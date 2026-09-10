@@ -1,3 +1,4 @@
+import { addProductionChase, readProductionDays } from "./production-chase.js";
 import { ProductionAnalysisQuerySchema } from "@dx-rework/contracts";
 import { readProductionAnalysis } from "./production-analysis.js";
 import { productionNotExcluded } from "./production-visibility.js";
@@ -17,13 +18,17 @@ const progress = (row:FactsRow, asOf:string) => calculateProductionProgress({sta
 // One shared calculator serves listing, filtering, sorting, detail and future todo consumers.
 export function selectDashboardPage(items:ProductionDashboardItem[],input:ProductionDashboardQuery) {
   const q=input.q?.trim().toLocaleLowerCase()??"";
-  const filtered=items.filter(({order,progress:p})=>(!input.supplierId||order.supplierId===input.supplierId)
+  const filtered=items.filter(({order,progress:p,chase})=>(!input.supplierId||order.supplierId===input.supplierId)
     &&(!input.status||order.status===input.status)&&(!input.progressState||p.progressState===input.progressState)
+    &&(!input.risk||(input.risk==="attention" ? p.attention||chase?.deliveryPressure : input.risk==="stale" ? p.daysWithoutUpdate!==null&&p.daysWithoutUpdate>=2 : chase?.deliveryPressure&&chase.dueThisWeek))
     &&(!q||[order.supplierName,...order.lines.map(l=>l.styleNo)].some(s=>s.toLocaleLowerCase().includes(q))));
   filtered.sort((a,b)=>productionProgressRank(a.progress.progressState)-productionProgressRank(b.progress.progressState)
     ||(a.order.deliveryDate??"9999").localeCompare(b.order.deliveryDate??"9999")||a.order.productionOrderId.localeCompare(b.order.productionOrderId));
   const page=input.page??1;
   return {filtered,items:filtered.slice((page-1)*15,page*15),page,pageSize:15 as const,totalCount:filtered.length,
+    chaseCounts:{attention:filtered.filter(i=>i.progress.attention||i.chase?.deliveryPressure).length,
+      stale:filtered.filter(i=>i.progress.daysWithoutUpdate!==null&&i.progress.daysWithoutUpdate>=2).length,
+      duePressure:filtered.filter(i=>i.chase?.deliveryPressure&&i.chase.dueThisWeek).length},
     counts:{inProduction:filtered.filter(i=>i.order.status==="in_production").length,completed:filtered.filter(i=>i.order.status==="production_completed").length,
       shipped:filtered.filter(i=>i.order.status==="shipped").length,attention:filtered.filter(i=>i.progress.attention).length}};
 }
@@ -75,7 +80,7 @@ export class ProductionDashboardService {
       const result=await client.query<ProductionRow>(`${selectProduction} WHERE ${productionVisibility}`,productionVisibilityArgs(actor));
       const orders=result.rows.map(toOrder),ids=orders.map(o=>o.productionOrderId);
       const current=await readProductionProgressFacts(client,ids,asOf);
-      const items=orders.filter(o=>current.has(o.productionOrderId)).map(order=>({order,progress:current.get(order.productionOrderId)!}));
+      const items=addProductionChase(orders.filter(o=>current.has(o.productionOrderId)).map(order=>({order,progress:current.get(order.productionOrderId)!})),await readProductionDays(client,ids,asOf),asOf);
       const selected=selectDashboardPage(items,input),selectedIds=selected.filtered.map(i=>i.order.productionOrderId);
       const suppliers=[...new Map(orders.map(o=>[o.supplierId,{supplierId:o.supplierId,supplierName:o.supplierName}])).values()]
         .sort((a,b)=>a.supplierName.localeCompare(b.supplierName));
@@ -92,7 +97,7 @@ export class ProductionDashboardService {
       }
       events.sort((a,b)=>b.recordedAt.localeCompare(a.recordedAt)||a.id.localeCompare(b.id));
       return ProductionDashboardSchema.parse({asOf,items:selected.items,page:selected.page,pageSize:15,totalCount:selected.totalCount,
-        counts:selected.counts,suppliers,events:events.slice(0,20)});
+        counts:selected.counts,chaseCounts:selected.chaseCounts,suppliers,events:events.slice(0,20)});
     });
   }
   async detail(actor:TrustedActorContext,id:string) {

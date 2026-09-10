@@ -1,3 +1,4 @@
+import { readProductionDays } from "../../apps/api/src/sourcing/production-chase.js";
 import {randomUUID} from "node:crypto";
 import pg from "pg";
 import {afterAll,beforeAll,describe,expect,it} from "vitest";
@@ -28,7 +29,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
       CREATE TABLE sourcing_production_shipments(production_order_id uuid PRIMARY KEY,shipped_on date,created_at timestamptz,recorded_quantity int);
       CREATE TABLE sourcing_production_alerts(production_order_id uuid,alert_id uuid PRIMARY KEY,kind text,opened_at timestamptz,resolved_at timestamptz);
       CREATE TABLE sourcing_production_alert_reads(alert_id uuid,user_id uuid,read_at timestamptz);
-      CREATE TABLE sourcing_production_reports(production_order_id uuid,report_id uuid,created_at timestamptz,business_date date);
+      CREATE TABLE sourcing_production_reports(production_order_id uuid,report_id uuid,created_at timestamptz,business_date date,root_report_id uuid,revision int DEFAULT 1,quantity int DEFAULT 0);
       CREATE TABLE rework_orders(rework_order_id uuid,rework_no text,rework_quantity bigint,status text,source_receiving_batch_id uuid);`);
     for(const order of orders)await database.query("INSERT INTO sourcing_production_orders VALUES($1)",[order.productionOrderId]);
     await database.query("INSERT INTO receiving_batches VALUES($1,NULL,-5),($2,NULL,0),($3,'2026-09-06',0)",[batch,shared,archived]);
@@ -40,10 +41,17 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     await database.query("INSERT INTO sourcing_production_shipments VALUES($1,'2026-09-04','2026-09-04',90)",[orders[0]!.productionOrderId]);
     await database.query("INSERT INTO sourcing_production_alerts VALUES($1,$2,'behind','2026-09-02',NULL)",[orders[0]!.productionOrderId,alert]);
     await database.query("INSERT INTO sourcing_production_alert_reads VALUES($1,$2,'2026-09-02')",[alert,actor.actorId]);
-    await database.query("INSERT INTO sourcing_production_reports VALUES($1,$2,'2026-09-03','2026-09-02')",[orders[0]!.productionOrderId,randomUUID()]);
+    await database.query("INSERT INTO sourcing_production_reports(production_order_id,report_id,created_at,business_date) VALUES($1,$2,'2026-09-03','2026-09-02')",[orders[0]!.productionOrderId,randomUUID()]);
     for(const source of [batch,batch,shared])await database.query("INSERT INTO rework_orders VALUES($1,'RW-TEST',10,'completed',$2)",[randomUUID(),source]);
   });
   afterAll(async()=>{await database.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+  it("uses latest report revisions and sums real daily records for chasing",async()=>{
+    const id=randomUUID(),root=randomUUID(),other=randomUUID();
+    await database.query("INSERT INTO sourcing_production_reports(production_order_id,root_report_id,revision,quantity,business_date,created_at) VALUES($1,$2,1,100,'2026-09-08','2026-09-08'),($1,$2,2,80,'2026-09-08','2026-09-09'),($1,$3,1,20,'2026-09-08','2026-09-08')",[id,root,other]);
+    const client=await database.connect();
+    try{const days=await readProductionDays(client,[id],"2026-09-10T00:00:00Z");expect(days.get(id)).toEqual([{day:"2026-09-08",quantity:100}]);}
+    finally{client.release();await database.query("DELETE FROM sourcing_production_reports WHERE production_order_id=$1",[id]);}
+  });
   it("aggregates all 20 visible orders before pagination and keeps same-name suppliers separate",async()=>{
     const result=await read();expect(result.items).toHaveLength(15);expect(result.summary).toMatchObject({totalCount:20,openCount:18,remainingQuantity:"1080",missingDueCount:1,qualityOrderCount:2});
     expect(result.groupTotal).toBe(2);expect(new Set(result.groups.map(group=>group.supplierId)).size).toBe(2);
