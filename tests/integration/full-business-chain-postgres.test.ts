@@ -18,6 +18,8 @@ import {
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { financial } from "../../apps/api/src/reporting/management-reporting-financial.js";
+import { fetchFacts } from "../../apps/api/src/reporting/management-reporting-orders.js";
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { BusinessAwareWholeOrderReviewService } from "../../apps/api/src/rework/business-aware-whole-order-review-service.js";
 import { ExternalResponsibilityApplicationService } from "../../apps/api/src/rework/external-responsibility-application-service.js";
@@ -1277,6 +1279,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const newBatch=await external.get(factoryPayables("external_responsibility:view"),submitted.value.reworkOrderId);
     const newFactoryCase=newBatch!.cases.find(row=>row.responsibilityType==='processing_factory')!;
     expect(newFactoryCase).toMatchObject({actualDeductedAmount:"80.00",remainingAmount:"68.10"});
+    expect(await financial(database,{from:"2000-01-01",to:"2100-12-31",asOf:new Date()})).toMatchObject({externalProposed:"187.70",externalDeducted:"119.60",externalRemaining:"68.10"});
+    const managementRows=await fetchFacts(database,{q:"UAT-FULL-CHAIN",limit:15});
+    expect(managementRows.rows[0]).toMatchObject({external_proposed_amount:"187.70",external_deducted_amount:"119.60",external_remaining_amount:"68.10"});
     const newFabricId=(await database.query("SELECT case_id FROM rework_external_responsibility_cases WHERE rework_order_id=$1 AND responsibility_type='fabric_supplier' ORDER BY created_at DESC LIMIT 1",[submitted.value.reworkOrderId])).rows[0].case_id;
     const carriedFabric=await external.getCase(fabricPayables("external_deduction:record"),newFabricId);
     expect(carriedFabric).toMatchObject({actualDeductedAmount:"39.60",remainingAmount:"0.00"});

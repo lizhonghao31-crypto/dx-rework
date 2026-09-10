@@ -39,7 +39,7 @@ export async function financial(db: Pool, range: Range): Promise<ManagementDashb
        WHERE order_record.status<>'deleted' AND case_record.status<>'superseded'
          AND (case_record.created_at AT TIME ZONE $3)::date BETWEEN $1::date AND $2::date
      ), entry_totals AS (
-       SELECT case_id,COALESCE(sum(amount),0) actual FROM rework_external_deduction_entries GROUP BY case_id
+       SELECT c.case_id,COALESCE((SELECT sum(amount) FROM external_deduction_scope(c.case_id)),0) actual FROM active_cases c
      ), external AS (
        SELECT COALESCE(sum(case_record.proposed_deduction_amount),0)::text proposed,
          COALESCE(sum(COALESCE(closure.actual_deducted_amount,entry.actual,0)),0)::text deducted,
