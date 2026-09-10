@@ -306,6 +306,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await migration("0138_receiving_receipt_corrections.sql");
     await migration("0139_receiving_packing_difference_resolution.sql");
     await migration("0140_receiving_packing_difference_direction.sql");
+    await migration("0169_receiving_difference_evidence.sql");
   });
 
   afterAll(async () => {
@@ -831,6 +832,87 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       actualQuantity: 1,
       defectiveQuantity: 0,
     }, randomUUID())).rejects.toThrow("该订单已不可追加收货，请重新搜索选择");
+  });
+
+  it.each(["receiving", "packing"] as const)("binds %s evidence to the resolution and preserves its immutable history", async (differenceType) => {
+    const created = await service.create(receiver(), {
+      styleNo: `TEST-EVIDENCE-${differenceType}`, documentQuantity: 100, actualQuantity: 90,
+      attachmentIds: [await readyImage()],
+    }, randomUUID());
+    let row = (await service.board(businessDate(), `TEST-EVIDENCE-${differenceType}`)).rows[0]!;
+    if (differenceType === "packing") {
+      await service.recordPacking(tailSupervisor(), {
+        receivingBatchId: created.value.receivingBatchId, expectedVersion: row.version,
+        expectedPackingRevisionId: null, packingQuantity: 85,
+      }, randomUUID());
+      row = (await service.board(businessDate(), `TEST-EVIDENCE-${differenceType}`)).rows[0]!;
+    }
+    const attachmentIds = differenceType === "receiving"
+      ? [await readyImage()] : [await readyImage("image/png"), await readyImage("image/webp")];
+    const input = {
+      receivingBatchId: row.receivingBatchId, expectedVersion: row.version,
+      expectedDocumentQuantity: row.documentQuantity, expectedActualQuantity: row.cumulativeActualQuantity,
+      expectedPackingRevisionId: row.packingRevisionId, differenceType, result: "已核对并留存处理图片", attachmentIds,
+    };
+    const actor = differenceType === "receiving" ? differenceResolver() : tailSupervisor();
+    const key = randomUUID();
+    const resolved = await service.resolveDifference(actor, input, key);
+    const replay = await service.resolveDifference(actor, input, key);
+    expect(replay.reused).toBe(true);
+    expect(replay.value.resolutionId).toBe(resolved.value.resolutionId);
+    expect(resolved.value.handledBy).toBe(actor.actorId);
+    const after = (await service.board(businessDate(), row.styleNo)).rows[0]!;
+    const record = differenceType === "receiving" ? after.receivingDifferenceResolution! : after.packingDifferenceResolution!;
+    expect(record.attachments.map((image) => image.attachmentId).sort()).toEqual([...attachmentIds].sort());
+    expect(record.handledBy).toBe("仓管测试");
+    expect(record.handledAt).toBe(resolved.value.handledAt);
+    expect(after.attachments).toHaveLength(1);
+    expect(after.attachments.some((image) => attachmentIds.includes(image.attachmentId))).toBe(false);
+    for (const sql of [
+      "UPDATE attachments SET entity_id='other-record' WHERE attachment_id=$1",
+      "UPDATE attachments SET original_filename='changed.jpg' WHERE attachment_id=$1",
+      "DELETE FROM attachments WHERE attachment_id=$1",
+    ]) await expect(database.query(sql, [attachmentIds[0]])).rejects.toThrow(/immutable/);
+    await service.createRepeated(receiver(), {
+      receivingBatchId: row.receivingBatchId, source: "jiashun", actualQuantity: 1,
+    }, randomUUID());
+    const changed = (await service.board(businessDate(), row.styleNo)).rows[0]!;
+    expect(differenceType === "receiving" ? changed.receivingDifferenceResolution : changed.packingDifferenceResolution).toBeNull();
+    const history = await database.query("SELECT entity_id FROM attachments WHERE attachment_id=ANY($1::uuid[])", [attachmentIds]);
+    expect(history.rows.every((image) => image.entity_id === resolved.value.resolutionId)).toBe(true);
+  });
+
+  it("rejects invalid evidence atomically without saving a false handled result", async () => {
+    const deliveryImage = await readyImage();
+    const created = await service.create(receiver(), {
+      styleNo: "TEST-EVIDENCE-REJECTIONS", documentQuantity: 100, actualQuantity: 90, attachmentIds: [deliveryImage],
+    }, randomUUID());
+    const row = (await service.board(businessDate(), "TEST-EVIDENCE-REJECTIONS")).rows[0]!;
+    const input = {
+      receivingBatchId: created.value.receivingBatchId, expectedVersion: row.version,
+      expectedDocumentQuantity: 100, expectedActualQuantity: 90,
+      differenceType: "receiving" as const, result: "不可保存的不完整证据",
+    };
+    const good = await readyImage();
+    const pdf = await readyImage("application/pdf");
+    const pending = await readyImage();
+    await database.query("UPDATE attachments SET status='pending',ready_at=NULL WHERE attachment_id=$1", [pending]);
+    const otherOwner = randomUUID();
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'其他上传人',true)", [otherOwner]);
+    const foreign = await readyImage();
+    await database.query("UPDATE attachments SET uploaded_by=$2 WHERE attachment_id=$1", [foreign, otherOwner]);
+    for (const [attachmentIds, message] of [
+      [[good, pdf], "仅支持"], [[good, pending], "尚未上传完成"],
+      [[good, foreign], "本人"], [[good, deliveryImage], "已绑定"],
+      [[good, randomUUID()], "不存在"], [[good, good], "不能重复"],
+      [["not-a-uuid"], "标识无效"], [[good, pdf, pending, foreign], "最多3张"],
+    ] as const) {
+      await expect(service.resolveDifference(differenceResolver(), { ...input, attachmentIds }, randomUUID())).rejects.toThrow(message);
+      expect((await service.board(businessDate(), row.styleNo)).rows[0]!.receivingDifferenceResolution).toBeNull();
+      expect((await database.query("SELECT entity_type FROM attachments WHERE attachment_id=$1", [good])).rows[0]!.entity_type).toBeNull();
+    }
+    await expect(service.resolveDifference(tailSupervisor(), { ...input, attachmentIds: [good] }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    expect((await database.query("SELECT count(*)::int AS count FROM receiving_difference_resolutions WHERE receiving_batch_id=$1", [row.receivingBatchId])).rows[0]!.count).toBe(0);
   });
 
   it("records cumulative packing and resolves both live differences with immutable audit", async () => {

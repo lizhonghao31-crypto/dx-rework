@@ -155,6 +155,7 @@ const resolutionBody = (input: unknown): {
   expectedPackingRevisionId: string | null;
   differenceType: "receiving" | "packing";
   result: string;
+  attachmentIds: readonly string[];
 } => {
   if (!input || typeof input !== "object") {
     throw new ApplicationError("VALIDATION_ERROR", "差异处理信息不完整", 400);
@@ -162,6 +163,10 @@ const resolutionBody = (input: unknown): {
   const body = input as Record<string, unknown>;
   if (body.differenceType !== "receiving" && body.differenceType !== "packing") {
     throw new ApplicationError("VALIDATION_ERROR", "差异类型无效", 400);
+  }
+  if (body.attachmentIds !== undefined && (!Array.isArray(body.attachmentIds)
+      || body.attachmentIds.some((value) => typeof value !== "string"))) {
+    throw new ApplicationError("VALIDATION_ERROR", "处理凭证信息无效", 400);
   }
   if (typeof body.result !== "string") {
     throw new ApplicationError("VALIDATION_ERROR", "请填写处理结果", 400);
@@ -175,6 +180,7 @@ const resolutionBody = (input: unknown): {
       : null,
     differenceType: body.differenceType,
     result: body.result,
+    attachmentIds: (body.attachmentIds as string[] | undefined) ?? [],
   };
 };
 

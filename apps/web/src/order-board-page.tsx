@@ -2,7 +2,7 @@ import { ReceivingAnalysisPanel } from "./receiving-analysis-panel.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { KpiInstrument, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import {
@@ -46,6 +46,7 @@ type DifferenceResolution = Readonly<{
   result: string;
   handledBy: string;
   handledAt: string;
+  attachments?: readonly ReceivingAttachment[];
 }>;
 type UploadIntent = Readonly<{
   attachmentId: string;
@@ -234,9 +235,42 @@ export function OrderBoardPage() {
   }> | null>(null);
   const [differenceResult, setDifferenceResult] = useState("");
   const [differenceRequestKey, setDifferenceRequestKey] = useState("");
+  const [differenceImages, setDifferenceImages] = useState<readonly { file: File; previewUrl: string }[]>([]);
+  const differenceUploaded = useRef(new Map<File, string>());
+  const differencePreviewUrls = useRef(new Set<string>());
+  const differenceSubmitting = useRef(false);
+  useEffect(() => {
+    const urls = differencePreviewUrls.current;
+    return () => { for (const url of urls) URL.revokeObjectURL(url); };
+  }, []);
+  const clearDifferenceImages = () => {
+    for (const url of differencePreviewUrls.current) URL.revokeObjectURL(url);
+    differencePreviewUrls.current.clear();
+    differenceUploaded.current.clear();
+    setDifferenceImages([]);
+  };
+  const closeDifference = () => {
+    if (differenceSubmitting.current) return;
+    clearDifferenceImages();
+    setDifferenceEditing(null);
+  };
+  const selectDifferenceImages = (files: FileList | null) => {
+    if (!files?.length || mutationBusy) return;
+    const selected = Array.from(files);
+    if (differenceImages.length + selected.length > 3) { setMutationMessage("处理凭证最多3张"); return; }
+    if (selected.some((file) => !isReceivingImageCandidate(file))) { setMutationMessage("请选择JPEG、PNG、WebP图片"); return; }
+    const additions = selected.map((file) => {
+      const previewUrl = URL.createObjectURL(file);
+      differencePreviewUrls.current.add(previewUrl);
+      return { file, previewUrl };
+    });
+    setDifferenceImages((current) => [...current, ...additions]);
+    setMutationMessage("");
+  };
   const [attachmentViewer, setAttachmentViewer] = useState<Readonly<{
     attachments: readonly ReceivingAttachment[];
     index: number;
+    title?: string;
   }> | null>(null);
 
   const resetPagination = () => {
@@ -396,6 +430,7 @@ export function OrderBoardPage() {
       ? row.receivingDifferenceResolution
       : row.packingDifferenceResolution;
     setPackingEditing(null);
+    clearDifferenceImages();
     setDifferenceEditing({ row, type, resolution });
     setDifferenceResult("");
     setDifferenceRequestKey(createClientRequestId());
@@ -403,15 +438,25 @@ export function OrderBoardPage() {
   };
 
   const submitDifference = async () => {
-    if (!differenceEditing || differenceEditing.resolution || mutationBusy) return;
+    if (!differenceEditing || differenceEditing.resolution || mutationBusy || differenceSubmitting.current) return;
     const result = differenceResult.trim();
     if (!result || result.length > 500) {
       setMutationMessage("处理结果不能为空且不能超过500个字符");
       return;
     }
+    differenceSubmitting.current = true;
     setMutationBusy(true);
     setMutationMessage("");
     try {
+      const attachmentIds: string[] = [];
+      for (const image of differenceImages) {
+        let attachmentId = differenceUploaded.current.get(image.file);
+        if (!attachmentId) {
+          attachmentId = await uploadReplacementImage(image.file);
+          differenceUploaded.current.set(image.file, attachmentId);
+        }
+        attachmentIds.push(attachmentId);
+      }
       const row = differenceEditing.row;
       const response = await fetch(apiUrl(`receiving/batches/${row.receivingBatchId}/difference-resolutions`), {
         method: "POST",
@@ -424,9 +469,11 @@ export function OrderBoardPage() {
           expectedPackingRevisionId: row.packingRevisionId,
           differenceType: differenceEditing.type,
           result,
+          ...(attachmentIds.length ? { attachmentIds } : {}),
         }),
       });
       if (!response.ok) throw new Error(await responseError(response, "差异处理提交失败"));
+      clearDifferenceImages();
       setDifferenceEditing(null);
       setRefreshToken((current) => current + 1);
       setMutationMessage("差异处理结果已保存");
@@ -435,6 +482,7 @@ export function OrderBoardPage() {
       setMutationMessage(text);
       await alertInApp(text, { title: "提交失败" });
     } finally {
+      differenceSubmitting.current = false;
       setMutationBusy(false);
     }
   };
@@ -800,11 +848,11 @@ export function OrderBoardPage() {
         className="order-board-attachment-modal__content"
         role="dialog"
         aria-modal="true"
-        aria-label="查看送货单附件"
+        aria-label={`查看${attachmentViewer.title ?? "送货单附件"}`}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="order-board-attachment-modal__heading">
-          <strong>送货单附件 {attachmentViewer.index + 1}/{attachmentViewer.attachments.length}</strong>
+          <strong>{attachmentViewer.title ?? "送货单附件"} {attachmentViewer.index + 1}/{attachmentViewer.attachments.length}</strong>
           <button type="button" onClick={() => setAttachmentViewer(null)}>关闭</button>
         </div>
         <ImageViewer src={attachmentUrl(selectedAttachment.attachmentId, "preview")} alt={selectedAttachment.filename} />
@@ -839,7 +887,7 @@ export function OrderBoardPage() {
       </form>
     </div> : null}
 
-    {differenceEditing ? <div className="order-board-dialog-backdrop" role="presentation" onMouseDown={() => !mutationBusy && setDifferenceEditing(null)}>
+    {differenceEditing ? <div className="order-board-dialog-backdrop" role="presentation" onMouseDown={() => !mutationBusy && closeDifference()}>
       <form className="order-board-dialog order-board-difference-dialog" role="dialog" aria-modal="true" aria-label={`${differenceEditing.type === "receiving" ? "收货" : "装箱"}差异处理`} onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitDifference(); }}>
         <h2>{differenceEditing.type === "receiving" ? "收货差异" : "装箱差异"}{differenceEditing.resolution ? "处理结果" : "去处理"}</h2>
         <dl className="order-board-difference-snapshot">
@@ -855,9 +903,34 @@ export function OrderBoardPage() {
           <p>{differenceEditing.resolution.result}</p>
           <small>处理人：{differenceEditing.resolution.handledBy} · {historyDateTime(differenceEditing.resolution.handledAt)}</small>
         </div> : <label>处理结果<textarea maxLength={500} rows={4} value={differenceResult} disabled={mutationBusy} onChange={(event) => setDifferenceResult(event.target.value)} placeholder="填写核对结果和后续处理情况" /></label>}
+        {differenceEditing.resolution ? (differenceEditing.resolution.attachments?.length ? <div className="order-board-difference-evidence">
+          <strong>处理凭证</strong>
+          <div className="order-board-difference-evidence__images">
+            {differenceEditing.resolution.attachments.map((attachment, index, attachments) => <button
+              key={attachment.attachmentId} type="button" className="order-board-difference-evidence__preview"
+              aria-label={`查看处理凭证${index + 1}`}
+              onClick={() => setAttachmentViewer({ attachments, index, title: "处理凭证" })}
+            ><img src={attachmentUrl(attachment.attachmentId, "preview")} alt={`处理凭证${index + 1}`} /></button>)}
+          </div>
+        </div> : null) : <div className="order-board-difference-evidence">
+          <label>处理凭证（选填，最多3张）<input type="file" accept="image/jpeg,image/png,image/webp" multiple
+            disabled={mutationBusy || differenceImages.length >= 3}
+            onChange={(event) => { selectDifferenceImages(event.target.files); event.target.value = ""; }} /></label>
+          <div className="order-board-difference-evidence__images">
+            {differenceImages.map((image) => <div key={image.previewUrl}>
+              <img src={image.previewUrl} alt={image.file.name} />
+              <button type="button" disabled={mutationBusy} onClick={() => {
+                URL.revokeObjectURL(image.previewUrl);
+                differencePreviewUrls.current.delete(image.previewUrl);
+                differenceUploaded.current.delete(image.file);
+                setDifferenceImages((current) => current.filter((item) => item !== image));
+              }}>移除</button>
+            </div>)}
+          </div>
+        </div>}
         {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}</p> : null}
         <div className="order-board-dialog__actions">
-          <button type="button" disabled={mutationBusy} onClick={() => setDifferenceEditing(null)}>{differenceEditing.resolution ? "关闭" : "取消"}</button>
+          <button type="button" disabled={mutationBusy} onClick={closeDifference}>{differenceEditing.resolution ? "关闭" : "取消"}</button>
           {!differenceEditing.resolution ? <button type="submit" className="is-primary" disabled={mutationBusy || !differenceResult.trim()}>{mutationBusy ? "提交中…" : "提交处理"}</button> : null}
         </div>
       </form>
