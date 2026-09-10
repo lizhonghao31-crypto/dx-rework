@@ -16,7 +16,8 @@ describe("process database entry", () => {
     expect(app).toContain("<LegacySupplierCenterRedirect />");
     expect(app).toContain('parameters.get("tool") === "onboarding"');
     expect(app).toContain('<MasterDataPage view="suppliers" />');
-    expect(app).toContain('<SupplierCenterPage mode="directory" />');
+    expect(app).toContain('path === "/ui/suppliers") page = <SupplierDirectoryPage />');
+    expect(app).toContain('path === "/ui/suppliers/manage") page = <SupplierMaintenancePage />');
     expect(page).toContain('href={pageUrl("ui/suppliers")}>供应商中心</a>');
     expect(navigation).not.toContain('pageUrl("ui/process-database")');
     expect(page).toContain('view === "crafts" ? "工艺数据库" : view === "processes" ? "工序数据库" : "工厂与供应商"');
