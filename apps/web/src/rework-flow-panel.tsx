@@ -40,10 +40,9 @@ export function ReworkFlowPanel(props: Props) {
     return () => controller.abort();
   }, [allowed, query, props.refreshToken]);
   useEffect(() => {
-    const refresh = () => { if (document.visibilityState === "visible") props.onRefresh(); };
     const restored = (event: PageTransitionEvent) => { if (event.persisted) props.onRefresh(); };
-    document.addEventListener("visibilitychange", refresh); window.addEventListener("pageshow", restored);
-    return () => { document.removeEventListener("visibilitychange", refresh); window.removeEventListener("pageshow", restored); };
+    window.addEventListener("pageshow", restored);
+    return () => { window.removeEventListener("pageshow", restored); };
   }, [props.onRefresh]);
   const change = (patch: Partial<typeof filters>) => setFilters(value => ({ ...value, ...patch, page: 1 }));
   if (!allowed) return null;
