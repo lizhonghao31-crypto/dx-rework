@@ -24,7 +24,7 @@ const event = {
   authorizationCapability: "audit:read", action: "x", entityType: "y", entityId: "z", beforeState: null, afterState: null, reason: null, createdAt: "2026-08-05T00:00:00.000Z",
 };
 
-function appFor(capabilities: string[], businessRoles: string[]) {
+function appFor(capabilities: string[], businessRoles: string[], root = false) {
   const service = { events: vi.fn().mockResolvedValue({ items: [event], page: 1, pageSize: 50, totalCount: 1, totalPages: 1 }), exports: vi.fn().mockResolvedValue({ items: [{ ...event, exportType: null, reportType: null }], nextCursor: null }) };
   const app = buildApp({
     config,
@@ -33,6 +33,7 @@ function appFor(capabilities: string[], businessRoles: string[]) {
     adminAudit: {
       authenticate: vi.fn().mockResolvedValue({ id: actorId, capabilities, businessRoles, displayName: "Admin" }),
       service: service as unknown as AdminAuditService,
+      root: { isRootUser: vi.fn().mockResolvedValue(root) },
     },
   });
   return { app, service };
@@ -47,8 +48,14 @@ describe("admin audit routes", () => {
     expect((await app.inject({ method: "GET", url: "/admin/audit/exports?unexpected=true" })).statusCode).toBe(400);
   });
 
-  it("allows owner_group to read audit without requiring the technical administrator role", async () => {
-    const { app } = appFor(["dashboard:management:read"], ["owner_group"]);
+  it("rejects owner_group from platform technical audit", async () => {
+    const { app } = appFor(["dashboard:management:read", "audit:read"], ["owner_group"]);
+    expect((await app.inject({ method: "GET", url: "/admin/audit/events" })).statusCode).toBe(403);
+    expect((await app.inject({ method: "GET", url: "/admin/audit/exports" })).statusCode).toBe(403);
+  });
+
+  it("preserves Root audit access without requiring a technical role", async () => {
+    const { app } = appFor([], [], true);
     expect((await app.inject({ method: "GET", url: "/admin/audit/events" })).statusCode).toBe(200);
     expect((await app.inject({ method: "GET", url: "/admin/audit/exports" })).statusCode).toBe(200);
   });

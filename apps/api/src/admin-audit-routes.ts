@@ -1,6 +1,7 @@
 import { AdminAuditEventsPageSchema, AdminAuditEventsQuerySchema, AdminAuditExportsPageSchema, AdminAuditExportsQuerySchema } from "@dx-rework/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
+import type { RootAuthority } from "./access/root-authority.js";
 import type { AuthUser } from "./auth/service.js";
 import { ApplicationError } from "./platform/errors.js";
 import type { AdminAuditService } from "./admin-audit-service.js";
@@ -20,15 +21,16 @@ const parse = <T>(schema: { safeParse(value: unknown): { success: true; data: T 
 export type AdminAuditHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: AdminAuditService;
+  root?: Pick<RootAuthority, "isRootUser"> | undefined;
 }>;
 
 export function registerAdminAuditRoutes(app: FastifyInstance, dependencies: AdminAuditHttpDependencies): void {
   const authorize = async (request: FastifyRequest): Promise<void> => {
     const user = await dependencies.authenticate(cookieToken(request));
-    if (!user.businessRoles?.length) throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
-    const owner = user.businessRoles.includes("owner_group");
-    const administrator = user.businessRoles.includes("system_admin") && user.capabilities.includes("audit:read");
-    if (!owner && !administrator) {
+    const root = await dependencies.root?.isRootUser(user.id) === true;
+    if (!user.businessRoles?.length && !root) throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
+    const administrator = user.businessRoles?.includes("system_admin") === true && user.capabilities.includes("audit:read");
+    if (!root && !administrator) {
       throw new ApplicationError("FORBIDDEN", "当前用户无权查看审计日志", 403);
     }
   };

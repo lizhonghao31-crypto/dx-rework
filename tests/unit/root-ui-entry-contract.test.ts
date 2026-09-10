@@ -67,7 +67,11 @@ describe("zero-role Root UI entry contract", () => {
     expect(source).toContain("const isRoot = currentUser?.isRoot === true;");
     expect(source).not.toContain("const initiationAccess =");
     expect(source).toContain("const reportAccess = isRoot || isOwner");
-    expect(source).toContain("const systemManagementAccess = auditAccess || technicalAdminAccess");
+    expect(source).toContain("const systemManagementAccess = isRoot");
+    expect(source).toContain("|| auditAccess");
+    expect(source).toContain("|| technicalAdminAccess");
+    expect(source).toContain('|| (!isOwner && hasCapability("master_data:manage"));');
+    expect(source).toContain('const auditAccess = isRoot || (isSystemAdmin && hasCapability("audit:read"));');
     for (const entry of ["订单回货", "返工单看板", "系统管理", "财务报表", "工资管理"]) {
       expect(source).toContain(`name: "${entry}"`);
     }

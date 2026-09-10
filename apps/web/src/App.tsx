@@ -360,7 +360,16 @@ export function App() {
   if (path === "/ui/my-tasks" || path.startsWith("/ui/my-tasks/")) {
     return <AuthGate requiredCapability="todo:view">{page}</AuthGate>;
   }
-  if (path.startsWith("/ui/production-reporting") || path.startsWith("/ui/production-dashboard")) {
+  if (path.startsWith("/ui/production-dashboard")) {
+    return <AuthGate requiredAnyOf={[
+      { requiredRole: "production_reporter", requiredCapability: "production-reporting" },
+      { requiredRole: "owner_group", requiredCapability: "sourcing:view" },
+      { requiredRole: "production_management", requiredCapability: "sourcing:view" },
+      { requiredRole: "order_merchandiser", requiredCapability: "sourcing:view" },
+      { requiredRole: "finance_director", requiredCapability: "sourcing:view" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path.startsWith("/ui/production-reporting")) {
     return <AuthGate requiredAnyOf={[
       { requiredRole: "production_reporter", requiredCapability: "production-reporting" },
       { requiredRole: "owner_group", requiredCapability: "sourcing:view" },
@@ -425,16 +434,10 @@ export function App() {
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/admin") {
-    return <AuthGate requiredAnyOf={[
-      owner,
-      { requiredRole: "system_admin", requiredCapability: "admin:read" },
-    ]}>{page}</AuthGate>;
+    return <AuthGate requiredRole="system_admin" requiredCapability="admin:read">{page}</AuthGate>;
   }
   if (path === "/ui/audit") {
-    return <AuthGate requiredAnyOf={[
-      owner,
-      { requiredRole: "system_admin", requiredCapability: "audit:read" },
-    ]}>{page}</AuthGate>;
+    return <AuthGate requiredRole="system_admin" requiredCapability="audit:read">{page}</AuthGate>;
   }
   if (path === "/ui/employee-access") {
     return <AuthGate requiredRole="root_superuser" requiredCapability="access:admin">{page}</AuthGate>;

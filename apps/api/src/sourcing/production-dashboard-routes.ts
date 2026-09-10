@@ -6,6 +6,7 @@ import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { ProductionDashboardService } from "./production-dashboard-service.js";
+
 export function registerProductionDashboardRoutes(app:FastifyInstance,dependencies:{
   authenticate(token:string|undefined):Promise<AuthUser>;root?:RootAuthority|undefined;service:ProductionDashboardService;
 }) {

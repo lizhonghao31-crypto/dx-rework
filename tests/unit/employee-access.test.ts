@@ -52,15 +52,18 @@ describe("PR-31 employee access contracts", () => {
     }).success).toBe(true);
   });
 
-  it("admits owners to employee access and keeps owner navigation available", async () => {
+  it("keeps employee access Root-only while retaining technical navigation for authorized administrators", async () => {
     const [app, components] = await Promise.all([
       readFile("apps/web/src/App.tsx", "utf8"),
       readFile("apps/web/src/components.tsx", "utf8"),
     ]);
     expect(app).toContain('path === "/ui/employee-access"');
-    expect(app).toContain('{ requiredRole: "owner_group" }');
+    expect(app).toContain('requiredRole="root_superuser" requiredCapability="access:admin"');
     expect(components).toContain('hasPageAccess(body.user, { requiredRole: "owner_group", requiredCapability: "access:admin" })');
-    expect(components).toContain("const systemManagementAccess = auditAccess || technicalAdminAccess");
+    expect(components).toContain("const systemManagementAccess = isRoot");
+    expect(components).toContain("|| auditAccess");
+    expect(components).toContain("|| technicalAdminAccess");
+    expect(components).toContain('|| (!isOwner && hasCapability("master_data:manage"));');
     expect(components).toContain("if (canManageEmployeeAccess) {");
     const personnelLink = components.indexOf('name: "人员与权限"');
     expect(personnelLink).toBeGreaterThan(-1);

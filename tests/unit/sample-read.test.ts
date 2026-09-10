@@ -21,9 +21,12 @@ describe("sample read HTTP and query boundaries", () => {
     expect(result.values).toContain("x\\%' OR true --%");
     expect(result.values).toContain("brand'");
   });
-  it.each(["sample_designer", "sample_administrative", "sample_finance", "sample_approver", "finance_director", "owner_group"])("requires both role and capability for navigation %s", role => {
+  it.each(["sample_designer", "sample_administrative", "sample_finance", "finance_director", "owner_group"])("requires both role and capability for navigation %s", role => {
     expect(canAccessSamples({ id: userId, displayName: "fixture", businessRoles: [role], capabilities: ["sample:view_basic"] })).toBe(true);
     expect(canAccessSamples({ id: userId, displayName: "fixture", businessRoles: [role], capabilities: [] })).toBe(false);
+  });
+  it("does not revive retired sample approval role", () => {
+    expect(canAccessSamples({ id: userId, displayName: "fixture", businessRoles: ["sample_approver"], capabilities: ["sample:view_basic"] })).toBe(false);
   });
   it("does not expose sample navigation to technical roles with overbroad capabilities", () => {
     expect(canAccessSamples({ id: userId, displayName: "fixture", businessRoles: ["system_admin"], capabilities: SampleCapabilitySchema.options })).toBe(false);
