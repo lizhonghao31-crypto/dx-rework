@@ -16,6 +16,7 @@
    - 样衣：`docs/requirements/sample-system-migration-v1.0.md`
    - 外发定价、供应商、合同、生产：`docs/requirements/sourcing-supplier-production-v1.0.md`
    - UI：`docs/requirements/rework-ui-golden-source-v1.0.md`
+   - 业务分析与限定区域 UI：`docs/requirements/business-analysis-limited-ui-golden-source-v1.0.md`
 4. 样衣迁移、供应商/外发建设、权限治理均已完成。上述文档中的业务标准继续有效，但历史迁移步骤、旧 PR 顺序、旧 SHA、旧“下一步”和临时授权仅作历史，不得自动恢复施工。
 5. 截图、旧聊天、旧 PR 描述和历史路线不能单独覆盖最新业务决定或当前 `main`。
 
