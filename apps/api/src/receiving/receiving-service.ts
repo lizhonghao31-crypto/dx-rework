@@ -34,6 +34,7 @@ type ResolveReceivingDifferenceInput = Readonly<{
   expectedPackingRevisionId?: string | null;
   differenceType: ReceivingDifferenceType;
   result: string;
+  attachmentIds?: readonly string[];
 }>;
 
 type DifferenceResolution = Readonly<{
@@ -41,6 +42,7 @@ type DifferenceResolution = Readonly<{
   result: string;
   handledBy: string;
   handledAt: string;
+  attachments: readonly Readonly<{ attachmentId: string; filename: string }>[];
 }>;
 
 type CreateRepeatedReceivingInput = Readonly<{
@@ -1802,6 +1804,33 @@ export class ReceivingService {
     }
   }
 
+  private normalizeDifferenceImages(values: readonly string[]): readonly string[] {
+    if (values.length > MAX_RECEIVING_IMAGES) fail("处理凭证最多3张");
+    if (new Set(values).size !== values.length) fail("处理凭证不能重复");
+    if (values.some((value) => !UUID_PATTERN.test(value))) fail("处理凭证标识无效");
+    return values;
+  }
+
+  private async bindDifferenceImages(
+    client: PoolClient, actor: TrustedActorContext, resolutionId: string, attachmentIds: readonly string[],
+  ): Promise<void> {
+    if (!attachmentIds.length) return;
+    const candidates = await client.query<{
+      attachment_id: string; uploaded_by: string; mime_type: string; status: string;
+      entity_type: string | null; entity_id: string | null;
+    }>(`SELECT attachment_id,uploaded_by,mime_type,status,entity_type,entity_id
+        FROM attachments WHERE attachment_id=ANY($1::uuid[]) ORDER BY attachment_id FOR UPDATE`, [attachmentIds]);
+    if (candidates.rows.length !== attachmentIds.length) fail("处理凭证不存在或不可用");
+    for (const row of candidates.rows) {
+      if (row.status !== "ready") fail("处理凭证尚未上传完成");
+      if (row.uploaded_by !== actor.actorId) fail("只能使用本人上传的处理凭证", 403, "FORBIDDEN");
+      if (!RECEIVING_IMAGE_MIME_TYPES.has(row.mime_type)) fail("处理凭证仅支持JPEG、PNG、WebP图片");
+      if (row.entity_type !== null || row.entity_id !== null) fail("处理凭证已绑定到其他业务记录", 409, "CONFLICT");
+    }
+    await client.query(`UPDATE attachments SET entity_type='receiving_difference_resolution',entity_id=$2
+      WHERE attachment_id=ANY($1::uuid[]) AND entity_type IS NULL`, [attachmentIds, resolutionId]);
+  }
+
   async resolveDifference(
     actor: TrustedActorContext,
     input: ResolveReceivingDifferenceInput,
@@ -1824,6 +1853,7 @@ export class ReceivingService {
       expectedPackingRevisionId: normalizeOptionalUuid(input.expectedPackingRevisionId, "装箱数量版本"),
       differenceType,
       result: normalizeResolutionResult(input.result),
+      ...(input.attachmentIds?.length ? { attachmentIds: this.normalizeDifferenceImages(input.attachmentIds) } : {}),
     };
     const scope = `receiving.difference.resolve.${differenceType}`;
     const client = await this.database.connect();
@@ -1869,6 +1899,7 @@ export class ReceivingService {
             packingQuantity: differenceType === "packing" ? snapshot.packingQuantity : null,
             differenceQuantity,
             result: normalized.result,
+            attachmentIds: normalized.attachmentIds ?? [],
           },
         });
         const inserted = await client.query<{
@@ -1894,6 +1925,7 @@ export class ReceivingService {
             differenceType === "packing" ? snapshot.packingQuantity : null,
             differenceQuantity, normalized.result, actor.actorId, eventId, actor.requestId],
         );
+        await this.bindDifferenceImages(client, actor, resolutionId, normalized.attachmentIds ?? []);
         const row = inserted.rows[0]!;
         return {
           statusCode: 201,
@@ -2043,10 +2075,12 @@ export class ReceivingService {
       receiving_resolution_result: string | null;
       receiving_resolution_handled_by: string | null;
       receiving_resolution_handled_at: Date | null;
+      receiving_resolution_attachments: { attachmentId: string; filename: string }[];
       packing_resolution_id: string | null;
       packing_resolution_result: string | null;
       packing_resolution_handled_by: string | null;
       packing_resolution_handled_at: Date | null;
+      packing_resolution_attachments: { attachmentId: string; filename: string }[];
       last_received_at: Date;
       last_received_cursor: string;
       last_receiver_name: string;
@@ -2090,10 +2124,20 @@ export class ReceivingService {
               receiving_resolution.result AS receiving_resolution_result,
               receiving_resolution_user.display_name AS receiving_resolution_handled_by,
               receiving_resolution.created_at AS receiving_resolution_handled_at,
+              COALESCE((SELECT jsonb_agg(jsonb_build_object('attachmentId',evidence.attachment_id,
+                'filename',evidence.original_filename) ORDER BY evidence.created_at,evidence.attachment_id)
+                FROM attachments evidence WHERE evidence.entity_type='receiving_difference_resolution'
+                  AND evidence.entity_id=receiving_resolution.resolution_id::text AND evidence.status='ready'),
+                '[]'::jsonb) AS receiving_resolution_attachments,
               packing_resolution.resolution_id AS packing_resolution_id,
               packing_resolution.result AS packing_resolution_result,
               packing_resolution_user.display_name AS packing_resolution_handled_by,
               packing_resolution.created_at AS packing_resolution_handled_at,
+              COALESCE((SELECT jsonb_agg(jsonb_build_object('attachmentId',evidence.attachment_id,
+                'filename',evidence.original_filename) ORDER BY evidence.created_at,evidence.attachment_id)
+                FROM attachments evidence WHERE evidence.entity_type='receiving_difference_resolution'
+                  AND evidence.entity_id=packing_resolution.resolution_id::text AND evidence.status='ready'),
+                '[]'::jsonb) AS packing_resolution_attachments,
               totals.receipt_count,totals.batch_count,
               COALESCE(receiving_history.items,'[]'::jsonb) AS receiving_history,
               totals.last_received_at,
@@ -2304,12 +2348,14 @@ export class ReceivingService {
         result: row.receiving_resolution_result!,
         handledBy: row.receiving_resolution_handled_by!,
         handledAt: row.receiving_resolution_handled_at!.toISOString(),
+        attachments: row.receiving_resolution_attachments,
       },
       packingDifferenceResolution: row.packing_resolution_id === null ? null : {
         resolutionId: row.packing_resolution_id,
         result: row.packing_resolution_result!,
         handledBy: row.packing_resolution_handled_by!,
         handledAt: row.packing_resolution_handled_at!.toISOString(),
+        attachments: row.packing_resolution_attachments,
       },
       receiptCount: Number(row.receipt_count),
       batchCount: Number(row.batch_count),

@@ -122,3 +122,11 @@
   .order-board-history__entry>time{grid-column:1/-1}
   .order-board-difference-snapshot{grid-template-columns:1fr 1fr}
 }
+
+/* PR01: evidence stays inside the existing difference dialog. */
+.order-board-difference-evidence{display:grid;gap:8px;min-width:0}
+.order-board-difference-evidence input[type=file]{max-width:100%;min-width:0}
+.order-board-difference-evidence__images{display:flex;flex-wrap:wrap;gap:8px}
+.order-board-difference-evidence__images>div{display:grid;gap:4px;width:76px}
+.order-board-difference-evidence__images img{display:block;width:76px;height:76px;object-fit:cover;border-radius:6px}
+.order-board-difference-evidence__preview{padding:0;border:1px solid #c7d0da;border-radius:6px;background:#fff;cursor:pointer}

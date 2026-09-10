@@ -270,6 +270,10 @@ const app = buildApp({
         actorId: actor.actorId, actorRoles: [...actor.actorRoles, ...(await rootAuthority.isRootUser(actor.actorId) ? [ROOT_ACTOR_ROLE] : [])],
         authorizationCapability: "sample:view_basic", authorizationCapabilities: actor.capabilities, requestId: "sample-attachment-download",
       }, binding);
+      if (binding.entityType === "receiving_difference_resolution") {
+        return binding.mimeType.startsWith("image/")
+          && (actor.actorRoles.length > 0 || await rootAuthority.isRootUser(actor.actorId));
+      }
       if (
         ["rework_order", "receiving_batch"].includes(binding.entityType)
         && binding.mimeType.startsWith("image/")
