@@ -60,7 +60,10 @@ describe("PR-31 employee access contracts", () => {
     expect(app).toContain('path === "/ui/employee-access"');
     expect(app).toContain('requiredRole="root_superuser" requiredCapability="access:admin"');
     expect(components).toContain('hasPageAccess(body.user, { requiredRole: "owner_group", requiredCapability: "access:admin" })');
-    expect(components).toContain("const systemManagementAccess = isRoot || (!isOwner && (");
+    expect(components).toContain("const systemManagementAccess = isRoot");
+    expect(components).toContain("|| auditAccess");
+    expect(components).toContain("|| technicalAdminAccess");
+    expect(components).toContain('|| (!isOwner && hasCapability("master_data:manage"));');
     expect(components).toContain("if (canManageEmployeeAccess) {");
     const personnelLink = components.indexOf('name: "人员与权限"');
     expect(personnelLink).toBeGreaterThan(-1);
