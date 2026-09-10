@@ -683,6 +683,7 @@ export class AccessMasterDataService {
     supportedCrafts: string[];
     dailyCapacity: number | null;
     contractDataMissing: string[];
+    changedAt: string;
   }>> {
     const result = await this.database.query<{
       supplier_id: string;
@@ -699,10 +700,11 @@ export class AccessMasterDataService {
       payee_name: string | null;
       bank_account: string | null;
       bank_name: string | null;
+      created_at: Date;
     }>(
       `SELECT supplier_id,supplier_code,supplier_type,version,supplier_name,active,address,
               supported_crafts,daily_capacity,contract_entity_name,party_b_representative,
-              payee_name,bank_account,bank_name
+              payee_name,bank_account,bank_name,created_at
        FROM current_supplier_catalog
        WHERE ($1::boolean OR active=true)
        ORDER BY supplier_name,supplier_code`,
@@ -718,6 +720,7 @@ export class AccessMasterDataService {
       supportedCrafts: row.supported_crafts,
       dailyCapacity: row.daily_capacity,
       contractDataMissing: this.contractDataMissing(row),
+      changedAt: row.created_at.toISOString(),
     }));
   }
 
