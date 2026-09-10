@@ -5,9 +5,10 @@ on:
     branches:
       - main
     types:
-      - labeled
+      - opened
       - synchronize
       - reopened
+      - edited
 
 permissions:
   contents: read
@@ -19,7 +20,7 @@ concurrency:
 jobs:
   full-validate:
     name: Full Gate exact Head
-    if: contains(github.event.pull_request.labels.*.name, 'full-gate')
+    if: ${{ startsWith(github.event.pull_request.title, '[FULL]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -28,6 +29,14 @@ jobs:
       SERVICE_NAME: dx-rework-api
 
     steps:
+      - name: Require explicit Full Gate title
+        shell: bash
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          [[ "$PR_TITLE" == "[FULL] "* ]]
+
       - name: Checkout exact PR Head
         uses: actions/checkout@v4
         with:
@@ -84,7 +93,7 @@ jobs:
                 ;;
             esac
             case "$path" in
-              tests/integration/root-single-account-two-pass-postgres.test.ts|tests/integration/full-business-chain-postgres.test.ts|scripts/deploy/*|scripts/backup-postgres.sh|scripts/restore-postgres.sh|infra/*|.github/workflows/full-gate.yml|.github/workflows/release*.yml|.github/workflows/deploy*.yml|.github/workflows/deployment*.yml)
+              tests/integration/root-single-account-two-pass-postgres.test.ts|tests/integration/full-business-chain-postgres.test.ts|scripts/deploy/*|scripts/backup-postgres.sh|scripts/restore-postgres.sh|infra/*|.github/workflows/full-gate.yml|.github/workflows/ci.yml|.github/workflows/release*.yml|.github/workflows/deploy*.yml|.github/workflows/deployment*.yml)
                 deployment_sensitive=true
                 ;;
             esac
@@ -100,8 +109,6 @@ jobs:
             echo "DEPLOYMENT_SENSITIVE=$deployment_sensitive"
             echo "DB_REQUIRED=$db_required"
           } >> "$GITHUB_ENV"
-          printf 'migration_sensitive=%s\nreceiving_sensitive=%s\nbusiness_chain_sensitive=%s\ndeployment_sensitive=%s\ndb_required=%s\n' \
-            "$migration_sensitive" "$receiving_sensitive" "$business_chain_sensitive" "$deployment_sensitive" "$db_required"
 
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund --prefer-offline
@@ -138,9 +145,7 @@ jobs:
           for _ in $(seq 1 60); do
             if docker exec dx-rework-full-gate-postgres pg_isready -U dx_rework -d dx_rework_ci >/dev/null 2>&1; then
               ready_streak=$((ready_streak + 1))
-              if [[ "$ready_streak" -ge 3 ]]; then
-                break
-              fi
+              if [[ "$ready_streak" -ge 3 ]]; then break; fi
             else
               ready_streak=0
             fi
@@ -150,7 +155,6 @@ jobs:
             docker logs dx-rework-full-gate-postgres
             exit 1
           fi
-          docker exec dx-rework-full-gate-postgres pg_isready -U dx_rework -d dx_rework_ci
           {
             echo 'DATABASE_URL=postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/dx_rework_ci'
             echo 'TEST_DATABASE_URL=postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/dx_rework_ci'
