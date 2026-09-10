@@ -1,30 +1,38 @@
-# GitHub Actions Usage Constitution v1.0
+# GitHub Actions Usage Constitution v2.0
 
 Status: P0 mandatory for `lizhonghao31-crypto/dx-rework`.
 
 ## Purpose
 
-GitHub Actions is an evidence layer, not a development scratchpad. Development, diagnosis and targeted tests happen before pushing a PR Head; GitHub-hosted runners validate staged results.
+GitHub Actions is an evidence layer, not a development scratchpad. Diagnosis and targeted checks happen before pushing; GitHub validates an intended PR Head.
 
-## Mandatory execution policy
+## Gate selection
 
-1. Ordinary PR Head updates may allocate only the single Quick Gate hosted job in `.github/workflows/ci.yml`.
-2. Quick Gate is limited to exact-Head/governance checks, Actions-policy verification, dependency install, lint, typecheck, workspace build without the root `postbuild`, migration static lint and secret scan.
-3. Quick Gate must not run PostgreSQL, the full test suite, migration replay, backup/restore, PR-17 acceptance, release packaging, Playwright/browser installation or preview generation/deployment.
-4. Heavy validation lives in `.github/workflows/full-gate.yml` and may allocate a runner only while the PR has the `full-gate` label.
-5. Once `full-gate` is present, any new Head invalidates prior Full Gate evidence and must run the Full Gate again.
-6. Automatic PR Preview is disabled. Preview must never run on `opened`, `synchronize` or `reopened` without an explicit future policy change approved by the business owner.
-7. Standalone Governance must not allocate a runner for ordinary PR events; governance checks are part of Quick Gate.
-8. No noop commit may be created only to trigger CI. Do not push iterative debugging commits to an open PR when the same work can be diagnosed and batched locally.
-9. A failed job may be rerun once on the same Head. A repeated failure requires root-cause diagnosis before any further run.
-10. Codex Review starts only after the final intended Head passes Full Gate. Default maximum is one review request per PR; a second review requires an unresolved P0/P1 or explicit business-owner approval.
-11. Default maximum Full Gate executions is two per PR. A third requires explicit business-owner approval and a written cause for the prior repeated failure.
-12. Monthly normal-development target is at most 1,200 GitHub-hosted Linux minutes, preserving at least 800 included minutes as contingency rather than planned consumption.
+Every PR is classified **before creation** and its title must start with exactly one prefix:
+
+- `[QUICK]` — low-risk change; run Quick Gate only.
+- `[FULL]` — high-risk change; run Full Gate only.
+
+The workflows are mutually exclusive by title. A `[FULL]` PR must not allocate the Quick Gate hosted job. A `[QUICK]` PR must not allocate the Full Gate hosted job.
+
+High-risk means migration/schema, auth/permissions, financial or quantity semantics, core workflow/approval/audit/idempotency, cross-module critical behavior, deployment/infrastructure/Actions, shared platform changes, or P0/P1 fixes.
+
+## Execution policy
+
+1. Do not push iterative debugging commits when the same diagnosis and repair can be completed before push.
+2. Known incomplete changes must not be pushed.
+3. Related code/tests/migration/manifest changes are prepared as one intended Head.
+4. Any new Head invalidates prior Gate evidence.
+5. Quick Gate stays lightweight: exact Head, governance guard, install, lint, typecheck, workspace build without root `postbuild`, migration static lint and secret scan. It must not run PostgreSQL, full migration replay, backup/restore, PR-17 acceptance, release packaging, browser installation or preview.
+6. Full Gate owns heavy validation and runs only for `[FULL]` PRs.
+7. Automatic PR Preview and standalone Governance runners remain disabled for ordinary PR events.
+8. No noop commit may be created only to trigger CI.
+9. A failed job may be rerun once on the same Head. Repeated failure requires root-cause diagnosis before another run.
+10. Codex Review starts only after the required Gate passes on the final intended Head. Default maximum is one Review; a second requires a real P0/P1 repair or explicit business-owner approval.
+11. Review does not authorize Codex construction; implementation remains with the current ChatGPT Work/assistant unless the business owner explicitly requests Codex coding.
 
 ## Machine guard
 
-`scripts/ci/verify-actions-policy.mjs` runs inside Quick Gate and rejects restoration of the high-burn topology, including automatic Preview/Governance runners, heavy work in Quick Gate, removal of `full-gate` gating, or stale-run cancellation being disabled.
+`scripts/ci/verify-actions-policy.mjs` enforces the mutually exclusive `[QUICK]` / `[FULL]` topology, lightweight Quick Gate, no automatic Preview/Governance runners, and stale-run cancellation.
 
-## Change control
-
-Weakening or bypassing this policy, the machine guard, or the workflow topology requires explicit business-owner approval in the specific PR. Convenience, a failed CI run, or lack of local tooling is not approval.
+Weakening or bypassing this policy requires explicit business-owner approval.

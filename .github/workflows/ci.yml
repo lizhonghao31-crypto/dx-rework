@@ -4,19 +4,23 @@ on:
   pull_request:
     branches:
       - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: foundation-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: quick-gate-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   validate:
-    if: ${{ github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'full-gate') }}
-    # Keep the historical check name to avoid breaking any existing required-check configuration.
+    if: ${{ github.event_name != 'pull_request' || !startsWith(github.event.pull_request.title, '[FULL]') }}
     name: Lint, test, migrate and build exact Head
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -25,6 +29,18 @@ jobs:
       GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
     steps:
+      - name: Require explicit Quick Gate title
+        if: ${{ github.event_name == 'pull_request' }}
+        shell: bash
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          [[ "$PR_TITLE" == "[QUICK] "* ]] || {
+            echo "PR title must start with [QUICK] or [FULL]."
+            exit 1
+          }
+
       - name: Checkout exact PR Head
         uses: actions/checkout@v4
         with:
@@ -62,6 +78,7 @@ jobs:
           governance_only=false
           web_only=false
           has_web_source=false
+          high_risk=false
 
           if [[ "${EVENT_NAME}" == "pull_request" ]]; then
             test -n "${BASE_SHA}"
@@ -75,7 +92,7 @@ jobs:
               web_only=true
               for path in "${changed_files[@]}"; do
                 case "${path}" in
-                  .github/workflows/*|.github/pull_request_template.md|AGENTS.md|docs/governance/*|scripts/ci/*)
+                  .github/workflows/*|.github/pull_request_template.md|AGENTS.md|docs/governance/*|docs/roadmap/*|scripts/ci/*)
                     ;;
                   *)
                     governance_only=false
@@ -91,11 +108,21 @@ jobs:
                     web_only=false
                     ;;
                 esac
+                case "${path}" in
+                  apps/api/migrations/*|apps/api/src/platform/migration-manifest.json|apps/api/src/access/*|apps/api/src/auth/*|apps/api/src/rework/*|apps/api/src/wages/*|apps/api/src/sourcing/*|scripts/deploy/*|scripts/backup-postgres.sh|scripts/restore-postgres.sh|infra/*|.github/workflows/*)
+                    high_risk=true
+                    ;;
+                esac
               done
               if [[ "${has_web_source}" != "true" ]]; then
                 web_only=false
               fi
             fi
+          fi
+
+          if [[ "${high_risk}" == "true" ]]; then
+            echo "This diff requires [FULL] Gate. Rename the PR before continuing."
+            exit 1
           fi
 
           echo "governance_only=${governance_only}" >> "${GITHUB_OUTPUT}"
@@ -226,7 +253,6 @@ jobs:
             echo "- Actions policy: passed"
             echo "- Governance script syntax: passed"
             echo "- Business checks skipped: governance-only change"
-            echo "- Heavy DB, full test, release and preview work intentionally deferred to Full Gate"
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Write business quick-gate summary

@@ -1,195 +1,148 @@
 # AGENTS.md
 
-## 2026-09-08 已批准紧凑 UI 增量
+状态：长期施工规则 V2.0  
+适用仓库：`lizhonghao31-crypto/dx-rework`  
+生效日期：2026-09-10
 
-当前新增五 PR 路线见 `docs/roadmap/ui-polish-20260908-v1.0.md`。业务负责人明确要求全系统紧凑 UI，含已验收返工页面的基础间距、按钮/折叠入口与装饰调整；覆盖下文此前“返工不重排”的对应视觉限制，不改变流程、权限、金额和数据规则。沿用既有控件与配色，不逐控件重复确认。此前十三 PR 路线及其临时授权保留为历史。2026-09-08追加授权：本轮五PR由Work连续完成代码、门禁、必要的一次Codex Review、修复与合并，不在创建PR后停止；覆盖下文相应流程默认。ECS部署与生产数据保护仍按原约束执行。
+本文件只保留长期有效的施工纪律。阶段性 PR 计划、临时授权、已完成迁移步骤不得继续作为默认施工入口。
 
-## 2026-09-07 本轮已批准增量规则
+## 1. Golden Source 与优先级
 
-当前 UAT/UI/数据升级路线以 `docs/roadmap/uat-ui-data-upgrade-v2.0.md`（正文 V2.1）及 `docs/roadmap/uat-ui-data-upgrade-execution-v2.1.md` 为入口，固定 PR01—PR13。该计划是业务负责人明确批准的版本化变更：节点一订单图片和样衣采购小票必填；跨模块统一基础 UI 参数，不强制统一业务布局；图标及业务布局先交可点击样板确认。已验收返工不重排，仅添加获批导航/标题图标。
+1. GitHub `main` 是当前代码事实的唯一 Golden Source。
+2. 当前业务负责人对本次任务作出的明确决定，可以更新既有业务规则；助手必须把已批准的新规则与实现同步写入对应文档，不得要求用户为同一决定重复确认。
+3. 未被新决定覆盖时，业务规则按对应领域 Golden Source 执行：
+   - 通用/返工：`docs/requirements/startup-requirements-v1.2.md`
+   - 平台权限：`docs/requirements/platform-permission-golden-source-v1.0.md`
+   - 样衣：`docs/requirements/sample-system-migration-v1.0.md`
+   - 外发定价、供应商、合同、生产：`docs/requirements/sourcing-supplier-production-v1.0.md`
+   - UI：`docs/requirements/rework-ui-golden-source-v1.0.md`
+4. 样衣迁移、供应商/外发建设、权限治理均已完成。上述文档中的业务标准继续有效，但历史迁移步骤、旧 PR 顺序、旧 SHA、旧“下一步”和临时授权仅作历史，不得自动恢复施工。
+5. 截图、旧聊天、旧 PR 描述和历史路线不能单独覆盖最新业务决定或当前 `main`。
 
-本轮 Work 获授权自主判断并触发必要 Codex Review（最终 intended Head 所需 Gate 全绿后，每 PR 最多一次）、修复和合并并继续路线；覆盖下文手动触发、合并及创建 PR 后结束本轮的流程性默认。2026-09-07追加授权：PR08—PR13后续UI不再逐次请求业务负责人确认，由Work完成实际可点击样板和自测后直接接入、开PR并按本轮授权合并；固定13个PR范围不变。部署与生产数据保护仍按本轮计划及当时明确授权执行；不是永久授权。
+## 2. 默认施工角色
 
-本文件约束所有在 `dx-rework` 仓库内施工的网页版 ChatGPT Work、Codex Review、其他 Agent 和开发人员。除非 PR 明确获得业务负责人批准，不得绕过。
+- 默认由当前 ChatGPT Work/助手同时负责：需求分析、方案、代码修改、测试、PR 修复和交付。
+- Codex 默认只做独立 Review，不承担编码施工。
+- 只有业务负责人对当前任务明确要求“使用 Codex 施工/编码”时，才允许委派 Codex 编码；“开始”“继续”“全程接手”“所有授权”等不等于授权 Codex 施工。
+- Review finding 由当前助手核验并修复，不默认交回 Codex 编码。
 
-## 1. Golden Source
+## 3. 执行模式与授权
 
-1. GitHub `main` 是唯一代码 Golden Source。
-2. 业务规则以 `docs/requirements/startup-requirements-v1.2.md` 为当前确认基线。
-3. 样衣模块以 `docs/requirements/sample-system-migration-v1.0.md` 为一期业务、权限、数据、UI、迁移与验收 Golden Source。
-4. 外发定价、供应商中心、合同、正式派单、生产填报与实时看板以 `docs/requirements/sourcing-supplier-production-v1.0.md` 为一期 Golden Source。
-5. 当前平台化路线、规则隔离和新窗口读取入口以 `docs/roadmap/platform-2.0-rules-index-v1.0.md` 为准。
-6. 返工模块已运行的 UI 基础参数是全平台现有页面与未来开发的唯一 UI 参数 Golden Source，详见 `docs/requirements/rework-ui-golden-source-v1.0.md`；覆盖所有 UI 参数及同类交互，不限导航。
-7. Figma 基础库和 Product 是基于返工基线同步的设计与验收载体，旧数值不能覆盖返工实际实现。
-8. 聊天记录、截图、口头意见不能直接覆盖上述基线；需求变化必须先形成版本化文档或 ADR。
+每个任务只需确定一次执行模式：
 
-## 2. 每次施工前的强制预检
+- **逐 PR 验收**：当前 PR 达到交付状态后等待业务负责人确认，再进入下一 PR。
+- **全程接手**：在业务负责人明确授权的范围内，连续完成施工、门禁、必要 Review、修复及获授权的合并，不因普通可处理阻断自行停工。
 
-开始任何修改前，必须输出并记录：
+临时授权只对明确范围和当前任务有效；任务结束后恢复默认。用户说“停”时立即停止一切写入、检查、等待和后续推进。
+
+## 4. 一次预检，避免重复核验
+
+开始修改前只做一次必要预检，记录：
 
 ```text
 repository: lizhonghao31-crypto/dx-rework
 base branch: main
-base SHA: <本次任务由 GitHub/Codex 平台实际注入或从远程 main 读取的基线 SHA>
-working branch: <本次实际工作分支；Codex 托管任务可为平台注入的 work 分支>
-task scope: <一句话目标>
-allowed files: <允许修改的明确路径>
-forbidden files: <本次不得修改的路径>
+base SHA: <current main>
+working branch: <branch>
+task scope: <one sentence>
+allowed files: <paths>
+forbidden files: <paths>
+gate class: QUICK or FULL
 ```
 
-要求：
+没有新的 push、merge、PR Head 变化或真实错误时，不重复读取同一 PR、同一仓库状态或同一规则全文。查询 CI 就读取当前运行与必要日志；查询 Review 就读取新增 finding；查询能否合并就直接给出“可以/不可以 + 唯一阻塞”。
 
-- 网页版 ChatGPT Work 是本仓库长期、唯一默认的施工入口。其运行目录可能是 `/workspace/scratch/...` 且没有 `.git`；这是正常云端工作形态，不构成初始化失败。此时以 GitHub `main`、目标 PR/branch 元数据以及 GitHub 返回的 blob/commit SHA 作为预检证据。
-- 网页版 Work 不得扫描、比较或复用运行环境中偶然可见的历史克隆、旧分支和旧工作树；scratch 中的临时文件不是代码 Golden Source。
-- 同一任务的远程基线预检只执行一次。只有施工期间 GitHub 出现与本任务相关的新 push、merge 或 PR head 变化时，才按新事实重新核验；附件挂载、scratch 路径或本地目录问题不得触发整套仓库重查。
-- 普通本地或 GitHub 开发环境必须从最新远程 `main` 创建新分支。
-- 仅当业务负责人在具体任务中明确要求改用 Codex 托管工作区时，才适用其平台注入的任务/PR 基线规则；不得自行切换到 Codex Cloud。
-- 无论采用哪种环境，都不允许根据旧聊天中的 SHA、旧 PR 分支或人工猜测继续施工。
-- 创建或更新 PR 后，必须由 GitHub Actions 对当前 PR head SHA、必需文件与目标分支再次校验；GitHub 上的 PR base/head 元数据是最终合并校验依据。
-- 若平台提供的 base SHA 与当前任务/PR 元数据明确不一致，或 PR head SHA 与本次实际提交 SHA 不一致，立即停止，不得继续测试或要求合并。
-- 预检所需文件不存在、仓库错误或已知 SHA 不一致时，立即停止并报告。
+## 5. 修改模式与 PR 范围
 
-## 3. 修改模式
+- 默认使用 Incremental Injection。
+- 一个 PR 解决一个可独立验收的业务目标，不按文件数或代码行机械切碎。
+- 实现该目标所必需的代码、测试、migration、manifest、文档应一次完整处理。
+- 不做无关重构、格式化、依赖升级或“顺手优化”。
+- 开工时确定完成标准；达到标准后收口，不临时增加可选基础设施、重构或测试平台作为前置条件。
 
-- 默认模式：增量功能注入（Incremental Injection）。
-- 一个 PR 只解决一个明确目标。
-- 不做与目标无关的重构、格式化、目录迁移或依赖升级。
-- 若不改旧逻辑无法实现，先说明触碰位置、必要性、影响与回滚方法，取得批准后再修改。
-- 新条件不满足时，原有行为必须保持不变。
-- 禁止以“顺手优化”为由扩大范围。
+## 6. Push / CI 纪律（P0）
 
-## 4. 项目边界
+GitHub Actions 是验收层，不是开发 scratchpad。
 
-当前系统：
+- 先读取真实错误/Review，定位根因，集中完成相关修改和定向检查，再 push。
+- **已知没改完不得 push。**
+- 多文件修改必须先完整组装、检查，再形成一个 intended Head；不得每改一个文件就 push 一次。
+- Gate 运行期间保持 Head 稳定。只有发现真实阻断且已完成集中修复后，才产生下一次 Head。
+- 不允许用“push 看看 CI 怎么说”的方式调试。
+- 同一 Head 的瞬态失败最多 rerun 一次；再次失败先查根因。
+- 禁止 noop commit 只为触发 CI。
 
-- 独立部署、独立给员工使用；
-- 细化“质检返工/尾部返工”业务；
-- 暂不嵌入 ERP 页面或现有 ERP 节点；
-- 数据模型、接口和事件必须保留未来接入 ERP “发起返工”等节点的能力。
+详细 Actions 规则见 `docs/governance/github-actions-usage-policy-v1.0.md`。
 
-不得直接复制 ERP 的巨型单文件实现。可以复用已验证的技术、部署、接口和治理经验，但新项目必须保持模块化边界。
+## 7. Quick Gate / Full Gate 二选一（P0）
 
-## 5. 身份、人员与权限
+在创建 PR **之前**确定 Gate 等级，并体现在 PR 标题：
 
-- 禁止使用显示姓名作为数据库主键、权限判断或流程路由条件。
-- 使用稳定的钉钉 userId/unionId 映射内部 userId，再映射角色和 capability。
-- 必须先验证用户属于本公司钉钉组织，再执行系统准入与角色授权。
-- 非本公司组织成员不得登录。
-- 正式环境不得保留通行码登录。
-- 钉钉工作台内支持免密登录；普通浏览器支持钉钉扫码登录。
-- 前端可见性控制与后端授权校验必须同时存在。
-- 所有关键操作记录操作者稳定 ID、角色、时间、动作、前后状态和业务对象。
+- `[QUICK] ...`：低风险，仅跑 Quick Gate。
+- `[FULL] ...`：高风险，仅跑 Full Gate；Quick Gate 必须跳过且不得分配 hosted runner。
 
-特别注意：
+下列任一项使用 `[FULL]`：
 
-- “李生”与“李总”指同一人。
-- “李同生”是另一名不同人员。
-- 不允许通过姓名相似性、称呼或人工猜测合并身份。
+- migration / schema / 数据回填 / 数据库约束；
+- 登录、身份、角色、capability、字段权限、Root/老板特权；
+- 金额、单价、数量、工资、合同、付款、结算；
+- 核心状态机、审批、审计、并发、幂等；
+- 跨模块关键链路、通知/待办关键路由；
+- 部署、发布、备份恢复、GitHub Actions / 基础设施；
+- 共享平台壳或影响多个模块的公共能力；
+- P0/P1 修复；
+- 业务负责人明确要求 Full Gate。
 
-## 6. UI 与设计系统
+纯文档、低风险文案/CSS、隔离测试维护等，在不触及上述边界时用 `[QUICK]`。
 
-- 业务可用性优先于视觉表现。
-- 不得未经批准引入新的 UI 组件库或整体替换调色盘。
-- 组件、颜色、间距、圆角、字体和阴影必须优先使用项目设计 token。
-- Soft UI 只用于表面层级，不得降低文字、状态和操作按钮的对比度。
-- 手机端表单正文默认保证清晰可读；不得为“信息密度”大量使用超小字号。
-- 管理座舱中李总、伍云峰、张文豪使用同一套完整信息界面；李总与伍总同级同权，张文豪按执行职责获得操作能力，本厂承担最终审批仍由李总或伍总完成；所有操作通过审计日志追踪。
-- 李同生使用中层工作台；基础员工只显示与其职责和待办有关的内容。
-- 页面实现必须继承已验收返工模块的同类组件；新增布局按规则提供预览，同值参数对齐使用返工原页面作为基准。
-- 任何 UI 工作先读取 `docs/requirements/rework-ui-golden-source-v1.0.md`。返工实际参数优先于共享 token 中的冲突值及旧文档；通过独立共享 UI PR 同步规则、token、组件与现有页面。不得为迁就旧 token 反改已验收返工，未来模块也不得另造参数。
+任何新 Head 都使旧 Gate 证据失效。合并证据必须来自当前 Head。
 
-## 7. 数据与集成原则
+## 8. Codex Review
 
-- 业务对象必须使用稳定 ID，并预留 `external_source`、`external_id`、`erp_node_id` 或等价映射能力。
-- 任何未来 ERP 接入采用显式适配层，不得让返工业务直接依赖 ERP 页面内部状态。
-- 关键状态变更应形成可追溯领域事件或 outbox 记录。
-- 上传文件走服务端 OSS 能力；密钥不得进入前端、仓库、日志或 PR。
-- ECS 环境变量、健康检查、备份和回滚方式参照 ERP 已验证做法。
-- 不得未经批准读取、复制或重用 ERP 生产数据。
+- Codex Review 只针对最终 intended Head；代码已经冻结且所需 Gate 全绿后才进入 Review。
+- 是否需要 Review按当前任务风险和业务负责人授权执行；权限、财务、migration、核心状态机、P0/P1 默认应 Review。
+- 默认每 PR 最多一次；只有 Review 发现真实 P0/P1 后发生实质修复，或业务负责人明确授权，才进行第二次。
+- Review 建议先核验是否真实、未过期且属于本 PR；范围外重构和纯偏好不自动阻塞交付。
+- Codex Review 不得自动转化为 Codex 施工。
 
-## 8. 测试与证据
+## 9. 测试与结论纪律
 
-每个 PR 至少提供：
+“已修改”“定向测试通过”“Gate 通过”“Review 通过”“已合并”“已部署”“业务验收通过”是不同状态，不得互相替代。
 
-- lint/静态检查；
-- 构建结果；
-- 与本次业务目标对应的自动化测试；
-- 若涉及界面，提供桌面端与移动端截图；
-- 若涉及权限，提供允许与拒绝两类测试；
-- 若涉及状态流转，提供合法流转与非法流转测试；
-- 当前 PR head SHA；
-- 测试所对应的 commit SHA。
+- 权限修改必须同时覆盖允许与拒绝。
+- 状态流转必须覆盖合法与非法路径。
+- UI 的 CI 全绿不等于视觉验收。
+- 矩阵全绿不等于所有浏览器业务场景都执行过。
+- 没有证据时不得给出超过证据范围的确定结论。
 
-GitHub Actions 证据必须来自当前 PR head，不接受旧运行、其他分支或本地口头说明替代。
+## 10. ECS / 生产操作
 
-## 9. PR 交付格式
+- 生产、Acceptance、备份、密钥和数据库操作必须先区分目标环境。
+- 多步骤、包含 `set -e` / `exit` / `kill` / `mv` / migration 的维护命令，不直接粘贴进当前登录 Shell 执行；写成独立脚本后用 `bash <script>` 或后台方式运行，且不得 `source`。
+- Acceptance 更新按实际 diff 选择最小动作；没有前端/依赖变化时不得默认 `npm ci`、全量 build 或在 ECS 上重跑 Gate。
+- 低配置 ECS 上不得把 CI/Full Gate 当部署步骤执行。
+- 任何轻量更新都必须保持运行代码、数据库 schema 与版本标识一致，不能只改显示版本号。
 
-PR 描述必须包含：
+## 11. 高风险红线
 
-1. 业务目标；
-2. 本次范围；
-3. 明确不在本次范围的事项；
-4. 修改文件；
-5. 测试证据；
-6. base SHA 与 head SHA；
-7. 已知风险；
-8. 回滚方法；
-9. 是否改变业务规则、权限、数据结构或 UI Golden Source。
+未经当前任务明确授权，不得：
 
-## 10. 高风险红线
+- 修改钉钉应用配置、组织架构、生产权限、安全组或密钥；
+- 删除/覆盖生产数据、备份或 OSS 对象；
+- 使用 ERP 生产数据；
+- 将 secret/token/cookie/password 写入代码、日志或文档；
+- 修改业务 Golden Source 以迎合测试结果；
+- 把未确认的业务选择伪装成确定规则。
 
-未经明确授权，不得：
+Root 作为业务负责人/超级调试身份的既有特殊能力必须保留；不得为了普通角色约束顺手限制 Root。
 
-- 修改钉钉应用配置、组织架构或生产权限；
-- 修改 ECS 生产环境变量、密钥或安全组；
-- 删除或覆盖生产数据、备份、OSS 对象；
-- 合并 PR、部署生产或向外部人员发送通知；
-- 将任何密钥、token、cookie、密码写入代码、日志或文档；
-- 将未验收的 Figma 试验自动回写 ERP；
-- 把尚未确认的业务选择伪装成确定规则。
+## 12. 新窗口启动
 
-发现冲突、权限不足、数据含义不清或 Golden Source 不一致时，停止施工并提交证据，不得猜测。
+新窗口只需读取：
 
-## 11. GitHub Actions Usage Constitution（P0）
+1. 本文件；
+2. `docs/governance/chatgpt-codex-construction-workflow-v1.0.md`；
+3. 本次任务对应的唯一业务 Golden Source；
+4. GitHub 当前 `main`、相关开放 PR 与 Head。
 
-详细制度见 `docs/governance/github-actions-usage-policy-v1.0.md`。以下规则高于施工便利性，适用于 ChatGPT、Codex、开发人员和其他 Agent：
-
-- GitHub Remote 是阶段验收层，不是开发 scratchpad；能在本地/Codex 工作区完成的诊断、定向测试和集中修复不得通过连续 push 调试。
-- 普通 PR Head 更新只能自动分配 `.github/workflows/ci.yml` 的单个 Quick Gate hosted job；禁止恢复第二个自动 Governance runner 或自动 Preview runner。
-- Quick Gate 禁止 PostgreSQL、全量测试、migration replay、backup/restore、PR-17 acceptance、release packaging、Playwright/browser install 和 Preview。
-- 重型验证只允许在 PR 带 `full-gate` label 时由 `.github/workflows/full-gate.yml` 执行；label 存在后的任何新 Head 都必须重新 Full Gate。
-- 禁止 noop commit 仅为触发 CI；同一 Head 的失败 Job 最多 rerun 一次，再失败必须先查根因。
-- Codex Review 只能在最终 intended Head 的 Full Gate 全绿后，由业务负责人手动触发；ChatGPT、Codex 或其他 Agent 不得自行触发。默认每 PR 一次；第二次仅限明确 P0/P1 或业务负责人授权。
-- Full Gate 默认每 PR 最多两次；第三次需要业务负责人明确授权并说明前两次为何未收口。
-- 正常开发 GitHub-hosted Linux minutes 月度目标不超过 1200，至少保留 800 included minutes 作为非计划储备。
-- `scripts/ci/verify-actions-policy.mjs` 是机器红线。未经业务负责人在具体 PR 中明确授权，不得删除、绕过或弱化该脚本及本节规则。
-
-
-## 12. 网页版 ChatGPT Work 固定施工流程（P0）
-
-详细流程见 `docs/governance/chatgpt-codex-construction-workflow-v1.0.md`；当前路线与规则入口见 `docs/roadmap/platform-2.0-rules-index-v1.0.md`。任何新 Work 窗口或直接施工开始前必须先读取本文件、施工流程和平台 2.0 索引，再按索引读取本次任务唯一对应的业务规则。旧 `docs/roadmap/platform-sourcing-roadmap-v1.0.md` 只作为截至 2026-08-31 的历史施工记录。
-
-涉及样衣模块的任何讨论、设计、编码、测试、PR 或迁移操作，必须在范围预检前完整读取 `docs/requirements/sample-system-migration-v1.0.md`。未读取不得开工；发现聊天内容、旧系统实现或旧文档与该规则冲突时，以该规则为准并报告冲突。身份、权限、数据源、金额口径、状态闭环或上线门槛的变更，必须先更新该规则并获得业务负责人明确批准。
-
-涉及外发定价、多款价格、供应商中心、合同 PDF、正式派单、生产数据填报、实时生产看板或实时生产待办的任何任务，必须在范围预检前完整读取 `docs/requirements/sourcing-supplier-production-v1.0.md`。ERP 只可作为产品交互原型，不得读取、迁移、同步或引用 ERP 业务数据。样衣规则与外发供应商规则不得互相推导业务含义，也不得夹在同一个业务 PR 中。
-
-以下规则为默认强制流程：
-
-- 网页版 ChatGPT Work 同时承担施工控制器与执行器：读取 Golden Source、冻结范围、直接实施、审查 diff、管理 GitHub 交付并向用户汇报。
-- 不得默认调用、切换或等待 Codex Cloud。只有业务负责人在具体任务中明确要求时，才可改变施工入口。
-- “Codex Review”仅指最终 intended Head 的独立代码审查，不是施工执行渠道；其触发权仍只属于业务负责人。
-- Work 发现当前目录是无 `.git` 的 scratch 时，必须按网页版 Work 规则立即使用 GitHub 远程事实继续，不得寻找旧工作树、反复初始化或把正常形态误报为阻塞。
-- 完成修改和可用门禁后直接创建普通 PR（`draft: false`）；未经业务负责人明确要求，不得创建或转换为 Draft。
-- PR 创建前必须判定门禁等级。数据库迁移/约束、权限身份、财务金额数量合同、核心状态机/审批/审计/幂等、跨模块关键链路、部署基础设施、共享平台壳或 P0/P1 变更，必须在 PR 创建后立即添加 `full-gate` label；不得等业务负责人提醒。
-- PR 创建成功后必须立即报告 PR 链接、范围、测试结果、是否需要 Full Gate、是否需要 Codex Review并结束本轮；不得为了等待 CI、润色描述、整理计划或其他非阻断性收尾继续占用施工窗口。
-- CI 作为异步状态处理；CI 后续失败时读取精确日志、做根因对应的最小修复，不得原地盲等或盲目 rerun。`skipped`、`cancelled` 和旧 Head 的成功不算通过。
-- Codex Review 只能在最终 intended Head 的所需门禁全绿且 diff 冻结后进行。高风险 PR 必须请求，低风险纯文档/文案/CSS/隔离测试维护默认可不请求。
-- Codex Review 只能由业务负责人手动触发。ChatGPT、Codex 和其他 Agent 不得自行触发、代点或暗中触发；需要 Review 时必须明确请业务负责人触发。
-- 当前 Head 的所有适用门禁和必要 Review 完成后，必须立即明确回答“可以合并”或“不能合并 + 唯一具体阻塞”，不得只汇报绿色状态让业务负责人自行判断。
-- PR 合并和部署只能由业务负责人明确决定。业务负责人报告已合并后，必须核验远端 merged 状态与最新 `main` SHA，再给出路线中的下一步。
-- 完整门禁分类、Review 条件和全绿后交接步骤以 `docs/governance/chatgpt-codex-construction-workflow-v1.0.md` 第 6–8 节为准。
-- 用户说“停”后立即停止一切检查、写入、PR 操作和等待。
-- 业务负责人的明确授权可以覆盖本节的流程性默认规则；临时授权仅限所述范围和当前任务，长期例外必须通过版本化文件和 PR 固化。任何授权均不得绕过平台安全策略、密钥和生产数据保护或法律合规要求。
-
-
-
+不得要求业务负责人重新叙述已经版本化确认的历史。
