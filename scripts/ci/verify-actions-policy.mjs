@@ -22,6 +22,8 @@ const stepBlock = (source, name) => {
   return source.slice(start, next >= 0 ? next : source.length);
 };
 
+const countOccurrences = (source, needle) => source.split(needle).length - 1;
+
 assert(quick.includes("timeout-minutes: 5"), "Quick Gate timeout must stay at 5 minutes");
 assert(quick.includes("!startsWith(github.event.pull_request.title, '[FULL]')"), "Quick Gate must skip FULL-title PRs before allocating its job");
 assert(stepBlock(quick, "Require explicit Quick Gate title").includes("[QUICK]"), "Quick Gate must require an explicit QUICK title");
@@ -42,13 +44,13 @@ assert(classifier.includes("HEAD_SHA"), "Quick Gate classifier must use exact PR
 assert(classifier.includes('git diff --name-only "${BASE_SHA}" "${HEAD_SHA}"'), "Quick Gate classifier must classify exact PR diff");
 assert(classifier.includes("governance_only=false"), "Quick Gate governance classifier must fail closed");
 assert(classifier.includes("web_only=false"), "Quick Gate web classifier must fail closed");
+assert(countOccurrences(quick, "backup-postgres.sh") === 1 && classifier.includes("backup-postgres.sh"), "backup-postgres.sh may appear only in Quick Gate risk classification");
+assert(countOccurrences(quick, "restore-postgres.sh") === 1 && classifier.includes("restore-postgres.sh"), "restore-postgres.sh may appear only in Quick Gate risk classification");
 
 for (const forbidden of [
   "postgres:16-alpine",
   "npm test",
   "db:migrate:check",
-  "backup-postgres.sh",
-  "restore-postgres.sh",
   "pr17:acceptance",
   "package-release.sh",
   "playwright install",
