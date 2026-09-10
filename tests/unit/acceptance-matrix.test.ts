@@ -29,10 +29,28 @@ describe("acceptance authorization matrix", () => {
     expect(ACCEPTANCE_ROLE_MATRIX.some((entry) => entry.expectedRole === "administrative_clerk")).toBe(false);
   });
 
-  it("contains no pending rule reference for the 2026-09-09 confirmed matrix", () => {
+  it("explicitly binds every current business check to an approved rule", () => {
     for (const entry of ACCEPTANCE_ROLE_MATRIX) {
-      expect(entry.defaultRule?.status).toBe("approved");
       expect(Object.values(entry.ruleRefs ?? {}).every((rule) => rule.status === "approved")).toBe(true);
+
+      const identityUserId = `uat-${entry.alias}-id`;
+      const checks = evaluateAcceptanceSnapshot(
+        entry,
+        {
+          alias: entry.alias,
+          userId: identityUserId,
+          roleCodes: [entry.expectedRole],
+          capabilities: entry.requiredCapabilities ?? [],
+        },
+        user(entry.expectedRole, entry.requiredCapabilities ?? [], entry.expectedRoot === true, identityUserId),
+      );
+      for (const check of checks.filter((candidate) => candidate.ruleStatus !== "infrastructure")) {
+        expect(check.ruleStatus, `${entry.alias}:${check.key}`).toBe("approved");
+      }
+      for (const probe of entry.probes ?? []) {
+        const check = evaluateHttpProbe(entry, probe, probe.expectedStatus);
+        if (!probe.infrastructure) expect(check.ruleStatus, `${entry.alias}:http:${probe.id}`).toBe("approved");
+      }
     }
   });
 
@@ -128,6 +146,24 @@ describe("acceptance authorization matrix", () => {
     expect(check.verdict).toBe("fail");
     expect(check.ruleId).toBe("PERM-PLATFORM-ROOT-001");
     expect(check.ruleStatus).toBe("approved");
+  });
+
+  it("quarantines a future capability added to an existing role unless that exact check has a ruleRef", () => {
+    const owner = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "owner")!;
+    const futureExpectation = {
+      ...owner,
+      requiredCapabilities: [...(owner.requiredCapabilities ?? []), "future:unapproved"],
+    };
+    const identityUserId = "uat-owner-id";
+    const checks = evaluateAcceptanceSnapshot(
+      futureExpectation,
+      { alias: "owner", userId: identityUserId, roleCodes: ["owner_group"], capabilities: futureExpectation.requiredCapabilities },
+      user("owner_group", futureExpectation.requiredCapabilities, false, identityUserId),
+    );
+    const future = checks.find((entry) => entry.key.endsWith(":cap:future:unapproved:allow"))!;
+    expect(future.verdict).toBe("pending");
+    expect(future.ruleStatus).toBe("unmapped");
+    expect(future.ruleId).toBe("PERM-ACCEPTANCE-UNMAPPED-001");
   });
 
   it("quarantines only a genuinely unmapped future business check", () => {
