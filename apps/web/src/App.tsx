@@ -34,7 +34,7 @@ import { WorkflowQueuePage } from "./reporting/workflow-queue-page.js";
 import { AdminConsolePage } from "./admin-console-page.js";
 import { EmployeeAccessPage } from "./employee-access-page.js";
 import { MasterDataPage } from "./master-data-page.js";
-import { SupplierCenterPage } from "./supplier-center-page.js";
+import { SupplierDirectoryPage, SupplierMaintenancePage } from "./supplier-center-page.js";
 import { WorkforceMasterDataPage } from "./workforce-master-data-page.js";
 import { MyTodosPage } from "./my-todos-page.js";
 import { ResponsibilityTaskPage } from "./responsibility-task-page.js";
@@ -280,8 +280,8 @@ export function App() {
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
   else if (path === "/ui/production-dashboard" || /^\/ui\/production-dashboard\/[0-9a-f-]+$/i.test(path)) page = <ProductionDashboardPage productionOrderId={path.split("/")[3]} />;
   else if (path === "/ui/production-reporting" || /^\/ui\/production-reporting\/[0-9a-f-]+$/i.test(path)) page = <ProductionReportingPage productionOrderId={path.split("/")[3]} />;
-  else if (path === "/ui/suppliers") page = <SupplierCenterPage mode="directory" />;
-  else if (path === "/ui/suppliers/manage") page = <SupplierCenterPage mode="manage" />;
+  else if (path === "/ui/suppliers") page = <SupplierDirectoryPage />;
+  else if (path === "/ui/suppliers/manage") page = <SupplierMaintenancePage />;
   else if (path === "/ui/master-data") {
     const parameters = new URLSearchParams(search);
     const masterDataView = parameters.get("view");

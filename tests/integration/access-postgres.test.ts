@@ -875,6 +875,24 @@ runWithPostgres("role permissions and versioned master data", () => {
     ]);
   });
 
+  it("projects the supplier current version timestamp without exposing contract fields", async () => {
+    const supplier = await service.createSupplier(supplierWriteActor, {
+      supplierCode: "TIMESTAMP_FIXTURE", supplierType: "factory", supplierName: "供应商版本时间测试厂",
+      active: true, notes: "", supportedCrafts: ["车缝"], bankAccount: "6222000000000001", changeReason: "建档",
+    });
+    await service.reviseSupplier(supplierWriteActor, supplier.supplierId, {
+      expectedVersion: 1, active: false, changeReason: "停用测试",
+    });
+    const summary = (await service.listSuppliers(true)).find(item => item.supplierId === supplier.supplierId)!;
+    const latest = await service.getSupplier(supplier.supplierId, false);
+    expect(summary.version).toBe(2);
+    expect(summary.changedAt).toBe(latest.changedAt);
+    expect(Number.isNaN(Date.parse(summary.changedAt))).toBe(false);
+    expect(summary).not.toHaveProperty("bankAccount");
+    expect(summary).not.toHaveProperty("contractEntityName");
+    expect((await service.listSuppliers()).some(item => item.supplierId === supplier.supplierId)).toBe(false);
+  });
+
 
   it("pages and searches the process catalog with a query-bound stable cursor", async () => {
     await Promise.all(Array.from({ length: 17 }, (_, index) => service.createProcess(masterDataActor, {

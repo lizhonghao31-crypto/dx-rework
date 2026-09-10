@@ -11,6 +11,7 @@ export type SupplierSummary = Readonly<{
   supportedCrafts: string[];
   dailyCapacity: number | null;
   contractDataMissing: string[];
+  changedAt?: string;
 }>;
 
 export const SUPPLIER_TYPE_LABELS: Record<SupplierSummary["supplierType"], string> = {
@@ -49,13 +50,22 @@ export function nextSupplierSelection(
 
 export function filterSupplierDirectory(
   suppliers: readonly SupplierSummary[],
-  input: Readonly<{ query: string; type: "all" | SupplierSummary["supplierType"]; status: "active" | "inactive" | "all" }>,
+  input: Readonly<{
+    query: string;
+    type: "all" | SupplierSummary["supplierType"];
+    status: "active" | "inactive" | "all";
+    craft?: string;
+    completeness?: "all" | "missing" | "complete";
+  }>,
 ): SupplierSummary[] {
   const query = input.query.trim().toLocaleLowerCase("zh-CN");
   return suppliers.filter((supplier) => {
     if (input.type !== "all" && supplier.supplierType !== input.type) return false;
     if (input.status === "active" && !supplier.active) return false;
     if (input.status === "inactive" && supplier.active) return false;
+    if (input.craft && !supplier.supportedCrafts.includes(input.craft)) return false;
+    if (input.completeness === "missing" && supplier.contractDataMissing.length === 0) return false;
+    if (input.completeness === "complete" && supplier.contractDataMissing.length > 0) return false;
     if (!query) return true;
     return [
       supplier.supplierName,
@@ -65,4 +75,3 @@ export function filterSupplierDirectory(
     ].join(" ").toLocaleLowerCase("zh-CN").includes(query);
   });
 }
-

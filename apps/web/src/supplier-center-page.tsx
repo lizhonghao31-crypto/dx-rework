@@ -6,6 +6,8 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { createWebUrls } from "../url-contract.js";
 import { verifySession, type AuthorizedUser } from "./auth.js";
 import { registerInternalNavigationGuard } from "./internal-navigation.js";
+import { createSupplierDraftGuard } from "./supplier-draft-guard.js";
+import { SupplierDirectoryList, SupplierMaintenanceList } from "./supplier-center-lists.js";
 import { confirmInApp } from "./system-dialog.js";
 import { Shell } from "./components.js";
 import { ListPagination, usePaginatedItems } from "./list-pagination.js";
@@ -45,11 +47,15 @@ async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
 export function SupplierCenterNavigation({ active }: { active: "directory" | "manage" }) {
   return (
     <nav className="supplier-center-tabs" aria-label="供应商中心">
-      <a className={active === "directory" ? "active" : ""} href={pageUrl("ui/suppliers")}><NavigationIcon route="/ui/suppliers" />供应商目录</a>
-      <a className={active === "manage" ? "active" : ""} href={pageUrl("ui/suppliers/manage")}><NavigationIcon route="/ui/suppliers/manage" />资料维护</a>
+      <a className={active === "directory" ? "active" : ""} aria-current={active === "directory" ? "page" : undefined} href={pageUrl("ui/suppliers")}>供应商目录</a>
+      <a className={active === "manage" ? "active" : ""} aria-current={active === "manage" ? "page" : undefined} href={pageUrl("ui/suppliers/manage")}>资料维护</a>
     </nav>
   );
 }
+
+// Distinct route components prevent a confirmed departure from retaining a create form.
+export function SupplierDirectoryPage() { return <SupplierCenterPage mode="directory" />; }
+export function SupplierMaintenancePage() { return <SupplierCenterPage mode="manage" />; }
 
 export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" | "manage" }) {
   const [user, setUser] = useState<AuthorizedUser | null>(null);
@@ -60,6 +66,8 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   const [query, setQuery] = useState("");
   const [supplierType, setSupplierType] = useState<"all" | SupplierSummary["supplierType"]>("all");
   const [status, setStatus] = useState<"active" | "inactive" | "all">("active");
+  const [craft, setCraft] = useState("");
+  const [completeness, setCompleteness] = useState<"all" | "missing" | "complete">("all");
   const [draft, setDraft] = useState<SupplierDraft>(emptyDraft);
   const [editing, setEditing] = useState(false);
   const [creating,setCreating]=useState(false),[identityLoading,setIdentityLoading]=useState(true),[identityError,setIdentityError]=useState("");
@@ -72,38 +80,33 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   const [reload, setReload] = useState(0);
   const selectedRef = useRef("");
   const writeLock = useRef(false);
-  const discardLock = useRef(false);
   const refreshLock = useRef(false);
   const dirty = creating || (editing && profile !== null && JSON.stringify(draft) !== JSON.stringify(draftFromProfile(profile)));
   const detailReady = !detailLoading && profile?.supplierId === selectedId && selectedId !== "";
-
-  useEffect(() => {
-    if (!dirty && !busy) return;
-    const guard = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
-    window.addEventListener("beforeunload", guard);
-    return () => window.removeEventListener("beforeunload", guard);
-  }, [dirty, busy]);
-
-  const discardChanges = async (): Promise<boolean> => {
-    if (writeLock.current || discardLock.current || refreshLock.current) return false;
-    if (!dirty) return true;
-    discardLock.current = true;
-    try {
-      return await confirmInApp("当前供应商有未保存修改，确定放弃这些修改？", {
+  const [draftGuard] = useState(() => createSupplierDraftGuard({
+    isBlocked: () => writeLock.current || refreshLock.current,
+    confirm: () => confirmInApp("当前供应商有未保存修改，确定放弃这些修改？", {
         title: "未保存修改", confirmLabel: "放弃修改", cancelLabel: "继续编辑",
-      });
-    } finally { discardLock.current = false; }
-  };
+    }),
+    discard: () => {
+      creationCode.current = "";
+      setDraft(emptyDraft());
+      setCreating(false);
+      setEditing(false);
+    },
+  }));
+  draftGuard.setDirty(dirty);
+  const discardChanges = draftGuard.requestLeave;
 
   useEffect(() => {
-    if (!dirty && !busy) return;
-    return registerInternalNavigationGuard(async () => {
-      if (writeLock.current || refreshLock.current) return false;
-      return confirmInApp("当前供应商有未保存修改，确定离开并放弃？", {
-        title: "未保存修改", confirmLabel: "放弃并离开", cancelLabel: "继续编辑",
-      });
-    });
-  }, [dirty, busy]);
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (!draftGuard.shouldBlock) return;
+      event.preventDefault(); event.returnValue = "";
+    };
+    const unregister = registerInternalNavigationGuard(draftGuard.requestLeave);
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => { unregister(); window.removeEventListener("beforeunload", beforeUnload); };
+  }, [draftGuard]);
 
   const selectSupplier = async (id: string) => {
     if ((!creating && id === selectedRef.current) || !await discardChanges()) return;
@@ -203,13 +206,16 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
     query,
     type: supplierType,
     status,
-  }), [query, status, supplierType, suppliers]);
-  const page = usePaginatedItems(filtered, `${query}:${supplierType}:${status}`, 12);
+    craft: mode === "directory" ? craft : "",
+    completeness: mode === "manage" ? completeness : "all",
+  }), [query, status, supplierType, suppliers, craft, completeness, mode]);
+  const crafts = useMemo(() => [...new Set(suppliers.flatMap(supplier => supplier.supportedCrafts))].sort((a, b) => a.localeCompare(b, "zh-CN")), [suppliers]);
+  const page = usePaginatedItems(filtered, `${query}:${supplierType}:${status}:${craft}:${completeness}`, 12);
   const missingLabels = supplierContractMissingLabels(profile?.contractDataMissing ?? []);
   const contractVisible = profile ? Object.hasOwn(profile, "contractEntityName") : false;
 
   const save = async () => {
-    if(!canMaintain||writeLock.current||discardLock.current||refreshLock.current)return;
+    if(!canMaintain||writeLock.current||draftGuard.pending||refreshLock.current)return;
     if(!creating&&(!profile||!detailReady||profile.supplierId!==selectedRef.current))return;
     const parsed=supplierDraftPayload(draft,{creating,code:creationCode.current,version:profile?.version??1});
     if(!parsed.success){setError(parsed.error);return;}
@@ -218,6 +224,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       const result=await json<{supplierId:string;version:number}>(creating?"master-data/suppliers":`master-data/suppliers/${profile!.supplierId}/versions`,{method:"POST",body:JSON.stringify(parsed.data)});
       if(!creating&&result.supplierId!==profile!.supplierId)throw new Error("保存结果与当前供应商不一致，请刷新核对。");
       // Once committed, leave create mode before refreshing so a read failure cannot resubmit a new supplier.
+      draftGuard.markClean();creationCode.current="";setDraft(emptyDraft());
       savedSelection.current=result.supplierId;setSavedMessage("资料已保存 · 版本 "+result.version);
       selectedRef.current=result.supplierId;setCreating(false);setSelectedId(result.supplierId);setEditing(false);setProfile(null);setHistory([]);setDetailLoading(true);
       setReload(value=>value+1);
@@ -228,7 +235,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   };
 
   const toggleActive = async () => {
-    if (!profile || !canMaintain || !detailReady || profile.supplierId !== selectedRef.current || writeLock.current || discardLock.current || refreshLock.current) return;
+    if (!profile || !canMaintain || !detailReady || profile.supplierId !== selectedRef.current || writeLock.current || draftGuard.pending || refreshLock.current) return;
     setDraft({ ...draft, active: !profile.active, changeReason: profile.active ? "供应商停用" : "供应商恢复启用" });
     setEditing(true);
   };
@@ -237,14 +244,15 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
     <Shell active={mode === "manage" ? "资料维护" : "供应商目录"}>
       <header className="page-heading supplier-center-heading">
         <div>
-          <h1><NavigationIcon route={mode === "manage" ? "/ui/suppliers/manage" : "/ui/suppliers"} size="title" />供应商中心</h1>
-          <p>{mode==="manage"?"填写并保存供应商资料，保留每次修改记录。":"查看供应商资料、工艺与常规产能。"}</p>
+          <h1><NavigationIcon route={mode === "manage" ? "/ui/suppliers/manage" : "/ui/suppliers"} size="title" />{mode === "manage" ? "资料维护" : "供应商目录"}</h1>
+          <p>{mode === "manage" ? "新增、修改、启停供应商资料并保留变更历史" : "查看供应商资料、工艺、常规产能及已有业务事实"}</p>
         </div>
         <div className="supplier-center-heading__actions">
           <StatusBadge tone={canMaintain ? "info" : "neutral"}>{identityLoading?"核验身份中":canMaintain ? "Root 可维护" : "只读"}</StatusBadge>
           {canMaintain ? <Button variant="primary" disabled={busy||refreshing} onClick={()=>void beginCreate()}>新增供应商</Button> : null}
         </div>
       </header>
+      <SupplierCenterNavigation active={mode} />
       {identityError?<p role="alert">{identityError} <Button onClick={()=>void loadIdentity()}>重新核验</Button></p>:null}
       {savedMessage?<p className="supplier-center-notice" role="status">{savedMessage}</p>:null}
       {error ? <div className="supplier-center-error" role="alert"><b>请处理以下问题</b><p>{error}</p></div> : null}
@@ -254,7 +262,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       <div className={`supplier-center-workspace${selectedId||creating ? " has-selection" : ""}`}>
         <Surface className="supplier-directory">
           <div className="supplier-directory__heading">
-            <div><h2>供应商目录</h2><p>共 {filtered.length} 家</p></div>
+            <div><h2>{mode === "manage" ? "供应商资料" : "供应商列表"}</h2><p>共 {filtered.length} 家</p></div>
             <Button onClick={() => void refreshDirectory()} disabled={busy || refreshing}>刷新</Button>
           </div>
           <div className="supplier-directory__filters">
@@ -266,23 +274,17 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
             <select value={status} onChange={(event) => setStatus(event.target.value as typeof status)} aria-label="启用状态">
               <option value="active">仅启用</option><option value="inactive">仅停用</option><option value="all">全部状态</option>
             </select>
+            {mode === "directory" ? <select value={craft} onChange={event => setCraft(event.target.value)} aria-label="工艺">
+              <option value="">全部工艺</option>{crafts.map(value => <option key={value} value={value}>{value}</option>)}
+            </select> : <select value={completeness} onChange={event => setCompleteness(event.target.value as typeof completeness)} aria-label="资料完整度">
+              <option value="all">全部资料</option><option value="missing">有缺项</option><option value="complete">完整</option>
+            </select>}
           </div>
-          <div className="supplier-table-labels" aria-hidden="true"><span>供应商 / 编码</span><span>工艺与日产能</span><span>状态 / 合同资料</span></div>
-          <div className="supplier-directory__list">
-            {page.items.length ? page.items.map((supplier) => (
-              <button className={selectedId === supplier.supplierId ? "is-selected" : ""} disabled={busy || refreshing} onClick={() => void selectSupplier(supplier.supplierId)} key={supplier.supplierId}>
-                <span><strong>{supplier.supplierName}</strong><small>{supplier.supplierCode} · {SUPPLIER_TYPE_LABELS[supplier.supplierType]}</small></span>
-                <span className="supplier-directory__craft"><span>{supplier.supportedCrafts.join("、") || "工艺尚未维护"}</span><small>{supplier.dailyCapacity === null ? "产能尚未维护" : `${supplier.dailyCapacity.toLocaleString("zh-CN")} 件 / 日`}</small></span>
-                <span className="supplier-directory__meta">
-                  <StatusBadge tone={supplier.active ? "success" : "warning"}>{supplier.active ? "启用" : "停用"}</StatusBadge>
-                  {supplier.contractDataMissing.length
-                    ? <small>{supplier.contractDataMissing.length} 项合同资料缺失</small>
-                    : <small className="is-complete">合同资料完整</small>}
-                </span>
-              </button>
-            )) : <p className="supplier-center-empty">没有符合条件的供应商。</p>}
-          </div>
-          <ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} ariaLabel="供应商目录分页" />
+          {page.items.length ? mode === "directory"
+            ? <SupplierDirectoryList suppliers={page.items} disabled={busy || refreshing} onSelect={id => void selectSupplier(id)} />
+            : <SupplierMaintenanceList suppliers={page.items} canWrite={canMaintain} disabled={busy || refreshing} onSelect={id => void selectSupplier(id)} />
+            : <p className="supplier-center-empty">没有符合条件的供应商。</p>}
+          <ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} ariaLabel={mode === "manage" ? "资料维护分页" : "供应商目录分页"} />
         </Surface>
 
         <Surface className="supplier-profile">
@@ -322,4 +324,3 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
     </Shell>
   );
 }
-

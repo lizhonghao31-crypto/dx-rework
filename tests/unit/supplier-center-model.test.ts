@@ -62,6 +62,16 @@ describe("SSP-02 supplier center model", () => {
       .toEqual(["供应商地址", "乙方代表", "收款账号", "开户行"]);
   });
 
+  it("combines exact craft and completeness filters with search, type and status", () => {
+    const all = { query: "", type: "all", status: "all" } as const;
+    expect(filterSupplierDirectory(suppliers, { ...all, craft: "车缝" })).toEqual([suppliers[0]]);
+    expect(filterSupplierDirectory(suppliers, { ...all, craft: "车" })).toEqual([]);
+    expect(filterSupplierDirectory(suppliers, { ...all, completeness: "missing" })).toEqual([suppliers[1]]);
+    expect(filterSupplierDirectory(suppliers, { ...all, completeness: "complete" })).toEqual([suppliers[0]]);
+    expect(filterSupplierDirectory(suppliers, { ...all, status: "active", completeness: "missing" })).toEqual([]);
+    expect(filterSupplierDirectory(suppliers, { ...all, query: "FAC_001", type: "factory", craft: "整烫", completeness: "complete" })).toEqual([suppliers[0]]);
+  });
+
   it("keeps both mobile and desktop users in the directory until they select a supplier", () => {
     expect(nextSupplierSelection("", suppliers, true)).toBe("");
     expect(nextSupplierSelection("", suppliers, false)).toBe("");
@@ -69,4 +79,3 @@ describe("SSP-02 supplier center model", () => {
     expect(nextSupplierSelection(suppliers[1]!.supplierId, suppliers, true)).toBe(suppliers[1]?.supplierId);
   });
 });
-
