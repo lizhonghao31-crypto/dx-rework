@@ -27,15 +27,18 @@ const ACCEPTANCE_USERS = [
   ["worker-a", "[UAT] 工人甲", "worker"],
   ["worker-b", "[UAT] 工人乙", "worker"],
   ["merchandiser", "[UAT] 订单跟单", "order_merchandiser"],
+  ["embroidery-washing-merchandiser", "[UAT] 印绣花/洗水跟单", "embroidery_washing_merchandiser"],
   ["finance-read", "[UAT] 财务全局查看", "finance_read"],
   ["finance-director", "[UAT] 财务总监", "finance_director"],
   ["factory-payables", "[UAT] 加工厂应付会计", "factory_payables"],
+  ["embroidery-washing-payables", "[UAT] 印绣花洗水应付会计", "embroidery_washing_payables"],
+  ["fabric-payables", "[UAT] 面料供应商应付会计", "fabric_payables"],
+  ["wage-month-close-accountant", "[UAT] 工资月结会计", "wage_month_close_accountant"],
   ["system-admin", "[UAT] 系统管理员", "system_admin"],
   ["production-reporter", "[UAT] 驻厂生产填报", "production_reporter"],
   ["sample-designer", "[UAT] 样衣设计师", "sample_designer"],
   ["sample-admin", "[UAT] 样衣管理员", "sample_administrative"],
   ["sample-finance", "[UAT] 样衣财务", "sample_finance"],
-  ["sample-approver", "[UAT] 样衣审批人", "sample_approver"],
 ] as const;
 
 const acceptanceDatabaseUrl = process.env.ACCEPTANCE_DATABASE_URL?.trim();

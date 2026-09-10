@@ -164,7 +164,7 @@ export const ACCEPTANCE_SCENARIOS: readonly AcceptanceScenarioDefinition[] = [
     ],
     preflight: { path: "frontline/work-tasks?kind=worker", expectedStatus: 200 },
     ruleId: "PERM-PLATFORM-WORKER-CROSSMODULE-001",
-    ruleStatus: "pending",
+    ruleStatus: "approved",
   },
 ];
 

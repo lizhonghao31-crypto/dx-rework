@@ -58,7 +58,8 @@ const UNMAPPED_BUSINESS_RULE: AcceptanceRuleRef = Object.freeze({
   status: "unmapped",
 });
 const approved = (ruleId: string): AcceptanceRuleRef => ({ ruleId, status: "approved" });
-const pending = (ruleId: string): AcceptanceRuleRef => ({ ruleId, status: "pending" });
+const approvedKeys = (ruleId: string, keys: readonly string[]): Record<string, AcceptanceRuleRef> =>
+  Object.fromEntries(keys.map((key) => [key, approved(ruleId)]));
 
 const probe = (id: string, label: string, path: string, expectedStatus: number): AcceptanceHttpProbe => ({
   id,
@@ -74,6 +75,7 @@ const sourcingAllow = probe("sourcing-list", "报价选厂订单列表", "sourci
 const sourcingDeny = probe("sourcing-list", "报价选厂订单列表", "sourcing/cases?page=1", 403);
 const suppliersAllow = probe("supplier-list", "供应商目录", "master-data/suppliers", 200);
 const suppliersDeny = probe("supplier-list", "供应商目录", "master-data/suppliers", 403);
+const productionDashboardAllow = probe("production-dashboard", "实时生产看板", "production-dashboard", 200);
 const productionDashboardDeny = probe("production-dashboard", "实时生产看板", "production-dashboard", 403);
 const samplesAllow = probe("sample-list", "样衣目录", "samples?page=1", 200);
 const samplesDeny = probe("sample-list", "样衣目录", "samples?page=1", 403);
@@ -102,10 +104,10 @@ const sampleMutationDenyRules = Object.fromEntries(
 );
 
 /**
- * Business expectations remain independent from runtime RBAC, but only checks
- * traceable to an APPROVED Golden Source rule may pass/fail. PENDING or unmapped
- * business checks are still executed and retain expected/actual evidence, while
- * their verdict is "pending" so current implementation cannot become the oracle.
+ * The matrix translates the approved Golden Source. Every current business
+ * check is explicitly bound by key. A future capability/module/HTTP check that
+ * is added without a ruleRefs entry is quarantined as unmapped instead of
+ * inheriting an unrelated role-level approval.
  */
 export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
   {
@@ -113,39 +115,30 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     expectedRole: "owner_group",
     expectedRoot: true,
     allowedModules: ["rework", "sourcing", "suppliers", "production", "samples"],
-    probes: [accessRolesAllow, sourcingAllow, suppliersAllow, samplesAllow],
-    ruleRefs: {
-      "module:rework:allow": approved("PERM-PLATFORM-ROOT-001"),
-      "module:sourcing:allow": approved("PERM-PLATFORM-ROOT-001"),
-      "module:suppliers:allow": approved("PERM-PLATFORM-ROOT-001"),
-      "module:production:allow": approved("PERM-PLATFORM-ROOT-001"),
-      "module:samples:allow": approved("PERM-PLATFORM-ROOT-001"),
-      "http:access-roles": approved("PERM-PLATFORM-ROOT-001"),
-      "http:sourcing-list": approved("PERM-PLATFORM-ROOT-001"),
-      "http:supplier-list": approved("PERM-PLATFORM-ROOT-001"),
-      "http:sample-list": approved("PERM-PLATFORM-ROOT-001"),
-    },
+    probes: [accessRolesAllow, sourcingAllow, suppliersAllow, productionDashboardAllow, samplesAllow],
+    ruleRefs: approvedKeys("PERM-PLATFORM-ROOT-001", [
+      "module:rework:allow", "module:sourcing:allow", "module:suppliers:allow", "module:production:allow", "module:samples:allow",
+      "http:access-roles", "http:sourcing-list", "http:supplier-list", "http:production-dashboard", "http:sample-list",
+    ]),
   },
   {
     alias: "owner",
     expectedRole: "owner_group",
     requiredCapabilities: ["todo:view", "sourcing:view", "supplier_profile:read", "sample:view_basic"],
+    forbiddenCapabilities: ["access:admin", "admin:read", "audit:read"],
     allowedModules: ["rework", "sourcing", "suppliers", "production", "samples"],
-    probes: [accessRolesAllow, sourcingAllow, suppliersAllow, samplesAllow],
+    probes: [accessRolesDeny, sourcingAllow, suppliersAllow, productionDashboardAllow, samplesAllow],
     ruleRefs: {
-      "cap:todo:view:allow": approved("PERM-PLATFORM-OWNER-001"),
-      "cap:sourcing:view:allow": approved("PERM-PLATFORM-OWNER-001"),
+      ...approvedKeys("PERM-PLATFORM-OWNER-001", [
+        "cap:todo:view:allow", "cap:sourcing:view:allow", "cap:sample:view_basic:allow",
+        "cap:access:admin:deny", "cap:admin:read:deny", "cap:audit:read:deny",
+        "module:rework:allow", "module:sourcing:allow", "module:production:allow", "module:samples:allow",
+        "http:sourcing-list", "http:production-dashboard", "http:sample-list",
+      ]),
       "cap:supplier_profile:read:allow": approved("PERM-SUPPLIER-OWNER-001"),
-      "cap:sample:view_basic:allow": approved("PERM-PLATFORM-OWNER-001"),
-      "module:rework:allow": approved("PERM-PLATFORM-OWNER-001"),
-      "module:sourcing:allow": approved("PERM-PLATFORM-OWNER-001"),
       "module:suppliers:allow": approved("PERM-SUPPLIER-OWNER-001"),
-      "module:production:allow": approved("PERM-PLATFORM-OWNER-001"),
-      "module:samples:allow": approved("PERM-PLATFORM-OWNER-001"),
-      "http:access-roles": approved("PERM-PLATFORM-OWNER-001"),
-      "http:sourcing-list": approved("PERM-PLATFORM-OWNER-001"),
       "http:supplier-list": approved("PERM-SUPPLIER-OWNER-001"),
-      "http:sample-list": approved("PERM-PLATFORM-OWNER-001"),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
     },
   },
   {
@@ -155,13 +148,18 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     forbiddenCapabilities: ["sample:view_basic", "access:admin"],
     allowedModules: ["rework", "sourcing", "suppliers", "production"],
     forbiddenModules: ["samples"],
-    probes: [accessRolesDeny, sourcingAllow, suppliersAllow, samplesDeny],
+    probes: [accessRolesDeny, sourcingAllow, suppliersAllow, productionDashboardAllow, samplesDeny],
     ruleRefs: {
+      ...approvedKeys("PERM-ROLE-PRODUCTION-MANAGEMENT-001", [
+        "cap:sample:view_basic:deny", "cap:access:admin:deny", "module:rework:allow", "module:production:allow",
+        "module:samples:deny", "http:production-dashboard", "http:sample-list",
+      ]),
       "cap:sourcing:view:allow": approved("PERM-SOURCING-FIVE-001"),
       "module:sourcing:allow": approved("PERM-SOURCING-FIVE-001"),
       "http:sourcing-list": approved("PERM-SOURCING-FIVE-001"),
-      "module:suppliers:allow": pending("PERM-SUPPLIER-PM-CENTER-001"),
-      "http:supplier-list": pending("PERM-SUPPLIER-PM-CENTER-001"),
+      "module:suppliers:allow": approved("PERM-SUPPLIER-PM-CENTER-001"),
+      "http:supplier-list": approved("PERM-SUPPLIER-PM-CENTER-001"),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
     },
   },
   {
@@ -171,13 +169,18 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     forbiddenCapabilities: ["sample:view_basic", "access:admin"],
     allowedModules: ["rework", "sourcing", "suppliers"],
     forbiddenModules: ["samples", "production"],
-    probes: [accessRolesDeny, sourcingAllow, suppliersAllow, samplesDeny],
+    probes: [accessRolesDeny, sourcingAllow, suppliersAllow, productionDashboardDeny, samplesDeny],
     ruleRefs: {
+      ...approvedKeys("PERM-ROLE-IE-001", [
+        "cap:process:review:allow", "cap:sample:view_basic:deny", "cap:access:admin:deny", "module:rework:allow",
+        "module:samples:deny", "module:production:deny", "http:production-dashboard", "http:sample-list",
+      ]),
       "cap:sourcing:view:allow": approved("PERM-SOURCING-FIVE-001"),
       "module:sourcing:allow": approved("PERM-SOURCING-FIVE-001"),
       "http:sourcing-list": approved("PERM-SOURCING-FIVE-001"),
-      "module:suppliers:allow": pending("PERM-SUPPLIER-IE-CENTER-001"),
-      "http:supplier-list": pending("PERM-SUPPLIER-IE-CENTER-001"),
+      "module:suppliers:allow": approved("PERM-SUPPLIER-IE-CENTER-001"),
+      "http:supplier-list": approved("PERM-SUPPLIER-IE-CENTER-001"),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
     },
   },
   {
@@ -187,10 +190,16 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     forbiddenCapabilities: ["sourcing:view", "sample:view_basic", "access:admin"],
     allowedModules: ["rework"],
     forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
-    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesDeny],
+    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, productionDashboardDeny, samplesDeny],
     ruleRefs: {
-      "module:suppliers:deny": pending("PERM-SUPPLIER-TAIL-001"),
-      "http:supplier-list": pending("PERM-SUPPLIER-TAIL-001"),
+      ...approvedKeys("PERM-ROLE-TAIL-SUPERVISOR-001", [
+        "cap:process:configure:allow", "cap:work:assign:allow", "cap:sourcing:view:deny", "cap:sample:view_basic:deny", "cap:access:admin:deny",
+        "module:rework:allow", "module:sourcing:deny", "module:production:deny", "module:samples:deny",
+        "http:sourcing-list", "http:production-dashboard", "http:sample-list",
+      ]),
+      "module:suppliers:deny": approved("PERM-SUPPLIER-TAIL-001"),
+      "http:supplier-list": approved("PERM-SUPPLIER-TAIL-001"),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
     },
   },
   {
@@ -200,10 +209,16 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     forbiddenCapabilities: ["sourcing:view", "sample:view_basic", "access:admin"],
     allowedModules: ["rework"],
     forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
-    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesDeny],
+    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, productionDashboardDeny, samplesDeny],
     ruleRefs: {
-      "module:suppliers:deny": pending("PERM-SUPPLIER-QC-001"),
-      "http:supplier-list": pending("PERM-SUPPLIER-QC-001"),
+      ...approvedKeys("PERM-ROLE-QC-001", [
+        "cap:rework:initiate:allow", "cap:sourcing:view:deny", "cap:sample:view_basic:deny", "cap:access:admin:deny",
+        "module:rework:allow", "module:sourcing:deny", "module:production:deny", "module:samples:deny",
+        "http:sourcing-list", "http:production-dashboard", "http:sample-list",
+      ]),
+      "module:suppliers:deny": approved("PERM-SUPPLIER-QC-001"),
+      "http:supplier-list": approved("PERM-SUPPLIER-QC-001"),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
     },
   },
   {
@@ -213,10 +228,16 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     forbiddenCapabilities: ["sourcing:view", "sample:view_basic", "access:admin"],
     allowedModules: ["rework"],
     forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
-    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesDeny],
+    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, productionDashboardDeny, samplesDeny],
     ruleRefs: {
-      "module:suppliers:deny": pending("PERM-SUPPLIER-WAREHOUSE-001"),
-      "http:supplier-list": pending("PERM-SUPPLIER-WAREHOUSE-001"),
+      ...approvedKeys("PERM-ROLE-WAREHOUSE-001", [
+        "cap:receiving:create:allow", "cap:sourcing:view:deny", "cap:sample:view_basic:deny", "cap:access:admin:deny",
+        "module:rework:allow", "module:sourcing:deny", "module:production:deny", "module:samples:deny",
+        "http:sourcing-list", "http:production-dashboard", "http:sample-list",
+      ]),
+      "module:suppliers:deny": approved("PERM-SUPPLIER-WAREHOUSE-001"),
+      "http:supplier-list": approved("PERM-SUPPLIER-WAREHOUSE-001"),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
     },
   },
   {
@@ -226,22 +247,23 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     forbiddenCapabilities: ["access:admin", "sourcing:view", "supplier_profile:read", "sample:view_basic"],
     allowedModules: ["rework"],
     forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
-    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesDeny],
+    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, productionDashboardDeny, samplesDeny],
     ruleRefs: {
       "cap:work:report:allow": approved("PERM-REWORK-WORKER-001"),
       "module:rework:allow": approved("PERM-REWORK-WORKER-001"),
-      "cap:supplier_profile:read:deny": pending("PERM-SUPPLIER-WORKER-001"),
-      "module:suppliers:deny": pending("PERM-SUPPLIER-WORKER-001"),
-      "http:supplier-list": pending("PERM-SUPPLIER-WORKER-001"),
-      "cap:access:admin:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
-      "cap:sourcing:view:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
-      "cap:sample:view_basic:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
-      "module:sourcing:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
-      "module:production:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
-      "module:samples:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
-      "http:access-roles": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
-      "http:sourcing-list": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
-      "http:sample-list": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "cap:supplier_profile:read:deny": approved("PERM-SUPPLIER-WORKER-001"),
+      "module:suppliers:deny": approved("PERM-SUPPLIER-WORKER-001"),
+      "http:supplier-list": approved("PERM-SUPPLIER-WORKER-001"),
+      "cap:access:admin:deny": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "cap:sourcing:view:deny": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "cap:sample:view_basic:deny": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "module:sourcing:deny": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "module:production:deny": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "module:samples:deny": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
+      "http:sourcing-list": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "http:production-dashboard": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "http:sample-list": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
     },
   },
   {
@@ -251,22 +273,23 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     forbiddenCapabilities: ["access:admin", "sourcing:view", "supplier_profile:read", "sample:view_basic"],
     allowedModules: ["rework"],
     forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
-    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesDeny],
+    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, productionDashboardDeny, samplesDeny],
     ruleRefs: {
       "cap:work:report:allow": approved("PERM-REWORK-WORKER-001"),
       "module:rework:allow": approved("PERM-REWORK-WORKER-001"),
-      "cap:supplier_profile:read:deny": pending("PERM-SUPPLIER-WORKER-001"),
-      "module:suppliers:deny": pending("PERM-SUPPLIER-WORKER-001"),
-      "http:supplier-list": pending("PERM-SUPPLIER-WORKER-001"),
-      "cap:access:admin:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
-      "cap:sourcing:view:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
-      "cap:sample:view_basic:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
-      "module:sourcing:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
-      "module:production:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
-      "module:samples:deny": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
-      "http:access-roles": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
-      "http:sourcing-list": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
-      "http:sample-list": pending("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "cap:supplier_profile:read:deny": approved("PERM-SUPPLIER-WORKER-001"),
+      "module:suppliers:deny": approved("PERM-SUPPLIER-WORKER-001"),
+      "http:supplier-list": approved("PERM-SUPPLIER-WORKER-001"),
+      "cap:access:admin:deny": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "cap:sourcing:view:deny": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "cap:sample:view_basic:deny": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "module:sourcing:deny": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "module:production:deny": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "module:samples:deny": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
+      "http:sourcing-list": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "http:production-dashboard": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
+      "http:sample-list": approved("PERM-PLATFORM-WORKER-CROSSMODULE-001"),
     },
   },
   {
@@ -276,15 +299,34 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     forbiddenCapabilities: ["sample:view_basic", "access:admin"],
     allowedModules: ["rework", "sourcing", "suppliers", "production"],
     forbiddenModules: ["samples"],
-    probes: [accessRolesDeny, sourcingAllow, suppliersAllow, samplesDeny],
+    probes: [accessRolesDeny, sourcingAllow, suppliersAllow, productionDashboardAllow, samplesDeny],
     ruleRefs: {
+      ...approvedKeys("PERM-ROLE-MERCHANDISER-001", [
+        "cap:sample:view_basic:deny", "cap:access:admin:deny", "module:rework:allow", "module:production:allow",
+        "module:samples:deny", "http:production-dashboard", "http:sample-list",
+      ]),
       "cap:sourcing:view:allow": approved("PERM-SOURCING-FIVE-001"),
       "cap:sourcing:inquiry:create:allow": approved("PERM-SOURCING-FIVE-001"),
       "module:sourcing:allow": approved("PERM-SOURCING-FIVE-001"),
       "http:sourcing-list": approved("PERM-SOURCING-FIVE-001"),
-      "cap:supplier_profile:read:allow": pending("PERM-SUPPLIER-MERCH-CENTER-001"),
-      "module:suppliers:allow": pending("PERM-SUPPLIER-MERCH-CENTER-001"),
-      "http:supplier-list": pending("PERM-SUPPLIER-MERCH-CENTER-001"),
+      "cap:supplier_profile:read:allow": approved("PERM-SUPPLIER-MERCH-CENTER-001"),
+      "module:suppliers:allow": approved("PERM-SUPPLIER-MERCH-CENTER-001"),
+      "http:supplier-list": approved("PERM-SUPPLIER-MERCH-CENTER-001"),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
+    },
+  },
+  {
+    alias: "embroidery-washing-merchandiser",
+    expectedRole: "embroidery_washing_merchandiser",
+    requiredCapabilities: ["external_responsibility:view"],
+    forbiddenCapabilities: ["access:admin"],
+    allowedModules: ["rework"],
+    probes: [accessRolesDeny],
+    ruleRefs: {
+      ...approvedKeys("PERM-ROLE-EMBROIDERY-WASH-MERCH-001", [
+        "cap:external_responsibility:view:allow", "cap:access:admin:deny", "module:rework:allow",
+      ]),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
     },
   },
   {
@@ -296,20 +338,28 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
     probes: [accessRolesDeny, reworkReportAllow, sourcingDeny, suppliersDeny, productionDashboardDeny, samplesDeny],
     ruleRefs: {
+      ...approvedKeys("PERM-ROLE-FINANCE-READ-001", [
+        "cap:sourcing:view:deny", "cap:supplier_profile:read:deny", "cap:sample:view_basic:deny", "cap:access:admin:deny",
+        "module:sourcing:deny", "module:suppliers:deny", "module:production:deny", "module:samples:deny",
+        "http:sourcing-list", "http:supplier-list", "http:production-dashboard", "http:sample-list",
+      ]),
       "cap:report:view:allow": approved("PERM-REWORK-FINANCE-READ-001"),
       "module:rework:allow": approved("PERM-REWORK-FINANCE-READ-001"),
       "http:rework-report-list": approved("PERM-REWORK-FINANCE-READ-001"),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
     },
   },
   {
     alias: "finance-director",
     expectedRole: "finance_director",
     requiredCapabilities: ["sourcing:view", "sample:view_basic", "sample:view_finance", "sample:view_audit"],
-    forbiddenCapabilities: ["access:admin", ...sampleMutationCapabilities],
-    allowedModules: ["rework", "sourcing", "suppliers", "samples"],
-    forbiddenModules: ["production"],
-    probes: [accessRolesDeny, sourcingAllow, suppliersAllow, samplesAllow],
+    forbiddenCapabilities: ["access:admin", "production-reporting", ...sampleMutationCapabilities],
+    allowedModules: ["rework", "sourcing", "suppliers", "production", "samples"],
+    probes: [accessRolesDeny, sourcingAllow, suppliersAllow, productionDashboardAllow, samplesAllow],
     ruleRefs: {
+      ...approvedKeys("PERM-ROLE-FINANCE-DIRECTOR-001", [
+        "cap:access:admin:deny", "cap:production-reporting:deny", "module:production:allow", "http:production-dashboard",
+      ]),
       "cap:sourcing:view:allow": approved("PERM-SOURCING-FIVE-001"),
       "module:sourcing:allow": approved("PERM-SOURCING-FIVE-001"),
       "http:sourcing-list": approved("PERM-SOURCING-FIVE-001"),
@@ -320,57 +370,107 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
       "module:samples:allow": approved("PERM-SAMPLE-FINANCE-DIRECTOR-001"),
       "http:sample-list": approved("PERM-SAMPLE-FINANCE-DIRECTOR-001"),
       "module:rework:allow": approved("PERM-REWORK-FINANCE-DIRECTOR-001"),
-      "module:suppliers:allow": pending("PERM-SUPPLIER-FINANCE-CENTER-001"),
-      "http:supplier-list": pending("PERM-SUPPLIER-FINANCE-CENTER-001"),
+      "module:suppliers:allow": approved("PERM-SUPPLIER-FINANCE-CENTER-001"),
+      "http:supplier-list": approved("PERM-SUPPLIER-FINANCE-CENTER-001"),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
     },
   },
   {
     alias: "factory-payables",
     expectedRole: "factory_payables",
-    requiredCapabilities: ["sourcing:view", "supplier_profile:read"],
+    requiredCapabilities: ["sourcing:view", "supplier_profile:read", "external_responsibility:payables_confirm"],
     forbiddenCapabilities: ["sample:view_basic", "access:admin"],
-    allowedModules: ["sourcing", "suppliers"],
+    allowedModules: ["rework", "sourcing", "suppliers"],
     forbiddenModules: ["samples", "production"],
-    probes: [accessRolesDeny, sourcingAllow, suppliersAllow, samplesDeny],
+    probes: [accessRolesDeny, sourcingAllow, suppliersAllow, productionDashboardDeny, samplesDeny],
     ruleRefs: {
-      "cap:supplier_profile:read:allow": pending("PERM-SUPPLIER-FACTORY-PAYABLES-CENTER-001"),
-      "module:suppliers:allow": pending("PERM-SUPPLIER-FACTORY-PAYABLES-CENTER-001"),
-      "http:supplier-list": pending("PERM-SUPPLIER-FACTORY-PAYABLES-CENTER-001"),
+      ...approvedKeys("PERM-ROLE-PAYABLES-001", [
+        "cap:sourcing:view:allow", "cap:external_responsibility:payables_confirm:allow", "cap:sample:view_basic:deny", "cap:access:admin:deny",
+        "module:rework:allow", "module:sourcing:allow", "module:samples:deny", "module:production:deny",
+        "http:sourcing-list", "http:production-dashboard", "http:sample-list",
+      ]),
+      "cap:supplier_profile:read:allow": approved("PERM-SUPPLIER-FACTORY-PAYABLES-CENTER-001"),
+      "module:suppliers:allow": approved("PERM-SUPPLIER-FACTORY-PAYABLES-CENTER-001"),
+      "http:supplier-list": approved("PERM-SUPPLIER-FACTORY-PAYABLES-CENTER-001"),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
+    },
+  },
+  {
+    alias: "embroidery-washing-payables",
+    expectedRole: "embroidery_washing_payables",
+    requiredCapabilities: ["external_responsibility:view", "external_responsibility:payables_confirm"],
+    forbiddenCapabilities: ["access:admin"],
+    allowedModules: ["rework"],
+    probes: [accessRolesDeny],
+    ruleRefs: {
+      ...approvedKeys("PERM-ROLE-PAYABLES-001", [
+        "cap:external_responsibility:view:allow", "cap:external_responsibility:payables_confirm:allow", "cap:access:admin:deny", "module:rework:allow",
+      ]),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
+    },
+  },
+  {
+    alias: "fabric-payables",
+    expectedRole: "fabric_payables",
+    requiredCapabilities: ["external_responsibility:view", "external_responsibility:payables_confirm"],
+    forbiddenCapabilities: ["access:admin"],
+    allowedModules: ["rework"],
+    probes: [accessRolesDeny],
+    ruleRefs: {
+      ...approvedKeys("PERM-ROLE-PAYABLES-001", [
+        "cap:external_responsibility:view:allow", "cap:external_responsibility:payables_confirm:allow", "cap:access:admin:deny", "module:rework:allow",
+      ]),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
+    },
+  },
+  {
+    alias: "wage-month-close-accountant",
+    expectedRole: "wage_month_close_accountant",
+    requiredCapabilities: ["wage:view", "wage:export"],
+    forbiddenCapabilities: ["access:admin", "report:export", "sourcing:view", "supplier_profile:read", "sample:view_basic"],
+    allowedModules: ["rework"],
+    forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
+    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, productionDashboardDeny, samplesDeny],
+    ruleRefs: {
+      ...approvedKeys("PERM-WAGE-MONTH-CLOSE-EXPORT-001", [
+        "cap:wage:view:allow", "cap:wage:export:allow", "cap:access:admin:deny", "cap:report:export:deny", "cap:sourcing:view:deny",
+        "cap:supplier_profile:read:deny", "cap:sample:view_basic:deny", "module:rework:allow", "module:sourcing:deny", "module:suppliers:deny",
+        "module:production:deny", "module:samples:deny", "http:sourcing-list", "http:supplier-list", "http:production-dashboard", "http:sample-list",
+      ]),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
     },
   },
   {
     alias: "system-admin",
     expectedRole: "system_admin",
     requiredCapabilities: ["admin:read", "audit:read"],
-    forbiddenCapabilities: ["sample:view_basic", "sourcing:view"],
+    forbiddenCapabilities: ["access:admin", "sample:view_basic", "sourcing:view", "supplier_profile:read", "production-reporting"],
     forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
-    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesDeny],
+    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, productionDashboardDeny, samplesDeny],
     ruleRefs: {
-      "cap:admin:read:allow": approved("PERM-PLATFORM-SYSADMIN-001"),
-      "cap:audit:read:allow": approved("PERM-PLATFORM-SYSADMIN-001"),
-      "cap:sample:view_basic:deny": approved("PERM-PLATFORM-SYSADMIN-001"),
-      "cap:sourcing:view:deny": approved("PERM-PLATFORM-SYSADMIN-001"),
-      "module:sourcing:deny": approved("PERM-PLATFORM-SYSADMIN-001"),
-      "module:suppliers:deny": approved("PERM-PLATFORM-SYSADMIN-001"),
-      "module:production:deny": approved("PERM-PLATFORM-SYSADMIN-001"),
-      "module:samples:deny": approved("PERM-PLATFORM-SYSADMIN-001"),
-      "http:access-roles": approved("PERM-PLATFORM-SYSADMIN-001"),
-      "http:sourcing-list": approved("PERM-PLATFORM-SYSADMIN-001"),
-      "http:supplier-list": approved("PERM-PLATFORM-SYSADMIN-001"),
-      "http:sample-list": approved("PERM-PLATFORM-SYSADMIN-001"),
+      ...approvedKeys("PERM-PLATFORM-SYSADMIN-001", [
+        "cap:admin:read:allow", "cap:audit:read:allow", "cap:access:admin:deny", "cap:sample:view_basic:deny", "cap:sourcing:view:deny",
+        "cap:supplier_profile:read:deny", "cap:production-reporting:deny", "module:sourcing:deny", "module:suppliers:deny", "module:production:deny",
+        "module:samples:deny", "http:sourcing-list", "http:supplier-list", "http:production-dashboard", "http:sample-list",
+      ]),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
     },
   },
   {
     alias: "production-reporter",
     expectedRole: "production_reporter",
     requiredCapabilities: ["production-reporting"],
-    forbiddenCapabilities: ["sample:view_basic", "access:admin"],
+    forbiddenCapabilities: ["sample:view_basic", "access:admin", "sourcing:view", "supplier_profile:read"],
     allowedModules: ["production"],
     forbiddenModules: ["sourcing", "suppliers", "samples"],
-    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesDeny],
+    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, productionDashboardAllow, samplesDeny],
     ruleRefs: {
-      "cap:production-reporting:allow": approved("PERM-PRODUCTION-REPORTER-001"),
-      "module:production:allow": approved("PERM-PRODUCTION-REPORTER-001"),
+      ...approvedKeys("PERM-PRODUCTION-REPORTER-001", [
+        "cap:production-reporting:allow", "cap:sample:view_basic:deny", "cap:access:admin:deny", "cap:sourcing:view:deny", "cap:supplier_profile:read:deny",
+        "module:production:allow", "module:sourcing:deny", "module:suppliers:deny", "module:samples:deny",
+        "http:sourcing-list", "http:supplier-list", "http:production-dashboard", "http:sample-list",
+      ]),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
     },
   },
   {
@@ -380,12 +480,13 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     forbiddenCapabilities: ["sample:view_finance", "sourcing:view", "access:admin"],
     allowedModules: ["samples"],
     forbiddenModules: ["sourcing", "suppliers", "production"],
-    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesAllow],
+    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, productionDashboardDeny, samplesAllow],
     ruleRefs: {
-      "cap:sample:view_basic:allow": approved("PERM-SAMPLE-DESIGNER-001"),
-      "cap:sample:view_finance:deny": approved("PERM-SAMPLE-DESIGNER-001"),
-      "module:samples:allow": approved("PERM-SAMPLE-DESIGNER-001"),
-      "http:sample-list": approved("PERM-SAMPLE-DESIGNER-001"),
+      ...approvedKeys("PERM-SAMPLE-DESIGNER-001", [
+        "cap:sample:view_basic:allow", "cap:sample:view_finance:deny", "cap:sourcing:view:deny", "cap:access:admin:deny", "module:samples:allow",
+        "module:sourcing:deny", "module:suppliers:deny", "module:production:deny", "http:sourcing-list", "http:supplier-list", "http:production-dashboard", "http:sample-list",
+      ]),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
     },
   },
   {
@@ -395,12 +496,13 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     forbiddenCapabilities: ["sample:view_finance", "sourcing:view", "access:admin"],
     allowedModules: ["samples"],
     forbiddenModules: ["sourcing", "suppliers", "production"],
-    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesAllow],
+    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, productionDashboardDeny, samplesAllow],
     ruleRefs: {
-      "cap:sample:view_basic:allow": approved("PERM-SAMPLE-ADMIN-001"),
-      "cap:sample:view_finance:deny": approved("PERM-SAMPLE-ADMIN-001"),
-      "module:samples:allow": approved("PERM-SAMPLE-ADMIN-001"),
-      "http:sample-list": approved("PERM-SAMPLE-ADMIN-001"),
+      ...approvedKeys("PERM-SAMPLE-ADMIN-001", [
+        "cap:sample:view_basic:allow", "cap:sample:view_finance:deny", "cap:sourcing:view:deny", "cap:access:admin:deny", "module:samples:allow",
+        "module:sourcing:deny", "module:suppliers:deny", "module:production:deny", "http:sourcing-list", "http:supplier-list", "http:production-dashboard", "http:sample-list",
+      ]),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
     },
   },
   {
@@ -410,28 +512,13 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     forbiddenCapabilities: ["sourcing:view", "access:admin"],
     allowedModules: ["samples"],
     forbiddenModules: ["sourcing", "suppliers", "production"],
-    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesAllow],
+    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, productionDashboardDeny, samplesAllow],
     ruleRefs: {
-      "cap:sample:view_basic:allow": approved("PERM-SAMPLE-FINANCE-001"),
-      "cap:sample:view_finance:allow": approved("PERM-SAMPLE-FINANCE-001"),
-      "module:samples:allow": approved("PERM-SAMPLE-FINANCE-001"),
-      "http:sample-list": approved("PERM-SAMPLE-FINANCE-001"),
-    },
-  },
-  {
-    alias: "sample-approver",
-    expectedRole: "sample_approver",
-    requiredCapabilities: ["sample:view_basic", "sample:view_finance", "sample:view_audit"],
-    forbiddenCapabilities: ["sourcing:view", "access:admin"],
-    allowedModules: ["samples"],
-    forbiddenModules: ["sourcing", "suppliers", "production"],
-    probes: [accessRolesDeny, sourcingDeny, suppliersDeny, samplesAllow],
-    ruleRefs: {
-      "cap:sample:view_basic:allow": approved("PERM-SAMPLE-APPROVER-001"),
-      "cap:sample:view_finance:allow": approved("PERM-SAMPLE-APPROVER-001"),
-      "cap:sample:view_audit:allow": approved("PERM-SAMPLE-APPROVER-001"),
-      "module:samples:allow": approved("PERM-SAMPLE-APPROVER-001"),
-      "http:sample-list": approved("PERM-SAMPLE-APPROVER-001"),
+      ...approvedKeys("PERM-SAMPLE-FINANCE-001", [
+        "cap:sample:view_basic:allow", "cap:sample:view_finance:allow", "cap:sourcing:view:deny", "cap:access:admin:deny", "module:samples:allow",
+        "module:sourcing:deny", "module:suppliers:deny", "module:production:deny", "http:sourcing-list", "http:supplier-list", "http:production-dashboard", "http:sample-list",
+      ]),
+      "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
     },
   },
 ];
