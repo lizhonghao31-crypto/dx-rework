@@ -1,15 +1,41 @@
-import {WorkAnalysisQuerySchema,WorkflowAnalysisResponseSchema,type WorkflowAnalysisResponse} from '@dx-rework/contracts';
+import {WorkflowAnalysisQuerySchema,type WorkflowAnalysisResponse} from '@dx-rework/contracts';
 import type {Pool} from 'pg';
+import {workflowAnalysisResult} from './workflow-analysis-model.js';
 import {ApplicationError} from '../platform/errors.js';
-export const REWORK_FLOW_SQL=`WITH changes AS (
- SELECT event_id::text id,entity_id,before_state->>'status' previous,after_state->>'status' next,action,created_at,
+export const REWORK_FLOW_SQL=`WITH snapshots AS (
+ SELECT e.*,COALESCE(before_state->>'status',lag(after_state->>'status') OVER(PARTITION BY entity_id ORDER BY created_at,event_id)) previous,
+ after_state->>'status' next
+ FROM operation_events e WHERE entity_type='rework_order' AND action LIKE 'rework.%' AND after_state->>'status' IS NOT NULL
+), changes AS (
+ SELECT event_id::text id,entity_id,previous,next,action,actor_id,created_at,
  lead(created_at) OVER(PARTITION BY entity_id ORDER BY created_at,event_id) left_at
- FROM operation_events WHERE entity_type='rework_order' AND action LIKE 'rework.%'
- AND after_state->>'status' IS NOT NULL AND before_state->>'status' IS DISTINCT FROM after_state->>'status'
-) SELECT r.rework_order_id::text id,'rework' kind,COALESCE(r.rework_no,r.rework_order_id::text) label,r.status,false AS "independentFinance",
+ FROM snapshots WHERE previous IS DISTINCT FROM next AND (previous IS NOT NULL OR action='rework.draft.create')
+) SELECT r.rework_order_id::text id,'rework' kind,COALESCE(r.rework_no,r.rework_order_id::text) label,r.status,
+ r.style_no AS "styleNo",r.order_no AS "orderNo",false AS "independentFinance",
  (SELECT created_at FROM changes e WHERE e.entity_id=r.rework_order_id::text AND e.next=r.status AND e.left_at IS NULL ORDER BY created_at DESC,id DESC LIMIT 1) AS "enteredAt",
- COALESCE((SELECT jsonb_agg(jsonb_build_object('id',e.event_id::text,'from',e.before_state->>'status','to',e.after_state->>'status','action',e.action,'changesNode',change.id IS NOT NULL,'enteredAt',e.created_at,'leftAt',change.left_at) ORDER BY e.created_at,e.event_id) FROM operation_events e LEFT JOIN changes change ON change.id=e.event_id::text WHERE e.entity_type='rework_order' AND e.entity_id=r.rework_order_id::text AND e.action LIKE 'rework.%'),'[]'::jsonb) history
- FROM rework_orders r WHERE r.status NOT IN ('deleted','cancelled') AND ($1='' OR r.rework_no ILIKE '%'||$1||'%' OR r.style_no ILIKE '%'||$1||'%')
+ (SELECT u.display_name FROM changes e LEFT JOIN app_users u ON u.id=e.actor_id WHERE e.entity_id=r.rework_order_id::text AND e.next=r.status AND e.left_at IS NULL ORDER BY e.created_at DESC,e.id DESC LIMIT 1) AS "submitterName",
+ COALESCE((SELECT jsonb_agg(DISTINCT u.display_name) FROM rework_todos t JOIN app_users u ON u.id=t.recipient_user_id
+ WHERE t.status='pending' AND t.todo_type='business_action' AND (t.route_descriptor->>'reworkOrderId'=r.rework_order_id::text OR (t.entity_type='rework_order' AND t.entity_id=r.rework_order_id::text))),'[]'::jsonb) handlers,
+ COALESCE((SELECT jsonb_agg(jsonb_build_object('taskId',t.work_task_id,'processName',i.process_name,
+ 'people',COALESCE((SELECT jsonb_agg(m.display_name_snapshot ORDER BY m.display_name_snapshot) FROM rework_work_task_members m WHERE m.work_task_id=t.work_task_id),'[]'::jsonb),
+ 'reports',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',w.work_report_id,'quantity',w.actual_quantity::text,'at',w.completed_at,'actorName',u.display_name,
+ 'rejected',EXISTS(SELECT 1 FROM rework_work_report_rejections rejected WHERE rejected.work_report_id=w.work_report_id)) ORDER BY w.completed_at,w.work_report_id)
+ FROM rework_work_reports w LEFT JOIN app_users u ON u.id=w.submitted_by WHERE w.work_task_id=t.work_task_id),'[]'::jsonb)) ORDER BY i.position,t.work_task_id)
+ FROM rework_work_tasks t JOIN rework_process_configuration_items i ON i.configuration_item_id=t.configuration_item_id WHERE t.rework_order_id=r.rework_order_id AND t.status='active'),'[]'::jsonb) execution,
+ COALESCE((SELECT jsonb_agg(jsonb_build_object('id',e.event_id::text,'from',COALESCE(change.previous,e.before_state->>'status'),'to',e.after_state->>'status','action',e.action,
+ 'changesNode',change.id IS NOT NULL,'enteredAt',e.created_at,'leftAt',change.left_at,'actorName',u.display_name,'reason',e.reason,
+ 'returned',e.action ~ '(reject|return)' OR COALESCE(e.after_state->>'decision','')='rejected' OR COALESCE(e.after_state->>'rejected','')='true') ORDER BY e.created_at,e.event_id)
+ FROM operation_events e LEFT JOIN changes change ON change.id=e.event_id::text LEFT JOIN app_users u ON u.id=e.actor_id
+ WHERE e.entity_type='rework_order' AND e.entity_id=r.rework_order_id::text AND e.action LIKE 'rework.%'),'[]'::jsonb) history
+ FROM rework_orders r WHERE r.status NOT IN ('deleted','cancelled') AND (
+ $1='' OR r.rework_no ILIKE '%'||$1||'%' OR r.style_no ILIKE '%'||$1||'%' OR r.order_no ILIKE '%'||$1||'%'
+ OR EXISTS(SELECT 1 FROM operation_events e JOIN app_users u ON u.id=e.actor_id WHERE e.entity_type='rework_order' AND e.entity_id=r.rework_order_id::text AND u.display_name ILIKE '%'||$1||'%')
+ OR EXISTS(SELECT 1 FROM rework_todos t JOIN app_users u ON u.id=t.recipient_user_id WHERE t.status='pending' AND t.todo_type='business_action' AND (t.route_descriptor->>'reworkOrderId'=r.rework_order_id::text OR (t.entity_type='rework_order' AND t.entity_id=r.rework_order_id::text)) AND u.display_name ILIKE '%'||$1||'%')
+ OR EXISTS(SELECT 1 FROM app_users u WHERE u.id=r.merchandiser_user_id AND u.display_name ILIKE '%'||$1||'%')
+ OR EXISTS(SELECT 1 FROM rework_work_tasks t JOIN rework_work_task_members m USING(work_task_id) WHERE t.rework_order_id=r.rework_order_id AND m.display_name_snapshot ILIKE '%'||$1||'%')
+ OR EXISTS(SELECT 1 FROM supplier_catalog_versions v WHERE v.supplier_id=r.processing_factory_supplier_id AND v.version=r.processing_factory_supplier_version AND v.supplier_name ILIKE '%'||$1||'%')
+ OR EXISTS(SELECT 1 FROM rework_order_supply_context c JOIN supplier_catalog_versions v ON (v.supplier_id,v.version) IN ((c.washing_supplier_id,c.washing_supplier_version),(c.embroidery_supplier_id,c.embroidery_supplier_version),(c.fabric_supplier_id,c.fabric_supplier_version)) WHERE c.rework_order_id=r.rework_order_id AND v.supplier_name ILIKE '%'||$1||'%')
+ OR EXISTS(SELECT 1 FROM rework_external_responsibility_cases c WHERE c.rework_order_id=r.rework_order_id AND c.supplier_name_snapshot ILIKE '%'||$1||'%'))
  AND ($2::date IS NULL OR r.created_at >= $2::date::timestamp AT TIME ZONE 'Asia/Shanghai')
  AND ($3::date IS NULL OR r.created_at < ($3::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')`;
 export const SOURCING_FLOW_SQL=`WITH changes AS (
@@ -25,15 +51,15 @@ export const SOURCING_FLOW_SQL=`WITH changes AS (
  AND ($3::date IS NULL OR c.created_at < ($3::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')`;
 const iso=(v:Date|string|null)=>v===null?null:new Date(v).toISOString();
 export async function readWorkflowAnalysis(db:Pool,input:unknown,includeSourcing:boolean):Promise<WorkflowAnalysisResponse>{
- const parsed=WorkAnalysisQuerySchema.safeParse(input);if(!parsed.success||!['all','rework','sourcing','finance','waiting','closed'].includes(parsed.data.group))throw new ApplicationError('VALIDATION_ERROR','流程筛选无效',400);
+ const parsed=WorkflowAnalysisQuerySchema.safeParse(input);if(!parsed.success||!['all','rework','sourcing','finance','waiting','closed'].includes(parsed.data.group))throw new ApplicationError('VALIDATION_ERROR','流程筛选无效',400);
  const filters=parsed.data,client=await db.connect();
  try{await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');const clock=await client.query<{now:Date}>('SELECT CURRENT_TIMESTAMP now');
  const args=[filters.q,filters.from??null,filters.to??null];
  const rows=(await client.query<WorkflowAnalysisResponse['items'][number]>(REWORK_FLOW_SQL,args)).rows;
- if(includeSourcing)rows.push(...(await client.query<WorkflowAnalysisResponse['items'][number]>(SOURCING_FLOW_SQL,args)).rows);
- const closed=(r:typeof rows[number])=>['completed','closed','cancelled'].includes(r.status);
- const all=rows.filter(r=>filters.group==='all'||(filters.group==='finance'?r.independentFinance:filters.group==='waiting'?!closed(r)&&!r.independentFinance:filters.group==='closed'?closed(r):r.kind===filters.group)).map(r=>({...r,enteredAt:iso(r.enteredAt),history:r.history.map(h=>({...h,enteredAt:iso(h.enteredAt),leftAt:iso(h.leftAt)})).sort((a,b)=>(a.enteredAt??'').localeCompare(b.enteredAt??'')||a.id.localeCompare(b.id))})).sort((a,b)=>(a.enteredAt??'9999').localeCompare(b.enteredAt??'9999')||a.id.localeCompare(b.id));
- const groups=new Map<string,{key:string;count:number;missingEntryCount:number}>();for(const r of all){const key=`${r.kind}:${r.status}`;const g=groups.get(key)??{key,count:0,missingEntryCount:0};g.count++;if(r.enteredAt===null)g.missingEntryCount++;groups.set(key,g);}
- await client.query('COMMIT');return WorkflowAnalysisResponseSchema.parse({asOf:clock.rows[0]!.now.toISOString(),filters,total:all.length,missingEntryCount:all.filter(r=>r.enteredAt===null).length,groups:[...groups.values()].sort((a,b)=>b.count-a.count||a.key.localeCompare(b.key)),items:all.slice((filters.page-1)*15,filters.page*15)});
+ if(includeSourcing&&filters.group!=='rework')rows.push(...(await client.query<WorkflowAnalysisResponse['items'][number]>(SOURCING_FLOW_SQL,args)).rows);
+ const all=rows.map(r=>({...r,enteredAt:iso(r.enteredAt),handlers:r.handlers??[],execution:(r.execution??[]).map(task=>({...task,reports:task.reports.map(report=>({...report,at:iso(report.at)}))})),
+ roundtripCount:r.history.filter(h=>h.returned||/(reject|return)/.test(h.action)).length,
+ history:r.history.map(h=>({...h,enteredAt:iso(h.enteredAt),leftAt:iso(h.leftAt)})).sort((a,b)=>(a.enteredAt??'').localeCompare(b.enteredAt??'')||a.id.localeCompare(b.id))}));
+ await client.query('COMMIT');return workflowAnalysisResult(all,filters,clock.rows[0]!.now.toISOString());
  }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
 }
