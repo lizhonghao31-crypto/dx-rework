@@ -12,7 +12,7 @@ import "./rework-flow-panel.css";
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 const time = (value: string | null) => value ? new Date(value).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" }) : "未记录";
 const nodeLabel = (value: string | null) => value === null ? "开始" : reworkFlowNodes[value]?.label ?? value;
-type Props = { keyword: string; search: string; node: string; from: string; to: string; refreshToken: number; onQuery: (value: string) => void; onNode: (value: string) => void; onRefresh: () => void };
+type Props = { search: string; node: string; from: string; to: string; refreshToken: number; onNode: (value: string) => void; onRefresh: () => void };
 
 export function ReworkFlowPanel(props: Props) {
   const [allowed, setAllowed] = useState(false), [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState("");
@@ -51,9 +51,8 @@ export function ReworkFlowPanel(props: Props) {
       <strong>流程等待与往返</strong><span>{data ? `当前等待 ${data.waitingCount} · 有往返 ${data.roundtripCount} · 缺记录 ${data.missingEntryCount}` : busy ? "读取中…" : "暂未取得分析"}</span><b>{open ? "收起⌃" : "展开⌄"}</b>
     </button>
     {open && <div className="rework-flow__body">
+      <p className="rework-flow__scope">沿用上方关键词、状态与日期条件；以下只筛选流程记录。</p>
       <div className="rework-flow__toolbar">
-        <label>联动关键词<input value={props.keyword} maxLength={100} onChange={event => props.onQuery(event.target.value)} placeholder="RW号 / 原订单 / 款号 / 人员 / 供应商" /></label>
-        <label>当前节点<select value={props.node} onChange={event => props.onNode(event.target.value)}><option value="">全部节点</option>{Object.entries(reworkFlowNodes).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></label>
         <label>流程状态<select value={filters.state} onChange={event => change({ state: event.target.value as typeof filters.state })}><option value="all">全部</option><option value="waiting">当前等待</option><option value="closed">已结束</option></select></label>
         <label>往返<select value={filters.roundtrip} onChange={event => change({ roundtrip: event.target.value as typeof filters.roundtrip })}><option value="all">全部</option><option value="yes">有退回 / 往返</option><option value="repeated">2 次以上</option><option value="no">无退回记录</option></select></label>
         <label>记录<select value={filters.issue} onChange={event => change({ issue: event.target.value as typeof filters.issue })}><option value="all">全部记录</option><option value="missing">进入时间 / 历史缺失</option></select></label>

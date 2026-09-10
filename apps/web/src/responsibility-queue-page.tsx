@@ -3,7 +3,7 @@ import {
   ResponsibilityQueueResponseSchema,
   type ResponsibilityQueueResponse,
 } from "@dx-rework/contracts/responsibility-queue";
-import { InsetField, StatusBadge, Surface } from "@dx-rework/ui";
+import { InsetField, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
@@ -71,16 +71,9 @@ export function ResponsibilityQueuePage() {
     <Shell active="责任处理">
       <Header
         title="待责任判定"
-        subtitle="订单完成整单确认后进入这里；责任提交完成后自动离开当前队列"
+        subtitle="处理责任方、供应商与倍率；本厂责任及订单重新判责需老板确认。提交后按当前节点流转"
         badge={state.kind === "ready" ? `${formatBusinessDecimal(items.length)} 条当前结果` : "加载中"}
       />
-      <Surface className="responsibility-queue-summary">
-        <div>
-          <h2>责任处理工作台</h2>
-          <p>处理责任方、供应商及外部扣款倍率，完成后提交老板签字。</p>
-        </div>
-        <StatusBadge tone="info">N06 · 待判责</StatusBadge>
-      </Surface>
       <Surface className="reporting-filters">
         <InsetField label="搜索当前节点订单" type="search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="单号 / 款号 / 订单号 / 问题部位" />
       </Surface>
