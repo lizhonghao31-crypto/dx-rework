@@ -202,6 +202,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   const [processes, setProcesses] = useState<ProcessForm[]>([]);
   const [tailCostBearer, setTailCostBearer] = useState<TailInspectionCostBearer | null>(null);
   const [tailBearerEditing, setTailBearerEditing] = useState(false);
+  const [mobileEditing,setMobileEditing]=useState<string[]>([]);
   const [selectedProcessIds, setSelectedProcessIds] = useState<string[]>([]);
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);
   const [batchAllocations, setBatchAllocations] = useState<AllocationForm[]>(() => [defaultBatchAllocation()]);
@@ -544,7 +545,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     {processes.map((process) => {
       const persisted = determination?.processes.find((item) => item.configurationItemId === process.configurationItemId);
       const totalBps = shareTotalBps(process.allocations);
-      return <section className="responsibility-process" key={process.configurationItemId}>
+      return <section className={`responsibility-process${mobileEditing.includes(process.configurationItemId)?" is-mobile-editing":""}`} key={process.configurationItemId}>
         <div className="responsibility-process__title">
           <div className="responsibility-process__identity">
             {editable && process.executionKind === "worker" && <input aria-label={`选择工序 ${process.processName}`} type="checkbox" checked={selectedProcessIds.includes(process.configurationItemId)} onChange={(event) => setSelectedProcessIds((current) => event.target.checked ? [...current, process.configurationItemId] : current.filter((id) => id !== process.configurationItemId))} />}
@@ -552,6 +553,10 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
           </div>
           <b className={totalBps === 10000n ? "share-ok" : "share-error"}>责任比例 {totalBps === null ? "格式有误" : `${Number(totalBps) / 100}%`}</b>
         </div>
+        {editable && process.executionKind !== "tail_inspection" && <div className="responsibility-mobile-preview">
+          {process.allocations.map((allocation,index)=><p key={index}>{typeMeta(allocation.responsibilityType).label} {formatBusinessDecimal(allocation.sharePercent)}% × {formatBusinessDecimal(allocation.multiplier)} · {estimatedAllocationAmount(process.baseAmount,allocation)}{allocation.supplierId?` · ${suppliers.find(row=>row.supplierId===allocation.supplierId)?.supplierName??"待选择供应商"}`:''}</p>)}
+          <Button disabled={Boolean(busyAction)} onClick={()=>setMobileEditing(current=>current.includes(process.configurationItemId)?current.filter(id=>id!==process.configurationItemId):[...current,process.configurationItemId])}>{mobileEditing.includes(process.configurationItemId)?"收起编辑":"编辑"}</Button>
+        </div>}
         <div className="responsibility-party-list">
           {process.allocations.map((allocation, allocationIndex) => {
             const meta = typeMeta(allocation.responsibilityType);
