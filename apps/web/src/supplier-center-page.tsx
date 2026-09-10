@@ -24,6 +24,7 @@ import "./supplier-center-page.css";
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 import {emptyDraft,draftFromProfile,supplierDraftPayload,type SupplierProfile,type SupplierDraft} from "./supplier-profile-draft.js";
+import { SupplierBatchPanel } from "./supplier-batch-panel.js";
 import {SupplierProfileForm} from "./supplier-profile-form.js";
 
 async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -70,6 +71,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   const [completeness, setCompleteness] = useState<"all" | "missing" | "complete">("all");
   const [draft, setDraft] = useState<SupplierDraft>(emptyDraft);
   const [editing, setEditing] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
   const [creating,setCreating]=useState(false),[identityLoading,setIdentityLoading]=useState(true),[identityError,setIdentityError]=useState("");
   const creationCode=useRef(""),savedSelection=useRef("");
   const [savedMessage,setSavedMessage]=useState("");
@@ -146,6 +148,14 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
     creationCode.current='SUP_'+Array.from(crypto.getRandomValues(new Uint8Array(12)),value=>value.toString(16).padStart(2,'0')).join('').toUpperCase();
     savedSelection.current='';setSavedMessage('');
     selectedRef.current='';setSelectedId('');setProfile(null);setHistory([]);setDraft(emptyDraft());setError('');setDetailLoading(false);setCreating(true);setEditing(true);
+  };
+
+  const beginBatch = async () => {
+    if (!canMaintain || !await discardChanges() || writeLock.current || refreshLock.current) return;
+    creationCode.current = ""; savedSelection.current = ""; selectedRef.current = "";
+    setSelectedId(""); setProfile(null); setHistory([]); setDraft(emptyDraft());
+    setCreating(false); setEditing(false); setDetailLoading(false); setError(""); setSavedMessage("");
+    setBatchOpen(true);
   };
 
   const refreshDirectory = async () => {
@@ -249,7 +259,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
         </div>
         <div className="supplier-center-heading__actions">
           <StatusBadge tone={canMaintain ? "info" : "neutral"}>{identityLoading?"核验身份中":canMaintain ? "Root 可维护" : "只读"}</StatusBadge>
-          {canMaintain ? <Button variant="primary" disabled={busy||refreshing} onClick={()=>void beginCreate()}>新增供应商</Button> : null}
+          {canMaintain && !batchOpen ? <><Button disabled={busy || refreshing} onClick={() => void beginBatch()}>批量录入</Button><Button variant="primary" disabled={busy||refreshing} onClick={()=>void beginCreate()}>新增供应商</Button></> : null}
         </div>
       </header>
       <SupplierCenterNavigation active={mode} />
@@ -259,7 +269,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       {mode === "manage" && !identityLoading && !identityError && !canWrite ? (
         <div className="supplier-center-notice" role="status">当前账号为只读，可查看资料与变更历史。</div>
       ) : null}
-      <div className={`supplier-center-workspace${selectedId||creating ? " has-selection" : ""}`}>
+      {batchOpen && canMaintain ? <SupplierBatchPanel onClose={() => setBatchOpen(false)} onChanged={async () => { setSuppliers(await json<SupplierSummary[]>("master-data/suppliers?includeInactive=true")); }} /> : <div className={`supplier-center-workspace${selectedId||creating ? " has-selection" : ""}`}>
         <Surface className="supplier-directory">
           <div className="supplier-directory__heading">
             <div><h2>{mode === "manage" ? "供应商资料" : "供应商列表"}</h2><p>共 {filtered.length} 家</p></div>
@@ -320,7 +330,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
             </>
           )}
         </Surface>
-      </div>
+      </div>}
     </Shell>
   );
 }

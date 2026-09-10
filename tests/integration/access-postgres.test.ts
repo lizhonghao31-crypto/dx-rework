@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import pg from "pg";
+import { CreateSupplierSchema, SUPPLIER_BATCH_COLUMNS, type SupplierBatchApply, type SupplierBatchCell, type SupplierBatchField, type SupplierBatchRow } from "@dx-rework/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
@@ -873,6 +874,45 @@ runWithPostgres("role permissions and versioned master data", () => {
     expect(await service.listSuppliers()).toEqual([
       expect.objectContaining({ supplierId: supplier.supplierId, supplierName: "加工厂一号", version: 4 }),
     ]);
+  });
+
+  it("imports supplier batches with idempotent writes, supplementation, explicit changes and stale-preview rejection", async () => {
+    const rootActor = { ...supplierWriteActor, actorRoles: ["root_superuser"] };
+    const header = SUPPLIER_BATCH_COLUMNS.map(([, label]) => label);
+    const cells = (fields: Partial<Record<SupplierBatchField, SupplierBatchCell>>) => SUPPLIER_BATCH_COLUMNS.map(([field]) => fields[field] ?? null);
+    const preview = async (fields: Partial<Record<SupplierBatchField, SupplierBatchCell>>) => (await service.previewSupplierBatch(rootActor, [header, cells(fields)]))[0]!;
+    const input = (row: SupplierBatchRow, confirmedFields: SupplierBatchField[] = []): SupplierBatchApply => ({ cells: row.cells, supplierCode: row.supplierCode, expectedSupplierId: row.supplierId, expectedVersion: row.version, confirmedFields });
+    await expect(service.previewSupplierBatch(supplierWriteActor, [header, cells({})])).rejects.toMatchObject({ statusCode: 403 });
+    await expect(service.previewSupplierBatch(rootActor, [["错误表头"], []])).rejects.toMatchObject({ statusCode: 400 });
+    const data = { supplierName: "批量新增测试厂", supplierType: "加工厂", contactPerson: "张三", contactPhone: "12345", address: "地址", payeeName: "张三", bankAccount: "001234567890123456789", bankName: "开户行", supportedCrafts: "车缝" };
+    const row = await preview(data);
+    const competingPreview = await preview(data);
+    const key = randomUUID();
+    const created = await service.applySupplierBatchRow(rootActor, input(row), key);
+    expect(created).toMatchObject({ reused: false, response: { version: 1, unchanged: false } });
+    expect(await service.applySupplierBatchRow(rootActor, input(row), key)).toEqual({ ...created, reused: true });
+    await expect(service.applySupplierBatchRow(rootActor, { ...input(row), confirmedFields: ["bankName"] }, key)).rejects.toMatchObject({ statusCode: 409 });
+    await expect(service.applySupplierBatchRow(rootActor, input(competingPreview), randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    expect((await service.listSupplierHistory(created.response.supplierId, true))).toHaveLength(1);
+    expect(await service.getSupplier(created.response.supplierId, true)).toHaveProperty("bankAccount", data.bankAccount);
+
+    const existing = await service.createSupplier(supplierWriteActor, CreateSupplierSchema.parse({ supplierCode: "BATCH_PARTIAL", supplierName: "批量空资料测试厂", supplierType: "factory", contactPerson: "旧联系人", active: false, dailyCapacity: 500, supportedCrafts: ["车缝"], changeReason: "历史空资料测试" }));
+    const patch = { supplierCode: "BATCH_PARTIAL", address: "补齐地址", contactPerson: "新联系人", supportedCrafts: "车缝、锁眼" };
+    const supplement = await preview(patch);
+    expect(supplement).toMatchObject({ status: "review", supplierId: existing.supplierId, version: 1 });
+    await expect(service.applySupplierBatchRow(supplierWriteActor, input(supplement), randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    await service.applySupplierBatchRow(rootActor, input(supplement), randomUUID());
+    expect(await service.getSupplier(existing.supplierId, true)).toMatchObject({ version: 2, address: "补齐地址", contactPerson: "旧联系人", active: false, dailyCapacity: 500, supportedCrafts: ["车缝", "锁眼"] });
+    await expect(service.applySupplierBatchRow(rootActor, input(supplement, ["contactPerson"]), randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    const difference = await preview(patch);
+    await service.applySupplierBatchRow(rootActor, input(difference, ["contactPerson"]), randomUUID());
+    expect(await service.getSupplier(existing.supplierId, true)).toMatchObject({ version: 3, contactPerson: "新联系人" });
+    const unchanged = await preview(patch);
+    expect(unchanged.status).toBe("unchanged");
+    expect((await service.applySupplierBatchRow(rootActor, input(unchanged), randomUUID())).response).toMatchObject({ unchanged: true, version: 3 });
+    expect(await service.listSupplierHistory(existing.supplierId, true)).toHaveLength(3);
+    const audits = await database.query("SELECT action FROM operation_events WHERE entity_id=$1", [existing.supplierId]);
+    expect(audits.rows.map(item => item.action).sort()).toEqual(["master_data.supplier.create", "master_data.supplier.revise", "master_data.supplier.revise"]);
   });
 
   it("projects the supplier current version timestamp without exposing contract fields", async () => {
