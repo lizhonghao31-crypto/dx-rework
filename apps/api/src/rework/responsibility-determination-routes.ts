@@ -1,4 +1,5 @@
 import {
+  ReopenOrderResponsibilitySchema,
   ConfirmHighMultiplierSchema,
   CreateResponsibilityDraftSchema,
   FinalizeResponsibilitySchema,
@@ -21,7 +22,7 @@ import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import type { ResponsibilityDeterminationApplicationService } from "./responsibility-determination-application-service.js";
 
-type ResponsibilityDeterminationHttpService = Pick<ResponsibilityDeterminationApplicationService, "listQueue" | "get" | "listTransferCandidates" | "listSupplierOptions" | "saveDraft" | "finalize" | "transfer" | "takeover" | "confirmHighMultiplier" | "approveOwnerSignature" | "rejectOwnerSignature">;
+type ResponsibilityDeterminationHttpService = Pick<ResponsibilityDeterminationApplicationService, "revisions" | "listQueue" | "get" | "listTransferCandidates" | "listSupplierOptions" | "saveDraft" | "finalize" | "transfer" | "takeover" | "confirmHighMultiplier" | "approveOwnerSignature" | "rejectOwnerSignature">;
 const token = (request: FastifyRequest): string | undefined => request.headers.cookie?.split(";").map((value) => value.trim()).find((value) => value.startsWith("dx_rework_session="))?.slice(18);
 const parse = <T>(schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } }, value: unknown): T => { const result = schema.safeParse(value); if (!result.success) throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400); return result.data; };
 
@@ -57,6 +58,11 @@ export function registerResponsibilityDeterminationRoutes(app: FastifyInstance, 
   };
   const key = (request: FastifyRequest): string => parse(IdempotencyKeySchema, request.headers["idempotency-key"]);
 
+  app.get("/rework-orders/:reworkOrderId/responsibility-revisions", async request => dependencies.service.revisions.get(await actor(request,"responsibility:determine"),parse(ResponsibilityOrderParamsSchema,request.params).reworkOrderId));
+  app.post("/rework-orders/:reworkOrderId/responsibility-revisions", async (request,reply) => {
+    const result=await dependencies.service.revisions.reopen(await actor(request,"responsibility:determine"),parse(ResponsibilityOrderParamsSchema,request.params).reworkOrderId,parse(ReopenOrderResponsibilitySchema,request.body),key(request));
+    if(result.reused)reply.header("idempotency-replayed","true");return reply.code(201).send(result.value);
+  });
   app.get("/responsibility-determinations/queue", async (request) => ResponsibilityQueueResponseSchema.parse(await dependencies.service.listQueue(await actor(request, "responsibility:determine"))));
   app.get("/rework-orders/:reworkOrderId/responsibility-determination", async (request) => {
     const currentActor = await actor(request, "responsibility:determine");

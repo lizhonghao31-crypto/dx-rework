@@ -175,7 +175,12 @@ export class AuthorizedResponsibilityDeterminationService {
          LIMIT 1`,
         [current.determination_id],
       )).rowCount ?? 0) > 0;
-      const requiresOwnerSignature = current.settlement_schema_version === 2 && hasOwnFactory;
+      const orderRevision = await client.query("SELECT 1 FROM operation_events WHERE entity_type='rework_order' AND entity_id=$1 AND action='rework.responsibility.reopen' LIMIT 1", [orderId]);
+      const paidFloor = await client.query(`SELECT 1 FROM rework_external_deduction_entries entry JOIN rework_external_responsibility_cases c USING(case_id)
+        WHERE c.rework_order_id=$1 GROUP BY c.responsibility_type,c.supplier_id
+        HAVING sum(entry.amount)>COALESCE((SELECT sum(a.rounded_amount) FROM rework_responsibility_allocations a WHERE a.determination_id=$2 AND a.responsibility_type=c.responsibility_type AND a.supplier_id=c.supplier_id),0)`, [orderId,current.determination_id]);
+      if (paidFloor.rowCount) fail("新责任不能低于该责任方已扣金额；退款、抵账、冲销不在本轮范围", 400, "VALIDATION_ERROR");
+      const requiresOwnerSignature = current.settlement_schema_version === 2 && (hasOwnFactory || Boolean(orderRevision.rowCount));
       const nextStatus = requiresOwnerSignature
         ? "pending_owner_signature" as const
         : "pending_responsibility_action" as const;

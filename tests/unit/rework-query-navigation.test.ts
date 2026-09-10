@@ -34,7 +34,8 @@ describe("rework query default range and ordering", () => {
 
     expect(source).toContain('limit: "15"');
     expect(source).not.toContain('limit: "40"');
-    expect(source).toContain("const [page,setPage]=useState(1);");
+    expect(source).toContain('Number(initial.get("page"))');
+    expect(source).toContain('window.history.replaceState(window.history.state,"",url)');
     expect(source).toContain("<ListPagination");
     expect(source).not.toContain("<CursorListPagination");
     expect(source).toContain('ariaLabel="返工单分页"');

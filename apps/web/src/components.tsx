@@ -608,6 +608,7 @@ export function Header({
   badgePlacement = "actions",
   action,
   actionHref,
+  backHref,
 }: {
   title: string;
   iconRoute?: string;
@@ -616,6 +617,7 @@ export function Header({
   badgePlacement?: "actions" | "subtitle";
   action?: string;
   actionHref?: string;
+  backHref?: string;
 }) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const pathname = typeof window === "undefined" ? "" : window.location.pathname;
@@ -624,7 +626,7 @@ export function Header({
   return (
     <header className="page-heading">
       <div className="page-heading__copy">
-        <h1><NavigationIcon route={headingRoute} group={badge} size="title" />{title}</h1>
+        <h1>{backHref ? <a className="rework-detail-back" href={`${basePath}${backHref}`} aria-label="返回来源列表">← 返回</a> : null}<NavigationIcon route={headingRoute} group={badge} size="title" />{title}</h1>
         {subtitle ? <div className="page-heading__subtitle-row">
           <p className="page-heading__subtitle">{subtitle}</p>
           {badgePlacement === "subtitle" ? <StatusBadge tone="info">{badge}</StatusBadge> : null}

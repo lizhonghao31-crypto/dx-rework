@@ -121,7 +121,7 @@ export async function fetchFacts(source: Queryable, options: {
        JOIN rework_external_responsibility_cases case_record USING(batch_id)
        WHERE determination.stage='finalized' AND case_record.status<>'superseded'
      ), entry_totals AS (
-       SELECT case_id,COALESCE(sum(amount),0) actual FROM rework_external_deduction_entries GROUP BY case_id
+       SELECT c.case_id,COALESCE((SELECT sum(amount) FROM external_deduction_scope(c.case_id)),0) actual FROM active_cases c
      ), external AS (
        SELECT case_record.rework_order_id,
          COALESCE(sum(case_record.proposed_deduction_amount),0)::text proposed,

@@ -18,6 +18,8 @@ import {
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { financial } from "../../apps/api/src/reporting/management-reporting-financial.js";
+import { fetchFacts } from "../../apps/api/src/reporting/management-reporting-orders.js";
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { BusinessAwareWholeOrderReviewService } from "../../apps/api/src/rework/business-aware-whole-order-review-service.js";
 import { ExternalResponsibilityApplicationService } from "../../apps/api/src/rework/external-responsibility-application-service.js";
@@ -824,6 +826,15 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       status: "pending",
     })));
 
+    // Reopen an unpaid external determination: retire its active ledger and reuse N07/N09.
+    const unpaidActor=actor(ids.production,["production_management"],"responsibility:determine","external_responsibility:approve_revision");
+    const unpaidBefore=await responsibility.revisions.get(unpaidActor,submitted.value.reworkOrderId);
+    const unpaid=await responsibility.revisions.reopen(unpaidActor,submitted.value.reworkOrderId,{expectedOrderVersion:unpaidBefore.orderVersion,expectedDeterminationVersion:unpaidBefore.currentVersion!,reason:"未扣款前更正责任资料"},randomUUID());
+    expect(unpaid.value.paidAmount).toBe("0");
+    expect((await database.query("SELECT count(*)::int count FROM rework_external_responsibility_cases WHERE rework_order_id=$1 AND status='superseded'",[submitted.value.reworkOrderId])).rows[0].count).toBe(2);
+    const unpaidFinal=await responsibility.finalize(production(),submitted.value.reworkOrderId,{expectedOrderVersion:unpaid.value.orderVersion,expectedCurrentDeterminationVersion:unpaid.value.currentVersion!},randomUUID());
+    await responsibility.approveOwnerSignature(actor(ids.ownerOne,["owner_group"],"responsibility:owner_sign","responsibility:determine"),submitted.value.reworkOrderId,{expectedOrderVersion:unpaidFinal.value.orderVersion},randomUUID());
+
     const externalCases = await database.query<{
       caseId: string;
       responsibilityType: string;
@@ -837,7 +848,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
               proposed_deduction_amount::text AS "proposedAmount",
               status
        FROM rework_external_responsibility_cases
-       WHERE rework_order_id=$1
+       WHERE rework_order_id=$1 AND status<>'superseded'
        ORDER BY responsibility_type`,
       [submitted.value.reworkOrderId],
     );
@@ -1224,7 +1235,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
               WHERE successor.replaces_determination_id=determination.determination_id
             )) own_factory_total,
          (SELECT COALESCE(sum(proposed_deduction_amount),0)::numeric(18,2)::text
-          FROM rework_external_responsibility_cases WHERE rework_order_id=$1) external_total,
+          FROM rework_external_responsibility_cases c JOIN rework_external_responsibility_batches b USING(batch_id) WHERE c.rework_order_id=$1 AND b.status='active') external_total,
          (SELECT sum(payable_amount)::numeric(18,2)::text
           FROM rework_wage_items WHERE rework_order_id=$1) wage_total`,
       [submitted.value.reworkOrderId],
@@ -1244,6 +1255,48 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
        ORDER BY category,todo_id`,
     );
     expect(openBusinessTodos.rows).toEqual([]);
+
+    // B PR08: completed/partially-paid orders reopen without rewriting wage or paid facts.
+    const revisionActor = actor(ids.production,["production_management"],"responsibility:determine","external_responsibility:approve_revision");
+    const ownerSignActor = () => actor(ids.ownerOne,["owner_group"],"responsibility:owner_sign","responsibility:determine");
+    const revisionBefore = await responsibility.revisions.get(revisionActor,submitted.value.reworkOrderId);
+    expect(revisionBefore.canReopen).toBe(true);
+    const reopenInput = {expectedOrderVersion:revisionBefore.orderVersion,expectedDeterminationVersion:revisionBefore.currentVersion!,reason:"供应商补充资料，重新核对责任"};
+    await expect(responsibility.revisions.reopen(qc(),submitted.value.reworkOrderId,reopenInput,randomUUID())).rejects.toMatchObject({statusCode:403});
+    const reopenKey=randomUUID();
+    const reopened=await responsibility.revisions.reopen(revisionActor,submitted.value.reworkOrderId,reopenInput,reopenKey);
+    expect(reopened.value).toMatchObject({status:"pending_responsibility_determination",paidAmount:"119.60"});
+    expect((await responsibility.revisions.reopen(revisionActor,submitted.value.reworkOrderId,reopenInput,reopenKey)).reused).toBe(true);
+    expect((await database.query("SELECT count(*)::int count FROM rework_todos WHERE entity_id=$1 AND category='responsibility_determination' AND status='pending'",[submitted.value.reworkOrderId])).rows[0].count).toBe(1);
+    let revisedFinal=await responsibility.finalize(production(),submitted.value.reworkOrderId,{expectedOrderVersion:reopened.value.orderVersion,expectedCurrentDeterminationVersion:reopened.value.currentVersion!},randomUUID());
+    expect(revisedFinal.value.reworkStatus).toBe("pending_owner_signature");
+    const rejected=await responsibility.rejectOwnerSignature(ownerSignActor(),submitted.value.reworkOrderId,{expectedOrderVersion:revisedFinal.value.orderVersion},randomUUID());
+    expect(rejected.value.reworkStatus).toBe("pending_responsibility_determination");
+    const resaved=await responsibility.saveDraft(production(),submitted.value.reworkOrderId,CreateResponsibilityDraftSchema.parse({expectedOrderVersion:rejected.value.orderVersion,expectedCurrentDeterminationVersion:rejected.value.determination!.version,handlerUserId:ids.production,tailInspectionCostBearer:"processing_factory",processes:n07Processes.map(process=>({...process,allocations:process.allocations.map(allocation=>({...allocation,multiplier:allocation.responsibilityType==="processing_factory"&&process.configurationItemId!==tailItem.configurationItemId?"1.300":allocation.multiplier}))}))}),randomUUID());
+    revisedFinal=await responsibility.finalize(production(),submitted.value.reworkOrderId,{expectedOrderVersion:resaved.value.orderVersion,expectedCurrentDeterminationVersion:resaved.value.determination!.version},randomUUID());
+    const confirmed=await responsibility.approveOwnerSignature(ownerSignActor(),submitted.value.reworkOrderId,{expectedOrderVersion:revisedFinal.value.orderVersion},randomUUID());
+    expect(confirmed.value.reworkStatus).toBe("completed");
+    const newBatch=await external.get(factoryPayables("external_responsibility:view"),submitted.value.reworkOrderId);
+    const newFactoryCase=newBatch!.cases.find(row=>row.responsibilityType==='processing_factory')!;
+    expect(newFactoryCase).toMatchObject({actualDeductedAmount:"80.00",remainingAmount:"68.10"});
+    expect(await financial(database,{from:"2000-01-01",to:"2100-12-31",asOf:new Date()})).toMatchObject({externalProposed:"187.70",externalDeducted:"119.60",externalRemaining:"68.10"});
+    const managementRows=await fetchFacts(database,{q:"UAT-FULL-CHAIN",limit:15});
+    expect(managementRows.rows[0]).toMatchObject({external_proposed_amount:"187.70",external_deducted_amount:"119.60",external_remaining_amount:"68.10"});
+    const newFabricId=(await database.query("SELECT case_id FROM rework_external_responsibility_cases WHERE rework_order_id=$1 AND responsibility_type='fabric_supplier' ORDER BY created_at DESC LIMIT 1",[submitted.value.reworkOrderId])).rows[0].case_id;
+    const carriedFabric=await external.getCase(fabricPayables("external_deduction:record"),newFabricId);
+    expect(carriedFabric).toMatchObject({actualDeductedAmount:"39.60",remainingAmount:"0.00"});
+    const remainder=await external.recordDeduction(factoryPayables("external_deduction:record"),newFactoryCase.caseId,CreateExternalDeductionEntrySchema.parse({expectedCaseVersion:newFactoryCase.caseVersion,entryType:"deduction",amount:"68.10",deductedOn:new Date().toISOString().slice(0,10),attachmentIds:[]}),randomUUID());
+    expect(remainder.value).toMatchObject({actualDeductedAmount:"148.10",remainingAmount:"0.00"});
+    await external.close(factoryPayables("external_deduction:close"),newFactoryCase.caseId,{expectedCaseVersion:remainder.value.caseVersion,result:"full",evidenceAttachmentIds:[]},randomUUID());
+    await external.close(fabricPayables("external_deduction:close"),newFabricId,{expectedCaseVersion:carriedFabric.caseVersion,result:"full",evidenceAttachmentIds:[]},randomUUID());
+    expect((await external.getCase(factoryPayables("external_responsibility:view"),processingCaseId)).actualDeductedAmount).toBe("80.00");
+    expect((await wages.get(wageView(),wagePeriod.periodId)).items).toEqual(wageDetail.items);
+    expect((await database.query("SELECT count(*)::int count,sum(amount)::text amount FROM rework_external_deduction_entries e JOIN rework_external_responsibility_cases c USING(case_id) WHERE c.rework_order_id=$1",[submitted.value.reworkOrderId])).rows[0]).toEqual({count:3,amount:"187.70"});
+    const history=await responsibility.revisions.get(revisionActor,submitted.value.reworkOrderId);
+    expect(history.revisions).toHaveLength(2);
+    expect(history.history.some(row=>row.signature?.decision==='rejected')).toBe(true);
+    expect(history.history.some(row=>row.signature?.decision==='approved')).toBe(true);
+
   });
 
   it("recovers a required-tail order only after every unified worker and tail task has a valid report", async () => {
@@ -1430,6 +1483,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       tail_reported_quantity: "200.00",
       final_confirmed_quantity: "200.00",
     }]);
+
   });
 
   it.each([
@@ -1731,6 +1785,20 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       { expectedVersion: finalized.value.orderVersion, reason: "不应允许下游重复操作" },
       randomUUID(),
     )).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+    if (!legacy) {
+    // All-own responsibility has no supplier case and must still support order-level revision.
+    const ownView=await responsibility.get(production(),submitted.value.reworkOrderId);
+    const ownDraft=await responsibility.saveDraft(production(),submitted.value.reworkOrderId,CreateResponsibilityDraftSchema.parse({expectedOrderVersion:finalized.value.orderVersion,expectedCurrentDeterminationVersion:null,handlerUserId:ids.production,tailInspectionCostBearer:"own_factory",processes:ownView.sourceProcesses.filter(row=>row.includedInResponsibility).map(row=>({configurationItemId:row.configurationItemId,multiplier:"1.000",allocations:[{responsibilityType:"own_factory",shareBps:10000,multiplier:"1.000"}]}))}),randomUUID());
+    const ownFinal=await responsibility.finalize(production(),submitted.value.reworkOrderId,{expectedOrderVersion:ownDraft.value.orderVersion,expectedCurrentDeterminationVersion:ownDraft.value.determination!.version},randomUUID());
+    const owner=actor(ids.ownerOne,["owner_group"],"responsibility:owner_sign","responsibility:determine","external_responsibility:approve_revision");
+    await responsibility.approveOwnerSignature(owner,submitted.value.reworkOrderId,{expectedOrderVersion:ownFinal.value.orderVersion},randomUUID());
+    const ownBefore=await responsibility.revisions.get(owner,submitted.value.reworkOrderId);
+    const ownReopen=await responsibility.revisions.reopen(owner,submitted.value.reworkOrderId,{expectedOrderVersion:ownBefore.orderVersion,expectedDeterminationVersion:ownBefore.currentVersion!,reason:"本厂承担责任重新核对"},randomUUID());
+    expect(ownReopen.value.status).toBe("pending_responsibility_determination");
+    expect((await database.query("SELECT count(*)::int count FROM rework_external_responsibility_cases WHERE rework_order_id=$1",[submitted.value.reworkOrderId])).rows[0].count).toBe(0);
+    const ownResubmit=await responsibility.finalize(production(),submitted.value.reworkOrderId,{expectedOrderVersion:ownReopen.value.orderVersion,expectedCurrentDeterminationVersion:ownReopen.value.currentVersion!},randomUUID());
+    await responsibility.approveOwnerSignature(owner,submitted.value.reworkOrderId,{expectedOrderVersion:ownResubmit.value.orderVersion},randomUUID());
+    }
   });
 
   it("submits simplified N01 without retired manual-entry facts", async () => {
@@ -1863,4 +1931,5 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     }]);
   });
 });
+
 

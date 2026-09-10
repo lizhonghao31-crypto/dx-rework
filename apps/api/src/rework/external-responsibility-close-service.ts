@@ -206,8 +206,7 @@ export class ExternalResponsibilityCloseService {
       `SELECT COALESCE(sum(entry.amount),0)::text actual,
               COALESCE(sum(entry.amount),0)=case_record.proposed_deduction_amount is_full
        FROM rework_external_responsibility_cases case_record
-       LEFT JOIN rework_external_deduction_entries entry
-         ON entry.case_id=case_record.case_id
+       LEFT JOIN LATERAL external_deduction_scope(case_record.case_id) entry ON true
        WHERE case_record.case_id=$1
        GROUP BY case_record.proposed_deduction_amount`,
       [caseId],

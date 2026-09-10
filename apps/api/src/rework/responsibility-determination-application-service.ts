@@ -1,3 +1,4 @@
+import { OrderResponsibilityRevisionService } from "./order-responsibility-revision-service.js";
 import type {
   ConfirmHighMultiplier,
   CreateResponsibilityDraft,
@@ -69,12 +70,14 @@ export class ResponsibilityDeterminationApplicationService {
   private readonly draftEngine: ResponsibilityDeterminationService;
   private readonly authorized: AuthorizedResponsibilityDeterminationService;
   private readonly queue: ResponsibilityDeterminationQueueService;
+  readonly revisions: OrderResponsibilityRevisionService;
   private readonly ownerSignatures: ResponsibilityOwnerSignatureService;
 
   constructor(
     private readonly database: Pool,
     todos?: TodoProjectionService,
   ) {
+    this.revisions = new OrderResponsibilityRevisionService(database,todos);
     this.draftEngine = new ResponsibilityDeterminationService(
       database,
       undefined,

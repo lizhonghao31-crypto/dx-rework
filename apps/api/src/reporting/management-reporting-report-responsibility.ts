@@ -55,7 +55,7 @@ export async function ownFactoryReport(source: Queryable, query: ReportQuery, ra
 export async function externalReport(source: Queryable, query: ReportQuery, range: Range, limit: number): Promise<ReportData> {
   const result=await source.query<QueryResultRow>(
     `WITH leaf AS (SELECT determination.* FROM rework_responsibility_determinations determination WHERE determination.stage='finalized' AND NOT EXISTS(SELECT 1 FROM rework_responsibility_determinations successor WHERE successor.replaces_determination_id=determination.determination_id)),
-     entries AS (SELECT case_id,COALESCE(sum(amount),0) actual FROM rework_external_deduction_entries GROUP BY case_id)
+     entries AS (SELECT c.case_id,COALESCE((SELECT sum(amount) FROM external_deduction_scope(c.case_id)),0) actual FROM rework_external_responsibility_cases c)
      SELECT order_record.rework_order_id,order_record.rework_no,order_record.style_no,case_record.case_id,
        case_record.responsibility_type,case_record.supplier_id,case_record.supplier_name_snapshot,case_record.status,
        case_record.proposed_deduction_amount::text,COALESCE(closure.actual_deducted_amount,entries.actual,0)::text actual_amount,
