@@ -13,7 +13,7 @@ export function SampleAnalysisView({data,legacy,busy,error,draft,onDraft,onApply
  data:SampleAnalysisResponse|null;legacy:SampleAmounts|null;busy:boolean;error:string;draft:AnalysisDraft;
  onDraft:(key:string,value:string)=>void;onApply:()=>void;onReset:()=>void;onQuery:(change:Partial<SampleAnalysisQuery>)=>void;onDrill:(change:Partial<SampleAnalysisQuery>)=>void;onBack:()=>void;canGoBack:boolean;onRefresh:()=>void;detailUrl:(id:string)=>string;
 }){
- const [theme,setTheme]=useState<'purchase'|'holding'|'disposal'>('purchase'),[filtersOpen,setFiltersOpen]=useState(false);
+ const [theme,setTheme]=useState<'purchase'|'holding'|'disposal'>('purchase');
  const s=data?.summary,options=data?.options;
  const input=(key:string,label:string,type='text')=><label key={key}>{label}<input className="rework-v2-control" type={type} inputMode={type==='text'&&key.includes('Price')?'decimal':undefined} value={draft[key]??''} onChange={e=>onDraft(key,e.target.value)}/></label>;
  const select=(key:string,label:string,items:{id:string;name:string}[])=><label key={key}>{label}<select className="rework-v2-control" value={draft[key]??''} onChange={e=>onDraft(key,e.target.value)}><option value="">全部</option>{items.map(item=><option key={item.id} value={item.id}>{item.name}{items.some(other=>other.name===item.name&&other.id!==item.id)?` · ${item.id.slice(-6)}`:''}</option>)}</select></label>;
@@ -21,12 +21,11 @@ export function SampleAnalysisView({data,legacy,busy,error,draft,onDraft,onApply
  return <div className="sample-analysis" aria-busy={busy}>
   <div className="analysis-toolbar"><p>{data?<time dateTime={data.asOf}>数据截至 {new Date(data.asOf).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}</time>:'读取采购、持有与处置事实'}</p><Button variant="secondary" disabled={busy} onClick={onRefresh}>{busy?'读取中…':'刷新'}</Button></div>
   {error?<p role="alert">{error}{data?'；以下保留上次成功结果和筛选口径。':''} <Button variant="secondary" disabled={busy} onClick={onRefresh}>重试</Button></p>:null}
-  <Surface className="rework-v2-core"><button className="analysis-filter-toggle" type="button" aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(value=>!value)}>采购日期 / 人员 / 更多筛选</button><form className={filtersOpen?"analysis-filter-form is-open":"analysis-filter-form"} onSubmit={e=>{e.preventDefault();onApply();}}><div className="analysis-filter-main">
+  <Surface className="rework-v2-core"><form className="analysis-filter-form is-open" onSubmit={e=>{e.preventDefault();onApply();}}><div className="analysis-filter-main">
    {input('purchaseFrom','采购开始日期','date')}{input('purchaseTo','采购结束日期','date')}{select('purchaserUserId','采购人',options?.people??[])}{select('holderUserId','当前持有人',options?.people??[])}
-  </div><details className="analysis-more"><summary>品牌、部门、类别、单价与事件期间</summary><div className="analysis-filter-main">
    {select('brandChoice','品牌',options?.brands??[])}{select('departmentChoice','部门',options?.departments??[])}{select('category','类别',(options?.categories??[]).map(value=>({id:value,name:value||'未记录类别'})))}
    {select('status','当前状态',Object.entries(analysisStatusLabels).map(([id,name])=>({id,name})))}{input('minPrice','最低采购单价')}{input('maxPrice','最高采购单价')}{input('eventFrom','借还 / 处置 / 回款开始','date')}{input('eventTo','借还 / 处置 / 回款结束','date')}
-  </div></details><div className="analysis-form-actions"><Button type="submit" disabled={busy}>应用筛选</Button><Button variant="secondary" disabled={busy} onClick={onReset}>清除筛选</Button></div></form></Surface>
+  </div><div className="analysis-form-actions"><Button type="submit" disabled={busy}>应用筛选</Button><Button variant="secondary" disabled={busy} onClick={onReset}>清除筛选</Button></div></form></Surface>
   {data?<>
   <p className="analysis-scope">生效条件：{Object.entries(data.filters).filter(([key,value])=>!['page','groupPage','group','purchaseFrom','purchaseTo','eventFrom','eventTo'].includes(key)&&value!==undefined).map(([key,value])=>{
     const labels:Record<string,string>={purchaserUserId:'采购人',holderUserId:'持有人',brand:'品牌',brandId:'品牌',department:'部门',departmentId:'部门',category:'类别',status:'状态',minPrice:'最低单价',maxPrice:'最高单价',fact:'事实范围',disposalType:'处置类型'};
