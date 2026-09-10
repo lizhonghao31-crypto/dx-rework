@@ -29,7 +29,9 @@ describe("order board global style search", () => {
     expect(page).toContain('<option value="short">少收</option>');
     expect(page).toContain('<option value="extra">多收</option>');
     expect(page).toContain('<option value="multiple">多次收货</option>');
-    expect(service).toContain("$4='multiple' AND totals.receipt_count>1");
+    const filters = await readFile("apps/api/src/receiving/receiving-board-filters.ts", "utf8");
+    expect(service).toContain("${RECEIVING_BOARD_BASE_SQL}${RECEIVING_BOARD_FILTERS_SQL}");
+    expect(filters).toContain("$4='multiple' AND receipt_count>1");
     expect(page).toContain("event.target.value.toUpperCase()");
     expect(receivingPage).toContain("styleNo.trim().toUpperCase()");
     expect(receivingPage).toContain("setStyleNo(event.target.value)");

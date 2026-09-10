@@ -1,3 +1,4 @@
+import { RECEIVING_BOARD_FILTERS_SQL } from "./receiving-board-filters.js";
 import { readReceivingAnalysis } from "./receiving-analysis.js";
 import type { ProductionClosureService } from "../sourcing/production-closure-service.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -127,7 +128,7 @@ type ReceivingHistoryItem = Readonly<{
   receivedAt: string;
   receiverName: string;
 }>;
-type BoardStatus = "all" | "normal" | "extra" | "short" | "multiple";
+type BoardStatus = "all" | "normal" | "extra" | "short" | "multiple" | "receiving_difference" | "packing_difference" | "missing_packing" | "pending" | "handled" | "stale";
 
 type BoardRow = Readonly<{
   receivingBatchId: string;
@@ -148,6 +149,8 @@ type BoardRow = Readonly<{
   packingRecordedAt: string | null;
   receivingDifferenceResolution: DifferenceResolution | null;
   packingDifferenceResolution: DifferenceResolution | null;
+  staleResolution: boolean;
+  resolutionHistory: readonly (DifferenceResolution & { differenceType: ReceivingDifferenceType; differenceQuantity: number })[];
   receiptCount: number;
   batchCount: number;
   receivingHistory: readonly ReceivingHistoryItem[];
@@ -177,6 +180,7 @@ type BoardResult = Readonly<{
   endDate: string;
   mode: "range" | "search";
   status: BoardStatus;
+  insights: Readonly<{ pendingCount: number; missingPackingCount: number; staleCount: number }>;
   kpis: Readonly<{
     orderCount: number;
     receivedQuantity: number;
@@ -237,6 +241,7 @@ const normalizeStyleNo = (value: string): string => {
 const normalizeBoardStatus = (value: string): BoardStatus => {
   if (value === "" || value === "all") return "all";
   if (value === "normal" || value === "extra" || value === "short" || value === "multiple") return value;
+  if (value === "receiving_difference" || value === "packing_difference" || value === "missing_packing" || value === "pending" || value === "handled" || value === "stale") return value;
   return fail("收货状态筛选无效");
 };
 
@@ -2015,29 +2020,20 @@ export class ReceivingService {
     try {
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const summaryResult = await client.query<{
+      pending_count: string;
+      missing_packing_count: string;
+      stale_count: string;
       order_count: string;
       received_quantity: string;
       abnormal_order_count: string;
       difference_quantity: string;
       document_quantity: string;
     }>(
-      `${RECEIVING_BOARD_BASE_SQL}, filtered_totals AS (
-         SELECT totals.*,
-                totals.cumulative_actual_quantity-totals.document_quantity AS difference_quantity,
-                abs(totals.cumulative_actual_quantity-totals.document_quantity) AS absolute_difference,
-                CASE
-                  WHEN totals.cumulative_actual_quantity-totals.document_quantity<0 THEN 0
-                  WHEN totals.cumulative_actual_quantity-totals.document_quantity>0 THEN 1
-                  ELSE 2
-                END AS difference_rank
-         FROM style_totals totals
-         WHERE $4='all'
-            OR ($4='multiple' AND totals.receipt_count>1)
-            OR ($4='normal' AND totals.cumulative_actual_quantity-totals.document_quantity=0)
-            OR ($4='short' AND totals.cumulative_actual_quantity-totals.document_quantity<0)
-            OR ($4='extra' AND totals.cumulative_actual_quantity-totals.document_quantity>0)
-       )
-       SELECT count(*)::bigint AS order_count,
+      `${RECEIVING_BOARD_BASE_SQL}${RECEIVING_BOARD_FILTERS_SQL}
+       SELECT count(*) FILTER(WHERE pending_difference)::text AS pending_count,
+              count(*) FILTER(WHERE missing_packing)::text AS missing_packing_count,
+              count(*) FILTER(WHERE stale_resolution)::text AS stale_count,
+              count(*)::bigint AS order_count,
               COALESCE(sum(actual_quantity),0)::bigint AS received_quantity,
               count(*) FILTER (WHERE difference_quantity<>0)::bigint AS abnormal_order_count,
               COALESCE(sum(absolute_difference),0)::bigint AS difference_quantity,
@@ -2053,6 +2049,8 @@ export class ReceivingService {
         ? [startDate, endDate, needle, status, offset]
         : [startDate, endDate, needle, status, pageSize, offset];
       const rowsResult = await client.query<{
+      stale_resolution: boolean;
+      resolution_history: { resolutionId: string; differenceType: ReceivingDifferenceType; differenceQuantity: number; result: string; handledBy: string; handledAt: string; attachments: {attachmentId: string; filename: string}[] }[];
       receiving_batch_id: string;
       style_no: string;
       document_quantity: string;
@@ -2091,28 +2089,22 @@ export class ReceivingService {
       root_deletable: boolean;
       root_mutable: boolean;
     }>(
-      `${RECEIVING_BOARD_BASE_SQL}, filtered_totals AS (
-         SELECT totals.*,
-                totals.cumulative_actual_quantity-totals.document_quantity AS difference_quantity,
-                abs(totals.cumulative_actual_quantity-totals.document_quantity) AS absolute_difference,
-                CASE
-                  WHEN totals.cumulative_actual_quantity-totals.document_quantity<0 THEN 0
-                  WHEN totals.cumulative_actual_quantity-totals.document_quantity>0 THEN 1
-                  ELSE 2
-                END AS difference_rank
-         FROM style_totals totals
-         WHERE $4='all'
-            OR ($4='multiple' AND totals.receipt_count>1)
-            OR ($4='normal' AND totals.cumulative_actual_quantity-totals.document_quantity=0)
-            OR ($4='short' AND totals.cumulative_actual_quantity-totals.document_quantity<0)
-            OR ($4='extra' AND totals.cumulative_actual_quantity-totals.document_quantity>0)
-       ), page_totals AS (
+      `${RECEIVING_BOARD_BASE_SQL}${RECEIVING_BOARD_FILTERS_SQL}, page_totals AS (
          SELECT *
          FROM filtered_totals
          ORDER BY difference_rank ASC,absolute_difference DESC,last_received_at DESC,style_key ASC
          ${pageWindowSql}
        )
-       SELECT action.receiving_batch_id,totals.style_key AS style_no,totals.document_quantity,
+       SELECT totals.stale_resolution,
+              COALESCE((SELECT jsonb_agg(jsonb_build_object('resolutionId',r.resolution_id,
+                'differenceType',r.difference_type,'differenceQuantity',r.difference_quantity_snapshot,
+                'result',r.result,'handledBy',u.display_name,'handledAt',r.created_at,
+                'attachments',COALESCE((SELECT jsonb_agg(jsonb_build_object('attachmentId',a.attachment_id,'filename',a.original_filename))
+                  FROM attachments a WHERE a.entity_type='receiving_difference_resolution' AND a.entity_id=r.resolution_id::text AND a.status='ready'),'[]'::jsonb))
+                ORDER BY r.created_at DESC,r.resolution_id DESC)
+                FROM receiving_difference_resolutions r JOIN scoped_batches b USING(receiving_batch_id)
+                LEFT JOIN app_users u ON u.id=r.handled_by WHERE b.style_key=totals.style_key),'[]'::jsonb) AS resolution_history,
+              action.receiving_batch_id,totals.style_key AS style_no,totals.document_quantity,
               totals.prior_actual_quantity,totals.actual_quantity,totals.defective_quantity,
               totals.current_actual_quantity,totals.current_defective_quantity,
               totals.cumulative_actual_quantity,
@@ -2325,6 +2317,8 @@ export class ReceivingService {
       pageWindowParameters,
     );
     const allRows: BoardRow[] = rowsResult.rows.map((row) => ({
+      staleResolution: row.stale_resolution,
+      resolutionHistory: row.resolution_history ?? [],
       receivingBatchId: row.receiving_batch_id,
       styleNo: row.style_no,
       documentQuantity: Number(row.document_quantity),
@@ -2389,6 +2383,7 @@ export class ReceivingService {
       endDate,
       mode,
       status,
+      insights: { pendingCount: Number(summary.pending_count ?? 0), missingPackingCount: Number(summary.missing_packing_count ?? 0), staleCount: Number(summary.stale_count ?? 0) },
       kpis: {
         orderCount: Number(summary.order_count),
         receivedQuantity: Number(summary.received_quantity),
