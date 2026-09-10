@@ -43,13 +43,13 @@ describe("PR-06 responsibility 2.0", () => {
     }).success).toBe(false);
   });
 
-  it("routes only own-factory responsibility to owner confirmation", async () => {
+  it("routes own-factory responsibility and order revisions to owner confirmation", async () => {
     const [service, migration, panel] = await Promise.all([
       readFile("apps/api/src/rework/responsibility-determination-authorized-service.ts", "utf8"),
       readFile("apps/api/migrations/0081_rework_v2_responsibility_2.sql", "utf8"),
       readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
     ]);
-    expect(service).toContain("const requiresOwnerSignature = current.settlement_schema_version === 2 && hasOwnFactory");
+    expect(service).toContain("const requiresOwnerSignature = current.settlement_schema_version === 2 && (hasOwnFactory || Boolean(orderRevision.rowCount))");
     expect(service).toContain("await this.externalResponsibilities.ensureForFinalized(client, actor, order, id)");
     expect(service).toContain("await maybeCompleteResponsibilityAction(client, actor, actionOrder)");
     expect(migration).toContain("WHEN 'rework.responsibility.submit_owner_signature'");
