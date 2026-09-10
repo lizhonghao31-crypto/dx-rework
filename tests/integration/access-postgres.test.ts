@@ -888,6 +888,7 @@ runWithPostgres("role permissions and versioned master data", () => {
     const row = await preview(data);
     const competingPreview = await preview(data);
     const key = randomUUID();
+    await expect(service.applySupplierBatchRow(rootActor, { ...input(row), supplierCode: "MANUAL_CODE" }, randomUUID())).rejects.toMatchObject({ statusCode: 400 });
     const created = await service.applySupplierBatchRow(rootActor, input(row), key);
     expect(created).toMatchObject({ reused: false, response: { version: 1, unchanged: false } });
     expect(await service.applySupplierBatchRow(rootActor, input(row), key)).toEqual({ ...created, reused: true });
@@ -898,6 +899,11 @@ runWithPostgres("role permissions and versioned master data", () => {
 
     const existing = await service.createSupplier(supplierWriteActor, CreateSupplierSchema.parse({ supplierCode: "BATCH_PARTIAL", supplierName: "批量空资料测试厂", supplierType: "factory", contactPerson: "旧联系人", active: false, dailyCapacity: 500, supportedCrafts: ["车缝"], changeReason: "历史空资料测试" }));
     const patch = { supplierCode: "BATCH_PARTIAL", address: "补齐地址", contactPerson: "新联系人", supportedCrafts: "车缝、锁眼" };
+    expect((await preview({ ...data, supplierCode: "UNKNOWN_TYPO" })).status).toBe("conflict");
+    const mismatched = await preview({ supplierCode: "BATCH_PARTIAL", supplierName: "拼错的另一个名称" });
+    expect(mismatched.status).toBe("conflict");
+    await expect(service.applySupplierBatchRow(rootActor, input(mismatched), randomUUID())).rejects.toMatchObject({ statusCode: 400 });
+    expect(await service.getSupplier(existing.supplierId, true)).toMatchObject({ supplierName: "批量空资料测试厂", version: 1 });
     const supplement = await preview(patch);
     expect(supplement).toMatchObject({ status: "review", supplierId: existing.supplierId, version: 1 });
     await expect(service.applySupplierBatchRow(supplierWriteActor, input(supplement), randomUUID())).rejects.toMatchObject({ statusCode: 403 });

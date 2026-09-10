@@ -30,6 +30,9 @@ describe("supplier batch identity and merge rules", () => {
     expect(plan({ ...complete, supplierName: "达兴 加工厂" }).status).toBe("create");
   });
   it("rejects conflicting codes and immutable types", () => {
+    expect(plan({ ...complete, supplierCode: "SUP_TYPO" }).status).toBe("conflict");
+    expect(plan({ supplierCode: profile.supplierCode, supplierName: "未在目录中的任意名称" }).status).toBe("conflict");
+    expect(plan({ supplierCode: profile.supplierCode, supplierName: ` ${profile.supplierName} ` }).status).toBe("unchanged");
     expect(plan({ ...complete, supplierCode: "SUP_WRONG", supplierName: profile.supplierName }).status).toBe("conflict");
     expect(plan({ supplierCode: profile.supplierCode, supplierType: "面料商" }).status).toBe("conflict");
   });

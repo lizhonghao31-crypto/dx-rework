@@ -26,9 +26,9 @@ export function planSupplierBatchRow(cells: SupplierBatchCell[], catalog: readon
   let target: SupplierBatchProfile | undefined;
   if (text("supplierCode")) {
     target = catalog.find(item => item.supplierCode === text("supplierCode"));
-    if (!target && named.length) return fail("编码与同名供应商不一致，请核对编码", "conflict");
-    if (target && named.some(item => item.supplierId !== target!.supplierId)) return fail("编码与名称指向不同供应商，请核对后重试", "conflict");
-    if (target && type && target.supplierType !== type) return fail("编码对应的供应商类型不一致，不能变更类型", "conflict");
+    if (!target) return fail("供应商编码不存在，请核对；新增供应商请留空编码，由系统生成", "conflict");
+    if (row.supplierName && supplierNameKey(row.supplierName) !== supplierNameKey(target.supplierName)) return fail("编码与名称不一致，请核对；更名请使用单条资料维护", "conflict");
+    if (type && target.supplierType !== type) return fail("编码对应的供应商类型不一致，不能变更类型", "conflict");
   } else {
     if (!row.supplierName || !type) return fail("未填写编码时，供应商名称和类型必填");
     if (named.length > 1) return fail("名称和类型匹配多个供应商，请填写准确编码", "conflict");

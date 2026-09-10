@@ -1288,6 +1288,7 @@ export class AccessMasterDataService {
       if (input.expectedSupplierId) await client.query("SELECT supplier_id FROM supplier_catalog_items WHERE supplier_id=$1 FOR UPDATE", [input.expectedSupplierId]);
       const row = planSupplierBatchRow(input.cells, await this.supplierBatchCatalog(client), input.supplierCode);
       if (["conflict", "error"].includes(row.status)) throw new ApplicationError("VALIDATION_ERROR", row.message, 400);
+      if (row.status === "create" && !/^SUP_[A-F0-9]{24}$/.test(input.supplierCode)) throw new ApplicationError("VALIDATION_ERROR", "新增编码无效，请重新预检生成系统编码", 400);
       if (row.supplierId !== input.expectedSupplierId || row.version !== input.expectedVersion || row.supplierCode !== input.supplierCode) {
         throw new ApplicationError("CONFLICT", "供应商资料或匹配对象已变化，请重新预检", 409);
       }

@@ -485,7 +485,9 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
     return reply.header("content-type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
       .header("content-disposition", 'attachment; filename="supplier-template.xlsx"').send(supplierBatchTemplate());
   });
-  app.post("/master-data/suppliers/import/preview", { bodyLimit: 1024 * 1024 }, async request => {
+  // XLSX stays limited to 2 MB in the client. JSON may expand to six bytes per code unit;
+  // 201 rows × 15 cells × 1,000 code units plus JSON framing fits within 20 MiB.
+  app.post("/master-data/suppliers/import/preview", { bodyLimit: 20 * 1024 * 1024 }, async request => {
     const accessActor = await supplierWriteActor(request);
     return dependencies.service.previewSupplierBatch(accessActor, parse(SupplierBatchPreviewSchema, request.body).rows);
   });
