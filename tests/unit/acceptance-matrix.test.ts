@@ -14,25 +14,52 @@ const user = (
 ) => ({ id, displayName: role, businessRoles: [role], capabilities, isRoot });
 
 describe("acceptance authorization matrix", () => {
-  it("covers every standard seeded acceptance alias exactly once", () => {
+  it("covers the active Golden Source roles exactly once and excludes retired roles", () => {
     const aliases = ACCEPTANCE_ROLE_MATRIX.map((entry) => entry.alias);
     expect(new Set(aliases).size).toBe(aliases.length);
     expect(aliases).toEqual([
       "root", "owner", "production-management", "ie", "tail-supervisor", "qc", "warehouse",
-      "worker-a", "worker-b", "merchandiser", "finance-read", "finance-director", "factory-payables",
-      "system-admin", "production-reporter", "sample-designer", "sample-admin", "sample-finance", "sample-approver",
+      "worker-a", "worker-b", "merchandiser", "embroidery-washing-merchandiser", "finance-read",
+      "finance-director", "factory-payables", "embroidery-washing-payables", "fabric-payables",
+      "wage-month-close-accountant", "system-admin", "production-reporter", "sample-designer",
+      "sample-admin", "sample-finance",
     ]);
+    expect(aliases).not.toContain("sample-approver");
+    expect(ACCEPTANCE_ROLE_MATRIX.some((entry) => entry.expectedRole === "tail_inspector")).toBe(false);
+    expect(ACCEPTANCE_ROLE_MATRIX.some((entry) => entry.expectedRole === "administrative_clerk")).toBe(false);
   });
 
-  it("keeps finance-director sample access read-only and binds it to its approved Golden Source rule", () => {
+  it("contains no pending rule reference for the 2026-09-09 confirmed matrix", () => {
+    for (const entry of ACCEPTANCE_ROLE_MATRIX) {
+      expect(entry.defaultRule?.status).toBe("approved");
+      expect(Object.values(entry.ruleRefs ?? {}).every((rule) => rule.status === "approved")).toBe(true);
+    }
+  });
+
+  it("enforces Root-only personnel administration for owner and system-admin", () => {
+    const owner = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "owner")!;
+    const systemAdmin = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "system-admin")!;
+    for (const entry of [owner, systemAdmin]) {
+      const accessProbe = entry.probes?.find((probe) => probe.id === "access-roles");
+      expect(accessProbe?.expectedStatus).toBe(403);
+      expect(entry.ruleRefs?.["http:access-roles"]).toEqual({
+        ruleId: "PERM-PLATFORM-ACCESS-ADMIN-001",
+        status: "approved",
+      });
+    }
+  });
+
+  it("keeps finance-director sample access read-only and production dashboard read-only", () => {
     const finance = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "finance-director")!;
     expect(finance.requiredCapabilities).toEqual(expect.arrayContaining([
       "sample:view_basic", "sample:view_finance", "sample:view_audit",
     ]));
     expect(finance.forbiddenCapabilities).toEqual(expect.arrayContaining([
-      "sample:create", "sample:batch_create", "sample:update_basic", "sample:correct_finance",
-      "sample:dispose_request", "sample:dispose_approve", "sample:archive",
+      "production-reporting", "sample:create", "sample:batch_create", "sample:update_basic",
+      "sample:correct_finance", "sample:dispose_request", "sample:dispose_approve", "sample:archive",
     ]));
+    expect(finance.allowedModules).toContain("production");
+    expect(finance.probes?.find((probe) => probe.id === "production-dashboard")?.expectedStatus).toBe(200);
     for (const key of [
       "cap:sample:view_basic:allow",
       "cap:sample:view_finance:allow",
@@ -49,7 +76,7 @@ describe("acceptance authorization matrix", () => {
     }
   });
 
-  it("keeps supplier-center scope pending when the Golden Source has not approved full master-data access", () => {
+  it("binds every confirmed supplier-center boundary to an approved rule", () => {
     const expected = new Map([
       ["production-management", "PERM-SUPPLIER-PM-CENTER-001"],
       ["ie", "PERM-SUPPLIER-IE-CENTER-001"],
@@ -64,7 +91,7 @@ describe("acceptance authorization matrix", () => {
     ]);
     for (const [alias, ruleId] of expected) {
       const entry = ACCEPTANCE_ROLE_MATRIX.find((candidate) => candidate.alias === alias)!;
-      expect(entry.ruleRefs?.["http:supplier-list"]).toEqual({ ruleId, status: "pending" });
+      expect(entry.ruleRefs?.["http:supplier-list"]).toEqual({ ruleId, status: "approved" });
     }
   });
 
@@ -81,19 +108,19 @@ describe("acceptance authorization matrix", () => {
     expect(session.ruleId).toBe("ACCEPTANCE-INFRASTRUCTURE");
   });
 
-  it("never turns a pending business rule into a failure even when actual access differs", () => {
+  it("lets a confirmed supplier rule fail instead of quarantining it as pending", () => {
     const tail = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "tail-supervisor")!;
     const supplierProbe = tail.probes?.find((probe) => probe.id === "supplier-list");
     if (!supplierProbe) throw new Error("tail-supervisor supplier-list probe is missing");
     const check = evaluateHttpProbe(tail, supplierProbe, 200);
     expect(check.expected).toBe("HTTP 403");
     expect(check.actual).toBe("HTTP 200");
-    expect(check.verdict).toBe("pending");
+    expect(check.verdict).toBe("fail");
     expect(check.ruleId).toBe("PERM-SUPPLIER-TAIL-001");
-    expect(check.ruleStatus).toBe("pending");
+    expect(check.ruleStatus).toBe("approved");
   });
 
-  it("lets an approved Golden Source rule fail when runtime behavior diverges", () => {
+  it("lets an approved Root rule fail when runtime behavior diverges", () => {
     const root = ACCEPTANCE_ROLE_MATRIX.find((entry) => entry.alias === "root")!;
     const accessProbe = root.probes?.find((probe) => probe.id === "access-roles");
     if (!accessProbe) throw new Error("root access-roles probe is missing");
@@ -103,7 +130,7 @@ describe("acceptance authorization matrix", () => {
     expect(check.ruleStatus).toBe("approved");
   });
 
-  it("quarantines an unmapped business check instead of treating current implementation as the oracle", () => {
+  it("quarantines only a genuinely unmapped future business check", () => {
     const check = evaluateHttpProbe("worker-a", {
       id: "unmapped", label: "尚未绑定规则的业务探针", path: "example", expectedStatus: 403,
     }, 200);
