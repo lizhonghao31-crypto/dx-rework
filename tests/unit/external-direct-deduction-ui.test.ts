@@ -21,7 +21,7 @@ describe("N10 external deduction UI", () => {
     expect(panel).not.toContain("登记未扣成功");
     expect(panel).not.toContain('label="扣款凭证号（选填）"');
     expect(queue).toContain('pending_payables_confirmation: "待扣款"');
-    expect(queue).toContain("录入本次扣款即可");
+    expect(queue).toContain("录入本次实际扣款并按现有流程完成");
   });
 
   it("auto-closes a fully deducted ledger while leaving a recovery action if close fails", async () => {

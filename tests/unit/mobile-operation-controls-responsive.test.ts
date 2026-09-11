@@ -10,15 +10,17 @@ describe("mobile operation controls", () => {
     expect(styles).toContain(".dx-field { min-width: 0; }");
   });
 
-  it("sizes the rework filters by their outer controls without a nested input frame", async () => {
+  it("keeps the approved mobile filters readable with a full-width search and expandable fields", async () => {
     const styles = await readFile("apps/web/src/reporting/rework-query-mobile.css", "utf8");
 
-    expect(styles).toContain("@media(max-width:560px)");
+    expect(styles).toContain("@media(max-width:760px)");
     expect(styles).toContain("grid-template-columns:repeat(3,minmax(0,1fr))");
-    expect(styles).toContain(".reporting-filters--orders .dx-field__control,.reporting-filters--orders select,.reporting-filters--orders .reporting-date-range input");
-    expect(styles).toContain("height:36px;min-height:36px;max-height:36px");
+    expect(styles).toContain(".reporting-filters--orders :is(select,input,.dx-field__control,button)");
+    expect(styles).toContain("min-height:44px");
+    expect(styles).toContain("font-size:16px");
     expect(styles).toContain(".reporting-filters--orders .dx-field__control input");
-    expect(styles).toContain("min-height:0;max-height:none;padding:0;border:0;border-radius:0;background:transparent");
+    expect(styles).toContain(".dx-field__control input { min-height:0; }");
+    expect(styles).toContain(".rework-query-more.is-open");
     expect(styles).not.toContain("minmax(0,1.35fr)");
   });
 

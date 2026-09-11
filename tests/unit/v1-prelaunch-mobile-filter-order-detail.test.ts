@@ -14,8 +14,8 @@ describe("v1 prelaunch mobile filters and final order detail UI", () => {
     expect(page).toContain("刷新</Button>");
     expect(styles).toContain("grid-template-columns:repeat(3,minmax(0,1fr))");
     expect(styles).toContain(".reporting-filters--orders .dx-field__control input");
-    expect(styles).toContain("min-height:0;max-height:none;padding:0;border:0");
-    expect(styles).toContain(".reporting-filters--orders .reporting-filters__refresh{grid-column:3;width:auto");
+    expect(styles).toContain(".dx-field__control input { min-height:0; }");
+    expect(styles).toContain(".reporting-filters__refresh { order:2;justify-self:stretch; }");
   });
 
   it("reads receiving totals and immutable supply snapshots in the business detail query", async () => {
