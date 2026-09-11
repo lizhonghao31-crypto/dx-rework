@@ -1,5 +1,6 @@
 import { settleWageBatches } from "../wages/wage-settlement-batches.js";
 import {
+  BasicReworkPageSchema,
   WageSettlementPreviewSchema, WageSettlementResultSchema,
   ManagementDashboardResponseSchema,
   ManagementReworkPageSchema,
@@ -49,6 +50,9 @@ export const loadManagementDashboard = (
 ): Promise<ManagementDashboardResponse | SiteDashboardResponse> => mode === "management"
   ? request("management/dashboard", ManagementDashboardResponseSchema, signal)
   : request("site/dashboard", SiteDashboardResponseSchema, signal);
+
+export const loadBasicReworkOrders = (filters: Record<string,string | undefined>, signal?: AbortSignal) =>
+  request(`management/rework-basic-orders${queryString(filters)}`,BasicReworkPageSchema,signal);
 
 export const loadReworkOrders = (
   filters: Record<string, string | undefined>,

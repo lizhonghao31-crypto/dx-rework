@@ -1,3 +1,5 @@
+import { readBasicRework } from "./basic-rework-reader.js";
+import type { BasicReworkQuery } from "@dx-rework/contracts/reporting";
 import { wageSelection, wageSelectionValues } from "./wage-report-selection.js";
 import {readWorkflowAnalysis} from "./workflow-analysis.js";
 import type { DashboardQuery, ManagementDashboardResponse, ManagementReworkPage, ManagementReworkQuery, ReportPreviewResponse, ReportQuery, ReportType, SiteDashboardResponse } from "@dx-rework/contracts/reporting";
@@ -27,6 +29,10 @@ const workflowCapabilitiesByStatus: Readonly<Record<string, readonly string[]>> 
 
 export class ManagementReportingService {
   constructor(private readonly db: Pool) {}
+
+  async listBasicRework(actor: TrustedActorContext, query: BasicReworkQuery) {
+    return readBasicRework(this.db,actor,query);
+  }
 
   async workflowAnalysis(actor: TrustedActorContext, input: unknown) {
     await this.require(actor, "dashboard:management:read");

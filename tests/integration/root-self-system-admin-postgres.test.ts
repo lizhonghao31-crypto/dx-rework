@@ -1,3 +1,4 @@
+import "./quality-basic-rework-postgres.test.js";
 import "./wage-settlement-postgres.test.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";

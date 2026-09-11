@@ -16,7 +16,7 @@ import { mapWithConcurrency } from "./concurrency.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import "./receiving-page.css";
 
-const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 const MAX_RECEIVING_IMAGES = 3;
 
 const businessDateDaysAgo = (daysAgo: number): string => {
@@ -397,6 +397,7 @@ export function ReceivingPage() {
   };
 
   return <main className="receiving-shell">
+    <a className="dx-button dx-button--secondary receiving-order-link" href={pageUrl("/ui/orders?returnTo=%2Fui%2Freceiving")}>查看订货回货</a>
     <section className="receiving-hero">
       <div className="receiving-brand">达兴 · 仓库收货</div>
       {open ? <>

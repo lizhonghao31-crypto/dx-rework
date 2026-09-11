@@ -384,7 +384,7 @@ export function Shell({
   const todoAccess = hasCapability("todo:view");
   const reportAccess = isRoot || isOwner || hasCapability("report:view");
   const reworkBoardAccess = reportAccess || hasCapability("dashboard:site:read")
-    || hasCapability("rework:related_orders:view");
+    || hasCapability("rework:related_orders:view") || hasCapability("rework:basic:view");
   const wageAccess = isRoot || isOwner || hasCapability("wage:view");
   const systemManagementAccess = isRoot
     || auditAccess
