@@ -217,7 +217,7 @@ export function MyTodosPage() {
 
   useEffect(() => {
     let mounted = true;
-    void verifySession().then((session) => {
+    void verifySession(true).then((session) => {
       if (!mounted) return;
       const modules = session !== "denied" && session.status === "authorized"
         ? todoModuleIdsForUser(session.user)
@@ -246,8 +246,22 @@ export function MyTodosPage() {
     window.history.replaceState({...window.history.state,dxTodoQueryUser:queryOwner},"",pageUrl(path));
   },[searchQuery,requestedModule,requestedPage,queryOwner]);
   useEffect(()=>{
-    const restored=(event:PageTransitionEvent)=>{if(event.persisted)setRefresh(n=>n+1);};
-    window.addEventListener("pageshow",restored);return()=>window.removeEventListener("pageshow",restored);
+    let mounted=true;
+    const restored=(event:PageTransitionEvent)=>{
+      if(!event.persisted)return;
+      const savedOwner=window.history.state?.dxTodoQueryUser;
+      ++loadVersion.current;setQueryOwner(null);setState({kind:"loading"});
+      void verifySession(true).then(session=>{
+        if(!mounted)return;
+        if(session==="denied"||session.status!=="authorized"||savedOwner!==session.user.id){
+          // A different identity must also discard the restored shell/session UI.
+          window.location.replace(pageUrl("/ui/my-tasks"));return;
+        }
+        setAccessibleTodoModules(new Set(todoModuleIdsForUser(session.user)));
+        setQueryOwner(session.user.id);setRefresh(n=>n+1);
+      });
+    };
+    window.addEventListener("pageshow",restored);return()=>{mounted=false;window.removeEventListener("pageshow",restored);};
   },[]);
 
   const activeModule = state.kind === "ready" ? state.activeModule : "rework";
