@@ -97,7 +97,7 @@ export function WagePeriodList() {
       const result = await markWageSettlement(filters,preview.lineIds);
       setMessage(`已标记 ${formatBusinessDecimal(result.markedCount)} 条工资明细。`);
       setRefresh(n=>n+1);
-    } catch(error) {setMessage(error instanceof Error ? error.message : "工资结算标记失败");}
+    } catch(error) {setMessage(error instanceof Error ? error.message : "工资结算标记失败");setRefresh(n=>n+1);}
     finally {busyRef.current=false;setBusy(false);}
   };
   const personPage = usePaginatedItems(personSummary, resetKey);
