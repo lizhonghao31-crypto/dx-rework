@@ -64,6 +64,7 @@ export const ManagementReworkQuerySchema = DashboardQuerySchema.extend({
 export const ReportQuerySchema = DashboardQuerySchema.extend({
   q: z.string().trim().min(1).max(100).optional(),
   status: z.string().trim().min(1).max(80).optional(),
+  personType: z.enum(["internal", "temporary"]).optional(),
   limit: z.coerce.number().int().min(1).max(500).default(100),
 }).strict();
 
