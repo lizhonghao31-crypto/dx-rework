@@ -71,8 +71,9 @@ export class ProductionClosureService {
   const client=await this.database.connect();
   try{await client.query("BEGIN");await client.query("SELECT pg_advisory_xact_lock(hashtext('production-closure'))");
    const timestamp=await client.query<{as_of:Date}>("SELECT clock_timestamp() AS as_of"),asOf=(this.clock?.()??timestamp.rows[0]!.as_of).toISOString();
-   const orders=await client.query<{production_order_id:string;created_by:string;operation_event_id:string;first_style_no:string;supplier_name_snapshot:string}>(`SELECT production.production_order_id,source_case.created_by,production.operation_event_id,production.first_style_no,production.supplier_name_snapshot
+   const orders=await client.query<{production_order_id:string;created_by:string;operation_event_id:string;first_style_no:string;supplier_name_snapshot:string;merchandiser_name:string|null}>(`SELECT production.production_order_id,source_case.created_by,production.operation_event_id,production.first_style_no,production.supplier_name_snapshot,merchandiser.display_name merchandiser_name
     FROM sourcing_production_orders production JOIN sourcing_cases source_case USING(sourcing_case_id)
+    LEFT JOIN app_users merchandiser ON merchandiser.id=source_case.created_by
     JOIN sourcing_production_pilots pilot ON pilot.supplier_id=production.supplier_id AND pilot.enabled=true WHERE ${productionNotExcluded}`);
    const facts=await readProductionProgressFacts(client,orders.rows.map(r=>r.production_order_id),asOf);
    await this.project(client,orders.rows.map(o=>o.production_order_id),facts);
@@ -85,7 +86,7 @@ export class ProductionClosureService {
     return [TodoResponseSchema.parse({todoId:a.alert_id,todoType:"business_action",category:`production_${a.kind}`,sourceEventId:o.operation_event_id,
      sourceAction:"sourcing.production.dispatch",entityType:"production_order",entityId:o.production_order_id,recipientUserId:actor.actorId,
      requiredRole:null,requiredCapability:"sourcing:view",route:{routeName:"production_detail",entityId:o.production_order_id,todoId:a.alert_id},policyKey:null,dueAt:null,reminderCount:0,
-     status:"pending",blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:o.first_style_no,supplierName:o.supplier_name_snapshot,status:a.kind,updatedAt:asOf},
+     status:"pending",blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:o.first_style_no,supplierName:o.supplier_name_snapshot,merchandiserName:o.merchandiser_name ?? null,status:a.kind,updatedAt:asOf},
      unread:a.read_at===null,productionProgress:p.productionProgress,daysWithoutUpdate:p.daysWithoutUpdate,
      version:1,createdAt:iso(a.opened_at),updatedAt:asOf})];});
    await client.query("COMMIT");return result;

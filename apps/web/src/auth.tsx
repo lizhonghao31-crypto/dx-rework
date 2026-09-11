@@ -74,18 +74,21 @@ type AuthGateState = "loading" | "denied" | AuthorizedSession;
 export type VerifiedSession = Exclude<AuthGateState, "loading">;
 let verifiedSession: VerifiedSession | undefined;
 let sessionVerification: Promise<VerifiedSession> | undefined;
+let sessionVerificationVersion=0;
 
-export const verifySession = (): Promise<VerifiedSession> => {
+export const verifySession = (force=false): Promise<VerifiedSession> => {
+  if(force){verifiedSession=undefined;sessionVerification=undefined;}
   if (verifiedSession !== undefined) return Promise.resolve(verifiedSession);
 
   if (!sessionVerification) {
-    sessionVerification = fetch(apiUrl("auth/me"), { credentials: "include" })
+    const version=++sessionVerificationVersion;
+    sessionVerification = fetch(apiUrl("auth/me"), { credentials: "include",cache:"no-store" })
       .then(async (response): Promise<VerifiedSession> =>
         response.ok ? await response.json() as AuthorizedSession : "denied",
       )
       .catch((): VerifiedSession => "denied")
       .then((state): VerifiedSession => {
-        verifiedSession = state;
+        if(version===sessionVerificationVersion)verifiedSession = state;
         return state;
       });
   }

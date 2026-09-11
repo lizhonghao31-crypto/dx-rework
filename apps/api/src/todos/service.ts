@@ -86,6 +86,7 @@ const TODO_WITH_CONTEXT_SQL = `SELECT
   todos.created_at,todos.updated_at,
   orders.rework_no,orders.order_no,orders.style_no,orders.status rework_status,
   orders.updated_at rework_updated_at,
+  COALESCE(rework_merchandiser.display_name,sourcing_merchandiser.display_name) merchandiser_name,
   sample.sample_code,COALESCE(NULLIF(sample.style_no,''),sample.style_name) sample_style_no,
   sample.status sample_status,sample.updated_at sample_updated_at,
   sourcing.erp_order_no sourcing_order_no,sourcing.style_no sourcing_style_no,
@@ -111,6 +112,7 @@ LEFT JOIN rework_orders orders
     NULLIF(todos.route_descriptor->>'reworkOrderId','')::uuid,
     CASE WHEN todos.entity_type='rework_order' THEN todos.entity_id::uuid END
   )
+LEFT JOIN app_users rework_merchandiser ON rework_merchandiser.id=orders.merchandiser_user_id
 LEFT JOIN supplier_catalog_versions rework_supplier
   ON rework_supplier.supplier_id=orders.processing_factory_supplier_id
  AND rework_supplier.version=orders.processing_factory_supplier_version
@@ -118,6 +120,7 @@ LEFT JOIN current_sourcing_cases sourcing
   ON sourcing.sourcing_case_id=CASE
     WHEN todos.entity_type='sourcing_case' THEN todos.entity_id::uuid
   END
+LEFT JOIN app_users sourcing_merchandiser ON sourcing_merchandiser.id=sourcing.created_by
 LEFT JOIN LATERAL (
   SELECT decision.supplier_name_snapshot
   FROM sourcing_decisions decision
@@ -299,7 +302,7 @@ export class TodoService {
       ?? "rework";
     if (activeModule === "production") {
       const filtered = productionTodos.filter(todo => !normalizedQuery ||
-        [todo.orderContext?.styleNo, todo.orderContext?.supplierName].some(value => value?.toUpperCase().includes(normalizedQuery.toUpperCase())));
+        [todo.orderContext?.styleNo, todo.orderContext?.supplierName, todo.orderContext?.merchandiserName].some(value => value?.toUpperCase().includes(normalizedQuery.toUpperCase())));
       const totalCount = filtered.length, totalPages = Math.ceil(totalCount / 15), page = totalPages ? Math.min(requestedPage,totalPages) : 1;
       return {todos:filtered.slice((page-1)*15,page*15),activeModule,moduleCounts,page,pageSize:15,totalCount,totalPages};
     }
@@ -319,6 +322,7 @@ export class TodoService {
            OR strpos(upper(COALESCE(sample_style_no,'')),upper($3))>0
            OR strpos(upper(COALESCE(supplier_name_snapshot,'')),upper($3))>0
            OR strpos(upper(COALESCE(sample_code,'')),upper($3))>0
+           OR strpos(upper(COALESCE(merchandiser_name,'')),upper($3))>0
          )`,
       [actor.actorId, activeModule, normalizedQuery],
     );
@@ -342,6 +346,7 @@ export class TodoService {
            OR strpos(upper(COALESCE(sample_style_no,'')),upper($3))>0
            OR strpos(upper(COALESCE(supplier_name_snapshot,'')),upper($3))>0
            OR strpos(upper(COALESCE(sample_code,'')),upper($3))>0
+           OR strpos(upper(COALESCE(merchandiser_name,'')),upper($3))>0
          )
        ORDER BY status_rank ASC,due_at ASC NULLS LAST,created_at DESC,todo_id DESC
        LIMIT $4 OFFSET $5`,

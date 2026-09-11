@@ -52,7 +52,7 @@ describe("zero-role Root UI entry contract", () => {
       readFile(new URL("../../apps/web/src/styles.css", import.meta.url), "utf8"),
     ]);
     expect(auth).toContain("let verifiedSession: VerifiedSession | undefined;");
-    expect(auth).toContain("const verifySession = (): Promise<VerifiedSession> =>");
+    expect(auth).toContain("const verifySession = (force=false): Promise<VerifiedSession> =>");
     expect(auth).toContain('useState<AuthGateState>(() => verifiedSession ?? "loading")');
     expect(styles).toContain("display: flex; flex-direction: column;");
     expect(styles).toContain(".app-shell__identity { margin-top: auto;");

@@ -3,6 +3,7 @@ import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
+import { todoReturnPath } from "./todo-query-state.js";
 import { Header, Shell } from "./components.js";
 import { ReworkDetailPage, type WorkflowNodeKey } from "./rework-detail-page.js";
 import { WagePeriodDetailPage } from "./wages/wage-period-detail.js";
@@ -117,7 +118,7 @@ export function ResponsibilityTaskPage() {
   if (state.kind === "error" || state.kind === "blocked") {
     return (
       <Shell active="我的待办">
-        <Header title="当前任务无法处理" badge="需要处理" action="返回我的待办" actionHref="/ui/my-tasks" />
+        <Header title="当前任务无法处理" badge="需要处理" action="返回我的待办" actionHref={todoReturnPath(window.location.search) ?? "/ui/my-tasks"} />
         <Surface><StatusBadge tone="warning">暂不可操作</StatusBadge><p>{state.kind === "error" ? state.message : state.reason}</p></Surface>
       </Shell>
     );
@@ -136,7 +137,7 @@ export function ResponsibilityTaskPage() {
     }
     return (
       <Shell active="我的待办">
-        <Header title="任务已完成" badge="已完成" action="返回我的待办" actionHref="/ui/my-tasks" />
+        <Header title="任务已完成" badge="已完成" action="返回我的待办" actionHref={todoReturnPath(window.location.search) ?? "/ui/my-tasks"} />
         <Surface className="my-todos-state my-todos-complete">
           <StatusBadge tone="success">已完成</StatusBadge>
           <h2>您在本订单内的任务已全部完成，谢谢。</h2>
@@ -161,7 +162,7 @@ export function ResponsibilityTaskPage() {
   }
   return (
     <Shell active="我的待办">
-      <Header title="核对本期返工工资" subtitle="返工工资核对任务" badge="当前由你处理" action="返回我的待办" actionHref="/ui/my-tasks" />
+      <Header title="核对本期返工工资" subtitle="返工工资核对任务" badge="当前由你处理" action="返回我的待办" actionHref={todoReturnPath(window.location.search) ?? "/ui/my-tasks"} />
       <Surface className="task-guidance">
         <p><b>你现在要做：</b>核对本期返工工资</p>
         <p><b>完成后：</b>进入下一位工资核对或月结处理人。</p>

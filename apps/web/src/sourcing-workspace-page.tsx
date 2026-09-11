@@ -1,3 +1,4 @@
+import { todoReturnPath } from "./todo-query-state.js";
 import {WorkAnalysisPanel} from "./work-analysis-panel.js";
 import { isNewSourcingPrice, newSourcingPriceDisplay, historicalSourcingPrice, sourcingPriceSummary, sourcingDeleteConfirmation } from "./sourcing-price-presentation.js";
 import { NavigationIcon } from "./navigation-icons.js";
@@ -1235,8 +1236,8 @@ function OrderDetailPage({
         subtitle={`${item.gender ?? "历史未维护"} · ${item.styleName ?? "历史未维护"}`}
         badge={STATUS_LABELS[item.status]}
         badgePlacement="subtitle"
-        action="返回订单列表"
-        actionHref={item.status === "closed" ? "/ui/sourcing/history" : "/ui/sourcing/pending"}
+        action={todoReturnPath(window.location.search) ? "返回我的待办" : "返回订单列表"}
+        actionHref={todoReturnPath(window.location.search) ?? (item.status === "closed" ? "/ui/sourcing/history" : "/ui/sourcing/pending")}
       />
       <div className="rework-detail-layout rework-detail-target-layout">
         <dl className="rework-detail-core-facts" aria-label="外发定价选厂订单核心信息">

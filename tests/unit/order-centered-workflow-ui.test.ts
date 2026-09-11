@@ -19,7 +19,7 @@ describe("order-centered workflow UI", () => {
     expect(page).toContain("const orderSummary");
     expect(page).toContain("款号：");
     expect(page).toContain("返工单：");
-    expect(page).toContain("输入供应商名称或款号");
+    expect(page).toContain("输入供应商、款号或跟单姓名");
     expect(todos).toContain("strpos(upper(COALESCE(style_no,sourcing_style_no,'')),upper($3))>0");
     expect(todos).toContain("LIMIT $4 OFFSET $5");
     expect(page).toContain('params.set("module", module)');

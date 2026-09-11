@@ -73,7 +73,8 @@ export function installInternalNavigation(basePath: string, sync: () => void): (
     const returnTo = /^\/ui\/(tasks|my-tasks|responsibility)\/[^/]+$/.test(relativePath)
       ? { dxReworkReturnTo: /^\/ui\/(tasks|my-tasks|responsibility)\/[^/]+$/.test(sourcePath)
           ? window.history.state?.dxReworkReturnTo : `${sourcePath}${window.location.search}${window.location.hash}` } : {};
-    window.history.pushState({ [POSITION]: position, ...returnTo }, "", `${url.pathname}${url.search}${url.hash}`);
+    const todoQueryUser = window.history.state?.dxTodoQueryUser;
+    window.history.pushState({ [POSITION]: position, ...returnTo, ...(typeof todoQueryUser === "string" ? { dxTodoQueryUser: todoQueryUser } : {}) }, "", `${url.pathname}${url.search}${url.hash}`);
     remember();
     if (url.hash) window.requestAnimationFrame(() => document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView({ block: "start" }));
     else window.scrollTo({ top: 0, left: 0 });
