@@ -1,4 +1,5 @@
 import {
+  FinanceNodeParamsSchema, FinanceNodeReadSchema,
   BasicReworkPageSchema, BasicReworkQuerySchema,
   WageSettlementPreviewSchema, WageSettlementRequestSchema, WageSettlementResultSchema,
   DashboardQuerySchema,
@@ -57,6 +58,13 @@ export function registerManagementReportingRoutes(
     const input=parse(WageSettlementRequestSchema,request.body);
     return WageSettlementResultSchema.parse(await dependencies.service.markWageSettlement(
       await actor(request,"wage:settlement_mark"),input.filters,input.lineIds));
+  });
+
+  app.get("/management/rework-orders/:reworkOrderId/finance-nodes/:node", async (request,reply) => {
+    const {reworkOrderId,node}=parse(FinanceNodeParamsSchema,request.params);
+    reply.header("cache-control","no-store");
+    return FinanceNodeReadSchema.parse(await dependencies.service.financeNode(
+      await actor(request,"rework:finance_nodes:read"),reworkOrderId,node));
   });
 
   app.get("/management/rework-basic-orders", async (request,reply) => {

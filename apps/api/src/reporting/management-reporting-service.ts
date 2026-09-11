@@ -1,3 +1,5 @@
+import { readFinanceNode } from "./finance-node-reader.js";
+import type { FinanceNodeKey } from "@dx-rework/contracts/reporting";
 import { readBasicRework } from "./basic-rework-reader.js";
 import type { BasicReworkQuery } from "@dx-rework/contracts/reporting";
 import { wageSelection, wageSelectionValues } from "./wage-report-selection.js";
@@ -29,6 +31,10 @@ const workflowCapabilitiesByStatus: Readonly<Record<string, readonly string[]>> 
 
 export class ManagementReportingService {
   constructor(private readonly db: Pool) {}
+
+  async financeNode(actor: TrustedActorContext, orderId: string, node: FinanceNodeKey) {
+    return readFinanceNode(this.db,actor,orderId,node);
+  }
 
   async listBasicRework(actor: TrustedActorContext, query: BasicReworkQuery) {
     return readBasicRework(this.db,actor,query);
