@@ -128,9 +128,7 @@ export const nodeMeta: Record<ManagementReworkRow["status"], { node: string; lab
 
 export const reportStatusValues: Readonly<Record<ReportType, ReadonlySet<string>>> = {
   rework_overview: new Set(Object.keys(nodeMeta)),
-  // Wage "status" is intentionally reused as the person-type filter after the
-  // retired month-close state was removed from the wage-management UI.
-  wages: new Set(["internal", "temporary"]),
+  wages: new Set(["ready_to_lock", "locked"]),
   responsibilities: new Set(["own_factory", "processing_factory", "embroidery_factory", "washing_factory", "fabric_supplier"]),
   own_factory: new Set(["pending", "approved", "rejected"]),
   external_deductions: new Set([
