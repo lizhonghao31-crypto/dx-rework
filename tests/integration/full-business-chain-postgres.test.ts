@@ -1256,6 +1256,13 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     );
     expect(openBusinessTodos.rows).toEqual([]);
 
+    // PR03: adding basic visibility never opens protected node readers, including for the original QC initiator.
+    const basicQuality={...qc(),authorizationCapabilities:["tools:user","rework:initiate","rework:basic:view"]};
+    await expect(configuration.get(basicQuality,submitted.value.reworkOrderId)).rejects.toMatchObject({statusCode:403});
+    await expect(work.list(basicQuality,submitted.value.reworkOrderId)).rejects.toMatchObject({statusCode:403});
+    await expect(wholeOrder.get(basicQuality,submitted.value.reworkOrderId)).rejects.toMatchObject({statusCode:403});
+    await expect(responsibility.get(basicQuality,submitted.value.reworkOrderId)).rejects.toMatchObject({statusCode:403});
+
     // B PR08: completed/partially-paid orders reopen without rewriting wage or paid facts.
     const revisionActor = actor(ids.production,["production_management"],"responsibility:determine","external_responsibility:approve_revision");
     const ownerSignActor = () => actor(ids.ownerOne,["owner_group"],"responsibility:owner_sign","responsibility:determine");

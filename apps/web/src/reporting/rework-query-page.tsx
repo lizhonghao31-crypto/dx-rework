@@ -1,3 +1,4 @@
+import { BasicReworkBoard, ReworkBoardAccess } from "./basic-rework-board.js";
 import {ReworkFlowPanel} from "../rework-flow-panel.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import type { ManagementReworkPage, ManagementReworkRow } from "@dx-rework/contracts/reporting";
@@ -24,6 +25,10 @@ const responsibilityTypes = [["","全部责任"],["own_factory","本厂承担"],
 type LoadState = { kind: "loading" } | { kind: "ready"; value: ManagementReworkPage } | { kind: "unavailable"; message: string };
 
 export function ReworkQueryPage() {
+  return <ReworkBoardAccess basic={<BasicReworkBoard />} business={<BusinessReworkQueryPage />} />;
+}
+
+function BusinessReworkQueryPage() {
   const initial = useMemo(() => new URLSearchParams(window.location.search), []);
   const [q, setQ] = useState(initial.get("q") ?? "");
   const debouncedQ = useDebouncedValue(q, 200);

@@ -97,6 +97,24 @@ export const DashboardExceptionSchema = z.object({
   deepLink: z.string().startsWith("/"),
 }).strict();
 
+export const BasicReworkQuerySchema = z.object({
+  q: z.string().trim().max(100).optional(), status: ReportingReworkStatusSchema.optional(),
+  page: z.coerce.number().int().min(1).max(100000).default(1),
+}).strict();
+export const BasicReworkRowSchema = z.object({
+  reworkOrderId: IdSchema, reworkNo: z.string().nullable(), styleNo: z.string().nullable(),
+  orderNo: z.string().nullable(), processingFactory: z.string().nullable(), merchandiser: z.string().nullable(),
+  quantity: z.string().nullable(), reason: z.string().nullable(), problemPart: z.string().nullable(),
+  problemDescription: z.string().nullable(), status: ReportingReworkStatusSchema, nodeLabel: z.string(),
+  photos: z.array(z.object({attachmentId: IdSchema, filename: z.string()}).strict()),
+}).strict();
+export const BasicReworkPageSchema = z.object({
+  items: z.array(BasicReworkRowSchema), page: z.number().int().positive(),
+  totalPages: z.number().int().positive(), totalCount: z.number().int().nonnegative(),
+}).strict();
+export type BasicReworkQuery = z.infer<typeof BasicReworkQuerySchema>;
+export type BasicReworkPage = z.infer<typeof BasicReworkPageSchema>;
+
 export const ManagementReworkRowSchema = z.object({
   reworkOrderId: IdSchema,
   reworkNo: z.string().nullable(),

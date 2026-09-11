@@ -1,4 +1,5 @@
 import {
+  BasicReworkPageSchema, BasicReworkQuerySchema,
   WageSettlementPreviewSchema, WageSettlementRequestSchema, WageSettlementResultSchema,
   DashboardQuerySchema,
   ManagementDashboardResponseSchema,
@@ -56,6 +57,12 @@ export function registerManagementReportingRoutes(
     const input=parse(WageSettlementRequestSchema,request.body);
     return WageSettlementResultSchema.parse(await dependencies.service.markWageSettlement(
       await actor(request,"wage:settlement_mark"),input.filters,input.lineIds));
+  });
+
+  app.get("/management/rework-basic-orders", async (request,reply) => {
+    reply.header("cache-control","no-store");
+    return BasicReworkPageSchema.parse(await dependencies.service.listBasicRework(
+      await actor(request,"rework:basic:view"),parse(BasicReworkQuerySchema,request.query)));
   });
 
   app.get("/management/workflow-analysis", async (request,reply) => {
