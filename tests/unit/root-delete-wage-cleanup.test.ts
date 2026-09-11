@@ -23,7 +23,7 @@ describe("Root order deletion wage closure", () => {
     expect(source).toContain("WHERE status='locked' OR source_item_count>0");
     expect(source).toContain("WHERE period_id=$1 AND (status='locked' OR source_item_count>0)");
     expect(source).toContain("AND item.invalidated_at IS NULL");
-    expect(source).toContain("WHERE period_id=$1 AND invalidated_at IS NULL");
+    expect(source).not.toContain("INSERT INTO rework_wage_month_close_lines");
   });
 
   it("excludes invalidated rows from unlocked Excel while preserving locked snapshots", async () => {

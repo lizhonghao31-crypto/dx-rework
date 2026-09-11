@@ -60,7 +60,7 @@ describe("order detail information architecture", () => {
     expect(detail).toContain('className="rework-workflow__desktop-grid"');
     expect(detail).toContain('className="rework-workflow__mobile-rail"');
     expect(detail).toContain("{workflowNodes.map(renderWorkflowNode)}");
-    expect(detail).toContain('<div className="rework-detail-task__heading"><h2>办理区</h2><span className="rework-detail-single-piece-total">');
+    expect(detail).toMatch(/<div className="rework-detail-task__heading"><h2>办理区[\s\S]*?<\/h2><span className="rework-detail-single-piece-total">/);
     expect(detail).not.toContain("当前工作区");
     expect(detail).toContain("当前步骤 {activeStepIndex} / {workflowNodes.length}");
     expect(styles).toContain(".rework-detail-overview-grid");

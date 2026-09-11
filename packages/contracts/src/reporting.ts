@@ -62,6 +62,7 @@ export const ManagementReworkQuerySchema = DashboardQuerySchema.extend({
 }).strict();
 
 export const ReportQuerySchema = DashboardQuerySchema.extend({
+  personType: z.enum(["internal", "temporary"]).optional(),
   q: z.string().trim().min(1).max(100).optional(),
   status: z.string().trim().min(1).max(80).optional(),
   limit: z.coerce.number().int().min(1).max(500).default(100),
@@ -180,6 +181,25 @@ export const ManagementReworkPageSchema = z.object({
   canViewReports: z.boolean(),
 }).strict();
 
+export const WageSettlementPreviewSchema = z.object({
+  lineIds: z.array(IdSchema),
+  personCount: z.number().int().nonnegative(),
+  lineCount: z.number().int().nonnegative(),
+}).strict();
+export const WageSettlementRequestSchema = z.object({
+  filters: ReportQuerySchema,
+  lineIds: z.array(IdSchema).min(1).max(100_000),
+}).strict();
+export const WageSettlementResultSchema = z.object({ markedCount: z.number().int().nonnegative() }).strict();
+export const WageReportSummarySchema = z.object({
+  rowCount: z.number().int().nonnegative(),
+  pendingLineCount: z.number().int().nonnegative(),
+  pendingPersonCount: z.number().int().nonnegative(),
+  people: z.array(z.object({
+    personId: IdSchema, name: z.string(), orderCount: z.number().int().nonnegative(), amount: MoneySchema,
+  }).strict()),
+}).strict();
+
 const ReportCellSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 export const ReportPreviewResponseSchema = z.object({
   reportType: ReportTypeSchema,
@@ -188,6 +208,8 @@ export const ReportPreviewResponseSchema = z.object({
   rowCount: z.number().int().nonnegative(),
   truncated: z.boolean(),
   canExport: z.boolean(),
+  canSettleWages: z.boolean().optional(),
+  wageSummary: WageReportSummarySchema.optional(),
   totals: z.record(z.string(), z.string()),
   columns: z.array(z.object({ key: z.string().min(1), label: z.string().min(1) }).strict()),
   rows: z.array(z.record(z.string(), ReportCellSchema)),

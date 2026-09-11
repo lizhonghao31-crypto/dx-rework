@@ -1,4 +1,6 @@
+import { settleWageBatches } from "../wages/wage-settlement-batches.js";
 import {
+  WageSettlementPreviewSchema, WageSettlementResultSchema,
   ManagementDashboardResponseSchema,
   ManagementReworkPageSchema,
   ReportPreviewResponseSchema,
@@ -92,3 +94,17 @@ export const reportingPageUrl = (path: string): string => pageUrl(path);
 
 export const reportingBusinessDate = (value = new Date()): string => shanghaiBusinessDate(value);
 export const reportingBusinessMonthStart = (value = new Date()): string => `${reportingBusinessDate(value).slice(0, 7)}-01`;
+
+export const previewWageSettlement = (filters: Record<string,string | undefined>) => request(
+  `management/wages/settlement-preview${queryString(filters)}`,WageSettlementPreviewSchema);
+export const markWageSettlement = (filters: Record<string,string | undefined>,lineIds:string[]) =>
+ settleWageBatches(lineIds,ids=>markWageSettlementBatch(filters,ids));
+const markWageSettlementBatch = async (filters: Record<string,string | undefined>,lineIds:string[]) => {
+ const response=await fetch(apiUrl("management/wages/settlement"),{
+  method:"POST",credentials:"include",headers:{"content-type":"application/json",accept:"application/json"},
+  body:JSON.stringify({filters,lineIds}),
+ });
+ if(!response.ok){const value=await response.json().catch(()=>null) as {error?:{message?:string}} | null;
+  throw new Error(value?.error?.message ?? "工资结算标记失败");}
+ return WageSettlementResultSchema.parse(await response.json());
+};

@@ -107,8 +107,9 @@ describe("root global business bypass policy", () => {
     expect(routes).not.toContain("tail-approve");
     expect(routes).not.toContain("administrative-approve");
     expect(routes).not.toContain("wage-adjustments");
-    expect(service).toContain('period.status !== "ready_to_lock"');
-    expect(service).toContain("自然月结束前不能锁定");
+    expect(service).toContain("canLock: false");
+    expect(service).toContain("旧工资月结已停用");
+    expect(service).not.toContain("INSERT INTO rework_wage_month_closures");
     expect(retirement).toContain("wage review workflow is retired");
     expect(retirement).toContain("wage adjustment workflow is retired");
   });

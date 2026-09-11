@@ -1,4 +1,5 @@
 import {
+  WageSettlementPreviewSchema, WageSettlementRequestSchema, WageSettlementResultSchema,
   DashboardQuerySchema,
   ManagementDashboardResponseSchema,
   ManagementReworkPageSchema,
@@ -45,6 +46,17 @@ export function registerManagementReportingRoutes(
     const user = await dependencies.authenticate(token(request));
     return businessActor(dependencies.root, user, request.id, capability);
   };
+
+  app.get("/management/wages/settlement-preview", async (request,reply) => {
+    reply.header("cache-control","no-store");
+    return WageSettlementPreviewSchema.parse(await dependencies.service.previewWageSettlement(
+      await actor(request,"wage:settlement_mark"),parse(ReportQuerySchema,request.query)));
+  });
+  app.post("/management/wages/settlement", {bodyLimit: 8 * 1024 * 1024}, async request => {
+    const input=parse(WageSettlementRequestSchema,request.body);
+    return WageSettlementResultSchema.parse(await dependencies.service.markWageSettlement(
+      await actor(request,"wage:settlement_mark"),input.filters,input.lineIds));
+  });
 
   app.get("/management/workflow-analysis", async (request,reply) => {
     const reader = await actor(request,"dashboard:management:read");
