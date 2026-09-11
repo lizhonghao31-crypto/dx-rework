@@ -1,3 +1,4 @@
+import { todoReturnPath } from "./todo-query-state.js";
 import { ProductionExclusionControls } from "./production-exclusion-controls.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { ProductionPilotControls, ProductionReceiptSummary } from "./production-closure-ui.js";
@@ -77,7 +78,7 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
   const asOf=data?.asOf??detail?.asOf;
   return <Shell active="实时看板"><div className="sourcing-workspace production-dashboard production-board">
     <Header iconRoute="/ui/production-dashboard" title="实时看板" subtitle="生产数量与工作日进度，按实际记录判断。" badge="实时生产看板"/>
-    <div className="production-dashboard__toolbar">{canOpenReporting?<a href={pageUrl("ui/production-reporting")}><NavigationIcon route="/ui/production-reporting" />生产数据填报</a>:null}{productionOrderId?<a href={pageUrl("ui/production-dashboard")}>返回实时看板</a>:null}
+    <div className="production-dashboard__toolbar">{canOpenReporting?<a href={pageUrl("ui/production-reporting")}><NavigationIcon route="/ui/production-reporting" />生产数据填报</a>:null}{productionOrderId?<a href={pageUrl(todoReturnPath(window.location.search) ?? "ui/production-dashboard")}>{todoReturnPath(window.location.search) ? "返回我的待办" : "返回实时看板"}</a>:null}
       <span>{asOf?<time dateTime={asOf} title={timestamp(asOf)}>数据截至 {timestamp(asOf)} · 读取于{relativeProductionTime(asOf,now)}前</time>:"正在读取数据"}</span>
       {canControlMotion?<Button variant="secondary" aria-pressed={paused} onClick={()=>{if(canControlMotion)setPaused(value=>!value);}}>{paused?"继续动效":"暂停动效"}</Button>:null}
       <Button variant="secondary" disabled={loading} onClick={()=>{void load(true);}}><span aria-hidden="true" className={loading?"production-dashboard__refreshing":""}>↻</span> {loading?"刷新中…":"刷新"}</Button>

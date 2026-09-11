@@ -1,3 +1,4 @@
+import { todoReturnPath } from "./todo-query-state.js";
 import {SampleAnalysisPage} from './sample-analysis-page.js';
 import {SampleDisposalActions,SampleArchiveList,SampleFinancialHistory} from "./sample-disposal-page.js";
 import { useEffect, useState } from "react";
@@ -87,7 +88,7 @@ export function SampleHistory({ sampleId, kind }: { sampleId: string; kind: "cus
 export function SampleDetail({ detail }: { detail: SampleDetailResponse }) {
   const item = detail.item;
   return <>
-    <a href={pageUrl("ui/samples")}>返回在管样衣</a>
+    <a href={pageUrl(todoReturnPath(window.location.search) ?? "ui/samples")}>{todoReturnPath(window.location.search) ? "返回我的待办" : "返回在管样衣"}</a>
     <header className="sample-detail-heading"><div><h2>{item.styleName}</h2><p>{item.sampleCode} · {item.styleNo}</p></div><SampleBadge status={item.status} /></header>
     <div className="sample-detail-grid"><Surface className="rework-v2-core"><div className="sample-detail-photo"><SampleThumbnail key={`${item.sampleId}:${item.version}`} sampleId={item.sampleId} large /></div></Surface><Surface className="rework-v2-core"><h2>样衣资料</h2>
       <dl className="sample-info">

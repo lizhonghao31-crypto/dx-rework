@@ -15,6 +15,7 @@ import { Shell } from "./components.js";
 import { todoModuleIdsForUser } from "./platform-access.js";
 import { todoPageWindow } from "./todo-pagination.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
+import { readTodoQuery, todoQueryPath, withTodoReturn } from "./todo-query-state.js";
 import "./my-todos.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -165,9 +166,12 @@ const taskHref = (todo: TodoResponse): string => [
 
 export function MyTodosPage() {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
-  const [searchQuery, setSearchQuery] = useState("");
-  const [requestedModule, setRequestedModule] = useState<TodoModule | undefined>();
-  const [requestedPage, setRequestedPage] = useState(1);
+  const [initial] = useState(()=>readTodoQuery(window.location.search));
+  const [searchQuery, setSearchQuery] = useState(initial.q);
+  const [requestedModule, setRequestedModule] = useState<TodoModule | undefined>(initial.module);
+  const [requestedPage, setRequestedPage] = useState(initial.page);
+  const [queryOwner,setQueryOwner] = useState<string | null>(null);
+  const [refresh,setRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
   const [accessibleTodoModules, setAccessibleTodoModules] = useState<ReadonlySet<TodoModule> | null>(null);
   const loadVersion = useRef(0);
@@ -191,7 +195,8 @@ export function MyTodosPage() {
       });
       if (!response.ok) throw new Error(`待办加载失败（${response.status}）`);
       const result = TodoListResponseSchema.parse(await response.json());
-      if (version !== loadVersion.current) return;
+      if (version !== loadVersion.current || signal?.aborted) return;
+      window.history.replaceState({...window.history.state,dxTodoQueryUser:queryOwner},"",pageUrl(todoQueryPath({q:query,module:result.activeModule,page:result.page})));
       setState({
         kind: "ready",
         activeModule: result.activeModule,
@@ -218,6 +223,11 @@ export function MyTodosPage() {
         ? todoModuleIdsForUser(session.user)
         : [];
       setAccessibleTodoModules(new Set(modules));
+      if(session !== "denied" && session.status === "authorized") {
+        const savedOwner=window.history.state?.dxTodoQueryUser;
+        if(savedOwner && savedOwner!==session.user.id){setSearchQuery("");setRequestedModule(undefined);setRequestedPage(1);}
+        setQueryOwner(session.user.id);
+      }
     });
     return () => {
       mounted = false;
@@ -226,9 +236,19 @@ export function MyTodosPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void load(requestedModule, activeQuery, requestedPage, controller.signal);
+    if(queryOwner && activeQuery===searchQuery.trim()) void load(requestedModule, activeQuery, requestedPage, controller.signal);
     return () => controller.abort();
-  }, [activeQuery, requestedModule, requestedPage]);
+  }, [activeQuery, requestedModule, requestedPage, queryOwner, searchQuery, refresh]);
+
+  useEffect(()=>{
+    if(!queryOwner)return;
+    const path=todoQueryPath({q:searchQuery,...(requestedModule?{module:requestedModule}:{}),page:requestedPage});
+    window.history.replaceState({...window.history.state,dxTodoQueryUser:queryOwner},"",pageUrl(path));
+  },[searchQuery,requestedModule,requestedPage,queryOwner]);
+  useEffect(()=>{
+    const restored=(event:PageTransitionEvent)=>{if(event.persisted)setRefresh(n=>n+1);};
+    window.addEventListener("pageshow",restored);return()=>window.removeEventListener("pageshow",restored);
+  },[]);
 
   const activeModule = state.kind === "ready" ? state.activeModule : "rework";
   const moduleCounts = state.kind === "ready"
@@ -289,7 +309,7 @@ export function MyTodosPage() {
               value={searchQuery}
               maxLength={100}
               aria-label="搜索待办"
-              placeholder="输入供应商名称或款号，自动筛选"
+              placeholder="输入供应商、款号或跟单姓名，自动筛选"
               autoComplete="off"
               onChange={(event) => {
                 setSearchQuery(event.target.value);
@@ -301,7 +321,7 @@ export function MyTodosPage() {
       {todos.length === 0 && (
         <div className="my-todos-state my-todos-module-empty">
           <p>{activeQuery
-            ? "未找到匹配的待办，请检查供应商名称或款号。"
+            ? "未找到匹配的待办，请检查供应商、款号或跟单姓名。"
             : totalActionable === 0
               ? "您当前的任务已全部完成。有新的事项轮到你处理时，会出现在这里。"
               : "该模块当前没有待处理事项。"}</p>
@@ -331,7 +351,7 @@ export function MyTodosPage() {
                     </div>
                   </div>
                 ) : (
-                  <a className="my-todo-row" href={taskHref(todo)}>
+                  <a className="my-todo-row" href={withTodoReturn(taskHref(todo),{q:activeQuery,module:activeModule,page})}>
                     <b className="my-todo-index">{String((page - 1) * pageSize + index + 1).padStart(2, "0")}</b>
                     <div className="my-todo-primary">
                       <div className="my-todo-title">
