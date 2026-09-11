@@ -47,11 +47,12 @@ export async function wageReport(
        pricing_unit_snapshot,unit_price_snapshot::text,assignment_mode,wage_amount::text,
        CASE WHEN settled THEN '已结算' ELSE '未结算' END settlement_status
      FROM lines
-     WHERE (completed_at AT TIME ZONE '${TIMEZONE}')::date BETWEEN $1::date AND $2::date
+     WHERE completed_at IS NOT NULL
+       AND (completed_at AT TIME ZONE '${TIMEZONE}')::date BETWEEN $1::date AND $2::date
        AND ($3::text IS NULL OR person_name_snapshot ILIKE $3 OR rework_no_snapshot ILIKE $3 OR style_no_snapshot ILIKE $3)
        AND ($4::text IS NULL OR person_type_snapshot=$4)
      ORDER BY period_month DESC,person_name_snapshot,sort_id LIMIT $5`,
-    [range.from, range.to, query.q ? `%${query.q}%` : null, query.status ?? null, limit],
+    [range.from, range.to, query.q ? `%${query.q}%` : null, query.personType ?? null, limit],
   );
   const rows = result.rows.map((row) => ({
     periodMonth: String(row.period_month).slice(0, 7),
