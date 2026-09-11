@@ -1,3 +1,4 @@
+import { canOperateReworkNode, WHOLE_ORDER_REVIEW_CAPABILITIES } from "./rework-node-access.js";
 import { FinanceNodePanel } from "./reporting/finance-node-panel.js";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { REWORK_IMAGE_SUPPLEMENT_ROLES, type InspectionReportDraft } from "@dx-rework/contracts";
@@ -585,9 +586,7 @@ export function ReworkDetailPage({
     || hasCapability(currentUser, "responsibility:owner_sign")
     || hasCapability(currentUser, "rework:related_orders:view");
   const canSeeExternal = elevated(currentUser) || hasCapability(currentUser, "external_responsibility:view");
-  const canSeeWholeOrderReview = elevated(currentUser) || [
-    "submission:audit", "quantity:adjust", "quantity:confirm", "process:review",
-  ].some((capability) => hasCapability(currentUser, capability));
+  const canSeeWholeOrderReview = elevated(currentUser) || WHOLE_ORDER_REVIEW_CAPABILITIES.some((capability) => hasCapability(currentUser, capability));
   const canSupplementOrderImages = detail.status !== "cancelled"
     && canSupplementImagesByRole(currentUser);
   const canHandleInitiation = elevated(currentUser)
@@ -632,22 +631,10 @@ export function ReworkDetailPage({
   };
 
   const financeNodeReader = !elevated(currentUser) && hasCapability(currentUser,"rework:finance_nodes:read");
-  // A mixed-role account keeps its existing actionable workspace at the current node.
-  const hasCurrentNodeOperation = (key: WorkflowNodeKey): boolean => {
-    const required: Partial<Record<WorkflowNodeKey,readonly string[]>> = {
-      initiation:["rework:initiate"],process_configuration:["process:configure"],ie_review:["process:review"],
-      task_assignment:["work:assign"],work_reporting:["work:report","work:report_for_worker","tail_inspection:report","submission:audit"],
-      whole_order_review:["submission:audit"],final_quantity_ie_review:["process:review"],
-      quantity_adjustment:["quantity:adjust","quantity:confirm","process:review"],
-      responsibility:["responsibility:determine","responsibility:takeover","responsibility:confirm_high_multiplier"],
-      owner_signature:["responsibility:owner_sign"],
-    };
-    return (required[key]??[]).some(cap=>hasCapability(currentUser,cap));
-  };
   const renderSelectedTask = () => {
     if (!selected) return null;
     if (financeNodeReader && selected.state !== "future" && selected.key !== "settlement_followup"
-      && !(selected.state === "current" && hasCurrentNodeOperation(selected.key))) {
+      && !(selected.state === "current" && canOperateReworkNode(currentUser?.capabilities ?? [], selected.key))) {
       return <>{renderNodePreview()}<FinanceNodePanel orderId={detail.reworkOrderId} node={selected.key==="archive"?"settlement_followup":selected.key}
         {...(selected.state!=="completed"?{attachments:detail.attachments}:{})} /></>;
     }

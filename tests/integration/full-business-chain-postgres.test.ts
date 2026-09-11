@@ -1319,6 +1319,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(reads.get('process_configuration').sections.find((s:{title:string})=>s.title==='工人预分配').rows.length).toBeGreaterThan(0);
     expect(reads.get('work_reporting').sections.find((s:{title:string})=>s.title==='报工记录').rows.length).toBeGreaterThan(0);
     expect(reads.get('final_quantity_ie_review').sections.find((s:{title:string})=>s.title==='最终数量与 IE 复核').rows.length).toBeGreaterThan(0);
+    expect(reads.get('whole_order_review').sections.find((section:{title:string})=>section.title==='数量调整记录'))
+      .toEqual(reads.get('quantity_adjustment').sections.find((section:{title:string})=>section.title==='数量调整记录'));
     expect(reads.get('responsibility').sections.find((s:{title:string})=>s.title==='责任计算明细').rows.length).toBeGreaterThan(0);
     expect(reads.get('owner_signature').sections.find((s:{title:string})=>s.title==='老板签字记录').rows.some((row:string[])=>row.includes('rejected'))).toBe(true);
     expect(reads.get('settlement_ledger').sections.find((s:{title:string})=>s.title==='实际扣款明细').rows).toHaveLength(3);

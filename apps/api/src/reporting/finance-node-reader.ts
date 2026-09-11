@@ -131,7 +131,7 @@ export async function readFinanceNode(db:Pool,actor:TrustedActorContext,orderId:
     FROM rework_orders orders LEFT JOIN app_users actor ON actor.id=orders.created_by WHERE orders.rework_order_id=$1`};
   const byNode:Record<FinanceNodeKey,SectionQuery[]>={
     initiation:[initiation],process_configuration:[processes,preassignment,assignments],ie_review:[processes],task_assignment:[preassignment,assignments],
-    work_reporting:[assignments,reports,quantityCorrections],whole_order_review:[quantities,finalPrices,coefficients,reports,quantityCorrections,reviewSnapshot],final_quantity_ie_review:[quantities,finalPrices,coefficients,precounts,reviewSnapshot],
+    work_reporting:[assignments,reports,quantityCorrections],whole_order_review:[adjustments,quantities,finalPrices,coefficients,reports,quantityCorrections,reviewSnapshot],final_quantity_ie_review:[quantities,finalPrices,coefficients,precounts,reviewSnapshot],
     quantity_adjustment:[adjustments,quantities],responsibility:[responsibility,responsibilityLines,highMultipliers],owner_signature:[responsibility,signatures,ownerMultipliers,approvals],
     settlement_ledger:[cases,deductions,special,wages],settlement_followup:[cases,deductions,special,wages],
   };
