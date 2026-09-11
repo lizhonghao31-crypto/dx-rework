@@ -97,6 +97,15 @@ export const DashboardExceptionSchema = z.object({
   deepLink: z.string().startsWith("/"),
 }).strict();
 
+export const FinanceNodeKeySchema = z.enum(["initiation","process_configuration","ie_review","task_assignment","work_reporting","whole_order_review","final_quantity_ie_review","quantity_adjustment","responsibility","owner_signature","settlement_ledger","settlement_followup"]);
+export const FinanceNodeParamsSchema = z.object({reworkOrderId:IdSchema,node:FinanceNodeKeySchema}).strict();
+export const FinanceNodeReadSchema = z.object({
+  node:FinanceNodeKeySchema,
+  sections:z.array(z.object({title:z.string(),columns:z.array(z.string()),rows:z.array(z.array(z.string().nullable()))}).strict()),
+}).strict();
+export type FinanceNodeKey = z.infer<typeof FinanceNodeKeySchema>;
+export type FinanceNodeRead = z.infer<typeof FinanceNodeReadSchema>;
+
 export const BasicReworkQuerySchema = z.object({
   q: z.string().trim().max(100).optional(), status: ReportingReworkStatusSchema.optional(),
   page: z.coerce.number().int().min(1).max(100000).default(1),

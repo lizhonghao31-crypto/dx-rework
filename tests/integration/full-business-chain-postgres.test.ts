@@ -1,3 +1,5 @@
+import { readFinanceNode } from "../../apps/api/src/reporting/finance-node-reader.js";
+import { FinanceNodeKeySchema } from "@dx-rework/contracts/reporting";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -1303,6 +1305,38 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(history.revisions).toHaveLength(2);
     expect(history.history.some(row=>row.signature?.decision==='rejected')).toBe(true);
     expect(history.history.some(row=>row.signature?.decision==='approved')).toBe(true);
+
+    // PR04: read actual historical records through the separate finance capability.
+    const financeReader=actor(ids.financeDirector,["finance_director"],"rework:finance_nodes:read");
+    const beforeRead=await database.query("SELECT version,status FROM rework_orders WHERE rework_order_id=$1",[submitted.value.reworkOrderId]);
+    const reads=new Map();
+    for(const node of FinanceNodeKeySchema.options){
+      const read=await readFinanceNode(database,financeReader,submitted.value.reworkOrderId,node);
+      for(const section of read.sections)for(const row of section.rows)expect(row.length).toBe(section.columns.length);
+      reads.set(node,read);
+    }
+    expect(reads.get('process_configuration').sections.find((s:{title:string})=>s.title==='工序与核价记录').rows.length).toBeGreaterThan(0);
+    expect(reads.get('process_configuration').sections.find((s:{title:string})=>s.title==='工人预分配').rows.length).toBeGreaterThan(0);
+    expect(reads.get('work_reporting').sections.find((s:{title:string})=>s.title==='报工记录').rows.length).toBeGreaterThan(0);
+    expect(reads.get('final_quantity_ie_review').sections.find((s:{title:string})=>s.title==='最终数量与 IE 复核').rows.length).toBeGreaterThan(0);
+    expect(reads.get('whole_order_review').sections.find((section:{title:string})=>section.title==='数量调整记录'))
+      .toEqual(reads.get('quantity_adjustment').sections.find((section:{title:string})=>section.title==='数量调整记录'));
+    expect(reads.get('responsibility').sections.find((s:{title:string})=>s.title==='责任计算明细').rows.length).toBeGreaterThan(0);
+    expect(reads.get('owner_signature').sections.find((s:{title:string})=>s.title==='老板签字记录').rows.some((row:string[])=>row.includes('rejected'))).toBe(true);
+    expect(reads.get('settlement_ledger').sections.find((s:{title:string})=>s.title==='实际扣款明细').rows).toHaveLength(3);
+    expect(reads.get('settlement_ledger').sections.find((s:{title:string})=>s.title==='工资明细').rows.length).toBeGreaterThan(0);
+    await expect(readFinanceNode(database,qc(),submitted.value.reworkOrderId,'responsibility')).rejects.toMatchObject({statusCode:403});
+    await expect(configuration.saveDraft(financeReader,submitted.value.reworkOrderId,n02Input,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(configuration.submit(financeReader,submitted.value.reworkOrderId,{expectedOrderVersion:n02Saved.value.orderVersion,expectedConfigurationVersion:n02Saved.value.configuration!.configurationVersion},randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(wholeOrder.reviewFinalQuantity(financeReader,submitted.value.reworkOrderId,{expectedOrderVersion:n06View.orderVersion,decision:"approved"},randomUUID())).rejects.toMatchObject({statusCode:403});
+    const forged={...financeReader,actorId:ids.qc};
+    await expect(readFinanceNode(database,forged,submitted.value.reworkOrderId,'responsibility')).rejects.toThrow();
+    await expect(database.query("SELECT access_authorized_actor_roles($1,'process:configure')",[ids.financeDirector])).rejects.toThrow();
+    await expect(database.query("SELECT access_authorized_actor_roles($1,'responsibility:owner_sign')",[ids.financeDirector])).rejects.toThrow();
+    expect((await database.query("SELECT version,status FROM rework_orders WHERE rework_order_id=$1",[submitted.value.reworkOrderId])).rows).toEqual(beforeRead.rows);
+    expect((await wages.get(wageView(),wagePeriod.periodId)).items).toEqual(wageDetail.items);
+    expect(await businessDetail.canDownloadBoundAttachment(financeReader,{entityType:'external_responsibility_case',entityId:processingCaseId})).toBe(true);
+
 
   });
 

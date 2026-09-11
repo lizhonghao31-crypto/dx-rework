@@ -171,6 +171,7 @@
     {"version":"0169_receiving_difference_evidence","checksum":"4a599023bbccb85d5876640b8940973f6c51883ec645d31299d47f35791dc590"}
     ,{"version":"0170_order_responsibility_revision","checksum":"ef9de9d9d2b3a985604afa3471ab6540287eac3df4032b5ebd86b4a1f1f37197"},
     {"version": "0171_wage_settlement_marks", "checksum": "ae5f32aac05b8f80f1d3a8ef425e24015b46c95937979fa9d8b8b96bb8b6db9a"},
-    {"version":"0172_quality_rework_basic_read","checksum":"5f1253d2967fceb96626c0dc40677aaaf09c4226c196a2af757cab70d0ac6ad7"}
+    {"version":"0172_quality_rework_basic_read","checksum":"5f1253d2967fceb96626c0dc40677aaaf09c4226c196a2af757cab70d0ac6ad7"},
+    {"version":"0173_finance_rework_node_read","checksum":"8fd70862d63b6431d3b49c82408abe8b53af859569264058f530aed3dabe8d58"}
   ]
 }

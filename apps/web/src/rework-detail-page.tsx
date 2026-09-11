@@ -1,3 +1,5 @@
+import { canOperateReworkNode, WHOLE_ORDER_REVIEW_CAPABILITIES } from "./rework-node-access.js";
+import { FinanceNodePanel } from "./reporting/finance-node-panel.js";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { REWORK_IMAGE_SUPPLEMENT_ROLES, type InspectionReportDraft } from "@dx-rework/contracts";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
@@ -584,9 +586,7 @@ export function ReworkDetailPage({
     || hasCapability(currentUser, "responsibility:owner_sign")
     || hasCapability(currentUser, "rework:related_orders:view");
   const canSeeExternal = elevated(currentUser) || hasCapability(currentUser, "external_responsibility:view");
-  const canSeeWholeOrderReview = elevated(currentUser) || [
-    "submission:audit", "quantity:adjust", "quantity:confirm", "process:review",
-  ].some((capability) => hasCapability(currentUser, capability));
+  const canSeeWholeOrderReview = elevated(currentUser) || WHOLE_ORDER_REVIEW_CAPABILITIES.some((capability) => hasCapability(currentUser, capability));
   const canSupplementOrderImages = detail.status !== "cancelled"
     && canSupplementImagesByRole(currentUser);
   const canHandleInitiation = elevated(currentUser)
@@ -603,7 +603,7 @@ export function ReworkDetailPage({
     const nodeHistory = detail.workflowHistory.filter((event) => historyNode(event.action) === selected.key);
     return <Surface className="rework-detail-node-preview">
       <StatusBadge tone={selected.state === "completed" ? "success" : "info"}>
-        {selected.state === "completed" ? "已完成 · 可只读" : selected.state === "followup" ? `${nodeStatusLabel(selected, detail)} · 只读` : "未开始 · 可预览"}
+        {selected.state === "completed" ? "已完成 · 可只读" : selected.state === "current" || selected.state === "followup" ? `${nodeStatusLabel(selected, detail)} · 只读` : "未开始 · 可预览"}
       </StatusBadge>
       <h2>{selected.number} · {selected.label}</h2>
       <p>{selected.preview}</p>
@@ -630,8 +630,14 @@ export function ReworkDetailPage({
     </Surface>;
   };
 
+  const financeNodeReader = !elevated(currentUser) && hasCapability(currentUser,"rework:finance_nodes:read");
   const renderSelectedTask = () => {
     if (!selected) return null;
+    if (financeNodeReader && selected.state !== "future" && selected.key !== "settlement_followup"
+      && !(selected.state === "current" && canOperateReworkNode(currentUser?.capabilities ?? [], selected.key))) {
+      return <>{renderNodePreview()}<FinanceNodePanel orderId={detail.reworkOrderId} node={selected.key==="archive"?"settlement_followup":selected.key}
+        {...(selected.state!=="completed"?{attachments:detail.attachments}:{})} /></>;
+    }
     if (selected.key === "initiation" && detail.status === "draft") {
       return canHandleInitiation
         ? <ReworkInitiationForm reworkOrderId={detail.reworkOrderId} embedded onOrderChanged={() => { void syncAfterNodeAction(); }} />
@@ -678,6 +684,7 @@ export function ReworkDetailPage({
     if (selected.state !== "future" && selected.key === "settlement_followup") {
       return <>
         <OrderCompletionAndSettlementSummary detail={detail} />
+        {financeNodeReader&&<FinanceNodePanel orderId={detail.reworkOrderId} node="settlement_followup" onlyWages />}
         {canSeeExternal ? <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} embedded {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} /> : null}
       </>;
     }
