@@ -60,7 +60,7 @@ type ItemRow = {
   member_count: number;
   member_snapshot: WageItem["memberSnapshot"];
 };
-type Permissions = { export: boolean };
+type Permissions = { monthClose: boolean; export: boolean };
 
 export type WageSettlementFilters = Readonly<{
   from: string;
@@ -138,7 +138,7 @@ export class WageService {
     private readonly db: Pool,
     private readonly idem = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
-    private readonly _todos?: TodoProjectionService,
+    private readonly todos?: TodoProjectionService,
   ) {}
 
   async list(actor: TrustedActorContext): Promise<WagePeriod[]> {
@@ -185,6 +185,104 @@ export class WageService {
       [itemId],
     );
     return this.itemDto(first(result.rows, "工资明细不存在"));
+  }
+
+  /** Legacy compatibility only. No current web route exposes month-close locking. */
+  async lock(
+    actor: TrustedActorContext,
+    periodId: string,
+    expectedVersion: number,
+    note: string | null,
+    key: string,
+  ): Promise<Result<{ closureId: string; periodId: string; status: "locked"; periodVersion: number }>> {
+    await this.requireDirect(actor, "wage_month_close_accountant", "wage:month_close");
+    return this.mutate(actor, "wage.month_close", key, { periodId, expectedVersion, note }, async (client) => {
+      const period = await this.period(client, periodId);
+      if (period.period_version !== expectedVersion || period.status !== "ready_to_lock") {
+        fail("工资期间尚未进入可月结状态或版本冲突");
+      }
+      const ended = await client.query<{ ended: boolean }>(
+        `SELECT CURRENT_TIMESTAMP >= (($1::date+interval '1 month')::timestamp
+          AT TIME ZONE 'Asia/Singapore') ended`,
+        [period.period_month],
+      );
+      if (!first(ended.rows, "月份边界校验失败", 409).ended) {
+        fail("自然月结束前不能锁定", 409, "INVALID_STATE_TRANSITION");
+      }
+      const eventId = await this.events.append(
+        client,
+        { ...actor, authorizationCapability: "wage:month_close" },
+        {
+          action: "wage.month_close",
+          entityType: "wage_period",
+          entityId: periodId,
+          before: this.periodAudit(period),
+          after: { ...this.periodAudit(period), status: "locked" },
+          ...(note ? { reason: note } : {}),
+        },
+      );
+      await this.context(client, eventId, actor.requestId);
+      const closureId = randomUUID();
+      await client.query(
+        `INSERT INTO rework_wage_month_closures(
+           closure_id,period_id,period_version_snapshot,item_count,person_count,
+           original_total,adjustment_total,final_total,locked_by,locked_at,
+           lock_note,operation_event_id,operation_request_id
+         ) VALUES($1,$2,$3,$4,$5,$6::numeric,0,$6::numeric,$7,
+           CURRENT_TIMESTAMP,$8,$9,$10)`,
+        [
+          closureId,
+          periodId,
+          period.period_version,
+          period.source_item_count,
+          period.person_count,
+          period.original_total,
+          actor.actorId,
+          note,
+          eventId,
+          actor.requestId,
+        ],
+      );
+      await client.query(
+        `INSERT INTO rework_wage_month_close_lines(
+           closure_line_id,closure_id,line_type,wage_item_id,adjustment_id,
+           person_id,person_name_snapshot,person_type_snapshot,rework_no_snapshot,
+           style_no_snapshot,process_name_snapshot,quantity_snapshot,unit_snapshot,
+           unit_price_snapshot,assignment_mode,member_snapshot,original_amount,
+           adjustment_amount,final_amount)
+         SELECT gen_random_uuid(),$2,'wage_item',wage_item_id,NULL,person_id,
+           person_name_snapshot,person_type_snapshot,rework_no_snapshot,
+           style_no_snapshot,process_name_snapshot,actual_quantity_snapshot,
+           pricing_unit_snapshot,unit_price_snapshot,assignment_mode,member_snapshot,
+           payable_amount,0,payable_amount
+         FROM rework_wage_items
+         WHERE period_id=$1 AND invalidated_at IS NULL`,
+        [periodId, closureId],
+      );
+      await client.query(
+        `SET CONSTRAINTS wage_closure_complete_on_closure,wage_closure_complete_on_line IMMEDIATE`,
+      );
+      await client.query(
+        `UPDATE rework_wage_periods SET status='locked',locked_by=$2,
+          locked_at=CURRENT_TIMESTAMP,lock_note=$3,locked_operation_event_id=$4,
+          locked_request_id=$5,period_version=period_version+1,
+          adjustment_total=0,final_total=original_total,
+          updated_at=CURRENT_TIMESTAMP WHERE period_id=$1`,
+        [periodId, actor.actorId, note, eventId, actor.requestId],
+      );
+      await this.todos?.completeOpenByDedupeKey(
+        client,
+        actor,
+        `wage-month-lock:${periodId}:${period.period_version}`,
+        "Wage month was locked",
+      );
+      return {
+        closureId,
+        periodId,
+        status: "locked" as const,
+        periodVersion: expectedVersion + 1,
+      };
+    });
   }
 
   async settlementSummary(
@@ -286,11 +384,26 @@ export class WageService {
     }
   }
 
+  private async requireDirect(actor: TrustedActorContext, role: string, capability: string) {
+    const result = await this.db.query<{ allowed: boolean }>(
+      "SELECT wage_has_direct_role($1,$2,$3) allowed",
+      [actor.actorId, role, capability],
+    );
+    if (!first(result.rows, "工资权限校验失败", 403).allowed) {
+      fail("必须由直接有效业务角色执行", 403, "FORBIDDEN");
+    }
+  }
+
   private async permissions(
     actor: TrustedActorContext,
-    _executor: Pool | PoolClient,
+    executor: Pool | PoolClient,
   ): Promise<Permissions> {
-    return { export: actor.authorizationCapabilities?.includes("wage:export") ?? false };
+    const result = await executor.query<Permissions>(
+      `SELECT wage_has_direct_role($1,'wage_month_close_accountant','wage:month_close') "monthClose",
+        $2::boolean export`,
+      [actor.actorId, actor.authorizationCapabilities?.includes("wage:export") ?? false],
+    );
+    return first(result.rows, "工资权限校验失败", 403);
   }
 
   private periodDto(row: PeriodRow, permission: Permissions): WagePeriod {
@@ -306,7 +419,7 @@ export class WageService {
       lockedBy: row.locked_by,
       lockedAt: iso(row.locked_at),
       lockNote: row.lock_note,
-      canLock: false,
+      canLock: permission.monthClose && row.status === "ready_to_lock",
       canExport: permission.export,
     };
   }
@@ -371,6 +484,36 @@ export class WageService {
         ORDER BY confirmation.confirmed_at DESC,confirmation.confirmation_id DESC
         LIMIT 1
       ) coefficient ON true`;
+  }
+
+  private async period(client: PoolClient, periodId: string): Promise<PeriodRow> {
+    const result = await client.query<PeriodRow>(
+      `SELECT period_id,period_month::text,timezone,status,period_version,
+        source_item_count,person_count,original_total::text,locked_by,locked_at,lock_note
+       FROM rework_wage_periods WHERE period_id=$1 FOR UPDATE`,
+      [periodId],
+    );
+    return first(result.rows, "工资期间不存在");
+  }
+
+  private async context(client: PoolClient, eventId: string, requestId: string) {
+    await client.query(
+      `SELECT set_config('dx_rework.wage_event_id',$1,true),
+        set_config('dx_rework.wage_request_id',$2,true)`,
+      [eventId, requestId],
+    );
+  }
+
+  private periodAudit(row: PeriodRow): Record<string, unknown> {
+    return {
+      periodId: row.period_id,
+      periodMonth: row.period_month,
+      status: row.status,
+      periodVersion: row.period_version,
+      sourceItemCount: row.source_item_count,
+      personCount: row.person_count,
+      totalAmount: row.original_total,
+    };
   }
 
   private async mutate<T>(
