@@ -22,6 +22,10 @@
   gap: 12px;
 }
 
+.wage-query-grid > :first-child {
+  flex: 1 1 260px;
+}
+
 .wage-query-grid > label {
   display: grid;
   min-width: 150px;
@@ -38,6 +42,17 @@
   border-radius: 8px;
   background: var(--dx-v2-color-surface);
   color: var(--dx-v2-color-text);
+}
+
+.wage-query-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.wage-query-actions > a {
+  display: inline-flex;
 }
 
 .wage-summary {
@@ -136,8 +151,13 @@
   }
 
   .wage-query-grid > :first-child,
-  .wage-query-grid > a {
+  .wage-query-actions {
     grid-column: 1 / -1;
+  }
+
+  .wage-query-actions {
+    justify-content: flex-end;
+    margin-left: 0;
   }
 
   .wage-section-heading {
