@@ -148,3 +148,7 @@
     grid-template-columns: 1fr 1fr;
   }
 }
+
+.wage-management .wage-query-actions { display:flex; align-items:end; gap:12px; margin-left:auto; }
+.wage-management .wage-query-actions button { min-height:42px; white-space:nowrap; }
+@media (max-width:760px) { .wage-management .wage-query-actions { grid-column:1 / -1; margin-left:0; flex-wrap:wrap; } }

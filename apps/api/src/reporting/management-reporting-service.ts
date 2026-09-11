@@ -1,3 +1,4 @@
+import { wageSelection, wageSelectionValues } from "./wage-report-selection.js";
 import {readWorkflowAnalysis} from "./workflow-analysis.js";
 import type { DashboardQuery, ManagementDashboardResponse, ManagementReworkPage, ManagementReworkQuery, ReportPreviewResponse, ReportQuery, ReportType, SiteDashboardResponse } from "@dx-rework/contracts/reporting";
 import type { Pool } from "pg";
@@ -251,7 +252,8 @@ export class ManagementReportingService {
       canExport: reportType === "wages"
         ? capabilities(actor).includes("wage:export")
         : capabilities(actor).includes("report:export"),
-      totals: recalculateDisplayedTotals(rows, data.totals),
+      totals: reportType === "wages" ? data.totals : recalculateDisplayedTotals(rows, data.totals),
+      ...(data.wageSummary ? { wageSummary: data.wageSummary, canSettleWages: this.canSettleWages(actor) } : {}),
       columns: data.columns,
       rows,
     };
@@ -277,6 +279,39 @@ export class ManagementReportingService {
     } finally {
       client.release();
     }
+  }
+
+  private canSettleWages(actor: TrustedActorContext): boolean {
+    return actor.actorRoles.includes("root_superuser") || capabilities(actor).includes("wage:settlement_mark");
+  }
+
+  private async requireSettlement(actor: TrustedActorContext): Promise<void> {
+    if (!this.canSettleWages(actor)) fail("当前账号无权标记工资结算");
+    await this.db.query("SELECT access_authorized_actor_roles($1,'wage:settlement_mark')",[actor.actorId]);
+  }
+
+  async previewWageSettlement(actor: TrustedActorContext, query: ReportQuery) {
+    await this.requireSettlement(actor);
+    this.validateReportStatus("wages",query.status);
+    const range = await this.range(query);
+    const result = await this.db.query(`${wageSelection}
+      SELECT line_id,person_id FROM filtered WHERE marked_at IS NULL ORDER BY line_id`,wageSelectionValues(query,range));
+    return { lineIds:result.rows.map(row=>String(row.line_id)),lineCount:result.rows.length,
+      personCount:new Set(result.rows.map(row=>String(row.person_id))).size };
+  }
+
+  async markWageSettlement(actor: TrustedActorContext, query: ReportQuery, lineIds: readonly string[]) {
+    await this.requireSettlement(actor);
+    this.validateReportStatus("wages",query.status);
+    const range = await this.range(query);
+    // One atomic insert: concurrent/retried requests preserve the original marker and timestamp.
+    const result = await this.db.query(`${wageSelection}, inserted AS (
+      INSERT INTO rework_wage_settlement_marks(line_id,wage_item_id,closure_line_id,marked_by)
+      SELECT line_id,wage_item_id,closure_line_id,$7::uuid FROM filtered
+      WHERE marked_at IS NULL AND line_id=ANY($6::uuid[])
+      ON CONFLICT(line_id) DO NOTHING RETURNING line_id
+    ) SELECT count(*)::int marked_count FROM inserted`,[...wageSelectionValues(query,range),lineIds,actor.actorId]);
+    return {markedCount:result.rows[0]!.marked_count as number};
   }
 
   private validateReportStatus(reportType: ReportType, status: string | undefined): void {

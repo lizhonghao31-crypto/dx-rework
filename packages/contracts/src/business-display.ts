@@ -150,6 +150,7 @@ const CAPABILITY_LABELS: Readonly<Record<string, string>> = {
   "report:view": "查看财务报表",
   "report:export": "导出财务报表",
   "wage:view": "查看工资",
+  "wage:settlement_mark": "标记工资结算",
   "wage:tail_review": "工资初核",
   "wage:administrative_review": "工资行政复核",
   "wage:month_close": "旧版工资月结权限（已停用）",

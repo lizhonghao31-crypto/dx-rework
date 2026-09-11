@@ -1,5 +1,5 @@
 import { BUSINESS_TIME_ZONE } from "@dx-rework/contracts/business-display";
-import type { ManagementReworkRow, ReportType } from "@dx-rework/contracts/reporting";
+import type { ManagementReworkRow, ReportType, ReportPreviewResponse } from "@dx-rework/contracts/reporting";
 import type { Pool, PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
@@ -55,7 +55,7 @@ export type ExceptionRow = {
 };
 export type ReportColumn = { key: string; label: string };
 export type ReportRow = Record<string, string | number | boolean | null>;
-export type ReportData = { columns: ReportColumn[]; rows: ReportRow[]; totals: Record<string, string> };
+export type ReportData = { columns: ReportColumn[]; rows: ReportRow[]; totals: Record<string, string>; wageSummary?: ReportPreviewResponse["wageSummary"] };
 
 export const fail = (message: string, status = 403, code = "FORBIDDEN"): never => {
   throw new ApplicationError(code, message, status);
@@ -128,7 +128,7 @@ export const nodeMeta: Record<ManagementReworkRow["status"], { node: string; lab
 
 export const reportStatusValues: Readonly<Record<ReportType, ReadonlySet<string>>> = {
   rework_overview: new Set(Object.keys(nodeMeta)),
-  wages: new Set(["ready_to_lock", "locked"]),
+  wages: new Set(["settled", "unsettled"]),
   responsibilities: new Set(["own_factory", "processing_factory", "embroidery_factory", "washing_factory", "fabric_supplier"]),
   own_factory: new Set(["pending", "approved", "rejected"]),
   external_deductions: new Set([

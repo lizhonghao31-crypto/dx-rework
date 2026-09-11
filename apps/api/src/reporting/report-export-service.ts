@@ -28,6 +28,7 @@ const exportCell = (
   ) {
     return workbookNumberCell(value);
   }
+  if (key === "settlementStatus") return value === "settled" ? "已结算" : "未结算";
   return businessCellValue(key, value);
 };
 
@@ -75,6 +76,7 @@ export class ReportExportService {
       ["开始日期", range.from],
       ["结束日期", range.to],
       ["关键词", query.q ?? ""],
+      ...(reportType === "wages" ? [["工人类型",query.personType === "internal" ? "正式工" : query.personType === "temporary" ? "临时工" : "全部"]] : []),
       ["状态", businessCellValue("status", query.status ?? "")],
       ["明细行数", data.rows.length],
       ["Git SHA", this.gitSha],
