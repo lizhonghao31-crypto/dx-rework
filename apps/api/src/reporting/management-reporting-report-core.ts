@@ -1,6 +1,6 @@
 import type { ReportQuery, ReportType } from "@dx-rework/contracts/reporting";
 
-import { type Queryable, type Range, type ReportData, fail } from "./management-reporting-shared.js";
+import { type Queryable, type Range, type ReportData, fail, money } from "./management-reporting-shared.js";
 import { factDto } from "./management-reporting-dto.js";
 import { fetchFacts } from "./management-reporting-orders.js";
 import { wageReport } from "./management-reporting-report-wages.js";
@@ -32,7 +32,7 @@ export async function reworkReport(source: Queryable, query: ReportQuery, limit:
     return {
       reworkOrderId: dto.reworkOrderId,reworkNo: dto.reworkNo,styleNo: dto.styleNo,orderNo: dto.orderNo,
       status: dto.status,node: dto.nodeLabel,nodeEnteredAt: dto.nodeEnteredAt,agingSeconds: dto.agingSeconds,
-      wageAmount: dto.wageAmount,responsibilityAmount: dto.responsibilityAmount,ownFactoryAmount: dto.ownFactoryAmount,
+      wageAmount: money(row.wage_amount),responsibilityAmount: dto.responsibilityAmount,ownFactoryAmount: dto.ownFactoryAmount,
       externalProposedAmount: dto.externalProposedAmount,externalDeductedAmount: dto.externalDeductedAmount,
       externalRemainingAmount: dto.externalRemainingAmount,overdue: dto.overdue,exceptionCount: dto.exceptionCount,
     };
@@ -46,4 +46,3 @@ export async function reworkReport(source: Queryable, query: ReportQuery, limit:
     {key:"overdue",label:"是否逾期"},{key:"exceptionCount",label:"异常数"},
   ], rows, totals: totals(rows,["wageAmount","responsibilityAmount","ownFactoryAmount","externalProposedAmount","externalDeductedAmount","externalRemainingAmount"]) };
 }
-

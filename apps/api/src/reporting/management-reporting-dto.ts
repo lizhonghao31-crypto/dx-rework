@@ -2,7 +2,7 @@ import type { ManagementReworkRow } from "@dx-rework/contracts/reporting";
 
 import { type FactRow, money, number, iso } from "./management-reporting-shared.js";
 
-export function factDto(row: FactRow): ManagementReworkRow {
+export function factDto(row: FactRow, canReadWages = true): ManagementReworkRow {
   return {
     reworkOrderId: row.rework_order_id,
     reworkNo: row.rework_no,
@@ -16,7 +16,7 @@ export function factDto(row: FactRow): ManagementReworkRow {
     currentHandlerUserId: row.current_handler_user_id,
     plannedQuantity: row.planned_quantity,
     reportedQuantity: row.reported_quantity,
-    wageAmount: money(row.wage_amount),
+    ...(canReadWages ? { wageAmount: money(row.wage_amount) } : {}),
     responsibilityAmount: money(row.responsibility_amount),
     ownFactoryAmount: money(row.own_factory_amount),
     externalProposedAmount: money(row.external_proposed_amount),
@@ -30,4 +30,3 @@ export function factDto(row: FactRow): ManagementReworkRow {
     updatedAt: iso(row.updated_at),
   };
 }
-
