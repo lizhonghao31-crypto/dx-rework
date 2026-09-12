@@ -163,6 +163,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   };
 
   let workerPersonId = "";
+  let otherPatternPersonId = "";
   let tailPersonId = "";
   let factorySupplierId = "";
   let fabricSupplierId = "";
@@ -331,6 +332,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       aliases: [],
       reason: "全链验收工人档案",
     })).personId;
+    otherPatternPersonId = (await access.createPerson(ownerMasterData(), { personType: "internal", appUserId: ids.otherPatternWorker, displayName: "另一板房工人", aliases: [], reason: "隔离验收换人" })).personId;
     tailPersonId = (await access.createPerson(ownerMasterData(), {
       personType: "internal",
       appUserId: ids.tailInspector,
@@ -539,6 +541,14 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     // A real supervisor exists in this fixture; prerelease Root work must not create staff todos or notices.
     expect((await database.query("SELECT count(*)::int count FROM rework_todos WHERE entity_type='pattern_room_order' AND entity_id=$1", [created.orderId])).rows[0].count).toBe(0);
     expect((await database.query("SELECT supervisor_user_id FROM pattern_room_rounds WHERE round_id=$1", [created.currentRoundId])).rows[0].supervisor_user_id).toBe(ids.patternRoot);
+    const action = (order: { version: number; currentRoundId: string }) => ({ version: order.version, roundId: order.currentRoundId });
+    const rework = await service.requestRework(root, created.orderId, { ...action(handed), reason: "Root返工验收", reasonCategory: "other" }, randomUUID());
+    const reworkAssigned = await service.assign(root, created.orderId, { ...action(rework), personId, amount: "10" }, randomUUID());
+    const transferred = await service.transfer(root, created.orderId, { ...action(reworkAssigned), segmentId: reworkAssigned.rounds.at(-1)!.segments[0]!.segmentId, personId: workerPersonId, amount: "2", reason: "Root换人验收" }, randomUUID());
+    const stopped = await service.cancel(root, created.orderId, { ...action(transferred), segmentId: transferred.rounds.at(-1)!.segments.at(-1)!.segmentId, amount: "3", reason: "Root取消验收" }, randomUUID());
+    expect((await service.confirmCancelledFees(root, created.orderId, action(stopped), randomUUID())).status).toBe("cancelled");
+    expect((await database.query("SELECT count(*)::int count FROM rework_todos WHERE entity_id=$1", [created.orderId])).rows[0].count).toBe(0);
+    expect((await database.query("SELECT count(*)::int count FROM user_role_assignments WHERE user_id=$1", [ids.patternRoot])).rows[0].count).toBe(0);
   });
 
   it("qualifies misc work once from completed labor and exact stored hourly pricing, independently of creator closure", async () => {
@@ -678,6 +688,170 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     await expect(service.recordHours(root, created.orderId, { ...action(closed), hours: "2.0" }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
     expect((await database.query("SELECT count(*)::int count FROM rework_todos WHERE entity_id=$1", [closed.orderId])).rows[0].count).toBe(0);
     expect((await database.query("SELECT count(*)::int count FROM user_role_assignments WHERE user_id=$1", [ids.patternRoot])).rows[0].count).toBe(0);
+  });
+
+  const patternActor = (userId: string, roles: string[]) => actor(userId, roles, "pattern_room:orders:view", ...Object.keys(PATTERN_ORDER_ROLES), "todo:view");
+  const roundAction = (order: { version: number; currentRoundId: string }) => ({ version: order.version, roundId: order.currentRoundId });
+  const makePattern = async (service: PatternRoomOrderService, creator: TrustedActorContext, styleNo: string) => {
+    const fileId = randomUUID();
+    await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'本轮制作.pdf','application/pdf',10,$3,$4,'ready',CURRENT_TIMESTAMP)", [fileId, `private/${fileId}.pdf`, "c".repeat(64), creator.actorId]);
+    return service.create(creator, { styleNo, categoryId: "92000000-0000-4000-8000-000000000002", quantity: 2, priceVersion: 1, attachmentIds: [fileId] }, randomUUID());
+  };
+  const patternHttp = async (service: PatternRoomOrderService, current: TrustedActorContext, path: string, input: object, key: string) => {
+    const app = Fastify();
+    registerPatternRoomOrderRoutes(app, { service, attachments: {} as AttachmentService, authenticate: async () => ({ id: current.actorId, businessRoles: current.actorRoles, capabilities: Object.keys(PATTERN_ORDER_ROLES) }) });
+    try { return await app.inject({ method: "POST", url: `/pattern-room/orders/${path}`, payload: input, headers: { cookie: "dx_rework_session=fixture", "idempotency-key": key } }); }
+    finally { await app.close(); }
+  };
+
+  it("preserves multiple worker segments and pre/post-handoff rework without duplicate rounds or early wages", async () => {
+    const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
+    const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]);
+    const worker = patternActor(ids.worker, ["worker"]), nextWorker = patternActor(ids.otherPatternWorker, ["worker"]);
+    const created = await makePattern(service, designer, "PATTERN-换人及多轮");
+    const assigned = await service.assign(supervisor, created.orderId, { ...roundAction(created), personId: workerPersonId }, randomUUID());
+    await expect(service.requestRework(designer, created.orderId, { ...roundAction(assigned), reason: "尚未完工", reasonCategory: "other" }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    const firstInput = { ...roundAction(assigned), segmentId: assigned.rounds[0]!.segments[0]!.segmentId, personId: otherPatternPersonId, amount: "25.125", reason: "已做部分交接" };
+    await expect(service.transfer(supervisor, created.orderId, { ...firstInput, amount: "80.001" }, randomUUID())).rejects.toMatchObject({ statusCode: 400 });
+    const transferKey = randomUUID(), transferResponse = await patternHttp(service, supervisor, `${created.orderId}/transfer`, firstInput, transferKey);
+    expect(transferResponse.statusCode).toBe(200);
+    const transferred = transferResponse.json();
+    expect((await service.transfer(supervisor, created.orderId, firstInput, transferKey)).version).toBe(transferred.version);
+    await expect(service.get(worker, created.orderId)).rejects.toMatchObject({ statusCode: 404 });
+    await expect(service.complete(worker, created.orderId, roundAction(assigned), randomUUID())).rejects.toMatchObject({ statusCode: 404 });
+    expect((await service.get(nextWorker, created.orderId)).rounds[0]!.segments.map(segment => segment.amount)).toEqual(["54.87500000"]);
+    const oldStopped = (await database.query("SELECT worker_completed_at,ended_at FROM pattern_room_segments WHERE segment_id=$1", [firstInput.segmentId])).rows[0];
+    expect(oldStopped.worker_completed_at).toBeNull(); expect(oldStopped.ended_at).not.toBeNull();
+    const second = await service.transfer(supervisor, created.orderId, { ...roundAction(transferred), segmentId: transferred.rounds[0]!.segments.at(-1)!.segmentId, personId: workerPersonId, amount: "10.875", reason: "再次换回原工人" }, randomUUID());
+    expect(second.rounds[0]!.segments.map(segment => segment.amount)).toEqual(["25.12500000", "10.87500000", "44.00000000"]);
+    expect((await service.get(worker, created.orderId)).rounds[0]!.segments.map(segment => segment.amount)).toEqual(["25.12500000", "44.00000000"]);
+    const complete = await service.complete(worker, created.orderId, roundAction(second), randomUUID());
+    const completedAt = complete.rounds[0]!.completedAt;
+    expect(complete.rounds[0]!.segments.every(segment => !segment.wageEligible)).toBe(true);
+    const input = { ...roundAction(complete), reason: "客户要求调整", reasonCategory: "customer_change" }, requestKey = randomUUID();
+    const requestResponse = await patternHttp(service, supervisor, `${created.orderId}/rework`, input, requestKey);
+    expect(requestResponse.statusCode).toBe(200);
+    const requested = requestResponse.json();
+    expect((await service.requestRework(supervisor, created.orderId, input, requestKey)).currentRoundId).toBe(requested.currentRoundId);
+    await expect(service.requestRework(designer, created.orderId, input, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    expect(requested.reworkCount).toBe(0);
+    expect(requested.rounds.at(-1)).toMatchObject({ index: null, roundType: "rework", agreedAmount: null });
+    expect(requested.rounds.at(-1)).not.toHaveProperty("unitPrice");
+    expect(requested.rounds[0]!.nodes.at(-1)!.exitReason).toBe("rework");
+    expect((await database.query("SELECT status FROM rework_todos WHERE dedupe_key=$1", [patternTodoKey(created.orderId, complete.currentRoundId, "handoff")])).rows[0].status).toBe("completed");
+    await expect(service.assign(supervisor, created.orderId, { ...roundAction(requested), personId: otherPatternPersonId }, randomUUID())).rejects.toMatchObject({ statusCode: 400 });
+    await expect(service.uploadActor(supervisor, "pattern")).rejects.toMatchObject({ statusCode: 403 });
+    expect((await service.uploadActor(supervisor, "pattern", "rework")).actorId).toBe(ids.patternSupervisor);
+    const reworkAssigned = await service.assign(supervisor, created.orderId, { ...roundAction(requested), personId: otherPatternPersonId, amount: "7.005" }, randomUUID());
+    expect(reworkAssigned.reworkCount).toBe(1); expect(reworkAssigned.rounds.at(-1)!.index).toBe(1);
+    const reworkComplete = await service.complete(nextWorker, created.orderId, roundAction(reworkAssigned), randomUUID());
+    expect((await service.get(supervisor, created.orderId)).rounds.flatMap(round => round.segments).every(segment => !segment.wageEligible)).toBe(true);
+    const handed = await service.handoff(designer, created.orderId, roundAction(reworkComplete), randomUUID());
+    expect(handed.rounds.flatMap(round => round.segments).filter(segment => segment.wageEligible)).toHaveLength(4);
+    expect(handed.rounds[0]!.completedAt).toBe(completedAt);
+    const eligibleBefore = (await database.query("SELECT segment_id,wage_eligible_at FROM pattern_room_segments WHERE round_id=ANY($1::uuid[]) ORDER BY segment_id", [handed.rounds.map(round => round.roundId)])).rows;
+    const afterHandoff = await service.requestRework(designer, created.orderId, { ...roundAction(handed), reason: "明确零元返工", reasonCategory: "workmanship" }, randomUUID());
+    const zeroAssigned = await service.assign(supervisor, created.orderId, { ...roundAction(afterHandoff), personId: otherPatternPersonId, amount: "0" }, randomUUID());
+    const zeroComplete = await service.complete(nextWorker, created.orderId, roundAction(zeroAssigned), randomUUID());
+    const zeroHanded = await service.handoff(designer, created.orderId, roundAction(zeroComplete), randomUUID());
+    expect(zeroHanded.reworkCount).toBe(2); expect(zeroHanded.rounds.at(-1)!.segments[0]!.wageEligible).toBe(false);
+    expect((await database.query("SELECT segment_id,wage_eligible_at FROM pattern_room_segments WHERE round_id=ANY($1::uuid[]) ORDER BY segment_id", [handed.rounds.map(round => round.roundId)])).rows).toEqual(eligibleBefore);
+    const neverDispatched = await service.requestRework(designer, created.orderId, { ...roundAction(zeroHanded), reason: "待分配取消测试", reasonCategory: "other" }, randomUUID());
+    const cancelled = await service.cancel(designer, created.orderId, { ...roundAction(neverDispatched), reason: "需求撤回" }, randomUUID());
+    expect(cancelled.reworkCount).toBe(2); expect(cancelled.rounds.at(-1)).toMatchObject({ index: null, status: "cancelled", cancelledAmount: "0.00000000" });
+    expect(cancelled.actions.cancelFees).toBe(false);
+  });
+
+  it("keeps cancelled partial labor separate from sample handoff and never orphans earlier unhanded work", async () => {
+    const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
+    const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]), worker = patternActor(ids.worker, ["worker"]);
+    const pending = await makePattern(service, designer, "PATTERN-未派工取消");
+    await expect(service.cancel(supervisor, pending.orderId, { ...roundAction(pending), reason: "非发起人" }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    expect((await service.cancel(designer, pending.orderId, { ...roundAction(pending), reason: "发起人取消" }, randomUUID())).status).toBe("cancelled");
+    const created = await makePattern(service, designer, "PATTERN-部分取消");
+    const assigned = await service.assign(supervisor, created.orderId, { ...roundAction(created), personId: workerPersonId }, randomUUID());
+    await expect(service.cancel(designer, created.orderId, { ...roundAction(assigned), reason: "已派工本人不能直接停工" }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    const transfer = await service.transfer(supervisor, created.orderId, { ...roundAction(assigned), segmentId: assigned.rounds[0]!.segments[0]!.segmentId, personId: otherPatternPersonId, amount: "25.125", reason: "部分完成交接" }, randomUUID());
+    const cancelInput = { ...roundAction(transfer), segmentId: transfer.rounds[0]!.segments.at(-1)!.segmentId, amount: "5.125", reason: "客户停止制作" }, cancelKey = randomUUID();
+    const stopResponse = await patternHttp(service, supervisor, `${created.orderId}/cancel`, cancelInput, cancelKey);
+    expect(stopResponse.statusCode).toBe(200);
+    const stopped = stopResponse.json();
+    expect((await service.cancel(supervisor, created.orderId, cancelInput, cancelKey)).version).toBe(stopped.version);
+    expect(stopped.rounds[0]).toMatchObject({ agreedAmount: "80.00000000", cancelledAmount: "30.25000000", completedAt: null, handedOverAt: null });
+    expect(stopped.rounds[0]!.segments.every((segment: { wageEligible: boolean }) => !segment.wageEligible)).toBe(true);
+    expect((await database.query("SELECT count(*)::int count FROM pattern_room_segments WHERE round_id=$1 AND worker_completed_at IS NOT NULL", [stopped.currentRoundId])).rows[0].count).toBe(0);
+    expect((await todoService.listForActor({ ...designer, authorizationCapability: "todo:view" }, { module: "pattern_room", query: created.styleNo })).todos.map(todo => todo.category)).toEqual(["pattern_room_cancel_fees"]);
+    await expect(service.handoff(designer, created.orderId, roundAction(stopped), randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    const feeKey = randomUUID(), feeResponse = await patternHttp(service, designer, `${created.orderId}/cancel-fees`, roundAction(stopped), feeKey);
+    expect(feeResponse.statusCode).toBe(200);
+    const confirmed = feeResponse.json();
+    expect((await service.confirmCancelledFees(designer, created.orderId, roundAction(stopped), feeKey)).version).toBe(confirmed.version);
+    expect(confirmed.status).toBe("cancelled"); expect(confirmed.rounds[0]!.handedOverAt).toBeNull(); expect(confirmed.rounds[0]!.feeConfirmedAt).not.toBeNull();
+    expect(confirmed.rounds[0]!.segments.map((segment: { amount: string }) => segment.amount)).toEqual(["25.12500000", "5.12500000"]);
+    expect(confirmed.rounds[0]!.segments.every((segment: { wageEligible: boolean }) => segment.wageEligible)).toBe(true);
+    const zero = await makePattern(service, designer, "PATTERN-零费取消"), zeroAssigned = await service.assign(supervisor, zero.orderId, { ...roundAction(zero), personId: workerPersonId }, randomUUID());
+    const zeroStopped = await service.cancel(supervisor, zero.orderId, { ...roundAction(zeroAssigned), segmentId: zeroAssigned.rounds[0]!.segments[0]!.segmentId, amount: "0", reason: "尚未实际制作" }, randomUUID());
+    expect(zeroStopped.actions.cancelFees).toBe(false);
+    await expect(service.confirmCancelledFees(designer, zero.orderId, roundAction(zeroStopped), randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    const old = await makePattern(service, designer, "PATTERN-取消返工保留旧轮费用"), oldAssigned = await service.assign(supervisor, old.orderId, { ...roundAction(old), personId: workerPersonId }, randomUUID());
+    const oldComplete = await service.complete(worker, old.orderId, roundAction(oldAssigned), randomUUID());
+    const requested = await service.requestRework(designer, old.orderId, { ...roundAction(oldComplete), reason: "未交接先返工", reasonCategory: "other" }, randomUUID());
+    const requestCancelled = await service.cancel(designer, old.orderId, { ...roundAction(requested), reason: "新增要求撤回并停止本单" }, randomUUID());
+    expect(requestCancelled.reworkCount).toBe(0); expect((await service.get(designer, old.orderId)).actions.cancelFees).toBe(true);
+    const priorFees = await service.confirmCancelledFees(designer, old.orderId, roundAction(requestCancelled), randomUUID());
+    expect(priorFees.rounds[0]!.segments[0]!.wageEligible).toBe(true); expect(priorFees.rounds[0]!.handedOverAt).toBeNull();
+    expect(priorFees.rounds[0]!.completedAt).toBe(oldComplete.rounds[0]!.completedAt);
+  });
+
+  it("keeps misc hours per worker across transfers and records real work stops without changing qualified wages", async () => {
+    const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
+    const merchant = patternActor(ids.merchandiser, ["order_merchandiser"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]), nextWorker = patternActor(ids.otherPatternWorker, ["worker"]);
+    const prices = new PatternRoomPriceService(database), root = actor(ids.patternRoot, ["root_superuser"], "pattern_room:prices:read");
+    const current = (await prices.management(root)).hourly;
+    const price = await prices.change(root, "hourly", PATTERN_HOURLY_PRICE_ID, { version: current.version, amount: "28.555", enabled: true, reason: "隔离验收分段工时" }, randomUUID());
+    const created = await service.createMisc(merchant, { taskName: "MISC-分段实际工时", priceVersion: price.version }, randomUUID());
+    const assigned = await service.assign(supervisor, created.orderId, { ...roundAction(created), personId: workerPersonId }, randomUUID());
+    const initialHours = await service.recordHours(supervisor, created.orderId, { ...roundAction(assigned), hours: "0.9" }, randomUUID());
+    const transferred = await service.transfer(supervisor, created.orderId, { ...roundAction(initialHours), segmentId: initialHours.rounds[0]!.segments[0]!.segmentId, personId: otherPatternPersonId, hours: "1.2", reason: "原执行段实际结束" }, randomUUID());
+    expect(transferred.rounds[0]).toMatchObject({ actualHours: null, agreedAmount: null });
+    const hours = await service.recordHours(supervisor, created.orderId, { ...roundAction(transferred), hours: "0.1" }, randomUUID());
+    expect(hours.rounds[0]).toMatchObject({ actualHours: "1.3", agreedAmount: "37.12150000" });
+    const completed = await service.complete(nextWorker, created.orderId, roundAction(hours), randomUUID());
+    const before = (await service.get(supervisor, created.orderId)).rounds[0]!.segments;
+    expect(before.map(segment => segment.amount)).toEqual(["34.26600000", "2.85550000"]);
+    expect(before.every(segment => segment.wageEligible)).toBe(true);
+    const cancellation = { ...roundAction(completed), segmentId: before.at(-1)!.segmentId, reason: "结束已完成任务，保留费用" };
+    await expect(service.cancel(supervisor, created.orderId, { ...cancellation, hours: "0" }, randomUUID())).rejects.toMatchObject({ statusCode: 400 });
+    const closed = await service.cancel(supervisor, created.orderId, cancellation, randomUUID());
+    expect(closed.rounds[0]!.segments).toEqual(before);
+    const stopped = await service.createMisc(merchant, { taskName: "MISC-中途实际停止", priceVersion: price.version }, randomUUID());
+    const stopAssigned = await service.assign(supervisor, stopped.orderId, { ...roundAction(stopped), personId: workerPersonId }, randomUUID());
+    const stopTransfer = await service.transfer(supervisor, stopped.orderId, { ...roundAction(stopAssigned), segmentId: stopAssigned.rounds[0]!.segments[0]!.segmentId, personId: otherPatternPersonId, hours: "0.2", reason: "部分任务转交" }, randomUUID());
+    const stop = await service.cancel(supervisor, stopped.orderId, { ...roundAction(stopTransfer), segmentId: stopTransfer.rounds[0]!.segments.at(-1)!.segmentId, hours: "0.3", reason: "停止工作并确认两段实际工时" }, randomUUID());
+    expect(stop.rounds[0]).toMatchObject({ actualHours: "0.5", cancelledAmount: "14.27750000", completedAt: null, handedOverAt: null });
+    expect(stop.rounds[0]!.stoppedAt).not.toBeNull(); expect(stop.rounds[0]!.segments.every(segment => segment.wageEligible)).toBe(true);
+    expect((await database.query("SELECT count(*)::int count FROM pattern_room_segments WHERE round_id=$1 AND worker_completed_at IS NOT NULL", [stop.currentRoundId])).rows[0].count).toBe(0);
+    const zero = await service.createMisc(merchant, { taskName: "MISC-取消无实际工作", priceVersion: price.version }, randomUUID());
+    const zeroAssigned = await service.assign(supervisor, zero.orderId, { ...roundAction(zero), personId: workerPersonId }, randomUUID());
+    const zeroStopped = await service.cancel(supervisor, zero.orderId, { ...roundAction(zeroAssigned), segmentId: zeroAssigned.rounds[0]!.segments[0]!.segmentId, hours: "0", reason: "没有实际劳动" }, randomUUID());
+    expect(zeroStopped.rounds[0]).toMatchObject({ actualHours: "0.0", agreedAmount: "0.00000000" });
+    expect(zeroStopped.rounds[0]!.segments[0]!.wageEligible).toBe(false);
+  });
+
+  it("serializes a supervisor transfer racing the current worker's completion", async () => {
+    const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
+    const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]), worker = patternActor(ids.worker, ["worker"]), nextWorker = patternActor(ids.otherPatternWorker, ["worker"]);
+    const created = await makePattern(service, designer, "PATTERN-并发改派与完工"), assigned = await service.assign(supervisor, created.orderId, { ...roundAction(created), personId: workerPersonId }, randomUUID());
+    const results = await Promise.allSettled([
+      service.transfer(supervisor, created.orderId, { ...roundAction(assigned), segmentId: assigned.rounds[0]!.segments[0]!.segmentId, personId: otherPatternPersonId, amount: "20", reason: "并发原单换人" }, randomUUID()),
+      service.complete(worker, created.orderId, roundAction(assigned), randomUUID()),
+    ]);
+    expect(results.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter(result => result.status === "rejected")).toHaveLength(1);
+    const current = await service.get(supervisor, created.orderId);
+    expect(current.rounds[0]!.segments.filter(segment => segment.endedAt === null).length).toBeLessThanOrEqual(1);
+    const complete = current.status === "in_progress" ? await service.complete(nextWorker, created.orderId, roundAction(current), randomUUID()) : current;
+    expect((await service.handoff(designer, created.orderId, roundAction(complete), randomUUID())).status).toBe("completed");
   });
 
   it("carries one real order from N01 through N11 without losing cross-node facts", async () => {

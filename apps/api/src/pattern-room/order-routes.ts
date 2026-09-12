@@ -11,7 +11,7 @@ import type { PatternRoomOrderService } from "./order-service.js";
 
 export type PatternRoomOrderDependencies = { authenticate(token: string | undefined): Promise<AuthUser>; service: PatternRoomOrderService; attachments: AttachmentService; root?: RootAuthority };
 const orderParams = z.object({ orderId: z.string().uuid() });
-const uploadQuery = z.object({ kind: z.enum(["pattern", "misc"]).default("pattern") }).strict();
+const uploadQuery = z.object({ kind: z.enum(["pattern", "misc"]).default("pattern"), purpose: z.enum(["create", "rework"]).default("create") }).strict();
 const parse = <T>(schema: z.ZodType<T>, input: unknown): T => {
   const result = schema.safeParse(input);
   if (!result.success) throw new ApplicationError("VALIDATION_ERROR", "请检查订单与必填资料", 400);
@@ -45,19 +45,21 @@ export function registerPatternRoomOrderRoutes(app: FastifyInstance, dependencie
     ["assign", "assign", "pattern_room:orders:assign"], ["complete", "complete", "pattern_room:orders:complete"],
     ["handoff", "handoff", "pattern_room:orders:handoff"], ["updateMaterials", "materials", "pattern_room:orders:edit"],
     ["confirmMisc", "confirm", "pattern_room:misc:confirm"], ["updateMiscMaterials", "misc-materials", "pattern_room:misc:edit"], ["recordHours", "hours", "pattern_room:orders:hours"],
+    ["requestRework", "rework", "pattern_room:orders:rework"], ["transfer", "transfer", "pattern_room:orders:transfer"],
+    ["cancel", "cancel", "pattern_room:orders:cancel"], ["confirmCancelledFees", "cancel-fees", "pattern_room:orders:cancel_fees"],
   ] as const;
   for (const [method, path, capability] of actions) {
     app.post(`/pattern-room/orders/:orderId/${path}`, async request => dependencies.service[method](
       await actor(request, capability), parse(orderParams, request.params).orderId, request.body, key(request)));
   }
   app.post("/pattern-room/attachments/upload-intents", async (request, reply) => {
-    const kind = parse(uploadQuery, request.query).kind;
-    const trusted = await dependencies.service.uploadActor(await actor(request, kind === "pattern" ? "pattern_room:orders:create" : "pattern_room:misc:create"), kind);
+    const { kind, purpose } = parse(uploadQuery, request.query);
+    const trusted = await dependencies.service.uploadActor(await actor(request, purpose === "rework" ? "pattern_room:orders:rework" : kind === "pattern" ? "pattern_room:orders:create" : "pattern_room:misc:create"), kind, purpose);
     return reply.code(201).send(await dependencies.attachments.createUploadIntent(trusted, parse(CreateUploadIntentSchema, request.body)));
   });
   app.post("/pattern-room/attachments/:attachmentId/finalize", async request => {
-    const kind = parse(uploadQuery, request.query).kind;
-    const trusted = await dependencies.service.uploadActor(await actor(request, kind === "pattern" ? "pattern_room:orders:create" : "pattern_room:misc:create"), kind);
+    const { kind, purpose } = parse(uploadQuery, request.query);
+    const trusted = await dependencies.service.uploadActor(await actor(request, purpose === "rework" ? "pattern_room:orders:rework" : kind === "pattern" ? "pattern_room:orders:create" : "pattern_room:misc:create"), kind, purpose);
     return dependencies.attachments.finalize(trusted, parse(AttachmentParamsSchema, request.params).attachmentId);
   });
   app.get("/pattern-room/attachments/:attachmentId/download", async (request, reply) => {
