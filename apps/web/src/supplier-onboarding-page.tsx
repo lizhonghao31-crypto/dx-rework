@@ -8,7 +8,7 @@ import { NavigationIcon } from "./navigation-icons.js";
 import { SupplierProfileForm } from "./supplier-profile-form.js";
 import { emptyDraft } from "./supplier-profile-draft.js";
 import { SUPPLIER_TYPE_LABELS } from "./supplier-center-model.js";
-import { canApproveSupplier, canRequestSupplier, supplierApplicationDraft, supplierApplicationPayload, SUPPLIER_REQUEST_STATUS } from "./supplier-onboarding-model.js";
+import { canApproveSupplier, canRequestSupplier, supplierApplicationDraft, supplierApplicationPayload, supplierApplicationVersion, SUPPLIER_REQUEST_STATUS } from "./supplier-onboarding-model.js";
 import { ListPagination, usePaginatedItems } from "./list-pagination.js";
 import { createSupplierDraftGuard } from "./supplier-draft-guard.js";
 import { registerInternalNavigationGuard } from "./internal-navigation.js";
@@ -39,6 +39,13 @@ export function SupplierApplicationSnapshot({ profile }: { profile: SupplierOnbo
     { title: "工艺产能", fields: fields.slice(10) },
   ];
   return <div className="supplier-profile__sections supplier-application-sections">{groups.map(group => <section key={group.title}><h3>{group.title}</h3><dl className="supplier-application-snapshot">{group.fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value == null || value === "" ? "—" : value}</dd></div>)}</dl></section>)}</div>;
+}
+export function SupplierDuplicateCheck({ check }: { check: SupplierOnboardingDetail["duplicateCheck"] }) {
+  if (!check) return <p role="status">查重结果未就绪，请刷新后审批。</p>;
+  const conflict = check.formalSupplierCount + check.pendingRequestCount > 0;
+  return <div className={`supplier-duplicate-check ${conflict ? "supplier-return-reason" : "supplier-center-notice"}`} role="status"><strong>查重结果：{conflict ? "发现同名同类型记录" : "未发现同名同类型记录"}</strong>
+    <p>正式供应商（含停用）：{check.formalSupplierCount} 条；其他待审批申请：{check.pendingRequestCount} 条。</p>
+    <small>检查时间：{date(check.checkedAt)}。通过时会再次检查。</small></div>;
 }
 export function SupplierApplicationList({ items, reviewer }: { items: readonly SupplierOnboardingSummary[]; reviewer: boolean }) {
   return <table className="supplier-records supplier-applications-table"><thead><tr><th>供应商</th>{reviewer ? <th>申请人</th> : null}<th>状态</th><th>更新时间</th><th>操作</th></tr></thead>
@@ -132,7 +139,9 @@ export function SupplierOnboardingPage({ requestId, user: providedUser }: { requ
   if ((!applicant && !reviewer) || (creating && !applicant)) return <Shell active="资料维护"><p>当前账号不能提交新增申请。</p><a href={pageUrl("ui/suppliers/manage")}>返回资料维护</a></Shell>;
   const title = creating ? "申请新增供应商" : requestId ? "供应商申请详情" : reviewer ? "新增供应商审批" : "我的申请";
   const viewingCurrent = detail && selectedVersion === detail.version;
-  const shown = detail?.versions.find(v => v.version === selectedVersion)?.profile ?? detail?.profile;
+  const selected = detail ? supplierApplicationVersion(detail, selectedVersion) : undefined;
+  const shown = selected?.profile;
+  const duplicateConflict = !detail?.duplicateCheck || detail.duplicateCheck.formalSupplierCount + detail.duplicateCheck.pendingRequestCount > 0;
   const returnPath = todoReturnPath(window.location.search);
   return <Shell active="资料维护"><div className="supplier-onboarding-page">
     <header className="page-heading supplier-center-heading"><div><h1><NavigationIcon route="/ui/suppliers/manage" size="title" />{title}</h1>
@@ -147,17 +156,19 @@ export function SupplierOnboardingPage({ requestId, user: providedUser }: { requ
       {!creating && detail?.decisions.at(-1)?.reason ? <p className="supplier-return-reason">退回原因：{detail.decisions.at(-1)?.reason}</p> : null}
       <SupplierProfileForm draft={draft} onDraft={setDraft} busy={busy} ready={!loading} creating application submitLabel={creating ? "提交申请" : "修改后重新提交"} onSave={save}
         onCancel={() => { if (creating) void leave("ui/suppliers/manage"); else void guard.requestLeave().then(ok => { if (ok) setEditing(false); }); }} /></Surface>
-      : requestId && detail && shown ? <>
-        <Surface className="supplier-profile"><div className="supplier-profile__heading"><div><h2>{detail.supplierName}</h2><p>申请人：{detail.applicantName} · 提交于 {date(detail.createdAt)}</p></div>
-          <StatusBadge tone={detail.status === "approved" ? "success" : detail.status === "returned" ? "warning" : "info"}>{SUPPLIER_REQUEST_STATUS[detail.status]}</StatusBadge></div>
+      : requestId && detail && shown && selected ? <>
+        <Surface className="supplier-profile"><div className="supplier-profile__heading"><div><h2>{shown.supplierName}</h2><p>申请人：{detail.applicantName} · 第 {selected.version} 版提交于 {date(selected.submittedAt)}</p></div>
+          <StatusBadge tone={selected.status === "approved" ? "success" : selected.status === "returned" ? "warning" : "info"}>{SUPPLIER_REQUEST_STATUS[selected.status]}</StatusBadge></div>
           <label className="supplier-version-choice">申请版本<select value={selectedVersion} disabled={busy} onChange={event => setSelectedVersion(Number(event.target.value))}>{detail.versions.map(v => <option key={v.version} value={v.version}>第 {v.version} 版{v.version === detail.version ? "（当前）" : "（历史）"} · {date(v.submittedAt)}</option>)}</select></label>
           <SupplierApplicationSnapshot profile={shown} />
-          {detail.status === "approved" ? <p className="supplier-center-notice">已通过，申请内容已锁定。<a href={pageUrl(`ui/suppliers?supplierId=${detail.supplierId}`)}>查看正式资料</a></p> : null}
-          {detail.status === "returned" && viewingCurrent ? <p className="supplier-return-reason">退回原因：{detail.decisions.at(-1)?.reason}</p> : null}
+          {detail.status === "approved" && viewingCurrent ? <p className="supplier-center-notice">已通过，申请内容已锁定。<a href={pageUrl(`ui/suppliers?supplierId=${detail.supplierId}`)}>查看正式资料</a></p> : null}
+          {selected.decision?.decision === "returned" ? <p className="supplier-return-reason">退回原因：{selected.decision.reason}</p> : null}
           {applicant && detail.applicantId === user.id && detail.status === "returned" && viewingCurrent ? <Button variant="primary" disabled={busy} onClick={() => { setDraft(supplierApplicationDraft(detail.profile)); setEditing(true); }}>修改后重新提交</Button> : null}
           {reviewer && detail.status === "pending_approval" && viewingCurrent ? <form className="supplier-approval-actions" onSubmit={event => { event.preventDefault(); decide("return"); }}>
+            <SupplierDuplicateCheck check={detail.duplicateCheck} />
+            <Button type="button" disabled={busy} onClick={() => setReload(v => v + 1)}>刷新查重</Button>
             <label>退回原因<textarea aria-label="退回原因" maxLength={500} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} placeholder="需要修改时，请说明具体原因" /></label>
-            <div><Button type="button" className="supplier-approve" disabled={busy} onClick={() => decide("approve")}>通过</Button><Button type="submit" className="supplier-return" disabled={busy || !reason.trim()}>退回</Button></div>
+            <div><Button type="button" className="supplier-approve" disabled={busy || duplicateConflict} onClick={() => decide("approve")}>通过</Button><Button type="submit" className="supplier-return" disabled={busy || !reason.trim()}>退回</Button></div>
           </form> : null}
         </Surface>
         <Surface className="supplier-application-history"><h2>审批记录</h2>{detail.decisions.length ? detail.decisions.map(d => <div key={d.version}><strong>第 {d.version} 版 · {d.decision === "approved" ? "通过" : "退回"}</strong><p>{d.reviewerName} · {date(d.decidedAt)}</p>{d.reason ? <p>{d.reason}</p> : null}</div>) : <p>暂无审批记录</p>}</Surface>

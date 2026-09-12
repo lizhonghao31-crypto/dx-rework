@@ -61,7 +61,16 @@ export class SupplierOnboardingService {
     if (!row) throw new ApplicationError("NOT_FOUND", "申请不存在或不属于当前账号", 404);
     const versions = (await this.db.query<{ version: number; profile: SupplierOnboardingProfile; submitted_at: Date }>("SELECT version,profile,submitted_at FROM supplier_onboarding_request_versions WHERE request_id=$1 ORDER BY version", [id])).rows;
     const decisions = (await this.db.query<{ version: number; decision: "approved" | "returned"; reason: string | null; reviewer_name: string; decided_at: Date }>("SELECT version,decision,reason,reviewer_name,decided_at FROM supplier_onboarding_decisions WHERE request_id=$1 ORDER BY version", [id])).rows;
+    const check = reviewRole(effective) && row.status === "pending_approval"
+      ? (await this.db.query<{ formal_count: number; pending_count: number; checked_at: Date }>(`SELECT CURRENT_TIMESTAMP checked_at,
+        (SELECT count(*)::int FROM current_supplier_catalog c WHERE c.supplier_type=$2
+          AND normalize_supplier_name(c.supplier_name)=normalize_supplier_name($1)) formal_count,
+        (SELECT count(*)::int FROM supplier_onboarding_requests r JOIN supplier_onboarding_request_versions v
+          ON (v.request_id,v.version)=(r.request_id,r.current_version) WHERE r.status='pending_approval' AND r.request_id<>$3
+          AND v.profile->>'supplierType'=$2 AND normalize_supplier_name(v.profile->>'supplierName')=normalize_supplier_name($1)) pending_count`,
+      [row.profile.supplierName, row.profile.supplierType, id])).rows[0] : undefined;
     return { ...summary(row), profile: row.profile,
+      ...(check ? { duplicateCheck: { formalSupplierCount: check.formal_count, pendingRequestCount: check.pending_count, checkedAt: check.checked_at.toISOString() } } : {}),
       versions: versions.map(v => ({ version: v.version, profile: v.profile, submittedAt: v.submitted_at.toISOString() })),
       decisions: decisions.map(d => ({ version: d.version, decision: d.decision, reason: d.reason, reviewerName: d.reviewer_name, decidedAt: d.decided_at.toISOString() })) };
   }

@@ -23,6 +23,7 @@ export type SupplierOnboardingSummary = {
 };
 export type SupplierOnboardingDetail = SupplierOnboardingSummary & {
   profile: SupplierOnboardingProfile;
+  duplicateCheck?: { formalSupplierCount: number; pendingRequestCount: number; checkedAt: string };
   versions: { version: number; profile: SupplierOnboardingProfile; submittedAt: string }[];
   decisions: { version: number; decision: "approved" | "returned"; reason: string | null; reviewerName: string; decidedAt: string }[];
 };

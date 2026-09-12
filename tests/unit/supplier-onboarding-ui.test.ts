@@ -1,12 +1,12 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
-import { canApproveSupplier, canRequestSupplier, canAccessSupplierMaintenance, supplierApplicationDraft, supplierApplicationPayload } from "../../apps/web/src/supplier-onboarding-model.js";
-import { SupplierApplicationList, SupplierApplicationSnapshot } from "../../apps/web/src/supplier-onboarding-page.js";
+import { canApproveSupplier, canRequestSupplier, canAccessSupplierMaintenance, supplierApplicationDraft, supplierApplicationPayload, supplierApplicationVersion } from "../../apps/web/src/supplier-onboarding-model.js";
+import { SupplierApplicationList, SupplierApplicationSnapshot, SupplierDuplicateCheck } from "../../apps/web/src/supplier-onboarding-page.js";
 import { SupplierProfileForm } from "../../apps/web/src/supplier-profile-form.js";
 import { SupplierCenterNavigation } from "../../apps/web/src/supplier-center-page.js";
 import type { AuthorizedUser } from "../../apps/web/src/auth.js";
-import type { SupplierOnboardingProfile, SupplierOnboardingSummary } from "@dx-rework/contracts/supplier-onboarding";
+import type { SupplierOnboardingDetail, SupplierOnboardingProfile, SupplierOnboardingSummary } from "@dx-rework/contracts/supplier-onboarding";
 const user = (role: string, capabilities: string[]): AuthorizedUser => ({ id: "fixture", displayName: "用户", businessRoles: [role], capabilities });
 const profile: SupplierOnboardingProfile = { supplierName: "合成申请供应商", supplierType: "factory", active: true, notes: "测试备注", contactPerson: "测试联系人", contactPhone: "020-00000000", address: "合成地址", payeeName: "测试收款人", bankAccount: "001234567890", bankName: "测试银行", supportedCrafts: ["车缝", "整烫"], dailyCapacity: 1000 };
 it("allows only the two applicant roles and prioritizes direct maintenance for mixed roles", () => {
@@ -50,4 +50,18 @@ it("renders immutable full snapshots and truthful applicant and reviewer list ac
   const reviewer = renderToStaticMarkup(createElement(SupplierApplicationList, { items: rows, reviewer: true }));
   expect(reviewer).toContain(">审批</a>"); expect(reviewer).toContain("申请人"); expect(reviewer).not.toContain("查看并修改");
   expect(renderToStaticMarkup(createElement(SupplierCenterNavigation, { active: "directory", canMaintain: false }))).not.toContain("资料维护");
+});
+
+it("keeps historical status, name and submission time tied to the selected version", () => {
+  const detail: SupplierOnboardingDetail = {
+    requestId: "fixture", applicantId: "applicant", applicantName: "申请人", supplierName: "第二版名称", supplierType: "factory", status: "pending_approval",
+    version: 2, supplierId: null, createdAt: "2026-09-10T00:00:00Z", updatedAt: "2026-09-12T00:00:00Z", profile: { ...profile, supplierName: "第二版名称" },
+    versions: [{ version: 1, profile, submittedAt: "2026-09-10T00:00:00Z" }, { version: 2, profile: { ...profile, supplierName: "第二版名称" }, submittedAt: "2026-09-12T00:00:00Z" }],
+    decisions: [{ version: 1, decision: "returned", reason: "补充地址", reviewerName: "审批人", decidedAt: "2026-09-11T00:00:00Z" }],
+  };
+  expect(supplierApplicationVersion(detail, 1)).toMatchObject({ status: "returned", submittedAt: detail.createdAt, profile, decision: { reason: "补充地址" } });
+  expect(supplierApplicationVersion(detail, 2)).toMatchObject({ status: "pending_approval", submittedAt: "2026-09-12T00:00:00Z", profile: { supplierName: "第二版名称" } });
+  expect(supplierApplicationVersion({ ...detail, status: "approved" }, 1).status).toBe("returned");
+  expect(renderToStaticMarkup(createElement(SupplierDuplicateCheck, { check: { formalSupplierCount: 1, pendingRequestCount: 0, checkedAt: detail.updatedAt } }))).toContain("发现同名同类型记录");
+  expect(renderToStaticMarkup(createElement(SupplierDuplicateCheck, { check: { formalSupplierCount: 0, pendingRequestCount: 0, checkedAt: detail.updatedAt } }))).toContain("未发现同名同类型记录");
 });

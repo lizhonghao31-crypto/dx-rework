@@ -11,6 +11,7 @@
 .supplier-approval-actions{display:grid;gap:12px;border-top:1px solid var(--dx-form-control-border);padding-top:16px}
 .supplier-approval-actions label{display:grid;gap:8px}.supplier-approval-actions textarea{min-height:96px;resize:vertical;width:100%;box-sizing:border-box}
 .supplier-approval-actions>div{display:flex;gap:12px}.supplier-approval-actions .supplier-approve{background:var(--dx-status-success);color:#fff;border-color:var(--dx-status-success)}
+.supplier-approval-actions>.supplier-duplicate-check{display:grid;gap:6px}.supplier-duplicate-check p{margin:0}
 .supplier-approval-actions .supplier-return{background:var(--dx-status-danger);color:#fff;border-color:var(--dx-status-danger)}
 .supplier-application-history>div{padding:12px 0;border-bottom:1px solid var(--dx-form-control-border);overflow-wrap:anywhere}.supplier-application-history p{margin:6px 0;white-space:pre-wrap}
 .supplier-applications-table th:first-child{width:30%}
