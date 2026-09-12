@@ -1,3 +1,5 @@
+import { SupplierOnboardingPage } from "./supplier-onboarding-page.js";
+import { canRequestSupplier, canApproveSupplier, canAccessSupplierMaintenance } from "./supplier-onboarding-model.js";
 import { ProductionAnalysisPanel } from "./production-analysis-panel.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -61,7 +63,10 @@ export function SupplierMaintenancePage() { return <SupplierCenterPage mode="man
 export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" | "manage" }) {
   const [user, setUser] = useState<AuthorizedUser | null>(null);
   const [suppliers, setSuppliers] = useState<SupplierSummary[]>([]);
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedId, setSelectedId] = useState(() => {
+    const id = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("supplierId") ?? "";
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ? id : "";
+  });
   const [profile, setProfile] = useState<SupplierProfile | null>(null);
   const [history, setHistory] = useState<SupplierProfile[]>([]);
   const [query, setQuery] = useState("");
@@ -80,7 +85,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   const [detailLoading, setDetailLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [reload, setReload] = useState(0);
-  const selectedRef = useRef("");
+  const selectedRef = useRef(selectedId);
   const writeLock = useRef(false);
   const refreshLock = useRef(false);
   const dirty = creating || (editing && profile !== null && JSON.stringify(draft) !== JSON.stringify(draftFromProfile(profile)));
@@ -250,6 +255,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
     setEditing(true);
   };
 
+  if (mode === "manage" && !identityLoading && user && !canWrite && canRequestSupplier(user)) return <SupplierOnboardingPage user={user} />;
   if (mode === "manage" && !identityLoading && user && !canWrite) {
     return <Shell active="资料维护"><p>当前账号没有资料维护权限。</p><a href={pageUrl("ui/suppliers")}>查看供应商目录</a></Shell>;
   }
@@ -262,10 +268,11 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
         </div>
         <div className="supplier-center-heading__actions">
           <StatusBadge tone={canMaintain ? "info" : "neutral"}>{identityLoading?"核验身份中":canMaintain ? "可维护" : "只读"}</StatusBadge>
+          {canMaintain && user && canApproveSupplier(user) ? <a className="dx-button" href={pageUrl("ui/suppliers/requests")}>待审批申请</a> : null}
           {canMaintain && !batchOpen ? <><Button disabled={busy || refreshing} onClick={() => void beginBatch()}>批量录入</Button><Button variant="primary" disabled={busy||refreshing} onClick={()=>void beginCreate()}>新增供应商</Button></> : null}
         </div>
       </header>
-      <SupplierCenterNavigation active={mode} canMaintain={canWrite} />
+      <SupplierCenterNavigation active={mode} canMaintain={user ? canAccessSupplierMaintenance(user) : false} />
       {identityError?<p role="alert">{identityError} <Button onClick={()=>void loadIdentity()}>重新核验</Button></p>:null}
       {savedMessage?<p className="supplier-center-notice" role="status">{savedMessage}</p>:null}
       {error ? <div className="supplier-center-error" role="alert"><b>请处理以下问题</b><p>{error}</p></div> : null}
