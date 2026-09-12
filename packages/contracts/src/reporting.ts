@@ -75,7 +75,7 @@ export const DashboardNodeSchema = z.object({
 }).strict();
 
 export const DashboardFinancialSummarySchema = z.object({
-  wageTotal: MoneySchema,
+  wageTotal: MoneySchema.optional(),
   responsibilityTotal: MoneySchema,
   ownFactoryTotal: MoneySchema,
   externalProposed: MoneySchema,
@@ -137,7 +137,7 @@ export const ManagementReworkRowSchema = z.object({
   currentHandlerUserId: IdSchema.nullable(),
   plannedQuantity: z.string().nullable(),
   reportedQuantity: z.string(),
-  wageAmount: MoneySchema,
+  wageAmount: MoneySchema.optional(),
   responsibilityAmount: MoneySchema,
   ownFactoryAmount: MoneySchema,
   externalProposedAmount: MoneySchema,
@@ -184,7 +184,7 @@ export const SiteDashboardResponseSchema = z.object({
     pendingAssignment: z.number().int().nonnegative(),
     inProgress: z.number().int().nonnegative(),
     pendingOrderReview: z.number().int().nonnegative(),
-    pendingWageReview: z.number().int().nonnegative(),
+    pendingWageReview: z.number().int().nonnegative().optional(),
     siteExceptions: z.number().int().nonnegative(),
   }).strict(),
   nodeCounts: z.array(DashboardNodeSchema),

@@ -82,8 +82,8 @@ describe("business-chain UI handoff contracts", () => {
     ]);
     expect(app).toContain('<Shell active="返工单看板" mobileNavigation="transaction"><ProcessConfigurationForm /></Shell>');
     expect(app).toContain('<Shell active="返工单看板" mobileNavigation="transaction"><WorkReportingForm /></Shell>');
-    expect(app).toContain('<Shell active="工资管理"><WagePage path={path} /></Shell>');
-    for (const label of ["我的待办", "订单回货", "返工单看板", "系统管理", "财务报表", "工资管理"]) {
+    expect(app).toContain('<Shell active="财务中心"><WagePage path={path} /></Shell>');
+    for (const label of ["我的待办", "订单回货", "返工单看板", "系统管理", "财务报表", "财务中心"]) {
       expect(shell).toContain(`name: "${label}"`);
     }
     expect(shell).not.toContain('name: "发起返工"');

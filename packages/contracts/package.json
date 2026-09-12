@@ -55,6 +55,10 @@
     "./business-display": {
       "types": "./src/business-display.ts",
       "import": "./dist/business-display.js"
+    },
+    "./finance-access": {
+      "types": "./src/finance-access.ts",
+      "import": "./dist/finance-access.js"
     }
   },
   "scripts": {

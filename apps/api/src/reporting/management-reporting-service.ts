@@ -1,3 +1,4 @@
+import { canAccessFinanceWages, requireFinanceWageAccess } from "../wages/wage-access.js";
 import { readFinanceNode } from "./finance-node-reader.js";
 import type { FinanceNodeKey } from "@dx-rework/contracts/reporting";
 import { readBasicRework } from "./basic-rework-reader.js";
@@ -32,6 +33,22 @@ const workflowCapabilitiesByStatus: Readonly<Record<string, readonly string[]>> 
 export class ManagementReportingService {
   constructor(private readonly db: Pool) {}
 
+  private async mayReadWageFields(actor: TrustedActorContext, capability: "wage:view" | "wage:export" = "wage:view"): Promise<boolean> {
+    if (!canAccessFinanceWages(actor, capability)) return false;
+    try { await requireFinanceWageAccess(this.db, actor, capability); return true; }
+    catch (error) {
+      if ((error instanceof ApplicationError && error.statusCode === 403) || (error as { code?: string }).code === "42501") return false;
+      throw error;
+    }
+  }
+
+  private withoutWageFields(data: ReportData): ReportData {
+    const totals = { ...data.totals };
+    delete totals.wageAmount;
+    return { ...data, columns: data.columns.filter(column => column.key !== "wageAmount"), totals,
+      rows: data.rows.map(row => { const visible = { ...row }; delete visible.wageAmount; return visible; }) };
+  }
+
   async financeNode(actor: TrustedActorContext, orderId: string, node: FinanceNodeKey) {
     return readFinanceNode(this.db,actor,orderId,node);
   }
@@ -49,6 +66,7 @@ export class ManagementReportingService {
 
   async managementDashboard(actor: TrustedActorContext, query: DashboardQuery): Promise<ManagementDashboardResponse> {
     await this.require(actor, "dashboard:management:read");
+    const canReadWages = await this.mayReadWageFields(actor);
     const range = await this.range(query);
     const [counts, financial, exceptions, exceptionCount, recent] = await Promise.all([
       this.db.query<CountRow>(
@@ -111,15 +129,15 @@ export class ManagementReportingService {
         exceptionCount,
       },
       nodeCounts,
-      financial,
+      financial: canReadWages ? financial : (({ wageTotal: _wageTotal, ...visible }) => { void _wageTotal; return visible; })(financial),
       exceptions,
-      recentOrders: recent.rows.map((row) => factDto(row)),
+      recentOrders: recent.rows.map((row) => factDto(row, canReadWages)),
       availableActions: [
         "view_rework" as const,
         ...(currentCapabilities.includes("responsibility:determine") ? ["determine_responsibility" as const] : []),
         ...(currentCapabilities.includes("own_factory:approve") ? ["approve_own_factory" as const] : []),
         ...(currentCapabilities.includes("external_responsibility:view") ? ["manage_external_responsibility" as const] : []),
-        ...(currentCapabilities.includes("wage:view") ? ["review_wages" as const] : []),
+        ...(canReadWages ? ["review_wages" as const] : []),
         ...(currentCapabilities.includes("report:export") ? ["export_reports" as const] : []),
       ],
     };
@@ -127,11 +145,12 @@ export class ManagementReportingService {
 
   async siteDashboard(actor: TrustedActorContext, query: DashboardQuery): Promise<SiteDashboardResponse> {
     await this.require(actor, "dashboard:site:read");
+    const canReadWages = await this.mayReadWageFields(actor);
     const range = await this.range(query);
     const [counts, recent, wageReview, exceptions] = await Promise.all([
       this.db.query<CountRow>(`SELECT status,count(*)::text count FROM rework_orders WHERE status NOT IN ('completed','cancelled','deleted') GROUP BY status`),
       fetchFacts(this.db, { limit: 12, siteOnly: true }),
-      this.db.query<{ count: string }>(`SELECT count(*)::text count FROM rework_wage_periods WHERE status='ready_to_lock'`),
+      canReadWages ? this.db.query<{ count: string }>(`SELECT count(*)::text count FROM rework_wage_periods WHERE status='ready_to_lock'`) : Promise.resolve({ rows: [] }),
       this.db.query<{ count: string }>(
         `SELECT count(DISTINCT order_record.rework_order_id)::text count
          FROM rework_orders order_record
@@ -147,7 +166,7 @@ export class ManagementReportingService {
     const pendingWageMonthClose = number(wageReview.rows[0]?.count ?? "0");
     const nodeCounts = Object.entries(nodeMeta).map(([status, meta]) => ({ ...meta, count: map.get(status) ?? 0 }))
       .filter((item) => ["N02", "N03", "N04", "N05", "N06", "N06-A"].includes(item.node));
-    nodeCounts.push({ node: "N11", label: "订单完成与后续结算 · 工资可月结", count: pendingWageMonthClose });
+    if (canReadWages) nodeCounts.push({ node: "N11", label: "订单完成与后续结算 · 工资可月结", count: pendingWageMonthClose });
     const currentCapabilities = capabilities(actor);
     return {
       mode: "site",
@@ -158,16 +177,16 @@ export class ManagementReportingService {
         pendingAssignment: map.get("pending_task_assignment") ?? 0,
         inProgress: map.get("in_progress") ?? 0,
         pendingOrderReview: (map.get("pending_order_review") ?? 0) + (map.get("pending_final_quantity_ie_review") ?? 0) + (map.get("pending_quantity_adjustment_ie_review") ?? 0),
-        pendingWageReview: pendingWageMonthClose,
+        ...(canReadWages ? { pendingWageReview: pendingWageMonthClose } : {}),
         siteExceptions: number(exceptions.rows[0]?.count ?? "0"),
       },
       nodeCounts,
-      recentOrders: recent.rows.map((row) => factDto(row)),
+      recentOrders: recent.rows.map((row) => factDto(row, canReadWages)),
       availableActions: [
         ...(currentCapabilities.includes("process:configure") ? ["configure_process" as const] : []),
         ...(currentCapabilities.includes("work:assign") ? ["assign_work" as const] : []),
         ...(currentCapabilities.includes("submission:audit") ? ["review_order" as const] : []),
-        ...(currentCapabilities.includes("wage:tail_review") ? ["review_wages" as const] : []),
+        ...(canReadWages ? ["review_wages" as const] : []),
         ...(currentCapabilities.includes("report:export") ? ["export_reports" as const] : []),
       ],
     };
@@ -201,6 +220,7 @@ export class ManagementReportingService {
       await this.require(actor, workflowCapability);
     }
 
+    const canReadWages = await this.mayReadWageFields(actor);
     const overdue = query.overdue === "true" ? true : query.overdue === "false" ? false : undefined;
     const exception = query.exception === "true" ? true : query.exception === "false" ? false : undefined;
     const ownTaskScoped = !broadCapability
@@ -235,7 +255,7 @@ export class ManagementReportingService {
     const totalCount = number(rows[0]?.total_count ?? "0");
     return {
       asOf: (clock.rows[0]?.as_of ?? new Date(0)).toISOString(),
-      items: rows.map((row) => factDto(row)),
+      items: rows.map((row) => factDto(row, canReadWages)),
       page: query.page,
       pageSize: query.limit,
       totalCount,
@@ -246,13 +266,12 @@ export class ManagementReportingService {
 
   async report(actor: TrustedActorContext, reportType: ReportType, query: ReportQuery): Promise<ReportPreviewResponse> {
     this.validateReportStatus(reportType, query.status);
-    const currentCapabilities = capabilities(actor);
-    const requiredCapability = reportType === "wages" && currentCapabilities.includes("wage:view")
-      ? "wage:view"
-      : "report:view";
-    await this.require(actor, requiredCapability);
+    if (reportType === "wages") await requireFinanceWageAccess(this.db, actor, "wage:view");
+    else await this.require(actor, "report:view");
+    const canReadWages = reportType === "wages" || (reportType === "rework_overview" && await this.mayReadWageFields(actor));
     const range = await this.range(query);
-    const data = await reportData(this.db, reportType, query, range, query.limit + 1);
+    const allData = await reportData(this.db, reportType, query, range, query.limit + 1);
+    const data = reportType === "rework_overview" && !canReadWages ? this.withoutWageFields(allData) : allData;
     const truncated = data.rows.length > query.limit;
     const rows = truncated ? data.rows.slice(0, query.limit) : data.rows;
     return {
@@ -276,12 +295,15 @@ export class ManagementReportingService {
     data: ReportData;
   }> {
     this.validateReportStatus(reportType, query.status);
-    await this.require(actor, reportType === "wages" ? "wage:export" : "report:export");
+    if (reportType === "wages") await requireFinanceWageAccess(this.db, actor, "wage:export");
+    else await this.require(actor, "report:export");
+    const canExportWages = reportType === "wages" || (reportType === "rework_overview" && await this.mayReadWageFields(actor, "wage:export"));
     const client = await this.db.connect();
     try {
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const range = await this.range(query, client);
-      const data = await reportData(client, reportType, query, range, 50_001);
+      const allData = await reportData(client, reportType, query, range, 50_001);
+      const data = reportType === "rework_overview" && !canExportWages ? this.withoutWageFields(allData) : allData;
       if (data.rows.length > 50_000) fail("导出超过 50000 行，请缩小筛选范围", 413, "EXPORT_TOO_LARGE");
       await client.query("COMMIT");
       return { range, data };
@@ -294,12 +316,11 @@ export class ManagementReportingService {
   }
 
   private canSettleWages(actor: TrustedActorContext): boolean {
-    return actor.actorRoles.includes("root_superuser") || capabilities(actor).includes("wage:settlement_mark");
+    return canAccessFinanceWages(actor, "wage:settlement_mark");
   }
 
   private async requireSettlement(actor: TrustedActorContext): Promise<void> {
-    if (!this.canSettleWages(actor)) fail("当前账号无权标记工资结算");
-    await this.db.query("SELECT access_authorized_actor_roles($1,'wage:settlement_mark')",[actor.actorId]);
+    await requireFinanceWageAccess(this.db, actor, "wage:settlement_mark");
   }
 
   async previewWageSettlement(actor: TrustedActorContext, query: ReportQuery) {

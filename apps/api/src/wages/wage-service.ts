@@ -1,3 +1,4 @@
+import { requireFinanceWageAccess } from "./wage-access.js";
 import type {
   LargestRemainderAllocation,
   LargestRemainderMember,
@@ -178,10 +179,7 @@ export class WageService {
   }
 
   private async requireView(actor: TrustedActorContext) {
-    if (!actor.authorizationCapabilities?.includes("wage:view")) {
-      fail("缺少工资查看能力", 403, "FORBIDDEN");
-    }
-    await this.db.query("SELECT access_authorized_actor_roles($1,'wage:view')", [actor.actorId]);
+    await requireFinanceWageAccess(this.db, actor, "wage:view");
   }
 
   private async permissions(actor: TrustedActorContext, _executor: Pool | PoolClient): Promise<Permissions> {

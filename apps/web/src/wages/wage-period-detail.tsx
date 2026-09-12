@@ -1,3 +1,5 @@
+import { AuthGate } from "../auth.js";
+import { financePageRequirements } from "../finance-access.js";
 import {
   WagePeriodDetailSchema,
   type WagePeriodDetail,
@@ -19,6 +21,10 @@ const responseError = async (response: Response): Promise<string> => {
 };
 
 export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
+  return <AuthGate requiredAnyOf={financePageRequirements}><WagePeriodDetailContent periodId={periodId} /></AuthGate>;
+}
+
+function WagePeriodDetailContent({ periodId }: { periodId: string }) {
   const [detail, setDetail] = useState<WagePeriodDetail | null>(null);
   const [message, setMessage] = useState("");
   const refreshing = useRef(false);

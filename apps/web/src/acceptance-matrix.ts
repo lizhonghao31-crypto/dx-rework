@@ -1,7 +1,7 @@
 import type { AuthorizedUser } from "./auth.js";
 import { accessiblePlatformModules } from "./platform-modules.js";
 
-export type AcceptanceModuleId = "rework" | "sourcing" | "suppliers" | "production" | "samples";
+export type AcceptanceModuleId = "rework" | "sourcing" | "suppliers" | "production" | "samples" | "finance";
 export type AcceptanceMatrixVerdict = "pass" | "fail" | "pending";
 export type AcceptanceRuleStatus = "approved" | "pending" | "unmapped" | "infrastructure";
 
@@ -109,7 +109,7 @@ const sampleMutationDenyRules = Object.fromEntries(
  * is added without a ruleRefs entry is quarantined as unmapped instead of
  * inheriting an unrelated role-level approval.
  */
-export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
+const EXISTING_ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
   {
     alias: "root",
     expectedRole: "owner_group",
@@ -522,6 +522,28 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
     },
   },
 ];
+
+// Approved 2026-09-12 scope, explicitly translated from the business plan.
+export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXISTING_ACCEPTANCE_ROLE_MATRIX.map(entry => {
+  const finance = ["root", "owner", "production-management", "finance-director", "finance-read", "wage-month-close-accountant"].includes(entry.alias);
+  const mark = ["root", "finance-director", "finance-read", "wage-month-close-accountant"].includes(entry.alias);
+  const readCaps = ["wage:view", "wage:export"];
+  const required = entry.expectedRoot ? [] : [...(finance ? readCaps : []), ...(mark ? ["wage:settlement_mark"] : [])];
+  const forbidden = [...(!finance ? readCaps : []), ...(!mark ? ["wage:settlement_mark"] : [])];
+  return {
+    ...entry,
+    requiredCapabilities: [...new Set([...(entry.requiredCapabilities ?? []), ...required])],
+    forbiddenCapabilities: [...new Set([...(entry.forbiddenCapabilities ?? []), ...forbidden])],
+    allowedModules: [...(entry.allowedModules ?? []), ...(finance ? ["finance" as const] : [])],
+    forbiddenModules: [...(entry.forbiddenModules ?? []), ...(!finance ? ["finance" as const] : [])],
+    probes: [...(entry.probes ?? []), probe("finance-wages", "工资查询", "management/reports/wages", finance ? 200 : 403),
+      probe("finance-wage-marker", "工资已结清权限", "management/wages/settlement-preview", mark ? 200 : 403)],
+    ruleRefs: { ...entry.ruleRefs, ...approvedKeys("PERM-FINANCE-WAGE-20260912", [
+      ...required.map(cap => `cap:${cap}:allow`), ...forbidden.map(cap => `cap:${cap}:deny`),
+      `module:finance:${finance ? "allow" : "deny"}`, "http:finance-wages", "http:finance-wage-marker",
+    ]) },
+  };
+});
 
 const ruleFor = (expectation: AcceptanceRoleExpectation, key: string): AcceptanceRuleRef =>
   expectation.ruleRefs?.[key] ?? UNMAPPED_BUSINESS_RULE;

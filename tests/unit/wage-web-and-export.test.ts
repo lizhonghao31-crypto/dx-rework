@@ -25,7 +25,7 @@ describe("wage web and xlsx delivery", () => {
       readFile(new URL("../../apps/api/src/wages/wage-export-service.ts", import.meta.url), "utf8"),
     ]);
     expect(app).toContain('path === "/ui/wages" || path.startsWith("/ui/wages/")');
-    expect(app).toContain('{ requiredCapability: "wage:view" }');
+    expect(app).toContain("requiredAnyOf={financePageRequirements}");
     expect(list).not.toContain("window.setInterval");
     expect(list).not.toContain('window.addEventListener("focus"');
     expect(detail).not.toContain("wage-periods/${period.periodId}/lock");

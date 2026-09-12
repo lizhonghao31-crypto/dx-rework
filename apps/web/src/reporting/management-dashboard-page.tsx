@@ -115,7 +115,7 @@ export function ManagementDashboardPage({ mode }: { mode: "management" | "site" 
             <Surface>
               <h2>金额总览</h2>
               <div className="reporting-financial-grid">
-                <div><small>工资</small><strong>{formatBusinessCurrency(management.financial.wageTotal)}</strong></div>
+                {management.financial.wageTotal !== undefined ? <div><small>工资</small><strong>{formatBusinessCurrency(management.financial.wageTotal)}</strong></div> : null}
                 <div><small>责任总额</small><strong>{formatBusinessCurrency(management.financial.responsibilityTotal)}</strong></div>
                 <div><small>本厂承担</small><strong>{formatBusinessCurrency(management.financial.ownFactoryTotal)}</strong></div>
                 <div><small>外部拟扣</small><strong>{formatBusinessCurrency(management.financial.externalProposed)}</strong></div>
@@ -144,7 +144,7 @@ export function ManagementDashboardPage({ mode }: { mode: "management" | "site" 
             <KpiInstrument label="待启动恢复" value={formatBusinessDecimal(site.kpis.pendingAssignment)} detail="待处理" tone="info" />
             <KpiInstrument label="执行报数中" value={formatBusinessDecimal(site.kpis.inProgress)} detail="进行中" tone="success" />
             <KpiInstrument label="待最终数量确认 / IE 复核" value={formatBusinessDecimal(site.kpis.pendingOrderReview)} detail="待处理" tone="warning" />
-            <KpiInstrument label="待工资初核" value={formatBusinessDecimal(site.kpis.pendingWageReview)} detail="待处理" tone="info" />
+            {site.kpis.pendingWageReview !== undefined ? <KpiInstrument label="待工资初核" value={formatBusinessDecimal(site.kpis.pendingWageReview)} detail="待处理" tone="info" /> : null}
             <KpiInstrument label="现场异常" value={formatBusinessDecimal(site.kpis.siteExceptions)} detail="待处理" tone="warning" />
           </div>
           <div className="reporting-dashboard-grid">

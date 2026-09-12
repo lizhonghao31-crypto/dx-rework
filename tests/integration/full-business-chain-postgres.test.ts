@@ -21,6 +21,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { financial } from "../../apps/api/src/reporting/management-reporting-financial.js";
+import { ManagementReportingService } from "../../apps/api/src/reporting/management-reporting-service.js";
 import { fetchFacts } from "../../apps/api/src/reporting/management-reporting-orders.js";
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { BusinessAwareWholeOrderReviewService } from "../../apps/api/src/rework/business-aware-whole-order-review-service.js";
@@ -222,8 +223,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     "external_deduction:special_approve",
   );
   const wageView = () => actor(
-    ids.tail,
-    ["tail_supervisor"],
+    ids.financeDirector,
+    ["finance_director"],
     "wage:view",
   );
   const monthCloseWage = () => actor(
@@ -1178,6 +1179,18 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     // The current natural month is intentionally not force-locked: the service
     // must reach ready_to_lock and then enforce the month-end barrier. The
     // historical-month lock itself remains covered by wage-workflow-postgres.
+    await expect(wages.list(actor(ids.tail,["tail_supervisor"],"wage:view"))).rejects.toMatchObject({statusCode:403});
+    await expect(database.query("SELECT finance_authorized_wage_roles($1,'wage:view')",[ids.tail])).rejects.toThrow();
+    const sharedReports = new ManagementReportingService(database);
+    const operationalReader = actor(ids.tail,["tail_supervisor"],"dashboard:site:read","wage:view");
+    const operationalPage = await sharedReports.listReworkOrders(operationalReader,{limit:100,page:1});
+    expect(operationalPage.items.length).toBeGreaterThan(0);
+    expect(operationalPage.items.every(item => item.wageAmount === undefined)).toBe(true);
+    const sitePage = await sharedReports.siteDashboard(operationalReader,{});
+    expect(sitePage.kpis).not.toHaveProperty("pendingWageReview");
+    expect(sitePage.recentOrders.every(item => item.wageAmount === undefined)).toBe(true);
+    const financialPage = await sharedReports.listReworkOrders(actor(ids.ownerOne,["owner_group"],"report:view","wage:view"),{limit:100,page:1});
+    expect(financialPage.items.some(item => item.wageAmount === "150.00")).toBe(true);
     const periods = await wages.list(wageView());
     expect(periods).toHaveLength(1);
     const wagePeriod = periods[0]!;
@@ -1972,5 +1985,4 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     }]);
   });
 });
-
 

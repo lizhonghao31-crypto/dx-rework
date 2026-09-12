@@ -18,7 +18,8 @@ describe("business landing target", () => {
   });
 
   it("routes wage users to a page they can actually open", () => {
-    expect(landingTarget(user(["wage:view"]))).toBe("ui/wages");
+    expect(landingTarget({ ...user(["wage:view"]), businessRoles: ["wage_month_close_accountant"] })).toBe("ui/finance");
+    expect(landingTarget(user(["wage:view"]))).toBeNull();
   });
 
   it("routes each single frontline role directly to its own work page", () => {
