@@ -6,7 +6,7 @@ import { authorizePatternOrder, canReadAllPatternOrders, isPatternRoot, patternA
 
 export type PatternOrderRow = {
   order_id: string; order_no: string; kind: "pattern" | "misc"; task_name: string | null; creator_role: "sample_designer" | "order_merchandiser"; status: PatternOrderSummary["status"]; version: number; current_round_id: string;
-  created_by: string; creator_name: string; style_no: string; required_date: string | Date | null; customer: string | null; size_color: string | null;
+  created_by: string; creator_name: string; style_no: string; required_date: string | null; customer: string | null; size_color: string | null;
   reference_style_no: string | null; variant: string | null; note: string | null; submitted_at: Date; updated_at: Date; rework_count: number; current_worker_name?: string | null;
 };
 export type PatternRoundRow = { round_id: string; order_id: string; round_index: number | null; round_type: "initial" | "rework"; requested_by: string; request_reason: string | null; status: PatternOrderSummary["status"]; category_id: string; price_version: number; category_name: string; unit: string;
@@ -17,10 +17,10 @@ export type PatternSegmentRow = { segment_id: string; round_id: string; segment_
 export const patternIso = (value: Date | null) => value?.toISOString() ?? null;
 export const patternSummary = (row: PatternOrderRow): PatternOrderSummary => ({ orderId: row.order_id, orderNo: row.order_no, kind: row.kind, taskName: row.task_name, status: row.status,
   version: row.version, styleNo: row.style_no, creatorId: row.created_by, creatorName: row.creator_name, currentWorkerName: row.current_worker_name ?? null,
-  requiredDate: row.required_date instanceof Date ? row.required_date.toISOString().slice(0, 10) : row.required_date, reworkCount: row.rework_count, submittedAt: row.submitted_at.toISOString(), updatedAt: row.updated_at.toISOString() });
+  requiredDate: row.required_date, reworkCount: row.rework_count, submittedAt: row.submitted_at.toISOString(), updatedAt: row.updated_at.toISOString() });
 const currentWorkerSql = `(SELECT worker.worker_name FROM pattern_room_segments worker WHERE worker.round_id=orders.current_round_id ORDER BY worker.segment_index DESC LIMIT 1)`;
 export async function scopedPatternOrder(client: PoolClient, actor: TrustedActorContext, orderId: string, lock = false): Promise<PatternOrderRow> {
-  const row = (await client.query<PatternOrderRow>(`SELECT orders.*,${currentWorkerSql} current_worker_name FROM pattern_room_orders orders
+  const row = (await client.query<PatternOrderRow>(`SELECT orders.*,to_char(orders.required_date,'YYYY-MM-DD') required_date,${currentWorkerSql} current_worker_name FROM pattern_room_orders orders
     WHERE ${patternOrderScopeSql} AND orders.order_id=$5 ${lock ? "FOR UPDATE OF orders" : ""}`, [...patternOrderScopeValues(actor), orderId])).rows[0];
   if (!row) throw new ApplicationError("NOT_FOUND", "订单不存在或不在当前账号的业务范围内", 404);
   return row;
@@ -57,7 +57,7 @@ export class PatternOrderReader {
         AND ($8::uuid IS NULL OR EXISTS(SELECT 1 FROM pattern_room_segments filtered_worker WHERE filtered_worker.round_id=orders.current_round_id AND filtered_worker.person_id=$8)) AND ($9::text IS NULL OR orders.kind=$9)`;
       const values = [...patternOrderScopeValues(effective), input.q || null, input.status ?? null, input.creatorId ?? null, input.workerId ?? null, input.kind ?? null];
       const count = (await client.query<{ count: number }>(`SELECT count(*)::int count FROM pattern_room_orders orders WHERE ${where}`, values)).rows[0]!.count;
-      const rows = await client.query<PatternOrderRow>(`SELECT orders.*,${currentWorkerSql} current_worker_name FROM pattern_room_orders orders WHERE ${where}
+      const rows = await client.query<PatternOrderRow>(`SELECT orders.*,to_char(orders.required_date,'YYYY-MM-DD') required_date,${currentWorkerSql} current_worker_name FROM pattern_room_orders orders WHERE ${where}
         ORDER BY orders.submitted_at DESC,orders.order_id DESC LIMIT $10 OFFSET $11`, [...values, input.limit, (input.page - 1) * input.limit]);
       return PatternOrderListSchema.parse({ items: rows.rows.map(patternSummary), totalCount: count, page: input.page, pageSize: input.limit,
         totalPages: Math.max(1, Math.ceil(count / input.limit)), canCreate: canUsePatternOrder(effective.actorRoles, patternActorCapabilities(effective), "pattern_room:orders:create"), canCreateMisc: canUsePatternOrder(effective.actorRoles, patternActorCapabilities(effective), "pattern_room:misc:create"), canFilterPeople: broad });

@@ -459,6 +459,19 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     await expect(service.get(worker, created.orderId)).rejects.toMatchObject({ statusCode: 404 });
     await expect(service.get(admin, created.orderId)).rejects.toMatchObject({ statusCode: 403 });
     expect((await service.list(owner, listing)).totalCount).toBe(1);
+    // Reproduce pg DATE parsing in non-UTC processes even when CI itself runs in UTC.
+    for (const offset of ["+08:00", "-07:00"]) {
+      const calendarPool = new Pool({ connectionString: databaseUrl!, options: `-c search_path=${schema}`,
+        types: { getTypeParser: (oid, format) => oid === 1082 ? (value: string) => new Date(`${value}T00:00:00${offset}`) : pg.types.getTypeParser(oid, format) },
+      });
+      try {
+        const parsed = await calendarPool.query<{ calendar_date: Date }>("SELECT DATE '2026-09-30' AS calendar_date");
+        expect(parsed.rows[0]!.calendar_date.toISOString()).toBe(new Date(`2026-09-30T00:00:00${offset}`).toISOString());
+        const calendarService = new PatternRoomOrderService(calendarPool, todoProjection, { ordersEnabled: true });
+        expect((await calendarService.get(designer, created.orderId)).requiredDate).toBe(input.requiredDate);
+        expect((await calendarService.list(owner, listing)).items[0]?.requiredDate).toBe(input.requiredDate);
+      } finally { await calendarPool.end(); }
+    }
     const pending = await todoService.listForActor({ ...supervisor, authorizationCapability: "todo:view" }, { module: "pattern_room", query: "PATTERN-本次" });
     expect(pending.todos).toHaveLength(1);
     expect(pending.todos[0]).toMatchObject({ category: "pattern_room_assignment", route: { routeName: "pattern_room_order", entityId: created.orderId, roundId: created.currentRoundId }, orderContext: { styleNo: input.styleNo } });
@@ -497,6 +510,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const revisionInput = { ...input, version: assigned.version, roundId: assigned.currentRoundId, attachmentIds: [files[1]], reason: "袖口工艺补充" };
     const materials = { styleNo: revisionInput.styleNo, referenceStyleNo: revisionInput.referenceStyleNo, requiredDate: revisionInput.requiredDate, version: revisionInput.version, roundId: revisionInput.roundId, attachmentIds: revisionInput.attachmentIds, reason: revisionInput.reason };
     const revised = await service.updateMaterials(designer, created.orderId, materials, randomUUID());
+    expect(revised.requiredDate).toBe(input.requiredDate);
     expect(revised.attachments).toHaveLength(2);
     expect(revised.attachments.find(file => file.attachmentId === files[0])?.active).toBe(false);
     expect(await service.canDownload(worker, { entityType: "pattern_room_attachment", entityId: files[0]! })).toBe(true);
@@ -1789,7 +1803,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
        FROM rework_todos
        WHERE todo_type='business_action'
          AND status IN ('pending','blocked_recipient')
+         AND (entity_id=$1 OR route_descriptor->>'entityId'=$1)
        ORDER BY category,todo_id`,
+      [submitted.value.reworkOrderId],
     );
     expect(openBusinessTodos.rows).toEqual([]);
 
