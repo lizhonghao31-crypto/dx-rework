@@ -1,0 +1,27 @@
+import { PatternOrderQuerySchema } from "@dx-rework/contracts/pattern-orders";
+import { todoReturnPath } from "./todo-query-state.js";
+
+export type PatternListQuery = { q: string; status: string; creatorId: string; workerId: string; page: number };
+export function readPatternListQuery(search: string): PatternListQuery {
+  const params = new URLSearchParams(search), input: Record<string, string> = {};
+  for (const key of ["q", "status", "creatorId", "workerId", "page"]) if (params.get(key)) input[key] = params.get(key)!;
+  const parsed = PatternOrderQuerySchema.safeParse(input), query = parsed.success ? parsed.data : PatternOrderQuerySchema.parse({});
+  return { q: query.q ?? "", status: query.status ?? "", creatorId: query.creatorId ?? "", workerId: query.workerId ?? "", page: query.page };
+}
+export function patternListPath(query: PatternListQuery): string {
+  const params = new URLSearchParams();
+  for (const key of ["q", "status", "creatorId", "workerId"] as const) if (query[key]) params.set(key, query[key]);
+  if (query.page > 1) params.set("page", String(query.page));
+  return `/ui/pattern-room/create${params.size ? `?${params}` : ""}`;
+}
+export function patternReturnPath(search: string): string {
+  const todo = todoReturnPath(search); if (todo) return todo;
+  const target = new URLSearchParams(search).get("returnTo");
+  if (!target || target.includes("\\") || target.split("?")[0] !== "/ui/pattern-room/create") return "/ui/pattern-room/create";
+  return patternListPath(readPatternListQuery(target.includes("?") ? target.slice(target.indexOf("?")) : ""));
+}
+export function patternEstimate(price: string | null, quantity: string): string | null {
+  if (!price || !/^\d+\.\d{3}$/.test(price) || !/^[1-9]\d{0,6}$/.test(quantity) || BigInt(quantity) > 1_000_000n) return null;
+  const total = BigInt(price.replace(".", "")) * BigInt(quantity);
+  return `${total / 1000n}.${(total % 1000n).toString().padStart(3, "0")}`;
+}

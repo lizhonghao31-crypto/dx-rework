@@ -63,6 +63,10 @@
     "./pattern-room": {
       "types": "./src/pattern-room.ts",
       "import": "./dist/pattern-room.js"
+    },
+    "./pattern-orders": {
+      "types": "./src/pattern-orders.ts",
+      "import": "./dist/pattern-orders.js"
     }
   },
   "scripts": {

@@ -174,6 +174,7 @@
     {"version":"0172_quality_rework_basic_read","checksum":"5f1253d2967fceb96626c0dc40677aaaf09c4226c196a2af757cab70d0ac6ad7"},
     {"version":"0173_finance_rework_node_read","checksum":"8fd70862d63b6431d3b49c82408abe8b53af859569264058f530aed3dabe8d58"},
     {"version":"0174_finance_wage_access","checksum":"d8a8bdd3bff5ddcf04794bcaeb8bf6095358f5552864cb254c97dbaae62d8979"},
-    {"version":"0175_pattern_room_prices","checksum":"d90bd6e6ea87b31df8fe7a473b9af7ab7fcc2c14085b09c8d06de490075e072a"}
+    {"version":"0175_pattern_room_prices","checksum":"d90bd6e6ea87b31df8fe7a473b9af7ab7fcc2c14085b09c8d06de490075e072a"},
+    {"version":"0176_pattern_room_first_pattern","checksum":"f851657b3d2199c5839c7243ac4b2b6c7b797a8f4cc4ac94d46a24e7ebc69990"}
   ]
 }

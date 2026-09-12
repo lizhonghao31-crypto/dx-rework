@@ -1,4 +1,4 @@
-import { canAccessPatternRoomPrices } from "./pattern-room-access.js";
+import { canAccessPatternRoom, canAccessPatternRoomPrices } from "./pattern-room-access.js";
 import { canAccessFinance } from "./finance-access.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { TodoCountIndicatorSchema } from "@dx-rework/contracts";
@@ -471,9 +471,9 @@ export function Shell({
     });
   }
 
-  const patternRoomNavigation: NavigationEntry[] = currentUser && canAccessPatternRoomPrices(currentUser) ? [
+  const patternRoomNavigation: NavigationEntry[] = currentUser && canAccessPatternRoom(currentUser) ? [
     { name: "创建订单", description: "打板与杂事订单", href: "/ui/pattern-room/create", activeKey: "pattern-room-create" },
-    { name: "板房价格管控", description: "品类执行价与杂事小时价", href: "/ui/pattern-room/prices" },
+    ...(canAccessPatternRoomPrices(currentUser) ? [{ name: "板房价格管控", description: "品类执行价与杂事小时价", href: "/ui/pattern-room/prices" }] : []),
   ] : [];
   const sampleNavigation: NavigationEntry[] = currentUser && canAccessSamples(currentUser) ? [
     { name: "在管样衣", description: "借出、在库与保管资料", href: "/ui/samples" },

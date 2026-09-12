@@ -103,6 +103,13 @@ const createApp = () => {
 };
 
 describe("todo HTTP boundaries", () => {
+  it("accepts the pattern-room module from the shared HTTP contract", async () => {
+    const { app, service } = createApp();
+    const response = await app.inject({ url: "/todos/mine?module=pattern_room&q=BF-001&page=2", headers: { cookie: "dx_rework_session=viewer" } });
+    expect(response.statusCode).toBe(200);
+    expect(service.listForActor).toHaveBeenCalledWith(expect.objectContaining({ actorId: todo.recipientUserId, authorizationCapability: "todo:view" }), { module: "pattern_room", query: "BF-001", page: 2 });
+  });
+
   it("lists only the authenticated actor's own todos through todo:view", async () => {
     const { app, service } = createApp();
     const response = await app.inject({
