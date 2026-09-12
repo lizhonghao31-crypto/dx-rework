@@ -1,6 +1,7 @@
+import { PatternRoomOrdersPage, PatternRoomOrderDetailPage } from "./pattern-room-orders-page.js";
 import { PatternRoomPage } from "./pattern-room-page.js";
 import { PatternRoomPricesPage } from "./pattern-room-prices-page.js";
-import { patternRoomPriceRequirements } from "./pattern-room-access.js";
+import { patternRoomPriceRequirements, patternRoomOrderRequirements } from "./pattern-room-access.js";
 import { FinancePage } from "./finance-page.js";
 import { financePageRequirements } from "./finance-access.js";
 import { installInternalNavigation } from "./internal-navigation.js";
@@ -308,7 +309,8 @@ export function App() {
   else if (path === "/ui/own-factory-approvals") page = <OwnFactoryApprovalQueuePage />;
   else if (path === "/ui/external-responsibilities") page = <ExternalResponsibilityQueuePage />;
   else if (path === "/ui/pattern-room") page = <Shell active="订单打板"><PatternRoomPage /></Shell>;
-  else if (path === "/ui/pattern-room/create") page = <Shell active="pattern-room-create"><PatternRoomPage creating /></Shell>;
+  else if (path === "/ui/pattern-room/create") page = <Shell active="pattern-room-create"><PatternRoomOrdersPage /></Shell>;
+  else if (/^\/ui\/pattern-room\/orders\/[^/]+$/.test(path)) page = <Shell active="pattern-room-create"><PatternRoomOrderDetailPage orderId={path.split("/").pop()!} /></Shell>;
   else if (path === "/ui/pattern-room/prices") page = <Shell active="板房价格管控"><PatternRoomPricesPage /></Shell>;
   else if (path === "/ui/finance") page = <Shell active="财务中心"><FinancePage /></Shell>;
   else if (path === "/ui/wages" || path.startsWith("/ui/wages/")) page = <Shell active="财务中心"><WagePage path={path} /></Shell>;
@@ -437,7 +439,7 @@ export function App() {
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/pattern-room" || path.startsWith("/ui/pattern-room/")) {
-    return <AuthGate requiredAnyOf={patternRoomPriceRequirements}>{page}</AuthGate>;
+    return <AuthGate requiredAnyOf={path === "/ui/pattern-room/prices" ? patternRoomPriceRequirements : [...patternRoomPriceRequirements, ...patternRoomOrderRequirements]}>{page}</AuthGate>;
   }
   if (path === "/ui/finance" || path === "/ui/wages" || path.startsWith("/ui/wages/")) {
     return <AuthGate requiredAnyOf={financePageRequirements}>{page}</AuthGate>;

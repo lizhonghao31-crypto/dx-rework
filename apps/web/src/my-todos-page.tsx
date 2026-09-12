@@ -39,6 +39,7 @@ const todoModules: readonly Readonly<{ id: TodoModule; label: string }>[] = [
   { id: "rework", label: "订单返工" },
   { id: "production", label: "实时生产" },
   { id: "samples", label: "样衣管理" },
+  { id: "pattern_room", label: "订单打板" },
 ];
 
 const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
@@ -52,6 +53,7 @@ const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
   sourcing_detail: "处理外发定价选厂订单",
   production_detail: "查看生产风险",
   sample_detail: "处理样衣事项",
+  pattern_room_order: "处理板房订单",
 };
 
 const taskTitle = (todo: TodoResponse): string =>
@@ -65,6 +67,9 @@ const taskTitle = (todo: TodoResponse): string =>
 
 const categoryLabel = (todo: TodoResponse): string => {
   const labels: Record<string, string> = {
+    pattern_room_assignment: "分配板房工人",
+    pattern_room_execution: "板房制作与报完工",
+    pattern_room_handoff: "确认收到样板",
     sample_borrow_confirm: "确认样衣借出",
     sample_return_confirm: "确认样衣归还",
     production_behind: "进度落后",
@@ -98,6 +103,10 @@ const todoHref = (todo: TodoResponse): string => {
   const query = new URLSearchParams({ todo: todo.todoId });
   let target: string;
   switch (route.routeName) {
+    case "pattern_room_order":
+      target = `ui/pattern-room/orders/${route.entityId}`;
+      if (route.roundId) query.set("round", route.roundId);
+      break;
     case "sample_detail":
       target = `ui/samples/${route.entityId}`;
       break;
@@ -273,7 +282,7 @@ export function MyTodosPage() {
   const pageSize = state.kind === "ready" ? state.pageSize : 15;
   const totalPages = state.kind === "ready" ? state.totalPages : 0;
   const renderedTotalPages = Math.max(totalPages, 1);
-  const totalActionable = moduleCounts.rework + moduleCounts.sourcing + (moduleCounts.production ?? 0) + (moduleCounts.samples ?? 0);
+  const totalActionable = moduleCounts.rework + moduleCounts.sourcing + (moduleCounts.production ?? 0) + (moduleCounts.samples ?? 0) + (moduleCounts.pattern_room ?? 0);
   const visiblePages = todoPageWindow(page, renderedTotalPages);
   const pageWindowStart = visiblePages[0] ?? 1;
   const pageWindowEnd = visiblePages.at(-1) ?? 1;
@@ -346,7 +355,7 @@ export function MyTodosPage() {
           {todos.map((todo, index) => {
             const blocked = todo.status === "blocked_recipient";
             const order = todo.orderContext;
-            const orderSummary = todo.entityType === "sample" ? `样衣：${order?.orderNo ?? ""} · ${order?.styleNo ?? ""}` : (todo.entityType === "sourcing_case" || todo.entityType === "production_order")
+            const orderSummary = todo.entityType === "pattern_room_order" ? `板房订单：${order?.orderNo ?? ""} · ${order?.styleNo ?? ""}` : todo.entityType === "sample" ? `样衣：${order?.orderNo ?? ""} · ${order?.styleNo ?? ""}` : (todo.entityType === "sourcing_case" || todo.entityType === "production_order")
               ? `款号：${order?.styleNo ?? "未填写"} · 供应商：${order?.supplierName ?? "待选厂"}`
               : order
                 ? `款号：${order.styleNo ?? "未填写"} · 返工单：${order.reworkNo ?? "待生成"}`
@@ -377,7 +386,7 @@ export function MyTodosPage() {
                     <div className="my-todo-metrics" aria-label="待办业务信息">
                       <span><small>当前节点</small>{categoryLabel(todo)}</span>
                       <span><small>{todo.entityType === "production_order" ? "风险持续" : "节点停留"}</small>{formatNodeDuration(todo.createdAt)}</span>
-                      {todo.entityType === "production_order" ? <span><small>生产进度</small>{formatBusinessDecimal(todo.productionProgress ?? 0)}%</span> : todo.entityType === "sample" ? null : <span><small>相关金额</small>待核定</span>}
+                      {todo.entityType === "production_order" ? <span><small>生产进度</small>{formatBusinessDecimal(todo.productionProgress ?? 0)}%</span> : ["sample", "pattern_room_order"].includes(todo.entityType) ? null : <span><small>相关金额</small>待核定</span>}
                       <span><small>截止</small>{formatDueAt(todo.dueAt)}</span>
                     </div>
                   </a>
@@ -418,4 +427,3 @@ export function MyTodosPage() {
     </Shell>
   );
 }
-

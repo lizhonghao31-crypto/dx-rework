@@ -48,6 +48,10 @@ type TodoRow = Readonly<{
   sample_style_no?: string | null;
   sample_status?: string | null;
   sample_updated_at?: Date | null;
+  pattern_order_no?: string | null;
+  pattern_style_no?: string | null;
+  pattern_status?: string | null;
+  pattern_updated_at?: Date | null;
   sourcing_order_no?: string | null;
   sourcing_style_no?: string | null;
   sourcing_status?: string | null;
@@ -76,7 +80,7 @@ export type TodoListOptions = Readonly<{
 
 const TODO_LIST_PAGE_SIZE = 15;
 const TODO_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const TODO_MODULES: readonly TodoModule[] = ["rework", "sourcing", "production", "samples"];
+const TODO_MODULES: readonly TodoModule[] = ["rework", "sourcing", "production", "samples", "pattern_room"];
 
 const TODO_WITH_CONTEXT_SQL = `SELECT
   todos.todo_id,todos.todo_type,todos.category,todos.source_event_id,todos.source_action,
@@ -89,6 +93,8 @@ const TODO_WITH_CONTEXT_SQL = `SELECT
   COALESCE(rework_merchandiser.display_name,sourcing_merchandiser.display_name) merchandiser_name,
   sample.sample_code,COALESCE(NULLIF(sample.style_no,''),sample.style_name) sample_style_no,
   sample.status sample_status,sample.updated_at sample_updated_at,
+  pattern.order_no pattern_order_no,pattern.style_no pattern_style_no,
+  pattern.status pattern_status,pattern.updated_at pattern_updated_at,
   sourcing.erp_order_no sourcing_order_no,sourcing.style_no sourcing_style_no,
   sourcing.status sourcing_status,sourcing.updated_at sourcing_updated_at,
   COALESCE(
@@ -99,6 +105,7 @@ const TODO_WITH_CONTEXT_SQL = `SELECT
     END
   ) supplier_name_snapshot,
   CASE
+    WHEN todos.entity_type='pattern_room_order' THEN 'pattern_room'
     WHEN todos.entity_type='sample' THEN 'samples'
     WHEN todos.route_descriptor->>'routeName'='sourcing_detail'
       OR todos.entity_type='sourcing_case' THEN 'sourcing'
@@ -106,6 +113,7 @@ const TODO_WITH_CONTEXT_SQL = `SELECT
   END todo_module,
   CASE todos.status WHEN 'pending' THEN 0 WHEN 'blocked_recipient' THEN 1 ELSE 2 END status_rank
 FROM rework_todos todos
+LEFT JOIN pattern_room_orders pattern ON pattern.order_id=CASE WHEN todos.entity_type='pattern_room_order' THEN todos.entity_id::uuid END
 LEFT JOIN sample_items sample ON sample.sample_id=CASE WHEN todos.entity_type='sample' THEN todos.entity_id::uuid END
 LEFT JOIN rework_orders orders
   ON orders.rework_order_id=COALESCE(
@@ -198,8 +206,8 @@ const TODO_DELIVERY_TOPIC = "todo.delivery";
 const emptyModuleCounts = (): TodoModuleCounts => ({ rework: 0, sourcing: 0 });
 
 const todoResponse = (row: TodoRow): TodoResponse => {
-  const contextStatus = row.rework_status ?? row.sourcing_status ?? row.sample_status;
-  const contextUpdatedAt = row.rework_updated_at ?? row.sourcing_updated_at ?? row.sample_updated_at;
+  const contextStatus = row.rework_status ?? row.sourcing_status ?? row.sample_status ?? row.pattern_status;
+  const contextUpdatedAt = row.rework_updated_at ?? row.sourcing_updated_at ?? row.sample_updated_at ?? row.pattern_updated_at;
   return ({
   todoId: row.todo_id,
   todoType: row.todo_type,
@@ -220,8 +228,8 @@ const todoResponse = (row: TodoRow): TodoResponse => {
   orderContext: contextStatus && contextUpdatedAt
     ? {
         reworkNo: row.rework_no ?? null,
-        orderNo: row.order_no ?? row.sourcing_order_no ?? row.sample_code ?? null,
-        styleNo: row.style_no ?? row.sourcing_style_no ?? row.sample_style_no ?? null,
+        orderNo: row.order_no ?? row.sourcing_order_no ?? row.sample_code ?? row.pattern_order_no ?? null,
+        styleNo: row.style_no ?? row.sourcing_style_no ?? row.sample_style_no ?? row.pattern_style_no ?? null,
         supplierName: row.supplier_name_snapshot ?? null,
         status: contextStatus,
         updatedAt: contextUpdatedAt.toISOString(),
@@ -319,9 +327,9 @@ export class TodoService {
          AND (
            $3=''
            OR strpos(upper(COALESCE(style_no,sourcing_style_no,'')),upper($3))>0
-           OR strpos(upper(COALESCE(sample_style_no,'')),upper($3))>0
+           OR strpos(upper(COALESCE(sample_style_no,pattern_style_no,'')),upper($3))>0
            OR strpos(upper(COALESCE(supplier_name_snapshot,'')),upper($3))>0
-           OR strpos(upper(COALESCE(sample_code,'')),upper($3))>0
+           OR strpos(upper(COALESCE(sample_code,pattern_order_no,'')),upper($3))>0
            OR strpos(upper(COALESCE(merchandiser_name,'')),upper($3))>0
          )`,
       [actor.actorId, activeModule, normalizedQuery],
@@ -343,9 +351,9 @@ export class TodoService {
          AND (
            $3=''
            OR strpos(upper(COALESCE(style_no,sourcing_style_no,'')),upper($3))>0
-           OR strpos(upper(COALESCE(sample_style_no,'')),upper($3))>0
+           OR strpos(upper(COALESCE(sample_style_no,pattern_style_no,'')),upper($3))>0
            OR strpos(upper(COALESCE(supplier_name_snapshot,'')),upper($3))>0
-           OR strpos(upper(COALESCE(sample_code,'')),upper($3))>0
+           OR strpos(upper(COALESCE(sample_code,pattern_order_no,'')),upper($3))>0
            OR strpos(upper(COALESCE(merchandiser_name,'')),upper($3))>0
          )
        ORDER BY status_rank ASC,due_at ASC NULLS LAST,created_at DESC,todo_id DESC

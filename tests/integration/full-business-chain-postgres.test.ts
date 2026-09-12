@@ -1,3 +1,9 @@
+import { PATTERN_ORDER_ROLES } from "@dx-rework/contracts/pattern-orders";
+import { PatternRoomOrderService, patternTodoKey } from "../../apps/api/src/pattern-room/order-service.js";
+import { RootAwareTodoProjectionService } from "../../apps/api/src/todos/root-aware-projection-service.js";
+import Fastify from "fastify";
+import { registerPatternRoomOrderRoutes } from "../../apps/api/src/pattern-room/order-routes.js";
+import type { AttachmentService } from "../../apps/api/src/tools/attachments.js";
 import { readFinanceNode } from "../../apps/api/src/reporting/finance-node-reader.js";
 import { FinanceNodeKeySchema } from "@dx-rework/contracts/reporting";
 import { randomUUID } from "node:crypto";
@@ -150,6 +156,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     technicalAdmin: randomUUID(),
     patternSupervisor: randomUUID(),
     patternDesigner: randomUUID(),
+    otherPatternDesigner: randomUUID(),
+    otherPatternWorker: randomUUID(),
+    patternRoot: randomUUID(),
   };
 
   let workerPersonId = "";
@@ -285,6 +294,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       [ids.technicalAdmin, "技术管理员", "system_admin"],
       [ids.patternSupervisor, "板房主管", "pattern_room_supervisor"],
       [ids.patternDesigner, "设计师", "sample_designer"],
+      [ids.otherPatternDesigner, "另一设计师", "sample_designer"],
+      [ids.otherPatternWorker, "另一工人", "worker"],
     ] as const;
     for (const [userId, displayName, roleCode] of users) {
       await database.query(
@@ -307,6 +318,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     }
     // The same bootstrap fixture path must still obey the one-supervisor database constraint.
     await expect(database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'pattern_room_supervisor',$2,'duplicate supervisor fixture')",[randomUUID(),ids.patternDesigner])).rejects.toMatchObject({code:"23505"});
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'Root验收',true)", [ids.patternRoot]);
+    await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','corp',$3,$3,true,true,CURRENT_TIMESTAMP)", [randomUUID(), ids.patternRoot, `ding-${ids.patternRoot}`]);
+    await database.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) VALUES(true,$1,$2,'corp')", [ids.patternRoot, `ding-${ids.patternRoot}`]);
     await access.ensureOrganizationPolicy();
 
     workerPersonId = (await access.createPerson(ownerMasterData(), {
@@ -397,6 +411,120 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(await prices.history(manager,category.priceId)).toHaveLength(3);
     await expect(database.query("DELETE FROM pattern_room_prices WHERE price_id=$1",[category.priceId])).rejects.toThrow();
     await expect(database.query("UPDATE pattern_room_price_history SET amount=1 WHERE price_id=$1",[category.priceId])).rejects.toThrow();
+  });
+
+  it("carries first pattern through scoped assignment, preserved materials and exactly one designer handoff", async () => {
+    const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
+    const caps = [...Object.keys(PATTERN_ORDER_ROLES), "todo:view"];
+    const designer = actor(ids.patternDesigner, ["sample_designer"], "pattern_room:orders:view", ...caps);
+    const otherDesigner = actor(ids.otherPatternDesigner, ["sample_designer"], "pattern_room:orders:view", ...caps);
+    const supervisor = actor(ids.patternSupervisor, ["pattern_room_supervisor"], "pattern_room:orders:view", ...caps);
+    const worker = actor(ids.worker, ["worker"], "pattern_room:orders:view", ...caps);
+    const otherWorker = actor(ids.otherPatternWorker, ["worker"], "pattern_room:orders:view", ...caps);
+    const owner = actor(ids.ownerOne, ["owner_group"], "pattern_room:orders:view", ...caps);
+    const admin = actor(ids.technicalAdmin, ["system_admin"], "pattern_room:orders:view", ...caps);
+    const files = [randomUUID(), randomUUID(), randomUUID()];
+    for (const file of files) await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'制作原稿.pdf','application/pdf',10,$3,$4,'ready',CURRENT_TIMESTAMP)`, [file, `private/${file}.pdf`, "a".repeat(64), ids.patternDesigner]);
+    const input = { styleNo: "PATTERN-本次款号", referenceStyleNo: "OLD-参考款号", categoryId: "92000000-0000-4000-8000-000000000002", quantity: 2, priceVersion: 1, attachmentIds: [files[0]], requiredDate: "2026-09-30" };
+    await expect(new PatternRoomOrderService(database, todoProjection).create(designer, input, randomUUID())).rejects.toMatchObject({ statusCode: 503 });
+    await expect(service.create(supervisor, input, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    await expect(service.create(designer, { ...input, attachmentIds: [] }, randomUUID())).rejects.toMatchObject({ statusCode: 400 });
+    await expect(service.create(designer, { ...input, priceVersion: 99 }, randomUUID())).rejects.toMatchObject({ statusCode: 409, code: "PRICE_CHANGED" });
+    const key = randomUUID(), created = await service.create(designer, input, key);
+    expect(created).toMatchObject({ styleNo: input.styleNo, referenceStyleNo: input.referenceStyleNo, status: "pending_assignment", requiredDate: "2026-09-30", reworkCount: 0 });
+    expect(created.rounds[0]).toMatchObject({ index: 0, unitPrice: "40.000", quantity: 2, agreedAmount: "80.000" });
+    expect((await service.create(designer, input, key)).orderId).toBe(created.orderId);
+    await expect(service.create(designer, { ...input, styleNo: "重复键不同内容" }, key)).rejects.toMatchObject({ statusCode: 409 });
+    const listing = { page: 1, limit: 25, q: "PATTERN-本次" };
+    expect((await service.list(otherDesigner, listing)).totalCount).toBe(0);
+    expect((await service.list(otherWorker, listing)).totalCount).toBe(0);
+    await expect(service.get(otherDesigner, created.orderId)).rejects.toMatchObject({ statusCode: 404 });
+    await expect(service.get(worker, created.orderId)).rejects.toMatchObject({ statusCode: 404 });
+    await expect(service.get(admin, created.orderId)).rejects.toMatchObject({ statusCode: 403 });
+    expect((await service.list(owner, listing)).totalCount).toBe(1);
+    const pending = await todoService.listForActor({ ...supervisor, authorizationCapability: "todo:view" }, { module: "pattern_room", query: "PATTERN-本次" });
+    expect(pending.todos).toHaveLength(1);
+    expect(pending.todos[0]).toMatchObject({ category: "pattern_room_assignment", route: { routeName: "pattern_room_order", entityId: created.orderId, roundId: created.currentRoundId }, orderContext: { styleNo: input.styleNo } });
+    expect((await service.workers(supervisor, "工人")).some(person => person.personId === workerPersonId)).toBe(true);
+    const firstAction = { version: created.version, roundId: created.currentRoundId, personId: workerPersonId };
+    await expect(service.assign(owner, created.orderId, firstAction, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    await expect(service.assign(supervisor, created.orderId, { ...firstAction, roundId: randomUUID() }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    const assignKey = randomUUID(), assigned = await service.assign(supervisor, created.orderId, firstAction, assignKey);
+    expect((await service.assign(supervisor, created.orderId, firstAction, assignKey)).version).toBe(assigned.version);
+    expect(assigned.status).toBe("in_progress");
+    const workerView = await service.get(worker, created.orderId);
+    expect(workerView.rounds[0]).not.toHaveProperty("agreedAmount");
+    expect(workerView.rounds[0]).not.toHaveProperty("unitPrice");
+    expect(workerView.rounds[0]!.segments).toHaveLength(1);
+    expect(workerView.rounds[0]!.segments[0]).toMatchObject({ workerUserId: ids.worker, amount: "80.000", wageEligible: false });
+    const app = Fastify();
+    registerPatternRoomOrderRoutes(app, { service, attachments: {} as AttachmentService, authenticate: async token => {
+      const current = token === "other" ? otherDesigner : worker;
+      return { id: current.actorId, businessRoles: current.actorRoles, capabilities: caps };
+    } });
+    try {
+      const allowed = await app.inject({ url: `/pattern-room/orders/${created.orderId}`, headers: { cookie: "dx_rework_session=worker" } });
+      expect(allowed.statusCode).toBe(200);
+      expect(allowed.json().rounds[0]).not.toHaveProperty("agreedAmount");
+      expect((await app.inject({ url: `/pattern-room/orders/${created.orderId}`, headers: { cookie: "dx_rework_session=other" } })).statusCode).toBe(404);
+      expect((await app.inject({ method: "POST", url: `/pattern-room/orders/${created.orderId}/handoff`, payload: { version: assigned.version, roundId: assigned.currentRoundId }, headers: { cookie: "dx_rework_session=worker", "idempotency-key": randomUUID() } })).statusCode).toBe(403);
+      expect((await app.inject({ url: "/pattern-room/orders?workerId=invalid" })).statusCode).toBe(400);
+    } finally { await app.close(); }
+    expect(await service.canDownload(otherWorker, { entityType: "pattern_room_attachment", entityId: files[0]! })).toBe(false);
+    expect(await service.canDownload(worker, { entityType: "pattern_room_attachment", entityId: files[0]! })).toBe(true);
+    const revisionInput = { ...input, version: assigned.version, roundId: assigned.currentRoundId, attachmentIds: [files[1]], reason: "袖口工艺补充" };
+    const materials = { styleNo: revisionInput.styleNo, referenceStyleNo: revisionInput.referenceStyleNo, requiredDate: revisionInput.requiredDate, version: revisionInput.version, roundId: revisionInput.roundId, attachmentIds: revisionInput.attachmentIds, reason: revisionInput.reason };
+    const revised = await service.updateMaterials(designer, created.orderId, materials, randomUUID());
+    expect(revised.attachments).toHaveLength(2);
+    expect(revised.attachments.find(file => file.attachmentId === files[0])?.active).toBe(false);
+    expect(await service.canDownload(worker, { entityType: "pattern_room_attachment", entityId: files[0]! })).toBe(true);
+    expect((await todoService.listForActor({ ...worker, authorizationCapability: "todo:view" }, { module: "pattern_room" })).todos.filter(todo => todo.entityId === created.orderId)).toHaveLength(1);
+    expect((await database.query("SELECT count(*)::int count FROM rework_todos WHERE entity_id=$1 AND todo_type='information' AND category='pattern_room_material_notice'", [created.orderId])).rows[0].count).toBe(2);
+    await expect(service.complete(worker, created.orderId, { version: assigned.version, roundId: assigned.currentRoundId }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    await expect(service.complete(otherWorker, created.orderId, { version: revised.version, roundId: revised.currentRoundId }, randomUUID())).rejects.toMatchObject({ statusCode: 404 });
+    // A forged Root marker is replaced by actual persisted roles before scope checks.
+    await expect(service.complete({ ...otherWorker, actorRoles: ["root_superuser", "worker"] }, created.orderId, { version: revised.version, roundId: revised.currentRoundId }, randomUUID())).rejects.toMatchObject({ statusCode: 404 });
+    const completeKey = randomUUID(), completeInput = { version: revised.version, roundId: revised.currentRoundId };
+    const completed = await service.complete(worker, created.orderId, completeInput, completeKey);
+    expect((await service.complete(worker, created.orderId, completeInput, completeKey)).version).toBe(completed.version);
+    expect(completed.status).toBe("pending_confirmation");
+    expect(completed.rounds[0]!.segments[0]!.wageEligible).toBe(false);
+    expect((await todoService.listForActor({ ...supervisor, authorizationCapability: "todo:view" }, { module: "pattern_room" })).todos.filter(todo => todo.entityId === created.orderId)).toHaveLength(0);
+    expect((await todoService.listForActor({ ...designer, authorizationCapability: "todo:view" }, { module: "pattern_room" })).todos.filter(todo => todo.entityId === created.orderId).map(todo => todo.category)).toEqual(["pattern_room_handoff"]);
+    await expect(service.updateMaterials(designer, created.orderId, { ...materials, version: completed.version }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    const handoffInput = { version: completed.version, roundId: completed.currentRoundId };
+    await expect(service.handoff(otherDesigner, created.orderId, handoffInput, randomUUID())).rejects.toMatchObject({ statusCode: 404 });
+    await expect(service.handoff(supervisor, created.orderId, handoffInput, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    const handoffKey = randomUUID(), handed = await service.handoff(designer, created.orderId, handoffInput, handoffKey);
+    expect((await service.handoff(designer, created.orderId, handoffInput, handoffKey)).version).toBe(handed.version);
+    expect(handed.status).toBe("completed");
+    expect(handed.rounds[0]!.segments[0]!.wageEligible).toBe(true);
+    expect(handed.rounds[0]!.completedAt).toBe(completed.rounds[0]!.completedAt);
+    expect(handed.rounds[0]!.nodes.map(node => node.stage)).toEqual(["pending_assignment", "in_progress", "pending_confirmation"]);
+    expect(handed.rounds[0]!.nodes.every(node => node.exitedAt && node.elapsedSeconds >= 0)).toBe(true);
+    expect((await database.query("SELECT count(*)::int count FROM pattern_room_segments WHERE round_id=$1 AND wage_eligible_at IS NOT NULL", [handed.currentRoundId])).rows[0].count).toBe(1);
+    expect((await database.query("SELECT status FROM rework_todos WHERE dedupe_key=$1", [patternTodoKey(created.orderId, created.currentRoundId, "handoff")])).rows[0].status).toBe("completed");
+    await expect(service.handoff(designer, created.orderId, handoffInput, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    await expect(service.create(otherDesigner, { ...input, attachmentIds: [files[2]] }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    await expect(service.create(designer, input, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    await expect(database.query("DELETE FROM pattern_room_orders WHERE order_id=$1", [created.orderId])).rejects.toThrow();
+  });
+
+  it("keeps Root first-pattern acceptance available with ordinary access closed and no normal roles", async () => {
+    const service = new PatternRoomOrderService(database, new RootAwareTodoProjectionService(todoService));
+    const root = actor(ids.patternRoot, ["root_superuser"], "pattern_room:orders:view");
+    const personId = (await access.createPerson({ ...root, authorizationCapability: "master_data:manage" }, { personType: "internal", appUserId: ids.patternRoot, displayName: "Root验收", aliases: [], reason: "Root单账号验收" })).personId;
+    const fileId = randomUUID();
+    await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'Root.pdf','application/pdf',10,$3,$4,'ready',CURRENT_TIMESTAMP)", [fileId, `private/${fileId}.pdf`, "b".repeat(64), ids.patternRoot]);
+    const created = await service.create(root, { styleNo: "ROOT-PATTERN", categoryId: "92000000-0000-4000-8000-000000000002", quantity: 1, priceVersion: 1, attachmentIds: [fileId] }, randomUUID());
+    expect((await service.workers(root, "Root")).some(person => person.personId === personId)).toBe(true);
+    const assigned = await service.assign(root, created.orderId, { version: created.version, roundId: created.currentRoundId, personId }, randomUUID());
+    const completed = await service.complete(root, created.orderId, { version: assigned.version, roundId: assigned.currentRoundId }, randomUUID());
+    const handed = await service.handoff(root, created.orderId, { version: completed.version, roundId: completed.currentRoundId }, randomUUID());
+    expect(handed.status).toBe("completed");
+    expect(handed.rounds[0]!.segments[0]!.wageEligible).toBe(true);
+    expect((await database.query("SELECT count(*)::int count FROM user_role_assignments WHERE user_id=$1", [ids.patternRoot])).rows[0].count).toBe(0);
   });
 
   it("carries one real order from N01 through N11 without losing cross-node facts", async () => {

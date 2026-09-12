@@ -524,6 +524,13 @@ const EXISTING_ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
 ];
 
 // Approved 2026-09-12 scope, explicitly translated from the business plan.
+// Approved PR03 roles; ordinary order operations remain closed until PR06.
+const patternOrderRoles: Record<string, readonly string[]> = {
+  "pattern_room:orders:view": ["sample_designer", "pattern_room_supervisor", "worker", "owner_group", "production_management"],
+  "pattern_room:orders:create": ["sample_designer"], "pattern_room:orders:edit": ["sample_designer"],
+  "pattern_room:orders:handoff": ["sample_designer"], "pattern_room:orders:assign": ["pattern_room_supervisor"], "pattern_room:orders:complete": ["worker"],
+};
+
 export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXISTING_ACCEPTANCE_ROLE_MATRIX.map(entry => {
   const finance = ["root", "owner", "production-management", "finance-director", "finance-read", "wage-month-close-accountant"].includes(entry.alias);
   const mark = ["root", "finance-director", "finance-read", "wage-month-close-accountant"].includes(entry.alias);
@@ -561,6 +568,15 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXIS
       ...required.map(cap => `cap:${cap}:allow`), ...forbidden.map(cap => `cap:${cap}:deny`),
       `module:pattern_room:${read ? "allow" : "deny"}`, "http:pattern-room-prices",
     ]) },
+  };
+}).map(entry => {
+  const root = entry.expectedRoot === true;
+  const required = root ? [] : Object.entries(patternOrderRoles).filter(([, roles]) => roles.includes(entry.expectedRole)).map(([capability]) => capability);
+  const forbidden = root ? [] : Object.entries(patternOrderRoles).filter(([, roles]) => !roles.includes(entry.expectedRole)).map(([capability]) => capability);
+  return { ...entry,
+    requiredCapabilities: [...(entry.requiredCapabilities ?? []), ...required], forbiddenCapabilities: [...(entry.forbiddenCapabilities ?? []), ...forbidden],
+    probes: [...(entry.probes ?? []), probe("pattern-room-orders", "首次打板开放边界", "pattern-room/orders", root ? 200 : required.includes("pattern_room:orders:view") ? 503 : 403)],
+    ruleRefs: { ...entry.ruleRefs, ...approvedKeys("PERM-PATTERN-ORDER-20260912", [...required.map(capability => `cap:${capability}:allow`), ...forbidden.map(capability => `cap:${capability}:deny`), "http:pattern-room-orders"]) },
   };
 });
 

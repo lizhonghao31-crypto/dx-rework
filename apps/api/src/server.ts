@@ -1,4 +1,5 @@
 import { PatternRoomPriceService } from "./pattern-room/price-service.js";
+import { PatternRoomOrderService } from "./pattern-room/order-service.js";
 import {recordOperationDiagnostic} from "./platform/operation-diagnostics.js";
 import {SampleImportService} from "./samples/sample-import-service.js";
 import {SampleDisposalService} from "./samples/sample-disposal-service.js";
@@ -138,6 +139,7 @@ const productionClosure = new ProductionClosureService(database,rootAuthority);
 const sampleFiles = new SampleAttachmentService(database);
 const todoService = new TodoService(database,undefined,undefined,productionClosure);
 const todoProjection = new RootAwareTodoProjectionService(todoService);
+const patternOrders = new PatternRoomOrderService(database, todoProjection);
 const receivingService = new ReceivingService(database,undefined,undefined,productionClosure);
 const sourcingProductionService = new SourcingProductionService(database);
 const sourcingContractService = new SourcingContractService(database, attachments);
@@ -267,6 +269,10 @@ const app = buildApp({
     attachments,
     exports: new ExportJobService(database),
     canDownloadBoundAttachment: async (actor, binding) => {
+      if (binding.entityType === "pattern_room_attachment") return patternOrders.canDownload({
+        actorId: actor.actorId, actorRoles: [...actor.actorRoles, ...(await rootAuthority.isRootUser(actor.actorId) ? [ROOT_ACTOR_ROLE] : [])],
+        authorizationCapability: "pattern_room:orders:view", authorizationCapabilities: actor.capabilities, requestId: "pattern-attachment-download",
+      }, binding);
       if (binding.entityType === "sample_attachment") return sampleFiles.canDownload({
         actorId: actor.actorId, actorRoles: [...actor.actorRoles, ...(await rootAuthority.isRootUser(actor.actorId) ? [ROOT_ACTOR_ROLE] : [])],
         authorizationCapability: "sample:view_basic", authorizationCapabilities: actor.capabilities, requestId: "sample-attachment-download",
@@ -372,6 +378,7 @@ const app = buildApp({
     root: rootAuthority,
   },
   patternRoomPrices: { authenticate: (token) => auth.authenticate(token), service: new PatternRoomPriceService(database), root: rootAuthority },
+  patternRoomOrders: { authenticate: (token) => auth.authenticate(token), service: patternOrders, attachments, root: rootAuthority },
   wages: {
     authenticate: (token) => auth.authenticate(token),
     service: wageService,
