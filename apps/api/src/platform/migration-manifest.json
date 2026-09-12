@@ -176,6 +176,7 @@
     {"version":"0174_finance_wage_access","checksum":"d8a8bdd3bff5ddcf04794bcaeb8bf6095358f5552864cb254c97dbaae62d8979"},
     {"version":"0175_pattern_room_prices","checksum":"d90bd6e6ea87b31df8fe7a473b9af7ab7fcc2c14085b09c8d06de490075e072a"},
     {"version":"0176_pattern_room_first_pattern","checksum":"f851657b3d2199c5839c7243ac4b2b6c7b797a8f4cc4ac94d46a24e7ebc69990"},
-    {"version":"0177_pattern_room_misc_hours","checksum":"b3896a2753beb7751161fa5f6c1f626cae532989bb5906491dc80d777c57eb9e"}
+    {"version":"0177_pattern_room_misc_hours","checksum":"b3896a2753beb7751161fa5f6c1f626cae532989bb5906491dc80d777c57eb9e"},
+    {"version":"0178_pattern_room_rework_transfer_cancel","checksum":"b1580568ef97727ac9e33d54935125123d3e6487a83706e7dd3ea86aa3015dd0"}
   ]
 }

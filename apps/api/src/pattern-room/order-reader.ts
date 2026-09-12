@@ -9,8 +9,9 @@ export type PatternOrderRow = {
   created_by: string; creator_name: string; style_no: string; required_date: string | Date | null; customer: string | null; size_color: string | null;
   reference_style_no: string | null; variant: string | null; note: string | null; submitted_at: Date; updated_at: Date; rework_count: number; current_worker_name?: string | null;
 };
-export type PatternRoundRow = { round_id: string; order_id: string; round_index: number; status: PatternOrderSummary["status"]; category_name: string; unit: string;
-  quantity: number | null; unit_price: string; agreed_amount: string | null; actual_hours: string | null; assigned_at: Date | null; assigned_by: string | null; supervisor_user_id: string | null; completed_at: Date | null; handed_over_at: Date | null };
+export type PatternRoundRow = { round_id: string; order_id: string; round_index: number | null; round_type: "initial" | "rework"; requested_by: string; request_reason: string | null; status: PatternOrderSummary["status"]; category_id: string; price_version: number; category_name: string; unit: string;
+  quantity: number | null; unit_price: string | null; agreed_amount: string | null; actual_hours: string | null; assigned_at: Date | null; assigned_by: string | null; supervisor_user_id: string | null; completed_at: Date | null; handed_over_at: Date | null;
+  stopped_at: Date | null; cancelled_at: Date | null; cancelled_amount: string | null; fee_confirmed_at: Date | null };
 export type PatternSegmentRow = { segment_id: string; round_id: string; segment_index: number; person_id: string; worker_user_id: string; worker_name: string;
   amount: string | null; actual_hours: string | null; started_at: Date; ended_at: Date | null; worker_completed_at: Date | null; wage_eligible_at: Date | null };
 export const patternIso = (value: Date | null) => value?.toISOString() ?? null;
@@ -67,7 +68,7 @@ export class PatternOrderReader {
     return this.read(actor, async (client, effective) => {
       const order = await scopedPatternOrder(client, effective, orderId);
       const allCosts = canReadAllPatternOrders(effective) || (order.created_by === effective.actorId && (effective.actorRoles.includes("sample_designer") || (order.kind === "misc" && effective.actorRoles.includes("order_merchandiser"))));
-      const rounds = (await client.query<PatternRoundRow>("SELECT * FROM pattern_room_rounds WHERE order_id=$1 ORDER BY round_index", [orderId])).rows;
+      const rounds = (await client.query<PatternRoundRow>("SELECT * FROM pattern_room_rounds WHERE order_id=$1 ORDER BY requested_at,round_id", [orderId])).rows;
       const segments = (await client.query<PatternSegmentRow>(`SELECT segment.* FROM pattern_room_segments segment JOIN pattern_room_rounds round USING(round_id)
         WHERE round.order_id=$1 ORDER BY round.round_index,segment.segment_index`, [orderId])).rows;
       const nodes = (await client.query<{ round_id: string; stage: string; entered_at: Date; exited_at: Date | null; exit_reason: string | null; elapsed_seconds: number }>(
@@ -90,8 +91,9 @@ export class PatternOrderReader {
       return PatternOrderDetailSchema.parse({ ...patternSummary(order), currentRoundId: order.current_round_id, customer: order.customer, sizeColor: order.size_color,
         referenceStyleNo: order.reference_style_no, variant: order.variant, note: order.note,
         rounds: rounds.filter(round => allCosts || round.round_id === order.current_round_id || segments.some(segment => segment.round_id === round.round_id && segment.worker_user_id === effective.actorId)).map(round => ({
-          roundId: round.round_id, index: round.round_index, status: round.status, categoryName: round.category_name, unit: round.unit, quantity: round.quantity,
-          ...(allCosts ? { unitPrice: round.unit_price, agreedAmount: round.agreed_amount, actualHours: round.actual_hours } : {}), assignedAt: patternIso(round.assigned_at), completedAt: patternIso(round.completed_at), handedOverAt: patternIso(round.handed_over_at),
+          roundId: round.round_id, index: round.round_index, roundType: round.round_type, requestedBy: round.requested_by, requestReason: round.request_reason, status: round.status, categoryName: round.category_name, unit: round.unit, quantity: round.quantity,
+          ...(allCosts ? { ...(round.unit_price !== null ? { unitPrice: round.unit_price } : {}), agreedAmount: round.agreed_amount, actualHours: round.actual_hours, cancelledAmount: round.cancelled_amount } : {}), assignedAt: patternIso(round.assigned_at), completedAt: patternIso(round.completed_at), handedOverAt: patternIso(round.handed_over_at),
+          stoppedAt: patternIso(round.stopped_at), cancelledAt: patternIso(round.cancelled_at), feeConfirmedAt: patternIso(round.fee_confirmed_at),
           segments: segments.filter(segment => segment.round_id === round.round_id && (allCosts || segment.worker_user_id === effective.actorId)).map(segment => ({
             segmentId: segment.segment_id, personId: segment.person_id, workerUserId: segment.worker_user_id, workerName: segment.worker_name, amount: segment.amount, actualHours: segment.actual_hours,
             startedAt: segment.started_at.toISOString(), endedAt: patternIso(segment.ended_at), wageEligible: segment.wage_eligible_at !== null,
@@ -104,7 +106,11 @@ export class PatternOrderReader {
           complete: order.status === "in_progress" && !!current && (isPatternRoot(effective) || current.worker_user_id === effective.actorId) && available("pattern_room:orders:complete"),
           handoff: order.status === "pending_confirmation" && creator && available(order.kind === "pattern" ? "pattern_room:orders:handoff" : "pattern_room:misc:confirm"),
           edit: ["pending_assignment", "in_progress"].includes(order.status) && creator && available(order.kind === "pattern" ? "pattern_room:orders:edit" : "pattern_room:misc:edit"),
-          hours: order.kind === "misc" && ["in_progress", "pending_confirmation", "completed"].includes(order.status) && available("pattern_room:orders:hours") && !!currentRound && !(currentRound.completed_at !== null && currentRound.actual_hours !== null) },
+          hours: order.kind === "misc" && ["in_progress", "pending_confirmation", "completed"].includes(order.status) && available("pattern_room:orders:hours") && !!currentRound && !(currentRound.completed_at !== null && currentRound.actual_hours !== null),
+          rework: order.kind === "pattern" && ["pending_confirmation", "completed"].includes(order.status) && !!currentRound?.completed_at && available("pattern_room:orders:rework") && (creator || effective.actorRoles.includes("pattern_room_supervisor")),
+          transfer: order.status === "in_progress" && available("pattern_room:orders:transfer"),
+          cancel: available("pattern_room:orders:cancel") && (order.status === "pending_assignment" ? isPatternRoot(effective) || currentRound?.requested_by === effective.actorId : ["in_progress", "pending_confirmation"].includes(order.status) && (isPatternRoot(effective) || effective.actorRoles.includes("pattern_room_supervisor"))),
+          cancelFees: order.kind === "pattern" && order.status === "cancelled" && creator && available("pattern_room:orders:cancel_fees") && rounds.some(round => round.cancelled_amount !== null && /[1-9]/.test(round.cancelled_amount) && round.fee_confirmed_at === null && round.handed_over_at === null) },
       });
     });
   }

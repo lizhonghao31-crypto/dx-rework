@@ -13,15 +13,15 @@ export async function patternRequest<T>(path: string, schema: z.ZodType<T>, init
   if (!response.ok) throw new PatternRequestError(body?.error?.message ?? "操作未完成，请重试", body?.error?.code ?? "UNKNOWN", response.status);
   return schema.parse(body);
 }
-export async function uploadPatternOriginal(file: File, kind: "pattern" | "misc" = "pattern") {
+export async function uploadPatternOriginal(file: File, kind: "pattern" | "misc" = "pattern", purpose: "create" | "rework" = "create") {
   if (!isSupportedAttachment(file)) throw new Error("请选择 PDF、JPG、PNG 或 WebP 原始制作资料");
-  const intent = await patternRequest(`attachments/upload-intents?kind=${kind}`, UploadIntentResponseSchema, { method: "POST", body: JSON.stringify({ filename: file.name, mimeType: file.type, sizeBytes: file.size, sha256: await sha256Hex(file) }) });
+  const intent = await patternRequest(`attachments/upload-intents?kind=${kind}&purpose=${purpose}`, UploadIntentResponseSchema, { method: "POST", body: JSON.stringify({ filename: file.name, mimeType: file.type, sizeBytes: file.size, sha256: await sha256Hex(file) }) });
   const form = new FormData();
   for (const [name, value] of Object.entries(intent.uploadFields)) form.append(name, value);
   form.append("file", file);
   const response = await fetch(intent.uploadUrl, { method: intent.uploadMethod, body: form, credentials: "omit" });
   if (!response.ok) throw new Error(`${file.name} 上传失败，请重试`);
-  return patternRequest(`attachments/${intent.attachmentId}/finalize?kind=${kind}`, AttachmentResponseSchema, { method: "POST", body: "{}" });
+  return patternRequest(`attachments/${intent.attachmentId}/finalize?kind=${kind}&purpose=${purpose}`, AttachmentResponseSchema, { method: "POST", body: "{}" });
 }
 export const patternTime = (value: string | null) => value ? new Date(value).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }) : "—";
 export function elapsedText(seconds: number) {
