@@ -1,3 +1,4 @@
+import { PatternRoomPriceService } from "./pattern-room/price-service.js";
 import {recordOperationDiagnostic} from "./platform/operation-diagnostics.js";
 import {SampleImportService} from "./samples/sample-import-service.js";
 import {SampleDisposalService} from "./samples/sample-disposal-service.js";
@@ -370,6 +371,7 @@ const app = buildApp({
     service: externalResponsibilityService,
     root: rootAuthority,
   },
+  patternRoomPrices: { authenticate: (token) => auth.authenticate(token), service: new PatternRoomPriceService(database), root: rootAuthority },
   wages: {
     authenticate: (token) => auth.authenticate(token),
     service: wageService,

@@ -39,6 +39,7 @@ import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.
 import { TodoProjectionService } from "../../apps/api/src/todos/projection-service.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
 import { WageService } from "../../apps/api/src/wages/wage-service.js";
+import { PatternRoomPriceService, PATTERN_HOURLY_PRICE_ID } from "../../apps/api/src/pattern-room/price-service.js";
 
 const { Pool } = pg;
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -147,6 +148,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     administrative: randomUUID(),
     monthClose: randomUUID(),
     technicalAdmin: randomUUID(),
+    patternSupervisor: randomUUID(),
+    patternDesigner: randomUUID(),
   };
 
   let workerPersonId = "";
@@ -280,6 +283,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       [ids.administrative, "行政文员", "administrative_clerk"],
       [ids.monthClose, "工资月结", "wage_month_close_accountant"],
       [ids.technicalAdmin, "技术管理员", "system_admin"],
+      [ids.patternSupervisor, "板房主管", "pattern_room_supervisor"],
+      [ids.patternDesigner, "设计师", "sample_designer"],
     ] as const;
     for (const [userId, displayName, roleCode] of users) {
       await database.query(
@@ -300,6 +305,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         [randomUUID(), userId, roleCode],
       );
     }
+    // The same bootstrap fixture path must still obey the one-supervisor database constraint.
+    await expect(database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'pattern_room_supervisor',$2,'duplicate supervisor fixture')",[randomUUID(),ids.patternDesigner])).rejects.toMatchObject({code:"23505"});
     await access.ensureOrganizationPolicy();
 
     workerPersonId = (await access.createPerson(ownerMasterData(), {
@@ -343,6 +350,53 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     await database.end();
     await adminPool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     await adminPool.end();
+  });
+
+  it("keeps pattern room standard prices exact, authorized, versioned and repeatably initialized", async () => {
+    const prices = new PatternRoomPriceService(database);
+    const manager = actor(ids.ownerOne,["owner_group"],"pattern_room:prices:read","pattern_room:prices:write","pattern_room:hourly:write","pattern_room:catalog:read");
+    const supervisor = actor(ids.patternSupervisor,["pattern_room_supervisor"],"pattern_room:prices:read","pattern_room:prices:write","pattern_room:hourly:write");
+    const designer = actor(ids.patternDesigner,["sample_designer"],"pattern_room:catalog:read","pattern_room:prices:read","pattern_room:prices:write","pattern_room:misc:quote");
+    const productionPrice = actor(ids.production,["production_management"],"pattern_room:prices:read","pattern_room:prices:write","pattern_room:hourly:write");
+    const initial = await prices.management(manager);
+    expect(initial.categories.map(item => item.amount)).toEqual(["15.000","40.000","40.000","40.000","40.000","40.000","40.000","80.000","60.000","60.000","80.000","100.000","60.000","80.000","100.000","100.000","80.000","80.000","100.000"]);
+    expect(initial.categories.filter(item => item.unit === "套").map(item => item.name)).toEqual(["女装套装两件套","男装套装两件套"]);
+    expect(initial.hourly.amount).toBeNull();
+    expect((await prices.quote(designer,"hourly",PATTERN_HOURLY_PRICE_ID)).amount).toBeNull();
+    const category = initial.categories[0]!;
+    const input = {version:1,amount:"18.125",enabled:true,reason:"现场确认执行价"};
+    for (const kind of ["category","hourly"] as const) await expect(prices.change(supervisor,kind,category.priceId,input,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(prices.change(productionPrice,"hourly",PATTERN_HOURLY_PRICE_ID,input,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(prices.history(designer,category.priceId)).rejects.toMatchObject({statusCode:403});
+    await expect(prices.management(designer)).rejects.toMatchObject({statusCode:403});
+    await expect(database.query("SELECT pattern_room_authorized_price_roles($1,'pattern_room:hourly:write')",[ids.production])).rejects.toThrow();
+    await expect(database.query("SELECT pattern_room_authorized_price_roles($1,'pattern_room:prices:write')",[ids.patternSupervisor])).rejects.toThrow();
+    await expect(prices.change(productionPrice,"category",PATTERN_HOURLY_PRICE_ID,input,randomUUID())).rejects.toMatchObject({statusCode:404});
+    expect((await prices.management(manager)).hourly.amount).toBeNull();
+    const options = await prices.options(designer);
+    expect(options).toHaveLength(19);
+    expect(options.every(item => !Object.hasOwn(item,"amount") && !Object.hasOwn(item,"updatedBy"))).toBe(true);
+    expect((await prices.management(supervisor)).canWriteCategories).toBe(false);
+    const key = randomUUID();
+    const changed = await prices.change(productionPrice,"category",category.priceId,input,key);
+    expect(changed).toMatchObject({amount:"18.125",version:2});
+    expect(await prices.change(productionPrice,"category",category.priceId,input,key)).toEqual(changed);
+    await expect(prices.change(productionPrice,"category",category.priceId,{...input,amount:"20.000"},randomUUID())).rejects.toMatchObject({statusCode:409});
+    await prices.change(manager,"hourly",PATTERN_HOURLY_PRICE_ID,{...input,amount:"28.500"},randomUUID());
+    const migration = await readFile(new URL("../../apps/api/migrations/0175_pattern_room_prices.sql",import.meta.url),"utf8");
+    await database.query(migration.split("-- BEGIN REPEATABLE PRICE SEED")[1]!.split("-- END REPEATABLE PRICE SEED")[0]!.replace(/^:[^\n]*\n/,""));
+    expect((await prices.management(manager)).categories[0]).toMatchObject({amount:"18.125",version:2});
+    expect((await prices.management(manager)).hourly).toMatchObject({amount:"28.500",version:2});
+    const history = await prices.history(manager,category.priceId);
+    expect(history.map(row => row.amount)).toEqual(["18.125","15.000"]);
+    expect(history[0]).toMatchObject({oldAmount:"15.000",reason:input.reason,changedBy:"生产管理"});
+    const disabled = await prices.change(manager,"category",category.priceId,{...input,version:2,enabled:false},randomUUID());
+    expect(disabled.version).toBe(3);
+    expect(await prices.options(designer)).toHaveLength(18);
+    await expect(prices.quote(designer,"category",category.priceId)).rejects.toMatchObject({statusCode:404});
+    expect(await prices.history(manager,category.priceId)).toHaveLength(3);
+    await expect(database.query("DELETE FROM pattern_room_prices WHERE price_id=$1",[category.priceId])).rejects.toThrow();
+    await expect(database.query("UPDATE pattern_room_price_history SET amount=1 WHERE price_id=$1",[category.priceId])).rejects.toThrow();
   });
 
   it("carries one real order from N01 through N11 without losing cross-node facts", async () => {
@@ -1985,4 +2039,3 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     }]);
   });
 });
-

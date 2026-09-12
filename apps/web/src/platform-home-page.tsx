@@ -14,6 +14,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const moduleCopy = {
+  pattern_room: { title: "订单打板", description: "打板与杂事请求、板房价格管控" },
   finance: { title: "财务中心", description: "工资查询、导出与发放标记" },
   samples: { title: "样衣管理", description: "查看在管样衣、待确认事项、处置与库存金额" },
   production: { title: "实时生产看板", description: "查看生产订单，按负责范围上报生产、完成和发货" },
