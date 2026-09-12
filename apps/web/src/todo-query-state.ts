@@ -1,7 +1,7 @@
 import type { TodoModule } from "@dx-rework/contracts";
 
 export type TodoQueryState = { q: string; module?: TodoModule; page: number };
-const modules:readonly string[]=["rework","sourcing","production","samples","pattern_room"];
+const modules:readonly string[]=["rework","sourcing","production","samples","pattern_room","suppliers"];
 export function readTodoQuery(search:string):TodoQueryState {
  const query=new URLSearchParams(search),module=query.get("module"),page=Number(query.get("page")??1);
  return {q:(query.get("q")??"").slice(0,100),page:Number.isSafeInteger(page)&&page>0&&page<=100_000?page:1,

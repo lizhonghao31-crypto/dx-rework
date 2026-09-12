@@ -1,3 +1,4 @@
+import { SupplierOnboardingService } from "./access/supplier-onboarding-service.js";
 import { PatternRoomPriceService } from "./pattern-room/price-service.js";
 import { PatternRoomOrderService } from "./pattern-room/order-service.js";
 import {recordOperationDiagnostic} from "./platform/operation-diagnostics.js";
@@ -377,6 +378,7 @@ const app = buildApp({
     service: externalResponsibilityService,
     root: rootAuthority,
   },
+  supplierOnboarding: { authenticate: token => auth.authenticate(token), root: rootAuthority, service: new SupplierOnboardingService(database, todoService) },
   patternRoomPrices: { authenticate: (token) => auth.authenticate(token), service: new PatternRoomPriceService(database), root: rootAuthority },
   patternRoomOrders: { authenticate: (token) => auth.authenticate(token), service: patternOrders, attachments, root: rootAuthority },
   wages: {

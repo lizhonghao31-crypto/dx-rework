@@ -1314,7 +1314,7 @@ export class AccessMasterDataService {
     return this.transaction(client => this.createSupplierWithClient(client, actor, input));
   }
 
-  private async createSupplierWithClient(client: PoolClient, actor: TrustedActorContext, input: CreateSupplier) {
+  async createSupplierWithClient(client: PoolClient, actor: TrustedActorContext, input: CreateSupplier) {
       const supplierId = randomUUID();
       await client.query(
         "INSERT INTO supplier_catalog_items(supplier_id,supplier_code,supplier_type) VALUES($1,$2,$3)",
