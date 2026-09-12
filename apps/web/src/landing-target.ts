@@ -1,3 +1,4 @@
+import { canAccessFinance } from "./finance-access.js";
 import type { AuthorizedUser } from "./auth.js";
 
 const has = (user: AuthorizedUser, capability: string): boolean =>
@@ -75,7 +76,7 @@ export function landingTarget(user: AuthorizedUser): string | null {
 
   if (has(user, "own_factory:view")) return "ui/own-factory-approvals";
   if (has(user, "external_responsibility:view")) return "ui/external-responsibilities";
-  if (has(user, "wage:view")) return "ui/wages";
+  if (canAccessFinance(user)) return "ui/finance";
   if (has(user, "master_data:manage")) return "ui/master-data";
   if (has(user, "report:view")) return "ui/reports";
 

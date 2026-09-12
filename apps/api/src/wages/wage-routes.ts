@@ -1,3 +1,4 @@
+import { assertFinanceWageAccess, type WageAccessCapability } from "./wage-access.js";
 import {
   WageItemParamsSchema,
   WagePeriodParamsSchema,
@@ -34,9 +35,10 @@ export function registerWageRoutes(app: FastifyInstance, dependencies: WageHttpD
   const actingRole = (capability: string): string | undefined =>
     capability === "wage:export" ? "finance_read" : undefined;
 
-  const actor = async (request: FastifyRequest, capability: string): Promise<TrustedActorContext> => {
+  const actor = async (request: FastifyRequest, capability: WageAccessCapability): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(token(request));
     const trusted = await businessActor(dependencies.root, user, request.id, capability, actingRole(capability));
+    assertFinanceWageAccess(trusted, capability);
     if (capability === "wage:view" && await isRootUser(dependencies.root, user.id)) {
       return {
         ...trusted,

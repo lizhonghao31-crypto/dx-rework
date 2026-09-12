@@ -11,6 +11,7 @@ export const NAVIGATION_ROUTE_ICONS: Readonly<Record<string, IconName>> = {
   "/ui/tasks": "Wrench",
   "/ui/reports": "ChartColumn",
   "/ui/wages": "Wallet",
+  "/ui/finance": "Wallet",
   "/ui/sourcing/create": "FilePlus2",
   "/ui/sourcing/pending": "FileText",
   "/ui/sourcing/history": "History",

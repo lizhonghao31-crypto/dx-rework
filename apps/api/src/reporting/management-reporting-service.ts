@@ -1,3 +1,4 @@
+import { canAccessFinanceWages, requireFinanceWageAccess } from "../wages/wage-access.js";
 import { readFinanceNode } from "./finance-node-reader.js";
 import type { FinanceNodeKey } from "@dx-rework/contracts/reporting";
 import { readBasicRework } from "./basic-rework-reader.js";
@@ -246,11 +247,8 @@ export class ManagementReportingService {
 
   async report(actor: TrustedActorContext, reportType: ReportType, query: ReportQuery): Promise<ReportPreviewResponse> {
     this.validateReportStatus(reportType, query.status);
-    const currentCapabilities = capabilities(actor);
-    const requiredCapability = reportType === "wages" && currentCapabilities.includes("wage:view")
-      ? "wage:view"
-      : "report:view";
-    await this.require(actor, requiredCapability);
+    if (reportType === "wages") await requireFinanceWageAccess(this.db, actor, "wage:view");
+    else await this.require(actor, "report:view");
     const range = await this.range(query);
     const data = await reportData(this.db, reportType, query, range, query.limit + 1);
     const truncated = data.rows.length > query.limit;
@@ -276,7 +274,8 @@ export class ManagementReportingService {
     data: ReportData;
   }> {
     this.validateReportStatus(reportType, query.status);
-    await this.require(actor, reportType === "wages" ? "wage:export" : "report:export");
+    if (reportType === "wages") await requireFinanceWageAccess(this.db, actor, "wage:export");
+    else await this.require(actor, "report:export");
     const client = await this.db.connect();
     try {
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
@@ -294,12 +293,11 @@ export class ManagementReportingService {
   }
 
   private canSettleWages(actor: TrustedActorContext): boolean {
-    return actor.actorRoles.includes("root_superuser") || capabilities(actor).includes("wage:settlement_mark");
+    return canAccessFinanceWages(actor, "wage:settlement_mark");
   }
 
   private async requireSettlement(actor: TrustedActorContext): Promise<void> {
-    if (!this.canSettleWages(actor)) fail("当前账号无权标记工资结算");
-    await this.db.query("SELECT access_authorized_actor_roles($1,'wage:settlement_mark')",[actor.actorId]);
+    await requireFinanceWageAccess(this.db, actor, "wage:settlement_mark");
   }
 
   async previewWageSettlement(actor: TrustedActorContext, query: ReportQuery) {

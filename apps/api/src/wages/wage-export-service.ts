@@ -1,3 +1,4 @@
+import { requireFinanceWageAccess } from "./wage-access.js";
 import { businessCellValue, translateTechnicalDetails } from "@dx-rework/contracts/business-display";
 import type { Pool } from "pg";
 
@@ -71,7 +72,7 @@ export class WageExportService {
     const currentCapabilities = actor.authorizationCapabilities ?? [actor.authorizationCapability];
     if (!root && !currentCapabilities.includes("wage:view")) fail("缺少工资查看能力", 403, "FORBIDDEN");
     if (!root && !currentCapabilities.includes("wage:export")) fail("缺少工资导出能力", 403, "FORBIDDEN");
-    if (!root) await this.db.query("SELECT access_authorized_actor_roles($1,'wage:export')", [actor.actorId]);
+    await requireFinanceWageAccess(this.db, actor, "wage:export");
     const periodResult = await this.db.query<PeriodRow>(
       `SELECT period_month::text,status,original_total::text,locked_by,locked_at
        FROM rework_wage_periods

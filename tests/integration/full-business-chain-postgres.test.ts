@@ -222,8 +222,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     "external_deduction:special_approve",
   );
   const wageView = () => actor(
-    ids.tail,
-    ["tail_supervisor"],
+    ids.financeDirector,
+    ["finance_director"],
     "wage:view",
   );
   const monthCloseWage = () => actor(
@@ -1178,6 +1178,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     // The current natural month is intentionally not force-locked: the service
     // must reach ready_to_lock and then enforce the month-end barrier. The
     // historical-month lock itself remains covered by wage-workflow-postgres.
+    await expect(wages.list(actor(ids.tail,["tail_supervisor"],"wage:view"))).rejects.toMatchObject({statusCode:403});
+    await expect(database.query("SELECT finance_authorized_wage_roles($1,'wage:view')",[ids.tail])).rejects.toThrow();
     const periods = await wages.list(wageView());
     expect(periods).toHaveLength(1);
     const wagePeriod = periods[0]!;

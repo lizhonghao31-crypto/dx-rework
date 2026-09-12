@@ -1,3 +1,5 @@
+import { FinancePage } from "./finance-page.js";
+import { financePageRequirements } from "./finance-access.js";
 import { installInternalNavigation } from "./internal-navigation.js";
 import { ProductionDashboardPage } from "./production-dashboard-page.js";
 import { SampleWorkspacePage } from "./sample-workspace-page.js";
@@ -302,7 +304,8 @@ export function App() {
   else if (path === "/ui/responsibility") page = <ResponsibilityQueuePage />;
   else if (path === "/ui/own-factory-approvals") page = <OwnFactoryApprovalQueuePage />;
   else if (path === "/ui/external-responsibilities") page = <ExternalResponsibilityQueuePage />;
-  else if (path === "/ui/wages" || path.startsWith("/ui/wages/")) page = <Shell active="工资管理"><WagePage path={path} /></Shell>;
+  else if (path === "/ui/finance") page = <Shell active="财务中心"><FinancePage /></Shell>;
+  else if (path === "/ui/wages" || path.startsWith("/ui/wages/")) page = <Shell active="财务中心"><WagePage path={path} /></Shell>;
   else if (path === "/ui/tasks") page = <ReworkQueryPage />;
   else if (path === "/ui/reports") page = <ReportCenterPage />;
   else if (path.startsWith("/ui/tasks/")) page = <ReworkDetailPage />;
@@ -427,11 +430,8 @@ export function App() {
       { requiredCapability: "external_responsibility:view" },
     ]}>{page}</AuthGate>;
   }
-  if (path === "/ui/wages" || path.startsWith("/ui/wages/")) {
-    return <AuthGate requiredAnyOf={[
-      owner,
-      { requiredCapability: "wage:view" },
-    ]}>{page}</AuthGate>;
+  if (path === "/ui/finance" || path === "/ui/wages" || path.startsWith("/ui/wages/")) {
+    return <AuthGate requiredAnyOf={financePageRequirements}>{page}</AuthGate>;
   }
   if (path === "/ui/admin") {
     return <AuthGate requiredRole="system_admin" requiredCapability="admin:read">{page}</AuthGate>;

@@ -1,3 +1,4 @@
+import { assertFinanceWageAccess, type WageAccessCapability } from "../wages/wage-access.js";
 import {
   FinanceNodeParamsSchema, FinanceNodeReadSchema,
   BasicReworkPageSchema, BasicReworkQuerySchema,
@@ -46,7 +47,11 @@ export function registerManagementReportingRoutes(
 ): void {
   const actor = async (request: FastifyRequest, capability: string): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(token(request));
-    return businessActor(dependencies.root, user, request.id, capability);
+    const trusted = await businessActor(dependencies.root, user, request.id, capability);
+    if (["wage:view", "wage:export", "wage:settlement_mark"].includes(capability)) {
+      assertFinanceWageAccess(trusted, capability as WageAccessCapability);
+    }
+    return trusted;
   };
 
   app.get("/management/wages/settlement-preview", async (request,reply) => {
@@ -103,7 +108,7 @@ export function registerManagementReportingRoutes(
   app.get("/management/reports/:reportType", async (request) => {
     const { reportType } = parse(ReportTypeParamsSchema, request.params);
     return ReportPreviewResponseSchema.parse(await dependencies.service.report(
-      await actor(request, "report:view"),
+      await actor(request, reportType === "wages" ? "wage:view" : "report:view"),
       reportType,
       parse(ReportQuerySchema, request.query),
     ));

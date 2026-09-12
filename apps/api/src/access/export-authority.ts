@@ -1,3 +1,4 @@
+import { FINANCE_WAGE_ROLES } from "@dx-rework/contracts/finance-access";
 import { ApplicationError } from "../platform/errors.js";
 
 export const BUSINESS_EXPORT_ROLE_ALLOWLIST = [
@@ -6,11 +7,7 @@ export const BUSINESS_EXPORT_ROLE_ALLOWLIST = [
   "finance_director",
 ] as const;
 
-export const WAGE_DATA_EXPORT_ROLE_ALLOWLIST = [
-  "owner_group",
-  "finance_director",
-  "wage_month_close_accountant",
-] as const;
+export const WAGE_DATA_EXPORT_ROLE_ALLOWLIST = FINANCE_WAGE_ROLES;
 
 const hasAnyRole = (actorRoles: readonly string[], roles: readonly string[]): boolean =>
   roles.some((role) => actorRoles.includes(role));

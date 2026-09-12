@@ -1,3 +1,4 @@
+import { canAccessFinance } from "./finance-access.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { TodoCountIndicatorSchema } from "@dx-rework/contracts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -385,7 +386,7 @@ export function Shell({
   const reportAccess = isRoot || isOwner || hasCapability("report:view");
   const reworkBoardAccess = reportAccess || hasCapability("dashboard:site:read")
     || hasCapability("rework:related_orders:view") || hasCapability("rework:basic:view");
-  const wageAccess = isRoot || isOwner || hasCapability("wage:view");
+  const wageAccess = currentUser !== null && canAccessFinance(currentUser);
   const systemManagementAccess = isRoot
     || auditAccess
     || technicalAdminAccess
@@ -425,10 +426,10 @@ export function Shell({
     description: "查询返工、责任、工资与扣款报表",
     href: "/ui/reports",
   });
-  if (wageAccess) reworkNavigation.push({
-    name: "工资管理",
-    description: "核对工资、调整、月结和导出",
-    href: "/ui/wages",
+  if (wageAccess) globalNavigation.push({
+    name: "财务中心",
+    description: "工资查询、导出与发放标记",
+    href: "/ui/finance",
   });
 
   // Desktop-only sourcing navigation keeps the full create / pending / history workspace.

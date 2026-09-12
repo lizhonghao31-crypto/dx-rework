@@ -33,6 +33,7 @@ const url=process.env.TEST_DATABASE_URL;
    CREATE FUNCTION immutable_catalog() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'immutable'; END $$;
    CREATE TRIGGER capability_catalog_no_insert BEFORE INSERT ON capability_catalog FOR EACH ROW EXECUTE FUNCTION immutable_catalog();
    CREATE TRIGGER role_capabilities_no_insert BEFORE INSERT ON role_capabilities FOR EACH ROW EXECUTE FUNCTION immutable_catalog();
+   CREATE TRIGGER role_capabilities_no_delete BEFORE DELETE ON role_capabilities FOR EACH ROW EXECUTE FUNCTION immutable_catalog();
    CREATE TABLE app_users(id uuid PRIMARY KEY);
    CREATE TABLE test_grants(user_id uuid,capability text);
    CREATE FUNCTION access_authorized_actor_roles(target uuid,requested text) RETURNS text[] LANGUAGE plpgsql AS $$ BEGIN
@@ -49,6 +50,7 @@ const url=process.env.TEST_DATABASE_URL;
     person_id uuid,person_name_snapshot text,person_type_snapshot text,rework_no_snapshot text,style_no_snapshot text,process_name_snapshot text,
     quantity_snapshot numeric,unit_snapshot text,unit_price_snapshot numeric,assignment_mode text,final_amount numeric);`);
   await db.query(await readFile(new URL("../../apps/api/migrations/0171_wage_settlement_marks.sql",import.meta.url),"utf8"));
+  await db.query(await readFile(new URL("../../apps/api/migrations/0174_finance_wage_access.sql",import.meta.url),"utf8"));
   for(const id of [finance,viewer,other]){await db.query("INSERT INTO app_users VALUES($1)",[id]);await db.query("INSERT INTO test_grants VALUES($1,'wage:view')",[id]);}
   await db.query("INSERT INTO test_grants VALUES($1,'wage:settlement_mark'),($1,'wage:export')",[finance]);
   firstId=await insertLine(person,"internal","2026-09-10T16:00:00Z");

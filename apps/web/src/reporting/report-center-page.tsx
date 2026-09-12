@@ -1,3 +1,5 @@
+import { canAccessFinance } from "../finance-access.js";
+import { verifySession } from "../auth.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { ReportTypeSchema, type ReportPreviewResponse, type ReportType } from "@dx-rework/contracts/reporting";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
@@ -22,6 +24,8 @@ type State={kind:"loading"}|{kind:"ready";value:ReportPreviewResponse}|{kind:"un
 const snapshotBusinessValue = businessValue;
 
 export function ReportCenterPage(){
+  const [wageAccess,setWageAccess]=useState<boolean|null>(null);
+  useEffect(()=>{let mounted=true;void verifySession().then(session=>{if(mounted)setWageAccess(session!=="denied"&&session.status==="authorized"&&canAccessFinance(session.user));});return()=>{mounted=false;};},[]);
   const initial=useMemo(()=>new URLSearchParams(window.location.search),[]);
   const parsed=ReportTypeSchema.safeParse(initial.get("type"));
   const [type,setType]=useState<ReportType>(parsed.success?parsed.data:"rework_overview");
@@ -31,12 +35,12 @@ export function ReportCenterPage(){
   const [status,setStatus]=useState(initial.get("status")??"");
   const [state,setState]=useState<State>({kind:"loading"});
   const filters=useMemo(()=>({from,to,q:q.trim()||undefined,status:status||undefined,limit:"100"}),[from,to,q,status]);
-  useEffect(()=>{const controller=new AbortController();setState({kind:"loading"});void loadReport(type,filters,controller.signal).then(value=>setState({kind:"ready",value})).catch((error:unknown)=>{if(!(error instanceof DOMException&&error.name==="AbortError"))setState({kind:"unavailable",message:error instanceof Error?error.message:"报表加载失败"});});return()=>controller.abort();},[type,filters]);
+  useEffect(()=>{if(type==="wages"){if(wageAccess===null)return;if(!wageAccess){setState({kind:"unavailable",message:"当前账号无权查看工资明细"});return;}}const controller=new AbortController();setState({kind:"loading"});void loadReport(type,filters,controller.signal).then(value=>setState({kind:"ready",value})).catch((error:unknown)=>{if(!(error instanceof DOMException&&error.name==="AbortError"))setState({kind:"unavailable",message:error instanceof Error?error.message:"报表加载失败"});});return()=>controller.abort();},[type,filters,wageAccess]);
   const value=state.kind==="ready"?state.value:null;
   const page=usePaginatedItems(value?.rows??[], `${type}:${from}:${to}:${q}:${status}`);
   return <Shell active="财务报表"><Header title="财务报表" subtitle="查询返工、工资、责任和扣款明细" badge={value?`${formatBusinessDecimal(value.rowCount)} 行 · ${value.range.from} 至 ${value.range.to}`:"查询中"} />
     <Surface className="reporting-filters report-center-filters">
-      <label>报表<select value={type} onChange={event=>{setType(ReportTypeSchema.parse(event.target.value));setStatus("");}}>{ReportTypeSchema.options.map(item=><option value={item} key={item}>{names[item]}</option>)}</select></label>
+      <label>报表<select value={type} onChange={event=>{setType(ReportTypeSchema.parse(event.target.value));setStatus("");}}>{ReportTypeSchema.options.filter(item=>item!=="wages"||wageAccess===true).map(item=><option value={item} key={item}>{names[item]}</option>)}</select></label>
       <label>开始日期<input type="date" value={from} onChange={event=>setFrom(event.target.value)} /></label>
       <label>结束日期<input type="date" value={to} onChange={event=>setTo(event.target.value)} /></label>
       <label>状态/类型<select value={status} onChange={event=>setStatus(event.target.value)}>{statuses[type].map(([item,label])=><option value={item} key={item}>{label}</option>)}</select></label>

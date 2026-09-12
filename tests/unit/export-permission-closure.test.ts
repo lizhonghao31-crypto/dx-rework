@@ -21,10 +21,10 @@ describe("global export permission closure", () => {
       expectDenied(() => assertBusinessExportAllowed([role], "receiving:export"));
     }
 
-    for (const role of ["root_superuser", "owner_group", "finance_director", "wage_month_close_accountant"]) {
+    for (const role of ["root_superuser", "owner_group", "production_management", "finance_director", "wage_month_close_accountant", "finance_read"]) {
       expectAllowed(() => assertWageDataExportAllowed([role]));
     }
-    for (const role of ["production_management", "finance_read", "administrative_clerk", "tail_supervisor", "worker"]) {
+    for (const role of ["administrative_clerk", "tail_supervisor", "worker", "sample_designer"]) {
       expectDenied(() => assertWageDataExportAllowed([role]));
     }
   });
