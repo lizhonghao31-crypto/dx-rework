@@ -8,14 +8,19 @@ import { createClientRequestId } from "./client-request-id.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import { PatternOrderForm } from "./pattern-order-form.js";
 import { elapsedText, patternRequest, patternTime, patternUrls } from "./pattern-order-client.js";
+import { patternListPath, patternReturnPath, readPatternListQuery } from "./pattern-order-query.js";
 import "./pattern-room.css";
 
 const { apiUrl, pageUrl } = patternUrls;
 export function PatternRoomOrdersPage() {
+  const [initial] = useState(() => readPatternListQuery(window.location.search));
   const [data, setData] = useState<z.infer<typeof PatternOrderListSchema> | null>(null), [error, setError] = useState("");
-  const [q, setQ] = useState(""), [status, setStatus] = useState(""), [creatorId, setCreatorId] = useState(""), [workerId, setWorkerId] = useState(""), [page, setPage] = useState(1);
+  const [q, setQ] = useState(initial.q), [status, setStatus] = useState(initial.status), [creatorId, setCreatorId] = useState(initial.creatorId), [workerId, setWorkerId] = useState(initial.workerId), [page, setPage] = useState(initial.page);
   const [people, setPeople] = useState<z.infer<typeof PatternPeopleFiltersSchema> | null>(null), [creating, setCreating] = useState(false), [refresh, setRefresh] = useState(0), [loading, setLoading] = useState(true);
   const search = useDebouncedValue(q.trim(), 250);
+  const listPath = patternListPath({ q: search, status, creatorId, workerId, page });
+  const detailHref = (id: string) => `${pageUrl(`ui/pattern-room/orders/${id}`)}?${new URLSearchParams({ returnTo: listPath })}`;
+  useEffect(() => { window.history.replaceState(null, "", pageUrl(listPath)); }, [listPath]);
   useEffect(() => {
     const abort = new AbortController(); setLoading(true); setError("");
     const params = new URLSearchParams({ page: String(page), q: search });
@@ -31,7 +36,7 @@ export function PatternRoomOrdersPage() {
   }, [data?.canFilterPeople, refresh]);
   return <div className="pattern-orders"><Header title="创建订单" badge="订单打板" badgePlacement="subtitle" />
     {error ? <Surface><p role="alert">{error}</p><Button onClick={() => setRefresh(value => value + 1)}>重新读取</Button></Surface> : null}
-    {creating ? <PatternOrderForm onCancel={() => setCreating(false)} onSaved={order => { window.location.assign(pageUrl(`ui/pattern-room/orders/${order.orderId}`)); }} /> : null}
+    {creating ? <PatternOrderForm onCancel={() => setCreating(false)} onSaved={order => { window.location.assign(detailHref(order.orderId)); }} /> : null}
     {data ? <Surface>
       <div className="pattern-actions"><h2>板房订单</h2>{data.canCreate && !creating ? <Button variant="primary" onClick={() => setCreating(true)}>新建打板</Button> : null}</div>
       <div className="pattern-fields"><InsetField label="搜索款号或订单号" value={q} onChange={e => { setQ(e.target.value); setPage(1); }} />
@@ -40,7 +45,7 @@ export function PatternRoomOrdersPage() {
           <label>执行工人<select value={workerId} onChange={e => { setWorkerId(e.target.value); setPage(1); }}><option value="">全部工人</option>{people.workers.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label></> : null}
       </div>
       <div className="pattern-price-table" aria-busy={loading}><table><thead><tr><th>订单 / 本次款号</th><th>状态</th><th>创建人</th><th>当前工人</th><th>要求完成</th><th>返工</th><th>提交时间</th></tr></thead><tbody>
-        {data.items.map(order => <tr key={order.orderId}><th scope="row"><a href={pageUrl(`ui/pattern-room/orders/${order.orderId}`)}>{order.orderNo}</a><small>{order.styleNo}</small></th><td>{PATTERN_ORDER_STATUS_LABELS[order.status]}</td><td>{order.creatorName}</td><td>{order.currentWorkerName ?? "待分配"}</td><td>{order.requiredDate ?? "—"}</td><td>{order.reworkCount} 次</td><td>{patternTime(order.submittedAt)}</td></tr>)}
+        {data.items.map(order => <tr key={order.orderId}><th scope="row"><a href={detailHref(order.orderId)}>{order.orderNo}</a><small>{order.styleNo}</small></th><td>{PATTERN_ORDER_STATUS_LABELS[order.status]}</td><td>{order.creatorName}</td><td>{order.currentWorkerName ?? "待分配"}</td><td>{order.requiredDate ?? "—"}</td><td>{order.reworkCount} 次</td><td>{patternTime(order.submittedAt)}</td></tr>)}
       </tbody></table></div>
       {!data.items.length ? <p>没有符合条件的订单。</p> : null}
       <div className="pattern-actions"><span>共 {data.totalCount} 单 · 第 {data.page} / {data.totalPages} 页</span><Button disabled={loading || page <= 1} onClick={() => setPage(value => value - 1)}>上一页</Button><Button disabled={loading || page >= data.totalPages} onClick={() => setPage(value => value + 1)}>下一页</Button></div>
@@ -78,7 +83,7 @@ export function PatternRoomOrderDetailPage({ orderId }: { orderId: string }) {
   };
   const visibleRounds = staleRound ? order?.rounds.filter(round => round.roundId === requestedRound) ?? [] : order?.rounds ?? [];
   return <div className="pattern-orders"><Header title={order?.styleNo ?? "板房订单"} badge={order?.orderNo ?? "订单打板"} badgePlacement="subtitle" />
-    <div className="pattern-actions"><a href={pageUrl("ui/pattern-room/create")}>返回创建订单</a><Button disabled={busy || editing} onClick={() => setRefresh(value => value + 1)}>刷新订单</Button></div>
+    <div className="pattern-actions"><a href={pageUrl(patternReturnPath(window.location.search))}>返回列表</a><Button disabled={busy || editing} onClick={() => setRefresh(value => value + 1)}>刷新订单</Button></div>
     {error ? <Surface><p role="alert">{error}</p><Button disabled={busy} onClick={() => { setEditing(false); setRefresh(value => value + 1); }}>重新读取订单</Button></Surface> : null}
     {!order && !error ? <p role="status">正在读取订单…</p> : null}
     {order ? <>

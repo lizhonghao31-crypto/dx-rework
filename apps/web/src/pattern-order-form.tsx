@@ -6,6 +6,7 @@ import { CreatePatternOrderSchema, UpdatePatternMaterialsSchema, PatternOrderDet
 import { PatternCategoryOptionsSchema, PatternPriceQuoteSchema } from "@dx-rework/contracts/pattern-room";
 import { createClientRequestId } from "./client-request-id.js";
 import { patternRequest, PatternRequestError, uploadPatternOriginal } from "./pattern-order-client.js";
+import { patternEstimate } from "./pattern-order-query.js";
 
 export function PatternOrderForm({ order, onSaved, onCancel }: { order?: PatternOrderDetail; onSaved(order: PatternOrderDetail): void; onCancel(): void }) {
   const [values, setValues] = useState({ styleNo: order?.styleNo ?? "", requiredDate: order?.requiredDate ?? "", customer: order?.customer ?? "", sizeColor: order?.sizeColor ?? "", referenceStyleNo: order?.referenceStyleNo ?? "", variant: order?.variant ?? "", note: order?.note ?? "", reason: "" });
@@ -56,12 +57,13 @@ export function PatternOrderForm({ order, onSaved, onCancel }: { order?: Pattern
     } finally { setBusy(false); }
   };
   const disabled = busy || uploading;
+  const estimated = patternEstimate(quote?.amount ?? null, quantity);
   return <Surface><form className="pattern-order-form" onSubmit={event => void submit(event)}><h2>{order ? "更新制作资料" : "新建打板"}</h2>
     <div className="pattern-fields">
       <InsetField label="本次款号（必填）" value={values.styleNo} required maxLength={100} onChange={e => setValues({ ...values, styleNo: e.target.value })} disabled={disabled} />
       {!order ? <><label>品类（必填）<select required value={categoryId} onChange={e => setCategoryId(e.target.value)} disabled={disabled}><option value="">请选择品类</option>{categories.map(category => <option key={category.priceId} value={category.priceId}>{category.name}（{category.unit}）</option>)}</select></label>
         <InsetField label="数量（必填）" type="number" min={1} max={1_000_000} step={1} required value={quantity} onChange={e => setQuantity(e.target.value)} disabled={disabled} />
-        <p>执行价：{quote?.amount ? `${formatBusinessDecimal(quote.amount)} 元/${quote.unit}` : "选择品类后显示"}</p></> : null}
+        <p>执行价：{quote?.amount ? `${formatBusinessDecimal(quote.amount)} 元/${quote.unit}` : "选择品类后显示"}<br />预计金额：{estimated !== null ? `${formatBusinessDecimal(estimated)} 元` : "填写品类与数量后显示"}</p></> : null}
       <InsetField label="要求完成日期" type="date" value={values.requiredDate} onChange={e => setValues({ ...values, requiredDate: e.target.value })} disabled={disabled} />
       <InsetField label="客户" value={values.customer} maxLength={100} onChange={e => setValues({ ...values, customer: e.target.value })} disabled={disabled} />
       <InsetField label="尺码与颜色" value={values.sizeColor} maxLength={200} onChange={e => setValues({ ...values, sizeColor: e.target.value })} disabled={disabled} />
