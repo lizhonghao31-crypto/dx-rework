@@ -1,3 +1,4 @@
+import { SupplierOnboardingPage } from "./supplier-onboarding-page.js";
 import { PatternRoomOrdersPage, PatternRoomOrderDetailPage } from "./pattern-room-orders-page.js";
 import { PatternRoomPage } from "./pattern-room-page.js";
 import { PatternRoomPricesPage } from "./pattern-room-prices-page.js";
@@ -286,6 +287,8 @@ export function App() {
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
   else if (path === "/ui/production-dashboard" || /^\/ui\/production-dashboard\/[0-9a-f-]+$/i.test(path)) page = <ProductionDashboardPage productionOrderId={path.split("/")[3]} />;
   else if (path === "/ui/production-reporting" || /^\/ui\/production-reporting\/[0-9a-f-]+$/i.test(path)) page = <ProductionReportingPage productionOrderId={path.split("/")[3]} />;
+  else if (path === "/ui/suppliers/requests") page = <SupplierOnboardingPage key="requests" />;
+  else if (/^\/ui\/suppliers\/requests\/(new|[0-9a-f-]{36})$/i.test(path)) page = <SupplierOnboardingPage key={path} requestId={path.split("/")[4]!} />;
   else if (path === "/ui/suppliers") page = <SupplierDirectoryPage />;
   else if (path === "/ui/suppliers/manage") page = <SupplierMaintenancePage />;
   else if (path === "/ui/master-data") {

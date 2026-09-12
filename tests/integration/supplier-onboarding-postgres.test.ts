@@ -25,6 +25,8 @@ const profile = (name: string) => {
       await expect(service.decide(applicant, id, "approved", { version: 1 }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
       for (const role of ["owner_group", "production_management", "root_superuser", "system_admin", "ie_reviewer"]) await expect(service.submit(f.actors[role]!, profile(role), randomUUID())).rejects.toMatchObject({ statusCode: 403 });
       expect((await service.get(applicant, id)).profile.bankAccount).toBe("001234567890");
+      expect((await service.get(applicant, id)).duplicateCheck).toBeUndefined();
+      expect((await service.get(reviewer, id)).duplicateCheck).toMatchObject({ formalSupplierCount: 0, pendingRequestCount: 0 });
       expect((await f.db.query("SELECT 1 FROM role_capabilities WHERE role_code='embroidery_washing_merchandiser' AND capability='supplier_contract_data:read'")).rows).toHaveLength(0);
       expect((await f.db.query("SELECT 1 FROM current_supplier_catalog WHERE supplier_name='版本申请'")).rows).toHaveLength(0);
       expect((await f.db.query("SELECT 1 FROM rework_todos WHERE entity_id=$1 AND status='pending'", [id])).rows).toHaveLength(2);
@@ -60,7 +62,8 @@ const profile = (name: string) => {
     try {
       const applicant = f.actors.order_merchandiser!, reviewer = f.actors.owner_group!;
       const first = (await service.submit(applicant, profile("期间直接新增"), randomUUID())).response.requestId;
-      await f.service.createSupplier(reviewer, supplierInput("期间直接新增"));
+      await f.service.createSupplier(reviewer, { ...supplierInput("期间直接新增"), active: false });
+      expect((await service.get(reviewer, first)).duplicateCheck).toMatchObject({ formalSupplierCount: 1, pendingRequestCount: 0 });
       await expect(service.decide(reviewer, first, "approved", { version: 1 }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
       expect((await service.get(applicant, first)).status).toBe("pending_approval");
       const second = (await service.submit(applicant, profile("事务回滚"), randomUUID())).response.requestId;
