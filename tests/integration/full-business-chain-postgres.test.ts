@@ -1924,6 +1924,41 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect((await database.query("SELECT count(*)::int count FROM pattern_room_wage_items")).rows[0].count).toBe(rows.length);
   });
 
+  it("backfills the same release snapshots as live materialization after later misc cancellation", async () => {
+    const service = new PatternRoomOrderService(database, todoProjection);
+    const merchant = patternActor(ids.merchandiser, ["order_merchandiser"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]);
+    const price = (await new PatternRoomPriceService(database).management(actor(ids.patternRoot, ["root_superuser"], "pattern_room:prices:read"))).hourly;
+    const created = await service.createMisc(merchant, { taskName: "MISC-完工后补工时取消", priceVersion: price.version }, randomUUID());
+    const assigned = await service.assign(supervisor, created.orderId, { ...roundAction(created), personId: workerPersonId }, randomUUID());
+    const complete = await service.complete(patternActor(ids.worker, ["worker"]), created.orderId, roundAction(assigned), randomUUID());
+    await service.cancel(supervisor, created.orderId, { ...roundAction(complete), segmentId: complete.rounds[0]!.segments[0]!.segmentId, hours: "0.2", reason: "取消时才核定实际工时" }, randomUUID());
+    const releaseColumns = "segment_id,payable_amount::text,period_month::text,release_basis,cancellation";
+    const expected = (await database.query(`SELECT ${releaseColumns} FROM pattern_room_wage_items ORDER BY segment_id`)).rows;
+    const oldMarks = (await database.query("SELECT line_id,wage_item_id,closure_line_id,marked_by,marked_at FROM rework_wage_settlement_marks WHERE pattern_wage_item_id IS NULL ORDER BY line_id")).rows;
+    const historySchema = `pattern_backfill_${randomUUID().replaceAll("-", "")}`;
+    await adminPool.query(`CREATE SCHEMA ${historySchema}`);
+    const history = new Pool({ connectionString: databaseUrl!, options: `-c search_path=${historySchema}` });
+    try {
+      // Copy genuine workflow sources, but no 0179 ledger/triggers, into an isolated pre-migration snapshot.
+      for (const table of ["app_users", "business_people", "pattern_room_orders", "pattern_room_rounds", "pattern_room_segments", "rework_wage_items", "rework_wage_month_close_lines"]) {
+        await history.query(`CREATE TABLE ${table} (LIKE ${schema}.${table} INCLUDING ALL)`);
+        await history.query(`INSERT INTO ${table} SELECT * FROM ${schema}.${table}`);
+      }
+      await history.query("CREATE FUNCTION reject_operation_event_mutation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'immutable'; END $$");
+      const marksMigration = await readFile(new URL("../../apps/api/migrations/0171_wage_settlement_marks.sql", import.meta.url), "utf8");
+      await history.query(marksMigration.slice(marksMigration.indexOf("CREATE TABLE rework_wage_settlement_marks")));
+      await history.query(`INSERT INTO rework_wage_settlement_marks SELECT line_id,wage_item_id,closure_line_id,marked_by,marked_at FROM ${schema}.rework_wage_settlement_marks WHERE pattern_wage_item_id IS NULL`);
+      await history.query(await readFile(new URL("../../apps/api/migrations/0179_pattern_room_unified_wages.sql", import.meta.url), "utf8"));
+      expect((await history.query(`SELECT ${releaseColumns} FROM pattern_room_wage_items ORDER BY segment_id`)).rows).toEqual(expected);
+      expect((await history.query("SELECT release_basis,cancellation FROM pattern_room_wage_items WHERE task_name='MISC-分段实际工时'")).rows).toEqual([{release_basis:"misc_complete",cancellation:false},{release_basis:"misc_complete",cancellation:false}]);
+      expect((await history.query("SELECT release_basis,cancellation FROM pattern_room_wage_items WHERE task_name='MISC-完工后补工时取消'")).rows).toEqual([{release_basis:"misc_stop",cancellation:true}]);
+      expect((await history.query("SELECT line_id,wage_item_id,closure_line_id,marked_by,marked_at FROM rework_wage_settlement_marks ORDER BY line_id")).rows).toEqual(oldMarks);
+      const exported = await new ReportExportService(new ManagementReportingService(database), database, "pr06-backfill-verification").export(financeWages(), "wages", {...allWageDates,wageSource:"order_rework"});
+      const xml = exported.content.toString("utf8"), sheet = [...xml.matchAll(/<worksheet[\s\S]*?<\/worksheet>/g)][1]![0];
+      expect(xml).toContain('formatCode="#,##0.###"'); expect(sheet).toContain('s="4" t="n"');
+    } finally { await history.end(); await adminPool.query(`DROP SCHEMA ${historySchema} CASCADE`); }
+  });
+
   it("opens ordinary work with 501 exact wage IDs, real-person grouping, cross-month release and late unpaid rework", async () => {
     // Isolated scale fixture: real create/assign/complete/handoff; 500 historical segments are synthesized below.
     // It validates a large release and financial scope, not 501 claimed UI orders or production records.

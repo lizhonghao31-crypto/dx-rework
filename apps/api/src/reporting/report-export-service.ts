@@ -38,7 +38,7 @@ const sheetRows = (
 ): WorkbookCell[][] => [
   columns.map((column) => column.label),
   ...rows.map((row) => columns.map((column) =>
-    row.wageSource === "pattern_room" && ["unitPrice","sourceAmount","roundAmount","actualHours"].includes(column.key) && row[column.key] != null
+    ["order_rework","pattern_room"].includes(String(row.wageSource)) && ["unitPrice","sourceAmount","roundAmount","actualHours"].includes(column.key) && row[column.key] != null
       ? workbookNumberCell(String(row[column.key]),"business3") : exportCell(column.key, row[column.key] ?? null))),
 ];
 

@@ -11,9 +11,9 @@
 | 首次打板与原文件 | [#472](https://github.com/lizhonghao31-crypto/dx-rework/pull/472) | 1fb63e813ca9ee534c6b167fac22675a04a87bd1 | 34674592033 / 103502056050 成功 | 待办入口、Root 关闭期通知两个 P1 修复并解决 |
 | 杂事与实际工时 | [#473](https://github.com/lizhonghao31-crypto/dx-rework/pull/473) | 6700f3a86a0b5f30ee6e5f3825d1ffdcb69255f8 | 34676755170 / 103507859703 成功 | 创建人角色切换 P2 修复并解决 |
 | 返工、换人、取消 | [#474](https://github.com/lizhonghao31-crypto/dx-rework/pull/474) | effaacc3a58f76fc0805fe5ce5e1f37cd2618f42 | 34678414967 / 103512334268 成功 | 未发现重大问题 |
-| 唯一工资接入与开放 | 本文所属 PR06 | 以本 PR 合并记录为准 | 本 PR 时间线记录最终 Head 和 Full Gate | 门禁后唯一一次审查，发现项由助手修复 |
+| 唯一工资接入与开放 | [#475](https://github.com/lizhonghao31-crypto/dx-rework/pull/475) | 以本 PR 合并记录为准 | 本 PR 时间线记录最终 Head 和 Full Gate | 唯一 Review 的回填取消标记 P2 已修复；最终门禁见收口评论 |
 
-PR06 文档写入发生在远端门禁前，不能预写不存在的合并 SHA。其最终 SHA、门禁和 Review 收口评论是本交付记录的补充。所有 PR 均为 FULL，Quick Gate 跳过；无连续小 push 调试或工作流改动。原迁移未被改写，0174–0179 顺序追加。
+PR06 文档随 PR 的提交写入，不能预写不存在的合并 SHA。其最终 SHA、门禁和 Review 收口评论是本交付记录的补充。所有 PR 均为 FULL，Quick Gate 跳过；无连续小 push 调试或工作流改动。原迁移未被改写，0174–0179 顺序追加。
 
 ## 已实现的业务闭环
 
@@ -43,13 +43,14 @@ PR06 文档写入发生在远端门禁前，不能预写不存在的合并 SHA�
 
 ## 本地验证与测试数据
 
-- 整套 Vitest：310 files / 1485 tests passed，42 files / 243 tests skipped；未配置真实 PostgreSQL 的用例不会被冒充通过。
-- 当前 schema PGlite 完整业务链：19/19 通过。包括旧 N01–N11、已计薪事实不可修改、多轮分币、所有财务角色真实 HTTP、501 条及跨月后补、同名人员分开、旧工资/标记不变。
+- 首轮整套 Vitest：310 files / 1485 tests passed，42 files / 243 tests skipped；未配置真实 PostgreSQL 的用例不会被冒充通过。
+- 当前 schema PGlite 完整业务链：20/20 通过。包括旧 N01–N11、已计薪事实不可修改、多轮分币、所有财务角色真实 HTTP、501 条及跨月后补、同名人员分开、旧工资/标记不变。
+- Review 修复后补充真实业务源记录的 pre-0179 隔离快照迁移，逐段对比实时物化与回填的工资金额、月份、释放依据、取消标记；先计薪后取消保留普通完工工资，取消时补齐工时则保持取消计薪。旧工资单价页面/导出统一三位显示格式，原值不变。
 - 旧工资专用 PGlite 回归：3/3，包含 502 条旧明细、历史月结、边界日期、固定 ID 与并发重试语义。
 - 原分批结清 100,001 条与失败中止用例通过；本地构建、类型检查、lint、迁移 checksum、secret scan 的收口状态见本 PR 证据。
 - PGlite 单连接适配器串行化查询，不能证明真实 PostgreSQL 连接并发。最终 Full Gate 在真实 PostgreSQL 16 验证迁移、Root 和完整业务链的并发场景、备份恢复与发布包。
 
-实际隔离测试 schema、17 个板房订单 ID/编号/类型/状态及成功清理结果保存于 `docs/evidence/pattern-room-pr06-test-fixtures.json`。规模场景原单 `b292b891-5970-4f50-b236-e72f4d24a108` 的 500 个历史段为合成数据，随后走真实完工/交接，不能说成进行了 501 次 UI 录入。该 schema 已整体删除。没有生产测试订单或 OSS 文件需要清理；测试附件仅为隔离元数据，不上传真实 OSS。
+实际隔离测试 schema、18 个板房订单 ID/编号/类型/状态及成功清理结果保存于 `docs/evidence/pattern-room-pr06-test-fixtures.json`。规模场景原单 `fbee7fdc-294e-47aa-9fb7-a7e2214a922f` 的 500 个历史段为合成数据，随后走真实完工/交接，不能说成进行了 501 次 UI 录入。该 schema 已整体删除，回填验证另外创建的隔离快照 schema 也在 finally 中删除。没有生产测试订单或 OSS 文件需要清理；测试附件仅为隔离元数据，不上传真实 OSS。
 
 ## 部署、现场验收与恢复
 

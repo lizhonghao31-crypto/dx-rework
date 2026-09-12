@@ -35,18 +35,21 @@ CREATE TRIGGER pattern_room_wages_insert_guard BEFORE INSERT ON pattern_room_wag
  FOR EACH ROW EXECUTE FUNCTION guard_pattern_wage_insert();
 
 CREATE FUNCTION materialize_pattern_round_wages(target_round uuid) RETURNS void LANGUAGE plpgsql AS $$
-DECLARE r pattern_room_rounds%ROWTYPE; o pattern_room_orders%ROWTYPE; basis text; total numeric; expected numeric; prior_action text;
+DECLARE r pattern_room_rounds%ROWTYPE; o pattern_room_orders%ROWTYPE; basis text; total numeric; expected numeric; prior_action text; first_release_at timestamptz; cancelled_for_release boolean;
 BEGIN
  SELECT * INTO STRICT r FROM pattern_room_rounds WHERE round_id=target_round FOR UPDATE;
  SELECT * INTO STRICT o FROM pattern_room_orders WHERE order_id=r.order_id;
- IF NOT EXISTS(SELECT 1 FROM pattern_room_segments WHERE round_id=target_round AND wage_eligible_at IS NOT NULL) THEN RETURN; END IF;
+ SELECT min(wage_eligible_at) INTO first_release_at FROM pattern_room_segments WHERE round_id=target_round;
+ IF first_release_at IS NULL THEN RETURN; END IF;
+ -- A later cancellation must not relabel wages already released, including migration backfills.
+ cancelled_for_release:=r.cancelled_at IS NOT NULL AND r.cancelled_at<=first_release_at;
  IF o.kind='pattern' AND r.handed_over_at IS NOT NULL AND r.completed_at IS NOT NULL THEN
    basis:='pattern_handoff'; expected:=r.agreed_amount;
  ELSIF o.kind='pattern' AND r.cancelled_at IS NOT NULL AND r.fee_confirmed_at IS NOT NULL THEN
    basis:='pattern_cancel_fees'; expected:=r.cancelled_amount;
  ELSIF o.kind='misc' AND r.hours_confirmed_at IS NOT NULL AND r.actual_hours IS NOT NULL
    AND (r.completed_at IS NOT NULL OR r.stopped_at IS NOT NULL) THEN
-   basis:=CASE WHEN r.completed_at IS NOT NULL THEN 'misc_complete' ELSE 'misc_stop' END;
+   basis:=CASE WHEN cancelled_for_release OR r.completed_at IS NULL THEN 'misc_stop' ELSE 'misc_complete' END;
    expected:=r.agreed_amount;
  ELSE RAISE EXCEPTION 'pattern wage release basis is incomplete' USING ERRCODE='23514';
  END IF;
@@ -75,7 +78,7 @@ BEGIN
    o.order_no,o.style_no,o.task_name,r.category_name,r.round_index,segment_index,r.unit,r.unit_price,r.quantity,actual_hours,
    amount,expected,payable,COALESCE(worker_completed_at,ended_at),
    date_trunc('month',COALESCE(worker_completed_at,ended_at) AT TIME ZONE 'Asia/Shanghai')::date,
-   wage_eligible_at,basis,r.cancelled_at IS NOT NULL
+   wage_eligible_at,basis,(basis='pattern_cancel_fees' OR (o.kind='misc' AND cancelled_for_release))
  FROM allocated WHERE payable>0 AND wage_eligible_at IS NOT NULL
  ON CONFLICT(segment_id) DO NOTHING;
  PERFORM set_config('dx_rework.pattern_wage_action',COALESCE(prior_action,''),true);

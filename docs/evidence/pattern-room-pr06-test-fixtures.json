@@ -1,19 +1,19 @@
 {
   "environment": "isolated local PGlite current-schema verification; not production",
-  "fullChainTests": 19,
-  "passed": 19,
-  "schema": "full_chain_0a8ed64212904b4190b3758d85c3dffd",
+  "fullChainTests": 20,
+  "passed": 20,
+  "schema": "full_chain_144293bde1de4f8aaf11e35ad8b09ec3",
   "orders": [
     {
-      "order_id": "b292b891-5970-4f50-b236-e72f4d24a108",
-      "order_no": "BF-20260912-19",
+      "order_id": "fbee7fdc-294e-47aa-9fb7-a7e2214a922f",
+      "order_no": "BF-20260912-20",
       "kind": "pattern",
       "style_no": "PR06-SCALE-MONTH",
       "task_name": null,
       "status": "completed"
     },
     {
-      "order_id": "49942f16-f53d-4f5e-81d8-ab9f04220477",
+      "order_id": "2441692d-74f9-4562-8fba-23a6c21eb553",
       "order_no": "BF-20260912-1",
       "kind": "pattern",
       "style_no": "PATTERN-本次款号",
@@ -21,7 +21,7 @@
       "status": "completed"
     },
     {
-      "order_id": "e9d9592a-7662-482f-a676-878ae5756e9f",
+      "order_id": "433153fe-c2e6-4991-bd14-feea33daf7b4",
       "order_no": "BF-20260912-4",
       "kind": "pattern",
       "style_no": "ROOT-PATTERN",
@@ -29,7 +29,7 @@
       "status": "cancelled"
     },
     {
-      "order_id": "66c086c4-3d42-402d-a3d0-813c61f928a3",
+      "order_id": "53b66c9e-35a7-4919-8866-a099e80c07fa",
       "order_no": "BF-20260912-5",
       "kind": "misc",
       "style_no": "可选关联款号",
@@ -37,7 +37,7 @@
       "status": "completed"
     },
     {
-      "order_id": "9f2743e6-6d8d-445b-a122-49720d862d03",
+      "order_id": "977a3b56-916b-41dc-8067-c01a58589c1b",
       "order_no": "BF-20260912-6",
       "kind": "misc",
       "style_no": "",
@@ -45,7 +45,7 @@
       "status": "completed"
     },
     {
-      "order_id": "69c0d788-cbbb-4e87-b794-6c857332581c",
+      "order_id": "6734ef45-19f3-4c27-b988-3b9fb8a7e665",
       "order_no": "BF-20260912-7",
       "kind": "misc",
       "style_no": "",
@@ -53,7 +53,7 @@
       "status": "completed"
     },
     {
-      "order_id": "1c8c905d-8ef5-4459-8037-19fdf644b2ee",
+      "order_id": "08ab86ca-03d1-4b1f-95b3-14c468bda418",
       "order_no": "BF-20260912-8",
       "kind": "misc",
       "style_no": "",
@@ -61,7 +61,7 @@
       "status": "completed"
     },
     {
-      "order_id": "e33e73a5-a27b-475d-85eb-50442b87e792",
+      "order_id": "c9af71c9-ef8d-45b1-86e3-fa945e70c2c6",
       "order_no": "BF-20260912-9",
       "kind": "misc",
       "style_no": "",
@@ -69,7 +69,7 @@
       "status": "completed"
     },
     {
-      "order_id": "a1d61e88-283f-48ac-98a5-766d289e98b4",
+      "order_id": "fb659129-9506-4217-8b90-4312deba86e7",
       "order_no": "BF-20260912-10",
       "kind": "pattern",
       "style_no": "PATTERN-换人及多轮",
@@ -77,7 +77,7 @@
       "status": "cancelled"
     },
     {
-      "order_id": "fdeacb9f-4a30-40df-9b91-33c47eaaf6f0",
+      "order_id": "4a30842e-c8e4-4457-8757-9f3bf3178f53",
       "order_no": "BF-20260912-11",
       "kind": "pattern",
       "style_no": "PATTERN-未派工取消",
@@ -85,7 +85,7 @@
       "status": "cancelled"
     },
     {
-      "order_id": "53acb5a1-1ac5-490c-a454-23f2106d2df7",
+      "order_id": "5d4c4edb-949d-49b2-8c4d-4822c89b9ad7",
       "order_no": "BF-20260912-12",
       "kind": "pattern",
       "style_no": "PATTERN-部分取消",
@@ -93,7 +93,7 @@
       "status": "cancelled"
     },
     {
-      "order_id": "07fb1447-d881-469c-bd32-f7cd9b368d1a",
+      "order_id": "f7f89a99-e52c-4356-b058-571ec267ec1d",
       "order_no": "BF-20260912-13",
       "kind": "pattern",
       "style_no": "PATTERN-零费取消",
@@ -101,7 +101,7 @@
       "status": "cancelled"
     },
     {
-      "order_id": "e4d97a5d-2f4a-40b1-9190-04e70871648d",
+      "order_id": "9e47beef-744c-4db1-b2c7-a622874d890a",
       "order_no": "BF-20260912-14",
       "kind": "pattern",
       "style_no": "PATTERN-取消返工保留旧轮费用",
@@ -109,7 +109,7 @@
       "status": "cancelled"
     },
     {
-      "order_id": "f9cef944-5a89-42ba-89fe-ad38cf2c5bd1",
+      "order_id": "f594291a-86b2-4bf1-8f4f-3015afca1ed6",
       "order_no": "BF-20260912-15",
       "kind": "misc",
       "style_no": "",
@@ -117,7 +117,7 @@
       "status": "cancelled"
     },
     {
-      "order_id": "0ebba576-6c86-4c94-8620-376589dcf269",
+      "order_id": "0b6b249c-03e6-4822-b7e9-0f2586c12129",
       "order_no": "BF-20260912-16",
       "kind": "misc",
       "style_no": "",
@@ -125,7 +125,7 @@
       "status": "cancelled"
     },
     {
-      "order_id": "abf68e58-5b56-4641-91c1-c1d2254853e4",
+      "order_id": "d9549686-c014-4c71-874a-84b1eb5c89c6",
       "order_no": "BF-20260912-17",
       "kind": "misc",
       "style_no": "",
@@ -133,16 +133,25 @@
       "status": "cancelled"
     },
     {
-      "order_id": "b83e752c-55a9-4101-b17d-5455b4873d48",
+      "order_id": "c469c203-aaa5-4a15-b40a-ed0d05d21b5b",
       "order_no": "BF-20260912-18",
       "kind": "pattern",
       "style_no": "PATTERN-并发改派与完工",
       "task_name": null,
       "status": "completed"
+    },
+    {
+      "order_id": "55c08185-742c-45c5-b3e9-0ebf7c35a6b6",
+      "order_no": "BF-20260912-19",
+      "kind": "misc",
+      "style_no": "",
+      "task_name": "MISC-完工后补工时取消",
+      "status": "cancelled"
     }
   ],
   "cleanup": {
-    "schema": "full_chain_0a8ed64212904b4190b3758d85c3dffd",
+    "schema": "full_chain_144293bde1de4f8aaf11e35ad8b09ec3",
     "dropped": true
-  }
+  },
+  "migrationSnapshotCleanup": "additional isolated pre-0179 snapshot schema dropped in finally"
 }
