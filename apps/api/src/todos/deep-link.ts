@@ -48,6 +48,9 @@ export function buildTodoDeepLink(
     case "production_detail":
       path = `/ui/production-dashboard/${route.entityId}`;
       break;
+    case "supplier_onboarding":
+      path = `/ui/suppliers/requests/${route.entityId}`;
+      break;
     case "pattern_room_order":
       path = `/ui/pattern-room/orders/${route.entityId}`;
       if (route.roundId) query.set("round", route.roundId);

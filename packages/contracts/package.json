@@ -64,6 +64,10 @@
       "types": "./src/pattern-room.ts",
       "import": "./dist/pattern-room.js"
     },
+    "./supplier-onboarding": {
+      "types": "./src/supplier-onboarding.ts",
+      "import": "./dist/supplier-onboarding.js"
+    },
     "./pattern-orders": {
       "types": "./src/pattern-orders.ts",
       "import": "./dist/pattern-orders.js"

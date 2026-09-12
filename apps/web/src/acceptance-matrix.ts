@@ -591,6 +591,24 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXIS
     forbiddenCapabilities: [...(entry.forbiddenCapabilities ?? []).filter(cap => cap !== capability), ...(!allowed && !entry.expectedRoot ? [capability] : [])],
     ruleRefs: { ...entry.ruleRefs, ...approvedKeys("PERM-SUPPLIER-MAINTAIN-001", [`cap:${capability}:${allowed ? "allow" : "deny"}`]) },
   };
+}).map(entry => {
+  const request = ["order_merchandiser", "embroidery_washing_merchandiser"].includes(entry.expectedRole);
+  const approve = ["owner_group", "production_management"].includes(entry.expectedRole);
+  const caps = { "supplier_onboarding:request": request, "supplier_onboarding:approve": approve };
+  const required = Object.entries(caps).filter(([, allow]) => allow).map(([cap]) => cap);
+  const forbidden = entry.expectedRoot ? [] : Object.entries(caps).filter(([, allow]) => !allow).map(([cap]) => cap);
+  const embroidery = entry.expectedRole === "embroidery_washing_merchandiser";
+  return { ...entry,
+    requiredCapabilities: [...(entry.requiredCapabilities ?? []), ...required, ...(embroidery ? ["supplier_profile:read"] : [])],
+    forbiddenCapabilities: [...(entry.forbiddenCapabilities ?? []).filter(cap => !embroidery || cap !== "supplier_profile:read"), ...forbidden],
+    allowedModules: [...(entry.allowedModules ?? []), ...(embroidery ? ["suppliers" as const] : [])],
+    forbiddenModules: (entry.forbiddenModules ?? []).filter(module => !embroidery || module !== "suppliers"),
+    probes: [...(entry.probes ?? []), probe("supplier-applications", "供应商申请记录边界", "supplier-onboarding/requests?scope=mine", entry.expectedRoot || request || approve ? 200 : 403)],
+    ruleRefs: { ...entry.ruleRefs, ...approvedKeys("PERM-SUPPLIER-ONBOARDING-001", [
+      ...required.map(cap => `cap:${cap}:allow`), ...forbidden.map(cap => `cap:${cap}:deny`), "http:supplier-applications",
+      ...(embroidery ? ["cap:supplier_profile:read:allow", "module:suppliers:allow"] : []),
+    ]) },
+  };
 });
 
 const ruleFor = (expectation: AcceptanceRoleExpectation, key: string): AcceptanceRuleRef =>

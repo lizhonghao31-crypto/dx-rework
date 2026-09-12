@@ -15,6 +15,7 @@ export const TodoRouteDescriptorSchema = z.object({
     "production_detail",
     "sample_detail",
     "pattern_room_order",
+    "supplier_onboarding",
   ]),
   entityId: TodoIdSchema,
   /** External-responsibility routes name a case but open in its rework order. */
@@ -126,7 +127,7 @@ export const TodoRoutingExceptionSchema = z.object({
   updatedAt: z.string().datetime(),
 }).strict();
 
-export const TodoModuleSchema = z.enum(["rework", "sourcing", "production", "samples", "pattern_room"]);
+export const TodoModuleSchema = z.enum(["rework", "sourcing", "production", "samples", "pattern_room", "suppliers"]);
 
 export const TodoModuleCountsSchema = z.object({
   rework: z.number().int().nonnegative(),
@@ -134,6 +135,7 @@ export const TodoModuleCountsSchema = z.object({
   production: z.number().int().nonnegative().optional(),
   samples: z.number().int().nonnegative().optional(),
   pattern_room: z.number().int().nonnegative().optional(),
+  suppliers: z.number().int().nonnegative().optional(),
 }).strict();
 
 export const TodoListResponseSchema = z.object({

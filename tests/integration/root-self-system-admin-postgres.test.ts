@@ -1,3 +1,4 @@
+import "./supplier-onboarding-postgres.test.js";
 import "./supplier-maintenance-postgres.test.js";
 import "./quality-basic-rework-postgres.test.js";
 import "./wage-settlement-postgres.test.js";

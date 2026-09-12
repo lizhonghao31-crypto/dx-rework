@@ -44,6 +44,8 @@ type TodoRow = Readonly<{
   style_no?: string | null;
   rework_status?: string | null;
   rework_updated_at?: Date | null;
+  supplier_request_status?: string | null;
+  supplier_request_updated_at?: Date | null;
   sample_code?: string | null;
   sample_style_no?: string | null;
   sample_status?: string | null;
@@ -80,7 +82,7 @@ export type TodoListOptions = Readonly<{
 
 const TODO_LIST_PAGE_SIZE = 15;
 const TODO_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const TODO_MODULES: readonly TodoModule[] = ["rework", "sourcing", "production", "samples", "pattern_room"];
+const TODO_MODULES: readonly TodoModule[] = ["rework", "sourcing", "production", "samples", "pattern_room", "suppliers"];
 
 const TODO_WITH_CONTEXT_SQL = `SELECT
   todos.todo_id,todos.todo_type,todos.category,todos.source_event_id,todos.source_action,
@@ -91,6 +93,7 @@ const TODO_WITH_CONTEXT_SQL = `SELECT
   orders.rework_no,orders.order_no,orders.style_no,orders.status rework_status,
   orders.updated_at rework_updated_at,
   COALESCE(rework_merchandiser.display_name,sourcing_merchandiser.display_name) merchandiser_name,
+  supplier_request.status supplier_request_status,supplier_request.updated_at supplier_request_updated_at,
   sample.sample_code,COALESCE(NULLIF(sample.style_no,''),sample.style_name) sample_style_no,
   sample.status sample_status,sample.updated_at sample_updated_at,
   pattern.order_no pattern_order_no,concat_ws(' · ',NULLIF(pattern.task_name,''),NULLIF(pattern.style_no,'')) pattern_style_no,
@@ -98,6 +101,7 @@ const TODO_WITH_CONTEXT_SQL = `SELECT
   sourcing.erp_order_no sourcing_order_no,sourcing.style_no sourcing_style_no,
   sourcing.status sourcing_status,sourcing.updated_at sourcing_updated_at,
   COALESCE(
+    supplier_version.profile->>'supplierName',
     sourcing_decision.supplier_name_snapshot,
     CASE
       WHEN orders.processing_factory_type='own_factory' THEN '本厂'
@@ -105,6 +109,7 @@ const TODO_WITH_CONTEXT_SQL = `SELECT
     END
   ) supplier_name_snapshot,
   CASE
+    WHEN todos.entity_type='supplier_onboarding' THEN 'suppliers'
     WHEN todos.entity_type='pattern_room_order' THEN 'pattern_room'
     WHEN todos.entity_type='sample' THEN 'samples'
     WHEN todos.route_descriptor->>'routeName'='sourcing_detail'
@@ -113,6 +118,8 @@ const TODO_WITH_CONTEXT_SQL = `SELECT
   END todo_module,
   CASE todos.status WHEN 'pending' THEN 0 WHEN 'blocked_recipient' THEN 1 ELSE 2 END status_rank
 FROM rework_todos todos
+LEFT JOIN supplier_onboarding_requests supplier_request ON supplier_request.request_id=CASE WHEN todos.entity_type='supplier_onboarding' THEN todos.entity_id::uuid END
+LEFT JOIN supplier_onboarding_request_versions supplier_version ON (supplier_version.request_id,supplier_version.version)=(supplier_request.request_id,supplier_request.current_version)
 LEFT JOIN pattern_room_orders pattern ON pattern.order_id=CASE WHEN todos.entity_type='pattern_room_order' THEN todos.entity_id::uuid END
 LEFT JOIN sample_items sample ON sample.sample_id=CASE WHEN todos.entity_type='sample' THEN todos.entity_id::uuid END
 LEFT JOIN rework_orders orders
@@ -206,8 +213,8 @@ const TODO_DELIVERY_TOPIC = "todo.delivery";
 const emptyModuleCounts = (): TodoModuleCounts => ({ rework: 0, sourcing: 0 });
 
 const todoResponse = (row: TodoRow): TodoResponse => {
-  const contextStatus = row.rework_status ?? row.sourcing_status ?? row.sample_status ?? row.pattern_status;
-  const contextUpdatedAt = row.rework_updated_at ?? row.sourcing_updated_at ?? row.sample_updated_at ?? row.pattern_updated_at;
+  const contextStatus = row.rework_status ?? row.sourcing_status ?? row.sample_status ?? row.pattern_status ?? row.supplier_request_status;
+  const contextUpdatedAt = row.rework_updated_at ?? row.sourcing_updated_at ?? row.sample_updated_at ?? row.pattern_updated_at ?? row.supplier_request_updated_at;
   return ({
   todoId: row.todo_id,
   todoType: row.todo_type,

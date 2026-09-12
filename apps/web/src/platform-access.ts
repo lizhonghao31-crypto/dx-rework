@@ -1,6 +1,6 @@
 import { PATTERN_ROOM_ORDERS_ENABLED, canUsePatternOrder } from "@dx-rework/contracts/pattern-orders";
 export type PlatformAccessModuleId = "rework" | "sourcing" | "suppliers" | "production" | "samples" | "platform";
-export type TodoAccessModuleId = "rework" | "sourcing" | "production" | "samples" | "pattern_room";
+export type TodoAccessModuleId = "rework" | "sourcing" | "production" | "samples" | "pattern_room" | "suppliers";
 
 export type PlatformRoleAccess = Readonly<{
   roleCode: string;
@@ -172,7 +172,7 @@ export function todoModuleIdsForUser(user: Readonly<{
   capabilities: readonly string[];
   isRoot?: boolean;
 }>): TodoAccessModuleId[] {
-  if (user.isRoot) return ["rework", "sourcing", "production", "samples", "pattern_room"];
+  if (user.isRoot) return ["rework", "sourcing", "production", "samples", "pattern_room", "suppliers"];
 
   const roles = user.businessRoles ?? [];
   const classified = roles.length > 0
@@ -183,5 +183,9 @@ export function todoModuleIdsForUser(user: Readonly<{
   if (user.capabilities.includes("todo:view") && user.capabilities.includes("sourcing:view") && roles.some(role=>["order_merchandiser","production_management","owner_group"].includes(role))) modules.add("production");
   else modules.delete("production");
   if (PATTERN_ROOM_ORDERS_ENABLED && user.capabilities.includes("todo:view") && canUsePatternOrder(roles,user.capabilities,"pattern_room:orders:view")) modules.add("pattern_room");
-  return (["rework", "sourcing", "production", "samples", "pattern_room"] as const).filter((moduleId) => modules.has(moduleId));
+  if (user.capabilities.includes("todo:view") && (
+    (user.capabilities.includes("supplier_onboarding:request") && roles.some(role => ["order_merchandiser", "embroidery_washing_merchandiser"].includes(role)))
+    || (user.capabilities.includes("supplier_onboarding:approve") && roles.some(role => ["owner_group", "production_management"].includes(role)))
+  )) modules.add("suppliers");
+  return (["rework", "sourcing", "production", "samples", "pattern_room", "suppliers"] as const).filter((moduleId) => modules.has(moduleId));
 }
