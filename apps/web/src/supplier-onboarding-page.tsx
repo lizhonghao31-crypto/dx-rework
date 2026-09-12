@@ -14,6 +14,7 @@ import { createSupplierDraftGuard } from "./supplier-draft-guard.js";
 import { registerInternalNavigationGuard } from "./internal-navigation.js";
 import { confirmInApp } from "./system-dialog.js";
 import { todoReturnPath } from "./todo-query-state.js";
+import { createClientRequestId } from "./client-request-id.js";
 import "./supplier-center-page.css";
 import "./supplier-onboarding-page.css";
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -102,7 +103,7 @@ export function SupplierOnboardingPage({ requestId, user: providedUser }: { requ
     if (lock.current) return;
     lock.current = true; setBusy(true); setError("");
     const body = JSON.stringify(payload), fingerprint = `${path}:${body}`;
-    if (operation.current?.fingerprint !== fingerprint) operation.current = { fingerprint, key: crypto.randomUUID() };
+    if (operation.current?.fingerprint !== fingerprint) operation.current = { fingerprint, key: createClientRequestId() };
     try {
       const result = await request<{ requestId: string }>(path, { method: "POST", headers: { "idempotency-key": operation.current.key }, body });
       if (!alive.current) return;
