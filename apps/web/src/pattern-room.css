@@ -27,3 +27,7 @@ dialog.pattern-price-dialog::backdrop { background: rgb(19 28 38 / 58%); }
 .pattern-nodes { display: grid; gap: 12px; padding-left: 24px; }
 .pattern-nodes li > span { display: block; margin-top: 4px; }
 .pattern-confirm { border-left: 3px solid #166534; padding: 8px 16px; background: #f0fdf4; }
+.pattern-progress { display: flex; flex-wrap: wrap; gap: 12px; list-style: none; padding: 0; margin: 16px 0; }
+.pattern-progress li { min-width: 110px; padding: 10px 16px; border: 1px solid #e1e7ed; border-radius: 8px; }
+.pattern-progress li[aria-current="step"] { border-color: #166534; background: #f0fdf4; }
+.pattern-progress small { display: block; margin-top: 4px; color: #64748b; }

@@ -3,7 +3,7 @@ import { patternEstimate, patternListPath, patternReturnPath, readPatternListQue
 
 describe("pattern order navigation and displayed estimate", () => {
   it("retains search, status, stable person filters and page when returning from detail", () => {
-    const query = { q: "本次款号 A&B", status: "in_progress", creatorId: "11111111-1111-4111-8111-111111111111", workerId: "22222222-2222-4222-8222-222222222222", page: 3 };
+    const query = { q: "本次款号 A&B", kind: "pattern", status: "in_progress", creatorId: "11111111-1111-4111-8111-111111111111", workerId: "22222222-2222-4222-8222-222222222222", page: 3 };
     const path = patternListPath(query);
     expect(readPatternListQuery(path.slice(path.indexOf("?")))).toEqual(query);
     expect(patternReturnPath(`?${new URLSearchParams({ returnTo: path })}`)).toBe(path);

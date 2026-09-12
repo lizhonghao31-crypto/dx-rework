@@ -20,12 +20,12 @@ export async function authorizePatternOrder(db: SqlClient, actor: TrustedActorCo
   return effective;
 }
 
-/** Parameters are always [actorId, broadReader, isDesigner, isWorker]. */
+/** Parameters are always [actorId, broadReader, actualRoles, isWorker]. */
 export const patternOrderScopeSql = `( $2::boolean
-  OR ($3::boolean AND orders.created_by=$1::uuid)
+  OR (orders.created_by=$1::uuid AND ('sample_designer'=ANY($3::text[]) OR (orders.kind='misc' AND 'order_merchandiser'=ANY($3::text[]))))
   OR ($4::boolean AND EXISTS(SELECT 1 FROM pattern_room_rounds scope_round
     JOIN pattern_room_segments scope_segment ON scope_segment.round_id=scope_round.round_id
     WHERE scope_round.round_id=orders.current_round_id AND scope_segment.worker_user_id=$1::uuid
       AND NOT EXISTS(SELECT 1 FROM pattern_room_segments newer_segment
         WHERE newer_segment.round_id=scope_segment.round_id AND newer_segment.segment_index>scope_segment.segment_index))) )`;
-export const patternOrderScopeValues = (actor: TrustedActorContext) => [actor.actorId, canReadAllPatternOrders(actor), actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("worker")];
+export const patternOrderScopeValues = (actor: TrustedActorContext) => [actor.actorId, canReadAllPatternOrders(actor), actor.actorRoles, actor.actorRoles.includes("worker")];

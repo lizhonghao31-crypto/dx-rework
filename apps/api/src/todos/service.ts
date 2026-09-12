@@ -93,7 +93,7 @@ const TODO_WITH_CONTEXT_SQL = `SELECT
   COALESCE(rework_merchandiser.display_name,sourcing_merchandiser.display_name) merchandiser_name,
   sample.sample_code,COALESCE(NULLIF(sample.style_no,''),sample.style_name) sample_style_no,
   sample.status sample_status,sample.updated_at sample_updated_at,
-  pattern.order_no pattern_order_no,pattern.style_no pattern_style_no,
+  pattern.order_no pattern_order_no,concat_ws(' · ',NULLIF(pattern.task_name,''),NULLIF(pattern.style_no,'')) pattern_style_no,
   pattern.status pattern_status,pattern.updated_at pattern_updated_at,
   sourcing.erp_order_no sourcing_order_no,sourcing.style_no sourcing_style_no,
   sourcing.status sourcing_status,sourcing.updated_at sourcing_updated_at,

@@ -3,8 +3,8 @@ import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { isPatternRoot } from "./order-authority.js";
 
-export async function bindPatternMaterials(client: PoolClient, actor: TrustedActorContext, orderId: string, roundId: string, attachmentIds: readonly string[], reason: string): Promise<void> {
-  if (!attachmentIds.length) throw new ApplicationError("VALIDATION_ERROR", "请上传制作PDF或清晰图片", 400);
+export async function bindPatternMaterials(client: PoolClient, actor: TrustedActorContext, orderId: string, roundId: string, attachmentIds: readonly string[], reason: string, required = true): Promise<void> {
+  if (required && !attachmentIds.length) throw new ApplicationError("VALIDATION_ERROR", "请上传制作PDF或清晰图片", 400);
   const ids = [...new Set(attachmentIds)].sort();
   for (const id of ids) {
     const file = (await client.query<{ status: string; uploaded_by: string; entity_type: string | null; entity_id: string | null; mime_type: string }>(

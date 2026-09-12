@@ -378,6 +378,10 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(initial.categories.filter(item => item.unit === "套").map(item => item.name)).toEqual(["女装套装两件套","男装套装两件套"]);
     expect(initial.hourly.amount).toBeNull();
     expect((await prices.quote(designer,"hourly",PATTERN_HOURLY_PRICE_ID)).amount).toBeNull();
+    const miscBeforeConfiguration = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
+    const miscCreator = actor(ids.merchandiser, ["order_merchandiser"], "pattern_room:misc:create", ...Object.keys(PATTERN_ORDER_ROLES));
+    await expect(miscBeforeConfiguration.createMisc(miscCreator, { taskName: "时薪未配置", priceVersion: 1 }, randomUUID())).rejects.toMatchObject({ statusCode: 409, code: "PRICE_NOT_CONFIGURED" });
+    expect((await database.query("SELECT count(*)::int count FROM pattern_room_orders WHERE task_name='时薪未配置'")).rows[0].count).toBe(0);
     const category = initial.categories[0]!;
     const input = {version:1,amount:"18.125",enabled:true,reason:"现场确认执行价"};
     for (const kind of ["category","hourly"] as const) await expect(prices.change(supervisor,kind,category.priceId,input,randomUUID())).rejects.toMatchObject({statusCode:403});
@@ -434,7 +438,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     await expect(service.create(designer, { ...input, priceVersion: 99 }, randomUUID())).rejects.toMatchObject({ statusCode: 409, code: "PRICE_CHANGED" });
     const key = randomUUID(), created = await service.create(designer, input, key);
     expect(created).toMatchObject({ styleNo: input.styleNo, referenceStyleNo: input.referenceStyleNo, status: "pending_assignment", requiredDate: "2026-09-30", reworkCount: 0 });
-    expect(created.rounds[0]).toMatchObject({ index: 0, unitPrice: "40.000", quantity: 2, agreedAmount: "80.000" });
+    expect(created.rounds[0]).toMatchObject({ index: 0, unitPrice: "40.000", quantity: 2, agreedAmount: "80.00000000" });
     expect((await service.create(designer, input, key)).orderId).toBe(created.orderId);
     await expect(service.create(designer, { ...input, styleNo: "重复键不同内容" }, key)).rejects.toMatchObject({ statusCode: 409 });
     const listing = { page: 1, limit: 25, q: "PATTERN-本次" };
@@ -458,7 +462,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(workerView.rounds[0]).not.toHaveProperty("agreedAmount");
     expect(workerView.rounds[0]).not.toHaveProperty("unitPrice");
     expect(workerView.rounds[0]!.segments).toHaveLength(1);
-    expect(workerView.rounds[0]!.segments[0]).toMatchObject({ workerUserId: ids.worker, amount: "80.000", wageEligible: false });
+    expect(workerView.rounds[0]!.segments[0]).toMatchObject({ workerUserId: ids.worker, amount: "80.00000000", wageEligible: false });
     const app = Fastify();
     registerPatternRoomOrderRoutes(app, { service, attachments: {} as AttachmentService, authenticate: async token => {
       const current = token === "other" ? otherDesigner : worker;
@@ -535,6 +539,145 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     // A real supervisor exists in this fixture; prerelease Root work must not create staff todos or notices.
     expect((await database.query("SELECT count(*)::int count FROM rework_todos WHERE entity_type='pattern_room_order' AND entity_id=$1", [created.orderId])).rows[0].count).toBe(0);
     expect((await database.query("SELECT supervisor_user_id FROM pattern_room_rounds WHERE round_id=$1", [created.currentRoundId])).rows[0].supervisor_user_id).toBe(ids.patternRoot);
+  });
+
+  it("qualifies misc work once from completed labor and exact stored hourly pricing, independently of creator closure", async () => {
+    const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
+    const caps = [...Object.keys(PATTERN_ORDER_ROLES), "todo:view"];
+    const merchant = actor(ids.merchandiser, ["order_merchandiser"], "pattern_room:orders:view", ...caps);
+    const designer = actor(ids.patternDesigner, ["sample_designer"], "pattern_room:orders:view", ...caps);
+    const other = actor(ids.otherPatternDesigner, ["sample_designer"], "pattern_room:orders:view", ...caps);
+    const supervisor = actor(ids.patternSupervisor, ["pattern_room_supervisor"], "pattern_room:orders:view", ...caps);
+    const worker = actor(ids.worker, ["worker"], "pattern_room:orders:view", ...caps);
+    const owner = actor(ids.ownerOne, ["owner_group"], "pattern_room:prices:read", "pattern_room:hourly:write");
+    const prices = new PatternRoomPriceService(database);
+    const before = (await prices.management(owner)).hourly;
+    const hourly = await prices.change(owner, "hourly", PATTERN_HOURLY_PRICE_ID, { version: before.version, amount: "28.555", enabled: true, reason: "隔离测试精确时薪" }, randomUUID());
+    const roundAction = (order: { version: number; currentRoundId: string }) => ({ version: order.version, roundId: order.currentRoundId });
+    const headers = (token: string) => ({ cookie: `dx_rework_session=${token}`, "idempotency-key": randomUUID() });
+    const app = Fastify();
+    registerPatternRoomOrderRoutes(app, { service, attachments: {} as AttachmentService, authenticate: async token => {
+      const current = token === "supervisor" ? supervisor : token === "worker" ? worker : token === "other" ? other : merchant;
+      return { id: current.actorId, businessRoles: current.actorRoles, capabilities: caps };
+    } });
+    try {
+      const input = { taskName: "MISC-先完成后工时", priceVersion: hourly.version };
+      const response = await app.inject({ method: "POST", url: "/pattern-room/misc-orders", payload: input, headers: headers("merchant") });
+      expect(response.statusCode).toBe(201);
+      const created = response.json();
+      expect(created).toMatchObject({ kind: "misc", taskName: input.taskName, styleNo: "", attachments: [], status: "pending_assignment" });
+      expect(created.rounds[0]).toMatchObject({ unit: "小时", unitPrice: "28.555", quantity: null, actualHours: null, agreedAmount: null });
+      expect((await service.list(merchant, { page: 1, limit: 1, kind: "misc", q: "MISC-" })).totalCount).toBe(1);
+      expect((await service.list(merchant, { page: 1, limit: 25, kind: "pattern" })).totalCount).toBe(0);
+      await expect(service.get(other, created.orderId)).rejects.toMatchObject({ statusCode: 404 });
+      const deniedPattern = await app.inject({ method: "POST", url: "/pattern-room/orders", payload: { styleNo: "无权打板", categoryId: "92000000-0000-4000-8000-000000000002", priceVersion: 1, attachmentIds: [randomUUID()] }, headers: headers("merchant") });
+      expect(deniedPattern.statusCode).toBe(403);
+      const revised = await service.updateMiscMaterials(merchant, created.orderId, { ...roundAction(created), taskName: input.taskName, styleNo: "可选关联款号", reason: "补充关联资料" }, randomUUID());
+      const assigned = await service.assign(supervisor, created.orderId, { ...roundAction(revised), personId: workerPersonId }, randomUUID());
+      await expect(service.recordHours(merchant, created.orderId, { ...roundAction(assigned), hours: "1.2" }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+      await prices.change(owner, "hourly", PATTERN_HOURLY_PRICE_ID, { version: hourly.version, amount: "99.000", enabled: true, reason: "隔离测试旧单不重算" }, randomUUID());
+      const completed = await service.complete(worker, created.orderId, roundAction(assigned), randomUUID());
+      expect(completed.rounds[0]!.segments[0]!.wageEligible).toBe(false);
+      const creatorTasks = (await todoService.listForActor({ ...merchant, authorizationCapability: "todo:view" }, { module: "pattern_room", query: input.taskName })).todos;
+      expect(creatorTasks).toHaveLength(1);
+      expect(creatorTasks[0]).toMatchObject({ category: "pattern_room_misc_confirmation", entityId: created.orderId });
+      const confirmation = await app.inject({ method: "POST", url: `/pattern-room/orders/${created.orderId}/confirm`, payload: roundAction(completed), headers: headers("merchant") });
+      expect(confirmation.statusCode).toBe(200);
+      const closed = confirmation.json();
+      expect(closed.status).toBe("completed");
+      expect(closed.rounds[0].segments[0].wageEligible).toBe(false);
+      const missingHours = (await todoService.listForActor({ ...supervisor, authorizationCapability: "todo:view" }, { module: "pattern_room", query: input.taskName })).todos;
+      expect(missingHours.map(todo => todo.category)).toEqual(["pattern_room_hours"]);
+      expect((await service.get(supervisor, created.orderId)).actions.hours).toBe(true);
+      const invalid = await app.inject({ method: "POST", url: `/pattern-room/orders/${created.orderId}/hours`, payload: { ...roundAction(closed), hours: "1.25" }, headers: headers("supervisor") });
+      expect(invalid.statusCode).toBe(400);
+      const hoursHeaders = headers("supervisor"), hoursInput = { ...roundAction(closed), hours: "0.1" };
+      const filled = await app.inject({ method: "POST", url: `/pattern-room/orders/${created.orderId}/hours`, payload: hoursInput, headers: hoursHeaders });
+      expect(filled.statusCode).toBe(200);
+      const qualified = filled.json();
+      expect(qualified.rounds[0]).toMatchObject({ unitPrice: "28.555", actualHours: "0.1", agreedAmount: "2.85550000" });
+      expect(qualified.rounds[0].segments[0]).toMatchObject({ actualHours: "0.1", amount: "2.85550000", wageEligible: true });
+      expect((await app.inject({ method: "POST", url: `/pattern-room/orders/${created.orderId}/hours`, payload: hoursInput, headers: hoursHeaders })).json().version).toBe(qualified.version);
+      await expect(service.recordHours(supervisor, created.orderId, { ...roundAction(qualified), hours: "0.2" }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+      expect((await todoService.listForActor({ ...supervisor, authorizationCapability: "todo:view" }, { module: "pattern_room", query: input.taskName })).todos).toHaveLength(0);
+      expect((await database.query("SELECT count(*)::int count FROM operation_events WHERE entity_id=$1 AND action='pattern_room.misc.hours_recorded'", [created.orderId])).rows[0].count).toBe(1);
+      const workerView = await service.get(worker, created.orderId);
+      expect(workerView.rounds[0]).not.toHaveProperty("unitPrice");
+      expect(workerView.rounds[0]).not.toHaveProperty("actualHours");
+      expect(workerView.rounds[0]!.segments[0]!.actualHours).toBe("0.1");
+      await expect(database.query("UPDATE pattern_room_segments SET actual_hours=1.25 WHERE segment_id=$1", [qualified.rounds[0].segments[0].segmentId])).rejects.toMatchObject({ code: "23514" });
+      // The other legal ordering: hours are known before the worker completes.
+      const currentPrice = (await prices.management(owner)).hourly;
+      const second = await service.createMisc(designer, { taskName: "MISC-先工时后完成", priceVersion: currentPrice.version }, randomUUID());
+      const secondAssigned = await service.assign(supervisor, second.orderId, { ...roundAction(second), personId: workerPersonId }, randomUUID());
+      const secondHours = await service.recordHours(supervisor, second.orderId, { ...roundAction(secondAssigned), hours: "1.2" }, randomUUID());
+      expect(secondHours.rounds[0]!.segments[0]!.wageEligible).toBe(false);
+      await expect(service.complete(worker, second.orderId, roundAction(secondAssigned), randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+      const completeKey = randomUUID(), secondComplete = await service.complete(worker, second.orderId, roundAction(secondHours), completeKey);
+      expect(secondComplete.rounds[0]!.segments[0]).toMatchObject({ amount: "118.80000000", wageEligible: true });
+      expect((await service.complete(worker, second.orderId, roundAction(secondHours), completeKey)).version).toBe(secondComplete.version);
+      await expect(service.handoff(designer, second.orderId, roundAction(secondComplete), randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+      expect((await todoService.listForActor({ ...supervisor, authorizationCapability: "todo:view" }, { module: "pattern_room", query: second.taskName! })).todos).toHaveLength(0);
+      const confirmKey = randomUUID(), secondClosed = await service.confirmMisc(designer, second.orderId, roundAction(secondComplete), confirmKey);
+      expect((await service.confirmMisc(designer, second.orderId, roundAction(secondComplete), confirmKey)).version).toBe(secondClosed.version);
+      expect((await database.query("SELECT count(*)::int count FROM pattern_room_segments WHERE round_id=$1 AND wage_eligible_at IS NOT NULL", [second.currentRoundId])).rows[0].count).toBe(1);
+    } finally { await app.close(); }
+  });
+
+  it("routes misc confirmation to the creator's current approved role after either legal role switch", async () => {
+    const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
+    const caps = [...Object.keys(PATTERN_ORDER_ROLES), "todo:view"];
+    const rootAdmin = () => actor(ids.patternRoot, ["root_superuser"], "access:admin");
+    const root = actor(ids.patternRoot, ["root_superuser"], "pattern_room:prices:read");
+    const price = (await new PatternRoomPriceService(database).management(root)).hourly;
+    const supervisor = actor(ids.patternSupervisor, ["pattern_room_supervisor"], "pattern_room:orders:view", ...caps);
+    const worker = actor(ids.worker, ["worker"], "pattern_room:orders:view", ...caps);
+    const action = (order: { version: number; currentRoundId: string }) => ({ version: order.version, roundId: order.currentRoundId });
+    const merchantRole = await access.assignRole(rootAdmin(), { userId: ids.otherPatternDesigner, roleCode: "order_merchandiser", reason: "隔离验收双职责" });
+    const designerRole = (await database.query("SELECT assignment_id FROM user_role_assignments WHERE user_id=$1 AND role_code='sample_designer' AND revoked_at IS NULL", [ids.otherPatternDesigner])).rows[0].assignment_id;
+    for (const nextRole of ["order_merchandiser", "sample_designer"] as const) {
+      const oldRoles = nextRole === "order_merchandiser" ? ["sample_designer", "order_merchandiser"] : ["order_merchandiser"];
+      const creator = actor(ids.otherPatternDesigner, oldRoles, "pattern_room:orders:view", ...caps);
+      const created = await service.createMisc(creator, { taskName: `MISC-职责切换-${nextRole}`, priceVersion: price.version }, randomUUID());
+      expect((await database.query("SELECT creator_role FROM pattern_room_orders WHERE order_id=$1", [created.orderId])).rows[0].creator_role).toBe(oldRoles[0]);
+      const assigned = await service.assign(supervisor, created.orderId, { ...action(created), personId: workerPersonId }, randomUUID());
+      const hours = await service.recordHours(supervisor, created.orderId, { ...action(assigned), hours: "1.2" }, randomUUID());
+      if (nextRole === "order_merchandiser") await access.revokeRole(rootAdmin(), designerRole, "隔离验收撤销设计师，保留跟单");
+      else {
+        await access.assignRole(rootAdmin(), { userId: ids.otherPatternDesigner, roleCode: "sample_designer", reason: "隔离验收恢复设计师" });
+        await access.revokeRole(rootAdmin(), merchantRole.assignmentId, "隔离验收撤销跟单，保留设计师");
+      }
+      const completed = await service.complete(worker, created.orderId, action(hours), randomUUID());
+      expect(completed.status).toBe("pending_confirmation");
+      const currentCreator = actor(ids.otherPatternDesigner, [nextRole], "todo:view", ...caps);
+      const pending = await todoService.listForActor(currentCreator, { module: "pattern_room", query: created.taskName! });
+      expect(pending.todos).toHaveLength(1);
+      expect(pending.todos[0]!.category).toBe("pattern_room_misc_confirmation");
+      expect((await database.query("SELECT required_role FROM rework_todos WHERE dedupe_key=$1", [patternTodoKey(created.orderId, created.currentRoundId, "misc-confirm")])).rows[0].required_role).toBe(nextRole);
+      expect((await service.confirmMisc(currentCreator, created.orderId, action(completed), randomUUID())).status).toBe("completed");
+      // The creation-time audit snapshot remains intact while routing uses live authority.
+      expect((await database.query("SELECT creator_role FROM pattern_room_orders WHERE order_id=$1", [created.orderId])).rows[0].creator_role).toBe(oldRoles[0]);
+    }
+  });
+
+  it("keeps prerelease Root misc work isolated and explicit zero hourly work out of payable wages", async () => {
+    const root = actor(ids.patternRoot, ["root_superuser"], "pattern_room:orders:view");
+    const service = new PatternRoomOrderService(database, new RootAwareTodoProjectionService(todoService));
+    const prices = new PatternRoomPriceService(database), hourly = (await prices.management(root)).hourly;
+    const zero = await prices.change(root, "hourly", PATTERN_HOURLY_PRICE_ID, { version: hourly.version, amount: "0.000", enabled: true, reason: "隔离测试明确零价" }, randomUUID());
+    const personId = (await database.query("SELECT person_id FROM business_people WHERE app_user_id=$1", [ids.patternRoot])).rows[0].person_id;
+    const action = (order: { version: number; currentRoundId: string }) => ({ version: order.version, roundId: order.currentRoundId });
+    const created = await service.createMisc(root, { taskName: "ROOT-MISC", priceVersion: zero.version }, randomUUID());
+    const assigned = await service.assign(root, created.orderId, { ...action(created), personId }, randomUUID());
+    const revised = await service.updateMiscMaterials(root, created.orderId, { ...action(assigned), taskName: "ROOT-MISC-修正", reason: "验收资料修正" }, randomUUID());
+    const hours = await service.recordHours(root, created.orderId, { ...action(revised), hours: "1.2" }, randomUUID());
+    const completed = await service.complete(root, created.orderId, action(hours), randomUUID());
+    const closed = await service.confirmMisc(root, created.orderId, action(completed), randomUUID());
+    expect(closed.status).toBe("completed");
+    expect(closed.rounds[0]!.segments[0]).toMatchObject({ amount: "0.00000000", wageEligible: false });
+    await expect(service.recordHours(root, created.orderId, { ...action(closed), hours: "2.0" }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    expect((await database.query("SELECT count(*)::int count FROM rework_todos WHERE entity_id=$1", [closed.orderId])).rows[0].count).toBe(0);
+    expect((await database.query("SELECT count(*)::int count FROM user_role_assignments WHERE user_id=$1", [ids.patternRoot])).rows[0].count).toBe(0);
   });
 
   it("carries one real order from N01 through N11 without losing cross-node facts", async () => {
