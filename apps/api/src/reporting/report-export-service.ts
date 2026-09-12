@@ -38,7 +38,8 @@ const sheetRows = (
 ): WorkbookCell[][] => [
   columns.map((column) => column.label),
   ...rows.map((row) => columns.map((column) =>
-    exportCell(column.key, row[column.key] ?? null))),
+    ["order_rework","pattern_room"].includes(String(row.wageSource)) && ["unitPrice","sourceAmount","roundAmount","actualHours"].includes(column.key) && row[column.key] != null
+      ? workbookNumberCell(String(row[column.key]),"business3") : exportCell(column.key, row[column.key] ?? null))),
 ];
 
 export class ReportExportService {
@@ -77,6 +78,7 @@ export class ReportExportService {
       ["结束日期", range.to],
       ["关键词", query.q ?? ""],
       ...(reportType === "wages" ? [["工人类型",query.personType === "internal" ? "正式工" : query.personType === "temporary" ? "临时工" : "全部"]] : []),
+      ...(reportType === "wages" ? [["工资来源",businessCellValue("wageSource",query.wageSource ?? "全部")],["板房类型",businessCellValue("wageKind",query.patternKind ?? "全部")]] : []),
       ["状态", businessCellValue("status", query.status ?? "")],
       ["明细行数", data.rows.length],
       ["Git SHA", this.gitSha],

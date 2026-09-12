@@ -63,10 +63,14 @@ export const ManagementReworkQuerySchema = DashboardQuerySchema.extend({
 
 export const ReportQuerySchema = DashboardQuerySchema.extend({
   personType: z.enum(["internal", "temporary"]).optional(),
+  wageSource: z.enum(["order_rework", "pattern_room"]).optional(),
+  patternKind: z.enum(["first_pattern", "pattern_rework", "misc"]).optional(),
   q: z.string().trim().min(1).max(100).optional(),
   status: z.string().trim().min(1).max(80).optional(),
   limit: z.coerce.number().int().min(1).max(500).default(100),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (value.patternKind && value.wageSource !== "pattern_room") context.addIssue({code:"custom",path:["patternKind"],message:"板房类型需要选择订单打板来源"});
+});
 
 export const DashboardNodeSchema = z.object({
   node: z.string().min(1),
@@ -222,8 +226,13 @@ export const WageReportSummarySchema = z.object({
   rowCount: z.number().int().nonnegative(),
   pendingLineCount: z.number().int().nonnegative(),
   pendingPersonCount: z.number().int().nonnegative(),
+  personCount: z.number().int().nonnegative(),
+  orderCount: z.number().int().nonnegative(),
+  roundCount: z.number().int().nonnegative(),
   people: z.array(z.object({
     personId: IdSchema, name: z.string(), orderCount: z.number().int().nonnegative(), amount: MoneySchema,
+    lineCount: z.number().int().nonnegative(), roundCount: z.number().int().nonnegative(),
+    sources: z.array(z.object({source:z.string(),kind:z.string(),amount:MoneySchema,lineCount:z.number().int().nonnegative()}).strict()),
   }).strict()),
 }).strict();
 

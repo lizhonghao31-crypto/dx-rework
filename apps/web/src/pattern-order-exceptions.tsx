@@ -67,13 +67,13 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
     </> : null}
     {active === "transfer" ? <div className="pattern-fields"><InsetField label="搜索接手工人" value={searchText} disabled={busy} onChange={e => { setSearchText(e.target.value); setPersonId(""); }} /><label>接手工人<select required disabled={busy} value={personId} onChange={e => setPersonId(e.target.value)}><option value="">请选择另一名工人</option>{workers.filter(worker => worker.userId !== segment?.workerUserId).map(worker => <option key={worker.personId} value={worker.personId}>{worker.name}</option>)}</select></label></div> : null}
     {active === "transfer" || (active === "cancel" && !pending) ? <>
-      <p>当前执行人：{segment?.workerName}。{order.kind === "pattern" ? `当前段金额 ${formatBusinessDecimal(segment?.amount ?? "0")} 元；以前执行段保留。` : "按本单保存的小时价计算每段实际劳动。"}</p>
+      <p>当前执行人：{segment?.workerName}。{order.kind === "pattern" ? `当前段金额 ${formatBusinessDecimal(segment?.amount ?? "0", 3)} 元；以前执行段保留。` : "按本单保存的小时价计算每段实际劳动。"}</p>
       {order.kind === "pattern" ? <InsetField label={active === "transfer" ? "原工人应得部分（元，无实际制作填0）" : "当前工人取消部分费用（元，无费用填0）"} inputMode="decimal" required value={amount} disabled={busy} onChange={e => setAmount(e.target.value)} />
         : active === "cancel" && fixedMisc ? <p>工时与完工已确定，本次保留既有计薪事实。</p>
         : <InsetField label="当前执行段已做工时（小时，无实际工作填0）" inputMode="decimal" required value={hours} disabled={busy} onChange={e => setHours(e.target.value)} />}
     </> : null}
     {active === "cancel" ? <p>{pending ? "取消未派工请求，保留历史轮次。" : "确认工作已经停止。打板有费用时，仍由原设计师确认取消费用。"}</p> : null}
-    {active === "cancel-fees" ? <><p>请核对以下取消费用，确认后计入工资，订单仍为已取消。</p>{order.rounds.filter(item => item.cancelledAmount != null && /[1-9]/.test(item.cancelledAmount) && item.feeConfirmedAt === null).map(item => <p key={item.roundId}>{item.index === 0 ? "首次打板" : `第${item.index}次返工`}：{formatBusinessDecimal(item.cancelledAmount!)} 元</p>)}</>
+    {active === "cancel-fees" ? <><p>请核对以下取消费用，确认后计入工资，订单仍为已取消。</p>{order.rounds.filter(item => item.cancelledAmount != null && /[1-9]/.test(item.cancelledAmount) && item.feeConfirmedAt === null).map(item => <p key={item.roundId}>{item.index === 0 ? "首次打板" : `第${item.index}次返工`}：{formatBusinessDecimal(item.cancelledAmount!, 3)} 元</p>)}</>
       : <label>{active === "rework" ? "返工内容 / 原因（必填）" : "操作说明（必填）"}<textarea required maxLength={active === "rework" ? 2000 : 500} disabled={busy} value={reason} onChange={e => setReason(e.target.value)} /></label>}
     {error ? <p role="alert">{error}</p> : null}{uploading ? <p role="status">正在上传原始资料…</p> : null}
     <div className="pattern-actions"><Button type="button" disabled={busy} onClick={() => onActive(null)}>暂不提交</Button><Button type="submit" variant="primary" disabled={busy}>{busy ? "提交中…" : titles[active]}</Button></div>

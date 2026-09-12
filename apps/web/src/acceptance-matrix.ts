@@ -558,6 +558,7 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXIS
   // PR02 approved field-level authority, independently transcribed from section 8.1.
   const root = entry.expectedRoot === true;
   const read = root || ["owner_group","production_management","finance_director","pattern_room_supervisor"].includes(entry.expectedRole);
+  const moduleAccess = read || ["sample_designer","order_merchandiser","worker"].includes(entry.expectedRole);
   const category = root || ["owner_group","production_management"].includes(entry.expectedRole);
   const hourly = root || entry.expectedRole === "owner_group";
   const required = root ? [] : [...(read ? ["pattern_room:prices:read"] : []), ...(category ? ["pattern_room:prices:write"] : []), ...(hourly ? ["pattern_room:hourly:write"] : [])];
@@ -565,12 +566,12 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXIS
   return { ...entry,
     requiredCapabilities: [...(entry.requiredCapabilities ?? []), ...required],
     forbiddenCapabilities: [...(entry.forbiddenCapabilities ?? []), ...forbidden],
-    allowedModules: [...(entry.allowedModules ?? []), ...(read ? ["pattern_room" as const] : [])],
-    forbiddenModules: [...(entry.forbiddenModules ?? []), ...(!read ? ["pattern_room" as const] : [])],
+    allowedModules: [...(entry.allowedModules ?? []), ...(moduleAccess ? ["pattern_room" as const] : [])],
+    forbiddenModules: [...(entry.forbiddenModules ?? []), ...(!moduleAccess ? ["pattern_room" as const] : [])],
     probes: [...(entry.probes ?? []), probe("pattern-room-prices","板房价格管控","pattern-room/prices",read ? 200 : 403)],
     ruleRefs: { ...entry.ruleRefs, ...approvedKeys("PERM-PATTERN-PRICE-20260912",[
       ...required.map(cap => `cap:${cap}:allow`), ...forbidden.map(cap => `cap:${cap}:deny`),
-      `module:pattern_room:${read ? "allow" : "deny"}`, "http:pattern-room-prices",
+      `module:pattern_room:${moduleAccess ? "allow" : "deny"}`, "http:pattern-room-prices",
     ]) },
   };
 }).map(entry => {
@@ -579,7 +580,7 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXIS
   const forbidden = root ? [] : Object.entries(patternOrderRoles).filter(([, roles]) => !roles.includes(entry.expectedRole)).map(([capability]) => capability);
   return { ...entry,
     requiredCapabilities: [...(entry.requiredCapabilities ?? []), ...required], forbiddenCapabilities: [...(entry.forbiddenCapabilities ?? []), ...forbidden],
-    probes: [...(entry.probes ?? []), probe("pattern-room-orders", "首次打板开放边界", "pattern-room/orders", root ? 200 : required.includes("pattern_room:orders:view") ? 503 : 403)],
+    probes: [...(entry.probes ?? []), probe("pattern-room-orders", "首次打板开放边界", "pattern-room/orders", root ? 200 : required.includes("pattern_room:orders:view") ? 200 : 403)],
     ruleRefs: { ...entry.ruleRefs, ...approvedKeys("PERM-PATTERN-ORDER-20260912", [...required.map(capability => `cap:${capability}:allow`), ...forbidden.map(capability => `cap:${capability}:deny`), "http:pattern-room-orders"]) },
   };
 });

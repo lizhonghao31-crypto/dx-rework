@@ -7,38 +7,64 @@ export async function wageReport(source: Queryable, query: ReportQuery, range: R
    SELECT period_month::text,person_id,person_name_snapshot,person_type_snapshot,rework_order_id,
     rework_no_snapshot,style_no_snapshot,process_name_snapshot,actual_quantity_snapshot::text,
     pricing_unit_snapshot,unit_price_snapshot::text,assignment_mode,wage_amount::text,
-    line_id,completed_date::text,marked_at::text
-   FROM filtered ORDER BY period_month DESC,person_name_snapshot,line_id LIMIT $6
+    line_id,completed_date::text,marked_at::text,marked_by,marked_by_name,wage_source,wage_kind,source_order_id,
+    round_id,round_index,segment_id,segment_index,task_name,source_amount::text,round_amount::text,actual_hours::text,
+    released_at::text,release_basis,cancellation
+   FROM filtered ORDER BY completed_date DESC,person_name_snapshot,line_id LIMIT $8
+ ), person_sources AS (
+   SELECT person_id,wage_source source,wage_kind kind,sum(wage_amount)::text amount,count(*)::int "lineCount"
+   FROM filtered GROUP BY person_id,wage_source,wage_kind
  ), people AS (
    SELECT person_id "personId",max(person_name_snapshot) name,
-     count(DISTINCT rework_no_snapshot)::int "orderCount",sum(wage_amount)::text amount
+     count(DISTINCT (wage_source,source_order_id))::int "orderCount",sum(wage_amount)::text amount,
+     count(*)::int "lineCount",count(DISTINCT round_id)::int "roundCount",
+     (SELECT jsonb_agg(jsonb_build_object('source',p.source,'kind',p.kind,'amount',p.amount,'lineCount',p."lineCount") ORDER BY p.source,p.kind)
+       FROM person_sources p WHERE p.person_id=filtered.person_id) sources
    FROM filtered GROUP BY person_id ORDER BY sum(wage_amount) DESC,person_id
  ) SELECT
    COALESCE((SELECT jsonb_agg(to_jsonb(preview)) FROM preview),'[]'::jsonb) rows,
    COALESCE((SELECT jsonb_agg(to_jsonb(people)) FROM people),'[]'::jsonb) people,
    count(*)::int row_count,COALESCE(sum(wage_amount),0)::text wage_total,
+   COALESCE(sum(wage_amount) FILTER(WHERE marked_at IS NULL),0)::text unsettled_total,
+   COALESCE(sum(wage_amount) FILTER(WHERE marked_at IS NOT NULL),0)::text settled_total,
+   count(DISTINCT person_id)::int person_count,count(DISTINCT (wage_source,source_order_id))::int order_count,
+   count(DISTINCT round_id)::int round_count,
    count(*) FILTER(WHERE marked_at IS NULL)::int pending_lines,
    count(DISTINCT person_id) FILTER(WHERE marked_at IS NULL)::int pending_people FROM filtered`,
    [...wageSelectionValues(query,range),limit]);
  const summary = result.rows[0]!;
+ const nullable = (value: unknown): string | null => value === null || value === undefined ? null : String(value);
  const rows = (summary.rows as Record<string, unknown>[]).map(row => ({
    periodMonth:String(row.period_month).slice(0,7),personId:String(row.person_id),
    personName:String(row.person_name_snapshot),personType:String(row.person_type_snapshot),
-   reworkOrderId:row.rework_order_id === null ? null : String(row.rework_order_id),
-   reworkNo:String(row.rework_no_snapshot),styleNo:String(row.style_no_snapshot),
-   processName:String(row.process_name_snapshot),quantity:String(row.actual_quantity_snapshot),
-   unit:String(row.pricing_unit_snapshot),unitPrice:String(row.unit_price_snapshot),
+   reworkOrderId:nullable(row.rework_order_id),sourceOrderId:nullable(row.source_order_id),
+   reworkNo:String(row.rework_no_snapshot),orderNo:String(row.rework_no_snapshot),styleNo:String(row.style_no_snapshot),
+   processName:String(row.process_name_snapshot),quantity:nullable(row.actual_quantity_snapshot),
+   unit:String(row.pricing_unit_snapshot),unitPrice:nullable(row.unit_price_snapshot),
    assignmentMode:String(row.assignment_mode),wageAmount:money(String(row.wage_amount)),
    lineId:String(row.line_id),completedDate:String(row.completed_date),
    settlementStatus:row.marked_at === null ? "unsettled" : "settled",
+   wageSource:String(row.wage_source),wageKind:String(row.wage_kind),taskName:nullable(row.task_name),
+   roundId:nullable(row.round_id),roundIndex:row.round_index as number|null,
+   segmentId:nullable(row.segment_id),segmentIndex:row.segment_index as number|null,
+   sourceAmount:nullable(row.source_amount),roundAmount:nullable(row.round_amount),actualHours:nullable(row.actual_hours),
+   releasedAt:nullable(row.released_at),releaseBasis:nullable(row.release_basis),cancellation:Boolean(row.cancellation),
+   markedBy:nullable(row.marked_by),markedByName:nullable(row.marked_by_name),markedAt:nullable(row.marked_at),
  }));
+ type Person = {personId:string;name:string;orderCount:number;amount:string;lineCount:number;roundCount:number;sources:{source:string;kind:string;amount:string;lineCount:number}[]};
  return { columns:[
    {key:"periodMonth",label:"工资月份"},{key:"personName",label:"人员"},{key:"personType",label:"人员类型"},
-   {key:"reworkNo",label:"返工单号"},{key:"styleNo",label:"款号"},{key:"processName",label:"工序"},
-   {key:"quantity",label:"数量/工时"},{key:"unit",label:"单位"},{key:"unitPrice",label:"单价"},
-   {key:"assignmentMode",label:"计件模式"},{key:"wageAmount",label:"工资金额"},{key:"settlementStatus",label:"工资结算"},
- ], rows,totals:{wageAmount:money(summary.wage_total)},wageSummary:{
+   {key:"wageSource",label:"工资来源"},{key:"wageKind",label:"业务类型"},
+   {key:"orderNo",label:"订单号"},{key:"styleNo",label:"款号"},{key:"taskName",label:"杂事名称"},{key:"processName",label:"工序/品类"},
+   {key:"roundIndex",label:"打板轮次（0为首次）"},{key:"segmentIndex",label:"执行段"},
+   {key:"quantity",label:"数量（板房为整轮数量）"},{key:"actualHours",label:"本人工时"},{key:"unit",label:"单位"},{key:"unitPrice",label:"单价快照"},
+   {key:"sourceAmount",label:"执行段计薪原值"},{key:"roundAmount",label:"整轮计薪原值"},
+   {key:"wageAmount",label:"工资金额"},{key:"completedDate",label:"劳动完成日期"},
+   {key:"releasedAt",label:"工资放行时间"},{key:"releaseBasis",label:"放行依据"},{key:"cancellation",label:"取消费用"},
+   {key:"settlementStatus",label:"工资结算"},{key:"markedByName",label:"结算标记人"},{key:"markedAt",label:"结算标记时间"},
+ ], rows,totals:{wageAmount:money(summary.wage_total),unsettledWageAmount:money(summary.unsettled_total),settledWageAmount:money(summary.settled_total)},wageSummary:{
    rowCount:summary.row_count,pendingLineCount:summary.pending_lines,pendingPersonCount:summary.pending_people,
-   people:summary.people.map((p: {personId:string;name:string;orderCount:number;amount:string})=>({...p,amount:money(p.amount)})),
+   personCount:summary.person_count,orderCount:summary.order_count,roundCount:summary.round_count,
+   people:(summary.people as Person[]).map(p=>({...p,amount:money(p.amount),sources:p.sources.map(item=>({...item,amount:money(item.amount)}))})),
  }};
 }

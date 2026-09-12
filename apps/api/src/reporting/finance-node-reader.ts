@@ -125,7 +125,7 @@ export async function readFinanceNode(db:Pool,actor:TrustedActorContext,orderId:
   const wages:SectionQuery={title:"工资明细",columns:["工人","类型","工序","数量","单价","工资金额","完工日期","结算状态","结算标记人","标记时间"],sql:`${wageSelection}
     SELECT person_name_snapshot,person_type_snapshot,process_name_snapshot,actual_quantity_snapshot,unit_price_snapshot,wage_amount,completed_date,
       CASE WHEN marked_at IS NULL THEN '未结算' ELSE '已结算' END,(SELECT display_name FROM app_users WHERE id=marked_by),marked_at
-    FROM filtered WHERE rework_order_id=$6 ORDER BY person_name_snapshot,completed_date,line_id`,values:['0001-01-01','9999-12-31',null,null,null,orderId]};
+    FROM filtered WHERE rework_order_id=$8 ORDER BY person_name_snapshot,completed_date,line_id`,values:['0001-01-01','9999-12-31',null,null,null,null,null,orderId]};
   const initiation:SectionQuery={title:"发起资料",columns:["返工号","款号","数量","原因","问题部位","问题描述","发起人","发起时间"],sql:`
     SELECT orders.rework_no,orders.style_no,orders.rework_quantity,to_jsonb(orders)->>'rework_reason',orders.problem_part,orders.problem_description,actor.display_name,orders.created_at
     FROM rework_orders orders LEFT JOIN app_users actor ON actor.id=orders.created_by WHERE orders.rework_order_id=$1`};

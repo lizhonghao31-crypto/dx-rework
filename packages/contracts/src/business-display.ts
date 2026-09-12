@@ -1,6 +1,9 @@
 export const BUSINESS_TIME_ZONE = "Asia/Shanghai";
 
 const VALUE_LABELS: Readonly<Record<string, string>> = {
+  order_rework: "订单返工", pattern_room: "订单打板", first_pattern: "首次打板", pattern_rework: "打板返工", misc: "杂事",
+  pattern_handoff: "样板交接", pattern_cancel_fees: "取消费用确认", misc_complete: "杂事完工及工时核定", misc_stop: "杂事停止及工时核定",
+  settled: "已结算", unsettled: "未结算", pattern_segment: "执行段",
   draft: "草稿",
   pending_process_configuration: "待配置工序",
   pending_ie_review: "待 IE 审核",
@@ -110,6 +113,7 @@ const FIELD_LABELS: Readonly<Record<string, string>> = {
   unit: "计价单位",
   periodStatus: "月结状态",
   wageAmount: "工资金额",
+  unsettledWageAmount: "未结算金额", settledWageAmount: "已结算金额",
   responsibilityAmount: "责任金额",
   ownFactoryAmount: "本厂承担金额",
   externalProposedAmount: "外部拟扣金额",
@@ -219,7 +223,7 @@ const ACTION_LABELS: Readonly<Record<string, string>> = {
 };
 
 const MONEY_FIELDS = new Set([
-  "wageAmount",
+  "wageAmount", "unsettledWageAmount", "settledWageAmount",
   "responsibilityAmount",
   "ownFactoryAmount",
   "externalProposedAmount",
