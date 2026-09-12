@@ -624,6 +624,42 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     } finally { await app.close(); }
   });
 
+  it("routes misc confirmation to the creator's current approved role after either legal role switch", async () => {
+    const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
+    const caps = [...Object.keys(PATTERN_ORDER_ROLES), "todo:view"];
+    const rootAdmin = () => actor(ids.patternRoot, ["root_superuser"], "access:admin");
+    const root = actor(ids.patternRoot, ["root_superuser"], "pattern_room:prices:read");
+    const price = (await new PatternRoomPriceService(database).management(root)).hourly;
+    const supervisor = actor(ids.patternSupervisor, ["pattern_room_supervisor"], "pattern_room:orders:view", ...caps);
+    const worker = actor(ids.worker, ["worker"], "pattern_room:orders:view", ...caps);
+    const action = (order: { version: number; currentRoundId: string }) => ({ version: order.version, roundId: order.currentRoundId });
+    const merchantRole = await access.assignRole(rootAdmin(), { userId: ids.otherPatternDesigner, roleCode: "order_merchandiser", reason: "隔离验收双职责" });
+    const designerRole = (await database.query("SELECT assignment_id FROM user_role_assignments WHERE user_id=$1 AND role_code='sample_designer' AND revoked_at IS NULL", [ids.otherPatternDesigner])).rows[0].assignment_id;
+    for (const nextRole of ["order_merchandiser", "sample_designer"] as const) {
+      const oldRoles = nextRole === "order_merchandiser" ? ["sample_designer", "order_merchandiser"] : ["order_merchandiser"];
+      const creator = actor(ids.otherPatternDesigner, oldRoles, "pattern_room:orders:view", ...caps);
+      const created = await service.createMisc(creator, { taskName: `MISC-职责切换-${nextRole}`, priceVersion: price.version }, randomUUID());
+      expect((await database.query("SELECT creator_role FROM pattern_room_orders WHERE order_id=$1", [created.orderId])).rows[0].creator_role).toBe(oldRoles[0]);
+      const assigned = await service.assign(supervisor, created.orderId, { ...action(created), personId: workerPersonId }, randomUUID());
+      const hours = await service.recordHours(supervisor, created.orderId, { ...action(assigned), hours: "1.2" }, randomUUID());
+      if (nextRole === "order_merchandiser") await access.revokeRole(rootAdmin(), designerRole, "隔离验收撤销设计师，保留跟单");
+      else {
+        await access.assignRole(rootAdmin(), { userId: ids.otherPatternDesigner, roleCode: "sample_designer", reason: "隔离验收恢复设计师" });
+        await access.revokeRole(rootAdmin(), merchantRole.assignmentId, "隔离验收撤销跟单，保留设计师");
+      }
+      const completed = await service.complete(worker, created.orderId, action(hours), randomUUID());
+      expect(completed.status).toBe("pending_confirmation");
+      const currentCreator = actor(ids.otherPatternDesigner, [nextRole], "todo:view", ...caps);
+      const pending = await todoService.listForActor(currentCreator, { module: "pattern_room", query: created.taskName! });
+      expect(pending.todos).toHaveLength(1);
+      expect(pending.todos[0]!.category).toBe("pattern_room_misc_confirmation");
+      expect((await database.query("SELECT required_role FROM rework_todos WHERE dedupe_key=$1", [patternTodoKey(created.orderId, created.currentRoundId, "misc-confirm")])).rows[0].required_role).toBe(nextRole);
+      expect((await service.confirmMisc(currentCreator, created.orderId, action(completed), randomUUID())).status).toBe("completed");
+      // The creation-time audit snapshot remains intact while routing uses live authority.
+      expect((await database.query("SELECT creator_role FROM pattern_room_orders WHERE order_id=$1", [created.orderId])).rows[0].creator_role).toBe(oldRoles[0]);
+    }
+  });
+
   it("keeps prerelease Root misc work isolated and explicit zero hourly work out of payable wages", async () => {
     const root = actor(ids.patternRoot, ["root_superuser"], "pattern_room:orders:view");
     const service = new PatternRoomOrderService(database, new RootAwareTodoProjectionService(todoService));

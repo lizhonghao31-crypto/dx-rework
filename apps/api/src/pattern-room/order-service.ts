@@ -150,8 +150,13 @@ export class PatternRoomOrderService {
       if (order.kind === "misc") await this.qualifyMisc(client, round.round_id);
       await this.todos.completeOpenByDedupeKey(client, effective, patternTodoKey(orderId, round.round_id, `execution:${segment.segment_id}`), "工人已完工");
       if (this.enabled) {
+        // Both creator roles may handle their own misc task. Resolve today's valid
+        // authority without changing the original creator/role audit snapshot.
+        const creatorRole = order.kind === "misc" ? (await client.query<{ role: string }>(
+          `SELECT role FROM unnest(ARRAY['sample_designer','order_merchandiser']::text[]) WITH ORDINALITY AS candidate(role,priority)
+           WHERE todo_user_has_direct_role($1,role,'pattern_room:misc:confirm') ORDER BY priority LIMIT 1`, [order.created_by])).rows[0]?.role ?? order.creator_role : order.creator_role;
         await this.todos.actionableForRecipient(client, effective, { ...this.projection(orderId, round.round_id, eventId, action, order.kind === "pattern" ? "handoff" : "misc-confirm"),
-          category: order.kind === "pattern" ? "pattern_room_handoff" : "pattern_room_misc_confirmation", recipientUserId: order.created_by, requiredRole: order.creator_role,
+          category: order.kind === "pattern" ? "pattern_room_handoff" : "pattern_room_misc_confirmation", recipientUserId: order.created_by, requiredRole: creatorRole,
           requiredCapability: order.kind === "pattern" ? "pattern_room:orders:handoff" : "pattern_room:misc:confirm" });
         if (order.kind === "misc" && round.actual_hours === null) await this.todos.actionableForUniqueDirectRole(client, effective, {
           ...this.projection(orderId, round.round_id, eventId, action, "hours"), requiredRole: "pattern_room_supervisor", requiredCapability: "pattern_room:orders:hours" });
