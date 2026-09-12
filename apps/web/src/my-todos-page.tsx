@@ -70,6 +70,8 @@ const categoryLabel = (todo: TodoResponse): string => {
     pattern_room_assignment: "分配板房工人",
     pattern_room_execution: "板房制作与报完工",
     pattern_room_handoff: "确认收到样板",
+    pattern_room_misc_confirmation: "确认杂事完成",
+    pattern_room_hours: "填写杂事实际工时",
     sample_borrow_confirm: "确认样衣借出",
     sample_return_confirm: "确认样衣归还",
     production_behind: "进度落后",

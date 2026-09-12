@@ -1,16 +1,16 @@
 import { PatternOrderQuerySchema } from "@dx-rework/contracts/pattern-orders";
 import { todoReturnPath } from "./todo-query-state.js";
 
-export type PatternListQuery = { q: string; status: string; creatorId: string; workerId: string; page: number };
+export type PatternListQuery = { q: string; kind: string; status: string; creatorId: string; workerId: string; page: number };
 export function readPatternListQuery(search: string): PatternListQuery {
   const params = new URLSearchParams(search), input: Record<string, string> = {};
-  for (const key of ["q", "status", "creatorId", "workerId", "page"]) if (params.get(key)) input[key] = params.get(key)!;
+  for (const key of ["q", "kind", "status", "creatorId", "workerId", "page"]) if (params.get(key)) input[key] = params.get(key)!;
   const parsed = PatternOrderQuerySchema.safeParse(input), query = parsed.success ? parsed.data : PatternOrderQuerySchema.parse({});
-  return { q: query.q ?? "", status: query.status ?? "", creatorId: query.creatorId ?? "", workerId: query.workerId ?? "", page: query.page };
+  return { q: query.q ?? "", kind: query.kind ?? "", status: query.status ?? "", creatorId: query.creatorId ?? "", workerId: query.workerId ?? "", page: query.page };
 }
 export function patternListPath(query: PatternListQuery): string {
   const params = new URLSearchParams();
-  for (const key of ["q", "status", "creatorId", "workerId"] as const) if (query[key]) params.set(key, query[key]);
+  for (const key of ["q", "kind", "status", "creatorId", "workerId"] as const) if (query[key]) params.set(key, query[key]);
   if (query.page > 1) params.set("page", String(query.page));
   return `/ui/pattern-room/create${params.size ? `?${params}` : ""}`;
 }

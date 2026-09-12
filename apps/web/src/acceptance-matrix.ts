@@ -524,11 +524,13 @@ const EXISTING_ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
 ];
 
 // Approved 2026-09-12 scope, explicitly translated from the business plan.
-// Approved PR03 roles; ordinary order operations remain closed until PR06.
+// Approved PR03/04 roles; ordinary order operations remain closed until PR06.
 const patternOrderRoles: Record<string, readonly string[]> = {
-  "pattern_room:orders:view": ["sample_designer", "pattern_room_supervisor", "worker", "owner_group", "production_management"],
+  "pattern_room:orders:view": ["sample_designer", "order_merchandiser", "pattern_room_supervisor", "worker", "owner_group", "production_management"],
   "pattern_room:orders:create": ["sample_designer"], "pattern_room:orders:edit": ["sample_designer"],
   "pattern_room:orders:handoff": ["sample_designer"], "pattern_room:orders:assign": ["pattern_room_supervisor"], "pattern_room:orders:complete": ["worker"],
+  "pattern_room:misc:create": ["sample_designer", "order_merchandiser"], "pattern_room:misc:edit": ["sample_designer", "order_merchandiser"],
+  "pattern_room:misc:confirm": ["sample_designer", "order_merchandiser"], "pattern_room:orders:hours": ["pattern_room_supervisor"],
 };
 
 export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXISTING_ACCEPTANCE_ROLE_MATRIX.map(entry => {

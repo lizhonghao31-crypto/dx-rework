@@ -2,38 +2,39 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { z } from "zod";
 import { Button, InsetField, Surface } from "@dx-rework/ui";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
-import { CreatePatternOrderSchema, UpdatePatternMaterialsSchema, PatternOrderDetailSchema, type PatternOrderDetail } from "@dx-rework/contracts/pattern-orders";
+import { CreatePatternOrderSchema, CreateMiscOrderSchema, UpdateMiscMaterialsSchema, UpdatePatternMaterialsSchema, PatternOrderDetailSchema, type PatternOrderDetail } from "@dx-rework/contracts/pattern-orders";
 import { PatternCategoryOptionsSchema, PatternPriceQuoteSchema } from "@dx-rework/contracts/pattern-room";
 import { createClientRequestId } from "./client-request-id.js";
 import { patternRequest, PatternRequestError, uploadPatternOriginal } from "./pattern-order-client.js";
 import { patternEstimate } from "./pattern-order-query.js";
 
-export function PatternOrderForm({ order, onSaved, onCancel }: { order?: PatternOrderDetail; onSaved(order: PatternOrderDetail): void; onCancel(): void }) {
-  const [values, setValues] = useState({ styleNo: order?.styleNo ?? "", requiredDate: order?.requiredDate ?? "", customer: order?.customer ?? "", sizeColor: order?.sizeColor ?? "", referenceStyleNo: order?.referenceStyleNo ?? "", variant: order?.variant ?? "", note: order?.note ?? "", reason: "" });
+export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSaved, onCancel }: { order?: PatternOrderDetail; kind?: "pattern" | "misc"; onSaved(order: PatternOrderDetail): void; onCancel(): void }) {
+  const misc = kind === "misc";
+  const [values, setValues] = useState({ taskName: order?.taskName ?? "", styleNo: order?.styleNo ?? "", requiredDate: order?.requiredDate ?? "", customer: order?.customer ?? "", sizeColor: order?.sizeColor ?? "", referenceStyleNo: order?.referenceStyleNo ?? "", variant: order?.variant ?? "", note: order?.note ?? "", reason: "" });
   const [files, setFiles] = useState((order?.attachments ?? []).filter(file => file.active && file.roundId === order?.currentRoundId).map(file => ({ attachmentId: file.attachmentId, filename: file.filename })));
   const [categories, setCategories] = useState<z.infer<typeof PatternCategoryOptionsSchema>>([]), [categoryId, setCategoryId] = useState("");
   const [quote, setQuote] = useState<z.infer<typeof PatternPriceQuoteSchema> | null>(null), [quantity, setQuantity] = useState("1");
   const [error, setError] = useState(""), [busy, setBusy] = useState(false), [uploading, setUploading] = useState(false), [refreshPrice, setRefreshPrice] = useState(0);
   const attempt = useRef<{ body: string; key: string } | null>(null);
   useEffect(() => {
-    if (order) return;
+    if (order || misc) return;
     const abort = new AbortController();
     void patternRequest("category-options", PatternCategoryOptionsSchema, { signal: abort.signal }).then(setCategories).catch(e => { if (!abort.signal.aborted) setError(e.message); });
     return () => abort.abort();
-  }, [order, refreshPrice]);
+  }, [order, misc, refreshPrice]);
   useEffect(() => {
     setQuote(null);
-    if (!categoryId) return;
+    if (order || (!misc && !categoryId)) return;
     const abort = new AbortController();
-    void patternRequest(`category-options/${categoryId}/quote`, PatternPriceQuoteSchema, { signal: abort.signal }).then(setQuote).catch(e => { if (!abort.signal.aborted) setError(e.message); });
+    void patternRequest(misc ? "hourly-quote" : `category-options/${categoryId}/quote`, PatternPriceQuoteSchema, { signal: abort.signal }).then(setQuote).catch(e => { if (!abort.signal.aborted) setError(e.message); });
     return () => abort.abort();
-  }, [categoryId, refreshPrice]);
+  }, [categoryId, misc, order, refreshPrice]);
   const upload = async (selected: File[]) => {
     if (selected.length + files.length > 20) { setError("最多上传 20 份制作资料"); return; }
     setUploading(true); setError("");
     try {
       for (const file of selected) {
-        const uploaded = await uploadPatternOriginal(file);
+        const uploaded = await uploadPatternOriginal(file, kind);
         setFiles(current => [...current, { attachmentId: uploaded.attachmentId, filename: uploaded.filename }]);
       }
     } catch (e) { setError(e instanceof Error ? e.message : "资料上传失败"); }
@@ -41,16 +42,17 @@ export function PatternOrderForm({ order, onSaved, onCancel }: { order?: Pattern
   };
   const submit = async (event: FormEvent) => {
     event.preventDefault(); if (busy || uploading) return;
-    const { reason, ...fields } = values;
-    const materials = { ...fields, requiredDate: fields.requiredDate || null, variant: fields.variant || null, attachmentIds: files.map(file => file.attachmentId) };
-    const input = order ? UpdatePatternMaterialsSchema.safeParse({ ...materials, reason, version: order.version, roundId: order.currentRoundId })
-      : CreatePatternOrderSchema.safeParse({ ...materials, categoryId, quantity: Number(quantity), priceVersion: quote?.version });
+    const { reason, taskName, ...fields } = values;
+    const common = { styleNo: fields.styleNo, requiredDate: fields.requiredDate || null, note: fields.note, attachmentIds: files.map(file => file.attachmentId) };
+    const materials = misc ? { ...common, taskName } : { ...fields, ...common, variant: fields.variant || null };
+    const input = order ? (misc ? UpdateMiscMaterialsSchema : UpdatePatternMaterialsSchema).safeParse({ ...materials, reason, version: order.version, roundId: order.currentRoundId })
+      : misc ? CreateMiscOrderSchema.safeParse({ ...materials, priceVersion: quote?.version }) : CreatePatternOrderSchema.safeParse({ ...materials, categoryId, quantity: Number(quantity), priceVersion: quote?.version });
     if (!input.success) { setError(input.error.issues[0]?.message ?? "请补充必填信息"); return; }
     const body = JSON.stringify(input.data);
     if (attempt.current?.body !== body) attempt.current = { body, key: createClientRequestId() };
     setBusy(true); setError("");
     try {
-      onSaved(await patternRequest(order ? `orders/${order.orderId}/materials` : "orders", PatternOrderDetailSchema, { method: "POST", body, headers: { "idempotency-key": attempt.current.key } }));
+      onSaved(await patternRequest(order ? `orders/${order.orderId}/${misc ? "misc-materials" : "materials"}` : misc ? "misc-orders" : "orders", PatternOrderDetailSchema, { method: "POST", body, headers: { "idempotency-key": attempt.current.key } }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "提交失败");
       if (e instanceof PatternRequestError && e.code === "PRICE_CHANGED") { setQuote(null); setRefreshPrice(value => value + 1); }
@@ -58,24 +60,26 @@ export function PatternOrderForm({ order, onSaved, onCancel }: { order?: Pattern
   };
   const disabled = busy || uploading;
   const estimated = patternEstimate(quote?.amount ?? null, quantity);
-  return <Surface><form className="pattern-order-form" onSubmit={event => void submit(event)}><h2>{order ? "更新制作资料" : "新建打板"}</h2>
+  return <Surface><form className="pattern-order-form" onSubmit={event => void submit(event)}><h2>{order ? "更新任务资料" : misc ? "新建杂事" : "新建打板"}</h2>
     <div className="pattern-fields">
-      <InsetField label="本次款号（必填）" value={values.styleNo} required maxLength={100} onChange={e => setValues({ ...values, styleNo: e.target.value })} disabled={disabled} />
-      {!order ? <><label>品类（必填）<select required value={categoryId} onChange={e => setCategoryId(e.target.value)} disabled={disabled}><option value="">请选择品类</option>{categories.map(category => <option key={category.priceId} value={category.priceId}>{category.name}（{category.unit}）</option>)}</select></label>
+      {misc ? <InsetField label="杂事内容 / 任务名称（必填）" value={values.taskName} required maxLength={200} onChange={e => setValues({ ...values, taskName: e.target.value })} disabled={disabled} /> : null}
+      <InsetField label={misc ? "关联款号（可选）" : "本次款号（必填）"} value={values.styleNo} required={!misc} maxLength={100} onChange={e => setValues({ ...values, styleNo: e.target.value })} disabled={disabled} />
+      {!order && !misc ? <><label>品类（必填）<select required value={categoryId} onChange={e => setCategoryId(e.target.value)} disabled={disabled}><option value="">请选择品类</option>{categories.map(category => <option key={category.priceId} value={category.priceId}>{category.name}（{category.unit}）</option>)}</select></label>
         <InsetField label="数量（必填）" type="number" min={1} max={1_000_000} step={1} required value={quantity} onChange={e => setQuantity(e.target.value)} disabled={disabled} />
         <p>执行价：{quote?.amount ? `${formatBusinessDecimal(quote.amount)} 元/${quote.unit}` : "选择品类后显示"}<br />预计金额：{estimated !== null ? `${formatBusinessDecimal(estimated)} 元` : "填写品类与数量后显示"}</p></> : null}
       <InsetField label="要求完成日期" type="date" value={values.requiredDate} onChange={e => setValues({ ...values, requiredDate: e.target.value })} disabled={disabled} />
-      <InsetField label="客户" value={values.customer} maxLength={100} onChange={e => setValues({ ...values, customer: e.target.value })} disabled={disabled} />
+      {misc && !order ? <div><p>本单小时价：{quote?.amount !== null && quote?.amount !== undefined ? `${formatBusinessDecimal(quote.amount)} 元/小时` : "尚未配置"}{quote?.amount === null ? "，请由老板或Root配置后提交。" : ""}</p><Button type="button" disabled={disabled} onClick={() => setRefreshPrice(value => value + 1)}>重新读取小时价</Button></div> : null}
+      {!misc ? <><InsetField label="客户" value={values.customer} maxLength={100} onChange={e => setValues({ ...values, customer: e.target.value })} disabled={disabled} />
       <InsetField label="尺码与颜色" value={values.sizeColor} maxLength={200} onChange={e => setValues({ ...values, sizeColor: e.target.value })} disabled={disabled} />
       <label>版型<select value={values.variant} onChange={e => setValues({ ...values, variant: e.target.value })} disabled={disabled}><option value="">未指定</option>{["初版", "复版", "齐色版"].map(value => <option key={value}>{value}</option>)}</select></label>
-      <InsetField label="参考历史款号（可选）" value={values.referenceStyleNo} maxLength={100} onChange={e => setValues({ ...values, referenceStyleNo: e.target.value })} disabled={disabled} />
+      <InsetField label="参考历史款号（可选）" value={values.referenceStyleNo} maxLength={100} onChange={e => setValues({ ...values, referenceStyleNo: e.target.value })} disabled={disabled} /></> : null}
     </div>
     <label>备注<textarea value={values.note} maxLength={2000} onChange={e => setValues({ ...values, note: e.target.value })} disabled={disabled} /></label>
-    <label>制作 PDF / 清晰图片（至少一份）<input type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp" disabled={disabled} onChange={e => { const selected = Array.from(e.target.files ?? []); e.target.value = ""; void upload(selected); }} /></label>
+    <label>{misc ? "图片 / 附件（选填）" : "制作 PDF / 清晰图片（至少一份）"}<input type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp" disabled={disabled} onChange={e => { const selected = Array.from(e.target.files ?? []); e.target.value = ""; void upload(selected); }} /></label>
     {uploading ? <p role="status">正在上传原始制作资料…</p> : null}
     <ul className="pattern-files">{files.map(file => <li key={file.attachmentId}><span>{file.filename}</span><Button type="button" disabled={disabled} onClick={() => setFiles(current => current.filter(item => item.attachmentId !== file.attachmentId))}>移出当前资料</Button></li>)}</ul>
-    {order ? <><InsetField label="变更原因（必填）" value={values.reason} required maxLength={500} onChange={e => setValues({ ...values, reason: e.target.value })} disabled={disabled} /><p>旧资料保留在订单记录中。派工后的变更会通知主管和当前工人。</p></> : <p>提交即确认材料已齐备，订单将进入待分配。</p>}
+    {order ? <><InsetField label="变更原因（必填）" value={values.reason} required maxLength={500} onChange={e => setValues({ ...values, reason: e.target.value })} disabled={disabled} /><p>旧资料保留在订单记录中。派工后的变更会通知主管和当前工人。</p></> : <p>{misc ? "实际工时由板房主管填写，工人完工且工时确定后计算工资。" : "提交即确认材料已齐备，订单将进入待分配。"}</p>}
     {error ? <p role="alert">{error}</p> : null}
-    <div className="pattern-actions"><Button type="button" disabled={disabled} onClick={onCancel}>取消</Button><Button type="submit" variant="primary" disabled={disabled || (!order && !quote)}>{busy ? "提交中…" : order ? "保存资料" : "提交打板"}</Button></div>
+    <div className="pattern-actions"><Button type="button" disabled={disabled} onClick={onCancel}>取消</Button><Button type="submit" variant="primary" disabled={disabled || (!order && (!quote || quote.amount === null))}>{busy ? "提交中…" : order ? "保存资料" : misc ? "提交杂事" : "提交打板"}</Button></div>
   </form></Surface>;
 }
