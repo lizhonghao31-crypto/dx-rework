@@ -4,6 +4,7 @@ import { RootAwareTodoProjectionService } from "../../apps/api/src/todos/root-aw
 import Fastify from "fastify";
 import { registerPatternRoomOrderRoutes } from "../../apps/api/src/pattern-room/order-routes.js";
 import type { AttachmentService } from "../../apps/api/src/tools/attachments.js";
+import { registerTodoRoutes } from "../../apps/api/src/todos/routes.js";
 import { readFinanceNode } from "../../apps/api/src/reporting/finance-node-reader.js";
 import { FinanceNodeKeySchema } from "@dx-rework/contracts/reporting";
 import { randomUUID } from "node:crypto";
@@ -463,10 +464,15 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       const current = token === "other" ? otherDesigner : worker;
       return { id: current.actorId, businessRoles: current.actorRoles, capabilities: caps };
     } });
+    registerTodoRoutes(app, { service: todoService, authenticate: async () => ({ id: ids.worker, businessRoles: ["worker"], capabilities: caps }) });
     try {
       const allowed = await app.inject({ url: `/pattern-room/orders/${created.orderId}`, headers: { cookie: "dx_rework_session=worker" } });
       expect(allowed.statusCode).toBe(200);
       expect(allowed.json().rounds[0]).not.toHaveProperty("agreedAmount");
+      const todoResponse = await app.inject({ url: "/todos/mine?module=pattern_room&q=PATTERN", headers: { cookie: "dx_rework_session=worker" } });
+      expect(todoResponse.statusCode).toBe(200);
+      expect(todoResponse.json().todos).toHaveLength(1);
+      expect(todoResponse.json().todos[0]).toMatchObject({ category: "pattern_room_execution", route: { entityId: created.orderId, roundId: assigned.currentRoundId } });
       expect((await app.inject({ url: `/pattern-room/orders/${created.orderId}`, headers: { cookie: "dx_rework_session=other" } })).statusCode).toBe(404);
       expect((await app.inject({ method: "POST", url: `/pattern-room/orders/${created.orderId}/handoff`, payload: { version: assigned.version, roundId: assigned.currentRoundId }, headers: { cookie: "dx_rework_session=worker", "idempotency-key": randomUUID() } })).statusCode).toBe(403);
       expect((await app.inject({ url: "/pattern-room/orders?workerId=invalid" })).statusCode).toBe(400);
@@ -520,11 +526,15 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const created = await service.create(root, { styleNo: "ROOT-PATTERN", categoryId: "92000000-0000-4000-8000-000000000002", quantity: 1, priceVersion: 1, attachmentIds: [fileId] }, randomUUID());
     expect((await service.workers(root, "Root")).some(person => person.personId === personId)).toBe(true);
     const assigned = await service.assign(root, created.orderId, { version: created.version, roundId: created.currentRoundId, personId }, randomUUID());
-    const completed = await service.complete(root, created.orderId, { version: assigned.version, roundId: assigned.currentRoundId }, randomUUID());
+    const revised = await service.updateMaterials(root, created.orderId, { version: assigned.version, roundId: assigned.currentRoundId, styleNo: created.styleNo, attachmentIds: [fileId], reason: "Root验收资料修正" }, randomUUID());
+    const completed = await service.complete(root, created.orderId, { version: revised.version, roundId: revised.currentRoundId }, randomUUID());
     const handed = await service.handoff(root, created.orderId, { version: completed.version, roundId: completed.currentRoundId }, randomUUID());
     expect(handed.status).toBe("completed");
     expect(handed.rounds[0]!.segments[0]!.wageEligible).toBe(true);
     expect((await database.query("SELECT count(*)::int count FROM user_role_assignments WHERE user_id=$1", [ids.patternRoot])).rows[0].count).toBe(0);
+    // A real supervisor exists in this fixture; prerelease Root work must not create staff todos or notices.
+    expect((await database.query("SELECT count(*)::int count FROM rework_todos WHERE entity_type='pattern_room_order' AND entity_id=$1", [created.orderId])).rows[0].count).toBe(0);
+    expect((await database.query("SELECT supervisor_user_id FROM pattern_room_rounds WHERE round_id=$1", [created.currentRoundId])).rows[0].supervisor_user_id).toBe(ids.patternRoot);
   });
 
   it("carries one real order from N01 through N11 without losing cross-node facts", async () => {

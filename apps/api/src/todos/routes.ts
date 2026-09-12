@@ -1,6 +1,7 @@
 import {
   TodoListResponseSchema,
   TodoMineParamsSchema,
+  TodoModuleSchema,
   TodoCountIndicatorSchema,
   TodoResponseSchema,
   TodoRoutingExceptionListResponseSchema,
@@ -68,12 +69,9 @@ export function registerTodoRoutes(
   app.get<{
     Querystring: { module?: string; page?: string; q?: string };
   }>("/todos/mine", async (request) => {
-    const module = request.query.module;
+    const module = request.query.module === undefined ? undefined : parse(TodoModuleSchema, request.query.module);
     const query = request.query.q;
     const pageInput = request.query.page;
-    if (module !== undefined && module !== "rework" && module !== "sourcing" && module !== "production" && module !== "samples") {
-      throw new ApplicationError("VALIDATION_ERROR", "待办模块无效", 400);
-    }
     if (query !== undefined && typeof query !== "string") {
       throw new ApplicationError("VALIDATION_ERROR", "搜索内容无效", 400);
     }

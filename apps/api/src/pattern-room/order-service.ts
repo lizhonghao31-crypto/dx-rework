@@ -79,6 +79,8 @@ export class PatternRoomOrderService {
     if (next) await client.query("INSERT INTO pattern_room_node_times(node_id,round_id,stage) VALUES($1,$2,$3)", [randomUUID(), roundId, next]);
   }
   private async supervisor(client: PoolClient, fallback: string): Promise<string> {
+    // Before release only Root may act; never route its acceptance work to real staff.
+    if (!this.enabled) return fallback;
     const result = await client.query<{ user_id: string }>(`SELECT assignment.user_id FROM user_role_assignments assignment WHERE assignment.role_code='pattern_room_supervisor'
       AND assignment.revoked_at IS NULL AND todo_user_has_direct_role(assignment.user_id,'pattern_room_supervisor','pattern_room:orders:assign') LIMIT 1`);
     return result.rows[0]?.user_id ?? fallback;
@@ -100,7 +102,7 @@ export class PatternRoomOrderService {
       await client.query("INSERT INTO pattern_room_node_times(node_id,round_id,stage) VALUES($1,$2,'pending_assignment')", [randomUUID(), roundId]);
       await bindPatternMaterials(client, effective, orderId, roundId, parsed.attachmentIds, "创建制作资料");
       const eventId = await this.event(client, effective, action, orderId, roundId, parsed);
-      await this.todos.actionableForUniqueDirectRole(client, effective, { ...this.projection(orderId, roundId, eventId, action, "assignment"), requiredRole: "pattern_room_supervisor", requiredCapability: "pattern_room:orders:assign" });
+      if (this.enabled) await this.todos.actionableForUniqueDirectRole(client, effective, { ...this.projection(orderId, roundId, eventId, action, "assignment"), requiredRole: "pattern_room_supervisor", requiredCapability: "pattern_room:orders:assign" });
       return orderId;
     });
   }
@@ -121,7 +123,7 @@ export class PatternRoomOrderService {
       await this.moveNode(client, round.round_id, "in_progress");
       const eventId = await this.event(client, effective, action, orderId, round.round_id, { segmentId, personId: person.person_id, workerUserId: person.app_user_id });
       await this.todos.completeOpenByDedupeKey(client, effective, patternTodoKey(orderId, round.round_id, "assignment"), "已分配工人");
-      await this.todos.actionableForRecipient(client, effective, { ...this.projection(orderId, round.round_id, eventId, action, `execution:${segmentId}`), category: "pattern_room_execution",
+      if (this.enabled) await this.todos.actionableForRecipient(client, effective, { ...this.projection(orderId, round.round_id, eventId, action, `execution:${segmentId}`), category: "pattern_room_execution",
         recipientUserId: person.app_user_id, requiredRole: "worker", requiredCapability: "pattern_room:orders:complete" });
       return orderId;
     });
@@ -139,10 +141,12 @@ export class PatternRoomOrderService {
       await this.moveNode(client, round.round_id, "pending_confirmation");
       const eventId = await this.event(client, effective, action, orderId, round.round_id, { segmentId: segment.segment_id, awaitingDesignerHandoff: true });
       await this.todos.completeOpenByDedupeKey(client, effective, patternTodoKey(orderId, round.round_id, `execution:${segment.segment_id}`), "工人已完工");
-      await this.todos.actionableForRecipient(client, effective, { ...this.projection(orderId, round.round_id, eventId, action, "handoff"), recipientUserId: order.created_by, requiredRole: "sample_designer", requiredCapability: "pattern_room:orders:handoff" });
-      const recipient = await this.supervisor(client, round.supervisor_user_id ?? round.assigned_by ?? effective.actorId);
-      await this.todos.information(client, effective, { category: "pattern_room_completion_notice", sourceEventId: eventId, sourceAction: action, entityType: "pattern_room_order", entityId: orderId,
-        recipientUserId: recipient, route: { routeName: "pattern_room_order", entityId: orderId, roundId: round.round_id }, dedupeKey: patternTodoKey(orderId, round.round_id, `completion-notice:${recipient}`) });
+      if (this.enabled) {
+        await this.todos.actionableForRecipient(client, effective, { ...this.projection(orderId, round.round_id, eventId, action, "handoff"), recipientUserId: order.created_by, requiredRole: "sample_designer", requiredCapability: "pattern_room:orders:handoff" });
+        const recipient = await this.supervisor(client, round.supervisor_user_id ?? round.assigned_by ?? effective.actorId);
+        await this.todos.information(client, effective, { category: "pattern_room_completion_notice", sourceEventId: eventId, sourceAction: action, entityType: "pattern_room_order", entityId: orderId,
+          recipientUserId: recipient, route: { routeName: "pattern_room_order", entityId: orderId, roundId: round.round_id }, dedupeKey: patternTodoKey(orderId, round.round_id, `completion-notice:${recipient}`) });
+      }
       return orderId;
     });
   }
@@ -175,7 +179,7 @@ export class PatternRoomOrderService {
       await client.query(`UPDATE pattern_room_orders SET style_no=$2,required_date=$3,customer=$4,size_color=$5,reference_style_no=$6,variant=$7,note=$8,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE order_id=$1`,
         [orderId, parsed.styleNo, parsed.requiredDate, parsed.customer, parsed.sizeColor, parsed.referenceStyleNo, parsed.variant, parsed.note]);
       const eventId = await this.event(client, effective, action, orderId, round.round_id, parsed, order, parsed.reason);
-      if (order.status === "in_progress") {
+      if (this.enabled && order.status === "in_progress") {
         const worker = (await client.query<{ worker_user_id: string }>("SELECT worker_user_id FROM pattern_room_segments WHERE round_id=$1 AND ended_at IS NULL", [round.round_id])).rows[0];
         const supervisor = await this.supervisor(client, round.supervisor_user_id ?? round.assigned_by ?? effective.actorId);
         for (const recipient of new Set([supervisor, ...(worker ? [worker.worker_user_id] : [])])) await this.todos.information(client, effective, {
