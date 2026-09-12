@@ -339,9 +339,9 @@ export class ManagementReportingService {
     const range = await this.range(query);
     // One atomic insert: concurrent/retried requests preserve the original marker and timestamp.
     const result = await this.db.query(`${wageSelection}, inserted AS (
-      INSERT INTO rework_wage_settlement_marks(line_id,wage_item_id,closure_line_id,marked_by)
-      SELECT line_id,wage_item_id,closure_line_id,$7::uuid FROM filtered
-      WHERE marked_at IS NULL AND line_id=ANY($6::uuid[])
+      INSERT INTO rework_wage_settlement_marks(line_id,wage_item_id,closure_line_id,pattern_wage_item_id,marked_by)
+      SELECT line_id,wage_item_id,closure_line_id,pattern_wage_item_id,$9::uuid FROM filtered
+      WHERE marked_at IS NULL AND line_id=ANY($8::uuid[])
       ON CONFLICT(line_id) DO NOTHING RETURNING line_id
     ) SELECT count(*)::int marked_count FROM inserted`,[...wageSelectionValues(query,range),lineIds,actor.actorId]);
     return {markedCount:result.rows[0]!.marked_count as number};

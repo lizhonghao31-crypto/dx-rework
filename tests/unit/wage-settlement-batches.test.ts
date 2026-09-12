@@ -8,7 +8,7 @@ describe("confirmed wage snapshot batches",()=>{
  });
  it("stops on failure, explains retry and does not send later batches",async()=>{
   const send=vi.fn().mockResolvedValueOnce({markedCount:10000}).mockRejectedValueOnce(new Error('连接中断'));
-  await expect(settleWageBatches(Array(25000).fill('id'),send)).rejects.toThrow('已完成的标记会保留');expect(send).toHaveBeenCalledTimes(2);
+  await expect(settleWageBatches(Array(25000).fill('id'),send)).rejects.toMatchObject({markedCount:10000,uncertainFrom:10001,uncertainTo:20000,notAttemptedCount:5000});expect(send).toHaveBeenCalledTimes(2);
  });
  it("counts newly marked rows only on retry",async()=>{
   expect(await settleWageBatches(['old','new'],async()=>({markedCount:1}))).toEqual({markedCount:1});

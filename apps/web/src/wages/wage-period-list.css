@@ -152,3 +152,8 @@
 .wage-management .wage-query-actions { display:flex; align-items:end; gap:12px; margin-left:auto; }
 .wage-management .wage-query-actions button { min-height:42px; white-space:nowrap; }
 @media (max-width:760px) { .wage-management .wage-query-actions { grid-column:1 / -1; margin-left:0; flex-wrap:wrap; } }
+
+.wage-detail-table details[open] { min-width: 240px; max-width: 360px; white-space: normal; }
+.wage-detail-table dl { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(110px, 2fr); gap: 6px 12px; }
+.wage-detail-table dd { margin: 0; overflow-wrap: anywhere; }
+.wage-person-grid details { overflow-wrap: anywhere; }

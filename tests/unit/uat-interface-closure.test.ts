@@ -42,7 +42,7 @@ describe("UAT interface closure", () => {
   it("provides real wage search, period shortcuts, summaries, detail and export", async () => {
     const source = await read("apps/web/src/wages/wage-period-list.tsx");
     expect(source).toContain('loadReport("wages"');
-    expect(source).toContain("工人 / 返工单 / 款号");
+    expect(source).toContain("工人 / 订单 / 款号 / 杂事");
     expect(source).toContain(">本月<");
     expect(source).toContain(">本季度<");
     expect(source).toContain(">本年度<");

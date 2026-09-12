@@ -1,0 +1,148 @@
+{
+  "environment": "isolated local PGlite current-schema verification; not production",
+  "fullChainTests": 19,
+  "passed": 19,
+  "schema": "full_chain_0a8ed64212904b4190b3758d85c3dffd",
+  "orders": [
+    {
+      "order_id": "b292b891-5970-4f50-b236-e72f4d24a108",
+      "order_no": "BF-20260912-19",
+      "kind": "pattern",
+      "style_no": "PR06-SCALE-MONTH",
+      "task_name": null,
+      "status": "completed"
+    },
+    {
+      "order_id": "49942f16-f53d-4f5e-81d8-ab9f04220477",
+      "order_no": "BF-20260912-1",
+      "kind": "pattern",
+      "style_no": "PATTERN-本次款号",
+      "task_name": null,
+      "status": "completed"
+    },
+    {
+      "order_id": "e9d9592a-7662-482f-a676-878ae5756e9f",
+      "order_no": "BF-20260912-4",
+      "kind": "pattern",
+      "style_no": "ROOT-PATTERN",
+      "task_name": null,
+      "status": "cancelled"
+    },
+    {
+      "order_id": "66c086c4-3d42-402d-a3d0-813c61f928a3",
+      "order_no": "BF-20260912-5",
+      "kind": "misc",
+      "style_no": "可选关联款号",
+      "task_name": "MISC-先完成后工时",
+      "status": "completed"
+    },
+    {
+      "order_id": "9f2743e6-6d8d-445b-a122-49720d862d03",
+      "order_no": "BF-20260912-6",
+      "kind": "misc",
+      "style_no": "",
+      "task_name": "MISC-先工时后完成",
+      "status": "completed"
+    },
+    {
+      "order_id": "69c0d788-cbbb-4e87-b794-6c857332581c",
+      "order_no": "BF-20260912-7",
+      "kind": "misc",
+      "style_no": "",
+      "task_name": "MISC-职责切换-order_merchandiser",
+      "status": "completed"
+    },
+    {
+      "order_id": "1c8c905d-8ef5-4459-8037-19fdf644b2ee",
+      "order_no": "BF-20260912-8",
+      "kind": "misc",
+      "style_no": "",
+      "task_name": "MISC-职责切换-sample_designer",
+      "status": "completed"
+    },
+    {
+      "order_id": "e33e73a5-a27b-475d-85eb-50442b87e792",
+      "order_no": "BF-20260912-9",
+      "kind": "misc",
+      "style_no": "",
+      "task_name": "ROOT-MISC-修正",
+      "status": "completed"
+    },
+    {
+      "order_id": "a1d61e88-283f-48ac-98a5-766d289e98b4",
+      "order_no": "BF-20260912-10",
+      "kind": "pattern",
+      "style_no": "PATTERN-换人及多轮",
+      "task_name": null,
+      "status": "cancelled"
+    },
+    {
+      "order_id": "fdeacb9f-4a30-40df-9b91-33c47eaaf6f0",
+      "order_no": "BF-20260912-11",
+      "kind": "pattern",
+      "style_no": "PATTERN-未派工取消",
+      "task_name": null,
+      "status": "cancelled"
+    },
+    {
+      "order_id": "53acb5a1-1ac5-490c-a454-23f2106d2df7",
+      "order_no": "BF-20260912-12",
+      "kind": "pattern",
+      "style_no": "PATTERN-部分取消",
+      "task_name": null,
+      "status": "cancelled"
+    },
+    {
+      "order_id": "07fb1447-d881-469c-bd32-f7cd9b368d1a",
+      "order_no": "BF-20260912-13",
+      "kind": "pattern",
+      "style_no": "PATTERN-零费取消",
+      "task_name": null,
+      "status": "cancelled"
+    },
+    {
+      "order_id": "e4d97a5d-2f4a-40b1-9190-04e70871648d",
+      "order_no": "BF-20260912-14",
+      "kind": "pattern",
+      "style_no": "PATTERN-取消返工保留旧轮费用",
+      "task_name": null,
+      "status": "cancelled"
+    },
+    {
+      "order_id": "f9cef944-5a89-42ba-89fe-ad38cf2c5bd1",
+      "order_no": "BF-20260912-15",
+      "kind": "misc",
+      "style_no": "",
+      "task_name": "MISC-分段实际工时",
+      "status": "cancelled"
+    },
+    {
+      "order_id": "0ebba576-6c86-4c94-8620-376589dcf269",
+      "order_no": "BF-20260912-16",
+      "kind": "misc",
+      "style_no": "",
+      "task_name": "MISC-中途实际停止",
+      "status": "cancelled"
+    },
+    {
+      "order_id": "abf68e58-5b56-4641-91c1-c1d2254853e4",
+      "order_no": "BF-20260912-17",
+      "kind": "misc",
+      "style_no": "",
+      "task_name": "MISC-取消无实际工作",
+      "status": "cancelled"
+    },
+    {
+      "order_id": "b83e752c-55a9-4101-b17d-5455b4873d48",
+      "order_no": "BF-20260912-18",
+      "kind": "pattern",
+      "style_no": "PATTERN-并发改派与完工",
+      "task_name": null,
+      "status": "completed"
+    }
+  ],
+  "cleanup": {
+    "schema": "full_chain_0a8ed64212904b4190b3758d85c3dffd",
+    "dropped": true
+  }
+}

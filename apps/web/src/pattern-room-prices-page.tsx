@@ -11,7 +11,7 @@ import "./pattern-room.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 const time = (value: string) => new Date(value).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false });
-const amountText = (value: string | null) => value === null ? "未配置" : formatBusinessDecimal(value);
+const amountText = (value: string | null) => value === null ? "未配置" : formatBusinessDecimal(value, 3);
 async function readPrice<T>(path: string, schema: z.ZodType<T>, init: RequestInit = {}): Promise<T> {
   const response = await fetch(apiUrl(path), { ...init, credentials: "include", cache: "no-store", headers: { "content-type": "application/json", ...init.headers } });
   const body = await response.json();

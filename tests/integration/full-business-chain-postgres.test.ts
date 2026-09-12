@@ -1,3 +1,5 @@
+import { registerManagementReportingRoutes } from "../../apps/api/src/reporting/management-reporting-routes.js";
+import { ReportExportService } from "../../apps/api/src/reporting/report-export-service.js";
 import { PATTERN_ORDER_ROLES } from "@dx-rework/contracts/pattern-orders";
 import { PatternRoomOrderService, patternTodoKey } from "../../apps/api/src/pattern-room/order-service.js";
 import { RootAwareTodoProjectionService } from "../../apps/api/src/todos/root-aware-projection-service.js";
@@ -150,6 +152,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     factoryPayables: randomUUID(),
     fabricPayables: randomUUID(),
     financeDirector: randomUUID(),
+    financeRead: randomUUID(),
     embroideryMerchandiser: randomUUID(),
     embroideryPayables: randomUUID(),
     administrative: randomUUID(),
@@ -289,6 +292,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       [ids.factoryPayables, "加工厂应付", "factory_payables"],
       [ids.fabricPayables, "面料应付", "fabric_payables"],
       [ids.financeDirector, "财务总监", "finance_director"],
+      [ids.financeRead, "财务全局查看", "finance_read"],
       [ids.embroideryMerchandiser, "印绣花跟单", "embroidery_washing_merchandiser"],
       [ids.embroideryPayables, "印绣花应付", "embroidery_washing_payables"],
       [ids.administrative, "行政文员", "administrative_clerk"],
@@ -364,8 +368,13 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   });
 
   afterAll(async () => {
+    if (process.env.PATTERN_ROOM_EVIDENCE === "1") {
+      const fixtures = await database.query("SELECT order_id,order_no,kind,style_no,task_name,status FROM pattern_room_orders ORDER BY submitted_at,order_id");
+      process.stdout.write(`PATTERN_ROOM_FIXTURES ${JSON.stringify({schema,orders:fixtures.rows})}\n`);
+    }
     await database.end();
     await adminPool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    if (process.env.PATTERN_ROOM_EVIDENCE === "1") process.stdout.write(`PATTERN_ROOM_CLEANUP ${JSON.stringify({schema,dropped:true})}\n`);
     await adminPool.end();
   });
 
@@ -434,7 +443,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     for (const file of files) await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
       VALUES($1,$2,'制作原稿.pdf','application/pdf',10,$3,$4,'ready',CURRENT_TIMESTAMP)`, [file, `private/${file}.pdf`, "a".repeat(64), ids.patternDesigner]);
     const input = { styleNo: "PATTERN-本次款号", referenceStyleNo: "OLD-参考款号", categoryId: "92000000-0000-4000-8000-000000000002", quantity: 2, priceVersion: 1, attachmentIds: [files[0]], requiredDate: "2026-09-30" };
-    await expect(new PatternRoomOrderService(database, todoProjection).create(designer, input, randomUUID())).rejects.toMatchObject({ statusCode: 503 });
+    await expect(new PatternRoomOrderService(database, todoProjection, { ordersEnabled: false }).create(designer, input, randomUUID())).rejects.toMatchObject({ statusCode: 503 });
     await expect(service.create(supervisor, input, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
     await expect(service.create(designer, { ...input, attachmentIds: [] }, randomUUID())).rejects.toMatchObject({ statusCode: 400 });
     await expect(service.create(designer, { ...input, priceVersion: 99 }, randomUUID())).rejects.toMatchObject({ statusCode: 409, code: "PRICE_CHANGED" });
@@ -524,7 +533,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   });
 
   it("keeps Root first-pattern acceptance available with ordinary access closed and no normal roles", async () => {
-    const service = new PatternRoomOrderService(database, new RootAwareTodoProjectionService(todoService));
+    const service = new PatternRoomOrderService(database, new RootAwareTodoProjectionService(todoService), { ordersEnabled: false });
     const root = actor(ids.patternRoot, ["root_superuser"], "pattern_room:orders:view");
     const personId = (await access.createPerson({ ...root, authorizationCapability: "master_data:manage" }, { personType: "internal", appUserId: ids.patternRoot, displayName: "Root验收", aliases: [], reason: "Root单账号验收" })).personId;
     const fileId = randomUUID();
@@ -615,7 +624,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       expect(workerView.rounds[0]).not.toHaveProperty("unitPrice");
       expect(workerView.rounds[0]).not.toHaveProperty("actualHours");
       expect(workerView.rounds[0]!.segments[0]!.actualHours).toBe("0.1");
-      await expect(database.query("UPDATE pattern_room_segments SET actual_hours=1.25 WHERE segment_id=$1", [qualified.rounds[0].segments[0].segmentId])).rejects.toMatchObject({ code: "23514" });
+      await expect(database.query("UPDATE pattern_room_segments SET actual_hours=1.25 WHERE segment_id=$1", [qualified.rounds[0].segments[0].segmentId])).rejects.toMatchObject({ code: "55000" });
       // The other legal ordering: hours are known before the worker completes.
       const currentPrice = (await prices.management(owner)).hourly;
       const second = await service.createMisc(designer, { taskName: "MISC-先工时后完成", priceVersion: currentPrice.version }, randomUUID());
@@ -672,7 +681,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
   it("keeps prerelease Root misc work isolated and explicit zero hourly work out of payable wages", async () => {
     const root = actor(ids.patternRoot, ["root_superuser"], "pattern_room:orders:view");
-    const service = new PatternRoomOrderService(database, new RootAwareTodoProjectionService(todoService));
+    const service = new PatternRoomOrderService(database, new RootAwareTodoProjectionService(todoService), { ordersEnabled: false });
     const prices = new PatternRoomPriceService(database), hourly = (await prices.management(root)).hourly;
     const zero = await prices.change(root, "hourly", PATTERN_HOURLY_PRICE_ID, { version: hourly.version, amount: "0.000", enabled: true, reason: "隔离测试明确零价" }, randomUUID());
     const personId = (await database.query("SELECT person_id FROM business_people WHERE app_user_id=$1", [ids.patternRoot])).rows[0].person_id;
@@ -692,10 +701,10 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
   const patternActor = (userId: string, roles: string[]) => actor(userId, roles, "pattern_room:orders:view", ...Object.keys(PATTERN_ORDER_ROLES), "todo:view");
   const roundAction = (order: { version: number; currentRoundId: string }) => ({ version: order.version, roundId: order.currentRoundId });
-  const makePattern = async (service: PatternRoomOrderService, creator: TrustedActorContext, styleNo: string) => {
+  const makePattern = async (service: PatternRoomOrderService, creator: TrustedActorContext, styleNo: string, quantity = 2) => {
     const fileId = randomUUID();
     await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'本轮制作.pdf','application/pdf',10,$3,$4,'ready',CURRENT_TIMESTAMP)", [fileId, `private/${fileId}.pdf`, "c".repeat(64), creator.actorId]);
-    return service.create(creator, { styleNo, categoryId: "92000000-0000-4000-8000-000000000002", quantity: 2, priceVersion: 1, attachmentIds: [fileId] }, randomUUID());
+    return service.create(creator, { styleNo, categoryId: "92000000-0000-4000-8000-000000000002", quantity, priceVersion: 1, attachmentIds: [fileId] }, randomUUID());
   };
   const patternHttp = async (service: PatternRoomOrderService, current: TrustedActorContext, path: string, input: object, key: string) => {
     const app = Fastify();
@@ -1864,6 +1873,141 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(await businessDetail.canDownloadBoundAttachment(financeReader,{entityType:'external_responsibility_case',entityId:processingCaseId})).toBe(true);
 
 
+  });
+
+  const financeWages = (id = ids.financeDirector, roles = ["finance_director"]) => actor(id, roles, "wage:view", "wage:export", "wage:settlement_mark");
+  const allWageDates = { from: "2020-01-01", to: "2099-12-31", limit: 500 };
+
+  it("materializes each eligible source once, conserves old cents rules and shares the legacy wage selection", async () => {
+    const reporting = new ManagementReportingService(database), finance = financeWages();
+    const rows = (await database.query(`SELECT w.*,s.amount::text exact_amount FROM pattern_room_wage_items w
+      JOIN pattern_room_segments s USING(segment_id) ORDER BY w.wage_item_id`)).rows;
+    expect(rows.length).toBeGreaterThan(10);
+    expect(new Set(rows.map(row => row.segment_id)).size).toBe(rows.length);
+    expect(new Set(rows.map(row => row.wage_type))).toEqual(new Set(["first_pattern", "pattern_rework", "misc"]));
+    for (const row of rows) expect(Number(row.payable_amount)).toBeGreaterThan(0);
+    const balances = await database.query(`SELECT round_id,sum(payable_amount)=round(max(round_amount),2) balanced FROM pattern_room_wage_items GROUP BY round_id`);
+    expect(balances.rows.every(row => row.balanced)).toBe(true);
+    const transferred = rows.filter(row => row.style_no === "PATTERN-换人及多轮");
+    expect(transferred).toHaveLength(4);
+    expect(transferred.find(row => row.wage_type === "pattern_rework")?.payable_amount).toBe("7.01");
+    const misc = rows.filter(row => row.task_name === "MISC-分段实际工时");
+    expect(misc.map(row => row.payable_amount).sort()).toEqual(["2.85", "34.27"]);
+    expect(rows.some(row => row.release_basis === "pattern_cancel_fees" && row.cancellation)).toBe(true);
+    expect(rows.some(row => row.release_basis === "misc_stop" && row.cancellation)).toBe(true);
+    const legacyBefore = (await database.query("SELECT * FROM rework_wage_items ORDER BY wage_item_id")).rows;
+    const legacy = await reporting.report(finance, "wages", { ...allWageDates, wageSource: "order_rework" });
+    expect(legacy.totals.wageAmount).toBe("150.00");
+    const pattern = await reporting.report(finance, "wages", { ...allWageDates, wageSource: "pattern_room" });
+    const combined = await reporting.report(finance, "wages", allWageDates);
+    const cents = (value: string) => BigInt(value.replace(".", ""));
+    expect(cents(combined.totals.wageAmount!)).toBe(cents(legacy.totals.wageAmount!) + cents(pattern.totals.wageAmount!));
+    expect(combined.wageSummary!.people.filter(person => person.personId === workerPersonId)).toHaveLength(1);
+    expect(combined.wageSummary!.people.find(person => person.personId === workerPersonId)!.sources.some(source => source.source === "order_rework")).toBe(true);
+    for (const kind of ["first_pattern", "pattern_rework", "misc"] as const) {
+      const filtered = await reporting.report(finance, "wages", { ...allWageDates, wageSource: "pattern_room", patternKind: kind });
+      expect(filtered.rows.length).toBeGreaterThan(0); expect(filtered.rows.every(row => row.wageKind === kind)).toBe(true);
+    }
+    const oldPreview = await reporting.previewWageSettlement(finance, { ...allWageDates, wageSource: "order_rework" });
+    expect((await reporting.markWageSettlement(finance, { ...allWageDates, wageSource: "order_rework" }, oldPreview.lineIds)).markedCount).toBe(oldPreview.lineCount);
+    const oldMarks = (await database.query("SELECT * FROM rework_wage_settlement_marks ORDER BY line_id")).rows;
+    expect((await reporting.markWageSettlement(finance, allWageDates, oldPreview.lineIds)).markedCount).toBe(0);
+    expect((await database.query("SELECT * FROM rework_wage_settlement_marks ORDER BY line_id")).rows).toEqual(oldMarks);
+    expect((await database.query("SELECT * FROM rework_wage_items ORDER BY wage_item_id")).rows).toEqual(legacyBefore);
+    const first = rows[0]!;
+    await expect(database.query("UPDATE pattern_room_wage_items SET payable_amount=1 WHERE wage_item_id=$1", [first.wage_item_id])).rejects.toThrow();
+    await expect(database.query("DELETE FROM pattern_room_wage_items WHERE wage_item_id=$1", [first.wage_item_id])).rejects.toThrow();
+    await expect(database.query("INSERT INTO pattern_room_wage_items SELECT * FROM pattern_room_wage_items LIMIT 1")).rejects.toMatchObject({ code: "55000" });
+    await expect(database.query("UPDATE pattern_room_segments SET amount=amount+1 WHERE segment_id=$1", [first.segment_id])).rejects.toMatchObject({ code: "55000" });
+    await expect(database.query("UPDATE pattern_room_rounds SET completed_at=COALESCE(completed_at,CURRENT_TIMESTAMP)+interval '1 day' WHERE round_id=$1", [first.round_id])).rejects.toMatchObject({ code: "55000" });
+    await database.query("SELECT materialize_pattern_round_wages($1)", [first.round_id]);
+    expect((await database.query("SELECT count(*)::int count FROM pattern_room_wage_items")).rows[0].count).toBe(rows.length);
+  });
+
+  it("opens ordinary work with 501 exact wage IDs, real-person grouping, cross-month release and late unpaid rework", async () => {
+    // Isolated scale fixture: real create/assign/complete/handoff; 500 historical segments are synthesized below.
+    // It validates a large release and financial scope, not 501 claimed UI orders or production records.
+    const service = new PatternRoomOrderService(database, todoProjection);
+    const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]), currentWorker = patternActor(ids.worker, ["worker"]);
+    const reporting = new ManagementReportingService(database), finance = financeWages();
+    const created = await makePattern(service, designer, "PR06-SCALE-MONTH", 14);
+    const assigned = await service.assign(supervisor, created.orderId, { ...roundAction(created), personId: workerPersonId }, randomUUID());
+    const segmentId = assigned.rounds[0]!.segments[0]!.segmentId;
+    await database.query("UPDATE pattern_room_segments SET segment_index=501,amount=60,worker_name='同名验收人员' WHERE segment_id=$1", [segmentId]);
+    await database.query(`INSERT INTO pattern_room_segments(segment_id,round_id,segment_index,person_id,worker_user_id,worker_name,person_type,amount,started_at,ended_at)
+      SELECT gen_random_uuid(),$1,n,CASE WHEN n%2=0 THEN $2::uuid ELSE $3::uuid END,
+        CASE WHEN n%2=0 THEN $4::uuid ELSE $5::uuid END,'同名验收人员','internal',1,CURRENT_TIMESTAMP-interval '2 hours',CURRENT_TIMESTAMP-interval '1 hour'
+      FROM generate_series(1,500) n`, [created.currentRoundId, workerPersonId, otherPatternPersonId, ids.worker, ids.otherPatternWorker]);
+    const complete = await service.complete(currentWorker, created.orderId, roundAction(assigned), randomUUID());
+    const backdate = async (orderId: string, roundId: string) => {
+      // Only unqualified test sources may be shifted; after materialization these facts are immutable.
+      await database.query("UPDATE pattern_room_orders SET submitted_at='2026-08-31T01:00:00Z' WHERE order_id=$1", [orderId]);
+      await database.query("UPDATE pattern_room_rounds SET requested_at='2026-08-31T01:00:00Z',assigned_at='2026-08-31T02:00:00Z',completed_at='2026-08-31T15:59:59Z' WHERE round_id=$1", [roundId]);
+      await database.query("UPDATE pattern_room_segments SET started_at='2026-08-31T02:00:00Z',ended_at='2026-08-31T15:59:59Z',worker_completed_at=CASE WHEN worker_completed_at IS NULL THEN NULL ELSE '2026-08-31T15:59:59Z'::timestamptz END WHERE round_id=$1", [roundId]);
+      await database.query("UPDATE pattern_room_node_times SET entered_at='2026-08-31T01:00:00Z',exited_at=CASE WHEN exited_at IS NULL THEN NULL ELSE '2026-08-31T15:59:59Z'::timestamptz END WHERE round_id=$1", [roundId]);
+    };
+    await backdate(created.orderId, created.currentRoundId);
+    const filters = { from: "2026-08-01", to: "2026-08-31", wageSource: "pattern_room" as const, q: "PR06-SCALE-MONTH", limit: 500 };
+    expect((await reporting.report(finance, "wages", filters)).wageSummary!.rowCount).toBe(0);
+    const handed = await service.handoff(designer, created.orderId, roundAction(complete), randomUUID());
+    const report = await reporting.report(finance, "wages", filters);
+    expect(report.rows).toHaveLength(500); expect(report.truncated).toBe(true);
+    expect(report.wageSummary).toMatchObject({ rowCount: 501, personCount: 2, pendingLineCount: 501, orderCount: 1, roundCount: 1 });
+    expect(report.wageSummary!.people.map(person => person.name)).toEqual(["同名验收人员", "同名验收人员"]);
+    expect(report.totals).toEqual({ wageAmount: "560.00", unsettledWageAmount: "560.00", settledWageAmount: "0.00" });
+    expect(report.rows.every(row => row.periodMonth === "2026-08" && row.completedDate === "2026-08-31")).toBe(true);
+    expect(report.rows.every(row => String(row.releasedAt) > "2026-09-01")).toBe(true);
+    expect((await reporting.exportData(finance, "wages", filters)).data.rows).toHaveLength(501);
+    const exporter = new ReportExportService(reporting, database, "pr06-isolated-verification");
+    const xlsx = await exporter.export(finance, "wages", filters);
+    const xml = xlsx.content.toString("utf8");
+    const sheet = [...xml.matchAll(/<worksheet[\s\S]*?<\/worksheet>/g)][1]![0];
+    expect((sheet.match(/<row r=/g) ?? []).length).toBe(502);
+    expect(xml).toContain("首次打板"); expect(xml).toContain("工资来源"); expect(xml).toContain('formatCode="#,##0.###"');
+    const preview = await reporting.previewWageSettlement(finance, filters);
+    expect(preview).toMatchObject({ lineCount: 501, personCount: 2 });
+    // A new August rework is confirmed after preview, so it must not inherit the old snapshot's mark.
+    const request = await service.requestRework(designer, created.orderId, { ...roundAction(handed), reason: "后补交接验收", reasonCategory: "other" }, randomUUID());
+    const rework = await service.assign(supervisor, created.orderId, { ...roundAction(request), personId: workerPersonId, amount: "1.005" }, randomUUID());
+    const reworkComplete = await service.complete(currentWorker, created.orderId, roundAction(rework), randomUUID());
+    await backdate(created.orderId, rework.currentRoundId);
+    await service.handoff(designer, created.orderId, roundAction(reworkComplete), randomUUID());
+    expect(await reporting.markWageSettlement(finance, filters, preview.lineIds)).toEqual({ markedCount: 501 });
+    const marks = (await database.query("SELECT line_id,marked_by,marked_at FROM rework_wage_settlement_marks WHERE line_id=ANY($1::uuid[]) ORDER BY line_id", [preview.lineIds])).rows;
+    expect(await reporting.markWageSettlement(financeWages(ids.monthClose, ["wage_month_close_accountant"]), filters, preview.lineIds)).toEqual({ markedCount: 0 });
+    expect((await database.query("SELECT line_id,marked_by,marked_at FROM rework_wage_settlement_marks WHERE line_id=ANY($1::uuid[]) ORDER BY line_id", [preview.lineIds])).rows).toEqual(marks);
+    const after = await reporting.report(finance, "wages", filters);
+    expect(after.wageSummary).toMatchObject({ rowCount: 502, orderCount: 1, roundCount: 2, pendingLineCount: 1 });
+    expect(after.totals).toEqual({ wageAmount: "561.01", settledWageAmount: "560.00", unsettledWageAmount: "1.01" });
+    const unpaid = await reporting.report(finance, "wages", { ...filters, status: "unsettled" });
+    expect(unpaid.rows).toHaveLength(1); expect(unpaid.rows[0]).toMatchObject({ wageKind: "pattern_rework", wageAmount: "1.01", markedAt: null });
+    expect((await service.get(designer, created.orderId)).status).toBe("completed");
+    expect((await database.query("SELECT count(*)::int count FROM rework_todos WHERE entity_id=$1 AND status='open' AND todo_type='actionable'", [created.orderId])).rows[0].count).toBe(0);
+  });
+
+  it("enforces real finance roles on unified HTTP report, settlement and XLSX with only minimal wage basis", async () => {
+    const reporting = new ManagementReportingService(database), exporter = new ReportExportService(reporting, database, "pr06-http-verification");
+    let current = financeWages(); const app = Fastify();
+    registerManagementReportingRoutes(app, { service: reporting, exportService: exporter, authenticate: async () => ({ id: current.actorId, businessRoles: current.actorRoles, capabilities: ["wage:view", "wage:export", "wage:settlement_mark"] }) });
+    const query = "from=2020-01-01&to=2099-12-31&wageSource=pattern_room&limit=500";
+    try {
+      for (const [id, role] of [[ids.financeDirector, "finance_director"], [ids.financeRead, "finance_read"], [ids.monthClose, "wage_month_close_accountant"], [ids.patternRoot, "root_superuser"], [ids.ownerOne, "owner_group"], [ids.production, "production_management"]] as const) {
+        current = financeWages(id, [role]);
+        const report = await app.inject({ url: `/management/reports/wages?${query}` });
+        expect(report.statusCode).toBe(200);
+        const body = report.json(); expect(body.rows.length).toBeGreaterThan(0);
+        for (const row of body.rows) {expect(row).not.toHaveProperty("attachments");expect(row).not.toHaveProperty("customer");expect(row).not.toHaveProperty("requestReason");}
+        expect((await app.inject({ url: `/management/reports/wages/export.xlsx?${query}` })).statusCode).toBe(200);
+        expect((await app.inject({ url: `/management/wages/settlement-preview?${query}` })).statusCode).toBe(["owner_group", "production_management"].includes(role) ? 403 : 200);
+      }
+      for (const [id, role] of [[ids.patternSupervisor, "pattern_room_supervisor"], [ids.patternDesigner, "sample_designer"], [ids.worker, "worker"], [ids.merchandiser, "order_merchandiser"]] as const) {
+        current = financeWages(id, [role]);
+        for (const path of ["management/reports/wages", "management/reports/wages/export.xlsx", "management/wages/settlement-preview"]) expect((await app.inject({ url: `/${path}?${query}` })).statusCode).toBe(403);
+        expect((await app.inject({ method: "POST", url: "/management/wages/settlement", payload: { filters: allWageDates, lineIds: [randomUUID()] } })).statusCode).toBe(403);
+        // Forged financial role in a cached caller context cannot substitute for current database authority.
+        await expect(reporting.report(financeWages(id), "wages", allWageDates)).rejects.toThrow();
+      }
+    } finally { await app.close(); }
   });
 
   it("recovers a required-tail order only after every unified worker and tail task has a valid report", async () => {

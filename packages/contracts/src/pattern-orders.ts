@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // Switched on only when the six-PR wage closure is complete. Root can verify each increment.
-export const PATTERN_ROOM_ORDERS_ENABLED = false;
+export const PATTERN_ROOM_ORDERS_ENABLED = true;
 export const PATTERN_ORDER_ROLES = {
   "pattern_room:orders:view": ["sample_designer", "order_merchandiser", "pattern_room_supervisor", "worker", "owner_group", "production_management"],
   "pattern_room:orders:create": ["sample_designer"],

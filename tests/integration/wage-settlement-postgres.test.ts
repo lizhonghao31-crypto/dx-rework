@@ -34,7 +34,7 @@ const url=process.env.TEST_DATABASE_URL;
    CREATE TRIGGER capability_catalog_no_insert BEFORE INSERT ON capability_catalog FOR EACH ROW EXECUTE FUNCTION immutable_catalog();
    CREATE TRIGGER role_capabilities_no_insert BEFORE INSERT ON role_capabilities FOR EACH ROW EXECUTE FUNCTION immutable_catalog();
    CREATE TRIGGER role_capabilities_no_delete BEFORE DELETE ON role_capabilities FOR EACH ROW EXECUTE FUNCTION immutable_catalog();
-   CREATE TABLE app_users(id uuid PRIMARY KEY);
+   CREATE TABLE app_users(id uuid PRIMARY KEY,display_name text DEFAULT '财务标记人');
    CREATE TABLE test_grants(user_id uuid,capability text);
    CREATE FUNCTION access_authorized_actor_roles(target uuid,requested text) RETURNS text[] LANGUAGE plpgsql AS $$ BEGIN
     IF NOT EXISTS(SELECT 1 FROM test_grants WHERE user_id=target AND capability=requested) THEN RAISE EXCEPTION 'forbidden'; END IF;
@@ -51,7 +51,13 @@ const url=process.env.TEST_DATABASE_URL;
     quantity_snapshot numeric,unit_snapshot text,unit_price_snapshot numeric,assignment_mode text,final_amount numeric);`);
   await db.query(await readFile(new URL("../../apps/api/migrations/0171_wage_settlement_marks.sql",import.meta.url),"utf8"));
   await db.query(await readFile(new URL("../../apps/api/migrations/0174_finance_wage_access.sql",import.meta.url),"utf8"));
-  for(const id of [finance,viewer,other]){await db.query("INSERT INTO app_users VALUES($1)",[id]);await db.query("INSERT INTO test_grants VALUES($1,'wage:view')",[id]);}
+  await db.query(`CREATE TABLE pattern_room_wage_items(wage_item_id uuid PRIMARY KEY,period_month date,person_id uuid,
+    person_name_snapshot text,person_type_snapshot text,order_no text,style_no text,category_name text,quantity integer,unit text,
+    unit_price numeric,payable_amount numeric,completed_at timestamptz,wage_type text,order_id uuid,round_id uuid,round_index integer,
+    segment_id uuid,segment_index integer,task_name text,segment_amount numeric,round_amount numeric,actual_hours numeric,
+    released_at timestamptz,release_basis text,cancellation boolean);
+    ALTER TABLE rework_wage_settlement_marks ADD COLUMN pattern_wage_item_id uuid REFERENCES pattern_room_wage_items(wage_item_id);`);
+  for(const id of [finance,viewer,other]){await db.query("INSERT INTO app_users(id) VALUES($1)",[id]);await db.query("INSERT INTO test_grants VALUES($1,'wage:view')",[id]);}
   await db.query("INSERT INTO test_grants VALUES($1,'wage:settlement_mark'),($1,'wage:export')",[finance]);
   firstId=await insertLine(person,"internal","2026-09-10T16:00:00Z");
   for(let i=1;i<501;i++)await insertLine(person,"internal","2026-09-11T08:00:00Z");
