@@ -1,3 +1,4 @@
+import { canAccessPatternRoomPrices } from "./pattern-room-access.js";
 import { canAccessFinance } from "./finance-access.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { TodoCountIndicatorSchema } from "@dx-rework/contracts";
@@ -27,6 +28,7 @@ type NavigationEntry = Readonly<{
   name: string;
   description: string;
   href: string;
+  activeKey?: string;
 }>;
 
 type NavigationGroup = Readonly<{
@@ -36,6 +38,7 @@ type NavigationGroup = Readonly<{
 }>;
 
 const ROLE_LABELS: Record<string, string> = {
+  pattern_room_supervisor: "板房主管",
   sample_designer: "样衣设计师",
   sample_administrative: "样衣管理员",
   sample_finance: "样衣财务",
@@ -110,7 +113,7 @@ function PrimaryNavigation({
           <a
             href={`${basePath}${entry.href}`}
           >
-            <NavigationItem icon={<NavigationIcon route={entry.href} size={iconSize} />} active={active === entry.name}>
+            <NavigationItem icon={<NavigationIcon route={entry.href} size={iconSize} />} active={active === (entry.activeKey ?? entry.name)}>
               <span className="primary-navigation__copy">
                 <strong>{entry.name}</strong>
                 <small title={entry.description}>{entry.description}</small>
@@ -151,7 +154,7 @@ function DesktopNavigation({
         />
       </div>
       {groups.filter((group) => group.entries.length > 0).map((group) => {
-        const groupIsActive = group.entries.some((entry) => entry.name === active);
+        const groupIsActive = group.entries.some((entry) => (entry.activeKey ?? entry.name) === active);
         return (
           <details
             className={"desktop-navigation__group" + (groupIsActive ? " is-active" : "")}
@@ -468,6 +471,10 @@ export function Shell({
     });
   }
 
+  const patternRoomNavigation: NavigationEntry[] = currentUser && canAccessPatternRoomPrices(currentUser) ? [
+    { name: "创建订单", description: "打板与杂事订单", href: "/ui/pattern-room/create", activeKey: "pattern-room-create" },
+    { name: "板房价格管控", description: "品类执行价与杂事小时价", href: "/ui/pattern-room/prices" },
+  ] : [];
   const sampleNavigation: NavigationEntry[] = currentUser && canAccessSamples(currentUser) ? [
     { name: "在管样衣", description: "借出、在库与保管资料", href: "/ui/samples" },
     { name: "待确认中心", description: "与你相关的借还和处置事项", href: "/ui/samples/pending" },
@@ -520,10 +527,12 @@ export function Shell({
     ...reworkNavigation,
     ...mobileSourcingNavigation,
     ...mobileSupplierNavigation,
+    ...(patternRoomNavigation.length ? [{ name: "订单打板", description: "订单打板与价格管控", href: "/ui/pattern-room" }] : []),
     ...sampleNavigation,
     ...platformNavigation,
   ];
   const desktopNavigationGroups: NavigationGroup[] = [
+    { name: "订单打板", description: "打板与杂事", entries: patternRoomNavigation },
     { name: "样衣管理", description: "样衣资料与实物保管", entries: sampleNavigation },
     {
       name: "订单返工",
@@ -550,7 +559,7 @@ export function Shell({
   const roleLabels = currentUser?.businessRoles?.map(roleLabel) ?? [];
   const roleText = roleLabels.length ? roleLabels.join(" · ") : "已登录";
   const activeEntry = navigation.find((entry) => entry.name === active);
-  const mobileActive = productionNavigation.some(entry => entry.name === active) ? "实时生产看板" : sourcingNavigation.some((entry) => entry.name === active)
+  const mobileActive = patternRoomNavigation.some(entry => (entry.activeKey ?? entry.name) === active) ? "订单打板" : productionNavigation.some(entry => entry.name === active) ? "实时生产看板" : sourcingNavigation.some((entry) => entry.name === active)
     ? "外发定价&选厂"
     : supplierNavigation.some((entry) => entry.name === active)
       ? "供应商中心"

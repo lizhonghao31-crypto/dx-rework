@@ -1,7 +1,7 @@
 import type { AuthorizedUser } from "./auth.js";
 import { accessiblePlatformModules } from "./platform-modules.js";
 
-export type AcceptanceModuleId = "rework" | "sourcing" | "suppliers" | "production" | "samples" | "finance";
+export type AcceptanceModuleId = "rework" | "sourcing" | "suppliers" | "production" | "samples" | "finance" | "pattern_room";
 export type AcceptanceMatrixVerdict = "pass" | "fail" | "pending";
 export type AcceptanceRuleStatus = "approved" | "pending" | "unmapped" | "infrastructure";
 
@@ -541,6 +541,25 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXIS
     ruleRefs: { ...entry.ruleRefs, ...approvedKeys("PERM-FINANCE-WAGE-20260912", [
       ...required.map(cap => `cap:${cap}:allow`), ...forbidden.map(cap => `cap:${cap}:deny`),
       `module:finance:${finance ? "allow" : "deny"}`, "http:finance-wages", "http:finance-wage-marker",
+    ]) },
+  };
+ }).map(entry => {
+  // PR02 approved field-level authority, independently transcribed from section 8.1.
+  const root = entry.expectedRoot === true;
+  const read = root || ["owner_group","production_management","finance_director","pattern_room_supervisor"].includes(entry.expectedRole);
+  const category = root || ["owner_group","production_management"].includes(entry.expectedRole);
+  const hourly = root || entry.expectedRole === "owner_group";
+  const required = root ? [] : [...(read ? ["pattern_room:prices:read"] : []), ...(category ? ["pattern_room:prices:write"] : []), ...(hourly ? ["pattern_room:hourly:write"] : [])];
+  const forbidden = [...(!read ? ["pattern_room:prices:read"] : []), ...(!category ? ["pattern_room:prices:write"] : []), ...(!hourly ? ["pattern_room:hourly:write"] : [])];
+  return { ...entry,
+    requiredCapabilities: [...(entry.requiredCapabilities ?? []), ...required],
+    forbiddenCapabilities: [...(entry.forbiddenCapabilities ?? []), ...forbidden],
+    allowedModules: [...(entry.allowedModules ?? []), ...(read ? ["pattern_room" as const] : [])],
+    forbiddenModules: [...(entry.forbiddenModules ?? []), ...(!read ? ["pattern_room" as const] : [])],
+    probes: [...(entry.probes ?? []), probe("pattern-room-prices","板房价格管控","pattern-room/prices",read ? 200 : 403)],
+    ruleRefs: { ...entry.ruleRefs, ...approvedKeys("PERM-PATTERN-PRICE-20260912",[
+      ...required.map(cap => `cap:${cap}:allow`), ...forbidden.map(cap => `cap:${cap}:deny`),
+      `module:pattern_room:${read ? "allow" : "deny"}`, "http:pattern-room-prices",
     ]) },
   };
 });

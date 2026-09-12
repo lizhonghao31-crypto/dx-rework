@@ -1,0 +1,13 @@
+.pattern-prices { display: grid; gap: 20px; }
+.pattern-price-table { overflow-x: auto; }
+.pattern-price-table table { width: 100%; border-collapse: collapse; text-align: left; }
+.pattern-price-table th, .pattern-price-table td { padding: 12px; border-bottom: 1px solid #e1e7ed; white-space: nowrap; }
+.pattern-price-table tbody th { font-weight: 500; }
+.pattern-price-table small { display: block; color: #64748b; margin-top: 4px; }
+.pattern-price-table td:last-child { display: flex; gap: 8px; }
+.pattern-hourly-price { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+dialog.pattern-price-dialog { padding: 0; }
+dialog.pattern-price-dialog::backdrop { background: rgb(19 28 38 / 58%); }
+.pattern-price-history { padding: 20px; }
+.pattern-price-history section { border-bottom: 1px solid #e1e7ed; padding: 12px 0; }
+.pattern-price-history p { overflow-wrap: anywhere; }

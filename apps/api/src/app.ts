@@ -1,3 +1,4 @@
+import { registerPatternRoomPriceRoutes, type PatternRoomPriceDependencies } from "./pattern-room/price-routes.js";
 import {registerOperationDiagnostics,type DiagnosticRecord} from "./platform/operation-diagnostics.js";
 import {registerSampleImportRoutes,type SampleImportDependencies} from "./samples/sample-import-routes.js";
 import {registerSampleDisposalRoutes,type SampleDisposalDependencies} from "./samples/sample-disposal-routes.js";
@@ -71,6 +72,7 @@ export type AppDependencies = Readonly<{
   responsibilityDetermination?: ResponsibilityDeterminationHttpDependencies;
   ownFactoryApproval?: OwnFactoryApprovalHttpDependencies;
   externalResponsibility?: ExternalResponsibilityHttpDependencies;
+  patternRoomPrices?: PatternRoomPriceDependencies;
   wages?: WageHttpDependencies;
   todos?: TodoHttpDependencies;
   reporting?: ManagementReportingHttpDependencies;
@@ -189,6 +191,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   if (dependencies.responsibilityDetermination) registerResponsibilityDeterminationRoutes(app, dependencies.responsibilityDetermination);
   if (dependencies.ownFactoryApproval) registerOwnFactoryApprovalRoutes(app, dependencies.ownFactoryApproval);
   if (dependencies.externalResponsibility) registerExternalResponsibilityRoutes(app, dependencies.externalResponsibility);
+  if (dependencies.patternRoomPrices) registerPatternRoomPriceRoutes(app, dependencies.patternRoomPrices);
   if (dependencies.wages) registerWageRoutes(app, dependencies.wages);
   if (dependencies.todos) registerTodoRoutes(app, dependencies.todos);
   if (dependencies.reporting) registerManagementReportingRoutes(app, dependencies.reporting);

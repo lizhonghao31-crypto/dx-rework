@@ -59,6 +59,10 @@
     "./finance-access": {
       "types": "./src/finance-access.ts",
       "import": "./dist/finance-access.js"
+    },
+    "./pattern-room": {
+      "types": "./src/pattern-room.ts",
+      "import": "./dist/pattern-room.js"
     }
   },
   "scripts": {

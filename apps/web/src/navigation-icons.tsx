@@ -12,6 +12,9 @@ export const NAVIGATION_ROUTE_ICONS: Readonly<Record<string, IconName>> = {
   "/ui/reports": "ChartColumn",
   "/ui/wages": "Wallet",
   "/ui/finance": "Wallet",
+  "/ui/pattern-room": "Shirt",
+  "/ui/pattern-room/create": "FilePlus2",
+  "/ui/pattern-room/prices": "Wallet",
   "/ui/sourcing/create": "FilePlus2",
   "/ui/sourcing/pending": "FileText",
   "/ui/sourcing/history": "History",
@@ -28,7 +31,7 @@ export const NAVIGATION_ROUTE_ICONS: Readonly<Record<string, IconName>> = {
 };
 
 export const NAVIGATION_GROUP_ICONS: Readonly<Record<string, IconName>> = {
-  "样衣管理": "Shirt", "订单返工": "Wrench", "外发定价&选厂": "FileText",
+  "订单打板": "Shirt", "样衣管理": "Shirt", "订单返工": "Wrench", "外发定价&选厂": "FileText",
   "供应商中心": "Factory", "平台管理": "Settings", "更多": "Ellipsis", "实时生产看板": "Activity",
 };
 
