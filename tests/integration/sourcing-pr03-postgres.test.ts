@@ -189,7 +189,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     `);
     await database.query(`
       ALTER TABLE supplier_catalog_versions
-        DISABLE TRIGGER supplier_catalog_versions_guard_creation
+        DISABLE TRIGGER supplier_catalog_versions_guard_creation, DISABLE TRIGGER supplier_profile_maintenance_authority
     `);
     try {
       await database.query(
@@ -211,7 +211,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     } finally {
       await database.query(`
         ALTER TABLE supplier_catalog_versions
-          ENABLE TRIGGER supplier_catalog_versions_guard_creation
+          ENABLE TRIGGER supplier_catalog_versions_guard_creation, ENABLE TRIGGER supplier_profile_maintenance_authority
       `);
       await database.query(`
         ALTER TABLE supplier_catalog_items
@@ -1538,7 +1538,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   it("keeps approval successful when contract data is missing and freezes supplements", async () => {
     const missingSupplierId = randomUUID();
     await database.query("ALTER TABLE supplier_catalog_items DISABLE TRIGGER supplier_catalog_items_require_initial_version");
-    await database.query("ALTER TABLE supplier_catalog_versions DISABLE TRIGGER supplier_catalog_versions_guard_creation");
+    await database.query("ALTER TABLE supplier_catalog_versions DISABLE TRIGGER supplier_catalog_versions_guard_creation, DISABLE TRIGGER supplier_profile_maintenance_authority");
     try {
       await database.query(
         `INSERT INTO supplier_catalog_items(supplier_id,supplier_code,supplier_type)
@@ -1552,7 +1552,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         [missingSupplierId,managerId],
       );
     } finally {
-      await database.query("ALTER TABLE supplier_catalog_versions ENABLE TRIGGER supplier_catalog_versions_guard_creation");
+      await database.query("ALTER TABLE supplier_catalog_versions ENABLE TRIGGER supplier_catalog_versions_guard_creation, ENABLE TRIGGER supplier_profile_maintenance_authority");
       await database.query("ALTER TABLE supplier_catalog_items ENABLE TRIGGER supplier_catalog_items_require_initial_version");
     }
 
@@ -1601,7 +1601,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       sourcingContractDocumentId: ready.sourcingContractDocumentId, confirmed: true,
     }, randomUUID());
 
-    await database.query("ALTER TABLE supplier_catalog_versions DISABLE TRIGGER supplier_catalog_versions_guard_creation");
+    await database.query("ALTER TABLE supplier_catalog_versions DISABLE TRIGGER supplier_catalog_versions_guard_creation, DISABLE TRIGGER supplier_profile_maintenance_authority");
     try {
       await database.query(
         `INSERT INTO supplier_catalog_versions(
@@ -1612,7 +1612,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         [missingSupplierId,managerId],
       );
     } finally {
-      await database.query("ALTER TABLE supplier_catalog_versions ENABLE TRIGGER supplier_catalog_versions_guard_creation");
+      await database.query("ALTER TABLE supplier_catalog_versions ENABLE TRIGGER supplier_catalog_versions_guard_creation, ENABLE TRIGGER supplier_profile_maintenance_authority");
     }
     const frozen = (await contractService.getCurrent(readerActor(), created.value.sourcingCaseId)).item!;
     expect(frozen.snapshotFingerprint).toBe(ready.snapshotFingerprint);

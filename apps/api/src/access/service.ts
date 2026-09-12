@@ -91,6 +91,11 @@ const ensureProtectedRoleAuthority = (actor: TrustedActorContext, roleCode: stri
   }
 };
 
+const canMaintainSuppliers = (actor: TrustedActorContext): boolean => isRootActor(actor)
+  || (actor.actorRoles.some(role => role === "owner_group" || role === "production_management")
+    && (actor.authorizationCapability === "supplier_profile:write"
+      || actor.authorizationCapabilities?.includes("supplier_profile:write") === true));
+
 const canReadTemporaryWorkerPrivateProfile = (actor?: TrustedActorContext): boolean =>
   actor !== undefined && (
     isRootActor(actor)
@@ -1266,7 +1271,7 @@ export class AccessMasterDataService {
   }
 
   async previewSupplierBatch(actor: TrustedActorContext, rows: SupplierBatchCell[][]): Promise<SupplierBatchRow[]> {
-    if (!isRootActor(actor)) throw new ApplicationError("FORBIDDEN", "无供应商维护权限", 403);
+    if (!canMaintainSuppliers(actor)) throw new ApplicationError("FORBIDDEN", "无供应商维护权限", 403);
     if (JSON.stringify(rows[0]) !== JSON.stringify(SUPPLIER_BATCH_COLUMNS.map(([, label]) => label))) {
       throw new ApplicationError("VALIDATION_ERROR", "列名或顺序与模板不一致，请使用标准模板", 400);
     }
@@ -1277,7 +1282,7 @@ export class AccessMasterDataService {
   }
 
   async applySupplierBatchRow(actor: TrustedActorContext, input: SupplierBatchApply, key: string) {
-    if (!isRootActor(actor)) throw new ApplicationError("FORBIDDEN", "无供应商维护权限", 403);
+    if (!canMaintainSuppliers(actor)) throw new ApplicationError("FORBIDDEN", "无供应商维护权限", 403);
     return this.transaction(async client => new IdempotencyService().execute(client, {
       scope: "supplier-batch-row", actorKey: actor.actorId, key,
       requestHash: createHash("sha256").update(JSON.stringify(input)).digest("hex"),

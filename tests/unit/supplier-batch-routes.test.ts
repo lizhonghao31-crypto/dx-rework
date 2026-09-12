@@ -7,13 +7,13 @@ import { buildWorkbook } from "../../apps/api/src/reporting/xlsx-workbook.js";
 import { planSupplierBatchRow } from "../../apps/api/src/access/supplier-batch-model.js";
 import type { SupplierBatchCell } from "@dx-rework/contracts";
 
-it("uses Root-only supplier authority for template, preflight and commit, including capability-only rejection", async () => {
+it("uses protected supplier authority for template, preflight and commit, including capability-only rejection", async () => {
   let root = false;
   const preview = vi.fn().mockResolvedValue([]);
   const apply = vi.fn().mockResolvedValue({ statusCode: 200, reused: true, response: { supplierId: "fixture", version: 1, unchanged: false } });
   const app = Fastify();
   registerAccessRoutes(app, {
-    authenticate: async () => ({ id: "root-fixture", displayName: "用户", businessRoles: ["owner_group"], capabilities: ["supplier_profile:write", "supplier_profile:read"] }),
+    authenticate: async () => ({ id: "root-fixture", displayName: "用户", businessRoles: ["system_admin"], capabilities: ["supplier_profile:write", "supplier_profile:read"] }),
     root: { isRootUser: async () => root },
     service: { previewSupplierBatch: preview, applySupplierBatchRow: apply },
   } as unknown as AccessHttpDependencies);
@@ -60,5 +60,22 @@ it("previews a valid 200-row workbook below 2 MB whose JSON expands beyond 1 MiB
     expect(response.statusCode).toBe(200);
     expect(response.json()).toHaveLength(200);
     expect(response.json().every((row: { status: string }) => row.status === "create")).toBe(true);
+  } finally { await app.close(); }
+});
+
+it.each(["owner_group", "production_management"])("allows %s without manufacturing Root authority", async role => {
+  let capabilities = ["supplier_profile:write"];
+  const preview = vi.fn().mockResolvedValue([]);
+  const app = Fastify();
+  registerAccessRoutes(app, {
+    authenticate: async () => ({ id: "writer", displayName: "维护人员", businessRoles: [role], capabilities }),
+    root: { isRootUser: async () => false }, service: { previewSupplierBatch: preview },
+  } as unknown as AccessHttpDependencies);
+  try {
+    const payload = { rows: [SUPPLIER_BATCH_COLUMNS.map(([, label]) => label), ["SUP_TEST"]] };
+    expect((await app.inject({ method: "POST", url: "/master-data/suppliers/import/preview", payload })).statusCode).toBe(200);
+    expect(preview.mock.calls[0]![0].actorRoles).toEqual([role]);
+    capabilities = [];
+    expect((await app.inject({ method: "POST", url: "/master-data/suppliers/import/preview", payload })).statusCode).toBe(403);
   } finally { await app.close(); }
 });

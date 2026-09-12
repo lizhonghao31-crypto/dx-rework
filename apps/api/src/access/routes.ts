@@ -124,11 +124,12 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
   const supplierWriteActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
     const user = await authenticated(request);
     const isRoot = await dependencies.root.isRootUser(user.id);
-    if (!isRoot) {
-      throw new ApplicationError("FORBIDDEN", "供应商资料一期仅允许超级用户维护", 403);
+    if (!isRoot && !(user.capabilities.includes("supplier_profile:write")
+      && user.businessRoles?.some(role => role === "owner_group" || role === "production_management"))) {
+      throw new ApplicationError("FORBIDDEN", "无供应商维护权限", 403);
     }
     const actorRoles = [...(user.businessRoles ?? [])];
-    if (!actorRoles.includes(ROOT_ACTOR_ROLE)) actorRoles.push(ROOT_ACTOR_ROLE);
+    if (isRoot && !actorRoles.includes(ROOT_ACTOR_ROLE)) actorRoles.push(ROOT_ACTOR_ROLE);
     const authorizationCapabilities = [...user.capabilities];
     if (!authorizationCapabilities.includes("supplier_profile:write")) {
       authorizationCapabilities.push("supplier_profile:write");

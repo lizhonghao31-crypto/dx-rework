@@ -31,7 +31,8 @@ export const CONTRACT_FIELD_LABELS: Readonly<Record<string, string>> = {
 };
 
 export function canWriteSupplierProfiles(user: AuthorizedUser): boolean {
-  return user.isRoot === true;
+  return user.isRoot === true || (user.capabilities.includes("supplier_profile:write")
+    && (user.businessRoles ?? []).some(role => role === "owner_group" || role === "production_management"));
 }
 
 export function supplierContractMissingLabels(fields: readonly string[]): string[] {
