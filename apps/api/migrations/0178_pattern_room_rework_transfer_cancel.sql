@@ -58,11 +58,11 @@ ALTER TABLE pattern_room_rounds ADD COLUMN fee_confirmed_at timestamptz;
 ALTER TABLE pattern_room_rounds ADD COLUMN fee_confirmed_by uuid REFERENCES app_users(id);
 ALTER TABLE pattern_room_rounds DROP CONSTRAINT pattern_room_round_pricing_basis_check;
 ALTER TABLE pattern_room_rounds ADD CONSTRAINT pattern_room_round_pricing_basis_check CHECK(
- (round_type='initial' AND round_index=0 AND unit_price IS NOT NULL AND
+ (round_type='initial' AND round_index IS NOT NULL AND round_index=0 AND unit_price IS NOT NULL AND
    ((unit IN ('件','套') AND quantity IS NOT NULL AND agreed_amount IS NOT NULL AND actual_hours IS NULL) OR (unit='小时' AND quantity IS NULL)))
  OR (round_type='rework' AND unit='轮' AND quantity IS NULL AND unit_price IS NULL AND actual_hours IS NULL
    AND request_reason IS NOT NULL AND length(btrim(request_reason))>0 AND reason_category IS NOT NULL
-   AND ((assigned_at IS NULL AND round_index IS NULL) OR (assigned_at IS NOT NULL AND round_index>0 AND agreed_amount IS NOT NULL))));
+   AND ((assigned_at IS NULL AND round_index IS NULL) OR (assigned_at IS NOT NULL AND round_index IS NOT NULL AND round_index>0 AND agreed_amount IS NOT NULL))));
 ALTER TABLE pattern_room_rounds DROP CONSTRAINT pattern_room_rounds_actual_hours_check;
 ALTER TABLE pattern_room_rounds ADD CONSTRAINT pattern_room_rounds_actual_hours_check CHECK(
  actual_hours>=0 AND actual_hours<=999999.9 AND actual_hours=trunc(actual_hours,1)

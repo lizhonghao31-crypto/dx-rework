@@ -709,6 +709,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]);
     const worker = patternActor(ids.worker, ["worker"]), nextWorker = patternActor(ids.otherPatternWorker, ["worker"]);
     const created = await makePattern(service, designer, "PATTERN-换人及多轮");
+    await expect(database.query("UPDATE pattern_room_rounds SET round_index=NULL WHERE round_id=$1", [created.currentRoundId])).rejects.toMatchObject({ code: "23514" });
     const assigned = await service.assign(supervisor, created.orderId, { ...roundAction(created), personId: workerPersonId }, randomUUID());
     await expect(service.requestRework(designer, created.orderId, { ...roundAction(assigned), reason: "尚未完工", reasonCategory: "other" }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
     const firstInput = { ...roundAction(assigned), segmentId: assigned.rounds[0]!.segments[0]!.segmentId, personId: otherPatternPersonId, amount: "25.125", reason: "已做部分交接" };
@@ -744,6 +745,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect((await service.uploadActor(supervisor, "pattern", "rework")).actorId).toBe(ids.patternSupervisor);
     const reworkAssigned = await service.assign(supervisor, created.orderId, { ...roundAction(requested), personId: otherPatternPersonId, amount: "7.005" }, randomUUID());
     expect(reworkAssigned.reworkCount).toBe(1); expect(reworkAssigned.rounds.at(-1)!.index).toBe(1);
+    await expect(database.query("UPDATE pattern_room_rounds SET round_index=NULL WHERE round_id=$1", [reworkAssigned.currentRoundId])).rejects.toMatchObject({ code: "23514" });
     const reworkComplete = await service.complete(nextWorker, created.orderId, roundAction(reworkAssigned), randomUUID());
     expect((await service.get(supervisor, created.orderId)).rounds.flatMap(round => round.segments).every(segment => !segment.wageEligible)).toBe(true);
     const handed = await service.handoff(designer, created.orderId, roundAction(reworkComplete), randomUUID());
@@ -827,6 +829,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const stopped = await service.createMisc(merchant, { taskName: "MISC-中途实际停止", priceVersion: price.version }, randomUUID());
     const stopAssigned = await service.assign(supervisor, stopped.orderId, { ...roundAction(stopped), personId: workerPersonId }, randomUUID());
     const stopTransfer = await service.transfer(supervisor, stopped.orderId, { ...roundAction(stopAssigned), segmentId: stopAssigned.rounds[0]!.segments[0]!.segmentId, personId: otherPatternPersonId, hours: "0.2", reason: "部分任务转交" }, randomUUID());
+    await expect(service.transfer(supervisor, stopped.orderId, { ...roundAction(stopTransfer), segmentId: stopTransfer.rounds[0]!.segments.at(-1)!.segmentId, personId: workerPersonId, hours: "999999.9", reason: "超出本轮累计工时" }, randomUUID())).rejects.toMatchObject({ statusCode: 400 });
+    expect((await service.get(supervisor, stopped.orderId)).version).toBe(stopTransfer.version);
     const stop = await service.cancel(supervisor, stopped.orderId, { ...roundAction(stopTransfer), segmentId: stopTransfer.rounds[0]!.segments.at(-1)!.segmentId, hours: "0.3", reason: "停止工作并确认两段实际工时" }, randomUUID());
     expect(stop.rounds[0]).toMatchObject({ actualHours: "0.5", cancelledAmount: "14.27750000", completedAt: null, handedOverAt: null });
     expect(stop.rounds[0]!.stoppedAt).not.toBeNull(); expect(stop.rounds[0]!.segments.every(segment => segment.wageEligible)).toBe(true);
