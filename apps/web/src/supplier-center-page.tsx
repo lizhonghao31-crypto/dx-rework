@@ -45,11 +45,11 @@ async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 
-export function SupplierCenterNavigation({ active }: { active: "directory" | "manage" }) {
+export function SupplierCenterNavigation({ active, canMaintain = false }: { active: "directory" | "manage"; canMaintain?: boolean }) {
   return (
     <nav className="supplier-center-tabs" aria-label="供应商中心">
       <a className={active === "directory" ? "active" : ""} aria-current={active === "directory" ? "page" : undefined} href={pageUrl("ui/suppliers")}>供应商目录</a>
-      <a className={active === "manage" ? "active" : ""} aria-current={active === "manage" ? "page" : undefined} href={pageUrl("ui/suppliers/manage")}>资料维护</a>
+      {canMaintain ? <a className={active === "manage" ? "active" : ""} aria-current={active === "manage" ? "page" : undefined} href={pageUrl("ui/suppliers/manage")}>资料维护</a> : null}
     </nav>
   );
 }
@@ -250,6 +250,9 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
     setEditing(true);
   };
 
+  if (mode === "manage" && !identityLoading && user && !canWrite) {
+    return <Shell active="资料维护"><p>当前账号没有资料维护权限。</p><a href={pageUrl("ui/suppliers")}>查看供应商目录</a></Shell>;
+  }
   return (
     <Shell active={mode === "manage" ? "资料维护" : "供应商目录"}>
       <header className="page-heading supplier-center-heading">
@@ -258,11 +261,11 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
           <p>{mode === "manage" ? "新增、修改、启停供应商资料并保留变更历史" : "查看供应商资料、工艺、常规产能及已有业务事实"}</p>
         </div>
         <div className="supplier-center-heading__actions">
-          <StatusBadge tone={canMaintain ? "info" : "neutral"}>{identityLoading?"核验身份中":canMaintain ? "Root 可维护" : "只读"}</StatusBadge>
+          <StatusBadge tone={canMaintain ? "info" : "neutral"}>{identityLoading?"核验身份中":canMaintain ? "可维护" : "只读"}</StatusBadge>
           {canMaintain && !batchOpen ? <><Button disabled={busy || refreshing} onClick={() => void beginBatch()}>批量录入</Button><Button variant="primary" disabled={busy||refreshing} onClick={()=>void beginCreate()}>新增供应商</Button></> : null}
         </div>
       </header>
-      <SupplierCenterNavigation active={mode} />
+      <SupplierCenterNavigation active={mode} canMaintain={canWrite} />
       {identityError?<p role="alert">{identityError} <Button onClick={()=>void loadIdentity()}>重新核验</Button></p>:null}
       {savedMessage?<p className="supplier-center-notice" role="status">{savedMessage}</p>:null}
       {error ? <div className="supplier-center-error" role="alert"><b>请处理以下问题</b><p>{error}</p></div> : null}

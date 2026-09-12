@@ -44,7 +44,7 @@ const suppliers: SupplierSummary[] = [
 ];
 
 describe("SSP-02 supplier center model", () => {
-  it("shows the center to profile readers while keeping maintenance Root-only", () => {
+  it("shows the center to profile readers with role and capability checks for maintenance", () => {
     expect(canAccessSupplierCenter(user(["supplier_profile:read"]))).toBe(true);
     expect(canWriteSupplierProfiles(user(["supplier_profile:read"]))).toBe(false);
     expect(canWriteSupplierProfiles(user([], true))).toBe(true);
@@ -78,4 +78,14 @@ describe("SSP-02 supplier center model", () => {
     expect(nextSupplierSelection("removed", suppliers, false)).toBe("");
     expect(nextSupplierSelection(suppliers[1]!.supplierId, suppliers, true)).toBe(suppliers[1]?.supplierId);
   });
+});
+
+it("requires both an approved business role and write capability while preserving Root", () => {
+  for (const role of ["owner_group", "production_management"]) {
+    expect(canWriteSupplierProfiles({ ...user(["supplier_profile:write"]), businessRoles: [role] })).toBe(true);
+    expect(canWriteSupplierProfiles({ ...user([]), businessRoles: [role] })).toBe(false);
+  }
+  for (const role of ["system_admin", "order_merchandiser", "embroidery_washing_merchandiser", "ie_reviewer", "finance_director"]) {
+    expect(canWriteSupplierProfiles({ ...user(["supplier_profile:write"]), businessRoles: [role] })).toBe(false);
+  }
 });

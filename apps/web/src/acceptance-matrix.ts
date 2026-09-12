@@ -583,6 +583,14 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXIS
     probes: [...(entry.probes ?? []), probe("pattern-room-orders", "首次打板开放边界", "pattern-room/orders", root ? 200 : required.includes("pattern_room:orders:view") ? 200 : 403)],
     ruleRefs: { ...entry.ruleRefs, ...approvedKeys("PERM-PATTERN-ORDER-20260912", [...required.map(capability => `cap:${capability}:allow`), ...forbidden.map(capability => `cap:${capability}:deny`), "http:pattern-room-orders"]) },
   };
+}).map(entry => {
+  const allowed = ["owner_group", "production_management"].includes(entry.expectedRole);
+  const capability = "supplier_profile:write";
+  return { ...entry,
+    requiredCapabilities: [...(entry.requiredCapabilities ?? []), ...(allowed ? [capability] : [])],
+    forbiddenCapabilities: [...(entry.forbiddenCapabilities ?? []).filter(cap => cap !== capability), ...(!allowed && !entry.expectedRoot ? [capability] : [])],
+    ruleRefs: { ...entry.ruleRefs, ...approvedKeys("PERM-SUPPLIER-MAINTAIN-001", [`cap:${capability}:${allowed ? "allow" : "deny"}`]) },
+  };
 });
 
 const ruleFor = (expectation: AcceptanceRoleExpectation, key: string): AcceptanceRuleRef =>

@@ -14,6 +14,7 @@ import { createWebUrls } from "../url-contract.js";
 import { hasPageAccess, verifySession, type AuthorizedUser } from "./auth.js";
 import type { Task } from "./types.js";
 import "./shell-navigation.css";
+import { canWriteSupplierProfiles } from "./supplier-center-model.js";
 import { canAccessSourcing, canAccessSupplierCenter, canAccessProduction, canAccessProductionReporting, canAccessSamples } from "./platform-modules.js";
 import { installTodoIndicatorRefresh } from "./todo-indicator-refresh.js";
 import { formatTodoBadgeCount } from "./todo-new-indicator.js";
@@ -464,7 +465,7 @@ export function Shell({
       description: "查询供应商资料、合同缺项与版本",
       href: "/ui/suppliers",
     });
-    supplierNavigation.push({
+    if (canWriteSupplierProfiles(currentUser)) supplierNavigation.push({
       name: "资料维护",
       description: "在同一详情中维护资料与启停状态",
       href: "/ui/suppliers/manage",
