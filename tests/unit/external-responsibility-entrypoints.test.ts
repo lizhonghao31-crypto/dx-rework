@@ -71,7 +71,9 @@ describe("external deduction canonical runtime contracts", () => {
       .rejects.toThrow("扣款资料加载失败，请刷新重试。（请求编号：test-request）");
     await expect(readExternalResponsibilityResponse(response(), dedicated.ExternalResponsibilityCaseResponseSchema, "write"))
       .rejects.toThrow("提交已获服务器响应，但结果暂未能显示。请先刷新核对台账，勿重复录入。");
-    expect(log).toHaveBeenCalledTimes(2);
+    await expect(readExternalResponsibilityResponse(response(), dedicated.ExternalResponsibilityBatchResponseSchema, "write")).rejects.toThrow("提交已获服务器响应");
+    await expect(readExternalResponsibilityResponse(response(), dedicated.ExternalResponsibilityQueueResponseSchema, "read")).rejects.toThrow("扣款资料加载失败");
+    expect(log).toHaveBeenCalledTimes(4);
     expect(await readExternalResponsibilityResponse(Response.json(batch), dedicated.ExternalResponsibilityBatchResponseSchema, "read")).toEqual(batch);
   });
 });

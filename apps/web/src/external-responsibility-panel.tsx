@@ -304,7 +304,7 @@ export function ExternalResponsibilityPanel({
         body: JSON.stringify(body),
       });
       if (!response.ok) throw new Error(await requestError(response));
-      const value = ExternalResponsibilityBatchResponseSchema.parse(await response.json());
+      const value = await readExternalResponsibilityResponse(response, ExternalResponsibilityBatchResponseSchema, "write");
       delete pendingMutationKeys.current[signature];
       setState({ kind: "ready", value });
       setMessage("供应商已锁定，可进入扣款。 ");
