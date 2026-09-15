@@ -474,7 +474,7 @@ export function Shell({
   }
 
   const patternRoomNavigation: NavigationEntry[] = currentUser && canAccessPatternRoom(currentUser) ? [
-    ...(canAccessPatternRoomOrders(currentUser) ? [{ name: "打板杂事看板", description: "查询打板与杂事订单", href: "/ui/pattern-room/orders", activeKey: "pattern-room-orders" }] : []),
+    ...(canAccessPatternRoomOrders(currentUser) ? [{ name: "订单打板/杂事看板", description: "查询打板与杂事订单", href: "/ui/pattern-room/orders", activeKey: "pattern-room-orders" }] : []),
     ...(canCreatePatternRoomOrders(currentUser) ? [{ name: "创建订单", description: "创建打板或杂事", href: "/ui/pattern-room/create", activeKey: "pattern-room-create" }] : []),
     ...(canAccessPatternRoomPrices(currentUser) ? [{ name: "价格管控", description: "品类单价与杂事小时单价", href: "/ui/pattern-room/prices" }] : []),
   ] : [];

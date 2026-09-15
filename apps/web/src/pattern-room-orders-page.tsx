@@ -1,3 +1,6 @@
+import { PatternNodeHistory, PatternNodeRecord, PatternRoundRecord } from "./pattern-round-record.js";
+import { patternSelectedStage, patternWorkflow } from "./pattern-workflow.js";
+import { PatternOrderCard } from "./pattern-order-card.js";
 import { PatternMaterials } from "./pattern-materials.js";
 import { PatternOrderDelete } from "./pattern-order-delete.js";
 import { ListPagination } from "./list-pagination.js";
@@ -6,7 +9,7 @@ import { confirmInApp } from "./system-dialog.js";
 import { PatternField as InsetField, PatternProgress } from "./pattern-controls.js";
 import { useEffect, useRef, useState } from "react";
 import type { z } from "zod";
-import { Button, Surface } from "@dx-rework/ui";
+import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { AssignPatternOrderSchema, PATTERN_ORDER_STATUS_LABELS, PatternOrderDetailSchema, PatternOrderListSchema, PatternPeopleFiltersSchema, PatternWorkerOptionsSchema, RecordPatternHoursSchema, type PatternOrderDetail } from "@dx-rework/contracts/pattern-orders";
 import { Header } from "./components.js";
@@ -14,7 +17,7 @@ import { createClientRequestId } from "./client-request-id.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import { PatternOrderForm } from "./pattern-order-form.js";
 import { PatternOrderExceptions, type PatternExceptionAction } from "./pattern-order-exceptions.js";
-import { elapsedText, patternRequest, patternTime, patternUrls } from "./pattern-order-client.js";
+import { patternRequest, patternTime, patternUrls } from "./pattern-order-client.js";
 import { patternListPath, patternReturnPath, readPatternListQuery } from "./pattern-order-query.js";
 import "./pattern-room.css";
 
@@ -43,29 +46,26 @@ export function PatternRoomOrdersPage() {
     void patternRequest("people-filters", PatternPeopleFiltersSchema, { signal: abort.signal }).then(setPeople).catch(e => { if (!abort.signal.aborted) setError(e.message); });
     return () => abort.abort();
   }, [data?.canFilterPeople, refresh]);
-  return <div className="pattern-orders"><Header title="打板杂事看板" badge="订单打板" badgePlacement="subtitle" />
+  return <div className="pattern-orders rework-query-content"><Header title="订单打板/杂事看板" badge="订单打板" badgePlacement="subtitle" />
     {error ? <Surface><p role="alert">{error}</p><Button onClick={() => setRefresh(value => value + 1)}>重新读取</Button></Surface> : null}
-    {data ? <Surface>
+    {data ? <>
+      <Surface>
       <div className="pattern-fields pattern-filters"><InsetField label="搜索款号、订单号或任务名称" placeholder="款号 / 订单号 / 任务名称" value={q} onChange={e => { setQ(e.target.value); setPage(1); }} />
         <label>订单类型<select value={kind} onChange={e => { setKind(e.target.value); setPage(1); }}><option value="">全部</option><option value="pattern">打板</option><option value="misc">杂事</option></select></label>
         <label>订单状态<select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="">全部状态</option>{Object.entries(PATTERN_ORDER_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         {people ? <><label>创建人<select value={creatorId} onChange={e => { setCreatorId(e.target.value); setPage(1); }}><option value="">全部创建人</option>{people.creators.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
-          <label>执行工人<select value={workerId} onChange={e => { setWorkerId(e.target.value); setPage(1); }}><option value="">全部工人</option>{people.workers.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label></> : null}
+          <label>板房师傅<select value={workerId} onChange={e => { setWorkerId(e.target.value); setPage(1); }}><option value="">全部师傅</option>{people.workers.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label></> : null}
       </div>
-      <div className="pattern-order-list" aria-busy={loading}>
-        {data.items.map(order => <article className="pattern-order-row" key={order.orderId}>
-          <div className="pattern-order-identity"><a href={detailHref(order.orderId)}>{order.kind === "misc" ? order.taskName : order.styleNo}</a><small>{order.orderNo}</small></div>
-          <div><small>类型 / 状态</small><span>{order.kind === "misc" ? "杂事" : "打板"} · {PATTERN_ORDER_STATUS_LABELS[order.status]}</span></div>
-          <div><small>创建人</small><span>{order.creatorName}</span></div>
-          <div><small>当前师傅</small><span>{order.currentWorkerName ?? "待分配"}</span></div>
-          <div><small>要求完成</small><span>{order.requiredDate ?? "—"}</span></div>
-          <div><small>返工 / 提交时间</small><span>{order.reworkCount} 次</span><small>{patternTime(order.submittedAt)}</small></div>
-          {data.canDelete && <div className="pattern-row-actions"><PatternOrderDelete orderId={order.orderId} version={order.version} label={order.orderNo} disabled={loading} onDeleted={() => { setData(current => current ? { ...current, items: current.items.filter(item => item.orderId !== order.orderId) } : current); setPage(1); setRefresh(value => value + 1); }} /></div>}
-        </article>)}
+      </Surface>
+      <div className="reporting-order-grid" aria-busy={loading}>
+        {data.items.map(order => <PatternOrderCard key={order.orderId} order={order} href={detailHref(order.orderId)} canDelete={data.canDelete} busy={loading} onDeleted={() => {
+          setData(current => current ? { ...current, items: current.items.filter(item => item.orderId !== order.orderId) } : current);
+          setPage(1); setRefresh(value => value + 1);
+        }} />)}
       </div>
       {!data.items.length ? <p className="pattern-empty">没有符合条件的订单。</p> : null}
-      <div className="pattern-pagination"><span>共 {formatBusinessDecimal(data.totalCount)} 单</span><ListPagination page={data.page} totalPages={data.totalPages} busy={loading} onPageChange={setPage} ariaLabel="打板杂事看板分页" /></div>
-    </Surface> : loading ? <p role="status">正在读取订单…</p> : null}
+      <div className="pattern-pagination"><span>共 {formatBusinessDecimal(data.totalCount)} 单</span><ListPagination page={data.page} totalPages={data.totalPages} busy={loading} onPageChange={setPage} ariaLabel="订单打板/杂事看板分页" /></div>
+    </> : loading ? <p role="status">正在读取订单…</p> : null}
   </div>;
 }
 
@@ -74,6 +74,8 @@ export function PatternRoomOrderDetailPage({ orderId }: { orderId: string }) {
   const [order, setOrder] = useState<PatternOrderDetail | null>(null), [error, setError] = useState(""), [busy, setBusy] = useState(false), [editing, setEditing] = useState(false), [refresh, setRefresh] = useState(0);
   const [workers, setWorkers] = useState<z.infer<typeof PatternWorkerOptionsSchema>>([]), [workerSearch, setWorkerSearch] = useState(""), [personId, setPersonId] = useState("");
   const [hours, setHours] = useState("");
+  const [materialsOpen, setMaterialsOpen] = useState(() => !window.matchMedia("(max-width: 760px)").matches);
+  const [workflowOpen, setWorkflowOpen] = useState(() => !window.matchMedia("(max-width: 760px)").matches);
   const [reworkAmount, setReworkAmount] = useState(""), [exception, setException] = useState<PatternExceptionAction | null>(null);
   const search = useDebouncedValue(workerSearch.trim(), 250), requestedRound = new URLSearchParams(window.location.search).get("round");
   const staleRound = Boolean(order && requestedRound && requestedRound !== order.currentRoundId);
@@ -89,6 +91,13 @@ export function PatternRoomOrderDetailPage({ orderId }: { orderId: string }) {
     void patternRequest(`workers?q=${encodeURIComponent(search)}`, PatternWorkerOptionsSchema, { signal: abort.signal }).then(setWorkers).catch(e => { if (!abort.signal.aborted) setError(e.message); });
     return () => abort.abort();
   }, [order?.actions.assign, staleRound, search]);
+  const showUpdatedOrder = (updated: PatternOrderDetail) => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("node");
+    if (params.has("round")) params.set("round", updated.currentRoundId);
+    window.history.replaceState(window.history.state, "", `${window.location.pathname}${params.size ? `?${params}` : ""}`);
+    setOrder(updated);
+  };
   const act = async (action: "assign" | "complete" | "handoff" | "hours") => {
     if (!order || busy || staleRound) return;
     const current = order.rounds.find(round => round.roundId === order.currentRoundId);
@@ -98,13 +107,18 @@ export function PatternRoomOrderDetailPage({ orderId }: { orderId: string }) {
     const body = JSON.stringify(input), path = action === "handoff" && order.kind === "misc" ? "confirm" : action;
     if (attempt.current?.body !== body || attempt.current.action !== action) attempt.current = { body, action, key: createClientRequestId() };
     setBusy(true); setError("");
-    try { setOrder(await patternRequest(`orders/${orderId}/${path}`, PatternOrderDetailSchema, { method: "POST", body, headers: { "idempotency-key": attempt.current.key } })); }
+    try { showUpdatedOrder(await patternRequest(`orders/${orderId}/${path}`, PatternOrderDetailSchema, { method: "POST", body, headers: { "idempotency-key": attempt.current.key } })); }
     catch (e) { setError(e instanceof Error ? e.message : "操作失败"); }
     finally { setBusy(false); }
   };
   const visibleRounds = staleRound ? order?.rounds.filter(round => round.roundId === requestedRound) ?? [] : order?.rounds ?? [];
   const currentRound = order?.rounds.find(round => round.roundId === order.currentRoundId);
   const displayRound = staleRound ? visibleRounds[0] : currentRound;
+  const selectedStage = displayRound ? patternSelectedStage(displayRound, window.location.search) : null;
+  const selectedNode = displayRound ? patternWorkflow(displayRound, order?.kind === "misc").find(item => item.stage === selectedStage) : null;
+  const currentWorkspace = !staleRound && selectedStage === currentRound?.status;
+  const canAct = order && Object.entries(order.actions).some(([action, allowed]) => action !== "delete" && allowed);
+
   const confirmAction = async (action: "complete" | "handoff") => {
     if (busy || !order) return;
     const message = action === "complete" ? "确认本轮工作已完成？" : order.kind === "misc" ? "确认杂事已完成？" : "确认已收到本轮样板？";
@@ -117,33 +131,34 @@ export function PatternRoomOrderDetailPage({ orderId }: { orderId: string }) {
     if(segment&&order.rounds.some(round=>round.segments.some(item=>item.segmentId===segment))) document.getElementById(`segment-${segment}`)?.scrollIntoView({block:"center"});
   },[order]);
   return <div className="pattern-orders"><Header title={order ? order.kind === "misc" ? order.taskName ?? "杂事" : order.styleNo : "板房订单"} badge={order?.orderNo ?? "订单打板"} badgePlacement="subtitle" />
-    <div className="pattern-actions"><a href={pageUrl(patternReturnPath(window.location.search))}>返回列表</a><Button disabled={busy || editing} onClick={() => setRefresh(value => value + 1)}>刷新订单</Button>{order?.actions.delete && !staleRound && <PatternOrderDelete orderId={order.orderId} version={order.version} label={order.orderNo} disabled={busy || editing || exception !== null} onBusy={setBusy} onDeleted={() => window.location.assign(pageUrl(patternReturnPath(window.location.search)))} />}</div>
+    <div className="pattern-actions pattern-detail-toolbar"><a href={pageUrl(patternReturnPath(window.location.search))}>返回列表</a><Button disabled={busy || editing || exception !== null} onClick={() => setRefresh(value => value + 1)}>刷新订单</Button>{order?.actions.delete && !staleRound && <PatternOrderDelete orderId={order.orderId} version={order.version} label={order.orderNo} disabled={busy || editing || exception !== null} onBusy={setBusy} onDeleted={() => window.location.assign(pageUrl(patternReturnPath(window.location.search)))} />}</div>
     {error ? <Surface><p role="alert">{error}</p><Button disabled={busy} onClick={() => { setEditing(false); setRefresh(value => value + 1); }}>重新读取订单</Button></Surface> : null}
     {!order && !error ? <p role="status">正在读取订单…</p> : null}
     {order ? <>
       {staleRound ? <Surface><p>这是历史轮次链接，仅供查看。</p><a href={pageUrl(`ui/pattern-room/orders/${orderId}`)}>查看当前订单</a></Surface> : null}
-      <Surface><h2>订单信息 <small className="pattern-status">{displayRound ? PATTERN_ORDER_STATUS_LABELS[displayRound.status] : "轮次不存在"}</small></h2><dl className="pattern-facts">
+      <Surface><div className="pattern-section-heading"><h2>订单信息</h2>{displayRound && <StatusBadge tone={displayRound.status === "cancelled" ? "danger" : displayRound.status === "completed" ? "success" : "info"}>{PATTERN_ORDER_STATUS_LABELS[displayRound.status]}</StatusBadge>}</div><dl className="pattern-facts">
         <div><dt>创建人</dt><dd>{order.creatorName}</dd></div><div><dt>要求完成</dt><dd>{order.requiredDate ?? "—"}</dd></div>{order.kind === "misc" ? <div><dt>关联款号</dt><dd>{order.styleNo || "—"}</dd></div> : <><div><dt>客户</dt><dd>{order.customer || "—"}</dd></div><div><dt>尺码与颜色</dt><dd>{order.sizeColor || "—"}</dd></div><div><dt>版型</dt><dd>{order.variant ?? "—"}</dd></div><div><dt>参考历史款号</dt><dd>{order.referenceStyleNo || "—"}</dd></div></>}
       </dl>{order.note ? <p className="pattern-note">{order.note}</p> : null}
       </Surface>
-      {order.canReadMaterials !== false && displayRound ? <Surface><h2>制作资料</h2><PatternMaterials files={order.attachments.filter(file => file.roundId === displayRound.roundId && file.active)} /></Surface> : null}
-      <Surface>{displayRound ? <PatternProgress round={displayRound} misc={order.kind === "misc"} /> : null}
-      {!staleRound && !editing ? <>
-        {!exception && order.actions.assign ? <div className="pattern-fields pattern-assignment"><label>板房师傅<div className="rework-v2-control"><SearchSelect options={workers.map(worker => ({ value: worker.personId, label: worker.name }))} value={personId} onChange={setPersonId} onSearchChange={setWorkerSearch} placeholder="输入姓名选择师傅" ariaLabel="板房师傅" emptyText="没有匹配的师傅" disabled={busy} /></div></label>{currentRound?.roundType === "rework" ? <InsetField label="本轮返工金额（元）" inputMode="decimal" value={reworkAmount} onChange={e => setReworkAmount(e.target.value)} disabled={busy} /> : null}<div className="rework-v2-actions"><Button variant="primary" disabled={busy || !personId || (currentRound?.roundType === "rework" && !reworkAmount)} onClick={() => void act("assign")}>{busy ? "提交中…" : "确认分配"}</Button></div></div> : null}
-        {!exception && order.actions.hours ? <div><h3>实际工时</h3><p>合计：{currentRound?.actualHours ? `${formatBusinessDecimal(currentRound.actualHours, 3)} 小时` : "待填写"}</p><div className="pattern-fields"><InsetField label="当前执行段实际工时（小时）" type="number" inputMode="decimal" min="0.1" max="999999.9" step="0.1" value={hours} onChange={e => setHours(e.target.value)} disabled={busy} /><Button variant="primary" disabled={busy || !hours} onClick={() => void act("hours")}>保存实际工时</Button></div></div> : null}
+      {order.canReadMaterials !== false && displayRound ? <Surface><details className="pattern-disclosure" open={materialsOpen} onToggle={event => setMaterialsOpen(event.currentTarget.open)}><summary>制作资料</summary><PatternMaterials files={order.attachments.filter(file => file.roundId === displayRound.roundId && file.active)} /></details></Surface> : null}
+      <Surface><details className="pattern-disclosure" open={workflowOpen} onToggle={event => setWorkflowOpen(event.currentTarget.open)}><summary>订单流程{displayRound && <small>{PATTERN_ORDER_STATUS_LABELS[displayRound.status]}</small>}</summary>{displayRound && selectedStage ? <PatternProgress round={displayRound} misc={order.kind === "misc"} selected={selectedStage} search={window.location.search} disabled={busy || editing || exception !== null} /> : null}</details></Surface>
+      <Surface className="pattern-workspace"><section id="pattern-node-workspace" aria-label="节点办理区"><h2>{currentWorkspace && canAct ? "办理区" : "节点记录"}</h2>
+      {displayRound && selectedStage && <PatternNodeRecord round={displayRound} misc={order.kind === "misc"} stage={selectedStage} />}
+      {currentWorkspace && !editing ? <>
+        {!exception && order.actions.assign ? <div className={`pattern-fields pattern-assignment${currentRound?.roundType === "rework" ? " has-rework-price" : ""}`}><label>板房师傅<div className="rework-v2-control"><SearchSelect options={workers.map(worker => ({ value: worker.personId, label: worker.name }))} value={personId} onChange={setPersonId} onSearchChange={setWorkerSearch} placeholder="输入姓名选择师傅" ariaLabel="板房师傅" emptyText="没有匹配的师傅" disabled={busy} /></div></label>{currentRound?.roundType === "rework" ? <InsetField label="本轮返工金额（元）" inputMode="decimal" value={reworkAmount} onChange={e => setReworkAmount(e.target.value)} disabled={busy} /> : null}<div className="rework-v2-actions pattern-single-action"><Button variant="primary" disabled={busy || !personId || (currentRound?.roundType === "rework" && !reworkAmount)} onClick={() => void act("assign")}>{busy ? "提交中…" : "确认分配"}</Button></div></div> : null}
+        {!exception && order.actions.hours ? <div><h3>实际工时</h3><p>合计：{currentRound?.actualHours ? `${formatBusinessDecimal(currentRound.actualHours, 3)} 小时` : "待填写"}</p><div className="pattern-fields pattern-hours"><InsetField label="当前执行段实际工时（小时）" type="number" inputMode="decimal" min="0.1" max="999999.9" step="0.1" value={hours} onChange={e => setHours(e.target.value)} disabled={busy} /><div className="rework-v2-actions pattern-single-action"><Button variant="primary" disabled={busy || !hours} onClick={() => void act("hours")}>保存实际工时</Button></div></div></div> : null}
         {!exception ? <div className="pattern-actions">{order.actions.edit ? <Button disabled={busy} onClick={() => setEditing(true)}>更新任务资料</Button> : null}{order.actions.complete ? <Button variant="primary" disabled={busy} onClick={() => void confirmAction("complete")}>报完工</Button> : null}{order.actions.handoff ? <Button variant="primary" disabled={busy} onClick={() => void confirmAction("handoff")}>{order.kind === "misc" ? "确认完成" : "确认收到样板"}</Button> : null}</div> : null}
-        <PatternOrderExceptions order={order} active={exception} onActive={value => { setException(value); }} busy={busy} onBusy={setBusy} onSaved={setOrder} />
-      </> : null}</Surface>
-      {editing && !staleRound ? <PatternOrderForm key={order.version} order={order} onCancel={() => setEditing(false)} onSaved={updated => { setOrder(updated); setEditing(false); }} /> : null}
-      {visibleRounds.map(round => <Surface key={round.roundId}><details open={staleRound || round.roundId === order.currentRoundId || round.roundId === requestedRound}><summary><strong>{order.kind === "misc" ? "杂事" : round.index === 0 ? "首次打板" : round.index === null ? "返工请求（未派工）" : `第 ${round.index} 次返工`} · {PATTERN_ORDER_STATUS_LABELS[round.status]}</strong></summary>
-        {round.requestReason ? <p className="pattern-note">返工要求：{round.requestReason}</p> : null}
-        {round.cancelledAt ? <p>取消时间：{patternTime(round.cancelledAt)}{round.cancelledAmount != null ? ` · 取消部分费用 ${formatBusinessDecimal(round.cancelledAmount, 3)} 元` : ""}{round.feeConfirmedAt ? ` · 费用确认 ${patternTime(round.feeConfirmedAt)}` : ""}</p> : null}
-        <p>{round.categoryName} · {order.kind === "misc" ? round.actualHours === undefined ? "按工时计价" : round.actualHours === null ? "工时待填写" : `${formatBusinessDecimal(round.actualHours, 3)} 小时` : round.roundType === "rework" ? round.agreedAmount === null ? "金额待主管核定" : "本轮金额由主管核定" : `${round.quantity === null ? "—" : formatBusinessDecimal(round.quantity, 3)} ${round.unit}`}{round.unitPrice !== undefined ? ` · ${formatBusinessDecimal(round.unitPrice, 3)} 元/${round.unit}` : ""}{round.agreedAmount != null ? ` · 合计 ${formatBusinessDecimal(round.agreedAmount, 3)} 元` : ""}</p>
-        {round.segments.map(segment => <p id={`segment-${segment.segmentId}`} key={segment.segmentId}>{segment.workerName}{segment.actualHours !== null ? ` · ${formatBusinessDecimal(segment.actualHours, 3)} 小时` : ""}{segment.amount != null ? ` · 分配金额 ${formatBusinessDecimal(segment.amount, 3)} 元` : ""} · {segment.wageEligible ? "可计薪" : order.kind === "misc" && segment.actualHours === null ? "工时待填写" : "待计薪"}</p>)}
-        <details className="pattern-node-history"><summary>节点用时</summary><ol className="pattern-nodes">{round.nodes.map(node => <li key={node.stage}><strong>{PATTERN_ORDER_STATUS_LABELS[node.stage]}</strong><span>{patternTime(node.enteredAt)} → {node.exitedAt ? patternTime(node.exitedAt) : "当前"}</span><span>{elapsedText(node.elapsedSeconds)}</span></li>)}</ol></details>
+        <PatternOrderExceptions order={order} active={exception} onActive={value => { setException(value); }} busy={busy} onBusy={setBusy} onSaved={showUpdatedOrder} />
+      </> : null}
+      {!currentWorkspace && displayRound && selectedNode?.state !== "future" && selectedStage !== "pending_assignment" && <PatternRoundRecord round={displayRound} misc={order.kind === "misc"} idPrefix="node-" />}
+      </section></Surface>
+      {editing && !staleRound ? <PatternOrderForm key={order.version} order={order} onCancel={() => setEditing(false)} onSaved={updated => { showUpdatedOrder(updated); setEditing(false); }} /> : null}
+      {visibleRounds.map(round => <Surface key={round.roundId}><details className="pattern-disclosure" open={staleRound || round.roundId === requestedRound || (round.roundId === order.currentRoundId && !window.matchMedia("(max-width: 760px)").matches)}><summary><strong>{order.kind === "misc" ? "杂事" : round.index === 0 ? "首次打板" : round.index === null ? "返工请求（未派工）" : `第 ${round.index} 次返工`} · {PATTERN_ORDER_STATUS_LABELS[round.status]}</strong></summary>
+        <PatternRoundRecord round={round} misc={order.kind === "misc"} />
+        <details className="pattern-node-history"><summary>节点用时</summary><PatternNodeHistory round={round} misc={order.kind === "misc"} /></details>
         {order.canReadMaterials !== false && order.attachments.some(file => file.roundId === round.roundId && (round.roundId !== displayRound?.roundId || !file.active)) && <details><summary>历史制作资料</summary><PatternMaterials files={order.attachments.filter(file => file.roundId === round.roundId && (round.roundId !== displayRound?.roundId || !file.active))} /></details>}
       </details></Surface>)}
-      <Surface><details><summary>订单记录（{order.history.length} 条）</summary>{order.history.map((entry, index) => <p key={`${entry.at}:${index}`}>{patternTime(entry.at)} · {entry.actorName} · {historyLabels[entry.action] ?? "订单操作"}{entry.reason ? ` · ${entry.reason}` : ""}</p>)}</details></Surface>
+      <Surface><details className="pattern-disclosure"><summary>订单记录（{formatBusinessDecimal(order.history.length)} 条）</summary><ol className="pattern-audit-list">{order.history.map((entry, index) => <li key={`${entry.at}:${index}`}><div><strong>{historyLabels[entry.action] ?? "订单操作"}</strong><span>{entry.actorName}</span><time>{patternTime(entry.at)}</time></div>{entry.reason && <p className="pattern-note">{entry.reason}</p>}</li>)}</ol></details></Surface>
     </> : null}
   </div>;
 }

@@ -57,10 +57,10 @@ export function PatternRoomPricesPage() {
     {error ? <Surface><p role="alert">{error}</p><Button onClick={() => void refresh().catch(e => setError(e instanceof Error ? e.message : "价格读取失败"))}>重新读取</Button></Surface> : null}
     {!data && !error ? <p role="status">正在读取价格…</p> : null}
     {data ? <>
-      <Surface><h2>打板品类单价</h2><p>新价格用于之后提交的订单；已提交订单保留原执行价。</p>
-        <div className="pattern-price-table"><table><thead><tr><th>品类</th><th>单位</th><th>单价（元）</th><th>状态</th><th>最近调整</th><th>操作</th></tr></thead><tbody>
-          {data.categories.map(item => <tr key={item.priceId}><th scope="row">{item.name}</th><td>{item.unit}</td><td>{amountText(item.amount)}</td><td>{item.enabled ? "启用" : "停用"}</td>
-            <td>{item.updatedBy ?? "初始化"}<small>{time(item.updatedAt)}</small></td><td><Button onClick={() => void showHistory(item)}>价格记录</Button>{data.canWriteCategories ? <Button onClick={() => edit(item)}>调整</Button> : null}</td></tr>)}
+      <Surface><h2>打板品类单价</h2><p>调整后仅对新订单生效。</p>
+        <div className="pattern-price-table reporting-table-wrap"><table><thead><tr><th>品类</th><th>单位</th><th>单价（元）</th><th>状态</th><th>最近调整</th><th>操作</th></tr></thead><tbody>
+          {data.categories.map(item => <tr key={item.priceId}><th scope="row">{item.name}</th><td data-label="单位">{item.unit}</td><td data-label="单价（元）">{amountText(item.amount)}</td><td data-label="状态">{item.enabled ? "启用" : "停用"}</td>
+            <td data-label="最近调整">{item.updatedBy ?? "初始化"}<small>{time(item.updatedAt)}</small></td><td data-label="操作"><div className="pattern-price-actions"><Button onClick={() => void showHistory(item)}>价格记录</Button>{data.canWriteCategories ? <Button onClick={() => edit(item)}>调整</Button> : null}</div></td></tr>)}
         </tbody></table></div>
       </Surface>
       <Surface><h2>杂事小时单价</h2><p className="pattern-hourly-price">{amountText(data.hourly.amount)}{data.hourly.amount !== null ? " 元/小时" : ""}</p>
