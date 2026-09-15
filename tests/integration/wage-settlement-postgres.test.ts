@@ -51,7 +51,7 @@ const url=process.env.TEST_DATABASE_URL;
     quantity_snapshot numeric,unit_snapshot text,unit_price_snapshot numeric,assignment_mode text,final_amount numeric);`);
   await db.query(await readFile(new URL("../../apps/api/migrations/0171_wage_settlement_marks.sql",import.meta.url),"utf8"));
   await db.query(await readFile(new URL("../../apps/api/migrations/0174_finance_wage_access.sql",import.meta.url),"utf8"));
-  await db.query(`CREATE TABLE pattern_room_orders(order_id uuid PRIMARY KEY);
+  await db.query(`CREATE TABLE pattern_room_orders(order_id uuid PRIMARY KEY,deleted_at timestamptz);
     CREATE TABLE pattern_room_rounds(round_id uuid PRIMARY KEY,order_id uuid REFERENCES pattern_room_orders(order_id));
     CREATE TABLE pattern_room_segments(segment_id uuid PRIMARY KEY,round_id uuid REFERENCES pattern_room_rounds(round_id));
     CREATE TABLE pattern_room_wage_items(wage_item_id uuid PRIMARY KEY,period_month date,person_id uuid,
