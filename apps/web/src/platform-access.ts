@@ -27,6 +27,7 @@ const BUSINESS_MODULES: readonly PlatformAccessModuleId[] = [
 const PROTECTED_ROLE_MODULES: Readonly<Record<string, readonly PlatformAccessModuleId[]>> = {
   owner_group: BUSINESS_MODULES,
   finance_director: BUSINESS_MODULES,
+  finance_read: BUSINESS_MODULES,
   system_admin: ["platform"],
 };
 
@@ -115,7 +116,7 @@ export function accessModuleIdsForRole(
     PROTECTED_ROLE_MODULES[roleCode] ?? accessModuleIdsForCapabilities(capabilities),
   );
   if (
-    ["production_management", "order_merchandiser", "finance_director"].includes(roleCode)
+    ["production_management", "order_merchandiser", "finance_director", "finance_read"].includes(roleCode)
     && capabilities.includes("sourcing:view")
   ) {
     modules.add("production");

@@ -39,6 +39,7 @@ type ExternalItem = NonNullable<ExternalResponsibilityBatchResponse>["items"][nu
 type Result<T> = { value: T; reused: boolean };
 
 type PermissionRow = {
+  active: boolean;
   can_sign: boolean;
   can_payables_confirm: boolean;
   can_payables_follow_up: boolean;
@@ -240,6 +241,7 @@ export class ProductionExternalResponsibilityService
     return {
       ...value,
       items: value.items.map((item) => this.normalizeAmountLineSnapshot(item)),
+      historicalCases: await Promise.all((value.historicalCases ?? []).map(item => this.enrichPermissions(actor, item))),
       cases: await Promise.all(
         value.cases.map((item) => this.enrichPermissions(actor, item)),
       ),
@@ -457,6 +459,7 @@ export class ProductionExternalResponsibilityService
   ): Promise<PermissionRow> {
     const result = await this.productionDatabase.query<PermissionRow>(
       `SELECT
+         EXISTS(SELECT 1 FROM rework_external_responsibility_batches batch WHERE batch.batch_id=target_case.batch_id AND batch.status='active') active,
          external_responsibility_can_sign(
            $1,target_case.rework_order_id,target_case.responsibility_type
          ) can_sign,
@@ -481,6 +484,7 @@ export class ProductionExternalResponsibilityService
       [actorId, caseId],
     );
     return result.rows[0] ?? {
+      active: false,
       can_sign: false,
       can_payables_confirm: false,
       can_payables_follow_up: false,
@@ -500,7 +504,7 @@ export class ProductionExternalResponsibilityService
     value: ExternalResponsibilityCaseResponse,
   ): Promise<ExternalResponsibilityCaseResponse> {
     const permission = await this.casePermissions(actor.actorId, value.caseId);
-    const active = value.status !== "superseded";
+    const active = permission.active && value.status !== "superseded";
     const followUp = active && value.status === "deduction_follow_up";
     const recordable = active && [
       "pending_payables_confirmation",

@@ -22,7 +22,7 @@ export function canAccessSupplierCenter(user: AuthorizedUser): boolean {
 
 export function canAccessSamples(user: AuthorizedUser): boolean {
   return user.isRoot === true || (user.capabilities.includes("sample:view_basic")
-    && user.businessRoles?.some(role => ["sample_designer", "sample_administrative", "sample_finance", "finance_director", "owner_group"].includes(role)) === true);
+    && user.businessRoles?.some(role => ["sample_designer", "sample_administrative", "sample_finance", "finance_director", "finance_read", "owner_group"].includes(role)) === true);
 }
 
 export function canAccessProductionReporting(user: AuthorizedUser): boolean {
@@ -33,7 +33,7 @@ export function canAccessProductionReporting(user: AuthorizedUser): boolean {
 
 export function canAccessProduction(user: AuthorizedUser): boolean {
   return canAccessProductionReporting(user)
-    || (user.businessRoles?.includes("finance_director") === true && user.capabilities.includes("sourcing:view"));
+    || (user.businessRoles?.some(role => ["finance_director", "finance_read"].includes(role)) === true && user.capabilities.includes("sourcing:view"));
 }
 
 export function accessiblePlatformModules(user: AuthorizedUser): readonly PlatformModule[] {

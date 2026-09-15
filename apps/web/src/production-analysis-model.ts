@@ -1,6 +1,6 @@
 export function canReadProductionAnalysis(user:{isRoot?:boolean;businessRoles?:readonly string[];capabilities:readonly string[]}) {
   const roles=user.businessRoles??[];
-  return user.isRoot===true || (roles.some(role=>["owner_group","production_management","order_merchandiser","finance_director"].includes(role)) && user.capabilities.includes("sourcing:view"))
+  return user.isRoot===true || (roles.some(role=>["owner_group","production_management","order_merchandiser","finance_director","finance_read"].includes(role)) && user.capabilities.includes("sourcing:view"))
     || (roles.includes("production_reporter") && user.capabilities.includes("production-reporting"));
 }
 export const productionAnalysisDueLabels = {all:"全部交期",overdue:"已逾期未完",soon:"未来7自然日到期",missing:"未完缺交期",later:"更晚交期",closed:"完成或已发货"};

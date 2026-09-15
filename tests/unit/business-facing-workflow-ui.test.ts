@@ -72,7 +72,7 @@ describe("business-facing workflow UI", () => {
     const source = await read("apps/web/src/external-responsibility-panel.tsx");
     expect(source).toContain("responsibilityTypeLabel[caseItem.responsibilityType]");
     expect(source).toContain("deductionEntryLabel[entry.entryType]");
-    expect(source).toContain("const canRecordDeduction = !readOnly && caseItem.canRecordDeduction");
+    expect(source).toContain("const canRecordDeduction = !caseReadOnly && caseItem.canRecordDeduction");
     expect(source).toContain("external-finance-summary");
     expect(source).toContain("本次扣款金额");
     expect(source).toContain("<ExternalEvidenceUploader");

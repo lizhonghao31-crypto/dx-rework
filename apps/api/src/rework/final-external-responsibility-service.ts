@@ -119,6 +119,7 @@ export class FinalExternalResponsibilityService
     if (!value) return null;
     return {
       ...value,
+      historicalCases: await Promise.all((value.historicalCases ?? []).map(item => this.enrichCase(item, executor))),
       cases: await Promise.all(
         value.cases.map((item) => this.enrichCase(item, executor)),
       ),

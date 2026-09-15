@@ -12,6 +12,7 @@ const SUPPLIER_CONTRACT_ROLES = new Set([
   "production_management",
   "factory_payables",
   "finance_director",
+  "finance_read",
 ]);
 
 const SUPPLIER_PAYMENT_ROLES = new Set([
@@ -20,6 +21,7 @@ const SUPPLIER_PAYMENT_ROLES = new Set([
   "production_management",
   "factory_payables",
   "finance_director",
+  "finance_read",
 ]);
 
 const DAXING_PRICE_ROLES = new Set([

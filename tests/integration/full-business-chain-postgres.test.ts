@@ -5,7 +5,11 @@ import { PatternRoomOrderService, patternTodoKey } from "../../apps/api/src/patt
 import { RootAwareTodoProjectionService } from "../../apps/api/src/todos/root-aware-projection-service.js";
 import Fastify from "fastify";
 import { registerPatternRoomOrderRoutes } from "../../apps/api/src/pattern-room/order-routes.js";
-import type { AttachmentService } from "../../apps/api/src/tools/attachments.js";
+import { registerExternalResponsibilityRoutes } from "../../apps/api/src/rework/external-responsibility-routes.js";
+import { registerToolsRoutes } from "../../apps/api/src/tools/routes.js";
+import type { ObjectStorage } from "../../apps/api/src/tools/storage.js";
+import type { ExportJobService } from "../../apps/api/src/tools/exports.js";
+import { AttachmentService } from "../../apps/api/src/tools/attachments.js";
 import { registerTodoRoutes } from "../../apps/api/src/todos/routes.js";
 import { readFinanceNode } from "../../apps/api/src/reporting/finance-node-reader.js";
 import { FinanceNodeKeySchema } from "@dx-rework/contracts/reporting";
@@ -376,6 +380,19 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     await adminPool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     if (process.env.PATTERN_ROOM_EVIDENCE === "1") process.stdout.write(`PATTERN_ROOM_CLEANUP ${JSON.stringify({schema,dropped:true})}\n`);
     await adminPool.end();
+  });
+
+  it("aligns persisted finance business reads without copying writes or exports", async () => {
+    const readCaps=['rework:finance_nodes:read','sourcing:view','supplier_profile:read','supplier_contract_data:read','sample:view_basic','sample:view_finance','sample:view_audit','pattern_room:prices:read','pattern_room:catalog:read','pattern_room:misc:quote'];
+    const rows=(await database.query<{capability:string}>("SELECT capability FROM role_capabilities WHERE role_code='finance_read'")).rows.map(row=>row.capability);
+    expect(rows).toEqual(expect.arrayContaining(readCaps));
+    for(const cap of ['external_deduction:special_approve','supplier_profile:write','sample:create','sample:dispose_approve','pattern_room:prices:write','process:configure','responsibility:owner_sign','report:export','receiving:export']) expect(rows).not.toContain(cap);
+    expect(rows).toContain('wage:settlement_mark');expect(rows).toContain('wage:export');
+    for(const cap of ['pattern_room:prices:read','pattern_room:catalog:read','pattern_room:misc:quote']) expect((await database.query('SELECT pattern_room_authorized_price_roles($1,$2)',[ids.financeRead,cap])).rowCount).toBe(1);
+    await expect(database.query("SELECT pattern_room_authorized_price_roles($1,'pattern_room:prices:write')",[ids.financeRead])).rejects.toThrow();
+    // Simultaneous roles retain lawful director authority; a read-only label never grants it.
+    expect((await database.query("SELECT external_responsibility_direct_role($1,'external_deduction:special_approve',ARRAY['finance_director']) allowed",[ids.financeRead])).rows[0].allowed).toBe(false);
+    expect((await database.query("SELECT external_responsibility_direct_role($1,'external_deduction:special_approve',ARRAY['finance_director']) allowed",[ids.financeDirector])).rows[0].allowed).toBe(true);
   });
 
   it("keeps pattern room standard prices exact, authorized, versioned and repeatably initialized", async () => {
@@ -1427,6 +1444,11 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       factoryPayables("external_deduction:record"),
       processingCaseId,
     );
+    const voucherIds = [randomUUID(),randomUUID()];
+    for (const [index,id] of voucherIds.entries()) await database.query(
+      `INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+       VALUES($1,$2,$3,$4,10,$5,$6,'ready',CURRENT_TIMESTAMP)`,
+      [id,`test/voucher/${id}`,index===0?'扣款凭证.png':'特批凭证.pdf',index===0?'image/png':'application/pdf','a'.repeat(64),ids.factoryPayables]);
     const partialDeduction = await external.recordDeduction(
       factoryPayables("external_deduction:record"),
       processingCaseId,
@@ -1435,7 +1457,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         entryType: "deduction",
         amount: "80.00",
         deductedOn: new Date().toISOString().slice(0, 10),
-        attachmentIds: [],
+        attachmentIds: [voucherIds[0]],
       }),
       randomUUID(),
     );
@@ -1456,7 +1478,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       RequestExternalDeductionSpecialApprovalSchema.parse({
         expectedCaseVersion: partialDeduction.value.caseVersion,
         reason: "供应商只确认扣款 80 元",
-        attachmentIds: [],
+        attachmentIds: [voucherIds[1]],
       }),
       randomUUID(),
     );
@@ -1490,6 +1512,12 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       outcome: "queued",
     });
 
+    await expect(external.approveSpecialApproval(actor(ids.financeRead,['finance_read'],'external_deduction:special_approve'),processingCaseId,
+      {expectedCaseVersion:firstRequest.value.caseVersion,expectedRequestVersion:1},randomUUID())).rejects.toMatchObject({statusCode:403});
+    const readOnlyHttp=Fastify();
+    registerExternalResponsibilityRoutes(readOnlyHttp,{service:external,authenticate:async()=>({id:ids.financeRead,businessRoles:['finance_read'],capabilities:['external_responsibility:view','rework:finance_nodes:read']})});
+    try { expect((await readOnlyHttp.inject({method:'POST',url:`/external-responsibility-cases/${processingCaseId}/special-approval/approve`,headers:{'idempotency-key':randomUUID()},payload:{expectedCaseVersion:firstRequest.value.caseVersion,expectedRequestVersion:1}})).statusCode).toBe(403); }
+    finally {await readOnlyHttp.close();}
     const returned = await external.returnSpecialApproval(
       financeDirector(),
       processingCaseId,
@@ -1887,6 +1915,48 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect((await database.query("SELECT version,status FROM rework_orders WHERE rework_order_id=$1",[submitted.value.reworkOrderId])).rows).toEqual(beforeRead.rows);
     expect((await wages.get(wageView(),wagePeriod.periodId)).items).toEqual(wageDetail.items);
     expect(await businessDetail.canDownloadBoundAttachment(financeReader,{entityType:'external_responsibility_case',entityId:processingCaseId})).toBe(true);
+    // 2026-09-15: identical finance reads, historical voucher scope, no new writes.
+    const globalReader=actor(ids.financeRead,["finance_read"],"rework:finance_nodes:read","external_responsibility:view","tools:user","wage:settlement_mark");
+    for (const node of FinanceNodeKeySchema.options) expect(await readFinanceNode(database,globalReader,submitted.value.reworkOrderId,node)).toEqual(reads.get(node));
+    const historicalBatch=await external.get(globalReader,submitted.value.reworkOrderId);
+    expect(historicalBatch!.canAllocateSuppliers).toBe(false);
+    const historicalCase=historicalBatch!.historicalCases!.find(item=>item.caseId===processingCaseId)!;
+    expect(historicalCase.evidenceAttachments?.map(file=>file.attachmentId).sort()).toEqual([...voucherIds].sort());
+    expect(historicalCase.specialApprovalHistory?.map(request=>request.decision?.decision)).toEqual(['approved','returned']);
+    expect(historicalCase.specialApprovalHistory?.[1]?.attachmentIds).toEqual([voucherIds[1]]);
+    expect(historicalCase.deductions[0]?.attachmentIds).toEqual([voucherIds[0]]);
+    expect(historicalCase).toMatchObject({canRecordDeduction:false,canRequestSpecialApproval:false,canDecideSpecialApproval:false,canApproveRevision:false});
+    const historicalOwner=await external.getCase(factoryPayables("external_responsibility:view"),processingCaseId);
+    expect(historicalOwner).toMatchObject({canRecordDeduction:false,canRequestSpecialApproval:false,canFollowUp:false});
+    expect(await businessDetail.canDownloadBoundAttachment(globalReader,{entityType:'external_responsibility_case',entityId:processingCaseId})).toBe(true);
+    expect(await businessDetail.canDownloadBoundAttachment(fabricPayables('external_responsibility:view'),{entityType:'external_responsibility_case',entityId:processingCaseId})).toBe(false);
+    expect((await businessDetail.get(fabricPayables('external_responsibility:view'),submitted.value.reworkOrderId)).attachments.some(file=>voucherIds.includes(file.attachmentId))).toBe(false);
+    await expect(database.query("SELECT access_authorized_actor_roles($1,'external_deduction:special_approve')",[ids.financeRead])).rejects.toThrow();
+    expect((await database.query("SELECT finance_authorized_wage_roles($1,'wage:settlement_mark')",[ids.financeRead])).rowCount).toBe(1);
+
+    let current=globalReader;
+    let grants=0;
+    const fileService=new AttachmentService(database,{createDownloadGrant:async()=>{grants++;return {downloadUrl:'https://example.invalid/test-voucher',expiresAt:new Date(Date.now()+60000).toISOString()};}} as unknown as ObjectStorage,{prefix:'test',ttlSeconds:60,maxUploadBytes:1000});
+    const app=Fastify();
+    const authenticate=async()=>({id:current.actorId,businessRoles:current.actorRoles,capabilities:current.authorizationCapabilities!});
+    registerExternalResponsibilityRoutes(app,{service:external,authenticate});
+    registerToolsRoutes(app,{attachments:fileService,exports:{} as ExportJobService,authenticate,
+      canDownloadBoundAttachment:async(user,binding)=>businessDetail.canDownloadBoundAttachment({...current,actorId:user.actorId,actorRoles:user.actorRoles,authorizationCapabilities:user.capabilities},binding)});
+    try {
+      const httpBatch=await app.inject({url:`/rework-orders/${submitted.value.reworkOrderId}/external-responsibilities`});
+      expect(httpBatch.statusCode,httpBatch.body).toBe(200);
+      expect((await app.inject({url:`/tools/attachments/${voucherIds[0]}/download`})).statusCode).toBe(200);
+      const writes=[['deductions',{expectedCaseVersion:historicalCase.caseVersion,entryType:'deduction',amount:'1.00',deductedOn:'2026-09-15',attachmentIds:[]}],
+        ['special-approval/approve',{expectedCaseVersion:historicalCase.caseVersion,expectedRequestVersion:2}]] as const;
+      for(const [path,payload] of writes) expect([403,409]).toContain((await app.inject({method:'POST',url:`/external-responsibility-cases/${processingCaseId}/${path}`,headers:{'idempotency-key':randomUUID()},payload})).statusCode);
+      current=actor(ids.fabricPayables,['fabric_payables'],'external_responsibility:view','tools:user');
+      expect((await app.inject({url:`/external-responsibility-cases/${processingCaseId}`})).statusCode).toBe(403);
+      expect((await app.inject({url:`/tools/attachments/${voucherIds[0]}/download`})).statusCode).toBe(403);
+      current=actor(ids.factoryPayables,['factory_payables'],'external_responsibility:view','tools:user');
+      expect((await app.inject({url:`/tools/attachments/${voucherIds[1]}/download`})).statusCode).toBe(200);
+      expect(grants).toBe(2);
+    } finally {await app.close();}
+
 
 
   });
