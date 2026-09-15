@@ -11,6 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { shanghaiBusinessDate } from "./business-date.js";
+import { ExternalEvidenceView } from "./external-evidence-view.js";
 import { ExternalEvidenceUploader } from "./external-evidence-uploader.js";
 import { SearchSelect } from "./search-select.js";
 import { alertInApp, confirmInApp, promptInApp } from "./system-dialog.js";
@@ -135,7 +136,7 @@ export function ExternalResponsibilityPanel({
           entry.items.some((mapped) => mapped.externalItemId === item.externalItemId),
         ),
       ) ?? false;
-      if (!batch || !hasUnassigned) return [] as Supplier[];
+      if (!batch || !hasUnassigned || batch.canAllocateSuppliers === false) return [] as Supplier[];
       const response = await fetch(
         apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities/supplier-options`),
         { credentials: "include", signal: controller.signal, headers: { accept: "application/json" } },
@@ -519,10 +520,11 @@ export function ExternalResponsibilityPanel({
   if (!state.value) return <Surface className="external-state">本单没有供应商责任金额，无需供应商扣款。</Surface>;
 
   const batch = state.value;
+  const allCases = [...batch.cases, ...(batch.historicalCases ?? [])];
   const visibleCases = focusCaseId
-    ? batch.cases.filter((caseItem) => caseItem.caseId === focusCaseId)
-    : batch.cases;
-  const visibleUnassigned = readOnly || focusCaseId ? [] : unassigned;
+    ? allCases.filter((caseItem) => caseItem.caseId === focusCaseId)
+    : allCases;
+  const visibleUnassigned = readOnly || focusCaseId || batch.status !== "active" || batch.canAllocateSuppliers === false ? [] : unassigned;
   const supplierAllocationReady = visibleUnassigned.length > 0
     && visibleUnassigned.every((item) => Boolean(selection[item.externalItemId]));
 
@@ -582,6 +584,8 @@ export function ExternalResponsibilityPanel({
 
     <section className="external-case-list">
       {visibleCases.map((caseItem) => {
+        const historical = caseItem.batchId !== batch.batchId || batch.status !== "active";
+        const caseReadOnly = readOnly || historical;
         const evidence = attachments[caseItem.caseId] ?? [];
         const inputCents = parseMoneyToCents(amount[caseItem.caseId] ?? "");
         const remainingCents = parseMoneyToCents(caseItem.remainingAmount);
@@ -589,19 +593,19 @@ export function ExternalResponsibilityPanel({
           && inputCents > 0n
           && remainingCents !== null
           && inputCents <= remainingCents;
-        const canRecordDeduction = !readOnly && caseItem.canRecordDeduction;
-        const canRequestRevision = !readOnly && caseItem.canRequestRevision;
-        const canApproveRevision = !readOnly && caseItem.canApproveRevision;
-        const canRequestSpecialApproval = !readOnly && caseItem.canRequestSpecialApproval;
-        const canDecideSpecialApproval = !readOnly && caseItem.canDecideSpecialApproval;
-        const canLegacySubmit = !readOnly && caseItem.canSign;
-        const recoveryClose = !readOnly && caseItem.canClose && caseItem.remainingAmount === "0.00";
+        const canRecordDeduction = !caseReadOnly && caseItem.canRecordDeduction;
+        const canRequestRevision = !caseReadOnly && caseItem.canRequestRevision;
+        const canApproveRevision = !caseReadOnly && caseItem.canApproveRevision;
+        const canRequestSpecialApproval = !caseReadOnly && caseItem.canRequestSpecialApproval;
+        const canDecideSpecialApproval = !caseReadOnly && caseItem.canDecideSpecialApproval;
+        const canLegacySubmit = !caseReadOnly && caseItem.canSign;
+        const recoveryClose = !caseReadOnly && caseItem.canClose && caseItem.remainingAmount === "0.00";
         const canAttachEvidence = canRecordDeduction || canRequestSpecialApproval || canRequestRevision || canLegacySubmit;
         const pendingRevision = caseItem.revisionRequests.find((request) => request.status === "pending");
         return <article className="external-case" key={caseItem.caseId}>
           <div className="section-title">
-            <div><b>{caseItem.supplier.name}</b><p>{caseLabel[caseItem.status]} · {responsibilityTypeLabel[caseItem.responsibilityType]}</p></div>
-            <StatusBadge tone={caseItem.status === "closed" ? "success" : caseItem.status === "pending_responsibility_revision" ? "warning" : "info"}>{caseLabel[caseItem.status]}</StatusBadge>
+            <div><b>{caseItem.supplier.name}</b><p>{historical ? "历史台账" : caseLabel[caseItem.status]} · {responsibilityTypeLabel[caseItem.responsibilityType]}</p></div>
+            <StatusBadge tone={caseItem.status === "closed" ? "success" : caseItem.status === "pending_responsibility_revision" ? "warning" : "info"}>{historical ? "历史台账" : caseLabel[caseItem.status]}</StatusBadge>
           </div>
 
           <div className="external-finance-summary">
@@ -610,7 +614,7 @@ export function ExternalResponsibilityPanel({
             <div><span>剩余</span><strong>{formatBusinessCurrency(caseItem.remainingAmount)}</strong></div>
           </div>
 
-          {!readOnly && (canRecordDeduction || canRequestSpecialApproval || canDecideSpecialApproval || canRequestRevision || canLegacySubmit || recoveryClose || canApproveRevision) && <div className="external-finance-operation">
+          {!caseReadOnly && (canRecordDeduction || canRequestSpecialApproval || canDecideSpecialApproval || canRequestRevision || canLegacySubmit || recoveryClose || canApproveRevision) && <div className="external-finance-operation">
             {canRecordDeduction && <InsetField
               label="本次扣款金额"
               inputMode="decimal"
@@ -643,18 +647,29 @@ export function ExternalResponsibilityPanel({
           </div>}
 
           {caseItem.deductions.length > 0 && <div className="external-ledger-list external-deduction-history">
-            <h4>扣款记录</h4>
+            <h4>{historical ? "历史台账扣款记录" : "扣款记录"}</h4>
             {caseItem.deductions.map((entry) => <div key={entry.deductionEntryId}>
               <span>{entry.deductedOn} · {deductionEntryLabel[entry.entryType]}</span>
               <b>{formatBusinessCurrency(entry.amount)}</b>
+              <ExternalEvidenceView attachmentIds={entry.attachmentIds} files={caseItem.evidenceAttachments ?? []} />
             </div>)}
           </div>}
 
-          {caseItem.specialApproval && <div className="external-special-approval">
-            <b>财务特批：{caseItem.specialApproval.reason}</b>
-            <span>申请时实扣 {formatBusinessCurrency(caseItem.specialApproval.actualDeductedAmount)}，差额 {formatBusinessCurrency(caseItem.specialApproval.remainingAmount)}</span>
-            {caseItem.specialApproval.decision && <span>结果：{caseItem.specialApproval.decision.decision === "approved" ? "已确认（不可修改）" : "已退回"}</span>}
+          {(caseItem.specialApprovalHistory ?? (caseItem.specialApproval ? [caseItem.specialApproval] : [])).map(request => <div className="external-special-approval" key={request.requestId}>
+            <b>财务特批：{request.reason}</b>
+            <span>申请时实扣 {formatBusinessCurrency(request.actualDeductedAmount)}，差额 {formatBusinessCurrency(request.remainingAmount)}</span>
+            {request.decision && <span>结果：{request.decision.decision === "approved" ? "已确认（不可修改）" : "已退回"}</span>}
+            <ExternalEvidenceView attachmentIds={request.attachmentIds} files={caseItem.evidenceAttachments ?? []} />
+          </div>)}
+
+          {caseItem.closure && caseItem.closure.evidenceAttachmentIds.length > 0 && <div className="external-special-approval">
+            <b>结案凭证{caseItem.closure.reason ? `：${caseItem.closure.reason}` : ""}</b>
+            <ExternalEvidenceView attachmentIds={caseItem.closure.evidenceAttachmentIds} files={caseItem.evidenceAttachments ?? []} />
           </div>}
+          {caseItem.followUps.filter(follow => follow.attachmentIds.length > 0).map(follow => <div className="external-special-approval" key={follow.followUpId}>
+            <b>跟进凭证：{follow.content}</b>
+            <ExternalEvidenceView attachmentIds={follow.attachmentIds} files={caseItem.evidenceAttachments ?? []} />
+          </div>)}
 
           {caseItem.closure?.result === "full" && <StatusBadge tone="success">已足额扣款</StatusBadge>}
           {caseItem.revisionRequests.filter((item) => item.seededDeterminationId).map((item) => (

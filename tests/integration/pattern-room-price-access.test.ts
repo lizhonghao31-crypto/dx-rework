@@ -21,7 +21,7 @@ describe("pattern room price field permissions", () => {
     ["finance_director", true, false, false, true, true], ["pattern_room_supervisor", true, false, false, true, true],
     ["sample_designer", false, false, false, true, true], ["order_merchandiser", false, false, false, false, true],
     ["worker", false, false, false, false, false], ["tail_supervisor", false, false, false, false, false],
-    ["finance_read", false, false, false, false, false], ["system_admin", false, false, false, false, false],
+    ["finance_read", true, false, false, true, true], ["system_admin", false, false, false, false, false],
   ] as const)("enforces role-specific HTTP and page permissions for %s even with forged extra grants", async (role, read, category, hourly, option, misc) => {
     const { app } = fixture([role]);
     expect(canAccessPatternRoomPrices({ id, displayName: "同名", businessRoles: [role], capabilities })).toBe(read);

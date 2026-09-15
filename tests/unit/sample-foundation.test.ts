@@ -111,6 +111,11 @@ describe("sample migration inventory", () => {
       + await readFile("apps/api/migrations/0158_sample_role_finance_maintenance.sql", "utf8")
       + await readFile("apps/api/migrations/0162_finance_director_sample_read.sql", "utf8");
     for (const [role, allowed] of Object.entries(SAMPLE_ROLE_CAPABILITIES)) {
+      // This test describes legacy bootstrap SQL; 0182 grants the new role through an explicit read allowlist.
+      if (role === "finance_read") {
+        expect(allowed).toEqual(SAMPLE_ROLE_CAPABILITIES.finance_director);
+        continue;
+      }
       for (const capability of SampleCapabilitySchema.options) expect(sql.includes(`('${role}','${capability}')`)).toBe(allowed.includes(capability));
     }
     expect(sql).not.toContain("('system_admin','sample:");

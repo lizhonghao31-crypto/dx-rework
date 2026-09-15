@@ -32,7 +32,7 @@ describe("finance director rework detail access", () => {
     expect(query).not.toHaveBeenCalled();
   });
 
-  it("keeps ordinary finance-read detail access wage-scoped", async () => {
+  it("aligns finance-read detail access with the director without waiting for wages", async () => {
     const query = vi.fn(async () => ({ rows: [] as unknown[] }));
     const service = new ReworkBusinessDetailService({ query } as unknown as Pool);
     const row = {
@@ -46,13 +46,7 @@ describe("finance director rework detail access", () => {
     }).canView.bind(service);
     const financeRead = actor("finance_read");
 
-    await expect(canView(financeRead, row)).resolves.toBe(false);
-    expect(query).toHaveBeenCalledWith(
-      "SELECT 1 FROM rework_wage_items WHERE rework_order_id=$1 LIMIT 1",
-      [row.rework_order_id],
-    );
-
-    query.mockResolvedValueOnce({ rows: [{}] });
     await expect(canView(financeRead, row)).resolves.toBe(true);
+    expect(query).not.toHaveBeenCalled();
   });
 });

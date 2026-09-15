@@ -69,9 +69,9 @@ export class FixedExternalResponsibilityService
        FROM rework_external_responsibility_batches batch
        JOIN rework_orders order_record
          ON order_record.rework_order_id=batch.rework_order_id
-       WHERE batch.rework_order_id=$1 AND batch.status='active'
+       WHERE batch.rework_order_id=$1
          AND order_record.status<>'deleted'
-       ORDER BY batch.created_at DESC
+       ORDER BY (batch.status='active') DESC,batch.created_at DESC
        LIMIT 1`,
       [orderId],
     );
@@ -80,6 +80,7 @@ export class FixedExternalResponsibilityService
 
     const items = await executor.query<{
       external_item_id: string;
+      can_sign: boolean;
       configuration_item_id: string;
       responsibility_type: ResponsibilityType;
       process_snapshot: Record<string, unknown>;
@@ -88,7 +89,8 @@ export class FixedExternalResponsibilityService
       proposed_amount: string;
       amount_line_snapshot: Record<string, unknown>;
     }>(
-      `SELECT item.external_item_id,item.configuration_item_id,
+      `SELECT external_responsibility_can_sign($2,$3,item.responsibility_type) can_sign,
+              item.external_item_id,item.configuration_item_id,
               item.responsibility_type,item.process_snapshot,
               item.multiplier_snapshot::text,item.share_bps_snapshot,
               item.proposed_amount::text,item.amount_line_snapshot
@@ -118,13 +120,13 @@ export class FixedExternalResponsibilityService
        FROM rework_external_responsibility_cases target_case
        JOIN rework_external_responsibility_batches batch
          ON batch.batch_id=target_case.batch_id
-       WHERE target_case.batch_id=$1
+       WHERE (target_case.batch_id=$1 OR (batch.rework_order_id=$3 AND batch.status='superseded'))
          AND external_responsibility_can_view_case(
            $2,target_case.rework_order_id,
            target_case.responsibility_type
          )
        ORDER BY target_case.created_at,target_case.case_id`,
-      [head.batch_id, actor.actorId],
+      [head.batch_id, actor.actorId, orderId],
     );
     const caseValues = await Promise.all(
       cases.rows.map(async (item) => {
@@ -133,6 +135,7 @@ export class FixedExternalResponsibilityService
       }),
     );
     return {
+      canAllocateSuppliers: head.status === "active" && items.rows.some(item => item.can_sign),
       batchId: head.batch_id,
       reworkOrderId: head.rework_order_id,
       finalizedDeterminationId: head.finalized_determination_id,
@@ -150,7 +153,8 @@ export class FixedExternalResponsibilityService
         proposedAmount: item.proposed_amount,
         amountLineSnapshot: item.amount_line_snapshot,
       })),
-      cases: caseValues,
+      cases: caseValues.filter(item => item.batchId === head.batch_id),
+      historicalCases: caseValues.filter(item => item.batchId !== head.batch_id),
     };
   }
 }

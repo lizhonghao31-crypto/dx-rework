@@ -211,6 +211,7 @@ const broadBusinessReader = (actor: TrustedActorContext): boolean =>
     "production_management",
     "tail_supervisor",
     "finance_director",
+    "finance_read",
   ].includes(role));
 
 const actorCapabilities = (actor: TrustedActorContext): readonly string[] =>
@@ -396,11 +397,12 @@ export class ReworkBusinessDetailService {
                FROM rework_external_responsibility_cases external_case
                WHERE external_case.case_id::text=attachment.entity_id
                  AND external_case.rework_order_id=$1::uuid
+                 AND external_responsibility_can_view_case($2,external_case.rework_order_id,external_case.responsibility_type)
              )
            )
          )
        ORDER BY attachment.created_at,attachment.attachment_id`,
-      [reworkOrderId],
+      [reworkOrderId, actor.actorId],
     );
 
     const workflowHistory = await this.database.query<WorkflowHistoryRow>(
@@ -795,11 +797,14 @@ export class ReworkBusinessDetailService {
       );
       reworkOrderIds = receiving.rows.map((row) => row.rework_order_id);
     } else if (binding.entityType === "external_responsibility_case") {
-      const externalCase = await this.database.query<{ rework_order_id: string }>(
-        "SELECT rework_order_id FROM rework_external_responsibility_cases WHERE case_id::text=$1",
-        [binding.entityId],
+      const externalCase = await this.database.query<{ permitted: boolean }>(
+        `SELECT external_responsibility_can_view_case($2,target.rework_order_id,target.responsibility_type) permitted
+         FROM rework_external_responsibility_cases target
+         JOIN rework_orders orders ON orders.rework_order_id=target.rework_order_id
+         WHERE target.case_id::text=$1 AND orders.status<>'deleted'`,
+        [binding.entityId, actor.actorId],
       );
-      reworkOrderIds = externalCase.rows[0] ? [externalCase.rows[0].rework_order_id] : [];
+      return externalCase.rows[0]?.permitted === true;
     }
     for (const reworkOrderId of reworkOrderIds) {
       try {

@@ -20,6 +20,7 @@ const owner: readonly SampleCapability[] = [
 export const SAMPLE_ROLE_CAPABILITIES: Readonly<Record<string, readonly SampleCapability[]>> = {
   sample_designer: designer, sample_administrative: administrative, sample_finance: finance, owner_group: owner,
   finance_director: financeDirectorReadOnly,
+  finance_read: financeDirectorReadOnly,
 };
 
 // Only accept a server-built actor (businessActor/RootAuthority), never request-body roles.

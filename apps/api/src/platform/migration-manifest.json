@@ -180,6 +180,7 @@
     {"version":"0178_pattern_room_rework_transfer_cancel","checksum":"b1580568ef97727ac9e33d54935125123d3e6487a83706e7dd3ea86aa3015dd0"},
     {"version":"0179_pattern_room_unified_wages","checksum":"a7e5b0707cce2fc8e7b797235fd32c0db3ccd99298755d35cb6701015842368f"},
     {"version": "0180_supplier_maintenance_authority", "checksum": "6cfb31e21d10a969b704f9c088a0c3bb6d1566a1c82b7a885599414cb96c1890"},
-    {"version": "0181_supplier_onboarding", "checksum": "b4989faf6eb53228bf9371d0df56b47192470278b0f75d65592429f827f564f6"}
+    {"version": "0181_supplier_onboarding", "checksum": "b4989faf6eb53228bf9371d0df56b47192470278b0f75d65592429f827f564f6"},
+    {"version": "0182_finance_read_evidence", "checksum": "a999938df1f5040ae490ded3dc6a9f01827ca29e237eefcb9b65822d7f4f7a47"}
   ]
 }

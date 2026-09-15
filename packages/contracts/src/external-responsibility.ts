@@ -291,6 +291,24 @@ const ExternalRevisionResponseSchema = z.object({
   decidedAt: z.string().datetime().nullable(),
 }).strict();
 
+const ExternalSpecialApprovalResponseSchema = z.object({
+    requestId: IdSchema,
+    requestVersion: z.number().int().positive(),
+    reason: z.string(),
+    attachmentIds: z.array(IdSchema),
+    proposedAmount: z.string(),
+    actualDeductedAmount: z.string(),
+    remainingAmount: z.string(),
+    requestedBy: IdSchema,
+    requestedAt: z.string().datetime(),
+    decision: z.object({
+      decision: z.enum(["approved", "returned"]),
+      reason: z.string().nullable(),
+      decidedBy: IdSchema,
+      decidedAt: z.string().datetime(),
+    }).strict().nullable(),
+  }).strict();
+
 export const ExternalResponsibilityCaseResponseSchema = z.object({
   caseId: IdSchema,
   batchId: IdSchema,
@@ -323,6 +341,7 @@ export const ExternalResponsibilityCaseResponseSchema = z.object({
   canApproveRevision: z.boolean(),
   items: z.array(ExternalItemResponseSchema),
   deductions: z.array(ExternalDeductionEntryResponseSchema),
+  evidenceAttachments: z.array(z.object({ attachmentId: IdSchema, filename: z.string(), mimeType: z.string() }).strict()).optional(),
   followUps: z.array(z.object({
     followUpId: IdSchema,
     content: z.string(),
@@ -343,23 +362,8 @@ export const ExternalResponsibilityCaseResponseSchema = z.object({
     closedBy: IdSchema,
     closedAt: z.string().datetime(),
   }).strict().nullable(),
-  specialApproval: z.object({
-    requestId: IdSchema,
-    requestVersion: z.number().int().positive(),
-    reason: z.string(),
-    attachmentIds: z.array(IdSchema),
-    proposedAmount: z.string(),
-    actualDeductedAmount: z.string(),
-    remainingAmount: z.string(),
-    requestedBy: IdSchema,
-    requestedAt: z.string().datetime(),
-    decision: z.object({
-      decision: z.enum(["approved", "returned"]),
-      reason: z.string().nullable(),
-      decidedBy: IdSchema,
-      decidedAt: z.string().datetime(),
-    }).strict().nullable(),
-  }).strict().nullable(),
+  specialApproval: ExternalSpecialApprovalResponseSchema.nullable(),
+  specialApprovalHistory: z.array(ExternalSpecialApprovalResponseSchema).optional(),
   revisionRequests: z.array(ExternalRevisionResponseSchema),
 }).strict();
 
@@ -373,6 +377,8 @@ export const ExternalResponsibilityBatchResponseSchema = z.object({
   sourceSnapshot: z.record(z.string(), z.unknown()),
   items: z.array(ExternalItemResponseSchema),
   cases: z.array(ExternalResponsibilityCaseResponseSchema),
+  historicalCases: z.array(ExternalResponsibilityCaseResponseSchema).optional(),
+  canAllocateSuppliers: z.boolean().optional(),
 }).strict().nullable();
 
 export const ExternalResponsibilityQueueResponseSchema = z.object({
