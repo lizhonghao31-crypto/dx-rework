@@ -270,7 +270,9 @@ export class PatternRoomOrderService {
       await client.query(`INSERT INTO pattern_room_rounds(round_id,order_id,round_type,round_index,status,category_id,price_version,category_name,unit,unit_price,quantity,agreed_amount,requested_by,request_reason,reason_category)
         VALUES($1,$2,'rework',NULL,'pending_assignment',$3,$4,'打板返工','轮',NULL,NULL,NULL,$5,$6,$7)`, [roundId, orderId, round.category_id, round.price_version, effective.actorId, parsed.reason, parsed.reasonCategory]);
       const inherited = (await client.query<{ attachment_id: string }>("SELECT attachment_id FROM pattern_room_attachment_bindings WHERE round_id=$1 AND active", [round.round_id])).rows.map(row => row.attachment_id);
-      const materials = [...new Set([...inherited, ...parsed.attachmentIds])];
+      const retained = parsed.retainedAttachmentIds ?? inherited;
+      if (retained.some(id => !inherited.includes(id))) throw new ApplicationError("VALIDATION_ERROR", "只能保留当前轮次的有效制作资料，请刷新后重试", 400);
+      const materials = [...new Set([...retained, ...parsed.attachmentIds])];
       if (materials.length > 20) throw new ApplicationError("VALIDATION_ERROR", "本轮制作资料合计不能超过20份，请整理后提交", 400);
       await bindPatternMaterials(client, effective, orderId, roundId, materials, parsed.reason);
       await this.moveNode(client, round.round_id, undefined, "rework");

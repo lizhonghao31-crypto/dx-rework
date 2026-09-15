@@ -1,3 +1,4 @@
+import { PatternMaterials } from "./pattern-materials.js";
 import { ListPagination } from "./list-pagination.js";
 import { SearchSelect } from "./search-select.js";
 import { confirmInApp } from "./system-dialog.js";
@@ -16,7 +17,7 @@ import { elapsedText, patternRequest, patternTime, patternUrls } from "./pattern
 import { patternListPath, patternReturnPath, readPatternListQuery } from "./pattern-order-query.js";
 import "./pattern-room.css";
 
-const { apiUrl, pageUrl } = patternUrls;
+const { pageUrl } = patternUrls;
 export function PatternRoomOrdersPage() {
   const [initial] = useState(() => readPatternListQuery(window.location.search));
   const [data, setData] = useState<z.infer<typeof PatternOrderListSchema> | null>(null), [error, setError] = useState("");
@@ -123,7 +124,7 @@ export function PatternRoomOrderDetailPage({ orderId }: { orderId: string }) {
         <div><dt>创建人</dt><dd>{order.creatorName}</dd></div><div><dt>要求完成</dt><dd>{order.requiredDate ?? "—"}</dd></div>{order.kind === "misc" ? <div><dt>关联款号</dt><dd>{order.styleNo || "—"}</dd></div> : <><div><dt>客户</dt><dd>{order.customer || "—"}</dd></div><div><dt>尺码与颜色</dt><dd>{order.sizeColor || "—"}</dd></div><div><dt>版型</dt><dd>{order.variant ?? "—"}</dd></div><div><dt>参考历史款号</dt><dd>{order.referenceStyleNo || "—"}</dd></div></>}
       </dl>{order.note ? <p className="pattern-note">{order.note}</p> : null}
       </Surface>
-      {order.canReadMaterials !== false && displayRound ? <Surface><details className="pattern-materials"><summary>制作资料</summary><ul className="pattern-files">{order.attachments.filter(file => file.roundId === displayRound.roundId && file.active).map(file => <li key={file.attachmentId}><span>{file.filename}</span><a href={apiUrl(`pattern-room/attachments/${file.attachmentId}/download?mode=preview`)} target="_blank" rel="noreferrer">预览 / 打印</a><a href={apiUrl(`pattern-room/attachments/${file.attachmentId}/download?mode=download`)}>下载</a></li>)}</ul></details></Surface> : null}
+      {order.canReadMaterials !== false && displayRound ? <Surface><h2>制作资料</h2><PatternMaterials files={order.attachments.filter(file => file.roundId === displayRound.roundId && file.active)} /></Surface> : null}
       <Surface>{displayRound ? <PatternProgress round={displayRound} misc={order.kind === "misc"} /> : null}
       {!staleRound && !editing ? <>
         {!exception && order.actions.assign ? <div className="pattern-fields pattern-assignment"><label>板房师傅<div className="rework-v2-control"><SearchSelect options={workers.map(worker => ({ value: worker.personId, label: worker.name }))} value={personId} onChange={setPersonId} onSearchChange={setWorkerSearch} placeholder="输入姓名选择师傅" ariaLabel="板房师傅" emptyText="没有匹配的师傅" disabled={busy} /></div></label>{currentRound?.roundType === "rework" ? <InsetField label="本轮返工金额（元）" inputMode="decimal" value={reworkAmount} onChange={e => setReworkAmount(e.target.value)} disabled={busy} /> : null}<div className="rework-v2-actions"><Button variant="primary" disabled={busy || !personId || (currentRound?.roundType === "rework" && !reworkAmount)} onClick={() => void act("assign")}>{busy ? "提交中…" : "确认分配"}</Button></div></div> : null}
@@ -138,7 +139,7 @@ export function PatternRoomOrderDetailPage({ orderId }: { orderId: string }) {
         <p>{round.categoryName} · {order.kind === "misc" ? round.actualHours === undefined ? "按工时计价" : round.actualHours === null ? "工时待填写" : `${formatBusinessDecimal(round.actualHours, 3)} 小时` : round.roundType === "rework" ? round.agreedAmount === null ? "金额待主管核定" : "本轮金额由主管核定" : `${round.quantity === null ? "—" : formatBusinessDecimal(round.quantity, 3)} ${round.unit}`}{round.unitPrice !== undefined ? ` · ${formatBusinessDecimal(round.unitPrice, 3)} 元/${round.unit}` : ""}{round.agreedAmount != null ? ` · 合计 ${formatBusinessDecimal(round.agreedAmount, 3)} 元` : ""}</p>
         {round.segments.map(segment => <p id={`segment-${segment.segmentId}`} key={segment.segmentId}>{segment.workerName}{segment.actualHours !== null ? ` · ${formatBusinessDecimal(segment.actualHours, 3)} 小时` : ""}{segment.amount != null ? ` · 分配金额 ${formatBusinessDecimal(segment.amount, 3)} 元` : ""} · {segment.wageEligible ? "可计薪" : order.kind === "misc" && segment.actualHours === null ? "工时待填写" : "待计薪"}</p>)}
         <details className="pattern-node-history"><summary>节点用时</summary><ol className="pattern-nodes">{round.nodes.map(node => <li key={node.stage}><strong>{PATTERN_ORDER_STATUS_LABELS[node.stage]}</strong><span>{patternTime(node.enteredAt)} → {node.exitedAt ? patternTime(node.exitedAt) : "当前"}</span><span>{elapsedText(node.elapsedSeconds)}</span></li>)}</ol></details>
-        {order.canReadMaterials !== false && <><h3>制作资料</h3><ul className="pattern-files">{order.attachments.filter(file => file.roundId === round.roundId).map(file => <li key={file.attachmentId}><span>{file.filename}{!file.active ? "（历史资料）" : ""}</span><a href={apiUrl(`pattern-room/attachments/${file.attachmentId}/download?mode=preview`)} target="_blank" rel="noreferrer">查看 / 打印</a><a href={apiUrl(`pattern-room/attachments/${file.attachmentId}/download?mode=download`)}>下载</a></li>)}</ul></>}
+        {order.canReadMaterials !== false && order.attachments.some(file => file.roundId === round.roundId && (round.roundId !== displayRound?.roundId || !file.active)) && <details><summary>历史制作资料</summary><PatternMaterials files={order.attachments.filter(file => file.roundId === round.roundId && (round.roundId !== displayRound?.roundId || !file.active))} /></details>}
       </details></Surface>)}
       <Surface><details><summary>订单记录（{order.history.length} 条）</summary>{order.history.map((entry, index) => <p key={`${entry.at}:${index}`}>{patternTime(entry.at)} · {entry.actorName} · {historyLabels[entry.action] ?? "订单操作"}{entry.reason ? ` · ${entry.reason}` : ""}</p>)}</details></Surface>
     </> : null}

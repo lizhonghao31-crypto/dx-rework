@@ -1,7 +1,8 @@
 import type { z } from "zod";
 import { AttachmentResponseSchema, UploadIntentResponseSchema } from "@dx-rework/contracts";
 import { createWebUrls } from "../url-contract.js";
-import { sha256Hex, isSupportedAttachment } from "./attachment-upload.js";
+import { sha256Hex } from "./attachment-upload.js";
+import { uploadPatternMaterial } from "./pattern-material-upload.js";
 
 export const patternUrls = createWebUrls(import.meta.env.BASE_URL);
 export class PatternRequestError extends Error {
@@ -14,7 +15,7 @@ export async function patternRequest<T>(path: string, schema: z.ZodType<T>, init
   return schema.parse(body);
 }
 export async function uploadPatternOriginal(file: File, kind: "pattern" | "misc" = "pattern", purpose: "create" | "rework" = "create") {
-  if (!isSupportedAttachment(file)) throw new Error("请选择 PDF、JPG、PNG 或 WebP 原始制作资料");
+  return uploadPatternMaterial(file, async file => {
   const intent = await patternRequest(`attachments/upload-intents?kind=${kind}&purpose=${purpose}`, UploadIntentResponseSchema, { method: "POST", body: JSON.stringify({ filename: file.name, mimeType: file.type, sizeBytes: file.size, sha256: await sha256Hex(file) }) });
   const form = new FormData();
   for (const [name, value] of Object.entries(intent.uploadFields)) form.append(name, value);
@@ -22,6 +23,7 @@ export async function uploadPatternOriginal(file: File, kind: "pattern" | "misc"
   const response = await fetch(intent.uploadUrl, { method: intent.uploadMethod, body: form, credentials: "omit" });
   if (!response.ok) throw new Error(`${file.name} 上传失败，请重试`);
   return patternRequest(`attachments/${intent.attachmentId}/finalize?kind=${kind}&purpose=${purpose}`, AttachmentResponseSchema, { method: "POST", body: "{}" });
+  });
 }
 export const patternTime = (value: string | null) => value ? new Date(value).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }) : "—";
 export function elapsedText(seconds: number) {

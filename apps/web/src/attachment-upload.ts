@@ -201,6 +201,24 @@ const decodeReceivingImage = async (file: File): Promise<DecodedReceivingImage> 
   return loadReceivingImageElement(file);
 };
 
+/** Pattern-room production drawings must keep every pixel; never use the QC resize lane. */
+export const normalizeOriginalImageForUpload = async (file: File): Promise<File> => {
+  const decoded = await decodeReceivingImage(file);
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = decoded.width;
+    canvas.height = decoded.height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("当前浏览器无法处理这张图片");
+    context.drawImage(decoded.source, 0, 0);
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/png"));
+    if (!blob || blob.type !== "image/png") throw new Error("图片转换失败，请重新选择图片");
+    return new File([blob], `${file.name.replace(/\.[^.]+$/, "") || "制作资料"}.png`, { type: blob.type, lastModified: file.lastModified });
+  } finally {
+    decoded.close();
+  }
+};
+
 const normalizedImageFilename = (filename: string, mimeType: string): string => {
   const stem = filename.replace(/\.[^.]+$/, "").trim() || "receiving-evidence";
   return `${stem}.${mimeType === "image/webp" ? "webp" : "jpg"}`;
