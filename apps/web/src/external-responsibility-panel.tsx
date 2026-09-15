@@ -541,7 +541,7 @@ export function ExternalResponsibilityPanel({
     setBusy(true);
     void load().catch((error: unknown) => setState({ kind: "unavailable", message: error instanceof Error ? error.message : "扣款资料加载失败，请刷新重试。" })).finally(() => setBusy(false));
   }}>刷新</Button></Surface>;
-  if (!state.value) return <Surface className="external-state">本单没有供应商责任金额，无需供应商扣款。</Surface>;
+  if (!state.value) return <Surface className="external-state">无本类扣款事项。</Surface>;
 
   const batch = state.value;
   const allCases = [...batch.cases, ...(batch.historicalCases ?? [])];
@@ -604,7 +604,7 @@ export function ExternalResponsibilityPanel({
       <Button variant="primary" data-ready={supplierAllocationReady ? "true" : "false"} disabled={busy} onClick={() => void allocate()}>确认供应商</Button>
     </section>}
 
-    {visibleCases.length === 0 && visibleUnassigned.length === 0 && <StatusBadge tone="info">当前外部责任金额为 0，无需扣款。</StatusBadge>}
+    {visibleCases.length === 0 && visibleUnassigned.length === 0 && <StatusBadge tone="info">无本类扣款事项。</StatusBadge>}
 
     <section className="external-case-list">
       {visibleCases.map((caseItem) => {

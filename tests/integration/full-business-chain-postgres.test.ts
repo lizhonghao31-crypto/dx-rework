@@ -1,3 +1,4 @@
+import { exerciseFinanceOrderQueries } from "./helpers/finance-order-query-scenario.js";
 import { MemberModuleBindingService } from "../../apps/api/src/access/member-module-binding-service.js";
 import "./member-module-policy-postgres.cases.js";
 import { exerciseAtomicOverDeduction } from "./helpers/atomic-deduction-scenario.js";
@@ -947,6 +948,13 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       reworkNo: expect.stringMatching(/^RW-/),
     });
 
+    await exerciseFinanceOrderQueries({database,external,orderId:submitted.value.reworkOrderId,unrelatedId:ids.otherPatternWorker,rootId:ids.patternRoot,beforeLedger:true,
+      readers:[{userId:ids.factoryPayables,role:"factory_payables",types:["processing_factory"]},
+        {userId:ids.fabricPayables,role:"fabric_payables",types:["fabric_supplier"]},
+        {userId:ids.embroideryPayables,role:"embroidery_washing_payables",types:["embroidery_factory","washing_factory"]},
+        {userId:ids.monthClose,role:"wage_month_close_accountant",types:[]},
+        {userId:ids.financeDirector,role:"finance_director",types:"all"},{userId:ids.financeRead,role:"finance_read",types:"all"}]});
+
     const firstTodoPage = await todoService.listForActor(tailTodoView(), { module: "rework" });
     expect(firstTodoPage.moduleCounts.rework).toBeGreaterThan(0);
     expect(firstTodoPage.todos).toHaveLength(1);
@@ -1854,6 +1862,13 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       [submitted.value.reworkOrderId],
     );
     expect(openBusinessTodos.rows).toEqual([]);
+
+    await exerciseFinanceOrderQueries({database,external,orderId:submitted.value.reworkOrderId,unrelatedId:ids.otherPatternWorker,rootId:ids.patternRoot,beforeLedger:false,
+      readers:[{userId:ids.factoryPayables,role:"factory_payables",types:["processing_factory"]},
+        {userId:ids.fabricPayables,role:"fabric_payables",types:["fabric_supplier"]},
+        {userId:ids.embroideryPayables,role:"embroidery_washing_payables",types:["embroidery_factory","washing_factory"]},
+        {userId:ids.monthClose,role:"wage_month_close_accountant",types:[]},
+        {userId:ids.financeDirector,role:"finance_director",types:"all"},{userId:ids.financeRead,role:"finance_read",types:"all"}]});
 
     // PR03: adding basic visibility never opens protected node readers, including for the original QC initiator.
     const basicQuality={...qc(),authorizationCapabilities:["tools:user","rework:initiate","rework:basic:view"]};

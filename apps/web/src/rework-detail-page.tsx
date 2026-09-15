@@ -586,7 +586,7 @@ export function ReworkDetailPage({
     || hasCapability(currentUser, "responsibility:confirm_high_multiplier")
     || hasCapability(currentUser, "responsibility:owner_sign")
     || hasCapability(currentUser, "rework:related_orders:view");
-  const canSeeExternal = elevated(currentUser) || hasCapability(currentUser, "external_responsibility:view");
+  const canSeeExternal = elevated(currentUser) || hasCapability(currentUser, "external_responsibility:view") || hasCapability(currentUser,"rework:finance_orders:read");
   const canSeeWholeOrderReview = elevated(currentUser) || WHOLE_ORDER_REVIEW_CAPABILITIES.some((capability) => hasCapability(currentUser, capability));
   const moduleWritable = moduleCanWrite(currentUser, "rework");
   const canSupplementOrderImages = moduleWritable && detail.status !== "cancelled"
@@ -632,9 +632,16 @@ export function ReworkDetailPage({
     </Surface>;
   };
 
+  const scopedFinanceOrderReader = hasCapability(currentUser,"rework:finance_orders:read") && !elevated(currentUser) && !hasCapability(currentUser,"rework:finance_nodes:read");
   const financeNodeReader = !elevated(currentUser) && hasCapability(currentUser,"rework:finance_nodes:read");
   const renderSelectedTask = () => {
     if (!selected) return null;
+    if (scopedFinanceOrderReader && selected.state !== "future"
+      && !["settlement_ledger","settlement_followup"].includes(selected.key)
+      && !canOperateReworkNode(currentUser?.capabilities??[],selected.key)) {
+      return <>{renderNodePreview()}<ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} readOnly embedded /></>;
+    }
+
     if (financeNodeReader && selected.state !== "future" && selected.key !== "settlement_followup"
       && !(selected.state === "current" && canOperateReworkNode(currentUser?.capabilities ?? [], selected.key))) {
       return <>{renderNodePreview()}<FinanceNodePanel orderId={detail.reworkOrderId} node={selected.key==="archive"?"settlement_followup":selected.key}

@@ -1,3 +1,4 @@
+import { canReadFinanceOrders, scopedExternalSource } from "./finance-order-access.js";
 import { createHash, randomUUID } from "node:crypto";
 import type {
   AllocateExternalSuppliers,
@@ -649,7 +650,13 @@ export class ExternalResponsibilityService {
 
   async get(actor: TrustedActorContext, orderId: string, executor: Queryable = this.database): Promise<ExternalResponsibilityBatchResponse> {
     const allowed = await executor.query<{ permitted: boolean }>("SELECT external_responsibility_can_view($1,$2) permitted", [actor.actorId, orderId]);
-    if (!allowed.rows[0]?.permitted) fail("当前用户无权查看外部责任台账", 403, "FORBIDDEN");
+    if (!allowed.rows[0]?.permitted) {
+      if (!await canReadFinanceOrders(executor,actor)) fail("当前用户无权查看外部责任台账",403,"FORBIDDEN");
+      const order=await executor.query("SELECT 1 FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'",[orderId]);
+      if(!order.rows[0]) fail("返工单不存在",404,"NOT_FOUND");
+      return null;
+    }
+    const allScope=await executor.query<{permitted:boolean}>("SELECT external_responsibility_can_view_all($1) permitted",[actor.actorId]);
     const batch = await executor.query<{ batch_id: string; rework_order_id: string; finalized_determination_id: string; finalized_determination_version: number; batch_version: number; status: "active" | "superseded"; source_snapshot: Record<string, unknown> }>(
       `SELECT batch.batch_id,batch.rework_order_id,batch.finalized_determination_id,batch.finalized_determination_version,batch.batch_version,batch.status,batch.source_snapshot
        FROM rework_external_responsibility_batches batch
@@ -682,7 +689,7 @@ export class ExternalResponsibilityService {
     return {
       batchId: head.batch_id, reworkOrderId: head.rework_order_id, finalizedDeterminationId: head.finalized_determination_id,
       finalizedDeterminationVersion: head.finalized_determination_version, batchVersion: head.batch_version,
-      status: head.status, sourceSnapshot: head.source_snapshot,
+      status: head.status, sourceSnapshot: allScope.rows[0]?.permitted ? head.source_snapshot : scopedExternalSource(head.source_snapshot),
       items: items.rows.map((item) => this.itemDto(item)),
       cases: await Promise.all(cases.rows.map((item) => this.caseDto(actor, item, executor))),
     };

@@ -122,6 +122,7 @@ export const BasicReworkRowSchema = z.object({
   photos: z.array(z.object({attachmentId: IdSchema, filename: z.string()}).strict()),
 }).strict();
 export const BasicReworkPageSchema = z.object({
+  canOpenOrder: z.boolean().optional(),
   items: z.array(BasicReworkRowSchema), page: z.number().int().positive(),
   totalPages: z.number().int().positive(), totalCount: z.number().int().nonnegative(),
 }).strict();

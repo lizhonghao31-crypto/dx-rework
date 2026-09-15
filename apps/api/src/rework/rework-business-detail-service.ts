@@ -1,3 +1,4 @@
+import { canReadFinanceOrders, isOnlyFinanceReader, isScopedFinanceReader } from "./finance-order-access.js";
 import { createHash, randomUUID } from "node:crypto";
 
 import type { InspectionReportDraft, ReworkOrderStatus } from "@dx-rework/contracts";
@@ -410,12 +411,12 @@ export class ReworkBusinessDetailService {
               actor.display_name actor_name
        FROM operation_events event
        LEFT JOIN app_users actor ON actor.id=event.actor_id
-       WHERE (
+       WHERE $2::boolean AND ((
          event.entity_type='rework_order' AND event.entity_id=$1
-       ) OR event.after_state->>'reworkOrderId'=$1
+       ) OR event.after_state->>'reworkOrderId'=$1)
        ORDER BY event.created_at,event.event_id
        LIMIT 200`,
-      [reworkOrderId],
+      [reworkOrderId, !isScopedFinanceReader(actor)],
     );
     const settlement = await this.database.query<{
       external_status: "not_required" | "in_progress" | "closed" | "revision_in_progress";
@@ -435,11 +436,12 @@ export class ReworkBusinessDetailService {
          WHERE target_case.rework_order_id=$1
            AND determination.settlement_schema_version=2
            AND target_case.status<>'superseded'
+           AND external_responsibility_can_view_case($3,target_case.rework_order_id,target_case.responsibility_type)
        ), wage_periods AS (
          SELECT DISTINCT period.period_id,period.period_month,period.status
          FROM rework_wage_items wage
          JOIN rework_wage_periods period ON period.period_id=wage.period_id
-         WHERE wage.rework_order_id=$1
+         WHERE wage.rework_order_id=$1 AND $2::boolean
        )
        SELECT CASE
          WHEN EXISTS(SELECT 1 FROM v2_cases WHERE status='pending_responsibility_revision') THEN 'revision_in_progress'
@@ -463,7 +465,7 @@ export class ReworkBusinessDetailService {
          FROM wage_periods
          WHERE status<>'locked'
        ),'[]'::jsonb) ELSE '[]'::jsonb END unsettled_wage_periods`,
-      [reworkOrderId, canViewWagePeriods(actor)],
+      [reworkOrderId, canViewWagePeriods(actor), actor.actorId],
     );
 
     return {
@@ -818,6 +820,8 @@ export class ReworkBusinessDetailService {
   }
 
   private async canView(actor: TrustedActorContext, row: DetailRow): Promise<boolean> {
+    if (await canReadFinanceOrders(this.database,actor)) return true;
+    if (isOnlyFinanceReader(actor) && actorCapabilities(actor).includes("rework:finance_orders:read")) return false;
     if (broadBusinessReader(actor)) return true;
     if (
       row.created_by === actor.actorId
