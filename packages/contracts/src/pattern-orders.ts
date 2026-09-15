@@ -59,6 +59,7 @@ export const PatternStoppedHoursSchema = z.string().regex(/^(?:0|[1-9]\d{0,5})(?
 export const RequestPatternReworkSchema = PatternRoundActionSchema.extend({
   reason: z.string().trim().min(1, "请填写返工内容或原因").max(2000), reasonCategory: z.enum(["customer_change", "workmanship", "other"]),
   attachmentIds: z.array(z.string().uuid()).max(20).default([]).refine(ids => new Set(ids).size === ids.length, "附件不能重复"),
+  retainedAttachmentIds: z.array(z.string().uuid()).max(20).refine(ids => new Set(ids).size === ids.length, "附件不能重复").optional(),
 }).strict();
 export const TransferPatternOrderSchema = PatternRoundActionSchema.extend({ segmentId: z.string().uuid(), personId: z.string().uuid(), reason: z.string().trim().min(1).max(500), amount: PatternWorkAmountSchema.optional(), hours: PatternStoppedHoursSchema.optional() }).strict();
 export const CancelPatternOrderSchema = PatternRoundActionSchema.extend({ segmentId: z.string().uuid().optional(), reason: z.string().trim().min(1, "请填写取消原因").max(500), amount: PatternWorkAmountSchema.optional(), hours: PatternStoppedHoursSchema.optional() }).strict();

@@ -1,3 +1,4 @@
+import { PatternMaterials } from "./pattern-materials.js";
 import { PatternField as InsetField } from "./pattern-controls.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { z } from "zod";
@@ -12,7 +13,7 @@ import { patternEstimate } from "./pattern-order-query.js";
 export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSaved, onCancel }: { order?: PatternOrderDetail; kind?: "pattern" | "misc"; onSaved(order: PatternOrderDetail): void; onCancel(): void }) {
   const misc = kind === "misc";
   const [values, setValues] = useState({ taskName: order?.taskName ?? "", styleNo: order?.styleNo ?? "", requiredDate: order?.requiredDate ?? "", customer: order?.customer ?? "", sizeColor: order?.sizeColor ?? "", referenceStyleNo: order?.referenceStyleNo ?? "", variant: order?.variant ?? "", note: order?.note ?? "", reason: "" });
-  const [files, setFiles] = useState((order?.attachments ?? []).filter(file => file.active && file.roundId === order?.currentRoundId).map(file => ({ attachmentId: file.attachmentId, filename: file.filename })));
+  const [files, setFiles] = useState((order?.attachments ?? []).filter(file => file.active && file.roundId === order?.currentRoundId).map(file => ({ attachmentId: file.attachmentId, filename: file.filename, mimeType: file.mimeType })));
   const [categories, setCategories] = useState<z.infer<typeof PatternCategoryOptionsSchema>>([]), [categoryId, setCategoryId] = useState("");
   const [quote, setQuote] = useState<z.infer<typeof PatternPriceQuoteSchema> | null>(null), [quantity, setQuantity] = useState("1");
   const [error, setError] = useState(""), [busy, setBusy] = useState(false), [uploading, setUploading] = useState(false), [refreshPrice, setRefreshPrice] = useState(0);
@@ -36,7 +37,7 @@ export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSav
     try {
       for (const file of selected) {
         const uploaded = await uploadPatternOriginal(file, kind);
-        setFiles(current => [...current, { attachmentId: uploaded.attachmentId, filename: uploaded.filename }]);
+        setFiles(current => [...current, { attachmentId: uploaded.attachmentId, filename: uploaded.filename, mimeType: uploaded.mimeType }]);
       }
     } catch (e) { setError(e instanceof Error ? e.message : "资料上传失败"); }
     finally { setUploading(false); }
@@ -76,9 +77,9 @@ export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSav
       <InsetField label="参考款号" value={values.referenceStyleNo} maxLength={100} onChange={e => setValues({ ...values, referenceStyleNo: e.target.value })} disabled={disabled} /></> : null}
     </div>
     <label>备注<textarea className="rework-v2-control" value={values.note} maxLength={2000} onChange={e => setValues({ ...values, note: e.target.value })} disabled={disabled} /></label>
-    <label className="rework-v2-upload">{misc ? "上传图片 / PDF" : "上传制作图片 / PDF *"}<input type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp" disabled={disabled} onChange={e => { const selected = Array.from(e.target.files ?? []); e.target.value = ""; void upload(selected); }} /></label>
+    <label className="rework-v2-upload">{misc ? "上传图片 / PDF" : "上传制作图片 / PDF *"}<input type="file" multiple accept="application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp" disabled={disabled} onChange={e => { const selected = Array.from(e.target.files ?? []); e.target.value = ""; void upload(selected); }} /></label>
     {uploading ? <p role="status">正在上传原始制作资料…</p> : null}
-    {files.length > 0 && <ul className="pattern-files">{files.map(file => <li key={file.attachmentId}><span>{file.filename}</span><Button type="button" disabled={disabled} onClick={() => setFiles(current => current.filter(item => item.attachmentId !== file.attachmentId))}>移除</Button></li>)}</ul>}
+    {files.length > 0 && <PatternMaterials files={files} disabled={disabled} onRemove={id => setFiles(current => current.filter(file => file.attachmentId !== id))} />}
     {order ? <InsetField label="变更原因 *" value={values.reason} required maxLength={500} onChange={e => setValues({ ...values, reason: e.target.value })} disabled={disabled} /> : null}
     {error ? <p role="alert">{error}</p> : null}
     <div className="rework-v2-action-area"><div className="rework-v2-actions"><Button type="button" disabled={disabled} onClick={onCancel}>取消</Button><Button type="submit" variant="primary" disabled={disabled || (!order && (!quote || quote.amount === null))}>{busy ? "提交中…" : order ? "保存资料" : misc ? "提交杂事" : "提交打板"}</Button></div></div>

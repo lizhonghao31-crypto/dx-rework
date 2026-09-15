@@ -1,3 +1,4 @@
+import { PatternMaterials, type PatternMaterial } from "./pattern-materials.js";
 import { SearchSelect } from "./search-select.js";
 import { PatternField as InsetField } from "./pattern-controls.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -14,13 +15,15 @@ const titles = { rework: "发起原单返工", transfer: "原单换人", cancel:
 export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, onSaved }: { order: PatternOrderDetail; active: PatternExceptionAction | null; onActive(action: PatternExceptionAction | null): void; busy: boolean; onBusy(value: boolean): void; onSaved(order: PatternOrderDetail): void }) {
   const [reason, setReason] = useState(""), [category, setCategory] = useState("customer_change"), [amount, setAmount] = useState(""), [hours, setHours] = useState("");
   const [personId, setPersonId] = useState(""), [searchText, setSearchText] = useState(""), [workers, setWorkers] = useState<z.infer<typeof PatternWorkerOptionsSchema>>([]);
-  const [files, setFiles] = useState<Array<{ attachmentId: string; filename: string }>>([]), [uploading, setUploading] = useState(false), [error, setError] = useState("");
+  const [files, setFiles] = useState<PatternMaterial[]>([]), [uploading, setUploading] = useState(false), [error, setError] = useState("");
+  const [retained, setRetained] = useState<PatternMaterial[]>([]);
   const attempt = useRef<{ body: string; action: string; key: string } | null>(null), search = useDebouncedValue(searchText.trim(), 250);
   const round = order.rounds.find(item => item.roundId === order.currentRoundId)!, segment = round.segments.at(-1);
   const pending = order.status === "pending_assignment", fixedMisc = order.kind === "misc" && round.completedAt !== null && round.actualHours != null;
   useEffect(() => {
+    setRetained(order.attachments.filter(file => file.roundId === order.currentRoundId && file.active));
     setReason(""); setAmount(""); setHours(""); setPersonId(""); setSearchText(""); setFiles([]); setError(""); attempt.current = null;
-  }, [active, order.currentRoundId]);
+  }, [active, order.currentRoundId, order.attachments]);
   useEffect(() => {
     if (active !== "transfer") return;
     const abort = new AbortController();
@@ -32,7 +35,7 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
     try {
       for (const file of selected) {
         const result = await uploadPatternOriginal(file, "pattern", "rework");
-        setFiles(current => [...current, { attachmentId: result.attachmentId, filename: result.filename }]);
+        setFiles(current => [...current, { attachmentId: result.attachmentId, filename: result.filename, mimeType: result.mimeType }]);
       }
     } catch (e) { setError(e instanceof Error ? e.message : "附件上传失败"); }
     finally { setUploading(false); onBusy(false); }
@@ -40,7 +43,7 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
   const submit = async (event: FormEvent) => {
     event.preventDefault(); if (!active || busy || uploading) return;
     const basis = { version: order.version, roundId: order.currentRoundId };
-    const input = active === "rework" ? RequestPatternReworkSchema.safeParse({ ...basis, reason, reasonCategory: category, attachmentIds: files.map(file => file.attachmentId) })
+    const input = active === "rework" ? RequestPatternReworkSchema.safeParse({ ...basis, reason, reasonCategory: category, retainedAttachmentIds: retained.map(file => file.attachmentId), attachmentIds: files.map(file => file.attachmentId) })
       : active === "transfer" ? TransferPatternOrderSchema.safeParse({ ...basis, segmentId: segment?.segmentId, personId, reason, ...(order.kind === "misc" ? { hours } : { amount }) })
       : active === "cancel" ? CancelPatternOrderSchema.safeParse({ ...basis, reason, ...(!pending ? { segmentId: segment?.segmentId, ...(order.kind === "pattern" ? { amount } : fixedMisc ? {} : { hours }) } : {}) })
       : PatternRoundActionSchema.safeParse(basis);
@@ -64,8 +67,8 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
     {active === "rework" ? <>
       <label>返工原因分类<select className="rework-v2-control" disabled={busy} value={category} onChange={e => setCategory(e.target.value)}><option value="customer_change">客户修改要求</option><option value="workmanship">制作不符合要求</option><option value="other">其他</option></select></label>
 
-      <label className="rework-v2-upload">补充图片 / PDF<input type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp" disabled={busy} onChange={e => { const selected = Array.from(e.target.files ?? []); e.target.value = ""; if (selected.length + files.length > 20) setError("最多补充20份资料"); else void upload(selected); }} /></label>
-      <ul className="pattern-files">{files.map(file => <li key={file.attachmentId}>{file.filename}<Button type="button" disabled={busy} onClick={() => setFiles(current => current.filter(item => item.attachmentId !== file.attachmentId))}>移出</Button></li>)}</ul>
+      <label className="rework-v2-upload">补充图片 / PDF<input type="file" multiple accept="application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp" disabled={busy} onChange={e => { const selected = Array.from(e.target.files ?? []); e.target.value = ""; if (selected.length + files.length + retained.length > 20) setError("本轮资料合计最多20份，请先移除不需要的资料"); else void upload(selected); }} /></label>
+      <PatternMaterials files={[...retained, ...files]} disabled={busy} onRemove={id => { setRetained(current => current.filter(file => file.attachmentId !== id)); setFiles(current => current.filter(file => file.attachmentId !== id)); }} />
     </> : null}
     {active === "transfer" ? <label>接手师傅<div className="rework-v2-control"><SearchSelect options={workers.filter(worker => worker.userId !== segment?.workerUserId).map(worker => ({ value: worker.personId, label: worker.name }))} value={personId} onChange={setPersonId} onSearchChange={setSearchText} placeholder="输入姓名选择师傅" ariaLabel="接手师傅" emptyText="没有匹配的师傅" disabled={busy} /></div></label> : null}
     {active === "transfer" || (active === "cancel" && !pending) ? <>

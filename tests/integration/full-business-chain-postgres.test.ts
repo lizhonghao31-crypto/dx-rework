@@ -751,6 +751,30 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     finally { await app.close(); }
   };
 
+  it("replaces rework materials within the total limit while preserving historical bindings", async () => {
+    const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
+    const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]);
+    const worker = patternActor(ids.worker, ["worker"]);
+    const created = await makePattern(service, designer, "PATTERN-返工资料选择");
+    const assigned = await service.assign(supervisor, created.orderId, { ...roundAction(created), personId: workerPersonId }, randomUUID());
+    const completed = await service.complete(worker, created.orderId, roundAction(assigned), randomUUID());
+    const originalId = completed.attachments[0]!.attachmentId;
+    const added: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      const id = randomUUID(); added.push(id);
+      await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'新资料.pdf','application/pdf',10,$3,$4,'ready',CURRENT_TIMESTAMP)", [id, `private/${id}.pdf`, "c".repeat(64), designer.actorId]);
+    }
+    const input = { ...roundAction(completed), reason: "新版资料替换", reasonCategory: "other", attachmentIds: added };
+    await expect(service.requestRework(designer, created.orderId, input, randomUUID())).rejects.toMatchObject({ statusCode: 400 });
+    await expect(service.requestRework(designer, created.orderId, { ...input, retainedAttachmentIds: [added[0]] }, randomUUID())).rejects.toMatchObject({ statusCode: 400 });
+    await expect(service.requestRework(designer, created.orderId, { ...input, retainedAttachmentIds: [], attachmentIds: [] }, randomUUID())).rejects.toMatchObject({ statusCode: 400 });
+    expect((await service.get(designer, created.orderId)).version).toBe(completed.version);
+    const requested = await service.requestRework(designer, created.orderId, { ...input, retainedAttachmentIds: [] }, randomUUID());
+    expect(requested.attachments.filter(file => file.roundId === requested.currentRoundId)).toHaveLength(20);
+    expect(requested.attachments.find(file => file.roundId === completed.currentRoundId && file.attachmentId === originalId)?.active).toBe(true);
+    expect(requested.rounds).toHaveLength(2);
+  });
+
   it("preserves multiple worker segments and pre/post-handoff rework without duplicate rounds or early wages", async () => {
     const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
     const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]);

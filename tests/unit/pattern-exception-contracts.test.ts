@@ -16,5 +16,9 @@ describe("pattern rework and stopped-labor input", () => {
     expect(RequestPatternReworkSchema.safeParse(input).success).toBe(true);
     expect(RequestPatternReworkSchema.safeParse({ ...input, reason: " " }).success).toBe(false);
     expect(RequestPatternReworkSchema.safeParse({ ...input, amount: "40" }).success).toBe(false);
+    expect(RequestPatternReworkSchema.parse(input).retainedAttachmentIds).toBeUndefined();
+    expect(RequestPatternReworkSchema.parse({ ...input, retainedAttachmentIds: [] }).retainedAttachmentIds).toEqual([]);
+    const attachmentId = "22222222-2222-4222-8222-222222222222";
+    expect(RequestPatternReworkSchema.safeParse({ ...input, retainedAttachmentIds: [attachmentId, attachmentId] }).success).toBe(false);
   });
 });

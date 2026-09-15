@@ -10,6 +10,8 @@ export type UploadGrant = Readonly<{
   expiresAt: string;
 }>;
 export type DownloadGrant = Readonly<{ downloadUrl: string; expiresAt: string }>;
+export type DownloadOptions = { ttlSeconds: number; filename: string; disposition?: "attachment" | "inline"; variant?: "thumbnail" };
+export const MATERIAL_THUMBNAIL_PROCESS = "image/resize,m_lfit,w_480,h_360,limit_1/format,webp/quality,q_80";
 
 export class ObjectStorageObjectNotFoundError extends Error {
   constructor() {
@@ -23,7 +25,7 @@ export interface ObjectStorage {
     objectKey: string,
     options: { mimeType: string; sizeBytes: number; sha256: string; ttlSeconds: number },
   ): Promise<UploadGrant>;
-  createDownloadGrant(objectKey: string, options: { ttlSeconds: number; filename: string; disposition?: "attachment" | "inline" }): Promise<DownloadGrant>;
+  createDownloadGrant(objectKey: string, options: DownloadOptions): Promise<DownloadGrant>;
   head(objectKey: string): Promise<StoredObjectMetadata>;
   readBytes(objectKey: string, maxBytes: number): Promise<Uint8Array>;
   computeSha256(objectKey: string): Promise<string>;
@@ -102,12 +104,13 @@ export class AliyunPrivateObjectStorage implements ObjectStorage {
     };
   }
 
-  async createDownloadGrant(objectKey: string, options: { ttlSeconds: number; filename: string; disposition?: "attachment" | "inline" }): Promise<DownloadGrant> {
+  async createDownloadGrant(objectKey: string, options: DownloadOptions): Promise<DownloadGrant> {
     // Capture before signing so the advertised timestamp can never exceed the URL's real lifetime.
     const expiresAt = grantExpiry(this.now(), options.ttlSeconds);
     const downloadUrl = this.client.signatureUrl(objectKey, {
       method: "GET",
       expires: options.ttlSeconds,
+      ...(options.variant === "thumbnail" ? { process: MATERIAL_THUMBNAIL_PROCESS } : {}),
       response: {
         "content-disposition": `${options.disposition ?? "attachment"}; filename*=UTF-8''${encodeURIComponent(options.filename)}`,
       },
@@ -222,7 +225,7 @@ export class FakeObjectStorage implements ObjectStorage {
   readonly objectBytes = new Map<string, Uint8Array>();
   readonly contentSha256 = new Map<string, string>();
   readonly deleted: string[] = [];
-  readonly signed: Array<{ method: "POST" | "GET"; objectKey: string; ttlSeconds: number; sizeBytes?: number }> = [];
+  readonly signed: Array<{ method: "POST" | "GET"; objectKey: string; ttlSeconds: number; sizeBytes?: number; variant?: "thumbnail" }> = [];
 
   constructor(private readonly now: () => Date = () => new Date()) {}
 
@@ -247,8 +250,8 @@ export class FakeObjectStorage implements ObjectStorage {
     };
   }
 
-  async createDownloadGrant(objectKey: string, options: { ttlSeconds: number; filename: string; disposition?: "attachment" | "inline" }): Promise<DownloadGrant> {
-    this.signed.push({ method: "GET", objectKey, ttlSeconds: options.ttlSeconds });
+  async createDownloadGrant(objectKey: string, options: DownloadOptions): Promise<DownloadGrant> {
+    this.signed.push({ method: "GET", objectKey, ttlSeconds: options.ttlSeconds, ...(options.variant ? { variant: options.variant } : {}) });
     return {
       downloadUrl: `https://private.example.test/${encodeURIComponent(objectKey)}?method=GET`,
       expiresAt: grantExpiry(this.now(), options.ttlSeconds),

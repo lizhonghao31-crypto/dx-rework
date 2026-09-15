@@ -201,6 +201,43 @@ const decodeReceivingImage = async (file: File): Promise<DecodedReceivingImage> 
   return loadReceivingImageElement(file);
 };
 
+/** Pattern-room production drawings must keep every pixel; never use the QC resize lane. */
+export const normalizeOriginalImageForUpload = async (file: File, maxBytes = 20 * 1024 * 1024): Promise<File> => {
+  const decoded = await decodeReceivingImage(file);
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = decoded.width;
+    canvas.height = decoded.height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("当前浏览器无法处理这张图片");
+    context.drawImage(decoded.source, 0, 0);
+    const encode = (type: string, quality?: number) => new Promise<Blob | null>(resolve => canvas.toBlob(resolve, type, quality));
+    const result = (blob: Blob, extension: string) => new File([blob], `${file.name.replace(/\.[^.]+$/, "") || "制作资料"}.${extension}`, { type: blob.type, lastModified: file.lastModified });
+    // Prefer lossless PNG within both the upload cap and the server's PNG decode budget.
+    if (decoded.height * (1 + decoded.width * 4) <= 128 * 1024 * 1024) {
+      const png = await encode("image/png");
+      if (png?.type === "image/png" && png.size > 0 && png.size <= maxBytes) return result(png, "png");
+    }
+    // Full dimensions are retained. Bound quality rather than silently downscaling drawings.
+    for (const quality of [0.98, 0.95, 0.9, 0.85]) {
+      const webp = await encode("image/webp", quality);
+      if (webp?.type === "image/webp" && webp.size > 0 && webp.size <= maxBytes) return result(webp, "webp");
+      if (webp?.type !== "image/webp") break;
+    }
+    // Browsers without WebP encoding still support full-size JPEG; flatten transparency to white.
+    context.globalCompositeOperation = "destination-over";
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    for (const quality of [0.98, 0.95, 0.9, 0.85]) {
+      const jpeg = await encode("image/jpeg", quality);
+      if (jpeg?.type === "image/jpeg" && jpeg.size > 0 && jpeg.size <= maxBytes) return result(jpeg, "jpg");
+    }
+    throw new Error(`图片保持原尺寸转换后仍超过 ${Math.floor(maxBytes / 1024 / 1024)} MB，请分成多张清晰图片上传`);
+  } finally {
+    decoded.close();
+  }
+};
+
 const normalizedImageFilename = (filename: string, mimeType: string): string => {
   const stem = filename.replace(/\.[^.]+$/, "").trim() || "receiving-evidence";
   return `${stem}.${mimeType === "image/webp" ? "webp" : "jpg"}`;

@@ -57,6 +57,22 @@ const emptyStorage = (): ObjectStorage => ({
 });
 
 describe("AttachmentService failure consistency", () => {
+  it("authorizes thumbnails before signing and refuses document transforms", async () => {
+    const ready = { ...row, mime_type: "image/jpeg", status: "ready" as const };
+    const { pool } = poolWithOwnedRow(ready);
+    const storage = emptyStorage();
+    vi.mocked(storage.createDownloadGrant).mockResolvedValue({ downloadUrl: "https://oss.test/thumbnail", expiresAt: "2030-01-01T00:00:00Z" });
+    const service = new AttachmentService(pool as never, storage, { prefix: "private", ttlSeconds: 300, maxUploadBytes: 1000 });
+    expect(service.uploadLimits()).toEqual({ maxUploadBytes: 1000 });
+    await expect(service.createDownloadIntent({ ...actor, actorId: "other" }, ready.attachment_id, undefined, "inline", "thumbnail")).rejects.toMatchObject({ statusCode: 403 });
+    expect(storage.createDownloadGrant).not.toHaveBeenCalled();
+    await service.createDownloadIntent(actor, ready.attachment_id, undefined, "inline", "thumbnail");
+    expect(storage.createDownloadGrant).toHaveBeenCalledWith(ready.object_key, expect.objectContaining({ variant: "thumbnail", disposition: "inline", ttlSeconds: 300 }));
+    const pdfPool = poolWithOwnedRow({ ...row, status: "ready" });
+    const pdfService = new AttachmentService(pdfPool.pool as never, storage, { prefix: "private", ttlSeconds: 300, maxUploadBytes: 1000 });
+    await expect(pdfService.createDownloadIntent(actor, row.attachment_id, undefined, "inline", "thumbnail")).rejects.toMatchObject({ statusCode: 400 });
+    expect(storage.createDownloadGrant).toHaveBeenCalledTimes(1);
+  });
   it("does not write a pending attachment when upload signing fails", async () => {
     const pool = { connect: vi.fn(), query: vi.fn() };
     const storage: ObjectStorage = {
