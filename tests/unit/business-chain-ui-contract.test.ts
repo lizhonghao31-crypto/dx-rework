@@ -194,7 +194,7 @@ describe("business-chain UI handoff contracts", () => {
       "utf8",
     );
     expect(source).toContain("本次扣款金额必须大于 0，最多两位小数");
-    expect(source).toContain("本次扣款金额不能超过当前剩余应扣金额");
+    expect(source).toContain("confirmDeductionException");
     expect(source).toContain('recorded.remainingAmount === "0.00" && recorded.canClose');
     expect(source).toContain("await closeFull(recorded)");
     expect(source).toContain("<ExternalEvidenceUploader");

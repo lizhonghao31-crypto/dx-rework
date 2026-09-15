@@ -27,6 +27,7 @@ type CandidateKind =
   | "external_payables_return"
   | "external_deduction_follow_up"
   | "external_deduction_overdue"
+  | "external_deduction_special_approval"
   | "wage_tail_review"
   | "wage_administrative_review"
   | "wage_month_close"
@@ -235,6 +236,11 @@ export class TodoBackfillService {
     let blockedRecipient = false;
     try {
       await client.query("BEGIN");
+      if (candidate.kind === "external_deduction_special_approval" && !await this.specialApprovalStillPending(client,candidate)) {
+        await client.query("ROLLBACK");
+        counters.inapplicableState=1;
+        return counters;
+      }
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
         [candidate.dedupeKey],
@@ -323,6 +329,7 @@ export class TodoBackfillService {
       case "wage_tail_review":
       case "wage_administrative_review":
       case "wage_month_close":
+      case "external_deduction_special_approval":
         await this.projections.actionableForUniqueDirectRole(client, actor, projection);
         return;
       case "process_configuration_return":
@@ -386,6 +393,7 @@ export class TodoBackfillService {
       this.pendingOwnerSignatures(watermark),
       this.pendingOwnFactoryApprovals(watermark),
       this.pendingExternalCases(watermark),
+      this.pendingExternalSpecialApprovals(watermark),
       this.pendingWages(watermark),
     ]);
     return candidates.flat().sort((left, right) => left.cursorKey.localeCompare(right.cursorKey));
@@ -687,6 +695,52 @@ export class TodoBackfillService {
       policyKey: "general", requiredRole: "owner_group", requiredCapability: "own_factory:approve",
       dedupeKey: `own-factory-approval:${row.approval_id}`,
     }));
+  }
+
+  private async pendingExternalSpecialApprovals(watermark: Watermark): Promise<Candidate[]> {
+    // Only a real, current pending request is recoverable; never invent money,
+    // requests or decisions from an operation-event label or a cancelled todo.
+    const available = await this.database.query<{present: boolean}>("SELECT to_regclass('rework_external_deduction_special_requests') IS NOT NULL present");
+    if (!available.rows[0]?.present) return []; // Historical migration replay before special approval existed.
+    const result = await this.database.query<{
+      special_request_id: string; case_id: string; rework_order_id: string; source_event_id: string;
+    }>(`SELECT request.special_request_id,request.case_id,target_case.rework_order_id,event.event_id source_event_id
+       FROM rework_external_deduction_special_requests request
+       JOIN rework_external_responsibility_cases target_case USING(case_id)
+       JOIN rework_external_responsibility_batches batch USING(batch_id)
+       JOIN rework_orders order_record ON order_record.rework_order_id=target_case.rework_order_id
+       JOIN operation_events event ON event.event_id=request.operation_event_id
+       WHERE target_case.status='pending_special_approval' AND batch.status='active'
+         AND order_record.status NOT IN ('deleted','cancelled')
+         AND event.action='rework.external_deduction.special.request'
+         AND ${watermarkPredicate("event",1,2)}
+         AND NOT EXISTS (SELECT 1 FROM rework_external_deduction_special_decisions decision WHERE decision.special_request_id=request.special_request_id)
+         AND NOT EXISTS (SELECT 1 FROM rework_external_deduction_special_requests newer WHERE newer.case_id=request.case_id AND newer.request_version>request.request_version)
+       ORDER BY request.special_request_id`,[watermark.createdAt,watermark.eventId]);
+    return result.rows.map(row=>this.candidate({
+      kind:"external_deduction_special_approval",id:row.special_request_id,
+      sourceEventId:row.source_event_id,sourceAction:"rework.external_deduction.special.request",
+      category:"external_deduction_special_approval",entityType:"rework_order",entityId:row.rework_order_id,
+      requiredRole:"finance_director",requiredCapability:"external_deduction:special_approve",
+      route:{routeName:"external_responsibility_detail",entityId:row.case_id,reworkOrderId:row.rework_order_id},
+      policyKey:"finance_return_or_wage_review",dedupeKey:`external-special:${row.case_id}:${row.special_request_id}`,
+    }));
+  }
+
+  private async specialApprovalStillPending(client: PoolClient, candidate: Candidate): Promise<boolean> {
+    // Serialize with the same order/case locks as the business command. A
+    // decision taken after candidate collection must prevent late notification.
+    const current = await client.query<{case_id: string}>(
+      `SELECT target_case.case_id FROM rework_external_responsibility_cases target_case
+       JOIN rework_external_responsibility_batches batch USING(batch_id)
+       JOIN rework_external_deduction_special_requests request USING(case_id)
+       JOIN rework_orders order_record ON order_record.rework_order_id=target_case.rework_order_id
+       WHERE request.operation_event_id=$1 AND target_case.status='pending_special_approval'
+         AND batch.status='active' AND order_record.status NOT IN ('deleted','cancelled')
+         AND NOT EXISTS (SELECT 1 FROM rework_external_deduction_special_decisions decision WHERE decision.special_request_id=request.special_request_id)
+         AND NOT EXISTS (SELECT 1 FROM rework_external_deduction_special_requests newer WHERE newer.case_id=request.case_id AND newer.request_version>request.request_version)
+       FOR UPDATE OF target_case,batch,order_record`,[candidate.sourceEventId]);
+    return current.rows.length===1;
   }
 
   private async pendingExternalCases(watermark: Watermark): Promise<Candidate[]> {

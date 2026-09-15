@@ -92,7 +92,7 @@ describe("business action readiness contract", () => {
     expect(source).not.toContain('disabled={busy || !supplierAllocationReady}');
     expect(source).not.toContain('disabled={busy || !temporaryNameReady}');
     expect(source).not.toContain('disabled={busy || !deductionReady}');
-    expect(source).toContain("本次扣款金额不能超过当前剩余应扣金额");
+    expect(source).toContain("confirmDeductionException");
     expect(source).toContain("requestRevision(caseItem)");
   });
 

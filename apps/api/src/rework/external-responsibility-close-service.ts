@@ -320,6 +320,10 @@ export class ExternalResponsibilityCloseService {
       `external-deduction:${caseId}:`,
       "External deduction case was closed",
     );
+    await this.todos?.completeOpenByDedupePrefix(
+      client, actor, `external-special-return:${caseId}:`,
+      "The returned exception was resolved by an exact full deduction",
+    );
     return this.reader.getCase(actor, caseId, client);
   }
 }
