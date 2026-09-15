@@ -40,6 +40,7 @@ type NavigationGroup = Readonly<{
 
 const ROLE_LABELS: Record<string, string> = {
   pattern_room_supervisor: "板房主管",
+  pattern_room_worker: "板房师傅",
   sample_designer: "样衣设计师",
   sample_administrative: "样衣管理员",
   sample_finance: "样衣财务",

@@ -4,10 +4,10 @@ import { z } from "zod";
 export const PATTERN_ROOM_ORDERS_ENABLED = true;
 export const FINANCE_PATTERN_READ_ROLES = ["wage_month_close_accountant", "finance_director", "finance_read"] as const;
 export const PATTERN_ORDER_ROLES = {
-  "pattern_room:orders:view": ["sample_designer", "order_merchandiser", "pattern_room_supervisor", "worker", "owner_group", "production_management", ...FINANCE_PATTERN_READ_ROLES],
+  "pattern_room:orders:view": ["sample_designer", "order_merchandiser", "pattern_room_supervisor", "pattern_room_worker", "owner_group", "production_management", ...FINANCE_PATTERN_READ_ROLES],
   "pattern_room:orders:create": ["sample_designer"],
   "pattern_room:orders:assign": ["pattern_room_supervisor"],
-  "pattern_room:orders:complete": ["worker"],
+  "pattern_room:orders:complete": ["pattern_room_worker"],
   "pattern_room:orders:handoff": ["sample_designer"],
   "pattern_room:orders:edit": ["sample_designer"],
   "pattern_room:misc:create": ["sample_designer", "order_merchandiser"],

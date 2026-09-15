@@ -1,3 +1,4 @@
+import { WorkerAwareAccessMasterDataService } from "../../apps/api/src/access/worker-aware-access-service.js";
 import { exerciseWagePagination } from "./helpers/wage-pagination-scenario.js";
 import { exerciseFinancePatternQueries, exerciseMixedFinancePatternScope } from "./helpers/finance-pattern-query-scenario.js";
 import { exerciseFinanceOrderQueries } from "./helpers/finance-order-query-scenario.js";
@@ -311,7 +312,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       [ids.patternSupervisor, "板房主管", "pattern_room_supervisor"],
       [ids.patternDesigner, "设计师", "sample_designer"],
       [ids.otherPatternDesigner, "另一设计师", "sample_designer"],
-      [ids.otherPatternWorker, "另一工人", "worker"],
+      [ids.otherPatternWorker, "另一板房师傅", "pattern_room_worker"],
     ] as const;
     for (const [userId, displayName, roleCode] of users) {
       await database.query(
@@ -332,6 +333,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         [randomUUID(), userId, roleCode],
       );
     }
+    await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'pattern_room_worker',$2,'explicit dual-role fixture')", [randomUUID(), ids.worker]);
     // The same bootstrap fixture path must still obey the one-supervisor database constraint.
     await expect(database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'pattern_room_supervisor',$2,'duplicate supervisor fixture')",[randomUUID(),ids.patternDesigner])).rejects.toMatchObject({code:"23505"});
     await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'Root验收',true)", [ids.patternRoot]);
@@ -458,8 +460,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const designer = actor(ids.patternDesigner, ["sample_designer"], "pattern_room:orders:view", ...caps);
     const otherDesigner = actor(ids.otherPatternDesigner, ["sample_designer"], "pattern_room:orders:view", ...caps);
     const supervisor = actor(ids.patternSupervisor, ["pattern_room_supervisor"], "pattern_room:orders:view", ...caps);
-    const worker = actor(ids.worker, ["worker"], "pattern_room:orders:view", ...caps);
-    const otherWorker = actor(ids.otherPatternWorker, ["worker"], "pattern_room:orders:view", ...caps);
+    const worker = actor(ids.worker, ["pattern_room_worker"], "pattern_room:orders:view", ...caps);
+    const otherWorker = actor(ids.otherPatternWorker, ["pattern_room_worker"], "pattern_room:orders:view", ...caps);
     const owner = actor(ids.ownerOne, ["owner_group"], "pattern_room:orders:view", ...caps);
     const admin = actor(ids.technicalAdmin, ["system_admin"], "pattern_room:orders:view", ...caps);
     const files = [randomUUID(), randomUUID(), randomUUID()];
@@ -605,7 +607,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const designer = actor(ids.patternDesigner, ["sample_designer"], "pattern_room:orders:view", ...caps);
     const other = actor(ids.otherPatternDesigner, ["sample_designer"], "pattern_room:orders:view", ...caps);
     const supervisor = actor(ids.patternSupervisor, ["pattern_room_supervisor"], "pattern_room:orders:view", ...caps);
-    const worker = actor(ids.worker, ["worker"], "pattern_room:orders:view", ...caps);
+    const worker = actor(ids.worker, ["pattern_room_worker"], "pattern_room:orders:view", ...caps);
     const owner = actor(ids.ownerOne, ["owner_group"], "pattern_room:prices:read", "pattern_room:hourly:write");
     const prices = new PatternRoomPriceService(database);
     const before = (await prices.management(owner)).hourly;
@@ -688,7 +690,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const root = actor(ids.patternRoot, ["root_superuser"], "pattern_room:prices:read");
     const price = (await new PatternRoomPriceService(database).management(root)).hourly;
     const supervisor = actor(ids.patternSupervisor, ["pattern_room_supervisor"], "pattern_room:orders:view", ...caps);
-    const worker = actor(ids.worker, ["worker"], "pattern_room:orders:view", ...caps);
+    const worker = actor(ids.worker, ["pattern_room_worker"], "pattern_room:orders:view", ...caps);
     const action = (order: { version: number; currentRoundId: string }) => ({ version: order.version, roundId: order.currentRoundId });
     const merchantRole = await access.assignRole(rootAdmin(), { userId: ids.otherPatternDesigner, roleCode: "order_merchandiser", reason: "隔离验收双职责" });
     const designerRole = (await database.query("SELECT assignment_id FROM user_role_assignments WHERE user_id=$1 AND role_code='sample_designer' AND revoked_at IS NULL", [ids.otherPatternDesigner])).rows[0].assignment_id;
@@ -751,10 +753,91 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     finally { await app.close(); }
   };
 
+  it("separates board workers from tail workers and creates one personnel identity on explicit role grant", async () => {
+    const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
+    const supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]), designer = patternActor(ids.patternDesigner, ["sample_designer"]);
+    const tailWorker = patternActor(ids.tailInspector, ["worker"]);
+    const options = await service.workers(supervisor, "");
+    expect(options.some(person => person.personId === workerPersonId)).toBe(true);
+    expect(options.some(person => person.personId === tailPersonId)).toBe(false);
+    expect((await database.query("SELECT count(*)::int n FROM role_capabilities WHERE role_code='worker' AND capability LIKE 'pattern_room:%'")).rows[0].n).toBe(0);
+    const created = await makePattern(service, designer, "PATTERN-板房角色隔离");
+    await expect(service.get(tailWorker, created.orderId)).rejects.toMatchObject({ statusCode: 403 });
+    await expect(service.assign(supervisor, created.orderId, { ...roundAction(created), personId: tailPersonId }, randomUUID())).rejects.toMatchObject({ statusCode: 400 });
+    await expect(service.complete(tailWorker, created.orderId, roundAction(created), randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    await expect(database.query("SELECT pattern_room_authorized_order_roles($1,'pattern_room:orders:view')", [ids.tailInspector])).rejects.toMatchObject({ code: "42501" });
+    const userId = randomUUID();
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'新板房师傅',true)", [userId]);
+    await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','corp',$3,$3,true,true,CURRENT_TIMESTAMP)", [randomUUID(), userId, `ding-${userId}`]);
+    const maintenance = new WorkerAwareAccessMasterDataService(database, "corp"), root = actor(ids.patternRoot, ["root_superuser"], "access:admin", "master_data:manage");
+    const grant = await maintenance.assignRole(root, { userId, roleCode: "pattern_room_worker", reason: "独立板房角色验收" });
+    const people = await database.query("SELECT person_id FROM business_people WHERE app_user_id=$1", [userId]);
+    expect(people.rows).toHaveLength(1);
+    expect((await service.workers(supervisor, "新板房")).map(person => person.personId)).toEqual([people.rows[0].person_id]);
+    const assigned = await service.assign(supervisor, created.orderId, { ...roundAction(created), personId: people.rows[0].person_id }, randomUUID());
+    const boardWorker = patternActor(userId, ["pattern_room_worker"]);
+    const executionTodo = (await database.query("SELECT todo_id FROM rework_todos WHERE entity_id=$1 AND required_capability='pattern_room:orders:complete'", [created.orderId])).rows[0].todo_id;
+    // Simulate a pre-split todo; production migration does not rewrite historical routing facts.
+    await database.query("ALTER TABLE rework_todos DISABLE TRIGGER rework_todos_update_guard");
+    try { await database.query("UPDATE rework_todos SET required_role='worker' WHERE todo_id=$1", [executionTodo]); }
+    finally { await database.query("ALTER TABLE rework_todos ENABLE TRIGGER rework_todos_update_guard"); }
+    const todoClient = await database.connect();
+    try {
+      await todoClient.query("BEGIN");
+      expect(await todoService.ensureOpenRecipientEligibleInTransaction(todoClient, root, executionTodo)).toBe(true);
+      await todoClient.query("ROLLBACK");
+    } finally { todoClient.release(); }
+    expect(await service.canDownload(boardWorker, { entityType: "pattern_room_attachment", entityId: created.attachments[0]!.attachmentId })).toBe(true);
+    await maintenance.revokeRole(root, grant.assignmentId, "撤销后必须即时失去板房权限");
+    await expect(service.complete(boardWorker, created.orderId, roundAction(assigned), randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    expect(await service.canDownload(boardWorker, { entityType: "pattern_room_attachment", entityId: created.attachments[0]!.attachmentId })).toBe(false);
+    expect((await service.workers(supervisor, "新板房")).length).toBe(0);
+    const again = await maintenance.assignRole(root, { userId, roleCode: "pattern_room_worker", reason: "复授权复用原工资身份" });
+    expect((await database.query("SELECT person_id FROM business_people WHERE app_user_id=$1", [userId])).rows).toEqual(people.rows);
+    expect((await service.complete(boardWorker, created.orderId, roundAction(assigned), randomUUID())).status).toBe("pending_confirmation");
+    await maintenance.revokeRole(root, again.assignmentId, "验收结束");
+  });
+
+  it("preserves both concurrent worker role grants with one person and rolls back genuine creation failures", async () => {
+    const root = actor(ids.patternRoot, ["root_superuser"], "access:admin", "master_data:manage");
+    const newEmployee = async () => {
+      const userId = randomUUID();
+      await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'双角色建档验收',true)", [userId]);
+      await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','corp',$3,$3,true,true,CURRENT_TIMESTAMP)", [randomUUID(), userId, `ding-${userId}`]);
+      return userId;
+    };
+    const userId = await newEmployee();
+    let reached = 0, release!: () => void;
+    const bothCreating = new Promise<void>(resolve => { release = resolve; });
+    class ConcurrentPersonnel extends WorkerAwareAccessMasterDataService {
+      override async createPerson(...args: Parameters<WorkerAwareAccessMasterDataService["createPerson"]>) {
+        reached += 1;
+        if (reached === 2) release();
+        await bothCreating;
+        return super.createPerson(...args);
+      }
+    }
+    const maintenance = new ConcurrentPersonnel(database, "corp");
+    const grants = await Promise.all(["worker", "pattern_room_worker"].map(roleCode => maintenance.assignRole(root, { userId, roleCode, reason: "显式同时授予双角色" })));
+    expect(reached).toBe(2);
+    expect(grants).toHaveLength(2);
+    expect((await database.query("SELECT role_code FROM user_role_assignments WHERE user_id=$1 AND revoked_at IS NULL ORDER BY role_code", [userId])).rows).toEqual([{ role_code: "pattern_room_worker" }, { role_code: "worker" }]);
+    expect((await database.query("SELECT person_id FROM business_people WHERE app_user_id=$1", [userId])).rows).toHaveLength(1);
+    for (const grant of grants) await maintenance.revokeRole(root, grant.assignmentId, "清理隔离授权用例");
+
+    class FailedPersonnel extends WorkerAwareAccessMasterDataService {
+      override async createPerson(): Promise<{ personId: string }> { throw new Error("person write failed"); }
+    }
+    const failedUser = await newEmployee();
+    await expect(new FailedPersonnel(database, "corp").assignRole(root, { userId: failedUser, roleCode: "pattern_room_worker", reason: "建档失败仍须回滚" })).rejects.toThrow("person write failed");
+    expect((await database.query("SELECT role_code FROM user_role_assignments WHERE user_id=$1 AND revoked_at IS NULL", [failedUser])).rows).toEqual([]);
+    expect((await database.query("SELECT person_id FROM business_people WHERE app_user_id=$1", [failedUser])).rows).toEqual([]);
+  });
+
   it("replaces rework materials within the total limit while preserving historical bindings", async () => {
     const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
     const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]);
-    const worker = patternActor(ids.worker, ["worker"]);
+    const worker = patternActor(ids.worker, ["pattern_room_worker"]);
     const created = await makePattern(service, designer, "PATTERN-返工资料选择");
     const assigned = await service.assign(supervisor, created.orderId, { ...roundAction(created), personId: workerPersonId }, randomUUID());
     const completed = await service.complete(worker, created.orderId, roundAction(assigned), randomUUID());
@@ -778,7 +861,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   it("preserves multiple worker segments and pre/post-handoff rework without duplicate rounds or early wages", async () => {
     const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
     const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]);
-    const worker = patternActor(ids.worker, ["worker"]), nextWorker = patternActor(ids.otherPatternWorker, ["worker"]);
+    const worker = patternActor(ids.worker, ["pattern_room_worker"]), nextWorker = patternActor(ids.otherPatternWorker, ["pattern_room_worker"]);
     const created = await makePattern(service, designer, "PATTERN-换人及多轮", 2, "只供原业务范围的制作说明");
     await expect(database.query("UPDATE pattern_room_rounds SET round_index=NULL WHERE round_id=$1", [created.currentRoundId])).rejects.toMatchObject({ code: "23514" });
     const assigned = await service.assign(supervisor, created.orderId, { ...roundAction(created), personId: workerPersonId }, randomUUID());
@@ -839,7 +922,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
   it("keeps cancelled partial labor separate from sample handoff and never orphans earlier unhanded work", async () => {
     const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
-    const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]), worker = patternActor(ids.worker, ["worker"]);
+    const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]), worker = patternActor(ids.worker, ["pattern_room_worker"]);
     const pending = await makePattern(service, designer, "PATTERN-未派工取消");
     await expect(service.cancel(supervisor, pending.orderId, { ...roundAction(pending), reason: "非发起人" }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
     expect((await service.cancel(designer, pending.orderId, { ...roundAction(pending), reason: "发起人取消" }, randomUUID())).status).toBe("cancelled");
@@ -880,7 +963,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
   it("keeps misc hours per worker across transfers and records real work stops without changing qualified wages", async () => {
     const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
-    const merchant = patternActor(ids.merchandiser, ["order_merchandiser"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]), nextWorker = patternActor(ids.otherPatternWorker, ["worker"]);
+    const merchant = patternActor(ids.merchandiser, ["order_merchandiser"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]), nextWorker = patternActor(ids.otherPatternWorker, ["pattern_room_worker"]);
     const prices = new PatternRoomPriceService(database), root = actor(ids.patternRoot, ["root_superuser"], "pattern_room:prices:read");
     const current = (await prices.management(root)).hourly;
     const price = await prices.change(root, "hourly", PATTERN_HOURLY_PRICE_ID, { version: current.version, amount: "28.555", enabled: true, reason: "隔离验收分段工时" }, randomUUID());
@@ -917,7 +1000,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
   it("serializes a supervisor transfer racing the current worker's completion", async () => {
     const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
-    const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]), worker = patternActor(ids.worker, ["worker"]), nextWorker = patternActor(ids.otherPatternWorker, ["worker"]);
+    const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]), worker = patternActor(ids.worker, ["pattern_room_worker"]), nextWorker = patternActor(ids.otherPatternWorker, ["pattern_room_worker"]);
     const created = await makePattern(service, designer, "PATTERN-并发改派与完工"), assigned = await service.assign(supervisor, created.orderId, { ...roundAction(created), personId: workerPersonId }, randomUUID());
     const results = await Promise.allSettled([
       service.transfer(supervisor, created.orderId, { ...roundAction(assigned), segmentId: assigned.rounds[0]!.segments[0]!.segmentId, personId: otherPatternPersonId, amount: "20", reason: "并发原单换人" }, randomUUID()),
@@ -2105,7 +2188,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const price = (await new PatternRoomPriceService(database).management(actor(ids.patternRoot, ["root_superuser"], "pattern_room:prices:read"))).hourly;
     const created = await service.createMisc(merchant, { taskName: "MISC-完工后补工时取消", priceVersion: price.version }, randomUUID());
     const assigned = await service.assign(supervisor, created.orderId, { ...roundAction(created), personId: workerPersonId }, randomUUID());
-    const complete = await service.complete(patternActor(ids.worker, ["worker"]), created.orderId, roundAction(assigned), randomUUID());
+    const complete = await service.complete(patternActor(ids.worker, ["pattern_room_worker"]), created.orderId, roundAction(assigned), randomUUID());
     await service.cancel(supervisor, created.orderId, { ...roundAction(complete), segmentId: complete.rounds[0]!.segments[0]!.segmentId, hours: "0.2", reason: "取消时才核定实际工时" }, randomUUID());
     const releaseColumns = "segment_id,payable_amount::text,period_month::text,release_basis,cancellation";
     const expected = (await database.query(`SELECT ${releaseColumns} FROM pattern_room_wage_items ORDER BY segment_id`)).rows;
@@ -2138,7 +2221,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     // Isolated scale fixture: real create/assign/complete/handoff; 500 historical segments are synthesized below.
     // It validates a large release and financial scope, not 501 claimed UI orders or production records.
     const service = new PatternRoomOrderService(database, todoProjection);
-    const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]), currentWorker = patternActor(ids.worker, ["worker"]);
+    const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]), currentWorker = patternActor(ids.worker, ["pattern_room_worker"]);
     const reporting = new ManagementReportingService(database), finance = financeWages();
     const created = await makePattern(service, designer, "PR06-SCALE-MONTH", 14);
     const assigned = await service.assign(supervisor, created.orderId, { ...roundAction(created), personId: workerPersonId }, randomUUID());
@@ -2211,7 +2294,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         expect((await app.inject({ url: `/management/reports/wages/export.xlsx?${query}` })).statusCode).toBe(200);
         expect((await app.inject({ url: `/management/wages/settlement-preview?${query}` })).statusCode).toBe(["owner_group", "production_management"].includes(role) ? 403 : 200);
       }
-      for (const [id, role] of [[ids.patternSupervisor, "pattern_room_supervisor"], [ids.patternDesigner, "sample_designer"], [ids.worker, "worker"], [ids.merchandiser, "order_merchandiser"]] as const) {
+      for (const [id, role] of [[ids.patternSupervisor, "pattern_room_supervisor"], [ids.patternDesigner, "sample_designer"], [ids.worker, "pattern_room_worker"], [ids.merchandiser, "order_merchandiser"]] as const) {
         current = financeWages(id, [role]);
         for (const path of ["management/reports/wages", "management/reports/wages/export.xlsx", "management/wages/settlement-preview"]) expect((await app.inject({ url: `/${path}?${query}` })).statusCode).toBe(403);
         expect((await app.inject({ method: "POST", url: "/management/wages/settlement", payload: { filters: allWageDates, lineIds: [randomUUID()] } })).statusCode).toBe(403);

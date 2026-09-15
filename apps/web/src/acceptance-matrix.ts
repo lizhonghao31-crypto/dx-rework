@@ -523,9 +523,9 @@ const EXISTING_ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
 // Approved 2026-09-12 scope, explicitly translated from the business plan.
 // Approved PR03/04/05 roles; ordinary order operations remain closed until PR06.
 const patternOrderRoles: Record<string, readonly string[]> = {
-  "pattern_room:orders:view": ["sample_designer", "order_merchandiser", "pattern_room_supervisor", "worker", "owner_group", "production_management", "finance_director", "finance_read", "wage_month_close_accountant"],
+  "pattern_room:orders:view": ["sample_designer", "order_merchandiser", "pattern_room_supervisor", "pattern_room_worker", "owner_group", "production_management", "finance_director", "finance_read", "wage_month_close_accountant"],
   "pattern_room:orders:create": ["sample_designer"], "pattern_room:orders:edit": ["sample_designer"],
-  "pattern_room:orders:handoff": ["sample_designer"], "pattern_room:orders:assign": ["pattern_room_supervisor"], "pattern_room:orders:complete": ["worker"],
+  "pattern_room:orders:handoff": ["sample_designer"], "pattern_room:orders:assign": ["pattern_room_supervisor"], "pattern_room:orders:complete": ["pattern_room_worker"],
   "pattern_room:misc:create": ["sample_designer", "order_merchandiser"], "pattern_room:misc:edit": ["sample_designer", "order_merchandiser"],
   "pattern_room:misc:confirm": ["sample_designer", "order_merchandiser"], "pattern_room:orders:hours": ["pattern_room_supervisor"],
   "pattern_room:orders:rework": ["sample_designer", "pattern_room_supervisor"], "pattern_room:orders:transfer": ["pattern_room_supervisor"],
@@ -555,7 +555,7 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXIS
   // PR02 approved field-level authority, independently transcribed from section 8.1.
   const root = entry.expectedRoot === true;
   const read = root || ["owner_group","production_management","finance_director","finance_read","pattern_room_supervisor"].includes(entry.expectedRole);
-  const moduleAccess = read || ["sample_designer","order_merchandiser","worker","wage_month_close_accountant"].includes(entry.expectedRole);
+  const moduleAccess = read || ["sample_designer","order_merchandiser","pattern_room_worker","wage_month_close_accountant"].includes(entry.expectedRole);
   const category = root || ["owner_group","production_management"].includes(entry.expectedRole);
   const hourly = root || entry.expectedRole === "owner_group";
   const required = root ? [] : [...(read ? ["pattern_room:prices:read"] : []), ...(category ? ["pattern_room:prices:write"] : []), ...(hourly ? ["pattern_room:hourly:write"] : [])];

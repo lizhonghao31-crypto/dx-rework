@@ -36,10 +36,10 @@ describe("platform permission and desktop navigation hub", () => {
       "sourcing",
     )).toBe(true);
     expect(accessModuleIdsForRole("owner_group")).toEqual([
-      "rework", "sourcing", "suppliers", "production", "samples",
+      "rework", "sourcing", "suppliers", "production", "samples", "pattern_room",
     ]);
     expect(accessModuleIdsForRole("finance_director")).toEqual([
-      "rework", "sourcing", "suppliers", "production", "samples",
+      "rework", "sourcing", "suppliers", "production", "samples", "pattern_room",
     ]);
     expect(employeeHasAccessModule(["owner_group"], [], "samples")).toBe(true);
     expect(employeeHasAccessModule(["owner_group"], [], "suppliers")).toBe(true);
@@ -151,7 +151,7 @@ describe("platform permission and desktop navigation hub", () => {
     expect(employeeAccess).toContain('<option value="suppliers">供应商中心</option>');
     expect(employeeAccess).toContain('<option value="samples">样衣管理</option>');
     expect(employeeAccess).toContain("employee.isRoot");
-    expect(employeeAccess).toContain("Root（订单返工 / 外发定价&选厂 / 供应商中心 / 实时生产看板 / 样衣管理 / 平台管理）");
+    expect(employeeAccess).toContain("Root（订单返工 / 外发定价&选厂 / 供应商中心 / 实时生产看板 / 样衣管理 / 订单打板 / 平台管理）");
     expect(systemNavigation).toContain(">人员与权限</a>");
     expect(css).toContain(".desktop-navigation__group");
     expect(css).toContain("color: var(--dx-v2-color-surface);");

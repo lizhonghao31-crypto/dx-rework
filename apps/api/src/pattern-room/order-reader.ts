@@ -74,7 +74,7 @@ export class PatternOrderReader {
         WHERE round.order_id=$1 ORDER BY round.round_index,segment.segment_index`, [orderId])).rows;
       const current = segments.filter(segment => segment.round_id === order.current_round_id).at(-1);
       // Finance reads do not widen the worker's original current-assignment scope.
-      const currentWorkerAccess = effective.actorRoles.includes("worker") && current?.worker_user_id === effective.actorId;
+      const currentWorkerAccess = effective.actorRoles.includes("pattern_room_worker") && current?.worker_user_id === effective.actorId;
       const canReadRoundMaterials = (roundId:string) => allMaterials || (currentWorkerAccess && (roundId === order.current_round_id || segments.some(segment => segment.round_id === roundId && segment.worker_user_id === effective.actorId)));
       const nodes = (await client.query<{ round_id: string; stage: string; entered_at: Date; exited_at: Date | null; exit_reason: string | null; elapsed_seconds: number }>(
         `SELECT node.*,GREATEST(0,EXTRACT(EPOCH FROM (COALESCE(node.exited_at,CURRENT_TIMESTAMP)-node.entered_at)))::float8 elapsed_seconds
