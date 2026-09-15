@@ -1,3 +1,5 @@
+import { readWageListQuery,wageListPath,wageSourcePath } from "./wage-query-state.js";
+import { createWebUrls } from "../../url-contract.js";
 import { NavigationIcon } from "../navigation-icons.js";
 import type { ReportPreviewResponse } from "@dx-rework/contracts/reporting";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
@@ -5,7 +7,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useDebouncedValue } from "../use-debounced-value.js";
 import { businessFieldLabel, businessValue } from "../business-display.js";
-import { ListPagination, usePaginatedItems } from "../list-pagination.js";
+import { ListPagination, LIST_PAGE_SIZE } from "../list-pagination.js";
 import {
   previewWageSettlement, markWageSettlement,
   loadReport,
@@ -21,6 +23,7 @@ type ReportState =
   | { kind: "ready"; value: ReportPreviewResponse; key: string }
   | { kind: "error"; message: string };
 
+const {pageUrl}=createWebUrls(import.meta.env.BASE_URL);
 const pad = (value: number): string => String(value).padStart(2, "0");
 const monthEnd = (year: number, month: number): string =>
   `${year}-${pad(month)}-${pad(new Date(Date.UTC(year, month, 0)).getUTCDate())}`;
@@ -40,13 +43,14 @@ const wageBasis=(row:ReportPreviewResponse["rows"][number]):string => {
 
 export function WagePeriodList() {
   const today = reportingBusinessDate();
-  const [from, setFrom] = useState(reportingBusinessMonthStart());
-  const [to, setTo] = useState(today);
-  const [q, setQ] = useState("");
-  const [personType, setPersonType] = useState("");
-  const [wageSource, setWageSource] = useState("");
-  const [patternKind, setPatternKind] = useState("");
-  const [status, setStatus] = useState("");
+  const [initial]=useState(()=>readWageListQuery(window.location.search));
+  const [from, setFrom] = useState(initial.from??reportingBusinessMonthStart());
+  const [to, setTo] = useState(initial.to??today);
+  const [q, setQ] = useState<string>(initial.q??"");
+  const [personType, setPersonType] = useState<string>(initial.personType??"");
+  const [wageSource, setWageSource] = useState<string>(initial.wageSource??"");
+  const [patternKind, setPatternKind] = useState<string>(initial.patternKind??"");
+  const [status, setStatus] = useState<string>(initial.status??"");
   const [refresh, setRefresh] = useState(0);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -117,8 +121,22 @@ export function WagePeriodList() {
     } catch(error) {setMessage(error instanceof Error ? error.message : "工资结算标记失败");setRefresh(n=>n+1);}
     finally {busyRef.current=false;setBusy(false);}
   };
-  const personPage = usePaginatedItems(personSummary, resetKey);
-  const detailPage = usePaginatedItems(value?.rows ?? [], resetKey);
+  const [pages,setPages]=useState({key:resetKey,detail:initial.page,person:initial.personPage});
+  const currentPages=pages.key===resetKey?pages:{key:resetKey,detail:1,person:1};
+  const paginate=<T,>(items:readonly T[],kind:"person"|"detail")=>{
+    const totalPages=Math.max(1,Math.ceil(items.length/LIST_PAGE_SIZE));
+    const page=Math.min(currentPages[kind],totalPages);
+    return {page,totalPages,items:items.slice((page-1)*LIST_PAGE_SIZE,page*LIST_PAGE_SIZE),
+      setPage:(next:number)=>setPages({...currentPages,[kind]:next})};
+  };
+  const personPage=paginate(personSummary,"person");
+  const detailPage=paginate(value?.rows??[],"detail");
+  const listPath=wageListPath({...filters,page:detailPage.page,personPage:personPage.page});
+  useEffect(()=>{if(!stale)window.history.replaceState(null,"",pageUrl(listPath));},[listPath,stale]);
+  const sourceCell=(row:ReportPreviewResponse["rows"][number])=>{
+    const target=wageSourcePath(row,listPath);
+    return target?<a href={pageUrl(target)}>{wageCell("orderNo",row.orderNo)}</a>:<>{wageCell("orderNo",row.orderNo)}<small>{row.sourceStatus==="missing"?"历史来源未关联":"来源暂不可回查"}</small></>;
+  };
 
   return (
     <div className="wage-page wage-management">
@@ -195,7 +213,7 @@ export function WagePeriodList() {
               <table>
                 <thead><tr>{value.columns.filter(column=>mainFields.has(column.key)).map(column=><th key={column.key}>{column.label}</th>)}<th>费用依据</th></tr></thead>
                 <tbody>{detailPage.items.map(row=>(
-                  <tr key={String(row.lineId)}>{value.columns.filter(column=>mainFields.has(column.key)).map(column=><td key={column.key}>{column.key === "settlementStatus" ? <StatusBadge tone={row[column.key] === "settled" ? "success" : "warning"}>{row[column.key] === "settled" ? "已结算" : "未结算"}</StatusBadge> : wageCell(column.key,row[column.key])}</td>)}
+                  <tr key={String(row.lineId)}>{value.columns.filter(column=>mainFields.has(column.key)).map(column=><td key={column.key}>{column.key === "settlementStatus" ? <StatusBadge tone={row[column.key] === "settled" ? "success" : "warning"}>{row[column.key] === "settled" ? "已结算" : "未结算"}</StatusBadge> : column.key === "orderNo" ? sourceCell(row) : wageCell(column.key,row[column.key])}</td>)}
                     <td><p>{wageBasis(row)}</p>{row.cancellation ? <p>取消部分计薪</p> : null}<details><summary>展开依据</summary><dl>{value.columns.filter(column=>!mainFields.has(column.key)).map(column=><Fragment key={column.key}><dt>{column.label}</dt><dd>{wageCell(column.key,row[column.key])}</dd></Fragment>)}</dl></details></td>
                   </tr>
                 ))}</tbody>

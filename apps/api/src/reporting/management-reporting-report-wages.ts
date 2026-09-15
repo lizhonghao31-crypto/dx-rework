@@ -9,7 +9,14 @@ export async function wageReport(source: Queryable, query: ReportQuery, range: R
     pricing_unit_snapshot,unit_price_snapshot::text,assignment_mode,wage_amount::text,
     line_id,completed_date::text,marked_at::text,marked_by,marked_by_name,wage_source,wage_kind,source_order_id,
     round_id,round_index,segment_id,segment_index,task_name,source_amount::text,round_amount::text,actual_hours::text,
-    released_at::text,release_basis,cancellation
+    released_at::text,release_basis,cancellation,
+    CASE WHEN source_order_id IS NULL THEN 'missing'
+      WHEN wage_source='order_rework' AND EXISTS(SELECT 1 FROM rework_orders source_order WHERE source_order.rework_order_id=filtered.source_order_id AND source_order.status<>'deleted') THEN 'available'
+      WHEN wage_source='pattern_room' AND EXISTS(SELECT 1 FROM pattern_room_orders source_order
+        JOIN pattern_room_rounds source_round ON source_round.order_id=source_order.order_id
+        JOIN pattern_room_segments source_segment ON source_segment.round_id=source_round.round_id
+        WHERE source_order.order_id=filtered.source_order_id AND source_round.round_id=filtered.round_id AND source_segment.segment_id=filtered.segment_id) THEN 'available'
+      ELSE 'unavailable' END source_status
    FROM filtered ORDER BY completed_date DESC,person_name_snapshot,line_id LIMIT $8
  ), person_sources AS (
    SELECT person_id,wage_source source,wage_kind kind,sum(wage_amount)::text amount,count(*)::int "lineCount"
@@ -37,7 +44,7 @@ export async function wageReport(source: Queryable, query: ReportQuery, range: R
  const rows = (summary.rows as Record<string, unknown>[]).map(row => ({
    periodMonth:String(row.period_month).slice(0,7),personId:String(row.person_id),
    personName:String(row.person_name_snapshot),personType:String(row.person_type_snapshot),
-   reworkOrderId:nullable(row.rework_order_id),sourceOrderId:nullable(row.source_order_id),
+   sourceStatus:String(row.source_status),reworkOrderId:nullable(row.rework_order_id),sourceOrderId:nullable(row.source_order_id),
    reworkNo:String(row.rework_no_snapshot),orderNo:String(row.rework_no_snapshot),styleNo:String(row.style_no_snapshot),
    processName:String(row.process_name_snapshot),quantity:nullable(row.actual_quantity_snapshot),
    unit:String(row.pricing_unit_snapshot),unitPrice:nullable(row.unit_price_snapshot),

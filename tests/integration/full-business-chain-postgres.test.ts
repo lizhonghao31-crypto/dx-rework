@@ -1,3 +1,4 @@
+import { exerciseFinancePatternQueries } from "./helpers/finance-pattern-query-scenario.js";
 import { exerciseFinanceOrderQueries } from "./helpers/finance-order-query-scenario.js";
 import { MemberModuleBindingService } from "../../apps/api/src/access/member-module-binding-service.js";
 import "./member-module-policy-postgres.cases.js";
@@ -470,6 +471,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     await expect(service.create(designer, { ...input, priceVersion: 99 }, randomUUID())).rejects.toMatchObject({ statusCode: 409, code: "PRICE_CHANGED" });
     const key = randomUUID(), created = await service.create(designer, input, key);
     expect(created).toMatchObject({ styleNo: input.styleNo, referenceStyleNo: input.referenceStyleNo, status: "pending_assignment", requiredDate: "2026-09-30", reworkCount: 0 });
+    await exerciseFinancePatternQueries({database,service,orderId:created.orderId,attachmentId:files[0]!,readers:[[ids.financeDirector,"finance_director"],[ids.financeRead,"finance_read"],[ids.monthClose,"wage_month_close_accountant"]]});
     expect(created.rounds[0]).toMatchObject({ index: 0, unitPrice: "40.000", quantity: 2, agreedAmount: "80.00000000" });
     expect((await service.create(designer, input, key)).orderId).toBe(created.orderId);
     await expect(service.create(designer, { ...input, styleNo: "重复键不同内容" }, key)).rejects.toMatchObject({ statusCode: 409 });
@@ -2033,6 +2035,19 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(legacy.totals.wageAmount).toBe("150.00");
     const pattern = await reporting.report(finance, "wages", { ...allWageDates, wageSource: "pattern_room" });
     const combined = await reporting.report(finance, "wages", allWageDates);
+    const sourceReader=actor(ids.monthClose,["wage_month_close_accountant"],"pattern_room:orders:view");
+    const sourceOrders=new PatternRoomOrderService(database,todoProjection);
+    for(const line of pattern.rows) {
+      expect(line.sourceStatus).toBe("available");
+      const source=rows.find(row=>row.wage_item_id===line.lineId)!;
+      expect(line).toMatchObject({sourceOrderId:source.order_id,roundId:source.round_id,segmentId:source.segment_id});
+      const original=await sourceOrders.get(sourceReader,String(line.sourceOrderId));
+      expect(original.rounds.find(round=>round.roundId===line.roundId)?.segments.some(segment=>segment.segmentId===line.segmentId)).toBe(true);
+      expect(original.attachments).toEqual([]);
+      expect(Object.values(original.actions).every(value=>!value)).toBe(true);
+    }
+    expect(legacy.rows.every(row=>row.sourceStatus==="available"&&row.sourceOrderId===row.reworkOrderId)).toBe(true);
+    await expect(new PatternRoomPriceService(database).management(actor(ids.monthClose,["wage_month_close_accountant"],"pattern_room:prices:read"))).rejects.toMatchObject({statusCode:403});
     const cents = (value: string) => BigInt(value.replace(".", ""));
     expect(cents(combined.totals.wageAmount!)).toBe(cents(legacy.totals.wageAmount!) + cents(pattern.totals.wageAmount!));
     expect(combined.wageSummary!.people.filter(person => person.personId === workerPersonId)).toHaveLength(1);

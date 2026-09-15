@@ -1,10 +1,11 @@
-import { canUsePatternOrder, type PatternOrderCapability } from "@dx-rework/contracts/pattern-orders";
+import { FINANCE_PATTERN_READ_ROLES, canUsePatternOrder, type PatternOrderCapability } from "@dx-rework/contracts/pattern-orders";
 import { ApplicationError } from "../platform/errors.js";
 import type { SqlClient, TrustedActorContext } from "../tools/repositories.js";
 
 export const patternActorCapabilities = (actor: TrustedActorContext) => actor.authorizationCapabilities ?? [actor.authorizationCapability];
 export const isPatternRoot = (actor: TrustedActorContext) => actor.actorRoles.includes("root_superuser");
-export const canReadAllPatternOrders = (actor: TrustedActorContext) => actor.actorRoles.some(role => ["root_superuser", "pattern_room_supervisor", "owner_group", "production_management"].includes(role));
+export const canReadAllPatternTechnicalOrders = (actor: TrustedActorContext) => actor.actorRoles.some(role => ["root_superuser", "pattern_room_supervisor", "owner_group", "production_management"].includes(role));
+export const canReadAllPatternOrders = (actor: TrustedActorContext) => canReadAllPatternTechnicalOrders(actor) || FINANCE_PATTERN_READ_ROLES.some(role=>actor.actorRoles.includes(role));
 export async function authorizePatternOrder(db: SqlClient, actor: TrustedActorContext, capability: PatternOrderCapability, enabled: boolean): Promise<TrustedActorContext> {
   if (!canUsePatternOrder(actor.actorRoles, patternActorCapabilities(actor), capability)) throw new ApplicationError("FORBIDDEN", "当前账号无权执行此打板操作", 403);
   let roles: string[] | undefined;

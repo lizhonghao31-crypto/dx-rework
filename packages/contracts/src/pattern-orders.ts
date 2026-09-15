@@ -2,8 +2,9 @@ import { z } from "zod";
 
 // Switched on only when the six-PR wage closure is complete. Root can verify each increment.
 export const PATTERN_ROOM_ORDERS_ENABLED = true;
+export const FINANCE_PATTERN_READ_ROLES = ["wage_month_close_accountant", "finance_director", "finance_read"] as const;
 export const PATTERN_ORDER_ROLES = {
-  "pattern_room:orders:view": ["sample_designer", "order_merchandiser", "pattern_room_supervisor", "worker", "owner_group", "production_management"],
+  "pattern_room:orders:view": ["sample_designer", "order_merchandiser", "pattern_room_supervisor", "worker", "owner_group", "production_management", ...FINANCE_PATTERN_READ_ROLES],
   "pattern_room:orders:create": ["sample_designer"],
   "pattern_room:orders:assign": ["pattern_room_supervisor"],
   "pattern_room:orders:complete": ["worker"],
@@ -89,6 +90,7 @@ export const PatternOrderDetailSchema = PatternOrderSummarySchema.extend({
       startedAt: z.string(), endedAt: z.string().nullable(), wageEligible: z.boolean() })),
     nodes: z.array(z.object({ stage: z.enum(["pending_assignment", "in_progress", "pending_confirmation"]), enteredAt: z.string(), exitedAt: z.string().nullable(), exitReason: z.string().nullable(), elapsedSeconds: z.number().nonnegative() })),
   })),
+  canReadMaterials: z.boolean().optional(),
   attachments: z.array(PatternAttachmentSchema),
   history: z.array(z.object({ action: z.string(), actorName: z.string(), at: z.string(), reason: z.string().nullable() })),
   actions: z.object({ assign: z.boolean(), complete: z.boolean(), handoff: z.boolean(), edit: z.boolean(), hours: z.boolean(), rework: z.boolean(), transfer: z.boolean(), cancel: z.boolean(), cancelFees: z.boolean() }),

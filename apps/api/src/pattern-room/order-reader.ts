@@ -2,7 +2,7 @@ import { PatternOrderDetailSchema, PatternOrderListSchema, PatternOrderQuerySche
 import type { Pool, PoolClient } from "pg";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
-import { authorizePatternOrder, canReadAllPatternOrders, isPatternRoot, patternActorCapabilities, patternOrderScopeSql, patternOrderScopeValues } from "./order-authority.js";
+import { authorizePatternOrder, canReadAllPatternOrders, canReadAllPatternTechnicalOrders, isPatternRoot, patternActorCapabilities, patternOrderScopeSql, patternOrderScopeValues } from "./order-authority.js";
 
 export type PatternOrderRow = {
   order_id: string; order_no: string; kind: "pattern" | "misc"; task_name: string | null; creator_role: "sample_designer" | "order_merchandiser"; status: PatternOrderSummary["status"]; version: number; current_round_id: string;
@@ -68,6 +68,8 @@ export class PatternOrderReader {
     return this.read(actor, async (client, effective) => {
       const order = await scopedPatternOrder(client, effective, orderId);
       const allCosts = canReadAllPatternOrders(effective) || (order.created_by === effective.actorId && (effective.actorRoles.includes("sample_designer") || (order.kind === "misc" && effective.actorRoles.includes("order_merchandiser"))));
+      const financeOnly=effective.actorRoles.every(role=>["wage_month_close_accountant","finance_director","finance_read"].includes(role));
+      const allMaterials = canReadAllPatternTechnicalOrders(effective) || (order.created_by === effective.actorId && (effective.actorRoles.includes("sample_designer") || (order.kind === "misc" && effective.actorRoles.includes("order_merchandiser"))));
       const rounds = (await client.query<PatternRoundRow>("SELECT * FROM pattern_room_rounds WHERE order_id=$1 ORDER BY requested_at,round_id", [orderId])).rows;
       const segments = (await client.query<PatternSegmentRow>(`SELECT segment.* FROM pattern_room_segments segment JOIN pattern_room_rounds round USING(round_id)
         WHERE round.order_id=$1 ORDER BY round.round_index,segment.segment_index`, [orderId])).rows;
@@ -77,21 +79,21 @@ export class PatternOrderReader {
       const files = (await client.query<{ attachment_id: string; round_id: string; original_filename: string; mime_type: string; size_bytes: string; active: boolean; bound_at: Date; reason: string }>(
         `SELECT binding.*,file.original_filename,file.mime_type,file.size_bytes FROM pattern_room_attachment_bindings binding
          JOIN attachments file USING(attachment_id) WHERE binding.order_id=$1 AND file.status='ready'
-           AND ($2::boolean OR EXISTS(SELECT 1 FROM pattern_room_segments own_segment WHERE own_segment.round_id=binding.round_id
-             AND own_segment.worker_user_id=$3 AND binding.bound_at<=COALESCE(own_segment.ended_at,CURRENT_TIMESTAMP)))
-         ORDER BY binding.bound_at,binding.attachment_id`, [orderId, allCosts, effective.actorId])).rows;
+           AND ($2::boolean OR ($4::boolean AND EXISTS(SELECT 1 FROM pattern_room_segments own_segment WHERE own_segment.round_id=binding.round_id
+             AND own_segment.worker_user_id=$3 AND binding.bound_at<=COALESCE(own_segment.ended_at,CURRENT_TIMESTAMP))))
+         ORDER BY binding.bound_at,binding.attachment_id`, [orderId, allMaterials, effective.actorId, effective.actorRoles.includes("worker")])).rows;
       const history = (await client.query<{ action: string; actor_name: string; created_at: Date; reason: string | null }>(
         `SELECT event.action,COALESCE(person.display_name,event.actor_id::text) actor_name,event.created_at,CASE WHEN $2 THEN event.reason END reason
          FROM operation_events event LEFT JOIN app_users person ON person.id=event.actor_id WHERE event.entity_type='pattern_room_order' AND event.entity_id=$1
-         ORDER BY event.created_at,event.event_id`, [orderId, allCosts])).rows;
+         ORDER BY event.created_at,event.event_id`, [orderId, allMaterials])).rows;
       const current = segments.filter(segment => segment.round_id === order.current_round_id).at(-1);
       const currentRound = rounds.find(round => round.round_id === order.current_round_id);
       const available = (capability: PatternOrderCapability) => canUsePatternOrder(effective.actorRoles, patternActorCapabilities(effective), capability);
       const creator = isPatternRoot(effective) || order.created_by === effective.actorId;
       return PatternOrderDetailSchema.parse({ ...patternSummary(order), currentRoundId: order.current_round_id, customer: order.customer, sizeColor: order.size_color,
-        referenceStyleNo: order.reference_style_no, variant: order.variant, note: order.note,
+        referenceStyleNo: order.reference_style_no, variant: order.variant, note: financeOnly ? null : order.note,
         rounds: rounds.filter(round => allCosts || round.round_id === order.current_round_id || segments.some(segment => segment.round_id === round.round_id && segment.worker_user_id === effective.actorId)).map(round => ({
-          roundId: round.round_id, index: round.round_index, roundType: round.round_type, requestedBy: round.requested_by, requestReason: round.request_reason, status: round.status, categoryName: round.category_name, unit: round.unit, quantity: round.quantity,
+          roundId: round.round_id, index: round.round_index, roundType: round.round_type, requestedBy: round.requested_by, requestReason: financeOnly ? null : round.request_reason, status: round.status, categoryName: round.category_name, unit: round.unit, quantity: round.quantity,
           ...(allCosts ? { ...(round.unit_price !== null ? { unitPrice: round.unit_price } : {}), agreedAmount: round.agreed_amount, actualHours: round.actual_hours, cancelledAmount: round.cancelled_amount } : {}), assignedAt: patternIso(round.assigned_at), completedAt: patternIso(round.completed_at), handedOverAt: patternIso(round.handed_over_at),
           stoppedAt: patternIso(round.stopped_at), cancelledAt: patternIso(round.cancelled_at), feeConfirmedAt: patternIso(round.fee_confirmed_at),
           segments: segments.filter(segment => segment.round_id === round.round_id && (allCosts || segment.worker_user_id === effective.actorId)).map(segment => ({
@@ -100,6 +102,7 @@ export class PatternOrderReader {
           })),
           nodes: nodes.filter(node => node.round_id === round.round_id).map(node => ({ stage: node.stage, enteredAt: node.entered_at.toISOString(), exitedAt: patternIso(node.exited_at), exitReason: node.exit_reason, elapsedSeconds: node.elapsed_seconds })),
         })),
+        canReadMaterials: allMaterials || files.length>0,
         attachments: files.map(file => ({ attachmentId: file.attachment_id, roundId: file.round_id, filename: file.original_filename, mimeType: file.mime_type, sizeBytes: Number(file.size_bytes), active: file.active, addedAt: file.bound_at.toISOString(), reason: file.reason })),
         history: history.map(event => ({ action: event.action, actorName: event.actor_name, at: event.created_at.toISOString(), reason: event.reason })),
         actions: { assign: order.status === "pending_assignment" && available("pattern_room:orders:assign"),
