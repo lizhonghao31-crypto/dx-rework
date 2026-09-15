@@ -86,13 +86,26 @@ export class WorkerAwareAccessMasterDataService extends AccessMasterDataService 
           ]),
         ],
       };
-      await this.createPerson(masterDataActor, {
-        personType: "internal",
-        appUserId: effectiveInput.userId,
-        displayName: executionAssignment.displayName,
-        aliases: [],
-        reason: `授予${roleLabel}角色自动建立内部作业人员档案`,
-      });
+      try {
+        await this.createPerson(masterDataActor, {
+          personType: "internal",
+          appUserId: effectiveInput.userId,
+          displayName: executionAssignment.displayName,
+          aliases: [],
+          reason: `授予${roleLabel}角色自动建立内部作业人员档案`,
+        });
+      } catch (error: unknown) {
+        // The two worker roles have distinct grant locks but share one personnel identity.
+        // createPerson has already rolled back its transaction on a unique conflict.
+        if (error instanceof ApplicationError && error.code === "CONFLICT") {
+          const existing = await this.operationalDatabase.query(
+            "SELECT person_id FROM business_people WHERE app_user_id=$1 AND person_type='internal'",
+            [effectiveInput.userId],
+          );
+          if (existing.rows.length === 1) return assignment;
+        }
+        throw error;
+      }
       return assignment;
     } catch (error: unknown) {
       try {

@@ -62,3 +62,9 @@
 
 - PR01：#489，一次 Review 两项 P2 已核验修复并关闭；修复 Head `3173d68a3f0109bc50fa3eff7beeb2f570be3ed8` Full Gate 成功、Quick Gate 跳过；合并提交 `594cc1e2cf99a750fb004ef25ef97fd12f8d913c`。未部署。
 - PR02：#490，资料修复已提交，Gate/Review 状态以该 PR 当前 Head 为准。
+
+### PR03 Review 修复
+
+- 已核验同时授予 `worker` 和 `pattern_room_worker` 的建档竞争。两个角色仍独立授权；建档唯一性冲突后重新确认同一 app_user_id 的内部人员档案，已存在则复用并保留两项明确授权。真正建档失败仍走原有审计撤销流程。
+- 新回归用同步屏障确保两条授权请求都已经判定无人员并进入建档，断言最终一个人员档案、两项有效角色；另验证真正建档失败会撤销角色且不留下人员记录。
+- API 类型检查、定向 ESLint 及上述并发/原角色隔离两个 PGlite 业务用例通过；修复后的真实 PostgreSQL 门禁以 PR #491 当前 Head 为准。

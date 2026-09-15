@@ -798,6 +798,42 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     await maintenance.revokeRole(root, again.assignmentId, "验收结束");
   });
 
+  it("preserves both concurrent worker role grants with one person and rolls back genuine creation failures", async () => {
+    const root = actor(ids.patternRoot, ["root_superuser"], "access:admin", "master_data:manage");
+    const newEmployee = async () => {
+      const userId = randomUUID();
+      await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'双角色建档验收',true)", [userId]);
+      await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','corp',$3,$3,true,true,CURRENT_TIMESTAMP)", [randomUUID(), userId, `ding-${userId}`]);
+      return userId;
+    };
+    const userId = await newEmployee();
+    let reached = 0, release!: () => void;
+    const bothCreating = new Promise<void>(resolve => { release = resolve; });
+    class ConcurrentPersonnel extends WorkerAwareAccessMasterDataService {
+      override async createPerson(...args: Parameters<WorkerAwareAccessMasterDataService["createPerson"]>) {
+        reached += 1;
+        if (reached === 2) release();
+        await bothCreating;
+        return super.createPerson(...args);
+      }
+    }
+    const maintenance = new ConcurrentPersonnel(database, "corp");
+    const grants = await Promise.all(["worker", "pattern_room_worker"].map(roleCode => maintenance.assignRole(root, { userId, roleCode, reason: "显式同时授予双角色" })));
+    expect(reached).toBe(2);
+    expect(grants).toHaveLength(2);
+    expect((await database.query("SELECT role_code FROM user_role_assignments WHERE user_id=$1 AND revoked_at IS NULL ORDER BY role_code", [userId])).rows).toEqual([{ role_code: "pattern_room_worker" }, { role_code: "worker" }]);
+    expect((await database.query("SELECT person_id FROM business_people WHERE app_user_id=$1", [userId])).rows).toHaveLength(1);
+    for (const grant of grants) await maintenance.revokeRole(root, grant.assignmentId, "清理隔离授权用例");
+
+    class FailedPersonnel extends WorkerAwareAccessMasterDataService {
+      override async createPerson(): Promise<{ personId: string }> { throw new Error("person write failed"); }
+    }
+    const failedUser = await newEmployee();
+    await expect(new FailedPersonnel(database, "corp").assignRole(root, { userId: failedUser, roleCode: "pattern_room_worker", reason: "建档失败仍须回滚" })).rejects.toThrow("person write failed");
+    expect((await database.query("SELECT role_code FROM user_role_assignments WHERE user_id=$1 AND revoked_at IS NULL", [failedUser])).rows).toEqual([]);
+    expect((await database.query("SELECT person_id FROM business_people WHERE app_user_id=$1", [failedUser])).rows).toEqual([]);
+  });
+
   it("replaces rework materials within the total limit while preserving historical bindings", async () => {
     const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
     const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]);
