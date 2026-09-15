@@ -45,7 +45,7 @@ export const wageSelection = `WITH unlocked_lines AS (
    (w.completed_at AT TIME ZONE '${TIMEZONE}')::date,
    w.wage_item_id,'pattern_room',w.wage_type,w.order_id,w.round_id,w.round_index,w.segment_id,w.segment_index,
    w.task_name,w.segment_amount,w.round_amount,w.actual_hours,w.released_at,w.release_basis,w.cancellation
- FROM pattern_room_wage_items w
+ FROM pattern_room_wage_items w JOIN pattern_room_orders live_order ON live_order.order_id=w.order_id AND live_order.deleted_at IS NULL
 ), filtered AS (
  SELECT lines.*,mark.marked_by,mark.marked_at,(SELECT display_name FROM app_users WHERE id=mark.marked_by) marked_by_name
  FROM lines LEFT JOIN rework_wage_settlement_marks mark USING(line_id)

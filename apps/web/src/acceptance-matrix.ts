@@ -523,6 +523,7 @@ const EXISTING_ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
 // Approved 2026-09-12 scope, explicitly translated from the business plan.
 // Approved PR03/04/05 roles; ordinary order operations remain closed until PR06.
 const patternOrderRoles: Record<string, readonly string[]> = {
+  "pattern_room:orders:delete": ["root_superuser"],
   "pattern_room:orders:view": ["sample_designer", "order_merchandiser", "pattern_room_supervisor", "pattern_room_worker", "owner_group", "production_management", "finance_director", "finance_read", "wage_month_close_accountant"],
   "pattern_room:orders:create": ["sample_designer"], "pattern_room:orders:edit": ["sample_designer"],
   "pattern_room:orders:handoff": ["sample_designer"], "pattern_room:orders:assign": ["pattern_room_supervisor"], "pattern_room:orders:complete": ["pattern_room_worker"],

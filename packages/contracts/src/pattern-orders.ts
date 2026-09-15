@@ -4,6 +4,7 @@ import { z } from "zod";
 export const PATTERN_ROOM_ORDERS_ENABLED = true;
 export const FINANCE_PATTERN_READ_ROLES = ["wage_month_close_accountant", "finance_director", "finance_read"] as const;
 export const PATTERN_ORDER_ROLES = {
+  "pattern_room:orders:delete": ["root_superuser"],
   "pattern_room:orders:view": ["sample_designer", "order_merchandiser", "pattern_room_supervisor", "pattern_room_worker", "owner_group", "production_management", ...FINANCE_PATTERN_READ_ROLES],
   "pattern_room:orders:create": ["sample_designer"],
   "pattern_room:orders:assign": ["pattern_room_supervisor"],
@@ -46,6 +47,8 @@ const miscMaterials = {
 export const CreateMiscOrderSchema = z.object({ ...miscMaterials,
   priceVersion: z.number().int().positive(),
 }).strict();
+export const DeletePatternOrderSchema = z.object({ version: z.number().int().positive() }).strict();
+export const DeletePatternOrderResponseSchema = z.object({ deleted: z.literal(true) });
 export const PatternRoundActionSchema = z.object({ version: z.number().int().positive(), roundId: z.string().uuid() }).strict();
 export const PatternWorkAmountSchema = z.string().regex(/^(?:0|[1-9]\d{0,16})(?:\.\d{1,3})?$/, "金额须为非负数，最多三位小数").transform(value => {
   const [whole, fraction = ""] = value.split("."); return `${whole}.${fraction.padEnd(3, "0")}`;
@@ -77,7 +80,7 @@ export const PatternOrderSummarySchema = z.object({
   styleNo: z.string(), creatorId: z.string().uuid(), creatorName: z.string(), currentWorkerName: z.string().nullable(),
   requiredDate: z.string().nullable(), reworkCount: z.number().int(), submittedAt: z.string(), updatedAt: z.string(),
 });
-export const PatternOrderListSchema = z.object({ items: z.array(PatternOrderSummarySchema), totalCount: z.number().int(), page: z.number().int(), pageSize: z.number().int(), totalPages: z.number().int(), canCreate: z.boolean(), canCreateMisc: z.boolean(), canFilterPeople: z.boolean() });
+export const PatternOrderListSchema = z.object({ items: z.array(PatternOrderSummarySchema), totalCount: z.number().int(), page: z.number().int(), pageSize: z.number().int(), totalPages: z.number().int(), canCreate: z.boolean(), canCreateMisc: z.boolean(), canFilterPeople: z.boolean(), canDelete: z.boolean().default(false) });
 export const PatternWorkerOptionsSchema = z.array(z.object({ personId: z.string().uuid(), userId: z.string().uuid(), name: z.string() }));
 export const PatternPeopleFiltersSchema = z.object({ creators: z.array(z.object({ id: z.string().uuid(), name: z.string() })), workers: z.array(z.object({ id: z.string().uuid(), name: z.string() })) });
 export const PatternAttachmentSchema = z.object({ attachmentId: z.string().uuid(), roundId: z.string().uuid(), filename: z.string(), mimeType: z.string(), sizeBytes: z.number(), active: z.boolean(), addedAt: z.string(), reason: z.string() });
@@ -94,7 +97,7 @@ export const PatternOrderDetailSchema = PatternOrderSummarySchema.extend({
   canReadMaterials: z.boolean().optional(),
   attachments: z.array(PatternAttachmentSchema),
   history: z.array(z.object({ action: z.string(), actorName: z.string(), at: z.string(), reason: z.string().nullable() })),
-  actions: z.object({ assign: z.boolean(), complete: z.boolean(), handoff: z.boolean(), edit: z.boolean(), hours: z.boolean(), rework: z.boolean(), transfer: z.boolean(), cancel: z.boolean(), cancelFees: z.boolean() }),
+  actions: z.object({ delete: z.boolean().default(false), assign: z.boolean(), complete: z.boolean(), handoff: z.boolean(), edit: z.boolean(), hours: z.boolean(), rework: z.boolean(), transfer: z.boolean(), cancel: z.boolean(), cancelFees: z.boolean() }),
 });
 export type PatternOrderSummary = z.infer<typeof PatternOrderSummarySchema>;
 export type PatternOrderDetail = z.infer<typeof PatternOrderDetailSchema>;

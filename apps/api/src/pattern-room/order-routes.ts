@@ -42,6 +42,7 @@ export function registerPatternRoomOrderRoutes(app: FastifyInstance, dependencie
   app.post("/pattern-room/orders", async (request, reply) => reply.code(201).send(await dependencies.service.create(await actor(request, "pattern_room:orders:create"), request.body, key(request))));
   app.post("/pattern-room/misc-orders", async (request, reply) => reply.code(201).send(await dependencies.service.createMisc(await actor(request, "pattern_room:misc:create"), request.body, key(request))));
   const actions = [
+    ["deleteOrder", "delete", "pattern_room:orders:delete"],
     ["assign", "assign", "pattern_room:orders:assign"], ["complete", "complete", "pattern_room:orders:complete"],
     ["handoff", "handoff", "pattern_room:orders:handoff"], ["updateMaterials", "materials", "pattern_room:orders:edit"],
     ["confirmMisc", "confirm", "pattern_room:misc:confirm"], ["updateMiscMaterials", "misc-materials", "pattern_room:misc:edit"], ["recordHours", "hours", "pattern_room:orders:hours"],

@@ -98,7 +98,7 @@ const TODO_WITH_CONTEXT_SQL = `SELECT
   sample.sample_code,COALESCE(NULLIF(sample.style_no,''),sample.style_name) sample_style_no,
   sample.status sample_status,sample.updated_at sample_updated_at,
   pattern.order_no pattern_order_no,concat_ws(' · ',NULLIF(pattern.task_name,''),NULLIF(pattern.style_no,'')) pattern_style_no,
-  pattern.status pattern_status,pattern.updated_at pattern_updated_at,
+  pattern.deleted_at pattern_deleted_at,pattern.status pattern_status,pattern.updated_at pattern_updated_at,
   sourcing.erp_order_no sourcing_order_no,sourcing.style_no sourcing_style_no,
   sourcing.status sourcing_status,sourcing.updated_at sourcing_updated_at,
   COALESCE(
@@ -304,6 +304,7 @@ export class TodoService {
          AND status IN ('pending','blocked_recipient')
          AND category<>'wage_month_close'
          AND (rework_status IS NULL OR rework_status<>'deleted')
+         AND pattern_deleted_at IS NULL
        GROUP BY todo_module`,
       [actor.actorId],
     );
@@ -331,6 +332,7 @@ export class TodoService {
          AND status IN ('pending','blocked_recipient')
          AND category<>'wage_month_close'
          AND (rework_status IS NULL OR rework_status<>'deleted')
+         AND pattern_deleted_at IS NULL
          AND todo_module=$2
          AND (
            $3=''
@@ -355,6 +357,7 @@ export class TodoService {
          AND status IN ('pending','blocked_recipient')
          AND category<>'wage_month_close'
          AND (rework_status IS NULL OR rework_status<>'deleted')
+         AND pattern_deleted_at IS NULL
          AND todo_module=$2
          AND (
            $3=''
@@ -396,7 +399,8 @@ export class TodoService {
        FROM todo_view
        WHERE recipient_user_id=$1
          AND todo_id=$2
-         AND (rework_status IS NULL OR rework_status<>'deleted')`,
+         AND (rework_status IS NULL OR rework_status<>'deleted')
+         AND pattern_deleted_at IS NULL`,
       [actor.actorId, todoId],
     );
     const row = result.rows[0];
@@ -415,7 +419,8 @@ export class TodoService {
            NULLIF(todos.route_descriptor->>'reworkOrderId','')::uuid,
            CASE WHEN todos.entity_type='rework_order' THEN todos.entity_id::uuid END
          )
-       WHERE todos.recipient_user_id=$1
+       LEFT JOIN pattern_room_orders pattern ON pattern.order_id=CASE WHEN todos.entity_type='pattern_room_order' THEN todos.entity_id::uuid END
+       WHERE pattern.deleted_at IS NULL AND todos.recipient_user_id=$1
          AND todos.todo_type<>'information'
          AND todos.status IN ('pending','blocked_recipient')
          AND todos.category<>'wage_month_close'

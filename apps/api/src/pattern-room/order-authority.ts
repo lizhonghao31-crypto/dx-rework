@@ -22,7 +22,7 @@ export async function authorizePatternOrder(db: SqlClient, actor: TrustedActorCo
 }
 
 /** Parameters are always [actorId, broadReader, actualRoles, isWorker]. */
-export const patternOrderScopeSql = `( $2::boolean
+export const patternOrderScopeSql = `orders.deleted_at IS NULL AND ( $2::boolean
   OR (orders.created_by=$1::uuid AND ('sample_designer'=ANY($3::text[]) OR (orders.kind='misc' AND 'order_merchandiser'=ANY($3::text[]))))
   OR ($4::boolean AND EXISTS(SELECT 1 FROM pattern_room_rounds scope_round
     JOIN pattern_room_segments scope_segment ON scope_segment.round_id=scope_round.round_id
