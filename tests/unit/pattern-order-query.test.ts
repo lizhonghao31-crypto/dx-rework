@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { patternEstimate, patternListPath, patternReturnPath, readPatternListQuery } from "../../apps/web/src/pattern-order-query.js";
+import { patternEstimate, patternListPath, patternReturnPath, readPatternListQuery, patternPagePath } from "../../apps/web/src/pattern-order-query.js";
 
 describe("pattern order navigation and displayed estimate", () => {
+  it("routes direct legacy query bookmarks to the board before applying creation access", () => {
+    for (const search of ["?q=DX123&page=2", "?status=in_progress", "?page=1", "?creatorId=", "?workerId="]) expect(patternPagePath("/ui/pattern-room/create", search)).toBe("/ui/pattern-room/orders");
+    expect(patternPagePath("/ui/pattern-room/create", "?kind=misc")).toBe("/ui/pattern-room/create");
+    expect(patternPagePath("/ui/pattern-room/prices", "?q=test")).toBe("/ui/pattern-room/prices");
+  });
   it("retains search, status, stable person filters and page when returning from detail", () => {
     const query = { q: "本次款号 A&B", kind: "pattern", status: "in_progress", creatorId: "11111111-1111-4111-8111-111111111111", workerId: "22222222-2222-4222-8222-222222222222", page: 3 };
     const path = patternListPath(query);

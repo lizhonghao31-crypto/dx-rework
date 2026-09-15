@@ -3,6 +3,10 @@ import { wageReturnPath } from "./wages/wage-query-state.js";
 import { todoReturnPath } from "./todo-query-state.js";
 
 export type PatternListQuery = { q: string; kind: string; status: string; creatorId: string; workerId: string; page: number };
+export function patternPagePath(path: string, search: string): string {
+  const params = new URLSearchParams(search);
+  return path === "/ui/pattern-room/create" && ["q", "status", "page", "creatorId", "workerId"].some(key => params.has(key)) ? "/ui/pattern-room/orders" : path;
+}
 export function readPatternListQuery(search: string): PatternListQuery {
   const params = new URLSearchParams(search), input: Record<string, string> = {};
   for (const key of ["q", "kind", "status", "creatorId", "workerId", "page"]) if (params.get(key)) input[key] = params.get(key)!;
