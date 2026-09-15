@@ -1,10 +1,9 @@
-.pattern-prices { display: grid; gap: 20px; }
 .pattern-price-table { overflow-x: auto; }
 .pattern-price-table table { width: 100%; border-collapse: collapse; text-align: left; }
-.pattern-price-table th, .pattern-price-table td { padding: 12px; border-bottom: 1px solid #e1e7ed; white-space: nowrap; }
+.pattern-price-table th, .pattern-price-table td { padding: 12px; border-bottom: 1px solid var(--dx-v2-color-border); vertical-align: middle; white-space: nowrap; }
 .pattern-price-table tbody th { font-weight: 500; }
 .pattern-price-table small { display: block; color: #64748b; margin-top: 4px; }
-.pattern-price-table td:last-child { display: flex; gap: 8px; }
+.pattern-price-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .pattern-hourly-price { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
 dialog.pattern-price-dialog { padding: 0; }
 dialog.pattern-price-dialog::backdrop { background: rgb(19 28 38 / 58%); }
@@ -42,14 +41,6 @@ dialog.pattern-price-dialog::backdrop { background: rgb(19 28 38 / 58%); }
 .pattern-filters { grid-template-columns: minmax(200px,1.5fr) repeat(4,minmax(0,1fr)); align-items: end; }
 .pattern-filters .pattern-single-field input { background: var(--dx-v2-color-inset); }
 .pattern-filters .pattern-single-field label > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.pattern-order-list { display: grid; margin-top: 12px; }
-.pattern-order-row { display: grid; grid-template-columns: minmax(160px,1.5fr) repeat(4,minmax(0,1fr)) minmax(140px,1.2fr); align-items: center; gap: 12px; padding: 14px 0; border-top: 1px solid var(--dx-v2-color-border); }
-.pattern-order-row > div { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
-.pattern-order-row small { color: var(--dx-v2-color-text-secondary); font-size: 12px; }
-.pattern-order-row > .pattern-row-actions { grid-column: 1 / -1; justify-self: end; }
-.pattern-delete-button.dx-button { color: #c52e3d; border-color: #e5aeb5; }
-.pattern-delete p { margin: 6px 0 0; }
-.pattern-order-identity > a { font-size: 18px; font-weight: 800; text-decoration: none; }
 .pattern-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
 .pattern-pagination .my-todos-pagination { margin: 0; }
 .pattern-empty { margin: 20px 0; color: var(--dx-v2-color-text-secondary); }
@@ -74,21 +65,19 @@ dialog.pattern-price-dialog::backdrop { background: rgb(19 28 38 / 58%); }
 .pattern-nodes li > span { display: block; margin-top: 4px; font-size: 12px; color: var(--dx-v2-color-text-secondary); }
 .pattern-node-history { border-top: 1px solid var(--dx-v2-color-border); }
 .pattern-exception { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--dx-v2-color-border); }
-.pattern-assignment { grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; }
+.pattern-assignment, .pattern-hours { grid-template-columns: minmax(0,1fr) auto; }
+.pattern-assignment.has-rework-price { grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; }
 .pattern-order-form [role=alert], .pattern-orders [role=alert] { color: var(--dx-v2-color-danger); overflow-wrap: anywhere; }
 @media (max-width:1100px) {
   .pattern-filters { grid-template-columns: repeat(3,minmax(0,1fr)); }
-  .pattern-order-row { grid-template-columns: repeat(3,minmax(0,1fr)); }
 }
 @media (max-width:900px) {
   .pattern-fields, .pattern-facts { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .pattern-assignment .rework-v2-actions { grid-column: 1 / -1; }
+  .pattern-assignment.has-rework-price .rework-v2-actions { grid-column: 1 / -1; }
 }
 @media (max-width:600px) {
-  .pattern-fields { grid-template-columns: minmax(0,1fr); }
-  .pattern-facts, .pattern-order-row { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .pattern-order-identity { grid-column: 1 / -1; }
-  .pattern-order-row { gap: 10px; padding-block: 12px; }
+  .pattern-fields, .pattern-assignment.has-rework-price { grid-template-columns: minmax(0,1fr); }
+  .pattern-facts { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .pattern-progress { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .pattern-nodes { grid-template-columns: minmax(0,1fr); }
   .pattern-orders select, .pattern-orders textarea, .pattern-orders .search-select input { min-height: var(--dx-form-control-height); font-size: 16px; }
@@ -96,7 +85,7 @@ dialog.pattern-price-dialog::backdrop { background: rgb(19 28 38 / 58%); }
   .pattern-orders summary { min-height: 44px; }
   .pattern-order-form .rework-v2-action-area { margin-top: 0; }
   .pattern-actions .dx-button { min-height: 48px; }
-  .pattern-price-table td:last-child { flex-wrap: wrap; }
+
 }
 
 .pattern-material-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(160px,1fr)); gap: 12px; padding: 0; margin: 0; list-style: none; }
@@ -105,8 +94,59 @@ dialog.pattern-price-dialog::backdrop { background: rgb(19 28 38 / 58%); }
 .pattern-material-thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .pattern-material-name { overflow-wrap: anywhere; font-size: 12px; }
 .pattern-material-grid .pattern-actions { margin: 0; }
-.pattern-material-dialog { border: 0; width: min(900px,calc(100vw - 32px)); box-sizing: border-box; }
+.pattern-material-dialog { border: 1px solid var(--dx-dialog-border); width: min(900px,calc(100vw - 32px)); box-sizing: border-box; }
 .pattern-material-dialog:not([open]) { display: none; }
-.pattern-material-dialog::backdrop { background: rgb(24 38 54 / 55%); }
+.pattern-material-dialog::backdrop { background: var(--dx-dialog-backdrop); }
 .pattern-pdf-preview { width: 100%; height: min(65vh,750px); border: 0; }
 @media (max-width:600px) { .pattern-material-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .pattern-material-dialog { width: calc(100vw - 16px); } }
+
+/* Rework cards own the surface, link, badge, trash icon and responsive geometry. */
+.pattern-orders.rework-query-content { display: grid; }
+.pattern-orders .reporting-order-card { min-width: 0; }
+.pattern-orders .reporting-order-card__main:focus-visible { outline: 2px solid var(--dx-v2-color-primary); outline-offset: -2px; border-radius: inherit; }
+.pattern-delete-error { margin: 0; padding: 8px 14px; }
+.pattern-detail-toolbar { position: relative; padding-right: 48px; min-height: 40px; margin: 0; }
+.pattern-detail-toolbar .reporting-order-delete { top: 50%; transform: translateY(-50%); }
+.pattern-detail-toolbar .pattern-delete-error { flex-basis: 100%; }
+
+.pattern-section-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; }
+.pattern-section-heading h2, .pattern-section-heading h3 { margin: 0; }
+.pattern-disclosure > summary > small { margin-left: auto; color: var(--dx-v2-color-text-secondary); font-weight: 400; }
+.pattern-progress { margin: 0; }
+.pattern-progress .rework-workflow__node { min-width: 0; text-decoration: none; }
+.pattern-progress .rework-workflow__node.is-selected { outline: 2px solid var(--dx-v2-color-primary); outline-offset: 2px; }
+.pattern-progress .rework-workflow__node:focus-visible { outline: 2px solid var(--dx-v2-color-primary); outline-offset: 2px; }
+.pattern-progress .rework-workflow__node[aria-disabled=true] { cursor: wait; }
+.pattern-progress .rework-workflow__node.is-stopped, .pattern-progress .rework-workflow__node.is-cancelled { color: var(--dx-v2-color-text-secondary); background: var(--dx-v2-color-surface); border-color: var(--dx-v2-color-border); box-shadow: none; }
+.pattern-node-record { margin-bottom: 12px; }
+.pattern-node-record h3 { font-size: 16px; }
+.pattern-node-record > p { margin: 0; color: var(--dx-v2-color-text-secondary); }
+.pattern-workspace section[id], .pattern-segment { scroll-margin-top: 16px; }
+.pattern-workspace .rework-v2-actions { margin: 0; }
+.pattern-workspace .pattern-single-action { grid-template-columns: minmax(0,1fr); }
+.pattern-segments, .pattern-audit-list { display: grid; gap: 12px; margin: 12px 0 0; padding: 0; list-style: none; }
+.pattern-segment { padding-top: 12px; border-top: 1px solid var(--dx-v2-color-border); }
+.pattern-audit-list > li { padding: 8px 0; border-bottom: 1px solid var(--dx-v2-color-border); }
+.pattern-audit-list > li:last-child { border-bottom: 0; }
+.pattern-audit-list > li > div { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; }
+.pattern-audit-list time { margin-left: auto; color: var(--dx-v2-color-text-secondary); }
+.pattern-audit-list p { margin: 4px 0 0; }
+.pattern-prices .pattern-price-table { max-height: none; min-width: 0; }
+.pattern-prices .pattern-price-table table { min-width: 0; }
+.pattern-prices .pattern-price-table thead th { position: static; background: transparent; }
+.pattern-prices .pattern-price-table tbody th { white-space: normal; min-width: 130px; max-width: 260px; overflow-wrap: anywhere; }
+@media (max-width:760px) {
+  .pattern-orders .pattern-disclosure > summary { min-height: 44px; }
+  .pattern-orders .pattern-facts dt, .pattern-orders .pattern-facts dd, .pattern-orders .pattern-node-record, .pattern-orders .pattern-audit-list, .pattern-orders .pattern-fields label { font-size: 16px; }
+  .pattern-assignment .rework-v2-actions, .pattern-hours .rework-v2-actions { width: 100%; }
+  .pattern-actions:not(.pattern-detail-toolbar) > .dx-button { min-height: 48px; }
+  .pattern-prices .pattern-price-actions .dx-button { min-height: 48px; }
+}
+@media (max-width:520px) {
+  .pattern-prices .pattern-price-table th, .pattern-prices .pattern-price-table td { border: 0; padding: 5px 0; white-space: normal; }
+  .pattern-prices .pattern-price-table tbody th { max-width: none; font-weight: 700; font-size: 16px; }
+  .pattern-price-table td[data-label]::before { content: attr(data-label); display: block; color: var(--dx-v2-color-text-secondary); font-size: 12px; margin-bottom: 4px; }
+  .pattern-price-table tr { padding-inline: 0; }
+  .pattern-audit-list time { margin-left: 0; flex-basis: 100%; }
+  .pattern-assignment .rework-v2-actions, .pattern-hours .rework-v2-actions { grid-column: 1 / -1; }
+}

@@ -1,5 +1,4 @@
 import { useRef, useState } from "react";
-import { Button } from "@dx-rework/ui";
 import { DeletePatternOrderResponseSchema } from "@dx-rework/contracts/pattern-orders";
 import { confirmInApp } from "./system-dialog.js";
 import { createClientRequestId } from "./client-request-id.js";
@@ -18,5 +17,7 @@ export function PatternOrderDelete({ orderId, version, label, disabled = false, 
     } catch (cause) { setError(cause instanceof Error ? cause.message : "删除失败，请重试"); }
     finally { setBusy(false); onBusy?.(false); }
   };
-  return <div className="pattern-delete"><Button type="button" className="pattern-delete-button" disabled={disabled || busy} onClick={() => void remove()}>{busy ? "删除中…" : "删除订单"}</Button>{error && <p role="alert">{error}</p>}</div>;
+  return <><button type="button" className="reporting-order-delete" aria-label={`删除订单 ${label}`} title={busy ? "删除中…" : "删除订单"} disabled={disabled || busy} onClick={() => void remove()}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M9 7l1-2h4l1 2m-9 0 1 13h10l1-13" /></svg>
+  </button>{error && <p className="pattern-delete-error" role="alert">{error}</p>}</>;
 }
