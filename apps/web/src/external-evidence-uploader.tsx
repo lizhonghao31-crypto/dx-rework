@@ -90,11 +90,13 @@ export function ExternalEvidenceUploader({
   disabled,
   onChange,
   onMessage,
+  onUploadingChange,
 }: {
   attachmentIds: readonly string[];
   disabled: boolean;
   onChange(value: string[]): void;
   onMessage(message: string): void;
+  onUploadingChange?(uploading: boolean): void;
 }) {
   const [uploaded, setUploaded] = useState<UploadedEvidence[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -104,6 +106,7 @@ export function ExternalEvidenceUploader({
   const uploadFiles = async (files: FileList | null): Promise<void> => {
     if (!files?.length || disabled || uploading) return;
     setUploading(true);
+    onUploadingChange?.(true);
     setFailedFile(null);
     let activeFileName = "所选文件";
     try {
@@ -174,6 +177,7 @@ export function ExternalEvidenceUploader({
       onMessage(`${error instanceof Error ? error.message : "附件上传失败"}，请重新选择文件重试。`);
     } finally {
       setUploading(false);
+      onUploadingChange?.(false);
       setStage(null);
     }
   };
