@@ -37,7 +37,7 @@ export function PatternRoomOrdersPage() {
     void patternRequest("people-filters", PatternPeopleFiltersSchema, { signal: abort.signal }).then(setPeople).catch(e => { if (!abort.signal.aborted) setError(e.message); });
     return () => abort.abort();
   }, [data?.canFilterPeople, refresh]);
-  return <div className="pattern-orders"><Header title="创建订单" badge="订单打板" badgePlacement="subtitle" />
+  return <div className="pattern-orders"><Header title={data && !data.canCreate && !data.canCreateMisc ? "板房订单" : "创建订单"} badge="订单打板" badgePlacement="subtitle" />
     {error ? <Surface><p role="alert">{error}</p><Button onClick={() => setRefresh(value => value + 1)}>重新读取</Button></Surface> : null}
     {creating ? <PatternOrderForm key={creating} kind={creating} onCancel={() => setCreating(null)} onSaved={order => { window.location.assign(detailHref(order.orderId)); }} /> : null}
     {data ? <Surface>
@@ -93,6 +93,11 @@ export function PatternRoomOrderDetailPage({ orderId }: { orderId: string }) {
   };
   const visibleRounds = staleRound ? order?.rounds.filter(round => round.roundId === requestedRound) ?? [] : order?.rounds ?? [];
   const currentRound = order?.rounds.find(round => round.roundId === order.currentRoundId);
+  useEffect(()=>{
+    if(!order)return;
+    const segment=new URLSearchParams(window.location.search).get("segment");
+    if(segment&&order.rounds.some(round=>round.segments.some(item=>item.segmentId===segment))) document.getElementById(`segment-${segment}`)?.scrollIntoView({block:"center"});
+  },[order]);
   return <div className="pattern-orders"><Header title={order ? order.kind === "misc" ? order.taskName ?? "杂事" : order.styleNo : "板房订单"} badge={order?.orderNo ?? "订单打板"} badgePlacement="subtitle" />
     <div className="pattern-actions"><a href={pageUrl(patternReturnPath(window.location.search))}>返回列表</a><Button disabled={busy || editing} onClick={() => setRefresh(value => value + 1)}>刷新订单</Button></div>
     {error ? <Surface><p role="alert">{error}</p><Button disabled={busy} onClick={() => { setEditing(false); setRefresh(value => value + 1); }}>重新读取订单</Button></Surface> : null}
@@ -110,13 +115,13 @@ export function PatternRoomOrderDetailPage({ orderId }: { orderId: string }) {
         <PatternOrderExceptions order={order} active={exception} onActive={value => { setException(value); setConfirmation(null); }} busy={busy} onBusy={setBusy} onSaved={setOrder} />
       </> : null}</Surface>
       {editing && !staleRound ? <PatternOrderForm key={order.version} order={order} onCancel={() => setEditing(false)} onSaved={updated => { setOrder(updated); setEditing(false); }} /> : null}
-      {visibleRounds.map(round => <Surface key={round.roundId}><details open={staleRound || round.roundId === order.currentRoundId}><summary><strong>{order.kind === "misc" ? "杂事" : round.index === 0 ? "首次打板" : round.index === null ? "返工请求（未派工）" : `第 ${round.index} 次返工`} · {PATTERN_ORDER_STATUS_LABELS[round.status]}</strong></summary>
+      {visibleRounds.map(round => <Surface key={round.roundId}><details open={staleRound || round.roundId === order.currentRoundId || round.roundId === requestedRound}><summary><strong>{order.kind === "misc" ? "杂事" : round.index === 0 ? "首次打板" : round.index === null ? "返工请求（未派工）" : `第 ${round.index} 次返工`} · {PATTERN_ORDER_STATUS_LABELS[round.status]}</strong></summary>
         {round.requestReason ? <p className="pattern-note">返工要求：{round.requestReason}</p> : null}
         {round.cancelledAt ? <p>取消时间：{patternTime(round.cancelledAt)}{round.cancelledAmount != null ? ` · 取消部分费用 ${formatBusinessDecimal(round.cancelledAmount, 3)} 元` : ""}{round.feeConfirmedAt ? ` · 费用确认 ${patternTime(round.feeConfirmedAt)}` : ""}</p> : null}
         <p>{round.categoryName} · {order.kind === "misc" ? round.actualHours === undefined ? "按工时计价" : round.actualHours === null ? "工时待填写" : `${formatBusinessDecimal(round.actualHours, 3)} 小时` : round.roundType === "rework" ? round.agreedAmount === null ? "金额待主管核定" : "本轮金额由主管核定" : `${round.quantity === null ? "—" : formatBusinessDecimal(round.quantity, 3)} ${round.unit}`}{round.unitPrice !== undefined ? ` · ${formatBusinessDecimal(round.unitPrice, 3)} 元/${round.unit}` : ""}{round.agreedAmount != null ? ` · 合计 ${formatBusinessDecimal(round.agreedAmount, 3)} 元` : ""}</p>
-        {round.segments.map(segment => <p key={segment.segmentId}>{segment.workerName}{segment.actualHours !== null ? ` · ${formatBusinessDecimal(segment.actualHours, 3)} 小时` : ""}{segment.amount != null ? ` · 分配金额 ${formatBusinessDecimal(segment.amount, 3)} 元` : ""} · {segment.wageEligible ? "已具备计薪资格" : order.kind === "misc" && segment.actualHours === null ? "工时待填写" : "尚未计薪"}</p>)}
+        {round.segments.map(segment => <p id={`segment-${segment.segmentId}`} key={segment.segmentId}>{segment.workerName}{segment.actualHours !== null ? ` · ${formatBusinessDecimal(segment.actualHours, 3)} 小时` : ""}{segment.amount != null ? ` · 分配金额 ${formatBusinessDecimal(segment.amount, 3)} 元` : ""} · {segment.wageEligible ? "已具备计薪资格" : order.kind === "misc" && segment.actualHours === null ? "工时待填写" : "尚未计薪"}</p>)}
         <p>节点耗时截至本次读取，可刷新查看最新耗时。</p><ol className="pattern-nodes">{round.nodes.map(node => <li key={node.stage}><strong>{PATTERN_ORDER_STATUS_LABELS[node.stage]}</strong><span>{patternTime(node.enteredAt)} → {node.exitedAt ? patternTime(node.exitedAt) : "当前"}</span><span>{elapsedText(node.elapsedSeconds)}</span></li>)}</ol>
-        <h3>制作资料</h3><ul className="pattern-files">{order.attachments.filter(file => file.roundId === round.roundId).map(file => <li key={file.attachmentId}><span>{file.filename}{!file.active ? "（历史资料）" : ""}</span><a href={apiUrl(`pattern-room/attachments/${file.attachmentId}/download?mode=preview`)} target="_blank" rel="noreferrer">查看 / 打印</a><a href={apiUrl(`pattern-room/attachments/${file.attachmentId}/download?mode=download`)}>下载</a></li>)}</ul>
+        {order.canReadMaterials !== false && <><h3>制作资料</h3><ul className="pattern-files">{order.attachments.filter(file => file.roundId === round.roundId).map(file => <li key={file.attachmentId}><span>{file.filename}{!file.active ? "（历史资料）" : ""}</span><a href={apiUrl(`pattern-room/attachments/${file.attachmentId}/download?mode=preview`)} target="_blank" rel="noreferrer">查看 / 打印</a><a href={apiUrl(`pattern-room/attachments/${file.attachmentId}/download?mode=download`)}>下载</a></li>)}</ul></>}
       </details></Surface>)}
       <Surface><details><summary>订单记录（{order.history.length} 条）</summary>{order.history.map((entry, index) => <p key={`${entry.at}:${index}`}>{patternTime(entry.at)} · {entry.actorName} · {historyLabels[entry.action] ?? "订单操作"}{entry.reason ? ` · ${entry.reason}` : ""}</p>)}</details></Surface>
     </> : null}

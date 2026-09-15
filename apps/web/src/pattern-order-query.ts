@@ -1,4 +1,5 @@
 import { PatternOrderQuerySchema } from "@dx-rework/contracts/pattern-orders";
+import { wageReturnPath } from "./wages/wage-query-state.js";
 import { todoReturnPath } from "./todo-query-state.js";
 
 export type PatternListQuery = { q: string; kind: string; status: string; creatorId: string; workerId: string; page: number };
@@ -17,6 +18,7 @@ export function patternListPath(query: PatternListQuery): string {
 export function patternReturnPath(search: string): string {
   const todo = todoReturnPath(search); if (todo) return todo;
   const target = new URLSearchParams(search).get("returnTo");
+  const wage=wageReturnPath(target);if(wage)return wage;
   if (!target || target.includes("\\") || target.split("?")[0] !== "/ui/pattern-room/create") return "/ui/pattern-room/create";
   return patternListPath(readPatternListQuery(target.includes("?") ? target.slice(target.indexOf("?")) : ""));
 }

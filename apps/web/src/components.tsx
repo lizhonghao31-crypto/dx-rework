@@ -473,7 +473,7 @@ export function Shell({
   }
 
   const patternRoomNavigation: NavigationEntry[] = currentUser && canAccessPatternRoom(currentUser) ? [
-    { name: "创建订单", description: "打板与杂事订单", href: "/ui/pattern-room/create", activeKey: "pattern-room-create" },
+    { name: currentUser.isRoot !== true && currentUser.businessRoles?.length && currentUser.businessRoles.every(role=>["wage_month_close_accountant","finance_director","finance_read"].includes(role)) ? "板房订单" : "创建订单", description: "打板与杂事订单", href: "/ui/pattern-room/create", activeKey: "pattern-room-create" },
     ...(canAccessPatternRoomPrices(currentUser) ? [{ name: "板房价格管控", description: "品类执行价与杂事小时价", href: "/ui/pattern-room/prices" }] : []),
   ] : [];
   const sampleNavigation: NavigationEntry[] = currentUser && canAccessSamples(currentUser) ? [

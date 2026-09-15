@@ -51,7 +51,10 @@ const url=process.env.TEST_DATABASE_URL;
     quantity_snapshot numeric,unit_snapshot text,unit_price_snapshot numeric,assignment_mode text,final_amount numeric);`);
   await db.query(await readFile(new URL("../../apps/api/migrations/0171_wage_settlement_marks.sql",import.meta.url),"utf8"));
   await db.query(await readFile(new URL("../../apps/api/migrations/0174_finance_wage_access.sql",import.meta.url),"utf8"));
-  await db.query(`CREATE TABLE pattern_room_wage_items(wage_item_id uuid PRIMARY KEY,period_month date,person_id uuid,
+  await db.query(`CREATE TABLE pattern_room_orders(order_id uuid PRIMARY KEY);
+    CREATE TABLE pattern_room_rounds(round_id uuid PRIMARY KEY,order_id uuid REFERENCES pattern_room_orders(order_id));
+    CREATE TABLE pattern_room_segments(segment_id uuid PRIMARY KEY,round_id uuid REFERENCES pattern_room_rounds(round_id));
+    CREATE TABLE pattern_room_wage_items(wage_item_id uuid PRIMARY KEY,period_month date,person_id uuid,
     person_name_snapshot text,person_type_snapshot text,order_no text,style_no text,category_name text,quantity integer,unit text,
     unit_price numeric,payable_amount numeric,completed_at timestamptz,wage_type text,order_id uuid,round_id uuid,round_index integer,
     segment_id uuid,segment_index integer,task_name text,segment_amount numeric,round_amount numeric,actual_hours numeric,
@@ -69,6 +72,7 @@ const url=process.env.TEST_DATABASE_URL;
  it("uses the whole filtered range, distinguishes same-name people and includes both date boundaries",async()=>{
   const report=await service.report(actor(),"wages",filters);
   expect(report.rows).toHaveLength(500);expect(report.truncated).toBe(true);
+  expect(report.rows.every(row=>row.sourceStatus==="available")).toBe(true);
   expect(report.totals.wageAmount).toBe("502.00");
   expect(report.wageSummary).toMatchObject({rowCount:502,pendingLineCount:502,pendingPersonCount:2});
   expect(report.wageSummary?.people.map(p=>p.personId).sort()).toEqual([person,sameName].sort());

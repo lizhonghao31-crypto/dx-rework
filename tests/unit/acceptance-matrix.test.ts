@@ -14,6 +14,18 @@ const user = (
 ) => ({ id, displayName: role, businessRoles: [role], capabilities, isRoot });
 
 describe("acceptance authorization matrix", () => {
+  it("accepts finance pattern-order reads while denying creation and price writes", () => {
+    for(const alias of ["finance-director","finance-read","wage-month-close-accountant"]) {
+      const entry=ACCEPTANCE_ROLE_MATRIX.find(item=>item.alias===alias)!;
+      expect(entry.requiredCapabilities).toContain("pattern_room:orders:view");
+      expect(entry.forbiddenCapabilities).not.toContain("pattern_room:orders:view");
+      expect(entry.allowedModules).toContain("pattern_room");
+      expect(entry.forbiddenModules).not.toContain("pattern_room");
+      expect(entry.probes?.find(probe=>probe.id==="pattern-room-orders")?.expectedStatus).toBe(200);
+      expect(entry.forbiddenCapabilities).toEqual(expect.arrayContaining(["pattern_room:orders:create","pattern_room:orders:assign","pattern_room:orders:complete","pattern_room:prices:write"]));
+      if(alias==="wage-month-close-accountant") expect(entry.probes?.find(probe=>probe.id==="pattern-room-prices")?.expectedStatus).toBe(403);
+    }
+  });
   it("covers the active Golden Source roles exactly once and excludes retired roles", () => {
     const aliases = ACCEPTANCE_ROLE_MATRIX.map((entry) => entry.alias);
     expect(new Set(aliases).size).toBe(aliases.length);
