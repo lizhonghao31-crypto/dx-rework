@@ -1,3 +1,4 @@
+import { currentModuleCanWrite } from "./member-module-policy.js";
 import {
   TailInspectionResponseSchema,
   WholeOrderReviewResponseSchema,
@@ -98,6 +99,7 @@ export function WholeOrderReviewPanel({
   embedded?: boolean;
   iePrecounts?: IePrecountOverview;
 }) {
+  const [moduleWritable, setModuleWritable] = useState(false);
   const [data, setData] = useState<WholeOrderReviewResponse | null>(null);
   const [tailData, setTailData] = useState<TailInspectionResponse | null>(null);
   const [message, setMessage] = useState("正在加载数量确认状态…");
@@ -136,6 +138,7 @@ export function WholeOrderReviewPanel({
   };
 
   const load = async () => {
+    setModuleWritable(await currentModuleCanWrite("rework"));
     if (requestInFlight.current) return;
     requestInFlight.current = true;
     try {
@@ -222,7 +225,7 @@ export function WholeOrderReviewPanel({
 
   const canCorrectReport = (report: ReviewReport): boolean =>
     data?.reworkStatus === "pending_order_review"
-    && data.canReview
+    && (moduleWritable && data.canReview)
     && !report.rejected
     && report.assignmentMode === "individual"
     && report.members.length === 1;
@@ -480,7 +483,7 @@ export function WholeOrderReviewPanel({
           onClick={() => void reject(report.workReportId, report.members[0]?.personId ?? null, report.executionKind)}
         >驳回</Button>
       </div>}
-      {tailStage && data.canReview && !report.rejected && !canCorrect && <Button
+      {tailStage && (moduleWritable && data.canReview) && !report.rejected && !canCorrect && <Button
         disabled={busy}
         onClick={() => void reject(report.workReportId, null, report.executionKind)}
       >驳回整条记录</Button>}
@@ -522,7 +525,7 @@ export function WholeOrderReviewPanel({
             if (!latest || Date.parse(entry.recordedAt) > Date.parse(latest.recordedAt)) return entry;
             return latest;
           }, undefined);
-          const canSaveProcess = tailStage && data.canReview && reports.some(canCorrectReport);
+          const canSaveProcess = tailStage && (moduleWritable && data.canReview) && reports.some(canCorrectReport);
           const processHasChanges = reports.some(hasChangedCorrection);
           const reviewedPrice = data.finalConfirmation?.prices.find((price) =>
             price.configurationItemId === process.configurationItemId);
@@ -563,7 +566,7 @@ export function WholeOrderReviewPanel({
                 <b>最终价格</b>
                 <small>{`N03 已审 ${formatUnitPrice(process.finalUnitPrice)}；不调整可保留原价`}</small>
               </div>
-              {data.canReview && <InsetField
+              {(moduleWritable && data.canReview) && <InsetField
                 label={`拟提交单价（元/${process.pricingUnit === "piece" ? "件" : "小时"}）`}
                 type="number"
                 min="0.001"
@@ -584,7 +587,7 @@ export function WholeOrderReviewPanel({
               <div className="quantity-process-price__review">
                 <span><small>原价</small><strong>{formatUnitPrice(reviewedPrice.originalUnitPrice)}</strong></span>
                 <span><small>提议价</small><strong>{formatUnitPrice(reviewedPrice.proposedUnitPrice)}</strong></span>
-                {data.canIeReview && <div className="quantity-price-decision" aria-label={`${process.processName}调价决定`}>
+                {(moduleWritable && data.canIeReview) && <div className="quantity-price-decision" aria-label={`${process.processName}调价决定`}>
                   <button
                     className="quantity-price-decision__button is-approve"
                     type="button"
@@ -632,7 +635,7 @@ export function WholeOrderReviewPanel({
         <b>{tailExpanded ? "−" : "+"}</b>
       </button>
       {tailExpanded && <div className="quantity-process-detail">
-        {tailStage && data.canReview && tailReports.some(canCorrectReport) && <div className="quantity-report-actions quantity-process-save">
+        {tailStage && (moduleWritable && data.canReview) && tailReports.some(canCorrectReport) && <div className="quantity-report-actions quantity-process-save">
           <strong>{formatBusinessDecimal(data.processes[0]?.tailCheckedQuantity ?? 0)} 件</strong>
           <Button
             disabled={busy || !tailReports.some(hasChangedCorrection)}
@@ -647,11 +650,11 @@ export function WholeOrderReviewPanel({
       <h2>历史整查报数记录</h2>
       {submittedTailAssignments.map((assignment) => <div className="section-title whole-order-row" key={assignment.assignmentId}>
         <div><b>{assignment.tailInspectorName}</b><p>返件总数 {formatBusinessDecimal(assignment.returnedQuantity ?? 0)} 件</p></div>
-        {data.canReview && <Button disabled={busy} onClick={() => void rejectTailInspection(assignment.assignmentId, assignment.tailInspectorName)}>驳回整查</Button>}
+        {(moduleWritable && data.canReview) && <Button disabled={busy} onClick={() => void rejectTailInspection(assignment.assignmentId, assignment.tailInspectorName)}>驳回整查</Button>}
       </div>)}
     </Surface>}
 
-    {tailStage && data.canReview && temporaryWorkerGroups.length > 0 && <Surface>
+    {tailStage && (moduleWritable && data.canReview) && temporaryWorkerGroups.length > 0 && <Surface>
       <button
         className="quantity-coefficient-section-toggle"
         type="button"
@@ -722,7 +725,7 @@ export function WholeOrderReviewPanel({
       </div>}
     </Surface>}
 
-    {tailStage && data.canReview && <Surface>
+    {tailStage && (moduleWritable && data.canReview) && <Surface>
       <div className="quantity-submit-row">
         <div>
           <h2>提交 IE 复核</h2>
@@ -735,7 +738,7 @@ export function WholeOrderReviewPanel({
       {!ready && <p role="status">还需完成：{readinessIssues.join("；")}。</p>}
     </Surface>}
 
-    {ieStage && data.canIeReview && <Surface>
+    {ieStage && (moduleWritable && data.canIeReview) && <Surface>
       <div className="quantity-submit-row">
         <div>
           <h2>IE 复核决定</h2>

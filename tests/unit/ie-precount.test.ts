@@ -95,7 +95,7 @@ describe("IE pre-count reference ledger", () => {
       readFile("apps/web/src/work-reporting-form.tsx", "utf8"),
       readFile("apps/web/src/whole-order-review-panel.tsx", "utf8"),
     ]);
-    expect(page).toContain('selected.key === "final_quantity_ie_review" ? { iePrecounts: detail.iePrecounts }');
+    expect(page).toContain('selected.key === "final_quantity_ie_review" ? { iePrecounts: { ...detail.iePrecounts, canRecord: moduleWritable && detail.iePrecounts.canRecord } }');
     expect(form).toContain("{...(iePrecounts ? { iePrecounts } : {})}");
     expect(review).toContain("<small>IE预核</small>");
     expect(review).toContain('iePrecount ? formatBusinessDecimal(iePrecount.quantity) : "—"');

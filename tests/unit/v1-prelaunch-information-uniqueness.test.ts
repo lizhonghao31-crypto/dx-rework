@@ -10,7 +10,7 @@ describe("v1 prelaunch business information uniqueness", () => {
     expect(detail).toMatch(/<WorkReportingForm[\s\S]*?taskMode="whole_order_review"[\s\S]*?embedded/);
     expect(detail).toContain("<ResponsibilityDeterminationPanel reworkOrderId={detail.reworkOrderId} embedded");
     expect(detail).toContain("readOnly embedded");
-    expect(detail).toContain("<ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} embedded");
+    expect(detail).toContain("<ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} readOnly={!moduleWritable} embedded");
   });
 
   it("keeps standalone heroes while hiding them in embedded mode", async () => {

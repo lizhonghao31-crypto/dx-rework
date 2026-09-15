@@ -1,3 +1,4 @@
+import { effectiveMemberAuthorization, type BusinessModule } from "../access/member-module-policy.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 
@@ -252,7 +253,7 @@ export class PostgresAuthStore implements AuthStore {
   private async loadAuthorization(
     queryable: Queryable,
     userId: string,
-  ): Promise<{ capabilities: string[]; businessRoles: string[] }> {
+  ): Promise<{ capabilities: string[]; businessRoles: string[]; readOnlyModules: BusinessModule[]; effectiveWriteCapabilities: string[] }> {
     const roles = await queryable.query<{ role_code: string }>(
       `SELECT ura.role_code
        FROM user_role_assignments ura
@@ -302,9 +303,13 @@ export class PostgresAuthStore implements AuthStore {
        ORDER BY capability`,
       [userId, this.corporationId],
     );
+    const granted = capabilities.rows.map((row) => row.capability);
+    const effective = await effectiveMemberAuthorization(queryable, userId, granted);
     return {
       businessRoles: roles.rows.map((row) => row.role_code),
-      capabilities: capabilities.rows.map((row) => row.capability),
+      capabilities: granted,
+      effectiveWriteCapabilities: effective.capabilities,
+      readOnlyModules: effective.readOnlyModules,
     };
   }
 }

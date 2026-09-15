@@ -47,6 +47,7 @@ type LeafRow = {
   settlement_schema_version: 1 | 2;
 };
 type PermissionRow = {
+  owner_read: boolean;
   determine_eligible: boolean;
   direct_takeover: boolean;
   direct_confirm: boolean;
@@ -450,7 +451,8 @@ export class AuthorizedResponsibilityDeterminationService {
 
   private async permissions(client: Queryable, actor: TrustedActorContext, order: OrderRow) {
     const result = await client.query<PermissionRow>(
-      `SELECT responsibility_can_determine($1,$2) determine_eligible,
+      `SELECT responsibility_actor_has_direct_role($1,'business:read_all',ARRAY['owner_group']) owner_read,
+              responsibility_can_determine($1,$2) determine_eligible,
               responsibility_actor_has_direct_role($1,'responsibility:takeover',ARRAY['owner_group']) direct_takeover,
               responsibility_actor_has_direct_role($1,'responsibility:confirm_high_multiplier',ARRAY['owner_group']) direct_confirm,
               responsibility_actor_has_direct_role($1,'responsibility:owner_sign',ARRAY['owner_group']) owner_sign,
@@ -481,6 +483,7 @@ export class AuthorizedResponsibilityDeterminationService {
     const pendingOwnerSignature = order.status === "pending_owner_signature";
     const root = isRootActor(actor);
     const canView = root ||
+      (row.owner_read && (caps.includes("business:read_all") || caps.includes("responsibility:owner_sign"))) ||
       (caps.includes("rework:related_orders:view") &&
         (order.merchandiser_user_id === actor.actorId ||
           order.embroidery_merchandiser_user_id === actor.actorId)) ||

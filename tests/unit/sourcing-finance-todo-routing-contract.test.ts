@@ -9,6 +9,7 @@ describe("sourcing finance confirmation and explicit-role todo routing", () => {
     const createInTransaction = vi.fn(async () => undefined);
     const projection = new TodoProjectionService({ createInTransaction } as never);
     const query = vi.fn(async (sql: string) => {
+      if (sql.includes("to_regclass")) return { rows: [{ available: false }] };
       expect(sql).toContain("FROM user_role_assignments assignment");
       expect(sql).not.toContain("owner_bootstrap_consumptions");
       return { rows: [{ user_id: "00000000-0000-4000-8000-000000000501" }] };

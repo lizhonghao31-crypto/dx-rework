@@ -1,3 +1,4 @@
+import { memberCanReceiveFact } from "../access/member-module-policy.js";
 import type { Pool, PoolClient } from "pg";
 
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -210,6 +211,7 @@ export class TodoTimingService {
       if (action?.kind === "escalation") {
         const recipients = await this.escalationRecipients(client, action);
         for (const recipientUserId of recipients) {
+          if (!(await memberCanReceiveFact(client, recipientUserId, "todo.escalate", "rework_todo", action.todoId))) continue;
           await this.todos.createInTransaction(client, actor, {
             todoType: "information",
             category: "todo_escalation",

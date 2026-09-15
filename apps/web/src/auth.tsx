@@ -8,6 +8,8 @@ export type AuthorizedUser = {
   capabilities: readonly string[];
   businessRoles?: readonly string[];
   isRoot?: boolean;
+  effectiveWriteCapabilities?: readonly string[];
+  readOnlyModules?: readonly ("rework" | "sourcing")[];
 };
 export type AuthorizedSession = { status: "authorized" | "no_role"; user: AuthorizedUser };
 export type PageAccessRequirement = {

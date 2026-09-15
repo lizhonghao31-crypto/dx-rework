@@ -1,3 +1,4 @@
+import { currentModuleCanWrite } from "./member-module-policy.js";
 import {
   OwnFactoryApprovalResponseSchema,
   type OwnFactoryApprovalResponse,
@@ -80,10 +81,8 @@ export function OwnFactoryApprovalPanel({
       return;
     }
     if (!response.ok) throw new Error(await requestError(response));
-    setState({
-      kind: "ready",
-      value: OwnFactoryApprovalResponseSchema.parse(await response.json()),
-    });
+    const value = OwnFactoryApprovalResponseSchema.parse(await response.json());
+    setState({ kind: "ready", value: { ...value, canDecide: value.canDecide && await currentModuleCanWrite("rework") } });
   };
 
   useEffect(() => {

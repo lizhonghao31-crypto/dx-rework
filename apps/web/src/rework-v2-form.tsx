@@ -1,3 +1,4 @@
+import { currentModuleCanWrite } from "./member-module-policy.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import {
   AttachmentResponseSchema,
@@ -245,6 +246,8 @@ export function ReworkInitiationV2Form({
   existingAttachmentCount = 0,
   onOrderChanged,
 }: ReworkInitiationV2FormProps = {}) {
+  const [moduleWritable, setModuleWritable] = useState<boolean | null>(null);
+  useEffect(() => { let active = true; void currentModuleCanWrite("rework").then(value => { if (active) setModuleWritable(value); }).catch(() => { if (active) setModuleWritable(false); }); return () => { active = false; }; }, []);
   const localDraftSeed = reworkOrderId ? null : readLocalN01Draft();
   const receivingBatchId = reworkOrderId
     ? undefined
@@ -678,6 +681,7 @@ export function ReworkInitiationV2Form({
     label: supplier.supplierName,
   })), [supplyOptions.fabricSuppliers]);
 
+  if (moduleWritable !== true) return <Surface><p>{moduleWritable === null ? "正在读取操作权限…" : "当前账号仅可查看返工订单。"}</p>{reworkOrderId ? <a href={pageUrl(`ui/tasks/${reworkOrderId}`)}>查看订单详情</a> : null}</Surface>;
   return <div className={`rework-v2-page${embedded ? " is-embedded" : ""}`}>
     {!embedded ? <div className="rework-v2-heading">
       <div>

@@ -1,3 +1,4 @@
+import { moduleCanWrite } from "./member-module-policy.js";
 import { canOperateReworkNode, WHOLE_ORDER_REVIEW_CAPABILITIES } from "./rework-node-access.js";
 import { FinanceNodePanel } from "./reporting/finance-node-panel.js";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
@@ -587,11 +588,12 @@ export function ReworkDetailPage({
     || hasCapability(currentUser, "rework:related_orders:view");
   const canSeeExternal = elevated(currentUser) || hasCapability(currentUser, "external_responsibility:view");
   const canSeeWholeOrderReview = elevated(currentUser) || WHOLE_ORDER_REVIEW_CAPABILITIES.some((capability) => hasCapability(currentUser, capability));
-  const canSupplementOrderImages = detail.status !== "cancelled"
+  const moduleWritable = moduleCanWrite(currentUser, "rework");
+  const canSupplementOrderImages = moduleWritable && detail.status !== "cancelled"
     && canSupplementImagesByRole(currentUser);
-  const canHandleInitiation = elevated(currentUser)
-    || (hasRole(currentUser, "quality_control") && hasCapability(currentUser, "rework:initiate"));
-  const canWaiveTailInspection = detail.tailInspectionRequired
+  const canHandleInitiation = moduleWritable && (elevated(currentUser)
+    || (hasRole(currentUser, "quality_control") && hasCapability(currentUser, "rework:initiate")));
+  const canWaiveTailInspection = moduleWritable && detail.tailInspectionRequired
     && (detail.status === "in_progress" || detail.status === "pending_order_review")
     && (elevated(currentUser) || (
       (hasRole(currentUser, "owner_group") || hasRole(currentUser, "production_management"))
@@ -658,7 +660,7 @@ export function ReworkDetailPage({
         onOrderChanged={syncAfterNodeAction}
         {...(selected.key === "work_reporting"
           && (detail.iePrecounts.canRecord || currentUser?.isRoot === true || hasRole(currentUser, "ie_reviewer"))
-          ? { iePrecounts: detail.iePrecounts }
+          ? { iePrecounts: { ...detail.iePrecounts, canRecord: moduleWritable && detail.iePrecounts.canRecord } }
           : {})}
       />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
@@ -669,7 +671,7 @@ export function ReworkDetailPage({
         taskMode="whole_order_review"
         embedded
         onOrderChanged={syncAfterNodeAction}
-        {...(selected.key === "final_quantity_ie_review" ? { iePrecounts: detail.iePrecounts } : {})}
+        {...(selected.key === "final_quantity_ie_review" ? { iePrecounts: { ...detail.iePrecounts, canRecord: moduleWritable && detail.iePrecounts.canRecord } } : {})}
       />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
@@ -685,7 +687,7 @@ export function ReworkDetailPage({
       return <>
         <OrderCompletionAndSettlementSummary detail={detail} />
         {financeNodeReader&&<FinanceNodePanel orderId={detail.reworkOrderId} node="settlement_followup" onlyWages />}
-        {canSeeExternal ? <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} embedded {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} /> : null}
+        {canSeeExternal ? <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} readOnly={!moduleWritable} embedded {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} /> : null}
       </>;
     }
     return renderNodePreview();
@@ -703,7 +705,7 @@ export function ReworkDetailPage({
     <Shell active="全部订单">
       <div className="rework-detail-header"><Header title={detail.styleNo ?? "款号未填写"} subtitle={detail.reworkNo ?? "未提交返工草稿"} badge={meta.label} badgePlacement="subtitle" {...backAction} /></div>
       <div className="rework-detail-layout rework-detail-target-layout">
-      {canSeeResponsibility && ["pending_responsibility_determination","pending_owner_signature","pending_responsibility_action","completed"].includes(detail.status) && <OrderResponsibilityRevisionPanel orderId={detail.reworkOrderId} orderVersion={detail.version} onChanged={syncAfterNodeAction} />}
+      {canSeeResponsibility && ["pending_responsibility_determination","pending_owner_signature","pending_responsibility_action","completed"].includes(detail.status) && <OrderResponsibilityRevisionPanel readOnly={!moduleWritable} orderId={detail.reworkOrderId} orderVersion={detail.version} onChanged={syncAfterNodeAction} />}
         <dl className="rework-detail-core-facts" aria-label="返工单核心信息">
           <div className="rework-detail-core-fact"><dt>返工工序</dt><dd title={detail.reworkProcess ?? undefined}>{detail.reworkProcess ?? "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>加工厂</dt><dd>{detail.processingFactory?.displayName ?? "—"}</dd></div>
@@ -850,7 +852,7 @@ export function ReworkDetailPage({
             <strong>+{formatBusinessDecimal(entry.quantity)} 件</strong><span>{entry.recordedBy}</span><time dateTime={entry.recordedAt}>{formatTime(entry.recordedAt)}</time>
           </div>)}
         </div> : <p className="rework-defect-dialog__empty">尾部阶段暂未增加次品。</p>}
-        {detail.defectiveQuantity.canAddTail ? <div className="rework-defect-dialog__add">
+        {(moduleWritable && detail.defectiveQuantity.canAddTail) ? <div className="rework-defect-dialog__add">
           <label>新增尾部次品数量<input autoFocus type="number" inputMode="numeric" min="1" step="1" value={tailDefectQuantity} onChange={(event) => setTailDefectQuantity(event.target.value)} /></label>
           <Button variant="primary" disabled={tailDefectBusy} onClick={() => void addTailDefectiveQuantity()}>{tailDefectBusy ? "保存中…" : "增加次品数量"}</Button>
         </div> : <p className="rework-defect-dialog__empty">仅尾部主管、老板和Root可增加尾部阶段次品数量。</p>}

@@ -1,3 +1,5 @@
+import { MemberModuleBindingService } from "../../apps/api/src/access/member-module-binding-service.js";
+import "./member-module-policy-postgres.cases.js";
 import { exerciseAtomicOverDeduction } from "./helpers/atomic-deduction-scenario.js";
 import { registerManagementReportingRoutes } from "../../apps/api/src/reporting/management-reporting-routes.js";
 import { ReportExportService } from "../../apps/api/src/reporting/report-export-service.js";
@@ -1390,6 +1392,16 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(unpaid.value.paidAmount).toBe("0");
     expect((await database.query("SELECT count(*)::int count FROM rework_external_responsibility_cases WHERE rework_order_id=$1 AND status='superseded'",[submitted.value.reworkOrderId])).rows[0].count).toBe(2);
     const unpaidFinal=await responsibility.finalize(production(),submitted.value.reworkOrderId,{expectedOrderVersion:unpaid.value.orderVersion,expectedCurrentDeterminationVersion:unpaid.value.currentVersion!},randomUUID());
+    // Real pending N08 cutover: existing legal recipients survive, Wu cannot sign even from a stale actor.
+    const memberBindings = { li_zhonghao: ids.ownerOne, wu_yunfeng: ids.ownerTwo, li_junyue: ids.patternRoot };
+    const memberCutover = await new MemberModuleBindingService(database).run(ids.patternRoot, memberBindings, true);
+    expect(memberCutover.cancelled).toBeGreaterThan(0);
+    expect(memberCutover.ownerTasksEnsured).toBe(0);
+    const memberPending = await database.query<{ recipient_user_id: string }>("SELECT recipient_user_id FROM rework_todos WHERE entity_id=$1 AND category='owner_signature' AND status='pending'", [submitted.value.reworkOrderId]);
+    expect(memberPending.rows.map(row => row.recipient_user_id).sort()).toEqual([ids.ownerOne, ids.patternRoot].sort());
+    const deniedOwner = actor(ids.ownerTwo,["owner_group"],"responsibility:owner_sign","responsibility:determine");
+    expect((await responsibility.get(deniedOwner,submitted.value.reworkOrderId)).canOwnerSign).toBe(false);
+    await expect(responsibility.approveOwnerSignature(deniedOwner,submitted.value.reworkOrderId,{expectedOrderVersion:unpaidFinal.value.orderVersion},randomUUID())).rejects.toMatchObject({statusCode:403});
     await responsibility.approveOwnerSignature(actor(ids.ownerOne,["owner_group"],"responsibility:owner_sign","responsibility:determine"),submitted.value.reworkOrderId,{expectedOrderVersion:unpaidFinal.value.orderVersion},randomUUID());
 
     const externalCases = await database.query<{

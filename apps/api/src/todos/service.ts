@@ -1,4 +1,5 @@
 import type { ProductionClosureService } from "../sourcing/production-closure-service.js";
+import { memberCanReceiveFact } from "../access/member-module-policy.js";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -835,6 +836,10 @@ export class TodoService {
   ): Promise<boolean> {
     const todo = await this.todoById(client, todoId, true);
     if (todo.status !== "pending") return false;
+    if (!(await memberCanReceiveFact(client, todo.recipient_user_id, todo.source_action, todo.entity_type, todo.entity_id))) {
+      await this.cancelTodoInTransaction(client, actor, todo, "成员模块权限调整：不再接收此模块待办");
+      return false;
+    }
 
     if (todo.todo_type === "information") {
       if (await this.isActivePrimaryOrganizationUser(client, todo.recipient_user_id)) return true;
