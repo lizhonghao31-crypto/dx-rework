@@ -48,6 +48,8 @@ export class AttachmentService {
     private readonly events = new OperationEventRepository(),
   ) {}
 
+  uploadLimits(): { maxUploadBytes: number } { return { maxUploadBytes: this.options.maxUploadBytes }; }
+
   async createUploadIntent(actor: TrustedActorContext, input: CreateUploadIntent): Promise<UploadIntentResponse> {
     this.validate(input);
     const attachmentId = randomUUID();
@@ -232,13 +234,16 @@ export class AttachmentService {
     attachmentId: string,
     authorizeBound?: (row: Readonly<{ entityType: string; entityId: string; uploadedBy: string; mimeType: string }>) => Promise<boolean>,
     disposition: "attachment" | "inline" = "attachment",
+    variant?: "thumbnail",
   ): Promise<DownloadIntentResponse> {
     const row = await this.ownedOrBound(attachmentId, actor.actorId, authorizeBound);
     if (row.status !== "ready") throw new ApplicationError("ATTACHMENT_NOT_READY", "Attachment is not ready", 409);
+    if (variant === "thumbnail" && !row.mime_type.startsWith("image/")) throw new ApplicationError("VALIDATION_ERROR", "该文件不是图片", 400);
     const grant = await this.storageCall(() => this.storage.createDownloadGrant(row.object_key, {
       ttlSeconds: this.options.ttlSeconds,
       filename: row.original_filename,
       disposition,
+      ...(variant ? { variant } : {}),
     }));
     const client = await this.pool.connect();
     try {

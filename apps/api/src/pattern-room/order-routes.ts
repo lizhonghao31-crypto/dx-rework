@@ -52,6 +52,12 @@ export function registerPatternRoomOrderRoutes(app: FastifyInstance, dependencie
     app.post(`/pattern-room/orders/:orderId/${path}`, async request => dependencies.service[method](
       await actor(request, capability), parse(orderParams, request.params).orderId, request.body, key(request)));
   }
+  app.get("/pattern-room/attachments/upload-limits", async (request, reply) => {
+    const { kind, purpose } = parse(uploadQuery, request.query);
+    await dependencies.service.uploadActor(await actor(request, purpose === "rework" ? "pattern_room:orders:rework" : kind === "pattern" ? "pattern_room:orders:create" : "pattern_room:misc:create"), kind, purpose);
+    reply.header("cache-control", "no-store");
+    return dependencies.attachments.uploadLimits();
+  });
   app.post("/pattern-room/attachments/upload-intents", async (request, reply) => {
     const { kind, purpose } = parse(uploadQuery, request.query);
     const trusted = await dependencies.service.uploadActor(await actor(request, purpose === "rework" ? "pattern_room:orders:rework" : kind === "pattern" ? "pattern_room:orders:create" : "pattern_room:misc:create"), kind, purpose);
@@ -64,9 +70,9 @@ export function registerPatternRoomOrderRoutes(app: FastifyInstance, dependencie
   });
   app.get("/pattern-room/attachments/:attachmentId/download", async (request, reply) => {
     const trusted = await dependencies.service.downloadActor(await actor(request, "pattern_room:orders:view"));
-    const mode = parse(z.object({ mode: z.enum(["preview", "download"]).default("preview") }), request.query).mode;
+    const mode = parse(z.object({ mode: z.enum(["thumbnail", "preview", "download"]).default("preview") }), request.query).mode;
     const grant = await dependencies.attachments.createDownloadIntent(trusted, parse(AttachmentParamsSchema, request.params).attachmentId,
-      binding => dependencies.service.canDownload(trusted, binding), mode === "preview" ? "inline" : "attachment");
+      binding => dependencies.service.canDownload(trusted, binding), mode === "download" ? "attachment" : "inline", mode === "thumbnail" ? "thumbnail" : undefined);
     reply.header("cache-control", "no-store");
     return reply.redirect(grant.downloadUrl);
   });

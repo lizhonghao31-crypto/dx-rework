@@ -189,9 +189,10 @@ export class AliyunOssV4RestClient implements AliyunOssSdkClient {
     return this.presign(name, {
       method,
       expires,
-      ...(typeof contentDisposition === "string"
-        ? { query: { "response-content-disposition": contentDisposition } }
-        : {}),
+      query: {
+        ...(typeof contentDisposition === "string" ? { "response-content-disposition": contentDisposition } : {}),
+        ...(typeof options.process === "string" ? { "x-oss-process": options.process } : {}),
+      },
     });
   }
 

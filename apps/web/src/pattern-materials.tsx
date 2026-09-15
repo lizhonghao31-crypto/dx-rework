@@ -4,7 +4,12 @@ import { ImageViewer } from "./image-viewer.js";
 import { patternUrls } from "./pattern-order-client.js";
 
 export type PatternMaterial = { attachmentId: string; filename: string; mimeType: string; active?: boolean };
-const materialUrl = (id: string, mode: "preview" | "download") => patternUrls.apiUrl(`pattern-room/attachments/${id}/download?mode=${mode}`);
+const materialUrl = (id: string, mode: "thumbnail" | "preview" | "download") => patternUrls.apiUrl(`pattern-room/attachments/${id}/download?mode=${mode}`);
+
+function MaterialThumbnail({ file }: { file: PatternMaterial }) {
+  const [failed, setFailed] = useState(false);
+  return failed ? <span>点击预览图片</span> : <img src={materialUrl(file.attachmentId, "thumbnail")} alt={file.filename} loading="lazy" onError={() => setFailed(true)} />;
+}
 
 function MaterialPreview({ files, selected, onSelect, onClose }: { files: PatternMaterial[]; selected: number; onSelect(index: number): void; onClose(): void }) {
   const dialog = useRef<HTMLDialogElement>(null), file = files[selected]!;
@@ -22,7 +27,7 @@ export function PatternMaterials({ files, onRemove, disabled = false }: { files:
   const selected = files.findIndex(file => file.attachmentId === selectedId);
   if (!files.length) return <p className="pattern-empty">暂无制作资料</p>;
   return <><ul className="pattern-material-grid">{files.map(file => <li key={file.attachmentId}>
-    <button type="button" className="pattern-material-thumb" aria-label={`预览 ${file.filename}`} onClick={() => setSelectedId(file.attachmentId)}>{file.mimeType.startsWith("image/") ? <img src={materialUrl(file.attachmentId, "preview")} alt={file.filename} loading="lazy" /> : <span>PDF · 点击预览</span>}</button>
+    <button type="button" className="pattern-material-thumb" aria-label={`预览 ${file.filename}`} onClick={() => setSelectedId(file.attachmentId)}>{file.mimeType.startsWith("image/") ? <MaterialThumbnail file={file} /> : <span>PDF · 点击预览</span>}</button>
     <span className="pattern-material-name">{file.filename}{file.active === false ? "（历史资料）" : ""}</span>
     <div className="pattern-actions"><a href={materialUrl(file.attachmentId, "download")}>下载</a>{onRemove && <Button type="button" disabled={disabled} onClick={() => onRemove(file.attachmentId)}>移除</Button>}</div>
   </li>)}</ul>{selected >= 0 && <MaterialPreview files={files} selected={selected} onSelect={index => setSelectedId(files[index]!.attachmentId)} onClose={() => setSelectedId(null)} />}</>;

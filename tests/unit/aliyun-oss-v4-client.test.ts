@@ -109,6 +109,18 @@ describe("Aliyun OSS V4 REST client", () => {
     );
   });
 
+  it("signs a reduced thumbnail transform without changing original download grants", async () => {
+    const client = new AliyunOssV4RestClient(baseOptions);
+    const storage = new AliyunPrivateObjectStorage(client, fixedNow);
+    const options = { ttlSeconds: 300, filename: "drawing.jpg", disposition: "inline" as const };
+    const thumbnail = new URL((await storage.createDownloadGrant("private/drawing.jpg", { ...options, variant: "thumbnail" })).downloadUrl);
+    const original = new URL((await storage.createDownloadGrant("private/drawing.jpg", options)).downloadUrl);
+    expect(thumbnail.searchParams.get("x-oss-process")).toBe("image/resize,m_lfit,w_480,h_360,limit_1/format,webp/quality,q_80");
+    expect(original.searchParams.has("x-oss-process")).toBe(false);
+    expect(thumbnail.searchParams.get("x-oss-signature")).not.toBe(original.searchParams.get("x-oss-signature"));
+    expect(thumbnail.searchParams.get("x-oss-expires")).toBe("300");
+  });
+
   it("uses signed HEAD metadata and streams object bytes for SHA-256 verification", async () => {
     const seen: Array<{ method: string | undefined; url: string }> = [];
     const fakeFetch = (async (

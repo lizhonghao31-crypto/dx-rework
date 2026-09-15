@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { INVALID_DECLARED_IMAGE_MESSAGE } from "../../apps/web/src/attachment-upload.js";
+import { INVALID_DECLARED_IMAGE_MESSAGE, normalizeOriginalImageForUpload } from "../../apps/web/src/attachment-upload.js";
 import { preparePatternMaterial, uploadPatternMaterial } from "../../apps/web/src/pattern-material-upload.js";
 
 describe("pattern original material uploads", () => {
@@ -40,5 +40,30 @@ describe("pattern original material uploads", () => {
     const invalid = vi.fn().mockRejectedValue(new Error(INVALID_DECLARED_IMAGE_MESSAGE));
     await expect(uploadPatternMaterial(jpeg(), invalid)).rejects.toThrow("图片内容无法读取");
     expect(invalid).toHaveBeenCalledTimes(2);
+  });
+  it("keeps phone dimensions while selecting an encoding within the configured cap", async () => {
+    const close = vi.fn(), formats: string[] = [];
+    const canvas = { width: 0, height: 0, getContext: () => ({ drawImage: vi.fn(), fillRect: vi.fn() }), toBlob: (callback: BlobCallback, type: string) => { formats.push(type); callback(new Blob([new Uint8Array(type === "image/png" ? 1500 : 500)], { type })); } };
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ width: 6000, height: 4000, close })));
+    vi.stubGlobal("document", { createElement: () => canvas });
+    const upload = vi.fn(async file => { expect(file.size).toBeLessThanOrEqual(1000); return file; });
+    const source = new File(["phone-image"], "phone.avif", { type: "image/avif" });
+    const file = await uploadPatternMaterial(source, upload, 1000);
+    expect(file.type).toBe("image/webp");
+    expect(formats).toEqual(["image/png", "image/webp"]);
+    expect([canvas.width, canvas.height]).toEqual([6000, 4000]);
+    expect(close).toHaveBeenCalledOnce();
+    expect(upload).toHaveBeenCalledOnce();
+  });
+  it("uses JPEG when WebP encoding is unavailable and reports oversize before any upload", async () => {
+    const context = { drawImage: vi.fn(), fillRect: vi.fn(), globalCompositeOperation: "", fillStyle: "" };
+    const canvas = { width: 0, height: 0, getContext: () => context, toBlob: (callback: BlobCallback, type: string) => callback(new Blob([new Uint8Array(type === "image/jpeg" ? 500 : 1500)], { type: type === "image/webp" ? "image/png" : type })) };
+    vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ width: 6000, height: 4000, close: vi.fn() })));
+    vi.stubGlobal("document", { createElement: () => canvas });
+    expect((await normalizeOriginalImageForUpload(jpeg(), 1000)).type).toBe("image/jpeg");
+    expect(context.fillRect).toHaveBeenCalledWith(0, 0, 6000, 4000);
+    const upload = vi.fn();
+    await expect(uploadPatternMaterial(new File(["phone"], "phone.avif", { type: "image/avif" }), upload, 100)).rejects.toThrow("保持原尺寸转换后仍超过");
+    expect(upload).not.toHaveBeenCalled();
   });
 });
