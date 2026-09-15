@@ -1,4 +1,4 @@
-import { exerciseFinancePatternQueries } from "./helpers/finance-pattern-query-scenario.js";
+import { exerciseFinancePatternQueries, exerciseMixedFinancePatternScope } from "./helpers/finance-pattern-query-scenario.js";
 import { exerciseFinanceOrderQueries } from "./helpers/finance-order-query-scenario.js";
 import { MemberModuleBindingService } from "../../apps/api/src/access/member-module-binding-service.js";
 import "./member-module-policy-postgres.cases.js";
@@ -738,10 +738,10 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
   const patternActor = (userId: string, roles: string[]) => actor(userId, roles, "pattern_room:orders:view", ...Object.keys(PATTERN_ORDER_ROLES), "todo:view");
   const roundAction = (order: { version: number; currentRoundId: string }) => ({ version: order.version, roundId: order.currentRoundId });
-  const makePattern = async (service: PatternRoomOrderService, creator: TrustedActorContext, styleNo: string, quantity = 2) => {
+  const makePattern = async (service: PatternRoomOrderService, creator: TrustedActorContext, styleNo: string, quantity = 2, note?:string) => {
     const fileId = randomUUID();
     await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'本轮制作.pdf','application/pdf',10,$3,$4,'ready',CURRENT_TIMESTAMP)", [fileId, `private/${fileId}.pdf`, "c".repeat(64), creator.actorId]);
-    return service.create(creator, { styleNo, categoryId: "92000000-0000-4000-8000-000000000002", quantity, priceVersion: 1, attachmentIds: [fileId] }, randomUUID());
+    return service.create(creator, { styleNo, note, categoryId: "92000000-0000-4000-8000-000000000002", quantity, priceVersion: 1, attachmentIds: [fileId] }, randomUUID());
   };
   const patternHttp = async (service: PatternRoomOrderService, current: TrustedActorContext, path: string, input: object, key: string) => {
     const app = Fastify();
@@ -754,7 +754,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
     const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]);
     const worker = patternActor(ids.worker, ["worker"]), nextWorker = patternActor(ids.otherPatternWorker, ["worker"]);
-    const created = await makePattern(service, designer, "PATTERN-换人及多轮");
+    const created = await makePattern(service, designer, "PATTERN-换人及多轮", 2, "只供原业务范围的制作说明");
     await expect(database.query("UPDATE pattern_room_rounds SET round_index=NULL WHERE round_id=$1", [created.currentRoundId])).rejects.toMatchObject({ code: "23514" });
     const assigned = await service.assign(supervisor, created.orderId, { ...roundAction(created), personId: workerPersonId }, randomUUID());
     await expect(service.requestRework(designer, created.orderId, { ...roundAction(assigned), reason: "尚未完工", reasonCategory: "other" }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
@@ -790,6 +790,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     await expect(service.uploadActor(supervisor, "pattern")).rejects.toMatchObject({ statusCode: 403 });
     expect((await service.uploadActor(supervisor, "pattern", "rework")).actorId).toBe(ids.patternSupervisor);
     const reworkAssigned = await service.assign(supervisor, created.orderId, { ...roundAction(requested), personId: otherPatternPersonId, amount: "7.005" }, randomUUID());
+    await exerciseMixedFinancePatternScope({database,service,orderId:created.orderId,rootId:ids.patternRoot,
+      readers:[worker,nextWorker,designer,patternActor(ids.otherPatternDesigner,["sample_designer"])]});
     expect(reworkAssigned.reworkCount).toBe(1); expect(reworkAssigned.rounds.at(-1)!.index).toBe(1);
     await expect(database.query("UPDATE pattern_room_rounds SET round_index=NULL WHERE round_id=$1", [reworkAssigned.currentRoundId])).rejects.toMatchObject({ code: "23514" });
     const reworkComplete = await service.complete(nextWorker, created.orderId, roundAction(reworkAssigned), randomUUID());

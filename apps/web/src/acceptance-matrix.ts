@@ -523,7 +523,7 @@ const EXISTING_ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
 // Approved 2026-09-12 scope, explicitly translated from the business plan.
 // Approved PR03/04/05 roles; ordinary order operations remain closed until PR06.
 const patternOrderRoles: Record<string, readonly string[]> = {
-  "pattern_room:orders:view": ["sample_designer", "order_merchandiser", "pattern_room_supervisor", "worker", "owner_group", "production_management"],
+  "pattern_room:orders:view": ["sample_designer", "order_merchandiser", "pattern_room_supervisor", "worker", "owner_group", "production_management", "finance_director", "finance_read", "wage_month_close_accountant"],
   "pattern_room:orders:create": ["sample_designer"], "pattern_room:orders:edit": ["sample_designer"],
   "pattern_room:orders:handoff": ["sample_designer"], "pattern_room:orders:assign": ["pattern_room_supervisor"], "pattern_room:orders:complete": ["worker"],
   "pattern_room:misc:create": ["sample_designer", "order_merchandiser"], "pattern_room:misc:edit": ["sample_designer", "order_merchandiser"],
@@ -555,7 +555,7 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXIS
   // PR02 approved field-level authority, independently transcribed from section 8.1.
   const root = entry.expectedRoot === true;
   const read = root || ["owner_group","production_management","finance_director","finance_read","pattern_room_supervisor"].includes(entry.expectedRole);
-  const moduleAccess = read || ["sample_designer","order_merchandiser","worker"].includes(entry.expectedRole);
+  const moduleAccess = read || ["sample_designer","order_merchandiser","worker","wage_month_close_accountant"].includes(entry.expectedRole);
   const category = root || ["owner_group","production_management"].includes(entry.expectedRole);
   const hourly = root || entry.expectedRole === "owner_group";
   const required = root ? [] : [...(read ? ["pattern_room:prices:read"] : []), ...(category ? ["pattern_room:prices:write"] : []), ...(hourly ? ["pattern_room:hourly:write"] : [])];
@@ -566,7 +566,7 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXIS
     allowedModules: [...(entry.allowedModules ?? []), ...(moduleAccess ? ["pattern_room" as const] : [])],
     forbiddenModules: [...(entry.forbiddenModules ?? []), ...(!moduleAccess ? ["pattern_room" as const] : [])],
     probes: [...(entry.probes ?? []), probe("pattern-room-prices","板房价格管控","pattern-room/prices",read ? 200 : 403)],
-    ruleRefs: { ...entry.ruleRefs, ...approvedKeys(entry.expectedRole === "finance_read" ? "PERM-ROLE-FINANCE-READ-001" : "PERM-PATTERN-PRICE-20260912",[
+    ruleRefs: { ...entry.ruleRefs, ...approvedKeys(entry.expectedRole === "wage_month_close_accountant" ? "PERM-PATTERN-FINANCE-READ-20260915" : entry.expectedRole === "finance_read" ? "PERM-ROLE-FINANCE-READ-001" : "PERM-PATTERN-PRICE-20260912",[
       ...required.map(cap => `cap:${cap}:allow`), ...forbidden.map(cap => `cap:${cap}:deny`),
       `module:pattern_room:${moduleAccess ? "allow" : "deny"}`, "http:pattern-room-prices",
     ]) },
@@ -578,7 +578,7 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXIS
   return { ...entry,
     requiredCapabilities: [...(entry.requiredCapabilities ?? []), ...required], forbiddenCapabilities: [...(entry.forbiddenCapabilities ?? []), ...forbidden],
     probes: [...(entry.probes ?? []), probe("pattern-room-orders", "首次打板开放边界", "pattern-room/orders", root ? 200 : required.includes("pattern_room:orders:view") ? 200 : 403)],
-    ruleRefs: { ...entry.ruleRefs, ...approvedKeys("PERM-PATTERN-ORDER-20260912", [...required.map(capability => `cap:${capability}:allow`), ...forbidden.map(capability => `cap:${capability}:deny`), "http:pattern-room-orders"]) },
+    ruleRefs: { ...entry.ruleRefs, ...approvedKeys(["finance_director","finance_read","wage_month_close_accountant"].includes(entry.expectedRole) ? "PERM-PATTERN-FINANCE-READ-20260915" : "PERM-PATTERN-ORDER-20260912", [...required.map(capability => `cap:${capability}:allow`), ...forbidden.map(capability => `cap:${capability}:deny`), "http:pattern-room-orders"]) },
   };
 }).map(entry => {
   const allowed = ["owner_group", "production_management"].includes(entry.expectedRole);

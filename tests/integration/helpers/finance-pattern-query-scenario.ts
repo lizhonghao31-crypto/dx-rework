@@ -7,6 +7,27 @@ import type { TrustedActorContext } from "../../../apps/api/src/tools/repositori
 import type { PatternRoomOrderService } from "../../../apps/api/src/pattern-room/order-service.js";
 import { registerPatternRoomOrderRoutes } from "../../../apps/api/src/pattern-room/order-routes.js";
 import type { AttachmentService } from "../../../apps/api/src/tools/attachments.js";
+import { AccessMasterDataService } from "../../../apps/api/src/access/service.js";
+
+export async function exerciseMixedFinancePatternScope(input: {database:Pool;service:PatternRoomOrderService;orderId:string;rootId:string;readers:TrustedActorContext[]}) {
+  const {database,service,orderId}=input;
+  const access=new AccessMasterDataService(database,"corp");
+  const root:TrustedActorContext={actorId:input.rootId,actorRoles:["root_superuser"],authorizationCapability:"access:admin",requestId:randomUUID()};
+  for(const reader of input.readers) {
+    const original=await service.get(reader,orderId).catch(error=>{expect(error).toMatchObject({statusCode:404});return null;});
+    const assignment=await access.assignRole(root,{userId:reader.actorId,roleCode:"finance_read",reason:"验证混合财务不扩制作资料范围"});
+    try {
+      const mixed={...reader,actorRoles:[...reader.actorRoles,"finance_read"]};
+      const detail=await service.get(mixed,orderId);
+      expect(detail.note).toBe(original?.note??null);
+      for(const round of detail.rounds) expect(round.requestReason).toBe(original?.rounds.find(item=>item.roundId===round.roundId)?.requestReason??null);
+      expect(detail.attachments).toEqual(original?.attachments??[]);
+      expect(detail.canReadMaterials).toBe(original?.canReadMaterials??false);
+      if(original) expect(detail.actions).toEqual(original.actions);
+      else expect(Object.values(detail.actions).every(value=>!value)).toBe(true);
+    } finally {await access.revokeRole(root,assignment.assignmentId,"恢复混合角色测试身份");}
+  }
+}
 
 export async function exerciseFinancePatternQueries(input: {database:Pool;service:PatternRoomOrderService;orderId:string;attachmentId:string;readers:Array<[string,string]>}) {
   const {database,service,orderId}=input;
