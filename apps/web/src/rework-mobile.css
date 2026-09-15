@@ -3,12 +3,12 @@
   .rework-detail-header .page-heading h1 { flex-wrap:wrap; gap:8px; font-size:22px; overflow-wrap:anywhere; }
   .rework-detail-header .rework-detail-back { width:100%; margin:0; min-height:44px; }
   .rework-detail-target-layout { display:flex; flex-direction:column; gap:12px; padding-bottom:24px; }
-  .rework-detail-target-layout > .rework-detail-workspace { order:0; padding:12px; }
-  .rework-detail-target-layout > .rework-detail-core-facts { order:1; }
+  .rework-detail-target-layout > .rework-detail-workspace { order:5; padding:12px; }
+  .rework-detail-target-layout > .rework-detail-core-facts { order:0; }
   .rework-detail-target-layout > .rework-responsibility-result { order:2; margin-bottom:0; }
   .rework-detail-target-layout > .rework-detail-dynamic-information { order:3; }
   .rework-detail-target-layout > .inspection-readonly { order:4; }
-  .rework-detail-target-layout > .rework-detail-overview-grid { order:5; }
+  .rework-detail-target-layout > .rework-detail-overview-grid { order:1; }
   .rework-mobile-current-node { display:inline; }
   .rework-detail-target-layout .rework-detail-task__heading { align-items:start; flex-wrap:wrap; gap:8px; }
   .rework-detail-target-layout .rework-detail-task__heading h2 { font-size:18px; line-height:1.5; }
