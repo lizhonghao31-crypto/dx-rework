@@ -1,3 +1,4 @@
+import { moduleCanWrite } from "./member-module-policy.js";
 import {
   ProcessConfigurationOptionsResponseSchema,
   ProcessConfigurationResponseSchema,
@@ -27,7 +28,7 @@ import "./process-worker-assignment-mobile-sheet.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
-type User = Readonly<{ id: string; businessRoles?: readonly string[]; capabilities: readonly string[]; isRoot?: boolean }>;
+type User = Readonly<{ id: string; businessRoles?: readonly string[]; capabilities: readonly string[]; isRoot?: boolean; readOnlyModules?: readonly ("rework" | "sourcing")[] }>;
 export type ProcessWorkerAssignmentDetail = Readonly<{
   reworkOrderId: string;
   createdBy: { userId: string; displayName: string };
@@ -116,13 +117,13 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
   const pendingKeys = useRef<Record<string, string>>({});
   const pendingSubmit = useRef<PendingSubmit | null>(null);
 
-  const canConfigure = user?.isRoot === true || Boolean(
+  const canConfigure = user?.isRoot === true || moduleCanWrite(user, "rework") && Boolean(
     user?.businessRoles?.includes("tail_supervisor")
     && user.capabilities.includes("process:configure")
     && user.capabilities.includes("work:assign"),
   );
-  const canReview = user?.isRoot === true || Boolean(user?.businessRoles?.includes("ie_reviewer") && user.capabilities.includes("process:review"));
-  const canCreateTemporary = user?.isRoot === true || user?.capabilities.includes("temporary_worker:manage") === true;
+  const canReview = user?.isRoot === true || moduleCanWrite(user, "rework") && Boolean(user?.businessRoles?.includes("ie_reviewer") && user.capabilities.includes("process:review"));
+  const canCreateTemporary = moduleCanWrite(user, "rework") && (user?.isRoot === true || user?.capabilities.includes("temporary_worker:manage") === true);
   const configuration = response?.configuration ?? null;
   const tailInspectionRequired = response?.tailInspectionRequired ?? true;
   const editable = Boolean(canConfigure && response?.reworkStatus === "pending_process_configuration");
@@ -193,7 +194,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
     ]);
     if (session === "denied" || session.status !== "authorized") throw new Error("当前登录状态已失效，请重新登录。");
     setUser(session.user); setDetail(loadedDetail); hydrate(config, workerPlan);
-    const configurable = session.user.isRoot === true || Boolean(session.user.businessRoles?.includes("tail_supervisor") && session.user.capabilities.includes("process:configure") && session.user.capabilities.includes("work:assign"));
+    const configurable = session.user.isRoot === true || moduleCanWrite(session.user, "rework") && Boolean(session.user.businessRoles?.includes("tail_supervisor") && session.user.capabilities.includes("process:configure") && session.user.capabilities.includes("work:assign"));
     if (configurable && config.reworkStatus === "pending_process_configuration") {
       const [processResult, peopleResult] = await Promise.allSettled([
         request("rework-process-configurations/options", ProcessConfigurationOptionsResponseSchema.parse),

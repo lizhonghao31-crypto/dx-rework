@@ -1,3 +1,4 @@
+import { moduleCanWrite } from "./member-module-policy.js";
 import {
   ProcessConfigurationResponseSchema,
   ReworkWorkTasksResponseSchema,
@@ -324,6 +325,7 @@ export function WorkReportingForm({
   const [canAdjustActive, setCanAdjustActive] = useState(false);
   const [canCreateTemporary, setCanCreateTemporary] = useState(false);
   const [isRoot, setIsRoot] = useState(false);
+  const [moduleWritable, setModuleWritable] = useState(false);
   const [reviewEligible, setReviewEligible] = useState(false);
   const [expandedProcesses, setExpandedProcesses] = useState<Record<string, boolean>>({});
 
@@ -364,12 +366,14 @@ export function WorkReportingForm({
     const load = async () => {
       const session = await verifySession();
       if (session === "denied" || session.status !== "authorized") throw new Error("当前登录状态已失效，请重新登录。");
-      const assignable = canAssignWork(session.user);
-      const activeAdjustable = canAdjustActiveWorkforce(session.user);
+      const writable = moduleCanWrite(session.user, "rework");
+      setModuleWritable(writable);
+      const assignable = writable && canAssignWork(session.user);
+      const activeAdjustable = writable && canAdjustActiveWorkforce(session.user);
       const root = session.user.isRoot === true;
       const taskReadable = canReadWorkFacts(session.user) || iePrecounts !== undefined;
       const orderReviewable = canReviewOrder(session.user);
-      const temporaryManageable = root || session.user.capabilities.includes("temporary_worker:manage");
+      const temporaryManageable = writable && (root || session.user.capabilities.includes("temporary_worker:manage"));
       setCanAssign(assignable); setCanAdjustActive(activeAdjustable); setCanCreateTemporary(temporaryManageable); setIsRoot(root); setReviewEligible(orderReviewable);
       const loaded = taskReadable ? await reload() : null;
       if (!taskReadable) setMessage(orderReviewable ? "当前岗位只处理尾部确认，不展示工人的个人上数。" : "当前岗位没有这个节点的处理权限。");
@@ -677,8 +681,8 @@ export function WorkReportingForm({
   const effectiveTaskMode = taskMode === "workspace"
     ? data?.reworkStatus === "pending_task_assignment" ? "task_assignment" : ["pending_order_review", "pending_final_quantity_ie_review"].includes(data?.reworkStatus ?? "") ? "whole_order_review" : "work_reporting"
     : taskMode;
-  const assignmentWritable = data?.reworkStatus === "pending_task_assignment";
-  const workReportingWritable = data?.reworkStatus === "in_progress";
+  const assignmentWritable = moduleWritable && data?.reworkStatus === "pending_task_assignment";
+  const workReportingWritable = moduleWritable && data?.reworkStatus === "in_progress";
   const loadedReworkOrderId = data?.reworkOrderId ?? "";
   const visibleTasks = groupTasksByProcess(data?.tasks.filter((task) => !frontlineContext || task.executionKind === frontlineContext.kind) ?? []);
   const incompleteTasks = visibleTasks.filter((task) => task.remainingQuantity !== 0);

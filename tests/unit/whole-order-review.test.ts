@@ -77,7 +77,7 @@ describe("whole-order review contracts", () => {
     expect(panel).toContain(">驳回</button>");
     expect(panel).toContain('className="quantity-price-decision__button is-approve"');
     expect(panel).toContain('className="quantity-price-decision__button is-reject"');
-    expect(panel).toContain("data.canIeReview && <div className=\"quantity-price-decision\"");
+    expect(panel).toContain("(moduleWritable && data.canIeReview) && <div className=\"quantity-price-decision\"");
     expect(panel).toContain("allChangedPricesDecided");
     expect(panel).toContain('priceReviewDecisions[id] === "approved" || priceReviewDecisions[id] === "rejected"');
     expect(panel).not.toContain("changedPriceIds.length === 0 || anyPriceRejected");

@@ -1,3 +1,4 @@
+import { moduleCanWrite } from "./member-module-policy.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { useEffect, useRef, useState } from "react";
 import type { z } from "zod";
@@ -94,17 +95,17 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
         <p>累计生产 {formatBusinessDecimal(detail.order.completedQuantity)} / {formatBusinessDecimal(detail.order.quantity)} 件{detail.order.reportingState?" · 待首次上报":""}</p>
         {detail.order.sourceCaseArchived?<p>原外发单已删除，生产记录继续保留。</p>:null}
         <p>工艺：{detail.order.processes.join("、")}</p>
-        {detail.canReport&&detail.order.status!=="shipped"?<div className="sourcing-form-grid"><label>业务日期<input type="date" value={date} max={today()} onChange={e=>setDate(e.target.value)} disabled={busy}/></label></div>:null}
+        {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&detail.order.status!=="shipped"?<div className="sourcing-form-grid"><label>业务日期<input type="date" value={date} max={today()} onChange={e=>setDate(e.target.value)} disabled={busy}/></label></div>:null}
         <div className="sourcing-order-list">{detail.order.lines.map(line=><Surface key={line.position} className="sourcing-order-card"><div className="production-reporting__line">
           <strong>{line.position}. {line.styleNo} · {line.color??"未记录颜色"}</strong>
           <p>累计 {formatBusinessDecimal(line.completedQuantity)} / {formatBusinessDecimal(line.quantity)} 件 · 剩余 {formatBusinessDecimal(line.quantity-line.completedQuantity)} 件</p>
-          {detail.canReport&&detail.order.status==="in_production"?<form className="sourcing-form-grid production-reporting__report" onSubmit={e=>{e.preventDefault();void write(`/${productionOrderId}/reports`,{position:line.position,businessDate:date,quantity:Number(quantities[line.position])},"本次产量已保存");}}>
+          {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&detail.order.status==="in_production"?<form className="sourcing-form-grid production-reporting__report" onSubmit={e=>{e.preventDefault();void write(`/${productionOrderId}/reports`,{position:line.position,businessDate:date,quantity:Number(quantities[line.position])},"本次产量已保存");}}>
             <label>本次新增数量<input type="number" inputMode="numeric" min={1} max={line.quantity-line.completedQuantity} step={1} required disabled={busy||line.quantity===line.completedQuantity} value={quantities[line.position]??""} onChange={e=>setQuantities(v=>({...v,[line.position]:e.target.value}))}/></label>
             <Button type="submit" disabled={busy||loading||!date||!quantities[line.position]||line.quantity===line.completedQuantity}>保存上报</Button>
           </form>:null}
         </div></Surface>)}</div>
-        {detail.canReport&&detail.order.status==="in_production"?<Button disabled={busy||loading||!date} onClick={()=>{void execute("complete");}}>生产完成</Button>:null}
-        {detail.canReport&&detail.order.status==="production_completed"?<Button disabled={busy||loading||!date} onClick={()=>{void execute("ship");}}>登记发货</Button>:null}
+        {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&detail.order.status==="in_production"?<Button disabled={busy||loading||!date} onClick={()=>{void execute("complete");}}>生产完成</Button>:null}
+        {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&detail.order.status==="production_completed"?<Button disabled={busy||loading||!date} onClick={()=>{void execute("ship");}}>登记发货</Button>:null}
         {detail.shipment?<p>发货款号 {detail.shipment.firstStyleNo} · {detail.shipment.shippedOn} · 发货时登记产量 {formatBusinessDecimal(detail.shipment.recordedQuantity)} 件（仓库收货另行记录）</p>:null}
       </Surface>
       <Surface className="sourcing-list-card"><details><summary>生产历史（{detail.history.length} 条）</summary>

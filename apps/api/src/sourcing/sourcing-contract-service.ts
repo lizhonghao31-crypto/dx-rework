@@ -1,3 +1,4 @@
+import { memberCanWriteModule } from "../access/member-module-policy.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 
@@ -203,7 +204,7 @@ export class SourcingContractService {
        ORDER BY document.contract_version DESC LIMIT 1`,
       [sourcingCaseId],
     );
-    return { item: result.rows[0] ? this.dto(result.rows[0], actor) : null };
+    return { item: result.rows[0] ? await this.dto(result.rows[0], actor) : null };
   }
 
   async supplement(
@@ -402,7 +403,7 @@ export class SourcingContractService {
     }
   }
 
-  private dto(row: ContractRow, actor: TrustedActorContext): SourcingContractDocument {
+  private async dto(row: ContractRow, actor: TrustedActorContext): Promise<SourcingContractDocument> {
     return {
       sourcingContractDocumentId: row.sourcing_contract_document_id,
       sourcingApprovalSnapshotId: row.sourcing_approval_snapshot_id,
@@ -417,8 +418,8 @@ export class SourcingContractService {
       failureReason: row.failure_reason,
       preparedAt: iso(row.prepared_at),
       generatedAt: row.generated_at ? iso(row.generated_at) : null,
-      canSupplement: actor.actorRoles.includes(ROOT_ROLE)
-        || (actor.actorRoles.includes(MERCHANDISER_ROLE) && actor.actorId === row.created_by),
+      canSupplement: await memberCanWriteModule(this.database, actor.actorId, "sourcing") && (actor.actorRoles.includes(ROOT_ROLE)
+        || (actor.actorRoles.includes(MERCHANDISER_ROLE) && actor.actorId === row.created_by)),
     };
   }
 }

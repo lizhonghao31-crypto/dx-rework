@@ -1,3 +1,4 @@
+import { currentModuleCanWrite } from "./member-module-policy.js";
 import {
   ResponsibilityDeterminationResponseSchema,
   ResponsibilitySupplierOptionsResponseSchema,
@@ -253,7 +254,8 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
       requestCurrentUserId(),
     ]);
     setCurrentUserId(userId);
-    applyResponse(next);
+    const writable = await currentModuleCanWrite("rework");
+    applyResponse(writable ? next : { ...next, canDetermine: false, canTakeover: false, canOwnerSign: false });
     setMessage("");
   };
   useEffect(() => {
@@ -416,7 +418,8 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     setBusyAction(action);
     try {
       const next = await write(action, path, payload);
-      applyResponse(next);
+      const writable = await currentModuleCanWrite("rework");
+    applyResponse(writable ? next : { ...next, canDetermine: false, canTakeover: false, canOwnerSign: false });
       setMessage(successMessage);
       onOrderChanged?.();
     } catch (error: unknown) {

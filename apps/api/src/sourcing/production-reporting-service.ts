@@ -1,3 +1,4 @@
+import { memberCanWriteModule } from "../access/member-module-policy.js";
 import { ProductionExclusionService } from "./production-exclusion-service.js";
 import { productionNotExcluded } from "./production-visibility.js";
 import type { ProductionExclusionInput } from "@dx-rework/contracts";
@@ -80,7 +81,7 @@ export class ProductionReportingService {
     const shipment=await client.query<{first_style_no:string;shipped_on:string;recorded_quantity:number}>(
       "SELECT first_style_no,shipped_on::text,recorded_quantity FROM sourcing_production_shipments WHERE production_order_id=$1",[id]);
     const allowed=await client.query<{allowed:boolean}>("SELECT sourcing_production_reporter_allowed($1,$2) AS allowed",[actor.actorId,id]);
-    return ProductionReportingDetailSchema.parse({order,canReport:isProductionReporter(actor)&&(isRoot(actor)||allowed.rows[0]?.allowed===true),canCorrect:isRoot(actor),
+    return ProductionReportingDetailSchema.parse({order,canReport:await memberCanWriteModule(client,actor.actorId,"sourcing")&&isProductionReporter(actor)&&(isRoot(actor)||allowed.rows[0]?.allowed===true),canCorrect:isRoot(actor),
       history:history.rows.map(r=>({reportId:r.report_id,rootReportId:r.root_report_id,revision:r.revision,position:r.position,businessDate:r.business_date,
         quantity:r.quantity,actorName:r.actor_name,createdAt:asIso(r.created_at),reason:r.reason,effective:r.effective})),
       transitions:transitions.rows.map(r=>({status:r.status,businessDate:r.business_date,actorName:r.display_name,createdAt:asIso(r.created_at)})),

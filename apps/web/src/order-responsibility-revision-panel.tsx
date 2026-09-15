@@ -6,7 +6,7 @@ import { createWebUrls } from '../url-contract.js';
 import { createClientRequestId } from './client-request-id.js';
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 const time = (value: string) => new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
-export function OrderResponsibilityRevisionPanel({orderId,orderVersion,onChanged}:{orderId:string;orderVersion:number;onChanged:()=>Promise<void>}) {
+export function OrderResponsibilityRevisionPanel({orderId,orderVersion,onChanged,readOnly=false}:{readOnly?:boolean;orderId:string;orderVersion:number;onChanged:()=>Promise<void>}) {
   const [value,setValue]=useState<OrderResponsibilityRevision|null>(null);
   const [error,setError]=useState(''); const [reason,setReason]=useState(''); const [open,setOpen]=useState(false); const [busy,setBusy]=useState(false);
   const url=apiUrl(`rework-orders/${orderId}/responsibility-revisions`);
@@ -33,7 +33,7 @@ export function OrderResponsibilityRevisionPanel({orderId,orderVersion,onChanged
     <div className="rework-responsibility-result__summary"><strong>责任结果{current?` · V${current.version} · ${current.stage==='draft'?'调整中':'已定稿'}`:''}</strong>
       {current&&<span>本厂 {formatBusinessCurrency(current.ownAmount)} · 外厂 {formatBusinessCurrency(current.externalAmount)} · 实际已扣 {formatBusinessCurrency(value!.paidAmount)}</span>}
       <a href={pageUrl(`ui/tasks/${orderId}?node=responsibility`)}>查看责任明细</a>
-      {value?.canReopen&&<Button onClick={()=>setOpen(!open)}>重新判责</Button>}
+      {!readOnly&&value?.canReopen&&<Button onClick={()=>setOpen(!open)}>重新判责</Button>}
     </div>
     {current&&<p>当前版本：{time(current.at)}{value?.revisions[0]&&value.status!=="completed"?` · ${value.revisions[0].actor??'未记录'} 于 ${time(value.revisions[0].at)} 发起调整：${value.revisions[0].reason??''}`:''}</p>}
     {error&&<p role="alert">{error}</p>}

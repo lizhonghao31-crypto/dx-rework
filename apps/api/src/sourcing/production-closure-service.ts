@@ -6,6 +6,7 @@ import { ProductionPilotInputSchema, ProductionPilotListSchema, ProductionExpect
 import { readProductionProgressFacts } from "./production-dashboard-service.js";
 import { canReadProductionReporting, productionVisibility, productionVisibilityArgs } from "./production-reporting-service.js";
 import { isRootActor } from "../access/business-authority.js";
+import { memberCanReceiveFact } from "../access/member-module-policy.js";
 import type { RootAuthority } from "../access/root-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import { OperationEventRepository, type TrustedActorContext } from "../tools/repositories.js";
@@ -68,6 +69,7 @@ export class ProductionClosureService {
  async todos(actor:TrustedActorContext):Promise<TodoResponse[]> {
   const root=await this.rootActor(actor);
   if(!isProductionRiskRecipient(actor,actor.actorId,root))return [];
+  if(!await memberCanReceiveFact(this.database,actor.actorId,"sourcing.production.dispatch","production_order"))return [];
   const client=await this.database.connect();
   try{await client.query("BEGIN");await client.query("SELECT pg_advisory_xact_lock(hashtext('production-closure'))");
    const timestamp=await client.query<{as_of:Date}>("SELECT clock_timestamp() AS as_of"),asOf=(this.clock?.()??timestamp.rows[0]!.as_of).toISOString();

@@ -1,3 +1,4 @@
+import { hasMemberModulePolicy, memberCanReceiveFact } from "../access/member-module-policy.js";
 import type { PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
@@ -286,6 +287,7 @@ export class TodoProjectionService {
       invalidRecipientRouting?: CreateTodoInTransactionInput["invalidRecipientRouting"];
     }>,
   ): Promise<void> {
+    if (!(await memberCanReceiveFact(client, projection.recipientUserId, projection.sourceAction, projection.entityType, projection.entityId))) return;
     await this.todos.createInTransaction(client, actor, {
       todoType: "business_action",
       category: projection.category,
@@ -318,6 +320,7 @@ export class TodoProjectionService {
       recipientUserId: string;
     }>,
   ): Promise<void> {
+    if (!(await memberCanReceiveFact(client, projection.recipientUserId, projection.sourceAction, projection.entityType, projection.entityId))) return;
     const eligible = await client.query<{ eligible: boolean }>(
       "SELECT todo_user_has_direct_role($1::uuid,$2::text,$3::text) AS eligible",
       [projection.recipientUserId, projection.requiredRole, projection.requiredCapability],
@@ -365,6 +368,7 @@ export class TodoProjectionService {
     actor: TrustedActorContext,
     projection: NamedRoleOrOrderDelegateProjection,
   ): Promise<void> {
+    if (!(await memberCanReceiveFact(client, projection.recipientUserId, projection.sourceAction, projection.entityType, projection.entityId))) return;
     const direct = await client.query<{ eligible: boolean }>(
       "SELECT todo_user_has_direct_role($1::uuid,$2::text,$3::text) AS eligible",
       [
@@ -436,6 +440,7 @@ export class TodoProjectionService {
     actor: TrustedActorContext,
     projection: InformationProjection,
   ): Promise<void> {
+    if (!(await memberCanReceiveFact(client, projection.recipientUserId, projection.sourceAction, projection.entityType, projection.entityId))) return;
     await this.todos.createInTransaction(client, actor, {
       todoType: "information",
       category: projection.category,
@@ -495,7 +500,7 @@ export class TodoProjectionService {
     actor: TrustedActorContext,
     projection: ActionableProjection & Readonly<{ excludeUserId: string }>,
   ): Promise<void> {
-    const recipients = await client.query<{ user_id: string }>(
+    let recipients = await client.query<{ user_id: string }>(
       `SELECT DISTINCT assignment.user_id
        FROM user_role_assignments assignment
        WHERE assignment.role_code='owner_group' AND assignment.revoked_at IS NULL
@@ -507,6 +512,13 @@ export class TodoProjectionService {
        LIMIT 2`,
       [projection.excludeUserId],
     );
+    if (recipients.rows.length === 0 && await hasMemberModulePolicy(client)) {
+      recipients = await client.query<{ user_id: string }>(
+        `SELECT binding.user_id FROM business_module_owner_bindings binding
+         WHERE binding.member_key='li_junyue' AND binding.user_id<>$1::uuid
+           AND access_is_root_actor(binding.user_id)`, [projection.excludeUserId],
+      );
+    }
     if (recipients.rows.length !== 1) {
       throw new ApplicationError(
         "CONFLICT",
@@ -530,6 +542,7 @@ export class TodoProjectionService {
     actor: TrustedActorContext,
     projection: ResponsibilityHandlerProjection,
   ): Promise<void> {
+    if (!(await memberCanReceiveFact(client, projection.recipientUserId, projection.sourceAction, projection.entityType, projection.entityId))) return;
     const direct = await client.query<{ role_code: string }>(
       `SELECT assignment.role_code
        FROM user_role_assignments assignment
@@ -704,6 +717,7 @@ export class TodoProjectionService {
     actor: TrustedActorContext,
     projection: NamedSourceActorProjection,
   ): Promise<void> {
+    if (!(await memberCanReceiveFact(client, projection.recipientUserId, projection.sourceAction, projection.entityType, projection.entityId))) return;
     const source = await client.query<{
       actor_id: string;
       actor_roles: string[];

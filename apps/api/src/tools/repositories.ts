@@ -87,6 +87,13 @@ export class IdempotencyService {
   }
 }
 
+const rethrowMemberPolicyError = (error: unknown): never => {
+  if (error instanceof Error && error.message.includes("MEMBER_MODULE_READ_ONLY:")) {
+    throw new ApplicationError("FORBIDDEN", "当前账号在此业务模块仅可查看", 403);
+  }
+  throw error;
+};
+
 export class OperationEventRepository {
   private actorRoles(actor: TrustedActorContext): string[] {
     const actorRoles = [...new Set(actor.actorRoles)].sort();
@@ -107,7 +114,7 @@ export class OperationEventRepository {
       `INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id,before_state,after_state,reason)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
       [eventId, actor.requestId, actor.actorId, actorRoles, actor.authorizationCapability, input.action, input.entityType, input.entityId, input.before ?? null, input.after ?? null, input.reason ?? null],
-    );
+    ).catch(rethrowMemberPolicyError);
     return eventId;
   }
 
@@ -143,7 +150,7 @@ export class OperationEventRepository {
          before_state jsonb,after_state jsonb,reason text
        )`,
       [JSON.stringify(rows)],
-    );
+    ).catch(rethrowMemberPolicyError);
     return rows.map((row) => row.event_id);
   }
 }

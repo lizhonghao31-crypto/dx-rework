@@ -107,7 +107,7 @@ describe("business-facing workflow UI", () => {
     expect(source).toContain("请输入您的实际完工件数");
     expect(source).toContain("返回返工");
     expect(source).toContain("临时工完工上数");
-    expect(source).toContain('const workReportingWritable = data?.reworkStatus === "in_progress";');
+    expect(source).toContain('const workReportingWritable = moduleWritable && data?.reworkStatus === "in_progress";');
     expect(source).toContain("已流转至 N05 · 尾部最终数量确认");
     expect(source).toContain("canReviewOrder(session.user)");
     expect(source).not.toContain("登记本次完成数量");

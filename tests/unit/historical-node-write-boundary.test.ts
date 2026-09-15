@@ -10,8 +10,8 @@ describe("historical node write boundary", () => {
     expect(source).toContain('loaded?.reworkStatus === "pending_task_assignment"');
     expect(source).toContain('data.reworkStatus !== "pending_task_assignment"');
     expect(source).toContain('data.reworkStatus !== "in_progress"');
-    expect(source).toContain('const assignmentWritable = data?.reworkStatus === "pending_task_assignment";');
-    expect(source).toContain('const workReportingWritable = data?.reworkStatus === "in_progress";');
+    expect(source).toContain('const assignmentWritable = moduleWritable && data?.reworkStatus === "pending_task_assignment";');
+    expect(source).toContain('const workReportingWritable = moduleWritable && data?.reworkStatus === "in_progress";');
     expect(source).toContain('canAssign && assignmentWritable');
     expect(source).toContain('assignmentWritable ? "待开工" : "已处理"');
     expect(source).toContain('task.remainingQuantity === 0 ? "已完成"');

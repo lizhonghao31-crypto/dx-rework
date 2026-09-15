@@ -1,3 +1,4 @@
+import { registerMemberModuleHttpGuard } from "./access/member-module-http.js";
 import { registerSupplierOnboardingRoutes, type SupplierOnboardingDependencies } from "./access/supplier-onboarding-routes.js";
 import { registerPatternRoomPriceRoutes, type PatternRoomPriceDependencies } from "./pattern-room/price-routes.js";
 import { registerPatternRoomOrderRoutes, type PatternRoomOrderDependencies } from "./pattern-room/order-routes.js";
@@ -130,6 +131,8 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
       return typeof incoming === "string" && SAFE_REQUEST_ID.test(incoming) ? incoming : randomUUID();
     },
   });
+
+  if (dependencies.auth) registerMemberModuleHttpGuard(app, token => dependencies.auth!.authenticate(token));
 
   if (dependencies.operationDiagnostics) registerOperationDiagnostics(app,dependencies.operationDiagnostics);
 

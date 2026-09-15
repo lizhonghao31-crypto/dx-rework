@@ -1,3 +1,4 @@
+import { moduleCanWrite } from "./member-module-policy.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { KpiInstrument, StatusBadge, Surface } from "@dx-rework/ui";
@@ -292,7 +293,7 @@ export function OrderBoardPage() {
         const qualityControl = roles.includes("quality_control")
           && capabilities.includes("rework:initiate");
         setCanReceive(isRoot || warehouseReceiver);
-        setCanInitiate(isRoot || roles.includes("owner_group") || qualityControl);
+        setCanInitiate(moduleCanWrite(session.user, "rework") && (isRoot || roles.includes("owner_group") || qualityControl));
         setCanExport(isRoot || capabilities.includes("receiving:export"));
         setCanResolveReceivingDifference(isRoot || (
           roles.includes("warehouse_receiver") && capabilities.includes("receiving:resolve_difference")

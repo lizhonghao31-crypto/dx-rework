@@ -1,3 +1,4 @@
+import { currentModuleCanWrite } from "./member-module-policy.js";
 import {
   ExternalResponsibilityBatchResponseSchema,
   ExternalResponsibilityCaseResponseSchema,
@@ -89,7 +90,7 @@ const requestError = async (response: Response): Promise<string> => {
 export function ExternalResponsibilityPanel({
   reworkOrderId,
   focusCaseId,
-  readOnly = false,
+  readOnly: requestedReadOnly = false,
   embedded = false,
 }: {
   reworkOrderId: string | null;
@@ -102,6 +103,8 @@ export function ExternalResponsibilityPanel({
   const [selection, setSelection] = useState<Record<string, string>>({});
   const [temporarySupplierName, setTemporarySupplierName] = useState<Partial<Record<ResponsibilityType, string>>>({});
   const [processingOverrideReason, setProcessingOverrideReason] = useState("");
+  const [moduleWritable, setModuleWritable] = useState(false);
+  const readOnly = requestedReadOnly || !moduleWritable;
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [amount, setAmount] = useState<Record<string, string>>({});
@@ -110,6 +113,7 @@ export function ExternalResponsibilityPanel({
 
   const load = async (): Promise<ExternalResponsibilityBatchResponse> => {
     if (!reworkOrderId) return null;
+    setModuleWritable(await currentModuleCanWrite("rework"));
     const response = await fetch(
       apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities`),
       { credentials: "include", headers: { accept: "application/json" } },

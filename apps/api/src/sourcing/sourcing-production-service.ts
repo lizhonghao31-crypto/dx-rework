@@ -1,3 +1,4 @@
+import { memberCanWriteModule } from "../access/member-module-policy.js";
 import { productionNotExcluded } from "./production-visibility.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -96,7 +97,7 @@ export class SourcingProductionService {
     const row = result.rows[0];
     return {
       item: row ? { productionOrderId: row.production_order_id, status: row.status, dispatchedAt: iso(row.dispatched_at) } : null,
-      canDispatch: !row && canWrite(actor, source.created_by) && source.contract_status === "ready",
+      canDispatch: !row && await memberCanWriteModule(this.database, actor.actorId, "sourcing") && canWrite(actor, source.created_by) && source.contract_status === "ready",
     };
   }
 
