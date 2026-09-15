@@ -41,7 +41,8 @@ describe("root logical deletion review regressions", () => {
   it("keeps the deleted-order external responsibility join unambiguous", async () => {
     const source = await readFile("apps/api/src/rework/fixed-external-responsibility-service.ts", "utf8");
 
-    expect(source).toContain("ORDER BY batch.created_at DESC");
+    expect(source).toContain("ORDER BY (batch.status='active') DESC,batch.created_at DESC");
+    expect(source).toContain("order_record.status<>'deleted'");
     expect(source).not.toContain("ORDER BY created_at DESC");
   });
 });
