@@ -17,6 +17,7 @@ import type {
   SubmitExternalResponsibilityCase,
 } from "@dx-rework/contracts";
 import type { Pool, PoolClient } from "pg";
+import type { ExternalResponsibilityCaseResponse as CurrentExternalCaseResponse } from "@dx-rework/contracts/external-responsibility";
 
 import { ApplicationError } from "../platform/errors.js";
 import {
@@ -29,7 +30,7 @@ import type { TodoProjectionService } from "../todos/projection-service.js";
 
 type Queryable = Pool | PoolClient;
 type ExternalResponsibilityCaseResponse = LegacyExternalCaseResponse & Pick<
-  import("@dx-rework/contracts/external-responsibility").ExternalResponsibilityCaseResponse,
+  CurrentExternalCaseResponse,
   "evidenceAttachments" | "specialApprovalHistory"
 >;
 type Result<T> = { value: T; reused: boolean };
