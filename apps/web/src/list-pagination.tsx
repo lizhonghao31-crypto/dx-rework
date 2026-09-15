@@ -1,9 +1,10 @@
+import { LIST_PAGE_SIZE } from "@dx-rework/contracts/reporting";
 import { useEffect, useMemo, useState } from "react";
 
 import { todoPageWindow } from "./todo-pagination.js";
 import "./my-todos.css";
 
-export const LIST_PAGE_SIZE = 15;
+export { LIST_PAGE_SIZE } from "@dx-rework/contracts/reporting";
 
 export const listPageWindow = todoPageWindow;
 

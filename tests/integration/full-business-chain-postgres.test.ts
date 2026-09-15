@@ -1,3 +1,4 @@
+import { exerciseWagePagination } from "./helpers/wage-pagination-scenario.js";
 import { exerciseFinancePatternQueries, exerciseMixedFinancePatternScope } from "./helpers/finance-pattern-query-scenario.js";
 import { exerciseFinanceOrderQueries } from "./helpers/finance-order-query-scenario.js";
 import { MemberModuleBindingService } from "../../apps/api/src/access/member-module-binding-service.js";
@@ -2149,6 +2150,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const sheet = [...xml.matchAll(/<worksheet[\s\S]*?<\/worksheet>/g)][1]![0];
     expect((sheet.match(/<row r=/g) ?? []).length).toBe(502);
     expect(xml).toContain("首次打板"); expect(xml).toContain("工资来源"); expect(xml).toContain('formatCode="#,##0.###"');
+    await exerciseWagePagination({database,reporting,actor:finance,filters});
     const preview = await reporting.previewWageSettlement(finance, filters);
     expect(preview).toMatchObject({ lineCount: 501, personCount: 2 });
     // A new August rework is confirmed after preview, so it must not inherit the old snapshot's mark.

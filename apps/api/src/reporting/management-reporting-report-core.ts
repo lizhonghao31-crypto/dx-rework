@@ -7,10 +7,10 @@ import { wageReport } from "./management-reporting-report-wages.js";
 import { responsibilityReport, ownFactoryReport, externalReport } from "./management-reporting-report-responsibility.js";
 import { exceptionReport, totals } from "./management-reporting-report-exceptions.js";
 
-export async function reportData(source: Queryable, reportType: ReportType, query: ReportQuery, range: Range, limit: number): Promise<ReportData> {
+export async function reportData(source: Queryable, reportType: ReportType, query: ReportQuery, range: Range, limit: number, page?:number): Promise<ReportData> {
   switch (reportType) {
     case "rework_overview": return reworkReport(source, query, limit);
-    case "wages": return wageReport(source, query, range, limit);
+    case "wages": return wageReport(source, query, range, limit, page);
     case "responsibilities": return responsibilityReport(source, query, range, limit);
     case "own_factory": return ownFactoryReport(source, query, range, limit);
     case "external_deductions": return externalReport(source, query, range, limit);

@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import { BUSINESS_TIME_ZONE } from "./business-display.js";
 
+export const LIST_PAGE_SIZE = 15;
+
 const IdSchema = z.string().uuid();
 const MoneySchema = z.string().regex(/^-?\d+\.\d{2}$/);
 const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -70,6 +72,10 @@ export const ReportQuerySchema = DashboardQuerySchema.extend({
   limit: z.coerce.number().int().min(1).max(500).default(100),
 }).strict().superRefine((value, context) => {
   if (value.patternKind && value.wageSource !== "pattern_room") context.addIssue({code:"custom",path:["patternKind"],message:"板房类型需要选择订单打板来源"});
+});
+
+export const WageReportPageQuerySchema = ReportQuerySchema.safeExtend({
+  page:z.coerce.number().int().min(1).max(100_000),
 });
 
 export const DashboardNodeSchema = z.object({
@@ -247,6 +253,7 @@ export const ReportPreviewResponseSchema = z.object({
   canExport: z.boolean(),
   canSettleWages: z.boolean().optional(),
   wageSummary: WageReportSummarySchema.optional(),
+  pagination: z.object({page:z.number().int().positive(),pageSize:z.number().int().positive(),totalCount:z.number().int().nonnegative(),totalPages:z.number().int().positive()}).strict().optional(),
   totals: z.record(z.string(), z.string()),
   columns: z.array(z.object({ key: z.string().min(1), label: z.string().min(1) }).strict()),
   rows: z.array(z.record(z.string(), ReportCellSchema)),

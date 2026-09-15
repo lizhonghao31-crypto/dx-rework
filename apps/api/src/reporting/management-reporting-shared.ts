@@ -55,7 +55,7 @@ export type ExceptionRow = {
 };
 export type ReportColumn = { key: string; label: string };
 export type ReportRow = Record<string, string | number | boolean | null>;
-export type ReportData = { columns: ReportColumn[]; rows: ReportRow[]; totals: Record<string, string>; wageSummary?: ReportPreviewResponse["wageSummary"] };
+export type ReportData = { columns: ReportColumn[]; rows: ReportRow[]; totals: Record<string, string>; wageSummary?: ReportPreviewResponse["wageSummary"]; pagination?:ReportPreviewResponse["pagination"] };
 
 export const fail = (message: string, status = 403, code = "FORBIDDEN"): never => {
   throw new ApplicationError(code, message, status);
