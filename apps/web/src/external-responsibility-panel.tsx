@@ -15,6 +15,7 @@ import { shanghaiBusinessDate } from "./business-date.js";
 import { confirmDeductionException } from "./external-deduction-confirmation.js";
 import { ExternalEvidenceView } from "./external-evidence-view.js";
 import { ExternalEvidenceUploader } from "./external-evidence-uploader.js";
+import { readExternalResponsibilityResponse } from "./external-responsibility-response.js";
 import { SearchSelect } from "./search-select.js";
 import { alertInApp, confirmInApp, promptInApp } from "./system-dialog.js";
 import "./external-responsibility.css";
@@ -123,7 +124,7 @@ export function ExternalResponsibilityPanel({
       return null;
     }
     if (!response.ok) throw new Error(await requestError(response));
-    const value = ExternalResponsibilityBatchResponseSchema.parse(await response.json());
+    const value = await readExternalResponsibilityResponse(response, ExternalResponsibilityBatchResponseSchema, "read");
     setState({ kind: "ready", value });
     return value;
   };
@@ -141,7 +142,7 @@ export function ExternalResponsibilityPanel({
           entry.items.some((mapped) => mapped.externalItemId === item.externalItemId),
         ),
       ) ?? false;
-      if (!batch || !hasUnassigned || batch.canAllocateSuppliers === false) return [] as Supplier[];
+      if (!batch || !hasUnassigned || batch.canAllocateSuppliers !== true) return [] as Supplier[];
       const response = await fetch(
         apiUrl(`rework-orders/${reworkOrderId}/external-responsibilities/supplier-options`),
         { credentials: "include", signal: controller.signal, headers: { accept: "application/json" } },
@@ -153,7 +154,7 @@ export function ExternalResponsibilityPanel({
       if (!(error instanceof DOMException && error.name === "AbortError")) {
         setState({
           kind: "unavailable",
-          message: error instanceof Error ? error.message : "外部责任台账加载失败",
+          message: error instanceof Error ? error.message : "扣款资料加载失败，请刷新重试。",
         });
       }
     });
@@ -195,7 +196,7 @@ export function ExternalResponsibilityPanel({
       body: JSON.stringify(body),
     });
     if (!response.ok) throw new Error(await requestError(response));
-    const result = ExternalResponsibilityCaseResponseSchema.parse(await response.json());
+    const result = await readExternalResponsibilityResponse(response, ExternalResponsibilityCaseResponseSchema, "write");
     delete pendingMutationKeys.current[signature];
     return result;
   };
@@ -303,7 +304,7 @@ export function ExternalResponsibilityPanel({
         body: JSON.stringify(body),
       });
       if (!response.ok) throw new Error(await requestError(response));
-      const value = ExternalResponsibilityBatchResponseSchema.parse(await response.json());
+      const value = await readExternalResponsibilityResponse(response, ExternalResponsibilityBatchResponseSchema, "write");
       delete pendingMutationKeys.current[signature];
       setState({ kind: "ready", value });
       setMessage("供应商已锁定，可进入扣款。 ");
@@ -537,7 +538,10 @@ export function ExternalResponsibilityPanel({
 
   if (state.kind === "hidden") return null;
   if (state.kind === "loading") return <Surface className="external-state">正在加载扣款台账…</Surface>;
-  if (state.kind === "unavailable") return <Surface className="external-state">{state.message}</Surface>;
+  if (state.kind === "unavailable") return <Surface className="external-state">{state.message}<Button type="button" disabled={busy} onClick={() => {
+    setBusy(true);
+    void load().catch((error: unknown) => setState({ kind: "unavailable", message: error instanceof Error ? error.message : "扣款资料加载失败，请刷新重试。" })).finally(() => setBusy(false));
+  }}>刷新</Button></Surface>;
   if (!state.value) return <Surface className="external-state">本单没有供应商责任金额，无需供应商扣款。</Surface>;
 
   const batch = state.value;
@@ -545,7 +549,7 @@ export function ExternalResponsibilityPanel({
   const visibleCases = focusCaseId
     ? allCases.filter((caseItem) => caseItem.caseId === focusCaseId)
     : allCases;
-  const visibleUnassigned = readOnly || focusCaseId || batch.status !== "active" || batch.canAllocateSuppliers === false ? [] : unassigned;
+  const visibleUnassigned = readOnly || focusCaseId || batch.status !== "active" || batch.canAllocateSuppliers !== true ? [] : unassigned;
   const supplierAllocationReady = visibleUnassigned.length > 0
     && visibleUnassigned.every((item) => Boolean(selection[item.externalItemId]));
 
