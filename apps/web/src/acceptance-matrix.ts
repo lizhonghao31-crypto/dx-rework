@@ -332,20 +332,17 @@ const EXISTING_ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
   {
     alias: "finance-read",
     expectedRole: "finance_read",
-    requiredCapabilities: ["report:view"],
-    forbiddenCapabilities: ["sourcing:view", "supplier_profile:read", "sample:view_basic", "access:admin"],
-    allowedModules: ["rework"],
-    forbiddenModules: ["sourcing", "suppliers", "production", "samples"],
-    probes: [accessRolesDeny, reworkReportAllow, sourcingDeny, suppliersDeny, productionDashboardDeny, samplesDeny],
+    requiredCapabilities: ["report:view", "sourcing:view", "supplier_profile:read", "supplier_contract_data:read", "sample:view_basic", "sample:view_finance", "sample:view_audit", "rework:finance_nodes:read", "pattern_room:catalog:read", "pattern_room:misc:quote"],
+    forbiddenCapabilities: ["access:admin", "production-reporting", "external_deduction:special_approve", "report:export", "receiving:export", ...sampleMutationCapabilities],
+    allowedModules: ["rework", "sourcing", "suppliers", "production", "samples"],
+    probes: [accessRolesDeny, reworkReportAllow, sourcingAllow, suppliersAllow, productionDashboardAllow, samplesAllow],
     ruleRefs: {
       ...approvedKeys("PERM-ROLE-FINANCE-READ-001", [
-        "cap:sourcing:view:deny", "cap:supplier_profile:read:deny", "cap:sample:view_basic:deny", "cap:access:admin:deny",
-        "module:sourcing:deny", "module:suppliers:deny", "module:production:deny", "module:samples:deny",
-        "http:sourcing-list", "http:supplier-list", "http:production-dashboard", "http:sample-list",
+        ...["report:view", "sourcing:view", "supplier_profile:read", "supplier_contract_data:read", "sample:view_basic", "sample:view_finance", "sample:view_audit", "rework:finance_nodes:read", "pattern_room:catalog:read", "pattern_room:misc:quote"].map(cap => `cap:${cap}:allow`),
+        ...["access:admin", "production-reporting", "external_deduction:special_approve", "report:export", "receiving:export", ...sampleMutationCapabilities].map(cap => `cap:${cap}:deny`),
+        ...["rework", "sourcing", "suppliers", "production", "samples"].map(module => `module:${module}:allow`),
+        "http:sourcing-list", "http:supplier-list", "http:production-dashboard", "http:sample-list", "http:rework-report-list",
       ]),
-      "cap:report:view:allow": approved("PERM-REWORK-FINANCE-READ-001"),
-      "module:rework:allow": approved("PERM-REWORK-FINANCE-READ-001"),
-      "http:rework-report-list": approved("PERM-REWORK-FINANCE-READ-001"),
       "http:access-roles": approved("PERM-PLATFORM-ACCESS-ADMIN-001"),
     },
   },
@@ -557,7 +554,7 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXIS
  }).map(entry => {
   // PR02 approved field-level authority, independently transcribed from section 8.1.
   const root = entry.expectedRoot === true;
-  const read = root || ["owner_group","production_management","finance_director","pattern_room_supervisor"].includes(entry.expectedRole);
+  const read = root || ["owner_group","production_management","finance_director","finance_read","pattern_room_supervisor"].includes(entry.expectedRole);
   const moduleAccess = read || ["sample_designer","order_merchandiser","worker"].includes(entry.expectedRole);
   const category = root || ["owner_group","production_management"].includes(entry.expectedRole);
   const hourly = root || entry.expectedRole === "owner_group";
@@ -569,7 +566,7 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXIS
     allowedModules: [...(entry.allowedModules ?? []), ...(moduleAccess ? ["pattern_room" as const] : [])],
     forbiddenModules: [...(entry.forbiddenModules ?? []), ...(!moduleAccess ? ["pattern_room" as const] : [])],
     probes: [...(entry.probes ?? []), probe("pattern-room-prices","板房价格管控","pattern-room/prices",read ? 200 : 403)],
-    ruleRefs: { ...entry.ruleRefs, ...approvedKeys("PERM-PATTERN-PRICE-20260912",[
+    ruleRefs: { ...entry.ruleRefs, ...approvedKeys(entry.expectedRole === "finance_read" ? "PERM-ROLE-FINANCE-READ-001" : "PERM-PATTERN-PRICE-20260912",[
       ...required.map(cap => `cap:${cap}:allow`), ...forbidden.map(cap => `cap:${cap}:deny`),
       `module:pattern_room:${moduleAccess ? "allow" : "deny"}`, "http:pattern-room-prices",
     ]) },

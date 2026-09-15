@@ -1,3 +1,5 @@
+import { ACCEPTANCE_ROLE_MATRIX } from "../../apps/web/src/acceptance-matrix.js";
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { canUsePatternPrice } from "@dx-rework/contracts/pattern-room";
 import { canUseSampleCapability } from "../../apps/api/src/samples/sample-authority.js";
@@ -33,4 +35,22 @@ describe('finance business read parity',()=>{
       expect(canReadDaxingPrice([role],false)).toBe(false);
     }
   });
+  it('keeps the live acceptance matrix aligned with approved finance reads and existing write limits',()=>{
+    const row=ACCEPTANCE_ROLE_MATRIX.find(entry=>entry.alias==='finance-read')!;
+    for(const cap of [...capabilities,'supplier_profile:read','supplier_contract_data:read','rework:finance_nodes:read','wage:settlement_mark']) {
+      expect(row.requiredCapabilities).toContain(cap);expect(row.forbiddenCapabilities).not.toContain(cap);
+    }
+    for(const module of ['rework','sourcing','suppliers','production','samples','finance','pattern_room']) {
+      expect(row.allowedModules).toContain(module);expect(row.forbiddenModules).not.toContain(module);
+    }
+    for(const id of ['sourcing-list','supplier-list','production-dashboard','sample-list','pattern-room-prices']) expect(row.probes!.find(probe=>probe.id===id)?.expectedStatus).toBe(200);
+    for(const cap of ['sample:create','external_deduction:special_approve','pattern_room:prices:write','report:export','receiving:export']) expect(row.forbiddenCapabilities).toContain(cap);
+    expect(row.ruleRefs!['http:pattern-room-prices'].ruleId).toBe('PERM-ROLE-FINANCE-READ-001');
+  });
+  it('includes saved legacy closure and follow-up proof in the read-only history',async()=>{
+    const source=await readFile('apps/web/src/external-responsibility-panel.tsx','utf8');
+    expect(source).toContain('attachmentIds={caseItem.closure.evidenceAttachmentIds}');
+    expect(source).toContain('attachmentIds={follow.attachmentIds}');
+  });
+
 });

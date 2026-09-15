@@ -662,6 +662,15 @@ export function ExternalResponsibilityPanel({
             <ExternalEvidenceView attachmentIds={request.attachmentIds} files={caseItem.evidenceAttachments ?? []} />
           </div>)}
 
+          {caseItem.closure && caseItem.closure.evidenceAttachmentIds.length > 0 && <div className="external-special-approval">
+            <b>结案凭证{caseItem.closure.reason ? `：${caseItem.closure.reason}` : ""}</b>
+            <ExternalEvidenceView attachmentIds={caseItem.closure.evidenceAttachmentIds} files={caseItem.evidenceAttachments ?? []} />
+          </div>}
+          {caseItem.followUps.filter(follow => follow.attachmentIds.length > 0).map(follow => <div className="external-special-approval" key={follow.followUpId}>
+            <b>跟进凭证：{follow.content}</b>
+            <ExternalEvidenceView attachmentIds={follow.attachmentIds} files={caseItem.evidenceAttachments ?? []} />
+          </div>)}
+
           {caseItem.closure?.result === "full" && <StatusBadge tone="success">已足额扣款</StatusBadge>}
           {caseItem.revisionRequests.filter((item) => item.seededDeterminationId).map((item) => (
             <StatusBadge key={item.revisionRequestId} tone="success">已进入 N08 重新判责</StatusBadge>
