@@ -103,8 +103,11 @@ dialog.pattern-price-dialog::backdrop { background: rgb(19 28 38 / 58%); }
 /* Rework cards own the surface, link, badge, trash icon and responsive geometry. */
 .pattern-orders.rework-query-content { display: grid; }
 .pattern-orders .reporting-order-card { min-width: 0; }
+/* The shared surface can be taller than its compact link; keep all card whitespace clickable. */
+.pattern-orders .reporting-order-card__main::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.pattern-orders .reporting-order-delete { z-index: 1; }
 .pattern-orders .reporting-order-card__main:focus-visible { outline: 2px solid var(--dx-v2-color-primary); outline-offset: -2px; border-radius: inherit; }
-.pattern-delete-error { margin: 0; padding: 8px 14px; }
+.pattern-delete-error { position: relative; z-index: 1; margin: 0; padding: 8px 14px; }
 .pattern-detail-toolbar { position: relative; padding-right: 48px; min-height: 40px; margin: 0; }
 .pattern-detail-toolbar .reporting-order-delete { top: 50%; transform: translateY(-50%); }
 .pattern-detail-toolbar .pattern-delete-error { flex-basis: 100%; }
