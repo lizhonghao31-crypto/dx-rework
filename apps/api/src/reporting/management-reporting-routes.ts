@@ -1,7 +1,7 @@
 import { assertFinanceWageAccess, type WageAccessCapability } from "../wages/wage-access.js";
 import {
   FinanceNodeParamsSchema, FinanceNodeReadSchema,
-  BasicReworkPageSchema, BasicReworkQuerySchema,
+  BasicReworkPageSchema, WageReportPageQuerySchema, BasicReworkQuerySchema,
   WageSettlementPreviewSchema, WageSettlementRequestSchema, WageSettlementResultSchema,
   DashboardQuerySchema,
   ManagementDashboardResponseSchema,
@@ -109,6 +109,10 @@ export function registerManagementReportingRoutes(
 
   app.get("/management/reports/:reportType", async (request) => {
     const { reportType } = parse(ReportTypeParamsSchema, request.params);
+    if(reportType==="wages" && typeof request.query==="object" && request.query!==null && "page" in request.query) {
+      const {page,...filters}=parse(WageReportPageQuerySchema,request.query);
+      return ReportPreviewResponseSchema.parse(await dependencies.service.report(await actor(request,"wage:view"),reportType,filters,page));
+    }
     return ReportPreviewResponseSchema.parse(await dependencies.service.report(
       await actor(request, reportType === "wages" ? "wage:view" : "report:view"),
       reportType,

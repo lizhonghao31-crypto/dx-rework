@@ -1,3 +1,4 @@
+import { LIST_PAGE_SIZE } from "@dx-rework/contracts/reporting";
 import { canAccessFinanceWages, requireFinanceWageAccess } from "../wages/wage-access.js";
 import { readFinanceNode } from "./finance-node-reader.js";
 import type { FinanceNodeKey } from "@dx-rework/contracts/reporting";
@@ -264,18 +265,20 @@ export class ManagementReportingService {
     };
   }
 
-  async report(actor: TrustedActorContext, reportType: ReportType, query: ReportQuery): Promise<ReportPreviewResponse> {
+  async report(actor: TrustedActorContext, reportType: ReportType, query: ReportQuery, page?:number): Promise<ReportPreviewResponse> {
+    if(page!==undefined && (reportType!=="wages" || !Number.isInteger(page) || page<1 || page>100_000)) fail("工资页码无效",400,"VALIDATION_ERROR");
     this.validateReportStatus(reportType, query.status);
     if (reportType === "wages") await requireFinanceWageAccess(this.db, actor, "wage:view");
     else await this.require(actor, "report:view");
     const canReadWages = reportType === "wages" || (reportType === "rework_overview" && await this.mayReadWageFields(actor));
     const range = await this.range(query);
-    const allData = await reportData(this.db, reportType, query, range, query.limit + 1);
+    const allData = await reportData(this.db, reportType, query, range, page===undefined?query.limit + 1:LIST_PAGE_SIZE, page);
     const data = reportType === "rework_overview" && !canReadWages ? this.withoutWageFields(allData) : allData;
-    const truncated = data.rows.length > query.limit;
+    const truncated = page===undefined && data.rows.length > query.limit;
     const rows = truncated ? data.rows.slice(0, query.limit) : data.rows;
     return {
       reportType,
+      ...(data.pagination?{pagination:data.pagination}:{}),
       asOf: range.asOf.toISOString(),
       range: { from: range.from, to: range.to, timezone: TIMEZONE },
       rowCount: rows.length,

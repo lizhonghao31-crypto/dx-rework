@@ -63,16 +63,19 @@ export function WagePeriodList() {
     q: debouncedQ.trim() || undefined,
     personType: personType || undefined,
     wageSource: wageSource || undefined, patternKind: patternKind || undefined, status:status || undefined,
-    limit: "500",
   }), [from, to, debouncedQ, personType, wageSource, patternKind, status]);
-  const queryKey = JSON.stringify([filters,refresh]);
+  const resetKey=JSON.stringify(filters);
+  const [pages,setPages]=useState({key:resetKey,detail:initial.page,person:initial.personPage});
+  const currentPages=pages.key===resetKey?pages:{key:resetKey,detail:1,person:1};
+  const requestedPage=currentPages.detail;
+  const queryKey = JSON.stringify([filters,refresh,requestedPage]);
   const currentKey = useRef(queryKey);
   currentKey.current = queryKey;
 
   useEffect(() => {
     const controller = new AbortController();
     setReport((current) => current.kind === "ready" ? current : { kind: "loading" });
-    void loadReport("wages", filters, controller.signal)
+    void loadReport("wages", {...filters,page:String(requestedPage)}, controller.signal)
       .then((value) => { if (!controller.signal.aborted) setReport({ kind: "ready", value, key: queryKey }); })
       .catch((error: unknown) => {
         if (!(error instanceof DOMException && error.name === "AbortError")) {
@@ -82,7 +85,7 @@ export function WagePeriodList() {
     return () => {
       controller.abort();
     };
-  }, [filters,queryKey]);
+  }, [filters,queryKey,requestedPage]);
 
   const setMonth = () => {
     setFrom(reportingBusinessMonthStart());
@@ -104,7 +107,6 @@ export function WagePeriodList() {
   const value = report.kind === "ready" ? report.value : null;
   const personSummary = value?.wageSummary?.people ?? [];
   const stale = report.kind !== "ready" || report.key !== queryKey || q.trim() !== debouncedQ.trim();
-  const resetKey = JSON.stringify(filters);
   const settle = async () => {
     if (stale || busyRef.current || !value?.canSettleWages || !value.wageSummary?.pendingLineCount) return;
     busyRef.current = true; setBusy(true); setMessage("");
@@ -121,8 +123,6 @@ export function WagePeriodList() {
     } catch(error) {setMessage(error instanceof Error ? error.message : "工资结算标记失败");setRefresh(n=>n+1);}
     finally {busyRef.current=false;setBusy(false);}
   };
-  const [pages,setPages]=useState({key:resetKey,detail:initial.page,person:initial.personPage});
-  const currentPages=pages.key===resetKey?pages:{key:resetKey,detail:1,person:1};
   const paginate=<T,>(items:readonly T[],kind:"person"|"detail")=>{
     const totalPages=Math.max(1,Math.ceil(items.length/LIST_PAGE_SIZE));
     const page=Math.min(currentPages[kind],totalPages);
@@ -130,7 +130,8 @@ export function WagePeriodList() {
       setPage:(next:number)=>setPages({...currentPages,[kind]:next})};
   };
   const personPage=paginate(personSummary,"person");
-  const detailPage=paginate(value?.rows??[],"detail");
+  const detailPage={items:value?.rows??[],page:value?.pagination?.page??requestedPage,totalPages:value?.pagination?.totalPages??1,
+    setPage:(next:number)=>setPages({...currentPages,detail:next})};
   const listPath=wageListPath({...filters,page:detailPage.page,personPage:personPage.page});
   useEffect(()=>{if(!stale)window.history.replaceState(null,"",pageUrl(listPath));},[listPath,stale]);
   const sourceCell=(row:ReportPreviewResponse["rows"][number])=>{
@@ -190,7 +191,7 @@ export function WagePeriodList() {
           <Surface className="wage-person-summary">
             <div className="wage-section-heading">
               <div><h2>按工人汇总</h2><p>随上方姓名、订单与期间条件同步变化。</p></div>
-              {value.truncated ? <StatusBadge tone="warning">仅预览前 500 条；汇总、导出及结算使用全部筛选结果</StatusBadge> : null}
+              <span>汇总、导出及结清确认均按完整筛选范围。</span>
             </div>
             {personSummary.length ? (
               <div className="wage-person-grid">
@@ -220,7 +221,7 @@ export function WagePeriodList() {
               </table>
             </div>
             {value.rows.length === 0 ? <p>当前筛选范围没有工资明细。</p> : null}
-            <ListPagination page={detailPage.page} totalPages={detailPage.totalPages} onPageChange={detailPage.setPage} ariaLabel="工资明细分页" />
+            <ListPagination page={detailPage.page} totalPages={detailPage.totalPages} onPageChange={detailPage.setPage} ariaLabel="工资明细分页" busy={stale} />
           </Surface>
         </>
       ) : null}

@@ -2,8 +2,11 @@ import type { ReportQuery } from "@dx-rework/contracts/reporting";
 import { type Queryable, type Range, type ReportData, money } from "./management-reporting-shared.js";
 import { wageSelection, wageSelectionValues } from "./wage-report-selection.js";
 
-export async function wageReport(source: Queryable, query: ReportQuery, range: Range, limit: number): Promise<ReportData> {
- const result = await source.query(`${wageSelection}, preview AS (
+export async function wageReport(source: Queryable, query: ReportQuery, range: Range, limit: number, page?:number): Promise<ReportData> {
+ const result = await source.query(`${wageSelection}, paging AS (
+   SELECT LEAST(COALESCE($9::int,1),GREATEST(1,ceil(count(*)::numeric/$8::int)::int)) page,
+     GREATEST(1,ceil(count(*)::numeric/$8::int)::int) total_pages FROM filtered
+ ), preview AS (
    SELECT period_month::text,person_id,person_name_snapshot,person_type_snapshot,rework_order_id,
     rework_no_snapshot,style_no_snapshot,process_name_snapshot,actual_quantity_snapshot::text,
     pricing_unit_snapshot,unit_price_snapshot::text,assignment_mode,wage_amount::text,
@@ -17,7 +20,7 @@ export async function wageReport(source: Queryable, query: ReportQuery, range: R
         JOIN pattern_room_segments source_segment ON source_segment.round_id=source_round.round_id
         WHERE source_order.order_id=filtered.source_order_id AND source_round.round_id=filtered.round_id AND source_segment.segment_id=filtered.segment_id) THEN 'available'
       ELSE 'unavailable' END source_status
-   FROM filtered ORDER BY completed_date DESC,person_name_snapshot,line_id LIMIT $8
+   FROM filtered ORDER BY completed_date DESC,person_name_snapshot,line_id LIMIT $8 OFFSET ((SELECT page FROM paging)-1)*$8
  ), person_sources AS (
    SELECT person_id,wage_source source,wage_kind kind,sum(wage_amount)::text amount,count(*)::int "lineCount"
    FROM filtered GROUP BY person_id,wage_source,wage_kind
@@ -29,7 +32,8 @@ export async function wageReport(source: Queryable, query: ReportQuery, range: R
        FROM person_sources p WHERE p.person_id=filtered.person_id) sources
    FROM filtered GROUP BY person_id ORDER BY sum(wage_amount) DESC,person_id
  ) SELECT
-   COALESCE((SELECT jsonb_agg(to_jsonb(preview)) FROM preview),'[]'::jsonb) rows,
+   COALESCE((SELECT jsonb_agg(to_jsonb(preview) ORDER BY completed_date DESC,person_name_snapshot,line_id) FROM preview),'[]'::jsonb) rows,
+   (SELECT page FROM paging) page,(SELECT total_pages FROM paging) total_pages,
    COALESCE((SELECT jsonb_agg(to_jsonb(people)) FROM people),'[]'::jsonb) people,
    count(*)::int row_count,COALESCE(sum(wage_amount),0)::text wage_total,
    COALESCE(sum(wage_amount) FILTER(WHERE marked_at IS NULL),0)::text unsettled_total,
@@ -38,7 +42,7 @@ export async function wageReport(source: Queryable, query: ReportQuery, range: R
    count(DISTINCT round_id)::int round_count,
    count(*) FILTER(WHERE marked_at IS NULL)::int pending_lines,
    count(DISTINCT person_id) FILTER(WHERE marked_at IS NULL)::int pending_people FROM filtered`,
-   [...wageSelectionValues(query,range),limit]);
+   [...wageSelectionValues(query,range),limit,page??null]);
  const summary = result.rows[0]!;
  const nullable = (value: unknown): string | null => value === null || value === undefined ? null : String(value);
  const rows = (summary.rows as Record<string, unknown>[]).map(row => ({
@@ -59,7 +63,7 @@ export async function wageReport(source: Queryable, query: ReportQuery, range: R
    markedBy:nullable(row.marked_by),markedByName:nullable(row.marked_by_name),markedAt:nullable(row.marked_at),
  }));
  type Person = {personId:string;name:string;orderCount:number;amount:string;lineCount:number;roundCount:number;sources:{source:string;kind:string;amount:string;lineCount:number}[]};
- return { columns:[
+ return { ...(page===undefined?{}:{pagination:{page:summary.page,pageSize:limit,totalPages:summary.total_pages,totalCount:summary.row_count}}),columns:[
    {key:"periodMonth",label:"工资月份"},{key:"personName",label:"人员"},{key:"personType",label:"人员类型"},
    {key:"wageSource",label:"工资来源"},{key:"wageKind",label:"业务类型"},
    {key:"orderNo",label:"订单号"},{key:"styleNo",label:"款号"},{key:"taskName",label:"杂事名称"},{key:"processName",label:"工序/品类"},
