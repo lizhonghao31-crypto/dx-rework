@@ -27,7 +27,7 @@ describe("v1 prelaunch business information uniqueness", () => {
 
   it("shows the selected node once and keeps completed-node history collapsed by default", async () => {
     const detail = await readFile("apps/web/src/rework-detail-page.tsx", "utf8");
-    expect(detail).toMatch(/<div className="rework-detail-task__heading"><h2>办理区[\s\S]*?<\/h2><span className="rework-detail-single-piece-total">/);
+    expect(detail).toMatch(/<div className="rework-detail-task__heading"><h2>办理区[\s\S]*?<\/h2>\{detail\.canReadBusinessDetails !== false && <span className="rework-detail-single-piece-total">/);
     expect(detail).not.toContain("<h2>当前工作区</h2><p>{selected?.number} · {selected?.label}</p>");
     expect(detail).toContain('<details className="rework-detail-node-history">');
     expect(detail).toContain("<summary>处理历史");

@@ -8,7 +8,7 @@ import { useDebouncedValue } from "../use-debounced-value.js";
 import { createWebUrls } from "../../url-contract.js";
 import { loadBasicReworkOrders } from "./reporting-client.js";
 import "./basic-rework-board.css";
-const {apiUrl}=createWebUrls(import.meta.env.BASE_URL);
+const {apiUrl,pageUrl}=createWebUrls(import.meta.env.BASE_URL);
 
 export function ReworkBoardAccess({basic,business}:{basic:ReactNode;business:ReactNode}) {
   const [access,setAccess]=useState<{basic:boolean;business:boolean}|null>(null);
@@ -19,7 +19,7 @@ export function ReworkBoardAccess({basic,business}:{basic:ReactNode;business:Rea
     const user=session.user;
     const original=user.isRoot===true||user.businessRoles?.includes("owner_group")===true
       ||["dashboard:management:read","dashboard:site:read","report:view","rework:related_orders:view"].some(cap=>user.capabilities.includes(cap));
-    setAccess({basic:user.capabilities.includes("rework:basic:view"),business:original});setShowBasic(!original);
+    setAccess({basic:user.capabilities.includes("rework:basic:view")||user.capabilities.includes("rework:finance_orders:read"),business:original});setShowBasic(!original);
   });return()=>{mounted=false;};},[]);
   if(!access)return <Surface>正在读取权限…</Surface>;
   if(!access.basic)return access.business?business:<Surface>暂无查看权限</Surface>;
@@ -50,7 +50,7 @@ export function BasicReworkBoard(){
     {error&&<Surface><p role="alert">{error}</p></Surface>}
     {!busy&&!error&&data?.items.length===0&&<Surface>没有符合条件的返工单。</Surface>}
     <div className="reporting-order-grid">{data?.items.map(order=><Surface className="reporting-order-card basic-rework-card" key={order.reworkOrderId}>
-      <div className="reporting-order-card__main"><div className="reporting-order-card__heading"><div><strong>{order.styleNo??"款号未填写"}</strong><small>{order.reworkNo??"返工单"}</small></div>
+      <div className="reporting-order-card__main"><div className="reporting-order-card__heading"><div><strong>{data.canOpenOrder?<a href={pageUrl(`ui/tasks/${order.reworkOrderId}`)}>{order.styleNo??"款号未填写"}</a>:order.styleNo??"款号未填写"}</strong><small>{order.reworkNo??"返工单"}</small></div>
         <StatusBadge tone={order.status==="completed"?"success":"info"}>{order.nodeLabel}</StatusBadge></div>
       <dl><div><dt>加工厂</dt><dd>{order.processingFactory??"未填写"}</dd></div><div><dt>跟单</dt><dd>{order.merchandiser??"未填写"}</dd></div>
         <div><dt>返工数量</dt><dd>{order.quantity??"未填写"}</dd></div><div><dt>订单号</dt><dd>{order.orderNo??"未填写"}</dd></div></dl>

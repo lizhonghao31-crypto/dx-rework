@@ -27,7 +27,7 @@ describe("receiving attachment authorization", () => {
     const service = new ReworkBusinessDetailService(database);
     const get = vi.spyOn(service, "get")
       .mockRejectedValueOnce(new ApplicationError("FORBIDDEN", "forbidden", 403))
-      .mockResolvedValueOnce({} as Awaited<ReturnType<ReworkBusinessDetailService["get"]>>);
+      .mockResolvedValueOnce({canReadBusinessDetails:true} as Awaited<ReturnType<ReworkBusinessDetailService["get"]>>);
 
     await expect(service.canDownloadBoundAttachment(actor, {
       entityType: "receiving_batch",

@@ -1,3 +1,4 @@
+import { canReadFinanceOrders, isScopedFinanceReader } from "./finance-order-access.js";
 import { createHash, randomUUID } from "node:crypto";
 
 import type { InspectionReportDraft, ReworkOrderStatus } from "@dx-rework/contracts";
@@ -38,6 +39,7 @@ const requestHash = (scope: string, input: unknown): string => createHash("sha25
   .digest("hex");
 
 export type ReworkBusinessDetail = Readonly<{
+  canReadBusinessDetails: boolean;
   reworkOrderId: string;
   reworkNo: string | null;
   status: ReworkOrderStatus;
@@ -368,10 +370,12 @@ export class ReworkBusinessDetailService {
       throw new ApplicationError("FORBIDDEN", "当前用户与该返工单无业务查看关系", 403);
     }
 
+    const fullBusinessAccess=await this.canView(actor,row,false);
     const attachments = await this.database.query<AttachmentRow>(
       `SELECT attachment.attachment_id,attachment.original_filename,attachment.mime_type,attachment.entity_type
        FROM attachments attachment
        WHERE attachment.status='ready'
+         AND ($3::boolean OR attachment.entity_type='external_responsibility_case' OR attachment.mime_type LIKE 'image/%')
          AND NOT (
            attachment.entity_type='receiving_batch'
            AND EXISTS(
@@ -402,7 +406,7 @@ export class ReworkBusinessDetailService {
            )
          )
        ORDER BY attachment.created_at,attachment.attachment_id`,
-      [reworkOrderId, actor.actorId],
+      [reworkOrderId, actor.actorId, fullBusinessAccess],
     );
 
     const workflowHistory = await this.database.query<WorkflowHistoryRow>(
@@ -410,12 +414,12 @@ export class ReworkBusinessDetailService {
               actor.display_name actor_name
        FROM operation_events event
        LEFT JOIN app_users actor ON actor.id=event.actor_id
-       WHERE (
+       WHERE $2::boolean AND ((
          event.entity_type='rework_order' AND event.entity_id=$1
-       ) OR event.after_state->>'reworkOrderId'=$1
+       ) OR event.after_state->>'reworkOrderId'=$1)
        ORDER BY event.created_at,event.event_id
        LIMIT 200`,
-      [reworkOrderId],
+      [reworkOrderId, fullBusinessAccess],
     );
     const settlement = await this.database.query<{
       external_status: "not_required" | "in_progress" | "closed" | "revision_in_progress";
@@ -435,11 +439,12 @@ export class ReworkBusinessDetailService {
          WHERE target_case.rework_order_id=$1
            AND determination.settlement_schema_version=2
            AND target_case.status<>'superseded'
+           AND external_responsibility_can_view_case($3,target_case.rework_order_id,target_case.responsibility_type)
        ), wage_periods AS (
          SELECT DISTINCT period.period_id,period.period_month,period.status
          FROM rework_wage_items wage
          JOIN rework_wage_periods period ON period.period_id=wage.period_id
-         WHERE wage.rework_order_id=$1
+         WHERE wage.rework_order_id=$1 AND $2::boolean
        )
        SELECT CASE
          WHEN EXISTS(SELECT 1 FROM v2_cases WHERE status='pending_responsibility_revision') THEN 'revision_in_progress'
@@ -463,10 +468,11 @@ export class ReworkBusinessDetailService {
          FROM wage_periods
          WHERE status<>'locked'
        ),'[]'::jsonb) ELSE '[]'::jsonb END unsettled_wage_periods`,
-      [reworkOrderId, canViewWagePeriods(actor)],
+      [reworkOrderId, canViewWagePeriods(actor), actor.actorId],
     );
 
     return {
+      canReadBusinessDetails: fullBusinessAccess,
       reworkOrderId: row.rework_order_id,
       reworkNo: row.rework_no,
       status: row.status,
@@ -480,18 +486,18 @@ export class ReworkBusinessDetailService {
         ? null
         : Number(row.source_receiving_actual_quantity),
       iePrecounts: {
-        canRecord: canRecordIePrecount(actor)
+        canRecord: fullBusinessAccess && canRecordIePrecount(actor)
           && ["in_progress", "pending_order_review"].includes(row.status),
-        processes: row.ie_precount_processes ?? [],
-        entries: row.ie_precount_entries ?? [],
+        processes: fullBusinessAccess ? row.ie_precount_processes ?? [] : [],
+        entries: fullBusinessAccess ? row.ie_precount_entries ?? [] : [],
       },
       defectiveQuantity: {
         receiving: Number(row.source_receiving_defective_quantity ?? 0),
         receivingLinked: row.source_receiving_defective_quantity !== null,
         tail: Number(row.tail_defective_quantity ?? 0),
         total: Number(row.source_receiving_defective_quantity ?? 0) + Number(row.tail_defective_quantity ?? 0),
-        canAddTail: canAddTailDefectiveQuantity(actor) && tailDefectMutableStatuses.has(row.status),
-        tailEntries: (row.tail_defective_quantity_entries ?? []).map((entry) => ({
+        canAddTail: fullBusinessAccess && canAddTailDefectiveQuantity(actor) && tailDefectMutableStatuses.has(row.status),
+        tailEntries: (fullBusinessAccess ? row.tail_defective_quantity_entries ?? [] : []).map((entry) => ({
           entryId: entry.entryId,
           quantity: entry.quantity,
           recordedBy: entry.recordedBy,
@@ -522,10 +528,10 @@ export class ReworkBusinessDetailService {
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity === null ? null : Number(row.rework_quantity),
       tailInspectionRequired: row.tail_inspection_required,
-      singlePieceReworkTotal: row.single_piece_rework_total === null ? null : Number(row.single_piece_rework_total),
-      inspectionReport: row.inspection_report,
+      singlePieceReworkTotal: !fullBusinessAccess || row.single_piece_rework_total === null ? null : Number(row.single_piece_rework_total),
+      inspectionReport: fullBusinessAccess ? row.inspection_report : null,
       createdBy: { userId: row.created_by, displayName: row.creator_name },
-      processConfigurationCreatedBy: row.configuration_created_by && row.configuration_creator_name
+      processConfigurationCreatedBy: fullBusinessAccess && row.configuration_created_by && row.configuration_creator_name
         ? {
             userId: row.configuration_created_by,
             displayName: row.configuration_creator_name,
@@ -783,7 +789,7 @@ export class ReworkBusinessDetailService {
 
   async canDownloadBoundAttachment(
     actor: TrustedActorContext,
-    binding: Readonly<{ entityType: string; entityId: string }>,
+    binding: Readonly<{ entityType: string; entityId: string; mimeType?: string }>,
   ): Promise<boolean> {
     let reworkOrderIds: readonly string[] = [];
     if (binding.entityType === "rework_order") {
@@ -808,7 +814,8 @@ export class ReworkBusinessDetailService {
     }
     for (const reworkOrderId of reworkOrderIds) {
       try {
-        await this.get(actor, reworkOrderId);
+        const detail=await this.get(actor, reworkOrderId);
+        if(!detail.canReadBusinessDetails && binding.mimeType?.startsWith("image/")!==true) continue;
         return true;
       } catch (error) {
         if (!(error instanceof ApplicationError) || ![403, 404].includes(error.statusCode)) throw error;
@@ -817,7 +824,11 @@ export class ReworkBusinessDetailService {
     return false;
   }
 
-  private async canView(actor: TrustedActorContext, row: DetailRow): Promise<boolean> {
+  private async canView(actor: TrustedActorContext, row: DetailRow, includeFinance = true): Promise<boolean> {
+    if(includeFinance) {
+      if (await canReadFinanceOrders(this.database,actor)) return true;
+      if (actorCapabilities(actor).includes("rework:finance_orders:read")) return false;
+    } else if(isScopedFinanceReader(actor)) return false;
     if (broadBusinessReader(actor)) return true;
     if (
       row.created_by === actor.actorId
@@ -881,9 +892,7 @@ export class ReworkBusinessDetailService {
 
     if (actor.actorRoles.some((role) => [
       "embroidery_washing_merchandiser",
-      "factory_payables",
-      "embroidery_washing_payables",
-      "fabric_payables",
+      ...(includeFinance ? ["factory_payables","embroidery_washing_payables","fabric_payables"] : []),
     ].includes(role))) {
       const external = await this.database.query(
         `SELECT 1
@@ -900,8 +909,7 @@ export class ReworkBusinessDetailService {
 
     if (actor.actorRoles.some((role) => [
       "administrative_clerk",
-      "wage_month_close_accountant",
-      "finance_read",
+      ...(includeFinance ? ["wage_month_close_accountant","finance_read"] : []),
     ].includes(role))) {
       const wage = await this.database.query(
         "SELECT 1 FROM rework_wage_items WHERE rework_order_id=$1 LIMIT 1",

@@ -74,8 +74,10 @@ export function registerManagementReportingRoutes(
 
   app.get("/management/rework-basic-orders", async (request,reply) => {
     reply.header("cache-control","no-store");
+    const user=await dependencies.authenticate(token(request));
+    const capability=user.capabilities.includes("rework:finance_orders:read")?"rework:finance_orders:read":"rework:basic:view";
     return BasicReworkPageSchema.parse(await dependencies.service.listBasicRework(
-      await actor(request,"rework:basic:view"),parse(BasicReworkQuerySchema,request.query)));
+      await businessActor(dependencies.root,user,request.id,capability),parse(BasicReworkQuerySchema,request.query)));
   });
 
   app.get("/management/workflow-analysis", async (request,reply) => {

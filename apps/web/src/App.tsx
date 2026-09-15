@@ -466,6 +466,7 @@ export function App() {
   if (path === "/ui/tasks") {
     return <AuthGate requiredAnyOf={[
       { requiredCapability: "rework:basic:view" },
+      { requiredCapability: "rework:finance_orders:read" },
       owner,
       { requiredCapability: "dashboard:management:read" },
       { requiredCapability: "dashboard:site:read" },

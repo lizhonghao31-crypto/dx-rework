@@ -3,10 +3,15 @@ import type { Pool } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { capabilities, fail, nodeMeta } from "./management-reporting-shared.js";
 
+import { canReadFinanceOrders } from "../rework/finance-order-access.js";
+
 // A separate whitelist projection: no financial, process, approval or workflow-history joins.
 export async function readBasicRework(db: Pool, actor: TrustedActorContext, query: BasicReworkQuery): Promise<BasicReworkPage> {
-  if (!capabilities(actor).includes("rework:basic:view")) fail("缺少返工基础查看权限");
-  await db.query("SELECT access_authorized_actor_roles($1,$2)", [actor.actorId,"rework:basic:view"]);
+  const financeReader=await canReadFinanceOrders(db,actor);
+  if (!financeReader) {
+    if (!capabilities(actor).includes("rework:basic:view")) fail("缺少返工基础查看权限");
+    await db.query("SELECT access_authorized_actor_roles($1,$2)", [actor.actorId,"rework:basic:view"]);
+  }
   const result = await db.query<{items: Array<Omit<BasicReworkPage["items"][number],"nodeLabel">>; page: number; total_pages: number; total_count: number}>(`
     WITH filtered AS (
       SELECT orders.rework_order_id, orders.rework_no, orders.style_no, orders.order_no,
@@ -39,6 +44,6 @@ export async function readBasicRework(db: Pool, actor: TrustedActorContext, quer
     ) ORDER BY (s.status IN ('completed','cancelled')),s.updated_at DESC,s.rework_order_id) FROM selected s),'[]'::jsonb) items FROM paging`,
     [query.q || null,query.status ?? null,query.page]);
   const row=result.rows[0]!;
-  return BasicReworkPageSchema.parse({items:row.items.map(item=>({...item,nodeLabel:nodeMeta[item.status].label})),
+  return BasicReworkPageSchema.parse({canOpenOrder:financeReader,items:row.items.map(item=>({...item,nodeLabel:nodeMeta[item.status].label})),
     page:row.page,totalPages:row.total_pages,totalCount:row.total_count});
 }
