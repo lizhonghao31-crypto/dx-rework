@@ -1,4 +1,4 @@
-import { canAccessPatternRoom, canAccessPatternRoomPrices } from "./pattern-room-access.js";
+import { canAccessPatternRoom, canAccessPatternRoomPrices, canAccessPatternRoomOrders, canCreatePatternRoomOrders } from "./pattern-room-access.js";
 import { canAccessFinance } from "./finance-access.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { TodoCountIndicatorSchema } from "@dx-rework/contracts";
@@ -473,8 +473,9 @@ export function Shell({
   }
 
   const patternRoomNavigation: NavigationEntry[] = currentUser && canAccessPatternRoom(currentUser) ? [
-    { name: currentUser.isRoot !== true && currentUser.businessRoles?.length && currentUser.businessRoles.every(role=>["wage_month_close_accountant","finance_director","finance_read"].includes(role)) ? "板房订单" : "创建订单", description: "打板与杂事订单", href: "/ui/pattern-room/create", activeKey: "pattern-room-create" },
-    ...(canAccessPatternRoomPrices(currentUser) ? [{ name: "板房价格管控", description: "品类执行价与杂事小时价", href: "/ui/pattern-room/prices" }] : []),
+    ...(canAccessPatternRoomOrders(currentUser) ? [{ name: "打板杂事看板", description: "查询打板与杂事订单", href: "/ui/pattern-room/orders", activeKey: "pattern-room-orders" }] : []),
+    ...(canCreatePatternRoomOrders(currentUser) ? [{ name: "创建订单", description: "创建打板或杂事", href: "/ui/pattern-room/create", activeKey: "pattern-room-create" }] : []),
+    ...(canAccessPatternRoomPrices(currentUser) ? [{ name: "价格管控", description: "品类单价与杂事小时单价", href: "/ui/pattern-room/prices" }] : []),
   ] : [];
   const sampleNavigation: NavigationEntry[] = currentUser && canAccessSamples(currentUser) ? [
     { name: "在管样衣", description: "借出、在库与保管资料", href: "/ui/samples" },

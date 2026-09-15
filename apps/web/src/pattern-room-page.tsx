@@ -1,18 +1,15 @@
-import { Button, Surface } from "@dx-rework/ui";
+import { Surface } from "@dx-rework/ui";
 import { Header } from "./components.js";
-import { createWebUrls } from "../url-contract.js";
+import { patternUrls } from "./pattern-order-client.js";
 import { useEffect, useState } from "react";
-import { verifySession } from "./auth.js";
-import { canAccessPatternRoomPrices, canAccessPatternRoomOrders } from "./pattern-room-access.js";
-
-export function PatternRoomPage({ creating = false }: { creating?: boolean }) {
-  const { pageUrl } = createWebUrls(import.meta.env.BASE_URL);
-  const [prices, setPrices] = useState(false);
-  const [orders, setOrders] = useState(false);
-  useEffect(() => { let current = true; void verifySession().then(session => { if (current && session !== "denied") {setPrices(canAccessPatternRoomPrices(session.user));setOrders(canAccessPatternRoomOrders(session.user));} }).catch(() => undefined); return () => { current = false; }; }, []);
-  return <>
-    <Header title={creating ? "创建订单" : "订单打板"} badge="订单打板" badgePlacement="subtitle" />
-    {creating ? <Surface><h2>订单创建尚未开放</h2><p>开放后可在这里提交打板与杂事请求。</p><Button disabled>创建订单</Button></Surface>
-      : <Surface>{orders ? <a href={pageUrl("ui/pattern-room/create")}><Button>创建订单</Button></a> : null}{prices ? <> {" "}<a href={pageUrl("ui/pattern-room/prices")}><Button>板房价格管控</Button></a></> : null}</Surface>}
-  </>;
+import { verifySession, type AuthorizedUser } from "./auth.js";
+import { canAccessPatternRoomPrices, canAccessPatternRoomOrders, canCreatePatternRoomOrders } from "./pattern-room-access.js";
+export function PatternRoomPage() {
+  const [user, setUser] = useState<AuthorizedUser | null>(null);
+  useEffect(() => { let live = true; void verifySession().then(session => { if (live && session !== "denied") setUser(session.user); }).catch(() => undefined); return () => { live = false; }; }, []);
+  return <div className="pattern-orders"><Header title="订单打板" badge="板房" badgePlacement="subtitle" />{user && <Surface><div className="pattern-actions">
+    {canAccessPatternRoomOrders(user) && <a className="dx-button dx-button--primary" href={patternUrls.pageUrl("ui/pattern-room/orders")}>打板杂事看板</a>}
+    {canCreatePatternRoomOrders(user) && <a className="dx-button dx-button--secondary" href={patternUrls.pageUrl("ui/pattern-room/create")}>创建订单</a>}
+    {canAccessPatternRoomPrices(user) && <a className="dx-button dx-button--secondary" href={patternUrls.pageUrl("ui/pattern-room/prices")}>价格管控</a>}
+  </div></Surface>}</div>;
 }

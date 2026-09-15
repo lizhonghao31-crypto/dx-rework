@@ -15,6 +15,7 @@ export function SearchSelect({
   ariaLabel,
   disabled,
   onChange,
+  onSearchChange,
 }: {
   options: readonly SearchSelectOption[];
   value: string;
@@ -23,6 +24,7 @@ export function SearchSelect({
   ariaLabel?: string;
   disabled?: boolean;
   onChange: (value: string) => void;
+  onSearchChange?: (query: string) => void;
 }) {
   const selectedLabel = options.find((option) => option.value === value)?.label ?? "";
   const [query, setQuery] = useState(selectedLabel);
@@ -60,6 +62,7 @@ export function SearchSelect({
         }}
         onChange={(event) => {
           setQuery(event.target.value);
+          onSearchChange?.(event.target.value);
           onChange("");
           setOpen(true);
         }}

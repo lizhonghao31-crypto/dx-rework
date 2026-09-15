@@ -1,6 +1,7 @@
+import { PatternField as InsetField } from "./pattern-controls.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { z } from "zod";
-import { Button, InsetField, Surface } from "@dx-rework/ui";
+import { Button, Surface } from "@dx-rework/ui";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { CreatePatternOrderSchema, CreateMiscOrderSchema, UpdateMiscMaterialsSchema, UpdatePatternMaterialsSchema, PatternOrderDetailSchema, type PatternOrderDetail } from "@dx-rework/contracts/pattern-orders";
 import { PatternCategoryOptionsSchema, PatternPriceQuoteSchema } from "@dx-rework/contracts/pattern-room";
@@ -62,24 +63,24 @@ export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSav
   const estimated = patternEstimate(quote?.amount ?? null, quantity);
   return <Surface><form className="pattern-order-form" onSubmit={event => void submit(event)}><h2>{order ? "更新任务资料" : misc ? "新建杂事" : "新建打板"}</h2>
     <div className="pattern-fields">
-      {misc ? <InsetField label="杂事内容 / 任务名称（必填）" value={values.taskName} required maxLength={200} onChange={e => setValues({ ...values, taskName: e.target.value })} disabled={disabled} /> : null}
-      <InsetField label={misc ? "关联款号（可选）" : "本次款号（必填）"} value={values.styleNo} required={!misc} maxLength={100} onChange={e => setValues({ ...values, styleNo: e.target.value })} disabled={disabled} />
-      {!order && !misc ? <><label>品类（必填）<select required value={categoryId} onChange={e => setCategoryId(e.target.value)} disabled={disabled}><option value="">请选择品类</option>{categories.map(category => <option key={category.priceId} value={category.priceId}>{category.name}（{category.unit}）</option>)}</select></label>
-        <InsetField label="数量（必填）" type="number" min={1} max={1_000_000} step={1} required value={quantity} onChange={e => setQuantity(e.target.value)} disabled={disabled} />
-        <p>执行价：{quote?.amount ? `${formatBusinessDecimal(quote.amount, 3)} 元/${quote.unit}` : "选择品类后显示"}<br />预计金额：{estimated !== null ? `${formatBusinessDecimal(estimated, 3)} 元` : "填写品类与数量后显示"}</p></> : null}
+      {misc ? <InsetField label="任务名称 *" value={values.taskName} required maxLength={200} onChange={e => setValues({ ...values, taskName: e.target.value })} disabled={disabled} /> : null}
+      <InsetField label={misc ? "关联款号" : "款号 *"} value={values.styleNo} required={!misc} maxLength={100} onChange={e => setValues({ ...values, styleNo: e.target.value })} disabled={disabled} />
+      {!order && !misc ? <><label>品类 *<select className="rework-v2-control" required value={categoryId} onChange={e => setCategoryId(e.target.value)} disabled={disabled}><option value="">请选择品类</option>{categories.map(category => <option key={category.priceId} value={category.priceId}>{category.name}（{category.unit}）</option>)}</select></label>
+        <InsetField label="数量 *" type="number" min={1} max={1_000_000} step={1} required value={quantity} onChange={e => setQuantity(e.target.value)} disabled={disabled} />
+        <div className="pattern-total"><span>本单价格</span><strong>{estimated !== null ? `¥${formatBusinessDecimal(estimated, 3)}` : "—"}</strong></div></> : null}
       <InsetField label="要求完成日期" type="date" value={values.requiredDate} onChange={e => setValues({ ...values, requiredDate: e.target.value })} disabled={disabled} />
-      {misc && !order ? <div><p>本单小时价：{quote?.amount !== null && quote?.amount !== undefined ? `${formatBusinessDecimal(quote.amount, 3)} 元/小时` : "尚未配置"}{quote?.amount === null ? "，请由老板或Root配置后提交。" : ""}</p><Button type="button" disabled={disabled} onClick={() => setRefreshPrice(value => value + 1)}>重新读取小时价</Button></div> : null}
+      {misc && !order ? <div className="pattern-hourly"><p>小时单价：{quote?.amount !== null && quote?.amount !== undefined ? `${formatBusinessDecimal(quote.amount, 3)} 元/小时` : "尚未配置"}{quote?.amount === null ? "，请联系老板配置。" : ""}</p><Button type="button" disabled={disabled} onClick={() => setRefreshPrice(value => value + 1)}>刷新价格</Button></div> : null}
       {!misc ? <><InsetField label="客户" value={values.customer} maxLength={100} onChange={e => setValues({ ...values, customer: e.target.value })} disabled={disabled} />
       <InsetField label="尺码与颜色" value={values.sizeColor} maxLength={200} onChange={e => setValues({ ...values, sizeColor: e.target.value })} disabled={disabled} />
-      <label>版型<select value={values.variant} onChange={e => setValues({ ...values, variant: e.target.value })} disabled={disabled}><option value="">未指定</option>{["初版", "复版", "齐色版"].map(value => <option key={value}>{value}</option>)}</select></label>
-      <InsetField label="参考历史款号（可选）" value={values.referenceStyleNo} maxLength={100} onChange={e => setValues({ ...values, referenceStyleNo: e.target.value })} disabled={disabled} /></> : null}
+      <label>版型<select className="rework-v2-control" value={values.variant} onChange={e => setValues({ ...values, variant: e.target.value })} disabled={disabled}><option value="">未指定</option>{["初版", "复版", "齐色版"].map(value => <option key={value}>{value}</option>)}</select></label>
+      <InsetField label="参考款号" value={values.referenceStyleNo} maxLength={100} onChange={e => setValues({ ...values, referenceStyleNo: e.target.value })} disabled={disabled} /></> : null}
     </div>
-    <label>备注<textarea value={values.note} maxLength={2000} onChange={e => setValues({ ...values, note: e.target.value })} disabled={disabled} /></label>
-    <label>{misc ? "图片 / 附件（选填）" : "制作 PDF / 清晰图片（至少一份）"}<input type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp" disabled={disabled} onChange={e => { const selected = Array.from(e.target.files ?? []); e.target.value = ""; void upload(selected); }} /></label>
+    <label>备注<textarea className="rework-v2-control" value={values.note} maxLength={2000} onChange={e => setValues({ ...values, note: e.target.value })} disabled={disabled} /></label>
+    <label className="rework-v2-upload">{misc ? "上传图片 / PDF" : "上传制作图片 / PDF *"}<input type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp" disabled={disabled} onChange={e => { const selected = Array.from(e.target.files ?? []); e.target.value = ""; void upload(selected); }} /></label>
     {uploading ? <p role="status">正在上传原始制作资料…</p> : null}
-    <ul className="pattern-files">{files.map(file => <li key={file.attachmentId}><span>{file.filename}</span><Button type="button" disabled={disabled} onClick={() => setFiles(current => current.filter(item => item.attachmentId !== file.attachmentId))}>移出当前资料</Button></li>)}</ul>
-    {order ? <><InsetField label="变更原因（必填）" value={values.reason} required maxLength={500} onChange={e => setValues({ ...values, reason: e.target.value })} disabled={disabled} /><p>旧资料保留在订单记录中。派工后的变更会通知主管和当前工人。</p></> : <p>{misc ? "实际工时由板房主管填写，工人完工且工时确定后计算工资。" : "提交即确认材料已齐备，订单将进入待分配。"}</p>}
+    {files.length > 0 && <ul className="pattern-files">{files.map(file => <li key={file.attachmentId}><span>{file.filename}</span><Button type="button" disabled={disabled} onClick={() => setFiles(current => current.filter(item => item.attachmentId !== file.attachmentId))}>移除</Button></li>)}</ul>}
+    {order ? <InsetField label="变更原因 *" value={values.reason} required maxLength={500} onChange={e => setValues({ ...values, reason: e.target.value })} disabled={disabled} /> : null}
     {error ? <p role="alert">{error}</p> : null}
-    <div className="pattern-actions"><Button type="button" disabled={disabled} onClick={onCancel}>取消</Button><Button type="submit" variant="primary" disabled={disabled || (!order && (!quote || quote.amount === null))}>{busy ? "提交中…" : order ? "保存资料" : misc ? "提交杂事" : "提交打板"}</Button></div>
+    <div className="rework-v2-action-area"><div className="rework-v2-actions"><Button type="button" disabled={disabled} onClick={onCancel}>取消</Button><Button type="submit" variant="primary" disabled={disabled || (!order && (!quote || quote.amount === null))}>{busy ? "提交中…" : order ? "保存资料" : misc ? "提交杂事" : "提交打板"}</Button></div></div>
   </form></Surface>;
 }

@@ -3,6 +3,10 @@ import { wageReturnPath } from "./wages/wage-query-state.js";
 import { todoReturnPath } from "./todo-query-state.js";
 
 export type PatternListQuery = { q: string; kind: string; status: string; creatorId: string; workerId: string; page: number };
+export function patternPagePath(path: string, search: string): string {
+  const params = new URLSearchParams(search);
+  return path === "/ui/pattern-room/create" && ["q", "status", "page", "creatorId", "workerId"].some(key => params.has(key)) ? "/ui/pattern-room/orders" : path;
+}
 export function readPatternListQuery(search: string): PatternListQuery {
   const params = new URLSearchParams(search), input: Record<string, string> = {};
   for (const key of ["q", "kind", "status", "creatorId", "workerId", "page"]) if (params.get(key)) input[key] = params.get(key)!;
@@ -13,13 +17,13 @@ export function patternListPath(query: PatternListQuery): string {
   const params = new URLSearchParams();
   for (const key of ["q", "kind", "status", "creatorId", "workerId"] as const) if (query[key]) params.set(key, query[key]);
   if (query.page > 1) params.set("page", String(query.page));
-  return `/ui/pattern-room/create${params.size ? `?${params}` : ""}`;
+  return `/ui/pattern-room/orders${params.size ? `?${params}` : ""}`;
 }
 export function patternReturnPath(search: string): string {
   const todo = todoReturnPath(search); if (todo) return todo;
   const target = new URLSearchParams(search).get("returnTo");
   const wage=wageReturnPath(target);if(wage)return wage;
-  if (!target || target.includes("\\") || target.split("?")[0] !== "/ui/pattern-room/create") return "/ui/pattern-room/create";
+  if (!target || target.includes("\\") || !["/ui/pattern-room/orders", "/ui/pattern-room/create"].includes(target.split("?")[0]!)) return "/ui/pattern-room/orders";
   return patternListPath(readPatternListQuery(target.includes("?") ? target.slice(target.indexOf("?")) : ""));
 }
 export function patternEstimate(price: string | null, quantity: string): string | null {
