@@ -1,6 +1,13 @@
 import { RootAwareTodoProjectionService } from "../../apps/api/src/todos/root-aware-projection-service.js";
 import { CreateSupplierSchema } from "@dx-rework/contracts";
 import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
+import { SourcingContractService } from "../../apps/api/src/sourcing/sourcing-contract-service.js";
+import { SourcingProductionService } from "../../apps/api/src/sourcing/sourcing-production-service.js";
+import { ProductionReportingService } from "../../apps/api/src/sourcing/production-reporting-service.js";
+import { ProductionClosureService } from "../../apps/api/src/sourcing/production-closure-service.js";
+import { AttachmentService } from "../../apps/api/src/tools/attachments.js";
+import { FakeObjectStorage } from "../../apps/api/src/tools/storage.js";
+import { shanghaiDay } from "@dx-rework/domain";
 import Fastify from "fastify";
 import { registerReworkRoutes } from "../../apps/api/src/rework/routes.js";
 import { registerMemberModuleHttpGuard } from "../../apps/api/src/access/member-module-http.js";
@@ -31,6 +38,8 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
   const projection = new TodoProjectionService(todos);
   const binder = new MemberModuleBindingService(database, todos);
   const initiation = new ReworkInitiationService(database, "corp");
+  const contracts = new SourcingContractService(database, new AttachmentService(database, new FakeObjectStorage(), { prefix: "tests", ttlSeconds: 60, maxUploadBytes: 5000000 }));
+  let productionCaseId = "", productionSupplierId = "";
   const actor = (id: string, capability = "rework:initiate"): TrustedActorContext => ({
     actorId: id, actorRoles: id === ids.li_junyue ? ["root_superuser", "quality_control"] : ["owner_group", "quality_control", "production_management", "ie_reviewer"],
     authorizationCapability: capability, authorizationCapabilities: [capability, "business:read_all", "sourcing:view"], requestId: randomUUID(),
@@ -149,14 +158,55 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     const prior = (await database.query<{ todo_id: string }>("SELECT todo_id FROM rework_todos WHERE recipient_user_id=$1 LIMIT 1", [ids.wu_yunfeng])).rows[0]!;
     expect(await memberCanReceiveFact(database, ids.wu_yunfeng, "todo.escalate", "rework_todo", prior.todo_id)).toBe(false);
   });
+  it("restricts revision approvals through owner membership while preserving independent production authority", async () => {
+    const capability = "external_responsibility:approve_revision";
+    const permission = async (id: string, roles = ["owner_group", "production_management"]) => (await database.query<{ allowed: boolean }>(
+      "SELECT external_responsibility_direct_role($1,$2,$3::text[]) allowed", [id, capability, roles],
+    )).rows[0]!.allowed;
+    for (const id of [ids.wu_yunfeng, extraOwner]) {
+      expect(await permission(id)).toBe(false);
+      expect((await effectiveMemberAuthorization(database, id, [capability])).capabilities).toEqual([]);
+      for (const decision of ["approved", "rejected"]) {
+        await expect(tx(client => events.append(client, actor(id, capability), {
+          action: `rework.external_responsibility.revision.${decision}`, entityType: "rework_order", entityId: randomUUID(),
+        }))).rejects.toMatchObject({ statusCode: 403 });
+      }
+    }
+    for (const id of [ids.li_zhonghao, ids.li_junyue]) {
+      expect(await permission(id)).toBe(true);
+      expect((await effectiveMemberAuthorization(database, id, [capability])).capabilities).toEqual([capability]);
+    }
+    const access = new AccessMasterDataService(database, "corp");
+    const priorProduction = (await database.query<{ assignment_id: string }>("SELECT assignment_id FROM user_role_assignments WHERE user_id=$1 AND role_code='production_management' AND revoked_at IS NULL",[ids.wu_yunfeng])).rows[0]!;
+    await access.revokeRole(actor(ids.li_junyue,"access:admin"),priorProduction.assignment_id,"隔离验收按唯一生产管理规则切换职责");
+    const grant = await access.assignRole(actor(ids.li_junyue, "role:assign"), { userId: extraOwner, roleCode: "production_management", reason: "独立生产管理重判权限验收" });
+    try {
+      expect(await permission(extraOwner)).toBe(true);
+      expect(await permission(extraOwner, ["production_management"])).toBe(true);
+      expect(await permission(extraOwner, ["owner_group"])).toBe(false);
+      expect((await database.query<{ owner: boolean; production: boolean }>(
+        "SELECT todo_user_has_direct_role($1,'owner_group',$2) owner,todo_user_has_direct_role($1,'production_management',$2) production", [extraOwner, capability],
+      )).rows[0]).toEqual({ owner: false, production: true });
+      expect((await effectiveMemberAuthorization(database, extraOwner, [capability])).capabilities).toEqual([capability]);
+      await expect(tx(client => events.append(client, actor(extraOwner, capability), {
+        action: "rework.external_responsibility.revision.approved", entityType: "rework_order", entityId: randomUUID(),
+      }))).resolves.toBeTypeOf("string");
+    } finally {
+      await access.revokeRole(actor(ids.li_junyue, "role:assign"), grant.assignmentId, "结束隔离生产管理兼职验收");
+      await access.assignRole(actor(ids.li_junyue,"access:admin"),{userId:ids.wu_yunfeng,roleCode:"production_management",reason:"恢复隔离验收原兼职身份"});
+    }
+    expect(await permission(extraOwner)).toBe(false);
+  });
+
   it("keeps a real sourcing order readable while only Li can approve and rejected writes leave the exact state intact", async () => {
     const access = new AccessMasterDataService(database, "corp");
     const supplier = await access.createSupplier(actor(ids.li_junyue,"supplier_profile:write"), CreateSupplierSchema.parse({
-      supplierCode:"MEMBER-FACTORY", supplierType:"factory", supplierName:"测试成员权限工厂", active:true, changeReason:"隔离验收" }));
+      supplierCode:"MEMBER-FACTORY", supplierType:"factory", supplierName:"测试成员权限工厂", active:true, changeReason:"隔离验收",
+      address:"测试路1号",contractEntityName:"测试成员工厂有限公司",partyBRepresentative:"测试代表",payeeName:"测试收款人",bankAccount:"622200000000",bankName:"测试银行" }));
     const crafts = await access.ensureCrafts(actor(ids.li_junyue,"master_data:manage"), { craftNames:["成员分权验收工艺"] });
     const attachment = randomUUID();
     await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'验收.jpg','image/jpeg',128,$3,$4,'ready',CURRENT_TIMESTAMP)",[attachment,`member-test/${attachment}.jpg`,"a".repeat(64),ids.li_junyue]);
-    const sourcing = new SourcingService(database,undefined,undefined,new RootAwareTodoProjectionService(todos));
+    const sourcing = new SourcingService(database,undefined,undefined,new RootAwareTodoProjectionService(todos),contracts);
     const created = await sourcing.createCase(actor(ids.li_junyue,"sourcing:inquiry:create"), {
       gender:"男装",styleName:"成员权限验收",estimatedCutPieceSendDate:"2026-09-15",deliveryDate:"2026-09-30",
       lineItems:[{styleNo:"MEMBER-SOURCE",color:"黑色",quantity:10,externalUnitPrice:"10.0000"}],daxingUnitPrice:"10.0000",attachmentIds:[attachment],
@@ -172,6 +222,34 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     expect((await sourcing.getCase(actor(ids.wu_yunfeng,"sourcing:view"),id)).status).toBe("pending_owner_approval");
     expect((await sourcing.decideOwner(actor(ids.li_zhonghao,"sourcing:owner:approve"),id,{decision:"approved"},randomUUID())).value.status).toBe("pending_finance_reconciliation");
     expect((await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 AND recipient_user_id=$2",[id,ids.wu_yunfeng])).rowCount).toBe(0);
+    productionCaseId=id; productionSupplierId=supplier.supplierId;
+  });
+
+  it("suppresses virtual production risks and their unread counts while retaining production reads and other recipients", async () => {
+    const root = actor(ids.li_junyue,"sourcing:view");
+    const contract = (await contracts.getCurrent(root,productionCaseId)).item!;
+    const production = new SourcingProductionService(database);
+    const dispatched = await production.dispatch(root,productionCaseId,{sourcingContractDocumentId:contract.sourcingContractDocumentId,confirmed:true},randomUUID());
+    const id = dispatched.value.productionOrderId;
+    const closure = new ProductionClosureService(database,undefined,()=>new Date(Date.now()+3*86400000));
+    const reporting = new ProductionReportingService(database,undefined,undefined,closure);
+    await closure.setPilot(root,{supplierId:productionSupplierId,enabled:true});
+    await reporting.report(root,id,{position:1,businessDate:shanghaiDay(new Date()),quantity:1},randomUUID());
+    const view = (userId:string) => actor(userId,"todo:view");
+    const allowed = await closure.todos(view(ids.li_zhonghao));
+    expect(allowed).toHaveLength(1);
+    expect(allowed[0]).toMatchObject({category:"production_stale",unread:true,entityId:id});
+    expect((await closure.todos(view(ids.li_junyue))).map(todo=>todo.todoId)).toContain(allowed[0]!.todoId);
+    expect(await closure.todos(view(ids.wu_yunfeng))).toEqual([]);
+    const combined = new TodoService(database,undefined,undefined,closure);
+    const list = await combined.listForActor(view(ids.wu_yunfeng),{module:"production"});
+    expect(list.todos).toEqual([]);
+    expect(list.moduleCounts.production).toBe(0);
+    expect(await combined.countIndicatorForActor(view(ids.wu_yunfeng))).toEqual({pendingCount:0});
+    expect((await combined.countIndicatorForActor(view(ids.li_zhonghao))).pendingCount).toBeGreaterThan(0);
+    await expect(closure.markRead(view(ids.wu_yunfeng),allowed[0]!.todoId)).rejects.toMatchObject({statusCode:404});
+    expect((await production.get(actor(ids.wu_yunfeng,"sourcing:view"),id)).productionOrderId).toBe(id);
+    expect((await database.query("SELECT 1 FROM sourcing_production_alerts WHERE alert_id=$1 AND resolved_at IS NULL",[allowed[0]!.todoId])).rowCount).toBe(1);
   });
 
 });

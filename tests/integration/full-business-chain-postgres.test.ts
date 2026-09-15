@@ -1869,6 +1869,20 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect(revisionBefore.canReopen).toBe(true);
     const reopenInput = {expectedOrderVersion:revisionBefore.orderVersion,expectedDeterminationVersion:revisionBefore.currentVersion!,reason:"供应商补充资料，重新核对责任"};
     await expect(responsibility.revisions.reopen(qc(),submitted.value.reworkOrderId,reopenInput,randomUUID())).rejects.toMatchObject({statusCode:403});
+    // A later owner assignment cannot gain the bound members' revision approval path.
+    const revisionRoot=actor(ids.patternRoot,["root_superuser"],"access:admin");
+    const ownerRoleAdmin=actor(ids.patternRoot,["root_superuser","owner_group"],"access:admin");
+    const laterOwnerRole=await access.assignRole(ownerRoleAdmin,{userId:ids.otherPatternWorker,roleCode:"owner_group",reason:"验证名单启用后的新老板不能重判"});
+    const revisionOwner=(userId:string)=>actor(userId,["owner_group"],"responsibility:determine","external_responsibility:approve_revision","business:read_all");
+    try {
+      for(const userId of [ids.otherPatternWorker,ids.ownerTwo]) {
+        expect((await responsibility.revisions.get(revisionOwner(userId),submitted.value.reworkOrderId)).canReopen).toBe(false);
+        await expect(responsibility.revisions.reopen(revisionOwner(userId),submitted.value.reworkOrderId,reopenInput,randomUUID())).rejects.toMatchObject({statusCode:403});
+      }
+      expect((await responsibility.revisions.get(revisionOwner(ids.ownerOne),submitted.value.reworkOrderId)).canReopen).toBe(true);
+      expect((await responsibility.revisions.get(revisionRoot,submitted.value.reworkOrderId)).canReopen).toBe(true);
+      expect((await responsibility.revisions.get(revisionActor,submitted.value.reworkOrderId)).orderVersion).toBe(revisionBefore.orderVersion);
+    } finally { await access.revokeRole(ownerRoleAdmin,laterOwnerRole.assignmentId,"结束新老板重判隔离验收"); }
     const reopenKey=randomUUID();
     const reopened=await responsibility.revisions.reopen(revisionActor,submitted.value.reworkOrderId,reopenInput,reopenKey);
     expect(reopened.value).toMatchObject({status:"pending_responsibility_determination",paidAmount:"119.60"});

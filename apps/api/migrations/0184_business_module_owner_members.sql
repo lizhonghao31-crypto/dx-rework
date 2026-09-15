@@ -38,12 +38,31 @@ LANGUAGE sql IMMUTABLE AS $$
    ) THEN 'rework' ELSE NULL END
 $$;
 
+-- Keep the original direct-role check available without re-entering the policy wrapper.
+CREATE FUNCTION member_module_original_responsibility_direct_role(
+  candidate uuid, required_capability text, allowed_roles text[]
+) RETURNS boolean LANGUAGE sql STABLE AS $$
+  SELECT access_is_root_actor(candidate) OR (
+    responsibility_actor_is_active(candidate) AND EXISTS (
+      SELECT 1 FROM user_role_assignments assignment
+      JOIN business_roles role ON role.role_code=assignment.role_code AND role.enabled=true
+      JOIN role_capabilities capability ON capability.role_code=assignment.role_code
+        AND capability.capability=required_capability
+      WHERE assignment.user_id=candidate AND assignment.role_code=ANY(allowed_roles)
+        AND assignment.revoked_at IS NULL
+    )
+  )
+$$;
+
 CREATE FUNCTION member_module_capability_allowed(candidate uuid, capability text) RETURNS boolean
 LANGUAGE sql STABLE AS $$
  SELECT access_is_root_actor(candidate) OR (
    COALESCE(member_module_can_write(candidate,member_module_for_capability(capability)),true)
    AND (capability NOT IN ('responsibility:owner_sign','responsibility:confirm_high_multiplier','own_factory:approve','sourcing:owner:approve')
      OR member_module_owner_can_approve(candidate))
+   AND (capability <> 'external_responsibility:approve_revision'
+     OR member_module_owner_can_approve(candidate)
+     OR member_module_original_responsibility_direct_role(candidate,capability,ARRAY['production_management']))
  )
 $$;
 
@@ -123,7 +142,9 @@ CREATE OR REPLACE FUNCTION todo_user_has_direct_role(candidate uuid, required_ro
  STABLE
 AS $function$
   SELECT access_is_root_actor(candidate)
-  OR (member_module_capability_allowed(candidate,required_capability) AND EXISTS (
+  OR (member_module_capability_allowed(candidate,required_capability)
+    AND (required_capability <> 'external_responsibility:approve_revision' OR required_role <> 'owner_group'
+      OR member_module_owner_can_approve(candidate)) AND EXISTS (
     SELECT 1
     FROM user_role_assignments assignment
     JOIN business_roles role
@@ -149,32 +170,12 @@ AS $function$
   ));
 $function$;
 
-CREATE OR REPLACE FUNCTION member_module_original_responsibility_direct_role(
-  candidate uuid,
-  required_capability text,
-  allowed_roles text[]
-) RETURNS boolean LANGUAGE sql STABLE AS $$
-  SELECT access_is_root_actor(candidate)
-  OR (
-    responsibility_actor_is_active(candidate)
-    AND EXISTS (
-      SELECT 1
-      FROM user_role_assignments assignment
-      JOIN business_roles role
-        ON role.role_code=assignment.role_code AND role.enabled=true
-      JOIN role_capabilities capability
-        ON capability.role_code=assignment.role_code
-       AND capability.capability=required_capability
-      WHERE assignment.user_id=candidate
-        AND assignment.role_code=ANY(allowed_roles)
-        AND assignment.revoked_at IS NULL
-    )
-  )
-$$;
 CREATE OR REPLACE FUNCTION responsibility_actor_has_direct_role(candidate uuid, required_capability text, allowed_roles text[]) RETURNS boolean
 LANGUAGE sql STABLE AS $$
  SELECT access_is_root_actor(candidate) OR (member_module_capability_allowed(candidate,required_capability)
-   AND member_module_original_responsibility_direct_role(candidate,required_capability,allowed_roles))
+   AND member_module_original_responsibility_direct_role(candidate,required_capability,
+     CASE WHEN required_capability='external_responsibility:approve_revision' AND NOT member_module_owner_can_approve(candidate)
+       THEN array_remove(allowed_roles,'owner_group') ELSE allowed_roles END))
 $$;
 
 CREATE FUNCTION guard_member_binding_complete() RETURNS trigger LANGUAGE plpgsql AS $$

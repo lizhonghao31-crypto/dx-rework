@@ -183,6 +183,6 @@
     {"version": "0181_supplier_onboarding", "checksum": "b4989faf6eb53228bf9371d0df56b47192470278b0f75d65592429f827f564f6"},
     {"version": "0182_finance_read_evidence", "checksum": "a999938df1f5040ae490ded3dc6a9f01827ca29e237eefcb9b65822d7f4f7a47"},
     {"version": "0183_atomic_over_deduction_special", "checksum": "2721f00d756c9512012a5df5d7e9a4009410d41369ee3cee0f463e272a413a01"},
-    {"version": "0184_business_module_owner_members", "checksum": "434e663012622fefc5b435a85368f7ff9cbacf50e3de50115e9ddd345cdd74c4"}
+    {"version": "0184_business_module_owner_members", "checksum": "02586813428a7e03d85d65998bb3932aa4310c7410eb31bbdb1ae17d465199b4"}
   ]
 }
