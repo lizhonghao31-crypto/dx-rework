@@ -4,6 +4,7 @@ export type PatternRound = PatternOrderDetail["rounds"][number];
 export type PatternStage = PatternRound["status"];
 
 export function patternWorkflow(round: PatternRound, misc: boolean) {
+  const stopped = Boolean(round.stoppedAt || round.nodes.some(node => node.exitReason === "rework" || node.exitReason === "cancelled"));
   const stages: PatternStage[] = ["pending_assignment", "in_progress", "pending_confirmation", round.status === "cancelled" ? "cancelled" : "completed"];
   const labels = ["分配师傅", "制作中", misc ? "确认完成" : "确认交接", round.status === "cancelled" ? "已取消" : "已完成"];
   return stages.map((stage, index) => {
@@ -14,7 +15,7 @@ export function patternWorkflow(round: PatternRound, misc: boolean) {
       : interrupted ? "stopped" : node?.exitedAt ? "completed" : node ? "current" : "future";
     const status = interrupted ? node?.exitReason === "cancelled" ? "已终止" : "已转入返工"
       : stage === "cancelled" ? "已取消" : state === "completed" ? "已完成" : state === "current" ? "当前节点"
-      : round.status === "cancelled" || round.stoppedAt ? "未执行" : "未开始";
+      : round.status === "cancelled" || stopped ? "未执行" : "未开始";
     return { stage, label: labels[index]!, number: String(index + 1).padStart(2, "0"), state, status, node };
   });
 }

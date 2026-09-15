@@ -42,7 +42,7 @@ describe("pattern room order presentation", () => {
   });
 
   it("shows the handoff interrupted by rework without claiming a successful handoff", () => {
-    const historical: PatternRound = { ...round, status: "pending_confirmation", stoppedAt: time, nodes: [{ stage: "pending_confirmation", enteredAt: time, exitedAt: time, exitReason: "rework", elapsedSeconds: 50 }] };
+    const historical: PatternRound = { ...round, status: "pending_confirmation", stoppedAt: null, nodes: [{ stage: "pending_confirmation", enteredAt: time, exitedAt: time, exitReason: "rework", elapsedSeconds: 50 }] };
     expect(patternWorkflow(historical, false)[2]).toMatchObject({ state: "stopped", status: "已转入返工" });
     expect(patternWorkflow(historical, false)[3]).toMatchObject({ state: "future", status: "未执行" });
     expect(patternWorkflow({ ...round, status: "completed" }, true)[3]).toMatchObject({ state: "completed", status: "已完成" });
