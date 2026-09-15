@@ -91,7 +91,7 @@ describe("business action readiness contract", () => {
     expect(source).toContain('data-ready={deductionReady ? "true" : "false"}');
     expect(source).not.toContain('disabled={busy || !supplierAllocationReady}');
     expect(source).not.toContain('disabled={busy || !temporaryNameReady}');
-    expect(source).not.toContain('disabled={busy || !deductionReady}');
+    expect(source).toContain('disabled={busy || !deductionReady}');
     expect(source).toContain("confirmDeductionException");
     expect(source).toContain("requestRevision(caseItem)");
   });

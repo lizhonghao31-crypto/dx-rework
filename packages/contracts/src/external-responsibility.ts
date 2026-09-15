@@ -176,7 +176,16 @@ export const RequestExternalDeductionSpecialApprovalSchema = z.object({
   expectedCaseVersion: z.number().int().positive(),
   reason: ReasonSchema,
   attachmentIds: AttachmentIdsSchema,
-}).strict();
+  requestMode: z.enum(["proposed_entry", "existing_ledger"]).optional(),
+  requestedAmount: MoneyStringSchema.refine(value => !value.startsWith("-") && !/^0+(?:\.0{1,2})?$/.test(value), "申请金额必须大于零").optional(),
+  deductedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.requestMode === "proposed_entry") {
+    if (value.requestedAmount === undefined || value.deductedOn === undefined) context.addIssue({ code: "custom", message: "新金额特批必须提供金额与日期" });
+  } else if (value.requestedAmount !== undefined || value.deductedOn !== undefined) {
+    context.addIssue({ code: "custom", message: "既有台账特批不得夹带新金额" });
+  }
+});
 
 export const ApproveExternalDeductionSpecialApprovalSchema = z.object({
   expectedCaseVersion: z.number().int().positive(),
@@ -302,6 +311,9 @@ const ExternalSpecialApprovalResponseSchema = z.object({
     remainingAmount: z.string(),
     requestedBy: IdSchema,
     requestedAt: z.string().datetime(),
+    requestMode: z.enum(["proposed_entry", "existing_ledger"]).optional(),
+    requestedAmount: z.string().nullable().optional(),
+    deductedOn: z.string().nullable().optional(),
     decision: z.object({
       decision: z.enum(["approved", "returned"]),
       reason: z.string().nullable(),

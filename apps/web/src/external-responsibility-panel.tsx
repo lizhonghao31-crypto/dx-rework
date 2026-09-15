@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { shanghaiBusinessDate } from "./business-date.js";
-import { confirmDeductionException } from "./external-deduction-confirmation.js";
+import { confirmDeductionException, deductionInputState } from "./external-deduction-confirmation.js";
 import { ExternalEvidenceView } from "./external-evidence-view.js";
 import { ExternalEvidenceUploader } from "./external-evidence-uploader.js";
 import { readExternalResponsibilityResponse } from "./external-responsibility-response.js";
@@ -79,6 +79,8 @@ const parseMoneyToCents = (value: string): bigint | null => {
   return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0"));
 };
 
+const moneyFromCents = (value: bigint): string => `${value / 100n}.${(value % 100n).toString().padStart(2,"0")}`;
+
 const requestError = async (response: Response): Promise<string> => {
   try {
     const body = await response.json() as { error?: { message?: string } };
@@ -110,6 +112,7 @@ export function ExternalResponsibilityPanel({
   const [busy, setBusy] = useState(false);
   const [amount, setAmount] = useState<Record<string, string>>({});
   const [attachments, setAttachments] = useState<Record<string, string[]>>({});
+  const [uploadingCases, setUploadingCases] = useState<Record<string, boolean>>({});
   const pendingMutationKeys = useRef<Record<string, string>>({});
 
   const load = async (): Promise<ExternalResponsibilityBatchResponse> => {
@@ -327,11 +330,10 @@ export function ExternalResponsibilityPanel({
     if (closed.status !== "closed") throw new Error("扣款已足额，但自动结案未完成");
   };
 
-  const recordDeduction = async (caseItem: ExternalResponsibilityCaseResponse, forceSpecial = false): Promise<void> => {
-    if (busy) return;
+  const recordDeduction = async (caseItem: ExternalResponsibilityCaseResponse): Promise<void> => {
+    if (busy || readOnly || uploadingCases[caseItem.caseId] || !caseItem.canRecordDeduction) return;
     const text = amount[caseItem.caseId]?.trim() ?? "";
     const cents = parseMoneyToCents(text);
-    const remainingCents = parseMoneyToCents(caseItem.remainingAmount);
     if (cents === null || cents <= 0n) {
       const issue = "本次扣款金额必须大于 0，最多两位小数。";
       setMessage(issue);
@@ -340,16 +342,14 @@ export function ExternalResponsibilityPanel({
     }
     const actualCents = parseMoneyToCents(caseItem.actualDeductedAmount);
     const proposedCents = parseMoneyToCents(caseItem.proposedDeductionAmount);
-    if (remainingCents === null || actualCents === null || proposedCents === null) {
+    if (actualCents === null || proposedCents === null) {
       setMessage("扣款金额读取失败，请刷新后重试。");
       return;
     }
-    const confirmation = await confirmDeductionException(
-      {amount:cents,actual:actualCents,proposed:proposedCents,forceSpecial},
-      {confirmInApp,promptInApp,alertInApp},
-    );
-    if (confirmation.kind === "cancelled") return;
-    const specialApprovalReason = confirmation.kind === "special" ? confirmation.reason : undefined;
+    if (actualCents+cents>proposedCents) {
+      setMessage("累计扣款超出拟扣，请转财务总监特批。");
+      return;
+    }
     const files = attachments[caseItem.caseId] ?? [];
     setBusy(true);
     setMessage("");
@@ -362,15 +362,10 @@ export function ExternalResponsibilityPanel({
           amount: text,
           deductedOn: shanghaiBusinessDate(),
           attachmentIds: files,
-          ...(specialApprovalReason ? { specialApprovalReason } : {}),
         },
       );
       setAmount((current) => ({ ...current, [caseItem.caseId]: "" }));
       setAttachments((current) => ({ ...current, [caseItem.caseId]: [] }));
-      if (recorded.status === "pending_special_approval") {
-        await refresh("实扣已记录，已提交财务总监特批；审核前扣款台账保持待特批状态。");
-        return;
-      }
       if (recorded.remainingAmount === "0.00" && recorded.canClose) {
         try {
           await closeFull(recorded);
@@ -403,32 +398,36 @@ export function ExternalResponsibilityPanel({
   };
 
   const requestSpecialApproval = async (caseItem: ExternalResponsibilityCaseResponse): Promise<void> => {
-    if (busy) return;
-    if (amount[caseItem.caseId]?.trim()) {
-      if (caseItem.canRecordDeduction) await recordDeduction(caseItem,true);
-      return;
+    if (busy || readOnly || uploadingCases[caseItem.caseId]) return;
+    const text=amount[caseItem.caseId]?.trim()??"";
+    const hasAmount=text.length>0;
+    if (!caseItem.canRequestSpecialApproval && !caseItem.canRecordDeduction) return;
+    let reason: string | undefined;
+    if (hasAmount) {
+      const inputState=deductionInputState(text,caseItem.actualDeductedAmount,caseItem.proposedDeductionAmount);
+      if (!caseItem.canRecordDeduction || !inputState.valid) return;
+      const result=await confirmDeductionException({amount:parseMoneyToCents(text)!,actual:parseMoneyToCents(caseItem.actualDeductedAmount)!,proposed:parseMoneyToCents(caseItem.proposedDeductionAmount)!,forceSpecial:true},{confirmInApp,promptInApp,alertInApp});
+      if (result.kind!=="special") return;
+      reason=result.reason;
+    } else {
+      reason=(await promptInApp("请填写部分扣款或未扣的特批原因"))?.trim();
+      if (!reason || reason.length>500) return;
     }
-    if (!caseItem.canRequestSpecialApproval) return;
-    const reason = (await promptInApp("请填写超额、部分扣款或未扣原因（按已保存的实扣记录提交）"))?.trim() ?? "";
-    if (!reason) return;
     setBusy(true);
     setMessage("");
     try {
-      await send(
-        `external-responsibility-cases/${caseItem.caseId}/special-approval-requests`,
-        {
-          expectedCaseVersion: caseItem.caseVersion,
-          reason,
-          attachmentIds: attachments[caseItem.caseId] ?? [],
-        },
-      );
-      setAttachments((current) => ({ ...current, [caseItem.caseId]: [] }));
-      await refresh("已转财务总监特批。");
-    } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "扣款特批申请失败");
-    } finally {
-      setBusy(false);
-    }
+      await send(`external-responsibility-cases/${caseItem.caseId}/special-approval-requests`, {
+        expectedCaseVersion:caseItem.caseVersion,
+        requestMode:hasAmount?"proposed_entry":"existing_ledger",
+        ...(hasAmount?{requestedAmount:text,deductedOn:shanghaiBusinessDate()}:{}),
+        reason,attachmentIds:attachments[caseItem.caseId]??[],
+      });
+      setAmount(current=>({...current,[caseItem.caseId]:""}));
+      setAttachments(current=>({...current,[caseItem.caseId]:[]}));
+      await refresh("已提交财务总监审批。");
+    } catch (error:unknown) {
+      setMessage(error instanceof Error?error.message:"扣款特批申请失败");
+    } finally {setBusy(false);}
   };
 
   const decideSpecialApproval = async (
@@ -612,13 +611,13 @@ export function ExternalResponsibilityPanel({
         const historical = caseItem.batchId !== batch.batchId || batch.status !== "active";
         const caseReadOnly = readOnly || historical;
         const evidence = attachments[caseItem.caseId] ?? [];
-        const inputCents = parseMoneyToCents(amount[caseItem.caseId] ?? "");
-        const deductionReady = inputCents !== null
-          && inputCents > 0n;
+        const inputState=deductionInputState(amount[caseItem.caseId]??"",caseItem.actualDeductedAmount,caseItem.proposedDeductionAmount);
+        const deductionReady=inputState.ordinary && !uploadingCases[caseItem.caseId];
+        const specialReady=!uploadingCases[caseItem.caseId] && (!(amount[caseItem.caseId]??"").trim() || inputState.valid);
         const canRecordDeduction = !caseReadOnly && caseItem.canRecordDeduction;
         const canRequestRevision = !caseReadOnly && caseItem.canRequestRevision;
         const canApproveRevision = !caseReadOnly && caseItem.canApproveRevision;
-        const canRequestSpecialApproval = !caseReadOnly && (caseItem.canRequestSpecialApproval || (caseItem.canRecordDeduction && deductionReady));
+        const canRequestSpecialApproval = !caseReadOnly && (caseItem.canRequestSpecialApproval || caseItem.canRecordDeduction);
         const canDecideSpecialApproval = !caseReadOnly && caseItem.canDecideSpecialApproval;
         const canLegacySubmit = !caseReadOnly && caseItem.canSign;
         const recoveryClose = !caseReadOnly && caseItem.canClose && caseItem.remainingAmount === "0.00";
@@ -633,7 +632,7 @@ export function ExternalResponsibilityPanel({
           <div className="external-finance-summary">
             <div><span>应扣金额</span><strong>{formatBusinessCurrency(caseItem.proposedDeductionAmount)}</strong></div>
             <div><span>累计已扣</span><strong>{formatBusinessCurrency(caseItem.actualDeductedAmount)}</strong></div>
-            <div><span>{(parseMoneyToCents(caseItem.remainingAmount) ?? 0n) < 0n ? "超扣" : "剩余"}</span><strong>{formatBusinessCurrency(caseItem.remainingAmount.replace(/^-/u,""))}</strong></div>
+            <div><span>{caseItem.remainingAmount.startsWith("-") ? "超出拟扣" : "剩余"}</span><strong>{formatBusinessCurrency(caseItem.remainingAmount.replace(/^-/u,""))}</strong></div>
           </div>
 
           {!caseReadOnly && (canRecordDeduction || canRequestSpecialApproval || canDecideSpecialApproval || canRequestRevision || canLegacySubmit || recoveryClose || canApproveRevision) && <div className="external-finance-operation">
@@ -642,20 +641,21 @@ export function ExternalResponsibilityPanel({
               inputMode="decimal"
               value={amount[caseItem.caseId] ?? ""}
               onChange={(event) => setAmount((current) => ({ ...current, [caseItem.caseId]: event.target.value }))}
-              placeholder="填写本次实际已扣金额"
+              placeholder="填写本次金额"
             />}
             {canAttachEvidence && <ExternalEvidenceUploader
               attachmentIds={evidence}
               disabled={busy}
               onChange={(value) => setAttachments((current) => ({ ...current, [caseItem.caseId]: value }))}
               onMessage={setMessage}
+              onUploadingChange={value=>setUploadingCases(current=>({...current,[caseItem.caseId]:value}))}
             />}
             <div className="external-case-actions">
-              {canRecordDeduction && <Button variant="primary" data-ready={deductionReady ? "true" : "false"} disabled={busy} onClick={() => void recordDeduction(caseItem)}>扣款</Button>}
+              {canRecordDeduction && <Button variant="primary" data-ready={deductionReady ? "true" : "false"} disabled={busy || !deductionReady} onClick={() => void recordDeduction(caseItem)}>扣款</Button>}
               {recoveryClose && <Button variant="primary" disabled={busy} onClick={() => void finishDeduction(caseItem)}>完成扣款</Button>}
-              {canRequestSpecialApproval && <Button disabled={busy} onClick={() => void requestSpecialApproval(caseItem)}>转财务总监特批</Button>}
+              {canRequestSpecialApproval && <Button disabled={busy || !specialReady} onClick={() => void requestSpecialApproval(caseItem)}>转财务总监特批</Button>}
               {canDecideSpecialApproval && <>
-                <Button variant="primary" disabled={busy} onClick={() => void decideSpecialApproval(caseItem, true)}>特批确认</Button>
+                <Button variant="primary" disabled={busy} onClick={() => void decideSpecialApproval(caseItem, true)}>通过特批</Button>
                 <Button disabled={busy} onClick={() => void decideSpecialApproval(caseItem, false)}>退回</Button>
               </>}
               {canRequestRevision && <Button disabled={busy} onClick={() => void requestRevision(caseItem)}>重判责任</Button>}
@@ -665,7 +665,8 @@ export function ExternalResponsibilityPanel({
                 <Button disabled={busy} onClick={() => void decideRevision(caseItem, false)}>驳回重判</Button>
               </>}
             </div>
-            {canRecordDeduction && !deductionReady && amount[caseItem.caseId]?.trim() && <small role="status">请输入大于 0、最多两位小数的本次实际已扣金额；超额需财务总监特批。</small>}
+            {canRecordDeduction && inputState.over && <small role="status">累计超出拟扣 {formatBusinessCurrency(inputState.excess)}，请转财务总监特批。</small>}
+            {canRecordDeduction && !inputState.valid && amount[caseItem.caseId]?.trim() && <small role="status">请输入大于 0、最多两位小数的本次金额。</small>}
           </div>}
 
           {caseItem.deductions.length > 0 && <div className="external-ledger-list external-deduction-history">
@@ -679,7 +680,7 @@ export function ExternalResponsibilityPanel({
 
           {(caseItem.specialApprovalHistory ?? (caseItem.specialApproval ? [caseItem.specialApproval] : [])).map(request => <div className="external-special-approval" key={request.requestId}>
             <b>财务特批：{request.reason}</b>
-            <span>申请时实扣 {formatBusinessCurrency(request.actualDeductedAmount)}，差额 {formatBusinessCurrency(request.remainingAmount)}</span>
+            {request.requestMode==="proposed_entry" ? <span>申请金额 {formatBusinessCurrency(request.requestedAmount??"0.00")}，批准后累计 {formatBusinessCurrency(moneyFromCents((parseMoneyToCents(request.actualDeductedAmount)??0n)+(parseMoneyToCents(request.requestedAmount??"0.00")??0n)))} · {request.decision?"总监处理结果如下":"待财务总监审批"}</span> : <span>申请时累计已扣 {formatBusinessCurrency(request.actualDeductedAmount)}，差额 {formatBusinessCurrency(request.remainingAmount)}</span>}
             {request.decision && <span>结果：{request.decision.decision === "approved" ? "已确认（不可修改）" : "已退回"}</span>}
             <ExternalEvidenceView attachmentIds={request.attachmentIds} files={caseItem.evidenceAttachments ?? []} />
           </div>)}

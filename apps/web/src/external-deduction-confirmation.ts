@@ -13,19 +13,20 @@ export async function confirmDeductionException(
   dialogs: Dialogs,
 ): Promise<DeductionConfirmation> {
   const nextActual=input.actual+input.amount;
-  if (nextActual<=input.proposed && !input.forceSpecial) return {kind:"normal"};
+  if (!input.forceSpecial) {
+    if (nextActual<=input.proposed) return {kind:"normal"};
+    await dialogs.alertInApp("累计扣款超出拟扣，请使用“转财务总监特批”。");
+    return {kind:"cancelled"};
+  }
   if (nextActual===input.proposed) {
     await dialogs.alertInApp("记录后累计实扣恰好等于拟扣金额，请点击“扣款”正常完成，无需特批。");
     return {kind:"cancelled"};
   }
   const over=nextActual>input.proposed;
   const difference=over?nextActual-input.proposed:input.proposed-nextActual;
-  const confirmed=await dialogs.confirmInApp(
-    `本次将记录实际已扣 ${formatBusinessCurrency(money(input.amount))}，累计实扣 ${formatBusinessCurrency(money(nextActual))}，拟扣 ${formatBusinessCurrency(money(input.proposed))}，${over?"超扣":"未扣差额"} ${formatBusinessCurrency(money(difference))}。确认这些款项已经实际扣除，并同时提交财务总监特批？`,
-    {title:"记录实扣并提交特批",confirmLabel:"确认已实扣，继续"},
-  );
-  if (!confirmed) return {kind:"cancelled"};
-  const reason=(await dialogs.promptInApp(over?"请填写超额扣款原因":"请填写部分扣款原因"))?.trim();
+  const reason=(await dialogs.promptInApp(
+    `提交扣款特批申请：本次金额 ${formatBusinessCurrency(money(input.amount))}，批准后累计 ${formatBusinessCurrency(money(nextActual))}，拟扣 ${formatBusinessCurrency(money(input.proposed))}，${over?"超出拟扣":"未扣差额"} ${formatBusinessCurrency(money(difference))}。请填写特批原因。`,
+  ))?.trim();
   if (!reason) return {kind:"cancelled"};
   if (reason.length>500) {
     await dialogs.alertInApp("特批原因最多 500 字。");
@@ -33,3 +34,15 @@ export async function confirmDeductionException(
   }
   return {kind:"special",reason};
 }
+
+export const deductionInputState = (value: string, actual: string, proposed: string) => {
+  const cents = (text: string): bigint | null => {
+    if (!/^\d+(?:\.\d{1,2})?$/.test(text.trim())) return null;
+    const [whole="0", fraction=""] = text.trim().split(".");
+    return BigInt(whole)*100n+BigInt(fraction.padEnd(2,"0"));
+  };
+  const amount=cents(value), a=cents(actual), p=cents(proposed);
+  const valid=amount!==null && amount>0n && a!==null && p!==null;
+  const over=valid && a+amount>p;
+  return {valid, over, ordinary: valid && !over, excess: over ? money(a+amount-p) : "0.00"};
+};
