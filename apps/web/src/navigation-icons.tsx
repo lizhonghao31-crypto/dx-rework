@@ -13,6 +13,7 @@ export const NAVIGATION_ROUTE_ICONS: Readonly<Record<string, IconName>> = {
   "/ui/wages": "Wallet",
   "/ui/finance": "Wallet",
   "/ui/pattern-room": "Shirt",
+  "/ui/pattern-room/orders": "ClipboardCheck",
   "/ui/pattern-room/create": "FilePlus2",
   "/ui/pattern-room/prices": "Wallet",
   "/ui/sourcing/create": "FilePlus2",

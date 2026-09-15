@@ -11,23 +11,87 @@ dialog.pattern-price-dialog::backdrop { background: rgb(19 28 38 / 58%); }
 .pattern-price-history { padding: 20px; }
 .pattern-price-history section { border-bottom: 1px solid #e1e7ed; padding: 12px 0; }
 .pattern-price-history p { overflow-wrap: anywhere; }
-.pattern-orders, .pattern-order-form { display: grid; gap: 20px; }
-.pattern-fields, .pattern-facts { display: grid; grid-template-columns: repeat(auto-fit,minmax(190px,1fr)); gap: 16px; align-items: end; }
-.pattern-orders label { display: grid; gap: 8px; }
-.pattern-orders select, .pattern-orders textarea { width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: inherit; font: inherit; }
-.pattern-orders textarea { min-height: 90px; resize: vertical; }
-.pattern-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-block: 12px; }
-.pattern-actions h2 { margin-right: auto; }
-.pattern-files { padding: 0; list-style: none; }
-.pattern-files li { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-block: 10px; border-bottom: 1px solid #e1e7ed; }
-.pattern-files li > span { flex: 1; min-width: 150px; overflow-wrap: anywhere; }
-.pattern-facts dt { color: #64748b; font-size: 13px; }
-.pattern-facts dd { margin: 6px 0 0; overflow-wrap: anywhere; }
+
+/* Board-room composition uses the rework form and workflow visual primitives. */
+.pattern-orders, .pattern-prices { display: grid; align-content: start; gap: 12px; min-width: 0; }
+.pattern-orders > *, .pattern-prices > * { min-width: 0; }
+.pattern-orders h2, .pattern-prices h2 { margin: 0 0 12px; font-size: 18px; }
+.pattern-order-form { display: grid; gap: 12px; min-width: 0; margin: 0; }
+.pattern-order-form h2, .pattern-order-form h3, .pattern-order-form p { margin: 0; }
+.pattern-order-form > label.pattern-checkbox { display: flex; align-items: center; gap: 8px; }
+.pattern-fields, .pattern-facts { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; align-items: end; }
+.pattern-fields > *, .pattern-facts > *, .pattern-order-form > * { min-width: 0; }
+.pattern-single-field.rework-v2-grid { grid-template-columns: minmax(0,1fr); }
+.pattern-orders label:not(.rework-v2-upload), .pattern-order-form > label { display: grid; gap: 5px; min-width: 0; font-size: 12px; font-weight: 700; color: var(--dx-v2-color-text-secondary); }
+.pattern-orders select, .pattern-orders textarea { box-sizing: border-box; width: 100%; min-width: 0; font: inherit; color: var(--dx-v2-color-text); }
+.pattern-orders select { min-height: var(--dx-form-control-height); padding: 0 10px; border: 1px solid var(--dx-form-control-border); border-radius: 10px; background: #fff; }
+.pattern-orders textarea { padding: 10px 12px; min-height: 90px; resize: vertical; }
+.pattern-orders .rework-v2-upload { min-width: 0; }
+.pattern-orders .rework-v2-control .search-select { width: 100%; min-width: 0; }
+.pattern-orders .search-select__results { left: -10px; right: -10px; }
+.pattern-orders .search-select__results button { overflow-wrap: anywhere; }
+.pattern-actions, .pattern-kind { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 0; }
+.pattern-actions:empty { display: none; }
+.pattern-actions > a.dx-button { display: inline-flex; align-items: center; text-decoration: none; }
+.pattern-kind { margin: 0; }
+.pattern-total { display: grid; gap: 5px; align-content: center; min-height: var(--dx-form-control-height); }
+.pattern-total span { font-size: 12px; color: var(--dx-v2-color-text-secondary); }
+.pattern-total strong { font-size: 22px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pattern-hourly { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pattern-hourly .dx-button { padding-inline: 10px; }
+.pattern-filters { grid-template-columns: minmax(200px,1.5fr) repeat(4,minmax(0,1fr)); align-items: end; }
+.pattern-filters .pattern-single-field input { background: var(--dx-v2-color-inset); }
+.pattern-filters .pattern-single-field label > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.pattern-order-list { display: grid; margin-top: 12px; }
+.pattern-order-row { display: grid; grid-template-columns: minmax(160px,1.5fr) repeat(4,minmax(0,1fr)) minmax(140px,1.2fr); align-items: center; gap: 12px; padding: 14px 0; border-top: 1px solid var(--dx-v2-color-border); }
+.pattern-order-row > div { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.pattern-order-row small { color: var(--dx-v2-color-text-secondary); font-size: 12px; }
+.pattern-order-identity > a { font-size: 18px; font-weight: 800; text-decoration: none; }
+.pattern-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
+.pattern-pagination .my-todos-pagination { margin: 0; }
+.pattern-empty { margin: 20px 0; color: var(--dx-v2-color-text-secondary); }
+.pattern-files { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; }
+.pattern-files:empty { display: none; }
+.pattern-files li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--dx-v2-color-border); }
+.pattern-files li > span { flex: 1 1 150px; min-width: 0; overflow-wrap: anywhere; }
+.pattern-files a { white-space: nowrap; }
+.pattern-facts { margin: 0; align-items: start; }
+.pattern-facts dt, .pattern-status { color: var(--dx-v2-color-text-secondary); font-size: 12px; font-weight: 400; }
+.pattern-facts dd { margin: 4px 0 0; overflow-wrap: anywhere; }
 .pattern-note { white-space: pre-wrap; overflow-wrap: anywhere; }
-.pattern-nodes { display: grid; gap: 12px; padding-left: 24px; }
-.pattern-nodes li > span { display: block; margin-top: 4px; }
-.pattern-confirm { border-left: 3px solid #166534; padding: 8px 16px; background: #f0fdf4; }
-.pattern-progress { display: flex; flex-wrap: wrap; gap: 12px; list-style: none; padding: 0; margin: 16px 0; }
-.pattern-progress li { min-width: 110px; padding: 10px 16px; border: 1px solid #e1e7ed; border-radius: 8px; }
-.pattern-progress li[aria-current="step"] { border-color: #166534; background: #f0fdf4; }
-.pattern-progress small { display: block; margin-top: 4px; color: #64748b; }
+.pattern-progress { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; list-style: none; padding: 0; margin: 0 0 12px; }
+.pattern-progress .rework-workflow__node { grid-template-columns: 24px minmax(0,1fr); }
+.pattern-progress .rework-workflow__node > span strong { white-space: normal; }
+.pattern-orders summary { display: flex; align-items: center; min-height: 40px; cursor: pointer; font-weight: 700; }
+.pattern-orders summary::before { content: '›'; margin-right: 8px; }
+.pattern-orders details[open] > summary::before { transform: rotate(90deg); }
+.pattern-orders summary::-webkit-details-marker { display: none; }
+.pattern-orders details[open] > summary { margin-bottom: 8px; }
+.pattern-nodes { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; padding: 0; list-style: none; }
+.pattern-nodes li > span { display: block; margin-top: 4px; font-size: 12px; color: var(--dx-v2-color-text-secondary); }
+.pattern-node-history { border-top: 1px solid var(--dx-v2-color-border); }
+.pattern-exception { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--dx-v2-color-border); }
+.pattern-assignment { grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; }
+.pattern-order-form [role=alert], .pattern-orders [role=alert] { color: var(--dx-v2-color-danger); overflow-wrap: anywhere; }
+@media (max-width:1100px) {
+  .pattern-filters { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .pattern-order-row { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
+@media (max-width:900px) {
+  .pattern-fields, .pattern-facts { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .pattern-assignment .rework-v2-actions { grid-column: 1 / -1; }
+}
+@media (max-width:600px) {
+  .pattern-fields { grid-template-columns: minmax(0,1fr); }
+  .pattern-facts, .pattern-order-row { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .pattern-order-identity { grid-column: 1 / -1; }
+  .pattern-order-row { gap: 10px; padding-block: 12px; }
+  .pattern-progress { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .pattern-nodes { grid-template-columns: minmax(0,1fr); }
+  .pattern-orders select, .pattern-orders textarea, .pattern-orders .search-select input { min-height: var(--dx-form-control-height); font-size: 16px; }
+  .pattern-orders .dx-button { max-width: 100%; }
+  .pattern-orders summary { min-height: 44px; }
+  .pattern-order-form .rework-v2-action-area { margin-top: 0; }
+  .pattern-actions .dx-button { min-height: 48px; }
+  .pattern-price-table td:last-child { flex-wrap: wrap; }
+}

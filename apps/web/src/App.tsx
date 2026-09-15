@@ -1,3 +1,4 @@
+import { PatternOrderCreatePage } from "./pattern-order-create-page.js";
 import { SupplierOnboardingPage } from "./supplier-onboarding-page.js";
 import { PatternRoomOrdersPage, PatternRoomOrderDetailPage } from "./pattern-room-orders-page.js";
 import { PatternRoomPage } from "./pattern-room-page.js";
@@ -312,9 +313,10 @@ export function App() {
   else if (path === "/ui/own-factory-approvals") page = <OwnFactoryApprovalQueuePage />;
   else if (path === "/ui/external-responsibilities") page = <ExternalResponsibilityQueuePage />;
   else if (path === "/ui/pattern-room") page = <Shell active="订单打板"><PatternRoomPage /></Shell>;
-  else if (path === "/ui/pattern-room/create") page = <Shell active="pattern-room-create"><PatternRoomOrdersPage /></Shell>;
-  else if (/^\/ui\/pattern-room\/orders\/[^/]+$/.test(path)) page = <Shell active="pattern-room-create"><PatternRoomOrderDetailPage orderId={path.split("/").pop()!} /></Shell>;
-  else if (path === "/ui/pattern-room/prices") page = <Shell active="板房价格管控"><PatternRoomPricesPage /></Shell>;
+  else if (path === "/ui/pattern-room/orders") page = <Shell active="pattern-room-orders"><PatternRoomOrdersPage /></Shell>;
+  else if (path === "/ui/pattern-room/create") page = <Shell active="pattern-room-create"><PatternOrderCreatePage /></Shell>;
+  else if (/^\/ui\/pattern-room\/orders\/[^/]+$/.test(path)) page = <Shell active="pattern-room-orders"><PatternRoomOrderDetailPage orderId={path.split("/").pop()!} /></Shell>;
+  else if (path === "/ui/pattern-room/prices") page = <Shell active="价格管控"><PatternRoomPricesPage /></Shell>;
   else if (path === "/ui/finance") page = <Shell active="财务中心"><FinancePage /></Shell>;
   else if (path === "/ui/wages" || path.startsWith("/ui/wages/")) page = <Shell active="财务中心"><WagePage path={path} /></Shell>;
   else if (path === "/ui/tasks") page = <ReworkQueryPage />;

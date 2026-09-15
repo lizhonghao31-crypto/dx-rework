@@ -1,6 +1,7 @@
+import { PatternField as InsetField } from "./pattern-controls.js";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { z } from "zod";
-import { Button, InsetField, Surface } from "@dx-rework/ui";
+import { Button, Surface } from "@dx-rework/ui";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { PatternPriceChangeSchema, PatternPriceHistorySchema, PatternPriceItemSchema, PatternPricesSchema, type PatternPriceItem } from "@dx-rework/contracts/pattern-room";
 import { Header } from "./components.js";
@@ -52,12 +53,12 @@ export function PatternRoomPricesPage() {
     } catch (e) { setFormError(e instanceof Error ? e.message : "保存失败"); }
     finally { setBusy(false); }
   };
-  return <div className="pattern-prices"><Header title="板房价格管控" badge="订单打板" badgePlacement="subtitle" />
+  return <div className="pattern-prices"><Header title="价格管控" badge="订单打板" badgePlacement="subtitle" />
     {error ? <Surface><p role="alert">{error}</p><Button onClick={() => void refresh().catch(e => setError(e instanceof Error ? e.message : "价格读取失败"))}>重新读取</Button></Surface> : null}
     {!data && !error ? <p role="status">正在读取价格…</p> : null}
     {data ? <>
-      <Surface><h2>打板品类执行价</h2><p>新价格用于之后提交的订单；已提交订单保留原执行价。</p>
-        <div className="pattern-price-table"><table><thead><tr><th>品类</th><th>单位</th><th>执行价（元）</th><th>状态</th><th>最近调整</th><th>操作</th></tr></thead><tbody>
+      <Surface><h2>打板品类单价</h2><p>新价格用于之后提交的订单；已提交订单保留原执行价。</p>
+        <div className="pattern-price-table"><table><thead><tr><th>品类</th><th>单位</th><th>单价（元）</th><th>状态</th><th>最近调整</th><th>操作</th></tr></thead><tbody>
           {data.categories.map(item => <tr key={item.priceId}><th scope="row">{item.name}</th><td>{item.unit}</td><td>{amountText(item.amount)}</td><td>{item.enabled ? "启用" : "停用"}</td>
             <td>{item.updatedBy ?? "初始化"}<small>{time(item.updatedAt)}</small></td><td><Button onClick={() => void showHistory(item)}>价格记录</Button>{data.canWriteCategories ? <Button onClick={() => edit(item)}>调整</Button> : null}</td></tr>)}
         </tbody></table></div>
@@ -67,10 +68,10 @@ export function PatternRoomPricesPage() {
         <Button onClick={() => void showHistory(data.hourly)}>价格记录</Button>{" "}{data.canWriteHourly ? <Button onClick={() => edit(data.hourly)}>调整小时单价</Button> : null}
       </Surface>
     </> : null}
-    {editing ? <PriceDialog title={`调整${editing.name}`} busy={busy} onClose={() => setEditing(null)}><form onSubmit={event => { event.preventDefault(); void save(); }}>
+    {editing ? <PriceDialog title={`调整${editing.name}`} busy={busy} onClose={() => setEditing(null)}><form className="pattern-order-form" onSubmit={event => { event.preventDefault(); void save(); }}>
       <h2>调整{editing.name}</h2><p>当前价格：{amountText(editing.amount)} 元/{editing.unit}</p>
-      <InsetField label={`新执行价（元/${editing.unit}）`} inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} disabled={busy} autoFocus />
-      {editing.kind === "category" ? <label><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={busy} />启用此品类</label> : null}
+      <InsetField label={`新单价（元/${editing.unit}）`} inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} disabled={busy} autoFocus />
+      {editing.kind === "category" ? <label className="pattern-checkbox"><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={busy} />启用此品类</label> : null}
       <InsetField label="调整原因（必填）" value={reason} onChange={event => setReason(event.target.value)} maxLength={500} disabled={busy} />
       {formError ? <div><p role="alert">{formError}</p><Button type="button" disabled={busy} onClick={() => { setEditing(null); void refresh().catch(e => setError(e instanceof Error ? e.message : "价格读取失败")); }}>重新读取价格</Button></div> : null}
       <div className="system-dialog__actions"><Button type="button" disabled={busy} onClick={() => setEditing(null)}>取消</Button><Button variant="primary" type="submit" disabled={busy}>{busy ? "保存中…" : "保存"}</Button></div>

@@ -13,13 +13,13 @@ export function patternListPath(query: PatternListQuery): string {
   const params = new URLSearchParams();
   for (const key of ["q", "kind", "status", "creatorId", "workerId"] as const) if (query[key]) params.set(key, query[key]);
   if (query.page > 1) params.set("page", String(query.page));
-  return `/ui/pattern-room/create${params.size ? `?${params}` : ""}`;
+  return `/ui/pattern-room/orders${params.size ? `?${params}` : ""}`;
 }
 export function patternReturnPath(search: string): string {
   const todo = todoReturnPath(search); if (todo) return todo;
   const target = new URLSearchParams(search).get("returnTo");
   const wage=wageReturnPath(target);if(wage)return wage;
-  if (!target || target.includes("\\") || target.split("?")[0] !== "/ui/pattern-room/create") return "/ui/pattern-room/create";
+  if (!target || target.includes("\\") || !["/ui/pattern-room/orders", "/ui/pattern-room/create"].includes(target.split("?")[0]!)) return "/ui/pattern-room/orders";
   return patternListPath(readPatternListQuery(target.includes("?") ? target.slice(target.indexOf("?")) : ""));
 }
 export function patternEstimate(price: string | null, quantity: string): string | null {

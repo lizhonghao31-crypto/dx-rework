@@ -1,5 +1,7 @@
+import { SearchSelect } from "./search-select.js";
+import { PatternField as InsetField } from "./pattern-controls.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Button, InsetField } from "@dx-rework/ui";
+import { Button } from "@dx-rework/ui";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { CancelPatternOrderSchema, PatternOrderDetailSchema, PatternRoundActionSchema, PatternWorkerOptionsSchema, RequestPatternReworkSchema, TransferPatternOrderSchema, type PatternOrderDetail } from "@dx-rework/contracts/pattern-orders";
 import type { z } from "zod";
@@ -58,14 +60,14 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
     {order.actions.cancel ? <Button disabled={busy} onClick={() => onActive("cancel")}>取消任务</Button> : null}
     {order.actions.cancelFees ? <Button disabled={busy} onClick={() => onActive("cancel-fees")}>确认取消费用</Button> : null}
   </div>;
-  return <form className="pattern-confirm pattern-order-form" onSubmit={event => void submit(event)}><h3>{titles[active]}</h3>
+  return <form className="pattern-exception pattern-order-form" onSubmit={event => void submit(event)}><h3>{titles[active]}</h3>
     {active === "rework" ? <>
-      <label>返工原因分类<select disabled={busy} value={category} onChange={e => setCategory(e.target.value)}><option value="customer_change">客户修改要求</option><option value="workmanship">制作不符合要求</option><option value="other">其他</option></select></label>
-      <p>沿用本单制作资料，可补充新文件。主管明确核定金额并派工后计为一次返工。</p>
-      <label>补充 PDF / 清晰图片<input type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp" disabled={busy} onChange={e => { const selected = Array.from(e.target.files ?? []); e.target.value = ""; if (selected.length + files.length > 20) setError("最多补充20份资料"); else void upload(selected); }} /></label>
+      <label>返工原因分类<select className="rework-v2-control" disabled={busy} value={category} onChange={e => setCategory(e.target.value)}><option value="customer_change">客户修改要求</option><option value="workmanship">制作不符合要求</option><option value="other">其他</option></select></label>
+
+      <label className="rework-v2-upload">补充图片 / PDF<input type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp" disabled={busy} onChange={e => { const selected = Array.from(e.target.files ?? []); e.target.value = ""; if (selected.length + files.length > 20) setError("最多补充20份资料"); else void upload(selected); }} /></label>
       <ul className="pattern-files">{files.map(file => <li key={file.attachmentId}>{file.filename}<Button type="button" disabled={busy} onClick={() => setFiles(current => current.filter(item => item.attachmentId !== file.attachmentId))}>移出</Button></li>)}</ul>
     </> : null}
-    {active === "transfer" ? <div className="pattern-fields"><InsetField label="搜索接手工人" value={searchText} disabled={busy} onChange={e => { setSearchText(e.target.value); setPersonId(""); }} /><label>接手工人<select required disabled={busy} value={personId} onChange={e => setPersonId(e.target.value)}><option value="">请选择另一名工人</option>{workers.filter(worker => worker.userId !== segment?.workerUserId).map(worker => <option key={worker.personId} value={worker.personId}>{worker.name}</option>)}</select></label></div> : null}
+    {active === "transfer" ? <label>接手师傅<div className="rework-v2-control"><SearchSelect options={workers.filter(worker => worker.userId !== segment?.workerUserId).map(worker => ({ value: worker.personId, label: worker.name }))} value={personId} onChange={setPersonId} onSearchChange={setSearchText} placeholder="输入姓名选择师傅" ariaLabel="接手师傅" emptyText="没有匹配的师傅" disabled={busy} /></div></label> : null}
     {active === "transfer" || (active === "cancel" && !pending) ? <>
       <p>当前执行人：{segment?.workerName}。{order.kind === "pattern" ? `当前段金额 ${formatBusinessDecimal(segment?.amount ?? "0", 3)} 元；以前执行段保留。` : "按本单保存的小时价计算每段实际劳动。"}</p>
       {order.kind === "pattern" ? <InsetField label={active === "transfer" ? "原工人应得部分（元，无实际制作填0）" : "当前工人取消部分费用（元，无费用填0）"} inputMode="decimal" required value={amount} disabled={busy} onChange={e => setAmount(e.target.value)} />
@@ -74,8 +76,8 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
     </> : null}
     {active === "cancel" ? <p>{pending ? "取消未派工请求，保留历史轮次。" : "确认工作已经停止。打板有费用时，仍由原设计师确认取消费用。"}</p> : null}
     {active === "cancel-fees" ? <><p>请核对以下取消费用，确认后计入工资，订单仍为已取消。</p>{order.rounds.filter(item => item.cancelledAmount != null && /[1-9]/.test(item.cancelledAmount) && item.feeConfirmedAt === null).map(item => <p key={item.roundId}>{item.index === 0 ? "首次打板" : `第${item.index}次返工`}：{formatBusinessDecimal(item.cancelledAmount!, 3)} 元</p>)}</>
-      : <label>{active === "rework" ? "返工内容 / 原因（必填）" : "操作说明（必填）"}<textarea required maxLength={active === "rework" ? 2000 : 500} disabled={busy} value={reason} onChange={e => setReason(e.target.value)} /></label>}
+      : <label>{active === "rework" ? "返工内容 / 原因（必填）" : "操作说明（必填）"}<textarea className="rework-v2-control" required maxLength={active === "rework" ? 2000 : 500} disabled={busy} value={reason} onChange={e => setReason(e.target.value)} /></label>}
     {error ? <p role="alert">{error}</p> : null}{uploading ? <p role="status">正在上传原始资料…</p> : null}
-    <div className="pattern-actions"><Button type="button" disabled={busy} onClick={() => onActive(null)}>暂不提交</Button><Button type="submit" variant="primary" disabled={busy}>{busy ? "提交中…" : titles[active]}</Button></div>
+    <div className="rework-v2-action-area"><div className="rework-v2-actions"><Button type="button" disabled={busy} onClick={() => onActive(null)}>暂不提交</Button><Button type="submit" variant="primary" disabled={busy}>{busy ? "提交中…" : titles[active]}</Button></div></div>
   </form>;
 }

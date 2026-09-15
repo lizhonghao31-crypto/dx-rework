@@ -12,3 +12,7 @@ export function canAccessPatternRoomOrders(user: AuthorizedUser): boolean {
   return user.isRoot === true || (PATTERN_ROOM_ORDERS_ENABLED && canUsePatternOrder(user.businessRoles ?? [], user.capabilities, "pattern_room:orders:view"));
 }
 export const canAccessPatternRoom = (user: AuthorizedUser) => canAccessPatternRoomPrices(user) || canAccessPatternRoomOrders(user);
+
+export function canCreatePatternRoomOrders(user: AuthorizedUser): boolean {
+  return user.isRoot === true || (PATTERN_ROOM_ORDERS_ENABLED && (["pattern_room:orders:create", "pattern_room:misc:create"] as const).some(capability => canUsePatternOrder(user.businessRoles ?? [], user.capabilities, capability)));
+}
