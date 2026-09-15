@@ -15,12 +15,6 @@ export function isScopedFinanceReader(actor: TrustedActorContext): boolean {
   ].includes(role));
 }
 
-export function isOnlyFinanceReader(actor: TrustedActorContext): boolean {
-  return actor.actorRoles.length>0&&actor.actorRoles.every(role=>[
-    "factory_payables","embroidery_washing_payables","fabric_payables","wage_month_close_accountant","finance_director","finance_read",
-  ].includes(role));
-}
-
 // Shared batch snapshots include whole-order wages and responsibility totals.
 // Scoped readers receive their case rows plus basic order provenance only.
 export function scopedExternalSource(snapshot: Record<string,unknown>): Record<string,unknown> {

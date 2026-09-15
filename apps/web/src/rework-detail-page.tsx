@@ -115,6 +115,7 @@ export type ReworkBusinessDetail = Readonly<{
   problemDescription: string | null;
   reworkQuantity: number | null;
   tailInspectionRequired: boolean;
+  canReadBusinessDetails?: boolean;
   singlePieceReworkTotal: number | null;
   inspectionReport: InspectionReportDraft | null;
   createdBy: Readonly<{ userId: string; displayName: string }>;
@@ -837,7 +838,7 @@ export function ReworkDetailPage({
         </div>
 
         <section id="node-workspace" className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
-          <div className="rework-detail-task__heading"><h2>办理区<span className="rework-mobile-current-node"> · {selected?.number} {selected?.label}</span></h2><span className="rework-detail-single-piece-total">单件返工总价：{detail.singlePieceReworkTotal === null ? "待核价" : formatBusinessCurrency(detail.singlePieceReworkTotal)}</span></div>
+          <div className="rework-detail-task__heading"><h2>办理区<span className="rework-mobile-current-node"> · {selected?.number} {selected?.label}</span></h2>{detail.canReadBusinessDetails !== false && <span className="rework-detail-single-piece-total">单件返工总价：{detail.singlePieceReworkTotal === null ? "待核价" : formatBusinessCurrency(detail.singlePieceReworkTotal)}</span>}</div>
           {canWaiveTailInspection ? <TailInspectionWaiverAction detail={detail} onChanged={syncAfterNodeAction} /> : null}
           {renderSelectedTask()}
         </section>

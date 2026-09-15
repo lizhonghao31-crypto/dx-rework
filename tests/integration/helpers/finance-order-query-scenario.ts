@@ -46,7 +46,12 @@ export async function exerciseFinanceOrderQueries(input: {
         expect(batch.sourceSnapshot).not.toHaveProperty("finalizedDetermination.calculationTotal");
       }
       if(reader.types!=="all") {
-        expect((await detail.get(current,orderId)).workflowHistory).toEqual([]);
+        const scopedDetail=await detail.get(current,orderId);
+        expect(scopedDetail).toMatchObject({canReadBusinessDetails:false,singlePieceReworkTotal:null,inspectionReport:null,
+          iePrecounts:{canRecord:false,processes:[],entries:[]},defectiveQuantity:{canAddTail:false,tailEntries:[]}});
+        expect(scopedDetail.workflowHistory).toEqual([]);
+        expect(await detail.canDownloadBoundAttachment(current,{entityType:"rework_order",entityId:orderId,mimeType:"application/pdf"})).toBe(false);
+        expect(await detail.canDownloadBoundAttachment(current,{entityType:"rework_order",entityId:orderId,mimeType:"image/jpeg"})).toBe(true);
         expect((await app.inject({url:"/management/dashboard"})).statusCode).toBe(403);
       }
     }
@@ -62,10 +67,11 @@ export async function exerciseFinanceOrderQueries(input: {
         if(predecessor) await access.revokeRole(root,predecessor.assignmentId,"测试唯一应付岗位交接");
         try {
           const assignment=await access.assignRole(root,{userId:input.unrelatedId,roleCode:role,reason:"验证接岗后可以查历史"});
-          current={...current,actorRoles:[role]};
+          current={...current,actorRoles:["worker",role]};
           try {
             expect((await app.inject({url:"/management/rework-basic-orders"})).statusCode).toBe(200);
             expect((await detail.get(current,orderId)).reworkOrderId).toBe(orderId);
+            if(role==="factory_payables") expect(await detail.get(current,orderId)).toMatchObject({canReadBusinessDetails:false,workflowHistory:[],singlePieceReworkTotal:null,iePrecounts:{entries:[]}});
           } finally { await access.revokeRole(root,assignment.assignmentId,"验证撤销后旧页面必须失权"); }
           expect((await app.inject({url:"/management/rework-basic-orders"})).statusCode).toBe(403);
           await expect(detail.get(current,orderId)).rejects.toMatchObject({statusCode:403});
