@@ -1,4 +1,5 @@
 import { PatternMaterials } from "./pattern-materials.js";
+import { PatternOrderDelete } from "./pattern-order-delete.js";
 import { ListPagination } from "./list-pagination.js";
 import { SearchSelect } from "./search-select.js";
 import { confirmInApp } from "./system-dialog.js";
@@ -59,6 +60,7 @@ export function PatternRoomOrdersPage() {
           <div><small>当前师傅</small><span>{order.currentWorkerName ?? "待分配"}</span></div>
           <div><small>要求完成</small><span>{order.requiredDate ?? "—"}</span></div>
           <div><small>返工 / 提交时间</small><span>{order.reworkCount} 次</span><small>{patternTime(order.submittedAt)}</small></div>
+          {data.canDelete && <div className="pattern-row-actions"><PatternOrderDelete orderId={order.orderId} version={order.version} label={order.orderNo} disabled={loading} onDeleted={() => { setData(current => current ? { ...current, items: current.items.filter(item => item.orderId !== order.orderId) } : current); setPage(1); setRefresh(value => value + 1); }} /></div>}
         </article>)}
       </div>
       {!data.items.length ? <p className="pattern-empty">没有符合条件的订单。</p> : null}
@@ -115,7 +117,7 @@ export function PatternRoomOrderDetailPage({ orderId }: { orderId: string }) {
     if(segment&&order.rounds.some(round=>round.segments.some(item=>item.segmentId===segment))) document.getElementById(`segment-${segment}`)?.scrollIntoView({block:"center"});
   },[order]);
   return <div className="pattern-orders"><Header title={order ? order.kind === "misc" ? order.taskName ?? "杂事" : order.styleNo : "板房订单"} badge={order?.orderNo ?? "订单打板"} badgePlacement="subtitle" />
-    <div className="pattern-actions"><a href={pageUrl(patternReturnPath(window.location.search))}>返回列表</a><Button disabled={busy || editing} onClick={() => setRefresh(value => value + 1)}>刷新订单</Button></div>
+    <div className="pattern-actions"><a href={pageUrl(patternReturnPath(window.location.search))}>返回列表</a><Button disabled={busy || editing} onClick={() => setRefresh(value => value + 1)}>刷新订单</Button>{order?.actions.delete && !staleRound && <PatternOrderDelete orderId={order.orderId} version={order.version} label={order.orderNo} disabled={busy || editing || exception !== null} onBusy={setBusy} onDeleted={() => window.location.assign(pageUrl(patternReturnPath(window.location.search)))} />}</div>
     {error ? <Surface><p role="alert">{error}</p><Button disabled={busy} onClick={() => { setEditing(false); setRefresh(value => value + 1); }}>重新读取订单</Button></Surface> : null}
     {!order && !error ? <p role="status">正在读取订单…</p> : null}
     {order ? <>

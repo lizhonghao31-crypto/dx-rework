@@ -1,3 +1,4 @@
+import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
 import { WorkerAwareAccessMasterDataService } from "../../apps/api/src/access/worker-aware-access-service.js";
 import { exerciseWagePagination } from "./helpers/wage-pagination-scenario.js";
 import { exerciseFinancePatternQueries, exerciseMixedFinancePatternScope } from "./helpers/finance-pattern-query-scenario.js";
@@ -2935,4 +2936,122 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       updated_by: ids.tail,
     }]);
   });
+  it("logically deletes both board order kinds in every stage with Root audit and closed todos", async () => {
+    const service = new PatternRoomOrderService(database, todoProjection, { ordersEnabled: true });
+    const root = patternActor(ids.patternRoot, ["root_superuser"]), designer = patternActor(ids.patternDesigner, ["sample_designer"]);
+    const supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]), boardWorker = patternActor(ids.worker, ["pattern_room_worker"]);
+    const prices = new PatternRoomPriceService(database), before = (await prices.management(root)).hourly;
+    const hourly = await prices.change(root, "hourly", PATTERN_HOURLY_PRICE_ID, { version: before.version, amount: "28.500", enabled: true, reason: "删除回归时薪" }, randomUUID());
+    for (const kind of ["pattern", "misc"] as const) for (const stage of ["pending_assignment", "in_progress", "pending_confirmation", "completed", "cancelled"] as const) {
+      const label = `DELETE-${kind}-${stage}`;
+      let order = kind === "pattern" ? await makePattern(service, designer, label) : await service.createMisc(designer, { taskName: label, priceVersion: hourly.version }, randomUUID());
+      expect((await service.get(root, order.orderId)).actions.delete).toBe(true);
+      expect((await service.get(designer, order.orderId)).actions.delete).toBe(false);
+      await expect(service.deleteOrder(designer, order.orderId, { version: order.version }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+      await expect(service.deleteOrder(root, order.orderId, { version: order.version + 1 }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+      await expect(database.query("UPDATE pattern_room_orders SET deleted_at=CURRENT_TIMESTAMP WHERE order_id=$1", [order.orderId])).rejects.toThrow();
+      if (["in_progress", "pending_confirmation", "completed"].includes(stage)) order = await service.assign(supervisor, order.orderId, { ...roundAction(order), personId: workerPersonId }, randomUUID());
+      if (["pending_confirmation", "completed"].includes(stage)) {
+        if (kind === "misc") order = await service.recordHours(supervisor, order.orderId, { ...roundAction(order), hours: "1.0" }, randomUUID());
+        order = await service.complete(boardWorker, order.orderId, roundAction(order), randomUUID());
+      }
+      if (stage === "completed") order = kind === "pattern" ? await service.handoff(designer, order.orderId, roundAction(order), randomUUID()) : await service.confirmMisc(designer, order.orderId, roundAction(order), randomUUID());
+      if (stage === "cancelled") order = await service.cancel(designer, order.orderId, { ...roundAction(order), reason: "删除前已取消" }, randomUUID());
+      expect(order.status).toBe(stage);
+      const wages = (await database.query("SELECT * FROM pattern_room_wage_items WHERE order_id=$1 ORDER BY wage_item_id", [order.orderId])).rows;
+      const materials = (await database.query("SELECT * FROM pattern_room_attachment_bindings WHERE order_id=$1 ORDER BY attachment_id", [order.orderId])).rows;
+      const key = randomUUID(), input = { version: order.version };
+      expect(await service.deleteOrder(root, order.orderId, input, key)).toEqual({ deleted: true });
+      expect(await service.deleteOrder(root, order.orderId, input, key)).toEqual({ deleted: true });
+      await expect(service.get(root, order.orderId)).rejects.toMatchObject({ statusCode: 404 });
+      expect((await service.list(root, { q: label, page: 1, limit: 25 })).items).toEqual([]);
+      expect((await database.query("SELECT count(*)::int n FROM rework_todos WHERE entity_id=$1 AND status IN ('pending','blocked_recipient')", [order.orderId])).rows[0].n).toBe(0);
+      expect((await database.query("SELECT count(*)::int n FROM operation_events WHERE entity_id=$1 AND action='pattern_room.order.deleted'", [order.orderId])).rows[0].n).toBe(1);
+      expect((await database.query("SELECT * FROM pattern_room_wage_items WHERE order_id=$1 ORDER BY wage_item_id", [order.orderId])).rows).toEqual(wages);
+      expect((await database.query("SELECT * FROM pattern_room_attachment_bindings WHERE order_id=$1 ORDER BY attachment_id", [order.orderId])).rows).toEqual(materials);
+      if (materials.length) expect(await service.canDownload(root, { entityType: "pattern_room_attachment", entityId: materials[0].attachment_id })).toBe(false);
+      await expect(database.query("UPDATE pattern_room_orders SET deleted_at=NULL,deleted_by=NULL,deletion_event_id=NULL WHERE order_id=$1", [order.orderId])).rejects.toMatchObject({ code: "55000" });
+    }
+    const app = Fastify();
+    registerPatternRoomOrderRoutes(app, { service, attachments: {} as AttachmentService, root: new RootAuthority(database, "corp", undefined), authenticate: async () => ({ id: ids.patternRoot, businessRoles: [], capabilities: [] }) });
+    try {
+      const order = await makePattern(service, designer, "DELETE-HTTP");
+      expect((await app.inject({ method: "POST", url: `/pattern-room/orders/${order.orderId}/delete`, payload: { version: order.version }, headers: { cookie: "dx_rework_session=root", "idempotency-key": randomUUID() } })).statusCode).toBe(200);
+    } finally { await app.close(); }
+  });
+
+  it("excludes deleted board wages from reads and stale paid selections while preserving existing paid facts", async () => {
+    const service = new PatternRoomOrderService(database, todoProjection), root = patternActor(ids.patternRoot, ["root_superuser"]);
+    const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]), boardWorker = patternActor(ids.worker, ["pattern_room_worker"]);
+    const reporting = new ManagementReportingService(database), finance = financeWages();
+    for (const settled of [true, false]) {
+      let order = await makePattern(service, designer, `DELETE-WAGE-${settled}`);
+      order = await service.assign(supervisor, order.orderId, { ...roundAction(order), personId: workerPersonId }, randomUUID());
+      order = await service.complete(boardWorker, order.orderId, roundAction(order), randomUUID());
+      order = await service.handoff(designer, order.orderId, roundAction(order), randomUUID());
+      const filter = { ...allWageDates, wageSource: "pattern_room" as const, q: order.styleNo };
+      const preview = await reporting.previewWageSettlement(finance, filter);
+      expect(preview.lineCount).toBe(1);
+      if (settled) expect((await reporting.markWageSettlement(finance, filter, preview.lineIds)).markedCount).toBe(1);
+      const marks = (await database.query("SELECT * FROM rework_wage_settlement_marks WHERE line_id=ANY($1::uuid[])", [preview.lineIds])).rows;
+      await service.deleteOrder(root, order.orderId, { version: order.version }, randomUUID());
+      expect((await reporting.report(finance, "wages", filter)).rows).toEqual([]);
+      expect((await reporting.report(finance, "wages", filter)).totals.wageAmount).toBe("0.00");
+      expect((await reporting.previewWageSettlement(finance, filter)).lineCount).toBe(0);
+      const exported = await new ReportExportService(reporting, database, "board-deletion-verification").export(finance, "wages", filter);
+      const detailSheet = [...exported.content.toString("utf8").matchAll(/<worksheet[\s\S]*?<\/worksheet>/g)][1]![0];
+      expect(detailSheet).not.toContain(order.orderNo);
+      expect(detailSheet.match(/<row\b/g)).toHaveLength(1);
+      expect((await reporting.markWageSettlement(finance, filter, preview.lineIds)).markedCount).toBe(0);
+      const insertion = await database.query("INSERT INTO rework_wage_settlement_marks(line_id,pattern_wage_item_id,marked_by) VALUES($1,$1,$2) ON CONFLICT DO NOTHING RETURNING line_id", [preview.lineIds[0], ids.financeDirector]);
+      expect(insertion.rows).toEqual([]);
+      expect((await database.query("SELECT * FROM rework_wage_settlement_marks WHERE line_id=ANY($1::uuid[])", [preview.lineIds])).rows).toEqual(marks);
+      expect((await database.query("SELECT wage_item_id FROM pattern_room_wage_items WHERE order_id=$1", [order.orderId])).rows).toHaveLength(1);
+    }
+  });
+
+  it("serializes board deletion before a racing wage-paid marker", async () => {
+    const service = new PatternRoomOrderService(database, todoProjection), root = patternActor(ids.patternRoot, ["root_superuser"]);
+    const designer = patternActor(ids.patternDesigner, ["sample_designer"]), supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]), boardWorker = patternActor(ids.worker, ["pattern_room_worker"]);
+    const reporting = new ManagementReportingService(database), finance = financeWages();
+    let order = await makePattern(service, designer, "DELETE-WAGE-RACE");
+    order = await service.assign(supervisor, order.orderId, { ...roundAction(order), personId: workerPersonId }, randomUUID());
+    order = await service.complete(boardWorker, order.orderId, roundAction(order), randomUUID());
+    order = await service.handoff(designer, order.orderId, roundAction(order), randomUUID());
+    const filter = { ...allWageDates, wageSource: "pattern_room" as const, q: order.styleNo }, preview = await reporting.previewWageSettlement(finance, filter);
+    let locked!: () => void, resume!: () => void;
+    const deletionLocked = new Promise<void>(resolve => { locked = resolve; }), continueDeletion = new Promise<void>(resolve => { resume = resolve; });
+    class PausingProjection extends TodoProjectionService {
+      override async cancelOpenByDedupePrefix(...args: Parameters<TodoProjectionService["cancelOpenByDedupePrefix"]>) {
+        locked(); await continueDeletion; return super.cancelOpenByDedupePrefix(...args);
+      }
+    }
+    const deletion = new PatternRoomOrderService(database, new PausingProjection(todoService)).deleteOrder(root, order.orderId, { version: order.version }, randomUUID());
+    await deletionLocked;
+    const applicationName = `board-delete-mark-${randomUUID()}`;
+    const markingPool = new Pool({ connectionString: databaseUrl!, options: `-c search_path=${schema}`, application_name: applicationName });
+    const marking = new ManagementReportingService(markingPool).markWageSettlement(finance, filter, preview.lineIds);
+    // Observe the real INSERT blocked on the order lock before allowing deletion to commit.
+    // Merely launching two promises does not guarantee that the mark used the pre-delete snapshot.
+    let blocked = false;
+    try {
+      const deadline = Date.now() + 10000;
+      while (Date.now() < deadline) {
+        // pg_stat_activity truncates long SQL, so identify this dedicated client's CTE by its prefix.
+        const waiting = await adminPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'WITH unlocked_lines AS (%'", [applicationName]);
+        if (waiting.rowCount) { blocked = true; break; }
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      expect(blocked).toBe(true);
+      resume();
+      expect(await deletion).toEqual({ deleted: true });
+      expect(await marking).toEqual({ markedCount: 0 });
+      expect((await database.query("SELECT * FROM rework_wage_settlement_marks WHERE line_id=ANY($1::uuid[])", [preview.lineIds])).rows).toEqual([]);
+    } finally {
+      resume();
+      await Promise.allSettled([deletion, marking]);
+      await markingPool.end();
+    }
+  });
+
 });

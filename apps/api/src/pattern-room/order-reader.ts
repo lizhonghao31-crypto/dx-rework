@@ -31,8 +31,8 @@ export class PatternOrderReader {
   async peopleFilters(actor: TrustedActorContext) {
     return this.read(actor, async (client, effective) => {
       if (!canReadAllPatternOrders(effective)) throw new ApplicationError("FORBIDDEN", "当前账号不能筛选其他人员", 403);
-      const creators = await client.query<{ id: string; name: string }>("SELECT person.id,person.display_name name FROM app_users person WHERE EXISTS(SELECT 1 FROM pattern_room_orders orders WHERE orders.created_by=person.id) ORDER BY name,id");
-      const workers = await client.query<{ id: string; name: string }>("SELECT person.person_id id,person.display_name name FROM business_people person WHERE EXISTS(SELECT 1 FROM pattern_room_segments segment WHERE segment.person_id=person.person_id) ORDER BY name,id");
+      const creators = await client.query<{ id: string; name: string }>("SELECT person.id,person.display_name name FROM app_users person WHERE EXISTS(SELECT 1 FROM pattern_room_orders orders WHERE orders.created_by=person.id AND orders.deleted_at IS NULL) ORDER BY name,id");
+      const workers = await client.query<{ id: string; name: string }>("SELECT person.person_id id,person.display_name name FROM business_people person WHERE EXISTS(SELECT 1 FROM pattern_room_segments segment JOIN pattern_room_rounds round ON round.round_id=segment.round_id JOIN pattern_room_orders orders ON orders.order_id=round.order_id WHERE segment.person_id=person.person_id AND orders.deleted_at IS NULL) ORDER BY name,id");
       return { creators: creators.rows, workers: workers.rows };
     });
   }
@@ -60,7 +60,7 @@ export class PatternOrderReader {
       const rows = await client.query<PatternOrderRow>(`SELECT orders.*,to_char(orders.required_date,'YYYY-MM-DD') required_date,${currentWorkerSql} current_worker_name FROM pattern_room_orders orders WHERE ${where}
         ORDER BY orders.submitted_at DESC,orders.order_id DESC LIMIT $10 OFFSET $11`, [...values, input.limit, (input.page - 1) * input.limit]);
       return PatternOrderListSchema.parse({ items: rows.rows.map(patternSummary), totalCount: count, page: input.page, pageSize: input.limit,
-        totalPages: Math.max(1, Math.ceil(count / input.limit)), canCreate: canUsePatternOrder(effective.actorRoles, patternActorCapabilities(effective), "pattern_room:orders:create"), canCreateMisc: canUsePatternOrder(effective.actorRoles, patternActorCapabilities(effective), "pattern_room:misc:create"), canFilterPeople: broad });
+        totalPages: Math.max(1, Math.ceil(count / input.limit)), canCreate: canUsePatternOrder(effective.actorRoles, patternActorCapabilities(effective), "pattern_room:orders:create"), canCreateMisc: canUsePatternOrder(effective.actorRoles, patternActorCapabilities(effective), "pattern_room:misc:create"), canFilterPeople: broad, canDelete: isPatternRoot(effective) });
     });
   }
 
@@ -107,7 +107,7 @@ export class PatternOrderReader {
         canReadMaterials: allMaterials || files.length>0,
         attachments: files.map(file => ({ attachmentId: file.attachment_id, roundId: file.round_id, filename: file.original_filename, mimeType: file.mime_type, sizeBytes: Number(file.size_bytes), active: file.active, addedAt: file.bound_at.toISOString(), reason: file.reason })),
         history: history.map(event => ({ action: event.action, actorName: event.actor_name, at: event.created_at.toISOString(), reason: event.reason })),
-        actions: { assign: order.status === "pending_assignment" && available("pattern_room:orders:assign"),
+        actions: { delete: isPatternRoot(effective), assign: order.status === "pending_assignment" && available("pattern_room:orders:assign"),
           complete: order.status === "in_progress" && !!current && (isPatternRoot(effective) || current.worker_user_id === effective.actorId) && available("pattern_room:orders:complete"),
           handoff: order.status === "pending_confirmation" && creator && available(order.kind === "pattern" ? "pattern_room:orders:handoff" : "pattern_room:misc:confirm"),
           edit: ["pending_assignment", "in_progress"].includes(order.status) && creator && available(order.kind === "pattern" ? "pattern_room:orders:edit" : "pattern_room:misc:edit"),

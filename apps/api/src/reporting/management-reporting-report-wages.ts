@@ -18,7 +18,7 @@ export async function wageReport(source: Queryable, query: ReportQuery, range: R
       WHEN wage_source='pattern_room' AND EXISTS(SELECT 1 FROM pattern_room_orders source_order
         JOIN pattern_room_rounds source_round ON source_round.order_id=source_order.order_id
         JOIN pattern_room_segments source_segment ON source_segment.round_id=source_round.round_id
-        WHERE source_order.order_id=filtered.source_order_id AND source_round.round_id=filtered.round_id AND source_segment.segment_id=filtered.segment_id) THEN 'available'
+        WHERE source_order.order_id=filtered.source_order_id AND source_order.deleted_at IS NULL AND source_round.round_id=filtered.round_id AND source_segment.segment_id=filtered.segment_id) THEN 'available'
       ELSE 'unavailable' END source_status
    FROM filtered ORDER BY completed_date DESC,person_name_snapshot,line_id LIMIT $8 OFFSET ((SELECT page FROM paging)-1)*$8
  ), person_sources AS (

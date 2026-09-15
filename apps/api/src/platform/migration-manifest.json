@@ -187,6 +187,7 @@
     { "version": "0185_approved_deduction_proposals", "checksum": "b574e6dd2649363748f2bdcba93eed6f628b0566cf2d5e4732b429d0a58e27af" },
     { "version": "0186_finance_rework_order_queries", "checksum": "38afe674f479b4e76e39414f86d0a7fffcf6198b2c9934acac672dc7b7f4f08e" },
     { "version": "0187_finance_pattern_order_reads", "checksum": "dd7fb1a5c151c107bd20766800ed9b0291ac54d5947f3c662e091fd03f1a572f" },
-    {"version": "0188_pattern_room_worker_role", "checksum": "c70a1ae77fbffa61e3ea1dbed4d63f1a1605fdfdd83fd3f9ba5a7f946ea3ad60"}
+    {"version": "0188_pattern_room_worker_role", "checksum": "c70a1ae77fbffa61e3ea1dbed4d63f1a1605fdfdd83fd3f9ba5a7f946ea3ad60"},
+    {"version": "0189_pattern_room_order_logical_deletion", "checksum": "4459959e7f2c8239e8fe84c8321afac4ef5ffa1bbfc2579a668bdfe7f8b241a7"}
   ]
 }

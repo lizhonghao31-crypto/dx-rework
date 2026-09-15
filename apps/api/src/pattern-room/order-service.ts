@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { AssignPatternOrderSchema, CancelPatternOrderSchema, CreatePatternOrderSchema, CreateMiscOrderSchema, PATTERN_ROOM_ORDERS_ENABLED, PatternRoundActionSchema, RecordPatternHoursSchema, RequestPatternReworkSchema, TransferPatternOrderSchema, UpdateMiscMaterialsSchema, UpdatePatternMaterialsSchema, type PatternOrderCapability, type PatternOrderQuery, type PatternRoundAction } from "@dx-rework/contracts/pattern-orders";
+import { DeletePatternOrderSchema, AssignPatternOrderSchema, CancelPatternOrderSchema, CreatePatternOrderSchema, CreateMiscOrderSchema, PATTERN_ROOM_ORDERS_ENABLED, PatternRoundActionSchema, RecordPatternHoursSchema, RequestPatternReworkSchema, TransferPatternOrderSchema, UpdateMiscMaterialsSchema, UpdatePatternMaterialsSchema, type PatternOrderCapability, type PatternOrderQuery, type PatternRoundAction } from "@dx-rework/contracts/pattern-orders";
 import type { Pool, PoolClient } from "pg";
 import type { z } from "zod";
 import { ApplicationError } from "../platform/errors.js";
@@ -43,6 +43,30 @@ export class PatternRoomOrderService {
         AND (todo_user_has_direct_role(person.app_user_id,'pattern_room_worker','pattern_room:orders:complete') OR ($2 AND person.app_user_id=$3))
         AND ($1='' OR strpos(upper(person.display_name),upper($1))>0) ORDER BY person.display_name,person.person_id LIMIT 30`, [search.trim(), isPatternRoot(effective), effective.actorId])).rows
       .map(person => ({ personId: person.person_id, userId: person.app_user_id, name: person.display_name }));
+  }
+  async deleteOrder(actor: TrustedActorContext, orderId: string, input: unknown, key: string) {
+    const parsed = parse(DeletePatternOrderSchema, input), action = "pattern_room.order.deleted";
+    if (!/^[A-Za-z0-9._:-]{8,128}$/.test(key)) throw new ApplicationError("VALIDATION_ERROR", "缺少有效操作标识，请重试", 400);
+    const client = await this.db.connect();
+    try {
+      await client.query("BEGIN");
+      const effective = await authorizePatternOrder(client, actor, "pattern_room:orders:delete", this.enabled);
+      if (!isPatternRoot(effective)) throw new ApplicationError("FORBIDDEN", "仅 Root 可以删除板房订单", 403);
+      const outcome = await this.idempotency.execute(client, { scope: action, actorKey: actor.actorId, key,
+        requestHash: createHash("sha256").update(JSON.stringify({ orderId, ...parsed })).digest("hex"), expiresAt: new Date("9999-12-31T00:00:00Z") }, async () => {
+        const order = await scopedPatternOrder(client, effective, orderId, true);
+        if (order.version !== parsed.version) throw new ApplicationError("CONFLICT", "订单已变化，请刷新后再删除", 409);
+        const eventId = await this.event(client, effective, action, orderId, order.current_round_id,
+          { deleted: true }, { version: order.version, status: order.status, orderNo: order.order_no, kind: order.kind }, "Root 删除订单");
+        await client.query("UPDATE pattern_room_orders SET deleted_at=CURRENT_TIMESTAMP,deleted_by=$2,deletion_event_id=$3,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE order_id=$1", [orderId, effective.actorId, eventId]);
+        await client.query("UPDATE pattern_room_node_times SET exited_at=CURRENT_TIMESTAMP,exit_reason='cancelled' WHERE exited_at IS NULL AND round_id IN (SELECT round_id FROM pattern_room_rounds WHERE order_id=$1)", [orderId]);
+        await this.todos.cancelOpenByDedupePrefix(client, effective, `pattern-room:${orderId}:`, "订单已删除");
+        return { statusCode: 200, response: { deleted: true as const } };
+      });
+      await client.query("COMMIT");
+      return outcome.response;
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
   }
   private async mutate(actor: TrustedActorContext, capability: PatternOrderCapability, action: string, key: string, input: unknown,
     work: (client: PoolClient, effective: TrustedActorContext) => Promise<string>) {
