@@ -134,7 +134,7 @@ export const reportStatusValues: Readonly<Record<ReportType, ReadonlySet<string>
   external_deductions: new Set([
     "pending_business_signoff", "pending_payables_confirmation", "deduction_follow_up", "pending_special_approval",
     "returned", "pending_responsibility_revision", "closed", "superseded",
-    "full", "partial", "not_deducted",
+    "full", "partial", "not_deducted", "over_deducted",
   ]),
   exceptions: new Set(["overdue_todo", "blocked_recipient", "todo_delivery_failed", "deduction_follow_up_overdue"]),
 };

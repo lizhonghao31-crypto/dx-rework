@@ -1,3 +1,4 @@
+import { exerciseAtomicOverDeduction } from "./helpers/atomic-deduction-scenario.js";
 import { registerManagementReportingRoutes } from "../../apps/api/src/reporting/management-reporting-routes.js";
 import { ReportExportService } from "../../apps/api/src/reporting/report-export-service.js";
 import { PATTERN_ORDER_ROLES } from "@dx-rework/contracts/pattern-orders";
@@ -1571,10 +1572,15 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       [speciallyClosed.value.specialApproval!.requestId],
     )).rejects.toThrow();
 
-    const initialFabricCase = await external.getCase(
+    let initialFabricCase = await external.getCase(
       fabricPayables("external_deduction:record"),
       fabricCaseId,
     );
+    const zeroRequest=await external.requestSpecialApproval(fabricPayables("external_deduction:close"),fabricCaseId,
+      {expectedCaseVersion:initialFabricCase.caseVersion,reason:"暂未实际扣款，申请确认",attachmentIds:[]},randomUUID());
+    expect(zeroRequest.value.specialApproval).toMatchObject({actualDeductedAmount:"0.00",remainingAmount:"39.60"});
+    initialFabricCase=(await external.returnSpecialApproval(financeDirector(),fabricCaseId,
+      {expectedCaseVersion:zeroRequest.value.caseVersion,expectedRequestVersion:1,reason:"请继续核对实际扣款"},randomUUID())).value;
     const fullDeduction = await external.recordDeduction(
       fabricPayables("external_deduction:record"),
       fabricCaseId,
@@ -1873,13 +1879,13 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const newFabricId=(await database.query("SELECT case_id FROM rework_external_responsibility_cases WHERE rework_order_id=$1 AND responsibility_type='fabric_supplier' ORDER BY created_at DESC LIMIT 1",[submitted.value.reworkOrderId])).rows[0].case_id;
     const carriedFabric=await external.getCase(fabricPayables("external_deduction:record"),newFabricId);
     expect(carriedFabric).toMatchObject({actualDeductedAmount:"39.60",remainingAmount:"0.00"});
-    const remainder=await external.recordDeduction(factoryPayables("external_deduction:record"),newFactoryCase.caseId,CreateExternalDeductionEntrySchema.parse({expectedCaseVersion:newFactoryCase.caseVersion,entryType:"deduction",amount:"68.10",deductedOn:new Date().toISOString().slice(0,10),attachmentIds:[]}),randomUUID());
-    expect(remainder.value).toMatchObject({actualDeductedAmount:"148.10",remainingAmount:"0.00"});
-    await external.close(factoryPayables("external_deduction:close"),newFactoryCase.caseId,{expectedCaseVersion:remainder.value.caseVersion,result:"full",evidenceAttachmentIds:[]},randomUUID());
+    await exerciseAtomicOverDeduction({database,external,projection:todoProjection,currentCase:newFactoryCase,
+      payables:factoryPayables("external_deduction:record"),director:financeDirector(),
+      reader:actor(ids.financeRead,["finance_read"],"external_responsibility:view"),productionId:ids.production,root:actor(ids.patternRoot,["root_superuser"],"access:admin")});
     await external.close(fabricPayables("external_deduction:close"),newFabricId,{expectedCaseVersion:carriedFabric.caseVersion,result:"full",evidenceAttachmentIds:[]},randomUUID());
     expect((await external.getCase(factoryPayables("external_responsibility:view"),processingCaseId)).actualDeductedAmount).toBe("80.00");
     expect((await wages.get(wageView(),wagePeriod.periodId)).items).toEqual(wageDetail.items);
-    expect((await database.query("SELECT count(*)::int count,sum(amount)::text amount FROM rework_external_deduction_entries e JOIN rework_external_responsibility_cases c USING(case_id) WHERE c.rework_order_id=$1",[submitted.value.reworkOrderId])).rows[0]).toEqual({count:3,amount:"187.70"});
+    expect((await database.query("SELECT count(*)::int count,sum(amount)::text amount FROM rework_external_deduction_entries e JOIN rework_external_responsibility_cases c USING(case_id) WHERE c.rework_order_id=$1",[submitted.value.reworkOrderId])).rows[0]).toEqual({count:3,amount:"188.70"});
     const history=await responsibility.revisions.get(revisionActor,submitted.value.reworkOrderId);
     expect(history.revisions).toHaveLength(2);
     expect(history.history.some(row=>row.signature?.decision==='rejected')).toBe(true);

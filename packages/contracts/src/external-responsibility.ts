@@ -115,6 +115,7 @@ export const CreateExternalDeductionEntrySchema = z.object({
   referenceNo: z.string().trim().min(1).max(200).optional(),
   attachmentIds: AttachmentIdsSchema,
   reversesEntryId: IdSchema.optional(),
+  specialApprovalReason: ReasonSchema.optional(),
 }).strict().superRefine((value, context) => {
   if (
     value.entryType === "deduction"
@@ -352,7 +353,7 @@ export const ExternalResponsibilityCaseResponseSchema = z.object({
     createdAt: z.string().datetime(),
   }).strict()),
   closure: z.object({
-    result: z.enum(["full", "partial", "not_deducted"]),
+    result: z.enum(["full", "partial", "not_deducted", "over_deducted"]),
     proposedAmount: z.string(),
     actualDeductedAmount: z.string(),
     remainingAmount: z.string(),

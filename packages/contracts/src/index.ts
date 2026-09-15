@@ -1421,6 +1421,7 @@ export const CreateExternalDeductionEntrySchema = z.object({
   referenceNo: z.string().trim().min(1).max(200).optional(),
   attachmentIds: AttachmentIdsSchema,
   reversesEntryId: IdSchema.optional(),
+  specialApprovalReason: ReasonSchema.optional(),
 }).strict().superRefine((value, context) => {
   if (value.entryType === "deduction" && (value.reversesEntryId !== undefined || value.amount.startsWith("-"))) context.addIssue({ code: "custom", path: ["reversesEntryId"], message: "A deduction must be a positive new entry" });
   if (value.entryType !== "deduction" && value.reversesEntryId === undefined) context.addIssue({ code: "custom", path: ["reversesEntryId"], message: "An adjustment or reversal must reference an entry" });
@@ -1497,7 +1498,7 @@ const ExternalCaseResponseSchema = z.object({
   items: z.array(ExternalItemResponseSchema),
   deductions: z.array(ExternalDeductionEntryResponseSchema),
   followUps: z.array(z.object({ followUpId: IdSchema, content: z.string(), supplierFeedback: z.string().nullable(), nextFollowUpAt: z.string().datetime().nullable(), attachmentIds: z.array(IdSchema), createdBy: IdSchema, createdAt: z.string().datetime() }).strict()),
-  closure: z.object({ result: z.enum(["full", "partial", "not_deducted"]), proposedAmount: z.string(), actualDeductedAmount: z.string(), remainingAmount: z.string(), reason: z.string().nullable(), evidenceAttachmentIds: z.array(IdSchema), remainingDifferenceDisposition: z.string().nullable(), closedBy: IdSchema, closedAt: z.string().datetime() }).strict().nullable(),
+  closure: z.object({ result: z.enum(["full", "partial", "not_deducted", "over_deducted"]), proposedAmount: z.string(), actualDeductedAmount: z.string(), remainingAmount: z.string(), reason: z.string().nullable(), evidenceAttachmentIds: z.array(IdSchema), remainingDifferenceDisposition: z.string().nullable(), closedBy: IdSchema, closedAt: z.string().datetime() }).strict().nullable(),
   specialApproval: z.object({ requestId: IdSchema, requestVersion: z.number().int().positive(), reason: z.string(), attachmentIds: z.array(IdSchema), proposedAmount: z.string(), actualDeductedAmount: z.string(), remainingAmount: z.string(), requestedBy: IdSchema, requestedAt: z.string().datetime(), decision: z.object({ decision: z.enum(["approved", "returned"]), reason: z.string().nullable(), decidedBy: IdSchema, decidedAt: z.string().datetime() }).strict().nullable() }).strict().nullable(),
   canApproveRevision: z.boolean(),
   revisionRequests: z.array(z.object({ revisionRequestId: IdSchema, revisionVersion: z.number().int().positive(), status: z.enum(["pending", "approved", "rejected"]), reason: z.string(), requestedChange: z.record(z.string(), z.unknown()), requestedBy: IdSchema, decidedBy: IdSchema.nullable(), decisionReason: z.string().nullable(), createdAt: z.string().datetime(), decidedAt: z.string().datetime().nullable() }).strict()),

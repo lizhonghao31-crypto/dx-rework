@@ -56,7 +56,7 @@ const deductionLedgerValidationMessage = (error: unknown): string | null => {
   const candidate = databaseError(error);
   if (candidate?.code !== "23514" || typeof candidate.message !== "string") return null;
   if (candidate.message.includes("deduction entry would make actual amount invalid")) {
-    return "累计实扣金额不能低于 0，也不能超过当前拟扣金额。";
+    return "累计实扣金额不能低于 0；超额扣款必须同时提交财务总监特批。";
   }
   if (candidate.message.includes("deduction adjustment or reversal must reference its own case ledger entry")) {
     return "扣款调整或冲销只能引用当前这笔扣款台账中的原流水，冲销金额必须与原流水相反。";

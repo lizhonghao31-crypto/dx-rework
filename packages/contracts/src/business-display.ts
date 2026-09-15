@@ -48,6 +48,7 @@ const VALUE_LABELS: Readonly<Record<string, string>> = {
   full: "全额",
   partial: "部分",
   not_deducted: "未扣",
+  over_deducted: "超额扣款（已特批）",
   deduction: "扣款",
   adjustment: "调整",
   reversal: "冲销",

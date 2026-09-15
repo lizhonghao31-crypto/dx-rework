@@ -29,6 +29,6 @@ describe("N10 external deduction UI", () => {
     expect(panel).toContain('recorded.remainingAmount === "0.00" && recorded.canClose');
     expect(panel).toContain("await closeFull(recorded)");
     expect(panel).toContain("完成扣款");
-    expect(panel).toContain("本次扣款金额不能超过当前剩余应扣金额");
+    expect(panel).toContain("confirmDeductionException");
   });
 });

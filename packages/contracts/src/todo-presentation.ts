@@ -43,7 +43,7 @@ const catalog: Readonly<Record<string, TodoPresentation>> = {
   external_payables_return: { title: "外部责任资料已退回", action: "请修正历史外部责任资料。" },
   external_payables_returned: { title: "外部责任资料退回结果", action: "应付已退回资料，请查看退回结果。" },
   external_deduction_follow_up: { title: "跟进供应商实际扣款", action: "请记录本次实际扣款或最新跟进结果。" },
-  external_deduction_special_approval: { title: "审核扣款异常特批", action: "请确认或退回本次部分扣款/未扣异常。" },
+  external_deduction_special_approval: { title: "审核扣款异常特批", action: "请确认或退回本次超额、部分扣款或未扣异常。" },
   external_deduction_special_return: { title: "处理财务总监退回", action: "请继续跟进供应商扣款，再次提交特批或完成全额扣款。" },
   external_deduction_special_approved: { title: "扣款异常特批已确认", action: "财务总监已确认该扣款异常并关闭台账。" },
   external_deduction_special_returned: { title: "扣款异常特批已退回", action: "财务总监已退回该扣款异常。" },
