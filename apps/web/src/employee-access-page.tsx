@@ -261,6 +261,7 @@ export function EmployeeAccessPage() {
               <option value="suppliers">供应商中心</option>
               <option value="production">实时生产看板</option>
               <option value="samples">样衣管理</option>
+                <option value="pattern_room">订单打板</option>
               <option value="platform">平台管理</option>
             </select>
             <input
@@ -295,7 +296,7 @@ export function EmployeeAccessPage() {
                   || employee.businessRoles.some((role) => PROTECTED_ROLES.has(role));
                 const assignedRoleNames = employee.businessRoles.map(assignedRoleDisplayName);
                 const accessRoleNames = employee.isRoot
-                  ? ["Root（订单返工 / 外发定价&选厂 / 供应商中心 / 实时生产看板 / 样衣管理 / 平台管理）", ...assignedRoleNames]
+                  ? ["Root（订单返工 / 外发定价&选厂 / 供应商中心 / 实时生产看板 / 样衣管理 / 订单打板 / 平台管理）", ...assignedRoleNames]
                   : assignedRoleNames;
                 const protectedTargetLocked = protectedTarget && me?.isRoot !== true;
                 const wouldDisableLastOwner =

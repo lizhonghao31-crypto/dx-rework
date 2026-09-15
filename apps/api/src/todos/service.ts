@@ -1302,6 +1302,9 @@ export class TodoService {
     delegationId: string | undefined,
     reworkOrderId: string,
   ): Promise<boolean> {
+    // Existing board execution todos keep their historical routing facts. Their
+    // current eligibility follows the separate board role after the role split.
+    const effectiveRole = role === "worker" && capability === "pattern_room:orders:complete" ? "pattern_room_worker" : role;
     const result = await client.query<{ eligible: boolean }>(
       `SELECT CASE
          WHEN $4::uuid IS NULL THEN todo_user_has_direct_role($1::uuid,$2::text,$3::text)
@@ -1328,7 +1331,7 @@ export class TodoService {
              AND todo_user_has_direct_role(delegation.grantor_user_id,$2,$3)
          )
        END AS eligible`,
-      [recipientUserId, role, capability, delegationId ?? null, reworkOrderId],
+      [recipientUserId, effectiveRole, capability, delegationId ?? null, reworkOrderId],
     );
     return result.rows[0]?.eligible === true;
   }

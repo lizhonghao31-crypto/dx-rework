@@ -52,8 +52,8 @@ export class WorkerAwareAccessMasterDataService extends AccessMasterDataService 
         }
       : input;
     const assignment = await super.assignRole(actor, effectiveInput);
-    if (effectiveInput.roleCode !== "worker") return assignment;
-    const roleLabel = "工人";
+    if (!["worker", "pattern_room_worker"].includes(effectiveInput.roleCode)) return assignment;
+    const roleLabel = effectiveInput.roleCode === "pattern_room_worker" ? "板房师傅" : "工人";
 
     try {
       const people = await this.listPeople({ includeInactive: true });

@@ -29,4 +29,4 @@ export const patternOrderScopeSql = `( $2::boolean
     WHERE scope_round.round_id=orders.current_round_id AND scope_segment.worker_user_id=$1::uuid
       AND NOT EXISTS(SELECT 1 FROM pattern_room_segments newer_segment
         WHERE newer_segment.round_id=scope_segment.round_id AND newer_segment.segment_index>scope_segment.segment_index))) )`;
-export const patternOrderScopeValues = (actor: TrustedActorContext) => [actor.actorId, canReadAllPatternOrders(actor), actor.actorRoles, actor.actorRoles.includes("worker")];
+export const patternOrderScopeValues = (actor: TrustedActorContext) => [actor.actorId, canReadAllPatternOrders(actor), actor.actorRoles, actor.actorRoles.includes("pattern_room_worker")];

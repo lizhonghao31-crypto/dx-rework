@@ -40,7 +40,7 @@ export class PatternRoomOrderService {
     const effective = await authorizePatternOrder(this.db, actor, "pattern_room:orders:assign", this.enabled);
     return (await this.db.query<{ person_id: string; app_user_id: string; display_name: string }>(`SELECT person.person_id,person.app_user_id,person.display_name
       FROM business_people person WHERE person.active AND person.person_type='internal' AND person.app_user_id IS NOT NULL
-        AND (todo_user_has_direct_role(person.app_user_id,'worker','pattern_room:orders:complete') OR ($2 AND person.app_user_id=$3))
+        AND (todo_user_has_direct_role(person.app_user_id,'pattern_room_worker','pattern_room:orders:complete') OR ($2 AND person.app_user_id=$3))
         AND ($1='' OR strpos(upper(person.display_name),upper($1))>0) ORDER BY person.display_name,person.person_id LIMIT 30`, [search.trim(), isPatternRoot(effective), effective.actorId])).rows
       .map(person => ({ personId: person.person_id, userId: person.app_user_id, name: person.display_name }));
   }
@@ -122,7 +122,7 @@ export class PatternRoomOrderService {
       if (round.round_type === "initial" && parsed.amount !== undefined) throw new ApplicationError("VALIDATION_ERROR", "首次派工沿用本单执行价，无需另填金额", 400);
       const person = (await client.query<{ person_id: string; app_user_id: string; display_name: string }>(`SELECT person_id,app_user_id,display_name FROM business_people
         WHERE person_id=$1 AND active AND person_type='internal' AND app_user_id IS NOT NULL
-          AND (todo_user_has_direct_role(app_user_id,'worker','pattern_room:orders:complete') OR ($2 AND app_user_id=$3)) FOR SHARE`, [parsed.personId, isPatternRoot(effective), effective.actorId])).rows[0];
+          AND (todo_user_has_direct_role(app_user_id,'pattern_room_worker','pattern_room:orders:complete') OR ($2 AND app_user_id=$3)) FOR SHARE`, [parsed.personId, isPatternRoot(effective), effective.actorId])).rows[0];
       if (!person) throw new ApplicationError("VALIDATION_ERROR", "请选择有有效账号的板房工人", 400);
       const segmentId = randomUUID(), supervisorId = await this.supervisor(client, effective.actorId);
       await client.query(`INSERT INTO pattern_room_segments(segment_id,round_id,segment_index,person_id,worker_user_id,worker_name,person_type,amount)
@@ -134,7 +134,7 @@ export class PatternRoomOrderService {
       const eventId = await this.event(client, effective, action, orderId, round.round_id, { segmentId, personId: person.person_id, workerUserId: person.app_user_id, roundIndex: index, agreedAmount: parsed.amount ?? round.agreed_amount });
       await this.todos.completeOpenByDedupeKey(client, effective, patternTodoKey(orderId, round.round_id, "assignment"), "已分配工人");
       if (this.enabled) await this.todos.actionableForRecipient(client, effective, { ...this.projection(orderId, round.round_id, eventId, action, `execution:${segmentId}`), category: "pattern_room_execution",
-        recipientUserId: person.app_user_id, requiredRole: "worker", requiredCapability: "pattern_room:orders:complete" });
+        recipientUserId: person.app_user_id, requiredRole: "pattern_room_worker", requiredCapability: "pattern_room:orders:complete" });
       return orderId;
     });
   }
@@ -293,7 +293,7 @@ export class PatternRoomOrderService {
       if (!segment || segment.segment_id !== parsed.segmentId) throw new ApplicationError("CONFLICT", "当前执行人已变化，请刷新后重新操作", 409);
       const person = (await client.query<{ person_id: string; app_user_id: string; display_name: string }>(`SELECT person_id,app_user_id,display_name FROM business_people
         WHERE person_id=$1 AND active AND person_type='internal' AND app_user_id IS NOT NULL
-          AND (todo_user_has_direct_role(app_user_id,'worker','pattern_room:orders:complete') OR ($2 AND app_user_id=$3)) FOR SHARE`, [parsed.personId, isPatternRoot(effective), effective.actorId])).rows[0];
+          AND (todo_user_has_direct_role(app_user_id,'pattern_room_worker','pattern_room:orders:complete') OR ($2 AND app_user_id=$3)) FOR SHARE`, [parsed.personId, isPatternRoot(effective), effective.actorId])).rows[0];
       if (!person || person.app_user_id === segment.worker_user_id) throw new ApplicationError("VALIDATION_ERROR", "请选择另一名有有效账号的工人", 400);
       const segmentId = randomUUID();
       if (order.kind === "pattern") {
@@ -315,7 +315,7 @@ export class PatternRoomOrderService {
       await client.query("UPDATE pattern_room_orders SET version=version+1,updated_at=CURRENT_TIMESTAMP WHERE order_id=$1", [orderId]);
       const eventId = await this.event(client, effective, action, orderId, round.round_id, { previousSegmentId: segment.segment_id, segmentId, personId: person.person_id, amount: parsed.amount, hours: parsed.hours }, undefined, parsed.reason);
       await this.todos.completeOpenByDedupeKey(client, effective, patternTodoKey(orderId, round.round_id, `execution:${segment.segment_id}`), "主管已原单转交其他工人");
-      if (this.enabled) await this.todos.actionableForRecipient(client, effective, { ...this.projection(orderId, round.round_id, eventId, action, `execution:${segmentId}`), category: "pattern_room_execution", recipientUserId: person.app_user_id, requiredRole: "worker", requiredCapability: "pattern_room:orders:complete" });
+      if (this.enabled) await this.todos.actionableForRecipient(client, effective, { ...this.projection(orderId, round.round_id, eventId, action, `execution:${segmentId}`), category: "pattern_room_execution", recipientUserId: person.app_user_id, requiredRole: "pattern_room_worker", requiredCapability: "pattern_room:orders:complete" });
       return orderId;
     });
   }

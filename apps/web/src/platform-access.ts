@@ -1,5 +1,5 @@
 import { PATTERN_ROOM_ORDERS_ENABLED, canUsePatternOrder } from "@dx-rework/contracts/pattern-orders";
-export type PlatformAccessModuleId = "rework" | "sourcing" | "suppliers" | "production" | "samples" | "platform";
+export type PlatformAccessModuleId = "rework" | "sourcing" | "suppliers" | "production" | "samples" | "pattern_room" | "platform";
 export type TodoAccessModuleId = "rework" | "sourcing" | "production" | "samples" | "pattern_room" | "suppliers";
 
 export type PlatformRoleAccess = Readonly<{
@@ -13,6 +13,7 @@ export const PLATFORM_ACCESS_MODULE_ORDER: readonly PlatformAccessModuleId[] = [
   "suppliers",
   "production",
   "samples",
+  "pattern_room",
   "platform",
 ];
 
@@ -22,6 +23,7 @@ const BUSINESS_MODULES: readonly PlatformAccessModuleId[] = [
   "suppliers",
   "production",
   "samples",
+  "pattern_room",
 ];
 
 const PROTECTED_ROLE_MODULES: Readonly<Record<string, readonly PlatformAccessModuleId[]>> = {
@@ -37,6 +39,7 @@ export const PLATFORM_ACCESS_MODULE_LABELS: Record<PlatformAccessModuleId, strin
   suppliers: "供应商中心",
   production: "实时生产看板",
   samples: "样衣管理",
+  pattern_room: "订单打板",
   platform: "平台管理",
 };
 
@@ -92,6 +95,8 @@ export function accessModuleIdsForCapabilities(
       modules.add("suppliers");
     } else if (capability.startsWith("sample:")) {
       modules.add("samples");
+    } else if (capability.startsWith("pattern_room:")) {
+      modules.add("pattern_room");
     } else if (isPlatformCapability(capability)) {
       modules.add("platform");
     } else if (isReworkCapability(capability)) {
