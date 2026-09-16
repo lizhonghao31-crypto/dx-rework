@@ -1,0 +1,72 @@
+name: Codebase Governance Audit
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+    paths:
+      - scripts/audit/codebase-governance-audit.mjs
+      - .github/workflows/codebase-governance-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codebase-governance-audit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Read-only full-repository audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      NODE_ENV: test
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
+
+      - name: Pin npm 10
+        run: npm install --global npm@10.9.9 --no-audit --no-fund --prefer-offline
+
+      - name: Assert isolated audit runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "${DATABASE_URL:-}"
+          test -z "${TEST_DATABASE_URL:-}"
+          test -z "${OSS_ACCESS_KEY_SECRET:-}"
+          test -z "${DINGTALK_APP_SECRET:-}"
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund --prefer-offline
+
+      - name: Run full-repository programmatic audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/codebase-governance-audit"
+          node scripts/audit/codebase-governance-audit.mjs --out "$out"
+          cat "$out/report.md" >> "$GITHUB_STEP_SUMMARY"
+          echo "AUDIT_OUTPUT=$out" >> "$GITHUB_ENV"
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: codebase-governance-audit-${{ github.sha }}
+          path: ${{ env.AUDIT_OUTPUT }}
+          if-no-files-found: error
+          retention-days: 14
