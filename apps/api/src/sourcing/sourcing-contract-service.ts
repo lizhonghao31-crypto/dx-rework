@@ -132,7 +132,7 @@ export class SourcingContractService {
                 'supplierCode',snapshot.supplier_code_snapshot,
                 'supplierName',snapshot.supplier_name_snapshot,
                 'address',snapshot.supplier_address,
-                'contractEntityName',snapshot.contract_entity_name,
+                'contractEntityName',COALESCE(snapshot.contract_entity_name,snapshot.supplier_name_snapshot),
                 'partyBRepresentative',snapshot.party_b_representative,
                 'payeeName',snapshot.payee_name,
                 'bankAccount',snapshot.bank_account,
@@ -168,7 +168,6 @@ export class SourcingContractService {
        CROSS JOIN LATERAL (
          SELECT array_remove(ARRAY[
            CASE WHEN snapshot.supplier_address IS NULL THEN 'address' END,
-           CASE WHEN snapshot.contract_entity_name IS NULL THEN 'contractEntityName' END,
            CASE WHEN snapshot.party_b_representative IS NULL THEN 'partyBRepresentative' END,
            CASE WHEN snapshot.payee_name IS NULL THEN 'payeeName' END,
            CASE WHEN snapshot.bank_account IS NULL THEN 'bankAccount' END,
@@ -342,7 +341,7 @@ export class SourcingContractService {
         templateVersion: Number(source.template_version),
         gender: typeof approval.gender === "string" ? approval.gender : "历史未维护",
         styleName: typeof approval.styleName === "string" ? approval.styleName : "历史未维护",
-        partyBName: value("contractEntityName"),
+        partyBName: value("contractEntityName") || String(approval.supplierName ?? ""),
         partyBAddress: value("address"),
         partyBRepresentative: value("partyBRepresentative"),
         payeeName: value("payeeName"),
