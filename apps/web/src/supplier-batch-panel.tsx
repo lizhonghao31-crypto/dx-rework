@@ -7,7 +7,7 @@ import { registerInternalNavigationGuard } from "./internal-navigation.js";
 import { confirmInApp } from "./system-dialog.js";
 import { createSupplierDraftGuard } from "./supplier-draft-guard.js";
 import { SupplierImportRequestError } from "./supplier-import-safety.js";
-import { canSubmitSupplierBatchEntry, executeSupplierBatch, type SupplierBatchEntry } from "./supplier-batch-client.js";
+import { canSubmitSupplierBatchEntry, executeSupplierBatch, summarizeSupplierBatch, type SupplierBatchEntry } from "./supplier-batch-client.js";
 import "./supplier-batch-panel.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -69,6 +69,7 @@ export function SupplierBatchPanel({ onClose, onChanged }: { onClose: () => void
     finally { lock.current = false; setBusy(false); }
   };
   const actionable = entries.filter(canSubmitSupplierBatchEntry).length;
+  const outcome = summarizeSupplierBatch(entries);
   return <Surface className="supplier-batch">
     <div className="supplier-batch__heading"><div><h2>批量录入供应商</h2><p>识别已有供应商，补齐空资料；已有值变化由你确认。</p></div><Button disabled={busy} onClick={() => void guard.requestLeave().then(ok => { if (ok) onClose(); })}>返回资料维护</Button></div>
     <ol className="supplier-batch__steps" aria-label="批量录入步骤">{["下载模板", "上传文件", "校验结果", "确认导入"].map((step, index) => <li key={step} aria-current={index === (executed ? 3 : entries.length ? 2 : filename ? 1 : 0) ? "step" : undefined}>{index + 1} {step}</li>)}</ol>
@@ -77,7 +78,8 @@ export function SupplierBatchPanel({ onClose, onChanged }: { onClose: () => void
     {filename ? <p>{filename}{busy ? " · 处理中…" : ""}</p> : null}
     {error ? <p role="alert" className="supplier-batch__error">{error}</p> : null}
     {entries.length ? <>
-      <div className="supplier-batch__summary" role="status">{Object.entries(labels).map(([status, label]) => <span key={status}>{label} {entries.filter(entry => entry.plan.status === status).length}</span>)}{executed ? <span>已保存 {entries.filter(entry => entry.result?.status === "success").length}</span> : null}</div>
+      <div className="supplier-batch__summary" role="status"><span>预检</span>{Object.entries(labels).map(([status, label]) => <span key={status}>{label} {entries.filter(entry => entry.plan.status === status).length}</span>)}</div>
+      {executed ? <div className="supplier-batch__summary" role="status"><span>本次结果</span><span>共 {outcome.total} 行</span><span>新增成功 {outcome.created}</span><span>补全成功 {outcome.supplemented}</span><span>确认更新成功 {outcome.confirmedUpdates}</span><span>无变化 {outcome.unchanged}</span><span>失败 {outcome.failed}</span>{outcome.pending ? <span>待处理 {outcome.pending}</span> : null}</div> : null}
       <p className="supplier-batch__hint">补全空值和工艺合并会自动执行。勾选“原值 → 新值”才覆盖该字段，未勾选的旧值保留。</p>
       <div className="supplier-batch__rows">{entries.map(entry => <article key={entry.plan.rowNumber}>
         <div className="supplier-batch__row-heading"><strong>第 {entry.plan.rowNumber} 行 · {entry.plan.supplierName || "未填写名称"}</strong><StatusBadge tone={["error", "conflict"].includes(entry.plan.status) || entry.result?.status === "failed" ? "warning" : entry.result?.status === "success" ? "success" : "neutral"}>{entry.result?.status === "success" ? "已保存" : labels[entry.plan.status]}</StatusBadge></div>
