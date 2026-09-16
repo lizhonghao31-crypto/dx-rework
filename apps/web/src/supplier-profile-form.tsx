@@ -2,7 +2,7 @@ import {Button} from '@dx-rework/ui';
 import {SUPPLIER_TYPE_LABELS} from './supplier-center-model.js';
 import type {SupplierDraft} from './supplier-profile-draft.js';
 export function SupplierProfileForm({draft,onDraft,busy,ready,creating,onSave,onCancel,application=false,submitLabel}:{draft:SupplierDraft;onDraft:(draft:SupplierDraft)=>void;busy:boolean;ready:boolean;creating:boolean;onSave:()=>void;onCancel:()=>void;application?:boolean;submitLabel?:string}){
- const field=(key:keyof SupplierDraft,label:string,maxLength:number,required=false,wide=false)=><label className={wide?'is-wide':undefined}>{label}{required?' *':''}<input required={required} maxLength={maxLength} value={String(draft[key])} onChange={e=>onDraft({...draft,[key]:e.target.value})}/></label>;
+ const field=(key:keyof SupplierDraft,label:string,maxLength:number,required=false,wide=false,placeholder?:string)=><label className={wide?'is-wide':undefined}>{label}{required?' *':''}<input required={required} maxLength={maxLength} placeholder={placeholder} value={String(draft[key])} onChange={e=>onDraft({...draft,[key]:e.target.value})}/></label>;
  return <form className="supplier-profile-form" onSubmit={e=>{e.preventDefault();onSave();}}>
   <p className="supplier-form-note">* 为资料采集表必填项。</p>
   <fieldset disabled={busy||!ready}><legend>基础与联系</legend>
@@ -14,7 +14,7 @@ export function SupplierProfileForm({draft,onDraft,busy,ready,creating,onSave,on
   </fieldset>
   <fieldset disabled={busy||!ready}><legend>收款与合同</legend>
    {field('payeeName','收款人',100,true)}{field('bankAccount','收款账号',100,true)}{field('bankName','开户行',200,true,true)}
-   {field('contractEntityName','合同主体名称',200)}{field('partyBRepresentative','乙方代表',100)}
+   {field('contractEntityName','合同签约名称（选填）',200,false,false,'仅与供应商名称不同时填写')}{field('partyBRepresentative','乙方代表',100)}
   </fieldset>
   <fieldset disabled={busy||!ready}><legend>工艺与产能</legend>
    <label className="is-wide">可承接工艺 *<input required maxLength={1000} placeholder="使用顿号或逗号分隔" value={draft.supportedCrafts} onChange={e=>onDraft({...draft,supportedCrafts:e.target.value})}/></label>

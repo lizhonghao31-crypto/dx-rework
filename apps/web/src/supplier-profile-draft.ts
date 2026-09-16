@@ -62,7 +62,9 @@ export const draftFromProfile = (profile: SupplierProfile): SupplierDraft => ({
   contactPerson: profile.contactPerson ?? "",
   contactPhone: profile.contactPhone ?? "",
   address: profile.address ?? "",
-  contractEntityName: profile.contractEntityName ?? "",
+  contractEntityName: profile.contractEntityName && profile.contractEntityName !== profile.supplierName
+    ? profile.contractEntityName
+    : "",
   partyBRepresentative: profile.partyBRepresentative ?? "",
   payeeName: profile.payeeName ?? "",
   bankAccount: profile.bankAccount ?? "",
