@@ -376,10 +376,11 @@ const renderStructuredContractPdf = async (
   return completed;
 };
 
-// Version 1 stays on the legacy renderer; V2 stays frozen on its approved layout.
-// V3 is the same contract content with the business-approved presentation refinements.
+// Generated attachments remain immutable. The current V2 template now uses the
+// approved presentation refinements for newly generated documents only.
 export const renderSourcingContractPdf = async (snapshot: ContractPdfSnapshot): Promise<Buffer> => {
-  if (snapshot.templateVersion === 2) return renderStructuredContractPdf(snapshot, "v2");
-  if (snapshot.templateVersion === 3) return renderStructuredContractPdf(snapshot, "v3");
+  if (snapshot.templateVersion === 2 || snapshot.templateVersion === 3) {
+    return renderStructuredContractPdf(snapshot, "v3");
+  }
   return renderLegacyContractPdf(snapshot);
 };
