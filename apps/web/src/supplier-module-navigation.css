@@ -1,0 +1,13 @@
+/* Supplier directory and maintenance are separate desktop modules.
+   Desktop users switch modules from the Shell navigation, not from page-local tabs. */
+@media (min-width: 801px) {
+  .ui-polish .supplier-center-tabs {
+    display: none;
+  }
+
+  /* Supplier onboarding belongs to 资料维护. Keep its in-module return path,
+     but do not expose a direct cross-module jump to 供应商目录 in the page header. */
+  .ui-polish .supplier-onboarding-page .supplier-center-heading__actions > a[href$="/ui/suppliers"] {
+    display: none;
+  }
+}
