@@ -5,9 +5,17 @@ import {
   RequestSourcingFactoryChangeSchema, type SourcingCaseSummary,
 } from "@dx-rework/contracts";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
-import { isNewSourcingPrice, newSourcingPriceDisplay, historicalSourcingPrice, sourcingPriceSummary, sourcingDeleteConfirmation } from "../../apps/web/src/sourcing-price-presentation.js";
+import { isNewSourcingPrice, newSourcingPriceDisplay, historicalSourcingPrice, sourcingPriceSummary, sourcingDeleteConfirmation, sourcingDecisionNeedsReason } from "../../apps/web/src/sourcing-price-presentation.js";
 
 describe("ordinary sourcing price precision and readable facts", () => {
+  it("shows the existing reason requirement for changed lines, not formatting-only changes", () => {
+    const quoted = [{ position: 1, unitPrice: "12.3000" }, { position: 2, unitPrice: "8.6100" }];
+    expect(sourcingDecisionNeedsReason([{ position: 2, unitPrice: "8.61" }, { position: 1, unitPrice: "0012.30" }], quoted)).toBe(false);
+    expect(sourcingDecisionNeedsReason([{ position: 1, unitPrice: "12.30" }, { position: 2, unitPrice: "8.62" }], quoted)).toBe(true);
+    expect(sourcingDecisionNeedsReason([{ position: 1, unitPrice: "12.34" }], [{ position: 1, unitPrice: "12.3456" }])).toBe(true);
+    expect(sourcingDecisionNeedsReason([{ position: 1, unitPrice: "" }], quoted)).toBe(false);
+    expect(sourcingDecisionNeedsReason([{ position: 1, unitPrice: "12.30" }], [])).toBe(false);
+  });
   it("accepts two effective decimals including storage zeroes, without silently rounding", () => {
     for (const price of ["12", "12.3", "12.34", "12.3400"]) expect(isNewSourcingPrice(price)).toBe(true);
     for (const price of ["12.3456", "12.301", "0.001", "0", "1,200.34", "-1", ""]) expect(isNewSourcingPrice(price)).toBe(false);
@@ -51,4 +59,3 @@ describe("ordinary sourcing price precision and readable facts", () => {
     for (const fact of ["K001 / 蓝", "合成加工厂", "1,200", "历史证据保留", "关联生产单不会自动", "stable-case-id"]) expect(message).toContain(fact);
   });
 });
-

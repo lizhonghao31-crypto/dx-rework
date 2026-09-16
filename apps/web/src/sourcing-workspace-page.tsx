@@ -1,7 +1,7 @@
 import { moduleCanWrite } from "./member-module-policy.js";
 import { todoReturnPath } from "./todo-query-state.js";
 import {WorkAnalysisPanel} from "./work-analysis-panel.js";
-import { isNewSourcingPrice, newSourcingPriceDisplay, historicalSourcingPrice, sourcingPriceSummary, sourcingDeleteConfirmation } from "./sourcing-price-presentation.js";
+import { isNewSourcingPrice, newSourcingPriceDisplay, historicalSourcingPrice, sourcingPriceSummary, sourcingDeleteConfirmation, sourcingDecisionNeedsReason } from "./sourcing-price-presentation.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import {
   AttachmentResponseSchema,
@@ -474,6 +474,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
       return;
     }
     setUploading(true);
+    setUploadFailed(false);
     try {
       const profile = currentUploadClientProfile();
       const uploaded = await prepareAndUploadWithConcurrency(
@@ -680,8 +681,8 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
             <label><span>款式（必填）</span><input required list="sourcing-style-options" value={styleName} maxLength={100} onChange={(event) => { setStyleName(event.target.value); createKey.current = null; }} placeholder="搜索或输入，如梭织短裤" /></label>
             <datalist id="sourcing-style-options">{styleCatalog.map((style) => <option key={style.styleId} value={style.styleName} />)}</datalist>
           </div>
-          <label><span>预计裁片发出日期（工厂发出）</span><input type="date" value={estimatedCutPieceSendDate} onChange={(event) => { setEstimatedCutPieceSendDate(event.target.value); createKey.current = null; }} /></label>
-          <label><span>要求交货日期（到工厂）</span><input type="date" value={deliveryDate} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
+          <label><span>预计裁片发出日期（工厂发出，必填）</span><input type="date" required aria-required="true" value={estimatedCutPieceSendDate} onChange={(event) => { setEstimatedCutPieceSendDate(event.target.value); createKey.current = null; }} /></label>
+          <label><span>要求交货日期（到工厂，必填）</span><input type="date" required aria-required="true" value={deliveryDate} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
           <label><span>达兴价（内部，必填）</span><input value={activeCreateInput === "daxing" ? daxingUnitPrice : newSourcingPriceDisplay(daxingUnitPrice)} onFocus={() => setActiveCreateInput("daxing")} onBlur={() => setActiveCreateInput(null)} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="必填，最多2位有效小数；仅内部授权岗位可见" aria-invalid={!isNewSourcingPrice(daxingUnitPrice)} /><small>{!isNewSourcingPrice(daxingUnitPrice) ? "请填写大于0且最多2位有效小数的达兴价。" : "仅内部授权岗位可见，不进入供应商合同。"}</small></label>
           <section className="sourcing-line-editor sourcing-form-wide" aria-label="订单款色明细">
             <div className="sourcing-line-editor__heading">
@@ -728,7 +729,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
         </section>
         <div className="sourcing-submit-row">
           <p role="status">{message}</p>
-          {uploadFailed ? <p role="alert">本次图片上传未完成，请重新选择图片上传成功后再提交。</p> : null}
+          {uploadFailed && !uploading ? <p role="alert">本次图片上传未完成，请重新选择图片上传成功后再提交。</p> : null}
           <div className="sourcing-create-actions">
             <button className="dx-button dx-button--secondary" type="button" disabled={busy || uploading} onClick={saveLocalDraft}>保存草稿</button>
             <button className="dx-button dx-button--primary" type="button" disabled={busy || uploading || uploadFailed || !images.length || !canCreate} onClick={() => void createOrder()}>
@@ -1158,8 +1159,11 @@ function OrderDetailPage({
     return <div className="sourcing-workspace"><Header iconRoute="/ui/sourcing/pending" title="订单详情" subtitle={message} badge="外发定价&选厂" /></div>;
   }
 
+  const needsDecisionReason = sourcingDecisionNeedsReason(decision.linePrices, item.ieQuote?.linePrices ?? []);
+  const missingDecisionReason = needsDecisionReason && !decision.decisionReason.trim();
   const submitManagement = async (): Promise<void> => {
     if (!decision.linePrices.length || decision.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice))) { setMessage("请填写各款大于0且最多2位有效小数的生产价格"); return; }
+    if (missingDecisionReason) { setMessage("调整 IE 价格时必须填写原因"); return; }
     const names = processes.map((value) => value.trim());
     if (names.some((value) => !value) || new Set(names).size !== names.length) {
       setMessage("请完整填写工艺及承包范围，不能重复"); return;
@@ -1395,8 +1399,8 @@ function OrderDetailPage({
               {craftCatalog.map((craft) => <option key={craft.craftId} value={craft.craftName}>{craft.craftCode}</option>)}
             </datalist>
           </section>
-              <label className="sourcing-form-wide"><span>选厂/调价说明</span><input value={decision.decisionReason} maxLength={500} onChange={(event) => { setDecision({ ...decision, decisionReason: event.target.value }); actionKey.current = null; }} /></label>
-              <button className="dx-button dx-button--primary" type="button" disabled={busy || !decision.supplierId || decision.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice))} onClick={() => void submitManagement()}>提交调价与选厂</button>
+              <label className="sourcing-form-wide"><span>选厂/调价说明{needsDecisionReason ? "（必填）" : "（未调价可选）"}</span><input value={decision.decisionReason} maxLength={500} required={needsDecisionReason} aria-invalid={missingDecisionReason} aria-describedby="sourcing-decision-reason-hint" onChange={(event) => { setDecision({ ...decision, decisionReason: event.target.value }); actionKey.current = null; }} /><small id="sourcing-decision-reason-hint" role="status">{missingDecisionReason ? "已调整 IE 价格，请填写调价原因后提交。" : "任一款价格发生变化时须填写原因；沿用 IE 价格无需填写。"}</small></label>
+              <button className="dx-button dx-button--primary" type="button" disabled={busy || !decision.supplierId || missingDecisionReason || decision.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice))} onClick={() => void submitManagement()}>提交调价与选厂</button>
             </div> : <p>当前账号仅可查看，本节点由生产管理办理。</p>}
           </Surface> : null}
 
@@ -1543,5 +1547,4 @@ function OrderDetailPage({
     </div>
   );
 }
-
 
