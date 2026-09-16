@@ -9,17 +9,17 @@ describe("shared button alignment", () => {
       readFile("apps/web/src/supplier-center-page.css", "utf8"),
     ]);
 
-    const sharedButtonRule = components.match(/\.dx-button\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+    const sharedButtonRule = components.match(/\.dx-button\s*{([\s\S]*?)}/)?.[1] ?? "";
     expect(sharedButtonRule).toContain("display: inline-flex");
     expect(sharedButtonRule).toContain("align-items: center");
     expect(sharedButtonRule).toContain("justify-content: center");
     expect(sharedButtonRule).toContain("text-align: center");
 
-    const disclosureRule = polish.match(/\.ui-polish \.dx-button\.ui-disclosure-trigger\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+    const disclosureRule = polish.match(/\.ui-polish \.dx-button\.ui-disclosure-trigger\s*{([\s\S]*?)}/)?.[1] ?? "";
     expect(disclosureRule).toContain("justify-content: flex-start");
     expect(disclosureRule).toContain("text-align: left");
 
-    expect(supplier).not.toMatch(/\.supplier-profile__back[^\{]*\{[^\}]*transform\s*:/s);
-    expect(supplier).not.toMatch(/\.supplier-profile__back[^\{]*\{[^\}]*top\s*:/s);
+    expect(supplier).not.toMatch(/\.supplier-profile__back[^{]*{[^}]*transform\s*:/s);
+    expect(supplier).not.toMatch(/\.supplier-profile__back[^{]*{[^}]*top\s*:/s);
   });
 });
