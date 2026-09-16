@@ -1,5 +1,5 @@
 import { SupplierOnboardingPage } from "./supplier-onboarding-page.js";
-import { canRequestSupplier, canApproveSupplier, canAccessSupplierMaintenance } from "./supplier-onboarding-model.js";
+import { canRequestSupplier, canApproveSupplier } from "./supplier-onboarding-model.js";
 import { ProductionAnalysisPanel } from "./production-analysis-panel.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -46,17 +46,7 @@ async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.status === 204 ? undefined as T : await response.json() as T;
 }
 
-
-export function SupplierCenterNavigation({ active, canMaintain = false }: { active: "directory" | "manage"; canMaintain?: boolean }) {
-  return (
-    <nav className="supplier-center-tabs" aria-label="供应商中心">
-      <a className={active === "directory" ? "active" : ""} aria-current={active === "directory" ? "page" : undefined} href={pageUrl("ui/suppliers")}>供应商目录</a>
-      {canMaintain ? <a className={active === "manage" ? "active" : ""} aria-current={active === "manage" ? "page" : undefined} href={pageUrl("ui/suppliers/manage")}>资料维护</a> : null}
-    </nav>
-  );
-}
-
-// Distinct route components prevent a confirmed departure from retaining a create form.
+// Distinct route components keep directory and maintenance as separate navigation modules.
 export function SupplierDirectoryPage() { return <SupplierCenterPage mode="directory" />; }
 export function SupplierMaintenancePage() { return <SupplierCenterPage mode="manage" />; }
 
@@ -257,7 +247,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
 
   if (mode === "manage" && !identityLoading && user && !canWrite && canRequestSupplier(user)) return <SupplierOnboardingPage user={user} />;
   if (mode === "manage" && !identityLoading && user && !canWrite) {
-    return <Shell active="资料维护"><p>当前账号没有资料维护权限。</p><a href={pageUrl("ui/suppliers")}>查看供应商目录</a></Shell>;
+    return <Shell active="资料维护"><p>当前账号没有资料维护权限。</p></Shell>;
   }
   return (
     <Shell active={mode === "manage" ? "资料维护" : "供应商目录"}>
@@ -272,7 +262,6 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
           {canMaintain && !batchOpen ? <><Button disabled={busy || refreshing} onClick={() => void beginBatch()}>批量录入</Button><Button variant="primary" disabled={busy||refreshing} onClick={()=>void beginCreate()}>新增供应商</Button></> : null}
         </div>
       </header>
-      <SupplierCenterNavigation active={mode} canMaintain={user ? canAccessSupplierMaintenance(user) : false} />
       {identityError?<p role="alert">{identityError} <Button onClick={()=>void loadIdentity()}>重新核验</Button></p>:null}
       {savedMessage?<p className="supplier-center-notice" role="status">{savedMessage}</p>:null}
       {error ? <div className="supplier-center-error" role="alert"><b>请处理以下问题</b><p>{error}</p></div> : null}
@@ -308,10 +297,10 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
         </Surface>
 
         <Surface className="supplier-profile">
-          {creating&&canMaintain?<><div className="supplier-profile__heading"><Button disabled={busy} onClick={()=>void cancelEdit()}>返回目录</Button><h2>新增供应商</h2></div><SupplierProfileForm draft={draft} onDraft={setDraft} busy={busy} ready creating onSave={()=>void save()} onCancel={()=>void cancelEdit()}/></>:!profile || !detailReady ? <div className="supplier-center-empty" role="status"><h2>{detailLoading ? "正在加载供应商…" : "选择供应商"}</h2><p>{selectedId ? "详情未就绪时不能编辑或保存；加载失败可点击刷新重试。" : "从目录中选择一项查看资料与版本历史。"}</p></div> : (
+          {creating&&canMaintain?<><div className="supplier-profile__heading"><Button disabled={busy} onClick={()=>void cancelEdit()}>返回列表</Button><h2>新增供应商</h2></div><SupplierProfileForm draft={draft} onDraft={setDraft} busy={busy} ready creating onSave={()=>void save()} onCancel={()=>void cancelEdit()}/></>:!profile || !detailReady ? <div className="supplier-center-empty" role="status"><h2>{detailLoading ? "正在加载供应商…" : "选择供应商"}</h2><p>{selectedId ? "详情未就绪时不能编辑或保存；加载失败可点击刷新重试。" : "从列表中选择一项查看资料与版本历史。"}</p></div> : (
             <>
               <div className="supplier-profile__heading">
-                <Button className="supplier-profile__back" disabled={busy || refreshing} onClick={() => void selectSupplier("")}>返回目录</Button>
+                <Button className="supplier-profile__back" disabled={busy || refreshing} onClick={() => void selectSupplier("")}>返回列表</Button>
                 <div><h2>{profile.supplierName}</h2><p>{profile.supplierCode} · 版本 {profile.version}</p></div>
                 <StatusBadge tone={profile.active ? "success" : "warning"}>{profile.active ? "启用" : "停用"}</StatusBadge>
                 {canMaintain ? <div className="supplier-profile__actions">
