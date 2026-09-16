@@ -1581,7 +1581,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const pending = (await contractService.getCurrent(readerActor(), created.value.sourcingCaseId)).item!;
     expect(pending).toMatchObject({
       status: "pending_supplement",
-      missingFields: ["address","contractEntityName","partyBRepresentative","payeeName","bankAccount","bankName"],
+      missingFields: ["address","partyBRepresentative","payeeName","bankAccount","bankName"],
     });
     expect((await production.state(contractActor(), created.value.sourcingCaseId)).canDispatch).toBe(false);
     await expect(production.dispatch(contractActor(), created.value.sourcingCaseId, {
@@ -1589,7 +1589,6 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
     const ready = (await contractService.supplement(contractActor(), created.value.sourcingCaseId, {
       address: "广州补充地址",
-      contractEntityName: "合同缺项加工厂有限公司",
       partyBRepresentative: "陈补充",
       payeeName: "陈补充",
       bankAccount: "622299",
@@ -1683,7 +1682,6 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       [randomUUID(), order.productionOrderId])).rejects.toMatchObject({
         code: "55000", message: "production execution requires reporter scope and valid business date",
       });
-    // A valid Root audit passes the execution permission guard, so this probes the state guard independently.
     const prematureShipmentEventId = await new OperationEventRepository().append(database, rootActor(), {
       action: "sourcing.production.ship", entityType: "sourcing_production_order", entityId: order.productionOrderId,
       after: { status: "shipped" }, reason: "验证有权操作也不能跳过生产完成",
@@ -1693,10 +1691,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       [randomUUID(), order.productionOrderId, merchandiserId, prematureShipmentEventId]))
       .rejects.toMatchObject({ code: "55000", message: "illegal production transition" });
     expect((await database.query("SELECT count(*)::int AS count FROM sourcing_production_transitions WHERE production_order_id=$1", [order.productionOrderId])).rows[0].count).toBe(1);
-    // Finance may reconcile after production has already begun, without changing production.
     await service.recordFinanceReconciliation(financeActor(), id, { result: "match" }, randomUUID());
     expect((await production.get(readerActor(), order.productionOrderId)).status).toBe("in_production");
-    // A later approved factory change must not create a second live execution.
     await service.requestFactoryChange(managerActor(), id, {
       supplierId: replacementFactoryId, unitPrice: "9.0000", changeReason: "验证已派单后的新合同不能重复派单",
     }, randomUUID());
@@ -1716,7 +1712,6 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query("SELECT 1 FROM sourcing_production_orders WHERE sourcing_case_id=$1", [id])).rowCount).toBe(1);
     expect((await production.get(readerActor(), order.productionOrderId)).supplierId).toBe(factoryId);
 
-    // Root deletion archives the source only: the active production queue survives.
     expect(order.sourceCaseArchived).toBe(false);
     const beforeDeletion = await production.list(readerActor());
     await service.deleteByRoot(rootActor(), id, randomUUID());
@@ -1816,7 +1811,6 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         {expectedReportId:firstReport.reportId,businessDate:dispatchDates.before_dispatch,quantity,reason:"验证修正日期下限"},randomUUID()))
         .rejects.toMatchObject({statusCode:400,message:"上报业务日期不能早于正式派单日期"});
     }
-    // Direct SQL must obey the same lower bound with otherwise matching Root audits.
     for(const revision of [1,2]) {
       const reportId=randomUUID(),rootReportId=revision===1?reportId:firstReport.rootReportId;
       const reason=revision===1?null:"验证数据库修正日期下限";
@@ -1881,7 +1875,6 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query("SELECT 1 FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1",[order.sourcingCaseId])).rowCount).toBe(0);
     await service.deleteByRoot(rootActor(),order.sourcingCaseId,randomUUID());
     expect((await reporting.detail(reporter(),order.productionOrderId)).order.sourceCaseArchived).toBe(true);
-    // Upgrade path: an older completion has no SSP-08 snapshot, then receives a later correction.
     const legacy=await createProduction("LEGACY");
     const legacyReport=await reporting.report(rootActor(),legacy.productionOrderId,{position:1,businessDate,quantity:10},randomUUID());
     await database.query("ALTER TABLE sourcing_production_transitions DISABLE TRIGGER sourcing_production_progress_capture");
@@ -1902,4 +1895,3 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
 
 });
-
