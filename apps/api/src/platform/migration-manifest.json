@@ -189,6 +189,7 @@
     { "version": "0187_finance_pattern_order_reads", "checksum": "dd7fb1a5c151c107bd20766800ed9b0291ac54d5947f3c662e091fd03f1a572f" },
     {"version": "0188_pattern_room_worker_role", "checksum": "c70a1ae77fbffa61e3ea1dbed4d63f1a1605fdfdd83fd3f9ba5a7f946ea3ad60"},
     {"version": "0189_pattern_room_order_logical_deletion", "checksum": "4459959e7f2c8239e8fe84c8321afac4ef5ffa1bbfc2579a668bdfe7f8b241a7"},
-    {"version": "0190_receiving_difference_authority", "checksum": "667132fcf1844b96474d82d9efa935bc403e176bbe22390315ddfc0476e13dc1"}
+    {"version": "0190_receiving_difference_authority", "checksum": "667132fcf1844b96474d82d9efa935bc403e176bbe22390315ddfc0476e13dc1"},
+    {"version": "0191_supplier_contract_signing_name_optional", "checksum": "2111be3f0d72dd534d13f55c918039db2309e7669e5677b36d27355a544b5110"}
   ]
 }
