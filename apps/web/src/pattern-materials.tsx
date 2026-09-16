@@ -22,13 +22,14 @@ function MaterialPreview({ files, selected, onSelect, onClose }: { files: Patter
   </dialog>;
 }
 
-export function PatternMaterials({ files, onRemove, disabled = false }: { files: PatternMaterial[]; onRemove?(id: string): void; disabled?: boolean }) {
+export function PatternMaterials({ files, onRemove, disabled = false, compact = false }: { files: PatternMaterial[]; onRemove?(id: string): void; disabled?: boolean; compact?: boolean }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = files.findIndex(file => file.attachmentId === selectedId);
   if (!files.length) return <p className="pattern-empty">暂无制作资料</p>;
-  return <><ul className="pattern-material-grid">{files.map(file => <li key={file.attachmentId}>
+  const visible = compact && !onRemove ? files.slice(0, 6) : files;
+  return <><ul className="pattern-material-grid">{visible.map(file => <li key={file.attachmentId}>
     <button type="button" className="pattern-material-thumb" aria-label={`预览 ${file.filename}`} onClick={() => setSelectedId(file.attachmentId)}>{file.mimeType.startsWith("image/") ? <MaterialThumbnail file={file} /> : <span>PDF · 点击预览</span>}</button>
     <span className="pattern-material-name">{file.filename}{file.active === false ? "（历史资料）" : ""}</span>
     <div className="pattern-actions"><a href={materialUrl(file.attachmentId, "download")}>下载</a>{onRemove && <Button type="button" disabled={disabled} onClick={() => onRemove(file.attachmentId)}>移除</Button>}</div>
-  </li>)}</ul>{selected >= 0 && <MaterialPreview files={files} selected={selected} onSelect={index => setSelectedId(files[index]!.attachmentId)} onClose={() => setSelectedId(null)} />}</>;
+  </li>)}</ul>{visible.length < files.length && <Button type="button" onClick={() => setSelectedId(files[0]!.attachmentId)}>查看全部 {files.length} 份资料</Button>}{selected >= 0 && <MaterialPreview files={files} selected={selected} onSelect={index => setSelectedId(files[index]!.attachmentId)} onClose={() => setSelectedId(null)} />}</>;
 }

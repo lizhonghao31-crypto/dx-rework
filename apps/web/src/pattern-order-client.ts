@@ -14,8 +14,11 @@ export async function patternRequest<T>(path: string, schema: z.ZodType<T>, init
   if (!response.ok) throw new PatternRequestError(body?.error?.message ?? "操作未完成，请重试", body?.error?.code ?? "UNKNOWN", response.status);
   return schema.parse(body);
 }
+export function readPatternUploadLimits(kind: "pattern" | "misc", purpose: "create" | "rework", signal?: AbortSignal) {
+  return patternRequest(`attachments/upload-limits?kind=${kind}&purpose=${purpose}`, z.object({ maxUploadBytes: z.number().int().positive() }), { signal: signal ?? null });
+}
 export async function uploadPatternOriginal(file: File, kind: "pattern" | "misc" = "pattern", purpose: "create" | "rework" = "create") {
-  const { maxUploadBytes } = await patternRequest(`attachments/upload-limits?kind=${kind}&purpose=${purpose}`, z.object({ maxUploadBytes: z.number().int().positive() }));
+  const { maxUploadBytes } = await readPatternUploadLimits(kind, purpose);
   return uploadPatternMaterial(file, async file => {
   const intent = await patternRequest(`attachments/upload-intents?kind=${kind}&purpose=${purpose}`, UploadIntentResponseSchema, { method: "POST", body: JSON.stringify({ filename: file.name, mimeType: file.type, sizeBytes: file.size, sha256: await sha256Hex(file) }) });
   const form = new FormData();

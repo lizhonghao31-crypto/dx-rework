@@ -9,6 +9,7 @@ import type { z } from "zod";
 import { createClientRequestId } from "./client-request-id.js";
 import { patternRequest, uploadPatternOriginal } from "./pattern-order-client.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
+import { PatternMaterialInput, PATTERN_MATERIAL_LIMIT } from "./pattern-material-input.js";
 
 export type PatternExceptionAction = "rework" | "transfer" | "cancel" | "cancel-fees";
 const titles = { rework: "发起原单返工", transfer: "原单换人", cancel: "取消本次任务", "cancel-fees": "确认取消费用" };
@@ -32,6 +33,8 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
     return () => abort.abort();
   }, [active, search]);
   const upload = async (selected: File[]) => {
+    if (disabled || !selected.length) return;
+    if (selected.length + files.length + retained.length > PATTERN_MATERIAL_LIMIT) { setError("本轮资料合计最多20份，请先移除不需要的资料"); return; }
     setUploading(true); onBusy(true); setError("");
     try {
       for (const file of selected) {
@@ -68,7 +71,7 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
     {active === "rework" ? <>
       <label>返工原因分类<select className="rework-v2-control" disabled={disabled} value={category} onChange={e => setCategory(e.target.value)}><option value="customer_change">客户修改要求</option><option value="workmanship">制作不符合要求</option><option value="other">其他</option></select></label>
 
-      <label className="rework-v2-upload">补充图片 / PDF<input type="file" multiple accept="application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp" disabled={disabled} onChange={e => { const selected = Array.from(e.target.files ?? []); e.target.value = ""; if (selected.length + files.length + retained.length > 20) setError("本轮资料合计最多20份，请先移除不需要的资料"); else void upload(selected); }} /></label>
+      <PatternMaterialInput kind="pattern" purpose="rework" count={files.length + retained.length} label="补充图片 / PDF" disabled={disabled} onFiles={selected => void upload(selected)} />
       <PatternMaterials files={[...retained, ...files]} disabled={disabled} onRemove={id => { setRetained(current => current.filter(file => file.attachmentId !== id)); setFiles(current => current.filter(file => file.attachmentId !== id)); }} />
     </> : null}
     {active === "transfer" ? <label>接手师傅<div className="rework-v2-control"><SearchSelect options={workers.filter(worker => worker.userId !== segment?.workerUserId).map(worker => ({ value: worker.personId, label: worker.name }))} value={personId} onChange={setPersonId} onSearchChange={setSearchText} placeholder="输入姓名选择师傅" ariaLabel="接手师傅" emptyText="没有匹配的师傅" disabled={disabled} /></div></label> : null}
