@@ -121,3 +121,25 @@
 .ui-polish .my-todos-workspace {
   padding: 0;
 }
+
+/* Responsibility revision is history/fallback work, not a top-of-order summary.
+   Keep it after the active node workspace so the settlement area owns the actions. */
+.ui-polish .rework-detail-target-layout > .rework-responsibility-result--compact {
+  order: 100;
+  padding: 10px 12px;
+}
+
+.ui-polish .rework-responsibility-result--compact .rework-responsibility-result__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.ui-polish .rework-responsibility-result--compact details {
+  margin-top: 0;
+}
+
+.ui-polish .rework-responsibility-result--compact summary {
+  cursor: pointer;
+  font-weight: 700;
+}
