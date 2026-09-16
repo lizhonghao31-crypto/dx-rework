@@ -169,14 +169,13 @@ function DesktopNavigation({
   );
 }
 
-const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "返工单看板", "外发定价&选厂", "供应商中心"] as const;
+const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "返工单看板", "外发定价&选厂"] as const;
 
 const MOBILE_NAVIGATION_META: Record<string, Readonly<{ label: string; glyph: string }>> = {
   "我的待办": { label: "待办", glyph: "待" },
   "订单回货": { label: "收货", glyph: "收" },
   "返工单看板": { label: "返工", glyph: "返" },
   "外发定价&选厂": { label: "外发", glyph: "发" },
-  "供应商中心": { label: "供应商", glyph: "供" },
 };
 
 function isMobilePrimaryNavigation(entry: NavigationEntry): boolean {
@@ -215,12 +214,14 @@ function MobileNavigationLink({
 
 function MobilePrimaryNavigation({
   navigation,
+  supplierGroup,
   financeGroup,
   active,
   basePath,
   pendingTodoCount,
 }: {
   navigation: readonly NavigationEntry[];
+  supplierGroup: NavigationGroup;
   financeGroup: NavigationGroup;
   active: string;
   basePath: string;
@@ -232,7 +233,9 @@ function MobilePrimaryNavigation({
     ...mobileCandidates.slice(4),
     ...navigation.filter((entry) => !isMobilePrimaryNavigation(entry)),
   ];
-  const moreIsActive = moreNavigation.some((entry) => entry.name === active) || financeGroup.entries.some(entry => entry.name === active);
+  const moreIsActive = moreNavigation.some((entry) => entry.name === active)
+    || supplierGroup.entries.some((entry) => entry.name === active)
+    || financeGroup.entries.some((entry) => entry.name === active);
 
   return (
     <nav className="mobile-primary-navigation" aria-label="移动端主导航">
@@ -246,7 +249,7 @@ function MobilePrimaryNavigation({
           />
         </div>
       ))}
-      {moreNavigation.length || financeGroup.entries.length ? (
+      {moreNavigation.length || supplierGroup.entries.length || financeGroup.entries.length ? (
         <details className="mobile-primary-navigation__more">
           <summary aria-label="更多导航">
             <span className={"mobile-primary-navigation__more-trigger" + (moreIsActive ? " is-active" : "")}>
@@ -256,6 +259,7 @@ function MobilePrimaryNavigation({
           </summary>
           <div className="mobile-primary-navigation__drawer">
             <PrimaryNavigation navigation={moreNavigation} active={active} basePath={basePath} />
+            <NavigationGroupMenu group={supplierGroup} active={active} basePath={basePath} />
             <NavigationGroupMenu group={financeGroup} active={active} basePath={basePath} />
           </div>
         </details>
@@ -462,6 +466,11 @@ export function Shell({
       href: "/ui/suppliers/manage",
     });
   }
+  const supplierGroup: NavigationGroup = {
+    name: "供应商中心",
+    description: "供应商资料与维护",
+    entries: supplierNavigation,
+  };
 
   const patternRoomNavigation: NavigationEntry[] = currentUser && canAccessPatternRoom(currentUser) ? [
     ...(canAccessPatternRoomOrders(currentUser) ? [{ name: "订单打板/杂事看板", description: "查询打板与杂事订单", href: "/ui/pattern-room/orders", activeKey: "pattern-room-orders" }] : []),
@@ -500,13 +509,6 @@ export function Shell({
         href: "/ui/sourcing/pending",
       }]
     : [];
-  const mobileSupplierNavigation: NavigationEntry[] = currentUser && canAccessSupplierCenter(currentUser)
-    ? [{
-        name: "供应商中心",
-        description: "查看供应商资料、合同缺项和历史",
-        href: "/ui/suppliers",
-      }]
-    : [];
   const productionNavigation: NavigationEntry[] = currentUser && canAccessProduction(currentUser)
     ? [
         { name: "实时看板", description: "查看生产双进度、交期与更新状态", href: "/ui/production-dashboard" },
@@ -519,7 +521,6 @@ export function Shell({
     ...globalNavigation,
     ...reworkNavigation,
     ...mobileSourcingNavigation,
-    ...mobileSupplierNavigation,
     ...(patternRoomNavigation.length ? [{ name: "订单打板", description: "订单打板与价格管控", href: "/ui/pattern-room" }] : []),
     ...sampleNavigation,
     ...platformNavigation,
@@ -532,11 +533,7 @@ export function Shell({
       description: "订单返工业务",
       entries: reworkNavigation,
     },
-    {
-      name: "供应商中心",
-      description: "供应商资料与维护",
-      entries: supplierNavigation,
-    },
+    supplierGroup,
     { name: "样衣管理", description: "样衣资料与实物保管", entries: sampleNavigation },
     financeGroup,
     {
@@ -552,7 +549,7 @@ export function Shell({
   const mobileActive = patternRoomNavigation.some(entry => (entry.activeKey ?? entry.name) === active) ? "订单打板" : productionNavigation.some(entry => entry.name === active) ? "实时生产看板" : sourcingNavigation.some((entry) => entry.name === active)
     ? "外发定价&选厂"
     : supplierNavigation.some((entry) => entry.name === active)
-      ? "供应商中心"
+      ? active
       : activeEntry?.name ?? active;
 
   return (
@@ -589,6 +586,7 @@ export function Shell({
       {mobileNavigation === "primary" ? (
         <MobilePrimaryNavigation
           navigation={navigation}
+          supplierGroup={supplierGroup}
           financeGroup={financeGroup}
           active={mobileActive}
           basePath={basePath}
