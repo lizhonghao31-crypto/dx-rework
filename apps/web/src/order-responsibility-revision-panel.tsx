@@ -102,10 +102,10 @@ export function OrderResponsibilityRevisionPanel({
       <Button type="submit" disabled={busy || !reason.trim()}>{busy ? "正在创建新责任版本…" : "确认重新判责"}</Button>
       <Button type="button" disabled={busy} onClick={() => setOpen(false)}>取消</Button>
     </form> : null}
-    {!!value?.history.length ? <details>
-      <summary>责任历史 · {value.history.length} 个版本</summary>
-      {value.revisions.map((row) => <p key={row.id}>{time(row.at)} · {row.actor ?? "未记录"} 发起重判：{row.reason}</p>)}
-      {value.history.map((row) => <div className="rework-responsibility-result__version" key={row.id}>
+    {(value?.history.length ?? 0) > 0 ? <details>
+      <summary>责任历史 · {value!.history.length} 个版本</summary>
+      {value!.revisions.map((row) => <p key={row.id}>{time(row.at)} · {row.actor ?? "未记录"} 发起重判：{row.reason}</p>)}
+      {value!.history.map((row) => <div className="rework-responsibility-result__version" key={row.id}>
         <b>V{row.version} · {row.stage === "draft" ? "草稿" : "定稿"}</b>
         <span>{time(row.at)} · {row.actor ?? "未记录"} · 本厂 {formatBusinessCurrency(row.ownAmount)} / 外厂 {formatBusinessCurrency(row.externalAmount)}</span>
         {row.reason ? <span>原因：{row.reason}</span> : null}
