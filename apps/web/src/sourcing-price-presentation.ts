@@ -6,6 +6,19 @@ export const isNewSourcingPrice = (value: string): boolean => SourcingNewUnitPri
 export const newSourcingPriceDisplay = (value: string): string =>
   isNewSourcingPrice(value) ? formatBusinessDecimal(value) : value;
 
+/** Presentation-only hint; authoritative validation remains in the existing service. */
+export function sourcingDecisionNeedsReason(current: readonly { position: number; unitPrice: string }[], quoted: readonly { position: number; unitPrice: string }[]): boolean {
+  const exact = (price: string): bigint | null => {
+    const match = /^(\d{1,10})(?:\.(\d{1,4}))?$/.exec(price.trim());
+    return match ? BigInt(match[1]!) * 10_000n + BigInt((match[2] ?? "").padEnd(4, "0")) : null;
+  };
+  return current.some(line => {
+    if (!isNewSourcingPrice(line.unitPrice)) return false; // Existing price feedback handles invalid input.
+    const previous = quoted.find(value => value.position === line.position);
+    return previous !== undefined && exact(previous.unitPrice) !== null && exact(previous.unitPrice) !== exact(line.unitPrice);
+  });
+}
+
 export function historicalSourcingPrice(value: string): string {
   const matched = /^(\d+)(?:\.(\d{1,4}))?$/.exec(value);
   if (!matched) return formatBusinessCurrency(value);
@@ -28,4 +41,3 @@ export function sourcingDeleteConfirmation(item: SourcingCaseSummary): string {
   const styles = item.lineItems.map((line) => `${line.styleNo} / ${line.color ?? "历史未维护颜色"}`).join("、");
   return `确认删除此外发订单？\n款色：${styles}\n供应商：${item.decision?.supplierName ?? "尚未选厂"}\n数量：${formatBusinessDecimal(item.orderQuantity)} 件\n订单号：${item.erpOrderNo}\n删除后从外发业务入口隐藏并关闭相关待办，历史证据保留。关联生产单不会自动作为测试记录排除，需单独核对。\n辅助标识：${item.sourcingCaseId}`;
 }
-
