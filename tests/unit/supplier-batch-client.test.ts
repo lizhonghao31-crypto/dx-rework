@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { executeSupplierBatch, type SupplierBatchEntry } from "../../apps/web/src/supplier-batch-client.js";
+import { executeSupplierBatch, summarizeSupplierBatch, type SupplierBatchEntry } from "../../apps/web/src/supplier-batch-client.js";
 import { SupplierImportRequestError } from "../../apps/web/src/supplier-import-safety.js";
 
 const entry = (rowNumber: number): SupplierBatchEntry => ({ plan: { rowNumber, cells: [null, "工厂"], supplierCode: `SUP_${rowNumber}`, supplierName: "工厂", supplierId: null, version: null, status: "create", message: "新增", changes: [] }, confirmedFields: [] });
@@ -27,4 +27,26 @@ it("stops at permission failure and never sends unchanged or unconfirmed-only ro
   api.mockClear();
   await executeSupplierBatch([{ ...entry(2), plan: { ...entry(2).plan, status: "unchanged" } }, { ...entry(3), plan: { ...entry(3).plan, status: "review", changes: [{ field: "bankName", label: "开户行", before: "旧", after: "新", needsConfirmation: true }] } }], api, vi.fn(), () => "key");
   expect(api).not.toHaveBeenCalled();
+});
+it("summarizes created, supplemented, confirmed, unchanged, failed and pending rows without hiding precheck failures", () => {
+  const success = { status: "success", message: "已保存", retryable: false } as const;
+  const rows: SupplierBatchEntry[] = [
+    { ...entry(2), result: success },
+    { ...entry(3), plan: { ...entry(3).plan, status: "supplement" }, result: success },
+    { ...entry(4), plan: { ...entry(4).plan, status: "review" }, result: success },
+    { ...entry(5), plan: { ...entry(5).plan, status: "unchanged" } },
+    { ...entry(6), result: { status: "success", message: "无变化，已跳过", retryable: false, unchanged: true } },
+    { ...entry(7), result: { status: "failed", message: "保存失败", retryable: true } },
+    { ...entry(8), plan: { ...entry(8).plan, status: "conflict" } },
+    { ...entry(9), plan: { ...entry(9).plan, status: "review", changes: [{ field: "bankName", label: "开户行", before: "旧", after: "新", needsConfirmation: true }] } },
+  ];
+  expect(summarizeSupplierBatch(rows)).toEqual({
+    total: 8,
+    created: 1,
+    supplemented: 1,
+    confirmedUpdates: 1,
+    unchanged: 2,
+    failed: 2,
+    pending: 1,
+  });
 });
