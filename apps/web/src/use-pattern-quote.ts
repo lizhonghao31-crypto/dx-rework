@@ -9,7 +9,7 @@ export type PatternQuoteState = { status: "idle" | "loading"; quote: null } | { 
 export function usePatternQuote(path: string | null, revision: number): PatternQuoteState {
   const [result, setResult] = useState<{ path: string; revision: number; state: PatternQuoteState } | null>(null);
   useEffect(() => {
-    if (!path) return;
+    if (!path) { setResult(null); return; }
     const abort = new AbortController();
     setResult({ path, revision, state: { status: "loading", quote: null } });
     void patternRequest(path, PatternPriceQuoteSchema, { signal: abort.signal }).then(quote => {
