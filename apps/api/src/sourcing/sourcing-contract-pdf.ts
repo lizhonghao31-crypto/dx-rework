@@ -184,11 +184,13 @@ const renderLegacyContractPdf = (snapshot: ContractPdfSnapshot): Buffer => {
 export const sourcingContractFingerprint = (snapshot: ContractPdfSnapshot): string =>
   createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
 
+type StructuredContractLayout = "v2" | "v3";
 
-// Version 1 documents retain their original rendering. Only new template versions
-// use the corrected source contract; generated documents are never regenerated.
-export const renderSourcingContractPdf = async (snapshot: ContractPdfSnapshot): Promise<Buffer> => {
-  if (snapshot.templateVersion !== 2) return renderLegacyContractPdf(snapshot);
+const renderStructuredContractPdf = async (
+  snapshot: ContractPdfSnapshot,
+  layout: StructuredContractLayout,
+): Promise<Buffer> => {
+  const polished = layout === "v3";
   const document = new PDFDocument({
     size: "A4", margin: 32, bufferPages: true,
     info: { Title: "服装加工合同", CreationDate: new Date(`${snapshot.contractDate}T00:00:00Z`),
@@ -205,30 +207,71 @@ export const renderSourcingContractPdf = async (snapshot: ContractPdfSnapshot): 
   const width = document.page.width - 64;
   const bottom = document.page.height - 40;
   let y = 32;
-  const text = (value: string, size = 9, color = "#111111"): void => {
-    document.fontSize(size).fillColor(color);
-    // PDFKit wraps CJK text and automatically continues paragraphs across pages.
-    document.text(value, 32, y, { width, lineGap: 2 });
-    y = document.y + 5;
-    if (y > bottom) { document.addPage(); y = 32; }
+  const ensureSpace = (height: number): void => {
+    if (y + height <= bottom) return;
+    document.addPage();
+    y = 32;
   };
-  text("服装加工合同", 17);
-  text(`合同编号：${snapshot.contractNumber}    生成日期：${snapshot.contractDate}    签订地点：${snapshot.signingPlace}`);
-  text(`甲方：${snapshot.partyAName}`);
-  text(`乙方：${snapshot.partyBName}`);
-  text("一、加工明细", 10);
+  const text = (
+    value: string,
+    size = 9,
+    color = "#111111",
+    options: { x?: number; width?: number; align?: "left" | "center" | "right"; lineGap?: number; characterSpacing?: number; after?: number } = {},
+  ): void => {
+    const x = options.x ?? 32;
+    const textWidth = options.width ?? width;
+    const lineGap = options.lineGap ?? 2;
+    document.fontSize(size).fillColor(color);
+    const height = document.heightOfString(value, { width: textWidth, lineGap, align: options.align });
+    ensureSpace(height + (options.after ?? 5));
+    document.text(value, x, y, {
+      width: textWidth,
+      lineGap,
+      align: options.align,
+      characterSpacing: options.characterSpacing,
+    });
+    y = document.y + (options.after ?? 5);
+  };
+
+  if (polished) {
+    text("服装加工合同", 18, "#111111", { align: "center", characterSpacing: 5, after: 9 });
+    text(
+      `合同编号：${snapshot.contractNumber}    生成日期：${snapshot.contractDate}    签订地点：${snapshot.signingPlace}`,
+      9,
+      "#111111",
+      { align: "center", after: 13 },
+    );
+    text(`甲方：${snapshot.partyAName}`, 9.5, "#111111", { x: 38, width: width - 12, after: 7 });
+    text(`乙方：${snapshot.partyBName}`, 9.5, "#111111", { x: 38, width: width - 12, after: 13 });
+    text("一、加工明细", 10, "#111111", { after: 7 });
+  } else {
+    text("服装加工合同", 17);
+    text(`合同编号：${snapshot.contractNumber}    生成日期：${snapshot.contractDate}    签订地点：${snapshot.signingPlace}`);
+    text(`甲方：${snapshot.partyAName}`);
+    text(`乙方：${snapshot.partyBName}`);
+    text("一、加工明细", 10);
+  }
+
   const widths = [86, 82, 85, 42, 54, 58, width - 407];
   const row = (cells: readonly string[], header = false): void => {
     document.fontSize(8);
-    const height = Math.max(32, ...cells.map((cell, index) =>
-      document.heightOfString(cell, { width: widths[index]! - 8, lineGap: 2 }) + 12));
+    const textHeights = cells.map((cell, index) =>
+      document.heightOfString(cell, { width: widths[index]! - 8, lineGap: 2 }));
+    const height = Math.max(32, ...textHeights.map((item) => item + 12));
     if (y + height > bottom) { document.addPage(); y = 32; tableHeader(); }
     let x = 32;
     cells.forEach((cell, index) => {
       document.lineWidth(0.5).strokeColor("#333333");
       if (header) document.rect(x, y, widths[index]!, height).fillAndStroke("#eeeeee", "#333333");
       else document.rect(x, y, widths[index]!, height).stroke();
-      document.fillColor("#111111").text(cell, x + 4, y + 6, { width: widths[index]! - 8, lineGap: 2 });
+      const align = polished && (header || index >= 2) ? "center" : "left";
+      const textHeight = document.heightOfString(cell, { width: widths[index]! - 8, lineGap: 2, align });
+      const textY = polished ? y + Math.max(5, (height - textHeight) / 2) : y + 6;
+      document.fillColor("#111111").text(cell, x + 4, textY, {
+        width: widths[index]! - 8,
+        lineGap: 2,
+        align,
+      });
       x += widths[index]!;
     });
     y += height;
@@ -241,9 +284,10 @@ export const renderSourcingContractPdf = async (snapshot: ContractPdfSnapshot): 
     snapshot.estimatedCutPieceSendDate, formatBusinessDecimal(line.quantity), formatSourcingContractPrice(line.unitPrice),
     formatBusinessDecimal(line.totalAmount), snapshot.deliveryDate,
   ]);
-  y += 5;
-  text(`合计：${formatBusinessDecimal(snapshot.totalQuantity)} 件    金额：${formatBusinessDecimal(snapshot.totalAmount)} 元`);
-  // Keep the responsibility clause intact; the full dynamic responsibility is red.
+  y += polished ? 7 : 5;
+  text(`合计：${formatBusinessDecimal(snapshot.totalQuantity)} 件    金额：${formatBusinessDecimal(snapshot.totalAmount)} 元`, 9, "#111111", { after: polished ? 11 : 5 });
+
+  // Keep the responsibility clause intact; only the dynamic responsibility segment is red.
   document.fontSize(9);
   const responsibility = `二、乙方负责${snapshot.processes.join("、")}，甲方提供样板及面/辅料。`;
   const responsibilityHeight = document.heightOfString(responsibility, { width, lineGap: 2 });
@@ -251,28 +295,92 @@ export const renderSourcingContractPdf = async (snapshot: ContractPdfSnapshot): 
   document.fillColor("#111111").text("二、乙方负责", 32, y, { width, lineGap: 2, continued: true });
   document.fillColor("#c00000").text(snapshot.processes.join("、"), { continued: true });
   document.fillColor("#111111").text("，甲方提供样板及面/辅料。");
-  y = document.y + 6;
+  y = document.y + (polished ? 10 : 6);
+
   const clauses = [
     ["三、质量要求", "qualityRequirements"], ["四、交货时间", "delayPenalty"],
     ["五、交货地点及运输方式", "logistics"], ["六、物料合理损耗及计算方法", "reasonableLoss"],
     ["七、次品率", "defectRate"], ["八、付款方式", "payment"],
     ["九、生效与补充协议", "effectiveness"], ["十、有效期", "validity"],
   ] as const;
-  for (const [title, key] of clauses) text(`${title}：${snapshot.terms[key] ?? ""}`);
-  if (y + 130 > bottom) { document.addPage(); y = 32; }
-  text(`甲方（盖章）：${snapshot.partyAName}`);
-  text(`地址：${snapshot.partyAAddress ?? "历史未维护"}`);
-  text("甲方代表：________________    签署日期：____年____月____日");
-  text(`乙方（盖章）：${snapshot.partyBName}`);
-  text(`地址：${snapshot.partyBAddress}    乙方代表：${snapshot.partyBRepresentative}`);
-  text(`收款人：${snapshot.payeeName}    开户行：${snapshot.bankName}`);
-  text(`银行账号：${snapshot.bankAccount}    签署日期：____年____月____日`);
+  for (const [title, key] of clauses) {
+    const clause = snapshot.terms[key] ?? "";
+    if (polished && key === "qualityRequirements") {
+      text(`${title}：`, 9, "#111111", { after: 3 });
+      text(clause, 9, "#111111", { x: 44, width: width - 12, lineGap: 3, after: 8 });
+    } else {
+      text(`${title}：${clause}`, 9, "#111111", { after: polished ? 7 : 5 });
+    }
+  }
+
+  if (polished) {
+    const gap = 34;
+    const columnWidth = (width - gap) / 2;
+    const leftX = 32;
+    const rightX = leftX + columnWidth + gap;
+    const left = [
+      `甲方（盖章）：${snapshot.partyAName}`,
+      `地址：${snapshot.partyAAddress ?? "历史未维护"}`,
+      "甲方代表：________________",
+      "签署日期：____年____月____日",
+    ];
+    const right = [
+      `乙方（盖章）：${snapshot.partyBName}`,
+      `地址：${snapshot.partyBAddress}`,
+      `乙方代表：${snapshot.partyBRepresentative}`,
+      `收款人：${snapshot.payeeName}`,
+      `开户行：${snapshot.bankName}`,
+      `银行账号：${snapshot.bankAccount}`,
+      "签署日期：____年____月____日",
+    ];
+    const columnHeight = (lines: readonly string[]): number => lines.reduce((sum, line) => (
+      sum + document.heightOfString(line, { width: columnWidth, lineGap: 2 }) + 5
+    ), 0);
+    const signatureHeight = Math.max(columnHeight(left), columnHeight(right));
+    ensureSpace(signatureHeight + 8);
+    const signatureY = y;
+    const drawColumn = (x: number, lines: readonly string[]): void => {
+      let currentY = signatureY;
+      document.fontSize(9).fillColor("#111111");
+      for (const line of lines) {
+        document.text(line, x, currentY, { width: columnWidth, lineGap: 2 });
+        currentY = document.y + 5;
+      }
+    };
+    drawColumn(leftX, left);
+    drawColumn(rightX, right);
+    y = signatureY + signatureHeight + 5;
+  } else {
+    if (y + 130 > bottom) { document.addPage(); y = 32; }
+    text(`甲方（盖章）：${snapshot.partyAName}`);
+    text(`地址：${snapshot.partyAAddress ?? "历史未维护"}`);
+    text("甲方代表：________________    签署日期：____年____月____日");
+    text(`乙方（盖章）：${snapshot.partyBName}`);
+    text(`地址：${snapshot.partyBAddress}    乙方代表：${snapshot.partyBRepresentative}`);
+    text(`收款人：${snapshot.payeeName}    开户行：${snapshot.bankName}`);
+    text(`银行账号：${snapshot.bankAccount}    签署日期：____年____月____日`);
+  }
+
   const pages = document.bufferedPageRange();
   for (let index = 0; index < pages.count; index += 1) {
     document.switchToPage(index);
     document.page.margins.bottom = 0;
-    document.fontSize(7).fillColor("#555555").text(`${snapshot.contractNumber}    ${index + 1} / ${pages.count}`, 32, document.page.height - 26, { width, lineBreak: false });
+    document.fontSize(7).fillColor("#555555").text(
+      `${snapshot.contractNumber}    ${index + 1} / ${pages.count}`,
+      32,
+      document.page.height - 26,
+      { width, lineBreak: false, align: polished ? "center" : "left" },
+    );
   }
   document.end();
   return completed;
+};
+
+// Generated attachments remain immutable. The current V2 template now uses the
+// approved presentation refinements for newly generated documents only.
+export const renderSourcingContractPdf = async (snapshot: ContractPdfSnapshot): Promise<Buffer> => {
+  if (snapshot.templateVersion === 2 || snapshot.templateVersion === 3) {
+    return renderStructuredContractPdf(snapshot, "v3");
+  }
+  return renderLegacyContractPdf(snapshot);
 };
