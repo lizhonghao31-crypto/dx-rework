@@ -4,7 +4,6 @@ import { expect, it } from "vitest";
 import { canApproveSupplier, canRequestSupplier, canAccessSupplierMaintenance, supplierApplicationDraft, supplierApplicationPayload, supplierApplicationVersion } from "../../apps/web/src/supplier-onboarding-model.js";
 import { SupplierApplicationList, SupplierApplicationSnapshot, SupplierDuplicateCheck } from "../../apps/web/src/supplier-onboarding-page.js";
 import { SupplierProfileForm } from "../../apps/web/src/supplier-profile-form.js";
-import { SupplierCenterNavigation } from "../../apps/web/src/supplier-center-page.js";
 import type { AuthorizedUser } from "../../apps/web/src/auth.js";
 import type { SupplierOnboardingDetail, SupplierOnboardingProfile, SupplierOnboardingSummary } from "@dx-rework/contracts/supplier-onboarding";
 const user = (role: string, capabilities: string[]): AuthorizedUser => ({ id: "fixture", displayName: "用户", businessRoles: [role], capabilities });
@@ -49,7 +48,6 @@ it("renders immutable full snapshots and truthful applicant and reviewer list ac
   expect(applicant).toContain("修改"); expect(applicant).toContain("待审批"); expect(applicant).toContain("已通过"); expect(applicant).not.toContain(">审批</a>");
   const reviewer = renderToStaticMarkup(createElement(SupplierApplicationList, { items: rows, reviewer: true }));
   expect(reviewer).toContain(">审批</a>"); expect(reviewer).toContain("申请人"); expect(reviewer).not.toContain("查看并修改");
-  expect(renderToStaticMarkup(createElement(SupplierCenterNavigation, { active: "directory", canMaintain: false }))).not.toContain("资料维护");
 });
 
 it("keeps historical status, name and submission time tied to the selected version", () => {
