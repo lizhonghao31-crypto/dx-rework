@@ -207,7 +207,7 @@ export function OrderBoardPage() {
   const [canReceive, setCanReceive] = useState(false);
   const [canInitiate, setCanInitiate] = useState(false);
   const [canExport, setCanExport] = useState(false);
-  const [canResolveReceivingDifference, setCanResolveReceivingDifference] = useState(false);
+  const [canResolveDifferences, setCanResolveDifferences] = useState(false);
   const [canManagePacking, setCanManagePacking] = useState(false);
   const [isRoot, setIsRoot] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
@@ -295,11 +295,11 @@ export function OrderBoardPage() {
         setCanReceive(isRoot || warehouseReceiver);
         setCanInitiate(moduleCanWrite(session.user, "rework") && (isRoot || roles.includes("owner_group") || qualityControl));
         setCanExport(isRoot || capabilities.includes("receiving:export"));
-        setCanResolveReceivingDifference(isRoot || (
-          roles.includes("warehouse_receiver") && capabilities.includes("receiving:resolve_difference")
+        setCanResolveDifferences(isRoot || (
+          roles.includes("order_merchandiser") && capabilities.includes("receiving:resolve_difference")
         ));
         setCanManagePacking(isRoot || (
-          roles.includes("tail_supervisor") && capabilities.includes("receiving:packing_manage")
+          roles.includes("warehouse_receiver") && capabilities.includes("receiving:packing_manage")
         ));
         setIsRoot(isRoot);
       })
@@ -308,7 +308,7 @@ export function OrderBoardPage() {
         setCanReceive(false);
         setCanInitiate(false);
         setCanExport(false);
-        setCanResolveReceivingDifference(false);
+        setCanResolveDifferences(false);
         setCanManagePacking(false);
         setIsRoot(false);
       });
@@ -536,7 +536,7 @@ export function OrderBoardPage() {
     const resolution = type === "receiving"
       ? row.receivingDifferenceResolution
       : row.packingDifferenceResolution;
-    const canHandle = type === "receiving" ? canResolveReceivingDifference : canManagePacking;
+    const canHandle = canResolveDifferences;
     if (value === null) return <strong>-</strong>;
     return <>
       <strong>{value === 0 ? "无差异" : signedQuantity(value)}</strong>
@@ -801,7 +801,7 @@ export function OrderBoardPage() {
               <span>装箱数量</span>
               <div>
                 <strong>{row.packingQuantity === null ? "-" : `${quantity(row.packingQuantity)}件`}</strong>
-                {canManagePacking && liveOperationSnapshot ? <button
+                {canManagePacking && liveOperationSnapshot && (row.packingQuantity === null || isRoot) ? <button
                   type="button"
                   className="order-board-packing-button"
                   onClick={() => openPacking(row)}

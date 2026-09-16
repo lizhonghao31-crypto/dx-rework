@@ -57,9 +57,9 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     requestId: randomUUID(),
   });
 
-  const tailSupervisor = (): TrustedActorContext => ({
+  const packingRecorder = (): TrustedActorContext => ({
     actorId: receiverId,
-    actorRoles: ["tail_supervisor"],
+    actorRoles: ["warehouse_receiver"],
     authorizationCapability: "receiving:packing_manage",
     authorizationCapabilities: ["receiving:packing_manage"],
     requestId: randomUUID(),
@@ -67,7 +67,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
 
   const differenceResolver = (): TrustedActorContext => ({
     actorId: receiverId,
-    actorRoles: ["warehouse_receiver"],
+    actorRoles: ["order_merchandiser"],
     authorizationCapability: "receiving:resolve_difference",
     authorizationCapabilities: ["receiving:resolve_difference"],
     requestId: randomUUID(),
@@ -307,6 +307,10 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await migration("0139_receiving_packing_difference_resolution.sql");
     await migration("0140_receiving_packing_difference_direction.sql");
     await migration("0169_receiving_difference_evidence.sql");
+    await migration("0190_receiving_difference_authority.sql");
+    await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','corp',$3,$3,true,true,CURRENT_TIMESTAMP)",[randomUUID(),receiverId,`test-${receiverId}`]);
+    for(const role of ["warehouse_receiver","order_merchandiser"]) await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$2,'receiving fixture')",[randomUUID(),receiverId,role]);
+    await database.query("INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','corp')");
   });
 
   afterAll(async () => {
@@ -841,7 +845,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     }, randomUUID());
     let row = (await service.board(businessDate(), `TEST-EVIDENCE-${differenceType}`)).rows[0]!;
     if (differenceType === "packing") {
-      await service.recordPacking(tailSupervisor(), {
+      await service.recordPacking(packingRecorder(), {
         receivingBatchId: created.value.receivingBatchId, expectedVersion: row.version,
         expectedPackingRevisionId: null, packingQuantity: 85,
       }, randomUUID());
@@ -854,7 +858,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       expectedDocumentQuantity: row.documentQuantity, expectedActualQuantity: row.cumulativeActualQuantity,
       expectedPackingRevisionId: row.packingRevisionId, differenceType, result: "已核对并留存处理图片", attachmentIds,
     };
-    const actor = differenceType === "receiving" ? differenceResolver() : tailSupervisor();
+    const actor = differenceResolver();
     const key = randomUUID();
     const resolved = await service.resolveDifference(actor, input, key);
     const replay = await service.resolveDifference(actor, input, key);
@@ -933,7 +937,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       expect((await service.board(businessDate(), row.styleNo)).rows[0]!.receivingDifferenceResolution).toBeNull();
       expect((await database.query("SELECT entity_type FROM attachments WHERE attachment_id=$1", [good])).rows[0]!.entity_type).toBeNull();
     }
-    await expect(service.resolveDifference(tailSupervisor(), { ...input, attachmentIds: [good] }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    await expect(service.resolveDifference(packingRecorder(), { ...input, attachmentIds: [good] }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
     expect((await database.query("SELECT count(*)::int AS count FROM receiving_difference_resolutions WHERE receiving_batch_id=$1", [row.receivingBatchId])).rows[0]!.count).toBe(0);
   });
 
@@ -956,8 +960,8 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       expectedPackingRevisionId: null,
       packingQuantity: 1_700,
     };
-    const packing = await service.recordPacking(tailSupervisor(), packingInput, packingKey);
-    const packingReplay = await service.recordPacking(tailSupervisor(), packingInput, packingKey);
+    const packing = await service.recordPacking(packingRecorder(), packingInput, packingKey);
+    const packingReplay = await service.recordPacking(packingRecorder(), packingInput, packingKey);
     expect(packingReplay.reused).toBe(true);
     expect(packingReplay.value.packingRevisionId).toBe(packing.value.packingRevisionId);
 
@@ -980,7 +984,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       differenceType: "receiving",
       result: "已与送货工厂核对，差额转下一批补回",
     }, randomUUID());
-    await service.resolveDifference(tailSupervisor(), {
+    await service.resolveDifference(differenceResolver(), {
       receivingBatchId: afterPacking.receivingBatchId,
       expectedVersion: afterPacking.version,
       expectedDocumentQuantity: afterPacking.documentQuantity,
@@ -1048,7 +1052,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       attachmentIds: [await readyImage()],
     }, randomUUID());
     const initial = (await service.board(businessDate(), businessDate(), styleNo)).rows[0]!;
-    await service.recordPacking(tailSupervisor(), {
+    await service.recordPacking(packingRecorder(), {
       receivingBatchId: created.value.receivingBatchId,
       expectedVersion: initial.version,
       expectedPackingRevisionId: null,

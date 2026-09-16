@@ -14,6 +14,14 @@ const user = (
 ) => ({ id, displayName: role, businessRoles: [role], capabilities, isRoot });
 
 describe("acceptance authorization matrix", () => {
+  it("separates discrepancy handling from warehouse packing entry", () => {
+    for(const entry of ACCEPTANCE_ROLE_MATRIX.filter(item=>!item.expectedRoot)) {
+      expect(entry.requiredCapabilities?.includes("receiving:resolve_difference")??false).toBe(entry.expectedRole==="order_merchandiser");
+      expect(entry.forbiddenCapabilities?.includes("receiving:resolve_difference")??false).toBe(entry.expectedRole!=="order_merchandiser");
+      expect(entry.requiredCapabilities?.includes("receiving:packing_manage")??false).toBe(entry.expectedRole==="warehouse_receiver");
+      expect(entry.forbiddenCapabilities?.includes("receiving:packing_manage")??false).toBe(entry.expectedRole!=="warehouse_receiver");
+    }
+  });
   it("accepts finance pattern-order reads while denying creation and price writes", () => {
     for(const alias of ["finance-director","finance-read","wage-month-close-accountant"]) {
       const entry=ACCEPTANCE_ROLE_MATRIX.find(item=>item.alias===alias)!;

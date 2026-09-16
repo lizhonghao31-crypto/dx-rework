@@ -672,7 +672,7 @@ export class ReceivingService {
   private assertBoardOperator(
     actor: TrustedActorContext,
     capability: "receiving:packing_manage" | "receiving:resolve_difference" | "receiving:export",
-    role?: "tail_supervisor" | "warehouse_receiver",
+    role?: "tail_supervisor" | "warehouse_receiver" | "order_merchandiser",
   ): void {
     const root = actor.actorRoles.includes("root_superuser");
     if (!root && (
@@ -681,6 +681,16 @@ export class ReceivingService {
       || (role !== undefined && !actor.actorRoles.includes(role))
     )) {
       fail("没有权限执行此订单回货操作", 403, "FORBIDDEN");
+    }
+  }
+
+  private async authorizeBoardWrite(client: PoolClient, actor: TrustedActorContext, capability: "receiving:packing_manage" | "receiving:resolve_difference"): Promise<TrustedActorContext> {
+    try {
+      const result = await client.query<{roles:string[]}>("SELECT receiving_authorized_board_operator($1,$2) roles", [actor.actorId,capability]);
+      return {...actor,actorRoles:result.rows[0]!.roles,authorizationCapability:capability};
+    } catch(error) {
+      if((error as {code?:string}).code === "42501") fail("当前账号无权执行此订单回货操作",403,"FORBIDDEN");
+      throw error;
     }
   }
 
@@ -1738,7 +1748,7 @@ export class ReceivingService {
     input: RecordPackingInput,
     idempotencyKey: string,
   ): Promise<Result<PackingRevisionResult>> {
-    this.assertBoardOperator(actor, "receiving:packing_manage", "tail_supervisor");
+    this.assertBoardOperator(actor, "receiving:packing_manage", "warehouse_receiver");
     const normalized = {
       receivingBatchId: input.receivingBatchId,
       expectedVersion: this.validateExpectedVersion(input.expectedVersion),
@@ -1749,6 +1759,7 @@ export class ReceivingService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      actor = await this.authorizeBoardWrite(client,actor,"receiving:packing_manage");
       const outcome = await this.idempotency.execute(client, {
         scope,
         actorKey: actor.actorId,
@@ -1757,6 +1768,9 @@ export class ReceivingService {
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
         const snapshot = await this.styleOperationSnapshot(client, normalized.receivingBatchId);
+        if (snapshot.packingRevisionId !== null && !actor.actorRoles.includes("root_superuser")) {
+          fail("已录入的装箱数量只有Root可以修改",403,"FORBIDDEN");
+        }
         if (snapshot.version !== normalized.expectedVersion
             || snapshot.packingRevisionId !== normalized.expectedPackingRevisionId) {
           fail("订单或装箱数量已更新，请刷新后重试", 409, "CONFLICT");
@@ -1842,14 +1856,7 @@ export class ReceivingService {
     idempotencyKey: string,
   ): Promise<Result<DifferenceResolutionResult>> {
     const differenceType = normalizeDifferenceType(input.differenceType);
-    const capability = differenceType === "receiving"
-      ? "receiving:resolve_difference" as const
-      : "receiving:packing_manage" as const;
-    this.assertBoardOperator(
-      actor,
-      capability,
-      differenceType === "receiving" ? "warehouse_receiver" : "tail_supervisor",
-    );
+    this.assertBoardOperator(actor,"receiving:resolve_difference","order_merchandiser");
     const normalized = {
       receivingBatchId: input.receivingBatchId,
       expectedVersion: this.validateExpectedVersion(input.expectedVersion),
@@ -1864,6 +1871,7 @@ export class ReceivingService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      actor = await this.authorizeBoardWrite(client,actor,"receiving:resolve_difference");
       const outcome = await this.idempotency.execute(client, {
         scope,
         actorKey: actor.actorId,

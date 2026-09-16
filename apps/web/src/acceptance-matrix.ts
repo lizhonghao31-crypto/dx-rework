@@ -607,7 +607,14 @@ export const ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = EXIS
       ...(embroidery ? ["cap:supplier_profile:read:allow", "module:suppliers:allow"] : []),
     ]) },
   };
+ }).map(entry => {
+  const allowed = {"receiving:resolve_difference": entry.expectedRole === "order_merchandiser", "receiving:packing_manage": entry.expectedRole === "warehouse_receiver"};
+  const required = entry.expectedRoot ? [] : Object.entries(allowed).filter(([,value])=>value).map(([cap])=>cap);
+  const forbidden = entry.expectedRoot ? [] : Object.entries(allowed).filter(([,value])=>!value).map(([cap])=>cap);
+  return {...entry,requiredCapabilities:[...(entry.requiredCapabilities??[]),...required],forbiddenCapabilities:[...(entry.forbiddenCapabilities??[]),...forbidden],
+    ruleRefs:{...entry.ruleRefs,...approvedKeys("PERM-RECEIVING-DIFFERENCE-20260916",[...required.map(cap=>`cap:${cap}:allow`),...forbidden.map(cap=>`cap:${cap}:deny`)])}};
 });
+
 
 const ruleFor = (expectation: AcceptanceRoleExpectation, key: string): AcceptanceRuleRef =>
   expectation.ruleRefs?.[key] ?? UNMAPPED_BUSINESS_RULE;
