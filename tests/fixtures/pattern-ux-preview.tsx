@@ -3,6 +3,8 @@ import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { PatternRoomOrderDetailPage } from "../../apps/web/src/pattern-room-orders-page.js";
 import { PatternOrderForm } from "../../apps/web/src/pattern-order-form.js";
+import { Header, NavigationGroupMenu } from "../../apps/web/src/components.js";
+import { financeNavigationEntries } from "../../apps/web/src/finance-access.js";
 import type { PatternOrderDetail } from "@dx-rework/contracts/pattern-orders";
 import "../../packages/ui/src/tokens.css";
 import "../../packages/ui/src/components.css";
@@ -66,14 +68,15 @@ function Preview() {
   };
   return <>
     <nav aria-label="隔离验收控制" style={{ padding: 8, display: "flex", flexWrap: "wrap", gap: 8 }}>
-      <label>页面<select value={view} onChange={event => { setView(event.target.value); refresh(); }}><option value="detail">订单详情</option><option value="create">创建订单</option><option value="edit">更新资料</option></select></label>
+      <label>页面<select value={view} onChange={event => { setView(event.target.value); refresh(); }}><option value="detail">订单详情</option><option value="create">创建订单</option><option value="edit">更新资料</option><option value="finance">财务二级导航</option></select></label>
       <label>类型<select onChange={event => { kind = event.target.value as typeof kind; refresh(); }}><option value="pattern">打板</option><option value="misc">杂事</option></select></label>
       <label>状态<select onChange={event => { status = event.target.value as typeof status; refresh(); }}>{["pending_assignment", "in_progress", "pending_confirmation", "completed", "cancelled"].map(value => <option key={value}>{value}</option>)}</select></label>
       <label>报价响应<select onChange={event => { hourly = event.target.value as typeof hourly; refresh(); }}>{["configured", "unconfigured", "failed", "delayed"].map(value => <option key={value}>{value}</option>)}</select></label>
       <button onClick={syntheticUpload}>选择一份合成 PDF</button>
     </nav>
     <main style={{ padding: "16px", maxWidth: "1080px", margin: "auto" }}>
-      {view === "detail" ? <PatternRoomOrderDetailPage key={`${kind}:${status}:${revision}`} orderId={id(1)} /> : <div className="pattern-orders"><PatternOrderForm key={`${kind}:${view}:${revision}`} kind={kind} {...(view === "edit" ? { order: order() } : {})} onCancel={() => setView("detail")} onSaved={() => setSaved(true)} /></div>}
+      {view === "finance" ? <div style={{ background: "#111c25", padding: 16, maxWidth: 300 }}><NavigationGroupMenu active="工资管理" basePath="/rework" group={{ name: "财务中心", description: "财务资料与工资", entries: financeNavigationEntries({ id: id(7), displayName: "合成工资会计", businessRoles: ["wage_month_close_accountant"], capabilities: ["wage:view"] }) }} /></div>
+        : view === "detail" ? <PatternRoomOrderDetailPage key={`${kind}:${status}:${revision}`} orderId={id(1)} /> : <div className="pattern-orders"><Header title={view === "create" ? "创建订单" : "更新资料"} badge="订单打板" backHref="/ui/pattern-room/orders" /><PatternOrderForm key={`${kind}:${view}:${revision}`} kind={kind} {...(view === "edit" ? { order: order() } : {})} onCancel={() => setView("detail")} onSaved={() => setSaved(true)} /></div>}
       {saved && <output aria-label="提交结果">保存成功；日期：{String(lastBody.requiredDate)}；附件：{(lastBody.attachmentIds as string[]).length}</output>}
     </main>
   </>;

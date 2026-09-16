@@ -19,6 +19,8 @@ import { PatternOrderForm } from "./pattern-order-form.js";
 import { PatternOrderExceptions, type PatternExceptionAction } from "./pattern-order-exceptions.js";
 import { patternRequest, patternTime, patternUrls } from "./pattern-order-client.js";
 import { patternListPath, patternReturnPath, readPatternListQuery } from "./pattern-order-query.js";
+import { canLeaveInternalPage, navigateInternalPage } from "./internal-navigation.js";
+import { useInternalReturnScroll } from "./use-internal-return-scroll.js";
 import "./pattern-room.css";
 
 const { pageUrl } = patternUrls;
@@ -31,19 +33,20 @@ export function PatternRoomOrdersPage() {
   const search = useDebouncedValue(q.trim(), 250);
   const listPath = patternListPath({ q: search, kind, status, creatorId, workerId, page });
   const detailHref = (id: string) => `${pageUrl(`ui/pattern-room/orders/${id}`)}?${new URLSearchParams({ returnTo: listPath })}`;
-  useEffect(() => { window.history.replaceState(null, "", pageUrl(listPath)); }, [listPath]);
+  useEffect(() => { window.history.replaceState(window.history.state, "", pageUrl(listPath)); }, [listPath]);
+  useInternalReturnScroll(!loading && data !== null);
   useEffect(() => {
     const abort = new AbortController(); setLoading(true); setError("");
     const params = new URLSearchParams({ page: String(page), q: search });
     if (status) params.set("status", status); if (creatorId) params.set("creatorId", creatorId); if (workerId) params.set("workerId", workerId);
     if (kind) params.set("kind", kind);
-    void patternRequest(`orders?${params}`, PatternOrderListSchema, { signal: abort.signal }).then(setData).catch(e => { if (!abort.signal.aborted) { setError(e.message); setData(null); } }).finally(() => { if (!abort.signal.aborted) setLoading(false); });
+    void patternRequest(`orders?${params}`, PatternOrderListSchema, { signal: abort.signal }).then(result => { if (!abort.signal.aborted) setData(result); }).catch(e => { if (!abort.signal.aborted) { setError(e.message); setData(null); } }).finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
   }, [search, kind, status, creatorId, workerId, page, refresh]);
   useEffect(() => {
     if (!data?.canFilterPeople) { setPeople(null); return; }
     const abort = new AbortController();
-    void patternRequest("people-filters", PatternPeopleFiltersSchema, { signal: abort.signal }).then(setPeople).catch(e => { if (!abort.signal.aborted) setError(e.message); });
+    void patternRequest("people-filters", PatternPeopleFiltersSchema, { signal: abort.signal }).then(result => { if (!abort.signal.aborted) setPeople(result); }).catch(e => { if (!abort.signal.aborted) setError(e.message); });
     return () => abort.abort();
   }, [data?.canFilterPeople, refresh]);
   return <div className="pattern-orders rework-query-content"><Header title="订单打板/杂事看板" badge="订单打板" badgePlacement="subtitle" />
@@ -82,13 +85,13 @@ export function PatternRoomOrderDetailPage({ orderId }: { orderId: string }) {
   const attempt = useRef<{ body: string; action: string; key: string } | null>(null);
   useEffect(() => {
     const abort = new AbortController(); setError("");
-    void patternRequest(`orders/${orderId}`, PatternOrderDetailSchema, { signal: abort.signal }).then(data => { setOrder(data); setException(null); }).catch(e => { if (!abort.signal.aborted) { setOrder(null); setError(e.message); } });
+    void patternRequest(`orders/${orderId}`, PatternOrderDetailSchema, { signal: abort.signal }).then(data => { if (!abort.signal.aborted) { setOrder(data); setException(null); } }).catch(e => { if (!abort.signal.aborted) { setOrder(null); setError(e.message); } });
     return () => abort.abort();
   }, [orderId, refresh]);
   useEffect(() => {
     if (!order?.actions.assign || staleRound) return;
     const abort = new AbortController();
-    void patternRequest(`workers?q=${encodeURIComponent(search)}`, PatternWorkerOptionsSchema, { signal: abort.signal }).then(setWorkers).catch(e => { if (!abort.signal.aborted) setError(e.message); });
+    void patternRequest(`workers?q=${encodeURIComponent(search)}`, PatternWorkerOptionsSchema, { signal: abort.signal }).then(result => { if (!abort.signal.aborted) setWorkers(result); }).catch(e => { if (!abort.signal.aborted) setError(e.message); });
     return () => abort.abort();
   }, [order?.actions.assign, staleRound, search]);
   const showUpdatedOrder = (updated: PatternOrderDetail) => {
@@ -130,9 +133,9 @@ export function PatternRoomOrderDetailPage({ orderId }: { orderId: string }) {
     const segment=new URLSearchParams(window.location.search).get("segment");
     if(segment&&order.rounds.some(round=>round.segments.some(item=>item.segmentId===segment))) document.getElementById(`segment-${segment}`)?.scrollIntoView({block:"center"});
   },[order]);
-  return <div className="pattern-orders"><Header title={order ? order.kind === "misc" ? order.taskName ?? "杂事" : order.styleNo : "板房订单"} badge={order?.orderNo ?? "订单打板"} badgePlacement="subtitle" />
-    <div className="pattern-actions pattern-detail-toolbar"><a href={pageUrl(patternReturnPath(window.location.search))}>返回列表</a><Button disabled={busy || editing || exception !== null} onClick={() => setRefresh(value => value + 1)}>刷新订单</Button>{order?.actions.delete && !staleRound && <PatternOrderDelete orderId={order.orderId} version={order.version} label={order.orderNo} disabled={busy || editing || exception !== null} onBusy={setBusy} onDeleted={() => window.location.assign(pageUrl(patternReturnPath(window.location.search)))} />}</div>
-    {error ? <Surface><p role="alert">{error}</p><Button disabled={busy} onClick={() => { setEditing(false); setRefresh(value => value + 1); }}>重新读取订单</Button></Surface> : null}
+  return <div className="pattern-orders"><Header title={order ? order.kind === "misc" ? order.taskName ?? "杂事" : order.styleNo : "板房订单"} badge={order?.orderNo ?? "订单打板"} badgePlacement="subtitle" backHref={patternReturnPath(window.location.search)} />
+    <div className="pattern-actions pattern-detail-toolbar"><Button disabled={busy || editing || exception !== null} onClick={() => setRefresh(value => value + 1)}>刷新订单</Button>{order?.actions.delete && !staleRound && <PatternOrderDelete orderId={order.orderId} version={order.version} label={order.orderNo} disabled={busy || editing || exception !== null} onBusy={setBusy} onDeleted={() => { void navigateInternalPage(pageUrl(patternReturnPath(window.location.search))); }} />}</div>
+    {error ? <Surface><p role="alert">{error}</p><Button disabled={busy} onClick={async () => { if (await canLeaveInternalPage()) { setEditing(false); setRefresh(value => value + 1); } }}>重新读取订单</Button></Surface> : null}
     {!order && !error ? <p role="status">正在读取订单…</p> : null}
     {order ? <>
       {staleRound ? <Surface><p>这是历史轮次链接，仅供查看。</p><a href={pageUrl(`ui/pattern-room/orders/${orderId}`)}>查看当前订单</a></Surface> : null}

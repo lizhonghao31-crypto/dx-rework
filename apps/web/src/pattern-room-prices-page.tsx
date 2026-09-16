@@ -7,6 +7,7 @@ import { PatternPriceChangeSchema, PatternPriceHistorySchema, PatternPriceItemSc
 import { Header } from "./components.js";
 import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
+import { useInternalReturnScroll } from "./use-internal-return-scroll.js";
 import "./system-dialog.css";
 import "./pattern-room.css";
 
@@ -31,6 +32,7 @@ export function PatternRoomPricesPage() {
   const [busy, setBusy] = useState(false), [formError, setFormError] = useState("");
   const [history, setHistory] = useState<{ item: PatternPriceItem; rows: z.infer<typeof PatternPriceHistorySchema> } | null>(null);
   const attempt = useRef<{ body: string; priceId: string; key: string } | null>(null);
+  useInternalReturnScroll(data !== null);
   const refresh = async () => { setData(await readPrice("pattern-room/prices", PatternPricesSchema)); setError(""); };
   useEffect(() => { const abort = new AbortController(); void readPrice("pattern-room/prices", PatternPricesSchema, { signal: abort.signal }).then(setData).catch(e => { if (!abort.signal.aborted) setError(e instanceof Error ? e.message : "价格读取失败"); }); return () => abort.abort(); }, []);
   const edit = (item: PatternPriceItem) => { setEditing(item); setAmount(item.amount ?? ""); setEnabled(item.enabled); setReason(""); setFormError(""); attempt.current = null; };

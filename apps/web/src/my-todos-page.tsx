@@ -16,6 +16,7 @@ import { todoModuleIdsForUser } from "./platform-access.js";
 import { todoPageWindow } from "./todo-pagination.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import { readTodoQuery, todoQueryPath, withTodoReturn } from "./todo-query-state.js";
+import { useInternalReturnScroll } from "./use-internal-return-scroll.js";
 import "./my-todos.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -195,6 +196,7 @@ export function MyTodosPage() {
   const [accessibleTodoModules, setAccessibleTodoModules] = useState<ReadonlySet<TodoModule> | null>(null);
   const loadVersion = useRef(0);
   const activeQuery = useDebouncedValue(searchQuery.trim(), 250);
+  useInternalReturnScroll(state.kind === "ready" && !busy);
 
   const load = async (
     module: TodoModule | undefined,

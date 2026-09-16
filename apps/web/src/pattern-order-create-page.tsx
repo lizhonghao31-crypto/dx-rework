@@ -5,12 +5,16 @@ import { Header } from "./components.js";
 import { verifySession } from "./auth.js";
 import { PatternOrderForm } from "./pattern-order-form.js";
 import { patternUrls } from "./pattern-order-client.js";
+import { patternReturnPath } from "./pattern-order-query.js";
+import { canLeaveInternalPage, navigateInternalPage } from "./internal-navigation.js";
 import "./pattern-room.css";
 
 export function PatternOrderCreatePage() {
   const [allowed, setAllowed] = useState<{ pattern: boolean; misc: boolean } | null>(null);
   const [kind, setKind] = useState<"pattern" | "misc">(new URLSearchParams(window.location.search).get("kind") === "misc" ? "misc" : "pattern");
   const [error, setError] = useState("");
+  const returnPath = patternReturnPath(window.location.search);
+  const changeKind = async (next: "pattern" | "misc") => { if (next !== kind && await canLeaveInternalPage()) setKind(next); };
   useEffect(() => {
     let live = true;
     void verifySession().then(session => {
@@ -25,10 +29,12 @@ export function PatternOrderCreatePage() {
     }).catch(() => { if (live) setError("读取创建权限失败，请刷新重试"); });
     return () => { live = false; };
   }, []);
-  return <div className="pattern-orders"><Header title="创建订单" badge="订单打板" badgePlacement="subtitle" />
+  return <div className="pattern-orders"><Header title="创建订单" badge="订单打板" badgePlacement="subtitle" backHref={returnPath} />
     {error ? <Surface><p role="alert">{error}</p></Surface> : !allowed ? <p role="status">正在读取…</p> : <>
-      <div className="pattern-kind" role="group" aria-label="创建订单类型">{allowed.pattern && <Button aria-pressed={kind === "pattern"} variant={kind === "pattern" ? "primary" : "secondary"} onClick={() => setKind("pattern")}>打板</Button>}{allowed.misc && <Button aria-pressed={kind === "misc"} variant={kind === "misc" ? "primary" : "secondary"} onClick={() => setKind("misc")}>杂事</Button>}</div>
-      <PatternOrderForm key={kind} kind={kind} onCancel={() => window.location.assign(patternUrls.pageUrl("ui/pattern-room/orders"))} onSaved={order => window.location.assign(patternUrls.pageUrl(`ui/pattern-room/orders/${order.orderId}`))} />
+      <div className="pattern-kind" role="group" aria-label="创建订单类型">{allowed.pattern && <Button aria-pressed={kind === "pattern"} variant={kind === "pattern" ? "primary" : "secondary"} onClick={() => void changeKind("pattern")}>打板</Button>}{allowed.misc && <Button aria-pressed={kind === "misc"} variant={kind === "misc" ? "primary" : "secondary"} onClick={() => void changeKind("misc")}>杂事</Button>}</div>
+      <PatternOrderForm key={kind} kind={kind} onCancel={() => { void navigateInternalPage(patternUrls.pageUrl(returnPath)); }} onSaved={order => {
+        void navigateInternalPage(`${patternUrls.pageUrl(`ui/pattern-room/orders/${order.orderId}`)}?${new URLSearchParams({ returnTo: returnPath })}`, { replace: true });
+      }} />
     </>}
   </div>;
 }
