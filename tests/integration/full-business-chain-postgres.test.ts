@@ -1,4 +1,5 @@
 import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
+import { exerciseReceivingDifferenceAuthority } from "./helpers/receiving-difference-authority-scenario.js";
 import { WorkerAwareAccessMasterDataService } from "../../apps/api/src/access/worker-aware-access-service.js";
 import { exerciseWagePagination } from "./helpers/wage-pagination-scenario.js";
 import { exerciseFinancePatternQueries, exerciseMixedFinancePatternScope } from "./helpers/finance-pattern-query-scenario.js";
@@ -152,6 +153,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   const businessDetail = new ReworkBusinessDetailService(database);
 
   const ids = {
+    receivingWarehouse: randomUUID(),
+    secondOrderMerchant: randomUUID(),
     ownerOne: randomUUID(),
     ownerTwo: randomUUID(),
     qc: randomUUID(),
@@ -292,6 +295,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     // reviewed bootstrap path used by integration fixtures; all later actions
     // use normal production authorization functions from the current schema.
     const users = [
+      [ids.receivingWarehouse, "差异权限仓管", "warehouse_receiver"],
+      [ids.secondOrderMerchant, "第二订单跟单", "order_merchandiser"],
       [ids.ownerOne, "老板一", "owner_group"],
       [ids.ownerTwo, "老板二", "owner_group"],
       [ids.qc, "品控", "quality_control"],
@@ -389,6 +394,11 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     await adminPool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     if (process.env.PATTERN_ROOM_EVIDENCE === "1") process.stdout.write(`PATTERN_ROOM_CLEANUP ${JSON.stringify({schema,dropped:true})}\n`);
     await adminPool.end();
+  });
+
+  it("separates all merchandisers' discrepancy handling from warehouse facts and Root-only corrections", async () => {
+    await exerciseReceivingDifferenceAuthority({database,rootId:ids.patternRoot,warehouseId:ids.receivingWarehouse,
+      merchants:[ids.merchandiser,ids.secondOrderMerchant],deniedIds:[ids.tail,ids.financeRead,ids.embroideryMerchandiser,ids.worker]});
   });
 
   it("aligns persisted finance business reads without copying writes or exports", async () => {

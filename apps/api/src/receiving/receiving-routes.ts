@@ -277,7 +277,7 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
 
   const boardOperator = async (
     request: FastifyRequest,
-    role: "warehouse_receiver" | "tail_supervisor" | null,
+    role: "warehouse_receiver" | "tail_supervisor" | "order_merchandiser" | null,
     capability: "receiving:resolve_difference" | "receiving:packing_manage" | "receiving:export",
   ) => {
     const user = await dependencies.authenticate(token(request));
@@ -400,7 +400,7 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
     async (request, reply) => {
       const input = packingBody(request.body);
       const result = await dependencies.service.recordPacking(
-        await boardOperator(request, "tail_supervisor", "receiving:packing_manage"),
+        await boardOperator(request, "warehouse_receiver", "receiving:packing_manage"),
         { receivingBatchId: batchId(request.params.receivingBatchId), ...input },
         idempotencyKey(request),
       );
@@ -413,12 +413,8 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
     "/receiving/batches/:receivingBatchId/difference-resolutions",
     async (request, reply) => {
       const input = resolutionBody(request.body);
-      const role = input.differenceType === "receiving" ? "warehouse_receiver" : "tail_supervisor";
-      const capability = input.differenceType === "receiving"
-        ? "receiving:resolve_difference" as const
-        : "receiving:packing_manage" as const;
       const result = await dependencies.service.resolveDifference(
-        await boardOperator(request, role, capability),
+        await boardOperator(request, "order_merchandiser", "receiving:resolve_difference"),
         { receivingBatchId: batchId(request.params.receivingBatchId), ...input },
         idempotencyKey(request),
       );
