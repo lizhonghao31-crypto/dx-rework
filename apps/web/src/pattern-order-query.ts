@@ -20,10 +20,15 @@ export function patternListPath(query: PatternListQuery): string {
   return `/ui/pattern-room/orders${params.size ? `?${params}` : ""}`;
 }
 export function patternReturnPath(search: string): string {
-  const todo = todoReturnPath(search); if (todo) return todo;
   const target = new URLSearchParams(search).get("returnTo");
+  return validPatternReturnPath(target) ?? "/ui/pattern-room/orders";
+}
+export function validPatternReturnPath(target: string | null): string | null {
+  if (!target || target.includes("\\") || target.includes("#")) return null;
+  const todo = todoReturnPath(`?${new URLSearchParams({ returnTo: target })}`); if (todo) return todo;
   const wage=wageReturnPath(target);if(wage)return wage;
-  if (!target || target.includes("\\") || !["/ui/pattern-room/orders", "/ui/pattern-room/create"].includes(target.split("?")[0]!)) return "/ui/pattern-room/orders";
+  if (["/ui/pattern-room", "/ui/pattern-room/prices"].includes(target)) return target;
+  if (!["/ui/pattern-room/orders", "/ui/pattern-room/create"].includes(target.split("?")[0]!)) return null;
   return patternListPath(readPatternListQuery(target.includes("?") ? target.slice(target.indexOf("?")) : ""));
 }
 export function patternEstimate(price: string | null, quantity: string): string | null {

@@ -1,7 +1,20 @@
+import { preparePatternNavigation } from "./pattern-navigation.js";
+
 type LeaveGuard = () => Promise<boolean>;
 const guards = new Set<LeaveGuard>();
 let asking = false;
 const POSITION = "dxInternalNavigationPosition";
+type NavigateOptions = { replace?: boolean };
+let activeNavigate: ((href: string, options?: NavigateOptions) => Promise<boolean>) | undefined;
+
+export async function navigateInternalPage(href: string, options?: NavigateOptions): Promise<boolean> {
+  if (activeNavigate) return activeNavigate(href, options);
+  if (!await canLeaveInternalPage()) return false;
+  const target = new URL(href, window.location.href);
+  if (target.origin !== window.location.origin) return false;
+  if (options?.replace) window.location.replace(target.href); else window.location.assign(target.href);
+  return true;
+}
 
 export function registerInternalNavigationGuard(guard: LeaveGuard): () => void {
   guards.add(guard);
@@ -25,6 +38,7 @@ export function navigationRollbackDelta(current: unknown, target: unknown): numb
 
 /** Shared by App and the offline navigation regression fixture. */
 export function installInternalNavigation(basePath: string, sync: () => void): () => void {
+  const appPath = (pathname: string) => basePath && (pathname === basePath || pathname.startsWith(`${basePath}/`)) ? pathname.slice(basePath.length) || "/" : pathname;
   let current = { href: window.location.href, state: window.history.state };
   let position = Number.isSafeInteger(current.state?.[POSITION]) ? Number(current.state[POSITION]) : 0;
   window.history.replaceState({ ...current.state, [POSITION]: position }, "");
@@ -55,6 +69,36 @@ export function installInternalNavigation(basePath: string, sync: () => void): (
     if (attempt !== generation) return;
     remember();
   };
+  const go = async (href: string, options: NavigateOptions = {}) => {
+    const url = new URL(href, window.location.href);
+    if (url.origin !== window.location.origin) return false;
+    const relativePath = appPath(url.pathname);
+    if (!(relativePath === "/" || relativePath.startsWith("/ui/") || relativePath.startsWith("/system/") || relativePath.startsWith("/auth/"))) return false;
+    const attempt = generation;
+    if (guards.size && !await canLeaveInternalPage()) return false;
+    if (attempt !== generation) return false;
+    ++generation;
+    const sourcePath = appPath(window.location.pathname);
+    const pattern = preparePatternNavigation(`${sourcePath}${window.location.search}`, `${relativePath}${url.search}${url.hash}`, window.history.state?.dxPatternOrigin, window.scrollY);
+    const destination = new URL(`${basePath}${pattern.target}`, window.location.origin);
+    const sourceScroll = { path: `${window.location.pathname}${window.location.search}`, top: window.scrollY };
+    window.history.replaceState({ ...window.history.state, dxInternalRestoreScroll: sourceScroll }, "");
+    if (!options.replace) position += 1;
+    const returnTo = /^\/ui\/(tasks|my-tasks|responsibility)\/[^/]+$/.test(relativePath)
+      ? { dxReworkReturnTo: /^\/ui\/(tasks|my-tasks|responsibility)\/[^/]+$/.test(sourcePath)
+          ? window.history.state?.dxReworkReturnTo : `${sourcePath}${window.location.search}${window.location.hash}` } : {};
+    const todoQueryUser = window.history.state?.dxTodoQueryUser;
+    const state = { [POSITION]: position, ...returnTo,
+      ...(pattern.origin ? { dxPatternOrigin: pattern.origin } : {}),
+      ...(pattern.restoreTop !== undefined ? { dxInternalRestoreScroll: { path: `${destination.pathname}${destination.search}`, top: pattern.restoreTop } } : {}),
+      ...(typeof todoQueryUser === "string" ? { dxTodoQueryUser: todoQueryUser } : {}) };
+    window.history[options.replace ? "replaceState" : "pushState"](state, "", `${destination.pathname}${destination.search}${destination.hash}`);
+    remember();
+    if (url.hash) window.requestAnimationFrame(() => document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView({ block: "start" }));
+    else window.scrollTo({ top: 0, left: 0 });
+    return true;
+  };
+  activeNavigate = go;
   const navigate = async (event: MouseEvent) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const target = event.target;
@@ -63,23 +107,12 @@ export function installInternalNavigation(basePath: string, sync: () => void): (
     if (!(anchor instanceof HTMLAnchorElement) || anchor.target || anchor.hasAttribute("download")) return;
     const url = new URL(anchor.href, window.location.href);
     if (url.origin !== window.location.origin) return;
-    const relativePath = basePath !== "" && url.pathname.startsWith(basePath) ? url.pathname.slice(basePath.length) || "/" : url.pathname;
+    const relativePath = appPath(url.pathname);
     if (!(relativePath === "/" || relativePath.startsWith("/ui/") || relativePath.startsWith("/system/") || relativePath.startsWith("/auth/"))) return;
     event.preventDefault();
-    if (guards.size && !await canLeaveInternalPage()) return;
-    ++generation;
-    position += 1;
-    const sourcePath = basePath && window.location.pathname.startsWith(basePath) ? window.location.pathname.slice(basePath.length) : window.location.pathname;
-    const returnTo = /^\/ui\/(tasks|my-tasks|responsibility)\/[^/]+$/.test(relativePath)
-      ? { dxReworkReturnTo: /^\/ui\/(tasks|my-tasks|responsibility)\/[^/]+$/.test(sourcePath)
-          ? window.history.state?.dxReworkReturnTo : `${sourcePath}${window.location.search}${window.location.hash}` } : {};
-    const todoQueryUser = window.history.state?.dxTodoQueryUser;
-    window.history.pushState({ [POSITION]: position, ...returnTo, ...(typeof todoQueryUser === "string" ? { dxTodoQueryUser: todoQueryUser } : {}) }, "", `${url.pathname}${url.search}${url.hash}`);
-    remember();
-    if (url.hash) window.requestAnimationFrame(() => document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView({ block: "start" }));
-    else window.scrollTo({ top: 0, left: 0 });
+    await go(url.href);
   };
   window.addEventListener("popstate", pop);
   document.addEventListener("click", navigate);
-  return () => { ++generation; window.removeEventListener("popstate", pop); document.removeEventListener("click", navigate); };
+  return () => { ++generation; if (activeNavigate === go) activeNavigate = undefined; window.removeEventListener("popstate", pop); document.removeEventListener("click", navigate); };
 }

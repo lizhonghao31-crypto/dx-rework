@@ -1,5 +1,5 @@
 import { canAccessPatternRoom, canAccessPatternRoomPrices, canAccessPatternRoomOrders, canCreatePatternRoomOrders } from "./pattern-room-access.js";
-import { canAccessFinance } from "./finance-access.js";
+import { financeNavigationEntries } from "./finance-access.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { TodoCountIndicatorSchema } from "@dx-rework/contracts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -131,6 +131,15 @@ function PrimaryNavigation({
   );
 }
 
+export function NavigationGroupMenu({ group, active, basePath }: { group: NavigationGroup; active: string; basePath: string }) {
+  if (!group.entries.length) return null;
+  const groupIsActive = group.entries.some(entry => (entry.activeKey ?? entry.name) === active);
+  return <details className={"desktop-navigation__group" + (groupIsActive ? " is-active" : "")} open={groupIsActive || undefined}>
+    <summary><span><strong className="dx-navigation-group-label"><NavigationIcon group={group.name} size="primary" />{group.name}</strong><small>{group.description}</small></span><b aria-hidden="true">⌄</b></summary>
+    <PrimaryNavigation navigation={group.entries} active={active} basePath={basePath} />
+  </details>;
+}
+
 function DesktopNavigation({
   globalNavigation,
   groups,
@@ -155,25 +164,7 @@ function DesktopNavigation({
           pendingTodoCount={pendingTodoCount}
         />
       </div>
-      {groups.filter((group) => group.entries.length > 0).map((group) => {
-        const groupIsActive = group.entries.some((entry) => (entry.activeKey ?? entry.name) === active);
-        return (
-          <details
-            className={"desktop-navigation__group" + (groupIsActive ? " is-active" : "")}
-            open={groupIsActive || undefined}
-            key={group.name}
-          >
-            <summary>
-              <span>
-                <strong className="dx-navigation-group-label"><NavigationIcon group={group.name} size="primary" />{group.name}</strong>
-                <small>{group.description}</small>
-              </span>
-              <b aria-hidden="true">⌄</b>
-            </summary>
-            <PrimaryNavigation navigation={group.entries} active={active} basePath={basePath} />
-          </details>
-        );
-      })}
+      {groups.map(group => <NavigationGroupMenu key={group.name} group={group} active={active} basePath={basePath} />)}
     </nav>
   );
 }
@@ -224,11 +215,13 @@ function MobileNavigationLink({
 
 function MobilePrimaryNavigation({
   navigation,
+  financeGroup,
   active,
   basePath,
   pendingTodoCount,
 }: {
   navigation: readonly NavigationEntry[];
+  financeGroup: NavigationGroup;
   active: string;
   basePath: string;
   pendingTodoCount: number;
@@ -239,7 +232,7 @@ function MobilePrimaryNavigation({
     ...mobileCandidates.slice(4),
     ...navigation.filter((entry) => !isMobilePrimaryNavigation(entry)),
   ];
-  const moreIsActive = moreNavigation.some((entry) => entry.name === active);
+  const moreIsActive = moreNavigation.some((entry) => entry.name === active) || financeGroup.entries.some(entry => entry.name === active);
 
   return (
     <nav className="mobile-primary-navigation" aria-label="移动端主导航">
@@ -253,7 +246,7 @@ function MobilePrimaryNavigation({
           />
         </div>
       ))}
-      {moreNavigation.length ? (
+      {moreNavigation.length || financeGroup.entries.length ? (
         <details className="mobile-primary-navigation__more">
           <summary aria-label="更多导航">
             <span className={"mobile-primary-navigation__more-trigger" + (moreIsActive ? " is-active" : "")}>
@@ -263,6 +256,7 @@ function MobilePrimaryNavigation({
           </summary>
           <div className="mobile-primary-navigation__drawer">
             <PrimaryNavigation navigation={moreNavigation} active={active} basePath={basePath} />
+            <NavigationGroupMenu group={financeGroup} active={active} basePath={basePath} />
           </div>
         </details>
       ) : null}
@@ -391,7 +385,8 @@ export function Shell({
   const reportAccess = isRoot || isOwner || hasCapability("report:view");
   const reworkBoardAccess = reportAccess || hasCapability("dashboard:site:read")
     || hasCapability("rework:related_orders:view") || hasCapability("rework:basic:view") || hasCapability("rework:finance_orders:read");
-  const wageAccess = currentUser !== null && canAccessFinance(currentUser);
+  const financeNavigation = financeNavigationEntries(currentUser);
+  const financeGroup: NavigationGroup = { name: "财务中心", description: "财务资料与工资", entries: financeNavigation };
   const systemManagementAccess = isRoot
     || auditAccess
     || technicalAdminAccess
@@ -430,11 +425,6 @@ export function Shell({
     name: "财务报表",
     description: "查询返工、责任、工资与扣款报表",
     href: "/ui/reports",
-  });
-  if (wageAccess) globalNavigation.push({
-    name: "财务中心",
-    description: "工资查询、导出与发放标记",
-    href: "/ui/finance",
   });
 
   // Desktop-only sourcing navigation keeps the full create / pending / history workspace.
@@ -536,22 +526,19 @@ export function Shell({
   ];
   const desktopNavigationGroups: NavigationGroup[] = [
     { name: "订单打板", description: "打板与杂事", entries: patternRoomNavigation },
-    { name: "样衣管理", description: "样衣资料与实物保管", entries: sampleNavigation },
+    { name: "外发定价&选厂", description: "询价、审批与执行", entries: sourcingNavigation },
     {
       name: "订单返工",
       description: "订单返工业务",
       entries: reworkNavigation,
     },
     {
-      name: "外发定价&选厂",
-      description: "询价、审批与执行",
-      entries: sourcingNavigation,
-    },
-    {
       name: "供应商中心",
       description: "供应商资料与维护",
       entries: supplierNavigation,
     },
+    { name: "样衣管理", description: "样衣资料与实物保管", entries: sampleNavigation },
+    financeGroup,
     {
       name: "平台管理",
       description: "人员、权限与系统配置",
@@ -602,6 +589,7 @@ export function Shell({
       {mobileNavigation === "primary" ? (
         <MobilePrimaryNavigation
           navigation={navigation}
+          financeGroup={financeGroup}
           active={mobileActive}
           basePath={basePath}
           pendingTodoCount={pendingTodoCount}

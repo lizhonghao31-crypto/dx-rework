@@ -11,6 +11,7 @@ import { patternRequest, PatternRequestError, uploadPatternOriginal } from "./pa
 import { patternEstimate } from "./pattern-order-query.js";
 import { PatternMaterialInput, PATTERN_MATERIAL_LIMIT } from "./pattern-material-input.js";
 import { usePatternQuote } from "./use-pattern-quote.js";
+import { usePatternDraftGuard } from "./use-pattern-draft-guard.js";
 
 export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSaved, onCancel }: { order?: PatternOrderDetail; kind?: "pattern" | "misc"; onSaved(order: PatternOrderDetail): void; onCancel(): void }) {
   const misc = kind === "misc";
@@ -22,6 +23,7 @@ export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSav
   const price = usePatternQuote(order ? null : misc ? "hourly-quote" : categoryId ? `category-options/${categoryId}/quote` : null, refreshPrice);
   const quote = price.quote;
   const attempt = useRef<{ body: string; key: string } | null>(null);
+  const draft = usePatternDraftGuard(JSON.stringify([values, files.map(file => file.attachmentId), categoryId, quantity]), busy || uploading);
   useEffect(() => {
     if (order || misc) return;
     const abort = new AbortController();
@@ -52,7 +54,9 @@ export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSav
     if (attempt.current?.body !== body) attempt.current = { body, key: createClientRequestId() };
     setBusy(true); setError("");
     try {
-      onSaved(await patternRequest(order ? `orders/${order.orderId}/${misc ? "misc-materials" : "materials"}` : misc ? "misc-orders" : "orders", PatternOrderDetailSchema, { method: "POST", body, headers: { "idempotency-key": attempt.current.key } }));
+      const saved = await patternRequest(order ? `orders/${order.orderId}/${misc ? "misc-materials" : "materials"}` : misc ? "misc-orders" : "orders", PatternOrderDetailSchema, { method: "POST", body, headers: { "idempotency-key": attempt.current.key } });
+      draft.markSaved();
+      onSaved(saved);
     } catch (e) {
       setError(e instanceof Error ? e.message : "提交失败");
       if (e instanceof PatternRequestError && e.code === "PRICE_CHANGED") setRefreshPrice(value => value + 1);
@@ -81,6 +85,6 @@ export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSav
     {order ? <InsetField label="变更原因 *" value={values.reason} required maxLength={500} onChange={e => setValues({ ...values, reason: e.target.value })} disabled={disabled} /> : null}
     {error ? <p role="alert">{error}</p> : null}
     {price.status === "error" && <div><p role="alert">{price.message}</p>{!misc && <Button type="button" disabled={disabled} onClick={() => setRefreshPrice(value => value + 1)}>重读价格</Button>}</div>}
-    <div className="rework-v2-action-area"><div className="rework-v2-actions"><Button type="button" disabled={disabled} onClick={onCancel}>取消</Button><Button type="submit" variant="primary" disabled={disabled || (!order && (!quote || quote.amount === null))}>{busy ? "提交中…" : order ? "保存资料" : misc ? "提交杂事" : "提交打板"}</Button></div></div>
+    <div className="rework-v2-action-area"><div className="rework-v2-actions"><Button type="button" disabled={disabled} onClick={async () => { if (await draft.requestLeave()) onCancel(); }}>取消</Button><Button type="submit" variant="primary" disabled={disabled || (!order && (!quote || quote.amount === null))}>{busy ? "提交中…" : order ? "保存资料" : misc ? "提交杂事" : "提交打板"}</Button></div></div>
   </form></Surface>;
 }

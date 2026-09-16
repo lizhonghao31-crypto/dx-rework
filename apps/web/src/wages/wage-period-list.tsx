@@ -6,6 +6,7 @@ import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contra
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useDebouncedValue } from "../use-debounced-value.js";
+import { useInternalReturnScroll } from "../use-internal-return-scroll.js";
 import { businessFieldLabel, businessValue } from "../business-display.js";
 import { ListPagination, LIST_PAGE_SIZE } from "../list-pagination.js";
 import {
@@ -133,7 +134,8 @@ export function WagePeriodList() {
   const detailPage={items:value?.rows??[],page:value?.pagination?.page??requestedPage,totalPages:value?.pagination?.totalPages??1,
     setPage:(next:number)=>setPages({...currentPages,detail:next})};
   const listPath=wageListPath({...filters,page:detailPage.page,personPage:personPage.page});
-  useEffect(()=>{if(!stale)window.history.replaceState(null,"",pageUrl(listPath));},[listPath,stale]);
+  useEffect(()=>{if(!stale)window.history.replaceState(window.history.state,"",pageUrl(listPath));},[listPath,stale]);
+  useInternalReturnScroll(!stale);
   const sourceCell=(row:ReportPreviewResponse["rows"][number])=>{
     const target=wageSourcePath(row,listPath);
     return target?<a href={pageUrl(target)}>{wageCell("orderNo",row.orderNo)}</a>:<>{wageCell("orderNo",row.orderNo)}<small>{row.sourceStatus==="missing"?"历史来源未关联":"来源暂不可回查"}</small></>;
