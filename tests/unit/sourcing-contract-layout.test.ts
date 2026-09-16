@@ -65,7 +65,17 @@ describe("sourcing contract PDF presentation", () => {
     const title = find("服装加工合同");
     const metadata = find("合同编号：DX-WF-20260916-000001");
     expect(Math.abs(title.x + title.width / 2 - pageWidth / 2)).toBeLessThan(8);
-    expect(Math.abs(metadata.x + metadata.width / 2 - pageWidth / 2)).toBeLessThan(8);
+
+    // PDF.js may split one visually centered metadata line into several text items.
+    // Verify the visual row as a whole instead of treating its first fragment as the line width.
+    const metadataRow = items.filter((item) => (
+      item.page === metadata.page && Math.abs(item.y - metadata.y) < 2
+    ));
+    const metadataLeft = Math.min(...metadataRow.map((item) => item.x));
+    const metadataRight = Math.max(...metadataRow.map((item) => item.x + item.width));
+    expect(Math.abs((metadataLeft + metadataRight) / 2 - pageWidth / 2)).toBeLessThan(8);
+    expect(normalized(metadataRow.map((item) => item.text).join("")))
+      .toContain(normalized("合同编号：DX-WF-20260916-000001生成日期：2026-09-16签订地点：广州市"));
 
     const partyA = find("甲方（盖章）");
     const partyB = find("乙方（盖章）");
