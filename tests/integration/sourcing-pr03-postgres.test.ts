@@ -1938,6 +1938,30 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(changed.value.decision).toMatchObject({ cuttingProcess: "other", cuttingProcessOther: "CUT-INTERNAL-PR02" });
   });
 
+  it("rejects an undecodable contract picture before binding and permits correction with the same request key", async () => {
+    const uploadActor = { ...merchandiserActor(), authorizationCapability: "tools:user" };
+    const upload = async (bytes: Buffer, filename: string): Promise<string> => {
+      const sha256 = createHash("sha256").update(bytes).digest("hex");
+      const intent = await attachments.createUploadIntent(uploadActor, { filename, mimeType: "image/jpeg", sizeBytes: bytes.byteLength, sha256 });
+      await contractStorage.writeImmutable(intent.objectKey, bytes, { mimeType: "image/jpeg", sha256 });
+      await attachments.finalize(uploadActor, intent.attachmentId);
+      return intent.attachmentId;
+    };
+    const oversized = await sharp({ create: { width: 6400, height: 6400, channels: 3, background: "#ffffff" } }).jpeg().toBuffer();
+    expect(oversized.byteLength).toBeLessThan(1_048_576);
+    const oversizedId = await upload(oversized, "oversized-pixels.jpg");
+    const input = { gender: "女装" as const, styleName: "款图像素边界", estimatedCutPieceSendDate: "2026-10-01", deliveryDate: "2026-10-10",
+      lineItems: [{ alternateStyleNo: "PIXEL-BOUNDARY", color: "白", quantity: 10, imageAttachmentId: oversizedId }], daxingUnitPrice: "10", attachmentIds: [oversizedId] };
+    const key = randomUUID();
+    await expect(service.createCase(merchandiserActor(), input, key)).rejects.toMatchObject({ statusCode: 422, message: expect.stringContaining("oversized-pixels.jpg") });
+    expect((await database.query("SELECT entity_type,entity_id FROM attachments WHERE attachment_id=$1", [oversizedId])).rows[0]).toEqual({ entity_type: null, entity_id: null });
+    expect((await database.query("SELECT 1 FROM sourcing_cases WHERE style_no='PIXEL-BOUNDARY'")).rowCount).toBe(0);
+    const acceptedId = await upload(await sharp(oversized).resize(400).jpeg().toBuffer(), "corrected-pixels.jpg");
+    const corrected = { ...input, lineItems: [{ ...input.lineItems[0]!, imageAttachmentId: acceptedId }], attachmentIds: [oversizedId, acceptedId] };
+    expect((await service.createCase(merchandiserActor(), corrected, key)).value.lineItems[0]!.imageAttachmentId).toBe(acceptedId);
+    expect((await service.createCase(merchandiserActor(), corrected, key)).reused).toBe(true);
+  });
+
   it("binds per-line pictures to the order and preserves them through a contract style revision", async () => {
     const imageIds: string[] = [];
     const uploadActor = { ...merchandiserActor(), authorizationCapability: "tools:user" };

@@ -77,6 +77,17 @@ export class SourcingContractService {
     private readonly events = new OperationEventRepository(),
   ) {}
 
+  async validateLineImages(client: Pick<PoolClient, "query">, actor: TrustedActorContext, attachmentIds: readonly string[]): Promise<void> {
+    for (const attachmentId of new Set(attachmentIds)) {
+      const image = await this.attachments.readUnboundSourcingImage(client,actor.actorId,attachmentId);
+      try {
+        await normalizeSourcingContractImage(image.bytes);
+      } catch {
+        throw new ApplicationError("VALIDATION_ERROR",`款图“${image.filename}”无法用于合同，请更换为不超过4000万像素的 JPG、PNG 或 WebP 图片后再提交`,422);
+      }
+    }
+  }
+
   async resumePendingContracts(batchSize = 50): Promise<void> {
     for (;;) {
       const pending = await this.database.query<{

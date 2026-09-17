@@ -1426,6 +1426,11 @@ export class SourcingService {
         requestHash: requestHash(scope, normalized),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
+        const lineImageIds = normalized.lineItems.flatMap(line => line.imageAttachmentId ? [line.imageAttachmentId] : []);
+        if (lineImageIds.length) {
+          const contractService = this.contractService ?? fail("款图校验服务暂不可用，请稍后再试",503,"STORAGE_UNAVAILABLE");
+          await contractService.validateLineImages(client,actor,lineImageIds);
+        }
         await client.query(
           `INSERT INTO sourcing_style_catalog(style_id,style_name,created_by)
            VALUES($1,$2,$3) ON CONFLICT(normalized_name) DO NOTHING`,
@@ -3439,4 +3444,3 @@ export class SourcingService {
   }
 
 }
-

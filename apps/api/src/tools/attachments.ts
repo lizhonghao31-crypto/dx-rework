@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 
 import type {
   AttachmentResponse,
@@ -57,6 +57,19 @@ export class AttachmentService {
       WHERE attachment_id=$1 AND entity_type='sourcing_case' AND entity_id=$2 AND status='ready'
         AND mime_type IN ('image/jpeg','image/png','image/webp')`,[attachmentId,sourcingCaseId])).rows[0];
     if (!row) throw new ApplicationError("ATTACHMENT_NOT_READY","合同款图不存在或不属于本订单",409);
+    return this.readVerifiedSourcingImage(row);
+  }
+
+  async readUnboundSourcingImage(client: Pick<PoolClient, "query">, actorId: string, attachmentId: string): Promise<{ bytes: Buffer; sha256: string; filename: string }> {
+    const row = (await client.query<AttachmentRow>(`SELECT * FROM attachments
+      WHERE attachment_id=$1 AND uploaded_by=$2 AND status='ready'
+        AND entity_type IS NULL AND entity_id IS NULL
+        AND mime_type IN ('image/jpeg','image/png','image/webp')`,[attachmentId,actorId])).rows[0];
+    if (!row) throw new ApplicationError("ATTACHMENT_NOT_READY","款图必须已上传完成、属于当前账号且尚未绑定",400);
+    return {...await this.readVerifiedSourcingImage(row),filename:row.original_filename};
+  }
+
+  private async readVerifiedSourcingImage(row: AttachmentRow): Promise<{ bytes: Buffer; sha256: string }> {
     const bytes = Buffer.from(await this.storageCall(() => this.storage.readBytes(row.object_key,this.options.maxUploadBytes)));
     const sha256 = createHash("sha256").update(bytes).digest("hex");
     if (bytes.byteLength !== Number(row.size_bytes) || sha256 !== row.sha256) {
