@@ -1382,3 +1382,66 @@
 }
 
 .sourcing-order-classification { display: grid; gap: var(--dx-form-section-padding); min-width: 0; }
+
+/* Keep the order heading, metrics and line details in explicit tracks. */
+.sourcing-order-card__main {
+  grid-template-columns: minmax(220px, 1.15fr) minmax(0, 2.85fr);
+  gap: var(--dx-v2-space-2) var(--dx-v2-space-3);
+}
+.sourcing-order-card__heading { grid-area: 1 / 1; }
+.sourcing-order-card__main dl {
+  display: grid;
+  grid-area: 1 / 2;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--dx-v2-space-3);
+}
+.sourcing-order-card__main dl > div:nth-child(n + 4) { margin-top: 0; }
+.sourcing-order-card__lines {
+  grid-area: 2 / 1 / auto / -1;
+  min-width: 0;
+  margin: 0;
+}
+.sourcing-order-card__lines li {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, .8fr) minmax(0, 1fr);
+}
+.sourcing-order-card__lines li > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sourcing-order-card__activity { grid-area: 3 / 1 / auto / -1; }
+.sourcing-order-detail .rework-detail-overview-grid { align-items: start; }
+.sourcing-order-detail .sourcing-workflow-fold { min-height: 0; }
+.sourcing-workflow-fold > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dx-v2-space-2);
+  cursor: pointer;
+}
+.sourcing-workflow-fold > summary h2 { margin: 0; }
+.sourcing-workflow-fold[open] > summary { margin-bottom: var(--dx-v2-space-3); }
+.sourcing-owner-line-review__row > * { min-width: 0; overflow-wrap: anywhere; }
+
+@media (max-width: 1180px) and (min-width: 801px) {
+  .sourcing-order-card__main dl { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 800px) {
+  .sourcing-order-card__main { grid-template-columns: minmax(0, 1fr); }
+  .sourcing-order-card__main dl {
+    grid-area: 3 / 1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sourcing-order-card__activity { grid-area: 4 / 1; }
+  .sourcing-owner-line-review__row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--dx-v2-space-2);
+    align-items: start;
+  }
+  .sourcing-owner-line-review__row > b { grid-column: 1; }
+  .sourcing-owner-line-review__row > span:first-of-type { grid-column: 2 / -1; }
+  .sourcing-owner-line-review__row > span:not(:first-of-type) { font-size: 13px; }
+  .sourcing-owner-actions > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.sourcing-workflow-fold > summary::after { content: "展开"; font-size: 12px; white-space: nowrap; }
+.sourcing-workflow-fold[open] > summary::after { content: "收起"; }
