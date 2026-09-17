@@ -87,7 +87,8 @@ export const SourcingCaseLineInputSchema = z.object({
   alternateStyleNo: ShortTextSchema.optional(),
   color: ShortTextSchema,
   quantity: z.number().int().positive().max(10_000_000),
-  externalUnitPrice: SourcingNewUnitPriceSchema,
+  // Accepted for old clients only; the service does not record a node-one quote.
+  externalUnitPrice: SourcingNewUnitPriceSchema.optional(),
 }).strict();
 
 export const calculateSourcingOrderQuantity = (
@@ -156,10 +157,14 @@ export const CreateSourcingIeQuoteSchema = z.object({
   quoteReason: input.quoteReason,
 }));
 
+export const SourcingCuttingProcessSchema = z.enum(["in_house", "outsourced", "other"]);
+
 export const RecordSourcingManagementDecisionSchema = z.object({
   craftIds: z.array(IdSchema).min(1).max(MAX_SOURCING_PROCESSES)
     .refine((ids) => new Set(ids).size === ids.length, "工艺及承包范围不能重复"),
   supplierId: IdSchema,
+  cuttingProcess: SourcingCuttingProcessSchema.optional(),
+  cuttingProcessOther: z.string().trim().min(1).max(100).optional(),
   linePrices: z.array(NewSourcingLinePriceInputSchema).min(1).max(MAX_SOURCING_LINE_ITEMS)
     .refine(
       (items) => new Set(items.map((item) => item.position)).size === items.length,
@@ -168,11 +173,19 @@ export const RecordSourcingManagementDecisionSchema = z.object({
   unitPrice: SourcingNewUnitPriceSchema.optional(),
   decisionReason: z.string().trim().max(500).optional(),
 }).strict().superRefine((input, context) => {
+  if (input.cuttingProcess === "other" && !input.cuttingProcessOther) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["cuttingProcessOther"], message: "请填写其它裁床工序" });
+  }
+  if (input.cuttingProcess !== "other" && input.cuttingProcessOther) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["cuttingProcessOther"], message: "仅其它裁床工序可填写说明" });
+  }
   if ((input.linePrices ? 1 : 0) + (input.unitPrice ? 1 : 0) !== 1) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "请提交逐款价格" });
   }
 }).transform((input) => ({
   supplierId: input.supplierId,
+  cuttingProcess: input.cuttingProcess,
+  cuttingProcessOther: input.cuttingProcessOther,
   craftIds: input.craftIds,
   linePrices: input.linePrices ?? [{ position: 1, unitPrice: input.unitPrice! }],
   decisionReason: input.decisionReason,
@@ -348,6 +361,8 @@ export const SourcingDecisionSchema = z.object({
     unitPrice: z.string(),
     totalAmount: z.string(),
   }).strict()).min(1).max(MAX_SOURCING_LINE_ITEMS).default([]),
+  cuttingProcess: SourcingCuttingProcessSchema.nullable().optional(),
+  cuttingProcessOther: z.string().nullable().optional(),
   decisionReason: z.string(),
   decidedBy: IdSchema,
   decidedAt: z.string().datetime(),

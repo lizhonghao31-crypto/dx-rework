@@ -95,7 +95,6 @@ type SourcingLineDraft = Readonly<{
   alternateStyleNo: string;
   color: string;
   quantity: string;
-  externalUnitPrice: string;
 }>;
 type LocalSourcingDraft = Readonly<{
   gender: "" | "男装" | "女装";
@@ -109,7 +108,7 @@ type LocalSourcingDraft = Readonly<{
 }>;
 type LinePriceDraft = Readonly<{ position: number; unitPrice: string }>;
 type QuoteDraft = Readonly<{ linePrices: readonly LinePriceDraft[]; quoteReason: string }>;
-type DecisionDraft = Readonly<{ supplierId: string; linePrices: readonly LinePriceDraft[]; decisionReason: string }>;
+type DecisionDraft = Readonly<{ supplierId: string; linePrices: readonly LinePriceDraft[]; decisionReason: string; cuttingProcess: "" | "in_house" | "outsourced" | "other"; cuttingProcessOther: string }>;
 type FinanceReviewDraft = Readonly<{ differenceFields: readonly string[]; differenceReason: string }>;
 type FactoryChangeDraft = Readonly<{ supplierId: string; unitPrice: string; changeReason: string }>;
 type ContractSupplementDraft = Readonly<Partial<Record<SourcingContractMissingField, string>>>;
@@ -220,7 +219,6 @@ const readLocalSourcingDraft = (userId: string): LocalSourcingDraft | null => {
           && typeof line.alternateStyleNo === "string"
           && typeof line.color === "string"
           && typeof line.quantity === "string"
-          && typeof line.externalUnitPrice === "string"
         )).slice(0, MAX_SOURCING_LINE_ITEMS)
       : typeof parsed.styleNo === "string" && typeof parsed.orderQuantity === "string"
         ? [{
@@ -228,7 +226,6 @@ const readLocalSourcingDraft = (userId: string): LocalSourcingDraft | null => {
             alternateStyleNo: "",
             color: "",
             quantity: parsed.orderQuantity,
-            externalUnitPrice: "",
           }]
         : [];
     if (!lineItems.length) return null;
@@ -265,6 +262,14 @@ const clearLocalSourcingDraft = (userId: string): void => {
 const detailHref = (item: SourcingCaseSummary): string =>
   pageUrl(`ui/sourcing/orders/${item.sourcingCaseId}`);
 
+const sourcingLinePriceLabel = (item: SourcingCaseSummary, position: number): string => {
+  const line = item.lineItems.find((entry) => entry.position === position);
+  const price = item.decision?.linePrices.find((entry) => entry.position === position)?.unitPrice
+    ?? item.ieQuote?.linePrices.find((entry) => entry.position === position)?.unitPrice
+    ?? line?.externalUnitPrice;
+  return price ? formatBusinessCurrency(price) : line?.legacy ? "历史未维护价格" : "待 IE 给价";
+};
+
 function SourcingOrderCard({
   item,
   canDelete,
@@ -292,7 +297,7 @@ function SourcingOrderCard({
           <span>{line.styleNo}{line.alternateStyleNo ? ` / ${line.alternateStyleNo}` : ""}</span>
           <span>{line.color ?? "历史未维护颜色"}</span>
           <span>{formatBusinessDecimal(line.quantity)} 件</span>
-          <span>{line.externalUnitPrice ? formatBusinessCurrency(line.externalUnitPrice) : "历史未维护价格"}</span>
+          <span>{sourcingLinePriceLabel(item, line.position)}</span>
         </li>)}
         {item.lineItems.length > 3 ? <li><span>另有 {item.lineItems.length - 3} 行</span></li> : null}
       </ul>
@@ -378,7 +383,6 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     alternateStyleNo: "",
     color: "",
     quantity: "",
-    externalUnitPrice: "",
   }]);
   const [daxingUnitPrice, setDaxingUnitPrice] = useState("");
   const [images, setImages] = useState<UploadedImage[]>([]);
@@ -449,7 +453,6 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
       alternateStyleNo: "",
       color: "",
       quantity: "",
-      externalUnitPrice: current[0]?.externalUnitPrice ?? "",
     }]);
     createKey.current = null;
   };
@@ -605,7 +608,6 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
       ...(line.alternateStyleNo.trim() ? { alternateStyleNo: line.alternateStyleNo.trim() } : {}),
       color: line.color.trim(),
       quantity: Number(line.quantity),
-      externalUnitPrice: businessInputChange(line.externalUnitPrice).trim(),
     }));
     if (!canCreate) { setMessage("当前账号没有创建订单权限"); return; }
     if (!gender || !styleName.trim()) { setMessage("请选择性别并填写款式"); return; }
@@ -619,10 +621,6 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     if (lineItems.some((line) => !/^\d+$/.test(line.quantity))
       || normalizedLines.some((line) => line.quantity < 1 || line.quantity > 10_000_000)) {
       setMessage("每行数量必须是1至10000000之间的整数");
-      return;
-    }
-    if (normalizedLines.some((line) => !isNewSourcingPrice(line.externalUnitPrice))) {
-      setMessage("每行对外加工价格必须大于0且最多2位有效小数");
       return;
     }
     const normalizedDaxingPrice = businessInputChange(daxingUnitPrice).trim();
@@ -667,7 +665,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
       <Header
         iconRoute="/ui/sourcing/create"
         title="创建订单"
-        subtitle="跟单登记订单资料、款色价格和照片，提交后自动进入待审批订单。"
+        subtitle="跟单登记订单资料、款色数量和照片，提交后由 IE 首次给加工报价。"
         badge="外发定价&选厂"
       />
       <Surface className="sourcing-create-card">
@@ -687,8 +685,8 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
           <section className="sourcing-line-editor sourcing-form-wide" aria-label="订单款色明细">
             <div className="sourcing-line-editor__heading">
               <div>
-                <strong>款色与对外加工价格</strong>
-                <small>一份订单可登记多行款色；新增行沿用首行当前对外价格，总数量由各行自动汇总。</small>
+                <strong>款色明细</strong>
+                <small>一份订单可登记多行款色；加工报价由 IE 首次填写，总数量由各行自动汇总。</small>
               </div>
               <div className="sourcing-line-editor__actions">
                 <StatusBadge tone="info">合计 {formatBusinessDecimal(lineItems.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0))} 件</StatusBadge>
@@ -702,7 +700,6 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
                 <label><span>代用款号</span><input value={line.alternateStyleNo} maxLength={100} onChange={(event) => updateLineItem(index, "alternateStyleNo", event.target.value)} placeholder="选填" /></label>
                 <label><span>颜色</span><input value={line.color} maxLength={100} onChange={(event) => updateLineItem(index, "color", event.target.value)} placeholder="必填" /></label>
                 <label><span>数量</span><input value={activeCreateInput === `quantity-${index}` ? line.quantity : businessInputValue(line.quantity)} onFocus={() => setActiveCreateInput(`quantity-${index}`)} onBlur={() => setActiveCreateInput(null)} inputMode="numeric" onChange={(event) => updateLineItem(index, "quantity", businessInputChange(event.target.value))} placeholder="整数" /></label>
-                <label><span>对外加工价格</span><input value={activeCreateInput === `external-${index}` ? line.externalUnitPrice : newSourcingPriceDisplay(line.externalUnitPrice)} onFocus={() => setActiveCreateInput(`external-${index}`)} onBlur={() => setActiveCreateInput(null)} aria-invalid={!isNewSourcingPrice(line.externalUnitPrice)} inputMode="decimal" onChange={(event) => updateLineItem(index, "externalUnitPrice", businessInputChange(event.target.value))} placeholder="必填，最多2位有效小数" /></label>
                 <button className="dx-button dx-button--secondary" type="button" aria-label={`删除第 ${index + 1} 行款色`} disabled={lineItems.length === 1} onClick={() => void removeLineItem(index)}>删除</button>
               </article>)}
             </div>
@@ -941,7 +938,7 @@ function OrderDetailPage({
   const [processes, setProcesses] = useState<string[]>([""]);
   const [craftCatalog, setCraftCatalog] = useState<readonly CraftCatalogItem[]>([]);
   const [activeCraftQuery, setActiveCraftQuery] = useState("");
-  const [decision, setDecision] = useState<DecisionDraft>({ supplierId: "", linePrices: [], decisionReason: "" });
+  const [decision, setDecision] = useState<DecisionDraft>({ supplierId: "", linePrices: [], decisionReason: "", cuttingProcess: "", cuttingProcessOther: "" });
   const [financeReview, setFinanceReview] = useState<FinanceReviewDraft>({ differenceFields: [], differenceReason: "" });
   const [factoryChange, setFactoryChange] = useState<SourcingFactoryChangeState | null>(null);
   const [contract, setContract] = useState<SourcingContractDocument | null>(null);
@@ -989,7 +986,7 @@ function OrderDetailPage({
         linePrices: detail.lineItems.map((line) => ({
           position: line.position,
           unitPrice: current.linePrices.find((price) => price.position === line.position)?.unitPrice
-            || line.externalUnitPrice || "",
+            || "",
         })),
       }));
       setDecision((current) => ({
@@ -1002,6 +999,8 @@ function OrderDetailPage({
             || "",
         })),
         decisionReason: current.decisionReason,
+        cuttingProcess: current.cuttingProcess || detail.decision?.cuttingProcess || "",
+        cuttingProcessOther: current.cuttingProcessOther || detail.decision?.cuttingProcessOther || "",
       }));
       setFactoryChangeUnitPriceEdited(false);
       setMessage("");
@@ -1164,6 +1163,7 @@ function OrderDetailPage({
   const submitManagement = async (): Promise<void> => {
     if (!decision.linePrices.length || decision.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice))) { setMessage("请填写各款大于0且最多2位有效小数的生产价格"); return; }
     if (missingDecisionReason) { setMessage("调整 IE 价格时必须填写原因"); return; }
+    if (decision.cuttingProcess === "other" && !decision.cuttingProcessOther.trim()) { setMessage("请填写其它裁床工序"); return; }
     const names = processes.map((value) => value.trim());
     if (names.some((value) => !value) || new Set(names).size !== names.length) {
       setMessage("请完整填写工艺及承包范围，不能重复"); return;
@@ -1176,6 +1176,8 @@ function OrderDetailPage({
       await submit(`sourcing/cases/${item.sourcingCaseId}/management-decisions`, {
         supplierId: decision.supplierId, linePrices: decision.linePrices,
         craftIds: crafts.map((craft) => craft.craftId),
+        ...(decision.cuttingProcess ? { cuttingProcess: decision.cuttingProcess } : {}),
+        ...(decision.cuttingProcess === "other" ? { cuttingProcessOther: decision.cuttingProcessOther.trim() } : {}),
         ...(decision.decisionReason.trim() ? { decisionReason: decision.decisionReason.trim() } : {}),
       }, "逐款调价、选厂与工艺及承包范围已提交老板审批");
     } catch (error) { setMessage(error instanceof Error ? error.message : "工艺确认失败"); }
@@ -1306,6 +1308,7 @@ function OrderDetailPage({
             <h2>{selectedWorkflow.number} · {selectedWorkflow.label}</h2>
             <p>{WORKFLOW_PREVIEWS[selectedWorkflow.key]}</p>
             <p>负责角色：{selectedWorkflow.role}</p>
+            {selectedNode === "management" ? <p>裁床工序：{item.decision?.cuttingProcess === "in_house" ? "本厂裁" : item.decision?.cuttingProcess === "outsourced" ? "外厂裁" : item.decision?.cuttingProcess === "other" ? item.decision.cuttingProcessOther : "未填写"}</p> : null}
             {selectedNode === "created" ? <section className="sourcing-line-facts" aria-label="订单款色价格事实">
               <div className="section-title">
                 <div><h2>款色明细</h2></div>
@@ -1321,7 +1324,7 @@ function OrderDetailPage({
                   <span data-label="代用款号">{line.alternateStyleNo ?? "—"}</span>
                   <span data-label="颜色">{line.color ?? "历史未维护"}</span>
                   <span data-label="数量">{formatBusinessDecimal(line.quantity)} 件</span>
-                  <span data-label="对外加工价格">{line.externalUnitPrice ? formatBusinessCurrency(line.externalUnitPrice) : "历史未维护"}</span>
+                  <span data-label="对外加工价格">{sourcingLinePriceLabel(item, line.position)}</span>
                 </div>)}
               </div>
             </section> : null}
@@ -1398,6 +1401,8 @@ function OrderDetailPage({
               {craftCatalog.map((craft) => <option key={craft.craftId} value={craft.craftName}>{craft.craftCode}</option>)}
             </datalist>
           </section>
+              <label><span>裁床工序</span><select value={decision.cuttingProcess} onChange={(event) => { setDecision({ ...decision, cuttingProcess: event.target.value as DecisionDraft["cuttingProcess"], cuttingProcessOther: "" }); actionKey.current = null; }}><option value="">请选择</option><option value="in_house">本厂裁</option><option value="outsourced">外厂裁</option><option value="other">其它</option></select></label>
+              {decision.cuttingProcess === "other" ? <label><span>其它裁床工序（必填）</span><input value={decision.cuttingProcessOther} maxLength={100} onChange={(event) => { setDecision({ ...decision, cuttingProcessOther: event.target.value }); actionKey.current = null; }} /></label> : null}
               <label className="sourcing-form-wide"><span>选厂/调价说明{needsDecisionReason ? "（必填）" : "（未调价可选）"}</span><input value={decision.decisionReason} maxLength={500} required={needsDecisionReason} aria-invalid={missingDecisionReason} aria-describedby="sourcing-decision-reason-hint" onChange={(event) => { setDecision({ ...decision, decisionReason: event.target.value }); actionKey.current = null; }} /><small id="sourcing-decision-reason-hint" role="status">{missingDecisionReason ? "已调整 IE 价格，请填写调价原因后提交。" : "任一款价格发生变化时须填写原因；沿用 IE 价格无需填写。"}</small></label>
               <button className="dx-button dx-button--primary" type="button" disabled={busy || !decision.supplierId || missingDecisionReason || decision.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice))} onClick={() => void submitManagement()}>提交调价与选厂</button>
             </div> : <p>当前账号仅可查看，本节点由生产管理办理。</p>}

@@ -1169,7 +1169,7 @@
 
 .sourcing-line-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr) minmax(0, .8fr) minmax(0, .65fr) minmax(0, .85fr) auto;
+  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr) minmax(0, .8fr) minmax(0, .65fr) auto;
   align-items: end;
   gap: var(--dx-v2-space-3);
   border-radius: var(--dx-v2-radius-md);
