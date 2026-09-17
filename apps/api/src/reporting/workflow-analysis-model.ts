@@ -41,8 +41,8 @@ function periodSummary(rows: Item[], filters: WorkflowAnalysisQuery): WorkflowAn
     const firstAt = instant(first?.enteredAt ?? null);
     if (Number.isFinite(firstAt) && firstAt >= start && firstAt <= end) enteredCount++;
 
-    // Main rework cycle closes at the first real business completion. Later responsibility revisions
-    // remain in history but do not rewrite the original completion period or cycle time.
+    // The main rework cycle closes at the first real business completion. Later responsibility
+    // revisions stay auditable but do not rewrite the original completion period or cycle time.
     const firstCompletion = changes.find(event => event.to === "completed");
     const firstCompletedAt = instant(firstCompletion?.enteredAt ?? null);
     if (Number.isFinite(firstCompletedAt) && firstCompletedAt >= start && firstCompletedAt <= end) {
@@ -51,18 +51,22 @@ function periodSummary(rows: Item[], filters: WorkflowAnalysisQuery): WorkflowAn
       else missingCycleCount++;
     }
 
-    const enteredBeforeEnd = changes.filter(event => instant(event.enteredAt) <= end).at(-1);
-    if (enteredBeforeEnd && enteredBeforeEnd.to !== "completed") {
-      openAtEndCount++;
-      const enteredAt = instant(enteredBeforeEnd.enteredAt);
-      if (Number.isFinite(enteredAt) && enteredAt <= end) {
-        const seconds = Math.max(0, (end - enteredAt) / 1000);
-        if (longestOpenSeconds === null || seconds > longestOpenSeconds) {
-          longestOpenSeconds = seconds;
-          longestOpenItemId = row.id;
+    // Once the first completion has happened the main cycle is no longer unfinished, even if a
+    // later responsibility revision reopens a downstream responsibility node.
+    if (!Number.isFinite(firstCompletedAt) || firstCompletedAt > end) {
+      const enteredBeforeEnd = changes.filter(event => instant(event.enteredAt) <= end).at(-1);
+      if (enteredBeforeEnd && enteredBeforeEnd.to !== "completed") {
+        openAtEndCount++;
+        const enteredAt = instant(enteredBeforeEnd.enteredAt);
+        if (Number.isFinite(enteredAt) && enteredAt <= end) {
+          const seconds = Math.max(0, (end - enteredAt) / 1000);
+          if (longestOpenSeconds === null || seconds > longestOpenSeconds) {
+            longestOpenSeconds = seconds;
+            longestOpenItemId = row.id;
+          }
+          const bucket = nodeValues.get(enteredBeforeEnd.to ?? "");
+          if (bucket) bucket.open.push({ seconds, id: row.id });
         }
-        const bucket = nodeValues.get(enteredBeforeEnd.to ?? "");
-        if (bucket) bucket.open.push({ seconds, id: row.id });
       }
     }
 
@@ -71,6 +75,9 @@ function periodSummary(rows: Item[], filters: WorkflowAnalysisQuery): WorkflowAn
       if (!bucket || event.leftAt === null) continue;
       const enteredAt = instant(event.enteredAt), leftAt = instant(event.leftAt);
       if (!Number.isFinite(leftAt) || leftAt < start || leftAt > end) continue;
+      // Main-cycle node statistics stop at first completion; post-completion revisions are a
+      // separate diagnostic and must not make the original flow appear slower.
+      if (Number.isFinite(firstCompletedAt) && enteredAt > firstCompletedAt) continue;
       if (Number.isFinite(enteredAt) && leftAt >= enteredAt) bucket.completed.push((leftAt - enteredAt) / 1000);
       else bucket.missing++;
     }

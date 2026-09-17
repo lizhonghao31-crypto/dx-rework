@@ -17,6 +17,8 @@ describe('rework data sandbox pilot', () => {
     expect(page).toContain('平均流转时长');
     expect(page).toContain('流转最久环节');
     expect(page).toContain('包含排队、等待、夜间和休息时间');
+    expect(page).toContain('onMouseEnter={()=>setOpen(true)}');
+    expect(page).toContain('aria-expanded={open}');
     expect(page).toContain('management/workflow-analysis');
   });
 });

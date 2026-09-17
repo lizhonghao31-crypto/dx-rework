@@ -44,4 +44,15 @@ describe('workflow action filters', () => {
     expect(ie?.openAtEndCount).toBe(1);
     expect(ie?.longestOpenItemId).toBe(uid(31));
   });
+  it('does not reopen the main cycle when responsibility is revised after first completion', () => {
+    const revised = item(40, {status:'pending_responsibility_determination', enteredAt:'2026-09-04T00:00:00.000Z', history:[
+      {id:'40-a',from:null,to:'draft',action:'rework.draft.create',changesNode:true,enteredAt:'2026-09-01T00:00:00.000Z',leftAt:'2026-09-01T01:00:00.000Z'},
+      {id:'40-b',from:'draft',to:'completed',action:'rework.complete',changesNode:true,enteredAt:'2026-09-02T00:00:00.000Z',leftAt:'2026-09-04T00:00:00.000Z'},
+      {id:'40-c',from:'completed',to:'pending_responsibility_determination',action:'rework.responsibility.revise',changesNode:true,enteredAt:'2026-09-04T00:00:00.000Z',leftAt:null},
+    ]});
+    const result = workflowAnalysisResult([revised], WorkflowAnalysisQuerySchema.parse({group:'rework',periodMode:'activity',from:'2026-09-01',to:'2026-09-05'}), now);
+    expect(result.periodSummary?.completedCount).toBe(1);
+    expect(result.periodSummary?.openAtEndCount).toBe(0);
+    expect(result.periodSummary?.nodes.find(node=>node.node==='pending_responsibility_determination')?.openAtEndCount ?? 0).toBe(0);
+  });
 });
