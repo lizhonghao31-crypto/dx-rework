@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { duplicateSourcingLineMessage } from "./sourcing-style-identity.js";
 
 const IdSchema = z.string().uuid();
 const ShortTextSchema = z.string().trim().min(1).max(100);
@@ -93,6 +94,7 @@ export const SourcingCaseLineInputSchema = z.object({
 }).strict().refine(line => !!line.styleNo || !!line.alternateStyleNo, "正式款号与代用款号至少填写一个");
 
 export const ReviseSourcingStylesSchema = z.object({
+  confirmedDuplicateStyles: z.array(ShortTextSchema).max(40).optional(),
   expectedRevision: z.number().int().nonnegative(),
   lines: z.array(z.object({
     position: z.number().int().min(1).max(MAX_SOURCING_LINE_ITEMS),
@@ -115,12 +117,15 @@ export const calculateSourcingOrderQuantity = (
 };
 
 export const CreateSourcingCaseSchema = z.object({
+  confirmedDuplicateStyles: z.array(ShortTextSchema).max(40).optional(),
   gender: z.enum(["男装", "女装"]),
   styleName: ShortTextSchema,
   estimatedCutPieceSendDate: BusinessDateSchema,
   deliveryDate: BusinessDateSchema,
   lineItems: z.array(SourcingCaseLineInputSchema).min(1).max(MAX_SOURCING_LINE_ITEMS)
     .superRefine((lines, context) => {
+      const duplicate = duplicateSourcingLineMessage(lines);
+      if (duplicate) context.addIssue({ code: z.ZodIssueCode.custom, message: duplicate });
       try {
         calculateSourcingOrderQuantity(lines);
       } catch (error) {
