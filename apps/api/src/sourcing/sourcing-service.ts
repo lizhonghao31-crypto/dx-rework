@@ -148,6 +148,8 @@ type SourcingCaseRow = Readonly<{
   decision_quantity: number | string | null;
   decision_total_amount: string | null;
   decision_line_prices: readonly SourcingPricedLineRow[] | null;
+  cutting_process: "in_house" | "outsourced" | "other" | null;
+  cutting_process_other: string | null;
   management_decision_reason: string | null;
   management_decided_by: string | null;
   management_decided_at: Date | string | null;
@@ -344,6 +346,8 @@ const mapCase = (
         linePrices: row.decision_line_prices?.length
           ? row.decision_line_prices.map((line) => ({ ...line, quantity: Number(line.quantity) }))
           : [{ position: 1, quantity: Number(row.decision_quantity), unitPrice: row.decision_unit_price, totalAmount: row.decision_total_amount }],
+        cuttingProcess: row.cutting_process ?? null,
+        cuttingProcessOther: row.cutting_process_other ?? null,
         decisionReason: row.management_decision_reason,
         decidedBy: row.management_decided_by,
         decidedAt: toIso(row.management_decided_at),
@@ -481,6 +485,7 @@ export class SourcingService {
          decision_row.quantity AS decision_quantity,
          decision_row.total_amount AS decision_total_amount,
          decision_lines_row.line_prices AS decision_line_prices,
+         decision_row.cutting_process,decision_row.cutting_process_other,
          decision_row.decision_reason AS management_decision_reason,
          decision_row.decided_by AS management_decided_by,
          decision_row.decided_at AS management_decided_at,
@@ -640,6 +645,7 @@ export class SourcingService {
          decision_row.quantity AS decision_quantity,
          decision_row.total_amount AS decision_total_amount,
          decision_lines_row.line_prices AS decision_line_prices,
+         decision_row.cutting_process,decision_row.cutting_process_other,
          decision_row.decision_reason AS management_decision_reason,
          decision_row.decided_by AS management_decided_by,
          decision_row.decided_at AS management_decided_at,
@@ -1334,7 +1340,7 @@ export class SourcingService {
         : null,
       color: normalizeText(line.color, "颜色", 100),
       quantity: normalizeQuantity(line.quantity),
-      externalUnitPrice: normalizeSourcingUnitPrice(line.externalUnitPrice),
+      externalUnitPrice: null,
     }));
     let orderQuantity: number;
     try {
@@ -1385,6 +1391,7 @@ export class SourcingService {
           orderQuantity: normalized.orderQuantity,
           attachmentIds: normalized.attachmentIds,
           daxingUnitPriceRecorded: true,
+          pricingOrigin: "ie",
         };
         const eventId = await this.events.append(client, actor, {
           action: "sourcing.case.create",
@@ -1703,6 +1710,12 @@ export class SourcingService {
       unitPrice: normalizeSourcingUnitPrice(line.unitPrice),
     })).sort((left, right) => left.position - right.position);
     const suppliedReason = input.decisionReason?.trim() ?? "";
+    const cuttingProcess = input.cuttingProcess ?? null;
+    const cuttingProcessOther = input.cuttingProcessOther?.trim() || null;
+    if (cuttingProcess !== null && !["in_house", "outsourced", "other"].includes(cuttingProcess)) fail("裁床工序无效");
+    if (cuttingProcess === "other" ? !cuttingProcessOther || cuttingProcessOther.length > 100 : cuttingProcessOther !== null) {
+      fail("选择其它时请填写100字以内的裁床工序；其他选项不能填写说明");
+    }
     const scope = "sourcing.management-decision.record";
     const client = await this.database.connect();
     try {
@@ -1717,6 +1730,7 @@ export class SourcingService {
           craftIds,
           linePrices: requestedLinePrices,
           decisionReason: suppliedReason,
+          cuttingProcess,cuttingProcessOther,
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
@@ -1874,6 +1888,7 @@ export class SourcingService {
             supplierCode: selected.supplier_code,
             supplierName: selected.supplier_name,
             crafts: selectedCrafts,
+            cuttingProcess,cuttingProcessOther,
             linePrices: pricedLines,
             quantity,
             totalAmount,
@@ -1886,8 +1901,8 @@ export class SourcingService {
              source_ie_quote_id,supersedes_decision_id,source_change_request_id,
              supplier_id,supplier_code_snapshot,supplier_name_snapshot,
              unit_price,quantity,total_amount,decision_reason,decided_by,
-             operation_event_id,request_id,crafts
-           ) VALUES($1,$2,$3,$4,$5,$6,NULL,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb)`,
+             operation_event_id,request_id,crafts,cutting_process,cutting_process_other
+           ) VALUES($1,$2,$3,$4,$5,$6,NULL,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18,$19)`,
           [
             decisionId,
             sourcingCaseId,
@@ -1906,6 +1921,7 @@ export class SourcingService {
             eventId,
             actor.requestId,
             JSON.stringify(selectedCrafts),
+            cuttingProcess,cuttingProcessOther,
           ],
         );
         for (const line of pricedLines) {
@@ -2427,9 +2443,11 @@ export class SourcingService {
          source_ie_quote_id,supersedes_decision_id,source_change_request_id,
          supplier_id,supplier_code_snapshot,supplier_name_snapshot,
          unit_price,quantity,total_amount,decision_reason,decided_by,
-         operation_event_id,request_id,crafts
+         operation_event_id,request_id,crafts,cutting_process,cutting_process_other
       ) VALUES($1,$2,$3,'factory_change',NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-        (SELECT crafts FROM sourcing_decisions WHERE sourcing_decision_id=$4))`,
+        (SELECT crafts FROM sourcing_decisions WHERE sourcing_decision_id=$4),
+        (SELECT cutting_process FROM sourcing_decisions WHERE sourcing_decision_id=$4),
+        (SELECT cutting_process_other FROM sourcing_decisions WHERE sourcing_decision_id=$4))`,
       [
         decisionId, source.sourcing_case_id ?? fail("换厂订单标识缺失"),
         nextDecisionVersion, source.sourcing_decision_id, source.factory_change_request_id,

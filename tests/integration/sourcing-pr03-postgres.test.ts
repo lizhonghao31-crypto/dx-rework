@@ -1,4 +1,5 @@
 import "./work-analysis-postgres.cases.js";
+import { readQuoteAnalysis } from "../../apps/api/src/sourcing/sourcing-analysis.js";
 import { ProductionDashboardService } from "../../apps/api/src/sourcing/production-dashboard-service.js";
 import { ProductionReportingService } from "../../apps/api/src/sourcing/production-reporting-service.js";
 import { randomUUID } from "node:crypto";
@@ -257,7 +258,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         alternateStyleNo: null,
         color: "黑色",
         quantity: 137,
-        externalUnitPrice: "12.0000",
+        externalUnitPrice: null,
         legacy: false,
       }],
       daxingUnitPrice: "10.0000",
@@ -1892,6 +1893,43 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const legacyFrozen=await dashboard.detail(rootActor(),legacy.productionOrderId);
     expect(legacyFrozen.detail.order.completedQuantity).toBe(0);
     expect(legacyFrozen.progress).toMatchObject({completedQuantity:10,firstReportedOn:businessDate,frozen:true,attention:false});
+  });
+
+  it("starts new lines without prices, records IE first, and keeps audited cutting details out of contracts", async () => {
+    const created = await service.createCase(merchandiserActor(), {
+      gender: "女装", styleName: "首次报价验证", estimatedCutPieceSendDate: "2026-10-01", deliveryDate: "2026-10-10",
+      lineItems: [{ styleNo: "IE-FIRST-A", color: "黑", quantity: 100 }, { styleNo: "IE-FIRST-B", color: "白", quantity: 50 }],
+      daxingUnitPrice: "987.6500", attachmentIds: [],
+    }, randomUUID());
+    const caseId = created.value.sourcingCaseId;
+    const analysisBefore = await readQuoteAnalysis(database,{q:"IE-FIRST-A"});
+    expect(analysisBefore).toMatchObject({missingInitialCount:0,items:[{initialPriceExpected:false}]});
+    expect(created.value.ieQuote).toBeNull();
+    expect(created.value.lineItems.map(line => line.externalUnitPrice)).toEqual([null, null]);
+    const prices = [{ position: 1, unitPrice: "12.35" }, { position: 2, unitPrice: "8.50" }];
+    await expect(service.quoteIePrice(merchandiserActor(), caseId, { linePrices: prices }, randomUUID()))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+    const quoted = await service.quoteIePrice(ieActor(), caseId, { linePrices: prices }, randomUUID());
+    expect(quoted.value.ieQuote?.totalAmount).toBe("1660.00");
+    const key = randomUUID();
+    const input = { supplierId: factoryId, craftIds: [craftId("净色车缝")], linePrices: prices,
+      cuttingProcess: "other" as const, cuttingProcessOther: "CUT-INTERNAL-PR02" };
+    const decided = await service.recordManagementDecision(managerActor(), caseId, input, key);
+    expect(decided.value.decision).toMatchObject({ totalAmount: "1660.00", cuttingProcess: "other", cuttingProcessOther: "CUT-INTERNAL-PR02" });
+    expect((await service.recordManagementDecision(managerActor(), caseId, input, key)).reused).toBe(true);
+    await expect(service.recordManagementDecision(managerActor(), caseId, { ...input, cuttingProcessOther: "不同说明" }, key))
+      .rejects.toBeDefined();
+    await service.decideOwner(ownerActor(), caseId, { decision: "approved" }, randomUUID());
+    const stored = await database.query("SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_case_id=$1", [caseId]);
+    expect(await readQuoteAnalysis(database,{q:"IE-FIRST-A"})).toMatchObject({missingInitialCount:0,items:[{initialPriceExpected:false,ie:[{version:1}]}]});
+    expect(stored.rowCount).toBe(1);
+    expect(JSON.stringify(stored.rows)).not.toMatch(/CUT-INTERNAL-PR02|cuttingProcess|987\.65|daxing/);
+    await expect(database.query("UPDATE sourcing_decisions SET cutting_process='in_house',cutting_process_other=NULL WHERE sourcing_decision_id=$1", [decided.value.decision!.sourcingDecisionId]))
+      .rejects.toBeDefined();
+    const changed = await service.requestFactoryChange(managerActor(), caseId,
+      { supplierId: replacementFactoryId, unitPrice: "8.00", changeReason: "裁床沿用验证" }, randomUUID());
+    expect(changed.value.decision?.sourcingDecisionId).not.toBe(decided.value.decision?.sourcingDecisionId);
+    expect(changed.value.decision).toMatchObject({ cuttingProcess: "other", cuttingProcessOther: "CUT-INTERNAL-PR02" });
   });
 
 });

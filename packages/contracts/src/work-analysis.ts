@@ -6,7 +6,7 @@ const price=z.string().regex(/^\d+(\.\d{1,4})?$/).nullable();
 const instant=z.string().datetime().nullable();
 const line=z.object({position:z.number().int(),styleNo:z.string().nullable(),color:z.string().nullable(),quantity:z.string(),unitPrice:price});
 const stage=z.object({id:z.string(),version:z.number().int(),recordedAt:instant,lines:z.array(line)});
-export const QuoteAnalysisResponseSchema=z.object({asOf:z.string().datetime(),filters:WorkAnalysisQuerySchema,total:z.number().int(),missingInitialCount:z.number().int(),items:z.array(z.object({id:z.string().uuid(),orderNo:z.string(),archived:z.boolean(),initial:stage,ie:z.array(stage),approved:z.array(stage)}))});
+export const QuoteAnalysisResponseSchema=z.object({asOf:z.string().datetime(),filters:WorkAnalysisQuerySchema,total:z.number().int(),missingInitialCount:z.number().int(),items:z.array(z.object({id:z.string().uuid(),orderNo:z.string(),archived:z.boolean(),initialPriceExpected:z.boolean().optional(),initial:stage,ie:z.array(stage),approved:z.array(stage)}))});
 export type QuoteAnalysisResponse=z.infer<typeof QuoteAnalysisResponseSchema>;
 export const WorkflowAnalysisQuerySchema=WorkAnalysisQuerySchema.safeExtend({
  node:z.string().max(80).default(''),state:z.enum(['all','waiting','closed']).default('all'),
