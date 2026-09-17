@@ -298,7 +298,7 @@ function SourcingOrderCard({
       </ul>
       <dl>
         <div><dt>订单数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)}</dd></div>
-        {"daxingUnitPrice" in item ? <div><dt>达兴价</dt><dd>{formatBusinessCurrency(item.daxingUnitPrice ?? "")}</dd></div> : null}
+        {"daxingUnitPrice" in item ? <div><dt>预算价</dt><dd>{formatBusinessCurrency(item.daxingUnitPrice ?? "")}</dd></div> : null}
         <div><dt>IE 单价</dt><dd>{sourcingPriceSummary(item.ieQuote)}</dd></div>
         <div><dt>生产单价</dt><dd>{sourcingPriceSummary(item.decision)}</dd></div>
         <div><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
@@ -627,7 +627,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     }
     const normalizedDaxingPrice = businessInputChange(daxingUnitPrice).trim();
     if (!isNewSourcingPrice(normalizedDaxingPrice)) {
-      setMessage("请填写达兴价，最多2位有效小数且必须大于0");
+      setMessage("请填写预算价，最多2位有效小数且必须大于0");
       return;
     }
     try {
@@ -672,7 +672,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
       />
       <Surface className="sourcing-create-card">
         <div className="section-title">
-          <div><h2>订单资料</h2><p>请按实际订单填写；达兴价仅供内部核价。</p></div>
+          <div><h2>订单资料</h2><p>请按实际订单填写；预算价仅供内部核价。</p></div>
           <StatusBadge tone="info">跟单提交</StatusBadge>
         </div>
         <div className="sourcing-form-grid">
@@ -683,7 +683,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
           </div>
           <label><span>预计裁片发出日期（工厂发出，必填）</span><input type="date" required aria-required="true" value={estimatedCutPieceSendDate} onChange={(event) => { setEstimatedCutPieceSendDate(event.target.value); createKey.current = null; }} /></label>
           <label><span>要求交货日期（到工厂，必填）</span><input type="date" required aria-required="true" value={deliveryDate} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
-          <label><span>达兴价（内部，必填）</span><input value={activeCreateInput === "daxing" ? daxingUnitPrice : newSourcingPriceDisplay(daxingUnitPrice)} onFocus={() => setActiveCreateInput("daxing")} onBlur={() => setActiveCreateInput(null)} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="必填，最多2位有效小数；仅内部授权岗位可见" aria-invalid={!isNewSourcingPrice(daxingUnitPrice)} /><small>{!isNewSourcingPrice(daxingUnitPrice) ? "请填写大于0且最多2位有效小数的达兴价。" : "仅内部授权岗位可见，不进入供应商合同。"}</small></label>
+          <label><span>预算价（内部，必填）</span><input value={activeCreateInput === "daxing" ? daxingUnitPrice : newSourcingPriceDisplay(daxingUnitPrice)} onFocus={() => setActiveCreateInput("daxing")} onBlur={() => setActiveCreateInput(null)} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="必填，最多2位有效小数；仅内部授权岗位可见" aria-invalid={!isNewSourcingPrice(daxingUnitPrice)} /><small>{!isNewSourcingPrice(daxingUnitPrice) ? "请填写大于0且最多2位有效小数的预算价。" : "仅内部授权岗位可见，不进入供应商合同。"}</small></label>
           <section className="sourcing-line-editor sourcing-form-wide" aria-label="订单款色明细">
             <div className="sourcing-line-editor__heading">
               <div>
@@ -1248,7 +1248,7 @@ function OrderDetailPage({
       <div className="rework-detail-layout rework-detail-target-layout">
         <dl className="rework-detail-core-facts" aria-label="外发定价选厂订单核心信息">
           <div className="rework-detail-core-fact"><dt>订单总数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
-          {"daxingUnitPrice" in item ? <div className="rework-detail-core-fact"><dt>达兴价</dt><dd>{formatBusinessCurrency(item.daxingUnitPrice ?? "")}</dd></div> : null}
+          {"daxingUnitPrice" in item ? <div className="rework-detail-core-fact"><dt>预算价</dt><dd>{formatBusinessCurrency(item.daxingUnitPrice ?? "")}</dd></div> : null}
           <div className="rework-detail-core-fact"><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
           <div className="rework-detail-core-fact"><dt>要求交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>IE 单价</dt><dd>{sourcingPriceSummary(item.ieQuote)}</dd></div>
@@ -1259,26 +1259,6 @@ function OrderDetailPage({
           <div className="rework-detail-core-fact"><dt>性别 / 款式</dt><dd>{item.gender ?? "历史未维护"} / {item.styleName ?? "历史未维护"}</dd></div>
           <div className="rework-detail-core-fact sourcing-core-processes"><dt>工艺及承包范围</dt><dd>{item.processes.length ? <ol>{item.processes.map((process) => <li key={process}>{process}</li>)}</ol> : "—"}</dd></div>
         </dl>
-
-        <section className="sourcing-line-facts" aria-label="订单款色价格事实">
-          <div className="section-title">
-            <div><h2>款色与对外加工价格</h2><p>节点一提交后锁定；历史单缺失字段明确标记，不补造数据。</p></div>
-            <StatusBadge tone="info">{item.lineItems.length} 行 · {formatBusinessDecimal(item.orderQuantity)} 件</StatusBadge>
-          </div>
-          <div className="sourcing-line-facts__table">
-            <div className="sourcing-line-facts__header">
-              <span>序号</span><span>款号</span><span>代用款号</span><span>颜色</span><span>数量</span><span>对外加工价格</span>
-            </div>
-            {item.lineItems.map((line) => <div className="sourcing-line-facts__row" key={line.position}>
-              <b>{String(line.position).padStart(2, "0")}</b>
-              <span data-label="款号">{line.styleNo}</span>
-              <span data-label="代用款号">{line.alternateStyleNo ?? "—"}</span>
-              <span data-label="颜色">{line.color ?? "历史未维护"}</span>
-              <span data-label="数量">{formatBusinessDecimal(line.quantity)} 件</span>
-              <span data-label="对外加工价格">{line.externalUnitPrice ? formatBusinessCurrency(line.externalUnitPrice) : "历史未维护"}</span>
-            </div>)}
-          </div>
-        </section>
 
         <div className="rework-detail-overview-grid">
           <section className="rework-detail-images" aria-label="订单图片">
@@ -1299,11 +1279,11 @@ function OrderDetailPage({
             /> : null}
           </section>
 
-          <section className="rework-workflow" aria-label="订单流程">
-            <div className="rework-workflow__heading rework-detail-panel-title">
-              <div><h2>订单流程</h2><p>所有节点始终可见，当前环节不会遮住前序事实。</p></div>
+          <details className="rework-workflow sourcing-workflow-fold" aria-label="订单流程" key={item.sourcingCaseId}>
+            <summary className="rework-workflow__heading rework-detail-panel-title">
+              <h2>订单流程</h2>
               <span className="rework-workflow__step-count">当前步骤 {Math.min(step + 1, WORKFLOW.length)} / {WORKFLOW.length}</span>
-            </div>
+            </summary>
             <div className="rework-workflow__desktop-grid">
               {WORKFLOW.map((node, index) => {
                 const state: SourcingWorkflowNodeState = item.status === "closed" || index < step ? "completed" : index === step ? "current" : "future";
@@ -1317,7 +1297,7 @@ function OrderDetailPage({
                   : <a className={`rework-workflow__node is-${state}`} href={sourcingWorkflowNodeHref(item.sourcingCaseId, node.key)} aria-current={state === "current" ? "step" : undefined} key={node.key}>{content}</a>;
               })}
             </div>
-          </section>
+          </details>
         </div>
 
         <section id="node-workspace" className="rework-detail-task rework-detail-workspace sourcing-action-panel" aria-label="节点办理区">
@@ -1326,6 +1306,25 @@ function OrderDetailPage({
             <h2>{selectedWorkflow.number} · {selectedWorkflow.label}</h2>
             <p>{WORKFLOW_PREVIEWS[selectedWorkflow.key]}</p>
             <p>负责角色：{selectedWorkflow.role}</p>
+            {selectedNode === "created" ? <section className="sourcing-line-facts" aria-label="订单款色价格事实">
+              <div className="section-title">
+                <div><h2>款色明细</h2></div>
+                <StatusBadge tone="info">{item.lineItems.length} 行 · {formatBusinessDecimal(item.orderQuantity)} 件</StatusBadge>
+              </div>
+              <div className="sourcing-line-facts__table">
+                <div className="sourcing-line-facts__header">
+                  <span>序号</span><span>款号</span><span>代用款号</span><span>颜色</span><span>数量</span><span>对外加工价格</span>
+                </div>
+                {item.lineItems.map((line) => <div className="sourcing-line-facts__row" key={line.position}>
+                  <b>{String(line.position).padStart(2, "0")}</b>
+                  <span data-label="款号">{line.styleNo}</span>
+                  <span data-label="代用款号">{line.alternateStyleNo ?? "—"}</span>
+                  <span data-label="颜色">{line.color ?? "历史未维护"}</span>
+                  <span data-label="数量">{formatBusinessDecimal(line.quantity)} 件</span>
+                  <span data-label="对外加工价格">{line.externalUnitPrice ? formatBusinessCurrency(line.externalUnitPrice) : "历史未维护"}</span>
+                </div>)}
+              </div>
+            </section> : null}
             {selectedState === "completed" ? <details className="rework-detail-node-history">
               <summary>处理历史{selectedTimeline.length ? ` · ${formatBusinessDecimal(selectedTimeline.length)} 条` : ""}</summary>
               {selectedTimeline.length ? <div className="sourcing-timeline">
@@ -1419,7 +1418,7 @@ function OrderDetailPage({
                   return <div className="sourcing-owner-line-review__row" key={line.position}><b>{String(line.position).padStart(2, "0")}</b><span>{line.styleNo}<small>{line.color ?? "历史未维护颜色"} · {formatBusinessDecimal(line.quantity)} 件</small></span><span>IE <strong>{ieLine ? formatBusinessCurrency(ieLine.unitPrice) : "—"}</strong></span><span>生产 <strong>{decisionLine ? formatBusinessCurrency(decisionLine.unitPrice) : "—"}</strong></span><span>行金额 <strong>{decisionLine ? formatBusinessCurrency(decisionLine.totalAmount) : "—"}</strong></span></div>;
                 })}
               </div>
-              <p>{"daxingUnitPrice" in item ? `达兴价：${formatBusinessCurrency(item.daxingUnitPrice ?? "")}。` : ""}{item.decision?.decisionReason ? `生产管理说明：${item.decision.decisionReason}` : "生产管理未补充说明。"}</p>
+              <p>{"daxingUnitPrice" in item ? `预算价：${formatBusinessCurrency(item.daxingUnitPrice ?? "")}。` : ""}{item.decision?.decisionReason ? `生产管理说明：${item.decision.decisionReason}` : "生产管理未补充说明。"}</p>
               <details className="sourcing-owner-decision__details">
                 <summary>查看完整订单资料</summary>
                 <p>性别：{item.gender ?? "历史未维护"}；款式：{item.styleName ?? "历史未维护"}；款色：{item.lineItems.length} 行；预计裁片发出：{item.estimatedCutPieceSendDate ?? "历史未维护"}；要求交货：{item.deliveryDate ?? "—"}；工艺：{item.processes.length ? item.processes.join("、") : "—"}。</p>
