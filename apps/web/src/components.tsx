@@ -385,6 +385,7 @@ export function Shell({
   const reportAccess = isRoot || isOwner || hasCapability("report:view");
   const reworkBoardAccess = reportAccess || hasCapability("dashboard:site:read")
     || hasCapability("rework:related_orders:view") || hasCapability("rework:basic:view") || hasCapability("rework:finance_orders:read");
+  const reworkSandboxAccess = isRoot || hasCapability("dashboard:management:read");
   const financeNavigation = financeNavigationEntries(currentUser);
   const financeGroup: NavigationGroup = { name: "财务中心", description: "财务资料与工资", entries: financeNavigation };
   const systemManagementAccess = isRoot
@@ -421,6 +422,11 @@ export function Shell({
       href: "/ui/tasks",
     });
   }
+  if (reworkSandboxAccess) reworkNavigation.push({
+    name: "数据沙盘",
+    description: "查看流程时长、积压与期间对比",
+    href: "/ui/rework-data-sandbox",
+  });
   if (reportAccess) reworkNavigation.push({
     name: "财务报表",
     description: "查询返工、责任、工资与扣款报表",

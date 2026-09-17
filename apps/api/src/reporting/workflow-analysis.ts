@@ -36,8 +36,8 @@ export const REWORK_FLOW_SQL=`WITH snapshots AS (
  OR EXISTS(SELECT 1 FROM supplier_catalog_versions v WHERE v.supplier_id=r.processing_factory_supplier_id AND v.version=r.processing_factory_supplier_version AND v.supplier_name ILIKE '%'||$1||'%')
  OR EXISTS(SELECT 1 FROM rework_order_supply_context c JOIN supplier_catalog_versions v ON (v.supplier_id,v.version) IN ((c.washing_supplier_id,c.washing_supplier_version),(c.embroidery_supplier_id,c.embroidery_supplier_version),(c.fabric_supplier_id,c.fabric_supplier_version)) WHERE c.rework_order_id=r.rework_order_id AND v.supplier_name ILIKE '%'||$1||'%')
  OR EXISTS(SELECT 1 FROM rework_external_responsibility_cases c WHERE c.rework_order_id=r.rework_order_id AND c.supplier_name_snapshot ILIKE '%'||$1||'%'))
- AND ($2::date IS NULL OR r.created_at >= $2::date::timestamp AT TIME ZONE 'Asia/Shanghai')
- AND ($3::date IS NULL OR r.created_at < ($3::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')`;
+ AND ($4='activity' OR (($2::date IS NULL OR r.created_at >= $2::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+ AND ($3::date IS NULL OR r.created_at < ($3::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')))`;
 export const SOURCING_FLOW_SQL=`WITH changes AS (
  SELECT t.*,lead(transitioned_at) OVER(PARTITION BY sourcing_case_id ORDER BY sequence) left_at
  FROM sourcing_case_transitions t WHERE t.from_status IS DISTINCT FROM t.to_status AND t.business_action NOT LIKE 'factory_change_%' AND COALESCE(t.from_status,'') NOT LIKE '%factory_change%' AND t.to_status NOT LIKE '%factory_change%'
@@ -47,14 +47,14 @@ export const SOURCING_FLOW_SQL=`WITH changes AS (
  FROM sourcing_case_transitions t LEFT JOIN changes change USING(sourcing_transition_id) WHERE t.sourcing_case_id=c.sourcing_case_id AND t.business_action NOT LIKE 'factory_change_%' AND COALESCE(t.from_status,'') NOT LIKE '%factory_change%' AND t.to_status NOT LIKE '%factory_change%'),'[]'::jsonb) || COALESCE((SELECT jsonb_agg(jsonb_build_object('id',e.event_id::text,'from',NULL,'to',NULL,'action',e.action,'changesNode',false,'enteredAt',e.created_at,'leftAt',NULL) ORDER BY e.created_at,e.event_id) FROM operation_events e WHERE e.entity_type='sourcing_case' AND e.entity_id=c.sourcing_case_id::text AND e.action='sourcing.attachments.supplement'),'[]'::jsonb) history
  FROM current_sourcing_cases c WHERE c.status NOT LIKE '%factory_change%'
  AND ($1='' OR c.erp_order_no ILIKE '%'||$1||'%' OR c.style_no ILIKE '%'||$1||'%')
- AND ($2::date IS NULL OR c.created_at >= $2::date::timestamp AT TIME ZONE 'Asia/Shanghai')
- AND ($3::date IS NULL OR c.created_at < ($3::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')`;
+ AND ($4='activity' OR (($2::date IS NULL OR c.created_at >= $2::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+ AND ($3::date IS NULL OR c.created_at < ($3::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')))`;
 const iso=(v:Date|string|null)=>v===null?null:new Date(v).toISOString();
 export async function readWorkflowAnalysis(db:Pool,input:unknown,includeSourcing:boolean):Promise<WorkflowAnalysisResponse>{
  const parsed=WorkflowAnalysisQuerySchema.safeParse(input);if(!parsed.success||!['all','rework','sourcing','finance','waiting','closed'].includes(parsed.data.group))throw new ApplicationError('VALIDATION_ERROR','流程筛选无效',400);
  const filters=parsed.data,client=await db.connect();
  try{await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');const clock=await client.query<{now:Date}>('SELECT CURRENT_TIMESTAMP now');
- const args=[filters.q,filters.from??null,filters.to??null];
+ const args=[filters.q,filters.from??null,filters.to??null,filters.periodMode];
  const rows=(await client.query<WorkflowAnalysisResponse['items'][number]>(REWORK_FLOW_SQL,args)).rows;
  if(includeSourcing&&filters.group!=='rework')rows.push(...(await client.query<WorkflowAnalysisResponse['items'][number]>(SOURCING_FLOW_SQL,args)).rows);
  const all=rows.map(r=>({...r,enteredAt:iso(r.enteredAt),handlers:r.handlers??[],execution:(r.execution??[]).map(task=>({...task,reports:task.reports.map(report=>({...report,at:iso(report.at)}))})),

@@ -37,6 +37,7 @@ import { WorkReportingForm } from "./work-reporting-form.js";
 import { WagePage } from "./wages/wage-page.js";
 import { ManagementDashboardPage } from "./reporting/management-dashboard-page.js";
 import { ReworkQueryPage } from "./reporting/rework-query-page.js";
+import { ReworkDataSandboxPage } from "./rework-data-sandbox-page.js";
 import { ReportCenterPage } from "./reporting/report-center-page.js";
 import { WorkflowQueuePage } from "./reporting/workflow-queue-page.js";
 import { AdminConsolePage } from "./admin-console-page.js";
@@ -320,6 +321,7 @@ export function App() {
   else if (path === "/ui/pattern-room/prices") page = <Shell active="价格管控"><PatternRoomPricesPage /></Shell>;
   else if (path === "/ui/finance" || path === "/ui/wages" || path.startsWith("/ui/wages/")) page = <Shell active="工资管理"><WagePage path={path} /></Shell>;
   else if (path === "/ui/tasks") page = <ReworkQueryPage />;
+  else if (path === "/ui/rework-data-sandbox") page = <ReworkDataSandboxPage />;
   else if (path === "/ui/reports") page = <ReportCenterPage />;
   else if (path.startsWith("/ui/tasks/")) page = <ReworkDetailPage />;
   else if (path === "/ui/qc/new") page = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(receivingEntryBatchId)
@@ -474,6 +476,12 @@ export function App() {
       { requiredCapability: "dashboard:site:read" },
       { requiredCapability: "report:view" },
       { requiredCapability: "rework:related_orders:view" },
+    ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/rework-data-sandbox") {
+    return <AuthGate requiredAnyOf={[
+      owner,
+      { requiredCapability: "dashboard:management:read" },
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/reports") {

@@ -22,4 +22,26 @@ describe('workflow action filters', () => {
     const missing = workflowAnalysisResult(rows, WorkflowAnalysisQuerySchema.parse({issue: 'missing'}), now);
     expect(missing.items.map(row => row.id)).toEqual([uid(1)]); expect(missing.longestEnteredAt).toBeNull();
   });
+  it('reconstructs historical period flow without replacing waiting time with work time', () => {
+    const completed = item(30, {status: 'completed', enteredAt: null, history: [
+      {id:'30-a',from:null,to:'draft',action:'rework.draft.create',changesNode:true,enteredAt:'2026-09-01T00:00:00.000Z',leftAt:'2026-09-01T01:00:00.000Z'},
+      {id:'30-b',from:'draft',to:'pending_ie_review',action:'rework.submit',changesNode:true,enteredAt:'2026-09-01T01:00:00.000Z',leftAt:'2026-09-01T05:00:00.000Z'},
+      {id:'30-c',from:'pending_ie_review',to:'in_progress',action:'rework.ie.approve',changesNode:true,enteredAt:'2026-09-01T05:00:00.000Z',leftAt:'2026-09-02T05:00:00.000Z'},
+      {id:'30-d',from:'in_progress',to:'completed',action:'rework.complete',changesNode:true,enteredAt:'2026-09-02T05:00:00.000Z',leftAt:null},
+    ]});
+    const stillOpen = item(31, {status:'pending_ie_review', enteredAt:'2026-09-03T00:00:00.000Z', history:[
+      {id:'31-a',from:null,to:'draft',action:'rework.draft.create',changesNode:true,enteredAt:'2026-09-03T00:00:00.000Z',leftAt:'2026-09-03T01:00:00.000Z'},
+      {id:'31-b',from:'draft',to:'pending_ie_review',action:'rework.submit',changesNode:true,enteredAt:'2026-09-03T01:00:00.000Z',leftAt:null},
+    ]});
+    const result = workflowAnalysisResult([completed, stillOpen], WorkflowAnalysisQuerySchema.parse({group:'rework',periodMode:'activity',from:'2026-09-01',to:'2026-09-05'}), now);
+    expect(result.periodSummary?.enteredCount).toBe(2);
+    expect(result.periodSummary?.completedCount).toBe(1);
+    expect(result.periodSummary?.openAtEndCount).toBe(1);
+    expect(result.periodSummary?.averageCycleSeconds).toBe(29 * 3600);
+    const ie = result.periodSummary?.nodes.find(node=>node.node==='pending_ie_review');
+    expect(ie?.completedCount).toBe(1);
+    expect(ie?.averageSeconds).toBe(4 * 3600);
+    expect(ie?.openAtEndCount).toBe(1);
+    expect(ie?.longestOpenItemId).toBe(uid(31));
+  });
 });
