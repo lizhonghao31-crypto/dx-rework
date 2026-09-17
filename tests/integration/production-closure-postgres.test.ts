@@ -190,4 +190,32 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   expect((await dashboard.list(root())).items.some(o=>o.order.productionOrderId===ordinary.productionOrderId)).toBe(true);
  },60000);
 
+ it("preserves shipment and receipt links through style corrections before and after shipping",async()=>{
+  const order=await create(factories[2]!,"STYLELINK"),oldStyle=order.firstStyleNo;
+  await closure.setPilot(root(),{supplierId:factories[2],enabled:true});
+  const lines=order.lines.map(line=>({position:line.position,styleNo:line.position===1?"SHIP-NEW-STYLE":line.styleNo,alternateStyleNo:line.alternateStyleNo}));
+  await sourcing.reviseStyles(root(),order.sourcingCaseId,{expectedRevision:0,lines},randomUUID());
+  await reporting.report(root(),order.productionOrderId,{position:1,businessDate:today(),quantity:10},randomUUID());
+  await reporting.execute(root(),order.productionOrderId,"complete",{businessDate:today(),confirmed:true},randomUUID());
+  const shipped=await reporting.execute(root(),order.productionOrderId,"ship",{businessDate:today(),confirmed:true},randomUUID());
+  expect(shipped.value.shipment?.firstStyleNo).toBe("SHIP-NEW-STYLE");
+  await sourcing.reviseStyles(root(),order.sourcingCaseId,{expectedRevision:1,lines:lines.map(line=>({...line,styleNo:line.position===1?"RECEIPT-NEW-STYLE":line.styleNo}))},randomUUID());
+  for(const q of [oldStyle,"SHIP-NEW-STYLE","RECEIPT-NEW-STYLE"]) expect((await closure.expected(receiver(),{q})).items).toContainEqual(expect.objectContaining({productionOrderId:order.productionOrderId,firstStyleNo:"RECEIPT-NEW-STYLE"}));
+  for(const styleNo of ["RECEIPT-NEW-STYLE",oldStyle]) {
+   await receiving.create(receiver(),{styleNo,documentQuantity:5,actualQuantity:5,attachmentIds:[await readyImage()],productionOrderId:order.productionOrderId},randomUUID());
+  }
+  const summary=(await closure.receiptSummary(root(),order.productionOrderId)).shipment!;
+  expect(summary).toMatchObject({firstStyleNo:"RECEIPT-NEW-STYLE",expectedQuantity:10});
+  expect(summary.receipts).toHaveLength(2);
+  expect((await production.get(root(),order.productionOrderId)).lines[0]?.quantity).toBe(order.lines[0]?.quantity);
+ });
+ it("serializes competing style corrections without losing a revision",async()=>{
+  const order=await create(factories[2]!,"STYLE-RACE");
+  const outcomes=await Promise.allSettled(["RACE-A","RACE-B"].map(styleNo=>sourcing.reviseStyles(root(),order.sourcingCaseId,{expectedRevision:0,lines:order.lines.map(line=>({position:line.position,styleNo:line.position===1?styleNo:line.styleNo,alternateStyleNo:line.alternateStyleNo}))},randomUUID())));
+  expect(outcomes.filter(result=>result.status==="fulfilled")).toHaveLength(1);
+  expect(outcomes.filter(result=>result.status==="rejected")).toHaveLength(1);
+  expect((await sourcing.getCase(root(),order.sourcingCaseId)).identityRevision).toBe(1);
+  expect((await contracts.getCurrent(root(),order.sourcingCaseId)).item?.contractVersion).toBe(2);
+ });
+
 });

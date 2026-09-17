@@ -56,7 +56,7 @@ export class ProductionReportingService {
     if (!Number.isInteger(page)||page<1||page>100000) fail("分页页码无效",400);
     const filter=`${visible} AND ($5::uuid IS NULL OR production.supplier_id=$5)
       AND ($6::text='' OR production.first_style_no ILIKE '%'||$6||'%' OR production.supplier_name_snapshot ILIKE '%'||$6||'%'
-        OR EXISTS(SELECT 1 FROM sourcing_production_lines line WHERE line.production_order_id=production.production_order_id AND line.style_no ILIKE '%'||$6||'%'))
+        OR EXISTS(SELECT 1 FROM sourcing_style_aliases line WHERE line.sourcing_case_id=production.sourcing_case_id AND line.style_no ILIKE '%'||$6||'%'))
       AND ($7::text='' OR transition.status=$7)`;
     const args=[...visibility(actor),input.supplierId??null,input.q?.trim()??"",input.status??""];
     const rows=await this.database.query<ProductionRow>(`${selectProduction} WHERE ${filter}
@@ -79,7 +79,7 @@ export class ProductionReportingService {
       `SELECT transition.status,transition.business_date::text,person.display_name,transition.created_at FROM sourcing_production_transitions transition
        JOIN app_users person ON person.id=transition.actor_id WHERE production_order_id=$1 ORDER BY sequence`,[id]);
     const shipment=await client.query<{first_style_no:string;shipped_on:string;recorded_quantity:number}>(
-      "SELECT first_style_no,shipped_on::text,recorded_quantity FROM sourcing_production_shipments WHERE production_order_id=$1",[id]);
+      "SELECT sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,shipment.shipped_on::text,shipment.recorded_quantity FROM sourcing_production_shipments shipment JOIN sourcing_production_orders production USING(production_order_id) WHERE production_order_id=$1",[id]);
     const allowed=await client.query<{allowed:boolean}>("SELECT sourcing_production_reporter_allowed($1,$2) AS allowed",[actor.actorId,id]);
     return ProductionReportingDetailSchema.parse({order,canReport:await memberCanWriteModule(client,actor.actorId,"sourcing")&&isProductionReporter(actor)&&(isRoot(actor)||allowed.rows[0]?.allowed===true),canCorrect:isRoot(actor),
       history:history.rows.map(r=>({reportId:r.report_id,rootReportId:r.root_report_id,revision:r.revision,position:r.position,businessDate:r.business_date,
@@ -170,7 +170,7 @@ export class ProductionReportingService {
       WHERE person.enabled AND role.role_code='production_reporter' ORDER BY person.display_name`);
     const suppliers=await this.database.query<{supplier_id:string;supplier_name:string}>("SELECT supplier_id,supplier_name FROM current_supplier_catalog ORDER BY supplier_name");
     const scopes=await this.database.query<{user_id:string;scope_type:string;scope_id:string;active:boolean;scope_label:string}>(`SELECT scope.user_id,scope.scope_type,scope.scope_id,scope.active,
-      COALESCE(production.first_style_no||' · '||production.supplier_name_snapshot,supplier.supplier_name,scope.scope_id::text) AS scope_label
+      COALESCE(sourcing_current_first_style(production.sourcing_case_id)||' · '||production.supplier_name_snapshot,supplier.supplier_name,scope.scope_id::text) AS scope_label
       FROM current_sourcing_production_reporting_scopes scope
       LEFT JOIN sourcing_production_orders production ON scope.scope_type='order' AND production.production_order_id=scope.scope_id
       LEFT JOIN current_supplier_catalog supplier ON scope.scope_type='supplier' AND supplier.supplier_id=scope.scope_id

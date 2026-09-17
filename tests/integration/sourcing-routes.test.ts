@@ -66,6 +66,7 @@ const create = (
         supplierName: "一号加工厂",
       }],
     })),
+    reviseStyles: vi.fn(async () => ({value:caseSummary,reused:false})),
     createCase: vi.fn(async () => ({ value: caseSummary, reused: false })),
     supplementImages: vi.fn(async () => ({
       value: {
@@ -617,6 +618,26 @@ describe("sourcing PR03 routes", () => {
       payload: { address: "越权地址" },
     })).statusCode).toBe(403);
     expect(finance.contracts.supplement).not.toHaveBeenCalled();
+  });
+
+  it("accepts only authorized style editors and rejects economic changes in the identity endpoint",async()=>{
+    const body={expectedRevision:0,lines:[{position:1,styleNo:"NEW",alternateStyleNo:null}]};
+    for(const [roles,caps,root,expected] of [
+      [["order_merchandiser"],["sourcing:view","sourcing:inquiry:create"],false,200],
+      [["production_management"],["sourcing:view","sourcing:decision:record"],false,200],
+      [[],[],true,200],[["ie_reviewer"],["sourcing:view","sourcing:price:quote"],false,403],
+      [["order_merchandiser"],["sourcing:view"],false,403],
+    ] as const) {
+      const {app,service}=create(caps,roles,root);
+      const result=await app.inject({method:"POST",url:`/sourcing/cases/${caseSummary.sourcingCaseId}/styles`,headers:{cookie:"dx_rework_session=trusted","idempotency-key":"style-route-test"},payload:body});
+      expect(result.statusCode).toBe(expected);
+      expect(service.reviseStyles).toHaveBeenCalledTimes(expected===200?1:0);
+    }
+    const {app,service}=create([],[],true);
+    for(const line of [{...body.lines[0],quantity:1},{position:1,styleNo:null,alternateStyleNo:null}]) {
+      expect((await app.inject({method:"POST",url:`/sourcing/cases/${caseSummary.sourcingCaseId}/styles`,headers:{cookie:"dx_rework_session=trusted","idempotency-key":"style-invalid"},payload:{...body,lines:[line]}})).statusCode).toBe(400);
+    }
+    expect(service.reviseStyles).not.toHaveBeenCalled();
   });
 
 });

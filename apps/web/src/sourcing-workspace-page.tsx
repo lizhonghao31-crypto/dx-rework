@@ -604,7 +604,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   const createOrder = async (): Promise<void> => {
     if (busy || uploading || uploadFailed) { setMessage("请等待图片上传成功，失败时重新选择图片上传。"); return; }
     const normalizedLines = lineItems.map((line) => ({
-      styleNo: line.styleNo.trim(),
+      ...(line.styleNo.trim() ? { styleNo: line.styleNo.trim() } : {}),
       ...(line.alternateStyleNo.trim() ? { alternateStyleNo: line.alternateStyleNo.trim() } : {}),
       color: line.color.trim(),
       quantity: Number(line.quantity),
@@ -614,8 +614,8 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     if (!estimatedCutPieceSendDate || !deliveryDate) {
       setMessage("请填写裁片发出日期和到工厂的交货日期"); return;
     }
-    if (normalizedLines.some((line) => !line.styleNo || !line.color)) {
-      setMessage("每行都必须填写款号和颜色");
+    if (normalizedLines.some((line) => (!line.styleNo && !line.alternateStyleNo) || !line.color)) {
+      setMessage("每行须填写正式款号或代用款号，并填写颜色");
       return;
     }
     if (lineItems.some((line) => !/^\d+$/.test(line.quantity))
@@ -696,8 +696,8 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
             <div className="sourcing-line-editor__list">
               {lineItems.map((line, index) => <article className="sourcing-line-row" key={index}>
                 <b>{String(index + 1).padStart(2, "0")}</b>
-                <label><span>款号</span><input value={line.styleNo} maxLength={100} onChange={(event) => updateLineItem(index, "styleNo", event.target.value)} placeholder="必填" /></label>
-                <label><span>代用款号</span><input value={line.alternateStyleNo} maxLength={100} onChange={(event) => updateLineItem(index, "alternateStyleNo", event.target.value)} placeholder="选填" /></label>
+                <label><span>正式款号</span><input value={line.styleNo} maxLength={100} onChange={(event) => updateLineItem(index, "styleNo", event.target.value)} placeholder="可后补" /></label>
+                <label><span>代用款号</span><input value={line.alternateStyleNo} maxLength={100} onChange={(event) => updateLineItem(index, "alternateStyleNo", event.target.value)} placeholder="无正式款号时必填" /></label>
                 <label><span>颜色</span><input value={line.color} maxLength={100} onChange={(event) => updateLineItem(index, "color", event.target.value)} placeholder="必填" /></label>
                 <label><span>数量</span><input value={activeCreateInput === `quantity-${index}` ? line.quantity : businessInputValue(line.quantity)} onFocus={() => setActiveCreateInput(`quantity-${index}`)} onBlur={() => setActiveCreateInput(null)} inputMode="numeric" onChange={(event) => updateLineItem(index, "quantity", businessInputChange(event.target.value))} placeholder="整数" /></label>
                 <button className="dx-button dx-button--secondary" type="button" aria-label={`删除第 ${index + 1} 行款色`} disabled={lineItems.length === 1} onClick={() => void removeLineItem(index)}>删除</button>
@@ -876,6 +876,7 @@ const statusStep = (status: SourcingCaseStatus): number => ({
 
 const timelineLabel = (entry: SourcingTimelineEntry): string => ({
   created: "创建订单",
+  style_revision: "修改款号",
   ie_quote: `IE 报价 V${entry.version}`,
   management_decision: `生产管理决定 V${entry.version}`,
   owner_decision: entry.decision === "approved" ? "老板批准" : "老板驳回",
@@ -905,6 +906,7 @@ const sourcingWorkflowNodeHref = (sourcingCaseId: string, key: SourcingWorkflowN
 
 const timelineNode = (entry: SourcingTimelineEntry): SourcingWorkflowNodeKey => ({
   created: "created",
+  style_revision: "created",
   ie_quote: "ie_quote",
   management_decision: "management",
   owner_decision: "owner",
@@ -931,6 +933,10 @@ function OrderDetailPage({
   user: AuthorizedUser | null;
 }) {
   const [item, setItem] = useState<SourcingCaseSummary | null>(null);
+  const [editingStyles,setEditingStyles] = useState(false);
+  const [styleEdits,setStyleEdits] = useState<Array<{position:number;styleNo:string;alternateStyleNo:string}>>([]);
+  const [styleEditRevision,setStyleEditRevision] = useState(0);
+  const styleEditKey = useRef<string | null>(null);
   const [attachments, setAttachments] = useState<readonly SourcingAttachment[]>([]);
   const [timeline, setTimeline] = useState<readonly SourcingTimelineEntry[]>([]);
   const [factories, setFactories] = useState<readonly SourcingFactory[]>([]);
@@ -1052,6 +1058,20 @@ function OrderDetailPage({
     actionKey.current = null;
   };
 
+  const canEditStyles = user?.isRoot === true || canManage || (canAct(user,"order_merchandiser","sourcing:inquiry:create") && item?.createdBy === user?.id);
+  const saveStyles = async (): Promise<void> => {
+    if (!item || busy) return;
+    if (styleEdits.some(line => !line.styleNo.trim() && !line.alternateStyleNo.trim())) {setMessage("每行须填写正式款号或代用款号");return;}
+    setBusy(true);
+    const key=styleEditKey.current ?? createClientRequestId();styleEditKey.current=key;
+    try {
+      await request(`sourcing/cases/${sourcingCaseId}/styles`,SourcingCaseSummarySchema,{method:"POST",headers:{"idempotency-key":key},
+        body:JSON.stringify({expectedRevision:styleEditRevision,lines:styleEdits.map(line=>({position:line.position,styleNo:line.styleNo.trim()||null,alternateStyleNo:line.alternateStyleNo.trim()||null}))})});
+      setEditingStyles(false);styleEditKey.current=null;
+      await load();setMessage("款号已保存；已生成的合同将保留旧版，并更新当前下载版本。");
+    } catch(error) {setMessage(error instanceof Error ? error.message : "款号保存失败");}
+    finally {setBusy(false);}
+  };
   const canOwner = canAct(user, "owner_group", "sourcing:owner:approve");
   const canMerchandiserTransfer = canAct(user, "order_merchandiser", "sourcing:factory_change:request");
   const canManagementTransfer = canManage;
@@ -1247,6 +1267,20 @@ function OrderDetailPage({
         action={todoReturnPath(window.location.search) ? "返回我的待办" : "返回订单列表"}
         actionHref={todoReturnPath(window.location.search) ?? (item.status === "closed" ? "/ui/sourcing/history" : "/ui/sourcing/pending")}
       />
+      {canEditStyles ? <div className="sourcing-style-actions">
+        <button className="dx-button dx-button--secondary" type="button" disabled={busy} onClick={() => {
+          setStyleEdits(item.lineItems.map(line => ({position:line.position,styleNo:(line.formalStyleNo === undefined ? line.styleNo : line.formalStyleNo) ?? "",alternateStyleNo:line.alternateStyleNo ?? ""})));
+          setStyleEditRevision(item.identityRevision ?? 0);styleEditKey.current=null;setEditingStyles(true);
+        }}>修改款号</button>
+      </div> : null}
+      {editingStyles ? <form className="sourcing-style-editor" onSubmit={event=>{event.preventDefault();void saveStyles();}}>
+        {styleEdits.map((line,index)=><div className="sourcing-style-editor__row" key={line.position}>
+          <strong>{item.lineItems[index]?.color ?? "款色"} · {formatBusinessDecimal(item.lineItems[index]?.quantity ?? 0)} 件</strong>
+          <label><span>正式款号</span><input maxLength={100} value={line.styleNo} onChange={event=>{setStyleEdits(current=>current.map(row=>row.position===line.position?{...row,styleNo:event.target.value}:row));styleEditKey.current=null;}} /></label>
+          <label><span>代用款号</span><input maxLength={100} value={line.alternateStyleNo} onChange={event=>{setStyleEdits(current=>current.map(row=>row.position===line.position?{...row,alternateStyleNo:event.target.value}:row));styleEditKey.current=null;}} /></label>
+        </div>)}
+        <div className="sourcing-style-editor__actions"><button className="dx-button" disabled={busy} type="submit">保存款号</button><button className="dx-button dx-button--secondary" disabled={busy} type="button" onClick={()=>setEditingStyles(false)}>取消</button></div>
+      </form> : null}
       <div className="rework-detail-layout rework-detail-target-layout">
         <dl className="rework-detail-core-facts" aria-label="外发定价选厂订单核心信息">
           <div className="rework-detail-core-fact"><dt>订单总数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
@@ -1455,6 +1489,7 @@ function OrderDetailPage({
                 {(moduleWritable && contract.canSupplement) ? contract.missingFields.map((field) => <label key={field}><span>{contractMissingLabels[field] ?? field}</span><input value={contractSupplement[field] ?? ""} maxLength={300} onChange={(event) => { setContractSupplement({ ...contractSupplement, [field]: event.target.value }); actionKey.current = null; }} /></label>) : null}
                 {(moduleWritable && contract.canSupplement) ? <button className="dx-button dx-button--primary" type="button" disabled={busy || contract.missingFields.some((field) => !(contractSupplement[field] ?? "").trim())} onClick={() => void submitContract(`sourcing/cases/${item.sourcingCaseId}/contract/supplements`, Object.fromEntries(contract.missingFields.map((field) => [field, contractSupplement[field]?.trim()])), "合同资料已补齐并生成 PDF")}>保存本合同补充资料</button> : <p>仅本订单跟单或 Root 可补充缺项。</p>}
               </div> : null}
+              {canReadContractData && timeline.some(entry=>entry.kind==="contract" && entry.pdfAttachmentId && entry.entryId!==contract.sourcingContractDocumentId) ? <details><summary>历史合同</summary>{timeline.filter(entry=>entry.kind==="contract" && entry.pdfAttachmentId && entry.entryId!==contract.sourcingContractDocumentId).map(entry=><p key={entry.entryId}><a href={attachmentUrl(entry.pdfAttachmentId!,"download")} target="_blank" rel="noreferrer">V{entry.version} · {entry.contractReference}</a></p>)}</details> : null}
               {contract.status === "generation_failed" && (moduleWritable && contract.canSupplement) ? <div className="sourcing-contract-bar__actions"><span>{contract.failureReason ?? "合同生成失败"}</span><button className="dx-button dx-button--secondary" type="button" disabled={busy} onClick={() => void submitContract(`sourcing/cases/${item.sourcingCaseId}/contract/generate`, {}, "合同 PDF 已重新生成")}>重试生成</button></div> : null}
             </> : <p>批准事实正在准备合同，请刷新后查看。</p>}
           </Surface> : null}

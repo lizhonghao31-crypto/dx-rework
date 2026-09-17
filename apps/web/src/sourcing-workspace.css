@@ -1445,3 +1445,11 @@
 
 .sourcing-workflow-fold > summary::after { content: "展开"; font-size: 12px; white-space: nowrap; }
 .sourcing-workflow-fold[open] > summary::after { content: "收起"; }
+
+.sourcing-style-actions { display:flex; justify-content:flex-end; }
+.sourcing-style-editor { display:grid; gap:12px; padding:16px; background:var(--surface,#fff); border:1px solid var(--border,#dce4e8); border-radius:12px; }
+.sourcing-style-editor__row { display:grid; grid-template-columns:minmax(100px,.7fr) repeat(2,minmax(0,1fr)); gap:12px; align-items:end; }
+.sourcing-style-editor label { display:grid; gap:5px; min-width:0; }
+.sourcing-style-editor input { width:100%; min-width:0; box-sizing:border-box; }
+.sourcing-style-editor__actions { display:flex; gap:8px; }
+@media(max-width:640px) { .sourcing-style-editor__row { grid-template-columns:repeat(2,minmax(0,1fr)); } .sourcing-style-editor__row > strong { grid-column:1/-1; } }
