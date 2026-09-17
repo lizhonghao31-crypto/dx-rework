@@ -27,7 +27,7 @@ export const REWORK_FLOW_SQL=`WITH snapshots AS (
  'returned',e.action ~ '(reject|return)' OR COALESCE(e.after_state->>'decision','')='rejected' OR COALESCE(e.after_state->>'rejected','')='true') ORDER BY e.created_at,e.event_id)
  FROM operation_events e LEFT JOIN changes change ON change.id=e.event_id::text LEFT JOIN app_users u ON u.id=e.actor_id
  WHERE e.entity_type='rework_order' AND e.entity_id=r.rework_order_id::text AND e.action LIKE 'rework.%'),'[]'::jsonb) history
- FROM rework_orders r WHERE r.status NOT IN ('deleted','cancelled') AND (
+ FROM rework_orders r WHERE ($4='period_end' OR r.status NOT IN ('deleted','cancelled')) AND (
  $1='' OR r.rework_no ILIKE '%'||$1||'%' OR r.style_no ILIKE '%'||$1||'%' OR r.order_no ILIKE '%'||$1||'%'
  OR EXISTS(SELECT 1 FROM operation_events e JOIN app_users u ON u.id=e.actor_id WHERE e.entity_type='rework_order' AND e.entity_id=r.rework_order_id::text AND u.display_name ILIKE '%'||$1||'%')
  OR EXISTS(SELECT 1 FROM rework_todos t JOIN app_users u ON u.id=t.recipient_user_id WHERE t.status='pending' AND t.todo_type='business_action' AND (t.route_descriptor->>'reworkOrderId'=r.rework_order_id::text OR (t.entity_type='rework_order' AND t.entity_id=r.rework_order_id::text)) AND u.display_name ILIKE '%'||$1||'%')
