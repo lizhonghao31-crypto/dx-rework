@@ -1585,6 +1585,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       missingFields: ["address","partyBRepresentative","payeeName","bankAccount","bankName"],
     });
     expect((await production.state(contractActor(), created.value.sourcingCaseId)).canDispatch).toBe(false);
+    await expect(service.reviseStyles(rootActor(),created.value.sourcingCaseId,{
+      expectedRevision:0,lines:created.value.lineItems.map(line => ({position:line.position,styleNo:"EARLY-REVISION",alternateStyleNo:null})),
+    },randomUUID())).rejects.toMatchObject({code:"INVALID_STATE_TRANSITION"});
     await expect(production.dispatch(contractActor(), created.value.sourcingCaseId, {
       sourcingContractDocumentId: pending.sourcingContractDocumentId, confirmed: true,
     }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
@@ -2055,12 +2058,21 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const edit={expectedRevision:0,lines:[{position:1,styleNo:"FINAL-PR03",alternateStyleNo:"TEMP-PR03"}]};
     await expect(service.reviseStyles(ieActor(),id,edit,randomUUID())).rejects.toMatchObject({statusCode:403});
     await expect(service.reviseStyles({...merchandiserActor(),actorId:ieId},id,edit,randomUUID())).rejects.toMatchObject({statusCode:403});
-    const first=await service.reviseStyles(merchandiserActor(),id,edit,randomUUID());
-    expect(first.value).toMatchObject({styleNo:"FINAL-PR03",identityRevision:1,status:"pending_ie_quote"});
-    await expect(service.reviseStyles(managerActor(),id,edit,randomUUID())).rejects.toMatchObject({statusCode:409});
+    for (const actor of [merchandiserActor(),managerActor(),rootActor()]) {
+      await expect(service.reviseStyles(actor,id,edit,randomUUID())).rejects.toMatchObject({code:"INVALID_STATE_TRANSITION"});
+    }
     await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"8.50"}]},randomUUID());
+    await expect(service.reviseStyles(rootActor(),id,edit,randomUUID())).rejects.toMatchObject({code:"INVALID_STATE_TRANSITION"});
     await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"8.50"}]},randomUUID());
+    await expect(service.reviseStyles(managerActor(),id,edit,randomUUID())).rejects.toMatchObject({code:"INVALID_STATE_TRANSITION"});
+    const generate = vi.spyOn(contractService,"generateIfReady").mockResolvedValueOnce({item:null});
     await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    generate.mockRestore();
+    await expect(service.reviseStyles(merchandiserActor(),id,edit,randomUUID())).rejects.toMatchObject({code:"INVALID_STATE_TRANSITION"});
+    await contractService.generateIfReady(contractActor(),id);
+    const first=await service.reviseStyles(merchandiserActor(),id,edit,randomUUID());
+    expect(first.value).toMatchObject({styleNo:"FINAL-PR03",identityRevision:1,status:"pending_finance_reconciliation"});
+    await expect(service.reviseStyles(managerActor(),id,edit,randomUUID())).rejects.toMatchObject({statusCode:409});
     const original=(await contractService.getCurrent(readerActor(),id)).item!;
     expect(original.status).toBe("ready");
     const approved=(await service.getCase(readerActor(),id)).approvalSnapshot!;
@@ -2074,9 +2086,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(current.pdfAttachmentId).not.toBe(original.pdfAttachmentId);
     const documents=await database.query<{approval_snapshot:{lines:{styleNo:string;unitPrice:string}[];totalAmount:string};revision_of:string|null}>(
       "SELECT approval_snapshot,revision_of FROM sourcing_contract_documents WHERE sourcing_case_id=$1 ORDER BY contract_version",[id]);
-    expect(documents.rows.map(row=>row.approval_snapshot.lines[0]!.styleNo)).toEqual(["FINAL-PR03","REVISED-PR03"]);
-    expect(documents.rows.map(row=>row.approval_snapshot.totalAmount)).toEqual(["170.00","170.00"]);
-    expect(documents.rows[1]!.revision_of).toBe(original.sourcingContractDocumentId);
+    expect(documents.rows.map(row=>row.approval_snapshot.lines[0]!.styleNo)).toEqual(["TEMP-PR03","FINAL-PR03","REVISED-PR03"]);
+    expect(documents.rows.map(row=>row.approval_snapshot.totalAmount)).toEqual(["170.00","170.00","170.00"]);
+    expect(documents.rows[2]!.revision_of).toBe(original.sourcingContractDocumentId);
     for(const q of ["TEMP-PR03","FINAL-PR03","REVISED-PR03"]) expect((await service.listCases(readerActor(),q)).items.map(item=>item.sourcingCaseId)).toContain(id);
     await expect(production.dispatch(rootActor(),id,{sourcingContractDocumentId:original.sourcingContractDocumentId,confirmed:true},randomUUID())).rejects.toMatchObject({statusCode:409});
     const order=(await production.dispatch(rootActor(),id,{sourcingContractDocumentId:current.sourcingContractDocumentId,confirmed:true},randomUUID())).value;

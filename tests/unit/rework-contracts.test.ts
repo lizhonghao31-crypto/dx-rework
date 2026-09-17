@@ -132,7 +132,7 @@ describe("rework initiation contracts", () => {
       new URL("../../apps/web/src/rework-detail-page.tsx", import.meta.url),
       "utf8",
     );
-    expect(source).toContain("const visibleImageAttachments = imageAttachments.slice(0, 6);");
+    expect(source).toContain("const visibleImageAttachments = imageAttachments;");
     expect(source).toContain("index === 5 && imageAttachments.length > 6");
     expect(source).toContain("imageAttachments.length - 5");
   });

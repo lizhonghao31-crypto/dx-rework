@@ -1359,6 +1359,15 @@ export class SourcingService {
       const result = await this.idempotency.execute(client,{scope,actorKey:actor.actorId,key,
         requestHash:requestHash(scope,{sourcingCaseId,input:parsed.data}),expiresAt:new Date(Date.now()+86400000)},async () => {
         const before = await this.readCase(client,sourcingCaseId,actor);
+        const generatedContract = (await client.query<{status:string;pdf_attachment_id:string|null;identity_version:number}>(
+          `SELECT status,pdf_attachment_id,identity_version FROM sourcing_contract_documents
+           WHERE sourcing_case_id=$1 ORDER BY contract_version DESC LIMIT 1`, [sourcingCaseId],
+        )).rows[0];
+        if (!before.approvalSnapshot || !["pending_finance_reconciliation","closed"].includes(before.status)
+          || generatedContract?.status !== "ready" || !generatedContract.pdf_attachment_id
+          || Number(generatedContract.identity_version) !== (before.identityRevision ?? 0)) {
+          fail("老板批准且当前合同 PDF 生成成功后才能修改款号",409,"INVALID_STATE_TRANSITION");
+        }
         if ((before.identityRevision ?? 0) !== parsed.data!.expectedRevision) fail("款号已被他人修改，请刷新后重试",409,"CONFLICT");
         if (lines.length !== before.lineItems.length || lines.some((line,index) => line.position !== before.lineItems[index]!.position)) fail("只能修改已有款色行的款号");
         const previous = before.lineItems.map(line => ({position:line.position,styleNo:line.formalStyleNo === undefined ? line.styleNo : line.formalStyleNo,alternateStyleNo:line.alternateStyleNo}));

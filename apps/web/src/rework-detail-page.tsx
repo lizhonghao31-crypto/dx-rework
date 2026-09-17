@@ -24,6 +24,7 @@ import { WorkReportingForm } from "./work-reporting-form.js";
 import "./rework-detail.css";
 import "./rework-detail-compact.css";
 import "./rework-mobile.css";
+import "./order-overview-responsive.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -429,8 +430,12 @@ export function ReworkDetailPage({
   const [tailDefectMessage, setTailDefectMessage] = useState("");
   const [tailDefectBusy, setTailDefectBusy] = useState(false);
   const defectDialogRef = useRef<HTMLDialogElement | null>(null);
-  const [mobileImagesExpanded, setMobileImagesExpanded] = useState(false);
+  const [mobileImagesExpanded, setMobileImagesExpanded] = useState(true);
   const [mobileWorkflowExpanded, setMobileWorkflowExpanded] = useState(false);
+  const mobileWorkflowRailRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (mobileWorkflowExpanded) mobileWorkflowRailRef.current?.querySelector(".is-current")?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [mobileWorkflowExpanded]);
   const [collapsedStages, setCollapsedStages] = useState<Set<WorkflowStage["key"]>>(() =>
     window.matchMedia("(max-width: 640px)").matches ? new Set(["planning", "execution", "responsibility"]) : new Set(),
   );
@@ -561,7 +566,7 @@ export function ReworkDetailPage({
     { label: "面辅料供应商", value: detail.supplyContext.fabricSupplierName },
     { label: "印绣花跟单", value: detail.supplyContext.embroideryMerchandiserName },
   ].filter((fact): fact is { label: string; value: string } => Boolean(fact.value));
-  const visibleImageAttachments = imageAttachments.slice(0, 6);
+  const visibleImageAttachments = imageAttachments;
   const meta = statusMeta[detail.status];
   const stages = buildWorkflow(detail, currentUser, returnToTodos ? focusedNode : undefined);
   const workflowNodes = stages.flatMap((stage) => stage.nodes);
@@ -738,7 +743,7 @@ export function ReworkDetailPage({
 
         {detail.inspectionReport ? <InspectionReportReadonly report={detail.inspectionReport} /> : null}
 
-        <div className="rework-detail-overview-grid">
+        <div className="rework-detail-overview-grid order-overview--compact">
           <section className="rework-detail-images" aria-label="订单图片">
             <div className="section-title rework-detail-panel-title rework-detail-desktop-panel-heading">
               <div><h2>订单图片</h2></div>
@@ -829,7 +834,7 @@ export function ReworkDetailPage({
                   </details>;
                 })}
               </div>
-              <div className="rework-workflow__mobile-rail" aria-label="移动端流程节点">
+              <div className="rework-workflow__mobile-rail" ref={mobileWorkflowRailRef} aria-label="移动端流程节点">
                 {workflowNodes.map(renderWorkflowNode)}
               </div>
               {detail.status === "pending_responsibility_determination" ? <div className="rework-workflow__pending-path">N07 选择每道工序的主责任方后提交老板签字；供应商计划扣款暂不生成。</div> : null}
