@@ -4,6 +4,10 @@ import { createHash, randomUUID } from "node:crypto";
 
 import {
   calculateSourcingLinesTotalExact,
+  duplicateSourcingLineMessage,
+  sourcingStyleNumbers,
+  normalizeSourcingStyleNumber,
+  type SourcingStyleIdentity,
   calculateSourcingOrderQuantity,
   calculateSourcingTotalExact,
   MAX_SOURCING_ATTACHMENTS,
@@ -1340,6 +1344,26 @@ export class SourcingService {
     return result.rows;
   }
 
+  private async checkStyleNumbers(client: PoolClient, lines: readonly SourcingStyleIdentity[], confirmed: readonly string[] = [], caseId: string | null = null, previous: readonly SourcingStyleIdentity[] = []): Promise<string[]> {
+    const duplicate = duplicateSourcingLineMessage(lines);
+    if (duplicate) fail(duplicate);
+    const prior = new Set(sourcingStyleNumbers(previous));
+    const names = sourcingStyleNumbers(lines).filter(name => !prior.has(name));
+    // Lock in a stable order so concurrent submissions cannot both miss a new identity.
+    for (const name of names) await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [`sourcing-style:${name}`]);
+    if (!names.length) return [];
+    const matches = await client.query<{style_no:string}>(
+      `SELECT DISTINCT normalize_sourcing_style_key(alias.style_no) AS style_no
+       FROM sourcing_style_aliases alias JOIN sourcing_cases source USING(sourcing_case_id)
+       WHERE source.deleted_at IS NULL AND ($2::uuid IS NULL OR source.sourcing_case_id<>$2)
+         AND normalize_sourcing_style_key(alias.style_no)=ANY($1::text[]) ORDER BY style_no`, [names,caseId],
+    );
+    const acknowledged = new Set(confirmed.map(normalizeSourcingStyleNumber));
+    const unconfirmed = matches.rows.filter(row => !acknowledged.has(row.style_no));
+    if (unconfirmed.length) fail(`款号 ${unconfirmed.map(row => row.style_no).join("、")} 已被其它外发订单使用，请核对是否录错。`,409,"STYLE_NUMBER_EXISTS");
+    return matches.rows.map(row => row.style_no);
+  }
+
   async reviseStyles(actor: TrustedActorContext, sourcingCaseId: string, input: ReviseSourcingStyles, key: string): Promise<Result<SourcingCaseSummary>> {
     const parsed = ReviseSourcingStylesSchema.safeParse(input);
     if (!parsed.success || !UUID_PATTERN.test(sourcingCaseId)) fail("款号修改信息无效");
@@ -1357,7 +1381,7 @@ export class SourcingService {
       if (!source) fail("外发订单不存在",404,"NOT_FOUND");
       if (!root && ((!manager && source!.created_by !== actor.actorId) || !await memberCanWriteModule(client,actor.actorId,"sourcing"))) fail("无权修改本订单款号",403,"FORBIDDEN");
       const result = await this.idempotency.execute(client,{scope,actorKey:actor.actorId,key,
-        requestHash:requestHash(scope,{sourcingCaseId,input:parsed.data}),expiresAt:new Date(Date.now()+86400000)},async () => {
+        requestHash:requestHash(scope,{sourcingCaseId,input:{...parsed.data,confirmedDuplicateStyles:undefined}}),expiresAt:new Date(Date.now()+86400000)},async () => {
         const before = await this.readCase(client,sourcingCaseId,actor);
         const generatedContract = (await client.query<{status:string;pdf_attachment_id:string|null;identity_version:number}>(
           `SELECT status,pdf_attachment_id,identity_version FROM sourcing_contract_documents
@@ -1372,8 +1396,11 @@ export class SourcingService {
         if (lines.length !== before.lineItems.length || lines.some((line,index) => line.position !== before.lineItems[index]!.position)) fail("只能修改已有款色行的款号");
         const previous = before.lineItems.map(line => ({position:line.position,styleNo:line.formalStyleNo === undefined ? line.styleNo : line.formalStyleNo,alternateStyleNo:line.alternateStyleNo}));
         if (JSON.stringify(previous) === JSON.stringify(lines)) return {statusCode:200,response:before};
+        const confirmedDuplicates = await this.checkStyleNumbers(client,
+          lines.map(line => ({...line,color:before.lineItems.find(row => row.position===line.position)?.color})),
+          parsed.data!.confirmedDuplicateStyles,sourcingCaseId,previous);
         const eventId = await this.events.append(client,{...actor,authorizationCapability:manager ? MANAGEMENT_DECISION_CAPABILITY : CASE_CREATE_CAPABILITY},{
-          action:scope,entityType:"sourcing_case",entityId:sourcingCaseId,before:{lines:previous},after:{lines},reason:"补充或修正款号，数量价格及审批保持不变",
+          action:scope,entityType:"sourcing_case",entityId:sourcingCaseId,before:{lines:previous},after:{lines,confirmedDuplicateStyles:confirmedDuplicates},reason:"补充或修正款号，数量价格及审批保持不变",
         });
         await client.query(`INSERT INTO sourcing_style_revisions(sourcing_case_id,revision,lines,changed_by,operation_event_id,request_id)
           VALUES($1,$2,$3::jsonb,$4,$5,$6)`,[sourcingCaseId,(before.identityRevision ?? 0)+1,JSON.stringify(lines),actor.actorId,eventId,actor.requestId]);
@@ -1415,6 +1442,7 @@ export class SourcingService {
     }
     const normalized = {
       gender: input.gender,
+      ...(input.confirmedDuplicateStyles?.length ? {confirmedDuplicateStyles:input.confirmedDuplicateStyles.map(normalizeSourcingStyleNumber)} : {}),
       styleName,
       estimatedCutPieceSendDate: input.estimatedCutPieceSendDate,
       deliveryDate: input.deliveryDate,
@@ -1432,7 +1460,7 @@ export class SourcingService {
         scope,
         actorKey: actor.actorId,
         key: idempotencyKey,
-        requestHash: requestHash(scope, normalized),
+        requestHash: requestHash(scope, {...normalized,confirmedDuplicateStyles:undefined}),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
         const lineImageIds = normalized.lineItems.flatMap(line => line.imageAttachmentId ? [line.imageAttachmentId] : []);
@@ -1440,6 +1468,7 @@ export class SourcingService {
           const contractService = this.contractService ?? fail("款图校验服务暂不可用，请稍后再试",503,"STORAGE_UNAVAILABLE");
           await contractService.validateLineImages(client,actor,lineImageIds);
         }
+        const confirmedDuplicates = await this.checkStyleNumbers(client,normalized.lineItems,normalized.confirmedDuplicateStyles);
         await client.query(
           `INSERT INTO sourcing_style_catalog(style_id,style_name,created_by)
            VALUES($1,$2,$3) ON CONFLICT(normalized_name) DO NOTHING`,
@@ -1463,6 +1492,7 @@ export class SourcingService {
           attachmentIds: normalized.attachmentIds,
           daxingUnitPriceRecorded: true,
           pricingOrigin: "ie",
+          confirmedDuplicateStyles: confirmedDuplicates,
         };
         const eventId = await this.events.append(client, actor, {
           action: "sourcing.case.create",
