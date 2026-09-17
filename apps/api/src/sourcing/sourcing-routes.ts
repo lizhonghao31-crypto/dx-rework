@@ -6,6 +6,7 @@ import { registerProductionReportingRoutes } from "./production-reporting-routes
 import type { ProductionReportingService } from "./production-reporting-service.js";
 import {
   CreateSourcingCaseSchema,
+  ReviseSourcingStylesSchema,
   DispatchSourcingOrderSchema,
   SourcingDispatchStateSchema,
   SourcingProductionOrderSchema,
@@ -174,6 +175,21 @@ export function registerSourcingRoutes(
     app.get<{ Params: { productionOrderId: string } }>("/sourcing/production-orders/:productionOrderId", async (request) =>
       SourcingProductionOrderSchema.parse(await production.get(await readActor(request), caseId(request.params.productionOrderId))));
   }
+
+  app.post<{ Params: { sourcingCaseId: string } }>("/sourcing/cases/:sourcingCaseId/styles", async (request, reply) => {
+    const user = await dependencies.authenticate(token(request));
+    const root = await isRootUser(dependencies.root,user.id);
+    const manager = user.businessRoles?.includes("production_management") && user.capabilities.includes("sourcing:decision:record");
+    if (!root && !manager && !(user.businessRoles?.includes("order_merchandiser") && user.capabilities.includes("sourcing:inquiry:create"))) {
+      throw new ApplicationError("FORBIDDEN","当前岗位无权修改款号",403);
+    }
+    const parsed = ReviseSourcingStylesSchema.safeParse(request.body);
+    if (!parsed.success) validationError(parsed.error.issues[0]?.message ?? "款号修改信息无效");
+    const actor = await businessActor(dependencies.root,user,request.id,manager ? "sourcing:decision:record" : "sourcing:inquiry:create");
+    const result = await dependencies.service.reviseStyles(actor,caseId(request.params.sourcingCaseId),parsed.data!,idempotencyKey(request));
+    if (result.reused) void reply.header("idempotency-replayed","true");
+    return result.value;
+  });
 
   app.get("/sourcing/analysis", async (request,reply) => {
     const actor = await readActor(request);

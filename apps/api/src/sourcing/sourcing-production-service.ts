@@ -38,17 +38,17 @@ export const selectProduction = `SELECT production.production_order_id,productio
   production.decision_version,production.sourcing_contract_document_id,production.contract_number,
   production.contract_version,production.supplier_id,production.supplier_name_snapshot,
   production.gender,production.style_name_snapshot,production.quantity,production.processes,
-  production.delivery_date::text,production.first_style_no,production.dispatched_by,production.dispatched_at,
+  production.delivery_date::text,sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,production.dispatched_by,production.dispatched_at,
   transition.status,source_case.deleted_at IS NOT NULL AS source_case_archived,
   (SELECT COALESCE(sum(quantity),0)::integer FROM effective_sourcing_production_reports
     WHERE production_order_id=production.production_order_id) AS completed_quantity,
   (SELECT min(business_date)::text FROM effective_sourcing_production_reports
     WHERE production_order_id=production.production_order_id AND quantity>0) AS first_reported_on,
-  (SELECT jsonb_agg(jsonb_build_object('position',line.position,'styleNo',line.style_no,
-    'alternateStyleNo',line.alternate_style_no,'color',line.color,'quantity',line.quantity,
+  (SELECT jsonb_agg(jsonb_build_object('position',line.position,'styleNo',identity.style_no,
+    'alternateStyleNo',identity.alternate_style_no,'color',line.color,'quantity',line.quantity,
     'completedQuantity',(SELECT COALESCE(sum(quantity),0)::integer FROM effective_sourcing_production_reports
       WHERE production_order_id=line.production_order_id AND position=line.position)) ORDER BY line.position)
-   FROM sourcing_production_lines line WHERE line.production_order_id=production.production_order_id) AS lines
+   FROM sourcing_production_lines line JOIN current_sourcing_case_lines identity ON identity.sourcing_case_id=production.sourcing_case_id AND identity.position=line.position WHERE line.production_order_id=production.production_order_id) AS lines
   FROM sourcing_production_orders production
   JOIN sourcing_cases source_case USING(sourcing_case_id)
   JOIN LATERAL (SELECT status FROM sourcing_production_transitions
@@ -83,7 +83,7 @@ export class SourcingProductionService {
       LEFT JOIN LATERAL (SELECT sourcing_decision_id FROM sourcing_decisions
         WHERE sourcing_case_id=source_case.sourcing_case_id ORDER BY decision_version DESC LIMIT 1) decision ON true
       LEFT JOIN sourcing_approval_snapshots snapshot ON snapshot.sourcing_decision_id=decision.sourcing_decision_id
-      LEFT JOIN sourcing_contract_documents document USING(sourcing_approval_snapshot_id)
+      LEFT JOIN LATERAL (SELECT * FROM sourcing_contract_documents WHERE sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id ORDER BY contract_version DESC LIMIT 1) document ON true
       WHERE source_case.sourcing_case_id=$1 AND source_case.deleted_at IS NULL
       `, [sourcingCaseId]);
     return result.rows[0] ?? fail("外发订单不存在", 404);
@@ -151,8 +151,8 @@ export class SourcingProductionService {
             snapshot.quantity,snapshot.processes,snapshot.delivery_date,
             (SELECT style_no FROM sourcing_approval_snapshot_lines WHERE sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id ORDER BY position LIMIT 1),$2,$3
           FROM sourcing_approval_snapshots snapshot JOIN sourcing_contract_documents document USING(sourcing_approval_snapshot_id)
-          WHERE snapshot.sourcing_approval_snapshot_id=$4`,
-        [productionOrderId, actor.actorId, eventId, source.sourcing_approval_snapshot_id]);
+          WHERE snapshot.sourcing_approval_snapshot_id=$4 AND document.sourcing_contract_document_id=$5`,
+        [productionOrderId, actor.actorId, eventId, source.sourcing_approval_snapshot_id, parsed.data.sourcingContractDocumentId]);
         await client.query(`INSERT INTO sourcing_production_lines(production_order_id,position,style_no,alternate_style_no,color,quantity)
           SELECT $1,position,style_no,alternate_style_no,color,quantity FROM sourcing_approval_snapshot_lines
           WHERE sourcing_approval_snapshot_id=$2 ORDER BY position`, [productionOrderId, source.sourcing_approval_snapshot_id]);

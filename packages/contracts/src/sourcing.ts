@@ -83,13 +83,25 @@ export const SOURCING_IMAGE_SUPPLEMENT_ROLES = [
 ] as const;
 
 export const SourcingCaseLineInputSchema = z.object({
-  styleNo: ShortTextSchema,
+  styleNo: ShortTextSchema.optional(),
   alternateStyleNo: ShortTextSchema.optional(),
   color: ShortTextSchema,
   quantity: z.number().int().positive().max(10_000_000),
   // Accepted for old clients only; the service does not record a node-one quote.
   externalUnitPrice: SourcingNewUnitPriceSchema.optional(),
+}).strict().refine(line => !!line.styleNo || !!line.alternateStyleNo, "正式款号与代用款号至少填写一个");
+
+export const ReviseSourcingStylesSchema = z.object({
+  expectedRevision: z.number().int().nonnegative(),
+  lines: z.array(z.object({
+    position: z.number().int().min(1).max(MAX_SOURCING_LINE_ITEMS),
+    styleNo: ShortTextSchema.nullable(),
+    alternateStyleNo: ShortTextSchema.nullable(),
+  }).strict().refine(line => !!line.styleNo || !!line.alternateStyleNo, "正式款号与代用款号至少填写一个"))
+    .min(1).max(MAX_SOURCING_LINE_ITEMS)
+    .refine(lines => new Set(lines.map(line => line.position)).size === lines.length, "款色行不能重复"),
 }).strict();
+export type ReviseSourcingStyles = z.infer<typeof ReviseSourcingStylesSchema>;
 
 export const calculateSourcingOrderQuantity = (
   lineItems: readonly Readonly<{ quantity: number }>[],
@@ -414,6 +426,7 @@ export const SourcingCraftSnapshotSchema = z.object({
 }).strict();
 
 export const SourcingCaseLineSchema = z.object({
+  formalStyleNo: z.string().nullable().optional(),
   position: z.number().int().min(1).max(MAX_SOURCING_LINE_ITEMS),
   styleNo: z.string(),
   alternateStyleNo: z.string().nullable(),
@@ -424,6 +437,7 @@ export const SourcingCaseLineSchema = z.object({
 }).strict();
 
 export const SourcingCaseSummarySchema = z.object({
+  identityRevision: z.number().int().nonnegative().optional(),
   gender: z.enum(["男装", "女装"]).nullable().default(null),
   styleName: z.string().nullable().default(null),
   sourcingCaseId: IdSchema,
@@ -483,9 +497,11 @@ export const SupplementSourcingImagesSchema = z.object({
 }).strict();
 
 export const SourcingTimelineEntrySchema = z.object({
+  pdfAttachmentId: IdSchema.nullable().optional(),
   entryId: IdSchema,
   kind: z.enum([
     "created",
+    "style_revision",
     "ie_quote",
     "management_decision",
     "owner_decision",

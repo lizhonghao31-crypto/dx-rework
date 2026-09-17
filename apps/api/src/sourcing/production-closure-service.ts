@@ -73,7 +73,7 @@ export class ProductionClosureService {
   const client=await this.database.connect();
   try{await client.query("BEGIN");await client.query("SELECT pg_advisory_xact_lock(hashtext('production-closure'))");
    const timestamp=await client.query<{as_of:Date}>("SELECT clock_timestamp() AS as_of"),asOf=(this.clock?.()??timestamp.rows[0]!.as_of).toISOString();
-   const orders=await client.query<{production_order_id:string;created_by:string;operation_event_id:string;first_style_no:string;supplier_name_snapshot:string;merchandiser_name:string|null}>(`SELECT production.production_order_id,source_case.created_by,production.operation_event_id,production.first_style_no,production.supplier_name_snapshot,merchandiser.display_name merchandiser_name
+   const orders=await client.query<{production_order_id:string;created_by:string;operation_event_id:string;first_style_no:string;supplier_name_snapshot:string;merchandiser_name:string|null}>(`SELECT production.production_order_id,source_case.created_by,production.operation_event_id,sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,production.supplier_name_snapshot,merchandiser.display_name merchandiser_name
     FROM sourcing_production_orders production JOIN sourcing_cases source_case USING(sourcing_case_id)
     LEFT JOIN app_users merchandiser ON merchandiser.id=source_case.created_by
     JOIN sourcing_production_pilots pilot ON pilot.supplier_id=production.supplier_id AND pilot.enabled=true WHERE ${productionNotExcluded}`);
@@ -104,17 +104,17 @@ export class ProductionClosureService {
  async linkReceipt(client:PoolClient,actor:TrustedActorContext,input:{productionOrderId:string;receiptId:string;styleNo:string;operationEventId:string;receivedAt:string}){
   if(!this.warehouse(actor))fail("仅仓管可关联实际收货");
   if(!z.string().uuid().safeParse(input.productionOrderId).success)fail("生产订单编号无效",400);
-  const result=await client.query<{first_style_no:string;shipped_on:string}>(`SELECT shipment.first_style_no,shipment.shipped_on::text FROM sourcing_production_shipments shipment
+  const result=await client.query<{style_matches:boolean;shipped_on:string}>(`SELECT EXISTS(SELECT 1 FROM sourcing_style_aliases alias WHERE alias.sourcing_case_id=production.sourcing_case_id AND alias.position=1 AND upper(btrim(alias.style_no))=upper(btrim($2))) AS style_matches,shipment.shipped_on::text FROM sourcing_production_shipments shipment
    JOIN sourcing_production_orders production USING(production_order_id) JOIN sourcing_production_pilots pilot USING(supplier_id)
-   WHERE shipment.production_order_id=$1 AND ${productionNotExcluded} AND pilot.enabled=true FOR SHARE OF pilot`,[input.productionOrderId]);
+   WHERE shipment.production_order_id=$1 AND ${productionNotExcluded} AND pilot.enabled=true FOR SHARE OF pilot`,[input.productionOrderId,input.styleNo]);
   const shipment=result.rows[0];
   if(!shipment)fail("该订单未发货或未启用试点",409);
   const day=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(input.receivedAt));
-  if(shipment.first_style_no.trim().toUpperCase()!==input.styleNo.trim().toUpperCase()||day<shipment.shipped_on)fail("收货款号或日期与所选发货单不符",409);
+  if(!shipment.style_matches||day<shipment.shipped_on)fail("收货款号或日期与所选发货单不符",409);
   await client.query("INSERT INTO sourcing_production_receipt_links(receipt_id,production_order_id,operation_event_id) VALUES($1,$2,$3)",[input.receiptId,input.productionOrderId,input.operationEventId]);
  }
  private async receipts(ids:string[]):Promise<ProductionReceivingSummary[]> {
-  const result=await this.database.query<{production_order_id:string;first_style_no:string;supplier_name_snapshot:string;contract_number:string;shipped_on:string;recorded_quantity:number}>(`SELECT shipment.*,shipment.shipped_on::text,production.supplier_name_snapshot,production.contract_number
+  const result=await this.database.query<{production_order_id:string;first_style_no:string;supplier_name_snapshot:string;contract_number:string;shipped_on:string;recorded_quantity:number}>(`SELECT shipment.*,sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,shipment.shipped_on::text,production.supplier_name_snapshot,production.contract_number
    FROM sourcing_production_shipments shipment JOIN sourcing_production_orders production USING(production_order_id) WHERE production_order_id=ANY($1::uuid[])`,[ids]);
   const receipts=await this.database.query<{production_order_id:string;receipt_id:string;receiving_batch_id:string;actual_quantity:number;received_at:Date;archived:boolean}>(`SELECT link.production_order_id,receipt.receipt_id,receipt.receiving_batch_id,
    COALESCE(correction.actual_quantity,receipt.actual_quantity)::integer AS actual_quantity,receipt.received_at,batch.deleted_at IS NOT NULL AS archived
@@ -129,7 +129,7 @@ export class ProductionClosureService {
   const q=input.q?.trim()??"",page=input.page??1;if(q.length>100||!Number.isInteger(page)||page<1||page>100000)fail("回货筛选无效",400);
   const where=`FROM sourcing_production_shipments shipment JOIN sourcing_production_orders production USING(production_order_id)
    JOIN sourcing_production_pilots pilot USING(supplier_id) WHERE pilot.enabled=true AND ${productionNotExcluded}
-   AND ($1='' OR strpos(upper(shipment.first_style_no),upper($1))>0 OR strpos(upper(production.supplier_name_snapshot),upper($1))>0)`;
+   AND ($1='' OR EXISTS(SELECT 1 FROM sourcing_style_aliases alias WHERE alias.sourcing_case_id=production.sourcing_case_id AND alias.position=1 AND strpos(upper(alias.style_no),upper($1))>0) OR strpos(upper(production.supplier_name_snapshot),upper($1))>0)`;
   const count=await this.database.query<{count:string}>(`SELECT count(*) ${where}`,[q]);
   const rows=await this.database.query<{production_order_id:string}>(`SELECT shipment.production_order_id ${where} ORDER BY shipment.shipped_on DESC,shipment.production_order_id LIMIT 15 OFFSET $2`,[q,(page-1)*15]);
   const summaries=await this.receipts(rows.rows.map(r=>r.production_order_id));const byId=new Map(summaries.map(s=>[s.productionOrderId,s]));

@@ -109,7 +109,7 @@ export class ProductionDashboardService {
   }
   private async events(client:PoolClient,ids:string[]):Promise<ProductionDashboardEvent[]> {
     const result=await client.query<{id:string;production_order_id:string;first_style_no:string;supplier_name_snapshot:string;kind:"report"|"correct"|"complete"|"ship";business_date:string;created_at:Date;quantity:number|null}>(`
-      SELECT activity.*,production.first_style_no,production.supplier_name_snapshot FROM (
+      SELECT activity.*,sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,production.supplier_name_snapshot FROM (
         SELECT report.report_id::text AS id,report.production_order_id,CASE WHEN revision=1 THEN 'report' ELSE 'correct' END AS kind,
           business_date::text,created_at,quantity FROM sourcing_production_reports report WHERE production_order_id=ANY($1::uuid[])
         UNION ALL

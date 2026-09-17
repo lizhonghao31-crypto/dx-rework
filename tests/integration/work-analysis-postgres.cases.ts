@@ -13,6 +13,8 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   await admin.query(`CREATE SCHEMA ${schema}`);await db.query("SET TIME ZONE 'UTC'");
   await db.query(`CREATE TABLE sourcing_cases(sourcing_case_id uuid PRIMARY KEY,erp_order_no text,style_no text,created_at timestamptz,deleted_at timestamptz);
    CREATE TABLE sourcing_case_lines(sourcing_case_id uuid,position int,style_no text,color text,quantity int,external_unit_price numeric(18,4),PRIMARY KEY(sourcing_case_id,position));
+   CREATE VIEW current_sourcing_case_lines AS SELECT * FROM sourcing_case_lines;
+   CREATE VIEW sourcing_style_aliases AS SELECT sourcing_case_id,position,style_no FROM sourcing_case_lines;
    CREATE TABLE sourcing_ie_quotes(sourcing_ie_quote_id uuid PRIMARY KEY,sourcing_case_id uuid,quote_version int,quoted_at timestamptz);
    CREATE TABLE sourcing_ie_quote_lines(sourcing_ie_quote_id uuid,sourcing_case_id uuid,position int,quantity int,unit_price numeric(18,4));
    CREATE TABLE sourcing_decisions(sourcing_decision_id uuid PRIMARY KEY,source_type text);

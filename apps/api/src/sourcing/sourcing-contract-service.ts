@@ -114,15 +114,23 @@ export class SourcingContractService {
     approvalSnapshotId: string,
     actor: TrustedActorContext,
   ): Promise<string> {
+    // Serialize with style corrections, approvals and dispatch before reading the revision.
+    await client.query(`SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=(
+      SELECT sourcing_case_id FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1) FOR UPDATE`,[approvalSnapshotId]);
+    const metadata = (await client.query<{identity_version:number;template_version:number}>(`SELECT
+      (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=snapshot.sourcing_case_id) AS identity_version,
+      (SELECT max(template_version) FROM sourcing_contract_template_versions WHERE effective_from<=CURRENT_TIMESTAMP) AS template_version
+      FROM sourcing_approval_snapshots snapshot WHERE sourcing_approval_snapshot_id=$1`,[approvalSnapshotId])).rows[0];
+    if (!metadata) throw new ApplicationError("INVALID_STATE_TRANSITION","合同批准快照不存在",409);
     const documentId = randomUUID();
     const inserted = await client.query<{ sourcing_contract_document_id: string }>(
       `INSERT INTO sourcing_contract_documents(
          sourcing_contract_document_id,sourcing_case_id,sourcing_approval_snapshot_id,
          sourcing_decision_id,contract_version,contract_number,template_version,
-         approval_snapshot,missing_fields,status,prepared_by
+         approval_snapshot,missing_fields,status,prepared_by,identity_version,revision_of
        )
        SELECT $1,snapshot.sourcing_case_id,snapshot.sourcing_approval_snapshot_id,
-              snapshot.sourcing_decision_id,snapshot.decision_version,
+              snapshot.sourcing_decision_id,GREATEST(snapshot.decision_version,(SELECT COALESCE(max(contract_version),0)+1 FROM sourcing_contract_documents WHERE sourcing_case_id=snapshot.sourcing_case_id)),
               'DX-WF-'||to_char(snapshot.approved_at AT TIME ZONE 'Asia/Shanghai','YYYYMMDD')||'-'||
                 lpad(nextval('sourcing_contract_number_seq')::text,6,'0'),
               template.template_version,
@@ -145,44 +153,51 @@ export class SourcingContractService {
                 'approvedAt',snapshot.approved_at,
                 'lines',COALESCE((
                   SELECT jsonb_agg(jsonb_build_object(
-                    'position',line.position,'styleNo',line.style_no,
-                    'alternateStyleNo',line.alternate_style_no,'color',line.color,
+                    'position',line.position,'styleNo',identity.style_no,
+                    'alternateStyleNo',identity.alternate_style_no,'color',line.color,
                     'quantity',line.quantity,'unitPrice',line.unit_price::text,
                     'totalAmount',line.total_amount::text
                   ) ORDER BY line.position)
                   FROM sourcing_approval_snapshot_lines line
+                  JOIN current_sourcing_case_lines identity ON identity.sourcing_case_id=snapshot.sourcing_case_id AND identity.position=line.position
                   WHERE line.sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id
                 ),'[]'::jsonb)
-              ),
+              ) || COALESCE(supplements.values,'{}'::jsonb),
               missing.fields,
               CASE WHEN cardinality(missing.fields)>0
                 THEN 'pending_supplement' ELSE 'generation_pending' END,
-              $2
+              $2,$4,previous.sourcing_contract_document_id
        FROM sourcing_approval_snapshots snapshot
+       LEFT JOIN LATERAL (SELECT * FROM sourcing_contract_documents
+         WHERE sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id ORDER BY contract_version DESC LIMIT 1) previous ON true
+       LEFT JOIN LATERAL (SELECT (SELECT jsonb_object_agg(field_name,field_value) FROM sourcing_contract_supplements
+         WHERE sourcing_contract_document_id=previous.sourcing_contract_document_id)
+         || '{}'::jsonb AS direct_values) direct ON true
+       LEFT JOIN LATERAL (SELECT COALESCE(jsonb_object_agg(key,value),'{}'::jsonb) || COALESCE(direct.direct_values,'{}'::jsonb) AS values
+         FROM jsonb_each(previous.approval_snapshot) WHERE key=ANY(ARRAY['address','contractEntityName','partyBRepresentative','payeeName','bankAccount','bankName'])) supplements ON true
        CROSS JOIN LATERAL (
          SELECT template_version
          FROM sourcing_contract_template_versions
-         WHERE effective_from<=snapshot.approved_at
-         ORDER BY template_version DESC LIMIT 1
+         WHERE template_version=$5
        ) template
        CROSS JOIN LATERAL (
          SELECT array_remove(ARRAY[
-           CASE WHEN snapshot.supplier_address IS NULL THEN 'address' END,
-           CASE WHEN snapshot.party_b_representative IS NULL THEN 'partyBRepresentative' END,
-           CASE WHEN snapshot.payee_name IS NULL THEN 'payeeName' END,
-           CASE WHEN snapshot.bank_account IS NULL THEN 'bankAccount' END,
-           CASE WHEN snapshot.bank_name IS NULL THEN 'bankName' END
+           CASE WHEN COALESCE(supplements.values->>'address',snapshot.supplier_address) IS NULL THEN 'address' END,
+           CASE WHEN COALESCE(supplements.values->>'partyBRepresentative',snapshot.party_b_representative) IS NULL THEN 'partyBRepresentative' END,
+           CASE WHEN COALESCE(supplements.values->>'payeeName',snapshot.payee_name) IS NULL THEN 'payeeName' END,
+           CASE WHEN COALESCE(supplements.values->>'bankAccount',snapshot.bank_account) IS NULL THEN 'bankAccount' END,
+           CASE WHEN COALESCE(supplements.values->>'bankName',snapshot.bank_name) IS NULL THEN 'bankName' END
          ],NULL)::text[] AS fields
        ) missing
        WHERE snapshot.sourcing_approval_snapshot_id=$3
-       ON CONFLICT(sourcing_approval_snapshot_id) DO NOTHING
+       ON CONFLICT(sourcing_approval_snapshot_id,identity_version,template_version) DO NOTHING
        RETURNING sourcing_contract_document_id`,
-      [documentId,actor.actorId,approvalSnapshotId],
+      [documentId,actor.actorId,approvalSnapshotId,metadata.identity_version,metadata.template_version],
     );
     const existing = inserted.rows[0] ? null : await client.query<{ sourcing_contract_document_id: string }>(
       `SELECT sourcing_contract_document_id FROM sourcing_contract_documents
-       WHERE sourcing_approval_snapshot_id=$1`,
-      [approvalSnapshotId],
+       WHERE sourcing_approval_snapshot_id=$1 AND identity_version=$2 AND template_version=$3`,
+      [approvalSnapshotId,metadata.identity_version,metadata.template_version],
     );
     const id = inserted.rows[0]?.sourcing_contract_document_id
       ?? existing?.rows[0]?.sourcing_contract_document_id;
@@ -218,6 +233,7 @@ export class SourcingContractService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId]);
       await this.idempotency.execute(client, {
         scope,actorKey: actor.actorId,key: idempotencyKey,
         requestHash: requestHash(scope,{ sourcingCaseId,input }),

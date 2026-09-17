@@ -1,3 +1,4 @@
+import { memberCanWriteModule } from "../access/member-module-policy.js";
 import {readQuoteAnalysis} from "./sourcing-analysis.js";
 import { createHash, randomUUID } from "node:crypto";
 
@@ -6,10 +7,12 @@ import {
   calculateSourcingOrderQuantity,
   calculateSourcingTotalExact,
   MAX_SOURCING_ATTACHMENTS,
+  ReviseSourcingStylesSchema,
   SOURCING_IMAGE_SUPPLEMENT_ROLES,
 } from "@dx-rework/contracts";
 import type {
   CreateSourcingCase,
+  ReviseSourcingStyles,
   CreateSourcingIeQuote,
   DeleteSourcingCaseResponse,
   DecideSourcingException,
@@ -93,6 +96,7 @@ type SourcingPricedLineRow = Readonly<{
 }>;
 
 type SourcingCaseRow = Readonly<{
+  identity_revision?: number;
   sourcing_case_id: string;
   gender: "男装" | "女装" | null;
   style_name_snapshot: string | null;
@@ -278,6 +282,7 @@ const mapCase = (
       }];
   return {
   sourcingCaseId: row.sourcing_case_id,
+  identityRevision: Number(row.identity_revision ?? 0),
   gender: row.gender ?? null,
   styleName: row.style_name_snapshot ?? null,
   erpOrderId: row.erp_order_id,
@@ -462,6 +467,7 @@ export class SourcingService {
       `SELECT
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
+         (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=case_view.sourcing_case_id) AS identity_revision,
          source_case.gender,source_case.style_name_snapshot,
          source_case.daxing_unit_price::text AS daxing_unit_price,
          to_char(source_case.estimated_cut_piece_send_date,'YYYY-MM-DD')
@@ -518,7 +524,7 @@ export class SourcingService {
          SELECT jsonb_agg(
            jsonb_build_object(
              'position',line.position,
-             'styleNo',line.style_no,
+             'styleNo',line.style_no,'formalStyleNo',line.formal_style_no,
              'alternateStyleNo',line.alternate_style_no,
              'color',line.color,
              'quantity',line.quantity,
@@ -527,7 +533,7 @@ export class SourcingService {
            )
            ORDER BY line.position
          ) AS line_items
-         FROM sourcing_case_lines line
+         FROM current_sourcing_case_lines line
          WHERE line.sourcing_case_id=case_view.sourcing_case_id
        ) lines_row ON true
        LEFT JOIN LATERAL (
@@ -622,6 +628,7 @@ export class SourcingService {
          count(*) OVER()::text AS total_count,
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
+         (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=case_view.sourcing_case_id) AS identity_revision,
          source_case.gender,source_case.style_name_snapshot,
          source_case.daxing_unit_price::text AS daxing_unit_price,
          to_char(source_case.estimated_cut_piece_send_date,'YYYY-MM-DD')
@@ -678,7 +685,7 @@ export class SourcingService {
          SELECT jsonb_agg(
            jsonb_build_object(
              'position',line.position,
-             'styleNo',line.style_no,
+             'styleNo',line.style_no,'formalStyleNo',line.formal_style_no,
              'alternateStyleNo',line.alternate_style_no,
              'color',line.color,
              'quantity',line.quantity,
@@ -687,7 +694,7 @@ export class SourcingService {
            )
            ORDER BY line.position
          ) AS line_items
-         FROM sourcing_case_lines line
+         FROM current_sourcing_case_lines line
          WHERE line.sourcing_case_id=case_view.sourcing_case_id
        ) lines_row ON true
        LEFT JOIN LATERAL (
@@ -754,6 +761,7 @@ export class SourcingService {
        ) snapshot_lines ON true
        WHERE ($1='' OR case_view.erp_order_no ILIKE '%'||$1||'%'
           OR case_view.style_no ILIKE '%'||$1||'%'
+          OR EXISTS(SELECT 1 FROM sourcing_style_aliases alias WHERE alias.sourcing_case_id=case_view.sourcing_case_id AND alias.style_no ILIKE '%'||$1||'%')
           OR EXISTS (
             SELECT 1
             FROM sourcing_case_lines search_line
@@ -1031,7 +1039,8 @@ export class SourcingService {
     await this.readCase(this.database, sourcingCaseId, actor);
     const result = await this.database.query<{
       entry_id: string;
-      kind: "created" | "ie_quote" | "management_decision" | "owner_decision"
+      pdf_attachment_id: string | null;
+      kind: "created" | "style_revision" | "ie_quote" | "management_decision" | "owner_decision"
         | "contract" | "factory_change_request" | "factory_change_verification"
         | "finance_reconciliation" | "exception_verification";
       entry_version: number | string;
@@ -1060,6 +1069,11 @@ export class SourcingService {
                 NULL::text AS result,NULL::text AS resolution
          FROM sourcing_cases source_case
          WHERE source_case.sourcing_case_id=$1
+         UNION ALL
+         SELECT revision.operation_event_id,'style_revision',revision.revision,revision.changed_by,
+                revision.created_at,'补充或修改款号',NULL::numeric,NULL::numeric,
+                NULL::text,NULL::text,NULL::text,NULL::date,NULL::integer,'{}'::text[],NULL::text,NULL::text
+         FROM sourcing_style_revisions revision WHERE revision.sourcing_case_id=$1
          UNION ALL
          SELECT quote.sourcing_ie_quote_id,'ie_quote',quote.quote_version,quote.quoted_by,
                 quote.quoted_at,quote.quote_reason,quote.unit_price,quote.total_amount,
@@ -1148,7 +1162,8 @@ export class SourcingService {
               timeline.unit_price::text,timeline.total_amount::text,
               timeline.supplier_name,timeline.decision,
               timeline.contract_reference,timeline.signed_on::text AS signed_on,
-              timeline.quantity,timeline.difference_fields,timeline.result,timeline.resolution
+              timeline.quantity,timeline.difference_fields,timeline.result,timeline.resolution,
+              (SELECT pdf_attachment_id FROM sourcing_contract_documents WHERE sourcing_contract_document_id=timeline.entry_id AND timeline.kind='contract') AS pdf_attachment_id
        FROM timeline
        LEFT JOIN app_users app_user ON app_user.id=timeline.actor_id
        ORDER BY timeline.handled_at,timeline.kind,timeline.entry_version`,
@@ -1158,6 +1173,7 @@ export class SourcingService {
     return {
       items: result.rows.map((row) => ({
         entryId: row.entry_id,
+        pdfAttachmentId: row.pdf_attachment_id ?? null,
         kind: row.kind,
         version: Number(row.entry_version),
         handledBy: row.handled_by,
@@ -1324,6 +1340,44 @@ export class SourcingService {
     return result.rows;
   }
 
+  async reviseStyles(actor: TrustedActorContext, sourcingCaseId: string, input: ReviseSourcingStyles, key: string): Promise<Result<SourcingCaseSummary>> {
+    const parsed = ReviseSourcingStylesSchema.safeParse(input);
+    if (!parsed.success || !UUID_PATTERN.test(sourcingCaseId)) fail("款号修改信息无效");
+    const root = actor.actorRoles.includes(ROOT_ROLE);
+    const caps = actor.authorizationCapabilities ?? [actor.authorizationCapability];
+    const manager = actor.actorRoles.includes(MANAGEMENT_DECISION_ROLE) && caps.includes(MANAGEMENT_DECISION_CAPABILITY);
+    const merchandiser = actor.actorRoles.includes(CASE_CREATE_ROLE) && caps.includes(CASE_CREATE_CAPABILITY);
+    if (!root && (!caps.includes(READ_CAPABILITY) || (!manager && !merchandiser))) fail("当前岗位无权修改款号",403,"FORBIDDEN");
+    const lines = [...parsed.data!.lines].sort((a,b) => a.position-b.position);
+    const client = await this.database.connect();
+    const scope = "sourcing.styles.revise";
+    try {
+      await client.query("BEGIN");
+      const source = (await client.query<{created_by:string}>("SELECT created_by FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId])).rows[0];
+      if (!source) fail("外发订单不存在",404,"NOT_FOUND");
+      if (!root && ((!manager && source!.created_by !== actor.actorId) || !await memberCanWriteModule(client,actor.actorId,"sourcing"))) fail("无权修改本订单款号",403,"FORBIDDEN");
+      const result = await this.idempotency.execute(client,{scope,actorKey:actor.actorId,key,
+        requestHash:requestHash(scope,{sourcingCaseId,input:parsed.data}),expiresAt:new Date(Date.now()+86400000)},async () => {
+        const before = await this.readCase(client,sourcingCaseId,actor);
+        if ((before.identityRevision ?? 0) !== parsed.data!.expectedRevision) fail("款号已被他人修改，请刷新后重试",409,"CONFLICT");
+        if (lines.length !== before.lineItems.length || lines.some((line,index) => line.position !== before.lineItems[index]!.position)) fail("只能修改已有款色行的款号");
+        const previous = before.lineItems.map(line => ({position:line.position,styleNo:line.formalStyleNo === undefined ? line.styleNo : line.formalStyleNo,alternateStyleNo:line.alternateStyleNo}));
+        if (JSON.stringify(previous) === JSON.stringify(lines)) return {statusCode:200,response:before};
+        const eventId = await this.events.append(client,{...actor,authorizationCapability:manager ? MANAGEMENT_DECISION_CAPABILITY : CASE_CREATE_CAPABILITY},{
+          action:scope,entityType:"sourcing_case",entityId:sourcingCaseId,before:{lines:previous},after:{lines},reason:"补充或修正款号，数量价格及审批保持不变",
+        });
+        await client.query(`INSERT INTO sourcing_style_revisions(sourcing_case_id,revision,lines,changed_by,operation_event_id,request_id)
+          VALUES($1,$2,$3::jsonb,$4,$5,$6)`,[sourcingCaseId,(before.identityRevision ?? 0)+1,JSON.stringify(lines),actor.actorId,eventId,actor.requestId]);
+        if (before.approvalSnapshot) await this.contractService?.prepareForApproval(client,before.approvalSnapshot.sourcingApprovalSnapshotId,actor);
+        return {statusCode:200,response:await this.readCase(client,sourcingCaseId,actor)};
+      });
+      await client.query("COMMIT");
+      await this.contractService?.generateIfReady({...actor,authorizationCapability:READ_CAPABILITY},sourcingCaseId).catch(() => undefined);
+      return {value:result.response,reused:result.reused};
+    } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
+    finally { client.release(); }
+  }
+
   async createCase(
     actor: TrustedActorContext,
     input: CreateSourcingCase,
@@ -1334,7 +1388,7 @@ export class SourcingService {
     const styleName = normalizeText(input.styleName, "款式", 100);
     const lineItems = input.lineItems.map((line, index) => ({
       position: index + 1,
-      styleNo: normalizeText(line.styleNo, "款号", 100),
+      styleNo: line.styleNo ? normalizeText(line.styleNo, "款号", 100) : null,
       alternateStyleNo: line.alternateStyleNo
         ? normalizeText(line.alternateStyleNo, "代用款号", 100)
         : null,
@@ -1342,6 +1396,7 @@ export class SourcingService {
       quantity: normalizeQuantity(line.quantity),
       externalUnitPrice: null,
     }));
+    if (lineItems.some(line => !line.styleNo && !line.alternateStyleNo)) fail("正式款号与代用款号至少填写一个");
     let orderQuantity: number;
     try {
       orderQuantity = calculateSourcingOrderQuantity(lineItems);
@@ -1421,7 +1476,7 @@ export class SourcingService {
             sourcingCaseId,
             sourcingCaseId,
             sourcingCaseId,
-            normalized.lineItems[0]!.styleNo,
+            normalized.lineItems[0]!.styleNo ?? normalized.lineItems[0]!.alternateStyleNo,
             LANE_KEY,
             normalized.orderQuantity,
             normalized.deliveryDate,
@@ -2137,7 +2192,7 @@ export class SourcingService {
              SELECT $1,line.position,source_line.style_no,source_line.alternate_style_no,
                     source_line.color,line.quantity,line.unit_price,line.total_amount
              FROM sourcing_decision_lines line
-             JOIN sourcing_case_lines source_line
+             JOIN current_sourcing_case_lines source_line
                ON source_line.sourcing_case_id=$2 AND source_line.position=line.position
              WHERE line.sourcing_decision_id=$3 ORDER BY line.position`,
             [snapshotId,sourcingCaseId,source.sourcing_decision_id],
@@ -2463,7 +2518,7 @@ export class SourcingService {
        )
        SELECT $1,line.sourcing_case_id,line.position,line.quantity,$2,
               round($2::numeric*line.quantity,2)
-       FROM sourcing_case_lines line
+       FROM current_sourcing_case_lines line
        WHERE line.sourcing_case_id=$3
        ORDER BY line.position`,
       [decisionId,source.proposed_unit_price,source.sourcing_case_id],
@@ -2506,7 +2561,7 @@ export class SourcingService {
          SELECT $1,line.position,source_line.style_no,source_line.alternate_style_no,
                 source_line.color,line.quantity,line.unit_price,line.total_amount
          FROM sourcing_decision_lines line
-         JOIN sourcing_case_lines source_line
+         JOIN current_sourcing_case_lines source_line
            ON source_line.sourcing_case_id=$2 AND source_line.position=line.position
          WHERE line.sourcing_decision_id=$3 ORDER BY line.position`,
         [snapshotId,source.sourcing_case_id,decisionId],
@@ -3059,6 +3114,7 @@ export class SourcingService {
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
+        await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 FOR UPDATE",[sourcingCaseId]);
         const current = await client.query<{
           status: string;
           sequence: number | string;
@@ -3111,6 +3167,7 @@ export class SourcingService {
              FROM sourcing_contract_documents contract
              WHERE contract.sourcing_case_id=source_case.sourcing_case_id
                AND contract.sourcing_decision_id=decision_row.sourcing_decision_id
+               AND contract.contract_version=(SELECT max(latest.contract_version) FROM sourcing_contract_documents latest WHERE latest.sourcing_case_id=contract.sourcing_case_id)
                AND contract.status='ready'
              ORDER BY contract.contract_version DESC LIMIT 1
            ) contract_row ON true
