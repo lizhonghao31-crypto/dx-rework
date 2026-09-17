@@ -27,7 +27,7 @@ describe("1.0 prelaunch PR-06 UI and workspace clarity", () => {
       read("apps/web/src/rework-detail-compact.css"),
     ]);
 
-    expect(detail).toContain("const [mobileImagesExpanded, setMobileImagesExpanded] = useState(false)");
+    expect(detail).toContain("const [mobileImagesExpanded, setMobileImagesExpanded] = useState(true)");
     expect(detail).toContain("const [mobileWorkflowExpanded, setMobileWorkflowExpanded] = useState(false)");
     expect(detail).toContain('aria-controls="order-images-content"');
     expect(detail).toContain('aria-controls="order-workflow-content"');

@@ -52,11 +52,12 @@ describe("order detail information architecture", () => {
   });
 
   it("uses the confirmed desktop overview, five-column two-row workflow and mobile horizontal rail", async () => {
-    const [detail, styles] = await Promise.all([
+    const [detail, styles, responsive] = await Promise.all([
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
       readFile("apps/web/src/rework-detail-compact.css", "utf8"),
+      readFile("apps/web/src/order-overview-responsive.css", "utf8"),
     ]);
-    expect(detail).toContain('className="rework-detail-overview-grid"');
+    expect(detail).toContain('className="rework-detail-overview-grid order-overview--compact"');
     expect(detail).toContain('className="rework-workflow__desktop-grid"');
     expect(detail).toContain('className="rework-workflow__mobile-rail"');
     expect(detail).toContain("{workflowNodes.map(renderWorkflowNode)}");
@@ -64,10 +65,11 @@ describe("order detail information architecture", () => {
     expect(detail).not.toContain("当前工作区");
     expect(detail).toContain("当前步骤 {activeStepIndex} / {workflowNodes.length}");
     expect(styles).toContain(".rework-detail-overview-grid");
-    expect(styles).toContain("grid-template-columns: minmax(280px, .82fr) minmax(0, 1.48fr);");
+    expect(responsive).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
     expect(styles).toContain(".rework-workflow__desktop-grid");
     expect(styles).toContain("grid-template-columns: repeat(5, minmax(0, 1fr));");
-    expect(styles).toContain("height: 224px;");
+    expect(responsive).toContain("height: 260px;");
+    expect(responsive).toContain("flex-direction: row;");
     expect(styles).toContain("grid-template-rows: repeat(2, minmax(0, 1fr));");
     expect(styles).toContain(".rework-workflow__mobile-rail");
     expect(styles).toContain("overflow-x: auto");
@@ -80,7 +82,10 @@ describe("order detail information architecture", () => {
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
       readFile("apps/web/src/rework-detail-compact.css", "utf8"),
     ]);
-    expect(detail).toContain("imageAttachments.slice(0, 6)");
+    expect(detail).toContain("const visibleImageAttachments = imageAttachments;");
+    const responsive = await readFile("apps/web/src/order-overview-responsive.css", "utf8");
+    expect(responsive).toContain(".rework-detail-image-card:nth-child(n + 7) { display: none; }");
+    expect(responsive).toContain("scroll-snap-type: x proximity;");
     expect(detail).not.toContain("暂无图片");
     expect(detail).not.toContain("rework-detail-image-card--empty");
     expect(detail).toContain("imageAttachments.length - 5");
