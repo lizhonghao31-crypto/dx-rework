@@ -22,4 +22,23 @@ describe('workflow action filters', () => {
     const missing = workflowAnalysisResult(rows, WorkflowAnalysisQuerySchema.parse({issue: 'missing'}), now);
     expect(missing.items.map(row => row.id)).toEqual([uid(1)]); expect(missing.longestEnteredAt).toBeNull();
   });
+  it('reconstructs a historical period end and keeps waiting time separate from completed flow time', () => {
+    const rows = [
+      item(1,{createdAt:'2026-09-01T01:00:00.000Z',status:'completed',enteredAt:null,history:[
+        {id:'1-a',from:null,to:'draft',action:'rework.draft.create',changesNode:true,enteredAt:'2026-09-01T01:00:00.000Z',leftAt:'2026-09-01T02:00:00.000Z'},
+        {id:'1-b',from:'draft',to:'pending_ie_review',action:'rework.submit',changesNode:true,enteredAt:'2026-09-01T02:00:00.000Z',leftAt:'2026-09-01T06:00:00.000Z'},
+        {id:'1-c',from:'pending_ie_review',to:'completed',action:'rework.complete',changesNode:true,enteredAt:'2026-09-01T06:00:00.000Z',leftAt:null},
+      ]}),
+      item(2,{createdAt:'2026-09-02T01:00:00.000Z',status:'in_progress',enteredAt:'2026-09-02T02:00:00.000Z',history:[
+        {id:'2-a',from:null,to:'draft',action:'rework.draft.create',changesNode:true,enteredAt:'2026-09-02T01:00:00.000Z',leftAt:'2026-09-02T02:00:00.000Z'},
+        {id:'2-b',from:'draft',to:'in_progress',action:'rework.task.assign',changesNode:true,enteredAt:'2026-09-02T02:00:00.000Z',leftAt:null},
+      ]}),
+    ];
+    const result=workflowAnalysisResult(rows,WorkflowAnalysisQuerySchema.parse({group:'rework',snapshot:'period_end',from:'2026-09-01',to:'2026-09-03'}),'2026-09-10T00:00:00.000Z');
+    expect(result.enteredCount).toBe(2);expect(result.completedInRangeCount).toBe(1);expect(result.openAtEndCount).toBe(1);
+    expect(result.averageCycleSeconds).toBe(5*3600);
+    expect(result.nodeMetrics.find(metric=>metric.status==='pending_ie_review')?.averageFlowSeconds).toBe(4*3600);
+    expect(result.nodeMetrics.find(metric=>metric.status==='in_progress')?.openCount).toBe(1);
+    expect(result.items.map(row=>row.id)).toContain(uid(2));
+  });
 });

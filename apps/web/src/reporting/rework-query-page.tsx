@@ -1,5 +1,4 @@
 import { BasicReworkBoard, ReworkBoardAccess } from "./basic-rework-board.js";
-import {ReworkFlowPanel} from "../rework-flow-panel.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import type { ManagementReworkPage, ManagementReworkRow } from "@dx-rework/contracts/reporting";
 import { Button, InsetField, Surface } from "@dx-rework/ui";
@@ -10,6 +9,8 @@ import { verifySession } from "../auth.js";
 import { ListPagination } from "../list-pagination.js";
 import { confirmInApp } from "../system-dialog.js";
 import { useDebouncedValue } from "../use-debounced-value.js";
+import { ReworkDataSandboxPage } from "../rework-data-sandbox-page.js";
+import { ReworkModuleTabs } from "../rework-module-tabs.js";
 import { deleteReworkOrder, loadReworkOrders } from "./reporting-client.js";
 import { ManagementOrderCard } from "./management-order-card.js";
 import "./reporting.css";
@@ -25,7 +26,8 @@ const responsibilityTypes = [["","全部责任"],["own_factory","本厂承担"],
 type LoadState = { kind: "loading" } | { kind: "ready"; value: ManagementReworkPage } | { kind: "unavailable"; message: string };
 
 export function ReworkQueryPage() {
-  return <ReworkBoardAccess basic={<BasicReworkBoard />} business={<BusinessReworkQueryPage />} />;
+  const sandbox = new URLSearchParams(window.location.search).get("view") === "sandbox";
+  return <ReworkBoardAccess basic={<BasicReworkBoard />} business={sandbox ? <ReworkDataSandboxPage /> : <BusinessReworkQueryPage />} />;
 }
 
 function BusinessReworkQueryPage() {
@@ -44,6 +46,7 @@ function BusinessReworkQueryPage() {
   const [refresh, setRefresh] = useState(0);
   const [refreshing, setRefreshing] = useState(true);
   const [isRoot, setIsRoot] = useState(false);
+  const [canSandbox, setCanSandbox] = useState(false);
   const [deletingOrderId, setDeletingOrderId] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const resetPage=()=>{setPage(1);};
@@ -71,7 +74,10 @@ function BusinessReworkQueryPage() {
   useEffect(() => {
     let mounted = true;
     void verifySession().then((session) => {
-      if (mounted) setIsRoot(session !== "denied" && session.status === "authorized" && session.user.isRoot === true);
+      if (!mounted || session === "denied" || session.status !== "authorized") return;
+      const root = session.user.isRoot === true;
+      setIsRoot(root);
+      setCanSandbox(root || session.user.capabilities.includes("dashboard:management:read"));
     });
     return () => { mounted = false; };
   }, []);
@@ -88,6 +94,7 @@ function BusinessReworkQueryPage() {
   const items = state.kind === "ready" ? state.value.items : [];
   return <Shell active="返工单看板"><div className="rework-query-content">
     <Header title="返工单看板" subtitle="查看权限范围内返工单；进入订单详情查看完整流程并处理对应节点。" badge={!refreshing && state.kind === "ready" ? `${formatBusinessDecimal(items.length)} 条当前结果` : "查询中"} />
+    {canSandbox ? <ReworkModuleTabs active="board" /> : null}
     <Surface className="reporting-filters reporting-filters--orders">
       <InsetField label="关键词" aria-label="关键词" value={q} onChange={(event) => {setQ(event.target.value);resetPage();}} placeholder="单号 / 款号 / 订单 / 人员 / 供应商" />
       <label>状态<select value={status} onChange={(event) => {setStatus(event.target.value);resetPage();}}>{statuses.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>
@@ -100,7 +107,6 @@ function BusinessReworkQueryPage() {
       <label>异常<select value={exception} onChange={(event) => {setException(event.target.value);resetPage();}}><option value="">全部</option><option value="true">仅异常</option><option value="false">无异常</option></select></label>
       <Button className="reporting-filters__refresh" onClick={() => setRefresh((value) => value + 1)}>刷新</Button>
     </Surface>
-    <ReworkFlowPanel search={debouncedQ} node={status} from={from} to={to} refreshToken={refresh} onNode={value=>{setStatus(value);resetPage();}} onRefresh={()=>setRefresh(value=>value+1)} />
     {state.kind === "loading" && <Surface className="reporting-state">正在查询…</Surface>}
     {state.kind === "unavailable" && <Surface className="reporting-state">{state.message}</Surface>}
     {deleteError && <Surface className="reporting-state reporting-delete-error"><p role="alert">{deleteError}</p></Surface>}
@@ -115,4 +121,3 @@ function BusinessReworkQueryPage() {
     />}
   </div></Shell>;
 }
-
