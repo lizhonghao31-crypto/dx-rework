@@ -524,7 +524,7 @@ export class SourcingService {
          SELECT jsonb_agg(
            jsonb_build_object(
              'position',line.position,
-             'styleNo',line.style_no,'formalStyleNo',line.formal_style_no,
+             'styleNo',line.style_no,'formalStyleNo',line.formal_style_no,'imageAttachmentId',line.image_attachment_id,
              'alternateStyleNo',line.alternate_style_no,
              'color',line.color,
              'quantity',line.quantity,
@@ -685,7 +685,7 @@ export class SourcingService {
          SELECT jsonb_agg(
            jsonb_build_object(
              'position',line.position,
-             'styleNo',line.style_no,'formalStyleNo',line.formal_style_no,
+             'styleNo',line.style_no,'formalStyleNo',line.formal_style_no,'imageAttachmentId',line.image_attachment_id,
              'alternateStyleNo',line.alternate_style_no,
              'color',line.color,
              'quantity',line.quantity,
@@ -1395,6 +1395,7 @@ export class SourcingService {
       color: normalizeText(line.color, "颜色", 100),
       quantity: normalizeQuantity(line.quantity),
       externalUnitPrice: null,
+      imageAttachmentId: line.imageAttachmentId ?? null,
     }));
     if (lineItems.some(line => !line.styleNo && !line.alternateStyleNo)) fail("正式款号与代用款号至少填写一个");
     let orderQuantity: number;
@@ -1413,6 +1414,7 @@ export class SourcingService {
       daxingUnitPrice: normalizeSourcingUnitPrice(input.daxingUnitPrice),
       attachmentIds: [...(input.attachmentIds ?? [])],
     };
+    if (lineItems.some(line => line.imageAttachmentId && (!UUID_PATTERN.test(line.imageAttachmentId) || !normalized.attachmentIds.includes(line.imageAttachmentId)))) fail("款图必须包含在订单图片中");
     const scope = "sourcing.case.create";
     const client = await this.database.connect();
     try {
@@ -1424,6 +1426,11 @@ export class SourcingService {
         requestHash: requestHash(scope, normalized),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
+        const lineImageIds = normalized.lineItems.flatMap(line => line.imageAttachmentId ? [line.imageAttachmentId] : []);
+        if (lineImageIds.length) {
+          const contractService = this.contractService ?? fail("款图校验服务暂不可用，请稍后再试",503,"STORAGE_UNAVAILABLE");
+          await contractService.validateLineImages(client,actor,lineImageIds);
+        }
         await client.query(
           `INSERT INTO sourcing_style_catalog(style_id,style_name,created_by)
            VALUES($1,$2,$3) ON CONFLICT(normalized_name) DO NOTHING`,
@@ -1495,8 +1502,8 @@ export class SourcingService {
           await client.query(
             `INSERT INTO sourcing_case_lines(
                sourcing_case_id,position,style_no,alternate_style_no,color,quantity,
-               external_unit_price,legacy_source,created_by,operation_event_id,request_id
-             ) VALUES($1,$2,$3,$4,$5,$6,$7,false,$8,$9,$10)`,
+               external_unit_price,legacy_source,created_by,operation_event_id,request_id,image_attachment_id
+             ) VALUES($1,$2,$3,$4,$5,$6,$7,false,$8,$9,$10,$11)`,
             [
               sourcingCaseId,
               line.position,
@@ -1508,6 +1515,7 @@ export class SourcingService {
               actor.actorId,
               eventId,
               actor.requestId,
+              line.imageAttachmentId,
             ],
           );
         }
@@ -3436,4 +3444,3 @@ export class SourcingService {
   }
 
 }
-

@@ -2,8 +2,9 @@ import "./work-analysis-postgres.cases.js";
 import { readQuoteAnalysis } from "../../apps/api/src/sourcing/sourcing-analysis.js";
 import { ProductionDashboardService } from "../../apps/api/src/sourcing/production-dashboard-service.js";
 import { ProductionReportingService } from "../../apps/api/src/sourcing/production-reporting-service.js";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import sharp from "sharp";
 
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -32,12 +33,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     completeOpenByDedupePrefix: vi.fn(async () => 0),
     information: vi.fn(async () => undefined),
   };
-  const contractService = new SourcingContractService(
-    database,
-    new AttachmentService(database, new FakeObjectStorage(), {
-      prefix: "tests",ttlSeconds: 60,maxUploadBytes: 5_000_000,
-    }),
-  );
+  const contractStorage = new FakeObjectStorage();
+  const attachments = new AttachmentService(database, contractStorage, {
+    prefix: "tests",ttlSeconds: 60,maxUploadBytes: 5_000_000,
+  });
+  const contractService = new SourcingContractService(database, attachments);
   const service = new SourcingService(
     database,undefined,undefined,todoProjection,contractService,
   );
@@ -512,7 +512,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       readerActor(),created.value.sourcingCaseId,
     )).item;
     expect(firstContract).toMatchObject({
-      contractVersion: 2,templateVersion: 2,status: "ready",missingFields: [],
+      contractVersion: 2,templateVersion: 3,status: "ready",missingFields: [],
     });
     const frozenContract = (await database.query<{ approval_snapshot: Record<string, unknown> }>(
       "SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",
@@ -1936,6 +1936,113 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       { supplierId: replacementFactoryId, unitPrice: "8.00", changeReason: "裁床沿用验证" }, randomUUID());
     expect(changed.value.decision?.sourcingDecisionId).not.toBe(decided.value.decision?.sourcingDecisionId);
     expect(changed.value.decision).toMatchObject({ cuttingProcess: "other", cuttingProcessOther: "CUT-INTERNAL-PR02" });
+  });
+
+  it("rejects an undecodable contract picture before binding and permits correction with the same request key", async () => {
+    const uploadActor = { ...merchandiserActor(), authorizationCapability: "tools:user" };
+    const upload = async (bytes: Buffer, filename: string): Promise<string> => {
+      const sha256 = createHash("sha256").update(bytes).digest("hex");
+      const intent = await attachments.createUploadIntent(uploadActor, { filename, mimeType: "image/jpeg", sizeBytes: bytes.byteLength, sha256 });
+      await contractStorage.writeImmutable(intent.objectKey, bytes, { mimeType: "image/jpeg", sha256 });
+      await attachments.finalize(uploadActor, intent.attachmentId);
+      return intent.attachmentId;
+    };
+    const oversized = await sharp({ create: { width: 6400, height: 6400, channels: 3, background: "#ffffff" } }).jpeg().toBuffer();
+    expect(oversized.byteLength).toBeLessThan(1_048_576);
+    const oversizedId = await upload(oversized, "oversized-pixels.jpg");
+    const input = { gender: "女装" as const, styleName: "款图像素边界", estimatedCutPieceSendDate: "2026-10-01", deliveryDate: "2026-10-10",
+      lineItems: [{ alternateStyleNo: "PIXEL-BOUNDARY", color: "白", quantity: 10, imageAttachmentId: oversizedId }], daxingUnitPrice: "10", attachmentIds: [oversizedId] };
+    const key = randomUUID();
+    await expect(service.createCase(merchandiserActor(), input, key)).rejects.toMatchObject({ statusCode: 422, message: expect.stringContaining("oversized-pixels.jpg") });
+    expect((await database.query("SELECT entity_type,entity_id FROM attachments WHERE attachment_id=$1", [oversizedId])).rows[0]).toEqual({ entity_type: null, entity_id: null });
+    expect((await database.query("SELECT 1 FROM sourcing_cases WHERE style_no='PIXEL-BOUNDARY'")).rowCount).toBe(0);
+    const acceptedId = await upload(await sharp(oversized).resize(400).jpeg().toBuffer(), "corrected-pixels.jpg");
+    const corrected = { ...input, lineItems: [{ ...input.lineItems[0]!, imageAttachmentId: acceptedId }], attachmentIds: [oversizedId, acceptedId] };
+    expect((await service.createCase(merchandiserActor(), corrected, key)).value.lineItems[0]!.imageAttachmentId).toBe(acceptedId);
+    expect((await service.createCase(merchandiserActor(), corrected, key)).reused).toBe(true);
+  });
+
+  it("binds per-line pictures to the order and preserves them through a contract style revision", async () => {
+    const imageIds: string[] = [];
+    const uploadActor = { ...merchandiserActor(), authorizationCapability: "tools:user" };
+    for (const [index, format] of (["png", "webp"] as const).entries()) {
+      const bytes = await sharp({ create: { width: 100, height: 150, channels: 3, background: index ? "#c34242" : "#4268a0" } }).toFormat(format).toBuffer();
+      const sha256 = createHash("sha256").update(bytes).digest("hex");
+      const mimeType = `image/${format}`;
+      const intent = await attachments.createUploadIntent(uploadActor, { filename: `style-${index}.${format}`, mimeType, sizeBytes: bytes.byteLength, sha256 });
+      await contractStorage.writeImmutable(intent.objectKey, bytes, { mimeType, sha256 });
+      await attachments.finalize(uploadActor, intent.attachmentId);
+      imageIds.push(intent.attachmentId);
+    }
+    const input = { gender: "女装" as const, styleName: "逐款图片", estimatedCutPieceSendDate: "2026-10-01", deliveryDate: "2026-10-10",
+      lineItems: [{ alternateStyleNo: "PIC-A", color: "蓝", quantity: 10, imageAttachmentId: imageIds[0]! },
+        { alternateStyleNo: "PIC-A", color: "灰", quantity: 15, imageAttachmentId: imageIds[0]! },
+        { styleNo: "PIC-B", color: "红", quantity: 20, imageAttachmentId: imageIds[1]! }], daxingUnitPrice: "987.65", attachmentIds: imageIds };
+    await expect(service.createCase(merchandiserActor(), { ...input, attachmentIds: [imageIds[0]!] }, randomUUID())).rejects.toMatchObject({ statusCode: 400 });
+    const created = await service.createCase(merchandiserActor(), input, randomUUID());
+    const id = created.value.sourcingCaseId;
+    expect(created.value.lineItems.map(line => line.imageAttachmentId)).toEqual([imageIds[0], imageIds[0], imageIds[1]]);
+    await expect(attachments.readSourcingContractImage(randomUUID(), imageIds[0]!)).rejects.toMatchObject({ statusCode: 409 });
+    await expect(service.createCase(merchandiserActor(), input, randomUUID())).rejects.toMatchObject({ statusCode: 400 });
+    const linePrices = input.lineItems.map((_line, index) => ({ position: index + 1, unitPrice: "8.50" }));
+    await service.quoteIePrice(ieActor(), id, { linePrices }, randomUUID());
+    await service.recordManagementDecision(managerActor(), id, { supplierId: factoryId, craftIds: [craftId("净色车缝")], linePrices, cuttingProcess: "other", cuttingProcessOther: "IMAGE-INTERNAL-CUT" }, randomUUID());
+    await service.decideOwner(ownerActor(), id, { decision: "approved" }, randomUUID());
+    const original = (await contractService.getCurrent(readerActor(), id)).item!;
+    expect(original).toMatchObject({ templateVersion: 3, status: "ready" });
+    const query = "SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1";
+    const snapshot = (await database.query(query, [original.sourcingContractDocumentId])).rows[0]!.approval_snapshot;
+    expect(snapshot.lines.map((line: { imageAttachmentId: string }) => line.imageAttachmentId)).toEqual([imageIds[0], imageIds[0], imageIds[1]]);
+    expect(JSON.stringify(snapshot)).not.toMatch(/987\.65|IMAGE-INTERNAL-CUT|cuttingProcess|daxing/);
+    await service.reviseStyles(merchandiserActor(), id, { expectedRevision: 0, lines: [
+      { position: 1, styleNo: "FINAL-PIC-A", alternateStyleNo: "PIC-A" },
+      { position: 2, styleNo: "FINAL-PIC-A", alternateStyleNo: "PIC-A" },
+      { position: 3, styleNo: "FINAL-PIC-B", alternateStyleNo: null },
+    ] }, randomUUID());
+    const revised = (await contractService.getCurrent(readerActor(), id)).item!;
+    expect(revised).toMatchObject({ status: "ready", contractVersion: original.contractVersion + 1 });
+    expect(revised.pdfAttachmentId).not.toBe(original.pdfAttachmentId);
+    const updated = (await database.query(query, [revised.sourcingContractDocumentId])).rows[0]!.approval_snapshot;
+    expect(updated.lines.map((line: { imageAttachmentId: string }) => line.imageAttachmentId)).toEqual(snapshot.lines.map((line: { imageAttachmentId: string }) => line.imageAttachmentId));
+    expect(updated.lines.map((line: { styleNo: string }) => line.styleNo)).toEqual(["FINAL-PIC-A", "FINAL-PIC-A", "FINAL-PIC-B"]);
+    expect(updated.totalAmount).toBe(snapshot.totalAmount);
+    await expect(database.query("UPDATE sourcing_case_lines SET image_attachment_id=$2 WHERE sourcing_case_id=$1", [id, imageIds[1]])).rejects.toBeDefined();
+  });
+
+  it("appends a corrected template contract while retaining the original PDF and supplements", async () => {
+    const created = await service.createCase(merchandiserActor(), { gender: "男装", styleName: "历史合同纠版", estimatedCutPieceSendDate: "2026-10-01", deliveryDate: "2026-10-10",
+      lineItems: [{ styleNo: "TEMPLATE-UPGRADE", color: "黑", quantity: 20 }], daxingUnitPrice: "7.00", attachmentIds: [] }, randomUUID());
+    const id = created.value.sourcingCaseId;
+    await service.quoteIePrice(ieActor(), id, { linePrices: [{ position: 1, unitPrice: "8.50" }] }, randomUUID());
+    await service.recordManagementDecision(managerActor(), id, { supplierId: factoryId, craftIds: [craftId("净色车缝")], linePrices: [{ position: 1, unitPrice: "8.50" }] }, randomUUID());
+    // Represent an existing V2 contract without preparing a V3 document first.
+    const legacyService = new SourcingService(database, undefined, undefined, todoProjection);
+    const approved = (await legacyService.decideOwner(ownerActor(), id, { decision: "approved" }, randomUUID())).value.approvalSnapshot!;
+    const oldId = randomUUID();
+    const payload = { gender: "男装", styleName: "历史合同纠版", supplierName: "一号加工厂", contractEntityName: "一号加工厂有限公司", address: null,
+      partyBRepresentative: "陈一", payeeName: "陈一", bankAccount: "622201", bankName: "测试银行一支行", quantity: "20", totalAmount: "170.00",
+      estimatedCutPieceSendDate: "2026-10-01", deliveryDate: "2026-10-10", processes: ["净色车缝"], approvedAt: new Date().toISOString(), lines: approved.linePrices };
+    await database.query(`INSERT INTO sourcing_contract_documents(sourcing_contract_document_id,sourcing_case_id,sourcing_approval_snapshot_id,sourcing_decision_id,
+      contract_version,contract_number,template_version,approval_snapshot,missing_fields,status,prepared_by)
+      VALUES($1,$2,$3,$4,1,'DX-WF-20260917-'||lpad(nextval('sourcing_contract_number_seq')::text,6,'0'),2,$5,ARRAY['address'],'pending_supplement',$6)`,
+    [oldId, id, approved.sourcingApprovalSnapshotId, approved.sourcingDecisionId, JSON.stringify(payload), merchandiserId]);
+    const old = (await contractService.supplement(contractActor(), id, { address: "原合同补充地址" }, randomUUID())).item!;
+    expect(old).toMatchObject({ templateVersion: 2, status: "ready" });
+    const originalPdf = (await database.query("SELECT * FROM attachments WHERE attachment_id=$1", [old.pdfAttachmentId])).rows[0]!;
+    const originalBytes = await contractStorage.readBytes(originalPdf.object_key, 5_000_000);
+    const migration = await readFile("apps/api/migrations/0194_sourcing_line_images_contract_template.sql", "utf8");
+    const backfill = migration.slice(migration.indexOf("INSERT INTO sourcing_contract_documents("));
+    await database.query(backfill);
+    const pending = (await contractService.getCurrent(readerActor(), id)).item!;
+    expect(pending).toMatchObject({ templateVersion: 3, contractVersion: 2, status: "generation_pending", missingFields: [] });
+    const current = (await database.query("SELECT approval_snapshot,revision_of FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1", [pending.sourcingContractDocumentId])).rows[0]!;
+    expect(current.revision_of).toBe(oldId);
+    expect(current.approval_snapshot).toMatchObject({ address: "原合同补充地址", totalAmount: "170.00" });
+    await contractService.generateIfReady(contractActor(), id, pending.sourcingContractDocumentId);
+    expect((await contractService.getCurrent(readerActor(), id)).item).toMatchObject({ status: "ready", templateVersion: 3 });
+    expect((await database.query("SELECT * FROM attachments WHERE attachment_id=$1", [old.pdfAttachmentId])).rows[0]).toEqual(originalPdf);
+    expect(await contractStorage.readBytes(originalPdf.object_key, 5_000_000)).toEqual(originalBytes);
+    expect((await database.query("SELECT terms->>'qualityRequirements' AS clause FROM sourcing_contract_template_versions WHERE template_version=3")).rows[0]!.clause).toContain("费用由乙方承担");
   });
 
   it("revises delayed style identities without changing approval money or production links", async () => {

@@ -95,6 +95,7 @@ type SourcingLineDraft = Readonly<{
   alternateStyleNo: string;
   color: string;
   quantity: string;
+  imageAttachmentId?: string;
 }>;
 type LocalSourcingDraft = Readonly<{
   gender: "" | "男装" | "女装";
@@ -245,7 +246,11 @@ const readLocalSourcingDraft = (userId: string): LocalSourcingDraft | null => {
         ? parsed.estimatedCutPieceSendDate
         : "",
       deliveryDate: parsed.deliveryDate,
-      lineItems,
+      lineItems: lineItems.map((line) => ({
+        ...line,
+        imageAttachmentId: images.some((image) => image.attachmentId === line.imageAttachmentId)
+          ? line.imageAttachmentId ?? "" : "",
+      })),
       daxingUnitPrice: typeof parsed.daxingUnitPrice === "string" ? parsed.daxingUnitPrice : "",
       images,
       savedAt: typeof parsed.savedAt === "string" ? parsed.savedAt : "",
@@ -464,9 +469,9 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     createKey.current = null;
   };
 
-  const uploadImages = async (files: FileList | null): Promise<void> => {
+  const uploadImages = async (files: FileList | null, lineIndex?: number): Promise<void> => {
     if (!files?.length || uploading || busy) return;
-    const selected = Array.from(files);
+    const selected = lineIndex === undefined ? Array.from(files) : [files[0]!];
     const unsupported = selected.find((file) => !isImageUploadCandidate(file));
     if (unsupported) {
       setMessage(`${unsupported.name} 不是支持的图片格式`);
@@ -559,6 +564,11 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
       );
       setImages((current) => [...current, ...uploaded]);
       setUploadFailed(false);
+      if (lineIndex !== undefined && uploaded[0]) {
+        const imageAttachmentId = uploaded[0].attachmentId;
+        setLineItems((current) => current.map((line, index) => index === lineIndex
+          ? { ...line, imageAttachmentId } : line));
+      }
       setMessage(`已上传 ${formatBusinessDecimal(uploaded.length)} 张图片；请核对订单资料后提交`);
       createKey.current = null;
     } catch (error) {
@@ -570,6 +580,8 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   };
 
   const removeImage = (attachmentId: string): void => {
+    setLineItems((current) => current.map((line) => line.imageAttachmentId === attachmentId
+      ? { ...line, imageAttachmentId: "" } : line));
     setImages((current) => {
       const removed = current.find((image) => image.attachmentId === attachmentId);
       if (removed && previewUrls.current.includes(removed.previewUrl)) {
@@ -608,6 +620,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
       ...(line.alternateStyleNo.trim() ? { alternateStyleNo: line.alternateStyleNo.trim() } : {}),
       color: line.color.trim(),
       quantity: Number(line.quantity),
+      ...(line.imageAttachmentId ? { imageAttachmentId: line.imageAttachmentId } : {}),
     }));
     if (!canCreate) { setMessage("当前账号没有创建订单权限"); return; }
     if (!gender || !styleName.trim()) { setMessage("请选择性别并填写款式"); return; }
@@ -690,7 +703,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
               </div>
               <div className="sourcing-line-editor__actions">
                 <StatusBadge tone="info">合计 {formatBusinessDecimal(lineItems.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0))} 件</StatusBadge>
-                <button className="dx-button dx-button--secondary" type="button" disabled={lineItems.length >= MAX_SOURCING_LINE_ITEMS} onClick={addLineItem}>＋ 新增款色</button>
+                <button className="dx-button dx-button--secondary" type="button" disabled={busy || uploading || lineItems.length >= MAX_SOURCING_LINE_ITEMS} onClick={addLineItem}>＋ 新增款色</button>
               </div>
             </div>
             <div className="sourcing-line-editor__list">
@@ -700,7 +713,18 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
                 <label><span>代用款号</span><input value={line.alternateStyleNo} maxLength={100} onChange={(event) => updateLineItem(index, "alternateStyleNo", event.target.value)} placeholder="无正式款号时必填" /></label>
                 <label><span>颜色</span><input value={line.color} maxLength={100} onChange={(event) => updateLineItem(index, "color", event.target.value)} placeholder="必填" /></label>
                 <label><span>数量</span><input value={activeCreateInput === `quantity-${index}` ? line.quantity : businessInputValue(line.quantity)} onFocus={() => setActiveCreateInput(`quantity-${index}`)} onBlur={() => setActiveCreateInput(null)} inputMode="numeric" onChange={(event) => updateLineItem(index, "quantity", businessInputChange(event.target.value))} placeholder="整数" /></label>
-                <button className="dx-button dx-button--secondary" type="button" aria-label={`删除第 ${index + 1} 行款色`} disabled={lineItems.length === 1} onClick={() => void removeLineItem(index)}>删除</button>
+                <div className="sourcing-line-photo">
+                  {line.imageAttachmentId ? <img src={images.find((image) => image.attachmentId === line.imageAttachmentId)?.previewUrl} alt={`第 ${index + 1} 款图片`} /> : null}
+                  <label className="rework-v2-upload">
+                    <span>{line.imageAttachmentId ? "更换图片" : "＋ 上传图片"}</span>
+                    <input type="file" accept="image/*" disabled={busy || uploading || images.length >= MAX_SOURCING_ATTACHMENTS} onChange={(event) => { void uploadImages(event.target.files, index); event.target.value = ""; }} />
+                  </label>
+                  {images.length > 0 ? <select aria-label={`第 ${index + 1} 款复用图片`} value={line.imageAttachmentId ?? ""} disabled={busy || uploading} onChange={(event) => updateLineItem(index, "imageAttachmentId", event.target.value)}>
+                    <option value="">复用已上传图片</option>
+                    {images.map((image, imageIndex) => <option key={image.attachmentId} value={image.attachmentId}>{imageIndex + 1}. {image.filename}</option>)}
+                  </select> : null}
+                </div>
+                <button className="dx-button dx-button--secondary" type="button" aria-label={`删除第 ${index + 1} 行款色`} disabled={busy || uploading || lineItems.length === 1} onClick={() => void removeLineItem(index)}>删除</button>
               </article>)}
             </div>
           </section>
@@ -708,7 +732,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
         </div>
         <section className="sourcing-photo-field" aria-label="订单照片">
           <div className="section-title">
-            <div><h2>订单照片（必填）</h2><p>至少上传1张；上传成功后才能提交。支持 JPG、PNG、WebP。</p></div>
+            <div><h2>订单照片（必填）</h2><p>至少上传1张；款图也会显示在这里，无需重复上传。支持 JPG、PNG、WebP。</p></div>
             <StatusBadge tone="info">{images.length}/{MAX_SOURCING_ATTACHMENTS}</StatusBadge>
           </div>
           {images.length > 0 ? <div className="rework-v2-image-grid">
@@ -1586,4 +1610,3 @@ function OrderDetailPage({
     </div>
   );
 }
-

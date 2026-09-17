@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import PDFDocument from "pdfkit";
+import sharp from "sharp";
 import { SourcingNewUnitPriceSchema } from "@dx-rework/contracts";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 
@@ -8,7 +9,14 @@ export const formatSourcingContractPrice = (value: string): string =>
   SourcingNewUnitPriceSchema.safeParse(value).success ? formatBusinessDecimal(value) : value;
 
 
+export const normalizeSourcingContractImage = async (bytes: Buffer): Promise<Buffer> => sharp(bytes,{limitInputPixels:40_000_000})
+  .rotate().resize({width:600,height:600,fit:"inside",withoutEnlargement:true})
+  .flatten({background:"#ffffff"}).jpeg({quality:80}).toBuffer();
+
 export type ContractPdfLine = Readonly<{
+  imageAttachmentId?: string | null;
+  imageSha256?: string;
+  imageBytes?: Buffer;
   position: number;
   styleNo: string;
   alternateStyleNo: string | null;
@@ -182,7 +190,10 @@ const renderLegacyContractPdf = (snapshot: ContractPdfSnapshot): Buffer => {
 };
 
 export const sourcingContractFingerprint = (snapshot: ContractPdfSnapshot): string =>
-  createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
+  createHash("sha256").update(JSON.stringify({...snapshot,lines:snapshot.lines.map(line=>{
+    const {imageBytes,...facts}=line;
+    return imageBytes ? {...facts,imageSha256:line.imageSha256 ?? createHash("sha256").update(imageBytes).digest("hex")} : facts;
+  })})).digest("hex");
 
 type StructuredContractLayout = "v2" | "v3";
 
@@ -252,18 +263,22 @@ const renderStructuredContractPdf = async (
     text("一、加工明细", 10);
   }
 
-  const widths = [86, 82, 85, 42, 54, 58, width - 407];
-  const row = (cells: readonly string[], header = false): void => {
+  const withPictures = (snapshot.templateVersion ?? 1) >= 3;
+  const widths = withPictures ? [84,80,58,36,48,61,82,width-449] : [86, 82, 85, 42, 54, 58, width - 407];
+  const row = (cells: readonly string[], header = false, picture?: Buffer): void => {
     document.fontSize(8);
     const textHeights = cells.map((cell, index) =>
       document.heightOfString(cell, { width: widths[index]! - 8, lineGap: 2 }));
-    const height = Math.max(32, ...textHeights.map((item) => item + 12));
+    const height = Math.max(picture ? 78 : 32, ...textHeights.map((item) => item + 12));
     if (y + height > bottom) { document.addPage(); y = 32; tableHeader(); }
     let x = 32;
     cells.forEach((cell, index) => {
       document.lineWidth(0.5).strokeColor("#333333");
       if (header) document.rect(x, y, widths[index]!, height).fillAndStroke("#eeeeee", "#333333");
       else document.rect(x, y, widths[index]!, height).stroke();
+      if (withPictures && index === 1 && picture && !header) {
+        document.image(picture,x+5,y+5,{fit:[widths[index]!-10,height-10],align:"center",valign:"center"});
+      }
       const align = polished && (header || index >= 2) ? "center" : "left";
       const textHeight = document.heightOfString(cell, { width: widths[index]! - 8, lineGap: 2, align });
       const textY = polished ? y + Math.max(5, (height - textHeight) / 2) : y + 6;
@@ -276,14 +291,17 @@ const renderStructuredContractPdf = async (
     });
     y += height;
   };
-  const tableHeader = (): void => row(["款号 / 代用款号", "颜色 / 性别款式", "发裁片时间\n（工厂发出）", "数量", "单价\n（不含税）", "金额", "货期\n（到工厂）"], true);
+  const tableHeader = (): void => row(withPictures
+    ? ["款号 / 代用款号","款式图片","颜色 / 性别款式","数量","单价\n（不含税）","金额","发裁片时间\n（工厂发出）","货期\n（到工厂）"]
+    : ["款号 / 代用款号", "颜色 / 性别款式", "发裁片时间\n（工厂发出）", "数量", "单价\n（不含税）", "金额", "货期\n（到工厂）"], true);
   tableHeader();
-  for (const line of snapshot.lines) row([
-    `${line.styleNo}${line.alternateStyleNo ? ` / ${line.alternateStyleNo}` : ""}`,
-    `${line.color ?? "历史未维护"}\n${snapshot.gender ?? "历史未维护"}${snapshot.styleName ?? "历史未维护"}`,
-    snapshot.estimatedCutPieceSendDate, formatBusinessDecimal(line.quantity), formatSourcingContractPrice(line.unitPrice),
-    formatBusinessDecimal(line.totalAmount), snapshot.deliveryDate,
-  ]);
+  for (const line of snapshot.lines) {
+    const identity=`${line.styleNo}${line.alternateStyleNo && line.alternateStyleNo !== line.styleNo ? ` / ${line.alternateStyleNo}` : ""}`;
+    const classification=`${line.color ?? "历史未维护"}\n${snapshot.gender ?? "历史未维护"}${snapshot.styleName ?? "历史未维护"}`;
+    row(withPictures ? [identity,line.imageBytes ? "" : "未提供",classification,formatBusinessDecimal(line.quantity),
+      formatSourcingContractPrice(line.unitPrice),formatBusinessDecimal(line.totalAmount),snapshot.estimatedCutPieceSendDate,snapshot.deliveryDate]
+      : [identity,classification,snapshot.estimatedCutPieceSendDate,formatBusinessDecimal(line.quantity),formatSourcingContractPrice(line.unitPrice),formatBusinessDecimal(line.totalAmount),snapshot.deliveryDate],false,line.imageBytes);
+  }
   y += polished ? 7 : 5;
   text(`合计：${formatBusinessDecimal(snapshot.totalQuantity)} 件    金额：${formatBusinessDecimal(snapshot.totalAmount)} 元`, 9, "#111111", { after: polished ? 11 : 5 });
 
