@@ -7,7 +7,11 @@ const closed = (row: Pick<Item, "status">) => terminal.has(row.status);
 const milliseconds = (value: string | null | undefined) => value ? Date.parse(value) : Number.NaN;
 const shanghaiStart = (day: string) => Date.parse(`${day}T00:00:00+08:00`);
 
-function buildResult(rows: Item[], filters: WorkflowAnalysisQuery, asOf: string, summary: Partial<Pick<WorkflowAnalysisResponse,"enteredCount"|"completedInRangeCount"|"openAtEndCount"|"averageCycleSeconds"|"cycleSampleCount"|"nodeMetrics">> = {}): WorkflowAnalysisResponse {
+type SummaryOverride = Partial<Pick<WorkflowAnalysisResponse,
+  "enteredCount"|"completedInRangeCount"|"openAtEndCount"|"averageCycleSeconds"|"cycleSampleCount"|"nodeMetrics"|"missingEntryCount"
+>>;
+
+function buildResult(rows: Item[], filters: WorkflowAnalysisQuery, asOf: string, summary: SummaryOverride = {}): WorkflowAnalysisResponse {
   const matches = rows.filter(row => {
     const waiting = !closed(row) && !row.independentFinance;
     return (filters.group === "all" || (filters.group === "finance" ? row.independentFinance : filters.group === "waiting" ? waiting : filters.group === "closed" ? closed(row) : row.kind === filters.group))
@@ -31,7 +35,7 @@ function buildResult(rows: Item[], filters: WorkflowAnalysisQuery, asOf: string,
     waitingCount: waiting.length, roundtripCount: matches.filter(row => row.roundtripCount > 0).length,
     repeatedCount: matches.filter(row => row.roundtripCount >= 2).length,
     longestEnteredAt: waiting.flatMap(row => row.enteredAt ? [row.enteredAt] : []).sort()[0] ?? null,
-    missingEntryCount: matches.filter(row => row.enteredAt === null || row.history.length === 0).length,
+    missingEntryCount: summary.missingEntryCount ?? matches.filter(row => row.enteredAt === null || row.history.length === 0).length,
     enteredCount: summary.enteredCount ?? 0, completedInRangeCount: summary.completedInRangeCount ?? 0,
     openAtEndCount: summary.openAtEndCount ?? waiting.length, averageCycleSeconds: summary.averageCycleSeconds ?? null,
     cycleSampleCount: summary.cycleSampleCount ?? 0, nodeMetrics: summary.nodeMetrics ?? [],
@@ -45,7 +49,7 @@ function periodEndResult(rows: Item[], filters: WorkflowAnalysisQuery, asOf: str
   const start = shanghaiStart(filters.from), requestedEnd = shanghaiStart(filters.to) + 86400000;
   const cutoff = Math.min(requestedEnd, Date.parse(asOf));
   const enteredCount = rows.filter(row => Number.isFinite(milliseconds(row.createdAt)) && milliseconds(row.createdAt) >= start && milliseconds(row.createdAt) < cutoff).length;
-  let completedInRangeCount = 0, cycleSeconds = 0, cycleSampleCount = 0;
+  let completedInRangeCount = 0, cycleSeconds = 0, cycleSampleCount = 0, missingHistoricalCount = 0;
   const node = new Map<string, { flowSeconds: number; flowCount: number; openCount: number; longestOpenSeconds: number | null }>();
   const snapshotRows: Item[] = [];
 
@@ -71,13 +75,17 @@ function periodEndResult(rows: Item[], filters: WorkflowAnalysisQuery, asOf: str
       node.set(event.to, current);
     }
     const effective = [...cycleHistory].reverse().find(event => event.changesNode && event.to);
-    const status = effective?.to ?? "draft";
-    const enteredAt = effective?.enteredAt ?? row.createdAt;
+    if (!effective?.to || !effective.enteredAt) {
+      missingHistoricalCount++;
+      continue;
+    }
+    const status = effective.to;
+    const enteredAt = effective.enteredAt;
     const historicalRoundtrips = cycleHistory.filter(event => event.returned || /(reject|return)/.test(event.action)).length;
     const truncatedHistory = cycleHistory.map(event => ({...event, leftAt: event.leftAt && milliseconds(event.leftAt) < cutoff ? event.leftAt : null}));
     const snapshot = { ...row, status, enteredAt, handlers: [], execution: [], submitterName: null, roundtripCount: historicalRoundtrips, history: truncatedHistory };
     snapshotRows.push(snapshot);
-    if (!terminal.has(status) && enteredAt) {
+    if (!terminal.has(status)) {
       const current = node.get(status) ?? { flowSeconds: 0, flowCount: 0, openCount: 0, longestOpenSeconds: null };
       const waitingSeconds = Math.max(0, (cutoff - milliseconds(enteredAt)) / 1000);
       current.openCount++;
@@ -92,7 +100,8 @@ function periodEndResult(rows: Item[], filters: WorkflowAnalysisQuery, asOf: str
   })).sort((a,b) => (b.averageFlowSeconds ?? -1) - (a.averageFlowSeconds ?? -1) || b.openCount - a.openCount || a.status.localeCompare(b.status));
   const openAtEndCount = snapshotRows.filter(row => !closed(row) && !row.independentFinance).length;
   return buildResult(snapshotRows, filters, asOf, { enteredCount, completedInRangeCount, openAtEndCount,
-    averageCycleSeconds: cycleSampleCount ? cycleSeconds / cycleSampleCount : null, cycleSampleCount, nodeMetrics });
+    averageCycleSeconds: cycleSampleCount ? cycleSeconds / cycleSampleCount : null, cycleSampleCount, nodeMetrics,
+    missingEntryCount: missingHistoricalCount });
 }
 
 export function workflowAnalysisResult(rows: Item[], filters: WorkflowAnalysisQuery, asOf: string): WorkflowAnalysisResponse {
