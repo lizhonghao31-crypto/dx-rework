@@ -41,4 +41,21 @@ describe('workflow action filters', () => {
     expect(result.nodeMetrics.find(metric=>metric.status==='in_progress')?.openCount).toBe(1);
     expect(result.items.map(row=>row.id)).toContain(uid(2));
   });
+  it('uses status at the cutoff even if the order is cancelled later', () => {
+    const row=item(4,{createdAt:'2026-09-01T01:00:00.000Z',status:'cancelled',enteredAt:null,history:[
+      {id:'4-a',from:null,to:'draft',action:'rework.draft.create',changesNode:true,enteredAt:'2026-09-01T01:00:00.000Z',leftAt:'2026-09-01T02:00:00.000Z'},
+      {id:'4-b',from:'draft',to:'pending_ie_review',action:'rework.submit',changesNode:true,enteredAt:'2026-09-01T02:00:00.000Z',leftAt:'2026-09-06T00:00:00.000Z'},
+      {id:'4-c',from:'pending_ie_review',to:'cancelled',action:'rework.cancel',changesNode:true,enteredAt:'2026-09-06T00:00:00.000Z',leftAt:null},
+    ]});
+    const result=workflowAnalysisResult([row],WorkflowAnalysisQuerySchema.parse({group:'rework',snapshot:'period_end',from:'2026-09-01',to:'2026-09-03'}),now);
+    expect(result.enteredCount).toBe(1);expect(result.openAtEndCount).toBe(1);
+    expect(result.items[0]?.status).toBe('pending_ie_review');
+    expect(result.nodeMetrics.find(metric=>metric.status==='pending_ie_review')?.openCount).toBe(1);
+  });
+  it('keeps missing historical transitions unknown instead of fabricating a draft backlog', () => {
+    const row=item(5,{createdAt:'2026-09-02T01:00:00.000Z',status:'in_progress',enteredAt:null,history:[]});
+    const result=workflowAnalysisResult([row],WorkflowAnalysisQuerySchema.parse({group:'rework',snapshot:'period_end',from:'2026-09-01',to:'2026-09-03'}),now);
+    expect(result.enteredCount).toBe(1);expect(result.openAtEndCount).toBe(0);expect(result.missingEntryCount).toBe(1);
+    expect(result.nodeMetrics).toHaveLength(0);expect(result.items).toHaveLength(0);
+  });
 });
