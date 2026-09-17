@@ -71,7 +71,7 @@ export const SourcingCaseStatusSchema = z.enum([
   "closed",
 ]);
 
-export const MAX_SOURCING_ATTACHMENTS = 8;
+export const MAX_SOURCING_ATTACHMENTS = 20;
 export const MAX_SOURCING_PROCESSES = 20;
 export const MAX_SOURCING_LINE_ITEMS = 20;
 export const SOURCING_IMAGE_SUPPLEMENT_ROLES = [
@@ -83,6 +83,7 @@ export const SOURCING_IMAGE_SUPPLEMENT_ROLES = [
 ] as const;
 
 export const SourcingCaseLineInputSchema = z.object({
+  imageAttachmentId: IdSchema.optional(),
   styleNo: ShortTextSchema.optional(),
   alternateStyleNo: ShortTextSchema.optional(),
   color: ShortTextSchema,
@@ -132,7 +133,7 @@ export const CreateSourcingCaseSchema = z.object({
   daxingUnitPrice: SourcingNewUnitPriceSchema,
   attachmentIds: z.array(IdSchema).min(1, "请至少上传一张订单图片").max(MAX_SOURCING_ATTACHMENTS)
     .refine((ids) => new Set(ids).size === ids.length, "订单图片不能重复"),
-}).strict();
+}).strict().refine(order => order.lineItems.every(line => !line.imageAttachmentId || order.attachmentIds.includes(line.imageAttachmentId)), "款图必须包含在订单图片中");
 
 export const SourcingLinePriceInputSchema = z.object({
   position: z.number().int().min(1).max(MAX_SOURCING_LINE_ITEMS),
@@ -426,6 +427,7 @@ export const SourcingCraftSnapshotSchema = z.object({
 }).strict();
 
 export const SourcingCaseLineSchema = z.object({
+  imageAttachmentId: IdSchema.nullable().optional(),
   formalStyleNo: z.string().nullable().optional(),
   position: z.number().int().min(1).max(MAX_SOURCING_LINE_ITEMS),
   styleNo: z.string(),

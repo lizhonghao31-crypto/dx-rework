@@ -1169,7 +1169,7 @@
 
 .sourcing-line-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr) minmax(0, .8fr) minmax(0, .65fr) auto;
+  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr) minmax(0, .8fr) minmax(0, .65fr) minmax(0, .9fr) auto;
   align-items: end;
   gap: var(--dx-v2-space-3);
   border-radius: var(--dx-v2-radius-md);
@@ -1198,6 +1198,30 @@
   width: 100%;
   min-height: var(--dx-form-control-height);
   box-sizing: border-box;
+}
+
+.sourcing-line-photo {
+  display: grid;
+  gap: var(--dx-v2-space-2);
+  min-width: 0;
+}
+
+.sourcing-line-photo img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: var(--dx-v2-radius-sm);
+}
+
+.sourcing-line-photo .rework-v2-upload {
+  margin: 0;
+  padding: var(--dx-v2-space-2);
+}
+
+.sourcing-line-photo select {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--dx-form-control-height);
 }
 
 .sourcing-order-card__lines {
@@ -1338,12 +1362,13 @@
   }
 
   .sourcing-line-row > b {
-    grid-row: 1 / span 5;
+    grid-row: 1 / span 6;
     align-self: start;
     padding-top: var(--dx-v2-space-5);
   }
 
   .sourcing-line-row > label,
+  .sourcing-line-row > .sourcing-line-photo,
   .sourcing-line-row > button {
     grid-column: 2;
   }

@@ -50,6 +50,21 @@ export class AttachmentService {
 
   uploadLimits(): { maxUploadBytes: number } { return { maxUploadBytes: this.options.maxUploadBytes }; }
 
+  // Internal contract rendering only: callers supply the already-frozen case and image IDs.
+  // Read private storage directly; never accept a URL or issue a public download grant.
+  async readSourcingContractImage(sourcingCaseId: string, attachmentId: string): Promise<{ bytes: Buffer; sha256: string }> {
+    const row = (await this.pool.query<AttachmentRow>(`SELECT * FROM attachments
+      WHERE attachment_id=$1 AND entity_type='sourcing_case' AND entity_id=$2 AND status='ready'
+        AND mime_type IN ('image/jpeg','image/png','image/webp')`,[attachmentId,sourcingCaseId])).rows[0];
+    if (!row) throw new ApplicationError("ATTACHMENT_NOT_READY","合同款图不存在或不属于本订单",409);
+    const bytes = Buffer.from(await this.storageCall(() => this.storage.readBytes(row.object_key,this.options.maxUploadBytes)));
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    if (bytes.byteLength !== Number(row.size_bytes) || sha256 !== row.sha256) {
+      throw new ApplicationError("ATTACHMENT_METADATA_MISMATCH","合同款图校验失败",422);
+    }
+    return {bytes,sha256};
+  }
+
   async createUploadIntent(actor: TrustedActorContext, input: CreateUploadIntent): Promise<UploadIntentResponse> {
     this.validate(input);
     const attachmentId = randomUUID();

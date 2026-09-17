@@ -17,6 +17,7 @@ import {
 } from "../tools/repositories.js";
 import {
   renderSourcingContractPdf,
+  normalizeSourcingContractImage,
   sourcingContractFingerprint,
   type ContractPdfSnapshot,
 } from "./sourcing-contract-pdf.js";
@@ -153,7 +154,8 @@ export class SourcingContractService {
                 'approvedAt',snapshot.approved_at,
                 'lines',COALESCE((
                   SELECT jsonb_agg(jsonb_build_object(
-                    'position',line.position,'styleNo',identity.style_no,
+                    'position',line.position,'styleNo',identity.style_no,'imageAttachmentId',identity.image_attachment_id,
+                    'imageSha256',(SELECT sha256 FROM attachments WHERE attachment_id=identity.image_attachment_id),
                     'alternateStyleNo',identity.alternate_style_no,'color',line.color,
                     'quantity',line.quantity,'unitPrice',line.unit_price::text,
                     'totalAmount',line.total_amount::text
@@ -349,6 +351,13 @@ export class SourcingContractService {
         supplements[name] ?? String(approval[name] ?? "");
       const lines = Array.isArray(approval.lines) ? approval.lines as Array<Record<string, unknown>> : [];
       const approvedAt = String(approval.approvedAt ?? source.prepared_at);
+      const images = new Map<string,{bytes:Buffer;sha256:string}>();
+      for (const line of lines) {
+        if (typeof line.imageAttachmentId !== "string" || images.has(line.imageAttachmentId)) continue;
+        const original = await this.attachments.readSourcingContractImage(source.sourcing_case_id,line.imageAttachmentId);
+        if (line.imageSha256 && line.imageSha256 !== original.sha256) throw new Error("合同款图与冻结快照不一致");
+        images.set(line.imageAttachmentId,{bytes:await normalizeSourcingContractImage(original.bytes),sha256:original.sha256});
+      }
       const snapshot: ContractPdfSnapshot = {
         contractNumber: source.contract_number,
         contractDate: shanghaiDate(approvedAt),
@@ -369,6 +378,7 @@ export class SourcingContractService {
         processes: Array.isArray(approval.processes) ? approval.processes.map(String) : [],
         lines: lines.map((line) => ({
           position: Number(line.position),styleNo: String(line.styleNo ?? ""),
+          ...(typeof line.imageAttachmentId === "string" ? {imageAttachmentId:line.imageAttachmentId,imageSha256:images.get(line.imageAttachmentId)!.sha256,imageBytes:images.get(line.imageAttachmentId)!.bytes} : {}),
           alternateStyleNo: line.alternateStyleNo ? String(line.alternateStyleNo) : null,
           color: line.color ? String(line.color) : null,quantity: Number(line.quantity),
           unitPrice: String(line.unitPrice),totalAmount: String(line.totalAmount),
