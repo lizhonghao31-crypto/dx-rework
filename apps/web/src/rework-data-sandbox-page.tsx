@@ -81,6 +81,7 @@ export function ReworkDataSandboxPage() {
   const slowestA = summaryA ? slowestNode(summaryA) : null;
   const compareNode = new Map((summaryB?.nodes ?? []).map(node => [node.node, node]));
   const slowestPrior = slowestA ? compareNode.get(slowestA.node) ?? null : null;
+  const dataAsOf = dataA?.asOf ?? null;
   const apply = () => {
     if (!draftA.from || !draftA.to || !draftB.from || !draftB.to || draftA.from > draftA.to || draftB.from > draftB.to) { setError("日期范围无效"); return; }
     setA(draftA); setB(draftB); setQ(draftQ.trim());
@@ -88,7 +89,7 @@ export function ReworkDataSandboxPage() {
   return <Shell active="数据沙盘"><div className="rework-data-sandbox">
     <Header title="数据沙盘" iconRoute="/ui/rework-data-sandbox" subtitle="返工流程运营 · 双期间对比与原单下钻" badge="订单返工" />
     <Surface className="sandbox-filter"><div><b>分析期间 A</b><input type="date" value={draftA.from} onChange={e=>setDraftA(value=>({...value,from:e.target.value}))}/><span>至</span><input type="date" value={draftA.to} onChange={e=>setDraftA(value=>({...value,to:e.target.value}))}/></div><div><b>对比期间 B</b><input type="date" value={draftB.from} onChange={e=>setDraftB(value=>({...value,from:e.target.value}))}/><span>至</span><input type="date" value={draftB.to} onChange={e=>setDraftB(value=>({...value,to:e.target.value}))}/></div><label>款号 / RW / ERP<input value={draftQ} maxLength={100} onChange={e=>setDraftQ(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")apply();}}/></label><Button disabled={busy} onClick={apply}>应用</Button><Button variant="secondary" disabled={busy} onClick={()=>setRefreshKey(value=>value+1)}>刷新</Button></Surface>
-    {error ? <Surface className="sandbox-state" role="alert">{error}。原返工看板和办理入口不受影响。</Surface> : null}
+    {error ? <div role="alert"><Surface className="sandbox-state">{error}。原返工看板和办理入口不受影响。</Surface></div> : null}
     {busy && !summaryA ? <Surface className="sandbox-state">正在读取返工运营数据…</Surface> : null}
     {summaryA && summaryB ? <>
       <div className="sandbox-kpis">
@@ -97,7 +98,7 @@ export function ReworkDataSandboxPage() {
         <MetricCard title="平均流转时长" primary={duration(summaryA.averageCycleSeconds)} secondary={`B期 ${duration(summaryB.averageCycleSeconds)} · A期${summaryA.cycleSampleCount}个完整样本`} comparison={timeChange(summaryA.averageCycleSeconds,summaryB.averageCycleSeconds,true)} info={{title:"平均流转时长",formula:"本期首次完成且首个进入事件完整的订单，从首次进入返工流程到首次进入已完成状态的总经过时间之和 ÷ 完整样本数。",use:"观察一张返工单从发起到首次业务完成整体需要经过多久。",note:"包含排队、等待、夜间和休息时间，不等于实际劳动工时；缺记录不按0计算。"}}/>
         <MetricCard title="流转最久环节" primary={slowestA ? nodeLabel(slowestA.node) : "—"} secondary={slowestA ? `A期平均 ${duration(slowestA.averageSeconds)} · B期同环节 ${duration(slowestPrior?.averageSeconds??null)}` : "暂无完整样本"} comparison={timeChange(slowestA?.averageSeconds??null,slowestPrior?.averageSeconds??null,true)} info={{title:"流转最久环节",formula:"比较首次业务完成前，各环节在本期离开该节点的完整流转记录，取平均流转时长最高的环节；变化只与B期同一环节比较。",use:"快速定位哪个环节占用的业务等待时间最长，再结合积压和原单检查原因。",note:"流转时长包含等待，不代表实际操作工时，也不能单凭本指标认定人员责任。"}}/>
       </div>
-      <Surface className="sandbox-section"><div className="sandbox-section__title"><div><h2>各环节流转</h2><p>A期与B期使用同一口径。平均时长看已完成流转，期末未完成看仍停在该环节的业务。</p></div><MetricInfo title="各环节流转" formula="节点平均=本期离开该节点、且发生在首次业务完成前的完整流转时长之和÷流转次数；期末未完成按期间结束时真实节点还原。" use="同时识别普遍较慢的环节与正在积压的环节。" note="补图、报数和普通保存不重置时钟；缺进入或离开时间不补造。"/><small>数据截至 {new Date(dataA.asOf).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai"})}</small></div>
+      <Surface className="sandbox-section"><div className="sandbox-section__title"><div><h2>各环节流转</h2><p>A期与B期使用同一口径。平均时长看已完成流转，期末未完成看仍停在该环节的业务。</p></div><MetricInfo title="各环节流转" formula="节点平均=本期离开该节点、且发生在首次业务完成前的完整流转时长之和÷流转次数；期末未完成按期间结束时真实节点还原。" use="同时识别普遍较慢的环节与正在积压的环节。" note="补图、报数和普通保存不重置时钟；缺进入或离开时间不补造。"/><small>数据截至 {dataAsOf ? new Date(dataAsOf).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai"}) : "未记录"}</small></div>
         <div className="sandbox-node-head" aria-hidden="true"><span>环节</span><span>A期平均流转</span><span>对比B期</span><span>A期期末未完成</span><span>最长已停留</span><span>查看</span></div>
         <div className="sandbox-node-list">{summaryA.nodes.map(node=>{const prior=compareNode.get(node.node);const delta=timeChange(node.averageSeconds,prior?.averageSeconds??null,true);return <div className="sandbox-node-row" key={node.node}><b>{nodeLabel(node.node)}</b><span>{duration(node.averageSeconds)}<small>{node.completedCount}次完成流转</small></span><em className={`is-${delta.tone}`}>{delta.text}</em><span>{node.openAtEndCount} 单</span><span>{duration(node.longestOpenSeconds)}</span><span>{node.longestOpenItemId?<a href={pageUrl(`ui/tasks/${node.longestOpenItemId}`)}>最长事项 →</a>:"—"}</span></div>;})}</div>
         {!summaryA.nodes.length?<p>所选期间没有可计算的节点流转记录。</p>:null}
