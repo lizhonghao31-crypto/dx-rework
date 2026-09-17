@@ -2,14 +2,16 @@ import {QuoteAnalysisResponseSchema,WorkAnalysisQuerySchema,type QuoteAnalysisRe
 import type {Pool} from 'pg';
 import {ApplicationError} from '../platform/errors.js';
 
+const IE_FIRST_SQL=`EXISTS(SELECT 1 FROM operation_events creation WHERE creation.entity_type='sourcing_case'
+ AND creation.entity_id=c.sourcing_case_id::text AND creation.action='sourcing.case.create' AND creation.after_state->>'pricingOrigin'='ie')`;
 const QUOTE_FILTER_SQL=`($1='' OR c.erp_order_no ILIKE '%'||$1||'%' OR EXISTS(SELECT 1 FROM sourcing_case_lines l WHERE l.sourcing_case_id=c.sourcing_case_id AND l.style_no ILIKE '%'||$1||'%'))
  AND ($2::date IS NULL OR c.created_at >= $2::date::timestamp AT TIME ZONE 'Asia/Shanghai')
  AND ($3::date IS NULL OR c.created_at < ($3::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
 `;
-export const QUOTE_ANALYSIS_COUNTS_SQL=`SELECT count(*)::int total,count(*) FILTER(WHERE NOT EXISTS(SELECT 1 FROM sourcing_case_lines l WHERE l.sourcing_case_id=c.sourcing_case_id) OR EXISTS(SELECT 1 FROM sourcing_case_lines l WHERE l.sourcing_case_id=c.sourcing_case_id AND l.external_unit_price IS NULL))::int missing FROM sourcing_cases c WHERE ${QUOTE_FILTER_SQL}`;
+export const QUOTE_ANALYSIS_COUNTS_SQL=`SELECT count(*)::int total,count(*) FILTER(WHERE NOT (${IE_FIRST_SQL}) AND (NOT EXISTS(SELECT 1 FROM sourcing_case_lines l WHERE l.sourcing_case_id=c.sourcing_case_id) OR EXISTS(SELECT 1 FROM sourcing_case_lines l WHERE l.sourcing_case_id=c.sourcing_case_id AND l.external_unit_price IS NULL)))::int missing FROM sourcing_cases c WHERE ${QUOTE_FILTER_SQL}`;
 
 // All monetary columns are explicitly converted to text; no JS floating arithmetic.
-export const QUOTE_ANALYSIS_SQL=`WITH selected AS MATERIALIZED (SELECT c.* FROM sourcing_cases c WHERE ${QUOTE_FILTER_SQL} ORDER BY c.created_at DESC,c.sourcing_case_id LIMIT $4 OFFSET $5) SELECT c.sourcing_case_id::text id,c.erp_order_no AS "orderNo",c.deleted_at IS NOT NULL archived,
+export const QUOTE_ANALYSIS_SQL=`WITH selected AS MATERIALIZED (SELECT c.* FROM sourcing_cases c WHERE ${QUOTE_FILTER_SQL} ORDER BY c.created_at DESC,c.sourcing_case_id LIMIT $4 OFFSET $5) SELECT c.sourcing_case_id::text id,c.erp_order_no AS "orderNo",c.deleted_at IS NOT NULL archived,NOT (${IE_FIRST_SQL}) AS "initialPriceExpected",
  jsonb_build_object('id',c.sourcing_case_id::text,'version',1,'recordedAt',c.created_at,'lines',COALESCE((
  SELECT jsonb_agg(jsonb_build_object('position',l.position,'styleNo',l.style_no,'color',l.color,'quantity',l.quantity::text,'unitPrice',l.external_unit_price::text) ORDER BY l.position)
  FROM sourcing_case_lines l WHERE l.sourcing_case_id=c.sourcing_case_id),'[]'::jsonb)) initial,

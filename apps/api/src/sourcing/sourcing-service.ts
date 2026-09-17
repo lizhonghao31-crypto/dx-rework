@@ -1391,6 +1391,7 @@ export class SourcingService {
           orderQuantity: normalized.orderQuantity,
           attachmentIds: normalized.attachmentIds,
           daxingUnitPriceRecorded: true,
+          pricingOrigin: "ie",
         };
         const eventId = await this.events.append(client, actor, {
           action: "sourcing.case.create",

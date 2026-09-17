@@ -1,4 +1,5 @@
 import "./work-analysis-postgres.cases.js";
+import { readQuoteAnalysis } from "../../apps/api/src/sourcing/sourcing-analysis.js";
 import { ProductionDashboardService } from "../../apps/api/src/sourcing/production-dashboard-service.js";
 import { ProductionReportingService } from "../../apps/api/src/sourcing/production-reporting-service.js";
 import { randomUUID } from "node:crypto";
@@ -1901,6 +1902,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       daxingUnitPrice: "987.6500", attachmentIds: [],
     }, randomUUID());
     const caseId = created.value.sourcingCaseId;
+    const analysisBefore = await readQuoteAnalysis(database,{q:"IE-FIRST-A"});
+    expect(analysisBefore).toMatchObject({missingInitialCount:0,items:[{initialPriceExpected:false}]});
     expect(created.value.ieQuote).toBeNull();
     expect(created.value.lineItems.map(line => line.externalUnitPrice)).toEqual([null, null]);
     const prices = [{ position: 1, unitPrice: "12.35" }, { position: 2, unitPrice: "8.50" }];
@@ -1918,6 +1921,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       .rejects.toBeDefined();
     await service.decideOwner(ownerActor(), caseId, { decision: "approved" }, randomUUID());
     const stored = await database.query("SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_case_id=$1", [caseId]);
+    expect(await readQuoteAnalysis(database,{q:"IE-FIRST-A"})).toMatchObject({missingInitialCount:0,items:[{initialPriceExpected:false,ie:[{version:1}]}]});
     expect(stored.rowCount).toBe(1);
     expect(JSON.stringify(stored.rows)).not.toMatch(/CUT-INTERNAL-PR02|cuttingProcess|987\.65|daxing/);
     await expect(database.query("UPDATE sourcing_decisions SET cutting_process='in_house',cutting_process_other=NULL WHERE sourcing_decision_id=$1", [decided.value.decision!.sourcingDecisionId]))
