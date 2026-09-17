@@ -55,4 +55,14 @@ describe('workflow action filters', () => {
     expect(result.periodSummary?.openAtEndCount).toBe(0);
     expect(result.periodSummary?.nodes.find(node=>node.node==='pending_responsibility_determination')?.openAtEndCount ?? 0).toBe(0);
   });
+  it('keeps completed orders with missing start history out of average cycle time', () => {
+    const incompleteHistory = item(50, {status:'completed', enteredAt:null, history:[
+      {id:'50-a',from:'in_progress',to:'completed',action:'rework.complete',changesNode:true,enteredAt:'2026-09-03T00:00:00.000Z',leftAt:null},
+    ]});
+    const result = workflowAnalysisResult([incompleteHistory], WorkflowAnalysisQuerySchema.parse({group:'rework',periodMode:'activity',from:'2026-09-01',to:'2026-09-05'}), now);
+    expect(result.periodSummary?.completedCount).toBe(1);
+    expect(result.periodSummary?.cycleSampleCount).toBe(0);
+    expect(result.periodSummary?.missingCycleCount).toBe(1);
+    expect(result.periodSummary?.averageCycleSeconds).toBeNull();
+  });
 });

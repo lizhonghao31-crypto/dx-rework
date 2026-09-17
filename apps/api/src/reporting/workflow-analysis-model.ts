@@ -38,7 +38,8 @@ function periodSummary(rows: Item[], filters: WorkflowAnalysisQuery): WorkflowAn
   for (const row of rows) {
     const changes = changedHistory(row);
     const first = changes[0];
-    const firstAt = instant(first?.enteredAt ?? null);
+    const hasRecordedStart = first?.from === null && first.to === "draft";
+    const firstAt = hasRecordedStart ? instant(first.enteredAt) : Number.NaN;
     if (Number.isFinite(firstAt) && firstAt >= start && firstAt <= end) enteredCount++;
 
     // The main rework cycle closes at the first real business completion. Later responsibility
