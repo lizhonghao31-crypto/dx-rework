@@ -1,4 +1,4 @@
-import { z } from "zod";
+import type { z } from "zod";
 import { createWebUrls } from "../url-contract.js";
 
 export const cuttingUrls = createWebUrls(import.meta.env.BASE_URL);

@@ -296,7 +296,6 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
-  const [refresh, setRefresh] = useState(0);
   const attempt = useRef<{ body: string; key: string } | null>(null);
   const draft = useCuttingDraftGuard(
     JSON.stringify({ pieceCount, actualCutCount }),
@@ -326,7 +325,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
       }
     });
     return () => abort.abort();
-  }, [cuttingOrderId, refresh]);
+  }, [cuttingOrderId]);
 
   const updateDigits = (
     next: string,
