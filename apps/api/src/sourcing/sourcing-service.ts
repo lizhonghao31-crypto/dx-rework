@@ -37,6 +37,7 @@ import type {
 } from "@dx-rework/contracts";
 import type { Pool, PoolClient } from "pg";
 
+import { ensureCuttingOrdersForApproval } from "../cutting/cutting-source-service.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TodoProjectionService } from "../todos/projection-service.js";
 import {
@@ -2244,6 +2245,7 @@ export class SourcingService {
              WHERE line.sourcing_decision_id=$3 ORDER BY line.position`,
             [snapshotId,sourcingCaseId,source.sourcing_decision_id],
           );
+          await ensureCuttingOrdersForApproval(client, sourcingCaseId, snapshotId);
           await this.contractService?.prepareForApproval(client, snapshotId, actor);
         }
         await client.query(

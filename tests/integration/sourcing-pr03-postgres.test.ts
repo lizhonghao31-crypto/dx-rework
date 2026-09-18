@@ -10,6 +10,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
+import { CuttingSourceService } from "../../apps/api/src/cutting/cutting-source-service.js";
 import { SourcingContractService } from "../../apps/api/src/sourcing/sourcing-contract-service.js";
 import { SourcingProductionService } from "../../apps/api/src/sourcing/sourcing-production-service.js";
 import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
@@ -41,6 +42,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   const service = new SourcingService(
     database,undefined,undefined,todoProjection,contractService,
   );
+  const cutting = new CuttingSourceService(database);
   const production = new SourcingProductionService(database);
   const craftService = new AccessMasterDataService(database, "corp");
   const craftIdsByName = new Map<string, string>();
@@ -86,6 +88,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     authorizationCapability: "sourcing:owner:approve",
     authorizationCapabilities: ["sourcing:view", "sourcing:owner:approve"],
     requestId,
+  });
+  const cuttingOwnerActor = (requestId = randomUUID()): TrustedActorContext => ({
+    ...ownerActor(requestId),
+    authorizationCapability: "cutting:orders:view",
+    authorizationCapabilities: ["cutting:orders:view"],
   });
   const factoryChangeActor = (requestId = randomUUID()): TrustedActorContext => ({
     ...merchandiserActor(requestId),
@@ -225,6 +232,31 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await database.end();
     await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     await admin.end();
+  });
+
+  it("registers cutting roles and capabilities without assigning employees", async () => {
+    const roles = await database.query<{ role_code: string }>(
+      `SELECT role_code FROM business_roles
+       WHERE role_code IN ('cutting_supervisor','cutting_worker') ORDER BY role_code`,
+    );
+    expect(roles.rows.map((row) => row.role_code)).toEqual(["cutting_supervisor","cutting_worker"]);
+    const grants = await database.query<{ role_code: string; capability: string }>(
+      `SELECT role_code,capability FROM role_capabilities
+       WHERE role_code IN ('cutting_supervisor','cutting_worker')
+       ORDER BY role_code,capability`,
+    );
+    expect(grants.rows).toEqual([
+      { role_code: "cutting_supervisor", capability: "cutting:orders:view" },
+      { role_code: "cutting_supervisor", capability: "cutting:records:create" },
+      { role_code: "cutting_supervisor", capability: "tools:user" },
+      { role_code: "cutting_worker", capability: "cutting:orders:view" },
+      { role_code: "cutting_worker", capability: "cutting:records:create" },
+      { role_code: "cutting_worker", capability: "tools:user" },
+    ]);
+    expect((await database.query(
+      `SELECT 1 FROM user_role_assignments
+       WHERE role_code IN ('cutting_supervisor','cutting_worker')`,
+    )).rowCount).toBe(0);
   });
 
   it("creates once, records an exact IE quote and advances the audited state", async () => {
@@ -450,6 +482,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       },
     });
     expect(rejected.value.approvalSnapshot).toBeNull();
+    expect((await database.query(
+      "SELECT 1 FROM cutting_orders WHERE sourcing_case_id=$1",
+      [created.value.sourcingCaseId],
+    )).rowCount).toBe(0);
 
     const revision = await service.recordManagementDecision(
       managerActor(),
@@ -474,12 +510,20 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       ownerDecision: null,
     });
 
+    const approvalKey = randomUUID();
     const approved = await service.decideOwner(
       ownerActor(),
       created.value.sourcingCaseId,
       { decision: "approved" },
-      randomUUID(),
+      approvalKey,
     );
+    const approvalReplay = await service.decideOwner(
+      ownerActor(),
+      created.value.sourcingCaseId,
+      { decision: "approved" },
+      approvalKey,
+    );
+    expect(approvalReplay.reused).toBe(true);
     expect(approved.value).toMatchObject({
       status: "pending_finance_reconciliation",
       version: 6,
@@ -508,6 +552,28 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         }],
       },
     });
+    const cuttingItems = (await cutting.listSources(cuttingOwnerActor())).items
+      .filter((item) => item.sourcingCaseId === created.value.sourcingCaseId);
+    expect(cuttingItems).toHaveLength(1);
+    expect(cuttingItems[0]).toMatchObject({
+      sourcePosition: 1,
+      formalStyleNo: "DX-260826",
+      displayStyleNo: "DX-260826",
+      color: "黑色",
+      contractQuantity: 137,
+      supplierId: factoryId,
+      supplierName: "一号加工厂",
+      merchandiserId,
+    });
+    expect(cuttingItems[0]).not.toHaveProperty("daxingUnitPrice");
+    expect(cuttingItems[0]).not.toHaveProperty("unitPrice");
+    expect(cuttingItems[0]).not.toHaveProperty("totalAmount");
+    expect(cuttingItems[0]).not.toHaveProperty("bankAccount");
+    await expect(cutting.listSources({
+      ...unrelatedReaderActor(),
+      authorizationCapability: "cutting:orders:view",
+      authorizationCapabilities: ["cutting:orders:view"],
+    })).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
     const firstContract = (await contractService.getCurrent(
       readerActor(),created.value.sourcingCaseId,
     )).item;
@@ -1367,6 +1433,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "SELECT 1 FROM sourcing_approval_snapshots WHERE sourcing_case_id=$1",
       [created.value.sourcingCaseId],
     )).rowCount).toBe(1);
+    const multiCutting = await database.query<{ sourcing_line_position: number }>(
+      `SELECT sourcing_line_position FROM cutting_orders
+       WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position`,
+      [created.value.sourcingCaseId],
+    );
+    expect(multiCutting.rows.map((row) => Number(row.sourcing_line_position))).toEqual([1,2]);
     expect((await database.query<{ total_amount: string }>(
       "SELECT total_amount::text FROM sourcing_decisions WHERE sourcing_decision_id=$1",
       [decided.value.decision!.sourcingDecisionId],
@@ -2067,11 +2139,17 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(service.reviseStyles(managerActor(),id,edit,randomUUID())).rejects.toMatchObject({code:"INVALID_STATE_TRANSITION"});
     const generate = vi.spyOn(contractService,"generateIfReady").mockResolvedValueOnce({item:null});
     await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    const pendingCutting=(await cutting.listSources(cuttingOwnerActor())).items.find(item=>item.sourcingCaseId===id)!;
+    expect(pendingCutting).toMatchObject({formalStyleNo:null,alternateStyleNo:"TEMP-PR03",displayStyleNo:"TEMP-PR03"});
+    const stableCuttingOrderId=pendingCutting.cuttingOrderId;
     generate.mockRestore();
     await expect(service.reviseStyles(merchandiserActor(),id,edit,randomUUID())).rejects.toMatchObject({code:"INVALID_STATE_TRANSITION"});
     await contractService.generateIfReady(contractActor(),id);
     const first=await service.reviseStyles(merchandiserActor(),id,edit,randomUUID());
     expect(first.value).toMatchObject({styleNo:"FINAL-PR03",identityRevision:1,status:"pending_finance_reconciliation"});
+    const formalCutting=(await cutting.listSources(cuttingOwnerActor())).items.find(item=>item.sourcingCaseId===id)!;
+    expect(formalCutting).toMatchObject({cuttingOrderId:stableCuttingOrderId,formalStyleNo:"FINAL-PR03",displayStyleNo:"FINAL-PR03"});
+    expect((await database.query("SELECT 1 FROM cutting_orders WHERE sourcing_case_id=$1",[id])).rowCount).toBe(1);
     await expect(service.reviseStyles(managerActor(),id,edit,randomUUID())).rejects.toMatchObject({statusCode:409});
     const original=(await contractService.getCurrent(readerActor(),id)).item!;
     expect(original.status).toBe("ready");
