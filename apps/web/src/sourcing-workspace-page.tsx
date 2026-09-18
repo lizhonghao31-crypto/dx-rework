@@ -303,12 +303,16 @@ const clearLocalSourcingDraft = (userId: string): void => {
 
 const detailHref = (
   item: SourcingCaseSummary,
-  returnTo: string,
-): string => withSourcingReturn(
-  pageUrl(`ui/sourcing/orders/${item.sourcingCaseId}`),
-  returnTo.startsWith("/ui/sourcing/history") ? "history" : "pending",
-  readSourcingListQuery(returnTo.slice(returnTo.indexOf("?") + 1)),
-);
+  returnTo?: string,
+): string => {
+  const target = pageUrl(`ui/sourcing/orders/${item.sourcingCaseId}`);
+  if (!returnTo) return target;
+  return withSourcingReturn(
+    target,
+    returnTo.startsWith("/ui/sourcing/history") ? "history" : "pending",
+    readSourcingListQuery(returnTo.slice(returnTo.indexOf("?") + 1)),
+  );
+};
 
 const sourcingLinePriceLabel = (item: SourcingCaseSummary, position: number): string => {
   const line = item.lineItems.find((entry) => entry.position === position);
