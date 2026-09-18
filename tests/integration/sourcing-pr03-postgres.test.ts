@@ -289,6 +289,138 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     )).rowCount).toBe(0);
   });
 
+  it("backfills missing historical approved cutting tasks without duplicating existing or deleted sources", async () => {
+    const makeApproved = async (
+      suffix: string,
+      lineCount: 1 | 2,
+    ): Promise<string> => {
+      const lines = Array.from({ length: lineCount }, (_value, index) => ({
+        styleNo: `CUT-HISTORY-${suffix}-${index + 1}`,
+        color: index === 0 ? "黑色" : "米白",
+        quantity: 100 + index,
+      }));
+      const created = await service.createCase(merchandiserActor(), {
+        gender: "男装" as const,
+        styleName: "历史裁床补任务测试",
+        estimatedCutPieceSendDate: "2026-10-01",
+        deliveryDate: "2026-10-12",
+        lineItems: lines,
+        daxingUnitPrice: "7.0000",
+        attachmentIds: [],
+      }, randomUUID());
+      await service.quoteIePrice(
+        ieActor(),
+        created.value.sourcingCaseId,
+        {
+          linePrices: lines.map((_line, index) => ({
+            position: index + 1,
+            unitPrice: "8.5000",
+          })),
+        },
+        randomUUID(),
+      );
+      await service.recordManagementDecision(
+        managerActor(),
+        created.value.sourcingCaseId,
+        {
+          supplierId: factoryId,
+          craftIds: [craftId("净色车缝")],
+          linePrices: lines.map((_line, index) => ({
+            position: index + 1,
+            unitPrice: "8.5000",
+          })),
+        },
+        randomUUID(),
+      );
+      await service.decideOwner(
+        ownerActor(),
+        created.value.sourcingCaseId,
+        { decision: "approved" },
+        randomUUID(),
+      );
+      return created.value.sourcingCaseId;
+    };
+
+    const activeCaseId = await makeApproved("ACTIVE", 2);
+    const original = await database.query<{
+      cutting_order_id: string;
+      sourcing_line_position: number;
+    }>(
+      `SELECT cutting_order_id,sourcing_line_position
+       FROM cutting_orders
+       WHERE sourcing_case_id=$1
+       ORDER BY sourcing_line_position`,
+      [activeCaseId],
+    );
+    expect(original.rows).toHaveLength(2);
+    const preserved = original.rows[0]!;
+    const removed = original.rows[1]!;
+
+    await database.query("ALTER TABLE cutting_orders DISABLE TRIGGER cutting_orders_no_delete");
+    try {
+      await database.query(
+        "DELETE FROM cutting_orders WHERE cutting_order_id=$1",
+        [removed.cutting_order_id],
+      );
+    } finally {
+      await database.query("ALTER TABLE cutting_orders ENABLE TRIGGER cutting_orders_no_delete");
+    }
+
+    const deletedCaseId = await makeApproved("DELETED", 1);
+    const deletedTask = await database.query<{ cutting_order_id: string }>(
+      "SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1",
+      [deletedCaseId],
+    );
+    await database.query("ALTER TABLE cutting_orders DISABLE TRIGGER cutting_orders_no_delete");
+    try {
+      await database.query(
+        "DELETE FROM cutting_orders WHERE cutting_order_id=$1",
+        [deletedTask.rows[0]!.cutting_order_id],
+      );
+    } finally {
+      await database.query("ALTER TABLE cutting_orders ENABLE TRIGGER cutting_orders_no_delete");
+    }
+    await service.deleteByRoot(rootActor(), deletedCaseId, randomUUID());
+
+    const migration = await readFile(
+      new URL("../../apps/api/migrations/0200_cutting_historical_approved_backfill.sql", import.meta.url),
+      "utf8",
+    );
+    await database.query(migration);
+
+    const restored = await database.query<{
+      cutting_order_id: string;
+      sourcing_line_position: number;
+    }>(
+      `SELECT cutting_order_id,sourcing_line_position
+       FROM cutting_orders
+       WHERE sourcing_case_id=$1
+       ORDER BY sourcing_line_position`,
+      [activeCaseId],
+    );
+    expect(restored.rows).toHaveLength(2);
+    expect(restored.rows[0]).toEqual(preserved);
+    expect(restored.rows[1]?.sourcing_line_position).toBe(removed.sourcing_line_position);
+    expect(restored.rows[1]?.cutting_order_id).not.toBe(removed.cutting_order_id);
+    expect((await database.query(
+      "SELECT 1 FROM cutting_orders WHERE sourcing_case_id=$1",
+      [deletedCaseId],
+    )).rowCount).toBe(0);
+    expect((await database.query(
+      `SELECT 1
+       FROM cutting_records record
+       JOIN cutting_orders cutting USING(cutting_order_id)
+       WHERE cutting.sourcing_case_id=$1`,
+      [activeCaseId],
+    )).rowCount).toBe(0);
+
+    await database.query(migration);
+    expect((await database.query(
+      "SELECT count(*)::integer AS count FROM cutting_orders WHERE sourcing_case_id=$1",
+      [activeCaseId],
+    )).rows[0]?.count).toBe(2);
+  });
+
   it("rejects cutting mutations after the source sourcing case is logically deleted", async () => {
     const makeApproved = async (suffix: string) => {
       const created = await service.createCase(merchandiserActor(), {
