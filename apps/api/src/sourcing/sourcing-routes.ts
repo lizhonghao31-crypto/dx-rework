@@ -200,9 +200,21 @@ export function registerSourcingRoutes(
   app.get("/sourcing/factories", async (request) =>
     dependencies.service.listFactories(await readActor(request)));
 
-  app.get<{ Querystring: { page?: string; q?: string; status?: string } }>("/sourcing/cases", async (request) => {
-    if (request.query.q !== undefined && typeof request.query.q !== "string") {
-      validationError("搜索内容无效");
+  app.get<{ Querystring: {
+    page?: string;
+    q?: string;
+    status?: string;
+    stage?: string;
+    gender?: string;
+    styleName?: string;
+  } }>("/sourcing/cases", async (request) => {
+    for (const [value, message] of [
+      [request.query.q, "搜索内容无效"],
+      [request.query.stage, "流程状态筛选无效"],
+      [request.query.gender, "性别筛选无效"],
+      [request.query.styleName, "款式类别筛选无效"],
+    ] as const) {
+      if (value !== undefined && typeof value !== "string") validationError(message);
     }
     const page = Number(request.query.page ?? "1");
     if (!Number.isInteger(page) || page < 1 || page > 100_000) validationError("分页页码无效");
@@ -210,12 +222,24 @@ export function registerSourcingRoutes(
     if (status !== undefined && status !== "pending" && status !== "closed") {
       validationError("订单状态筛选无效");
     }
+    const stage = request.query.stage ?? "all";
+    if (!["all","ie","management","owner","finance","factory_change","exception"].includes(stage)) {
+      validationError("流程状态筛选无效");
+    }
+    const gender = request.query.gender ?? "all";
+    if (!["all","男装","女装","missing"].includes(gender)) validationError("性别筛选无效");
+    if ((request.query.styleName ?? "").length > 100) validationError("款式类别不能超过100个字符");
     const statusFilter = status === "pending" || status === "closed" ? status : "all";
     return dependencies.service.listCases(
       await readActor(request),
       request.query.q ?? "",
       statusFilter,
       page,
+      {
+        stage: stage as "all"|"ie"|"management"|"owner"|"finance"|"factory_change"|"exception",
+        gender: gender as "all"|"男装"|"女装"|"missing",
+        styleName: request.query.styleName ?? "",
+      },
     );
   });
 

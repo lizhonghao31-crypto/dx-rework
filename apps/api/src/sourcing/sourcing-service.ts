@@ -621,11 +621,22 @@ export class SourcingService {
     query = "",
     statusFilter: "all" | "pending" | "closed" = "all",
     page = 1,
+    filters: Readonly<{
+      stage?: "all"|"ie"|"management"|"owner"|"finance"|"factory_change"|"exception";
+      gender?: "all"|"男装"|"女装"|"missing";
+      styleName?: string;
+    }> = {},
   ): Promise<SourcingCaseListResponse> {
     this.assertReader(actor);
     const normalizedQuery = query.trim();
+    const stage = filters.stage ?? "all";
+    const gender = filters.gender ?? "all";
+    const normalizedStyleName = filters.styleName?.trim() ?? "";
     if (normalizedQuery.length > 100) fail("搜索内容不能超过100个字符");
     if (!["all", "pending", "closed"].includes(statusFilter)) fail("订单状态筛选无效");
+    if (!["all","ie","management","owner","finance","factory_change","exception"].includes(stage)) fail("流程状态筛选无效");
+    if (!["all","男装","女装","missing"].includes(gender)) fail("性别筛选无效");
+    if (normalizedStyleName.length > 100) fail("款式类别不能超过100个字符");
     if (!Number.isInteger(page) || page < 1 || page > 100_000) fail("分页页码无效");
     const offset = (page - 1) * SOURCING_LIST_PAGE_SIZE;
     const result = await this.database.query<SourcingCaseRow>(
@@ -793,13 +804,35 @@ export class SourcingService {
             WHERE contract_row.sourcing_case_id=case_view.sourcing_case_id
               AND contract_row.contract_reference ILIKE '%'||$1||'%'
           ))
-         AND ($2='all' OR ($2='closed' AND case_view.status='closed')
-           OR ($2='pending' AND case_view.status<>'closed'))
+         AND ($2::text='all' OR ($2::text='closed' AND case_view.status='closed')
+           OR ($2::text='pending' AND case_view.status<>'closed'))
+         AND (
+           $3::text='all'
+           OR ($3::text='ie' AND case_view.status='pending_ie_quote')
+           OR ($3::text='management' AND case_view.status='pending_management_decision')
+           OR ($3::text='owner' AND case_view.status='pending_owner_approval')
+           OR ($3::text='finance' AND case_view.status IN ('pending_contract','pending_finance_reconciliation'))
+           OR ($3::text='factory_change' AND case_view.status='pending_factory_change_verification')
+           OR ($3::text='exception' AND case_view.status='pending_exception_verification')
+         )
+         AND (
+           $4::text='all'
+           OR ($4::text='missing' AND source_case.gender IS NULL)
+           OR ($4::text IN ('男装','女装') AND source_case.gender=$4::text)
+         )
+         AND (
+           $5::text=''
+           OR ($5::text='历史未维护' AND (source_case.style_name_snapshot IS NULL OR btrim(source_case.style_name_snapshot)=''))
+           OR ($5::text<>'历史未维护' AND source_case.style_name_snapshot ILIKE '%'||$5::text||'%')
+         )
        ORDER BY case_view.created_at DESC,case_view.sourcing_case_id DESC
-       LIMIT 15 OFFSET $3`,
+       LIMIT 15 OFFSET $6`,
       [
         normalizedQuery,
         statusFilter,
+        stage,
+        gender,
+        normalizedStyleName,
         offset,
       ],
     );

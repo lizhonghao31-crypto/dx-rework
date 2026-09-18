@@ -628,6 +628,17 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await service.listCases(readerActor(), "整烫")).items).toHaveLength(0);
     expect((await service.listCases(readerActor(), "梭织短裤")).items).toHaveLength(1);
 
+    const classified = await service.listCases(readerActor(), "", "pending", 1, {
+      stage: "management",
+      gender: "男装",
+      styleName: "梭织",
+    });
+    expect(classified.items).toHaveLength(1);
+    expect(classified.items[0]?.sourcingCaseId).toBe(created.value.sourcingCaseId);
+    expect((await service.listCases(readerActor(), "", "pending", 1, { stage: "ie" })).items).toHaveLength(0);
+    expect((await service.listCases(readerActor(), "", "pending", 1, { gender: "女装" })).items).toHaveLength(0);
+    expect((await service.listCases(readerActor(), "", "pending", 1, { styleName: "不存在的款式" })).items).toHaveLength(0);
+
     expect((await database.query(
       "SELECT 1 FROM sourcing_ie_quotes WHERE sourcing_case_id=$1",
       [created.value.sourcingCaseId],

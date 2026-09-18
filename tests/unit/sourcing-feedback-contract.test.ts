@@ -25,6 +25,18 @@ describe("sourcing form feedback", () => {
     expect(source).toContain('const overrides = kind === "quote" ? quotePriceOverrides : decisionPriceOverrides;');
   });
 
+  it("keeps order list filters compact, input-driven and free of a submit search button", async () => {
+    const source = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
+    expect(source).toContain('className="sourcing-search" aria-label="外发订单筛选"');
+    expect(source).toContain('aria-label="订单状态"');
+    expect(source).toContain('aria-label="性别"');
+    expect(source).toContain('aria-label="款式类别"');
+    expect(source).toContain("useDebouncedValue(search.trim(), 180)");
+    expect(source).toContain("useDebouncedValue(styleName.trim(), 180)");
+    expect(source).not.toContain('type="submit">搜索</button>');
+    expect(source).toContain("returnTo={listPath}");
+    expect(source).toContain("const listBackPath = sourcingReturnPath(window.location.search);");
+  });
   it("provides inline reason feedback and avoids sending a known-invalid decision", async () => {
     const source = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
     expect(source).toContain('aria-describedby={missingDecisionReason ? "sourcing-decision-reason-hint" : undefined}');
