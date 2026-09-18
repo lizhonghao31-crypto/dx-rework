@@ -43,7 +43,7 @@ export async function readReceivingAnalysis(database: Pool, baseSql: string, act
             AND resolution.difference_quantity_snapshot=packing.packing_quantity-totals.cumulative_actual_quantity) AS packing_handled
       FROM style_totals totals
       JOIN LATERAL (SELECT batch.receiving_batch_id,batch.version FROM batch_totals batch
-        WHERE batch.style_key=totals.style_key ORDER BY batch.last_through_end_received_at DESC NULLS LAST,
+        WHERE batch.group_key=totals.group_key ORDER BY batch.last_through_end_received_at DESC NULLS LAST,
           batch.receiving_batch_id DESC LIMIT 1) action ON true
       LEFT JOIN LATERAL (SELECT revision.packing_revision_id,revision.packing_quantity FROM receiving_packing_revisions revision
         WHERE revision.receiving_batch_id=action.receiving_batch_id
@@ -65,23 +65,23 @@ export async function readReceivingAnalysis(database: Pool, baseSql: string, act
         count(*) FILTER(WHERE packing_revision_id IS NULL)::text AS "missingPackingCount",
         count(*) FILTER(WHERE receiving_handled OR packing_handled)::text AS "handledCount",
         (SELECT count(*)::text FROM receiving_receipts receipt
-          JOIN scoped_batches batch USING(receiving_batch_id) JOIN filtered f ON f.style_key=batch.style_key
+          JOIN scoped_batches batch USING(receiving_batch_id) JOIN filtered f ON f.group_key=batch.group_key
           LEFT JOIN sourcing_production_receipt_links link USING(receipt_id)
           WHERE link.receipt_id IS NULL AND ($3<>'' OR receipt.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai'))) AS "unlinkedReceiptCount",
         (SELECT count(*)::text FROM receiving_receipts receipt
-          JOIN scoped_batches batch USING(receiving_batch_id) JOIN filtered f ON f.style_key=batch.style_key
+          JOIN scoped_batches batch USING(receiving_batch_id) JOIN filtered f ON f.group_key=batch.group_key
           JOIN sourcing_production_receipt_links link USING(receipt_id)
           JOIN sourcing_production_exclusions exclusion USING(production_order_id)
           WHERE $3<>'' OR receipt.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')) AS "excludedReceiptCount"
       FROM filtered`, values);
     const rows = await client.query(`${facts}, page_rows AS (
-      SELECT * FROM filtered ORDER BY abs(receiving_difference) DESC,style_key,receiving_batch_id LIMIT 15 OFFSET $5)
+      SELECT * FROM filtered ORDER BY abs(receiving_difference) DESC,style_key,group_key,receiving_batch_id LIMIT 15 OFFSET $5)
       SELECT f.receiving_batch_id AS "receivingBatchId",f.style_key AS "styleNo",f.version,
         f.document_quantity::text AS "documentQuantity",f.cumulative_actual_quantity::text AS "actualQuantity",
         f.receiving_difference::text AS "receivingDifference",f.packing_revision_id AS "packingRevisionId",
         f.packing_quantity::text AS "packingQuantity",f.packing_difference::text AS "packingDifference",
         f.receiving_handled AS "receivingHandled",f.packing_handled AS "packingHandled",
-        ARRAY(SELECT receiving_batch_id FROM scoped_batches WHERE style_key=f.style_key ORDER BY receiving_batch_id) AS "batchIds",
+        ARRAY(SELECT receiving_batch_id FROM scoped_batches WHERE group_key=f.group_key ORDER BY receiving_batch_id) AS "batchIds",
         COALESCE((SELECT jsonb_agg(jsonb_build_object(
           'receiptId',receipt.receipt_id,'receivingBatchId',receipt.receiving_batch_id,'receivedAt',receipt.received_at,
           'documentQuantity',COALESCE(correction.document_quantity,receipt.document_quantity)::text,
@@ -102,12 +102,12 @@ export async function readReceivingAnalysis(database: Pool, baseSql: string, act
             ORDER BY item.created_at DESC,item.correction_id DESC LIMIT 1) correction ON true
           LEFT JOIN sourcing_production_receipt_links link USING(receipt_id)
           LEFT JOIN sourcing_production_orders production ON production.production_order_id=link.production_order_id AND ${productionNotExcluded}
-          WHERE batch.style_key=f.style_key AND ($3<>'' OR receipt.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai'))),'[]'::jsonb) AS receipts,
+          WHERE batch.group_key=f.group_key AND ($3<>'' OR receipt.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai'))),'[]'::jsonb) AS receipts,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('revisionId',revision.packing_revision_id,
           'receivingBatchId',revision.receiving_batch_id,'quantity',revision.packing_quantity::text,'recordedAt',revision.created_at)
           ORDER BY revision.created_at DESC,revision.packing_revision_id DESC)
           FROM receiving_packing_revisions revision JOIN scoped_batches batch USING(receiving_batch_id)
-          WHERE batch.style_key=f.style_key),'[]'::jsonb) AS "packingHistory",
+          WHERE batch.group_key=f.group_key),'[]'::jsonb) AS "packingHistory",
         COALESCE((SELECT jsonb_agg(jsonb_build_object('resolutionId',resolution.resolution_id,
           'receivingBatchId',resolution.receiving_batch_id,'type',resolution.difference_type,
           'documentQuantity',resolution.document_quantity_snapshot::text,'actualQuantity',resolution.actual_quantity_snapshot::text,
@@ -115,8 +115,8 @@ export async function readReceivingAnalysis(database: Pool, baseSql: string, act
           'packingRevisionId',resolution.packing_revision_id,'result',resolution.result,'handledAt',resolution.created_at)
           ORDER BY resolution.created_at DESC,resolution.resolution_id DESC)
           FROM receiving_difference_resolutions resolution JOIN scoped_batches batch USING(receiving_batch_id)
-          WHERE batch.style_key=f.style_key),'[]'::jsonb) AS resolutions
-      FROM page_rows f ORDER BY abs(f.receiving_difference) DESC,f.style_key,f.receiving_batch_id`, [...values, (filters.page - 1) * 15]);
+          WHERE batch.group_key=f.group_key),'[]'::jsonb) AS resolutions
+      FROM page_rows f ORDER BY abs(f.receiving_difference) DESC,f.style_key,f.group_key,f.receiving_batch_id`, [...values, (filters.page - 1) * 15]);
     const {as_of: asOf, ...totals} = summary.rows[0]!;
     const response = ReceivingAnalysisResponseSchema.parse({asOf: new Date(asOf).toISOString(), filters, summary: totals, items: rows.rows});
     await client.query("COMMIT");

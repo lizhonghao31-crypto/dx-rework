@@ -308,6 +308,15 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await migration("0140_receiving_packing_difference_direction.sql");
     await migration("0169_receiving_difference_evidence.sql");
     await migration("0190_receiving_difference_authority.sql");
+    // PR04 board reads the latest schema's optional cutting identity. This partial-migration
+    // fixture stays intentionally legacy, so add only the nullable projection surface it needs.
+    await database.query("ALTER TABLE receiving_batches ADD COLUMN cutting_order_id uuid");
+    await database.query(`CREATE TABLE current_cutting_records(
+      cutting_order_id uuid,
+      actual_cut_count bigint,
+      recorded_by uuid,
+      recorded_at timestamptz
+    )`);
     await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','corp',$3,$3,true,true,CURRENT_TIMESTAMP)",[randomUUID(),receiverId,`test-${receiverId}`]);
     for(const role of ["warehouse_receiver","order_merchandiser"]) await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$2,'receiving fixture')",[randomUUID(),receiverId,role]);
     await database.query("INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','corp')");

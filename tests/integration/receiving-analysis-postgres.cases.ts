@@ -19,7 +19,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     base = source.match(/const RECEIVING_BOARD_BASE_SQL = `([\s\S]*?)`;/)![1]!;
     await admin.query(`CREATE SCHEMA ${schema}`);
     // Isolated table fixtures for the production SQL, not replacement business migrations.
-    await database.query(`CREATE TABLE receiving_batches(receiving_batch_id uuid PRIMARY KEY,style_no text,deleted_at timestamptz,
+    await database.query(`CREATE TABLE receiving_batches(receiving_batch_id uuid PRIMARY KEY,style_no text,cutting_order_id uuid,deleted_at timestamptz,
       delivery_note_quantity bigint,actual_quantity_adjustment bigint DEFAULT 0,defective_quantity_adjustment bigint DEFAULT 0,version int DEFAULT 1);
       CREATE TABLE receiving_receipts(receipt_id uuid PRIMARY KEY,receiving_batch_id uuid,received_at timestamptz,document_quantity bigint,actual_quantity bigint,defective_quantity bigint DEFAULT 0,receiving_source text DEFAULT 'jiashun');
       CREATE TABLE operation_events(entity_id text,action text,entity_type text,after_state jsonb,before_state jsonb,created_at timestamptz);

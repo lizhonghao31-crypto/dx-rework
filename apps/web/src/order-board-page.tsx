@@ -71,6 +71,9 @@ type BoardRow = Readonly<{
   packingDifferenceQuantity: number | null;
   packingRecordedBy: string | null;
   packingRecordedAt: string | null;
+  actualCutCount: number | null;
+  cuttingRecordedBy: string | null;
+  cuttingRecordedAt: string | null;
   receivingDifferenceResolution: DifferenceResolution | null;
   packingDifferenceResolution: DifferenceResolution | null;
   staleResolution?: boolean;
@@ -212,7 +215,7 @@ export function OrderBoardPage() {
   const [isRoot, setIsRoot] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
   const [page, setPage] = useState(1);
-  const [expandedStyles, setExpandedStyles] = useState<ReadonlySet<string>>(() => new Set());
+  const [expandedRows, setExpandedRows] = useState<ReadonlySet<string>>(() => new Set());
   const [editing, setEditing] = useState<BoardRow | null>(null);
   const [correctingReceipt, setCorrectingReceipt] = useState<ReceivingHistoryItem | null>(null);
   const [deleting, setDeleting] = useState<BoardRow | null>(null);
@@ -555,11 +558,11 @@ export function OrderBoardPage() {
     </>;
   };
 
-  const toggleHistory = (styleNo: string) => {
-    setExpandedStyles((current) => {
+  const toggleHistory = (receivingBatchId: string) => {
+    setExpandedRows((current) => {
       const next = new Set(current);
-      if (next.has(styleNo)) next.delete(styleNo);
-      else next.add(styleNo);
+      if (next.has(receivingBatchId)) next.delete(receivingBatchId);
+      else next.add(receivingBatchId);
       return next;
     });
   };
@@ -748,7 +751,7 @@ export function OrderBoardPage() {
     <div className="order-board-list">
       {data?.rows.map((row) => {
         const tone = row.differenceQuantity < 0 ? "short" : row.differenceQuantity > 0 ? "extra" : "even";
-        const historyExpanded = expandedStyles.has(row.styleNo);
+        const historyExpanded = expandedRows.has(row.receivingBatchId);
         return <div className="order-board-item" key={row.receivingBatchId}>
         <Surface className={`order-board-row is-${tone}`}>
           <div className="order-board-row__main">
@@ -764,8 +767,12 @@ export function OrderBoardPage() {
                 type="button"
                 className="order-board-history-toggle"
                 aria-expanded={historyExpanded}
-                onClick={() => toggleHistory(row.styleNo)}
+                onClick={() => toggleHistory(row.receivingBatchId)}
               >第{row.receiptCount}次收货 <span>{historyExpanded ? "收起" : "查看记录"}</span></button> : null}
+            </div>
+            <div className="order-board-row__confirmation-item order-board-row__cutting-confirmation">
+              <span>裁床登记人</span>
+              <strong>{row.cuttingRecordedBy && row.cuttingRecordedAt ? `${row.cuttingRecordedBy} · ${dateTime(row.cuttingRecordedAt)}` : "—"}</strong>
             </div>
             <div className="order-board-row__confirmation-item order-board-row__receiving-confirmation">
               <span>收货人</span>
@@ -779,6 +786,10 @@ export function OrderBoardPage() {
             {actionControls(row, true)}
           </div>
           <div className="order-board-row__facts">
+            <div className="order-board-row__cutting">
+              <span>实裁数</span>
+              <strong>{row.actualCutCount === null ? "—" : `${quantity(row.actualCutCount)}件`}</strong>
+            </div>
             <div className="order-board-row__document">
               <span>送货单数量</span>
               <div className="order-board-row__document-value">

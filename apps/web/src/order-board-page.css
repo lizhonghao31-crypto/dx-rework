@@ -139,3 +139,52 @@
 .order-board-page .order-board-stale-resolution summary { cursor:pointer; }
 .order-board-page .order-board-stale-resolution div { display:flex; flex-wrap:wrap; gap:8px; padding:8px 0; border-top:1px solid #eee; }
 @media(max-width:600px) { .order-board-page .order-board-insights button { min-height:40px; } }
+
+/* PR04 cutting facts: preserve the accepted card while adding one personnel fact and one quantity fact. */
+.order-board-row{container-type:inline-size}
+.order-board-row__main{
+  grid-template-columns:minmax(220px,1.35fr) repeat(3,minmax(150px,1fr)) minmax(190px,auto);
+  min-height:44px;
+}
+.order-board-row__main>.order-board-row__style{grid-column:1;padding-left:10px}
+.order-board-row__main>.order-board-row__cutting-confirmation{grid-column:2}
+.order-board-row__main>.order-board-row__receiving-confirmation{grid-column:3}
+.order-board-row__main>.order-board-row__packing-confirmation{grid-column:4}
+.order-board-row__main>.order-board-actions--desktop{grid-column:5;padding-right:10px}
+.order-board-row__confirmation-item strong{
+  overflow:visible;
+  text-overflow:clip;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  line-height:1.25;
+}
+.order-board-row__facts{grid-template-columns:repeat(7,minmax(0,1fr))}
+.order-board-row__facts>div{
+  min-height:34px;
+}
+.order-board-row__facts strong{
+  max-width:100%;
+  overflow:visible;
+  text-overflow:clip;
+  white-space:nowrap;
+}
+@container (max-width:839px){
+  .order-board-row__facts{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .order-board-row__facts>div:nth-child(5){border-left:0}
+  .order-board-row__facts>div:nth-child(n+5){border-top:1px solid #d5dde7}
+  .order-board-row__packing-difference{grid-column:span 2}
+}
+@media(max-width:900px){
+  .order-board-row__main{grid-template-columns:1fr 1fr;padding:7px 10px}
+  .order-board-row__main>.order-board-row__style{grid-column:1/-1;padding-left:0}
+  .order-board-row__main>.order-board-row__cutting-confirmation{grid-column:1/-1;justify-content:flex-start;text-align:left}
+  .order-board-row__main>.order-board-row__receiving-confirmation{grid-column:1}
+  .order-board-row__main>.order-board-row__packing-confirmation{grid-column:2}
+  .order-board-actions--mobile{grid-column:1/-1}
+}
+@media(max-width:600px){
+  .order-board-row__main>.order-board-row__cutting-confirmation{grid-column:1/-1}
+  .order-board-row__facts>div{padding:4px 6px}
+  .order-board-row__facts>div span{font-size:10px}
+  .order-board-row__facts>div strong{font-size:12px}
+}
