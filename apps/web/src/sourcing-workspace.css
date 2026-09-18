@@ -1478,3 +1478,7 @@
 .sourcing-style-editor input { width:100%; min-width:0; box-sizing:border-box; }
 .sourcing-style-editor__actions { display:flex; gap:8px; }
 @media(max-width:640px) { .sourcing-style-editor__row { grid-template-columns:repeat(2,minmax(0,1fr)); } .sourcing-style-editor__row > strong { grid-column:1/-1; } }
+
+/* Price feedback occupies space only on the affected input after an error. */
+.sourcing-line-price-row > .sourcing-price-control { min-width: 0; }
+.sourcing-price-control > small { color: #b91c1c; }

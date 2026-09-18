@@ -162,10 +162,10 @@ describe("sourcing PR03 routes", () => {
       expect((await app.inject({ method: "POST", url: "/sourcing/cases", headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "invalid-new-case" }, payload: { ...valid, ...override } })).statusCode).toBe(400);
     }
     expect(service.createCase).not.toHaveBeenCalled();
-    for (const path of ["ie-quotes", "management-decisions"]) {
+    for (const path of ["ie-quotes", "management-decisions"]) for (const price of ["12.3456", "10.8元", "0", "-1", "10."]) {
       expect((await app.inject({ method: "POST", url: `/sourcing/cases/${caseSummary.sourcingCaseId}/${path}`,
         headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "invalid-new-price" },
-        payload: { linePrices: [{ position: 1, unitPrice: "12.3456" }], ...(path === "management-decisions" ? { supplierId: "00000000-0000-4000-8000-000000000200", craftIds: ["00000000-0000-4000-8000-000000000401"] } : {}) },
+        payload: { linePrices: [{ position: 1, unitPrice: price }], ...(path === "management-decisions" ? { supplierId: "00000000-0000-4000-8000-000000000200", craftIds: ["00000000-0000-4000-8000-000000000401"] } : {}) },
       })).statusCode).toBe(400);
     }
     expect(service.quoteIePrice).not.toHaveBeenCalled();

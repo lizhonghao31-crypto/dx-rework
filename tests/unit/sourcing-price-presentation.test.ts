@@ -8,11 +8,15 @@ import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contra
 import { isNewSourcingPrice, newSourcingPriceDisplay, historicalSourcingPrice, sourcingPriceSummary, sourcingDeleteConfirmation, sourcingDecisionNeedsReason } from "../../apps/web/src/sourcing-price-presentation.js";
 
 describe("ordinary sourcing price precision and readable facts", () => {
-  it("shows the existing reason requirement for changed lines, not formatting-only changes", () => {
+  it("requires a reason only for a position-matched increase, including mixed changes", () => {
     const quoted = [{ position: 1, unitPrice: "12.3000" }, { position: 2, unitPrice: "8.6100" }];
     expect(sourcingDecisionNeedsReason([{ position: 2, unitPrice: "8.61" }, { position: 1, unitPrice: "0012.30" }], quoted)).toBe(false);
     expect(sourcingDecisionNeedsReason([{ position: 1, unitPrice: "12.30" }, { position: 2, unitPrice: "8.62" }], quoted)).toBe(true);
-    expect(sourcingDecisionNeedsReason([{ position: 1, unitPrice: "12.34" }], [{ position: 1, unitPrice: "12.3456" }])).toBe(true);
+    expect(sourcingDecisionNeedsReason([{ position: 1, unitPrice: "12.34" }], [{ position: 1, unitPrice: "12.3456" }])).toBe(false);
+    expect(sourcingDecisionNeedsReason([{ position: 1, unitPrice: "10.8" }], [{ position: 1, unitPrice: "17" }])).toBe(false);
+    expect(sourcingDecisionNeedsReason([{ position: 1, unitPrice: "17.0000" }], [{ position: 1, unitPrice: "17.00" }])).toBe(false);
+    expect(sourcingDecisionNeedsReason([{ position: 2, unitPrice: "8.62" }, { position: 1, unitPrice: "1" }], quoted)).toBe(true);
+    expect(sourcingDecisionNeedsReason([{ position: 1, unitPrice: "17.01" }], [{ position: 1, unitPrice: "17" }])).toBe(true);
     expect(sourcingDecisionNeedsReason([{ position: 1, unitPrice: "" }], quoted)).toBe(false);
     expect(sourcingDecisionNeedsReason([{ position: 1, unitPrice: "12.30" }], [])).toBe(false);
   });

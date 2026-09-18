@@ -18,8 +18,11 @@ describe("sourcing form feedback", () => {
   });
   it("provides inline reason feedback and avoids sending a known-invalid decision", async () => {
     const source = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
-    expect(source).toContain('aria-describedby="sourcing-decision-reason-hint"');
-    expect(source).toContain('if (missingDecisionReason) { setMessage("调整 IE 价格时必须填写原因"); return; }');
-    expect(source).toContain("disabled={busy || !decision.supplierId || missingDecisionReason");
+    expect(source).toContain('aria-describedby={missingDecisionReason ? "sourcing-decision-reason-hint" : undefined}');
+    expect(source).toContain('if (missingDecisionReason) { setMessage("价格高于 IE，请填写原因"); return; }');
+    expect(source).toContain('disabled={busy || priceComposing("decision") || !decision.supplierId || missingDecisionReason');
+    expect(source).not.toContain("历史价格不会自动截断");
+    expect(source).not.toContain("任一行调价时必须填写原因");
+    expect(source).not.toContain("未调价可选");
   });
 });
