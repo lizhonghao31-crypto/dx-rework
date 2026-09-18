@@ -16,6 +16,15 @@ describe("sourcing form feedback", () => {
     expect(source).toContain("if (busy || uploading || uploadFailed)");
     expect(source).toContain("setUploadFailed(true);");
   });
+  it("wires first-line price cascade independently into IE and management forms", async () => {
+    const source = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
+    expect(source).toContain('import { applySourcingPriceCascade } from "./sourcing-price-cascade.js";');
+    expect(source).toContain("const quotePriceOverrides = useRef<ReadonlySet<number>>(new Set<number>());");
+    expect(source).toContain("const decisionPriceOverrides = useRef<ReadonlySet<number>>(new Set<number>());");
+    expect(source).toContain("const result = applySourcingPriceCascade(lines, position, next, overrides.current);");
+    expect(source).toContain('const overrides = kind === "quote" ? quotePriceOverrides : decisionPriceOverrides;');
+  });
+
   it("provides inline reason feedback and avoids sending a known-invalid decision", async () => {
     const source = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
     expect(source).toContain('aria-describedby={missingDecisionReason ? "sourcing-decision-reason-hint" : undefined}');
