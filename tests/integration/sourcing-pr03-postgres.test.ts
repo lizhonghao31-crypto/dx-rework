@@ -419,6 +419,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       "SELECT count(*)::integer AS count FROM cutting_orders WHERE sourcing_case_id=$1",
       [activeCaseId],
     )).rows[0]?.count).toBe(2);
+
+    // Keep this fixture isolated from later list/search assertions in this shared suite.
+    await service.deleteByRoot(rootActor(), activeCaseId, randomUUID());
   });
 
   it("rejects cutting mutations after the source sourcing case is logically deleted", async () => {
