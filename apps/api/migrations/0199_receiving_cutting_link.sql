@@ -85,7 +85,13 @@ BEGIN
       AND (
         (
           receipt.cutting_order_id IS NULL
-          AND upper(btrim(receipt.style_no))=upper(btrim(shipment.first_style_no))
+          AND EXISTS (
+            SELECT 1
+            FROM sourcing_style_aliases alias
+            WHERE alias.sourcing_case_id=production.sourcing_case_id
+              AND alias.position=1
+              AND upper(btrim(alias.style_no))=upper(btrim(receipt.style_no))
+          )
           AND event.after_state->>'productionOrderId'=NEW.production_order_id::text
         )
         OR
