@@ -2615,6 +2615,7 @@ export class SourcingService {
          WHERE line.sourcing_decision_id=$3 ORDER BY line.position`,
         [snapshotId,source.sourcing_case_id,decisionId],
       );
+      await ensureCuttingOrdersForApproval(client, source.sourcing_case_id, snapshotId);
       await this.contractService?.prepareForApproval(client, snapshotId, actor);
     }
     if (nextStatus !== source.status) {

@@ -1193,6 +1193,16 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       `sourcing:${ownerCaseId}:owner:`,
       "老板直接转厂已生效，原老板审批待办失效",
     );
+    expect((await database.query(
+      "SELECT 1 FROM cutting_orders WHERE sourcing_case_id=$1",
+      [ownerCaseId],
+    )).rowCount).toBe(1);
+    expect((await cutting.listSources(cuttingOwnerActor())).items.find(
+      (item) => item.sourcingCaseId === ownerCaseId,
+    )).toMatchObject({
+      formalStyleNo: "TRANSFER-OWNER-5",
+      supplierId: replacementFactoryId,
+    });
 
     const exceptionCaseId = await openAtFirstDecision("EXCEPTION-TRANSFER");
     await service.decideOwner(
