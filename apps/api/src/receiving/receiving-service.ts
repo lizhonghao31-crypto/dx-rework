@@ -667,10 +667,14 @@ export class ReceivingService {
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
-        const target = await this.repeatReceivingBatch(client, input.receivingBatchId);
         const cutting = input.cuttingOrderId
           ? await this.resolveCuttingSelection(client, input.cuttingOrderId)
           : null;
+        const target = await this.repeatReceivingBatch(
+          client,
+          input.receivingBatchId,
+          cutting?.cuttingOrderId,
+        );
         if (cutting && normalizeStyleNo(cutting.styleNo) !== normalizeStyleNo(target.styleNo)) {
           fail("已裁正式款号与所选多次收货订单不一致，请重新选择", 409, "CONFLICT");
         }
@@ -1294,7 +1298,77 @@ export class ReceivingService {
   private async repeatReceivingBatch(
     client: PoolClient,
     receivingBatchId: string,
+    cuttingOrderId?: string,
   ): Promise<{ receivingBatchId: string; styleNo: string; documentQuantity: number }> {
+    if (cuttingOrderId) {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`cutting:${cuttingOrderId}`]);
+      const target = await client.query<{
+        receiving_batch_id: string;
+        style_no: string;
+        document_quantity: string;
+      }>(
+        `SELECT batch.receiving_batch_id,
+                upper(btrim(batch.style_no)) AS style_no,
+                batch.delivery_note_quantity::bigint AS document_quantity
+         FROM receiving_batches batch
+         WHERE batch.receiving_batch_id=$1
+           AND batch.cutting_order_id=$2
+           AND batch.deleted_at IS NULL
+           AND NOT EXISTS(
+             SELECT 1 FROM receiving_receipts receipt
+             JOIN operation_events event ON event.event_id=receipt.operation_event_id
+             WHERE receipt.receiving_batch_id=batch.receiving_batch_id
+               AND event.after_state->>'backfilled'='true'
+           )
+           AND NOT EXISTS(
+             SELECT 1 FROM rework_orders rework
+             WHERE rework.source_receiving_batch_id=batch.receiving_batch_id
+               AND (
+                 rework.status='completed'
+                 OR EXISTS(
+                   SELECT 1 FROM operation_events event
+                   WHERE event.entity_type='rework_order'
+                     AND event.entity_id=rework.rework_order_id::text
+                     AND event.after_state->>'status'='completed'
+                 )
+               )
+           )
+           AND EXISTS(
+             SELECT 1 FROM attachments attachment
+             WHERE attachment.entity_type='receiving_batch'
+               AND attachment.entity_id=batch.receiving_batch_id::text
+               AND attachment.status='ready'
+               AND NOT EXISTS(
+                 SELECT 1 FROM receiving_attachment_retirements retired
+                 WHERE retired.attachment_id=attachment.attachment_id
+               )
+           )
+           AND batch.receiving_batch_id=(
+             SELECT latest.receiving_batch_id
+             FROM receiving_batches latest
+             WHERE latest.cutting_order_id=$2
+               AND latest.deleted_at IS NULL
+               AND NOT EXISTS(
+                 SELECT 1 FROM receiving_receipts receipt
+                 JOIN operation_events event ON event.event_id=receipt.operation_event_id
+                 WHERE receipt.receiving_batch_id=latest.receiving_batch_id
+                   AND event.after_state->>'backfilled'='true'
+               )
+             ORDER BY latest.created_at DESC,latest.receiving_batch_id DESC
+             LIMIT 1
+           )
+         FOR UPDATE OF batch`,
+        [receivingBatchId, cuttingOrderId],
+      );
+      const row = target.rows[0];
+      if (!row) return fail("该订单已不可追加收货，请重新搜索选择", 409, "INVALID_STATE_TRANSITION");
+      return {
+        receivingBatchId: row.receiving_batch_id,
+        styleNo: row.style_no,
+        documentQuantity: Number(row.document_quantity),
+      };
+    }
+
     const initial = await client.query<{ style_no: string }>(
       `SELECT style_no FROM receiving_batches
        WHERE receiving_batch_id=$1 AND deleted_at IS NULL`,
@@ -1376,7 +1450,57 @@ export class ReceivingService {
     styleNo: string,
     documentQuantity: number,
     receivedDate: string | null,
+    cuttingOrderId?: string,
   ): Promise<{ receivingBatchId: string; isNew: boolean }> {
+    if (cuttingOrderId) {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`cutting:${cuttingOrderId}`]);
+      const latest = await client.query<{ receiving_batch_id: string; closed: boolean }>(
+        `SELECT batch.receiving_batch_id,
+                EXISTS(
+                  SELECT 1 FROM rework_orders rework
+                  WHERE rework.source_receiving_batch_id=batch.receiving_batch_id
+                    AND (
+                      rework.status='completed'
+                      OR EXISTS (
+                        SELECT 1 FROM operation_events event
+                        WHERE event.entity_type='rework_order'
+                          AND event.entity_id=rework.rework_order_id::text
+                          AND event.after_state->>'status'='completed'
+                      )
+                    )
+                ) AS closed
+         FROM receiving_batches batch
+         WHERE batch.cutting_order_id=$1
+           AND batch.deleted_at IS NULL
+           AND NOT EXISTS(
+             SELECT 1
+             FROM receiving_receipts backfill_receipt
+             JOIN operation_events backfill_event
+               ON backfill_event.event_id=backfill_receipt.operation_event_id
+             WHERE backfill_receipt.receiving_batch_id=batch.receiving_batch_id
+               AND backfill_event.after_state->>'backfilled'='true'
+           )
+         ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
+         LIMIT 1`,
+        [cuttingOrderId],
+      );
+      const current = latest.rows[0];
+      if (!receivedDate && current && !current.closed) {
+        return fail("该裁床任务已有收货记录，请到“多次收货”录入", 409, "REPEAT_RECEIVING_REQUIRED");
+      }
+      const receivingBatchId = randomUUID();
+      await client.query(
+        `INSERT INTO receiving_batches(
+           receiving_batch_id,cutting_order_id,style_no,delivery_note_quantity,created_by,created_at
+         ) VALUES($1,$2,$3,$4,$5,COALESCE(
+           ($6::date+(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::time) AT TIME ZONE 'Asia/Shanghai',
+           CURRENT_TIMESTAMP
+         ))`,
+        [receivingBatchId, cuttingOrderId, styleNo, documentQuantity, actor.actorId, receivedDate],
+      );
+      return { receivingBatchId, isNew: true };
+    }
+
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [styleNo]);
     const latest = await client.query<{ receiving_batch_id: string; closed: boolean }>(
       `SELECT batch.receiving_batch_id,
@@ -1412,7 +1536,6 @@ export class ReceivingService {
     if (!receivedDate && current && !current.closed) {
       return fail("该款号已有收货记录，请到“多次收货”录入", 409, "REPEAT_RECEIVING_REQUIRED");
     }
-
     const receivingBatchId = randomUUID();
     await client.query(
       `INSERT INTO receiving_batches(
@@ -1497,6 +1620,7 @@ export class ReceivingService {
       input.styleNo,
       input.documentQuantity,
       input.receivedDate,
+      input.cuttingOrderId,
     )).receivingBatchId;
     const receiptId = randomUUID();
     const eventId = await this.events.append(client, actor, {
@@ -1717,10 +1841,11 @@ export class ReceivingService {
     }>(
       `WITH ranked AS (
          SELECT batch.receiving_batch_id,
+                batch.cutting_order_id,
                 upper(btrim(batch.style_no)) AS style_no,
                 batch.delivery_note_quantity::bigint AS document_quantity,
                 row_number() OVER (
-                  PARTITION BY upper(btrim(batch.style_no))
+                  PARTITION BY batch.cutting_order_id
                   ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
                 ) AS position,
                 EXISTS(
@@ -1748,6 +1873,7 @@ export class ReceivingService {
                 ) AS has_images
          FROM receiving_batches batch
          WHERE batch.deleted_at IS NULL
+           AND batch.cutting_order_id IS NOT NULL
            AND NOT EXISTS(
              SELECT 1
              FROM receiving_receipts receipt
@@ -1760,21 +1886,12 @@ export class ReceivingService {
               option_row.cutting_order_id,option_row.color,option_row.supplier_name,
               option_row.actual_cut_count::text,option_row.style_conflict_count::text
        FROM ranked
-       LEFT JOIN LATERAL (
-         SELECT receipt.cutting_order_id
-         FROM receiving_receipts receipt
-         WHERE receipt.receiving_batch_id=ranked.receiving_batch_id
-           AND receipt.cutting_order_id IS NOT NULL
-         ORDER BY receipt.received_at,receipt.receipt_id
-         LIMIT 1
-       ) stable_link ON true
        JOIN current_cutting_style_options option_row
-         ON upper(btrim(option_row.formal_style_no))=ranked.style_no
-        AND (stable_link.cutting_order_id IS NULL
-          OR stable_link.cutting_order_id=option_row.cutting_order_id)
+         ON option_row.cutting_order_id=ranked.cutting_order_id
        WHERE ranked.position=1 AND NOT ranked.closed AND ranked.has_images
          AND right(ranked.style_no,char_length($1))=$1
-       ORDER BY ranked.style_no,option_row.supplier_name,option_row.color NULLS LAST
+       ORDER BY ranked.style_no,option_row.supplier_name,option_row.color NULLS LAST,
+                option_row.cutting_order_id
        LIMIT 20`,
       [needle],
     );

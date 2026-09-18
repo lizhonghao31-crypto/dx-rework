@@ -198,6 +198,6 @@
     { "version": "0196_sourcing_style_duplicate_guards", "checksum": "dd2cf7e6cb650f8154c362bfb7eaeff4a7e5848ad59f62bb342b36c1aebce3e7" },
     { "version": "0197_cutting_source_foundation", "checksum": "6354085dff65fd4851ce7428cfe3589587f16f994d23d6bdf4835d521fdafdfe" },
     { "version": "0198_cutting_actual_records", "checksum": "c09245850bd291466dacf5f6cc5e13072ba79b82a109bce5a7f0ef277240d6e9" },
-    { "version": "0199_receiving_cutting_link", "checksum": "c9456b08dec1cc64e667865c99a04e01f3dbc66b4bea7142bf74ff172963aade" }
+    { "version": "0199_receiving_cutting_link", "checksum": "3e9398c8e2c2497be39dc7afee123b16eed5d3fbf2f9d96b77cead00b1b34c34" }
   ]
 }

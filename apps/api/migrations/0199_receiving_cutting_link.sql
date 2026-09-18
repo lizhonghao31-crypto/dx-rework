@@ -1,8 +1,15 @@
 -- PR03: bind new warehouse receiving facts to stable cutting orders.
 -- Historical receipts remain nullable; no fabricated cutting linkage is backfilled.
 
+ALTER TABLE receiving_batches
+  ADD COLUMN cutting_order_id uuid REFERENCES cutting_orders(cutting_order_id);
+
 ALTER TABLE receiving_receipts
   ADD COLUMN cutting_order_id uuid REFERENCES cutting_orders(cutting_order_id);
+
+CREATE INDEX receiving_batches_cutting_order_idx
+  ON receiving_batches(cutting_order_id,created_at,receiving_batch_id)
+  WHERE cutting_order_id IS NOT NULL;
 
 CREATE INDEX receiving_receipts_cutting_order_idx
   ON receiving_receipts(cutting_order_id,received_at,receipt_id)
@@ -23,12 +30,16 @@ BEGIN
   WHERE event_id=NEW.operation_event_id;
 
   SELECT option_row.cutting_order_id,
-         option_row.formal_style_no
+         option_row.formal_style_no,
+         batch.cutting_order_id AS batch_cutting_order_id
   INTO candidate
   FROM current_cutting_style_options option_row
+  JOIN receiving_batches batch
+    ON batch.receiving_batch_id=NEW.receiving_batch_id
   WHERE option_row.cutting_order_id=NEW.cutting_order_id;
 
   IF candidate.cutting_order_id IS NULL
+     OR candidate.batch_cutting_order_id IS DISTINCT FROM NEW.cutting_order_id
      OR upper(btrim(candidate.formal_style_no))<>upper(btrim(NEW.style_no))
      OR audit_event.event_id IS NULL
      OR audit_event.action<>'receiving.receipt.create'
@@ -49,11 +60,37 @@ CREATE TRIGGER receiving_receipts_cutting_link_guard
   BEFORE INSERT ON receiving_receipts
   FOR EACH ROW EXECUTE FUNCTION guard_receiving_cutting_link_insert();
 
+CREATE OR REPLACE FUNCTION guard_receiving_batch_cutting_link_update()
+RETURNS trigger LANGUAGE plpgsql AS $cutting_batch$
+BEGIN
+  IF NEW.cutting_order_id IS DISTINCT FROM OLD.cutting_order_id THEN
+    RAISE EXCEPTION 'receiving batch cutting link is immutable'
+      USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END;
+$cutting_batch$;
+
+CREATE TRIGGER receiving_batches_cutting_link_no_update
+  BEFORE UPDATE OF cutting_order_id ON receiving_batches
+  FOR EACH ROW EXECUTE FUNCTION guard_receiving_batch_cutting_link_update();
+
 CREATE OR REPLACE FUNCTION guard_receiving_cutting_link_update()
 RETURNS trigger LANGUAGE plpgsql AS $cutting$
 BEGIN
   IF NEW.cutting_order_id IS DISTINCT FROM OLD.cutting_order_id THEN
     RAISE EXCEPTION 'receiving cutting link is immutable'
+      USING ERRCODE='55000';
+  END IF;
+  IF NEW.cutting_order_id IS NOT NULL
+     AND NEW.receiving_batch_id IS DISTINCT FROM OLD.receiving_batch_id
+     AND NOT EXISTS (
+       SELECT 1 FROM receiving_batches batch
+       WHERE batch.receiving_batch_id=NEW.receiving_batch_id
+         AND batch.cutting_order_id=NEW.cutting_order_id
+     )
+  THEN
+    RAISE EXCEPTION 'receiving receipt cannot move across cutting batches'
       USING ERRCODE='55000';
   END IF;
   RETURN NEW;

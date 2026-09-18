@@ -108,10 +108,12 @@ export class ProductionClosureService {
    JOIN sourcing_production_orders production ON production.sourcing_case_id=cutting.sourcing_case_id
    JOIN sourcing_production_shipments shipment USING(production_order_id)
    JOIN sourcing_production_pilots pilot ON pilot.supplier_id=production.supplier_id AND pilot.enabled=true
-   WHERE cutting.cutting_order_id=$1 AND ${productionNotExcluded}
+   WHERE cutting.cutting_order_id=$1
+     AND shipment.shipped_on <= ($2::timestamptz AT TIME ZONE 'Asia/Shanghai')::date
+     AND ${productionNotExcluded}
    ORDER BY shipment.shipped_on DESC,production.production_order_id
    LIMIT 1
-   FOR SHARE OF pilot`,[input.cuttingOrderId]);
+   FOR SHARE OF pilot`,[input.cuttingOrderId,input.receivedAt]);
   const match=matched.rows[0];
   if(!match)return null;
   await this.linkReceipt(client,actor,{productionOrderId:match.production_order_id,receiptId:input.receiptId,styleNo:input.styleNo,
