@@ -15,7 +15,9 @@ export function sourcingDecisionNeedsReason(current: readonly { position: number
   return current.some(line => {
     if (!isNewSourcingPrice(line.unitPrice)) return false; // Existing price feedback handles invalid input.
     const previous = quoted.find(value => value.position === line.position);
-    return previous !== undefined && exact(previous.unitPrice) !== null && exact(previous.unitPrice) !== exact(line.unitPrice);
+    const prior = previous ? exact(previous.unitPrice) : null;
+    const next = exact(line.unitPrice);
+    return prior !== null && next !== null && next > prior;
   });
 }
 

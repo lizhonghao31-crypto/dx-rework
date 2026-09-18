@@ -17,13 +17,14 @@ describe("sourcing number presentation", () => {
     expect(page).toContain("const businessInputValue");
     expect(page).toContain("const businessInputChange");
     expect(page).toContain("const [activeBusinessInput, setActiveBusinessInput]");
-    expect(page).toContain("newSourcingPriceDisplay(price)");
+    const priceInput = await readFile("apps/web/src/sourcing-price-input.ts", "utf8");
+    expect(priceInput).toContain("newSourcingPriceDisplay(accepted)");
     expect(page).toContain("linesTotalPreview(quote.linePrices, item.lineItems)");
     expect(page).toContain("linesTotalPreview(decision.linePrices, item.lineItems)");
-    expect(page).toContain('onFocus={() => setActiveBusinessInput(`quote-${line.position}`)}');
+    expect(page).toContain('priceInput("quote", line.position, price)');
+    expect(page).toContain('priceInput("decision", line.position, price)');
     expect(page).toContain('onBlur={() => setActiveBusinessInput(null)}');
     expect(page).not.toContain("value={decision.unitPrice} inputMode=\"decimal\"");
     expect(page).not.toContain("value={finance.totalAmount} inputMode=\"decimal\"");
   });
 });
-

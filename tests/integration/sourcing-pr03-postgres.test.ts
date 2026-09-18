@@ -2162,4 +2162,45 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(results.find(result => result.status==="rejected")).toMatchObject({reason:{code:"STYLE_NUMBER_EXISTS"}});
   });
 
+  it("requires management reasons only above matching IE prices without offsetting other reductions", async () => {
+    const make = async (suffix: string) => {
+      const created = await service.createCase(merchandiserActor(), {
+        gender: "男装", styleName: "说明边界验证", estimatedCutPieceSendDate: "2026-10-01", deliveryDate: "2026-10-10",
+        lineItems: [1,2].map(position => ({styleNo:`REASON-${suffix}-${position}`,color:"蓝",quantity:10})),
+        daxingUnitPrice:"8",attachmentIds:[],
+      },randomUUID());
+      const id = created.value.sourcingCaseId;
+      await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"17"},{position:2,unitPrice:"20"}]},randomUUID());
+      return id;
+    };
+    const base = {supplierId:factoryId,craftIds:[craftId("净色车缝")]};
+    for (const [suffix,price,reason] of [["lower","10.8",undefined],["equal","17.0000",undefined],["voluntary","10.8","主动记录降价原因"]] as const) {
+      const id = await make(suffix);
+      const result = await service.recordManagementDecision(managerActor(),id,{
+        ...base,linePrices:[{position:2,unitPrice:"20.00"},{position:1,unitPrice:price}],
+        ...(reason ? {decisionReason:reason} : {}),
+      },randomUUID());
+      expect(result.value.status).toBe("pending_owner_approval");
+      expect(result.value.decision?.decisionReason).toBe(reason ?? "生产管理确认加工厂与价格");
+      if (price === "10.8") expect(result.value.decision?.linePrices[0]?.unitPrice).not.toBe(result.value.ieQuote?.linePrices[0]?.unitPrice);
+    }
+    const id = await make("mixed");
+    // Total falls from 370 to 180.10, but the first line still rises by 0.01.
+    const input = {...base,linePrices:[{position:2,unitPrice:"1"},{position:1,unitPrice:"17.01"}]};
+    for (const reason of [undefined,"   "]) {
+      await expect(service.recordManagementDecision(managerActor(),id,{...input,...(reason ? {decisionReason:reason} : {})},randomUUID()))
+        .rejects.toMatchObject({statusCode:400,message:"价格高于 IE，请填写原因"});
+    }
+    expect((await service.getCase(readerActor(),id)).decision).toBeNull();
+    await expect(service.recordManagementDecision(managerActor(),id,{...base,linePrices:[{position:1,unitPrice:"1"}]},randomUUID()))
+      .rejects.toMatchObject({statusCode:400});
+    for (const invalid of ["10.8元","0","-1"]) {
+      await expect(service.recordManagementDecision(managerActor(),id,{...base,linePrices:[{position:1,unitPrice:invalid},{position:2,unitPrice:"1"}]},randomUUID()))
+        .rejects.toMatchObject({statusCode:400});
+    }
+    const result = await service.recordManagementDecision(managerActor(),id,{...input,decisionReason:"第一款增加工序"},randomUUID());
+    expect(result.value.decision).toMatchObject({totalAmount:"180.10",decisionReason:"第一款增加工序"});
+    expect(result.value.status).toBe("pending_owner_approval");
+  });
+
 });

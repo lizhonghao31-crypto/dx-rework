@@ -1926,11 +1926,11 @@ export class SourcingService {
         );
         const selected = factory.rows[0]
           ?? fail("请选择当前有效的加工厂", 400, "VALIDATION_ERROR");
-        const adjusted = quoteLines.rows.some((line, index) => (
-          normalizeSourcingUnitPrice(line.unit_price) !== pricedLines[index]!.unitPrice
+        const increased = quoteLines.rows.some((line, index) => (
+          scaledUnitPrice(pricedLines[index]!.unitPrice) > scaledUnitPrice(line.unit_price)
         ));
-        if (adjusted && !suppliedReason) {
-          fail("调整 IE 价格时必须填写原因");
+        if (increased && !suppliedReason) {
+          fail("价格高于 IE，请填写原因");
         }
         const selectedCrafts = (await client.query<{
               position: number;

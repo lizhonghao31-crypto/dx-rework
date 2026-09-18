@@ -2,6 +2,7 @@ import { moduleCanWrite } from "./member-module-policy.js";
 import { todoReturnPath } from "./todo-query-state.js";
 import {WorkAnalysisPanel} from "./work-analysis-panel.js";
 import { isNewSourcingPrice, newSourcingPriceDisplay, historicalSourcingPrice, sourcingPriceSummary, sourcingDeleteConfirmation, sourcingDecisionNeedsReason } from "./sourcing-price-presentation.js";
+import { createSourcingPriceInput } from "./sourcing-price-input.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import {
   AttachmentResponseSchema,
@@ -1014,6 +1015,25 @@ function OrderDetailPage({
   const [activeBusinessInput, setActiveBusinessInput] = useState<string | null>(null);
   const [factoryChangeUnitPriceEdited, setFactoryChangeUnitPriceEdited] = useState(false);
   const actionKey = useRef<string | null>(null);
+  const priceInputs = useRef(new Map<string, ReturnType<typeof createSourcingPriceInput>>());
+  const [, refreshPriceInputs] = useState(0);
+  const priceInput = (kind: "quote" | "decision", position: number, value: string) => {
+    const key = `${kind}-${position}`;
+    let control = priceInputs.current.get(key);
+    if (!control) {
+      control = createSourcingPriceInput(next => {
+        const update = (lines: readonly LinePriceDraft[]) => lines.map(line => line.position === position ? { ...line, unitPrice: next } : line);
+        if (kind === "quote") setQuote(current => ({ ...current, linePrices: update(current.linePrices) }));
+        else setDecision(current => ({ ...current, linePrices: update(current.linePrices) }));
+        actionKey.current = null;
+      }, () => refreshPriceInputs(current => current + 1));
+      priceInputs.current.set(key, control);
+    }
+    control.sync(value);
+    return control;
+  };
+  const priceComposing = (kind: "quote" | "decision") => [...priceInputs.current].some(([key, control]) => key.startsWith(`${kind}-`) && control.composing);
+
   const moduleWritable = moduleCanWrite(user, "sourcing");
   const canSupplementImages = user?.isRoot === true
     || moduleWritable && user?.businessRoles?.some((role) => SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(
@@ -1154,6 +1174,7 @@ function OrderDetailPage({
     success: string,
     resetFactoryChange = false,
   ): Promise<void> => {
+    if (path.endsWith("/ie-quotes") && priceComposing("quote")) return;
     if (path.endsWith("/ie-quotes") && (!quote.linePrices.length || quote.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice)))) {
       setMessage("请填写各款大于0且最多2位有效小数的IE价格"); return;
     }
@@ -1238,8 +1259,9 @@ function OrderDetailPage({
   const needsDecisionReason = sourcingDecisionNeedsReason(decision.linePrices, item.ieQuote?.linePrices ?? []);
   const missingDecisionReason = needsDecisionReason && !decision.decisionReason.trim();
   const submitManagement = async (): Promise<void> => {
+    if (priceComposing("decision")) return;
     if (!decision.linePrices.length || decision.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice))) { setMessage("请填写各款大于0且最多2位有效小数的生产价格"); return; }
-    if (missingDecisionReason) { setMessage("调整 IE 价格时必须填写原因"); return; }
+    if (missingDecisionReason) { setMessage("价格高于 IE，请填写原因"); return; }
     if (decision.cuttingProcess === "other" && !decision.cuttingProcessOther.trim()) { setMessage("请填写其它裁床工序"); return; }
     const names = processes.map((value) => value.trim());
     if (names.some((value) => !value) || new Set(names).size !== names.length) {
@@ -1457,34 +1479,36 @@ function OrderDetailPage({
               <div className="sourcing-line-price-table sourcing-form-wide" role="table" aria-label="IE逐款价格">
                 {item.lineItems.map((line) => {
                   const price = quote.linePrices.find((entry) => entry.position === line.position)?.unitPrice ?? "";
+                  const control = priceInput("quote", line.position, price);
+                  const errorId = `sourcing-quote-price-error-${line.position}`;
                   return <label className="sourcing-line-price-row" key={line.position}>
                     <span><b>{String(line.position).padStart(2, "0")}</b> {line.styleNo} · {line.color ?? "历史未维护颜色"} · {formatBusinessDecimal(line.quantity)} 件</span>
-                    <input aria-label={`${line.styleNo} IE单价`} value={activeBusinessInput === `quote-${line.position}` ? price : newSourcingPriceDisplay(price)} inputMode="decimal" onChange={(event) => { const value = businessInputChange(event.target.value); setQuote({ ...quote, linePrices: quote.linePrices.map((entry) => entry.position === line.position ? { ...entry, unitPrice: value } : entry) }); actionKey.current = null; }} onFocus={() => setActiveBusinessInput(`quote-${line.position}`)} onBlur={() => setActiveBusinessInput(null)} />
+                    <span className="sourcing-price-control"><input aria-label={`${line.styleNo} IE单价`} {...control.props} aria-describedby={control.error ? errorId : undefined} />{control.error ? <small id={errorId} role="status">{control.error}</small> : null}</span>
                     <strong>{formatBusinessCurrency(isNewSourcingPrice(price) ? totalPreview(price, line.quantity) : "—")}</strong>
                   </label>;
                 })}
               </div>
-              {quote.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice)) ? <p role="status">每款IE价格必须大于0且最多2位有效小数；历史价格不会自动截断，请逐款核对后填写。</p> : null}
               <label><span>逐款汇总</span><input value={businessInputValue(linesTotalPreview(quote.linePrices, item.lineItems))} readOnly /></label>
               <label className="sourcing-form-wide"><span>价格说明</span><input value={quote.quoteReason} maxLength={500} onChange={(event) => { setQuote({ ...quote, quoteReason: event.target.value }); actionKey.current = null; }} /></label>
-              <button className="dx-button dx-button--primary" type="button" disabled={busy || quote.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice))} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/ie-quotes`, { linePrices: quote.linePrices, ...(quote.quoteReason.trim() ? { quoteReason: quote.quoteReason.trim() } : {}) }, "IE 逐款价格已提交")}>提交 IE 逐款价格</button>
+              <button className="dx-button dx-button--primary" type="button" disabled={busy || priceComposing("quote") || quote.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice))} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/ie-quotes`, { linePrices: quote.linePrices, ...(quote.quoteReason.trim() ? { quoteReason: quote.quoteReason.trim() } : {}) }, "IE 逐款价格已提交")}>提交 IE 逐款价格</button>
             </div> : <p>当前账号仅可查看，本节点由 IE 办理。</p>}
           </Surface> : null}
 
           {item.status === "pending_management_decision" && selectedNode === "management" ? <Surface className="rework-detail-node-preview">
             <h2>03 · 生产管理调价与选厂</h2>
-            <p>逐款确认 IE 价格并选择一个启用加工厂；任一行调价时必须填写原因。</p>
+            <p>逐款确认 IE 价格并选择一个启用加工厂。</p>
             {canManage ? <div className="sourcing-form-grid">
               <label><span>加工厂</span><select value={decision.supplierId} onChange={(event) => { setDecision({ ...decision, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择加工厂</option>{factories.map((factory) => <option key={factory.supplierId} value={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
               {selectedFactory ? <div className="sourcing-factory-facts sourcing-form-wide"><strong>{selectedFactory.supplierName} · {selectedFactory.supplierCode}</strong><span>工艺：{selectedFactory.supportedCrafts.join("、") || "未维护"}</span><span>日产能：{selectedFactory.dailyCapacity ? `${formatBusinessDecimal(selectedFactory.dailyCapacity)} 件` : "未维护"}</span><span>{selectedFactory.notes || "暂无协同备注"}</span><em>{selectedFactory.contractDataMissing.length ? `合同缺项：${selectedFactory.contractDataMissing.map((field) => contractMissingLabels[field] ?? field).join("、")}` : "合同资料完整"}</em></div> : null}
               <div className="sourcing-line-price-table sourcing-form-wide" role="table" aria-label="生产管理逐款价格">
                 {item.lineItems.map((line) => {
                   const price = decision.linePrices.find((entry) => entry.position === line.position)?.unitPrice ?? "";
+                  const control = priceInput("decision", line.position, price);
+                  const errorId = `sourcing-decision-price-error-${line.position}`;
                   const iePrice = item.ieQuote?.linePrices.find((entry) => entry.position === line.position)?.unitPrice;
-                  return <label className="sourcing-line-price-row" key={line.position}><span><b>{String(line.position).padStart(2, "0")}</b> {line.styleNo} · {line.color ?? "历史未维护颜色"}<small>IE {iePrice ? formatBusinessCurrency(iePrice) : "—"}</small></span><input aria-label={`${line.styleNo} 生产单价`} value={activeBusinessInput === `decision-${line.position}` ? price : newSourcingPriceDisplay(price)} inputMode="decimal" onChange={(event) => { const value = businessInputChange(event.target.value); setDecision({ ...decision, linePrices: decision.linePrices.map((entry) => entry.position === line.position ? { ...entry, unitPrice: value } : entry) }); actionKey.current = null; }} onFocus={() => setActiveBusinessInput(`decision-${line.position}`)} onBlur={() => setActiveBusinessInput(null)} /><strong>{formatBusinessCurrency(isNewSourcingPrice(price) ? totalPreview(price, line.quantity) : "—")}</strong></label>;
+                  return <label className="sourcing-line-price-row" key={line.position}><span><b>{String(line.position).padStart(2, "0")}</b> {line.styleNo} · {line.color ?? "历史未维护颜色"}<small>IE {iePrice ? formatBusinessCurrency(iePrice) : "—"}</small></span><span className="sourcing-price-control"><input aria-label={`${line.styleNo} 生产单价`} {...control.props} aria-describedby={control.error ? errorId : undefined} />{control.error ? <small id={errorId} role="status">{control.error}</small> : null}</span><strong>{formatBusinessCurrency(isNewSourcingPrice(price) ? totalPreview(price, line.quantity) : "—")}</strong></label>;
                 })}
               </div>
-              {decision.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice)) ? <p role="status">每款生产价格必须大于0且最多2位有效小数；历史价格不会自动截断，请逐款核对后填写。</p> : null}
               <label><span>逐款汇总</span><input value={businessInputValue(linesTotalPreview(decision.linePrices, item.lineItems))} readOnly /></label>
           <section className="sourcing-process-editor sourcing-form-wide" aria-label="工艺及承包范围">
             <div className="sourcing-process-editor__heading">
@@ -1504,8 +1528,8 @@ function OrderDetailPage({
           </section>
               <label><span>裁床工序</span><select value={decision.cuttingProcess} onChange={(event) => { setDecision({ ...decision, cuttingProcess: event.target.value as DecisionDraft["cuttingProcess"], cuttingProcessOther: "" }); actionKey.current = null; }}><option value="">请选择</option><option value="in_house">本厂裁</option><option value="outsourced">外厂裁</option><option value="other">其它</option></select></label>
               {decision.cuttingProcess === "other" ? <label><span>其它裁床工序（必填）</span><input value={decision.cuttingProcessOther} maxLength={100} onChange={(event) => { setDecision({ ...decision, cuttingProcessOther: event.target.value }); actionKey.current = null; }} /></label> : null}
-              <label className="sourcing-form-wide"><span>选厂/调价说明{needsDecisionReason ? "（必填）" : "（未调价可选）"}</span><input value={decision.decisionReason} maxLength={500} required={needsDecisionReason} aria-invalid={missingDecisionReason} aria-describedby="sourcing-decision-reason-hint" onChange={(event) => { setDecision({ ...decision, decisionReason: event.target.value }); actionKey.current = null; }} /><small id="sourcing-decision-reason-hint" role="status">{missingDecisionReason ? "已调整 IE 价格，请填写调价原因后提交。" : "任一款价格发生变化时须填写原因；沿用 IE 价格无需填写。"}</small></label>
-              <button className="dx-button dx-button--primary" type="button" disabled={busy || !decision.supplierId || missingDecisionReason || decision.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice))} onClick={() => void submitManagement()}>提交调价与选厂</button>
+              <label className="sourcing-form-wide"><span>选厂/调价说明{needsDecisionReason ? "（必填）" : ""}</span><input value={decision.decisionReason} maxLength={500} required={needsDecisionReason} aria-invalid={missingDecisionReason} aria-describedby={missingDecisionReason ? "sourcing-decision-reason-hint" : undefined} onChange={(event) => { setDecision({ ...decision, decisionReason: event.target.value }); actionKey.current = null; }} />{missingDecisionReason ? <small id="sourcing-decision-reason-hint" role="status">价格高于 IE，请填写原因</small> : null}</label>
+              <button className="dx-button dx-button--primary" type="button" disabled={busy || priceComposing("decision") || !decision.supplierId || missingDecisionReason || decision.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice))} onClick={() => void submitManagement()}>提交调价与选厂</button>
             </div> : <p>当前账号仅可查看，本节点由生产管理办理。</p>}
           </Surface> : null}
 
