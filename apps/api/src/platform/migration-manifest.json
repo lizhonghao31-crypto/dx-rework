@@ -195,6 +195,7 @@
     {"version": "0193_sourcing_style_contract_revisions", "checksum": "4ae4810989b6abe25bb73ac575fb4c69c68b5616e448a8ce50756ee28a587b51"},
     { "version": "0194_sourcing_line_images_contract_template", "checksum": "d98478e077a96a581cffbcbdf19ac6d6998e156edfeaf73a69653be78e2581f6" },
     { "version": "0195_sourcing_style_revision_ready_contract", "checksum": "eaeeed1855668366942c794d40eb4eb16f4d3df4f1133848427b30a9ba045ec9" },
-    { "version": "0196_sourcing_style_duplicate_guards", "checksum": "dd2cf7e6cb650f8154c362bfb7eaeff4a7e5848ad59f62bb342b36c1aebce3e7" }
+    { "version": "0196_sourcing_style_duplicate_guards", "checksum": "dd2cf7e6cb650f8154c362bfb7eaeff4a7e5848ad59f62bb342b36c1aebce3e7" },
+    { "version": "0197_cutting_source_foundation", "checksum": "6354085dff65fd4851ce7428cfe3589587f16f994d23d6bdf4835d521fdafdfe" }
   ]
 }
