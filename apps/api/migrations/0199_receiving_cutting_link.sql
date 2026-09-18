@@ -64,6 +64,65 @@ CREATE TRIGGER receiving_receipts_cutting_link_no_update
   BEFORE UPDATE ON receiving_receipts
   FOR EACH ROW EXECUTE FUNCTION guard_receiving_cutting_link_update();
 
+CREATE OR REPLACE FUNCTION guard_sourcing_production_receipt_link()
+RETURNS trigger LANGUAGE plpgsql AS $production_receipt$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM receiving_receipts receipt
+    JOIN sourcing_production_shipments shipment
+      ON shipment.production_order_id=NEW.production_order_id
+    JOIN sourcing_production_orders production
+      ON production.production_order_id=shipment.production_order_id
+    JOIN operation_events event
+      ON event.event_id=NEW.operation_event_id
+    WHERE receipt.receipt_id=NEW.receipt_id
+      AND receipt.operation_event_id=NEW.operation_event_id
+      AND (receipt.received_at AT TIME ZONE 'Asia/Shanghai')::date>=shipment.shipped_on
+      AND event.action='receiving.receipt.create'
+      AND event.entity_type='receiving_receipt'
+      AND event.entity_id=NEW.receipt_id::text
+      AND (
+        (
+          receipt.cutting_order_id IS NULL
+          AND upper(btrim(receipt.style_no))=upper(btrim(shipment.first_style_no))
+          AND event.after_state->>'productionOrderId'=NEW.production_order_id::text
+        )
+        OR
+        (
+          receipt.cutting_order_id IS NOT NULL
+          AND event.after_state->>'cuttingOrderId'=receipt.cutting_order_id::text
+          AND EXISTS (
+            SELECT 1
+            FROM cutting_orders cutting
+            JOIN sourcing_style_aliases alias
+              ON alias.sourcing_case_id=cutting.sourcing_case_id
+             AND alias.position=cutting.sourcing_line_position
+            WHERE cutting.cutting_order_id=receipt.cutting_order_id
+              AND cutting.sourcing_case_id=production.sourcing_case_id
+              AND upper(btrim(alias.style_no))=upper(btrim(receipt.style_no))
+          )
+          AND EXISTS (
+            SELECT 1
+            FROM sourcing_production_pilots pilot
+            WHERE pilot.supplier_id=production.supplier_id
+              AND pilot.enabled=true
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM sourcing_production_exclusions exclusion
+            WHERE exclusion.production_order_id=production.production_order_id
+          )
+        )
+      )
+  ) THEN
+    RAISE EXCEPTION 'receipt link must match shipped production source and actual receipt audit'
+      USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END;
+$production_receipt$;
+
 CREATE VIEW current_receiving_cutting_links AS
 SELECT receipt.receipt_id,
        receipt.receiving_batch_id,
