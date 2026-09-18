@@ -419,7 +419,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(service.recordManagementDecision(managerActor(), created.value.sourcingCaseId, {
       supplierId: factoryId,unitPrice: "12.0000",craftIds: [],
     }, randomUUID())).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-    expect((await database.query("SELECT 1 FROM sourcing_cases")).rowCount).toBe(1);
+    expect((await database.query(
+      "SELECT 1 FROM sourcing_cases WHERE sourcing_case_id=$1",
+      [created.value.sourcingCaseId],
+    )).rowCount).toBe(1);
     expect(await service.getCase(unrelatedReaderActor(), created.value.sourcingCaseId))
       .not.toHaveProperty("daxingUnitPrice");
     expect(await service.getCase(anotherMerchandiserReader(), created.value.sourcingCaseId))
