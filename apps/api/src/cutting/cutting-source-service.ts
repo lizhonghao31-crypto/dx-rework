@@ -11,7 +11,7 @@ import {
   type CuttingRecordMutationResponse,
 } from "@dx-rework/contracts";
 import { LIST_PAGE_SIZE } from "@dx-rework/contracts/reporting";
-import type { Pool, PoolClient, Queryable } from "pg";
+import type { Pool, PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
 import {
@@ -40,6 +40,7 @@ const BROAD_VIEW_ROLES = new Set([
   "production_management",
 ]);
 const KEY_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
+type Queryable = Pool | PoolClient;
 
 const fail = (
   message: string,
@@ -399,7 +400,7 @@ export class CuttingService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
-      const outcome = await this.idempotency.execute(client, {
+      const outcome = await this.idempotency.execute<CuttingRecordMutationResponse>(client, {
         scope,
         actorKey: actor.actorId,
         key: idempotencyKey,
@@ -499,7 +500,7 @@ export class CuttingService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
-      const outcome = await this.idempotency.execute(client, {
+      const outcome = await this.idempotency.execute<CuttingRecordMutationResponse>(client, {
         scope,
         actorKey: actor.actorId,
         key: idempotencyKey,
@@ -529,8 +530,7 @@ export class CuttingService {
            WHERE cutting.cutting_order_id=$1`,
           [cuttingOrderId],
         );
-        const row = current.rows[0];
-        if (!row) fail("该裁床订单尚未登记，不能修正", 409, "INVALID_STATE_TRANSITION");
+        const row = current.rows[0] ?? fail("该裁床订单尚未登记，不能修正", 409, "INVALID_STATE_TRANSITION");
         const version = Number(row.version);
         if (version !== input.expectedVersion) {
           fail("裁床数量已变化，请刷新后再修正", 409, "CONFLICT");

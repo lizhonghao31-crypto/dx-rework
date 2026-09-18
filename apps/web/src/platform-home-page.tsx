@@ -22,6 +22,10 @@ const moduleCopy = {
     title: "外发定价&选厂",
     description: "创建询价、主管决定工厂和单价、合同执行与财务核对",
   },
+  cutting: {
+    title: "订单开裁",
+    description: "裁床实裁数量登记与回看",
+  },
   rework: {
     title: "订单返工",
     description: "收货、返工处理、责任判定、工资与扣款",

@@ -458,7 +458,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
         badge="裁床实裁"
         badgePlacement="subtitle"
         backHref={backHref}
-        subtitle={item ? `${item.supplierName} · ${statusLabel(item.status)}` : undefined}
+        {...(item ? { subtitle: `${item.supplierName} · ${statusLabel(item.status)}` } : {})}
       />
       {error ? <Surface><p className="cutting-error" role="alert">{error}</p></Surface> : null}
       {notice ? <Surface><p role="status">{notice}</p></Surface> : null}
