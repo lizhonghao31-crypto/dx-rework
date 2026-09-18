@@ -16,7 +16,7 @@ describe("order board cutting facts", () => {
     expect(service).toContain("cutting_record.actual_cut_count");
     expect(service).toContain("cutting_user.display_name AS cutting_recorded_by");
     expect(service).toContain("cutting_record.recorded_at AS cutting_recorded_at");
-    expect(service).toContain("actualCutCount: row.actual_cut_count === null ? null : Number(row.actual_cut_count)");
+    expect(service).toContain("actualCutCount: row.actual_cut_count == null ? null : Number(row.actual_cut_count)");
     expect(service).toContain("totals.cumulative_actual_quantity-totals.document_quantity AS difference_quantity");
     expect(page).toContain('<span>实裁数</span>');
     expect(page).toContain('<span>裁床登记人</span>');
