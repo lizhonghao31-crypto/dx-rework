@@ -1,5 +1,6 @@
 import { canAccessPatternRoom, canAccessPatternRoomPrices, canAccessPatternRoomOrders, canCreatePatternRoomOrders } from "./pattern-room-access.js";
 import { financeNavigationEntries } from "./finance-access.js";
+import { canAccessCutting } from "./cutting-access.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { TodoCountIndicatorSchema } from "@dx-rework/contracts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -39,6 +40,8 @@ type NavigationGroup = Readonly<{
 }>;
 
 const ROLE_LABELS: Record<string, string> = {
+  cutting_supervisor: "裁床主管",
+  cutting_worker: "裁床工人",
   pattern_room_supervisor: "板房主管",
   pattern_room_worker: "板房师傅",
   sample_designer: "样衣设计师",
@@ -169,13 +172,14 @@ function DesktopNavigation({
   );
 }
 
-const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "返工单看板", "外发定价&选厂", "供应商中心"] as const;
+const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "返工单看板", "外发定价&选厂", "订单开裁", "供应商中心"] as const;
 
 const MOBILE_NAVIGATION_META: Record<string, Readonly<{ label: string; glyph: string }>> = {
   "我的待办": { label: "待办", glyph: "待" },
   "订单回货": { label: "收货", glyph: "收" },
   "返工单看板": { label: "返工", glyph: "返" },
   "外发定价&选厂": { label: "外发", glyph: "发" },
+  "订单开裁": { label: "开裁", glyph: "裁" },
   "供应商中心": { label: "供应商", glyph: "供" },
 };
 
@@ -449,6 +453,10 @@ export function Shell({
     });
   }
 
+  const cuttingNavigation: NavigationEntry[] = currentUser && canAccessCutting(currentUser)
+    ? [{ name: "裁床实裁", description: "登记裁片数与实裁数", href: "/ui/cutting", activeKey: "cutting" }]
+    : [];
+
   const supplierNavigation: NavigationEntry[] = [];
   if (currentUser && canAccessSupplierCenter(currentUser)) {
     supplierNavigation.push({
@@ -519,6 +527,7 @@ export function Shell({
     ...globalNavigation,
     ...reworkNavigation,
     ...mobileSourcingNavigation,
+    ...(cuttingNavigation.length ? [{ name: "订单开裁", description: "裁床实裁登记", href: "/ui/cutting", activeKey: "cutting" }] : []),
     ...mobileSupplierNavigation,
     ...(patternRoomNavigation.length ? [{ name: "订单打板", description: "订单打板与价格管控", href: "/ui/pattern-room" }] : []),
     ...sampleNavigation,
@@ -527,6 +536,7 @@ export function Shell({
   const desktopNavigationGroups: NavigationGroup[] = [
     { name: "订单打板", description: "打板与杂事", entries: patternRoomNavigation },
     { name: "外发定价&选厂", description: "询价、审批与执行", entries: sourcingNavigation },
+    { name: "订单开裁", description: "裁床实裁", entries: cuttingNavigation },
     {
       name: "订单返工",
       description: "订单返工业务",
@@ -549,7 +559,7 @@ export function Shell({
   const roleLabels = currentUser?.businessRoles?.map(roleLabel) ?? [];
   const roleText = roleLabels.length ? roleLabels.join(" · ") : "已登录";
   const activeEntry = navigation.find((entry) => entry.name === active);
-  const mobileActive = patternRoomNavigation.some(entry => (entry.activeKey ?? entry.name) === active) ? "订单打板" : productionNavigation.some(entry => entry.name === active) ? "实时生产看板" : sourcingNavigation.some((entry) => entry.name === active)
+  const mobileActive = patternRoomNavigation.some(entry => (entry.activeKey ?? entry.name) === active) ? "订单打板" : productionNavigation.some(entry => entry.name === active) ? "实时生产看板" : cuttingNavigation.some((entry) => (entry.activeKey ?? entry.name) === active) ? "订单开裁" : sourcingNavigation.some((entry) => entry.name === active)
     ? "外发定价&选厂"
     : supplierNavigation.some((entry) => entry.name === active)
       ? "供应商中心"

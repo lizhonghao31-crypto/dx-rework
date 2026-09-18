@@ -1,4 +1,6 @@
 import { PatternOrderCreatePage } from "./pattern-order-create-page.js";
+import { CuttingDetailPage, CuttingListPage } from "./cutting-page.js";
+import { cuttingPageRequirements } from "./cutting-access.js";
 import { SupplierOnboardingPage } from "./supplier-onboarding-page.js";
 import { PatternRoomOrdersPage, PatternRoomOrderDetailPage } from "./pattern-room-orders-page.js";
 import { PatternRoomPage } from "./pattern-room-page.js";
@@ -123,6 +125,7 @@ function skipsInitialPlatformEntryCheck(path: string): boolean {
   return path === "/"
     || path === "/ui/home"
     || path.startsWith("/ui/sourcing")
+    || path.startsWith("/ui/cutting")
     || path.startsWith("/ui/samples")
     || path.startsWith("/auth/");
 }
@@ -265,6 +268,7 @@ export function App() {
   if (path === "/auth/qr/relay") return <QrRelayPage />;
   const sampleMatch = path.match(/^\/ui\/samples\/([0-9a-f-]{36})$/i);
   const sourcingOrderMatch = path.match(/^\/ui\/sourcing\/orders\/([0-9a-f-]{36})$/i);
+  const cuttingOrderMatch = path.match(/^\/ui\/cutting\/orders\/([0-9a-f-]{36})$/i);
   let page;
   if (path === "/ui/home") page = <HomeLanding />;
   else if (path === "/ui/sourcing" || path === "/ui/sourcing/pending") page = <SourcingWorkspacePage view="pending" />;
@@ -279,6 +283,8 @@ export function App() {
   else if (path === "/ui/sourcing/create") page = <SourcingWorkspacePage view="create" />;
   else if (path === "/ui/sourcing/history") page = <SourcingWorkspacePage view="history" />;
   else if (sourcingOrderMatch?.[1]) page = <SourcingWorkspacePage view="detail" sourcingCaseId={sourcingOrderMatch[1]} />;
+  else if (path === "/ui/cutting") page = <Shell active="cutting"><CuttingListPage /></Shell>;
+  else if (cuttingOrderMatch?.[1]) page = <Shell active="cutting" mobileNavigation="transaction"><CuttingDetailPage key={path} cuttingOrderId={cuttingOrderMatch[1]} /></Shell>;
   else if (path === "/ui/admin" || path === "/ui/audit") {
     const requestedTab = new URLSearchParams(search).get("tab");
     const adminTab = requestedTab === "attachments" || requestedTab === "delegations" || requestedTab === "exceptions"
@@ -353,6 +359,9 @@ export function App() {
       owner,
       { requiredCapability: "sourcing:view" },
     ]}>{page}</AuthGate>;
+  }
+  if (path === "/ui/cutting" || path.startsWith("/ui/cutting/")) {
+    return <AuthGate requiredAnyOf={cuttingPageRequirements}>{page}</AuthGate>;
   }
 
   if (path === "/ui/frontline" || path === "/ui/frontline/tasks") {

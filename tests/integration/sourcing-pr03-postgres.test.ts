@@ -94,6 +94,27 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     authorizationCapability: "cutting:orders:view",
     authorizationCapabilities: ["cutting:orders:view"],
   });
+  const cuttingSupervisorActor = (requestId = randomUUID()): TrustedActorContext => ({
+    actorId: ownerId,
+    actorRoles: ["cutting_supervisor"],
+    authorizationCapability: "cutting:records:create",
+    authorizationCapabilities: ["cutting:orders:view", "cutting:records:create"],
+    requestId,
+  });
+  const cuttingWorkerActor = (requestId = randomUUID()): TrustedActorContext => ({
+    actorId: managerId,
+    actorRoles: ["cutting_worker"],
+    authorizationCapability: "cutting:records:create",
+    authorizationCapabilities: ["cutting:orders:view", "cutting:records:create"],
+    requestId,
+  });
+  const cuttingRootActor = (requestId = randomUUID()): TrustedActorContext => ({
+    actorId: merchandiserId,
+    actorRoles: ["root_superuser"],
+    authorizationCapability: "cutting:records:correct",
+    authorizationCapabilities: ["cutting:orders:view", "cutting:records:create", "cutting:records:correct"],
+    requestId,
+  });
   const factoryChangeActor = (requestId = randomUUID()): TrustedActorContext => ({
     ...merchandiserActor(requestId),
     authorizationCapability: "sourcing:factory_change:request",
@@ -2152,6 +2173,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const pendingCutting=(await cutting.listSources(cuttingOwnerActor())).items.find(item=>item.sourcingCaseId===id)!;
     expect(pendingCutting).toMatchObject({formalStyleNo:null,alternateStyleNo:"TEMP-PR03",displayStyleNo:"TEMP-PR03"});
     const stableCuttingOrderId=pendingCutting.cuttingOrderId;
+    await expect(cutting.record(cuttingWorkerActor(),stableCuttingOrderId,{pieceCount:120,actualCutCount:20},randomUUID()))
+      .rejects.toMatchObject({code:"INVALID_STATE_TRANSITION"});
+    await expect(cutting.record(cuttingOwnerActor(),stableCuttingOrderId,{pieceCount:120,actualCutCount:20},randomUUID()))
+      .rejects.toMatchObject({statusCode:403});
     generate.mockRestore();
     await expect(service.reviseStyles(merchandiserActor(),id,edit,randomUUID())).rejects.toMatchObject({code:"INVALID_STATE_TRANSITION"});
     await contractService.generateIfReady(contractActor(),id);
@@ -2160,6 +2185,25 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const formalCutting=(await cutting.listSources(cuttingOwnerActor())).items.find(item=>item.sourcingCaseId===id)!;
     expect(formalCutting).toMatchObject({cuttingOrderId:stableCuttingOrderId,formalStyleNo:"FINAL-PR03",displayStyleNo:"FINAL-PR03"});
     expect((await database.query("SELECT 1 FROM cutting_orders WHERE sourcing_case_id=$1",[id])).rowCount).toBe(1);
+    const concurrentRecords=await Promise.all([
+      cutting.record(cuttingSupervisorActor(),stableCuttingOrderId,{pieceCount:120,actualCutCount:20},randomUUID()),
+      cutting.record(cuttingWorkerActor(),stableCuttingOrderId,{pieceCount:121,actualCutCount:20},randomUUID()),
+    ]);
+    expect(concurrentRecords.map(result=>result.value.outcome).sort()).toEqual(["already_recorded","created"]);
+    const recorded=await cutting.get(cuttingOwnerActor(),stableCuttingOrderId);
+    expect(recorded).toMatchObject({status:"recorded",actualCutCount:20,outOfRange:false,record:{version:1,actualCutCount:20,corrected:false}});
+    expect([ownerId,managerId]).toContain(recorded.record!.recordedBy);
+    const initialRecorder=recorded.record!.recordedBy;
+    const initialRecordedAt=recorded.record!.recordedAt;
+    expect((await database.query("SELECT formal_style_no,actual_cut_count,style_conflict_count FROM current_cutting_style_options WHERE cutting_order_id=$1",[stableCuttingOrderId])).rows[0])
+      .toMatchObject({formal_style_no:"FINAL-PR03",actual_cut_count:"20",style_conflict_count:"1"});
+    const corrected=await cutting.correct(cuttingRootActor(),stableCuttingOrderId,{expectedVersion:1,pieceCount:122,actualCutCount:22,reason:"修正测试误录"},randomUUID());
+    expect(corrected.value.item).toMatchObject({actualCutCount:22,outOfRange:true,record:{version:2,pieceCount:122,actualCutCount:22,recordedBy:initialRecorder,recordedAt:initialRecordedAt,corrected:true}});
+    expect(corrected.value.item.record!.corrections).toEqual([
+      expect.objectContaining({version:2,pieceCount:122,actualCutCount:22,reason:"修正测试误录",correctedBy:merchandiserId}),
+    ]);
+    await expect(cutting.correct(cuttingWorkerActor() as never,stableCuttingOrderId,{expectedVersion:2,pieceCount:123,actualCutCount:23,reason:"越权"},randomUUID()))
+      .rejects.toMatchObject({statusCode:403});
     await expect(service.reviseStyles(managerActor(),id,edit,randomUUID())).rejects.toMatchObject({statusCode:409});
     const original=(await contractService.getCurrent(readerActor(),id)).item!;
     expect(original.status).toBe("ready");
@@ -2167,6 +2211,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const key=randomUUID(),secondEdit={expectedRevision:1,lines:[{position:1,styleNo:"REVISED-PR03",alternateStyleNo:null}]};
     const revised=await service.reviseStyles(managerActor(),id,secondEdit,key);
     expect((await service.reviseStyles(managerActor(),id,secondEdit,key)).reused).toBe(true);
+    expect((await database.query("SELECT formal_style_no,actual_cut_count FROM current_cutting_style_options WHERE cutting_order_id=$1",[stableCuttingOrderId])).rows[0])
+      .toMatchObject({formal_style_no:"REVISED-PR03",actual_cut_count:"22"});
+    expect((await database.query("SELECT count(*)::integer AS count FROM cutting_records WHERE cutting_order_id=$1",[stableCuttingOrderId])).rows[0]!.count).toBe(1);
     await expect(service.reviseStyles(managerActor(),id,{...secondEdit,lines:[{position:1,styleNo:"WRONG",alternateStyleNo:null}]},key)).rejects.toMatchObject({code:"IDEMPOTENCY_CONFLICT"});
     expect(revised.value.approvalSnapshot).toEqual(approved);
     const current=(await contractService.getCurrent(readerActor(),id)).item!;

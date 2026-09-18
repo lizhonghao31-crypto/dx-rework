@@ -1,4 +1,5 @@
 import { canAccessPatternRoom } from "./pattern-room-access.js";
+import { canAccessCutting } from "./cutting-access.js";
 import { canAccessFinance } from "./finance-access.js";
 import type { AuthorizedUser } from "./auth.js";
 import { landingTarget } from "./landing-target.js";
@@ -6,7 +7,7 @@ import { landingTarget } from "./landing-target.js";
 export const PLATFORM_MODULE_QUERY = "platform_module";
 
 export type PlatformModule = Readonly<{
-  id: "rework" | "sourcing" | "suppliers" | "production" | "samples" | "finance" | "pattern_room";
+  id: "rework" | "sourcing" | "cutting" | "suppliers" | "production" | "samples" | "finance" | "pattern_room";
   href: string;
 }>;
 
@@ -40,6 +41,7 @@ export function accessiblePlatformModules(user: AuthorizedUser): readonly Platfo
   const modules: PlatformModule[] = [];
   const reworkHref = landingTarget(user);
   if (canAccessSourcing(user)) modules.push({ id: "sourcing", href: "ui/sourcing/pending" });
+  if (canAccessCutting(user)) modules.push({ id: "cutting", href: "ui/cutting" });
   if (canAccessSupplierCenter(user)) modules.push({ id: "suppliers", href: "ui/suppliers" });
   if (canAccessProduction(user)) modules.push({ id: "production", href: "ui/production-dashboard" });
   if (canAccessSamples(user)) modules.push({ id: "samples", href: "ui/samples" });
