@@ -38,6 +38,18 @@ describe("cutting UI contract", () => {
     expect(source.slice(sourcing, cutting)).not.toContain("供应商中心");
   });
 
+  it("centers cutting pagination against the full list width on desktop and mobile", async () => {
+    const css = await readFile(
+      new URL("../../apps/web/src/cutting-page.css", import.meta.url),
+      "utf8",
+    );
+    expect(css).toContain(".cutting-pagination{display:grid;grid-template-columns:1fr auto 1fr");
+    expect(css).toContain(".cutting-pagination>.my-todos-pagination{grid-column:2;justify-self:center}");
+    expect(css).toContain("@media(max-width:760px)");
+    expect(css).toContain(".cutting-pagination{grid-template-columns:1fr;justify-items:center}");
+    expect(css).toContain(".cutting-pagination>.my-todos-pagination{grid-column:1;justify-self:center}");
+  });
+
   it("keeps mobile form controls readable and folds the low-frequency range filter", async () => {
     const [page, css] = await Promise.all([
       readFile(new URL("../../apps/web/src/cutting-page.tsx", import.meta.url), "utf8"),
