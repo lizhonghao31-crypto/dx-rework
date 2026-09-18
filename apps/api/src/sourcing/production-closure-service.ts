@@ -101,12 +101,31 @@ export class ProductionClosureService {
    SELECT alert_id,$2 FROM sourcing_production_alerts WHERE alert_id=$1 AND resolved_at IS NULL ON CONFLICT DO NOTHING`,[id,actor.actorId]);
   return {read:true};
  }
- async linkReceipt(client:PoolClient,actor:TrustedActorContext,input:{productionOrderId:string;receiptId:string;styleNo:string;operationEventId:string;receivedAt:string}){
+ async linkReceiptByCuttingOrder(client:PoolClient,actor:TrustedActorContext,input:{cuttingOrderId:string;receiptId:string;styleNo:string;operationEventId:string;receivedAt:string}) {
+  if(!this.warehouse(actor))fail("仅仓管可关联实际收货");
+  const matched=await client.query<{production_order_id:string;sourcing_line_position:number}>(`SELECT production.production_order_id,cutting.sourcing_line_position
+   FROM cutting_orders cutting
+   JOIN sourcing_production_orders production ON production.sourcing_case_id=cutting.sourcing_case_id
+   JOIN sourcing_production_shipments shipment USING(production_order_id)
+   JOIN sourcing_production_pilots pilot ON pilot.supplier_id=production.supplier_id AND pilot.enabled=true
+   WHERE cutting.cutting_order_id=$1
+     AND shipment.shipped_on <= ($2::timestamptz AT TIME ZONE 'Asia/Shanghai')::date
+     AND ${productionNotExcluded}
+   ORDER BY shipment.shipped_on DESC,production.production_order_id
+   LIMIT 1
+   FOR SHARE OF pilot`,[input.cuttingOrderId,input.receivedAt]);
+  const match=matched.rows[0];
+  if(!match)return null;
+  await this.linkReceipt(client,actor,{productionOrderId:match.production_order_id,receiptId:input.receiptId,styleNo:input.styleNo,
+   operationEventId:input.operationEventId,receivedAt:input.receivedAt,sourcePosition:match.sourcing_line_position});
+  return match.production_order_id;
+ }
+ async linkReceipt(client:PoolClient,actor:TrustedActorContext,input:{productionOrderId:string;receiptId:string;styleNo:string;operationEventId:string;receivedAt:string;sourcePosition?:number}){
   if(!this.warehouse(actor))fail("仅仓管可关联实际收货");
   if(!z.string().uuid().safeParse(input.productionOrderId).success)fail("生产订单编号无效",400);
-  const result=await client.query<{style_matches:boolean;shipped_on:string}>(`SELECT EXISTS(SELECT 1 FROM sourcing_style_aliases alias WHERE alias.sourcing_case_id=production.sourcing_case_id AND alias.position=1 AND upper(btrim(alias.style_no))=upper(btrim($2))) AS style_matches,shipment.shipped_on::text FROM sourcing_production_shipments shipment
+  const result=await client.query<{style_matches:boolean;shipped_on:string}>(`SELECT EXISTS(SELECT 1 FROM sourcing_style_aliases alias WHERE alias.sourcing_case_id=production.sourcing_case_id AND alias.position=COALESCE($3,1) AND upper(btrim(alias.style_no))=upper(btrim($2))) AS style_matches,shipment.shipped_on::text FROM sourcing_production_shipments shipment
    JOIN sourcing_production_orders production USING(production_order_id) JOIN sourcing_production_pilots pilot USING(supplier_id)
-   WHERE shipment.production_order_id=$1 AND ${productionNotExcluded} AND pilot.enabled=true FOR SHARE OF pilot`,[input.productionOrderId,input.styleNo]);
+   WHERE shipment.production_order_id=$1 AND ${productionNotExcluded} AND pilot.enabled=true FOR SHARE OF pilot`,[input.productionOrderId,input.styleNo,input.sourcePosition??null]);
   const shipment=result.rows[0];
   if(!shipment)fail("该订单未发货或未启用试点",409);
   const day=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(input.receivedAt));
