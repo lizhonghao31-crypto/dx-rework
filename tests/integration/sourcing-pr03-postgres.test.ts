@@ -94,6 +94,27 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     authorizationCapability: "cutting:orders:view",
     authorizationCapabilities: ["cutting:orders:view"],
   });
+  const cuttingSupervisorActor = (requestId = randomUUID()): TrustedActorContext => ({
+    actorId: ownerId,
+    actorRoles: ["cutting_supervisor"],
+    authorizationCapability: "cutting:records:create",
+    authorizationCapabilities: ["cutting:orders:view", "cutting:records:create"],
+    requestId,
+  });
+  const cuttingWorkerActor = (requestId = randomUUID()): TrustedActorContext => ({
+    actorId: managerId,
+    actorRoles: ["cutting_worker"],
+    authorizationCapability: "cutting:records:create",
+    authorizationCapabilities: ["cutting:orders:view", "cutting:records:create"],
+    requestId,
+  });
+  const cuttingRootActor = (requestId = randomUUID()): TrustedActorContext => ({
+    actorId: merchandiserId,
+    actorRoles: ["root_superuser"],
+    authorizationCapability: "cutting:records:correct",
+    authorizationCapabilities: ["cutting:orders:view", "cutting:records:create", "cutting:records:correct"],
+    requestId,
+  });
   const factoryChangeActor = (requestId = randomUUID()): TrustedActorContext => ({
     ...merchandiserActor(requestId),
     authorizationCapability: "sourcing:factory_change:request",
@@ -259,6 +280,91 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     )).rowCount).toBe(0);
   });
 
+  it("rejects cutting mutations after the source sourcing case is logically deleted", async () => {
+    const makeApproved = async (suffix: string) => {
+      const created = await service.createCase(merchandiserActor(), {
+        gender: "男装" as const,
+        styleName: "删除竞态测试",
+        estimatedCutPieceSendDate: "2026-10-01",
+        deliveryDate: "2026-10-10",
+        lineItems: [{
+          styleNo: `CUT-DELETE-${suffix}`,
+          color: "黑色",
+          quantity: 100,
+        }],
+        daxingUnitPrice: "7.0000",
+        attachmentIds: [],
+      }, randomUUID());
+      await service.quoteIePrice(
+        ieActor(), created.value.sourcingCaseId,
+        { linePrices: [{ position: 1, unitPrice: "8.5000" }] },
+        randomUUID(),
+      );
+      await service.recordManagementDecision(
+        managerActor(), created.value.sourcingCaseId,
+        {
+          supplierId: factoryId,
+          craftIds: [craftId("净色车缝")],
+          linePrices: [{ position: 1, unitPrice: "8.5000" }],
+        },
+        randomUUID(),
+      );
+      await service.decideOwner(
+        ownerActor(), created.value.sourcingCaseId,
+        { decision: "approved" },
+        randomUUID(),
+      );
+      const cuttingOrder = (await cutting.listSources(cuttingOwnerActor())).items.find(
+        (item) => item.sourcingCaseId === created.value.sourcingCaseId,
+      );
+      expect(cuttingOrder).toBeDefined();
+      return {
+        sourcingCaseId: created.value.sourcingCaseId,
+        cuttingOrderId: cuttingOrder!.cuttingOrderId,
+      };
+    };
+
+    const stalePending = await makeApproved("PENDING");
+    await service.deleteByRoot(rootActor(), stalePending.sourcingCaseId, randomUUID());
+    await expect(cutting.record(
+      cuttingWorkerActor(),
+      stalePending.cuttingOrderId,
+      { pieceCount: 100, actualCutCount: 100 },
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "NOT_FOUND", statusCode: 404 });
+    expect((await database.query(
+      "SELECT 1 FROM cutting_records WHERE cutting_order_id=$1",
+      [stalePending.cuttingOrderId],
+    )).rowCount).toBe(0);
+
+    const staleCorrection = await makeApproved("CORRECTION");
+    await cutting.record(
+      cuttingSupervisorActor(),
+      staleCorrection.cuttingOrderId,
+      { pieceCount: 100, actualCutCount: 100 },
+      randomUUID(),
+    );
+    await service.deleteByRoot(rootActor(), staleCorrection.sourcingCaseId, randomUUID());
+    await expect(cutting.correct(
+      cuttingRootActor(),
+      staleCorrection.cuttingOrderId,
+      {
+        expectedVersion: 1,
+        pieceCount: 101,
+        actualCutCount: 101,
+        reason: "删除后旧页面不得修正",
+      },
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "NOT_FOUND", statusCode: 404 });
+    expect((await database.query(
+      `SELECT 1
+       FROM cutting_record_corrections correction
+       JOIN cutting_records record USING(cutting_record_id)
+       WHERE record.cutting_order_id=$1`,
+      [staleCorrection.cuttingOrderId],
+    )).rowCount).toBe(0);
+  });
+
   it("creates once, records an exact IE quote and advances the audited state", async () => {
     const createKey = randomUUID();
     const input = {
@@ -313,7 +419,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(service.recordManagementDecision(managerActor(), created.value.sourcingCaseId, {
       supplierId: factoryId,unitPrice: "12.0000",craftIds: [],
     }, randomUUID())).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-    expect((await database.query("SELECT 1 FROM sourcing_cases")).rowCount).toBe(1);
+    expect((await database.query(
+      "SELECT 1 FROM sourcing_cases WHERE sourcing_case_id=$1",
+      [created.value.sourcingCaseId],
+    )).rowCount).toBe(1);
     expect(await service.getCase(unrelatedReaderActor(), created.value.sourcingCaseId))
       .not.toHaveProperty("daxingUnitPrice");
     expect(await service.getCase(anotherMerchandiserReader(), created.value.sourcingCaseId))
@@ -2152,6 +2261,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const pendingCutting=(await cutting.listSources(cuttingOwnerActor())).items.find(item=>item.sourcingCaseId===id)!;
     expect(pendingCutting).toMatchObject({formalStyleNo:null,alternateStyleNo:"TEMP-PR03",displayStyleNo:"TEMP-PR03"});
     const stableCuttingOrderId=pendingCutting.cuttingOrderId;
+    await expect(cutting.record(cuttingWorkerActor(),stableCuttingOrderId,{pieceCount:120,actualCutCount:20},randomUUID()))
+      .rejects.toMatchObject({code:"INVALID_STATE_TRANSITION"});
+    await expect(cutting.record(cuttingOwnerActor(),stableCuttingOrderId,{pieceCount:120,actualCutCount:20},randomUUID()))
+      .rejects.toMatchObject({statusCode:403});
     generate.mockRestore();
     await expect(service.reviseStyles(merchandiserActor(),id,edit,randomUUID())).rejects.toMatchObject({code:"INVALID_STATE_TRANSITION"});
     await contractService.generateIfReady(contractActor(),id);
@@ -2160,6 +2273,25 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const formalCutting=(await cutting.listSources(cuttingOwnerActor())).items.find(item=>item.sourcingCaseId===id)!;
     expect(formalCutting).toMatchObject({cuttingOrderId:stableCuttingOrderId,formalStyleNo:"FINAL-PR03",displayStyleNo:"FINAL-PR03"});
     expect((await database.query("SELECT 1 FROM cutting_orders WHERE sourcing_case_id=$1",[id])).rowCount).toBe(1);
+    const concurrentRecords=await Promise.all([
+      cutting.record(cuttingSupervisorActor(),stableCuttingOrderId,{pieceCount:120,actualCutCount:20},randomUUID()),
+      cutting.record(cuttingWorkerActor(),stableCuttingOrderId,{pieceCount:121,actualCutCount:20},randomUUID()),
+    ]);
+    expect(concurrentRecords.map(result=>result.value.outcome).sort()).toEqual(["already_recorded","created"]);
+    const recorded=await cutting.get(cuttingOwnerActor(),stableCuttingOrderId);
+    expect(recorded).toMatchObject({status:"recorded",actualCutCount:20,outOfRange:false,record:{version:1,actualCutCount:20,corrected:false}});
+    expect([ownerId,managerId]).toContain(recorded.record!.recordedBy);
+    const initialRecorder=recorded.record!.recordedBy;
+    const initialRecordedAt=recorded.record!.recordedAt;
+    expect((await database.query("SELECT formal_style_no,actual_cut_count,style_conflict_count FROM current_cutting_style_options WHERE cutting_order_id=$1",[stableCuttingOrderId])).rows[0])
+      .toMatchObject({formal_style_no:"FINAL-PR03",actual_cut_count:"20",style_conflict_count:"1"});
+    const corrected=await cutting.correct(cuttingRootActor(),stableCuttingOrderId,{expectedVersion:1,pieceCount:122,actualCutCount:22,reason:"修正测试误录"},randomUUID());
+    expect(corrected.value.item).toMatchObject({actualCutCount:22,outOfRange:true,record:{version:2,pieceCount:122,actualCutCount:22,recordedBy:initialRecorder,recordedAt:initialRecordedAt,corrected:true}});
+    expect(corrected.value.item.record!.corrections).toEqual([
+      expect.objectContaining({version:2,pieceCount:122,actualCutCount:22,reason:"修正测试误录",correctedBy:merchandiserId}),
+    ]);
+    await expect(cutting.correct(cuttingWorkerActor() as never,stableCuttingOrderId,{expectedVersion:2,pieceCount:123,actualCutCount:23,reason:"越权"},randomUUID()))
+      .rejects.toMatchObject({statusCode:403});
     await expect(service.reviseStyles(managerActor(),id,edit,randomUUID())).rejects.toMatchObject({statusCode:409});
     const original=(await contractService.getCurrent(readerActor(),id)).item!;
     expect(original.status).toBe("ready");
@@ -2167,6 +2299,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const key=randomUUID(),secondEdit={expectedRevision:1,lines:[{position:1,styleNo:"REVISED-PR03",alternateStyleNo:null}]};
     const revised=await service.reviseStyles(managerActor(),id,secondEdit,key);
     expect((await service.reviseStyles(managerActor(),id,secondEdit,key)).reused).toBe(true);
+    expect((await database.query("SELECT formal_style_no,actual_cut_count FROM current_cutting_style_options WHERE cutting_order_id=$1",[stableCuttingOrderId])).rows[0])
+      .toMatchObject({formal_style_no:"REVISED-PR03",actual_cut_count:"22"});
+    expect((await database.query("SELECT count(*)::integer AS count FROM cutting_records WHERE cutting_order_id=$1",[stableCuttingOrderId])).rows[0]!.count).toBe(1);
     await expect(service.reviseStyles(managerActor(),id,{...secondEdit,lines:[{position:1,styleNo:"WRONG",alternateStyleNo:null}]},key)).rejects.toMatchObject({code:"IDEMPOTENCY_CONFLICT"});
     expect(revised.value.approvalSnapshot).toEqual(approved);
     const current=(await contractService.getCurrent(readerActor(),id)).item!;

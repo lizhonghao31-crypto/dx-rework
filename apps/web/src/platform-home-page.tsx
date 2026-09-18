@@ -6,6 +6,8 @@ import { accessiblePlatformModules, platformModuleHref } from "./platform-module
 import "./platform-home.css";
 
 const ROLE_LABELS: Record<string, string> = {
+  cutting_supervisor: "裁床主管",
+  cutting_worker: "裁床工人",
   owner_group: "老板",
   production_management: "生产管理",
   order_merchandiser: "订单跟单",
@@ -21,6 +23,10 @@ const moduleCopy = {
   sourcing: {
     title: "外发定价&选厂",
     description: "创建询价、主管决定工厂和单价、合同执行与财务核对",
+  },
+  cutting: {
+    title: "订单开裁",
+    description: "裁床实裁数量登记与回看",
   },
   rework: {
     title: "订单返工",

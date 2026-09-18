@@ -1,5 +1,5 @@
 import { PATTERN_ROOM_ORDERS_ENABLED, canUsePatternOrder } from "@dx-rework/contracts/pattern-orders";
-export type PlatformAccessModuleId = "rework" | "sourcing" | "suppliers" | "production" | "samples" | "pattern_room" | "platform";
+export type PlatformAccessModuleId = "rework" | "sourcing" | "cutting" | "suppliers" | "production" | "samples" | "pattern_room" | "platform";
 export type TodoAccessModuleId = "rework" | "sourcing" | "production" | "samples" | "pattern_room" | "suppliers";
 
 export type PlatformRoleAccess = Readonly<{
@@ -10,6 +10,7 @@ export type PlatformRoleAccess = Readonly<{
 export const PLATFORM_ACCESS_MODULE_ORDER: readonly PlatformAccessModuleId[] = [
   "rework",
   "sourcing",
+  "cutting",
   "suppliers",
   "production",
   "samples",
@@ -27,7 +28,7 @@ const BUSINESS_MODULES: readonly PlatformAccessModuleId[] = [
 ];
 
 const PROTECTED_ROLE_MODULES: Readonly<Record<string, readonly PlatformAccessModuleId[]>> = {
-  owner_group: BUSINESS_MODULES,
+  owner_group: [...BUSINESS_MODULES, "cutting"],
   finance_director: BUSINESS_MODULES,
   finance_read: BUSINESS_MODULES,
   system_admin: ["platform"],
@@ -36,6 +37,7 @@ const PROTECTED_ROLE_MODULES: Readonly<Record<string, readonly PlatformAccessMod
 export const PLATFORM_ACCESS_MODULE_LABELS: Record<PlatformAccessModuleId, string> = {
   rework: "订单返工",
   sourcing: "外发定价&选厂",
+  cutting: "订单开裁",
   suppliers: "供应商中心",
   production: "实时生产看板",
   samples: "样衣管理",
@@ -91,6 +93,8 @@ export function accessModuleIdsForCapabilities(
       modules.add("production");
     } else if (capability.startsWith("sourcing:")) {
       modules.add("sourcing");
+    } else if (capability.startsWith("cutting:")) {
+      modules.add("cutting");
     } else if (capability.startsWith("supplier_profile:")) {
       modules.add("suppliers");
     } else if (capability.startsWith("sample:")) {

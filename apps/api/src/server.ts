@@ -1,6 +1,7 @@
 import { SupplierOnboardingService } from "./access/supplier-onboarding-service.js";
 import { PatternRoomPriceService } from "./pattern-room/price-service.js";
 import { PatternRoomOrderService } from "./pattern-room/order-service.js";
+import { CuttingService } from "./cutting/cutting-source-service.js";
 import {recordOperationDiagnostic} from "./platform/operation-diagnostics.js";
 import {SampleImportService} from "./samples/sample-import-service.js";
 import {SampleDisposalService} from "./samples/sample-disposal-service.js";
@@ -141,6 +142,7 @@ const sampleFiles = new SampleAttachmentService(database);
 const todoService = new TodoService(database,undefined,undefined,productionClosure);
 const todoProjection = new RootAwareTodoProjectionService(todoService);
 const patternOrders = new PatternRoomOrderService(database, todoProjection);
+const cuttingService = new CuttingService(database);
 const receivingService = new ReceivingService(database,undefined,undefined,productionClosure);
 const sourcingProductionService = new SourcingProductionService(database);
 const sourcingContractService = new SourcingContractService(database, attachments);
@@ -238,6 +240,12 @@ const app = buildApp({
   receiving: {
     authenticate: (token) => auth.authenticate(token),
     service: receivingService,
+    root: rootAuthority,
+  },
+  cutting: {
+    authenticate: (token) => auth.authenticate(token),
+    service: cuttingService,
+    attachments,
     root: rootAuthority,
   },
   samples: {
