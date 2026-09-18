@@ -90,9 +90,18 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   await sourcing.quoteIePrice(actor(user,["ie_reviewer"],["sourcing:price:quote","sourcing:view"]),id,{linePrices:prices},randomUUID());
   await sourcing.recordManagementDecision(actor(user,["production_management"],["sourcing:decision:record","sourcing:view"]),id,{supplierId,linePrices:prices,craftIds:[craftId]},randomUUID());
   await sourcing.decideOwner(boss(),id,{decision:"approved"},randomUUID());
-  const cuttingOrders=(await cutting.listSources(root("cutting:orders:view"))).items.filter(item=>item.sourcingCaseId===id);
-  for(const item of cuttingOrders) await cutting.record(root("cutting:records:create"),item.cuttingOrderId,{
-    pieceCount:item.contractQuantity,actualCutCount:item.contractQuantity,
+  const cuttingOrders=await database.query<{cutting_order_id:string;quantity:number}>(
+    `SELECT cutting.cutting_order_id,snapshot_line.quantity
+     FROM cutting_orders cutting
+     JOIN sourcing_approval_snapshot_lines snapshot_line
+       ON snapshot_line.sourcing_approval_snapshot_id=cutting.approval_snapshot_id
+      AND snapshot_line.position=cutting.sourcing_line_position
+     WHERE cutting.sourcing_case_id=$1
+     ORDER BY cutting.sourcing_line_position`,
+    [id],
+  );
+  for(const item of cuttingOrders.rows) await cutting.record(root("cutting:records:create"),item.cutting_order_id,{
+    pieceCount:Number(item.quantity),actualCutCount:Number(item.quantity),
   },randomUUID());
   const contract=(await contracts.getCurrent(root(),id)).item!;
   return (await production.dispatch(root(),id,{sourcingContractDocumentId:contract.sourcingContractDocumentId,confirmed:true},randomUUID())).value;

@@ -572,15 +572,15 @@ export class ReceivingService {
     input: CreateReceivingInput,
     idempotencyKey: string,
   ): Promise<Result<ReceivingReceipt>> {
+    const actualQuantity = validateQuantity(input.actualQuantity, "实际收货数量", true);
+    const defectiveQuantity = validateQuantity(input.defectiveQuantity ?? 0, "次品数量", true);
+    if (defectiveQuantity > actualQuantity) fail("次品数量不能超过实际收货数量");
     if (input.cuttingOrderId !== undefined && !UUID_PATTERN.test(input.cuttingOrderId)) fail("请选择有效的已裁正式款号");
     if (input.cuttingOrderId === undefined) {
       if (!this.options.allowLegacyStyleInput || input.styleNo === undefined) {
         fail("请选择有效的已裁正式款号");
       }
     }
-    const actualQuantity = validateQuantity(input.actualQuantity, "实际收货数量", true);
-    const defectiveQuantity = validateQuantity(input.defectiveQuantity ?? 0, "次品数量", true);
-    if (defectiveQuantity > actualQuantity) fail("次品数量不能超过实际收货数量");
     const receivingSource: "initial" | "backfill" = input.receivedDate === undefined ? "initial" : "backfill";
     const normalized = {
       ...(input.cuttingOrderId ? { cuttingOrderId: input.cuttingOrderId } : {}),
