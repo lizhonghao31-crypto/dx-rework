@@ -3,6 +3,7 @@ import { todoReturnPath } from "./todo-query-state.js";
 import {WorkAnalysisPanel} from "./work-analysis-panel.js";
 import { isNewSourcingPrice, newSourcingPriceDisplay, historicalSourcingPrice, sourcingPriceSummary, sourcingDeleteConfirmation, sourcingDecisionNeedsReason } from "./sourcing-price-presentation.js";
 import { createSourcingPriceInput } from "./sourcing-price-input.js";
+import { applySourcingPriceCascade } from "./sourcing-price-cascade.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import {
   AttachmentResponseSchema,
@@ -1016,13 +1017,24 @@ function OrderDetailPage({
   const [factoryChangeUnitPriceEdited, setFactoryChangeUnitPriceEdited] = useState(false);
   const actionKey = useRef<string | null>(null);
   const priceInputs = useRef(new Map<string, ReturnType<typeof createSourcingPriceInput>>());
+  const quotePriceOverrides = useRef<ReadonlySet<number>>(new Set<number>());
+  const decisionPriceOverrides = useRef<ReadonlySet<number>>(new Set<number>());
   const [, refreshPriceInputs] = useState(0);
+  useEffect(() => {
+    quotePriceOverrides.current = new Set<number>();
+    decisionPriceOverrides.current = new Set<number>();
+  }, [sourcingCaseId]);
   const priceInput = (kind: "quote" | "decision", position: number, value: string) => {
     const key = `${kind}-${position}`;
     let control = priceInputs.current.get(key);
     if (!control) {
       control = createSourcingPriceInput(next => {
-        const update = (lines: readonly LinePriceDraft[]) => lines.map(line => line.position === position ? { ...line, unitPrice: next } : line);
+        const overrides = kind === "quote" ? quotePriceOverrides : decisionPriceOverrides;
+        const update = (lines: readonly LinePriceDraft[]) => {
+          const result = applySourcingPriceCascade(lines, position, next, overrides.current);
+          overrides.current = result.independentPositions;
+          return result.linePrices;
+        };
         if (kind === "quote") setQuote(current => ({ ...current, linePrices: update(current.linePrices) }));
         else setDecision(current => ({ ...current, linePrices: update(current.linePrices) }));
         actionKey.current = null;
