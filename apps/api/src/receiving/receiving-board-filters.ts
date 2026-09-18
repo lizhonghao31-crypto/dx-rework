@@ -15,11 +15,11 @@ export const RECEIVING_BOARD_FILTERS_SQL = `, board_facts AS (
  AND resolution.packing_revision_id=packing.packing_revision_id AND resolution.packing_quantity_snapshot=packing.packing_quantity
  AND resolution.difference_quantity_snapshot=packing.packing_quantity-totals.cumulative_actual_quantity) AS packing_handled,
  EXISTS(SELECT 1 FROM receiving_difference_resolutions resolution JOIN scoped_batches old_batch USING(receiving_batch_id)
- WHERE old_batch.style_key=totals.style_key AND resolution.difference_type='receiving') AS receiving_history_exists,
+ WHERE old_batch.group_key=totals.group_key AND resolution.difference_type='receiving') AS receiving_history_exists,
  EXISTS(SELECT 1 FROM receiving_difference_resolutions resolution JOIN scoped_batches old_batch USING(receiving_batch_id)
- WHERE old_batch.style_key=totals.style_key AND resolution.difference_type='packing') AS packing_history_exists
+ WHERE old_batch.group_key=totals.group_key AND resolution.difference_type='packing') AS packing_history_exists
  FROM style_totals totals
- JOIN LATERAL(SELECT batch.receiving_batch_id FROM batch_totals batch WHERE batch.style_key=totals.style_key
+ JOIN LATERAL(SELECT batch.receiving_batch_id FROM batch_totals batch WHERE batch.group_key=totals.group_key
  ORDER BY batch.last_through_end_received_at DESC NULLS LAST,batch.receiving_batch_id DESC LIMIT 1) action ON true
  LEFT JOIN LATERAL(SELECT revision.packing_revision_id,revision.packing_quantity FROM receiving_packing_revisions revision
  WHERE revision.receiving_batch_id=action.receiving_batch_id ORDER BY revision.created_at DESC,revision.packing_revision_id DESC LIMIT 1) packing ON true

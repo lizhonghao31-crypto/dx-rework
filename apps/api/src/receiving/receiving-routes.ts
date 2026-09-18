@@ -361,9 +361,10 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
         rows: [
           ["筛选范围", board.mode === "search" ? "全时间款号搜索" : `${board.startDate} 至 ${board.endDate}`, "状态", board.status],
           ["导出时间", new Date().toISOString(), "订单数", board.totalCount],
-          ["款号", "送货单数量", "实收数量", "次品数量", "收货差异", "收货差异状态", "收货差异处理结果", "收货差异处理人", "收货差异处理时间", "装箱数量", "装箱差异", "装箱差异状态", "装箱差异处理结果", "装箱差异处理人", "装箱差异处理时间", "最近收货", "收货人"],
+          ["款号", "实裁数", "裁床登记人", "裁床登记时间", "送货单数量", "实收数量", "次品数量", "收货差异", "收货差异状态", "收货差异处理结果", "收货差异处理人", "收货差异处理时间", "装箱数量", "装箱差异", "装箱差异状态", "装箱差异处理结果", "装箱差异处理人", "装箱差异处理时间", "最近收货", "收货人"],
           ...board.rows.map((row) => [
-            row.styleNo,row.documentQuantity,row.cumulativeActualQuantity,row.defectiveQuantity,row.differenceQuantity,
+            row.styleNo,row.actualCutCount,row.cuttingRecordedBy ?? "",row.cuttingRecordedAt ?? "",
+            row.documentQuantity,row.cumulativeActualQuantity,row.defectiveQuantity,row.differenceQuantity,
             row.differenceQuantity === 0 ? "无差异" : resolutionStatus(row.receivingDifferenceResolution),
             row.receivingDifferenceResolution?.result ?? "",row.receivingDifferenceResolution?.handledBy ?? "",row.receivingDifferenceResolution?.handledAt ?? "",
             row.packingQuantity,row.packingDifferenceQuantity,

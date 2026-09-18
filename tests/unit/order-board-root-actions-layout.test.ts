@@ -23,10 +23,12 @@ describe("order board Root action layout", () => {
     expect(styles).toContain("minmax(86px,auto)!important");
   });
 
-  it("uses three information columns and an inline rework entry on mobile", async () => {
+  it("uses the 4+3 quantity layout and an inline rework entry on narrow cards", async () => {
     const styles = await readFile("apps/web/src/order-board-page.css", "utf8");
 
-    expect(styles).toContain("grid-template-columns:repeat(3,minmax(0,1fr))!important");
+    expect(styles).toContain("@container (max-width:839px)");
+    expect(styles).toContain(".order-board-row__facts{grid-template-columns:repeat(4,minmax(0,1fr))}");
+    expect(styles).toContain(".order-board-row__packing-difference{grid-column:span 2}");
     expect(styles).toContain(".order-board-actions--mobile{grid-column:1/-1;justify-content:flex-end}");
     expect(styles).toContain(
       ".order-board-row__style-heading>.order-board-rework-link{display:inline-flex!important",

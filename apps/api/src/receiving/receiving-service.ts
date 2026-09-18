@@ -164,6 +164,9 @@ type BoardRow = Readonly<{
   packingDifferenceQuantity: number | null;
   packingRecordedBy: string | null;
   packingRecordedAt: string | null;
+  actualCutCount: number | null;
+  cuttingRecordedBy: string | null;
+  cuttingRecordedAt: string | null;
   receivingDifferenceResolution: DifferenceResolution | null;
   packingDifferenceResolution: DifferenceResolution | null;
   staleResolution: boolean;
@@ -279,8 +282,11 @@ const normalizeOptionalUuid = (value: string | null | undefined, label: string):
   return value;
 };
 
-const RECEIVING_BOARD_BASE_SQL = `WITH scoped_styles AS (
-         SELECT DISTINCT upper(btrim(batch.style_no)) AS style_key
+const RECEIVING_BOARD_BASE_SQL = `WITH scoped_groups AS (
+         SELECT DISTINCT
+                COALESCE('cut:'||batch.cutting_order_id::text,
+                  'style:'||upper(btrim(batch.style_no))) AS group_key,
+                upper(btrim(batch.style_no)) AS style_key
          FROM receiving_receipts receipt
          JOIN receiving_batches batch
            ON batch.receiving_batch_id=receipt.receiving_batch_id
@@ -295,10 +301,13 @@ const RECEIVING_BOARD_BASE_SQL = `WITH scoped_styles AS (
          )
        ), scoped_batches AS (
          SELECT batch.receiving_batch_id,
-                upper(btrim(batch.style_no)) AS style_key
+                scope.group_key,
+                scope.style_key,
+                batch.cutting_order_id
          FROM receiving_batches batch
-         JOIN scoped_styles scope
-           ON scope.style_key=upper(btrim(batch.style_no))
+         JOIN scoped_groups scope
+           ON scope.group_key=COALESCE('cut:'||batch.cutting_order_id::text,
+             'style:'||upper(btrim(batch.style_no)))
          WHERE batch.deleted_at IS NULL
        ), correction_adjustments AS (
          SELECT event.entity_id::uuid AS receiving_batch_id,
@@ -364,7 +373,9 @@ const RECEIVING_BOARD_BASE_SQL = `WITH scoped_styles AS (
          GROUP BY event.entity_id
        ), batch_totals AS (
          SELECT r.receiving_batch_id,
+                scope.group_key,
                 scope.style_key,
+                scope.cutting_order_id,
                 (
                   CASE WHEN $3::text<>'' THEN batch.delivery_note_quantity
                     ELSE batch.delivery_note_quantity
@@ -466,13 +477,13 @@ const RECEIVING_BOARD_BASE_SQL = `WITH scoped_styles AS (
          LEFT JOIN correction_adjustments adjustments
            ON adjustments.receiving_batch_id=r.receiving_batch_id
          GROUP BY r.receiving_batch_id,batch.receiving_batch_id,
-                  scope.style_key,
+                  scope.group_key,scope.style_key,scope.cutting_order_id,
                   adjustments.prior_actual_adjustment,adjustments.period_actual_adjustment,
                   adjustments.through_end_actual_adjustment,adjustments.all_actual_adjustment,
                   adjustments.through_end_document_adjustment,adjustments.all_document_adjustment,
                   adjustments.period_defective_adjustment
        ), style_totals AS (
-         SELECT totals.style_key,
+         SELECT totals.group_key,totals.style_key,
                 (
                   (array_agg(
                     totals.base_document_quantity
@@ -490,7 +501,7 @@ const RECEIVING_BOARD_BASE_SQL = `WITH scoped_styles AS (
                 count(*)::bigint AS batch_count,
                 max(totals.last_received_at) AS last_received_at
          FROM batch_totals totals
-         GROUP BY totals.style_key
+         GROUP BY totals.group_key,totals.style_key
        )`;
 
 const validateQuantity = (value: number, label: string, allowZero: boolean): number => {
@@ -796,14 +807,15 @@ export class ReceivingService {
     receivingBatchId: string,
   ): Promise<StyleOperationSnapshot> {
     if (!UUID_PATTERN.test(receivingBatchId)) fail("收货订单标识无效");
-    const batchResult = await client.query<{ style_no: string }>(
-      "SELECT style_no FROM receiving_batches WHERE receiving_batch_id=$1 AND deleted_at IS NULL",
+    const batchResult = await client.query<{ style_no: string; cutting_order_id: string | null }>(
+      "SELECT style_no,cutting_order_id FROM receiving_batches WHERE receiving_batch_id=$1 AND deleted_at IS NULL",
       [receivingBatchId],
     );
     const batch = batchResult.rows[0];
     if (!batch) return fail("收货订单不存在", 404, "NOT_FOUND");
     const styleNo = normalizeStyleNo(batch.style_no);
-    await this.lockStyles(client, [styleNo]);
+    const operationKey = batch.cutting_order_id ? `cutting:${batch.cutting_order_id}` : styleNo;
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [operationKey]);
     const snapshotResult = await client.query<{
       receiving_batch_id: string;
       style_no: string;
@@ -822,7 +834,7 @@ export class ReceivingService {
        JOIN LATERAL (
          SELECT item.receiving_batch_id,item.version
          FROM batch_totals item
-         WHERE item.style_key=totals.style_key
+         WHERE item.group_key=totals.group_key
          ORDER BY item.last_all_received_at DESC NULLS LAST,item.receiving_batch_id DESC
          LIMIT 1
        ) action ON true
@@ -833,8 +845,8 @@ export class ReceivingService {
          ORDER BY revision.created_at DESC,revision.packing_revision_id DESC
          LIMIT 1
        ) packing ON true
-       WHERE totals.style_key=$3`,
-      ["2000-01-01", "2999-12-31", styleNo],
+       WHERE totals.group_key=COALESCE('cut:'||$4::uuid::text,'style:'||$3)`,
+      ["2000-01-01", "2999-12-31", styleNo, batch.cutting_order_id],
     );
     const snapshot = snapshotResult.rows[0];
     if (!snapshot) return fail("收货订单不存在", 404, "NOT_FOUND");
@@ -2425,6 +2437,9 @@ export class ReceivingService {
       packing_quantity: string | null;
       packing_recorded_by: string | null;
       packing_recorded_at: Date | null;
+      actual_cut_count: string | null;
+      cutting_recorded_by: string | null;
+      cutting_recorded_at: Date | null;
       receiving_resolution_id: string | null;
       receiving_resolution_result: string | null;
       receiving_resolution_handled_by: string | null;
@@ -2448,7 +2463,7 @@ export class ReceivingService {
       `${RECEIVING_BOARD_BASE_SQL}${RECEIVING_BOARD_FILTERS_SQL}, page_totals AS (
          SELECT *
          FROM filtered_totals
-         ORDER BY difference_rank ASC,absolute_difference DESC,last_received_at DESC,style_key ASC
+         ORDER BY difference_rank ASC,absolute_difference DESC,last_received_at DESC,style_key ASC,group_key ASC
          ${pageWindowSql}
        )
        SELECT totals.stale_resolution,
@@ -2459,7 +2474,7 @@ export class ReceivingService {
                   FROM attachments a WHERE a.entity_type='receiving_difference_resolution' AND a.entity_id=r.resolution_id::text AND a.status='ready'),'[]'::jsonb))
                 ORDER BY r.created_at DESC,r.resolution_id DESC)
                 FROM receiving_difference_resolutions r JOIN scoped_batches b USING(receiving_batch_id)
-                LEFT JOIN app_users u ON u.id=r.handled_by WHERE b.style_key=totals.style_key),'[]'::jsonb) AS resolution_history,
+                LEFT JOIN app_users u ON u.id=r.handled_by WHERE b.group_key=totals.group_key),'[]'::jsonb) AS resolution_history,
               action.receiving_batch_id,totals.style_key AS style_no,totals.document_quantity,
               totals.prior_actual_quantity,totals.actual_quantity,totals.defective_quantity,
               totals.current_actual_quantity,totals.current_defective_quantity,
@@ -2468,6 +2483,9 @@ export class ReceivingService {
               packing.packing_revision_id,packing.packing_quantity,
               packing_user.display_name AS packing_recorded_by,
               packing.created_at AS packing_recorded_at,
+              cutting_record.actual_cut_count,
+              cutting_user.display_name AS cutting_recorded_by,
+              cutting_record.recorded_at AS cutting_recorded_at,
               receiving_resolution.resolution_id AS receiving_resolution_id,
               receiving_resolution.result AS receiving_resolution_result,
               receiving_resolution_user.display_name AS receiving_resolution_handled_by,
@@ -2508,9 +2526,9 @@ export class ReceivingService {
               ) AS root_mutable
        FROM page_totals totals
        JOIN LATERAL (
-         SELECT batch.receiving_batch_id,batch.version
+         SELECT batch.receiving_batch_id,batch.version,batch.cutting_order_id
          FROM batch_totals batch
-         WHERE batch.style_key=totals.style_key
+         WHERE batch.group_key=totals.group_key
          ORDER BY batch.last_through_end_received_at DESC NULLS LAST,
                   batch.receiving_batch_id DESC
          LIMIT 1
@@ -2523,6 +2541,9 @@ export class ReceivingService {
          LIMIT 1
        ) packing ON true
        LEFT JOIN app_users packing_user ON packing_user.id=packing.recorded_by
+       LEFT JOIN current_cutting_records cutting_record
+         ON cutting_record.cutting_order_id=action.cutting_order_id
+       LEFT JOIN app_users cutting_user ON cutting_user.id=cutting_record.recorded_by
        LEFT JOIN LATERAL (
          SELECT resolution.resolution_id,resolution.result,resolution.handled_by,resolution.created_at
          FROM receiving_difference_resolutions resolution
@@ -2554,8 +2575,10 @@ export class ReceivingService {
          JOIN receiving_batches latest_batch
            ON latest_batch.receiving_batch_id=latest.receiving_batch_id
           AND latest_batch.deleted_at IS NULL
+         JOIN scoped_batches latest_scope
+           ON latest_scope.receiving_batch_id=latest.receiving_batch_id
          JOIN app_users u ON u.id=latest.received_by
-         WHERE upper(btrim(latest_batch.style_no))=totals.style_key
+         WHERE latest_scope.group_key=totals.group_key
            AND (
              $3::text<>''
              OR (
@@ -2577,7 +2600,7 @@ export class ReceivingService {
                  SELECT 1
                  FROM scoped_batches source_batch
                  WHERE source_batch.receiving_batch_id=item.source_receiving_batch_id
-                   AND source_batch.style_key=totals.style_key
+                   AND source_batch.group_key=totals.group_key
                )
              )
              OR item.source_receiving_batch_id=action.receiving_batch_id
@@ -2601,7 +2624,7 @@ export class ReceivingService {
            AND attachment.entity_id IN (
              SELECT scope.receiving_batch_id::text
              FROM scoped_batches scope
-             WHERE scope.style_key=totals.style_key
+             WHERE scope.group_key=totals.group_key
            )
            AND attachment.status='ready'
            AND attachment.mime_type LIKE 'image/%'
@@ -2649,6 +2672,8 @@ export class ReceivingService {
            JOIN receiving_batches history_batch
              ON history_batch.receiving_batch_id=receipt.receiving_batch_id
             AND history_batch.deleted_at IS NULL
+           JOIN scoped_batches history_scope
+             ON history_scope.receiving_batch_id=receipt.receiving_batch_id
            LEFT JOIN LATERAL (
              SELECT item.document_quantity,item.actual_quantity,item.defective_quantity,item.receiving_source
              FROM receiving_receipt_corrections item
@@ -2661,7 +2686,7 @@ export class ReceivingService {
              LIMIT 1
            ) correction ON true
            JOIN app_users users ON users.id=receipt.received_by
-           WHERE upper(btrim(history_batch.style_no))=totals.style_key
+           WHERE history_scope.group_key=totals.group_key
              AND (
                $3::text<>''
                OR receipt.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
@@ -2669,7 +2694,7 @@ export class ReceivingService {
          ) history
        ) receiving_history ON true
        ORDER BY totals.difference_rank ASC,totals.absolute_difference DESC,
-                totals.last_received_at DESC,totals.style_key ASC`,
+                totals.last_received_at DESC,totals.style_key ASC,totals.group_key ASC`,
       pageWindowParameters,
     );
     const allRows: BoardRow[] = rowsResult.rows.map((row) => ({
@@ -2693,6 +2718,9 @@ export class ReceivingService {
         : Number(row.packing_quantity) - Number(row.cumulative_actual_quantity),
       packingRecordedBy: row.packing_recorded_by,
       packingRecordedAt: row.packing_recorded_at?.toISOString() ?? null,
+      actualCutCount: row.actual_cut_count == null ? null : Number(row.actual_cut_count),
+      cuttingRecordedBy: row.cutting_recorded_by,
+      cuttingRecordedAt: row.cutting_recorded_at?.toISOString() ?? null,
       receivingDifferenceResolution: row.receiving_resolution_id === null ? null : {
         resolutionId: row.receiving_resolution_id,
         result: row.receiving_resolution_result!,

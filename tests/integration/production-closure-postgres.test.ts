@@ -191,6 +191,10 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     .toEqual([first.value.receiptId,repeated.value.receiptId]);
   expect((await database.query("SELECT actual_cut_count FROM current_receiving_cutting_links WHERE receipt_id=$1",[repeated.value.receiptId])).rows[0]!.actual_cut_count)
     .toBe("20");
+  const board=await strictReceiving.board(today(),today(),"SSP09-AUTO-LINK-A","all",1,15);
+  expect(board.rows.find(row=>row.styleNo==="SSP09-AUTO-LINK-A")).toMatchObject({
+    actualCutCount:20,receiptCount:2,cuttingRecordedBy:"SSP09跟单",
+  });
  },60000);
 
  it("keeps same-style cutting orders in separate receiving batches and repeat options",async()=>{
@@ -238,6 +242,15 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   const repeatOptions=await strictReceiving.listRepeatOptions("TYLE");
   expect(repeatOptions.filter(item=>item.styleNo===sharedStyle).map(item=>item.cuttingOrderId).sort())
     .toEqual([firstCut!.cuttingOrderId,secondCut!.cuttingOrderId].sort());
+  await cutting.correct(root("cutting:records:correct"),secondCut!.cuttingOrderId,{
+    expectedVersion:1,pieceCount:20,actualCutCount:21,reason:"PR04看板读取当前实裁值",
+  },randomUUID());
+  const board=await strictReceiving.board(today(),today(),sharedStyle,"all",1,15);
+  const sharedRows=board.rows.filter(row=>row.styleNo===sharedStyle);
+  expect(sharedRows).toHaveLength(2);
+  expect(sharedRows.map(row=>row.actualCutCount).sort((a,b)=>(a??0)-(b??0))).toEqual([20,21]);
+  expect(sharedRows.every(row=>row.cuttingRecordedBy==="SSP09跟单")).toBe(true);
+  expect(sharedRows.every(row=>row.cuttingRecordedAt!==null)).toBe(true);
  },60000);
 
  it("keeps backfilled receipts before shipment unlinked instead of rolling them back",async()=>{
