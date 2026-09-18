@@ -1415,6 +1415,60 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     });
   });
 
+  it("keeps same-style cutting tasks as separate board rows with their own cutting facts", async () => {
+    const styleNo = "STYLE-CUTTING-BOARD-GROUP";
+    const yesterday = pastBusinessDate(1);
+    const first = await service.create(receiver(), {
+      styleNo,
+      documentQuantity: 50,
+      actualQuantity: 40,
+      attachmentIds: [await readyImage()],
+    }, randomUUID());
+    const second = await service.create(receiver(), {
+      styleNo,
+      documentQuantity: 50,
+      actualQuantity: 30,
+      attachmentIds: [await readyImage()],
+      receivedDate: yesterday,
+    }, randomUUID());
+
+    const firstCuttingOrderId = randomUUID();
+    const secondCuttingOrderId = randomUUID();
+    await database.query(
+      `UPDATE receiving_batches
+       SET cutting_order_id=CASE receiving_batch_id
+         WHEN $1 THEN $3::uuid
+         WHEN $2 THEN $4::uuid
+         ELSE cutting_order_id
+       END
+       WHERE receiving_batch_id=ANY($5::uuid[])`,
+      [
+        first.value.receivingBatchId,
+        second.value.receivingBatchId,
+        firstCuttingOrderId,
+        secondCuttingOrderId,
+        [first.value.receivingBatchId, second.value.receivingBatchId],
+      ],
+    );
+    await database.query(
+      `INSERT INTO current_cutting_records(
+         cutting_order_id,actual_cut_count,recorded_by,recorded_at
+       ) VALUES($1,50,$3,CURRENT_TIMESTAMP),($2,51,$3,CURRENT_TIMESTAMP)`,
+      [firstCuttingOrderId, secondCuttingOrderId, receiverId],
+    );
+
+    const board = await service.board(businessDate(), businessDate(), styleNo);
+    expect(board.rows).toHaveLength(2);
+    expect(board.rows.map((row) => row.receivingBatchId).sort()).toEqual(
+      [first.value.receivingBatchId, second.value.receivingBatchId].sort(),
+    );
+    expect(board.rows.map((row) => row.actualCutCount).sort((a, b) => (a ?? 0) - (b ?? 0)))
+      .toEqual([50, 51]);
+    expect(board.rows.every((row) => row.cuttingRecordedBy === "仓管测试")).toBe(true);
+    expect(board.rows.every((row) => row.cuttingRecordedAt !== null)).toBe(true);
+    expect(board.kpis.orderCount).toBe(2);
+  });
+
   it("keeps backfill facts in their own batch while consolidating the same style on the board", async () => {
     const current = await service.create(receiver(), {
       styleNo: "STYLE-BACKFILL-01",
