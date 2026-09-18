@@ -1417,38 +1417,39 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
 
   it("keeps same-style cutting tasks as separate board rows with their own cutting facts", async () => {
     const styleNo = "STYLE-CUTTING-BOARD-GROUP";
-    const yesterday = pastBusinessDate(1);
-    const first = await service.create(receiver(), {
-      styleNo,
-      documentQuantity: 50,
-      actualQuantity: 40,
-      attachmentIds: [await readyImage()],
-    }, randomUUID());
-    const second = await service.create(receiver(), {
-      styleNo,
-      documentQuantity: 50,
-      actualQuantity: 30,
-      attachmentIds: [await readyImage()],
-      receivedDate: yesterday,
-    }, randomUUID());
-
+    const firstBatchId = randomUUID();
+    const secondBatchId = randomUUID();
     const firstCuttingOrderId = randomUUID();
     const secondCuttingOrderId = randomUUID();
     await database.query(
-      `UPDATE receiving_batches
-       SET cutting_order_id=CASE receiving_batch_id
-         WHEN $1 THEN $3::uuid
-         WHEN $2 THEN $4::uuid
-         ELSE cutting_order_id
-       END
-       WHERE receiving_batch_id=ANY($5::uuid[])`,
+      `INSERT INTO receiving_batches(
+         receiving_batch_id,style_no,cutting_order_id,created_by,created_at,delivery_note_quantity
+       ) VALUES($1,$3,$4,$5,CURRENT_TIMESTAMP,50),
+               ($2,$3,$6,$5,CURRENT_TIMESTAMP - interval '1 day',50)`,
       [
-        first.value.receivingBatchId,
-        second.value.receivingBatchId,
+        firstBatchId,
+        secondBatchId,
+        styleNo,
         firstCuttingOrderId,
+        receiverId,
         secondCuttingOrderId,
-        [first.value.receivingBatchId, second.value.receivingBatchId],
       ],
+    );
+    await insertReceiptAt(
+      firstBatchId,
+      styleNo,
+      50,
+      40,
+      0,
+      new Date().toISOString(),
+    );
+    await insertReceiptAt(
+      secondBatchId,
+      styleNo,
+      50,
+      30,
+      0,
+      new Date(Date.now() - 86400000).toISOString(),
     );
     await database.query(
       `INSERT INTO current_cutting_records(
@@ -1460,7 +1461,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     const board = await service.board(businessDate(), businessDate(), styleNo);
     expect(board.rows).toHaveLength(2);
     expect(board.rows.map((row) => row.receivingBatchId).sort()).toEqual(
-      [first.value.receivingBatchId, second.value.receivingBatchId].sort(),
+      [firstBatchId, secondBatchId].sort(),
     );
     expect(board.rows.map((row) => row.actualCutCount).sort((a, b) => (a ?? 0) - (b ?? 0)))
       .toEqual([50, 51]);
