@@ -280,6 +280,91 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     )).rowCount).toBe(0);
   });
 
+  it("rejects cutting mutations after the source sourcing case is logically deleted", async () => {
+    const makeApproved = async (suffix: string) => {
+      const created = await service.createCase(merchandiserActor(), {
+        gender: "男装" as const,
+        styleName: "删除竞态测试",
+        estimatedCutPieceSendDate: "2026-10-01",
+        deliveryDate: "2026-10-10",
+        lineItems: [{
+          styleNo: `CUT-DELETE-${suffix}`,
+          color: "黑色",
+          quantity: 100,
+        }],
+        daxingUnitPrice: "7.0000",
+        attachmentIds: [],
+      }, randomUUID());
+      await service.quoteIePrice(
+        ieActor(), created.value.sourcingCaseId,
+        { linePrices: [{ position: 1, unitPrice: "8.5000" }] },
+        randomUUID(),
+      );
+      await service.recordManagementDecision(
+        managerActor(), created.value.sourcingCaseId,
+        {
+          supplierId: factoryId,
+          craftIds: [craftId("净色车缝")],
+          linePrices: [{ position: 1, unitPrice: "8.5000" }],
+        },
+        randomUUID(),
+      );
+      await service.decideOwner(
+        ownerActor(), created.value.sourcingCaseId,
+        { decision: "approved" },
+        randomUUID(),
+      );
+      const cuttingOrder = (await cutting.listSources(cuttingOwnerActor())).items.find(
+        (item) => item.sourcingCaseId === created.value.sourcingCaseId,
+      );
+      expect(cuttingOrder).toBeDefined();
+      return {
+        sourcingCaseId: created.value.sourcingCaseId,
+        cuttingOrderId: cuttingOrder!.cuttingOrderId,
+      };
+    };
+
+    const stalePending = await makeApproved("PENDING");
+    await service.deleteByRoot(rootActor(), stalePending.sourcingCaseId, randomUUID());
+    await expect(cutting.record(
+      cuttingWorkerActor(),
+      stalePending.cuttingOrderId,
+      { pieceCount: 100, actualCutCount: 100 },
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "NOT_FOUND", statusCode: 404 });
+    expect((await database.query(
+      "SELECT 1 FROM cutting_records WHERE cutting_order_id=$1",
+      [stalePending.cuttingOrderId],
+    )).rowCount).toBe(0);
+
+    const staleCorrection = await makeApproved("CORRECTION");
+    await cutting.record(
+      cuttingSupervisorActor(),
+      staleCorrection.cuttingOrderId,
+      { pieceCount: 100, actualCutCount: 100 },
+      randomUUID(),
+    );
+    await service.deleteByRoot(rootActor(), staleCorrection.sourcingCaseId, randomUUID());
+    await expect(cutting.correct(
+      cuttingRootActor(),
+      staleCorrection.cuttingOrderId,
+      {
+        expectedVersion: 1,
+        pieceCount: 101,
+        actualCutCount: 101,
+        reason: "删除后旧页面不得修正",
+      },
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "NOT_FOUND", statusCode: 404 });
+    expect((await database.query(
+      `SELECT 1
+       FROM cutting_record_corrections correction
+       JOIN cutting_records record USING(cutting_record_id)
+       WHERE record.cutting_order_id=$1`,
+      [staleCorrection.cuttingOrderId],
+    )).rowCount).toBe(0);
+  });
+
   it("creates once, records an exact IE quote and advances the audited state", async () => {
     const createKey = randomUUID();
     const input = {

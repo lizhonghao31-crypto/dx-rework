@@ -297,6 +297,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const attempt = useRef<{ body: string; key: string } | null>(null);
+  const correctionAttempt = useRef<{ body: string; key: string } | null>(null);
   const draft = useCuttingDraftGuard(
     JSON.stringify({ pieceCount, actualCutCount }),
     Boolean(item?.canRecord && !item.record && (pieceCount || actualCutCount)),
@@ -423,6 +424,15 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
       { title: "确认修正", confirmLabel: "保存修正" },
     );
     if (!confirmed) return;
+    const body = JSON.stringify({
+      expectedVersion: item.record.version,
+      pieceCount: parsedCorrectionPiece,
+      actualCutCount: parsedCorrectionActual,
+      reason: reason.trim(),
+    });
+    if (correctionAttempt.current?.body !== body) {
+      correctionAttempt.current = { body, key: createClientRequestId() };
+    }
     setBusy(true);
     setError("");
     setNotice("");
@@ -432,13 +442,8 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
         CuttingRecordMutationResponseSchema,
         {
           method: "POST",
-          body: JSON.stringify({
-            expectedVersion: item.record.version,
-            pieceCount: parsedCorrectionPiece,
-            actualCutCount: parsedCorrectionActual,
-            reason: reason.trim(),
-          }),
-          headers: { "idempotency-key": createClientRequestId() },
+          body,
+          headers: { "idempotency-key": correctionAttempt.current.key },
         },
       );
       setItem(result.item);

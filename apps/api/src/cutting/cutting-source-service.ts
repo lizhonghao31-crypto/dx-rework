@@ -244,6 +244,22 @@ export class CuttingService {
     );
   }
 
+  private async lockActiveOrder(client: PoolClient, cuttingOrderId: string): Promise<void> {
+    const locked = await client.query(
+      `SELECT cutting.cutting_order_id
+       FROM cutting_orders cutting
+       JOIN sourcing_cases source_case
+         ON source_case.sourcing_case_id=cutting.sourcing_case_id
+        AND source_case.deleted_at IS NULL
+       WHERE cutting.cutting_order_id=$1
+       FOR UPDATE OF source_case,cutting`,
+      [cuttingOrderId],
+    );
+    if (!locked.rowCount) {
+      fail("裁床订单不存在或源订单已删除", 404, "NOT_FOUND");
+    }
+  }
+
   async list(actor: TrustedActorContext, input: unknown): Promise<CuttingOrderListResponse> {
     this.assertReader(actor);
     const query = CuttingOrderQuerySchema.parse(input);
@@ -414,11 +430,7 @@ export class CuttingService {
         requestHash: hash({ cuttingOrderId, ...input }),
         expiresAt: new Date("9999-12-31T00:00:00Z"),
       }, async () => {
-        const locked = await client.query(
-          "SELECT cutting_order_id FROM cutting_orders WHERE cutting_order_id=$1 FOR UPDATE",
-          [cuttingOrderId],
-        );
-        if (!locked.rowCount) fail("裁床订单不存在", 404, "NOT_FOUND");
+        await this.lockActiveOrder(client, cuttingOrderId);
         const source = await client.query<{
           formal_style_no: string | null;
           contract_quantity: number | string;
@@ -514,11 +526,7 @@ export class CuttingService {
         requestHash: hash({ cuttingOrderId, ...input }),
         expiresAt: new Date("9999-12-31T00:00:00Z"),
       }, async () => {
-        const locked = await client.query(
-          "SELECT cutting_order_id FROM cutting_orders WHERE cutting_order_id=$1 FOR UPDATE",
-          [cuttingOrderId],
-        );
-        if (!locked.rowCount) fail("裁床订单不存在", 404, "NOT_FOUND");
+        await this.lockActiveOrder(client, cuttingOrderId);
         const current = await client.query<{
           cutting_record_id: string;
           version: number | string;

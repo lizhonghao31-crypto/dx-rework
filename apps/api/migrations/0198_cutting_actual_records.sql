@@ -37,15 +37,23 @@ CREATE INDEX cutting_record_corrections_record_idx
 
 CREATE OR REPLACE FUNCTION guard_cutting_record_creation()
 RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE event operation_events%ROWTYPE; source_formal_style text;
+DECLARE event operation_events%ROWTYPE; source_formal_style text; source_active boolean;
 BEGIN
   SELECT * INTO event FROM operation_events WHERE event_id=NEW.operation_event_id;
-  SELECT line.formal_style_no INTO source_formal_style
+  SELECT line.formal_style_no,source_case.deleted_at IS NULL
+  INTO source_formal_style,source_active
   FROM cutting_orders cutting
+  JOIN sourcing_cases source_case
+    ON source_case.sourcing_case_id=cutting.sourcing_case_id
   JOIN current_sourcing_case_lines line
     ON line.sourcing_case_id=cutting.sourcing_case_id
    AND line.position=cutting.sourcing_line_position
   WHERE cutting.cutting_order_id=NEW.cutting_order_id;
+
+  IF source_active IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'cutting record requires active source case'
+      USING ERRCODE='23514';
+  END IF;
 
   IF event.event_id IS NULL
     OR event.action<>'cutting.record.create'
@@ -75,9 +83,19 @@ $$;
 
 CREATE OR REPLACE FUNCTION guard_cutting_record_correction()
 RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE event operation_events%ROWTYPE; expected_version integer;
+DECLARE event operation_events%ROWTYPE; expected_version integer; source_active boolean;
 BEGIN
   SELECT * INTO event FROM operation_events WHERE event_id=NEW.operation_event_id;
+  SELECT source_case.deleted_at IS NULL INTO source_active
+  FROM cutting_records record
+  JOIN cutting_orders cutting ON cutting.cutting_order_id=record.cutting_order_id
+  JOIN sourcing_cases source_case ON source_case.sourcing_case_id=cutting.sourcing_case_id
+  WHERE record.cutting_record_id=NEW.cutting_record_id;
+  IF source_active IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'cutting correction requires active source case'
+      USING ERRCODE='23514';
+  END IF;
+
   SELECT COALESCE(max(correction_version),0)+1 INTO expected_version
   FROM cutting_record_corrections WHERE cutting_record_id=NEW.cutting_record_id;
 

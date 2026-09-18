@@ -46,6 +46,9 @@ describe("cutting UI contract", () => {
     expect(page).toContain('<details className="cutting-range-disclosure">');
     expect(page).toContain('inputMode="numeric"');
     expect(page).not.toMatch(/window\.(alert|prompt|confirm)\s*\(/);
+    expect(page).toContain("const correctionAttempt = useRef");
+    expect(page).toContain("correctionAttempt.current?.body !== body");
+    expect(page).toContain('headers: { "idempotency-key": correctionAttempt.current.key }');
     expect(css).toContain("@media(max-width:760px)");
     expect(css).toContain(".cutting-count-control input{min-height:46px;font-size:16px}");
     expect(css).toContain(".cutting-record-actions{position:sticky");
