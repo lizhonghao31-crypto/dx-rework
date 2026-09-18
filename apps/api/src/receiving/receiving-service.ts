@@ -105,9 +105,15 @@ type CuttingReceivingOption = Readonly<{
   styleConflictCount: number;
 }>;
 
-type RepeatReceivingOption = CuttingReceivingOption & Readonly<{
+type RepeatReceivingOption = Readonly<{
   receivingBatchId: string;
+  styleNo: string;
   documentQuantity: number;
+  cuttingOrderId?: string;
+  color?: string | null;
+  supplierName?: string;
+  actualCutCount?: number;
+  styleConflictCount?: number;
 }>;
 
 type ReceivingReceipt = Readonly<{
@@ -1695,13 +1701,8 @@ export class ReceivingService {
       );
       return result.rows.map((row) => ({
         receivingBatchId: row.receiving_batch_id,
-        cuttingOrderId: row.receiving_batch_id,
         styleNo: row.style_no,
         documentQuantity: Number(row.document_quantity),
-        color: null,
-        supplierName: "legacy-test",
-        actualCutCount: 0,
-        styleConflictCount: 1,
       }));
     }
     const result = await this.database.query<{
