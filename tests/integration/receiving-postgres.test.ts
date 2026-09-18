@@ -29,7 +29,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
   const schema = `receiving_${randomUUID().replaceAll("-", "")}`;
   const admin = new Pool({ connectionString: databaseUrl! });
   const database = new Pool({ connectionString: databaseUrl!, options: `-c search_path=${schema}` });
-  const service = new ReceivingService(database);
+  const service = new ReceivingService(database, undefined, undefined, undefined, { allowLegacyStyleInput: true });
   const reworkService = new ReworkInitiationService(database, "corp");
   const receiverId = randomUUID();
 

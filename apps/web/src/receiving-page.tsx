@@ -1,7 +1,6 @@
-import { ProductionExpectedPicker } from "./production-closure-ui.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, Surface } from "@dx-rework/ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
@@ -30,8 +29,19 @@ const businessDateDaysAgo = (daysAgo: number): string => {
   return new Date(Date.UTC(year!, month! - 1, day! - daysAgo)).toISOString().slice(0, 10);
 };
 
-type StyleOptions = Readonly<{ styles: readonly string[] }>;
-type RepeatOrder = Readonly<{ receivingBatchId: string; styleNo: string; documentQuantity: number }>;
+type CuttingOption = Readonly<{
+  cuttingOrderId: string;
+  styleNo: string;
+  color: string | null;
+  supplierName: string;
+  actualCutCount: number;
+  styleConflictCount: number;
+}>;
+type CuttingOptions = Readonly<{ orders: readonly CuttingOption[] }>;
+type RepeatOrder = CuttingOption & Readonly<{
+  receivingBatchId: string;
+  documentQuantity: number;
+}>;
 type RepeatOptions = Readonly<{ orders: readonly RepeatOrder[] }>;
 type Receipt = Readonly<{
   receiptId: string;
@@ -132,14 +142,17 @@ export function ReceivingPage() {
   const [repeatMenuOpen, setRepeatMenuOpen] = useState(false);
   const [repeatSearching, setRepeatSearching] = useState(false);
   const [receivedDate, setReceivedDate] = useState(businessDateDaysAgo(1));
-  const [styles, setStyles] = useState<readonly string[]>([]);
   const [styleNo, setStyleNo] = useState("");
+  const debouncedStyleNo = useDebouncedValue(styleNo, 180);
+  const [cuttingOptions, setCuttingOptions] = useState<readonly CuttingOption[]>([]);
+  const [cuttingOptionsQuery, setCuttingOptionsQuery] = useState("");
+  const [selectedCutting, setSelectedCutting] = useState<CuttingOption | null>(null);
+  const [cuttingSearching, setCuttingSearching] = useState(false);
   const [documentQuantity, setDocumentQuantity] = useState("");
   const [actualQuantity, setActualQuantity] = useState("");
   const [defectiveQuantity, setDefectiveQuantity] = useState("0");
   const [images, setImages] = useState<readonly SelectedImage[]>([]);
   const [styleMenuOpen, setStyleMenuOpen] = useState(false);
-  const [productionOrderId,setProductionOrderId]=useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const pendingKey = useRef<string | null>(null);
@@ -147,14 +160,6 @@ export function ReceivingPage() {
   const uploadedIds = useRef(new Map<string, string>());
   const previewUrls = useRef(new Set<string>());
 
-  const loadStyles = async () => {
-    const response = await fetch(apiUrl("receiving/style-options"), { credentials: "include" });
-    if (!response.ok) return;
-    const body = await response.json() as StyleOptions;
-    setStyles(body.styles);
-  };
-
-  useEffect(() => { void loadStyles(); }, []);
   useEffect(() => {
     const needle = debouncedRepeatQuery.trim();
     if (!repeat || !repeatSource || needle.length < 4) {
@@ -184,16 +189,38 @@ export function ReceivingPage() {
       .finally(() => { if (!controller.signal.aborted) setRepeatSearching(false); });
     return () => { controller.abort(); };
   }, [repeat, repeatSource, debouncedRepeatQuery]);
+  useEffect(() => {
+    const needle = debouncedStyleNo.trim();
+    if (!open || repeat || needle.length < 4) {
+      setCuttingOptions([]);
+      setCuttingOptionsQuery("");
+      setCuttingSearching(false);
+      return;
+    }
+    const controller = new AbortController();
+    setCuttingSearching(true);
+    void requestJson<CuttingOptions>(
+      `receiving/cutting-options?${new URLSearchParams({ q: needle }).toString()}`,
+      { method: "GET", signal: controller.signal },
+    ).then((body) => {
+      if (controller.signal.aborted) return;
+      setCuttingOptions(body.orders);
+      setCuttingOptionsQuery(needle.toUpperCase());
+    }).catch((cause: unknown) => {
+      if (controller.signal.aborted) return;
+      setCuttingOptions([]);
+      setCuttingOptionsQuery("");
+      setMessage(cause instanceof Error ? cause.message : "已裁正式款号加载失败");
+    }).finally(() => {
+      if (!controller.signal.aborted) setCuttingSearching(false);
+    });
+    return () => controller.abort();
+  }, [open, repeat, debouncedStyleNo]);
+
   useEffect(() => () => {
     for (const previewUrl of previewUrls.current) URL.revokeObjectURL(previewUrl);
     previewUrls.current.clear();
   }, []);
-
-  const matches = useMemo(() => {
-    const needle = styleNo.trim().toLocaleLowerCase("zh-CN");
-    if (!needle) return styles.slice(0, 10);
-    return styles.filter((item) => item.toLocaleLowerCase("zh-CN").includes(needle)).slice(0, 10);
-  }, [styleNo, styles]);
 
   const clearImages = () => {
     setImages((current) => {
@@ -208,6 +235,9 @@ export function ReceivingPage() {
 
   const clearNormalDraft = () => {
     setStyleNo("");
+    setCuttingOptions([]);
+    setCuttingOptionsQuery("");
+    setSelectedCutting(null);
     setDocumentQuantity("");
     setActualQuantity("");
     setDefectiveQuantity("0");
@@ -269,15 +299,15 @@ export function ReceivingPage() {
         method: "POST",
         headers: { "idempotency-key": key },
         body: JSON.stringify({
+          cuttingOrderId: selectedRepeatOrder.cuttingOrderId,
           receivingBatchId: selectedRepeatOrder.receivingBatchId,
           source: repeatSource,
           ...(repeatSource === "other_factory" ? { documentQuantity: addedDocumentCount } : {}),
-          ...(productionOrderId ? {productionOrderId} : {}),
           actualQuantity: actualCount,
           defectiveQuantity: defectiveCount,
         }),
       });
-      pendingKey.current = null;setProductionOrderId("");
+      pendingKey.current = null;
       setMessage(`多次收货成功 · ${receipt.styleNo} · 实收 ${formatBusinessDecimal(receipt.actualQuantity)} 件 · 次品 ${formatBusinessDecimal(receipt.defectiveQuantity)} 件`);
       setRepeatQuery("");
       setRepeatOrders([]);
@@ -286,7 +316,7 @@ export function ReceivingPage() {
       clearNormalDraft();
       setRepeatSource(null);
       setRepeat(false);
-      setOpen(false);setProductionOrderId("");
+      setOpen(false);
     } catch (cause) {
       const nextMessage = cause instanceof Error ? cause.message : "提交失败，请稍后重试";
       if (nextMessage.includes("重新搜索")) setSelectedRepeatOrder(null);
@@ -297,11 +327,11 @@ export function ReceivingPage() {
   };
 
   const submit = async () => {
-    const trimmedStyle = styleNo.trim().toUpperCase();
+    const trimmedStyle = selectedCutting?.styleNo ?? "";
     const documentCount = Number(documentQuantity);
     const actualCount = Number(actualQuantity);
     const defectiveCount = Number(defectiveQuantity);
-    if (!trimmedStyle) { setMessage("请选择或填写款号"); return; }
+    if (!selectedCutting) { setMessage("请先搜索并选择已裁正式款号"); return; }
     if (!/^\d+$/.test(documentQuantity) || documentCount <= 0) { setMessage("送货单数量请输入大于0的整数"); return; }
     if (!/^\d+$/.test(actualQuantity) || actualCount < 0) { setMessage("实际收货数量请输入大于等于0的整数"); return; }
     if (!/^\d+$/.test(defectiveQuantity) || defectiveCount < 0) { setMessage("次品数量请输入大于等于0的整数"); return; }
@@ -355,9 +385,8 @@ export function ReceivingPage() {
         credentials: "include",
         headers: { "content-type": "application/json", "idempotency-key": key },
         body: JSON.stringify({
-          styleNo: trimmedStyle,
+          cuttingOrderId: selectedCutting.cuttingOrderId,
           documentQuantity: documentCount,
-          ...(productionOrderId ? {productionOrderId} : {}),
           actualQuantity: actualCount,
           defectiveQuantity: defectiveCount,
           attachmentIds,
@@ -366,19 +395,21 @@ export function ReceivingPage() {
       });
       if (!response.ok) throw new Error(await errorMessage(response));
       const receipt = await response.json() as Receipt;
-      setProductionOrderId("");
+      
       pendingKey.current = null;
       const sign = receipt.differenceQuantity > 0 ? "+" : "";
       setMessage(`${backfill ? "补录" : "收货"}成功 · 次品 ${formatBusinessDecimal(receipt.defectiveQuantity)} 件 · 差异 ${sign}${formatBusinessDecimal(receipt.differenceQuantity)} 件`);
       setStyleNo("");
+      setCuttingOptions([]);
+      setCuttingOptionsQuery("");
+      setSelectedCutting(null);
       setDocumentQuantity("");
       setActualQuantity("");
       setDefectiveQuantity("0");
       clearImages();
       setStyleMenuOpen(false);
-      setOpen(false);setProductionOrderId("");
+      setOpen(false);
       setBackfill(false);
-      void loadStyles();
     } catch (cause) {
       const nextMessage = cause instanceof Error ? cause.message : "提交失败，请稍后重试";
       if (nextMessage.includes("请到“多次收货”录入")) {
@@ -400,13 +431,6 @@ export function ReceivingPage() {
     <a className="dx-button dx-button--secondary receiving-order-link" href={pageUrl("/ui/orders?returnTo=%2Fui%2Freceiving")}>查看订货回货</a>
     <section className="receiving-hero">
       <div className="receiving-brand">达兴 · 仓库收货</div>
-      {open ? <>
-        <ProductionExpectedPicker disabled={busy} value={productionOrderId} onSelect={shipment=>{
-          setProductionOrderId(shipment?.productionOrderId??"");pendingKey.current=null;
-          if(shipment){if(repeat){setRepeatQuery(shipment.firstStyleNo);setSelectedRepeatOrder(null);}
-            else setStyleNo(shipment.firstStyleNo);}
-        }}/>
-      </> : null}
       {!open ? (
         <div className="receiving-entry-actions">
           <button className="receiving-start" type="button" onClick={() => { setRepeat(false); setRepeatSource(null); setBackfill(false); setOpen(true); setMessage(""); }}>
@@ -441,7 +465,7 @@ export function ReceivingPage() {
           <button className="receiving-source-choice receiving-source-choice-other" type="button" onClick={() => { setRepeatSource("other_factory"); setDocumentQuantity(""); setMessage(""); }}>
             其他工厂收货
           </button>
-          <button className="receiving-cancel" type="button" onClick={() => { setRepeat(false); setOpen(false);setProductionOrderId(""); }}>返回</button>
+          <button className="receiving-cancel" type="button" onClick={() => { setRepeat(false); setOpen(false); }}>返回</button>
         </Surface>
       ) : repeat ? (
         <Surface className="receiving-form-card">
@@ -471,7 +495,7 @@ export function ReceivingPage() {
                 {repeatOrders.map((order) => <button
                   className="receiving-repeat-option"
                   type="button"
-                  key={order.receivingBatchId}
+                  key={`${order.receivingBatchId}:${order.cuttingOrderId}`}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
                     setRepeatQuery(order.styleNo);
@@ -479,12 +503,12 @@ export function ReceivingPage() {
                     setRepeatMenuOpen(false);
                     pendingKey.current = null;
                   }}
-                ><strong>{order.styleNo}</strong><small>原送货单 {formatBusinessDecimal(order.documentQuantity)} 件</small></button>)}
+                ><strong>{order.styleNo}</strong><small>{order.supplierName}{order.color ? ` · ${order.color}` : ""} · 实裁 {formatBusinessDecimal(order.actualCutCount)} 件 · 原送货单 {formatBusinessDecimal(order.documentQuantity)} 件</small></button>)}
               </div> : null}
             </div>
           </label>
-          {selectedRepeatOrder ? <p className="receiving-repeat-selected">已选择 {selectedRepeatOrder.styleNo} · 原送货单 {formatBusinessDecimal(selectedRepeatOrder.documentQuantity)} 件</p> : (
-            <p className="receiving-repeat-hint">{repeatSearching ? "正在搜索…" : repeatQuery.trim().length < 4 ? "请输入款号末尾至少4位" : "没有可追加收货的匹配订单"}</p>
+          {selectedRepeatOrder ? <p className="receiving-repeat-selected">已选择 {selectedRepeatOrder.styleNo} · {selectedRepeatOrder.supplierName}{selectedRepeatOrder.color ? ` · ${selectedRepeatOrder.color}` : ""} · 实裁 {formatBusinessDecimal(selectedRepeatOrder.actualCutCount)} 件 · 原送货单 {formatBusinessDecimal(selectedRepeatOrder.documentQuantity)} 件</p> : (
+            <p className="receiving-repeat-hint">{repeatSearching ? "正在搜索…" : repeatQuery.trim().length < 4 ? "请输入正式款号末尾至少4位" : "没有可追加收货的已裁正式款号"}</p>
           )}
           {repeatSource === "other_factory" ? <label className="receiving-field">
             <span>本次送货单数量</span>
@@ -505,7 +529,7 @@ export function ReceivingPage() {
             setRepeatQuery("");
             setRepeatOrders([]);
             setSelectedRepeatOrder(null);
-            setOpen(false);setProductionOrderId("");
+            setOpen(false);
           }}>返回</button>
         </Surface>
       ) : (
@@ -523,29 +547,44 @@ export function ReceivingPage() {
             />
           </label> : null}
           <label className="receiving-field">
-            <span>款号</span>
+            <span>正式款号</span>
             <div className="receiving-style-input">
               <input
                 type="search"
                 autoComplete="off"
                 inputMode="text"
-                placeholder="搜索或填写款号"
+                placeholder="输入正式款号后4位搜索"
                 value={styleNo}
                 disabled={busy}
                 onFocus={() => setStyleMenuOpen(true)}
                 onBlur={() => window.setTimeout(() => setStyleMenuOpen(false), 120)}
-                onChange={(event) => { setStyleNo(event.target.value); setStyleMenuOpen(true); pendingKey.current = null; }}
+                onChange={(event) => {
+                  setStyleNo(event.target.value);
+                  setSelectedCutting(null);
+                  setCuttingOptions([]);
+                  setCuttingOptionsQuery("");
+                  setStyleMenuOpen(true);
+                  pendingKey.current = null;
+                }}
               />
-              {styleMenuOpen && matches.length > 0 ? <div className="receiving-style-menu" role="listbox">
-                {matches.map((item) => <button
+              {styleMenuOpen && cuttingOptionsQuery === styleNo.trim().toUpperCase() && cuttingOptions.length > 0 ? <div className="receiving-style-menu" role="listbox">
+                {cuttingOptions.map((item) => <button
                   type="button"
-                  key={item}
+                  key={item.cuttingOrderId}
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => { setStyleNo(item); setStyleMenuOpen(false); pendingKey.current = null; }}
-                >{item}</button>)}
+                  onClick={() => {
+                    setStyleNo(item.styleNo);
+                    setSelectedCutting(item);
+                    setStyleMenuOpen(false);
+                    pendingKey.current = null;
+                  }}
+                ><strong>{item.styleNo}</strong><small>{item.supplierName}{item.color ? ` · ${item.color}` : ""} · 实裁 {formatBusinessDecimal(item.actualCutCount)} 件{item.styleConflictCount > 1 ? " · 同款号多条，请核对工厂/颜色" : ""}</small></button>)}
               </div> : null}
             </div>
           </label>
+          {selectedCutting ? <p className="receiving-repeat-selected">已选择 {selectedCutting.styleNo} · {selectedCutting.supplierName}{selectedCutting.color ? ` · ${selectedCutting.color}` : ""} · 实裁 {formatBusinessDecimal(selectedCutting.actualCutCount)} 件</p> : (
+            <p className="receiving-repeat-hint">{cuttingSearching ? "正在搜索…" : styleNo.trim().length < 4 ? "请输入正式款号末尾至少4位" : "没有可收货的已裁正式款号"}</p>
+          )}
           <label className="receiving-field">
             <span>送货单数量</span>
             <input type="number" min="1" step="1" inputMode="numeric" placeholder="0" value={documentQuantity} disabled={busy} onChange={(event) => { setDocumentQuantity(event.target.value); pendingKey.current = null; }} />
@@ -581,7 +620,7 @@ export function ReceivingPage() {
             </div> : null}
           </div>
           <Button variant="primary" className="receiving-submit" disabled={busy} onClick={() => void submit()}>{busy ? "提交中…" : backfill ? "提交补录" : "提交收货"}</Button>
-          <button className="receiving-cancel" type="button" disabled={busy} onClick={() => { pendingKey.current = null; clearImages(); setBackfill(false); setOpen(false);setProductionOrderId(""); }}>返回</button>
+          <button className="receiving-cancel" type="button" disabled={busy} onClick={() => { pendingKey.current = null; clearImages(); setBackfill(false); setOpen(false); }}>返回</button>
         </Surface>
       )}
       {message ? <p className="receiving-message" role="status">{message}</p> : null}

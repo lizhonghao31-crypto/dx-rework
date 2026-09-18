@@ -47,6 +47,7 @@ type DifferenceResolution = Readonly<{
 }>;
 
 type CreateRepeatedReceivingInput = Readonly<{
+  cuttingOrderId?: string;
   productionOrderId?: string;
   receivingBatchId: string;
   source: RepeatedReceivingSource;
@@ -56,8 +57,9 @@ type CreateRepeatedReceivingInput = Readonly<{
 }>;
 
 type CreateReceivingInput = Readonly<{
+  cuttingOrderId?: string;
   productionOrderId?: string;
-  styleNo: string;
+  styleNo?: string;
   documentQuantity: number;
   actualQuantity: number;
   defectiveQuantity?: number;
@@ -66,6 +68,7 @@ type CreateReceivingInput = Readonly<{
 }>;
 
 type NormalizedCreateReceivingInput = Readonly<{
+  cuttingOrderId?: string;
   productionOrderId?: string;
   styleNo: string;
   documentQuantity: number;
@@ -93,9 +96,17 @@ type CorrectReceivingReceiptInput = Readonly<{
   defectiveQuantity: number;
 }>;
 
-type RepeatReceivingOption = Readonly<{
-  receivingBatchId: string;
+type CuttingReceivingOption = Readonly<{
+  cuttingOrderId: string;
   styleNo: string;
+  color: string | null;
+  supplierName: string;
+  actualCutCount: number;
+  styleConflictCount: number;
+}>;
+
+type RepeatReceivingOption = CuttingReceivingOption & Readonly<{
+  receivingBatchId: string;
   documentQuantity: number;
 }>;
 
@@ -552,7 +563,8 @@ export class ReceivingService {
     private readonly database: Pool,
     private readonly idempotency = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
-    private readonly production?: Pick<ProductionClosureService,"linkReceipt">,
+    private readonly production?: Pick<ProductionClosureService,"linkReceiptByCuttingOrder"|"linkReceipt">,
+    private readonly options: Readonly<{ allowLegacyStyleInput?: boolean }> = {},
   ) {}
 
   async create(
@@ -560,13 +572,20 @@ export class ReceivingService {
     input: CreateReceivingInput,
     idempotencyKey: string,
   ): Promise<Result<ReceivingReceipt>> {
+    if (input.cuttingOrderId !== undefined && !UUID_PATTERN.test(input.cuttingOrderId)) fail("请选择有效的已裁正式款号");
+    if (input.cuttingOrderId === undefined) {
+      if (!this.options.allowLegacyStyleInput || input.styleNo === undefined) {
+        fail("请选择有效的已裁正式款号");
+      }
+    }
     const actualQuantity = validateQuantity(input.actualQuantity, "实际收货数量", true);
     const defectiveQuantity = validateQuantity(input.defectiveQuantity ?? 0, "次品数量", true);
     if (defectiveQuantity > actualQuantity) fail("次品数量不能超过实际收货数量");
     const receivingSource: "initial" | "backfill" = input.receivedDate === undefined ? "initial" : "backfill";
     const normalized = {
-      ...(input.productionOrderId ? {productionOrderId:input.productionOrderId} : {}),
-      styleNo: normalizeStyleNo(input.styleNo),
+      ...(input.cuttingOrderId ? { cuttingOrderId: input.cuttingOrderId } : {}),
+      ...(input.productionOrderId ? { productionOrderId: input.productionOrderId } : {}),
+      ...(input.styleNo ? { styleNo: normalizeStyleNo(input.styleNo) } : {}),
       documentQuantity: validateQuantity(input.documentQuantity, "送货单数量", false),
       actualQuantity,
       defectiveQuantity,
@@ -582,18 +601,20 @@ export class ReceivingService {
         scope,
         actorKey: actor.actorId,
         key: idempotencyKey,
-        requestHash: hash(scope, {
-          ...(input.productionOrderId ? {productionOrderId:input.productionOrderId} : {}),
-          styleNo: normalized.styleNo,
-          documentQuantity: normalized.documentQuantity,
-          actualQuantity: normalized.actualQuantity,
-          defectiveQuantity: normalized.defectiveQuantity,
-          attachmentIds: normalized.attachmentIds,
-          ...(normalized.receivedDate ? { receivedDate: normalized.receivedDate } : {}),
-          receivingSource: normalized.receivingSource,
-        }),
+        requestHash: hash(scope, normalized),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-      }, async () => ({ statusCode: 201, response: await this.createInTransaction(client, actor, normalized) }));
+      }, async () => {
+        const cutting = normalized.cuttingOrderId
+          ? await this.resolveCuttingSelection(client, normalized.cuttingOrderId)
+          : null;
+        return {
+          statusCode: 201,
+          response: await this.createInTransaction(client, actor, {
+            ...normalized,
+            styleNo: cutting?.styleNo ?? normalized.styleNo!,
+          }),
+        };
+      });
       await client.query("COMMIT");
       return { value: outcome.response, reused: outcome.reused };
     } catch (error) {
@@ -610,6 +631,10 @@ export class ReceivingService {
     idempotencyKey: string,
   ): Promise<Result<ReceivingReceipt>> {
     if (!UUID_PATTERN.test(input.receivingBatchId)) fail("收货订单标识无效");
+    if (input.cuttingOrderId !== undefined && !UUID_PATTERN.test(input.cuttingOrderId)) fail("请选择有效的已裁正式款号");
+    if (input.cuttingOrderId === undefined && !this.options.allowLegacyStyleInput) {
+      fail("请选择有效的已裁正式款号");
+    }
     const actualQuantity = validateQuantity(input.actualQuantity, "实际收货数量", true);
     const defectiveQuantity = validateQuantity(input.defectiveQuantity ?? 0, "次品数量", true);
     const source = normalizeRepeatedReceivingSource(input.source);
@@ -626,7 +651,8 @@ export class ReceivingService {
         actorKey: actor.actorId,
         key: idempotencyKey,
         requestHash: hash(scope, {
-          ...(input.productionOrderId ? {productionOrderId:input.productionOrderId} : {}),
+          ...(input.cuttingOrderId ? { cuttingOrderId: input.cuttingOrderId } : {}),
+          ...(input.productionOrderId ? { productionOrderId: input.productionOrderId } : {}),
           receivingBatchId: input.receivingBatchId,
           source,
           ...(documentQuantity === undefined ? {} : { documentQuantity }),
@@ -636,11 +662,28 @@ export class ReceivingService {
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
         const target = await this.repeatReceivingBatch(client, input.receivingBatchId);
+        const cutting = input.cuttingOrderId
+          ? await this.resolveCuttingSelection(client, input.cuttingOrderId)
+          : null;
+        if (cutting && normalizeStyleNo(cutting.styleNo) !== normalizeStyleNo(target.styleNo)) {
+          fail("已裁正式款号与所选多次收货订单不一致，请重新选择", 409, "CONFLICT");
+        }
+        if (cutting) {
+          const existingLink = await client.query<{ cutting_order_id: string }>(
+            "SELECT cutting_order_id FROM receiving_receipts WHERE receiving_batch_id=$1 AND cutting_order_id IS NOT NULL ORDER BY received_at,receipt_id LIMIT 1",
+            [target.receivingBatchId],
+          );
+          if (existingLink.rows[0]?.cutting_order_id
+              && existingLink.rows[0].cutting_order_id !== cutting.cuttingOrderId) {
+            fail("该收货订单已关联另一条裁床任务，请重新搜索选择", 409, "CONFLICT");
+          }
+        }
         return {
           statusCode: 201,
           response: await this.createInTransaction(client, actor, {
-            ...(input.productionOrderId ? {productionOrderId:input.productionOrderId} : {}),
-            styleNo: target.styleNo,
+            ...(cutting ? { cuttingOrderId: cutting.cuttingOrderId } : {}),
+            ...(input.productionOrderId ? { productionOrderId: input.productionOrderId } : {}),
+            styleNo: cutting?.styleNo ?? target.styleNo,
             documentQuantity: documentQuantity ?? target.documentQuantity,
             actualQuantity,
             defectiveQuantity,
@@ -658,6 +701,50 @@ export class ReceivingService {
     } finally {
       client.release();
     }
+  }
+
+  private async resolveCuttingSelection(
+    client: PoolClient,
+    cuttingOrderId: string,
+  ): Promise<CuttingReceivingOption & { sourcingCaseId: string }> {
+    const locked = await client.query<{ sourcing_case_id: string }>(
+      `SELECT cutting.sourcing_case_id
+       FROM cutting_orders cutting
+       JOIN sourcing_cases source_case
+         ON source_case.sourcing_case_id=cutting.sourcing_case_id
+        AND source_case.deleted_at IS NULL
+       WHERE cutting.cutting_order_id=$1
+       FOR SHARE OF cutting,source_case`,
+      [cuttingOrderId],
+    );
+    const source = locked.rows[0]
+      ?? fail("该裁床订单已失效，请重新搜索正式款号", 409, "INVALID_STATE_TRANSITION");
+    const result = await client.query<{
+      cutting_order_id: string;
+      formal_style_no: string;
+      color: string | null;
+      supplier_name: string;
+      actual_cut_count: string;
+      style_conflict_count: string;
+    }>(
+      `SELECT cutting_order_id,upper(btrim(formal_style_no)) AS formal_style_no,
+              color,supplier_name,actual_cut_count::text,
+              style_conflict_count::text
+       FROM current_cutting_style_options
+       WHERE cutting_order_id=$1`,
+      [cuttingOrderId],
+    );
+    const row = result.rows[0]
+      ?? fail("该款尚未完成实裁或正式款号不可用，请重新搜索", 409, "INVALID_STATE_TRANSITION");
+    return {
+      cuttingOrderId: row.cutting_order_id,
+      sourcingCaseId: source.sourcing_case_id,
+      styleNo: row.formal_style_no,
+      color: row.color,
+      supplierName: row.supplier_name,
+      actualCutCount: Number(row.actual_cut_count),
+      styleConflictCount: Number(row.style_conflict_count),
+    };
   }
 
   private assertRootCorrector(actor: TrustedActorContext): void {
@@ -1411,7 +1498,8 @@ export class ReceivingService {
       entityType: "receiving_receipt",
       entityId: receiptId,
       after: {
-        ...(input.productionOrderId ? {productionOrderId:input.productionOrderId} : {}),
+        ...(input.cuttingOrderId ? { cuttingOrderId: input.cuttingOrderId } : {}),
+        ...(input.productionOrderId ? { productionOrderId: input.productionOrderId } : {}),
         receiptId,
         receivingBatchId,
         styleNo: input.styleNo,
@@ -1431,40 +1519,58 @@ export class ReceivingService {
     );
     await this.bindReceivingImages(client, actor, receivingBatchId, input.attachmentIds);
 
-    const inserted = await client.query<{
-      receipt_id: string;
-      receiving_batch_id: string;
-      style_no: string;
-      document_quantity: number;
-      actual_quantity: number;
-      defective_quantity: number;
-      difference_quantity: number;
-      received_by: string;
-      received_at: Date;
-    }>(
-      `INSERT INTO receiving_receipts(
-         receipt_id,receiving_batch_id,style_no,document_quantity,actual_quantity,defective_quantity,
-         receiving_source,received_by,operation_event_id,request_id,received_at
-       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,COALESCE(
-         ($11::date+(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::time) AT TIME ZONE 'Asia/Shanghai',
-         CURRENT_TIMESTAMP
-       ))
-       RETURNING receipt_id,receiving_batch_id,style_no,document_quantity,actual_quantity,defective_quantity,
-                 difference_quantity,received_by,received_at`,
-      [
-        receiptId,
-        receivingBatchId,
-        input.styleNo,
-        input.documentQuantity,
-        input.actualQuantity,
-        input.defectiveQuantity,
-        input.receivingSource,
-        actor.actorId,
-        eventId,
-        actor.requestId,
-        input.receivedDate,
-      ],
-    );
+    const inserted = input.cuttingOrderId
+      ? await client.query<{
+          receipt_id: string;
+          receiving_batch_id: string;
+          style_no: string;
+          document_quantity: number;
+          actual_quantity: number;
+          defective_quantity: number;
+          difference_quantity: number;
+          received_by: string;
+          received_at: Date;
+        }>(
+          `INSERT INTO receiving_receipts(
+             receipt_id,receiving_batch_id,cutting_order_id,style_no,document_quantity,actual_quantity,defective_quantity,
+             receiving_source,received_by,operation_event_id,request_id,received_at
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,COALESCE(
+             ($12::date+(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::time) AT TIME ZONE 'Asia/Shanghai',
+             CURRENT_TIMESTAMP
+           ))
+           RETURNING receipt_id,receiving_batch_id,style_no,document_quantity,actual_quantity,defective_quantity,
+                     difference_quantity,received_by,received_at`,
+          [
+            receiptId,receivingBatchId,input.cuttingOrderId,input.styleNo,input.documentQuantity,
+            input.actualQuantity,input.defectiveQuantity,input.receivingSource,actor.actorId,eventId,
+            actor.requestId,input.receivedDate,
+          ],
+        )
+      : await client.query<{
+          receipt_id: string;
+          receiving_batch_id: string;
+          style_no: string;
+          document_quantity: number;
+          actual_quantity: number;
+          defective_quantity: number;
+          difference_quantity: number;
+          received_by: string;
+          received_at: Date;
+        }>(
+          `INSERT INTO receiving_receipts(
+             receipt_id,receiving_batch_id,style_no,document_quantity,actual_quantity,defective_quantity,
+             receiving_source,received_by,operation_event_id,request_id,received_at
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,COALESCE(
+             ($11::date+(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::time) AT TIME ZONE 'Asia/Shanghai',
+             CURRENT_TIMESTAMP
+           ))
+           RETURNING receipt_id,receiving_batch_id,style_no,document_quantity,actual_quantity,defective_quantity,
+                     difference_quantity,received_by,received_at`,
+          [
+            receiptId,receivingBatchId,input.styleNo,input.documentQuantity,input.actualQuantity,
+            input.defectiveQuantity,input.receivingSource,actor.actorId,eventId,actor.requestId,input.receivedDate,
+          ],
+        );
     if (input.receivingSource === "other_factory") {
       await client.query("SELECT set_config('dx_rework.receiving_root_action','append_other_factory',true)");
       const updated = await client.query(
@@ -1478,9 +1584,13 @@ export class ReceivingService {
       if (updated.rowCount !== 1) fail("该订单已不可追加收货，请重新搜索选择", 409, "INVALID_STATE_TRANSITION");
     }
     const row = inserted.rows[0]!;
-    if (input.productionOrderId) {
-      if (!this.production) fail("生产回货关联服务不可用",409,"INVALID_STATE_TRANSITION");
-      await this.production!.linkReceipt(client,actor,{productionOrderId:input.productionOrderId,receiptId,
+    if (this.production && input.cuttingOrderId) {
+      await this.production.linkReceiptByCuttingOrder(client,actor,{
+        cuttingOrderId:input.cuttingOrderId,receiptId,
+        styleNo:input.styleNo,operationEventId:eventId,receivedAt:row.received_at.toISOString(),
+      });
+    } else if (this.production && input.productionOrderId) {
+      await this.production.linkReceipt(client,actor,{productionOrderId:input.productionOrderId,receiptId,
         styleNo:input.styleNo,operationEventId:eventId,receivedAt:row.received_at.toISOString()});
     }
     return {
@@ -1496,12 +1606,47 @@ export class ReceivingService {
     };
   }
 
+  async listCuttingOptions(query = ""): Promise<readonly CuttingReceivingOption[]> {
+    const needle = query.trim().toUpperCase();
+    if (needle.length < 4) return [];
+    const result = await this.database.query<{
+      cutting_order_id: string;
+      formal_style_no: string;
+      color: string | null;
+      supplier_name: string;
+      actual_cut_count: string;
+      style_conflict_count: string;
+    }>(
+      `SELECT cutting_order_id,upper(btrim(formal_style_no)) AS formal_style_no,
+              color,supplier_name,actual_cut_count::text,style_conflict_count::text
+       FROM current_cutting_style_options
+       WHERE right(upper(btrim(formal_style_no)),char_length($1))=$1
+       ORDER BY formal_style_no,supplier_name,color NULLS LAST,cutting_order_id
+       LIMIT 20`,
+      [needle],
+    );
+    return result.rows.map((row) => ({
+      cuttingOrderId: row.cutting_order_id,
+      styleNo: row.formal_style_no,
+      color: row.color,
+      supplierName: row.supplier_name,
+      actualCutCount: Number(row.actual_cut_count),
+      styleConflictCount: Number(row.style_conflict_count),
+    }));
+  }
+
   async listRepeatOptions(query = ""): Promise<readonly RepeatReceivingOption[]> {
     const needle = query.trim().toUpperCase();
+    if (needle.length < 4) return [];
     const result = await this.database.query<{
       receiving_batch_id: string;
       style_no: string;
       document_quantity: string;
+      cutting_order_id: string;
+      color: string | null;
+      supplier_name: string;
+      actual_cut_count: string;
+      style_conflict_count: string;
     }>(
       `WITH ranked AS (
          SELECT batch.receiving_batch_id,
@@ -1544,18 +1689,37 @@ export class ReceivingService {
                AND event.after_state->>'backfilled'='true'
            )
        )
-       SELECT receiving_batch_id,style_no,document_quantity
+       SELECT ranked.receiving_batch_id,ranked.style_no,ranked.document_quantity,
+              option_row.cutting_order_id,option_row.color,option_row.supplier_name,
+              option_row.actual_cut_count::text,option_row.style_conflict_count::text
        FROM ranked
-       WHERE position=1 AND NOT closed AND has_images
-         AND ($1::text='' OR right(style_no,char_length($1))=$1)
-       ORDER BY style_no
+       LEFT JOIN LATERAL (
+         SELECT receipt.cutting_order_id
+         FROM receiving_receipts receipt
+         WHERE receipt.receiving_batch_id=ranked.receiving_batch_id
+           AND receipt.cutting_order_id IS NOT NULL
+         ORDER BY receipt.received_at,receipt.receipt_id
+         LIMIT 1
+       ) stable_link ON true
+       JOIN current_cutting_style_options option_row
+         ON upper(btrim(option_row.formal_style_no))=ranked.style_no
+        AND (stable_link.cutting_order_id IS NULL
+          OR stable_link.cutting_order_id=option_row.cutting_order_id)
+       WHERE ranked.position=1 AND NOT ranked.closed AND ranked.has_images
+         AND right(ranked.style_no,char_length($1))=$1
+       ORDER BY ranked.style_no,option_row.supplier_name,option_row.color NULLS LAST
        LIMIT 20`,
       [needle],
     );
     return result.rows.map((row) => ({
       receivingBatchId: row.receiving_batch_id,
+      cuttingOrderId: row.cutting_order_id,
       styleNo: row.style_no,
       documentQuantity: Number(row.document_quantity),
+      color: row.color,
+      supplierName: row.supplier_name,
+      actualCutCount: Number(row.actual_cut_count),
+      styleConflictCount: Number(row.style_conflict_count),
     }));
   }
 

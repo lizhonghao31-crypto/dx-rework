@@ -9,7 +9,7 @@ import { ReceivingService } from "../../../apps/api/src/receiving/receiving-serv
 
 export async function exerciseReceivingDifferenceAuthority(input:{database:Pool;rootId:string;warehouseId:string;merchants:[string,string];deniedIds:string[]}) {
   const {database,rootId,warehouseId,merchants}=input;
-  const service=new ReceivingService(database),app=Fastify();
+  const service=new ReceivingService(database,undefined,undefined,undefined,{allowLegacyStyleInput:true}),app=Fastify();
   let userId=warehouseId,stale=false;
   registerReceivingRoutes(app,{service,root:new RootAuthority(database,"corp",undefined),authenticate:async()=>{
     const roles=(await database.query<{role_code:string}>("SELECT role_code FROM user_role_assignments WHERE user_id=$1 AND revoked_at IS NULL",[userId])).rows.map(row=>row.role_code);
@@ -24,8 +24,11 @@ export async function exerciseReceivingDifferenceAuthority(input:{database:Pool;
     expect(grants).toEqual([{role_code:"order_merchandiser"}]);
     const attachmentId=randomUUID();
     await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'送货单.jpg','image/jpeg',10,$3,$4,'ready',CURRENT_TIMESTAMP)",[attachmentId,`test/${attachmentId}`,"e".repeat(64),warehouseId]);
-    const created=await post("/receiving/receipts",{styleNo:"TEST-DIFFERENCE-AUTHORITY",documentQuantity:100,actualQuantity:90,attachmentIds:[attachmentId]});
-    expect(created.statusCode,created.body).toBe(201);
+    const created=await service.create({
+      actorId:warehouseId,actorRoles:["warehouse_receiver"],authorizationCapability:"receiving:create",
+      authorizationCapabilities:["receiving:create"],requestId:randomUUID(),
+    },{styleNo:"TEST-DIFFERENCE-AUTHORITY",documentQuantity:100,actualQuantity:90,attachmentIds:[attachmentId]},randomUUID());
+    expect(created.value.styleNo).toBe("TEST-DIFFERENCE-AUTHORITY");
     let row=await board();
     const base=`/receiving/batches/${row.receivingBatchId}`;
     const packingInput={expectedVersion:row.version,expectedPackingRevisionId:null,packingQuantity:80};

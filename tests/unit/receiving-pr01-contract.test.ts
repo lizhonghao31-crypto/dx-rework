@@ -4,12 +4,16 @@ import { describe, expect, it } from "vitest";
 const read = (path: string) => readFile(path, "utf8");
 
 describe("PR-01 receiving fact layer", () => {
-  it("keeps warehouse receiving to one simple mobile form with searchable style numbers", async () => {
+  it("keeps warehouse receiving to one simple mobile form driven by completed cutting styles", async () => {
     const page = await read("apps/web/src/receiving-page.tsx");
     expect(page).toContain("＋");
     expect(page).toContain("点击收货");
     expect(page).toContain("款号");
-    expect(page).toContain("搜索或填写款号");
+    expect(page).toContain("输入正式款号后4位搜索");
+    expect(page).toContain("receiving/cutting-options");
+    expect(page).toContain("cuttingOrderId: selectedCutting.cuttingOrderId");
+    expect(page).not.toContain("ProductionExpectedPicker");
+    expect(page).not.toContain("productionOrderId");
     expect(page).toContain("送货单数量");
     expect(page).toContain("实际收货数量");
     expect(page).toContain("提交收货");
@@ -25,6 +29,8 @@ describe("PR-01 receiving fact layer", () => {
     ]);
     expect(page).toContain("多次收货");
     expect(page).toContain("输入款号后4-5位搜索");
+    expect(page).toContain("cuttingOrderId: selectedRepeatOrder.cuttingOrderId");
+    expect(page).toContain("实裁");
     expect(page).toContain("<span>款号</span>");
     expect(page).not.toContain("<span>订单号 / 款号</span>");
     expect(page).toContain("repeatOptionsQuery === repeatQuery.trim().toUpperCase()");
@@ -57,6 +63,8 @@ describe("PR-01 receiving fact layer", () => {
     expect(migration).toContain("receiving_receipts_no_delete");
     expect(routes).toContain("await isRootUser(dependencies.root, user.id)");
     expect(routes).toContain('"receiving:create"');
+    expect(routes).toContain('"/receiving/cutting-options"');
+    expect(routes).toContain("dependencies.service.listCuttingOptions");
     expect(routes).toContain('"/receiving/repeat-options"');
     expect(routes).toContain("await creator(request);");
     expect(routes).toContain("dependencies.service.listRepeatOptions");

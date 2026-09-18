@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { CuttingSourceService } from "../../apps/api/src/cutting/cutting-source-service.js";
+import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
 import { SourcingContractService } from "../../apps/api/src/sourcing/sourcing-contract-service.js";
 import { SourcingProductionService } from "../../apps/api/src/sourcing/sourcing-production-service.js";
 import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
@@ -43,6 +44,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     database,undefined,undefined,todoProjection,contractService,
   );
   const cutting = new CuttingSourceService(database);
+  const receiving = new ReceivingService(database);
   const production = new SourcingProductionService(database);
   const craftService = new AccessMasterDataService(database, "corp");
   const craftIdsByName = new Map<string, string>();
@@ -113,6 +115,13 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     actorRoles: ["root_superuser"],
     authorizationCapability: "cutting:records:correct",
     authorizationCapabilities: ["cutting:orders:view", "cutting:records:create", "cutting:records:correct"],
+    requestId,
+  });
+  const warehouseActor = (requestId = randomUUID()): TrustedActorContext => ({
+    actorId: ownerId,
+    actorRoles: ["warehouse_receiver"],
+    authorizationCapability: "receiving:create",
+    authorizationCapabilities: ["receiving:create"],
     requestId,
   });
   const factoryChangeActor = (requestId = randomUUID()): TrustedActorContext => ({
@@ -2302,6 +2311,41 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query("SELECT formal_style_no,actual_cut_count FROM current_cutting_style_options WHERE cutting_order_id=$1",[stableCuttingOrderId])).rows[0])
       .toMatchObject({formal_style_no:"REVISED-PR03",actual_cut_count:"22"});
     expect((await database.query("SELECT count(*)::integer AS count FROM cutting_records WHERE cutting_order_id=$1",[stableCuttingOrderId])).rows[0]!.count).toBe(1);
+    const suffixOptions=await receiving.listCuttingOptions("PR03");
+    expect(suffixOptions).toContainEqual(expect.objectContaining({
+      cuttingOrderId:stableCuttingOrderId,styleNo:"REVISED-PR03",actualCutCount:22,
+    }));
+    expect(await receiving.listCuttingOptions("R03")).toEqual([]);
+    const deliveryAttachmentId=randomUUID();
+    await database.query(`INSERT INTO attachments(
+      attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,
+      uploaded_by,status,ready_at
+    ) VALUES($1,$2,'仓库送货单.jpg','image/jpeg',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[
+      deliveryAttachmentId,`receiving-pr03/${deliveryAttachmentId}.jpg`,"b".repeat(64),ownerId,
+    ]);
+    const firstReceipt=await receiving.create(warehouseActor(),{
+      cuttingOrderId:stableCuttingOrderId,documentQuantity:20,actualQuantity:19,
+      defectiveQuantity:1,attachmentIds:[deliveryAttachmentId],
+    },randomUUID());
+    expect(firstReceipt.value).toMatchObject({styleNo:"REVISED-PR03",documentQuantity:20,actualQuantity:19});
+    expect((await database.query("SELECT cutting_order_id FROM receiving_receipts WHERE receipt_id=$1",[firstReceipt.value.receiptId])).rows[0]!.cutting_order_id)
+      .toBe(stableCuttingOrderId);
+    const repeatOptions=await receiving.listRepeatOptions("PR03");
+    expect(repeatOptions).toContainEqual(expect.objectContaining({
+      receivingBatchId:firstReceipt.value.receivingBatchId,cuttingOrderId:stableCuttingOrderId,
+      styleNo:"REVISED-PR03",actualCutCount:22,
+    }));
+    const jiashun=await receiving.createRepeated(warehouseActor(),{
+      cuttingOrderId:stableCuttingOrderId,receivingBatchId:firstReceipt.value.receivingBatchId,
+      source:"jiashun",actualQuantity:1,defectiveQuantity:0,
+    },randomUUID());
+    expect(jiashun.value.styleNo).toBe("REVISED-PR03");
+    const otherFactory=await receiving.createRepeated(warehouseActor(),{
+      cuttingOrderId:stableCuttingOrderId,receivingBatchId:firstReceipt.value.receivingBatchId,
+      source:"other_factory",documentQuantity:2,actualQuantity:2,defectiveQuantity:0,
+    },randomUUID());
+    expect(otherFactory.value).toMatchObject({styleNo:"REVISED-PR03",documentQuantity:2,actualQuantity:2});
+
     await expect(service.reviseStyles(managerActor(),id,{...secondEdit,lines:[{position:1,styleNo:"WRONG",alternateStyleNo:null}]},key)).rejects.toMatchObject({code:"IDEMPOTENCY_CONFLICT"});
     expect(revised.value.approvalSnapshot).toEqual(approved);
     const current=(await contractService.getCurrent(readerActor(),id)).item!;

@@ -14,6 +14,7 @@ import { SourcingProductionService } from "../../apps/api/src/sourcing/sourcing-
 import { ProductionReportingService } from "../../apps/api/src/sourcing/production-reporting-service.js";
 import { ProductionClosureService } from "../../apps/api/src/sourcing/production-closure-service.js";
 import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
+import { CuttingSourceService } from "../../apps/api/src/cutting/cutting-source-service.js";
 import { AttachmentService } from "../../apps/api/src/tools/attachments.js";
 import { FakeObjectStorage } from "../../apps/api/src/tools/storage.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
@@ -29,7 +30,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
  const contracts=new SourcingContractService(database,new AttachmentService(database,new FakeObjectStorage(),{prefix:"tests",ttlSeconds:60,maxUploadBytes:5000000}));
  const projection={actionableForAllAssignedRole:async()=>[],cancelOpenByDedupePrefix:async()=>0,completeOpenByDedupePrefix:async()=>0,information:async()=>undefined};
  const sourcing=new SourcingService(database,undefined,undefined,projection,contracts),production=new SourcingProductionService(database),reporting=new ProductionReportingService(database,undefined,undefined,new ProductionClosureService(database));
- const closure=new ProductionClosureService(database),receiving=new ReceivingService(database,undefined,undefined,closure);
+ const closure=new ProductionClosureService(database),receiving=new ReceivingService(database,undefined,undefined,closure,{allowLegacyStyleInput:true}),cutting=new CuttingSourceService(database);
  const factories:string[]=[];let craftId="";
  const today=()=>shanghaiDay(new Date());
  const readyImage=async()=>{
@@ -89,6 +90,10 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   await sourcing.quoteIePrice(actor(user,["ie_reviewer"],["sourcing:price:quote","sourcing:view"]),id,{linePrices:prices},randomUUID());
   await sourcing.recordManagementDecision(actor(user,["production_management"],["sourcing:decision:record","sourcing:view"]),id,{supplierId,linePrices:prices,craftIds:[craftId]},randomUUID());
   await sourcing.decideOwner(boss(),id,{decision:"approved"},randomUUID());
+  const cuttingOrders=(await cutting.listSources(root("cutting:orders:view"))).items.filter(item=>item.sourcingCaseId===id);
+  for(const item of cuttingOrders) await cutting.record(root("cutting:records:create"),item.cuttingOrderId,{
+    pieceCount:item.contractQuantity,actualCutCount:item.contractQuantity,
+  },randomUUID());
   const contract=(await contracts.getCurrent(root(),id)).item!;
   return (await production.dispatch(root(),id,{sourcingContractDocumentId:contract.sourcingContractDocumentId,confirmed:true},randomUUID())).value;
  };
@@ -152,6 +157,33 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   expect((await closure.receiptSummary(root(),order.productionOrderId)).shipment?.receipts).toHaveLength(2);
   expect((await database.query("SELECT 1 FROM sourcing_finance_reconciliations")).rowCount).toBe(0);
  },60000);
+ it("auto-links shipped pilot receipts from the selected cutting order without a second production picker",async()=>{
+  const order=await create(factories[1]!,"AUTO-LINK");
+  await closure.setPilot(root(),{supplierId:factories[1],enabled:true});
+  for(const line of order.lines) await reporting.report(root(),order.productionOrderId,{position:line.position,businessDate:today(),quantity:line.quantity},randomUUID());
+  await reporting.execute(root(),order.productionOrderId,"complete",{businessDate:today(),confirmed:true},randomUUID());
+  await reporting.execute(root(),order.productionOrderId,"ship",{businessDate:today(),confirmed:true},randomUUID());
+  const options=await receiving.listCuttingOptions("NK-A");
+  const selected=options.find(item=>item.styleNo==="SSP09-AUTO-LINK-A");
+  expect(selected).toMatchObject({actualCutCount:20,supplierName:"试点厂2"});
+  const first=await receiving.create(receiver(),{
+    cuttingOrderId:selected!.cuttingOrderId,documentQuantity:20,actualQuantity:20,
+    attachmentIds:[await readyImage()],
+  },randomUUID());
+  expect((await database.query("SELECT cutting_order_id FROM receiving_receipts WHERE receipt_id=$1",[first.value.receiptId])).rows[0]!.cutting_order_id)
+    .toBe(selected!.cuttingOrderId);
+  expect((await database.query("SELECT production_order_id FROM sourcing_production_receipt_links WHERE receipt_id=$1",[first.value.receiptId])).rows[0]!.production_order_id)
+    .toBe(order.productionOrderId);
+  const repeated=await receiving.createRepeated(receiver(),{
+    cuttingOrderId:selected!.cuttingOrderId,receivingBatchId:first.value.receivingBatchId,
+    source:"jiashun",actualQuantity:1,
+  },randomUUID());
+  expect((await closure.receiptSummary(root(),order.productionOrderId)).shipment?.receipts.map(item=>item.receiptId))
+    .toEqual([first.value.receiptId,repeated.value.receiptId]);
+  expect((await database.query("SELECT actual_cut_count FROM current_receiving_cutting_links WHERE receipt_id=$1",[repeated.value.receiptId])).rows[0]!.actual_cut_count)
+    .toBe("20");
+ },60000);
+
  it("excludes only the confirmed production object with Root audit, version protection and replay",async()=>{
   const order=await create(factories[0]!,"EXCLUDE"),id=order.productionOrderId;
   const exclusions=new ProductionExclusionService(database),dashboard=new ProductionDashboardService(database,reporting);
