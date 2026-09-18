@@ -281,7 +281,7 @@ describe("sourcing PR03 routes", () => {
     const allowed = create(["sourcing:view"], ["production_management"]);
     expect((await allowed.app.inject({
       method: "GET",
-      url: "/sourcing/cases?q=DX-100&status=pending&page=2",
+      url: "/sourcing/cases?q=DX-100&status=pending&page=2&stage=finance&gender=%E5%A5%B3%E8%A3%85&styleName=%E9%92%88%E7%BB%87",
       headers: { cookie: "dx_rework_session=trusted" },
     })).statusCode).toBe(200);
     expect(allowed.service.listCases).toHaveBeenCalledWith(
@@ -289,7 +289,17 @@ describe("sourcing PR03 routes", () => {
       "DX-100",
       "pending",
       2,
+      { stage: "finance", gender: "女装", styleName: "针织" },
     );
+    const beforeInvalidFilters = allowed.service.listCases.mock.calls.length;
+    for (const query of ["stage=bad", "gender=bad", `styleName=${"x".repeat(101)}`]) {
+      expect((await allowed.app.inject({
+        method: "GET",
+        url: `/sourcing/cases?${query}`,
+        headers: { cookie: "dx_rework_session=trusted" },
+      })).statusCode).toBe(400);
+    }
+    expect(allowed.service.listCases).toHaveBeenCalledTimes(beforeInvalidFilters);
 
     const forbidden = create([], ["production_management"]);
     expect((await forbidden.app.inject({

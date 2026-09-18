@@ -108,8 +108,38 @@
 
 .sourcing-search {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) auto;
+  grid-template-columns: minmax(280px, 2fr) repeat(3, minmax(130px, 1fr));
   gap: var(--dx-v2-space-2);
+  align-items: end;
+}
+
+.sourcing-search label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 12px;
+  font-weight: var(--dx-form-label-weight);
+}
+
+.sourcing-search :is(input, select) {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--dx-form-control-height);
+  box-sizing: border-box;
+  padding: 0 12px;
+  color: var(--dx-v2-color-text);
+  border: 1px solid var(--dx-form-control-border);
+  border-radius: 10px;
+  background: var(--dx-form-control-background);
+  font: inherit;
+  font-size: var(--dx-form-control-font-size);
+}
+
+.sourcing-search :is(input, select):focus {
+  border-color: var(--dx-v2-color-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(47 107 255 / 12%);
 }
 
 .sourcing-list-message {
@@ -1001,12 +1031,15 @@
   }
 
   .sourcing-search {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .sourcing-search .dx-button {
-    min-width: 68px;
-    padding-inline: var(--dx-v2-space-3);
+  .sourcing-search__keyword {
+    grid-column: 1 / -1;
+  }
+
+  .sourcing-search :is(input, select) {
+    font-size: 16px;
   }
 
   .sourcing-order-card {
@@ -1482,3 +1515,12 @@
 /* Price feedback occupies space only on the affected input after an error. */
 .sourcing-line-price-row > .sourcing-price-control { min-width: 0; }
 .sourcing-price-control > small { color: #b91c1c; }
+
+@media (max-width: 520px) {
+  .sourcing-search {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sourcing-search__keyword {
+    grid-column: 1;
+  }
+}

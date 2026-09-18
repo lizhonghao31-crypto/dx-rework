@@ -61,6 +61,16 @@ import { createClientRequestId } from "./client-request-id.js";
 import { Header, Shell } from "./components.js";
 import { ImageViewer } from "./image-viewer.js";
 import { ListPagination } from "./list-pagination.js";
+import {
+  readSourcingListQuery,
+  sourcingListPath,
+  sourcingReturnPath,
+  withSourcingReturn,
+  type SourcingGenderFilter,
+  type SourcingListQuery,
+  type SourcingStageFilter,
+} from "./sourcing-list-query.js";
+import { useDebouncedValue } from "./use-debounced-value.js";
 import { SourcingImageSupplementUploader } from "./sourcing-image-supplement-uploader.js";
 import { confirmInApp } from "./system-dialog.js";
 import "./rework-detail.css";
@@ -291,8 +301,14 @@ const clearLocalSourcingDraft = (userId: string): void => {
   if (typeof window !== "undefined") window.localStorage.removeItem(localSourcingDraftKey(userId));
 };
 
-const detailHref = (item: SourcingCaseSummary): string =>
-  pageUrl(`ui/sourcing/orders/${item.sourcingCaseId}`);
+const detailHref = (
+  item: SourcingCaseSummary,
+  returnTo: string,
+): string => withSourcingReturn(
+  pageUrl(`ui/sourcing/orders/${item.sourcingCaseId}`),
+  returnTo.startsWith("/ui/sourcing/history") ? "history" : "pending",
+  readSourcingListQuery(returnTo.slice(returnTo.indexOf("?") + 1)),
+);
 
 const sourcingLinePriceLabel = (item: SourcingCaseSummary, position: number): string => {
   const line = item.lineItems.find((entry) => entry.position === position);
@@ -304,17 +320,19 @@ const sourcingLinePriceLabel = (item: SourcingCaseSummary, position: number): st
 
 function SourcingOrderCard({
   item,
+  returnTo,
   canDelete,
   deleting,
   onDelete,
 }: {
   item: SourcingCaseSummary;
+  returnTo: string;
   canDelete: boolean;
   deleting: boolean;
   onDelete: (item: SourcingCaseSummary) => void;
 }) {
   return <Surface className="sourcing-order-card">
-    <a className="sourcing-order-card__main" href={detailHref(item)}>
+    <a className="sourcing-order-card__main" href={detailHref(item, returnTo)}>
       <div className="sourcing-order-card__heading">
         <div>
           <strong>{item.lineItems[0]?.styleNo ?? item.styleNo}{item.lineItems.length > 1 ? ` 等 ${item.lineItems.length} 行` : ""}</strong>
@@ -798,23 +816,39 @@ function OrderListPage({
   mode: "pending" | "history";
   user: AuthorizedUser | null;
 }) {
+  const [initial] = useState(() => readSourcingListQuery(window.location.search));
   const [items, setItems] = useState<readonly SourcingCaseSummary[]>([]);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initial.q);
+  const [stage, setStage] = useState<SourcingStageFilter>(mode === "history" ? "all" : initial.stage);
+  const [gender, setGender] = useState<SourcingGenderFilter>(initial.gender);
+  const [styleName, setStyleName] = useState(initial.styleName);
   const [message, setMessage] = useState("正在加载订单…");
   const [deletingCaseId, setDeletingCaseId] = useState("");
   const [deleteError, setDeleteError] = useState("");
-  const [activeQuery, setActiveQuery] = useState("");
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(initial.page);
   const [totalPages, setTotalPages] = useState(1);
   const loadVersion = useRef(0);
+  const debouncedSearch = useDebouncedValue(search.trim(), 180);
+  const debouncedStyleName = useDebouncedValue(styleName.trim(), 180);
+  const listState: SourcingListQuery = {
+    q: debouncedSearch,
+    stage: mode === "history" ? "all" : stage,
+    gender,
+    styleName: debouncedStyleName,
+    page,
+  };
+  const listPath = sourcingListPath(mode, listState);
 
-  const load = async (query: string, pageNumber: number): Promise<void> => {
+  const load = async (state: SourcingListQuery): Promise<void> => {
     const version = ++loadVersion.current;
     try {
       const params = new URLSearchParams({
         status: mode === "history" ? "closed" : "pending",
-        q: query.trim(),
-        page: String(pageNumber),
+        q: state.q,
+        stage: state.stage,
+        gender: state.gender,
+        styleName: state.styleName,
+        page: String(state.page),
       });
       const body = await request(
         `sourcing/cases?${params.toString()}`,
@@ -831,14 +865,23 @@ function OrderListPage({
     }
   };
 
-  const searchFromFirstPage = (): void => {
-    const query = search.trim();
-    setActiveQuery(query);
+  useEffect(() => {
+    window.history.replaceState(window.history.state, "", pageUrl(listPath));
+  }, [listPath]);
+
+  useEffect(() => {
+    void load(listState);
+  }, [debouncedSearch, debouncedStyleName, stage, gender, page, mode]);
+
+  const changeStage = (value: SourcingStageFilter): void => {
+    setStage(value);
     setPage(1);
-    void load(query, 1);
+  };
+  const changeGender = (value: SourcingGenderFilter): void => {
+    setGender(value);
+    setPage(1);
   };
 
-  useEffect(() => { void load("", 1); }, []);
   const visible = useMemo(
     () => items.filter((item) => mode === "history" ? item.status === "closed" : item.status !== "closed"),
     [items, mode],
@@ -877,16 +920,74 @@ function OrderListPage({
       />
       <WorkAnalysisPanel kind="quote" />
       <Surface className="sourcing-list-card">
-        <form className="sourcing-search" onSubmit={(event) => { event.preventDefault(); searchFromFirstPage(); }}>
-          <input value={search} maxLength={100} onChange={(event) => setSearch(event.target.value)} placeholder="搜索 ERP、款号、跟单、供应商、工艺或合同编号" />
-          <button className="dx-button dx-button--secondary" type="submit">搜索</button>
-        </form>
+        <div className="sourcing-search" aria-label="外发订单筛选">
+          <label className="sourcing-search__keyword">
+            <span>关键词</span>
+            <input
+              aria-label="关键词搜索"
+              value={search}
+              maxLength={100}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
+            />
+          </label>
+          {mode === "pending" ? <label>
+            <span>订单状态</span>
+            <select
+              aria-label="订单状态"
+              value={stage}
+              onChange={(event) => changeStage(event.target.value as SourcingStageFilter)}
+            >
+              <option value="all">全部状态</option>
+              <option value="ie">待 IE 报价</option>
+              <option value="management">待生产管理调价选厂</option>
+              <option value="owner">待老板终审</option>
+              <option value="finance">待财务核对</option>
+              <option value="factory_change">待核实换厂</option>
+              <option value="exception">待核实差异</option>
+            </select>
+          </label> : null}
+          <label>
+            <span>性别</span>
+            <select
+              aria-label="性别"
+              value={gender}
+              onChange={(event) => changeGender(event.target.value as SourcingGenderFilter)}
+            >
+              <option value="all">全部</option>
+              <option value="男装">男装</option>
+              <option value="女装">女装</option>
+              <option value="missing">历史未维护</option>
+            </select>
+          </label>
+          <label>
+            <span>款式类别</span>
+            <input
+              aria-label="款式类别"
+              value={styleName}
+              maxLength={100}
+              list="sourcing-style-filter-options"
+              onChange={(event) => {
+                setStyleName(event.target.value);
+                setPage(1);
+              }}
+            />
+            <datalist id="sourcing-style-filter-options">
+              <option value="历史未维护" />
+              {[...new Set(items.map((item) => item.styleName).filter((value): value is string => !!value))]
+                .map((value) => <option value={value} key={value} />)}
+            </datalist>
+          </label>
+        </div>
         {deleteError ? <p className="sourcing-delete-error" role="alert">{deleteError}</p> : null}
         {message ? <p className="sourcing-list-message" role="status">{message}</p> : null}
         {!message && visible.length === 0 ? <p className="sourcing-list-message">暂无符合条件的订单</p> : null}
         <div className="sourcing-order-list">
           {visible.map((item) => <SourcingOrderCard
             item={item}
+            returnTo={listPath}
             key={item.sourcingCaseId}
             canDelete={user?.isRoot === true}
             deleting={deletingCaseId === item.sourcingCaseId}
@@ -897,16 +998,12 @@ function OrderListPage({
           page={page}
           totalPages={totalPages}
           ariaLabel="订单列表分页"
-          onPageChange={(nextPage) => {
-            setPage(nextPage);
-            void load(activeQuery, nextPage);
-          }}
+          onPageChange={setPage}
         /> : null}
       </Surface>
     </div>
   );
 }
-
 const WORKFLOW = [
   { key: "created", number: "01", label: "跟单创建订单", role: "订单跟单" },
   { key: "ie_quote", number: "02", label: "IE 给价", role: "IE" },
@@ -953,8 +1050,15 @@ const sourcingWorkflowNodeFromSearch = (): SourcingWorkflowNodeKey | null => {
     : null;
 };
 
-const sourcingWorkflowNodeHref = (sourcingCaseId: string, key: SourcingWorkflowNodeKey): string =>
-  `${pageUrl(`ui/sourcing/orders/${sourcingCaseId}`)}?node=${key}#node-workspace`;
+const sourcingWorkflowNodeHref = (
+  sourcingCaseId: string,
+  key: SourcingWorkflowNodeKey,
+  returnTo: string | null,
+): string => {
+  const params = new URLSearchParams({ node: key });
+  if (returnTo) params.set("returnTo", returnTo);
+  return `${pageUrl(`ui/sourcing/orders/${sourcingCaseId}`)}?${params}#node-workspace`;
+};
 
 const timelineNode = (entry: SourcingTimelineEntry): SourcingWorkflowNodeKey => ({
   created: "created",
@@ -1339,6 +1443,9 @@ function OrderDetailPage({
     ? subtractFixedPoint(factoryChangeDraft.unitPrice, item.decision.unitPrice, 4)
     : null;
   const selectedFactory = factories.find((factory) => factory.supplierId === decision.supplierId);
+  const todoBackPath = todoReturnPath(window.location.search);
+  const listBackPath = sourcingReturnPath(window.location.search);
+  const detailReturnPath = todoBackPath ?? listBackPath;
   const contractMissingLabels: Readonly<Record<string, string>> = {
     address: "地址",
     contractEntityName: "合同主体",
@@ -1356,8 +1463,8 @@ function OrderDetailPage({
         subtitle={`${item.gender ?? "历史未维护"} · ${item.styleName ?? "历史未维护"}`}
         badge={STATUS_LABELS[item.status]}
         badgePlacement="subtitle"
-        action={todoReturnPath(window.location.search) ? "返回我的待办" : "返回订单列表"}
-        actionHref={todoReturnPath(window.location.search) ?? (item.status === "closed" ? "/ui/sourcing/history" : "/ui/sourcing/pending")}
+        action={todoBackPath ? "返回我的待办" : "返回订单列表"}
+        actionHref={detailReturnPath ?? (item.status === "closed" ? "/ui/sourcing/history" : "/ui/sourcing/pending")}
       />
       <div className="rework-detail-layout rework-detail-target-layout">
         <dl className="rework-detail-core-facts" aria-label="外发定价选厂订单核心信息">
@@ -1416,7 +1523,7 @@ function OrderDetailPage({
                 </>;
                 return state === "future"
                   ? <div className="rework-workflow__node is-future" aria-disabled="true" key={node.key}>{content}</div>
-                  : <a className={`rework-workflow__node is-${state}`} href={sourcingWorkflowNodeHref(item.sourcingCaseId, node.key)} aria-current={state === "current" ? "step" : undefined} key={node.key}>{content}</a>;
+                  : <a className={`rework-workflow__node is-${state}`} href={sourcingWorkflowNodeHref(item.sourcingCaseId, node.key, detailReturnPath)} aria-current={state === "current" ? "step" : undefined} key={node.key}>{content}</a>;
               })}
               </div>
               <div className="rework-workflow__mobile-rail" ref={workflowRailRef}>
@@ -1429,7 +1536,7 @@ function OrderDetailPage({
                 </>;
                 return state === "future"
                   ? <div className="rework-workflow__node is-future" aria-disabled="true" key={node.key}>{content}</div>
-                  : <a className={`rework-workflow__node is-${state}`} href={sourcingWorkflowNodeHref(item.sourcingCaseId, node.key)} aria-current={state === "current" ? "step" : undefined} key={node.key}>{content}</a>;
+                  : <a className={`rework-workflow__node is-${state}`} href={sourcingWorkflowNodeHref(item.sourcingCaseId, node.key, detailReturnPath)} aria-current={state === "current" ? "step" : undefined} key={node.key}>{content}</a>;
               })}
               </div>
             </div>
