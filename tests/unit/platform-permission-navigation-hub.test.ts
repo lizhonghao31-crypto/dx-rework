@@ -26,6 +26,8 @@ describe("platform permission and desktop navigation hub", () => {
       .toEqual(["供应商中心", "样衣管理"]);
     expect(accessModuleLabelsForCapabilities(["sourcing:quote:write"]))
       .toEqual(["外发定价&选厂"]);
+    expect(accessModuleLabelsForCapabilities(["cutting:orders:view"]))
+      .toEqual(["订单开裁"]);
     expect(accessModuleIdsForCapabilities(["tools:user", "todo:view", "receiving:create"]))
       .toEqual(["rework"]);
     expect(accessModuleIdsForCapabilities(["rework:initiate", "todo:view"]))
@@ -36,12 +38,18 @@ describe("platform permission and desktop navigation hub", () => {
       "sourcing",
     )).toBe(true);
     expect(accessModuleIdsForRole("owner_group")).toEqual([
-      "rework", "sourcing", "suppliers", "production", "samples", "pattern_room",
+      "rework", "sourcing", "cutting", "suppliers", "production", "samples", "pattern_room",
     ]);
     expect(accessModuleIdsForRole("finance_director")).toEqual([
       "rework", "sourcing", "suppliers", "production", "samples", "pattern_room",
     ]);
     expect(employeeHasAccessModule(["owner_group"], [], "samples")).toBe(true);
+    expect(employeeHasAccessModule(["owner_group"], [], "cutting")).toBe(true);
+    expect(employeeHasAccessModule(
+      ["cutting_worker"],
+      [{ roleCode: "cutting_worker", capabilities: ["cutting:orders:view", "cutting:records:create"] }],
+      "cutting",
+    )).toBe(true);
     expect(employeeHasAccessModule(["owner_group"], [], "suppliers")).toBe(true);
     expect(employeeHasAccessModule(["owner_group"], [], "platform")).toBe(false);
     expect(employeeHasAccessModule(["system_admin"], [], "platform")).toBe(true);
@@ -135,7 +143,7 @@ describe("platform permission and desktop navigation hub", () => {
     expect(components).toContain("currentUser && canAccessSourcing(currentUser)");
     expect(components).toContain("mobileSourcingNavigation");
     expect(components).toContain('name: "外发定价&选厂"');
-    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "返工单看板", "外发定价&选厂", "供应商中心"]');
+    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "返工单看板", "外发定价&选厂", "订单开裁", "供应商中心"]');
     expect(components).not.toContain('name: "发起返工"');
     expect(components).toContain("currentUser && canAccessSupplierCenter(currentUser)");
     expect(components).toContain('name: "供应商目录"');
@@ -148,10 +156,11 @@ describe("platform permission and desktop navigation hub", () => {
     expect(productionDashboard).toContain('canOpenReporting?<a href={pageUrl("ui/production-reporting")}');
     expect(employeeAccess).toContain('<h1><NavigationIcon route="/ui/employee-access" size="title" />人员与权限</h1>');
     expect(employeeAccess).toContain('aria-label="业务模块"');
+    expect(employeeAccess).toContain('<option value="cutting">订单开裁</option>');
     expect(employeeAccess).toContain('<option value="suppliers">供应商中心</option>');
     expect(employeeAccess).toContain('<option value="samples">样衣管理</option>');
     expect(employeeAccess).toContain("employee.isRoot");
-    expect(employeeAccess).toContain("Root（订单返工 / 外发定价&选厂 / 供应商中心 / 实时生产看板 / 样衣管理 / 订单打板 / 平台管理）");
+    expect(employeeAccess).toContain("Root（订单返工 / 外发定价&选厂 / 订单开裁 / 供应商中心 / 实时生产看板 / 样衣管理 / 订单打板 / 平台管理）");
     expect(systemNavigation).toContain(">人员与权限</a>");
     expect(css).toContain(".desktop-navigation__group");
     expect(css).toContain("color: var(--dx-v2-color-surface);");

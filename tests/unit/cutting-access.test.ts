@@ -4,6 +4,7 @@ import {
   CUTTING_CAPABILITY_ROLES,
   canUseCutting,
 } from "@dx-rework/contracts";
+import { canAccessCutting } from "../../apps/web/src/cutting-access.js";
 
 describe("cutting capability boundaries", () => {
   it("lets both cutting roles read and create records", () => {
@@ -31,5 +32,14 @@ describe("cutting capability boundaries", () => {
 
   it("declares correction capability only for Root", () => {
     expect(CUTTING_CAPABILITY_ROLES["cutting:records:correct"]).toEqual(["root_superuser"]);
+  });
+
+  it("requires both role and capability at the web entry while Root bypasses", () => {
+    const base = { id: "u1", displayName: "测试", isRoot: false };
+    expect(canAccessCutting({ ...base, businessRoles: ["cutting_worker"], capabilities: ["cutting:orders:view"] })).toBe(true);
+    expect(canAccessCutting({ ...base, businessRoles: ["cutting_worker"], capabilities: [] })).toBe(false);
+    expect(canAccessCutting({ ...base, businessRoles: ["owner_group"], capabilities: ["cutting:orders:view"] })).toBe(true);
+    expect(canAccessCutting({ ...base, businessRoles: ["finance_director"], capabilities: ["cutting:orders:view"] })).toBe(false);
+    expect(canAccessCutting({ ...base, businessRoles: [], capabilities: [], isRoot: true })).toBe(true);
   });
 });

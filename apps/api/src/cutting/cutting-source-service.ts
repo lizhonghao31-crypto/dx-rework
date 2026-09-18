@@ -40,7 +40,7 @@ const BROAD_VIEW_ROLES = new Set([
   "production_management",
 ]);
 const KEY_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
-type Queryable = Pool | PoolClient;
+type Queryable = Pick<Pool, "query"> | Pick<PoolClient, "query">;
 
 const fail = (
   message: string,
@@ -289,7 +289,15 @@ export class CuttingService {
   }
 
   async listSources(actor: TrustedActorContext) {
-    return this.list(actor, { q: "", status: "all", outOfRange: "false", page: 1 });
+    this.assertReader(actor);
+    const merchOnly = this.merchandiserOnly(actor);
+    const rows = await this.database.query<CuttingReadRow>(
+      READ_CTE + `SELECT * FROM cutting_read
+       WHERE ($1::boolean=false OR merchandiser_id=$2::uuid)
+       ORDER BY approved_at,cutting_order_id`,
+      [merchOnly, actor.actorId],
+    );
+    return { items: rows.rows.map((row) => this.mapListRow(row)) };
   }
 
   async get(actor: TrustedActorContext, cuttingOrderId: string): Promise<CuttingOrderDetail> {
@@ -309,8 +317,7 @@ export class CuttingService {
          AND ($2::boolean=false OR merchandiser_id=$3::uuid)`,
       [cuttingOrderId, merchOnly, actor.actorId],
     );
-    const row = result.rows[0];
-    if (!row) fail("裁床订单不存在或不在当前可读范围", 404, "NOT_FOUND");
+    const row = result.rows[0] ?? fail("裁床订单不存在或不在当前可读范围", 404, "NOT_FOUND");
     const contractQuantity = Number(row.contract_quantity);
     const base = this.mapListRow(row);
     const photos = row.image_attachment_id

@@ -6,6 +6,8 @@ import { accessiblePlatformModules, platformModuleHref } from "./platform-module
 import "./platform-home.css";
 
 const ROLE_LABELS: Record<string, string> = {
+  cutting_supervisor: "裁床主管",
+  cutting_worker: "裁床工人",
   owner_group: "老板",
   production_management: "生产管理",
   order_merchandiser: "订单跟单",
