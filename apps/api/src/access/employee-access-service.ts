@@ -318,8 +318,32 @@ export class EmployeeAccessService {
 
   async syncDirectory(actor: TrustedActorContext): Promise<EmployeeAccessSyncResponse> {
     await this.assertRootActor(actor, this.database, false);
-    const members = await this.provider.listOrganizationMembers(this.corporationId);
     const syncedAt = new Date();
+    const verification = await this.database.query<{ since: Date | null }>(
+      `SELECT min(last_verified_at) since
+       FROM identity_mappings
+       WHERE provider='dingtalk' AND corp_id=$1 AND active=true AND employed=true`,
+      [this.corporationId],
+    );
+    const departureStart = verification.rows[0]?.since
+      ? new Date(Math.min(verification.rows[0].since.getTime(), syncedAt.getTime()))
+      : syncedAt;
+    const [members, departedUserIds] = await Promise.all([
+      this.provider.listOrganizationMembers(this.corporationId),
+      this.provider.listDepartedUserIds(this.corporationId, departureStart, syncedAt),
+    ]);
+    const currentProviderUserIds = new Set(members.map((member) => member.userId));
+    const confirmedDepartures = [...new Set(departedUserIds)]
+      .filter((providerUserId) => !currentProviderUserIds.has(providerUserId))
+      .sort((left, right) => left.localeCompare(right));
+
+    if (this.rootDingtalkUserId && confirmedDepartures.includes(this.rootDingtalkUserId)) {
+      throw new ApplicationError(
+        "CONFLICT",
+        "钉钉离职记录包含当前系统Root，请先更新Root身份绑定后再同步",
+        409,
+      );
+    }
 
     return this.transaction(async (client) => {
       await this.assertRootActor(actor, client);
@@ -391,6 +415,95 @@ export class EmployeeAccessService {
         }
       }
 
+      let departedChanged = 0;
+      if (confirmedDepartures.length > 0) {
+        await client.query("SELECT pg_advisory_xact_lock(hashtext('dx_rework:owner_group_guard'))");
+      }
+      for (const providerUserId of confirmedDepartures) {
+        const beforeResult = await client.query<DirectoryAuditRow>(
+          `SELECT
+             u.id user_id,
+             i.provider_user_id,
+             i.union_id,
+             u.display_name,
+             COALESCE(p.department_names,'{}'::text[]) department_names,
+             i.active,
+             i.employed,
+             u.enabled,
+             u.manual_access_disabled
+           FROM identity_mappings i
+           JOIN app_users u ON u.id=i.user_id
+           LEFT JOIN employee_directory_profiles p ON p.user_id=u.id
+           WHERE i.provider='dingtalk' AND i.corp_id=$1 AND i.provider_user_id=$2
+           FOR UPDATE OF i,u`,
+          [this.corporationId, providerUserId],
+        );
+        const before = beforeResult.rows[0];
+        if (!before) continue;
+
+        await client.query(
+          `UPDATE identity_mappings
+           SET active=false,employed=false,last_verified_at=$3
+           WHERE provider='dingtalk' AND corp_id=$1 AND provider_user_id=$2`,
+          [this.corporationId, providerUserId, syncedAt],
+        );
+        await client.query(
+          `UPDATE app_users
+           SET enabled=false,updated_at=CURRENT_TIMESTAMP
+           WHERE id=$1`,
+          [before.user_id],
+        );
+        await client.query(
+          "UPDATE auth_sessions SET revoked_at=$2 WHERE user_id=$1 AND revoked_at IS NULL",
+          [before.user_id, syncedAt],
+        );
+        await client.query(
+          `INSERT INTO employee_directory_profiles(user_id,department_names,last_directory_synced_at)
+           VALUES($1,'{}'::text[],$2)
+           ON CONFLICT(user_id) DO UPDATE
+           SET last_directory_synced_at=EXCLUDED.last_directory_synced_at,
+               updated_at=CURRENT_TIMESTAMP`,
+          [before.user_id, syncedAt],
+        );
+
+        const afterResult = await client.query<DirectoryAuditRow>(
+          `SELECT
+             u.id user_id,
+             i.provider_user_id,
+             i.union_id,
+             u.display_name,
+             COALESCE(p.department_names,'{}'::text[]) department_names,
+             i.active,
+             i.employed,
+             u.enabled,
+             u.manual_access_disabled
+           FROM identity_mappings i
+           JOIN app_users u ON u.id=i.user_id
+           LEFT JOIN employee_directory_profiles p ON p.user_id=u.id
+           WHERE i.provider='dingtalk' AND i.corp_id=$1 AND i.user_id=$2`,
+          [this.corporationId, before.user_id],
+        );
+        const after = afterResult.rows[0];
+        if (!after) {
+          throw new ApplicationError("INVALID_STATE_TRANSITION", "钉钉离职同步后无法读取员工身份状态", 409);
+        }
+        if (!sameDirectoryState(before, after)) {
+          changed += 1;
+          departedChanged += 1;
+          await this.events.append(client, actor, {
+            action: "access.directory.employee.departed",
+            entityType: "app_user",
+            entityId: before.user_id,
+            before: directoryAuditState(before),
+            after: {
+              ...directoryAuditState(after),
+              sessionsRevoked: true,
+            },
+            reason: "钉钉明确离职记录同步",
+          });
+        }
+      }
+
       const response = {
         scanned: members.length,
         upserted: members.length,
@@ -401,7 +514,11 @@ export class EmployeeAccessService {
         action: "access.directory.sync",
         entityType: "dingtalk_corporation",
         entityId: this.corporationId,
-        after: response,
+        after: {
+          ...response,
+          confirmedDepartures: confirmedDepartures.length,
+          departedChanged,
+        },
         reason: "Root手动同步钉钉通讯录",
       });
       return response;

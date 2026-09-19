@@ -165,6 +165,49 @@ export class OfficialDingTalkProvider implements DingTalkProvider {
     return members.sort((left, right) => left.userId.localeCompare(right.userId));
   }
 
+  async listDepartedUserIds(corpId: string, startAt: Date, endAt: Date): Promise<readonly string[]> {
+    if (corpId !== this.config.corpId) {
+      throw new DingTalkProtocolError("Departure request belongs to a different corporation");
+    }
+    if (!Number.isFinite(startAt.getTime()) || !Number.isFinite(endAt.getTime()) || endAt < startAt) {
+      throw new DingTalkProtocolError("DingTalk departure range is invalid");
+    }
+    if (endAt.getTime() === startAt.getTime()) return [];
+
+    const appToken = await this.getAppToken();
+    const departed = new Set<string>();
+    const windowMs = 30 * 24 * 60 * 60 * 1_000;
+
+    for (let windowStart = startAt.getTime(); windowStart < endAt.getTime(); windowStart += windowMs) {
+      const windowEnd = Math.min(windowStart + windowMs, endAt.getTime());
+      let nextToken: string | undefined;
+      const seenTokens = new Set<string>();
+
+      for (let page = 0; page < 10_000; page += 1) {
+        if (nextToken) {
+          if (seenTokens.has(nextToken)) throw new DingTalkProtocolError("DingTalk departure pagination repeated a token");
+          seenTokens.add(nextToken);
+        }
+        const url = new URL(`${API}/v1.0/contact/empLeaveRecords`);
+        url.searchParams.set("startTime", new Date(windowStart).toISOString());
+        url.searchParams.set("endTime", new Date(windowEnd).toISOString());
+        url.searchParams.set("maxResults", "50");
+        if (nextToken) url.searchParams.set("nextToken", nextToken);
+        const body = await this.json(url.toString(), {
+          headers: { "x-acs-dingtalk-access-token": appToken },
+        });
+        for (const item of records(body.records, "departure records")) {
+          departed.add(text(item.userId, "departure userId"));
+        }
+        const following = optionalText(body.nextToken);
+        if (!following) break;
+        nextToken = following;
+        if (page === 9_999) throw new DingTalkProtocolError("DingTalk departure pagination exceeded the safe limit");
+      }
+    }
+    return [...departed].sort((left, right) => left.localeCompare(right));
+  }
+
   private async getAppToken(): Promise<string> {
     if (this.cachedAppToken && this.cachedAppToken.refreshAt > this.now()) return this.cachedAppToken.token;
     if (this.appTokenRequest) return this.appTokenRequest;

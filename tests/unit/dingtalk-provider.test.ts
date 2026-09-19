@@ -45,6 +45,37 @@ describe("official DingTalk provider contracts", () => {
     expect(http.mock.calls.filter(([url]) => String(url).includes("/gettoken"))).toHaveLength(2);
   });
 
+  it("lists explicit DingTalk departure records with token pagination and deduplication", async () => {
+    const http = mockFetch(
+      json({ errcode: 0, access_token: "app-token", expires_in: 7200 }),
+      json({
+        records: [
+          { userId: "leave-2", name: "乙", leaveTime: "2026-09-18T03:00:00Z" },
+          { userId: "leave-1", name: "甲", leaveTime: "2026-09-18T02:00:00Z" },
+        ],
+        nextToken: "page-2",
+      }),
+      json({
+        records: [
+          { userId: "leave-1", name: "甲", leaveTime: "2026-09-18T02:00:00Z" },
+          { userId: "leave-3", name: "丙", leaveTime: "2026-09-18T04:00:00Z" },
+        ],
+      }),
+    );
+    const provider = new OfficialDingTalkProvider(config, http);
+    await expect(provider.listDepartedUserIds(
+      "corp-a",
+      new Date("2026-09-18T00:00:00Z"),
+      new Date("2026-09-19T00:00:00Z"),
+    )).resolves.toEqual(["leave-1", "leave-2", "leave-3"]);
+
+    const departureCalls = http.mock.calls.filter(([url]) => String(url).includes("/v1.0/contact/empLeaveRecords"));
+    expect(departureCalls).toHaveLength(2);
+    expect(String(departureCalls[0]?.[0])).toContain("maxResults=50");
+    expect(String(departureCalls[1]?.[0])).toContain("nextToken=page-2");
+    expect((departureCalls[0]?.[1]?.headers as Record<string, string>)["x-acs-dingtalk-access-token"]).toBe("app-token");
+  });
+
   it("fails closed for a different OAuth corpId, missing directory mapping, inactive member, and malformed responses", async () => {
     await expect(new OfficialDingTalkProvider(config, mockFetch(json({ accessToken: "token", expireIn: 7200, corpId: "corp-b" }))).exchangeQrCode("code")).rejects.toBeInstanceOf(DingTalkProtocolError);
     const missing = new OfficialDingTalkProvider(config, mockFetch(json({ errcode: 0, access_token: "app", expires_in: 7200 }), json({ errcode: 60121, errmsg: "not found" })));
