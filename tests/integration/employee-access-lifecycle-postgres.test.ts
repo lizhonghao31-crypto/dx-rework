@@ -41,9 +41,11 @@ class FixtureDirectoryProvider extends OfficialDingTalkProvider {
 
   override async listDepartedUserIds(
     corpId: string,
-    _startAt: Date,
-    _endAt: Date,
+    startAt: Date,
+    endAt: Date,
   ): Promise<readonly string[]> {
+    void startAt;
+    void endAt;
     if (corpId !== "corp") throw new Error("unexpected fixture corporation");
     return [...this.departedUserIds];
   }
