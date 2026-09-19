@@ -44,7 +44,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     database,undefined,undefined,todoProjection,contractService,
   );
   const cutting = new CuttingSourceService(database);
-  const receiving = new ReceivingService(database);
+  const receiving = new ReceivingService(database,undefined,undefined,undefined,{allowLegacyStyleInput:true});
   const production = new SourcingProductionService(database);
   const craftService = new AccessMasterDataService(database, "corp");
   const craftIdsByName = new Map<string, string>();

@@ -623,11 +623,14 @@ export class ReceivingService {
       }, async () => {
         const cutting = normalized.cuttingOrderId
           ? await this.resolveCuttingSelection(client, normalized.cuttingOrderId)
-          : null;
+          : normalized.styleNo && !normalized.productionOrderId && this.options.allowLegacyStyleInput
+            ? await this.resolveUniqueExactCuttingSelection(client, normalized.styleNo)
+            : null;
         return {
           statusCode: 201,
           response: await this.createInTransaction(client, actor, {
             ...normalized,
+            ...(cutting ? { cuttingOrderId: cutting.cuttingOrderId } : {}),
             styleNo: cutting?.styleNo ?? normalized.styleNo!,
           }),
         };
@@ -678,8 +681,22 @@ export class ReceivingService {
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
-        const cutting = input.cuttingOrderId
-          ? await this.resolveCuttingSelection(client, input.cuttingOrderId)
+        const storedBatch = await client.query<{ cutting_order_id: string | null }>(
+          `SELECT cutting_order_id
+           FROM receiving_batches
+           WHERE receiving_batch_id=$1 AND deleted_at IS NULL
+           FOR SHARE`,
+          [input.receivingBatchId],
+        );
+        const storedCuttingOrderId = storedBatch.rows[0]?.cutting_order_id
+          ?? (storedBatch.rowCount ? null : fail("收货订单不存在", 404, "NOT_FOUND"));
+        if (input.cuttingOrderId && storedCuttingOrderId
+            && input.cuttingOrderId !== storedCuttingOrderId) {
+          fail("该收货订单已关联另一条裁床任务，请重新搜索选择", 409, "CONFLICT");
+        }
+        const effectiveCuttingOrderId = input.cuttingOrderId ?? storedCuttingOrderId ?? undefined;
+        const cutting = effectiveCuttingOrderId
+          ? await this.resolveCuttingSelection(client, effectiveCuttingOrderId)
           : null;
         const target = await this.repeatReceivingBatch(
           client,
@@ -722,6 +739,28 @@ export class ReceivingService {
     } finally {
       client.release();
     }
+  }
+
+  private async resolveUniqueExactCuttingSelection(
+    client: PoolClient,
+    styleNo: string,
+  ): Promise<(CuttingReceivingOption & { sourcingCaseId: string }) | null> {
+    const relation = await client.query<{ relation_name: string | null }>(
+      "SELECT to_regclass('current_cutting_style_options')::text AS relation_name",
+    );
+    if (!relation.rows[0]?.relation_name) return null;
+
+    const normalizedStyle = normalizeStyleNo(styleNo);
+    const matches = await client.query<{ cutting_order_id: string }>(
+      `SELECT cutting_order_id
+       FROM current_cutting_style_options
+       WHERE upper(btrim(formal_style_no))=$1
+       ORDER BY cutting_order_id
+       LIMIT 2`,
+      [normalizedStyle],
+    );
+    if (matches.rowCount !== 1) return null;
+    return this.resolveCuttingSelection(client, matches.rows[0]!.cutting_order_id);
   }
 
   private async resolveCuttingSelection(
@@ -1780,18 +1819,24 @@ export class ReceivingService {
   async listRepeatOptions(query = ""): Promise<readonly RepeatReceivingOption[]> {
     const needle = query.trim().toUpperCase();
     if (needle.length < 4) return [];
+
     if (this.options.allowLegacyStyleInput) {
       const result = await this.database.query<{
         receiving_batch_id: string;
         style_no: string;
         document_quantity: string;
+        cutting_order_id: string | null;
       }>(
         `WITH ranked AS (
-           SELECT batch.receiving_batch_id,
+           SELECT batch.receiving_batch_id,batch.cutting_order_id,
                   upper(btrim(batch.style_no)) AS style_no,
                   batch.delivery_note_quantity::bigint AS document_quantity,
                   row_number() OVER (
-                    PARTITION BY upper(btrim(batch.style_no))
+                    PARTITION BY CASE
+                      WHEN batch.cutting_order_id IS NULL
+                        THEN 'legacy:'||upper(btrim(batch.style_no))
+                      ELSE 'cutting:'||batch.cutting_order_id::text
+                    END
                     ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
                   ) AS position,
                   EXISTS(
@@ -1827,7 +1872,7 @@ export class ReceivingService {
                  AND event.after_state->>'backfilled'='true'
              )
          )
-         SELECT receiving_batch_id,style_no,document_quantity
+         SELECT receiving_batch_id,cutting_order_id,style_no,document_quantity
          FROM ranked
          WHERE position=1 AND NOT closed AND has_images
            AND right(style_no,char_length($1))=$1
@@ -1835,12 +1880,57 @@ export class ReceivingService {
          LIMIT 20`,
         [needle],
       );
-      return result.rows.map((row) => ({
-        receivingBatchId: row.receiving_batch_id,
-        styleNo: row.style_no,
-        documentQuantity: Number(row.document_quantity),
-      }));
+
+      const linkedIds = result.rows
+        .map((row) => row.cutting_order_id)
+        .filter((value): value is string => value !== null);
+
+      if (linkedIds.length === 0) {
+        return result.rows.map((row) => ({
+          receivingBatchId: row.receiving_batch_id,
+          styleNo: row.style_no,
+          documentQuantity: Number(row.document_quantity),
+        }));
+      }
+
+      const linked = await this.database.query<{
+        cutting_order_id: string;
+        color: string | null;
+        supplier_name: string;
+        actual_cut_count: string;
+        style_conflict_count: string;
+      }>(
+        `SELECT cutting_order_id,color,supplier_name,
+                actual_cut_count::text,style_conflict_count::text
+         FROM current_cutting_style_options
+         WHERE cutting_order_id=ANY($1::uuid[])`,
+        [linkedIds],
+      );
+      const linkedById = new Map(linked.rows.map((row) => [row.cutting_order_id, row] as const));
+
+      return result.rows.flatMap((row) => {
+        if (!row.cutting_order_id) {
+          return [{
+            receivingBatchId: row.receiving_batch_id,
+            styleNo: row.style_no,
+            documentQuantity: Number(row.document_quantity),
+          }];
+        }
+        const option = linkedById.get(row.cutting_order_id);
+        if (!option) return [];
+        return [{
+          receivingBatchId: row.receiving_batch_id,
+          cuttingOrderId: option.cutting_order_id,
+          styleNo: row.style_no,
+          documentQuantity: Number(row.document_quantity),
+          color: option.color,
+          supplierName: option.supplier_name,
+          actualCutCount: Number(option.actual_cut_count),
+          styleConflictCount: Number(option.style_conflict_count),
+        }];
+      });
     }
+
     const result = await this.database.query<{
       receiving_batch_id: string;
       style_no: string;

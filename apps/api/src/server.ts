@@ -143,7 +143,7 @@ const todoService = new TodoService(database,undefined,undefined,productionClosu
 const todoProjection = new RootAwareTodoProjectionService(todoService);
 const patternOrders = new PatternRoomOrderService(database, todoProjection);
 const cuttingService = new CuttingService(database);
-const receivingService = new ReceivingService(database,undefined,undefined,productionClosure);
+const receivingService = new ReceivingService(database,undefined,undefined,productionClosure,{allowLegacyStyleInput:true});
 const sourcingProductionService = new SourcingProductionService(database);
 const sourcingContractService = new SourcingContractService(database, attachments);
 await sourcingContractService.resumePendingContracts();

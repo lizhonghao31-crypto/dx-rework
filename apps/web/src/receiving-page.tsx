@@ -38,9 +38,15 @@ type CuttingOption = Readonly<{
   styleConflictCount: number;
 }>;
 type CuttingOptions = Readonly<{ orders: readonly CuttingOption[] }>;
-type RepeatOrder = CuttingOption & Readonly<{
+type RepeatOrder = Readonly<{
   receivingBatchId: string;
   documentQuantity: number;
+  styleNo: string;
+  cuttingOrderId?: string;
+  color?: string | null;
+  supplierName?: string;
+  actualCutCount?: number;
+  styleConflictCount?: number;
 }>;
 type RepeatOptions = Readonly<{ orders: readonly RepeatOrder[] }>;
 type Receipt = Readonly<{
@@ -179,6 +185,14 @@ export function ReceivingPage() {
         if (controller.signal.aborted) return;
         setRepeatOrders(body.orders);
         setRepeatOptionsQuery(needle.toUpperCase());
+        const exactMatches = body.orders.filter(
+          (order) => order.styleNo.trim().toUpperCase() === needle.toUpperCase(),
+        );
+        if (exactMatches.length === 1) {
+          setRepeatQuery(exactMatches[0]!.styleNo);
+          setSelectedRepeatOrder(exactMatches[0]!);
+          setRepeatMenuOpen(false);
+        }
       })
       .catch((cause: unknown) => {
         if (controller.signal.aborted) return;
@@ -206,6 +220,14 @@ export function ReceivingPage() {
       if (controller.signal.aborted) return;
       setCuttingOptions(body.orders);
       setCuttingOptionsQuery(needle.toUpperCase());
+      const exactMatches = body.orders.filter(
+        (order) => order.styleNo.trim().toUpperCase() === needle.toUpperCase(),
+      );
+      if (exactMatches.length === 1) {
+        setStyleNo(exactMatches[0]!.styleNo);
+        setSelectedCutting(exactMatches[0]!);
+        setStyleMenuOpen(false);
+      }
     }).catch((cause: unknown) => {
       if (controller.signal.aborted) return;
       setCuttingOptions([]);
@@ -299,7 +321,9 @@ export function ReceivingPage() {
         method: "POST",
         headers: { "idempotency-key": key },
         body: JSON.stringify({
-          cuttingOrderId: selectedRepeatOrder.cuttingOrderId,
+          ...(selectedRepeatOrder.cuttingOrderId
+            ? { cuttingOrderId: selectedRepeatOrder.cuttingOrderId }
+            : {}),
           receivingBatchId: selectedRepeatOrder.receivingBatchId,
           source: repeatSource,
           ...(repeatSource === "other_factory" ? { documentQuantity: addedDocumentCount } : {}),
@@ -327,11 +351,11 @@ export function ReceivingPage() {
   };
 
   const submit = async () => {
-    const trimmedStyle = selectedCutting?.styleNo ?? "";
+    const trimmedStyle = (selectedCutting?.styleNo ?? styleNo).trim();
     const documentCount = Number(documentQuantity);
     const actualCount = Number(actualQuantity);
     const defectiveCount = Number(defectiveQuantity);
-    if (!selectedCutting) { setMessage("请先搜索并选择已裁正式款号"); return; }
+    if (!trimmedStyle) { setMessage("款号不能为空"); return; }
     if (!/^\d+$/.test(documentQuantity) || documentCount <= 0) { setMessage("送货单数量请输入大于0的整数"); return; }
     if (!/^\d+$/.test(actualQuantity) || actualCount < 0) { setMessage("实际收货数量请输入大于等于0的整数"); return; }
     if (!/^\d+$/.test(defectiveQuantity) || defectiveCount < 0) { setMessage("次品数量请输入大于等于0的整数"); return; }
@@ -343,10 +367,10 @@ export function ReceivingPage() {
     if (submitting.current) return;
     submitting.current = true;
     setBusy(true);
-    if (!backfill) {
+    if (!backfill && trimmedStyle.length >= 4) {
       try {
         const options = await requestJson<RepeatOptions>(`receiving/repeat-options?${new URLSearchParams({ q: trimmedStyle }).toString()}`, { method: "GET" });
-        if (options.orders.some((order) => order.styleNo === trimmedStyle)) {
+        if (options.orders.some((order) => order.styleNo.trim().toUpperCase() === trimmedStyle.toUpperCase())) {
           setRepeat(true);
           setRepeatSource(null);
           setRepeatQuery("");
@@ -385,7 +409,9 @@ export function ReceivingPage() {
         credentials: "include",
         headers: { "content-type": "application/json", "idempotency-key": key },
         body: JSON.stringify({
-          cuttingOrderId: selectedCutting.cuttingOrderId,
+          ...(selectedCutting
+            ? { cuttingOrderId: selectedCutting.cuttingOrderId }
+            : { styleNo: trimmedStyle }),
           documentQuantity: documentCount,
           actualQuantity: actualCount,
           defectiveQuantity: defectiveCount,
@@ -477,7 +503,7 @@ export function ReceivingPage() {
                 type="search"
                 autoComplete="off"
                 inputMode="text"
-                placeholder="输入款号后4-5位搜索"
+                placeholder="输入完整款号或末尾至少4位"
                 value={repeatQuery}
                 disabled={busy}
                 onFocus={() => setRepeatMenuOpen(true)}
@@ -503,13 +529,17 @@ export function ReceivingPage() {
                     setRepeatMenuOpen(false);
                     pendingKey.current = null;
                   }}
-                ><strong>{order.styleNo}</strong><small>{order.supplierName}{order.color ? ` · ${order.color}` : ""} · 实裁 {formatBusinessDecimal(order.actualCutCount)} 件 · 原送货单 {formatBusinessDecimal(order.documentQuantity)} 件</small></button>)}
+                ><strong>{order.styleNo}</strong><small>{order.cuttingOrderId && order.supplierName && order.actualCutCount !== undefined
+                  ? `${order.supplierName}${order.color ? ` · ${order.color}` : ""} · 实裁 ${formatBusinessDecimal(order.actualCutCount)} 件 · 原送货单 ${formatBusinessDecimal(order.documentQuantity)} 件`
+                  : `原送货单 ${formatBusinessDecimal(order.documentQuantity)} 件`}</small></button>)}
               </div> : null}
             </div>
           </label>
-          {selectedRepeatOrder ? <p className="receiving-repeat-selected">已选择 {selectedRepeatOrder.styleNo} · {selectedRepeatOrder.supplierName}{selectedRepeatOrder.color ? ` · ${selectedRepeatOrder.color}` : ""} · 实裁 {formatBusinessDecimal(selectedRepeatOrder.actualCutCount)} 件 · 原送货单 {formatBusinessDecimal(selectedRepeatOrder.documentQuantity)} 件</p> : (
-            <p className="receiving-repeat-hint">{repeatSearching ? "正在搜索…" : repeatQuery.trim().length < 4 ? "请输入正式款号末尾至少4位" : "没有可追加收货的已裁正式款号"}</p>
-          )}
+          {selectedRepeatOrder ? <p className="receiving-repeat-selected">已选择 {selectedRepeatOrder.styleNo}{selectedRepeatOrder.cuttingOrderId && selectedRepeatOrder.supplierName && selectedRepeatOrder.actualCutCount !== undefined
+            ? ` · ${selectedRepeatOrder.supplierName}${selectedRepeatOrder.color ? ` · ${selectedRepeatOrder.color}` : ""} · 实裁 ${formatBusinessDecimal(selectedRepeatOrder.actualCutCount)} 件`
+            : ""} · 原送货单 {formatBusinessDecimal(selectedRepeatOrder.documentQuantity)} 件</p> : repeatSearching ? (
+            <p className="receiving-repeat-hint">正在搜索…</p>
+          ) : null}
           {repeatSource === "other_factory" ? <label className="receiving-field">
             <span>本次送货单数量</span>
             <input type="number" min="1" step="1" inputMode="numeric" placeholder="0" value={documentQuantity} disabled={busy} onChange={(event) => { setDocumentQuantity(event.target.value); pendingKey.current = null; }} />
@@ -553,7 +583,7 @@ export function ReceivingPage() {
                 type="search"
                 autoComplete="off"
                 inputMode="text"
-                placeholder="输入正式款号后4位搜索"
+                placeholder="输入完整款号或末尾至少4位"
                 value={styleNo}
                 disabled={busy}
                 onFocus={() => setStyleMenuOpen(true)}
@@ -582,9 +612,9 @@ export function ReceivingPage() {
               </div> : null}
             </div>
           </label>
-          {selectedCutting ? <p className="receiving-repeat-selected">已选择 {selectedCutting.styleNo} · {selectedCutting.supplierName}{selectedCutting.color ? ` · ${selectedCutting.color}` : ""} · 实裁 {formatBusinessDecimal(selectedCutting.actualCutCount)} 件</p> : (
-            <p className="receiving-repeat-hint">{cuttingSearching ? "正在搜索…" : styleNo.trim().length < 4 ? "请输入正式款号末尾至少4位" : "没有可收货的已裁正式款号"}</p>
-          )}
+          {selectedCutting ? <p className="receiving-repeat-selected">已选择 {selectedCutting.styleNo} · {selectedCutting.supplierName}{selectedCutting.color ? ` · ${selectedCutting.color}` : ""} · 实裁 {formatBusinessDecimal(selectedCutting.actualCutCount)} 件</p> : cuttingSearching ? (
+            <p className="receiving-repeat-hint">正在搜索…</p>
+          ) : null}
           <label className="receiving-field">
             <span>送货单数量</span>
             <input type="number" min="1" step="1" inputMode="numeric" placeholder="0" value={documentQuantity} disabled={busy} onChange={(event) => { setDocumentQuantity(event.target.value); pendingKey.current = null; }} />
