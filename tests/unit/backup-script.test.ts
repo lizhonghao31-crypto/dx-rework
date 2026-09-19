@@ -31,4 +31,23 @@ describe("PostgreSQL backup manifest", () => {
     expect(fullGate).toContain('target_fp="$(database_connection_fingerprint "$target_url")"');
     expect(fullGate).not.toContain("inet_server_addr()");
   });
+  it("pins one PostgreSQL client toolchain and rejects a dump client older than the server", async () => {
+    const lib = await readFile(new URL("../../scripts/deploy/lib.sh", import.meta.url), "utf8");
+    const backup = await readFile(new URL("../../scripts/backup-postgres.sh", import.meta.url), "utf8");
+    const restore = await readFile(new URL("../../scripts/restore-postgres.sh", import.meta.url), "utf8");
+    const deployExample = await readFile(new URL("../../docs/operations/pr-17-deploy.env.example", import.meta.url), "utf8");
+
+    expect(lib).toContain("DX_REWORK_PG_BIN_DIR");
+    expect(lib).toContain("approved_pg_bin_dir()");
+    expect(lib).toContain("assert_postgres_toolchain()");
+    expect(lib).toContain("show server_version_num");
+    expect(lib).toContain("pg_dump major $dump_major is older than database server major $server_major");
+    expect(backup).toContain('assert_postgres_toolchain "$DATABASE_URL"');
+    expect(backup).toContain("pg_exec pg_dump");
+    expect(backup).toContain("pg_exec pg_restore");
+    expect(restore).toContain('assert_postgres_toolchain "$DX_REWORK_RESTORE_DATABASE_URL"');
+    expect(restore).toContain("pg_exec pg_restore");
+    expect(deployExample).toContain("DX_REWORK_PG_BIN_DIR=/usr/pgsql-16/bin");
+  });
+
 });
