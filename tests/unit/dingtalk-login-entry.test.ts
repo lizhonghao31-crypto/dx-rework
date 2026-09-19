@@ -44,7 +44,7 @@ describe("达兴统一钉钉登录入口", () => {
 
   it("documents the relay URI as the production redirect contract", async () => {
     const env = await readFile(".env.example", "utf8");
-    expect(env).toContain("DINGTALK_QR_REDIRECT_URI=https://replace.example/rework/auth/qr/relay");
-    expect(env).not.toContain("DINGTALK_QR_REDIRECT_URI=https://replace.example/api/auth/qr/callback");
+    expect(env).toContain("DINGTALK_QR_REDIRECT_URI=https://replace.example/auth/qr/relay");
+    expect(env).not.toContain("DINGTALK_QR_REDIRECT_URI=https://replace.example/rework/auth/qr/relay");
   });
 });
