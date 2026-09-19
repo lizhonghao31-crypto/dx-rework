@@ -623,11 +623,14 @@ export class ReceivingService {
       }, async () => {
         const cutting = normalized.cuttingOrderId
           ? await this.resolveCuttingSelection(client, normalized.cuttingOrderId)
-          : null;
+          : normalized.styleNo && this.options.allowLegacyStyleInput
+            ? await this.resolveUniqueExactCuttingSelection(client, normalized.styleNo)
+            : null;
         return {
           statusCode: 201,
           response: await this.createInTransaction(client, actor, {
             ...normalized,
+            ...(cutting ? { cuttingOrderId: cutting.cuttingOrderId } : {}),
             styleNo: cutting?.styleNo ?? normalized.styleNo!,
           }),
         };
@@ -678,8 +681,22 @@ export class ReceivingService {
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
-        const cutting = input.cuttingOrderId
-          ? await this.resolveCuttingSelection(client, input.cuttingOrderId)
+        const storedBatch = await client.query<{ cutting_order_id: string | null }>(
+          `SELECT cutting_order_id
+           FROM receiving_batches
+           WHERE receiving_batch_id=$1 AND deleted_at IS NULL
+           FOR SHARE`,
+          [input.receivingBatchId],
+        );
+        const storedCuttingOrderId = storedBatch.rows[0]?.cutting_order_id
+          ?? (storedBatch.rowCount ? null : fail("收货订单不存在", 404, "NOT_FOUND"));
+        if (input.cuttingOrderId && storedCuttingOrderId
+            && input.cuttingOrderId !== storedCuttingOrderId) {
+          fail("该收货订单已关联另一条裁床任务，请重新搜索选择", 409, "CONFLICT");
+        }
+        const effectiveCuttingOrderId = input.cuttingOrderId ?? storedCuttingOrderId ?? undefined;
+        const cutting = effectiveCuttingOrderId
+          ? await this.resolveCuttingSelection(client, effectiveCuttingOrderId)
           : null;
         const target = await this.repeatReceivingBatch(
           client,
@@ -722,6 +739,23 @@ export class ReceivingService {
     } finally {
       client.release();
     }
+  }
+
+  private async resolveUniqueExactCuttingSelection(
+    client: PoolClient,
+    styleNo: string,
+  ): Promise<(CuttingReceivingOption & { sourcingCaseId: string }) | null> {
+    const normalizedStyle = normalizeStyleNo(styleNo);
+    const matches = await client.query<{ cutting_order_id: string }>(
+      `SELECT cutting_order_id
+       FROM current_cutting_style_options
+       WHERE upper(btrim(formal_style_no))=$1
+       ORDER BY cutting_order_id
+       LIMIT 2`,
+      [normalizedStyle],
+    );
+    if (matches.rowCount !== 1) return null;
+    return this.resolveCuttingSelection(client, matches.rows[0]!.cutting_order_id);
   }
 
   private async resolveCuttingSelection(
@@ -1793,7 +1827,11 @@ export class ReceivingService {
                   upper(btrim(batch.style_no)) AS style_no,
                   batch.delivery_note_quantity::bigint AS document_quantity,
                   row_number() OVER (
-                    PARTITION BY upper(btrim(batch.style_no))
+                    PARTITION BY CASE
+                      WHEN batch.cutting_order_id IS NULL
+                        THEN 'legacy:'||upper(btrim(batch.style_no))
+                      ELSE 'cutting:'||batch.cutting_order_id::text
+                    END
                     ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
                   ) AS position,
                   EXISTS(

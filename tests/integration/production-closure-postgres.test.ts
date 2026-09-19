@@ -183,18 +183,22 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   const options=await strictReceiving.listCuttingOptions("NK-A");
   const selected=options.find(item=>item.styleNo==="SSP09-AUTO-LINK-A");
   expect(selected).toMatchObject({actualCutCount:20,supplierName:"试点厂2"});
-  const first=await strictReceiving.create(receiver(),{
-    cuttingOrderId:selected!.cuttingOrderId,documentQuantity:20,actualQuantity:20,
+  const first=await receiving.create(receiver(),{
+    styleNo:"SSP09-AUTO-LINK-A",documentQuantity:20,actualQuantity:20,
     attachmentIds:[await readyImage()],
   },randomUUID());
   expect((await database.query("SELECT cutting_order_id FROM receiving_receipts WHERE receipt_id=$1",[first.value.receiptId])).rows[0]!.cutting_order_id)
     .toBe(selected!.cuttingOrderId);
   expect((await database.query("SELECT production_order_id FROM sourcing_production_receipt_links WHERE receipt_id=$1",[first.value.receiptId])).rows[0]!.production_order_id)
     .toBe(order.productionOrderId);
-  const repeated=await strictReceiving.createRepeated(receiver(),{
-    cuttingOrderId:selected!.cuttingOrderId,receivingBatchId:first.value.receivingBatchId,
+  const repeated=await receiving.createRepeated(receiver(),{
+    receivingBatchId:first.value.receivingBatchId,
     source:"jiashun",actualQuantity:1,
   },randomUUID());
+  expect((await database.query(
+    "SELECT cutting_order_id FROM receiving_receipts WHERE receipt_id=$1",
+    [repeated.value.receiptId],
+  )).rows[0]!.cutting_order_id).toBe(selected!.cuttingOrderId);
   expect((await closure.receiptSummary(root(),order.productionOrderId)).shipment?.receipts.map(item=>item.receiptId))
     .toEqual([first.value.receiptId,repeated.value.receiptId]);
   expect((await database.query("SELECT actual_cut_count FROM current_receiving_cutting_links WHERE receipt_id=$1",[repeated.value.receiptId])).rows[0]!.actual_cut_count)
@@ -249,6 +253,9 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   );
   const repeatOptions=await strictReceiving.listRepeatOptions("TYLE");
   expect(repeatOptions.filter(item=>item.styleNo===sharedStyle).map(item=>item.cuttingOrderId).sort())
+    .toEqual([firstCut!.cuttingOrderId,secondCut!.cuttingOrderId].sort());
+  const compatibilityRepeatOptions=await receiving.listRepeatOptions("TYLE");
+  expect(compatibilityRepeatOptions.filter(item=>item.styleNo===sharedStyle).map(item=>item.cuttingOrderId).sort())
     .toEqual([firstCut!.cuttingOrderId,secondCut!.cuttingOrderId].sort());
   await cutting.correct(root("cutting:records:correct"),secondCut!.cuttingOrderId,{
     expectedVersion:1,pieceCount:20,actualCutCount:21,reason:"PR04看板读取当前实裁值",
