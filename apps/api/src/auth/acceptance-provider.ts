@@ -200,6 +200,15 @@ export class AcceptanceDingTalkProvider extends OfficialDingTalkProvider {
     }));
   }
 
+  override async listDepartedUserIds(corpId: string, startAt: Date, endAt: Date): Promise<readonly string[]> {
+    void startAt;
+    void endAt;
+    if (corpId !== this.acceptanceCorporationId) {
+      throw new DingTalkProtocolError("Acceptance departure directory belongs to a different corporation");
+    }
+    return [];
+  }
+
   private async memberByProviderUserId(providerUserId: string): Promise<OrganizationMember | null> {
     if (!providerUserId.startsWith(PROVIDER_PREFIX)) return null;
     const result = await this.acceptanceDatabase.query<AcceptanceIdentityRow>(

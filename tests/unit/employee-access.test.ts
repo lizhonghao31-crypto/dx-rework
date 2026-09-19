@@ -133,9 +133,13 @@ describe("PR-31 employee access contracts", () => {
     const provider = await readFile("apps/api/src/auth/provider.ts", "utf8");
     expect(provider).toContain('/topapi/v2/department/listsub');
     expect(provider).toContain('/topapi/v2/user/list');
+    expect(provider).toContain("/v1.0/contact/empLeaveRecords");
+    expect(provider).toContain("x-acs-dingtalk-access-token");
     expect(provider).toContain("pagination repeated a cursor");
     expect(provider).toContain("pagination did not advance");
+    expect(provider).toContain("departure pagination repeated a token");
     expect(provider).toContain("listOrganizationMembers");
+    expect(provider).toContain("listDepartedUserIds");
     expect(provider).toContain("if (!detail) return null;");
     expect(provider).toContain("directory member could not be verified in the configured corporation");
     expect(provider).not.toContain('active: false, employed: false, displayName: "钉钉用户"');
@@ -151,6 +155,13 @@ describe("PR-31 employee access contracts", () => {
     expect(service).toContain("departments: row.department_names");
     expect(service).toContain("active: row.active");
     expect(service).toContain("employed: row.employed");
+    expect(service).toContain('action: "access.directory.employee.departed"');
+    expect(service).toContain("confirmedDepartures");
+    expect(service).toContain("currentProviderUserIds");
+    expect(service).toContain("365 * 24 * 60 * 60 * 1_000");
+    expect(service).toContain("last-usable-owner guard");
+    expect(service).toContain("UPDATE auth_sessions SET revoked_at=$2");
+    expect(service).not.toContain("members.some((member) => member.userId === providerUserId) ? true : false");
   });
 
   it("does not expose bootstrap or root identity values in the employee page", async () => {
