@@ -377,6 +377,20 @@ export class CuttingService {
          ORDER BY correction.correction_version`,
         [row.cutting_record_id],
       );
+      const cuttingSheetPhotos = await db.query<{
+        attachment_id: string;
+        original_filename: string;
+        mime_type: "image/jpeg" | "image/png" | "image/webp";
+      }>(
+        `SELECT attachment_id,original_filename,mime_type
+         FROM attachments
+         WHERE entity_type='cutting_record'
+           AND entity_id=$1::text
+           AND status='ready'
+           AND mime_type IN ('image/jpeg','image/png','image/webp')
+         ORDER BY created_at,attachment_id`,
+        [row.cutting_record_id],
+      );
       record = {
         cuttingRecordId: row.cutting_record_id,
         version: Number(row.record_version),
@@ -388,6 +402,11 @@ export class CuttingService {
         recordedByName: row.recorded_by_name,
         recordedAt: toIso(row.recorded_at)!,
         corrected: row.corrected === true,
+        cuttingSheetPhotos: cuttingSheetPhotos.rows.map((photo) => ({
+          attachmentId: photo.attachment_id,
+          filename: photo.original_filename,
+          mimeType: photo.mime_type,
+        })),
         corrections: corrections.rows.map((correction) => ({
           version: Number(correction.correction_version) + 1,
           pieceCount: Number(correction.piece_count),
@@ -462,6 +481,25 @@ export class CuttingService {
         if (!row.formal_style_no?.trim()) {
           fail("正式款号尚未补齐，暂不能登记实裁", 409, "INVALID_STATE_TRANSITION");
         }
+        if (input.attachmentIds.length < 1 || input.attachmentIds.length > 3
+          || new Set(input.attachmentIds).size !== input.attachmentIds.length) {
+          fail("请上传1至3张不重复的裁床单图片", 400, "VALIDATION_ERROR");
+        }
+        const readyAttachments = await client.query(
+          `SELECT attachment_id
+           FROM attachments
+           WHERE attachment_id=ANY($1::uuid[])
+             AND uploaded_by=$2
+             AND status='ready'
+             AND entity_type IS NULL
+             AND entity_id IS NULL
+             AND mime_type IN ('image/jpeg','image/png','image/webp')
+           FOR UPDATE`,
+          [input.attachmentIds, actor.actorId],
+        );
+        if (readyAttachments.rowCount !== input.attachmentIds.length) {
+          fail("裁床单图片未完成上传、归属不符或格式无效", 400, "VALIDATION_ERROR");
+        }
         const outOfRange = cuttingOutOfRange(Number(row.contract_quantity), input.actualCutCount);
         const eventId = await this.events.append(client, actor, {
           action: "cutting.record.create",
@@ -472,6 +510,7 @@ export class CuttingService {
             status: "recorded",
             pieceCount: input.pieceCount,
             actualCutCount: input.actualCutCount,
+            attachmentIds: input.attachmentIds,
             outOfRange,
           },
           reason: "登记裁床实裁",
@@ -480,13 +519,23 @@ export class CuttingService {
         await client.query(
           `INSERT INTO cutting_records(
              cutting_record_id,cutting_order_id,piece_count,actual_cut_count,
-             recorded_by,operation_event_id,request_id
-           ) VALUES($1,$2,$3,$4,$5,$6,$7)`,
+             attachment_ids,recorded_by,operation_event_id,request_id
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
           [
             recordId, cuttingOrderId, input.pieceCount, input.actualCutCount,
-            actor.actorId, eventId, actor.requestId,
+            input.attachmentIds, actor.actorId, eventId, actor.requestId,
           ],
         );
+        const boundAttachments = await client.query(
+          `UPDATE attachments
+           SET entity_type='cutting_record',entity_id=$1::text,updated_at=clock_timestamp()
+           WHERE attachment_id=ANY($2::uuid[])
+           RETURNING attachment_id`,
+          [recordId, input.attachmentIds],
+        );
+        if (boundAttachments.rowCount !== input.attachmentIds.length) {
+          fail("裁床单图片绑定失败，请重试", 409, "INVALID_STATE_TRANSITION");
+        }
         return {
           statusCode: 201,
           response: {
@@ -602,9 +651,7 @@ export class CuttingService {
     actor: TrustedActorContext,
     binding: Readonly<{ entityType: string; entityId: string; mimeType: string }>,
   ): Promise<boolean> {
-    if (binding.entityType !== "sourcing_case" || !binding.mimeType.startsWith("image/")) {
-      return false;
-    }
+    if (!binding.mimeType.startsWith("image/")) return false;
     try {
       this.assertReader(actor);
     } catch (error) {
@@ -612,18 +659,36 @@ export class CuttingService {
       throw error;
     }
     const merchOnly = this.merchandiserOnly(actor);
-    const result = await this.database.query(
-      `SELECT 1
-       FROM cutting_orders cutting
-       JOIN sourcing_cases source_case
-         ON source_case.sourcing_case_id=cutting.sourcing_case_id
-        AND source_case.deleted_at IS NULL
-       WHERE cutting.sourcing_case_id=$1::uuid
-         AND ($2::boolean=false OR source_case.created_by=$3::uuid)
-       LIMIT 1`,
-      [binding.entityId, merchOnly, actor.actorId],
-    );
-    return Boolean(result.rowCount);
+    if (binding.entityType === "sourcing_case") {
+      const result = await this.database.query(
+        `SELECT 1
+         FROM cutting_orders cutting
+         JOIN sourcing_cases source_case
+           ON source_case.sourcing_case_id=cutting.sourcing_case_id
+          AND source_case.deleted_at IS NULL
+         WHERE cutting.sourcing_case_id=$1::uuid
+           AND ($2::boolean=false OR source_case.created_by=$3::uuid)
+         LIMIT 1`,
+        [binding.entityId, merchOnly, actor.actorId],
+      );
+      return Boolean(result.rowCount);
+    }
+    if (binding.entityType === "cutting_record") {
+      const result = await this.database.query(
+        `SELECT 1
+         FROM cutting_records record
+         JOIN cutting_orders cutting ON cutting.cutting_order_id=record.cutting_order_id
+         JOIN sourcing_cases source_case
+           ON source_case.sourcing_case_id=cutting.sourcing_case_id
+          AND source_case.deleted_at IS NULL
+         WHERE record.cutting_record_id=$1::uuid
+           AND ($2::boolean=false OR source_case.created_by=$3::uuid)
+         LIMIT 1`,
+        [binding.entityId, merchOnly, actor.actorId],
+      );
+      return Boolean(result.rowCount);
+    }
+    return false;
   }
 
   private mapListRow(row: CuttingReadRow) {

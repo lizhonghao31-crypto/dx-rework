@@ -454,7 +454,7 @@ export function Shell({
   }
 
   const cuttingNavigation: NavigationEntry[] = currentUser && canAccessCutting(currentUser)
-    ? [{ name: "裁床实裁", description: "登记裁片数与实裁数", href: "/ui/cutting", activeKey: "cutting" }]
+    ? [{ name: "裁床实裁", description: "登记士啤片与实裁数", href: "/ui/cutting", activeKey: "cutting" }]
     : [];
 
   const supplierNavigation: NavigationEntry[] = [];

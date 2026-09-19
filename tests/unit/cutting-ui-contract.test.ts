@@ -57,6 +57,15 @@ describe("cutting UI contract", () => {
     ]);
     expect(page).toContain('<details className="cutting-range-disclosure">');
     expect(page).toContain('inputMode="numeric"');
+    expect(page).toContain("士啤片");
+    expect(page).not.toContain("裁片数");
+    expect(page).toContain("上传裁床单");
+    expect(page).toContain("必须上传1张，最多3张；支持 JPEG / PNG / WebP。");
+    expect(page).toContain('accept="image/*"');
+    expect(page).toContain("prepareImageUploadCandidate");
+    expect(page).toContain("uploadImageWithNormalizationRetry");
+    expect(page).toContain('className="rework-v2-upload"');
+    expect(page).toContain('className="rework-v2-image-grid"');
     expect(page).not.toMatch(/window\.(alert|prompt|confirm)\s*\(/);
     expect(page).toContain("const correctionAttempt = useRef");
     expect(page).toContain("correctionAttempt.current?.body !== body");
