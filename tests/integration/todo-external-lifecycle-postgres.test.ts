@@ -228,15 +228,34 @@ runWithPostgres("PR-13 todo notification lifecycle", () => {
     operationEventId: string,
     suffix: string,
   ): Promise<void> => {
-    await database.query(
-      `SELECT enqueue_todo_external_delivery(
-         todo,'complete',todo.recipient_user_id,$2::uuid,event.request_id,$3
-       )
-       FROM rework_todos todo
-       JOIN operation_events event ON event.event_id=$2::uuid
-       WHERE todo.todo_id=$1::uuid`,
-      [todoId, operationEventId, suffix],
-    );
+    const client = await database.connect();
+    try {
+      await client.query("BEGIN");
+      const event = await client.query<{ request_id: string }>(
+        "SELECT request_id FROM operation_events WHERE event_id=$1::uuid",
+        [operationEventId],
+      );
+      const requestId = event.rows[0]?.request_id;
+      if (!requestId) throw new Error("completion audit event is missing");
+      await client.query(
+        "SELECT set_config('dx_rework.todo_event_id',$1,true),set_config('dx_rework.todo_request_id',$2,true)",
+        [operationEventId, requestId],
+      );
+      await client.query(
+        `SELECT enqueue_todo_external_delivery(
+           todo,'complete',todo.recipient_user_id,$2::uuid,$3,$4
+         )
+         FROM rework_todos todo
+         WHERE todo.todo_id=$1::uuid`,
+        [todoId, operationEventId, requestId, suffix],
+      );
+      await client.query("COMMIT");
+    } catch (error: unknown) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   };
 
   it("installs external lifecycle tables and limits runtime authority to an explicit capability", async () => {
