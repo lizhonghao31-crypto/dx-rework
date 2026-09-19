@@ -319,14 +319,17 @@ export class EmployeeAccessService {
   async syncDirectory(actor: TrustedActorContext): Promise<EmployeeAccessSyncResponse> {
     await this.assertRootActor(actor, this.database, false);
     const syncedAt = new Date();
-    const verification = await this.database.query<{ since: Date | null }>(
-      `SELECT min(last_verified_at) since
-       FROM identity_mappings
-       WHERE provider='dingtalk' AND corp_id=$1 AND active=true AND employed=true`,
+    const directoryHistory = await this.database.query<{ since: Date | null }>(
+      `SELECT min(profile.last_directory_synced_at) since
+       FROM employee_directory_profiles profile
+       JOIN identity_mappings identity
+         ON identity.user_id=profile.user_id
+        AND identity.provider='dingtalk'
+        AND identity.corp_id=$1`,
       [this.corporationId],
     );
-    const departureStart = verification.rows[0]?.since
-      ? new Date(Math.min(verification.rows[0].since.getTime(), syncedAt.getTime()))
+    const departureStart = directoryHistory.rows[0]?.since
+      ? new Date(Math.min(directoryHistory.rows[0].since.getTime(), syncedAt.getTime()))
       : syncedAt;
     const [members, departedUserIds] = await Promise.all([
       this.provider.listOrganizationMembers(this.corporationId),
