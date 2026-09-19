@@ -1780,6 +1780,7 @@ export class ReceivingService {
   async listRepeatOptions(query = ""): Promise<readonly RepeatReceivingOption[]> {
     const needle = query.trim().toUpperCase();
     if (needle.length < 4) return [];
+
     if (this.options.allowLegacyStyleInput) {
       const result = await this.database.query<{
         receiving_batch_id: string;
@@ -1836,9 +1837,11 @@ export class ReceivingService {
          LIMIT 20`,
         [needle],
       );
+
       const linkedIds = result.rows
         .map((row) => row.cutting_order_id)
         .filter((value): value is string => value !== null);
+
       if (linkedIds.length === 0) {
         return result.rows.map((row) => ({
           receivingBatchId: row.receiving_batch_id,
@@ -1846,6 +1849,7 @@ export class ReceivingService {
           documentQuantity: Number(row.document_quantity),
         }));
       }
+
       const linked = await this.database.query<{
         cutting_order_id: string;
         color: string | null;
@@ -1860,6 +1864,7 @@ export class ReceivingService {
         [linkedIds],
       );
       const linkedById = new Map(linked.rows.map((row) => [row.cutting_order_id, row] as const));
+
       return result.rows.flatMap((row) => {
         if (!row.cutting_order_id) {
           return [{
@@ -1882,87 +1887,7 @@ export class ReceivingService {
         }];
       });
     }
-    const result = await this.database.query<{
-        receiving_batch_id: string;
-        style_no: string;
-        document_quantity: string;
-        cutting_order_id: string | null;
-        color: string | null;
-        supplier_name: string | null;
-        actual_cut_count: string | null;
-        style_conflict_count: string | null;
-      }>(
-        `WITH ranked AS (
-           SELECT batch.receiving_batch_id,batch.cutting_order_id,
-                  upper(btrim(batch.style_no)) AS style_no,
-                  batch.delivery_note_quantity::bigint AS document_quantity,
-                  row_number() OVER (
-                    PARTITION BY upper(btrim(batch.style_no))
-                    ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
-                  ) AS position,
-                  EXISTS(
-                    SELECT 1 FROM rework_orders rework
-                    WHERE rework.source_receiving_batch_id=batch.receiving_batch_id
-                      AND (
-                        rework.status='completed'
-                        OR EXISTS (
-                          SELECT 1 FROM operation_events event
-                          WHERE event.entity_type='rework_order'
-                            AND event.entity_id=rework.rework_order_id::text
-                            AND event.after_state->>'status'='completed'
-                        )
-                      )
-                  ) AS closed,
-                  EXISTS(
-                    SELECT 1 FROM attachments attachment
-                    WHERE attachment.entity_type='receiving_batch'
-                      AND attachment.entity_id=batch.receiving_batch_id::text
-                      AND attachment.status='ready'
-                      AND NOT EXISTS(
-                        SELECT 1 FROM receiving_attachment_retirements retired
-                        WHERE retired.attachment_id=attachment.attachment_id
-                      )
-                  ) AS has_images
-           FROM receiving_batches batch
-           WHERE batch.deleted_at IS NULL
-             AND NOT EXISTS(
-               SELECT 1
-               FROM receiving_receipts receipt
-               JOIN operation_events event ON event.event_id=receipt.operation_event_id
-               WHERE receipt.receiving_batch_id=batch.receiving_batch_id
-                 AND event.after_state->>'backfilled'='true'
-             )
-         )
-         SELECT ranked.receiving_batch_id,ranked.style_no,ranked.document_quantity,
-                option_row.cutting_order_id,option_row.color,option_row.supplier_name,
-                option_row.actual_cut_count::text,option_row.style_conflict_count::text
-         FROM ranked
-         LEFT JOIN current_cutting_style_options option_row
-           ON option_row.cutting_order_id=ranked.cutting_order_id
-         WHERE ranked.position=1 AND NOT ranked.closed AND ranked.has_images
-           AND right(ranked.style_no,char_length($1))=$1
-           AND (ranked.cutting_order_id IS NULL OR option_row.cutting_order_id IS NOT NULL)
-         ORDER BY ranked.style_no,option_row.supplier_name NULLS LAST,
-                  option_row.color NULLS LAST
-         LIMIT 20`,
-        [needle],
-      );
-      return result.rows.map((row) => ({
-        receivingBatchId: row.receiving_batch_id,
-        styleNo: row.style_no,
-        documentQuantity: Number(row.document_quantity),
-        ...(row.cutting_order_id && row.supplier_name && row.actual_cut_count !== null
-          && row.style_conflict_count !== null
-          ? {
-              cuttingOrderId: row.cutting_order_id,
-              color: row.color,
-              supplierName: row.supplier_name,
-              actualCutCount: Number(row.actual_cut_count),
-              styleConflictCount: Number(row.style_conflict_count),
-            }
-          : {}),
-      }));
-    }
+
     const result = await this.database.query<{
       receiving_batch_id: string;
       style_no: string;
