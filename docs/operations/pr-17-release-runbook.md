@@ -22,7 +22,7 @@ Nginx 安装或配置变更属于单独的基础设施窗口，须另行批准�
 目标机使用三个相互隔离、普通文件、非软链接、属主为低权限部署用户且权限为 `0600` 的配置文件：
 
 - `/opt/dx-rework/shared/.env`：应用运行变量；Production 必须使用 `APP_BASE_PATH=/`、`DINGTALK_QR_REDIRECT_URI=https://dxerp.org.cn/auth/qr/relay`、`TODO_PUBLIC_BASE_URL=https://dxerp.org.cn/`；Pilot shared-path 使用 `APP_BASE_PATH=/rework/`；PR-31 首位老板 bootstrap 的 userid/secret 两项默认均不配置，仅允许在明确的一次性初始化窗口成对注入；
-- `/opt/dx-rework/shared/deploy.env`：Node 22 路径、显式 Nginx 模式、HTTPS server name、TLS、真实 Nginx 配置路径和环境 profile；参考 `pr-17-deploy.env.example`；
+- `/opt/dx-rework/shared/deploy.env`：Node 22 路径、PostgreSQL 客户端目录、显式 Nginx 模式、HTTPS server name、TLS、真实 Nginx 配置路径和环境 profile；Production 必须将 `DX_REWORK_PG_BIN_DIR` 固定到与生产数据库主版本兼容的客户端目录（当前 ECS 为 `/usr/pgsql-16/bin`）；参考 `pr-17-deploy.env.example`；
 - `/opt/dx-rework/shared/restore.env`：仅恢复演练目标库及批准指纹；参考 `pr-17-restore.env.example`。API 进程不会读取该文件。
 
 首位老板 bootstrap 窗口是独立的安全操作窗口，不与 release/rollback 并发：只有**包含首位老板 bootstrap 能力、且其 migration manifest 与当前数据库完整一致**的 release 已稳定运行后，才允许临时把 `OWNER_BOOTSTRAP_DINGTALK_USER_ID` 与 `OWNER_BOOTSTRAP_SECRET` 成对写入 `.env` 并仅 reload `dx-rework-api`。完成一次性 bootstrap 后必须立即从 `.env` 删除两项、再次 reload 并确认 bootstrap 回到默认关闭状态。窗口期间禁止发起发布或代码回滚；尤其不得尝试回滚到不认识这两个环境键的更早 start wrapper。数据库的一次性 consumption 记录不因删除环境变量而撤销。
