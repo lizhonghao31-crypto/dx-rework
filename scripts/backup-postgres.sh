@@ -29,9 +29,7 @@ install -d -m 0700 "$root"
 exec 8>"$root/.backup.lock"
 flock -n 8 || die 'backup lock is held'
 
-identity="$(psql "$DATABASE_URL" -XAtqc "select coalesce(inet_server_addr()::text,'local')||':'||inet_server_port()||'/'||current_database()")"
-[[ -n "$identity" ]] || die 'database identity unavailable'
-fingerprint="$(printf %s "$identity" | sha256sum | cut -d' ' -f1)"
+fingerprint="$(database_connection_fingerprint "$DATABASE_URL")"
 
 stamp="$(date -u +%Y%m%dT%H%M%S.%NZ)"
 name="${stamp}-${GIT_SHA:0:12}-$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')"
