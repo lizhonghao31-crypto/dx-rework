@@ -623,7 +623,7 @@ export class ReceivingService {
       }, async () => {
         const cutting = normalized.cuttingOrderId
           ? await this.resolveCuttingSelection(client, normalized.cuttingOrderId)
-          : normalized.styleNo && this.options.allowLegacyStyleInput
+          : normalized.styleNo && !normalized.productionOrderId && this.options.allowLegacyStyleInput
             ? await this.resolveUniqueExactCuttingSelection(client, normalized.styleNo)
             : null;
         return {
