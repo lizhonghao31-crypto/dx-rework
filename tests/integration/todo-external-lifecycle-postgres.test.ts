@@ -194,6 +194,51 @@ runWithPostgres("PR-13 todo notification lifecycle", () => {
     }
   };
 
+  const completeTodo = async (
+    service: TodoService,
+    actor: TrustedActorContext,
+    dedupeKey: string,
+  ): Promise<string> => {
+    const client = await database.connect();
+    try {
+      await client.query("BEGIN");
+      expect(await service.completeOpenByDedupeKey(
+        client,
+        { ...actor, requestId: `complete-${randomUUID()}` },
+        dedupeKey,
+        "Terminal delivery idempotency test",
+      )).toBe(true);
+      const result = await client.query<{ completed_operation_event_id: string }>(
+        `SELECT completed_operation_event_id
+         FROM rework_todos WHERE dedupe_key=$1`,
+        [dedupeKey],
+      );
+      await client.query("COMMIT");
+      return result.rows[0]!.completed_operation_event_id;
+    } catch (error: unknown) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  };
+
+  const enqueueLegacyComplete = async (
+    todoId: string,
+    operationEventId: string,
+    suffix: string,
+  ): Promise<void> => {
+    await database.query(
+      `SELECT enqueue_todo_external_delivery(
+         todo,'complete',todo.recipient_user_id,$2::uuid,event.request_id,$3
+       )
+       FROM rework_todos todo
+       JOIN operation_events event ON event.event_id=$2::uuid
+       WHERE todo.todo_id=$1::uuid`,
+      [todoId, operationEventId, suffix],
+    );
+  };
+
   it("installs external lifecycle tables and limits runtime authority to an explicit capability", async () => {
     const tables = await database.query<{ table_name: string }>(
       `SELECT table_name FROM information_schema.tables
@@ -433,6 +478,138 @@ runWithPostgres("PR-13 todo notification lifecycle", () => {
       { recipient_user_id: original.userId, provider_state: "completed", external_generation: 1 },
       { recipient_user_id: replacement.userId, provider_state: "active", external_generation: 2 },
     ] });
+  });
+
+  it("treats terminal or never-created external completions as idempotent and preserves a pending create race", async () => {
+    const actor = await createUser("Terminal delivery actor", "tail_supervisor");
+    const service = new TodoService(database);
+    const provider = new FakeDingTalkTodoProvider();
+    const worker = new TodoDeliveryWorker(database, provider, "https://example.test/");
+
+    const terminalEntity = randomUUID();
+    const terminalSource = await sourceEvent(actor.actor, "rework.submit", terminalEntity);
+    const terminalKey = `terminal-binding:${terminalEntity}`;
+    const terminalTodo = await createTodo(service, actor.actor, {
+      todoType: "business_action",
+      category: "process_configuration",
+      sourceEventId: terminalSource,
+      sourceAction: "rework.submit",
+      entityType: "rework_order",
+      entityId: terminalEntity,
+      recipientUserId: actor.userId,
+      requiredRole: "tail_supervisor",
+      requiredCapability: "process:configure",
+      route: { routeName: "process_configuration", entityId: terminalEntity },
+      policyKey: "general",
+      dedupeKey: terminalKey,
+    });
+    expect((await worker.runOnce(1)).sent).toBe(1);
+    const terminalOperationEventId = await completeTodo(service, actor.actor, terminalKey);
+    const terminalOutbox = await database.query<{ event_id: string }>(
+      `SELECT event_id FROM message_outbox
+       WHERE aggregate_id=$1 AND payload->>'deliveryKind'='complete'
+       ORDER BY created_at DESC LIMIT 1`,
+      [terminalTodo.todoId],
+    );
+    await database.query(
+      `UPDATE dingtalk_todo_external_bindings
+       SET provider_state='completed',terminal_outbox_event_id=$2,
+           terminal_operation_event_id=$3,updated_at=CURRENT_TIMESTAMP
+       WHERE todo_id=$1`,
+      [terminalTodo.todoId, terminalOutbox.rows[0]!.event_id, terminalOperationEventId],
+    );
+    await expect(worker.runOnce(1)).resolves.toEqual({
+      claimed: 1,
+      sent: 0,
+      failed: 0,
+      suppressed: 1,
+    });
+    expect(provider.calls.map((call) => call.method)).toEqual(["create"]);
+
+    const noBindingEntity = randomUUID();
+    const noBindingSource = await sourceEvent(actor.actor, "rework.submit", noBindingEntity);
+    const noBindingKey = `no-binding:${noBindingEntity}`;
+    const noBindingTodo = await createTodo(service, actor.actor, {
+      todoType: "business_action",
+      category: "process_configuration",
+      sourceEventId: noBindingSource,
+      sourceAction: "rework.submit",
+      entityType: "rework_order",
+      entityId: noBindingEntity,
+      recipientUserId: actor.userId,
+      requiredRole: "tail_supervisor",
+      requiredCapability: "process:configure",
+      route: { routeName: "process_configuration", entityId: noBindingEntity },
+      policyKey: "general",
+      dedupeKey: noBindingKey,
+    });
+    await database.query(
+      `UPDATE message_outbox
+       SET status='sent',sent_at=CURRENT_TIMESTAMP,last_error=NULL,updated_at=CURRENT_TIMESTAMP
+       WHERE aggregate_id=$1 AND payload->>'deliveryKind'='create'`,
+      [noBindingTodo.todoId],
+    );
+    const noBindingOperationEventId = await completeTodo(service, actor.actor, noBindingKey);
+    await enqueueLegacyComplete(
+      noBindingTodo.todoId,
+      noBindingOperationEventId,
+      `legacy-no-binding:${noBindingOperationEventId}`,
+    );
+    await expect(worker.runOnce(1)).resolves.toEqual({
+      claimed: 1,
+      sent: 0,
+      failed: 0,
+      suppressed: 1,
+    });
+    expect(provider.calls.map((call) => call.method)).toEqual(["create"]);
+    await expect(database.query(
+      "SELECT count(*)::int count FROM dingtalk_todo_external_bindings WHERE todo_id=$1",
+      [noBindingTodo.todoId],
+    )).resolves.toMatchObject({ rows: [{ count: 0 }] });
+
+    const pendingEntity = randomUUID();
+    const pendingSource = await sourceEvent(actor.actor, "rework.submit", pendingEntity);
+    const pendingKey = `pending-create:${pendingEntity}`;
+    const pendingTodo = await createTodo(service, actor.actor, {
+      todoType: "business_action",
+      category: "process_configuration",
+      sourceEventId: pendingSource,
+      sourceAction: "rework.submit",
+      entityType: "rework_order",
+      entityId: pendingEntity,
+      recipientUserId: actor.userId,
+      requiredRole: "tail_supervisor",
+      requiredCapability: "process:configure",
+      route: { routeName: "process_configuration", entityId: pendingEntity },
+      policyKey: "general",
+      dedupeKey: pendingKey,
+    });
+    await database.query(
+      `UPDATE message_outbox
+       SET status='failed',available_at=CURRENT_TIMESTAMP + interval '1 hour',
+           last_error='deferred creation test',updated_at=CURRENT_TIMESTAMP
+       WHERE aggregate_id=$1 AND payload->>'deliveryKind'='create'`,
+      [pendingTodo.todoId],
+    );
+    const pendingOperationEventId = await completeTodo(service, actor.actor, pendingKey);
+    await enqueueLegacyComplete(
+      pendingTodo.todoId,
+      pendingOperationEventId,
+      `legacy-pending-create:${pendingOperationEventId}`,
+    );
+    await expect(worker.runOnce(1)).resolves.toEqual({
+      claimed: 1,
+      sent: 0,
+      failed: 1,
+      suppressed: 0,
+    });
+    expect(provider.calls.map((call) => call.method)).toEqual(["create"]);
+    await expect(database.query(
+      `SELECT status FROM message_outbox
+       WHERE aggregate_id=$1 AND payload->>'deliveryKind'='complete'
+       ORDER BY created_at DESC LIMIT 1`,
+      [pendingTodo.todoId],
+    )).resolves.toMatchObject({ rows: [{ status: "failed" }] });
   });
 
   it("updates the existing external todo for a database-timed reminder without creating a duplicate binding", async () => {
