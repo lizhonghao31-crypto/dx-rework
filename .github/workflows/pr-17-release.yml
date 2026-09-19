@@ -32,10 +32,6 @@ concurrency:
   group: pr-17-${{ inputs.target_environment }}
   cancel-in-progress: false
 
-env:
-  APP_BASE_PATH: /rework/
-  VITE_BASE_PATH: /rework/
-
 jobs:
   gate:
     name: Build exact main release bundle
@@ -59,6 +55,24 @@ jobs:
           test "$(git rev-parse HEAD)" = "$TARGET_SHA"
           test "$(git rev-parse origin/main)" = "$TARGET_SHA"
 
+      - name: Resolve deployment base path
+        shell: bash
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+        run: |
+          set -euo pipefail
+          case "$TARGET_ENVIRONMENT" in
+            dx-rework-production)
+              printf 'APP_BASE_PATH=/\nVITE_BASE_PATH=/\n' >> "$GITHUB_ENV"
+              ;;
+            dx-rework-pilot)
+              printf 'APP_BASE_PATH=/rework/\nVITE_BASE_PATH=/rework/\n' >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "Unsupported target environment: $TARGET_ENVIRONMENT" >&2
+              exit 64
+              ;;
+          esac
       - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
