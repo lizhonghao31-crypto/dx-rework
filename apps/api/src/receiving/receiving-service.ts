@@ -1786,6 +1786,107 @@ export class ReceivingService {
         style_no: string;
         document_quantity: string;
         cutting_order_id: string | null;
+      }>(
+        `WITH ranked AS (
+           SELECT batch.receiving_batch_id,batch.cutting_order_id,
+                  upper(btrim(batch.style_no)) AS style_no,
+                  batch.delivery_note_quantity::bigint AS document_quantity,
+                  row_number() OVER (
+                    PARTITION BY upper(btrim(batch.style_no))
+                    ORDER BY batch.created_at DESC,batch.receiving_batch_id DESC
+                  ) AS position,
+                  EXISTS(
+                    SELECT 1 FROM rework_orders rework
+                    WHERE rework.source_receiving_batch_id=batch.receiving_batch_id
+                      AND (
+                        rework.status='completed'
+                        OR EXISTS (
+                          SELECT 1 FROM operation_events event
+                          WHERE event.entity_type='rework_order'
+                            AND event.entity_id=rework.rework_order_id::text
+                            AND event.after_state->>'status'='completed'
+                        )
+                      )
+                  ) AS closed,
+                  EXISTS(
+                    SELECT 1 FROM attachments attachment
+                    WHERE attachment.entity_type='receiving_batch'
+                      AND attachment.entity_id=batch.receiving_batch_id::text
+                      AND attachment.status='ready'
+                      AND NOT EXISTS(
+                        SELECT 1 FROM receiving_attachment_retirements retired
+                        WHERE retired.attachment_id=attachment.attachment_id
+                      )
+                  ) AS has_images
+           FROM receiving_batches batch
+           WHERE batch.deleted_at IS NULL
+             AND NOT EXISTS(
+               SELECT 1
+               FROM receiving_receipts receipt
+               JOIN operation_events event ON event.event_id=receipt.operation_event_id
+               WHERE receipt.receiving_batch_id=batch.receiving_batch_id
+                 AND event.after_state->>'backfilled'='true'
+             )
+         )
+         SELECT receiving_batch_id,cutting_order_id,style_no,document_quantity
+         FROM ranked
+         WHERE position=1 AND NOT closed AND has_images
+           AND right(style_no,char_length($1))=$1
+         ORDER BY style_no
+         LIMIT 20`,
+        [needle],
+      );
+      const linkedIds = result.rows
+        .map((row) => row.cutting_order_id)
+        .filter((value): value is string => value !== null);
+      if (linkedIds.length === 0) {
+        return result.rows.map((row) => ({
+          receivingBatchId: row.receiving_batch_id,
+          styleNo: row.style_no,
+          documentQuantity: Number(row.document_quantity),
+        }));
+      }
+      const linked = await this.database.query<{
+        cutting_order_id: string;
+        color: string | null;
+        supplier_name: string;
+        actual_cut_count: string;
+        style_conflict_count: string;
+      }>(
+        `SELECT cutting_order_id,color,supplier_name,
+                actual_cut_count::text,style_conflict_count::text
+         FROM current_cutting_style_options
+         WHERE cutting_order_id=ANY($1::uuid[])`,
+        [linkedIds],
+      );
+      const linkedById = new Map(linked.rows.map((row) => [row.cutting_order_id, row] as const));
+      return result.rows.flatMap((row) => {
+        if (!row.cutting_order_id) {
+          return [{
+            receivingBatchId: row.receiving_batch_id,
+            styleNo: row.style_no,
+            documentQuantity: Number(row.document_quantity),
+          }];
+        }
+        const option = linkedById.get(row.cutting_order_id);
+        if (!option) return [];
+        return [{
+          receivingBatchId: row.receiving_batch_id,
+          cuttingOrderId: option.cutting_order_id,
+          styleNo: row.style_no,
+          documentQuantity: Number(row.document_quantity),
+          color: option.color,
+          supplierName: option.supplier_name,
+          actualCutCount: Number(option.actual_cut_count),
+          styleConflictCount: Number(option.style_conflict_count),
+        }];
+      });
+    }
+    const result = await this.database.query<{
+        receiving_batch_id: string;
+        style_no: string;
+        document_quantity: string;
+        cutting_order_id: string | null;
         color: string | null;
         supplier_name: string | null;
         actual_cut_count: string | null;
