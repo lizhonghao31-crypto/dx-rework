@@ -745,6 +745,11 @@ export class ReceivingService {
     client: PoolClient,
     styleNo: string,
   ): Promise<(CuttingReceivingOption & { sourcingCaseId: string }) | null> {
+    const relation = await client.query<{ relation_name: string | null }>(
+      "SELECT to_regclass('current_cutting_style_options')::text AS relation_name",
+    );
+    if (!relation.rows[0]?.relation_name) return null;
+
     const normalizedStyle = normalizeStyleNo(styleNo);
     const matches = await client.query<{ cutting_order_id: string }>(
       `SELECT cutting_order_id
