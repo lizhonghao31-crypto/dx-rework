@@ -82,6 +82,30 @@ node_exec() {
   "$node_bin" "$@"
 }
 
+database_connection_identity() {
+  local database_url="${1:-}" database
+  [[ -n "$database_url" ]] || die 'database URL required for identity'
+  require_command psql
+  database="$(psql "$database_url" -XAtqc "select current_database()")"
+  [[ "$database" =~ ^[A-Za-z0-9_.-]+$ ]] || die 'database identity unavailable'
+  node_exec -e '
+const [raw,database]=process.argv.slice(1);
+let url;
+try { url=new URL(raw); } catch { process.exit(1); }
+if(url.protocol!=="postgres:"&&url.protocol!=="postgresql:")process.exit(1);
+const host=(url.hostname||url.searchParams.get("host")||"local").toLowerCase();
+const port=url.port||url.searchParams.get("port")||"5432";
+if(!host||!port||!database)process.exit(1);
+process.stdout.write(`${host}:${port}/${database}`);
+' "$database_url" "$database" || die 'database identity unavailable'
+}
+
+database_connection_fingerprint() {
+  local identity
+  identity="$(database_connection_identity "$1")"
+  printf %s "$identity" | sha256sum | cut -d' ' -f1
+}
+
 acquire_lock() {
   local file inherited="${DX_REWORK_LOCK_FD:-}"
   file="$(assert_safe_path "$1")"

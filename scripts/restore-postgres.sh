@@ -30,10 +30,7 @@ for(const k of ["createdAt","gitSha","schemaVersion","schemaChecksum","sourceFin
 if(!Number.isFinite(Date.parse(m.createdAt)))process.exit(1);
 ' "$meta" || die 'invalid metadata'
 
-db_identity() {
-  psql "$1" -XAtqc "select coalesce(inet_server_addr()::text,'local')||':'||inet_server_port()||'/'||current_database()"
-}
-target_identity="$(db_identity "$DX_REWORK_RESTORE_DATABASE_URL")"
+target_identity="$(database_connection_identity "$DX_REWORK_RESTORE_DATABASE_URL")"
 target_name="${target_identity##*/}"
 target_fp="$(printf %s "$target_identity" | sha256sum | cut -d' ' -f1)"
 metadata_fp="$(node_exec -e 'process.stdout.write(JSON.parse(process.argv[1]).sourceFingerprint)' "$meta")"
