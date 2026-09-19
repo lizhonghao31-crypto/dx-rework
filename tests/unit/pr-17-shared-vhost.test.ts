@@ -84,6 +84,91 @@ describe("PR-17 shared staging /rework contract", () => {
     expect(result.stdout).toBe("https://rework.example.com");
   });
 
+  it("pins production to the official root domain and dedicated vhost", () => {
+    const directory = mkdtempSync(join(tmpdir(), "ops05-production-root-"));
+    const app = envFile(
+      directory,
+      "app.env",
+      [
+        "APP_BASE_PATH=/",
+        "DINGTALK_QR_REDIRECT_URI=https://dxerp.org.cn/auth/qr/relay",
+        "TODO_PUBLIC_BASE_URL=https://dxerp.org.cn/",
+        "",
+      ].join("\n"),
+    );
+    const deploy = envFile(
+      directory,
+      "deploy.env",
+      "DX_REWORK_NGINX_MODE=dedicated_vhost\nDX_REWORK_SERVER_NAME=dxerp.org.cn\nDX_REWORK_PROFILE=production\n",
+    );
+    const result = spawnSync(
+      "bash",
+      [
+        "-c",
+        `source scripts/deploy/lib.sh; DX_REWORK_APP_ENV_FILE='${app}' DX_REWORK_DEPLOY_ENV_FILE='${deploy}' load_release_config; printf '%s\\n%s\\n%s\\n' "$DX_REWORK_SMOKE_ORIGIN" "$DX_REWORK_SMOKE_WEB_URL" "$DX_REWORK_SMOKE_API_URL"`,
+      ],
+      { cwd: root, encoding: "utf8" },
+    );
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.stdout.trim().split("\n")).toEqual([
+      "https://dxerp.org.cn",
+      "https://dxerp.org.cn",
+      "https://dxerp.org.cn",
+    ]);
+  });
+
+  it("fails closed if production is left on the staging /rework contract", () => {
+    const directory = mkdtempSync(join(tmpdir(), "ops05-production-prefix-"));
+    const app = envFile(
+      directory,
+      "app.env",
+      [
+        "APP_BASE_PATH=/rework/",
+        "DINGTALK_QR_REDIRECT_URI=https://staging-api.dxerp.org.cn/rework/auth/qr/relay",
+        "TODO_PUBLIC_BASE_URL=https://staging-api.dxerp.org.cn/rework/",
+        "",
+      ].join("\n"),
+    );
+    const deploy = envFile(
+      directory,
+      "deploy.env",
+      "DX_REWORK_NGINX_MODE=shared_path\nDX_REWORK_SERVER_NAME=staging-api.dxerp.org.cn\nDX_REWORK_PROFILE=production\n",
+    );
+    const result = spawnSync(
+      "bash",
+      [
+        "-c",
+        `source scripts/deploy/lib.sh; DX_REWORK_APP_ENV_FILE='${app}' DX_REWORK_DEPLOY_ENV_FILE='${deploy}' load_release_config`,
+      ],
+      { cwd: root, encoding: "utf8" },
+    );
+    expect(result.status).not.toBe(0);
+    expect(`${result.stdout}\n${result.stderr}`).toMatch(/production requires/);
+  });
+
+  it("keeps official-domain release and legacy redirect contracts explicit", () => {
+    const workflow = read(".github/workflows/pr-17-release.yml");
+    const preflight = read("scripts/deploy/preflight.sh");
+    const fastDeploy = read("scripts/deploy-ecs.sh");
+    const smoke = read("scripts/deploy/smoke.sh");
+    const redirects = read("infra/nginx/dx-rework-legacy-redirects.conf.example");
+
+    expect(workflow).toContain("APP_BASE_PATH=/");
+    expect(workflow).toContain("APP_BASE_PATH=/rework/");
+    expect(preflight).toContain("release-app-base");
+    expect(preflight).toContain("release-vite-base");
+    expect(fastDeploy).not.toContain("https://staging-api.dxerp.org.cn/rework/");
+    expect(fastDeploy).toContain('\"appBasePath\":\"$APP_BASE_PATH\"');
+    expect(smoke).toContain('asset_prefix="${APP_BASE_PATH%/}/assets/"');
+
+    expect(redirects).toContain("https://dxerp.org.cn/");
+    expect(redirects).toContain("location = /rework/auth/qr/relay");
+    expect(redirects).toContain("location = /rework/api/auth/qr/callback");
+    expect(redirects).toContain("access_log off;");
+    expect(redirects).toContain("error_log /dev/null emerg;");
+    expect(redirects).toContain("dx_rework_legacy_path");
+  });
+
   it("keeps the shared Nginx snippet inside /rework and path-scopes maintenance", () => {
     const nginx = read("infra/nginx/dx-rework-shared-paths.conf.example");
     expect(nginx).toContain("# DX_REWORK_SHARED_PATHS_BEGIN");
