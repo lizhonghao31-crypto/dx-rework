@@ -18,6 +18,7 @@ describe("PostgreSQL backup manifest", () => {
     const lib = await readFile(new URL("../../scripts/deploy/lib.sh", import.meta.url), "utf8");
     const backup = await readFile(new URL("../../scripts/backup-postgres.sh", import.meta.url), "utf8");
     const restore = await readFile(new URL("../../scripts/restore-postgres.sh", import.meta.url), "utf8");
+    const fullGate = await readFile(new URL("../../.github/workflows/full-gate.yml", import.meta.url), "utf8");
 
     expect(lib).toContain("database_connection_identity()");
     expect(lib).toContain('select current_database()');
@@ -27,5 +28,7 @@ describe("PostgreSQL backup manifest", () => {
     expect(restore).toContain('database_connection_identity "$DX_REWORK_RESTORE_DATABASE_URL"');
     expect(backup).not.toContain("inet_server_addr()");
     expect(restore).not.toContain("inet_server_addr()");
+    expect(fullGate).toContain('target_fp="$(database_connection_fingerprint "$target_url")"');
+    expect(fullGate).not.toContain("inet_server_addr()");
   });
 });
