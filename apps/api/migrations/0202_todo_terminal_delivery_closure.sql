@@ -6,7 +6,7 @@ WITH terminal_complete_delivery AS (
   SELECT outbox.event_id
   FROM message_outbox outbox
   WHERE outbox.topic='todo.delivery'
-    AND outbox.status IN ('pending','processing','failed')
+    AND outbox.status IN ('pending','failed')
     AND outbox.payload->>'deliveryKind'='complete'
     AND outbox.aggregate_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
     AND COALESCE(outbox.payload->>'recipientUserId','')
