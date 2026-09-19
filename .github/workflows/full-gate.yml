@@ -205,8 +205,8 @@ jobs:
           psql "$admin_url" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $target_name"
           psql "$admin_url" -v ON_ERROR_STOP=1 -c "CREATE DATABASE $target_name"
           target_url="postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/$target_name"
-          target_identity="$(psql "$target_url" -XAtqc "select coalesce(inet_server_addr()::text,'local')||':'||inet_server_port()||'/'||current_database()")"
-          target_fp="$(printf %s "$target_identity" | sha256sum | cut -d' ' -f1)"
+          source scripts/deploy/lib.sh
+          target_fp="$(database_connection_fingerprint "$target_url")"
           {
             printf 'DX_REWORK_RESTORE_DATABASE_URL=%s\n' "$target_url"
             printf 'DX_REWORK_APPROVED_TARGET_FINGERPRINT=%s\n' "$target_fp"
