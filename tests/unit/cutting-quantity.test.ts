@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CorrectCuttingRecordSchema,
   CreateCuttingRecordSchema,
   cuttingAllowedRange,
   cuttingOutOfRange,
@@ -20,15 +21,33 @@ describe("cutting quantity rules", () => {
     expect(parseCuttingCountText("Infinity")).toBeNull();
   });
 
-  it("keeps piece count and actual cut count independent", () => {
+  it("keeps piece count and actual cut count independent while requiring 1-3 cutting-sheet images", () => {
+    const first = "00000000-0000-4000-8000-000000000001";
+    const second = "00000000-0000-4000-8000-000000000002";
+    const third = "00000000-0000-4000-8000-000000000003";
+    const fourth = "00000000-0000-4000-8000-000000000004";
     expect(CreateCuttingRecordSchema.parse({
       pieceCount: 7000,
       actualCutCount: 1000,
-    })).toEqual({ pieceCount: 7000, actualCutCount: 1000 });
+      attachmentIds: [first],
+    })).toEqual({ pieceCount: 7000, actualCutCount: 1000, attachmentIds: [first] });
     expect(CreateCuttingRecordSchema.parse({
       pieceCount: 0,
       actualCutCount: 0,
-    })).toEqual({ pieceCount: 0, actualCutCount: 0 });
+      attachmentIds: [first, second, third],
+    })).toEqual({ pieceCount: 0, actualCutCount: 0, attachmentIds: [first, second, third] });
+    expect(() => CreateCuttingRecordSchema.parse({
+      pieceCount: 1, actualCutCount: 1, attachmentIds: [],
+    })).toThrow();
+    expect(() => CreateCuttingRecordSchema.parse({
+      pieceCount: 1, actualCutCount: 1, attachmentIds: [first, second, third, fourth],
+    })).toThrow();
+    expect(() => CreateCuttingRecordSchema.parse({
+      pieceCount: 1, actualCutCount: 1, attachmentIds: [first, first],
+    })).toThrow();
+    expect(CorrectCuttingRecordSchema.parse({
+      pieceCount: 1, actualCutCount: 1, expectedVersion: 1, reason: "修正数量",
+    })).not.toHaveProperty("attachmentIds");
   });
 
   it("uses exact inclusive five-percent boundaries", () => {

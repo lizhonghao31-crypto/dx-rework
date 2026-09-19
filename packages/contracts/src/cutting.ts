@@ -28,6 +28,7 @@ export function canUseCutting(
 export const CuttingProcessSchema = z.enum(["in_house", "outsourced", "other"]);
 export const CuttingOrderStatusSchema = z.enum(["pending", "recorded"]);
 export const CuttingCountSchema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
+export const MAX_CUTTING_SHEET_ATTACHMENTS = 3;
 
 export function cuttingAllowedRange(contractQuantity: number): { min: number; max: number } {
   const quantity = BigInt(contractQuantity);
@@ -82,6 +83,7 @@ export const CuttingRecordSchema = z.object({
   recordedByName: z.string().min(1),
   recordedAt: z.string().datetime(),
   corrected: z.boolean(),
+  cuttingSheetPhotos: z.array(CuttingPhotoSchema).max(MAX_CUTTING_SHEET_ATTACHMENTS),
   corrections: z.array(CuttingCorrectionSchema),
 }).strict();
 
@@ -135,8 +137,14 @@ export const CuttingOrderDetailSchema = CuttingOrderListItemSchema.extend({
 export const CreateCuttingRecordSchema = z.object({
   pieceCount: CuttingCountSchema,
   actualCutCount: CuttingCountSchema,
+  attachmentIds: z.array(z.string().uuid())
+    .min(1, "请上传裁床单")
+    .max(MAX_CUTTING_SHEET_ATTACHMENTS, "裁床单最多上传3张")
+    .refine((ids) => new Set(ids).size === ids.length, "裁床单图片不能重复"),
 }).strict();
-export const CorrectCuttingRecordSchema = CreateCuttingRecordSchema.extend({
+export const CorrectCuttingRecordSchema = z.object({
+  pieceCount: CuttingCountSchema,
+  actualCutCount: CuttingCountSchema,
   expectedVersion: z.number().int().positive(),
   reason: z.string().trim().min(1).max(500),
 }).strict();

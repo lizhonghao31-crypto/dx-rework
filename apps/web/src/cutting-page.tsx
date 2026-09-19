@@ -1,7 +1,10 @@
 import {
+  AttachmentResponseSchema,
   CuttingOrderDetailSchema,
   CuttingOrderListResponseSchema,
   CuttingRecordMutationResponseSchema,
+  MAX_CUTTING_SHEET_ATTACHMENTS,
+  UploadIntentResponseSchema,
   cuttingOutOfRange,
   parseCuttingCountText,
   type CuttingOrderDetail,
@@ -12,6 +15,17 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
 import { createClientRequestId } from "./client-request-id.js";
+import {
+  currentQcUploadConcurrency,
+  currentUploadClientProfile,
+  isImageUploadCandidate,
+  measureAttachmentUploadStage,
+  prepareAndUploadWithConcurrency,
+  prepareImageUploadCandidate,
+  sha256Hex,
+  uploadImageWithNormalizationRetry,
+  type AttachmentUploadTimingContext,
+} from "./attachment-upload.js";
 import { Header } from "./components.js";
 import {
   cuttingImageUrl,
@@ -31,8 +45,37 @@ import { useDebouncedValue } from "./use-debounced-value.js";
 import { useInternalReturnScroll } from "./use-internal-return-scroll.js";
 import { createWebUrls } from "../url-contract.js";
 import "./cutting-page.css";
+import "./rework-v2-form.css";
 
-const { pageUrl } = createWebUrls(import.meta.env.BASE_URL);
+const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
+
+type UploadedCuttingSheet = Readonly<{
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  previewUrl: string;
+}>;
+
+type ApiSchema<T> = Readonly<{ parse(value: unknown): T }>;
+
+async function uploadRequest<T>(
+  path: string,
+  schema: ApiSchema<T>,
+  init: RequestInit,
+): Promise<T> {
+  const response = await fetch(apiUrl(path), {
+    credentials: "include",
+    ...init,
+    headers: {
+      accept: "application/json",
+      ...(init.body ? { "content-type": "application/json" } : {}),
+      ...(init.headers ?? {}),
+    },
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.error?.message ?? "图片上传失败");
+  return schema.parse(body);
+}
 
 const statusLabel = (status: CuttingOrderListItem["status"]): string =>
   status === "recorded" ? "已裁" : "待登记";
@@ -75,7 +118,7 @@ function CuttingCard({
             <b>{formatBusinessDecimal(item.contractQuantity)} 件</b>
           </div>
           <div>
-            <span>裁片数</span>
+            <span>士啤片</span>
             <b>{item.pieceCount === null ? "—" : `${formatBusinessDecimal(item.pieceCount)} 片`}</b>
           </div>
           <div>
@@ -166,7 +209,7 @@ export function CuttingListPage() {
         title="裁床实裁"
         badge="订单开裁"
         badgePlacement="subtitle"
-        subtitle="按款登记实际裁片数与实裁数"
+        subtitle="按款登记实际士啤片与实裁数"
       />
       <Surface className="cutting-toolbar">
         <div className="cutting-toolbar__statuses" aria-label="裁床状态筛选">
@@ -295,14 +338,27 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
   const [actualError, setActualError] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [cuttingSheets, setCuttingSheets] = useState<readonly UploadedCuttingSheet[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const previewUrls = useRef(new Set<string>());
   const [busy, setBusy] = useState(false);
   const attempt = useRef<{ body: string; key: string } | null>(null);
   const correctionAttempt = useRef<{ body: string; key: string } | null>(null);
   const draft = useCuttingDraftGuard(
-    JSON.stringify({ pieceCount, actualCutCount }),
-    Boolean(item?.canRecord && !item.record && (pieceCount || actualCutCount)),
+    JSON.stringify({
+      pieceCount,
+      actualCutCount,
+      attachmentIds: cuttingSheets.map((sheet) => sheet.attachmentId),
+    }),
+    Boolean(item?.canRecord && !item.record
+      && (pieceCount || actualCutCount || cuttingSheets.length > 0)),
   );
   const backHref = cuttingReturnPath(window.location.search);
+
+  useEffect(() => () => {
+    for (const previewUrl of previewUrls.current) URL.revokeObjectURL(previewUrl);
+    previewUrls.current.clear();
+  }, []);
 
   useEffect(() => {
     const abort = new AbortController();
@@ -351,14 +407,139 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
     ? cuttingOutOfRange(item.contractQuantity, parsedActual)
     : false;
 
+  const uploadCuttingSheets = async (files: FileList | null): Promise<void> => {
+    if (!files || files.length === 0 || busy || uploading || item?.record) return;
+    const selected = Array.from(files);
+    if (cuttingSheets.length + selected.length > MAX_CUTTING_SHEET_ATTACHMENTS) {
+      setError(`裁床单最多上传 ${MAX_CUTTING_SHEET_ATTACHMENTS} 张图片`);
+      return;
+    }
+    if (selected.some((file) => !isImageUploadCandidate(file))) {
+      setError("裁床单仅支持图片格式");
+      return;
+    }
+    setUploading(true);
+    setError("");
+    try {
+      const profile = currentUploadClientProfile();
+      const uploaded = await prepareAndUploadWithConcurrency(
+        selected,
+        currentQcUploadConcurrency(),
+        async (file) => {
+          const baseTiming: AttachmentUploadTimingContext = {
+            diagnosticId: createClientRequestId(),
+            ...profile,
+            originalBytes: file.size,
+            uploadBytes: file.size,
+            mimeType: file.type,
+          };
+          const prepared = await measureAttachmentUploadStage(
+            baseTiming,
+            "prepare",
+            () => prepareImageUploadCandidate(file),
+          );
+          const timing = { ...baseTiming, uploadBytes: prepared.size, mimeType: prepared.type };
+          const sha256 = await measureAttachmentUploadStage(
+            timing,
+            "hash",
+            () => sha256Hex(prepared),
+          );
+          return { file: prepared, timing, sha256 };
+        },
+        async ({ file, timing, sha256 }, source): Promise<UploadedCuttingSheet> =>
+          uploadImageWithNormalizationRetry(source, file, async (candidate) => {
+            const candidateTiming = candidate === file
+              ? timing
+              : { ...timing, uploadBytes: candidate.size, mimeType: candidate.type };
+            const candidateSha256 = candidate === file
+              ? sha256
+              : await measureAttachmentUploadStage(
+                  candidateTiming,
+                  "hash",
+                  () => sha256Hex(candidate),
+                );
+            const intent = await measureAttachmentUploadStage(
+              candidateTiming,
+              "intent",
+              () => uploadRequest(
+                "tools/attachments/upload-intents",
+                UploadIntentResponseSchema,
+                {
+                  method: "POST",
+                  body: JSON.stringify({
+                    filename: candidate.name,
+                    mimeType: candidate.type,
+                    sizeBytes: candidate.size,
+                    sha256: candidateSha256,
+                  }),
+                },
+              ),
+            );
+            const upload = new FormData();
+            for (const [name, value] of Object.entries(intent.uploadFields)) upload.append(name, value);
+            upload.append("file", candidate);
+            const response = await measureAttachmentUploadStage(
+              candidateTiming,
+              "oss",
+              () => fetch(intent.uploadUrl, { method: "POST", body: upload }),
+            );
+            if (!response.ok) throw new Error(`${source.name} 上传失败`);
+            const finalized = await measureAttachmentUploadStage(
+              candidateTiming,
+              "finalize",
+              () => uploadRequest(
+                `tools/attachments/${intent.attachmentId}/finalize`,
+                AttachmentResponseSchema,
+                { method: "POST" },
+              ),
+            );
+            const previewUrl = URL.createObjectURL(candidate);
+            previewUrls.current.add(previewUrl);
+            return {
+              attachmentId: finalized.attachmentId,
+              filename: finalized.filename,
+              mimeType: finalized.mimeType,
+              previewUrl,
+            };
+          }),
+      );
+      setCuttingSheets((current) => [...current, ...uploaded]);
+      attempt.current = null;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "裁床单上传失败，请重试");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeCuttingSheet = (attachmentId: string): void => {
+    setCuttingSheets((current) => {
+      const removed = current.find((sheet) => sheet.attachmentId === attachmentId);
+      if (removed) {
+        URL.revokeObjectURL(removed.previewUrl);
+        previewUrls.current.delete(removed.previewUrl);
+      }
+      return current.filter((sheet) => sheet.attachmentId !== attachmentId);
+    });
+    attempt.current = null;
+  };
+
   const submitRecord = async () => {
-    if (!item || busy) return;
+    if (!item || busy || uploading) return;
+    if (cuttingSheets.length === 0) {
+      setError("请上传裁床单");
+      return;
+    }
     if (parsedPiece === null || parsedActual === null) {
-      if (parsedPiece === null) setPieceError("请填写有效裁片数");
+      if (parsedPiece === null) setPieceError("请填写有效士啤片");
       if (parsedActual === null) setActualError("请填写有效实裁数");
       return;
     }
-    const body = JSON.stringify({ pieceCount: parsedPiece, actualCutCount: parsedActual });
+    const body = JSON.stringify({
+      pieceCount: parsedPiece,
+      actualCutCount: parsedActual,
+      attachmentIds: cuttingSheets.map((sheet) => sheet.attachmentId),
+    });
     if (attempt.current?.body !== body) {
       attempt.current = { body, key: createClientRequestId() };
     }
@@ -379,6 +560,11 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
       setItem(result.item);
       setPieceCount("");
       setActualCutCount("");
+      for (const sheet of cuttingSheets) {
+        URL.revokeObjectURL(sheet.previewUrl);
+        previewUrls.current.delete(sheet.previewUrl);
+      }
+      setCuttingSheets([]);
       setNotice(result.outcome === "already_recorded"
         ? "该款已由其他人员完成登记，页面已显示真实结果。"
         : "裁床实裁已登记。");
@@ -392,14 +578,14 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
   const correctRecord = async () => {
     if (!item?.record || !item.canCorrect || busy) return;
     const piece = await promptInApp(
-      "修正后的裁片数（片）",
+      "修正后的士啤片（片）",
       String(item.record.pieceCount),
-      { title: "Root 修正裁片数", confirmLabel: "下一步" },
+      { title: "Root 修正士啤片", confirmLabel: "下一步" },
     );
     if (piece === null) return;
     const parsedCorrectionPiece = parseCuttingCountText(piece.trim());
     if (parsedCorrectionPiece === null) {
-      setError("裁片数必须是非负整数");
+      setError("士啤片必须是非负整数");
       return;
     }
     const actual = await promptInApp(
@@ -420,7 +606,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
     );
     if (!reason?.trim()) return;
     const confirmed = await confirmInApp(
-      `将裁片数修正为 ${formatBusinessDecimal(parsedCorrectionPiece)} 片，实裁数修正为 ${formatBusinessDecimal(parsedCorrectionActual)} 件？`,
+      `将士啤片修正为 ${formatBusinessDecimal(parsedCorrectionPiece)} 片，实裁数修正为 ${formatBusinessDecimal(parsedCorrectionActual)} 件？`,
       { title: "确认修正", confirmLabel: "保存修正" },
     );
     if (!confirmed) return;
@@ -511,7 +697,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
             <div className="cutting-record-panel__heading">
               <div>
                 <h2>{item.record ? "实裁登记" : "登记裁床数量"}</h2>
-                <p>裁片数按片记录；实裁数按可用于制作成衣的件数记录。</p>
+                <p>士啤片按片记录；实裁数按可用于制作成衣的件数记录。</p>
               </div>
               <div className="cutting-card__status-line">
                 <StatusBadge tone={item.status === "recorded" ? "success" : "info"}>
@@ -523,11 +709,33 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
             {item.record ? (
               <>
                 <dl className="cutting-record-facts">
-                  <div><dt>裁片数</dt><dd>{formatBusinessDecimal(item.record.pieceCount)} 片</dd></div>
+                  <div><dt>士啤片</dt><dd>{formatBusinessDecimal(item.record.pieceCount)} 片</dd></div>
                   <div><dt>实裁数</dt><dd>{formatBusinessDecimal(item.record.actualCutCount)} 件</dd></div>
                   <div><dt>登记人</dt><dd>{item.record.recordedByName}</dd></div>
                   <div><dt>登记时间</dt><dd>{cuttingTime(item.record.recordedAt)}</dd></div>
                 </dl>
+                {item.record.cuttingSheetPhotos.length ? (
+                  <div className="cutting-sheet-readonly">
+                    <strong>裁床单</strong>
+                    <div className="rework-v2-image-grid">
+                      {item.record.cuttingSheetPhotos.map((photo) => (
+                        <article key={photo.attachmentId}>
+                          <a
+                            href={cuttingImageUrl(photo.attachmentId, "preview")}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <img
+                              src={cuttingImageUrl(photo.attachmentId, "thumbnail")}
+                              alt={photo.filename}
+                              loading="lazy"
+                            />
+                          </a>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 <p className={`cutting-range-note${item.outOfRange ? " is-warning" : ""}`}>
                   合同允许范围：{formatBusinessDecimal(item.allowedRange.min)}–{formatBusinessDecimal(item.allowedRange.max)} 件。
                   {item.outOfRange ? " 当前实裁超出±5%，仅作提示。" : " 当前实裁在±5%范围内。"}
@@ -550,7 +758,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
                       {item.record.corrections.map((correction) => (
                         <li key={correction.version}>
                           第 {formatBusinessDecimal(correction.version)} 版：
-                          裁片 {formatBusinessDecimal(correction.pieceCount)} 片，
+                          士啤片 {formatBusinessDecimal(correction.pieceCount)} 片，
                           实裁 {formatBusinessDecimal(correction.actualCutCount)} 件；
                           {correction.correctedByName} · {cuttingTime(correction.correctedAt)} · {correction.reason}
                         </li>
@@ -568,7 +776,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
                 ) : null}
                 <div className="cutting-record-grid">
                   <CountInput
-                    label="裁片数"
+                    label="士啤片"
                     unit="片"
                     value={pieceCount}
                     error={pieceError}
@@ -584,6 +792,48 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
                     onChange={(value) => updateDigits(value, setActualCutCount, setActualError)}
                   />
                 </div>
+                <div className="cutting-sheet-upload">
+                  <div className="cutting-sheet-upload__heading">
+                    <div>
+                      <h3>上传裁床单 <b>*</b></h3>
+                      <p>必须上传1张，最多3张；支持 JPEG / PNG / WebP。</p>
+                    </div>
+                    <StatusBadge tone={cuttingSheets.length ? "success" : "info"}>
+                      {cuttingSheets.length}/{MAX_CUTTING_SHEET_ATTACHMENTS}
+                    </StatusBadge>
+                  </div>
+                  <label className="rework-v2-upload">
+                    <span>{uploading ? "正在上传…" : "＋ 上传裁床单"}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      disabled={busy || uploading || cuttingSheets.length >= MAX_CUTTING_SHEET_ATTACHMENTS}
+                      onChange={(event) => {
+                        void uploadCuttingSheets(event.target.files);
+                        event.target.value = "";
+                      }}
+                    />
+                  </label>
+                  {cuttingSheets.length ? (
+                    <div className="rework-v2-image-grid">
+                      {cuttingSheets.map((sheet) => (
+                        <article key={sheet.attachmentId}>
+                          <a href={sheet.previewUrl} target="_blank" rel="noreferrer">
+                            <img src={sheet.previewUrl} alt={sheet.filename} />
+                          </a>
+                          <button
+                            type="button"
+                            disabled={busy || uploading}
+                            onClick={() => removeCuttingSheet(sheet.attachmentId)}
+                          >
+                            移除
+                          </button>
+                        </article>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
                 <p className={`cutting-range-note${draftOutOfRange ? " is-warning" : ""}`}>
                   实裁允许范围：{formatBusinessDecimal(item.allowedRange.min)}–{formatBusinessDecimal(item.allowedRange.max)} 件。
                   {draftOutOfRange ? " 当前输入超出±5%，仍可按真实数量提交。" : ""}
@@ -592,7 +842,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
                   <div className="cutting-record-actions">
                     <Button
                       variant="primary"
-                      disabled={busy || parsedPiece === null || parsedActual === null}
+                      disabled={busy || uploading || parsedPiece === null || parsedActual === null || cuttingSheets.length === 0}
                       onClick={() => void submitRecord()}
                     >
                       {busy ? "提交中…" : "提交登记"}

@@ -63,6 +63,18 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   const disabledFactoryId = randomUUID();
   const evidenceId = randomUUID();
 
+  const readyCuttingSheet = async (uploadedBy: string): Promise<string> => {
+    const attachmentId = randomUUID();
+    await database.query(
+      `INSERT INTO attachments(
+         attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,
+         uploaded_by,status,ready_at
+       ) VALUES($1,$2,'裁床单.png','image/png',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+      [attachmentId, `cutting-sheet/${attachmentId}.png`, "c".repeat(64), uploadedBy],
+    );
+    return attachmentId;
+  };
+
   const merchandiserActor = (requestId = randomUUID()): TrustedActorContext => ({
     actorId: merchandiserId,
     actorRoles: ["order_merchandiser"],
@@ -473,7 +485,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(cutting.record(
       cuttingWorkerActor(),
       stalePending.cuttingOrderId,
-      { pieceCount: 100, actualCutCount: 100 },
+      { pieceCount: 100, actualCutCount: 100, attachmentIds: [randomUUID()] },
       randomUUID(),
     )).rejects.toMatchObject({ code: "NOT_FOUND", statusCode: 404 });
     expect((await database.query(
@@ -482,10 +494,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     )).rowCount).toBe(0);
 
     const staleCorrection = await makeApproved("CORRECTION");
+    const staleCorrectionSheet = await readyCuttingSheet(ownerId);
     await cutting.record(
       cuttingSupervisorActor(),
       staleCorrection.cuttingOrderId,
-      { pieceCount: 100, actualCutCount: 100 },
+      { pieceCount: 100, actualCutCount: 100, attachmentIds: [staleCorrectionSheet] },
       randomUUID(),
     );
     await service.deleteByRoot(rootActor(), staleCorrection.sourcingCaseId, randomUUID());
@@ -2416,9 +2429,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const pendingCutting=(await cutting.listSources(cuttingOwnerActor())).items.find(item=>item.sourcingCaseId===id)!;
     expect(pendingCutting).toMatchObject({formalStyleNo:null,alternateStyleNo:"TEMP-PR03",displayStyleNo:"TEMP-PR03"});
     const stableCuttingOrderId=pendingCutting.cuttingOrderId;
-    await expect(cutting.record(cuttingWorkerActor(),stableCuttingOrderId,{pieceCount:120,actualCutCount:20},randomUUID()))
+    await expect(cutting.record(cuttingWorkerActor(),stableCuttingOrderId,{pieceCount:120,actualCutCount:20,attachmentIds:[randomUUID()]},randomUUID()))
       .rejects.toMatchObject({code:"INVALID_STATE_TRANSITION"});
-    await expect(cutting.record(cuttingOwnerActor(),stableCuttingOrderId,{pieceCount:120,actualCutCount:20},randomUUID()))
+    await expect(cutting.record(cuttingOwnerActor(),stableCuttingOrderId,{pieceCount:120,actualCutCount:20,attachmentIds:[randomUUID()]},randomUUID()))
       .rejects.toMatchObject({statusCode:403});
     generate.mockRestore();
     await expect(service.reviseStyles(merchandiserActor(),id,edit,randomUUID())).rejects.toMatchObject({code:"INVALID_STATE_TRANSITION"});
@@ -2428,13 +2441,19 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const formalCutting=(await cutting.listSources(cuttingOwnerActor())).items.find(item=>item.sourcingCaseId===id)!;
     expect(formalCutting).toMatchObject({cuttingOrderId:stableCuttingOrderId,formalStyleNo:"FINAL-PR03",displayStyleNo:"FINAL-PR03"});
     expect((await database.query("SELECT 1 FROM cutting_orders WHERE sourcing_case_id=$1",[id])).rowCount).toBe(1);
+    const supervisorSheet=await readyCuttingSheet(ownerId);
+    const workerSheet=await readyCuttingSheet(managerId);
     const concurrentRecords=await Promise.all([
-      cutting.record(cuttingSupervisorActor(),stableCuttingOrderId,{pieceCount:120,actualCutCount:20},randomUUID()),
-      cutting.record(cuttingWorkerActor(),stableCuttingOrderId,{pieceCount:121,actualCutCount:20},randomUUID()),
+      cutting.record(cuttingSupervisorActor(),stableCuttingOrderId,{pieceCount:120,actualCutCount:20,attachmentIds:[supervisorSheet]},randomUUID()),
+      cutting.record(cuttingWorkerActor(),stableCuttingOrderId,{pieceCount:121,actualCutCount:20,attachmentIds:[workerSheet]},randomUUID()),
     ]);
     expect(concurrentRecords.map(result=>result.value.outcome).sort()).toEqual(["already_recorded","created"]);
     const recorded=await cutting.get(cuttingOwnerActor(),stableCuttingOrderId);
-    expect(recorded).toMatchObject({status:"recorded",actualCutCount:20,outOfRange:false,record:{version:1,actualCutCount:20,corrected:false}});
+    expect(recorded).toMatchObject({status:"recorded",actualCutCount:20,outOfRange:false,record:{version:1,actualCutCount:20,corrected:false,cuttingSheetPhotos:[expect.objectContaining({mimeType:"image/png"})]}});
+    expect(recorded.record!.cuttingSheetPhotos).toHaveLength(1);
+    const recordedSheetId=recorded.record!.cuttingSheetPhotos[0]!.attachmentId;
+    await expect(database.query("DELETE FROM attachments WHERE attachment_id=$1",[recordedSheetId]))
+      .rejects.toMatchObject({code:"55000"});
     expect([ownerId,managerId]).toContain(recorded.record!.recordedBy);
     const initialRecorder=recorded.record!.recordedBy;
     const initialRecordedAt=recorded.record!.recordedAt;

@@ -83,6 +83,10 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   for(let i=1;i<=3;i++)factories.push((await access.createSupplier(root("supplier_profile:write"),CreateSupplierSchema.parse({supplierCode:`SSP09-${i}`,supplierType:"factory",supplierName:`试点厂${i}`,active:true,changeReason:"SSP09合成验收数据",address:`试点路${i}号`,contractEntityName:`试点厂${i}有限公司`,partyBRepresentative:"试点代表",payeeName:"试点收款人",bankAccount:`62220${i}`,bankName:"测试银行"}))).supplierId);
  },60000);
  afterAll(async()=>{await database.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+ const readyCuttingSheet=async(uploadedBy:string)=>{const attachmentId=randomUUID();await database.query(
+  `INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+   VALUES($1,$2,'裁床单.png','image/png',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+  [attachmentId,`cutting-sheet/${attachmentId}.png`,"d".repeat(64),uploadedBy]);return attachmentId;};
  const create=async(supplierId:string,suffix:string)=>{
   const created=await sourcing.createCase(merch(),{gender:"女装",styleName:"试点上衣",estimatedCutPieceSendDate:today(),deliveryDate:today(),
    lineItems:[{styleNo:`SSP09-${suffix}-A`,color:"蓝",quantity:20,externalUnitPrice:"8.0000"},{styleNo:`SSP09-${suffix}-B`,color:"白",quantity:10,externalUnitPrice:"9.0000"}],daxingUnitPrice:"777.1234"},randomUUID());
@@ -100,9 +104,13 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
      ORDER BY cutting.sourcing_line_position`,
     [id],
   );
-  for(const item of cuttingOrders.rows) await cutting.record(root("cutting:records:create"),item.cutting_order_id,{
-    pieceCount:Number(item.quantity),actualCutCount:Number(item.quantity),
-  },randomUUID());
+  for(const item of cuttingOrders.rows) {
+    const cuttingActor=root("cutting:records:create");
+    const cuttingSheet=await readyCuttingSheet(cuttingActor.actorId);
+    await cutting.record(cuttingActor,item.cutting_order_id,{
+      pieceCount:Number(item.quantity),actualCutCount:Number(item.quantity),attachmentIds:[cuttingSheet],
+    },randomUUID());
+  }
   const contract=(await contracts.getCurrent(root(),id)).item!;
   return (await production.dispatch(root(),id,{sourcingContractDocumentId:contract.sourcingContractDocumentId,confirmed:true},randomUUID())).value;
  };
