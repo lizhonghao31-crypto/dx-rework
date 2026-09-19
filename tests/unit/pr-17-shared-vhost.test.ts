@@ -158,7 +158,7 @@ describe("PR-17 shared staging /rework contract", () => {
     expect(preflight).toContain("release-app-base");
     expect(preflight).toContain("release-vite-base");
     expect(fastDeploy).not.toContain("https://staging-api.dxerp.org.cn/rework/");
-    expect(fastDeploy).toContain('\"appBasePath\":\"$APP_BASE_PATH\"');
+    expect(fastDeploy).toContain('"appBasePath":"$APP_BASE_PATH"');
     expect(smoke).toContain('asset_prefix="${APP_BASE_PATH%/}/assets/"');
 
     expect(redirects).toContain("https://dxerp.org.cn/");
