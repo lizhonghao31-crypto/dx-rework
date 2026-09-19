@@ -133,7 +133,6 @@ assert_postgres_toolchain() {
 database_connection_identity() {
   local database_url="${1:-}" database
   [[ -n "$database_url" ]] || die 'database URL required for identity'
-  require_command psql
   database="$(pg_exec psql "$database_url" -XAtqc "select current_database()")"
   [[ "$database" =~ ^[A-Za-z0-9_.-]+$ ]] || die 'database identity unavailable'
   node_exec -e '
