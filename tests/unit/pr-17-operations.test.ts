@@ -100,8 +100,13 @@ describe("PR-17 operations evidence", () => {
     expect(workflow).toContain("permissions:\n  contents: read");
     expect(workflow).toContain("concurrency:");
     expect(workflow).toContain("environment:");
-    expect(workflow).toContain("APP_BASE_PATH: /rework/");
-    expect(workflow).toContain("VITE_BASE_PATH: /rework/");
+    expect(workflow).toContain("Resolve deployment base path");
+    expect(workflow).toContain("dx-rework-production");
+    expect(workflow).toContain("APP_BASE_PATH=/");
+    expect(workflow).toContain("VITE_BASE_PATH=/");
+    expect(workflow).toContain("dx-rework-pilot");
+    expect(workflow).toContain("APP_BASE_PATH=/rework/");
+    expect(workflow).toContain("VITE_BASE_PATH=/rework/");
     expect(workflow).toContain("run: npm run build");
     expect(workflow).toContain("scripts/deploy/package-release.sh");
     expect(workflow).not.toContain("npm test");
