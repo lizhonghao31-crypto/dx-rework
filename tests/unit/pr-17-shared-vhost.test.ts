@@ -169,6 +169,31 @@ describe("PR-17 shared staging /rework contract", () => {
     expect(redirects).toContain("dx_rework_legacy_path");
   });
 
+  it("keeps the dedicated production SPA fresh while caching hashed assets immutably", () => {
+    const nginx = read("infra/nginx/dx-rework.conf.example");
+    const assetStart = nginx.indexOf("location ^~ /assets/ {");
+    const assetEnd = nginx.indexOf("\n    }", assetStart);
+    const assetBlock = nginx.slice(assetStart, assetEnd);
+    const spaStart = nginx.indexOf("location / {", assetEnd);
+    const spaEnd = nginx.indexOf("\n    }", spaStart);
+    const spaBlock = nginx.slice(spaStart, spaEnd);
+    const relayStart = nginx.indexOf("location = /auth/qr/relay {");
+    const relayEnd = nginx.indexOf("\n    }", relayStart);
+    const relayBlock = nginx.slice(relayStart, relayEnd);
+
+    expect(assetStart).toBeGreaterThan(-1);
+    expect(assetBlock).toContain('Cache-Control "public, max-age=31536000, immutable" always');
+    expect(assetBlock).toContain("X-Content-Type-Options nosniff always");
+
+    expect(spaStart).toBeGreaterThan(-1);
+    expect(spaBlock).toContain('Cache-Control "no-store, no-cache, must-revalidate" always');
+    expect(spaBlock).toContain("try_files $uri $uri/ /index.html;");
+
+    expect(relayStart).toBeGreaterThan(-1);
+    expect(relayBlock).toContain('Cache-Control "no-store, no-cache, must-revalidate" always');
+    expect(relayBlock).toContain("access_log off;");
+  });
+
   it("keeps the shared Nginx snippet inside /rework and path-scopes maintenance", () => {
     const nginx = read("infra/nginx/dx-rework-shared-paths.conf.example");
     expect(nginx).toContain("# DX_REWORK_SHARED_PATHS_BEGIN");
