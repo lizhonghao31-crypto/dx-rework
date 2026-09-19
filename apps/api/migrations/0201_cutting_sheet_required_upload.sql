@@ -156,3 +156,36 @@ $$;
 CREATE TRIGGER attachments_cutting_binding_guard
   BEFORE UPDATE ON attachments
   FOR EACH ROW EXECUTE FUNCTION guard_cutting_attachment_binding();
+
+CREATE OR REPLACE FUNCTION guard_cutting_attachment_delete()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.entity_type='cutting_record' THEN
+    RAISE EXCEPTION 'bound cutting sheet image cannot be deleted'
+      USING ERRCODE='55000';
+  END IF;
+  RETURN OLD;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION guard_cutting_attachment_truncate()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF EXISTS(
+    SELECT 1 FROM attachments
+    WHERE entity_type='cutting_record'
+  ) THEN
+    RAISE EXCEPTION 'attachments containing cutting sheet evidence cannot be truncated'
+      USING ERRCODE='55000';
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER attachments_cutting_no_delete
+  BEFORE DELETE ON attachments
+  FOR EACH ROW EXECUTE FUNCTION guard_cutting_attachment_delete();
+
+CREATE TRIGGER attachments_cutting_no_truncate
+  BEFORE TRUNCATE ON attachments
+  FOR EACH STATEMENT EXECUTE FUNCTION guard_cutting_attachment_truncate();

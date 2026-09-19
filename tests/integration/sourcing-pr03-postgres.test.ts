@@ -2451,6 +2451,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const recorded=await cutting.get(cuttingOwnerActor(),stableCuttingOrderId);
     expect(recorded).toMatchObject({status:"recorded",actualCutCount:20,outOfRange:false,record:{version:1,actualCutCount:20,corrected:false,cuttingSheetPhotos:[expect.objectContaining({mimeType:"image/png"})]}});
     expect(recorded.record!.cuttingSheetPhotos).toHaveLength(1);
+    const recordedSheetId=recorded.record!.cuttingSheetPhotos[0]!.attachmentId;
+    await expect(database.query("DELETE FROM attachments WHERE attachment_id=$1",[recordedSheetId]))
+      .rejects.toMatchObject({code:"55000"});
     expect([ownerId,managerId]).toContain(recorded.record!.recordedBy);
     const initialRecorder=recorded.record!.recordedBy;
     const initialRecordedAt=recorded.record!.recordedAt;
