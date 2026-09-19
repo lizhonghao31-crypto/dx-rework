@@ -134,13 +134,16 @@ load_app_config
 DATABASE_URL="$DATABASE_URL" "$DX_REWORK_NODE_BIN" scripts/migrate.mjs
 schema_version="$($DX_REWORK_NODE_BIN -e 'const m=require("./apps/api/src/platform/migration-manifest.json");process.stdout.write(m.migrations.at(-1).version)')"
 cat > release-manifest.json <<JSON
-{"gitSha":"$sha","buildTime":"$build_time","schemaVersion":"$schema_version"}
+{"gitSha":"$sha","buildTime":"$build_time","schemaVersion":"$schema_version","appBasePath":"$APP_BASE_PATH","viteBasePath":"$APP_BASE_PATH"}
 JSON
 
 web_target="$WEB_RELEASE_ROOT/$sha"
 rm -rf "$web_target"
 mkdir -p "$web_target"
 cp -a apps/web/dist/. "$web_target/"
+cat > "$web_target/release-manifest.json" <<JSON
+{"gitSha":"$sha","buildTime":"$build_time","schemaVersion":"$schema_version","appBasePath":"$APP_BASE_PATH","viteBasePath":"$APP_BASE_PATH","kind":"frontend"}
+JSON
 ln -sfn "$SOURCE_ROOT" "$DX_ROOT/current"
 ln -sfn "$web_target" "$DX_ROOT/frontend/current"
 
@@ -159,6 +162,8 @@ done
 [[ "$ready" == true ]] || die 'API did not become ready'
 version="$(curl -fsS http://127.0.0.1:3201/version)"
 "$DX_REWORK_NODE_BIN" -e 'const v=JSON.parse(process.argv[1]);if(v.gitSha!==process.argv[2])process.exit(1)' "$version" "$sha"
-curl -fsS -o /dev/null "https://staging-api.dxerp.org.cn/rework/"
+public_web_base="${TODO_PUBLIC_BASE_URL:-}"
+[[ "$public_web_base" == https://* ]] || die 'TODO_PUBLIC_BASE_URL must be configured for deployment smoke'
+curl -fsS -o /dev/null "${public_web_base%/}/"
 printf '%s\n' "$version"
 printf 'DEPLOY SUCCESS: %s\n' "$sha"

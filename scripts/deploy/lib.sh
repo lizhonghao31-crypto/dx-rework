@@ -301,6 +301,15 @@ load_release_config() {
       die 'DX_REWORK_NGINX_MODE must be shared_path or dedicated_vhost'
       ;;
   esac
+  if [[ "${DX_REWORK_PROFILE:-}" == production ]]; then
+    [[ "$DX_REWORK_NGINX_MODE" == dedicated_vhost ]] || die 'production requires dedicated_vhost'
+    [[ "${APP_BASE_PATH:-}" == / ]] || die 'production requires APP_BASE_PATH=/'
+    [[ "$DX_REWORK_SERVER_NAME" == dxerp.org.cn ]] || die 'production requires DX_REWORK_SERVER_NAME=dxerp.org.cn'
+    [[ "${DINGTALK_QR_REDIRECT_URI:-}" == https://dxerp.org.cn/auth/qr/relay ]] ||
+      die 'production requires the official DingTalk QR relay'
+    [[ "${TODO_PUBLIC_BASE_URL:-}" == https://dxerp.org.cn/ ]] ||
+      die 'production requires TODO_PUBLIC_BASE_URL=https://dxerp.org.cn/'
+  fi
   export DX_REWORK_SMOKE_ORIGIN="https://${DX_REWORK_SERVER_NAME}"
   if [[ "$DX_REWORK_NGINX_MODE" == shared_path ]]; then
     export DX_REWORK_SMOKE_WEB_URL="${DX_REWORK_SMOKE_ORIGIN}/rework"

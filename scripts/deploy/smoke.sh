@@ -69,18 +69,19 @@ if [[ "$nginx_mode" == shared_path ]]; then
   curl -fsS "$web_base/auth/login" | grep -qi '<html'
   curl -fsS "$web_base/deep-link-smoke" | grep -qi '<html'
 else
-  # Preserve the dedicated-vhost compatibility checks used by the original PR-17 contract.
   curl -fsS "$origin/login" | grep -qi '<html'
-  curl -fsS "$origin/rework/deep-link-smoke" | grep -qi '<html'
+  curl -fsS "$origin/deep-link-smoke" | grep -qi '<html'
 fi
 
-asset_path="$(sed -nE 's#.*(\/rework/assets/[^" ]+).*#\1#p' "$body" | head -1)"
+asset_prefix="${APP_BASE_PATH%/}/assets/"
+[[ "$APP_BASE_PATH" != / ]] || asset_prefix="/assets/"
+asset_path="$(grep -oE '/[^" ]*assets/[^" ]+' "$body" | grep -F "$asset_prefix" | head -1)"
 [[ -n "$asset_path" ]] || die 'frontend asset reference missing'
 curl -fsS -D "$headers" "$origin$asset_path" -o "$body"
 ! grep -qi '<html' "$body" || die 'real asset returned HTML'
 grep -Eqi '^content-type:[[:space:]]*(text/css|application/(javascript|octet-stream)|font/|image/)' "$headers"
 
-code="$(curl -sS -o "$body" -w '%{http_code}' "$origin/rework/assets/pr17-definitely-missing.js")"
+code="$(curl -sS -o "$body" -w '%{http_code}' "$origin${asset_prefix}pr17-definitely-missing.js")"
 [[ "$code" == 404 ]] && ! grep -qi '<html' "$body" || die 'missing asset must be a non-HTML 404'
 
 curl -fsS --compressed -H 'Accept-Encoding: gzip' -D "$headers" "$origin$asset_path" -o /dev/null

@@ -194,6 +194,8 @@ fi
 bundle="$(realpath "$bundle")"
 check release-api assert_release "$bundle/api" "$sha" "$bundle"
 check release-frontend assert_release "$bundle/frontend" "$sha" "$bundle"
+check release-app-base test "$(manifest_field "$bundle/frontend/release-manifest.json" appBasePath)" = "$APP_BASE_PATH"
+check release-vite-base test "$(manifest_field "$bundle/frontend/release-manifest.json" viteBasePath)" = "$APP_BASE_PATH"
 
 validate_active_runtime() {
   local active_sha
