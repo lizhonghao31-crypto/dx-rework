@@ -277,17 +277,25 @@ export class TodoDeliveryWorker {
       await this.markSuppressed(claimed);
       return "suppressed";
     }
-    const binding = await this.openBinding(input.todoId, input.recipientUserId);
+    const binding = await this.latestBinding(input.todoId, input.recipientUserId);
     if (!binding) {
-      await this.failWithoutBinding(
-        claimed,
-        new DingTalkTodoDeliveryError(
-          "DINGTALK_TODO_BINDING_PENDING",
-          "DingTalk todo binding is not available yet",
-          true,
-        ),
-      );
-      return "failed";
+      if (await this.hasOutstandingCreationDelivery(input.todoId, input.recipientUserId)) {
+        await this.failWithoutBinding(
+          claimed,
+          new DingTalkTodoDeliveryError(
+            "DINGTALK_TODO_BINDING_PENDING",
+            "DingTalk todo creation is still pending before terminal delivery",
+            true,
+          ),
+        );
+        return "failed";
+      }
+      await this.markSuppressed(claimed);
+      return "suppressed";
+    }
+    if (["completed", "cancelled", "permanent_failed"].includes(binding.provider_state)) {
+      await this.markSuppressed(claimed);
+      return "suppressed";
     }
     const operatorIdentity = await this.deliveryActorIdentity(input);
     if (!operatorIdentity) {
@@ -466,18 +474,44 @@ export class TodoDeliveryWorker {
     });
   }
 
-  private async openBinding(todoId: string, recipientUserId: string): Promise<BindingRow | null> {
+  private async latestBinding(todoId: string, recipientUserId: string): Promise<BindingRow | null> {
     const result = await this.database.query<BindingRow>(
       `SELECT binding_id,todo_id,external_generation,recipient_user_id,recipient_union_id,creator_union_id,
               provider_todo_id,source_key,provider_state,create_outbox_event_id,create_operation_event_id
        FROM dingtalk_todo_external_bindings
        WHERE todo_id=$1 AND recipient_user_id=$2
-         AND provider_state IN ('creating','active','unknown_response')
        ORDER BY external_generation DESC
        LIMIT 1`,
       [todoId, recipientUserId],
     );
     return result.rows[0] ?? null;
+  }
+
+  private async openBinding(todoId: string, recipientUserId: string): Promise<BindingRow | null> {
+    const binding = await this.latestBinding(todoId, recipientUserId);
+    return binding && ["creating", "active", "unknown_response"].includes(binding.provider_state)
+      ? binding
+      : null;
+  }
+
+  private async hasOutstandingCreationDelivery(
+    todoId: string,
+    recipientUserId: string,
+  ): Promise<boolean> {
+    const result = await this.database.query<{ outstanding: boolean }>(
+      `SELECT EXISTS(
+         SELECT 1
+         FROM message_outbox
+         WHERE topic=$1
+           AND aggregate_type='rework_todo'
+           AND aggregate_id=$2
+           AND payload->>'recipientUserId'=$3
+           AND payload->>'deliveryKind' IN ('create','information')
+           AND status IN ('pending','processing','failed')
+       ) outstanding`,
+      [TODO_DELIVERY_TOPIC, todoId, recipientUserId],
+    );
+    return result.rows[0]?.outstanding === true;
   }
 
   private async recordSuccess(
