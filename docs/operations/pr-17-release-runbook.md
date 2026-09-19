@@ -1,22 +1,27 @@
 # PR-17 发布与恢复手册
 
+> 2026-09-19 OPS-05 production-domain update: 正式生产入口切换目标为
+> `https://dxerp.org.cn/`，生产使用 `dedicated_vhost` 与根路径
+> `APP_BASE_PATH=/`。旧 `staging-api.dxerp.org.cn/rework/**` 仅作为迁移兼容入口；
+> `staging-api.dxerp.org.cn/acceptance/**` 继续承载独立验收环境。
+
 ## 1. 固定边界
 
 返工系统运行时只操作 `/opt/dx-rework`、PM2 进程 `dx-rework-api`、本机监听 `127.0.0.1:3201`、返工独立 PostgreSQL 数据库/迁移、独立日志/备份/release/generation。禁止修改或重启 ERP、样衣系统的目录、进程、数据库和运行配置。
 
-当前 Pilot/验收入口确认复用现有 dxerp staging HTTPS origin：`https://staging-api.dxerp.org.cn/rework/`。这是 **shared-path** 部署，不等于共享应用运行时：Nginx 仅在现有 staging TLS `server {}` 内增加严格限定的 `/rework/**` locations，API 只转发至 `127.0.0.1:3201`，前端只读取 `/opt/dx-rework/frontend/current`。共享域名的 `/`、根级 `/health/*`、`/version`、其他 ERP/样衣路径均不得由返工系统接管。
+历史 Pilot/验收曾复用 `https://staging-api.dxerp.org.cn/rework/` 的 **shared-path** 部署。该模式仍保留用于非生产环境；正式生产不再以该路径作为主入口。生产 `dxerp.org.cn` 根域直接服务 `/opt/dx-rework/frontend/current` 并将根级 API 转发至 `127.0.0.1:3201`。旧 `/rework/**` 链接通过独立兼容配置迁移到正式根域，不能重新成为生产事实源。
 
 PR-17 routine release 只原子切换 `/opt/dx-rework/active` 这一个 generation 指针并 reload 单一 PM2 应用，**不执行 `nginx -s reload`**。`/opt/dx-rework/current` 与 `/opt/dx-rework/frontend/current` 是永久稳定别名，分别解析到 `active/api` 与 `active/frontend`，不得在 routine release 中单独改写。
 
 Nginx 安装或配置变更属于单独的基础设施窗口，须另行批准并先备份、执行 `nginx -t` 后再由基础设施操作完成 graceful reload。shared-path 模式使用 `infra/nginx/dx-rework-shared-paths.conf.example` 的标记块作为审查基线；该块必须原样存在于配置文件与 `nginx -T` 输出中。`release-switch.lock` 只能在 `/rework/**` locations 内返回 503，**绝不能在共享 `server {}` 顶层使整个 staging origin 返回 503**。
 
-原 `dedicated_vhost` 模式仍作为未来兼容路径保留；部署模式必须由 `DX_REWORK_NGINX_MODE=shared_path|dedicated_vhost` 显式指定，不得根据 hostname 猜测。
+`dedicated_vhost` 现为 production 正式模式；`shared_path` 仅保留给 Pilot/兼容环境。部署模式必须由 `DX_REWORK_NGINX_MODE=shared_path|dedicated_vhost` 显式指定，不得根据 hostname 猜测。
 
 ## 2. 目标机配置与目录
 
 目标机使用三个相互隔离、普通文件、非软链接、属主为低权限部署用户且权限为 `0600` 的配置文件：
 
-- `/opt/dx-rework/shared/.env`：应用运行变量；Pilot 必须包含 `APP_BASE_PATH=/rework/`；PR-31 首位老板 bootstrap 的 userid/secret 两项默认均不配置，仅允许在明确的一次性初始化窗口成对注入；
+- `/opt/dx-rework/shared/.env`：应用运行变量；Production 必须使用 `APP_BASE_PATH=/`、`DINGTALK_QR_REDIRECT_URI=https://dxerp.org.cn/auth/qr/relay`、`TODO_PUBLIC_BASE_URL=https://dxerp.org.cn/`；Pilot shared-path 使用 `APP_BASE_PATH=/rework/`；PR-31 首位老板 bootstrap 的 userid/secret 两项默认均不配置，仅允许在明确的一次性初始化窗口成对注入；
 - `/opt/dx-rework/shared/deploy.env`：Node 22 路径、显式 Nginx 模式、HTTPS server name、TLS、真实 Nginx 配置路径和环境 profile；参考 `pr-17-deploy.env.example`；
 - `/opt/dx-rework/shared/restore.env`：仅恢复演练目标库及批准指纹；参考 `pr-17-restore.env.example`。API 进程不会读取该文件。
 
