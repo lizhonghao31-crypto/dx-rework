@@ -1785,9 +1785,14 @@ export class ReceivingService {
         receiving_batch_id: string;
         style_no: string;
         document_quantity: string;
+        cutting_order_id: string | null;
+        color: string | null;
+        supplier_name: string | null;
+        actual_cut_count: string | null;
+        style_conflict_count: string | null;
       }>(
         `WITH ranked AS (
-           SELECT batch.receiving_batch_id,
+           SELECT batch.receiving_batch_id,batch.cutting_order_id,
                   upper(btrim(batch.style_no)) AS style_no,
                   batch.delivery_note_quantity::bigint AS document_quantity,
                   row_number() OVER (
@@ -1827,11 +1832,17 @@ export class ReceivingService {
                  AND event.after_state->>'backfilled'='true'
              )
          )
-         SELECT receiving_batch_id,style_no,document_quantity
+         SELECT ranked.receiving_batch_id,ranked.style_no,ranked.document_quantity,
+                option_row.cutting_order_id,option_row.color,option_row.supplier_name,
+                option_row.actual_cut_count::text,option_row.style_conflict_count::text
          FROM ranked
-         WHERE position=1 AND NOT closed AND has_images
-           AND right(style_no,char_length($1))=$1
-         ORDER BY style_no
+         LEFT JOIN current_cutting_style_options option_row
+           ON option_row.cutting_order_id=ranked.cutting_order_id
+         WHERE ranked.position=1 AND NOT ranked.closed AND ranked.has_images
+           AND right(ranked.style_no,char_length($1))=$1
+           AND (ranked.cutting_order_id IS NULL OR option_row.cutting_order_id IS NOT NULL)
+         ORDER BY ranked.style_no,option_row.supplier_name NULLS LAST,
+                  option_row.color NULLS LAST
          LIMIT 20`,
         [needle],
       );
@@ -1839,6 +1850,16 @@ export class ReceivingService {
         receivingBatchId: row.receiving_batch_id,
         styleNo: row.style_no,
         documentQuantity: Number(row.document_quantity),
+        ...(row.cutting_order_id && row.supplier_name && row.actual_cut_count !== null
+          && row.style_conflict_count !== null
+          ? {
+              cuttingOrderId: row.cutting_order_id,
+              color: row.color,
+              supplierName: row.supplier_name,
+              actualCutCount: Number(row.actual_cut_count),
+              styleConflictCount: Number(row.style_conflict_count),
+            }
+          : {}),
       }));
     }
     const result = await this.database.query<{

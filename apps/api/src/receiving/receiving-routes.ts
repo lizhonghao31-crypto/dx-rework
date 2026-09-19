@@ -23,7 +23,8 @@ const idempotencyKey = (request: FastifyRequest): string => {
 };
 
 const createBody = (input: unknown): {
-  cuttingOrderId: string;
+  cuttingOrderId?: string;
+  styleNo?: string;
   documentQuantity: number;
   actualQuantity: number;
   defectiveQuantity: number;
@@ -34,8 +35,10 @@ const createBody = (input: unknown): {
     throw new ApplicationError("VALIDATION_ERROR", "收货信息不完整", 400);
   }
   const body = input as Record<string, unknown>;
-  if (typeof body.cuttingOrderId !== "string") {
-    throw new ApplicationError("VALIDATION_ERROR", "请选择已裁正式款号", 400);
+  const hasCuttingOrder = typeof body.cuttingOrderId === "string" && body.cuttingOrderId.trim() !== "";
+  const hasStyleNo = typeof body.styleNo === "string" && body.styleNo.trim() !== "";
+  if (!hasCuttingOrder && !hasStyleNo) {
+    throw new ApplicationError("VALIDATION_ERROR", "款号不能为空", 400);
   }
   if (body.attachmentIds !== undefined && (
     !Array.isArray(body.attachmentIds)
@@ -47,7 +50,8 @@ const createBody = (input: unknown): {
     throw new ApplicationError("VALIDATION_ERROR", "补录日期无效", 400);
   }
   return {
-    cuttingOrderId: batchId(body.cuttingOrderId),
+    ...(hasCuttingOrder ? { cuttingOrderId: batchId(body.cuttingOrderId as string) } : {}),
+    ...(hasStyleNo ? { styleNo: (body.styleNo as string).trim() } : {}),
     documentQuantity: Number(body.documentQuantity),
     actualQuantity: Number(body.actualQuantity),
     defectiveQuantity: body.defectiveQuantity === undefined ? 0 : Number(body.defectiveQuantity),
@@ -183,7 +187,7 @@ const batchId = (input: string): string => {
 };
 
 const repeatBody = (input: unknown): {
-  cuttingOrderId: string;
+  cuttingOrderId?: string;
   receivingBatchId: string;
   source: "jiashun" | "other_factory";
   documentQuantity?: number;
@@ -197,8 +201,9 @@ const repeatBody = (input: unknown): {
   if (typeof body.receivingBatchId !== "string") {
     throw new ApplicationError("VALIDATION_ERROR", "请选择要追加收货的订单", 400);
   }
-  if (typeof body.cuttingOrderId !== "string") {
-    throw new ApplicationError("VALIDATION_ERROR", "请选择已裁正式款号", 400);
+  if (body.cuttingOrderId !== undefined
+      && (typeof body.cuttingOrderId !== "string" || body.cuttingOrderId.trim() === "")) {
+    throw new ApplicationError("VALIDATION_ERROR", "已裁正式款号关联无效", 400);
   }
   if (body.source !== "jiashun" && body.source !== "other_factory") {
     throw new ApplicationError("VALIDATION_ERROR", "请选择嘉顺收货或其他工厂收货", 400);
@@ -207,7 +212,9 @@ const repeatBody = (input: unknown): {
     throw new ApplicationError("VALIDATION_ERROR", "请填写本次送货单数量", 400);
   }
   return {
-    cuttingOrderId: batchId(body.cuttingOrderId),
+    ...(typeof body.cuttingOrderId === "string"
+      ? { cuttingOrderId: batchId(body.cuttingOrderId) }
+      : {}),
     receivingBatchId: batchId(body.receivingBatchId),
     source: body.source,
     ...(body.source === "other_factory" ? { documentQuantity: Number(body.documentQuantity) } : {}),

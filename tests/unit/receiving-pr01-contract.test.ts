@@ -9,9 +9,13 @@ describe("PR-01 receiving fact layer", () => {
     expect(page).toContain("＋");
     expect(page).toContain("点击收货");
     expect(page).toContain("款号");
-    expect(page).toContain("输入正式款号后4位搜索");
+    expect(page).toContain("输入完整款号或末尾至少4位");
     expect(page).toContain("receiving/cutting-options");
-    expect(page).toContain("cuttingOrderId: selectedCutting.cuttingOrderId");
+    expect(page).toContain("const trimmedStyle = (selectedCutting?.styleNo ?? styleNo).trim()");
+    expect(page).toContain("? { cuttingOrderId: selectedCutting.cuttingOrderId }");
+    expect(page).toContain(": { styleNo: trimmedStyle }");
+    expect(page).toContain("exactMatches.length === 1");
+    expect(page).not.toContain("没有可收货的已裁正式款号");
     expect(page).not.toContain("ProductionExpectedPicker");
     expect(page).not.toContain("productionOrderId");
     expect(page).toContain("送货单数量");
@@ -28,8 +32,10 @@ describe("PR-01 receiving fact layer", () => {
       read("apps/web/src/receiving-page.css"),
     ]);
     expect(page).toContain("多次收货");
-    expect(page).toContain("输入款号后4-5位搜索");
-    expect(page).toContain("cuttingOrderId: selectedRepeatOrder.cuttingOrderId");
+    expect(page).toContain("输入完整款号或末尾至少4位");
+    expect(page).toContain("selectedRepeatOrder.cuttingOrderId");
+    expect(page).toContain("? { cuttingOrderId: selectedRepeatOrder.cuttingOrderId }");
+    expect(page).not.toContain("没有可追加收货的已裁正式款号");
     expect(page).toContain("实裁");
     expect(page).toContain("<span>款号</span>");
     expect(page).not.toContain("<span>订单号 / 款号</span>");
@@ -51,10 +57,11 @@ describe("PR-01 receiving fact layer", () => {
   });
 
   it("records immutable receiving facts and gives Root the same receiving path", async () => {
-    const [migration, routes, auth] = await Promise.all([
+    const [migration, routes, auth, server] = await Promise.all([
       read("apps/api/migrations/0076_receiving_fact_layer.sql"),
       read("apps/api/src/receiving/receiving-routes.ts"),
       read("apps/web/src/auth.tsx"),
+      read("apps/api/src/server.ts"),
     ]);
     expect(migration).toContain("'warehouse_receiver','仓管人员'");
     expect(migration).toContain("'receiving:create'");
@@ -70,7 +77,11 @@ describe("PR-01 receiving fact layer", () => {
     expect(routes).toContain("dependencies.service.listRepeatOptions");
     expect(routes).toContain('"/receiving/repeat-receipts"');
     expect(routes).toContain("dependencies.service.createRepeated");
+    expect(routes).toContain("cuttingOrderId?: string;");
+    expect(routes).toContain("styleNo?: string;");
+    expect(routes).toContain("if (!hasCuttingOrder && !hasStyleNo)");
     expect(routes).toContain("idempotencyKey(request)");
+    expect(server).toContain("{allowLegacyStyleInput:true}");
     expect(auth).toContain("if (user.isRoot === true) return true");
   });
 
