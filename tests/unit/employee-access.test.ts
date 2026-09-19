@@ -158,6 +158,8 @@ describe("PR-31 employee access contracts", () => {
     expect(service).toContain('action: "access.directory.employee.departed"');
     expect(service).toContain("confirmedDepartures");
     expect(service).toContain("currentProviderUserIds");
+    expect(service).toContain("365 * 24 * 60 * 60 * 1_000");
+    expect(service).toContain("last-usable-owner guard");
     expect(service).toContain("UPDATE auth_sessions SET revoked_at=$2");
     expect(service).not.toContain("members.some((member) => member.userId === providerUserId) ? true : false");
   });

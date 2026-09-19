@@ -328,9 +328,10 @@ export class EmployeeAccessService {
         AND identity.corp_id=$1`,
       [this.corporationId],
     );
+    const initialDepartureLookbackMs = 365 * 24 * 60 * 60 * 1_000;
     const departureStart = directoryHistory.rows[0]?.since
       ? new Date(Math.min(directoryHistory.rows[0].since.getTime(), syncedAt.getTime()))
-      : syncedAt;
+      : new Date(syncedAt.getTime() - initialDepartureLookbackMs);
     const [members, departedUserIds] = await Promise.all([
       this.provider.listOrganizationMembers(this.corporationId),
       this.provider.listDepartedUserIds(this.corporationId, departureStart, syncedAt),
@@ -444,17 +445,19 @@ export class EmployeeAccessService {
         const before = beforeResult.rows[0];
         if (!before) continue;
 
-        await client.query(
-          `UPDATE identity_mappings
-           SET active=false,employed=false,last_verified_at=$3
-           WHERE provider='dingtalk' AND corp_id=$1 AND provider_user_id=$2`,
-          [this.corporationId, providerUserId, syncedAt],
-        );
+        // Disable while the identity is still active/employed so the database
+        // last-usable-owner guard can correctly see the target in its owner count.
         await client.query(
           `UPDATE app_users
            SET enabled=false,updated_at=CURRENT_TIMESTAMP
            WHERE id=$1`,
           [before.user_id],
+        );
+        await client.query(
+          `UPDATE identity_mappings
+           SET active=false,employed=false,last_verified_at=$3
+           WHERE provider='dingtalk' AND corp_id=$1 AND provider_user_id=$2`,
+          [this.corporationId, providerUserId, syncedAt],
         );
         await client.query(
           "UPDATE auth_sessions SET revoked_at=$2 WHERE user_id=$1 AND revoked_at IS NULL",

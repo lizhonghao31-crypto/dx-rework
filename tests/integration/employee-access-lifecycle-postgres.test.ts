@@ -20,6 +20,8 @@ const runWithPostgres = databaseUrl ? describe : describe.skip;
 type Manifest = { migrations: Array<{ version: string; checksum: string }> };
 
 class FixtureDirectoryProvider extends OfficialDingTalkProvider {
+  lastDepartureRange: { startAt: Date; endAt: Date } | null = null;
+
   constructor(
     private readonly members: readonly DirectoryOrganizationMember[],
     private readonly departedUserIds: readonly string[],
@@ -44,9 +46,8 @@ class FixtureDirectoryProvider extends OfficialDingTalkProvider {
     startAt: Date,
     endAt: Date,
   ): Promise<readonly string[]> {
-    void startAt;
-    void endAt;
     if (corpId !== "corp") throw new Error("unexpected fixture corporation");
+    this.lastDepartureRange = { startAt, endAt };
     return [...this.departedUserIds];
   }
 }
@@ -322,6 +323,8 @@ runWithPostgres("employee access role lifecycle", () => {
       requestId: randomUUID(),
     });
     expect(synced.scanned).toBe(2);
+    expect(provider.lastDepartureRange).not.toBeNull();
+    expect(provider.lastDepartureRange!.startAt.getTime()).toBeLessThan(provider.lastDepartureRange!.endAt.getTime());
 
     const newHire = await database.query<{
       user_id: string;
@@ -378,5 +381,57 @@ runWithPostgres("employee access role lifecycle", () => {
        WHERE entity_id=$1 AND action='access.directory.employee.departed'`,
       [roleHolderId],
     )).rows).toEqual([{ action: "access.directory.employee.departed" }]);
+
+    const soleOwnerId = randomUUID();
+    await database.query(
+      "INSERT INTO app_users(id,display_name,enabled) VALUES($1,'唯一可用老板',false)",
+      [soleOwnerId],
+    );
+    await database.query(
+      `INSERT INTO identity_mappings(
+         id,user_id,provider,corp_id,provider_user_id,union_id,
+         active,employed,last_verified_at
+       ) VALUES($1,$2,'dingtalk','corp','sole-owner','union-sole-owner',true,true,CURRENT_TIMESTAMP)`,
+      [randomUUID(), soleOwnerId],
+    );
+    await service.assignRole(
+      { ...rootActor, requestId: randomUUID() },
+      { userId: soleOwnerId, roleCode: "owner_group", reason: "验证离职同步不能清空最后一个可用老板" },
+    );
+    expect((await database.query<{ enabled: boolean }>(
+      "SELECT enabled FROM app_users WHERE id=$1",
+      [soleOwnerId],
+    )).rows[0]?.enabled).toBe(true);
+
+    const soleOwnerProvider = new FixtureDirectoryProvider([
+      {
+        corpId: "corp",
+        userId: rootDingtalkUserId,
+        unionId: `union-${rootDingtalkUserId}`,
+        displayName: "Root",
+        active: true,
+        employed: true,
+        departmentNames: ["管理部"],
+      },
+    ], ["sole-owner"]);
+    const soleOwnerSync = new EmployeeAccessService(
+      database,
+      "corp",
+      service,
+      authStore,
+      soleOwnerProvider,
+      { enabled: false, dingtalkUserId: undefined, secret: undefined },
+      rootDingtalkUserId,
+    );
+    await expect(soleOwnerSync.syncDirectory({
+      ...rootActor,
+      requestId: randomUUID(),
+    })).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+    expect((await database.query<{ active: boolean; employed: boolean; enabled: boolean }>(
+      `SELECT i.active,i.employed,u.enabled
+       FROM identity_mappings i
+       JOIN app_users u ON u.id=i.user_id
+       WHERE i.provider='dingtalk' AND i.corp_id='corp' AND i.provider_user_id='sole-owner'`,
+    )).rows[0]).toEqual({ active: true, employed: true, enabled: true });
   }, 120_000);
 });
