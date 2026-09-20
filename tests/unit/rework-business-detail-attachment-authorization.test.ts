@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 
 import type { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
@@ -35,5 +36,28 @@ describe("receiving attachment authorization", () => {
     })).resolves.toBe(true);
     expect(get).toHaveBeenCalledTimes(2);
     expect(get).toHaveBeenLastCalledWith(actor, olderOrderId);
+  });
+  it("denies access when the actor cannot view any rework linked to the receiving batch", async () => {
+    const linkedOrderId = randomUUID();
+    const database = {
+      query: vi.fn(async () => ({ rows: [{ rework_order_id: linkedOrderId }] })),
+    } as unknown as Pool;
+    const service = new ReworkBusinessDetailService(database);
+    const get = vi.spyOn(service, "get")
+      .mockRejectedValue(new ApplicationError("FORBIDDEN", "forbidden", 403));
+
+    await expect(service.canDownloadBoundAttachment(actor, {
+      entityType: "receiving_batch",
+      entityId: randomUUID(),
+      mimeType: "image/jpeg",
+    })).resolves.toBe(false);
+    expect(get).toHaveBeenCalledWith(actor, linkedOrderId);
+  });
+
+  it("keeps server composition on scoped authorization instead of an image-type bypass", async () => {
+    const source = await readFile("apps/api/src/server.ts", "utf8");
+    expect(source).not.toContain('["rework_order", "receiving_batch"].includes(binding.entityType)');
+    expect(source).toContain("reworkBusinessDetailService.canDownloadBoundAttachment(businessReader, binding)");
+    expect(source).toContain("reworkService.canDownloadBoundAttachment(actor, binding)");
   });
 });
