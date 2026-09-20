@@ -45,7 +45,7 @@ export const assertTestDatabaseTarget = async (
   try {
     const result = await client.query(`
       SELECT current_database() AS database, current_user AS username,
-        obj_description(database.oid, 'pg_database') AS marker,
+        shobj_description(database.oid, 'pg_database') AS marker,
         database.datallowconn AS allow_connections, database.datistemplate AS is_template,
         role.rolsuper AS is_superuser, role.rolcreatedb AS can_create_database,
         role.rolcreaterole AS can_create_role, role.rolreplication AS can_replicate,
