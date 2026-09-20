@@ -71,44 +71,8 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          migration_sensitive=false
-          receiving_sensitive=false
-          business_chain_sensitive=false
-          deployment_sensitive=false
           git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" > "$RUNNER_TEMP/full-gate-changed-files.txt"
-          while IFS= read -r path; do
-            case "$path" in
-              apps/api/migrations/*|apps/api/src/platform/migration-manifest.json|scripts/seed-base-migrations.sh|scripts/migrate.mjs|scripts/migration-integration-check.mjs|scripts/check-migrations.mjs)
-                migration_sensitive=true
-                ;;
-            esac
-            case "$path" in
-              apps/api/src/receiving/*|tests/integration/receiving-postgres.test.ts)
-                receiving_sensitive=true
-                ;;
-            esac
-            case "$path" in
-              apps/api/src/samples/*|packages/contracts/src/sample*.ts|tests/integration/sample-*.ts|apps/api/src/rework/*|apps/api/src/wages/*|apps/api/src/todos/*|apps/api/src/reporting/*|apps/api/src/sourcing/*|packages/contracts/src/wages.ts|packages/contracts/src/todo-presentation.ts|packages/contracts/src/sourcing.ts|tests/integration/root-single-account-two-pass-postgres.test.ts|tests/integration/full-business-chain-postgres.test.ts|tests/integration/sourcing-*-postgres.test.ts|scripts/run-business-chain-gate.mjs)
-                business_chain_sensitive=true
-                ;;
-            esac
-            case "$path" in
-              tests/integration/root-single-account-two-pass-postgres.test.ts|tests/integration/full-business-chain-postgres.test.ts|scripts/deploy/*|scripts/backup-postgres.sh|scripts/restore-postgres.sh|infra/*|.github/workflows/full-gate.yml|.github/workflows/ci.yml|.github/workflows/release*.yml|.github/workflows/deploy*.yml|.github/workflows/deployment*.yml)
-                deployment_sensitive=true
-                ;;
-            esac
-          done < "$RUNNER_TEMP/full-gate-changed-files.txt"
-          db_required=false
-          if [[ "$migration_sensitive" == true || "$receiving_sensitive" == true || "$business_chain_sensitive" == true || "$deployment_sensitive" == true ]]; then
-            db_required=true
-          fi
-          {
-            echo "MIGRATION_SENSITIVE=$migration_sensitive"
-            echo "RECEIVING_SENSITIVE=$receiving_sensitive"
-            echo "BUSINESS_CHAIN_SENSITIVE=$business_chain_sensitive"
-            echo "DEPLOYMENT_SENSITIVE=$deployment_sensitive"
-            echo "DB_REQUIRED=$db_required"
-          } >> "$GITHUB_ENV"
+          node scripts/ci/full-gate-risk-map.mjs --github-env "$GITHUB_ENV" "$RUNNER_TEMP/full-gate-changed-files.txt"
 
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund --prefer-offline
@@ -176,9 +140,24 @@ jobs:
         if: env.DB_REQUIRED == 'true'
         run: npm run db:migrate:check
 
-      - name: Run PostgreSQL receiving regressions for receiving changes
-        if: env.RECEIVING_SENSITIVE == 'true'
-        run: npx vitest run tests/integration/receiving-postgres.test.ts
+      - name: Run mapped PostgreSQL sensitive-domain regressions
+        if: env.MAPPED_POSTGRES_TESTS != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${TEST_DATABASE_URL:?TEST_DATABASE_URL is required for mapped PostgreSQL regressions}"
+          NODE_ENV=test TEST_DATABASE_URL="$TEST_DATABASE_URL" node scripts/test-database-safety.mjs
+          IFS=',' read -r -a mapped_tests <<< "$MAPPED_POSTGRES_TESTS"
+          (( ${#mapped_tests[@]} > 0 ))
+          for test_file in "${mapped_tests[@]}"; do
+            test -f "$test_file"
+            log="$RUNNER_TEMP/mapped-$(basename "$test_file").log"
+            NO_COLOR=1 npx vitest run "$test_file" 2>&1 | tee "$log"
+            grep -Eq 'Tests[[:space:]]+[0-9]+ passed' "$log" || {
+              echo "Mapped PostgreSQL suite executed no passing tests: $test_file"
+              exit 1
+            }
+          done
 
       - name: Run PostgreSQL Root audit control-boundary regressions for migration changes
         if: env.MIGRATION_SENSITIVE == 'true'
@@ -271,5 +250,7 @@ jobs:
             echo "- Migration-sensitive: ${MIGRATION_SENSITIVE:-false}"
             echo "- Business-chain-sensitive: ${BUSINESS_CHAIN_SENSITIVE:-false}"
             echo "- Deployment-sensitive: ${DEPLOYMENT_SENSITIVE:-false}"
+            echo "- Sensitive domains: ${FULL_GATE_DOMAINS:-none}"
+            echo "- Mapped PostgreSQL suites: ${MAPPED_POSTGRES_TESTS:-none}"
             echo "- PostgreSQL business chain runs for business, migration, or deployment-sensitive exact diffs"
           } >> "${GITHUB_STEP_SUMMARY}"

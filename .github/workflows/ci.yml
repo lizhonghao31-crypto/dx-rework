@@ -78,7 +78,6 @@ jobs:
           governance_only=false
           web_only=false
           has_web_source=false
-          high_risk=false
 
           if [[ "${EVENT_NAME}" == "pull_request" ]]; then
             test -n "${BASE_SHA}"
@@ -86,7 +85,9 @@ jobs:
             test "$(git rev-parse HEAD)" = "${HEAD_SHA}"
             git fetch --no-tags --depth=1 origin "${BASE_SHA}"
 
-            mapfile -t changed_files < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")
+            git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" > "$RUNNER_TEMP/quick-gate-changed-files.txt"
+            mapfile -t changed_files < "$RUNNER_TEMP/quick-gate-changed-files.txt"
+            node scripts/ci/full-gate-risk-map.mjs --require-quick-safe "$RUNNER_TEMP/quick-gate-changed-files.txt"
             if (( ${#changed_files[@]} > 0 )); then
               governance_only=true
               web_only=true
@@ -108,21 +109,11 @@ jobs:
                     web_only=false
                     ;;
                 esac
-                case "${path}" in
-                  apps/api/migrations/*|apps/api/src/platform/migration-manifest.json|apps/api/src/access/*|apps/api/src/auth/*|apps/api/src/rework/*|apps/api/src/wages/*|apps/api/src/sourcing/*|scripts/deploy/*|scripts/backup-postgres.sh|scripts/restore-postgres.sh|infra/*|.github/workflows/*)
-                    high_risk=true
-                    ;;
-                esac
               done
               if [[ "${has_web_source}" != "true" ]]; then
                 web_only=false
               fi
             fi
-          fi
-
-          if [[ "${high_risk}" == "true" ]]; then
-            echo "This diff requires [FULL] Gate. Rename the PR before continuing."
-            exit 1
           fi
 
           echo "governance_only=${governance_only}" >> "${GITHUB_OUTPUT}"
