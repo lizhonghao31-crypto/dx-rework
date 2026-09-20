@@ -11,6 +11,8 @@ describe("OPS-03 scheduled PostgreSQL backups", () => {
     expect(script).toContain('active_api="$(realpath "$DX_ROOT/current")"');
     expect(script).toContain("verify-current");
     expect(script).toContain("keep_count=14");
+    expect(script).toContain('release_lock="$(assert_safe_path "$DX_ROOT/locks/release.lock")"');
+    expect(script).toContain("flock -w 1800 7");
     expect(script).toContain("daily-backup-last-success.json");
     expect(script).toContain("daily-backup-last-failure.json");
     expect(script).toContain("sha256sum -c --strict SHA256SUMS");
@@ -25,6 +27,7 @@ describe("OPS-03 scheduled PostgreSQL backups", () => {
     expect(script).toContain('"$failure_file" -nt "$success_file"');
     expect(script).toContain("sha256sum -c --strict SHA256SUMS");
     expect(script).toContain("pg_exec pg_restore --list");
+    expect(script).toContain("for required in COMPLETE SHA256SUMS database.dump metadata.json");
   });
 
   it("uses persistent Shanghai timers and does not auto-install them during routine release", async () => {
