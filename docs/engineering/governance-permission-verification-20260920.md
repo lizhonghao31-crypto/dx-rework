@@ -11,7 +11,15 @@
 - forbidden files: 业务源码、历史迁移、权限 Golden Source、工资/数量/金额算法、UI、部署及真人配置。
 - gate class: FULL；最终 Head 通过后请求一次独立 Review。
 
-权限标准采用 `docs/requirements/platform-permission-golden-source-v1.0.md` 及 V4 第 8.3—8.7 节。保持岗位职责、Root 特例和真实业务数据。
+本次业务权限的唯一金标准为仓库内 `docs/requirements/platform-permission-golden-source-v1.0.md`（以下章节均以当前 main 的该文件为准）：
+
+- PERM-01：`2026-09-16 回货差异处理（APPROVED）`。
+- PERM-02：`2026-09-12 财务中心与统一工资增量（APPROVED）`、`PERM-ROLE-FINANCE-READ-001`、`PERM-ROLE-FINANCE-DIRECTOR-001` 及第 4、5 节字段/导出白名单。
+- PERM-03：`2026-09-15 老板成员在返工、外发的增量分权`，执行说明为 `docs/engineering/business-module-owner-members-20260915.md`。
+- PERM-04：`2026-09-12 供应商维护与申请确认` 及其引用的 `docs/requirements/supplier-onboarding-20260912.md`。
+- PERM-05：文件开头 `板房职责更新（2026-09-15）`、`2026-09-12 首次打板流程（APPROVED）`、`2026-09-12 板房价格管控（APPROVED）` 及其引用的 `docs/requirements/pattern-room-finance-v1.0.md`。
+
+本文的 PERM-01—05 是验证分组标签，不是另一套权限规则，也不恢复金标准文件中的历史施工顺序。保持岗位职责、Root 特例和真实业务数据。
 
 ## 已有证据与本次工作
 
