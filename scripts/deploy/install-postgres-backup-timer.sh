@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
+source "$(dirname "$0")/backup-runtime.sh"
 
 [[ "$(id -u)" == 0 ]] || die 'backup timer installation requires root'
-active_sha="$(current_generation_sha)" || die 'active generation is unavailable'
-assert_active_release "$active_sha"
-active_api="$DX_ROOT/releases/$active_sha"
+resolve_backup_runtime
 
 unit_source="$active_api/infra/systemd"
 for unit in   dx-rework-postgres-backup.service   dx-rework-postgres-backup.timer   dx-rework-postgres-backup-health.service   dx-rework-postgres-backup-health.timer; do
@@ -23,7 +22,7 @@ systemctl start dx-rework-postgres-backup.service
 systemctl enable --now dx-rework-postgres-backup.timer
 systemctl enable --now dx-rework-postgres-backup-health.timer
 
-runuser -u dxrework --   "$DX_ROOT/current/scripts/deploy/check-scheduled-postgres-backup.sh"
+runuser -u dxrework -- /usr/bin/bash "$DX_ROOT/current/scripts/deploy/check-scheduled-postgres-backup.sh"
 
 systemctl --no-pager --full status dx-rework-postgres-backup.timer
 systemctl --no-pager --full status dx-rework-postgres-backup-health.timer
