@@ -6,7 +6,7 @@ const TESTS = Object.freeze({
   access: [
     "tests/integration/access-postgres.test.ts",
     "tests/integration/employee-access-lifecycle-postgres.test.ts",
-    "tests/integration/member-module-policy-postgres.cases.ts",
+    "tests/integration/full-business-chain-postgres.test.ts",
   ],
   wages: [
     "tests/integration/finance-wage-access-postgres.test.ts",
@@ -108,8 +108,8 @@ export const classifyFullGatePaths = (inputPaths) => {
     }
     if (isPostgresTest(path)) {
       businessChainSensitive = true;
-      mappedTests.add(path);
       domains.add("postgres-test");
+      if (existsSync(path)) mappedTests.add(path);
     }
     if (matchesAccess(path)) {
       businessChainSensitive = true;
@@ -184,6 +184,7 @@ const runCli = () => {
   if (!changedFileList) throw new Error("Usage: full-gate-risk-map.mjs [--require-quick-safe] [--github-env PATH] CHANGED_FILES");
   const paths = readFileSync(changedFileList, "utf8").split(/\r?\n/).filter(Boolean);
   const result = classifyFullGatePaths(paths);
+  assertMappedPostgresTests(Object.values(TESTS).flat());
   assertMappedPostgresTests(result.mappedPostgresTests);
 
   if (quickSafe && result.highRisk) {
