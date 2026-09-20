@@ -6,12 +6,66 @@ import { capabilities, fail, nodeMeta } from "./management-reporting-shared.js";
 import { canReadFinanceOrders } from "../rework/finance-order-access.js";
 
 // A separate whitelist projection: no financial, process, approval or workflow-history joins.
-export async function readBasicRework(db: Pool, actor: TrustedActorContext, query: BasicReworkQuery): Promise<BasicReworkPage> {
+const assertBasicReworkAccess = async (db: Pool, actor: TrustedActorContext): Promise<boolean> => {
   const financeReader=await canReadFinanceOrders(db,actor);
   if (!financeReader) {
     if (!capabilities(actor).includes("rework:basic:view")) fail("缺少返工基础查看权限");
     await db.query("SELECT access_authorized_actor_roles($1,$2)", [actor.actorId,"rework:basic:view"]);
   }
+  return financeReader;
+};
+
+export async function canDownloadBasicReworkAttachment(
+  db: Pool,
+  actor: TrustedActorContext,
+  binding: Readonly<{ attachmentId?: string; entityType: string; entityId: string; mimeType?: string }>,
+): Promise<boolean> {
+  if (!binding.mimeType?.startsWith("image/")) return false;
+  if (binding.entityType !== "rework_order" && binding.entityType !== "receiving_batch") return false;
+  try {
+    await assertBasicReworkAccess(db,actor);
+  } catch (error) {
+    if ((error as { statusCode?: number }).statusCode === 403 || (error as { code?: string }).code === "42501") return false;
+    throw error;
+  }
+  if (binding.entityType === "rework_order") {
+    const result=await db.query<{permitted:boolean}>(`
+      SELECT EXISTS(
+        SELECT 1 FROM rework_orders orders
+        WHERE orders.rework_order_id::text=$1 AND orders.status<>'deleted'
+          AND ($2::text IS NULL OR EXISTS(
+            SELECT 1 FROM attachments attachment
+            WHERE attachment.attachment_id::text=$2
+              AND attachment.entity_type='rework_order'
+              AND attachment.entity_id=orders.rework_order_id::text
+              AND attachment.status='ready'
+              AND attachment.mime_type LIKE 'image/%'
+          ))
+      ) permitted`,[binding.entityId,binding.attachmentId ?? null]);
+    return result.rows[0]?.permitted===true;
+  }
+  const result=await db.query<{permitted:boolean}>(`
+    SELECT EXISTS(
+      SELECT 1 FROM rework_orders orders
+      WHERE orders.source_receiving_batch_id::text=$1 AND orders.status<>'deleted'
+        AND ($2::text IS NULL OR EXISTS(
+          SELECT 1 FROM attachments attachment
+          WHERE attachment.attachment_id::text=$2
+            AND attachment.entity_type='receiving_batch'
+            AND attachment.entity_id=orders.source_receiving_batch_id::text
+            AND attachment.status='ready'
+            AND attachment.mime_type LIKE 'image/%'
+            AND NOT EXISTS(
+              SELECT 1 FROM receiving_attachment_retirements retired
+              WHERE retired.attachment_id=attachment.attachment_id
+            )
+        ))
+    ) permitted`,[binding.entityId,binding.attachmentId ?? null]);
+  return result.rows[0]?.permitted===true;
+}
+
+export async function readBasicRework(db: Pool, actor: TrustedActorContext, query: BasicReworkQuery): Promise<BasicReworkPage> {
+  const financeReader=await assertBasicReworkAccess(db,actor);
   const result = await db.query<{items: Array<Omit<BasicReworkPage["items"][number],"nodeLabel">>; page: number; total_pages: number; total_count: number}>(`
     WITH filtered AS (
       SELECT orders.rework_order_id, orders.rework_no, orders.style_no, orders.order_no,
