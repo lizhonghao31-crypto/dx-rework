@@ -170,6 +170,7 @@ export async function seedOwnTailHistory(db: Database, options: FixtureOptions =
       }
     }
     await setHistoryFixtureTriggers(db, true);
+    await setHistoricalSeedTriggers(db, true);
     await db.query("COMMIT");
     return { order, determination, predecessor, event, wageIds, tailIds, input };
   } catch (error) {
