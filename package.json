@@ -36,7 +36,8 @@
     "db:migrate": "node scripts/migrate.mjs",
     "db:migrate:lint": "node scripts/check-migrations.mjs",
     "db:migrate:check": "node scripts/migration-integration-check.mjs",
-    "secret:scan": "node scripts/secret-scan.mjs",
+    "secret:scan": "node scripts/secret-scan.mjs --worktree",
+    "secret:scan:full": "node scripts/secret-scan.mjs --all",
     "check": "npm run lint && npm run typecheck && npm run build && npm run test && npm run db:migrate:lint && npm run secret:scan",
     "preview:dry-run": "bash scripts/preview/dry-run.sh",
     "pr17:acceptance": "node scripts/acceptance/validate.mjs docs/operations/pr-17-acceptance-matrix.json"
