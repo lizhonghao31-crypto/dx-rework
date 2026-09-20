@@ -105,6 +105,16 @@ DX_REWORK_RESTORE_MANIFEST=<checksum-bound migration manifest>
 
 目标数据库必须：名称匹配 `dx_rework_drill_*|dx_rework_restore_*`、指纹与 `restore.env` 批准值一致、与备份 metadata 的 source fingerprint 不同，并且不存在用户对象。恢复不依赖源库在线；只使用 checksum 覆盖的 metadata 与真实目标连接。恢复后必须通过完整 migration history、数据库 readiness 和最小一致性查询，并记录 RPO/RTO。不得 drop 或覆盖生产数据库。
 
+## 6.1 每日 PostgreSQL 备份与失败可发现性
+
+生产数据库日备份使用独立目录 `/opt/dx-rework/backups/postgres/daily`，不与 release migration 前备份混合清理。systemd timer 固定按 `Asia/Shanghai` 每日 23:30 执行；安装时先立即执行一次备份并通过健康检查后才启用定时器。
+
+`run-scheduled-postgres-backup.sh` 必须从当前 active release 读取 Git SHA 与 migration manifest，验证生产数据库完整 migration history 后调用正式 `backup-postgres.sh`。备份必须产生 `COMPLETE`、通过 `SHA256SUMS` 与 `pg_restore --list`，成功后才允许执行保留策略。日备份与 routine release 共用 release 锁：备份最多等待 30 分钟，禁止与 migration / generation 切换并发；若备份先取得锁，发布必须等待或停止。默认只保留最近 14 个**成功的日备份集**；只清理 daily 专用目录中具备完整安全标记的旧集合，不触碰 release/manual 备份。
+
+成功证据写入 `/opt/dx-rework/evidence/ops03/daily-backup-last-success.json`；失败写入独立 failure 证据。每天 08:30 的 health timer 验证最近成功备份不超过 30 小时、完整性仍有效且不存在更新的未解决失败。备份 service 或 health service 失败会保持 systemd failed 状态并保留证据，供 OBS-01/人工巡检发现；本机制本身不发送钉钉消息，也不读取或输出生产密钥。
+
+安装/更新 systemd 单元必须由 root 显式执行当前 active release 的 `install-postgres-backup-timer.sh`。routine release 仅携带这些脚本和 unit，不自动修改 `/etc/systemd/system`。
+
 ## 7. 证据与外部事项
 
 证据按 Head SHA/Run ID 归档，去除 query、Authorization、token、session、数据库 URL 和凭据。代码自动化通过不等于真实 ECS、共享 Nginx 配置窗口、OSS、钉钉、Todo、UAT-01—UAT-22、广州尾部试点或 S-04 已完成；这些项目必须保持真实状态，禁止用 CI 代替现场证据。
