@@ -48,7 +48,7 @@ const placeholder = (value) => {
   // these distinguishable from pasted random credentials without ignoring test
   // files wholesale, so real provider tokens or random assignments still fail.
   if (/^[a-z0-9]+(?:[-_][a-z0-9]+)*$/i.test(value)
-    && /(?:^|[-_])test(?:[-_]|$)/i.test(value)) return true;
+    && /(?:^|[-_])(?:test|gate|probe|synthetic)(?:[-_]|$)/i.test(value)) return true;
   if (/^(?:0123456789abcdef){2,}$/i.test(value)) return true;
   if (/^[0-9]+$/.test(value) && /(?:0123456789|1234567890)/.test(value)) return true;
   return false;
