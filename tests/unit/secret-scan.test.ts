@@ -73,6 +73,7 @@ describe("secret scan", () => {
     expect(containsSecretSignature("DINGTALK_WEB_CLIENT_SECRET=web-client-secret-test")).toBe(false);
     expect(containsSecretSignature("SESSION_SECRET=0123456789abcdef0123456789abcdef")).toBe(false);
     expect(containsSecretSignature("SESSION_SECRET=12345678901234567890123456789012")).toBe(false);
+    expect(containsSecretSignature("SESSION_SECRET=root-single-account-gate-secret-0000000000000000")).toBe(false);
     expect(containsSecretSignature("OSS_ACCESS_KEY_SECRET=\nOSS_PRIVATE_PREFIX=dx-rework/private")).toBe(false);
     expect(containsSecretSignature("OPENAI_API_KEY=\nOPENAI_VISION_MODEL=gpt-5.6")).toBe(false);
   });
