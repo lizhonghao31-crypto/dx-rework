@@ -11,7 +11,7 @@
 
 历史 Pilot/验收曾复用 `https://staging-api.dxerp.org.cn/rework/` 的 **shared-path** 部署。该模式仍保留用于非生产环境；正式生产不再以该路径作为主入口。生产 `dxerp.org.cn` 根域直接服务 `/opt/dx-rework/frontend/current` 并将根级 API 转发至 `127.0.0.1:3201`。旧 `/rework/**` 链接通过独立兼容配置迁移到正式根域，不能重新成为生产事实源。
 
-仓库同时保留两种发布布局：当前 ECS 正式生产由 `scripts/deploy-ecs.sh` 采用 **source layout**，即 `/opt/dx-rework/current -> /opt/dx-rework/source`，前端指向 `/opt/dx-rework/frontend/source-releases/<SHA>`；PR-17 packaged release 采用 **generation layout**，即 `current -> active/api -> generations/<SHA>`。任何运维脚本必须以 `current` 的真实解析结果为事实源，不能因为机器上存在旧 `active/generations` 就假定 production 正在使用 generation layout。两种布局都不得在备份任务中改写 alias。
+仓库同时保留两种发布布局：当前 ECS 正式生产由 `scripts/deploy-ecs.sh` 采用 **source layout**，即 `/opt/dx-rework/current -> /opt/dx-rework/source`，前端指向 `/opt/dx-rework/frontend/source-releases/<SHA>`；PR-17 packaged release 采用 **generation layout**，即 `current -> active/api -> generations/<SHA>`。任何运维脚本必须以 `current` 的真实解析结果为事实源，不能因为机器上存在旧 `active/generations` 就假定 production 正在使用 generation layout。两种布局都不得在备份任务中改写 alias。 routine 发布**不执行 `nginx -s reload`**；两种布局都不得在备份任务中改写 alias。
 
 Nginx 安装或配置变更属于单独的基础设施窗口，须另行批准并先备份、执行 `nginx -t` 后再由基础设施操作完成 graceful reload。shared-path 模式使用 `infra/nginx/dx-rework-shared-paths.conf.example` 的标记块作为审查基线；该块必须原样存在于配置文件与 `nginx -T` 输出中。`release-switch.lock` 只能在 `/rework/**` locations 内返回 503，**绝不能在共享 `server {}` 顶层使整个 staging origin 返回 503**。
 
