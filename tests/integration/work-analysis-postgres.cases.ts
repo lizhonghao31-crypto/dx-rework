@@ -38,6 +38,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
    CREATE TABLE rework_order_supply_context(rework_order_id uuid,washing_supplier_id uuid,washing_supplier_version int,embroidery_supplier_id uuid,embroidery_supplier_version int,fabric_supplier_id uuid,fabric_supplier_version int);
    CREATE TABLE rework_external_responsibility_cases(rework_order_id uuid,supplier_name_snapshot text);`);
   await db.query(await readFile(new URL('../../apps/api/migrations/0161_work_operation_diagnostics.sql',import.meta.url),'utf8'));
+  await db.query(await readFile(new URL('../../apps/api/migrations/0204_operation_diagnostic_latency.sql',import.meta.url),'utf8'));
   for(let i=0;i<ids.length;i++){
    await db.query("INSERT INTO sourcing_cases VALUES($1,$2,'STYLE','2026-09-01',$3)",[ids[i],`ORDER-${String(i).padStart(2,'0')}`,i===16?'2026-09-06':null]);
    await db.query("INSERT INTO sourcing_case_lines VALUES($1,1,'STYLE','蓝',100,$2)",[ids[i],i===16?null:'1.2345']);
@@ -54,7 +55,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   await db.query("INSERT INTO sourcing_case_transitions VALUES($1,$2,7,'pending_finance_reconciliation','pending_finance_reconciliation','finance_matched','2026-09-07')",[randomUUID(),ids[0]]);
   await db.query("INSERT INTO operation_events(event_id,entity_id,entity_type,action,before_state,after_state,created_at) VALUES($1,$2,'sourcing_case','sourcing.attachments.supplement','{}','{}','2026-09-07')",[randomUUID(),ids[0]]);
   await db.query("INSERT INTO operation_events(event_id,entity_id,entity_type,action,before_state,after_state,created_at) VALUES($1,'private-person','supplier','master_data.supplier.revise',$2,$3,'2026-09-07')",[randomUUID(),JSON.stringify({active:true,bankAccount:'old-secret',cookie:'secret'}),JSON.stringify({active:false,bankAccount:'new-secret',cookie:'changed-secret'})]);
-  for(const status of [200,400,403,503])await recordOperationDiagnostic(db,{operation:'sample_create',status,code:status===400?'VALIDATION_ERROR':'arbitrary-secret',replayed:true});
+  for(const [index,status] of [200,400,403,503].entries())await recordOperationDiagnostic(db,{operation:'sample_create',status,code:status===400?'VALIDATION_ERROR':'arbitrary-secret',replayed:true,durationMs:10.5+index});
  });
  afterAll(async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
  it('preserves all price versions, quantities and four-decimal history; excludes transfer approvals',async()=>{
@@ -103,7 +104,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   const result=await readOperationDiagnostics(db,{});expect(result.recordCount).toBe('4');expect(result.groups).toHaveLength(4);expect(result.groups.find(g=>g.outcome==='success')?.replayedCount).toBe('1');expect(result.groups.filter(g=>g.outcome!=='success').every(g=>g.replayedCount==='0')).toBe(true);expect(result.revisions).toEqual([{action:'master_data.supplier.revise',field:'active',count:'1'}]);expect(JSON.stringify(result)).not.toMatch(/private-person|secret|bankAccount|cookie/);
  });
  it('supports outcome/date filtering while leaving absent historical failures explicitly empty',async()=>{
-  expect((await readOperationDiagnostics(db,{group:'permission'})).recordCount).toBe('1');const old=await readOperationDiagnostics(db,{to:'2020-01-01'});expect(old.groups).toHaveLength(0);expect(old.recordingSince).not.toBeNull();
+  const permission=await readOperationDiagnostics(db,{group:'permission'});expect(permission.recordCount).toBe('1');expect(permission.groups[0]).toMatchObject({timingSampleCount:'1',averageDurationMs:12.5,maxDurationMs:12.5});const old=await readOperationDiagnostics(db,{to:'2020-01-01'});expect(old.groups).toHaveLength(0);expect(old.recordingSince).not.toBeNull();
  });
  it('rejects mutation and unsafe fields at the new database boundary',async()=>{
   await expect(db.query("UPDATE work_operation_diagnostics SET error_code='OK'")).rejects.toThrow('immutable');await expect(db.query('DELETE FROM work_operation_diagnostics')).rejects.toThrow('immutable');await expect(db.query('TRUNCATE work_operation_diagnostics')).rejects.toThrow('immutable');
