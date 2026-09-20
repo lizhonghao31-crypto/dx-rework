@@ -6,10 +6,11 @@ const files = {
   governance: ".github/workflows/governance.yml",
   preview: ".github/workflows/pr-preview.yml",
   release: ".github/workflows/pr-17-release.yml",
+  riskMap: "scripts/ci/full-gate-risk-map.mjs",
 };
 
 const read = async (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
-const [quick, full, governance, preview, release] = await Promise.all(Object.values(files).map(read));
+const [quick, full, governance, preview, release, riskMap] = await Promise.all(Object.values(files).map(read));
 
 const assert = (condition, message) => {
   if (!condition) throw new Error(`GitHub Actions usage policy violation: ${message}`);
@@ -47,8 +48,7 @@ for (const event of ["opened", "synchronize", "reopened", "edited"]) {
 }
 assert(quick.includes("cancel-in-progress: true"), "Quick Gate must cancel stale runs");
 assert(full.includes("cancel-in-progress: true"), "Full Gate must cancel stale runs");
-assert(quick.includes("high_risk=false"), "Quick Gate must fail closed when high-risk paths are detected");
-assert(quick.includes("This diff requires [FULL] Gate"), "Quick Gate must reject a high-risk diff misclassified as QUICK");
+assert(quick.includes("full-gate-risk-map.mjs --require-quick-safe"), "Quick Gate must use the shared sensitive-path classifier");
 
 const classifier = stepBlock(quick, "Classify Quick Gate scope");
 assert(classifier.includes("BASE_SHA"), "Quick Gate classifier must use exact PR base SHA");
@@ -56,8 +56,12 @@ assert(classifier.includes("HEAD_SHA"), "Quick Gate classifier must use exact PR
 assert(classifier.includes('git diff --name-only "${BASE_SHA}" "${HEAD_SHA}"'), "Quick Gate classifier must classify exact PR diff");
 assert(classifier.includes("governance_only=false"), "Quick Gate governance classifier must fail closed");
 assert(classifier.includes("web_only=false"), "Quick Gate web classifier must fail closed");
-assert(countOccurrences(quick, "backup-postgres.sh") === 1 && classifier.includes("backup-postgres.sh"), "backup-postgres.sh may appear only in Quick Gate risk classification");
-assert(countOccurrences(quick, "restore-postgres.sh") === 1 && classifier.includes("restore-postgres.sh"), "restore-postgres.sh may appear only in Quick Gate risk classification");
+assert(countOccurrences(quick, "backup-postgres.sh") === 0, "Quick Gate must delegate deployment sensitivity to the shared classifier");
+assert(countOccurrences(quick, "restore-postgres.sh") === 0, "Quick Gate must delegate restore sensitivity to the shared classifier");
+assert(riskMap.includes('path === "scripts/backup-postgres.sh"'), "shared classifier must protect backup-postgres.sh");
+assert(riskMap.includes('path === "scripts/restore-postgres.sh"'), "shared classifier must protect restore-postgres.sh");
+assert(riskMap.includes('path.startsWith("apps/api/src/")'), "shared classifier must fail closed for unknown API paths");
+assert(riskMap.includes('path.startsWith("packages/contracts/src/")'), "shared classifier must fail closed for unknown shared-contract paths");
 
 for (const forbidden of [
   "postgres:16-alpine",
@@ -73,6 +77,9 @@ for (const forbidden of [
 assert(quick.includes("npm run build --workspaces --if-present"), "Quick Gate must avoid root postbuild");
 assert(full.includes("npm ci --no-audit --no-fund --prefer-offline"), "Full Gate dependency install must remain deterministic");
 assert(full.includes("Classify Full Gate risk from exact PR diff"), "Full Gate must classify exact PR diff");
+assert(full.includes("full-gate-risk-map.mjs --github-env"), "Full Gate must use the shared sensitive-path classifier");
+assert(full.includes("Run mapped PostgreSQL sensitive-domain regressions"), "Full Gate must execute mapped PostgreSQL suites");
+assert(full.includes("Mapped PostgreSQL suite executed no passing tests"), "Mapped PostgreSQL suites must fail when nothing actually runs");
 assert(full.includes("DB_REQUIRED"), "Full Gate must retain conditional PostgreSQL escalation");
 assert(full.includes("if: env.DB_REQUIRED == 'true'"), "PostgreSQL work must remain conditional");
 assert(full.includes("if: env.DEPLOYMENT_SENSITIVE == 'true'"), "release and backup work must remain conditional");
