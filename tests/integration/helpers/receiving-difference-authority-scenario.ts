@@ -77,6 +77,24 @@ export async function exerciseReceivingDifferenceAuthority(input:{database:Pool;
     await access.revokeRole(root,assignment.assignmentId,"验证旧会话不能沿用已撤回的差异权限");
     userId=merchants[1];
     expect((await post(`${base}/difference-resolutions`,resolutionInput("packing"))).statusCode).toBe(403);
+    // An explicit second role enables only discrepancy handling, never quantity corrections.
+    stale=false;userId=warehouseId;
+    const mixedRole=await access.assignRole(root,{userId:warehouseId,roleCode:"order_merchandiser",reason:"验证仓管兼任跟单的独立职责"});
+    try {
+      for(const type of ["receiving","packing"] as const) {
+        const response=await post(`${base}/difference-resolutions`,resolutionInput(type));
+        expect(response.statusCode,response.body).toBe(201);
+        expect(response.json().handledBy).toBe(warehouseId);
+      }
+      expect((await post(`${base}/packing-revisions`,{...packingInput,expectedPackingRevisionId:row.packingRevisionId,packingQuantity:95})).statusCode).toBe(403);
+      expect((await app.inject({method:"PATCH",url:base,payload:{expectedVersion:row.version,styleNo:row.styleNo,documentQuantity:100,actualQuantity:95}})).statusCode).toBe(403);
+    } finally {
+      await access.revokeRole(root,mixedRole.assignmentId,"结束兼岗验收并检查旧会话撤权");
+    }
+    stale=true;
+    for(const type of ["receiving","packing"] as const) expect((await post(`${base}/difference-resolutions`,resolutionInput(type))).statusCode).toBe(403);
+    expect(await board()).toMatchObject({documentQuantity:100,cumulativeActualQuantity:90,packingQuantity:80,differenceQuantity:-10,packingDifferenceQuantity:-10});
+    expect((await database.query("SELECT count(*)::int count FROM receiving_difference_resolutions WHERE receiving_batch_id=$1",[row.receivingBatchId])).rows[0].count).toBe(6);
     stale=false;userId=rootId;
     expect((await post(`${base}/packing-revisions`,{...packingInput,expectedPackingRevisionId:row.packingRevisionId,packingQuantity:82})).statusCode).toBe(201);
     expect((await app.inject({method:"PATCH",url:base,payload:{expectedVersion:row.version,styleNo:row.styleNo,documentQuantity:100,actualQuantity:92}})).statusCode).toBe(200);
