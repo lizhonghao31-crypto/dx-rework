@@ -584,6 +584,33 @@ export class ReceivingService {
     private readonly options: Readonly<{ allowLegacyStyleInput?: boolean }> = {},
   ) {}
 
+  async canDownloadBoundAttachment(
+    actor: Readonly<{ actorRoles: readonly string[] }>,
+    binding: Readonly<{ attachmentId?: string; entityType: string; entityId: string; mimeType?: string }>,
+  ): Promise<boolean> {
+    if (binding.entityType !== "receiving_batch" || !binding.mimeType?.startsWith("image/")) return false;
+    if (actor.actorRoles.length === 0) return false;
+    const result=await this.database.query<{permitted:boolean}>(`
+      SELECT EXISTS(
+        SELECT 1 FROM receiving_batches batch
+        WHERE batch.receiving_batch_id::text=$1
+          AND batch.deleted_at IS NULL
+          AND ($2::text IS NULL OR EXISTS(
+            SELECT 1 FROM attachments attachment
+            WHERE attachment.attachment_id::text=$2
+              AND attachment.entity_type='receiving_batch'
+              AND attachment.entity_id=batch.receiving_batch_id::text
+              AND attachment.status='ready'
+              AND attachment.mime_type LIKE 'image/%'
+              AND NOT EXISTS(
+                SELECT 1 FROM receiving_attachment_retirements retired
+                WHERE retired.attachment_id=attachment.attachment_id
+              )
+          ))
+      ) permitted`,[binding.entityId,binding.attachmentId ?? null]);
+    return result.rows[0]?.permitted===true;
+  }
+
   async create(
     actor: TrustedActorContext,
     input: CreateReceivingInput,
