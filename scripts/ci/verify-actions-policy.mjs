@@ -5,10 +5,11 @@ const files = {
   full: ".github/workflows/full-gate.yml",
   governance: ".github/workflows/governance.yml",
   preview: ".github/workflows/pr-preview.yml",
+  release: ".github/workflows/pr-17-release.yml",
 };
 
 const read = async (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
-const [quick, full, governance, preview] = await Promise.all(Object.values(files).map(read));
+const [quick, full, governance, preview, release] = await Promise.all(Object.values(files).map(read));
 
 const assert = (condition, message) => {
   if (!condition) throw new Error(`GitHub Actions usage policy violation: ${message}`);
@@ -64,6 +65,21 @@ assert(full.includes("Classify Full Gate risk from exact PR diff"), "Full Gate m
 assert(full.includes("DB_REQUIRED"), "Full Gate must retain conditional PostgreSQL escalation");
 assert(full.includes("if: env.DB_REQUIRED == 'true'"), "PostgreSQL work must remain conditional");
 assert(full.includes("if: env.DEPLOYMENT_SENSITIVE == 'true'"), "release and backup work must remain conditional");
+assert(full.includes("npm audit --omit=dev --audit-level=high"), "Full Gate must audit the production dependency graph");
+assert(full.includes("npm run secret:scan:full"), "Full Gate must scan complete Git history and first-party build artifacts");
+assert(!quick.includes("${{ secrets."), "Quick Gate must not receive repository or environment secrets");
+assert(!full.includes("${{ secrets."), "Full Gate must not receive repository or environment secrets");
+
+const releaseDeployMarker = "\n  deploy:";
+const releaseDeployStart = release.indexOf(releaseDeployMarker);
+assert(releaseDeployStart >= 0, "manual release deploy job missing");
+const releaseGate = release.slice(0, releaseDeployStart);
+const releaseDeploy = release.slice(releaseDeployStart);
+assert(!releaseGate.includes("${{ secrets."), "release build/gate job must not receive production secrets");
+assert(releaseDeploy.includes("environment: ${{ inputs.target_environment }}"), "release deploy job must use a protected target environment");
+assert(releaseDeploy.includes("${{ secrets.DX_REWORK_SSH_KEY }}"), "release deploy secrets must stay inside the protected deploy job");
+assert(release.includes("npm audit --omit=dev --audit-level=high"), "manual release must audit the production dependency graph");
+assert(release.includes("npm run secret:scan:full"), "manual release must rescan history and first-party build artifacts");
 
 assert(!/^\s*pull_request:/m.test(governance), "standalone Governance must not auto-run on pull requests");
 assert(!/^\s*pull_request:/m.test(preview), "Preview must not auto-run on pull requests");
