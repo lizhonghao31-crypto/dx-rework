@@ -45,6 +45,20 @@ describe("Full Gate sensitive path mapping", () => {
     }
   });
 
+  it("maps access/auth through a discoverable PostgreSQL wrapper", () => {
+    const result = classifyFullGatePaths(["apps/api/src/access/service.ts"]);
+    expect(result.mappedPostgresTests).toContain("tests/integration/full-business-chain-postgres.test.ts");
+    expect(result.mappedPostgresTests).not.toContain("tests/integration/member-module-policy-postgres.cases.ts");
+  });
+
+  it("does not schedule a deleted PostgreSQL test path while still escalating the diff", () => {
+    const deleted = classifyFullGatePaths(["tests/integration/removed-postgres.test.ts"]);
+    expect(deleted.businessChainSensitive).toBe(true);
+    expect(deleted.dbRequired).toBe(true);
+    expect(deleted.domains).toContain("postgres-test");
+    expect(deleted.mappedPostgresTests).not.toContain("tests/integration/removed-postgres.test.ts");
+  });
+
   it("maps migration, deployment and changed PostgreSQL tests explicitly", () => {
     const migration = classifyFullGatePaths(["apps/api/migrations/9999_test.sql"]);
     expect(migration.migrationSensitive).toBe(true);
