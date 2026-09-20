@@ -69,6 +69,12 @@ describe("secret scan", () => {
     expect(containsSecretSignature(assignedSecret)).toBe(true);
     expect(containsSecretSignature("SESSION_SECRET=replace_with_at_least_32_random_characters")).toBe(false);
     expect(containsSecretSignature("OPENAI_API_KEY=production-openai-key")).toBe(false);
+    expect(containsSecretSignature("SESSION_SECRET=a-test-session-secret-with-at-least-32-characters")).toBe(false);
+    expect(containsSecretSignature("DINGTALK_WEB_CLIENT_SECRET=web-client-secret-test")).toBe(false);
+    expect(containsSecretSignature("SESSION_SECRET=0123456789abcdef0123456789abcdef")).toBe(false);
+    expect(containsSecretSignature("SESSION_SECRET=12345678901234567890123456789012")).toBe(false);
+    expect(containsSecretSignature("OSS_ACCESS_KEY_SECRET=\nOSS_PRIVATE_PREFIX=dx-rework/private")).toBe(false);
+    expect(containsSecretSignature("OPENAI_API_KEY=\nOPENAI_VISION_MODEL=gpt-5.6")).toBe(false);
   });
 
   it("scans built first-party artifacts separately from ignored worktree build directories", async () => {
