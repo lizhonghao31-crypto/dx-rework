@@ -2,7 +2,7 @@ import { LIST_PAGE_SIZE } from "@dx-rework/contracts/reporting";
 import { canAccessFinanceWages, requireFinanceWageAccess } from "../wages/wage-access.js";
 import { readFinanceNode } from "./finance-node-reader.js";
 import type { FinanceNodeKey } from "@dx-rework/contracts/reporting";
-import { readBasicRework } from "./basic-rework-reader.js";
+import { canDownloadBasicReworkAttachment, readBasicRework } from "./basic-rework-reader.js";
 import type { BasicReworkQuery } from "@dx-rework/contracts/reporting";
 import { wageSelection, wageSelectionValues } from "./wage-report-selection.js";
 import {readWorkflowAnalysis} from "./workflow-analysis.js";
@@ -56,6 +56,13 @@ export class ManagementReportingService {
 
   async listBasicRework(actor: TrustedActorContext, query: BasicReworkQuery) {
     return readBasicRework(this.db,actor,query);
+  }
+
+  async canDownloadBasicReworkAttachment(
+    actor: TrustedActorContext,
+    binding: Readonly<{ attachmentId?: string; entityType: string; entityId: string; mimeType?: string }>,
+  ): Promise<boolean> {
+    return canDownloadBasicReworkAttachment(this.db,actor,binding);
   }
 
   async workflowAnalysis(actor: TrustedActorContext, input: unknown) {
