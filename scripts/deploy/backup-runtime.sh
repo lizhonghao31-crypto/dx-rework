@@ -34,11 +34,17 @@ resolve_backup_runtime() {
 
   if [[ "$active_api" == "$DX_ROOT/source" ]]; then
     active_mode=source
+    require_command git
     api_manifest="$active_api/release-manifest.json"
     [[ -f "$api_manifest" && ! -L "$api_manifest" ]] || die 'source deployment release manifest is missing or unsafe'
     active_sha="$(backup_manifest_field "$api_manifest" gitSha)"
     require_sha "$active_sha"
-    [[ "$active_frontend" == "$DX_ROOT/frontend/source-releases/$active_sha" ]] || die 'source API and frontend releases disagree'
+    [[ "$(git -C "$active_api" rev-parse HEAD)" == "$active_sha" ]] ||
+      die 'source checkout does not match deployed release'
+    [[ -z "$(git -C "$active_api" status --porcelain)" ]] ||
+      die 'source checkout is dirty; backup refuses unverified scripts'
+    [[ "$active_frontend" == "$DX_ROOT/frontend/source-releases/$active_sha" ]] ||
+      die 'source API and frontend releases disagree'
   elif [[ "$active_api" == "$DX_ROOT/releases/"* ]]; then
     active_mode=generation
     active_sha="$(basename "$active_api")"
