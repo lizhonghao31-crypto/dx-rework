@@ -5,6 +5,7 @@ import type { Pool } from "pg";
 import { describe, expect, it, vi } from "vitest";
 
 import { ApplicationError } from "../../apps/api/src/platform/errors.js";
+import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
 import { ReworkBusinessDetailService } from "../../apps/api/src/rework/rework-business-detail-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
@@ -54,10 +55,30 @@ describe("receiving attachment authorization", () => {
     expect(get).toHaveBeenCalledWith(actor, linkedOrderId);
   });
 
+  it("authorizes active receipt evidence for an effective business role without reopening the MIME bypass", async () => {
+    const query = vi.fn(async () => ({ rows: [{ permitted: true }] }));
+    const service = new ReceivingService({ query } as unknown as Pool);
+
+    await expect(service.canDownloadBoundAttachment(
+      { actorRoles: ["warehouse_receiver"] },
+      { attachmentId: randomUUID(), entityType: "receiving_batch", entityId: randomUUID(), mimeType: "image/jpeg" },
+    )).resolves.toBe(true);
+    expect(String(query.mock.calls[0]?.[0])).toContain("receiving_attachment_retirements");
+
+    await expect(service.canDownloadBoundAttachment(
+      { actorRoles: [] },
+      { attachmentId: randomUUID(), entityType: "receiving_batch", entityId: randomUUID(), mimeType: "image/jpeg" },
+    )).resolves.toBe(false);
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps server composition on scoped authorization instead of an image-type bypass", async () => {
     const source = await readFile("apps/api/src/server.ts", "utf8");
     expect(source).not.toContain('["rework_order", "receiving_batch"].includes(binding.entityType)');
+    expect(source).toContain("receivingService.canDownloadBoundAttachment(businessReader, binding)");
+    expect(source).toContain("reportingService.canDownloadBasicReworkAttachment(businessReader, binding)");
     expect(source).toContain("reworkBusinessDetailService.canDownloadBoundAttachment(businessReader, binding)");
-    expect(source).toContain("reworkService.canDownloadBoundAttachment(actor, binding)");
+    expect(source).toContain("actor.actorRoles.includes(ROOT_ACTOR_ROLE)");
+    expect(source).toContain('binding.entityType === "rework_order" || binding.entityType === "receiving_batch"');
   });
 });
