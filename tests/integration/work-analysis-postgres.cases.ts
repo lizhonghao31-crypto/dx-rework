@@ -1,3 +1,4 @@
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import pg from 'pg';
@@ -7,7 +8,7 @@ import {readWorkflowAnalysis} from '../../apps/api/src/reporting/workflow-analys
 import {readOperationDiagnostics,recordOperationDiagnostic} from '../../apps/api/src/platform/operation-diagnostics.js';
 const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
 (url?describe:describe.skip)('work analysis PostgreSQL facts',()=>{
- const schema=`sourcing_${randomUUID().replaceAll('-','')}`,admin=new pg.Pool({connectionString:url!}),db=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
+ const schema=ownedPostgresSchema("sourcing"),admin=new pg.Pool({connectionString:url!}),db=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
  const ids=Array.from({length:17},()=>randomUUID()),rw=randomUUID(),missing=randomUUID(),q1=randomUUID(),q2=randomUUID(),decision=randomUUID(),transfer=randomUUID(),approved=randomUUID(),transferApproved=randomUUID();
  beforeAll(async()=>{
   await admin.query(`CREATE SCHEMA ${schema}`);await db.query("SET TIME ZONE 'UTC'");
