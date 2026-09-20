@@ -1,3 +1,4 @@
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -7,7 +8,7 @@ import { stageSampleSource } from "../../apps/api/src/samples/sample-migration.j
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const run = databaseUrl ? describe : describe.skip;
 run("sample domain database boundaries", () => {
-  const schema = `sample_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("sample");
   const admin = new pg.Pool({ connectionString: databaseUrl! });
   const database = new pg.Pool({ connectionString: databaseUrl!, options: `-c search_path=${schema}` });
   const userId = randomUUID();
