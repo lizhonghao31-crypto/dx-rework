@@ -1,0 +1,19 @@
+[Unit]
+Description=DX Rework daily PostgreSQL backup
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor=/opt/dx-rework
+
+[Service]
+Type=oneshot
+User=dxrework
+Group=dxrework
+UMask=0077
+ExecStart=/opt/dx-rework/current/scripts/deploy/run-scheduled-postgres-backup.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
