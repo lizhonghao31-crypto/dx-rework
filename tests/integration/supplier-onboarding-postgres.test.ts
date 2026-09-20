@@ -10,6 +10,38 @@ const profile = (name: string) => {
   return SupplierOnboardingProfileSchema.parse(input);
 };
 (url ? describe : describe.skip)("supplier onboarding lifecycle", () => {
+  it("rejects revoked applicant and reviewer snapshots before reads, writes and idempotent replay", async () => {
+    const f = await supplierFixture();
+    const service = new SupplierOnboardingService(f.db);
+    const applicant = f.actors.order_merchandiser!, reviewer = f.actors.production_management!;
+    const root = { ...f.actors.root_superuser!, authorizationCapability: "access:admin", authorizationCapabilities: ["access:admin"] };
+    try {
+      const input = profile("撤权申请"), key = randomUUID();
+      const id = (await service.submit(applicant, input, key)).response.requestId;
+      const assignments = await f.service.listRoleAssignments({ userId: applicant.actorId });
+      const applicantRole = assignments.find(item => item.roleCode === "order_merchandiser" && !item.revokedAt)!;
+      await f.service.revokeRole(root, applicantRole.assignmentId, "验证申请人旧身份失效");
+      await expect(service.get(applicant, id)).rejects.toMatchObject({ statusCode: 403 });
+      await expect(service.list(applicant, "mine")).rejects.toMatchObject({ statusCode: 403 });
+      await expect(service.submit(applicant, input, key)).rejects.toMatchObject({ statusCode: 403 });
+      await expect(service.submit(applicant, profile("撤权后新申请"), randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+
+      const reviewerRole = (await f.service.listRoleAssignments({ userId: reviewer.actorId })).find(item => item.roleCode === "production_management" && !item.revokedAt)!;
+      await f.service.revokeRole(root, reviewerRole.assignmentId, "验证审批人旧身份失效");
+      await expect(service.get(reviewer, id)).rejects.toMatchObject({ statusCode: 403 });
+      await expect(service.list(reviewer, "pending")).rejects.toMatchObject({ statusCode: 403 });
+      for (const decision of ["approved", "returned"] as const) {
+        await expect(service.decide(reviewer, id, decision, decision === "returned" ? { version: 1, reason: "旧页面提交" } : { version: 1 }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+      }
+      expect((await f.db.query("SELECT status,supplier_id FROM supplier_onboarding_requests WHERE request_id=$1", [id])).rows).toEqual([{ status: "pending_approval", supplier_id: null }]);
+      expect((await f.db.query("SELECT 1 FROM supplier_onboarding_decisions WHERE request_id=$1", [id])).rows).toHaveLength(0);
+      expect((await f.db.query("SELECT 1 FROM operation_events WHERE entity_type='supplier_onboarding' AND entity_id=$1", [id])).rows).toHaveLength(1);
+      expect((await f.db.query("SELECT 1 FROM current_supplier_catalog WHERE supplier_name IN ('撤权申请','撤权后新申请')")).rows).toHaveLength(0);
+      const approved = await service.decide(f.actors.owner_group!, id, "approved", { version: 1 }, randomUUID());
+      expect(approved.response.supplierId).toBeTruthy();
+      expect((await f.db.query("SELECT 1 FROM current_supplier_catalog WHERE supplier_name='撤权申请'")).rows).toHaveLength(1);
+    } finally { await f.close(); }
+  }, 120000);
   it("scopes sensitive records, versions returns and atomically approves with audit, formal data and peer todo completion", async () => {
     const f = await supplierFixture();
     const service = new SupplierOnboardingService(f.db);
