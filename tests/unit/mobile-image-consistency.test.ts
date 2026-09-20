@@ -26,7 +26,7 @@ describe("mobile role layout and rework image consistency", () => {
     expect(contract).toContain("images: z.array(z.object({");
   });
 
-  it("opens rework-order and receiving-batch images to every authenticated effective role", async () => {
+  it("keeps rework-order and receiving-batch images behind scoped business authorization", async () => {
     const [routes, attachments, server] = await Promise.all([
       read("apps/api/src/tools/routes.ts"),
       read("apps/api/src/tools/attachments.ts"),
@@ -34,8 +34,11 @@ describe("mobile role layout and rework image consistency", () => {
     ]);
     expect(routes).toContain("entityId:string;mimeType:string");
     expect(attachments).toContain("mimeType: row.mime_type");
-    expect(server).toContain('["rework_order", "receiving_batch"].includes(binding.entityType)');
-    expect(server).toContain('binding.mimeType.startsWith("image/")');
+    expect(server).not.toContain('["rework_order", "receiving_batch"].includes(binding.entityType)');
+    expect(server).toContain("receivingService.canDownloadBoundAttachment(businessReader, binding)");
+    expect(server).toContain("reportingService.canDownloadBasicReworkAttachment(businessReader, binding)");
+    expect(server).toContain("reworkBusinessDetailService.canDownloadBoundAttachment(businessReader, binding)");
+    expect(server).toContain("reworkService.canDownloadBoundAttachment({ ...actor, actorRoles: effectiveRoles }, binding)");
     expect(server).not.toContain('binding.entityType === "rework_order") return true');
     expect(server).not.toContain('if (binding.mimeType.startsWith("image/")) return true');
   });

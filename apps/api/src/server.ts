@@ -279,22 +279,23 @@ const app = buildApp({
     attachments,
     exports: new ExportJobService(database),
     canDownloadBoundAttachment: async (actor, binding) => {
+      const isRoot=await rootAuthority.isRootUser(actor.actorId);
+      const effectiveRoles=isRoot && !actor.actorRoles.includes(ROOT_ACTOR_ROLE)
+        ? [...actor.actorRoles,ROOT_ACTOR_ROLE]
+        : actor.actorRoles;
       if (binding.entityType === "pattern_room_attachment") return patternOrders.canDownload({
-        actorId: actor.actorId, actorRoles: [...actor.actorRoles, ...(await rootAuthority.isRootUser(actor.actorId) ? [ROOT_ACTOR_ROLE] : [])],
+        actorId: actor.actorId, actorRoles: effectiveRoles,
         authorizationCapability: "pattern_room:orders:view", authorizationCapabilities: actor.capabilities, requestId: "pattern-attachment-download",
       }, binding);
       if (binding.entityType === "sample_attachment") return sampleFiles.canDownload({
-        actorId: actor.actorId, actorRoles: [...actor.actorRoles, ...(await rootAuthority.isRootUser(actor.actorId) ? [ROOT_ACTOR_ROLE] : [])],
+        actorId: actor.actorId, actorRoles: effectiveRoles,
         authorizationCapability: "sample:view_basic", authorizationCapabilities: actor.capabilities, requestId: "sample-attachment-download",
       }, binding);
       if (binding.entityType === "receiving_difference_resolution") {
-        return binding.mimeType.startsWith("image/")
-          && (actor.actorRoles.length > 0 || await rootAuthority.isRootUser(actor.actorId));
+        return binding.mimeType.startsWith("image/") && effectiveRoles.length > 0;
       }
-      if (
-        ["rework_order", "receiving_batch"].includes(binding.entityType)
-        && binding.mimeType.startsWith("image/")
-      ) return true;
+      if (isRoot && binding.mimeType.startsWith("image/")
+        && (binding.entityType === "rework_order" || binding.entityType === "receiving_batch")) return true;
       if (sourcingService.canDownloadBoundAttachment({
         actorId: actor.actorId,
         actorRoles: actor.actorRoles,
@@ -304,13 +305,15 @@ const app = buildApp({
       }, binding)) return true;
       const businessReader = {
         actorId: actor.actorId,
-        actorRoles: actor.actorRoles,
+        actorRoles: effectiveRoles,
         authorizationCapability: "tools:user",
         authorizationCapabilities: actor.capabilities,
         requestId: "attachment-download",
       };
+      if (await receivingService.canDownloadBoundAttachment(businessReader, binding)) return true;
+      if (await reportingService.canDownloadBasicReworkAttachment(businessReader, binding)) return true;
       if (await reworkBusinessDetailService.canDownloadBoundAttachment(businessReader, binding)) return true;
-      if (await reworkService.canDownloadBoundAttachment(actor, binding)) return true;
+      if (await reworkService.canDownloadBoundAttachment({ ...actor, actorRoles: effectiveRoles }, binding)) return true;
       return canDownloadWageAttachment(database, actor, binding);
     },
   },
