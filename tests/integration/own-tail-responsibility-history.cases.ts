@@ -17,9 +17,35 @@ type FixtureOptions = {
   missingWages?: boolean;
 };
 
-// Reconstruct the pre-0165 omission in an isolated schema. Replica mode is
-// confined to fixture seeding; the migration and assertions run with all
-// original insert, coverage, audit and immutability triggers enabled.
+// Reconstruct the pre-0165 omission in an isolated schema. The fixture owns
+// these test tables, so it disables only user-defined business triggers while
+// seeding historical rows. PostgreSQL system/constraint triggers stay enabled,
+// and all business triggers are restored before the migration/assertions run.
+const HISTORY_FIXTURE_TABLES = [
+  "app_users",
+  "rework_orders",
+  "operation_events",
+  "rework_process_configurations",
+  "rework_order_reviews",
+  "rework_wage_periods",
+  "rework_responsibility_determinations",
+  "rework_process_configuration_items",
+  "rework_responsibility_processes",
+  "rework_responsibility_allocations",
+  "business_people",
+  "rework_work_tasks",
+  "rework_work_reports",
+  "rework_work_report_member_shares",
+  "rework_wage_items",
+  "rework_responsibility_amount_lines",
+] as const;
+
+const setHistoryFixtureTriggers = async (db: Database, enabled: boolean) => {
+  for (const table of HISTORY_FIXTURE_TABLES) {
+    await db.query(`ALTER TABLE ${table} ${enabled ? "ENABLE" : "DISABLE"} TRIGGER USER`);
+  }
+};
+
 export async function seedOwnTailHistory(db: Database, options: FixtureOptions = {}) {
   const actor = randomUUID(), order = randomUUID(), configuration = randomUUID();
   const review = randomUUID(), event = randomUUID();
@@ -33,7 +59,7 @@ export async function seedOwnTailHistory(db: Database, options: FixtureOptions =
   };
   await db.query("BEGIN");
   try {
-    await db.query("SET LOCAL session_replication_role = replica");
+    await setHistoryFixtureTriggers(db, false);
     await insert("app_users", { id: actor, display_name: "TEST history actor", enabled: true });
     await insert("rework_orders", {
       rework_order_id: order, created_by: actor, updated_by: actor,
@@ -143,6 +169,7 @@ export async function seedOwnTailHistory(db: Database, options: FixtureOptions =
           FROM ${table} t WHERE determination_id=$1::uuid`, [predecessor, determination]);
       }
     }
+    await setHistoryFixtureTriggers(db, true);
     await db.query("COMMIT");
     return { order, determination, predecessor, event, wageIds, tailIds, input };
   } catch (error) {
