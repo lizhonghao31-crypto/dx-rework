@@ -8,9 +8,9 @@ describe("OPS-03 scheduled PostgreSQL backups", () => {
   it("runs from the active release, isolates retention, and writes durable health evidence", async () => {
     const script = await read("scripts/deploy/run-scheduled-postgres-backup.sh");
     expect(script).toContain('backup_root="$DX_ROOT/backups/postgres/daily"');
-    expect(script).toContain('active_sha="$(current_generation_sha)"');
-    expect(script).toContain('assert_active_release "$active_sha"');
-    expect(script).toContain('active_api="$DX_ROOT/releases/$active_sha"');
+    expect(script).toContain('source "$(dirname "$0")/backup-runtime.sh"');
+    expect(script).toContain("resolve_backup_runtime");
+    expect(script).toContain('/usr/bin/bash "$active_api/scripts/backup-postgres.sh"');
     expect(script).toContain("verify-current");
     expect(script).toContain("keep_count=14");
     expect(script).toContain('release_lock="$(assert_safe_path "$DX_ROOT/locks/release.lock")"');
@@ -19,6 +19,8 @@ describe("OPS-03 scheduled PostgreSQL backups", () => {
     expect(script).toContain("daily-backup-last-failure.json");
     expect(script).toContain("sha256sum -c --strict SHA256SUMS");
     expect(script).toContain("pg_exec pg_restore --list");
+    expect(script).toContain("awk 'NR==1");
+    expect(script).not.toContain("head -1");
     expect(script).toContain('rm -rf -- "$stale"');
     expect(script).not.toContain("/opt/daxing-");
   });
@@ -37,18 +39,22 @@ describe("OPS-03 scheduled PostgreSQL backups", () => {
     const healthTimer = await read("infra/systemd/dx-rework-postgres-backup-health.timer");
     const installer = await read("scripts/deploy/install-postgres-backup-timer.sh");
     const packageRelease = await read("scripts/deploy/package-release.sh");
+    const backupService = await read("infra/systemd/dx-rework-postgres-backup.service");
+    const healthService = await read("infra/systemd/dx-rework-postgres-backup-health.service");
 
     expect(backupTimer).toContain("OnCalendar=*-*-* 23:30:00 Asia/Shanghai");
     expect(backupTimer).toContain("Persistent=true");
     expect(healthTimer).toContain("OnCalendar=*-*-* 08:30:00 Asia/Shanghai");
-    expect(installer).toContain('active_sha="$(current_generation_sha)"');
-    expect(installer).toContain('assert_active_release "$active_sha"');
-    expect(installer).toContain('active_api="$DX_ROOT/releases/$active_sha"');
-    expect(installer).not.toContain('active_api="$(realpath "$DX_ROOT/current")"');
+    expect(installer).toContain('source "$(dirname "$0")/backup-runtime.sh"');
+    expect(installer).toContain("resolve_backup_runtime");
+    expect(installer).not.toContain("current_generation_sha");
+    expect(installer).not.toContain("assert_active_release");
     expect(installer).toContain("systemctl start dx-rework-postgres-backup.service");
     expect(installer).toContain("systemctl enable --now dx-rework-postgres-backup.timer");
     expect(installer).toContain("systemctl enable --now dx-rework-postgres-backup-health.timer");
     expect(packageRelease).toContain("infra/systemd/dx-rework-postgres-backup");
     expect(packageRelease).not.toContain("systemctl enable");
+    expect(backupService).toContain("ExecStart=/usr/bin/bash /opt/dx-rework/current/scripts/deploy/run-scheduled-postgres-backup.sh");
+    expect(healthService).toContain("ExecStart=/usr/bin/bash /opt/dx-rework/current/scripts/deploy/check-scheduled-postgres-backup.sh");
   });
 });
