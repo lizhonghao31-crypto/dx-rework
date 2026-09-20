@@ -119,6 +119,16 @@ const historicalSecretRegex = [
   "sk-[A-Za-z0-9_-]{20,}",
 ].join("|");
 
+const historicalAssignmentRegex = [
+  "DINGTALK_H5_APP_SECRET",
+  "DINGTALK_WEB_CLIENT_SECRET",
+  "SESSION_SECRET",
+  "OSS_ACCESS_KEY_SECRET",
+  "OPENAI_API_KEY",
+  "OWNER_BOOTSTRAP_SECRET",
+  "ACCEPTANCE_LAB_SECRET",
+].map((name) => `${name}[[:space:]]*[:=]`).join("|");
+
 const sensitiveHistoricalPath = (path) => {
   const normalized = path.replaceAll("\\", "/");
   const name = normalized.split("/").at(-1) ?? normalized;
@@ -160,6 +170,44 @@ export function findHistoricalSecretFindings(root = projectRoot) {
     else signatureFindings.push(`${currentCommit}:${line}`);
   }
 
+  const assignmentDiff = runGit(root, [
+    "log",
+    "--all",
+    "--extended-regexp",
+    "-G",
+    historicalAssignmentRegex,
+    "--format=@@COMMIT:%H",
+    "--no-renames",
+    "--no-ext-diff",
+    "--unified=0",
+    "--patch",
+  ]);
+
+  const assignmentFindings = [];
+  let assignmentCommit = "unknown";
+  let assignmentPath = "unknown";
+  for (const raw of assignmentDiff.split("\n")) {
+    if (raw.startsWith("@@COMMIT:")) {
+      assignmentCommit = raw.slice("@@COMMIT:".length).trim().slice(0, 12) || "unknown";
+      assignmentPath = "unknown";
+      continue;
+    }
+    if (raw.startsWith("--- a/")) {
+      assignmentPath = raw.slice("--- a/".length).trim();
+      continue;
+    }
+    if (raw.startsWith("+++ b/")) {
+      assignmentPath = raw.slice("+++ b/".length).trim();
+      continue;
+    }
+    if ((raw.startsWith("+") || raw.startsWith("-"))
+      && !raw.startsWith("+++")
+      && !raw.startsWith("---")
+      && containsSecretSignature(raw.slice(1))) {
+      assignmentFindings.push(`${assignmentCommit}:${assignmentPath}`);
+    }
+  }
+
   const objectList = runGit(root, ["rev-list", "--objects", "--all"]);
   const pathFindings = [];
   for (const raw of objectList.split("\n")) {
@@ -171,7 +219,7 @@ export function findHistoricalSecretFindings(root = projectRoot) {
   }
 
   return {
-    signatures: [...new Set(signatureFindings)].sort(),
+    signatures: [...new Set([...signatureFindings, ...assignmentFindings])].sort(),
     sensitivePaths: [...new Set(pathFindings)].sort(),
   };
 }
