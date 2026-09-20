@@ -2,7 +2,8 @@
 set -euo pipefail
 
 : "${BASE_SHA:?BASE_SHA is required}"
-: "${DATABASE_URL:?DATABASE_URL is required}"
+: "${TEST_DATABASE_URL:?TEST_DATABASE_URL is required}"
+NODE_ENV=test TEST_DATABASE_URL="$TEST_DATABASE_URL" node scripts/test-database-safety.mjs
 
 head_sha="${HEAD_SHA:-$(git rev-parse HEAD)}"
 manifest_path="apps/api/src/platform/migration-manifest.json"
@@ -62,6 +63,6 @@ fi
 
 DX_REWORK_MIGRATIONS_DIR="${base_dir}/apps/api/migrations" \
 DX_REWORK_MIGRATION_MANIFEST="${base_dir}/${manifest_path}" \
-node scripts/migrate.mjs
+DATABASE_URL="$TEST_DATABASE_URL" node scripts/migrate.mjs
 
 printf '{"success":true,"baseSha":"%s","seeded":true}\n' "${BASE_SHA}"

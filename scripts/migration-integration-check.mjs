@@ -1,9 +1,10 @@
 import pg from "pg";
 
 import { applyMigrations, loadMigrationManifest } from "./migration-lib.mjs";
+import { assertTestDatabaseTarget, requireTestDatabaseUrl } from "./test-database-safety.mjs";
 
-const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
-if (!databaseUrl) throw new Error("TEST_DATABASE_URL or DATABASE_URL is required");
+const databaseUrl = requireTestDatabaseUrl();
+await assertTestDatabaseTarget(databaseUrl);
 
 const first = await applyMigrations(databaseUrl);
 const second = await applyMigrations(databaseUrl);

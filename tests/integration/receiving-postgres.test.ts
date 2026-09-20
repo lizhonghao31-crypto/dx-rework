@@ -1,3 +1,4 @@
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import "./receiving-analysis-postgres.cases.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -26,7 +27,7 @@ const pastBusinessDate = (days: number): string => {
 };
 
 runWithPostgres("receiving fact PostgreSQL contracts", () => {
-  const schema = `receiving_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("receiving");
   const admin = new Pool({ connectionString: databaseUrl! });
   const database = new Pool({ connectionString: databaseUrl!, options: `-c search_path=${schema}` });
   const service = new ReceivingService(database, undefined, undefined, undefined, { allowLegacyStyleInput: true });

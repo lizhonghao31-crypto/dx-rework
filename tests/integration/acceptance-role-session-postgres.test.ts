@@ -1,3 +1,4 @@
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -23,7 +24,7 @@ const runWithPostgres = databaseUrl ? describe : describe.skip;
 type Manifest = { migrations: Array<{ version: string; checksum: string }> };
 
 runWithPostgres("acceptance role sessions", () => {
-  const schema = `acceptance_roles_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("acceptance_roles");
   const admin = new Pool({ connectionString: inertDatabaseUrl });
   const database = new Pool({
     connectionString: inertDatabaseUrl,

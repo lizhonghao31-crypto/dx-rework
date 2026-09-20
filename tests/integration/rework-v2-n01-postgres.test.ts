@@ -1,3 +1,4 @@
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -19,7 +20,7 @@ const runWithPostgres = databaseUrl ? describe : describe.skip;
 type Manifest = { migrations: Array<{ version: string; checksum: string }> };
 
 runWithPostgres("rework v2 N01 PostgreSQL contracts", () => {
-  const schema = `rework_v2_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("rework_v2");
   const admin = new Pool({ connectionString: databaseUrl! });
   const database = new Pool({
     connectionString: databaseUrl!,

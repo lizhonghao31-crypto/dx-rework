@@ -1,18 +1,20 @@
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import pg from "pg";
+
+import { assertTestDatabaseTarget } from "./test-database-safety.mjs";
 
 const { Pool } = pg;
 const DEFAULT_ECS_ENV_FILE = "/opt/dx-rework/shared/.env";
 const runtimeEnvFile = process.env.DX_REWORK_ENV_FILE || DEFAULT_ECS_ENV_FILE;
 const hasSharedRuntimeEnv = existsSync(runtimeEnvFile);
-const ISOLATED_GATE_SCHEMA = /^(?:full_chain_[0-9a-f]{32}|root_http_[12]_[0-9a-f]{32}|receiving_[0-9a-f]{32}|rework_v2_[0-9a-f]{32}|sourcing_[0-9a-f]{32}|sample_[0-9a-f]{32}|acceptance_roles_[0-9a-f]{32})$/;
+const ISOLATED_GATE_SCHEMA = /^(?:full_chain|root_http_[12]|receiving|rework_v2|sourcing|sample|acceptance_roles|own_tail|pattern_backfill)_[0-9a-f]{32}$/;
 const RUNTIME_ENV_KEYS = new Set([
-  "TEST_DATABASE_URL",
-  "DATABASE_URL",
   "OSS_REGION",
   "OSS_ENDPOINT",
   "OSS_BUCKET",
@@ -51,9 +53,16 @@ async function hydrateRuntimeEnv() {
 
 await hydrateRuntimeEnv();
 
-const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
+const databaseUrl = process.env.TEST_DATABASE_URL?.trim();
+const requireDatabase = process.env.DX_REWORK_REQUIRE_TEST_DATABASE === "true";
+if (requireDatabase && !databaseUrl) {
+  throw new Error("BUSINESS_CHAIN_TEST_DATABASE_REQUIRED: explicit TEST_DATABASE_URL is required");
+}
 const hasDatabase = Boolean(databaseUrl);
+if (databaseUrl) await assertTestDatabaseTarget(databaseUrl);
 const hasOss = Boolean(process.env.OSS_BUCKET);
+const runId = randomUUID().replaceAll("-", "").slice(0, 8);
+const resourceManifestDir = await mkdtemp(join(tmpdir(), `dx-rework-business-chain-${runId}-`));
 
 function ossBrowserBaseUrl(endpointValue, bucket) {
   const endpoint = new URL(endpointValue);
@@ -150,27 +159,34 @@ async function verifyOssRuntime() {
   process.stdout.write("OSS_RUNTIME_PREFLIGHT_PASSED: signed HEAD + browser POST CORS\n");
 }
 
-async function cleanupIsolatedGateSchemas() {
+async function ownedSchemasFromManifest() {
+  const entries = await readdir(resourceManifestDir, { withFileTypes: true });
+  const schemas = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+    const resource = JSON.parse(await readFile(join(resourceManifestDir, entry.name), "utf8"));
+    if (resource?.kind !== "postgres-schema" || resource.runId !== runId
+      || typeof resource.schema !== "string" || entry.name !== `${resource.schema}.json`
+      || !ISOLATED_GATE_SCHEMA.test(resource.schema)
+      || !resource.schema.slice(-32).startsWith(runId)) {
+      throw new Error(`BUSINESS_CHAIN_RESOURCE_MANIFEST_REJECTED: ${entry.name}`);
+    }
+    schemas.push(resource.schema);
+  }
+  return [...new Set(schemas)].sort();
+}
+
+async function cleanupOwnedGateSchemas() {
   if (!databaseUrl) return;
+  const schemas = await ownedSchemasFromManifest();
+  if (schemas.length === 0) return;
   const pool = new Pool({ connectionString: databaseUrl, max: 1 });
   try {
-    const result = await pool.query(
-      `SELECT nspname
-       FROM pg_namespace
-       WHERE nspname LIKE 'full_chain_%'
-          OR nspname LIKE 'root_http_%'
-          OR nspname LIKE 'receiving_%'
-          OR nspname LIKE 'rework_v2_%'
-          OR nspname LIKE 'sourcing_%'
-          OR nspname LIKE 'sample_%'
-          OR nspname LIKE 'acceptance_roles_%'`,
-    );
-    for (const row of result.rows) {
-      const schema = String(row.nspname);
-      if (!ISOLATED_GATE_SCHEMA.test(schema)) continue;
-      await pool.query(`DROP SCHEMA "${schema}" CASCADE`);
+    for (const schema of schemas) {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
       process.stdout.write(`BUSINESS_CHAIN_GATE_SCHEMA_CLEANED: ${schema}\n`);
     }
+    process.stdout.write(`BUSINESS_CHAIN_GATE_CLEANUP_PASSED: run=${runId} resources=${schemas.length}\n`);
   } finally {
     await pool.end();
   }
@@ -218,41 +234,34 @@ if (hasDatabase) {
   );
 }
 
-if (hasDatabase) await cleanupIsolatedGateSchemas();
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 let exitCode;
+let child;
+let interruptedSignal;
+const interrupt = (signal) => { interruptedSignal = signal; child?.kill(signal); };
+const onSigint = () => interrupt("SIGINT");
+const onSigterm = () => interrupt("SIGTERM");
+process.once("SIGINT", onSigint);
+process.once("SIGTERM", onSigterm);
 try {
-  const child = spawn(
-    npmCommand,
-    [
-      "exec",
-      "--",
-      "vitest",
-      "run",
-      "--config",
-      "vitest.business-chain.config.ts",
-      ...tests,
-    ],
-    {
-      stdio: "inherit",
-      env: process.env,
-    },
-  );
-
+  child = spawn(npmCommand, [
+    "exec", "--", "vitest", "run", "--config", "vitest.business-chain.config.ts", ...tests,
+  ], {
+    stdio: "inherit",
+    env: { ...process.env, DATABASE_URL: "", TEST_DATABASE_URL: databaseUrl ?? "", DX_REWORK_TEST_RUN_ID: runId, DX_REWORK_TEST_RESOURCE_MANIFEST_DIR: resourceManifestDir },
+  });
   exitCode = await new Promise((resolve, reject) => {
     child.once("error", reject);
-    child.once("exit", (code, signal) => {
-      if (signal) {
-        reject(new Error(`business chain gate terminated by ${signal}`));
-        return;
-      }
-      resolve(code ?? 1);
-    });
+    child.once("exit", (code, signal) => resolve(signal ? 1 : (code ?? 1)));
   });
 } finally {
-  if (hasDatabase) await cleanupIsolatedGateSchemas();
+  process.removeListener("SIGINT", onSigint);
+  process.removeListener("SIGTERM", onSigterm);
+  try { if (hasDatabase) await cleanupOwnedGateSchemas(); }
+  finally { await rm(resourceManifestDir, { recursive: true, force: true }); }
 }
+if (interruptedSignal) throw new Error(`BUSINESS_CHAIN_GATE_INTERRUPTED: ${interruptedSignal}`);
 
 if (exitCode !== 0) {
   throw new Error(`BUSINESS_CHAIN_GATE_FAILED: vitest exited ${exitCode}`);

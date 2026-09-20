@@ -1,3 +1,4 @@
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
 import { exerciseReceivingDifferenceAuthority } from "./helpers/receiving-difference-authority-scenario.js";
 import { WorkerAwareAccessMasterDataService } from "../../apps/api/src/access/worker-aware-access-service.js";
@@ -101,7 +102,7 @@ const n01CoreInspectionReport = (styleName: string) => ({
 });
 
 runWithPostgres("current-schema N01-N11 business chain", () => {
-  const schema = `full_chain_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("full_chain");
   const adminPool = new Pool({ connectionString: databaseUrl! });
   const database = new Pool({
     connectionString: databaseUrl!,
@@ -2204,7 +2205,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const releaseColumns = "segment_id,payable_amount::text,period_month::text,release_basis,cancellation";
     const expected = (await database.query(`SELECT ${releaseColumns} FROM pattern_room_wage_items ORDER BY segment_id`)).rows;
     const oldMarks = (await database.query("SELECT line_id,wage_item_id,closure_line_id,marked_by,marked_at FROM rework_wage_settlement_marks WHERE pattern_wage_item_id IS NULL ORDER BY line_id")).rows;
-    const historySchema = `pattern_backfill_${randomUUID().replaceAll("-", "")}`;
+    const historySchema = ownedPostgresSchema("pattern_backfill");
     await adminPool.query(`CREATE SCHEMA ${historySchema}`);
     const history = new Pool({ connectionString: databaseUrl!, options: `-c search_path=${historySchema}` });
     try {

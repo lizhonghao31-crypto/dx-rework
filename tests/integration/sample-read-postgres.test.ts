@@ -1,3 +1,4 @@
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import './sample-analysis-postgres.cases.js';
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -10,7 +11,7 @@ import { OperationEventRepository } from "../../apps/api/src/tools/repositories.
 const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const run = url ? describe : describe.skip;
 run("sample read projections, paging and exact amounts", () => {
-  const schema = `sample_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("sample");
   const admin = new pg.Pool({ connectionString: url! });
   const db = new pg.Pool({ connectionString: url!, options: `-c search_path=${schema}` });
   const service = new SampleReadService(db), userId = randomUUID(), otherId = randomUUID(), initiatorId = randomUUID();

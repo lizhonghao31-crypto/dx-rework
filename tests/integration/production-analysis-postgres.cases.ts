@@ -1,3 +1,4 @@
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { readProductionDays } from "../../apps/api/src/sourcing/production-chase.js";
 import {randomUUID} from "node:crypto";
 import pg from "pg";
@@ -6,7 +7,7 @@ import {ProductionAnalysisQuerySchema,type SourcingProductionOrder} from "@dx-re
 import {readProductionAnalysis} from "../../apps/api/src/sourcing/production-analysis.js";
 const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
 (url?describe:describe.skip)("production analysis PostgreSQL facts",()=>{
-  const schema=`sourcing_${randomUUID().replaceAll('-','')}`,admin=new pg.Pool({connectionString:url!}),database=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
+  const schema=ownedPostgresSchema("sourcing"),admin=new pg.Pool({connectionString:url!}),database=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
   const actor={actorId:randomUUID(),actorRoles:["root_superuser"],authorizationCapability:"production-reporting",requestId:randomUUID()};
   const supplierA=randomUUID(),supplierB=randomUUID(),batch=randomUUID(),shared=randomUUID(),archived=randomUUID(),receipt=randomUUID(),correction=randomUUID(),alert=randomUUID();
   const orders:SourcingProductionOrder[]=Array.from({length:20},(_,index)=>({productionOrderId:randomUUID(),sourcingCaseId:randomUUID(),sourceCaseArchived:index===19,

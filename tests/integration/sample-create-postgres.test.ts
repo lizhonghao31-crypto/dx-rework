@@ -1,3 +1,4 @@
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -8,7 +9,7 @@ import { SampleCapabilitySchema } from "../../packages/contracts/src/samples.js"
 
 const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 (url ? describe : describe.skip)("sample creation atomicity and attachment authority", () => {
-  const schema = `sample_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("sample");
   const admin = new pg.Pool({ connectionString: url! }), db = new pg.Pool({ connectionString: url!, options: `-c search_path=${schema}` });
   const service = new SampleCreateService(db, "sample-fixture-corp"), files = new SampleAttachmentService(db);
   const userId = randomUUID(), holderId = randomUUID(), foreignId = randomUUID(), disabledId = randomUUID();

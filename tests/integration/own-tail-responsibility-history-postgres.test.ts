@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { readFile } from "node:fs/promises";
 
 import pg from "pg";
@@ -13,7 +13,7 @@ runWithPostgres("confirmed own-tail historical responsibility repair", () => {
   it("repairs completed and draft orders once, preserves source facts and rejects incomplete history", async () => {
     const pool = new pg.Pool({ connectionString: databaseUrl! });
     const client = await pool.connect();
-    const schema = `own_tail_${randomUUID().replaceAll("-", "")}`;
+    const schema = ownedPostgresSchema("own_tail");
     try {
       await client.query(`CREATE SCHEMA ${schema}`);
       await client.query(`SET search_path TO ${schema}`);

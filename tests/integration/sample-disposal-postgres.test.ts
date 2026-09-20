@@ -1,3 +1,4 @@
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import {randomUUID,createHash} from 'node:crypto';
 import {readFile,readdir} from 'node:fs/promises';
 import pg from 'pg';
@@ -13,7 +14,7 @@ import {SampleCapabilitySchema} from '../../packages/contracts/src/samples.js';
 
 const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
 (url?describe:describe.skip)('sample disposal, private corrections and archive lifecycle',()=>{
- const schema=`sample_${randomUUID().replaceAll('-','')}`,admin=new pg.Pool({connectionString:url!}),db=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
+ const schema=ownedPostgresSchema("sample"),admin=new pg.Pool({connectionString:url!}),db=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
  const root=randomUUID(),designer=randomUUID(),other=randomUUID(),administrative=randomUUID(),peer=randomUUID(),finance=randomUUID(),approver=randomUUID();
  const actor=(role:string,id:string)=>({actorId:id,actorRoles:[role],authorizationCapability:'sample:view_basic',authorizationCapabilities:[...SampleCapabilitySchema.options,'todo:view'],requestId:`sample-test-${randomUUID()}`});
  const owner=()=>actor('root_superuser',root),user=()=>actor('sample_designer',designer),clerk=()=>actor('sample_administrative',administrative);

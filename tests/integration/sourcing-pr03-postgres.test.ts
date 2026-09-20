@@ -1,3 +1,4 @@
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import "./work-analysis-postgres.cases.js";
 import { readQuoteAnalysis } from "../../apps/api/src/sourcing/sourcing-analysis.js";
 import { ProductionDashboardService } from "../../apps/api/src/sourcing/production-dashboard-service.js";
@@ -23,7 +24,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
 
 runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
-  const schema = `sourcing_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("sourcing");
   const admin = new pg.Pool({ connectionString: databaseUrl! });
   const database = new pg.Pool({
     connectionString: databaseUrl!,

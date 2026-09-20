@@ -1,3 +1,4 @@
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
@@ -146,7 +147,7 @@ runWithPostgres("Root single-account two-pass HTTP business chain", () => {
   });
 
   async function setup(pass: 1 | 2): Promise<PassFixture & { schema: string }> {
-    const schema = `root_http_${pass}_${randomUUID().replaceAll("-", "")}`;
+    const schema = ownedPostgresSchema(`root_http_${pass}`);
     await admin.query(`CREATE SCHEMA ${schema}`);
     const database = new Pool({
       connectionString: databaseUrl!,

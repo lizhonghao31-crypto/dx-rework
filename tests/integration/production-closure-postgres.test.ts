@@ -1,3 +1,4 @@
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import "./production-analysis-postgres.cases.js";
 import { ProductionDashboardService } from "../../apps/api/src/sourcing/production-dashboard-service.js";
 import { ProductionExclusionService } from "../../apps/api/src/sourcing/production-exclusion-service.js";
@@ -20,7 +21,7 @@ import { FakeObjectStorage } from "../../apps/api/src/tools/storage.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
 (url?describe:describe.skip)("SSP09 full-schema dispatch to actual receipt",()=>{
- const schema=`sourcing_${randomUUID().replaceAll("-","")}`,admin=new pg.Pool({connectionString:url!}),database=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
+ const schema=ownedPostgresSchema("sourcing"),admin=new pg.Pool({connectionString:url!}),database=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
  const user=randomUUID(),owner=randomUUID(),warehouse=randomUUID();
  const actor=(id:string,roles:string[],capabilities:string[]):TrustedActorContext=>({actorId:id,actorRoles:roles,authorizationCapability:capabilities[0]!,authorizationCapabilities:capabilities,requestId:randomUUID()});
  const root=(capability="sourcing:view")=>actor(user,["root_superuser"],[capability,"sourcing:view","todo:view","receiving:create"]);

@@ -1,3 +1,4 @@
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { RootAwareTodoProjectionService } from "../../apps/api/src/todos/root-aware-projection-service.js";
 import { CreateSupplierSchema } from "@dx-rework/contracts";
 import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
@@ -28,7 +29,7 @@ import { FakeDingTalkTodoProvider } from "../../apps/api/src/todos/provider.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 (databaseUrl ? describe : describe.skip)("verified owner module policy current PostgreSQL", () => {
-  const schema = `full_chain_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("full_chain");
   const admin = new pg.Pool({ connectionString: databaseUrl! });
   const database = new pg.Pool({ connectionString: databaseUrl!, options: `-c search_path=${schema}` });
   const ids = { li_zhonghao: randomUUID(), wu_yunfeng: randomUUID(), li_junyue: randomUUID() };

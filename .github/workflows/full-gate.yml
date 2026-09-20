@@ -140,13 +140,13 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm -d --name dx-rework-full-gate-postgres \
-            -e POSTGRES_USER=dx_rework \
-            -e POSTGRES_PASSWORD=dx_rework_ci \
-            -e POSTGRES_DB=dx_rework_ci \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres_ci \
+            -e POSTGRES_DB=postgres \
             -p 5432:5432 postgres:16-alpine
           ready_streak=0
           for _ in $(seq 1 60); do
-            if docker exec dx-rework-full-gate-postgres pg_isready -U dx_rework -d dx_rework_ci >/dev/null 2>&1; then
+            if docker exec dx-rework-full-gate-postgres pg_isready -U postgres -d postgres >/dev/null 2>&1; then
               ready_streak=$((ready_streak + 1))
               if [[ "$ready_streak" -ge 3 ]]; then break; fi
             else
@@ -154,14 +154,16 @@ jobs:
             fi
             sleep 1
           done
-          if [[ "$ready_streak" -lt 3 ]]; then
-            docker logs dx-rework-full-gate-postgres
-            exit 1
-          fi
-          {
-            echo 'DATABASE_URL=postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/dx_rework_ci'
-            echo 'TEST_DATABASE_URL=postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/dx_rework_ci'
-          } >> "$GITHUB_ENV"
+          if [[ "$ready_streak" -lt 3 ]]; then docker logs dx-rework-full-gate-postgres; exit 1; fi
+          docker exec dx-rework-full-gate-postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "CREATE ROLE dx_rework_test LOGIN PASSWORD 'dx_rework_ci' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+          docker exec dx-rework-full-gate-postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "CREATE DATABASE dx_rework_ci OWNER dx_rework_test"
+          docker exec dx-rework-full-gate-postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c "COMMENT ON DATABASE dx_rework_ci IS 'dx-rework-isolated-test-v1'"
+          test_url='postgresql://dx_rework_test:dx_rework_ci@127.0.0.1:5432/dx_rework_ci'
+          NODE_ENV=test TEST_DATABASE_URL="$test_url" node scripts/test-database-safety.mjs
+          { echo "DATABASE_URL=$test_url"; echo "TEST_DATABASE_URL=$test_url"; } >> "$GITHUB_ENV"
 
       - name: Seed database with base-revision migration history
         if: env.DB_REQUIRED == 'true'
@@ -184,7 +186,7 @@ jobs:
 
       - name: Run PostgreSQL business chain for business, migration or deployment-sensitive changes
         if: env.BUSINESS_CHAIN_SENSITIVE == 'true' || env.MIGRATION_SENSITIVE == 'true' || env.DEPLOYMENT_SENSITIVE == 'true'
-        run: node scripts/run-business-chain-gate.mjs
+        run: DX_REWORK_REQUIRE_TEST_DATABASE=true node scripts/run-business-chain-gate.mjs
 
       - name: PostgreSQL backup and isolated restore drill
         if: env.DEPLOYMENT_SENSITIVE == 'true'
@@ -203,11 +205,11 @@ jobs:
           DX_REWORK_ROOT="$root" DX_REWORK_APP_ENV_FILE="$root/shared/.env" DX_REWORK_DEPLOY_ENV_FILE="$root/shared/deploy.env" \
             GIT_SHA="$(git rev-parse HEAD)" CURRENT_DATABASE_STATE="$state" TARGET_SCHEMA_VERSION="$target_version" \
             TARGET_SCHEMA_CHECKSUM="$target_checksum" scripts/backup-postgres.sh
-          admin_url='postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/postgres'
+          admin_url='postgresql://postgres:postgres_ci@127.0.0.1:5432/postgres'
           target_name='dx_rework_drill_ci'
           psql "$admin_url" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $target_name"
-          psql "$admin_url" -v ON_ERROR_STOP=1 -c "CREATE DATABASE $target_name"
-          target_url="postgresql://dx_rework:dx_rework_ci@127.0.0.1:5432/$target_name"
+          psql "$admin_url" -v ON_ERROR_STOP=1 -c "CREATE DATABASE $target_name OWNER dx_rework_test"
+          target_url="postgresql://dx_rework_test:dx_rework_ci@127.0.0.1:5432/$target_name"
           source scripts/deploy/lib.sh
           target_fp="$(database_connection_fingerprint "$target_url")"
           {
