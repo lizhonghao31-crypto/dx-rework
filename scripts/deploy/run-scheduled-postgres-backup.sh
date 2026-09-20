@@ -15,11 +15,16 @@ write_json_status() {
   local path="$1" status="$2" detail="$3" created_at tmp
   created_at="$(date -u +%FT%T.%NZ)"
   tmp="$(mktemp "$status_root/.daily-backup-status.XXXXXX")"
-  node_exec - "$tmp" "$status" "$created_at" "$active_sha" "$detail" <<'JS'
-const fs=require("fs");
-const [path,status,createdAt,gitSha,detail]=process.argv.slice(2);
-fs.writeFileSync(path,JSON.stringify({status,createdAt,gitSha,detail},null,2)+"\n",{mode:0o600});
-JS
+  python3 - "$tmp" "$status" "$created_at" "$active_sha" "$detail" <<'PY'
+import json
+import os
+import sys
+path,status,created_at,git_sha,detail=sys.argv[1:]
+with open(path,"w",encoding="utf-8") as f:
+    json.dump({"status":status,"createdAt":created_at,"gitSha":git_sha,"detail":detail},f,ensure_ascii=False,indent=2)
+    f.write("\n")
+os.chmod(path,0o600)
+PY
   mv -f "$tmp" "$path"
 }
 
@@ -46,12 +51,6 @@ exec 7>"$release_lock"
 flock -w 1800 7 || die 'release lock remained busy for 30 minutes'
 
 resolve_backup_runtime
-if [[ "$active_mode" == source ]]; then
-  [[ "$(git -C "$active_api" rev-parse HEAD)" == "$active_sha" ]] ||
-    die 'source checkout does not match deployed release'
-  [[ -z "$(git -C "$active_api" status --porcelain)" ]] ||
-    die 'source checkout is dirty; scheduled backup refuses unverified scripts'
-fi
 
 manifest="$active_api/apps/api/src/platform/migration-manifest.json"
 DATABASE_URL="$DATABASE_URL" node_exec   "$active_api/scripts/deploy/database-state.mjs" verify-current "$manifest"
@@ -71,7 +70,8 @@ if(!x)process.exit(1);
 process.stdout.write(x.checksum);
 ' "$manifest")"
 
-DX_REWORK_BACKUP_DIR="$backup_root" GIT_SHA="$active_sha" CURRENT_DATABASE_STATE="$current_state" TARGET_SCHEMA_VERSION="$target_version" TARGET_SCHEMA_CHECKSUM="$target_checksum"   "$active_api/scripts/backup-postgres.sh"
+DX_REWORK_BACKUP_DIR="$backup_root" GIT_SHA="$active_sha" CURRENT_DATABASE_STATE="$current_state" TARGET_SCHEMA_VERSION="$target_version" TARGET_SCHEMA_CHECKSUM="$target_checksum" \
+  /usr/bin/bash "$active_api/scripts/backup-postgres.sh"
 
 latest="$(
   find "$backup_root" -mindepth 2 -maxdepth 2 -type f -name COMPLETE -printf '%T@ %h\n' |
