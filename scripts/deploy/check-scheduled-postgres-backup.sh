@@ -35,8 +35,12 @@ age_seconds="${status_values[1]:-}"
   die 'scheduled backup success evidence is invalid'
 
 backup_set="$(assert_safe_path "$backup_set" "$backup_root")"
-[[ -d "$backup_set" && ! -L "$backup_set" && -f "$backup_set/COMPLETE" ]] ||
-  die 'scheduled backup set is missing or incomplete'
+[[ -d "$backup_set" && ! -L "$backup_set" ]] ||
+  die 'scheduled backup set is missing or unsafe'
+for required in COMPLETE SHA256SUMS database.dump metadata.json; do
+  [[ -f "$backup_set/$required" && ! -L "$backup_set/$required" ]] ||
+    die 'scheduled backup set is incomplete or unsafe'
+done
 (
   cd "$backup_set"
   sha256sum -c --strict SHA256SUMS >/dev/null
