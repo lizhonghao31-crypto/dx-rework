@@ -37,6 +37,8 @@ const placeholder = (value) => {
     "not-a-secret",
     "test-secret",
     "acceptance-test",
+    "acceptance-lab-secret",
+    "abcdefghijklmnopqrstuvwxyz",
     "local-development",
     "production-openai-key",
     "placeholder",
