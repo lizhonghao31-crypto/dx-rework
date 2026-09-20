@@ -83,12 +83,8 @@ node_exec() {
 }
 
 approved_pg_bin_dir() {
-  local dir="${DX_REWORK_PG_BIN_DIR:-}" fallback
-  if [[ -z "$dir" ]]; then
-    fallback="$(command -v pg_dump || true)"
-    [[ -n "$fallback" ]] || die 'PostgreSQL client tools unavailable'
-    dir="$(dirname "$(readlink -f "$fallback")")"
-  fi
+  local dir="${DX_REWORK_PG_BIN_DIR:-}"
+  [[ -n "$dir" ]] || die 'approved PostgreSQL client directory is not configured'
   [[ "$dir" == /* && -d "$dir" && ! -L "$dir" ]] ||
     die 'approved PostgreSQL client directory unavailable or unsafe'
   for tool in psql pg_dump pg_restore; do
@@ -98,15 +94,28 @@ approved_pg_bin_dir() {
   printf '%s\n' "$dir"
 }
 
-pg_exec() {
-  local tool="${1:-}" dir
-  shift || true
+pg_tool_path() {
+  local tool="${1:-}" dir candidate
   case "$tool" in
     psql|pg_dump|pg_restore) ;;
     *) die 'unsupported PostgreSQL client tool' ;;
   esac
-  dir="$(approved_pg_bin_dir)"
-  "$dir/$tool" "$@"
+  if [[ -n "${DX_REWORK_PG_BIN_DIR:-}" ]]; then
+    dir="$(approved_pg_bin_dir)"
+    printf '%s\n' "$dir/$tool"
+    return
+  fi
+  candidate="$(command -v "$tool" || true)"
+  [[ -n "$candidate" && -x "$candidate" ]] ||
+    die "PostgreSQL client tool unavailable: $tool"
+  printf '%s\n' "$candidate"
+}
+
+pg_exec() {
+  local tool="${1:-}" executable
+  shift || true
+  executable="$(pg_tool_path "$tool")"
+  "$executable" "$@"
 }
 
 postgres_tool_major() {
