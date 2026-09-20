@@ -138,7 +138,7 @@ export class RuntimeOperationalMonitor {
   constructor(
     private readonly database: ObservablePool,
     private readonly logger: RuntimeLogger,
-    private readonly intervalMs = 60_000,
+    private readonly intervalMs = 300_000,
   ) {
     if (!Number.isInteger(intervalMs) || intervalMs < 10_000 || intervalMs > 3_600_000) {
       throw new Error("Operational monitor interval must be between 10000 and 3600000 milliseconds");
