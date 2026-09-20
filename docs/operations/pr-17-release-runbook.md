@@ -11,7 +11,7 @@
 
 历史 Pilot/验收曾复用 `https://staging-api.dxerp.org.cn/rework/` 的 **shared-path** 部署。该模式仍保留用于非生产环境；正式生产不再以该路径作为主入口。生产 `dxerp.org.cn` 根域直接服务 `/opt/dx-rework/frontend/current` 并将根级 API 转发至 `127.0.0.1:3201`。旧 `/rework/**` 链接通过独立兼容配置迁移到正式根域，不能重新成为生产事实源。
 
-PR-17 routine release 只原子切换 `/opt/dx-rework/active` 这一个 generation 指针并 reload 单一 PM2 应用，**不执行 `nginx -s reload`**。`/opt/dx-rework/current` 与 `/opt/dx-rework/frontend/current` 是永久稳定别名，分别解析到 `active/api` 与 `active/frontend`，不得在 routine release 中单独改写。
+仓库同时保留两种发布布局：当前 ECS 正式生产由 `scripts/deploy-ecs.sh` 采用 **source layout**，即 `/opt/dx-rework/current -> /opt/dx-rework/source`，前端指向 `/opt/dx-rework/frontend/source-releases/<SHA>`；PR-17 packaged release 采用 **generation layout**，即 `current -> active/api -> generations/<SHA>`。任何运维脚本必须以 `current` 的真实解析结果为事实源，不能因为机器上存在旧 `active/generations` 就假定 production 正在使用 generation layout。两种布局都不得在备份任务中改写 alias。
 
 Nginx 安装或配置变更属于单独的基础设施窗口，须另行批准并先备份、执行 `nginx -t` 后再由基础设施操作完成 graceful reload。shared-path 模式使用 `infra/nginx/dx-rework-shared-paths.conf.example` 的标记块作为审查基线；该块必须原样存在于配置文件与 `nginx -T` 输出中。`release-switch.lock` 只能在 `/rework/**` locations 内返回 503，**绝不能在共享 `server {}` 顶层使整个 staging origin 返回 503**。
 
@@ -109,11 +109,11 @@ DX_REWORK_RESTORE_MANIFEST=<checksum-bound migration manifest>
 
 生产数据库日备份使用独立目录 `/opt/dx-rework/backups/postgres/daily`，不与 release migration 前备份混合清理。systemd timer 固定按 `Asia/Shanghai` 每日 23:30 执行；安装时先立即执行一次备份并通过健康检查后才启用定时器。
 
-`run-scheduled-postgres-backup.sh` 必须从当前 active release 读取 Git SHA 与 migration manifest，验证生产数据库完整 migration history 后调用正式 `backup-postgres.sh`。备份必须产生 `COMPLETE`、通过 `SHA256SUMS` 与 `pg_restore --list`，成功后才允许执行保留策略。日备份与 routine release 共用 release 锁：备份最多等待 30 分钟，禁止与 migration / generation 切换并发；若备份先取得锁，发布必须等待或停止。默认只保留最近 14 个**成功的日备份集**；只清理 daily 专用目录中具备完整安全标记的旧集合，不触碰 release/manual 备份。
+`run-scheduled-postgres-backup.sh` 必须从 `/opt/dx-rework/current` 所指向的真实运行布局读取 Git SHA 与 migration manifest，验证生产数据库完整 migration history 后调用正式 `backup-postgres.sh`。备份必须产生 `COMPLETE`、通过 `SHA256SUMS` 与 `pg_restore --list`，成功后才允许执行保留策略。日备份与 routine release 共用 release 锁：备份最多等待 30 分钟，禁止与 migration / generation 切换并发；若备份先取得锁，发布必须等待或停止。默认只保留最近 14 个**成功的日备份集**；只清理 daily 专用目录中具备完整安全标记的旧集合，不触碰 release/manual 备份。
 
 成功证据写入 `/opt/dx-rework/evidence/ops03/daily-backup-last-success.json`；失败写入独立 failure 证据。每天 08:30 的 health timer 验证最近成功备份不超过 30 小时、完整性仍有效且不存在更新的未解决失败。备份 service 或 health service 失败会保持 systemd failed 状态并保留证据，供 OBS-01/人工巡检发现；本机制本身不发送钉钉消息，也不读取或输出生产密钥。
 
-安装/更新 systemd 单元必须由 root 显式执行当前 active release 的 `install-postgres-backup-timer.sh`。routine release 仅携带这些脚本和 unit，不自动修改 `/etc/systemd/system`。
+安装/更新 systemd 单元必须由 root 显式执行当前 `current` 中的 `install-postgres-backup-timer.sh`。当前生产若为 source layout，安装器必须验证 source checkout、release manifest、frontend source-release 与 migration manifest 一致；若为 generation layout，则验证 active/generation 链路一致。routine release 仅携带这些脚本和 unit，不自动修改 `/etc/systemd/system`。
 
 ## 7. 证据与外部事项
 
