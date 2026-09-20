@@ -20,6 +20,9 @@ const MIME_EXTENSIONS: Record<string, readonly string[]> = {
   "application/pdf": ["pdf"],
 };
 
+const MAX_ACTIVE_UNBOUND_ATTACHMENTS_PER_ACTOR = 50;
+const MAX_CONCURRENT_FINALIZATIONS_PER_ACTOR = 4;
+
 type AttachmentRow = {
   attachment_id: string;
   object_key: string;
@@ -41,6 +44,8 @@ export type AttachmentCleanupResult = Readonly<{
 }>;
 
 export class AttachmentService {
+  private readonly activeFinalizationsByActor = new Map<string, number>();
+
   constructor(
     private readonly pool: Pool,
     private readonly storage: ObjectStorage,
@@ -93,6 +98,26 @@ export class AttachmentService {
     try {
       await client.query("BEGIN");
       await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
+        [`attachment-upload:${actor.actorId}`],
+      );
+      const active = await client.query<{ active_count: number }>(
+        `SELECT count(*)::int active_count
+         FROM attachments
+         WHERE uploaded_by=$1
+           AND entity_type IS NULL
+           AND entity_id IS NULL
+           AND status IN ('pending','ready')`,
+        [actor.actorId],
+      );
+      if ((active.rows[0]?.active_count ?? 0) >= MAX_ACTIVE_UNBOUND_ATTACHMENTS_PER_ACTOR) {
+        throw new ApplicationError(
+          "RATE_LIMITED",
+          "待处理附件过多，请先完成当前上传后再试",
+          429,
+        );
+      }
+      await client.query(
         `INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by) VALUES($1,$2,$3,$4,$5,$6,$7)`,
         [attachmentId, objectKey, input.filename, input.mimeType, input.sizeBytes, input.sha256, actor.actorId],
       );
@@ -127,6 +152,29 @@ export class AttachmentService {
       throw new ApplicationError("INVALID_STATE_TRANSITION", "Attachment is not pending", 409);
     }
 
+    const active = this.activeFinalizationsByActor.get(actor.actorId) ?? 0;
+    if (active >= MAX_CONCURRENT_FINALIZATIONS_PER_ACTOR) {
+      throw new ApplicationError(
+        "RATE_LIMITED",
+        "附件校验请求过多，请稍后重试",
+        429,
+      );
+    }
+    this.activeFinalizationsByActor.set(actor.actorId, active + 1);
+    try {
+      return await this.finalizePending(actor, row, attachmentId);
+    } finally {
+      const remaining = (this.activeFinalizationsByActor.get(actor.actorId) ?? 1) - 1;
+      if (remaining <= 0) this.activeFinalizationsByActor.delete(actor.actorId);
+      else this.activeFinalizationsByActor.set(actor.actorId, remaining);
+    }
+  }
+
+  private async finalizePending(
+    actor: TrustedActorContext,
+    row: AttachmentRow,
+    attachmentId: string,
+  ): Promise<AttachmentResponse> {
     const metadata = await this.verificationCall(actor, row, () => this.storage.head(row.object_key));
 
     if (
