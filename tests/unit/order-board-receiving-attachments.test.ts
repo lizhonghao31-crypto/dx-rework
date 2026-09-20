@@ -19,6 +19,7 @@ describe("order board receiving attachments", () => {
     expect(page).toContain('attachmentUrl(selectedAttachment.attachmentId, "preview")');
     expect(page).not.toContain("<span>送货单</span>");
     expect(server).not.toContain('["rework_order", "receiving_batch"].includes(binding.entityType)');
+    expect(server).toContain("receivingService.canDownloadBoundAttachment(businessReader, binding)");
     expect(server).toContain("reworkBusinessDetailService.canDownloadBoundAttachment(businessReader, binding)");
     expect(styles).toContain(".order-board-row__document-value{display:flex");
   });
