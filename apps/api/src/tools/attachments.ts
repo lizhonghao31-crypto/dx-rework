@@ -260,7 +260,7 @@ export class AttachmentService {
   async createDownloadIntent(
     actor: TrustedActorContext,
     attachmentId: string,
-    authorizeBound?: (row: Readonly<{ entityType: string; entityId: string; uploadedBy: string; mimeType: string }>) => Promise<boolean>,
+    authorizeBound?: (row: Readonly<{ attachmentId: string; entityType: string; entityId: string; uploadedBy: string; mimeType: string }>) => Promise<boolean>,
     disposition: "attachment" | "inline" = "attachment",
     variant?: "thumbnail",
   ): Promise<DownloadIntentResponse> {
@@ -461,13 +461,13 @@ export class AttachmentService {
   private async ownedOrBound(
     id: string,
     userId: string,
-    authorizeBound?: (row: { entityType: string; entityId: string; uploadedBy: string; mimeType: string }) => Promise<boolean>,
+    authorizeBound?: (row: { attachmentId: string; entityType: string; entityId: string; uploadedBy: string; mimeType: string }) => Promise<boolean>,
   ): Promise<AttachmentRow> {
     const result = await this.pool.query<AttachmentRow>(`SELECT * FROM attachments WHERE attachment_id=$1`, [id]);
     const row = result.rows[0];
     if (!row) throw new ApplicationError("NOT_FOUND", "Attachment not found", 404);
     if (row.entity_type && row.entity_id) {
-      if (!authorizeBound || !(await authorizeBound({ entityType: row.entity_type, entityId: row.entity_id, uploadedBy: row.uploaded_by, mimeType: row.mime_type }))) {
+      if (!authorizeBound || !(await authorizeBound({ attachmentId: row.attachment_id, entityType: row.entity_type, entityId: row.entity_id, uploadedBy: row.uploaded_by, mimeType: row.mime_type }))) {
         throw new ApplicationError("FORBIDDEN", "Attachment access denied", 403);
       }
     } else if (row.uploaded_by !== userId) {
