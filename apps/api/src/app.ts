@@ -3,6 +3,7 @@ import { registerSupplierOnboardingRoutes, type SupplierOnboardingDependencies }
 import { registerPatternRoomPriceRoutes, type PatternRoomPriceDependencies } from "./pattern-room/price-routes.js";
 import { registerPatternRoomOrderRoutes, type PatternRoomOrderDependencies } from "./pattern-room/order-routes.js";
 import {registerOperationDiagnostics,type DiagnosticRecord} from "./platform/operation-diagnostics.js";
+import { registerRequestOutcomeObservability } from "./platform/runtime-observability.js";
 import {registerSampleImportRoutes,type SampleImportDependencies} from "./samples/sample-import-routes.js";
 import {registerSampleDisposalRoutes,type SampleDisposalDependencies} from "./samples/sample-disposal-routes.js";
 import { randomUUID } from "node:crypto";
@@ -137,6 +138,8 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   if (dependencies.auth) registerMemberModuleHttpGuard(app, token => dependencies.auth!.authenticate(token));
 
   if (dependencies.operationDiagnostics) registerOperationDiagnostics(app,dependencies.operationDiagnostics);
+
+  registerRequestOutcomeObservability(app);
 
   app.addHook("onRequest", async (request, reply) => {
     void reply.header("x-request-id", request.id);

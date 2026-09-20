@@ -35,6 +35,7 @@ import {
   getAppliedSchemaHistory,
   registerDatabasePoolErrorHandler,
 } from "./platform/database.js";
+import { RuntimeOperationalMonitor } from "./platform/runtime-observability.js";
 import { ReceivingService } from "./receiving/receiving-service.js";
 import { SourcingService } from "./sourcing/sourcing-service.js";
 import { SourcingContractService } from "./sourcing/sourcing-contract-service.js";
@@ -411,6 +412,8 @@ const app = buildApp({
 });
 registerDatabasePoolErrorHandler(database, app.log);
 
+const runtimeOperationalMonitor = new RuntimeOperationalMonitor(database, app.log);
+
 const todoProvider = config.todoRuntime.deliveryEnabled
   ? new OfficialDingTalkTodoProvider({
       appKey: config.dingtalk.h5AppKey,
@@ -452,6 +455,7 @@ async function shutdown(signal: string): Promise<void> {
   shuttingDown = true;
   app.log.info({ signal }, "graceful shutdown started");
   if (attachmentCleanupTimer) clearInterval(attachmentCleanupTimer);
+  await runtimeOperationalMonitor.stop();
   await todoRuntime.stop();
   await app.close();
   await database.end();
@@ -462,6 +466,7 @@ process.once("SIGINT", () => void shutdown("SIGINT"));
 
 try {
   await app.listen({ host: config.host, port: config.port });
+  runtimeOperationalMonitor.start();
   todoRuntime.start();
   void runAttachmentCleanup();
   attachmentCleanupTimer = setInterval(
@@ -471,6 +476,7 @@ try {
   attachmentCleanupTimer.unref();
 } catch (error: unknown) {
   app.log.fatal({ err: error }, "API startup failed");
+  await runtimeOperationalMonitor.stop();
   await todoRuntime.stop();
   await database.end();
   process.exitCode = 1;

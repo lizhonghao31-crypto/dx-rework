@@ -19,21 +19,23 @@ export const diagnosticOperations:Readonly<Record<string,string>>={
 const codes=new Set(['VALIDATION_ERROR','FORBIDDEN','NO_BUSINESS_ROLE','UNAUTHORIZED','NOT_FOUND','CONFLICT','VERSION_CONFLICT','INTERNAL_ERROR','IDEMPOTENCY_CONFLICT','ATTACHMENT_NOT_READY','ATTACHMENT_UPLOAD_INCOMPLETE']);
 export function safeDiagnosticCode(value:unknown,status:number):string {return status<400?'OK':status>=500?'INTERNAL_ERROR':typeof value==='string'&&codes.has(value)?value:'UNCLASSIFIED';}
 export function diagnosticOutcome(status:number):'success'|'permission'|'validation'|'technical'{return status>=500?'technical':status===401||status===403?'permission':status>=400?'validation':'success';}
-export type DiagnosticRecord=Readonly<{operation:string;status:number;code:string;replayed:boolean}>;
+export type DiagnosticRecord=Readonly<{operation:string;status:number;code:string;replayed:boolean;durationMs:number|null}>;
 export function registerOperationDiagnostics(app:FastifyInstance,record:(row:DiagnosticRecord)=>Promise<void>):void{
- const errors=new WeakMap<FastifyRequest,unknown>();
+ const errors=new WeakMap<FastifyRequest,unknown>(),started=new WeakMap<FastifyRequest,bigint>();
+ app.addHook('onRequest',async request=>{started.set(request,process.hrtime.bigint());});
  app.addHook('onError',async(request,_reply,error)=>{errors.set(request,safeDiagnosticCode(error.code,Number(error.statusCode??500)));});
  app.addHook('onResponse',async(request,reply)=>{
   const operation=diagnosticOperations[`${request.method} ${request.routeOptions.url??''}`],status=reply.statusCode;
   if(!operation||status<200||status>=300&&status<400)return;
   // Header comes from the business handler's confirmed reused result, not a client claim.
-  const row={operation,status,code:safeDiagnosticCode(errors.get(request),status),replayed:status<300&&reply.getHeader('idempotency-replayed')==='true'};
+  const began=started.get(request),durationMs=began===undefined?null:Number(process.hrtime.bigint()-began)/1_000_000;
+  const row={operation,status,code:safeDiagnosticCode(errors.get(request),status),replayed:status<300&&reply.getHeader('idempotency-replayed')==='true',durationMs:durationMs===null?null:Math.round(durationMs*1000)/1000};
   try{await record(row);}catch{request.log.warn({diagnosticWriteFailed:true},'Operation diagnostic unavailable');}
  });
 }
 export async function recordOperationDiagnostic(db:Pool,row:DiagnosticRecord):Promise<void>{
  if(!Object.values(diagnosticOperations).includes(row.operation))return;
- await db.query(`INSERT INTO work_operation_diagnostics(diagnostic_id,operation,http_status,outcome,error_code,replayed) VALUES($1,$2,$3,$4,$5,$6)`,[randomUUID(),row.operation,row.status,diagnosticOutcome(row.status),safeDiagnosticCode(row.code,row.status),row.status<300&&row.replayed]);
+ await db.query(`INSERT INTO work_operation_diagnostics(diagnostic_id,operation,http_status,outcome,error_code,replayed,duration_ms) VALUES($1,$2,$3,$4,$5,$6,$7)`,[randomUUID(),row.operation,row.status,diagnosticOutcome(row.status),safeDiagnosticCode(row.code,row.status),row.status<300&&row.replayed,row.durationMs]);
 }
 // Both sides must contain a whitelisted field; absent audit facts are not fabricated as edits.
 export const DIAGNOSTIC_REVISIONS_SQL=`SELECT action,field,count(*)::text count FROM operation_events
@@ -47,7 +49,7 @@ export async function readOperationDiagnostics(db:Pool,input:unknown):Promise<Di
  const parsed=WorkAnalysisQuerySchema.safeParse(input);if(!parsed.success||!['all','success','validation','permission','technical'].includes(parsed.data.group))throw new ApplicationError('VALIDATION_ERROR','诊断筛选无效',400);
  const filters=parsed.data,client=await db.connect();
  try{await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');const clock=await client.query<{now:Date;since:Date|null}>('SELECT CURRENT_TIMESTAMP now,(SELECT min(recorded_at) FROM work_operation_diagnostics) since');
- const result=await client.query<{operation:string;outcome:string;code:string;count:string;replayedCount:string;lastAt:Date}>(`SELECT operation,outcome,error_code code,count(*)::text count,count(*) FILTER(WHERE replayed)::text AS "replayedCount",max(recorded_at) AS "lastAt" FROM work_operation_diagnostics
+ const result=await client.query<{operation:string;outcome:string;code:string;count:string;replayedCount:string;timingSampleCount:string;averageDurationMs:number|null;maxDurationMs:number|null;lastAt:Date}>(`SELECT operation,outcome,error_code code,count(*)::text count,count(*) FILTER(WHERE replayed)::text AS "replayedCount",count(duration_ms)::text AS "timingSampleCount",avg(duration_ms)::float8 AS "averageDurationMs",max(duration_ms)::float8 AS "maxDurationMs",max(recorded_at) AS "lastAt" FROM work_operation_diagnostics
  WHERE ($1='' OR operation ILIKE '%'||$1||'%') AND ($2='all' OR outcome=$2)
  AND ($3::date IS NULL OR recorded_at >= $3::date::timestamp AT TIME ZONE 'Asia/Shanghai')
  AND ($4::date IS NULL OR recorded_at < ($4::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
