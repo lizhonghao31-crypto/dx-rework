@@ -1,3 +1,4 @@
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import {randomUUID} from "node:crypto";
 import {readFile} from "node:fs/promises";
 import pg from "pg";
@@ -6,7 +7,7 @@ import {readReceivingAnalysis, RECEIVING_ANALYSIS_LINKS_SQL} from "../../apps/ap
 
 const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 (url ? describe : describe.skip)("receiving analysis SQL contracts", () => {
-  const schema = `receiving_${randomUUID().replaceAll("-", "")}`;
+  const schema = ownedPostgresSchema("receiving");
   const admin = new pg.Pool({connectionString: url!});
   const database = new pg.Pool({connectionString: url!, options: `-c search_path=${schema}`});
   const actor = {actorId: randomUUID(), actorRoles: ["warehouse_receiver"], authorizationCapability: "receiving:read", requestId: randomUUID()};
