@@ -69,6 +69,9 @@ assert(full.includes("npm audit --omit=dev --audit-level=high"), "Full Gate must
 assert(full.includes("npm run secret:scan:full"), "Full Gate must scan complete Git history and first-party build artifacts");
 assert(!quick.includes("${{ secrets."), "Quick Gate must not receive repository or environment secrets");
 assert(!full.includes("${{ secrets."), "Full Gate must not receive repository or environment secrets");
+assert(!governance.includes("${{ secrets."), "Governance validation must not receive repository or environment secrets");
+assert(!preview.includes("${{ secrets."), "Preview validation must not receive repository or environment secrets");
+assert(release.includes("permissions:\n  contents: read"), "manual release workflow must keep read-only repository contents permission");
 
 const releaseDeployMarker = "\n  deploy:";
 const releaseDeployStart = release.indexOf(releaseDeployMarker);
