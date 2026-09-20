@@ -1,3 +1,4 @@
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import pg from 'pg';
@@ -5,7 +6,7 @@ import { afterAll,beforeAll,describe,expect,it } from 'vitest';
 import { SampleAnalysisService } from '../../apps/api/src/samples/sample-analysis-service.js';
 const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
 (url?describe:describe.skip)('sample analysis consistent SQL facts',()=>{
- const schema='sample_'+randomUUID().replaceAll('-',''),admin=new pg.Pool({connectionString:url!}),db=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
+ const schema=ownedPostgresSchema("sample"),admin=new pg.Pool({connectionString:url!}),db=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
  const service=new SampleAnalysisService(db),person=randomUUID(),other=randomUUID(),brand=randomUUID(),department=randomUUID();
  const actor=(role='sample_finance')=>({actorId:person,actorRoles:[role],authorizationCapability:'sample:view_basic',authorizationCapabilities:['sample:view_basic','sample:view_finance'],requestId:'analysis-fixture'});
  const ids:string[]=[];
