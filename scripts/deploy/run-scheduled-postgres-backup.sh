@@ -39,6 +39,11 @@ load_database_tool_config
 install -d -m 0700 "$backup_root" "$status_root"
 acquire_lock "$DX_ROOT/locks/daily-postgres-backup.lock"
 
+release_lock="$(assert_safe_path "$DX_ROOT/locks/release.lock")"
+[[ ! -L "$release_lock" ]] || die 'release lock must not be a symlink'
+exec 7>"$release_lock"
+flock -w 1800 7 || die 'release lock remained busy for 30 minutes'
+
 active_api="$(realpath "$DX_ROOT/current")"
 [[ "$active_api" == "$DX_ROOT/releases/"* && -d "$active_api" && ! -L "$active_api" ]] ||
   die 'active API release path is unavailable or unsafe'
