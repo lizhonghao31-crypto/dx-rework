@@ -39,6 +39,7 @@ const placeholder = (value) => {
     "acceptance-test",
     "local-development",
     "production-openai-key",
+    "placeholder",
   ].some((marker) => normalized.includes(marker));
 };
 
