@@ -82,11 +82,67 @@ node_exec() {
   "$node_bin" "$@"
 }
 
+approved_pg_bin_dir() {
+  local dir="${DX_REWORK_PG_BIN_DIR:-}"
+  [[ -n "$dir" ]] || die 'approved PostgreSQL client directory is not configured'
+  [[ "$dir" == /* && -d "$dir" && ! -L "$dir" ]] ||
+    die 'approved PostgreSQL client directory unavailable or unsafe'
+  for tool in psql pg_dump pg_restore; do
+    [[ -f "$dir/$tool" && ! -L "$dir/$tool" && -x "$dir/$tool" ]] ||
+      die "approved PostgreSQL client tool unavailable or unsafe: $tool"
+  done
+  printf '%s\n' "$dir"
+}
+
+pg_tool_path() {
+  local tool="${1:-}" dir candidate
+  case "$tool" in
+    psql|pg_dump|pg_restore) ;;
+    *) die 'unsupported PostgreSQL client tool' ;;
+  esac
+  if [[ -n "${DX_REWORK_PG_BIN_DIR:-}" ]]; then
+    dir="$(approved_pg_bin_dir)"
+    printf '%s\n' "$dir/$tool"
+    return
+  fi
+  candidate="$(command -v "$tool" || true)"
+  [[ -n "$candidate" && -x "$candidate" ]] ||
+    die "PostgreSQL client tool unavailable: $tool"
+  printf '%s\n' "$candidate"
+}
+
+pg_exec() {
+  local tool="${1:-}" executable
+  shift || true
+  executable="$(pg_tool_path "$tool")"
+  "$executable" "$@"
+}
+
+postgres_tool_major() {
+  local tool="$1" output
+  output="$(pg_exec "$tool" --version)"
+  [[ "$output" =~ ([0-9]+)\. ]] || die "unable to parse PostgreSQL client version: $tool"
+  printf '%s\n' "${BASH_REMATCH[1]}"
+}
+
+assert_postgres_toolchain() {
+  local database_url="$1" psql_major dump_major restore_major server_num server_major
+  psql_major="$(postgres_tool_major psql)"
+  dump_major="$(postgres_tool_major pg_dump)"
+  restore_major="$(postgres_tool_major pg_restore)"
+  [[ "$psql_major" == "$dump_major" && "$dump_major" == "$restore_major" ]] ||
+    die 'PostgreSQL client tools must use the same major version'
+  server_num="$(pg_exec psql "$database_url" -XAtqc "show server_version_num")"
+  [[ "$server_num" =~ ^[0-9]+$ ]] || die 'database server version unavailable'
+  server_major="$((server_num / 10000))"
+  [[ "$dump_major" -ge "$server_major" ]] ||
+    die "pg_dump major $dump_major is older than database server major $server_major"
+}
+
 database_connection_identity() {
   local database_url="${1:-}" database
   [[ -n "$database_url" ]] || die 'database URL required for identity'
-  require_command psql
-  database="$(psql "$database_url" -XAtqc "select current_database()")"
+  database="$(pg_exec psql "$database_url" -XAtqc "select current_database()")"
   [[ "$database" =~ ^[A-Za-z0-9_.-]+$ ]] || die 'database identity unavailable'
   node_exec -e '
 const [raw,database]=process.argv.slice(1);
@@ -284,7 +340,7 @@ load_env_file() {
 }
 
 DX_REWORK_APP_ENV_KEYS='DATABASE_URL LOG_LEVEL DINGTALK_CORP_ID DINGTALK_H5_APP_KEY DINGTALK_H5_APP_SECRET DINGTALK_H5_AGENT_ID DINGTALK_WEB_CLIENT_ID DINGTALK_WEB_CLIENT_SECRET DINGTALK_QR_REDIRECT_URI APP_BASE_PATH SESSION_SECRET SESSION_TTL_SECONDS ROOT_DINGTALK_USER_ID OWNER_BOOTSTRAP_DINGTALK_USER_ID OWNER_BOOTSTRAP_SECRET TODO_RUNTIME_ENABLED TODO_DELIVERY_ENABLED TODO_TIMING_ENABLED TODO_PUBLIC_BASE_URL TODO_RUNTIME_ACTOR_ID TODO_DELIVERY_INTERVAL_MS TODO_TIMING_INTERVAL_MS OSS_REGION OSS_ENDPOINT OSS_BUCKET OSS_ACCESS_KEY_ID OSS_ACCESS_KEY_SECRET OSS_PRIVATE_PREFIX OSS_SIGNED_URL_TTL_SECONDS OSS_MAX_UPLOAD_BYTES OPENAI_API_KEY OPENAI_VISION_MODEL'
-DX_REWORK_DEPLOY_ENV_KEYS='DX_REWORK_NODE_BIN DX_REWORK_SERVER_NAME DX_REWORK_TLS_CERT DX_REWORK_TLS_KEY DX_REWORK_NGINX_CONFIG DX_REWORK_NGINX_MODE DX_REWORK_PROFILE'
+DX_REWORK_DEPLOY_ENV_KEYS='DX_REWORK_NODE_BIN DX_REWORK_PG_BIN_DIR DX_REWORK_SERVER_NAME DX_REWORK_TLS_CERT DX_REWORK_TLS_KEY DX_REWORK_NGINX_CONFIG DX_REWORK_NGINX_MODE DX_REWORK_PROFILE'
 DX_REWORK_RESTORE_ENV_KEYS='DX_REWORK_RESTORE_DATABASE_URL DX_REWORK_APPROVED_TARGET_FINGERPRINT DX_REWORK_APPROVED_TARGET_DATABASE'
 
 config_owner() {
@@ -305,6 +361,10 @@ load_deploy_config() {
 
 load_node_config() {
   load_env_file "${DX_REWORK_DEPLOY_ENV_FILE:-$DX_ROOT/shared/deploy.env}" "$(config_owner)" "$DX_REWORK_DEPLOY_ENV_KEYS" 'DX_REWORK_NODE_BIN'
+}
+
+load_database_tool_config() {
+  load_env_file "${DX_REWORK_DEPLOY_ENV_FILE:-$DX_ROOT/shared/deploy.env}" "$(config_owner)" "$DX_REWORK_DEPLOY_ENV_KEYS" 'DX_REWORK_NODE_BIN DX_REWORK_PG_BIN_DIR'
 }
 
 load_restore_config() {

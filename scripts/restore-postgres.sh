@@ -2,7 +2,7 @@
 set -euo pipefail
 source "$(dirname "$0")/deploy/lib.sh"
 
-load_node_config
+load_database_tool_config
 load_restore_config
 
 [[ $# == 1 ]] || die 'usage: restore-postgres.sh BACKUP_SET'
@@ -15,6 +15,8 @@ setdir="$(assert_safe_path "$1" "${DX_REWORK_BACKUP_DIR:-$DX_ROOT/backups/postgr
 : "${DX_REWORK_RESTORE_DATABASE_URL:?target database required}"
 : "${DX_REWORK_APPROVED_TARGET_FINGERPRINT:?approved target fingerprint required}"
 : "${DX_REWORK_APPROVED_TARGET_DATABASE:?approved target database required}"
+
+assert_postgres_toolchain "$DX_REWORK_RESTORE_DATABASE_URL"
 
 [[ "$(cat "$setdir/SHA256SUMS")" =~ ^[0-9a-f]{64}\ \ database.dump$'\n'[0-9a-f]{64}\ \ metadata.json$ ]] ||
   die 'checksum manifest must contain exactly safe basenames'
@@ -40,7 +42,7 @@ metadata_fp="$(node_exec -e 'process.stdout.write(JSON.parse(process.argv[1]).so
    "$target_fp" == "$DX_REWORK_APPROVED_TARGET_FINGERPRINT" ]] ||
   die 'target is not the explicitly approved drill database'
 
-user_object_count="$(psql "$DX_REWORK_RESTORE_DATABASE_URL" -XAtqc "
+user_object_count="$(pg_exec psql "$DX_REWORK_RESTORE_DATABASE_URL" -XAtqc "
   select count(*)
   from pg_class c
   join pg_namespace n on n.oid=c.relnamespace
@@ -50,9 +52,9 @@ user_object_count="$(psql "$DX_REWORK_RESTORE_DATABASE_URL" -XAtqc "
 ")"
 [[ "$user_object_count" == 0 ]] || die 'target contains user objects'
 
-pg_restore --list "$setdir/database.dump" >/dev/null
+pg_exec pg_restore --list "$setdir/database.dump" >/dev/null
 start="$(date +%s)"
-pg_restore --single-transaction --exit-on-error --no-owner --no-acl \
+pg_exec pg_restore --single-transaction --exit-on-error --no-owner --no-acl \
   --dbname="$DX_REWORK_RESTORE_DATABASE_URL" "$setdir/database.dump"
 
 manifest="${DX_REWORK_RESTORE_MANIFEST:?restored release migration manifest required}"

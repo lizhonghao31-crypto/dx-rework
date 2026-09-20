@@ -6,7 +6,7 @@ umask 077
 # Always validate the real target files; do not trust a caller-supplied boolean
 # claiming configuration has already been loaded.
 load_app_config
-load_node_config
+load_database_tool_config
 
 : "${DATABASE_URL:?DATABASE_URL is required}"
 : "${GIT_SHA:?GIT_SHA is required}"
@@ -29,6 +29,7 @@ install -d -m 0700 "$root"
 exec 8>"$root/.backup.lock"
 flock -n 8 || die 'backup lock is held'
 
+assert_postgres_toolchain "$DATABASE_URL"
 fingerprint="$(database_connection_fingerprint "$DATABASE_URL")"
 
 stamp="$(date -u +%Y%m%dT%H%M%S.%NZ)"
@@ -39,8 +40,8 @@ final="$root/$name"
 mkdir -m 0700 "$tmp"
 trap 'rm -rf -- "$tmp"' EXIT
 
-pg_dump --dbname="$DATABASE_URL" --format=custom --no-owner --no-acl --file="$tmp/database.dump"
-pg_restore --list "$tmp/database.dump" >/dev/null
+pg_exec pg_dump --dbname="$DATABASE_URL" --format=custom --no-owner --no-acl --file="$tmp/database.dump"
+pg_exec pg_restore --list "$tmp/database.dump" >/dev/null
 
 node_exec - "$tmp/metadata.json" "$GIT_SHA" "${db_schema[0]}" "${db_schema[1]}" \
   "$TARGET_SCHEMA_VERSION" "$TARGET_SCHEMA_CHECKSUM" "$fingerprint" "$(date -u +%FT%T.%NZ)" <<'JS'
