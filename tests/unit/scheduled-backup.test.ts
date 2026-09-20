@@ -10,7 +10,7 @@ describe("OPS-03 scheduled PostgreSQL backups", () => {
     expect(script).toContain('backup_root="$DX_ROOT/backups/postgres/daily"');
     expect(script).toContain('source "$(dirname "$0")/backup-runtime.sh"');
     expect(script).toContain("resolve_backup_runtime");
-    expect(script).toContain('if [[ "$active_mode" == source ]]');
+    expect(script).toContain('/usr/bin/bash "$active_api/scripts/backup-postgres.sh"');
     expect(script).toContain("verify-current");
     expect(script).toContain("keep_count=14");
     expect(script).toContain('release_lock="$(assert_safe_path "$DX_ROOT/locks/release.lock")"');
