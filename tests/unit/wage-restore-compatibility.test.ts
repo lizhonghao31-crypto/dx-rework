@@ -20,6 +20,9 @@ describe("retired wage adjustment restore compatibility", () => {
     expect(compatibility).toContain(
       "DROP CONSTRAINT IF EXISTS rework_wage_adjustments_decider_separation_check",
     );
+    expect(compatibility).toContain("wage adjustment retirement guards are not active");
+    expect(compatibility).toContain("wage_adjustments_guard_insert");
+    expect(compatibility).toContain("wage_adjustments_guard_update");
     expect(compatibility).toContain("pg_get_constraintdef");
     expect(compatibility).toContain("access_is_root_actor");
     expect(compatibility).not.toContain("DISABLE TRIGGER");
