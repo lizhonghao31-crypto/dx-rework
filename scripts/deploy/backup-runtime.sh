@@ -20,6 +20,7 @@ PY
 resolve_backup_runtime() {
   local current="$DX_ROOT/current" frontend_current="$DX_ROOT/frontend/current"
   local api_manifest web_manifest migration_manifest latest_schema generation
+  local source_owner source_head source_status
 
   require_command readlink
   require_command python3
@@ -39,9 +40,18 @@ resolve_backup_runtime() {
     [[ -f "$api_manifest" && ! -L "$api_manifest" ]] || die 'source deployment release manifest is missing or unsafe'
     active_sha="$(backup_manifest_field "$api_manifest" gitSha)"
     require_sha "$active_sha"
-    [[ "$(git -C "$active_api" rev-parse HEAD)" == "$active_sha" ]] ||
+    source_owner="$(stat -c %U "$active_api")"
+    if [[ "$(id -un)" == "$source_owner" ]]; then
+      source_head="$(git -C "$active_api" rev-parse HEAD)"
+      source_status="$(git -C "$active_api" status --porcelain)"
+    else
+      require_command runuser
+      source_head="$(runuser -u "$source_owner" -- git -C "$active_api" rev-parse HEAD)"
+      source_status="$(runuser -u "$source_owner" -- git -C "$active_api" status --porcelain)"
+    fi
+    [[ "$source_head" == "$active_sha" ]] ||
       die 'source checkout does not match deployed release'
-    [[ -z "$(git -C "$active_api" status --porcelain)" ]] ||
+    [[ -z "$source_status" ]] ||
       die 'source checkout is dirty; backup refuses unverified scripts'
     [[ "$active_frontend" == "$DX_ROOT/frontend/source-releases/$active_sha" ]] ||
       die 'source API and frontend releases disagree'
