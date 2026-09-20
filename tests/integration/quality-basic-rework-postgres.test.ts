@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
-import { readBasicRework } from "../../apps/api/src/reporting/basic-rework-reader.js";
+import { canDownloadBasicReworkAttachment, readBasicRework } from "../../apps/api/src/reporting/basic-rework-reader.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 const url=process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)("quality basic rework whitelist",()=>{
  const schema=`quality_basic_${randomUUID().replaceAll("-","")}`,quality=randomUUID(),other=randomUUID();
  const admin=new pg.Pool({connectionString:url}),db=new pg.Pool({connectionString:url,options:`-c search_path=${schema}`});
  const actor=(id=quality,cap=true):TrustedActorContext=>({actorId:id,actorRoles:["quality_control"],requestId:randomUUID(),authorizationCapability:"tools:user",authorizationCapabilities:cap?["rework:basic:view"]:[]});
- const receiving=randomUUID(),activePhoto=randomUUID(),retiredPhoto=randomUUID();
+ const receiving=randomUUID(),activePhoto=randomUUID(),retiredPhoto=randomUUID(),listedOrder=randomUUID(),reworkPhoto=randomUUID();
  beforeAll(async()=>{
   await admin.query(`CREATE SCHEMA ${schema}`);
   await db.query(`CREATE TABLE app_users(id uuid,display_name text);
@@ -24,7 +24,8 @@ const url=process.env.TEST_DATABASE_URL;
     IF requested<>'rework:basic:view' OR NOT EXISTS(SELECT 1 FROM test_grants WHERE id=target) THEN RAISE EXCEPTION 'forbidden'; END IF;
     RETURN ARRAY['quality_control']; END $$;`);
   await db.query("INSERT INTO test_grants VALUES($1)",[quality]);await db.query("INSERT INTO app_users VALUES($1,'跟单张三')",[other]);
-  for(let i=0;i<17;i++)await db.query(`INSERT INTO rework_orders VALUES($1,$2,'S1','ORDER1','own_factory',null,null,$3,100,'断线','袖口','开线',$4,CURRENT_TIMESTAMP,$5,9999)`,[randomUUID(),`RW${i}`,other,i===16?'deleted':'completed',receiving]);
+  for(let i=0;i<17;i++)await db.query(`INSERT INTO rework_orders VALUES($1,$2,'S1','ORDER1','own_factory',null,null,$3,100,'断线','袖口','开线',$4,CURRENT_TIMESTAMP,$5,9999)`,[i===0?listedOrder:randomUUID(),`RW${i}`,other,i===16?'deleted':'completed',receiving]);
+  await db.query("INSERT INTO attachments VALUES($1,'返工图','rework_order',$2,'ready','image/jpeg',CURRENT_TIMESTAMP)",[reworkPhoto,listedOrder]);
   for(const [id,mime] of [[activePhoto,'image/jpeg'],[retiredPhoto,'image/png'],[randomUUID(),'application/pdf']])await db.query("INSERT INTO attachments VALUES($1,'凭证','receiving_batch',$2,'ready',$3,CURRENT_TIMESTAMP)",[id,receiving,mime]);
   await db.query("INSERT INTO receiving_attachment_retirements VALUES($1)",[retiredPhoto]);
  });
@@ -35,6 +36,12 @@ const url=process.env.TEST_DATABASE_URL;
   expect(first.items[0]).toMatchObject({quantity:'100',processingFactory:'本厂',reason:'断线',photos:[{attachmentId:activePhoto,filename:'凭证'}]});
   expect(await readBasicRework(db,actor(),{q:'跟单张三',page:99})).toMatchObject({page:2,totalCount:16,totalPages:2});
   expect(await readBasicRework(db,actor(),{q:'不存在',page:99})).toMatchObject({page:1,totalCount:0,items:[]});
+ });
+ it("uses the same basic-view grant for image downloads and rejects retired receipt evidence",async()=>{
+  await expect(canDownloadBasicReworkAttachment(db,actor(),{attachmentId:reworkPhoto,entityType:'rework_order',entityId:listedOrder,mimeType:'image/jpeg'})).resolves.toBe(true);
+  await expect(canDownloadBasicReworkAttachment(db,actor(),{attachmentId:activePhoto,entityType:'receiving_batch',entityId:receiving,mimeType:'image/jpeg'})).resolves.toBe(true);
+  await expect(canDownloadBasicReworkAttachment(db,actor(),{attachmentId:retiredPhoto,entityType:'receiving_batch',entityId:receiving,mimeType:'image/png'})).resolves.toBe(false);
+  await expect(canDownloadBasicReworkAttachment(db,actor(quality,false),{attachmentId:reworkPhoto,entityType:'rework_order',entityId:listedOrder,mimeType:'image/jpeg'})).resolves.toBe(false);
  });
  it("rejects absent and forged grants while a mixed-role reader retains the same basic whitelist",async()=>{
   await expect(readBasicRework(db,actor(quality,false),{page:1})).rejects.toMatchObject({statusCode:403});
