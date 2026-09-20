@@ -39,6 +39,9 @@ describe("PostgreSQL backup manifest", () => {
 
     expect(lib).toContain("DX_REWORK_PG_BIN_DIR");
     expect(lib).toContain("approved_pg_bin_dir()");
+    expect(lib).toContain("pg_tool_path()");
+    expect(lib).toContain('if [[ -n "${DX_REWORK_PG_BIN_DIR:-}" ]]');
+    expect(lib).toContain('candidate="$(command -v "$tool" || true)"');
     expect(lib).toContain("assert_postgres_toolchain()");
     expect(lib).toContain("show server_version_num");
     expect(lib).toContain("pg_dump major $dump_major is older than database server major $server_major");
