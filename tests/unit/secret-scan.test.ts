@@ -86,20 +86,28 @@ describe("secret scan", () => {
     await expect(findArtifactSecrets(root)).resolves.toEqual(["apps/web/dist/assets/app.js"]);
   });
 
-  it("finds removed signatures and historically tracked sensitive files without returning secret values", () => {
+  it("finds removed signatures, sensitive assignments and tracked secret files without returning secret values", () => {
     const root = initRepo();
     const historicalToken = ["sk-", "A".repeat(30)].join("");
+    const historicalAssignedSecret = ["A1b2C3d4"].join("").repeat(4);
     writeFileSync(join(root, "leak.txt"), historicalToken);
+    writeFileSync(join(root, "ordinary.txt"), `SESSION_SECRET=${historicalAssignedSecret}`);
+    writeFileSync(join(root, "synthetic.txt"), "SESSION_SECRET=history-test-secret-with-at-least-32-characters");
     writeFileSync(join(root, ".env"), "SESSION_SECRET=historical-placeholder");
     commitAll(root, "introduce fixture leak");
 
     writeFileSync(join(root, "leak.txt"), "clean");
+    writeFileSync(join(root, "ordinary.txt"), "clean");
+    writeFileSync(join(root, "synthetic.txt"), "clean");
     rmSync(join(root, ".env"));
     commitAll(root, "remove fixture leak");
 
     const findings = findHistoricalSecretFindings(root);
     expect(findings.signatures.some((item) => item.endsWith(":leak.txt"))).toBe(true);
+    expect(findings.signatures.some((item) => item.endsWith(":ordinary.txt"))).toBe(true);
+    expect(findings.signatures.some((item) => item.endsWith(":synthetic.txt"))).toBe(false);
     expect(findings.sensitivePaths.some((item) => item.endsWith(":.env"))).toBe(true);
     expect(JSON.stringify(findings)).not.toContain(historicalToken);
+    expect(JSON.stringify(findings)).not.toContain(historicalAssignedSecret);
   });
 });
