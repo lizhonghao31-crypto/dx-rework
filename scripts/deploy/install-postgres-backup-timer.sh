@@ -3,10 +3,9 @@ set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 
 [[ "$(id -u)" == 0 ]] || die 'backup timer installation requires root'
-[[ -L "$DX_ROOT/current" ]] || die 'active release alias is missing'
-active_api="$(realpath "$DX_ROOT/current")"
-[[ "$active_api" == "$DX_ROOT/releases/"* && -d "$active_api" ]] ||
-  die 'active release path is invalid'
+active_sha="$(current_generation_sha)" || die 'active generation is unavailable'
+assert_active_release "$active_sha"
+active_api="$DX_ROOT/releases/$active_sha"
 
 unit_source="$active_api/infra/systemd"
 for unit in   dx-rework-postgres-backup.service   dx-rework-postgres-backup.timer   dx-rework-postgres-backup-health.service   dx-rework-postgres-backup-health.timer; do
