@@ -44,13 +44,9 @@ release_lock="$(assert_safe_path "$DX_ROOT/locks/release.lock")"
 exec 7>"$release_lock"
 flock -w 1800 7 || die 'release lock remained busy for 30 minutes'
 
-active_api="$(realpath "$DX_ROOT/current")"
-[[ "$active_api" == "$DX_ROOT/releases/"* && -d "$active_api" && ! -L "$active_api" ]] ||
-  die 'active API release path is unavailable or unsafe'
-active_sha="$(basename "$active_api")"
-require_sha "$active_sha"
-[[ "$(manifest_field "$active_api/release-manifest.json" gitSha)" == "$active_sha" ]] ||
-  die 'active release manifest SHA mismatch'
+active_sha="$(current_generation_sha)" || die 'active generation is unavailable'
+assert_active_release "$active_sha"
+active_api="$DX_ROOT/releases/$active_sha"
 
 manifest="$active_api/apps/api/src/platform/migration-manifest.json"
 DATABASE_URL="$DATABASE_URL" node_exec   "$active_api/scripts/deploy/database-state.mjs" verify-current "$manifest"
