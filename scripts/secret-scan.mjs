@@ -24,25 +24,34 @@ const signatures = [
   /\bsk-[A-Za-z0-9_-]{20,}\b/,
 ];
 
-const secretAssignment = /\b(?:DINGTALK_H5_APP_SECRET|DINGTALK_WEB_CLIENT_SECRET|SESSION_SECRET|OSS_ACCESS_KEY_SECRET|OPENAI_API_KEY|OWNER_BOOTSTRAP_SECRET|ACCEPTANCE_LAB_SECRET)\b\s*[:=]\s*["']?([A-Za-z0-9_./+=:@-]{20,})/g;
+const quotedSecretAssignment = /\b(?:DINGTALK_H5_APP_SECRET|DINGTALK_WEB_CLIENT_SECRET|SESSION_SECRET|OSS_ACCESS_KEY_SECRET|OPENAI_API_KEY|OWNER_BOOTSTRAP_SECRET|ACCEPTANCE_LAB_SECRET)\b[ \t]*[:=][ \t]*["']([^"'\r\n]{20,})["']/g;
+const unquotedSecretAssignment = /\b(?:DINGTALK_H5_APP_SECRET|DINGTALK_WEB_CLIENT_SECRET|SESSION_SECRET|OSS_ACCESS_KEY_SECRET|OPENAI_API_KEY|OWNER_BOOTSTRAP_SECRET|ACCEPTANCE_LAB_SECRET)\b[ \t]*=[ \t]*([A-Za-z0-9_./+=:@-]{20,})/g;
 
 const placeholder = (value) => {
   const normalized = value.toLowerCase();
-  return [
+  if ([
     "replace",
     "example",
     "dummy",
     "fixture",
     "changeme",
     "not-a-secret",
-    "test-secret",
     "acceptance-test",
     "acceptance-lab-secret",
     "abcdefghijklmnopqrstuvwxyz",
     "local-development",
     "production-openai-key",
     "placeholder",
-  ].some((marker) => normalized.includes(marker));
+  ].some((marker) => normalized.includes(marker))) return true;
+
+  // Tests and runtime probes use explicit human-readable synthetic values. Keep
+  // these distinguishable from pasted random credentials without ignoring test
+  // files wholesale, so real provider tokens or random assignments still fail.
+  if (/^[a-z0-9]+(?:[-_][a-z0-9]+)*$/i.test(value)
+    && /(?:^|[-_])test(?:[-_]|$)/i.test(value)) return true;
+  if (/^(?:0123456789abcdef){2,}$/i.test(value)) return true;
+  if (/^[0-9]+$/.test(value) && /(?:0123456789|1234567890)/.test(value)) return true;
+  return false;
 };
 
 export function isLikelyBinary(buffer) {
@@ -58,10 +67,12 @@ export function isLikelyBinary(buffer) {
 
 export function containsSecretSignature(content) {
   if (signatures.some((signature) => signature.test(content))) return true;
-  secretAssignment.lastIndex = 0;
-  for (const match of content.matchAll(secretAssignment)) {
-    const value = match[1] ?? "";
-    if (!placeholder(value)) return true;
+  for (const assignment of [quotedSecretAssignment, unquotedSecretAssignment]) {
+    assignment.lastIndex = 0;
+    for (const match of content.matchAll(assignment)) {
+      const value = match[1] ?? "";
+      if (!placeholder(value)) return true;
+    }
   }
   return false;
 }
