@@ -88,6 +88,46 @@ describe("AttachmentService failure consistency", () => {
     expect(pool.query).not.toHaveBeenCalled();
   });
 
+  it("caps one actor at the existing maximum business attachment batch while serializing quota checks", async () => {
+    const operations: string[] = [];
+    const client = {
+      query: vi.fn(async (sql: string) => {
+        operations.push(sql);
+        if (sql.includes("count(*)::int active_count")) {
+          return { rowCount: 1, rows: [{ active_count: 50 }] };
+        }
+        return { rowCount: 1, rows: [] };
+      }),
+      release: vi.fn(),
+    };
+    const pool = { connect: vi.fn(async () => client), query: vi.fn() };
+    const storage: ObjectStorage = {
+      ...emptyStorage(),
+      createExactSizeNonOverwritableUploadGrant: vi.fn(async () => ({
+        method: "POST",
+        uploadUrl: "https://oss.test/",
+        fields: { key: "private/proof.pdf" },
+        expiresAt: "2030-01-02T03:04:05.000Z",
+      } as never)),
+    };
+    const service = new AttachmentService(pool as never, storage, {
+      prefix: "private",
+      ttlSeconds: 300,
+      maxUploadBytes: 100,
+    });
+
+    await expect(service.createUploadIntent(actor, input)).rejects.toMatchObject({
+      code: "RATE_LIMITED",
+      statusCode: 429,
+    });
+    expect(operations[0]).toBe("BEGIN");
+    expect(operations[1]).toContain("pg_advisory_xact_lock");
+    expect(operations[2]).toContain("count(*)::int active_count");
+    expect(operations).not.toContain(expect.stringContaining("INSERT INTO attachments"));
+    expect(operations.at(-1)).toBe("ROLLBACK");
+    expect(client.release).toHaveBeenCalledOnce();
+  });
+
   it("returns the storage grant expiry and POST fields without recomputing them", async () => {
     const { pool } = poolWithOwnedRow();
     const storage: ObjectStorage = {
@@ -123,6 +163,37 @@ describe("AttachmentService failure consistency", () => {
       statusCode: 503,
     });
     expect(pool.connect).not.toHaveBeenCalled();
+  });
+
+  it("rejects a fifth concurrent finalize for the same actor before another storage read", async () => {
+    let releaseHeads!: () => void;
+    const headGate = new Promise<void>((resolve) => { releaseHeads = resolve; });
+    const { pool } = poolWithOwnedRow();
+    const storage: ObjectStorage = {
+      ...emptyStorage(),
+      head: vi.fn(async () => {
+        await headGate;
+        return { sizeBytes: pdfBytes.length, mimeType: "application/pdf", sha256: pdfSha256 };
+      }),
+    };
+    const service = new AttachmentService(pool as never, storage, {
+      prefix: "private",
+      ttlSeconds: 300,
+      maxUploadBytes: 100,
+    });
+
+    const firstFour = Array.from({ length: 4 }, (_, index) =>
+      service.finalize(actor, `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`));
+    await vi.waitFor(() => expect(storage.head).toHaveBeenCalledTimes(4));
+
+    await expect(service.finalize(
+      actor,
+      "00000000-0000-4000-8000-000000000005",
+    )).rejects.toMatchObject({ code: "RATE_LIMITED", statusCode: 429 });
+    expect(storage.head).toHaveBeenCalledTimes(4);
+
+    releaseHeads();
+    await expect(Promise.all(firstFour)).resolves.toHaveLength(4);
   });
 
   it("maps a temporary HEAD failure to 503 without rejecting the attachment", async () => {
