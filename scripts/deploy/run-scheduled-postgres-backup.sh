@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
+source "$(dirname "$0")/backup-runtime.sh"
 umask 077
 
 backup_root="$DX_ROOT/backups/postgres/daily"
@@ -44,9 +45,13 @@ release_lock="$(assert_safe_path "$DX_ROOT/locks/release.lock")"
 exec 7>"$release_lock"
 flock -w 1800 7 || die 'release lock remained busy for 30 minutes'
 
-active_sha="$(current_generation_sha)" || die 'active generation is unavailable'
-assert_active_release "$active_sha"
-active_api="$DX_ROOT/releases/$active_sha"
+resolve_backup_runtime
+if [[ "$active_mode" == source ]]; then
+  [[ "$(git -C "$active_api" rev-parse HEAD)" == "$active_sha" ]] ||
+    die 'source checkout does not match deployed release'
+  [[ -z "$(git -C "$active_api" status --porcelain)" ]] ||
+    die 'source checkout is dirty; scheduled backup refuses unverified scripts'
+fi
 
 manifest="$active_api/apps/api/src/platform/migration-manifest.json"
 DATABASE_URL="$DATABASE_URL" node_exec   "$active_api/scripts/deploy/database-state.mjs" verify-current "$manifest"
@@ -71,8 +76,7 @@ DX_REWORK_BACKUP_DIR="$backup_root" GIT_SHA="$active_sha" CURRENT_DATABASE_STATE
 latest="$(
   find "$backup_root" -mindepth 2 -maxdepth 2 -type f -name COMPLETE -printf '%T@ %h\n' |
     sort -nr |
-    head -1 |
-    cut -d' ' -f2-
+    awk 'NR==1 { sub(/^[^ ]+ /,""); first=$0 } END { if (first!="") print first }'
 )"
 [[ -n "$latest" && -d "$latest" && ! -L "$latest" ]] ||
   die 'scheduled backup did not produce a complete backup set'
