@@ -58,6 +58,7 @@ const create = (
   isRoot = false,
 ) => {
   const service = {
+    nodeHistory: vi.fn(async () => ({ item: caseSummary })),
     listCases: vi.fn(async () => ({ items: [caseSummary] })),
     listFactories: vi.fn(async () => ({
       items: [{
@@ -152,6 +153,17 @@ const create = (
 };
 
 describe("sourcing PR03 routes", () => {
+  it("reads historical nodes through the existing read permission without granting a write endpoint", async () => {
+    const allowed = create(["sourcing:view"], ["order_merchandiser"]);
+    const url = `/sourcing/cases/${caseSummary.sourcingCaseId}/history/ie_quote?entryId=${caseSummary.sourcingCaseId}`;
+    expect((await allowed.app.inject({ method: "GET", url, headers: { cookie: "dx_rework_session=trusted" } })).statusCode).toBe(200);
+    expect(allowed.service.nodeHistory).toHaveBeenCalledWith(expect.objectContaining({ authorizationCapability: "sourcing:view" }), caseSummary.sourcingCaseId, "ie_quote", caseSummary.sourcingCaseId);
+    expect((await allowed.app.inject({ method: "POST", url, headers: { cookie: "dx_rework_session=trusted" } })).statusCode).toBe(404);
+    const forbidden = create([], ["order_merchandiser"]);
+    expect((await forbidden.app.inject({ method: "GET", url, headers: { cookie: "dx_rework_session=trusted" } })).statusCode).toBe(403);
+    expect(forbidden.service.nodeHistory).not.toHaveBeenCalled();
+  });
+
   it("rejects missing images and excessive new quote precision before any service write", async () => {
     const { app, service } = create([], [], true);
     const valid = { gender: "男装", styleName: "测试短裤", estimatedCutPieceSendDate: "2026-09-10", deliveryDate: "2026-09-15",

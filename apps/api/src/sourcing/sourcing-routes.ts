@@ -6,6 +6,7 @@ import { registerProductionReportingRoutes } from "./production-reporting-routes
 import type { ProductionReportingService } from "./production-reporting-service.js";
 import {
   CreateSourcingCaseSchema,
+  SourcingHistoryNodeSchema,
   ReviseSourcingStylesSchema,
   DispatchSourcingOrderSchema,
   SourcingDispatchStateSchema,
@@ -297,6 +298,16 @@ export function registerSourcingRoutes(
       await readActor(request),
       caseId(request.params.sourcingCaseId),
     ),
+  );
+
+  app.get<{ Params: { sourcingCaseId: string; node: string }; Querystring: { entryId?: string } }>(
+    "/sourcing/cases/:sourcingCaseId/history/:node",
+    async (request) => {
+      const node = SourcingHistoryNodeSchema.safeParse(request.params.node);
+      if (!node.success) return validationError("历史节点无效");
+      return dependencies.service.nodeHistory(await readActor(request), caseId(request.params.sourcingCaseId),
+        node.data, typeof request.query.entryId === "string" ? request.query.entryId : undefined);
+    },
   );
 
   app.get<{ Querystring: { q?: string } }>("/sourcing/styles", async (request) =>

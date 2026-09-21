@@ -576,3 +576,18 @@ export type SourcingAttachmentListResponse = z.infer<typeof SourcingAttachmentLi
 export type SupplementSourcingImages = z.infer<typeof SupplementSourcingImagesSchema>;
 export type SourcingTimelineEntry = z.infer<typeof SourcingTimelineEntrySchema>;
 export type SourcingTimelineResponse = z.infer<typeof SourcingTimelineResponseSchema>;
+
+// Historical node pages are read-only projections of persisted business facts.
+export const SourcingHistoryNodeSchema = z.enum(["created", "ie_quote", "management", "owner", "finance"]);
+export const SourcingNodeHistorySchema = z.object({
+  item: SourcingCaseSummarySchema,
+  node: SourcingHistoryNodeSchema,
+  entry: SourcingTimelineEntrySchema,
+  versions: z.array(SourcingTimelineEntrySchema),
+  relatedEntries: z.array(SourcingTimelineEntrySchema),
+  attachments: SourcingAttachmentListResponseSchema.shape.items,
+  notices: z.array(z.string()),
+  contractReference: z.string().nullable(),
+}).strict();
+export type SourcingHistoryNode = z.infer<typeof SourcingHistoryNodeSchema>;
+export type SourcingNodeHistory = z.infer<typeof SourcingNodeHistorySchema>;

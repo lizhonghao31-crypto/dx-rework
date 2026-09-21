@@ -1040,6 +1040,34 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     );
     expect(financeMatched.value).toMatchObject({ status: "closed", version: 9 });
 
+    // Historical pages must survive rejection/repricing, transfer and later finance closure.
+    const historyCaseId = created.value.sourcingCaseId;
+    const creationHistory = await service.nodeHistory(readerActor(), historyCaseId, "created");
+    expect(creationHistory.item.ieQuote).toBeNull();
+    expect(creationHistory.item.decision).toBeNull();
+    expect(creationHistory.item.processes).toEqual([]);
+    expect(creationHistory.attachments.map(image => image.attachmentId)).toContain(evidenceId);
+    const quoteHistory = await service.nodeHistory(readerActor(), historyCaseId, "ie_quote");
+    expect(quoteHistory.item.ieQuote?.totalAmount).toBe("1481.46");
+    expect(quoteHistory.item.decision).toBeNull();
+    const firstHistory = await service.nodeHistory(readerActor(), historyCaseId, "management", firstDecision.value.decision!.sourcingDecisionId);
+    expect(firstHistory.item.decision?.totalAmount).toBe("1507.00");
+    expect(firstHistory.item.ownerDecision).toBeNull();
+    expect(firstHistory.versions).toHaveLength(3);
+    expect(firstHistory.relatedEntries.filter(record => record.kind === "factory_change_request")).toHaveLength(2);
+    expect(firstHistory.relatedEntries).toEqual(expect.arrayContaining([expect.objectContaining({kind: "factory_change_verification", decision: "rejected"})]));
+    const rejectedHistory = await service.nodeHistory(readerActor(), historyCaseId, "owner", rejected.value.ownerDecision!.sourcingOwnerDecisionId);
+    expect(rejectedHistory.item.ownerDecision?.decision).toBe("rejected");
+    expect(rejectedHistory.item.decision?.totalAmount).toBe("1507.00");
+    expect(rejectedHistory.item.approvalSnapshot).toBeNull();
+    const financeHistory = await service.nodeHistory(readerActor(), historyCaseId, "finance");
+    expect(financeHistory.entry.result).toBe("match");
+    expect(financeHistory.item.decision?.supplierId).toBe(replacementFactoryId);
+    expect(await service.nodeHistory(unrelatedReaderActor(), historyCaseId, "ie_quote")).not.toHaveProperty("item.daxingUnitPrice");
+    await expect(service.nodeHistory({ ...readerActor(), authorizationCapabilities: [] }, historyCaseId, "ie_quote")).rejects.toMatchObject({ statusCode: 403 });
+    await expect(service.nodeHistory(readerActor(), historyCaseId, "owner", randomUUID())).rejects.toMatchObject({ statusCode: 404 });
+
+
     expect((await database.query(
       "SELECT 1 FROM sourcing_decisions WHERE sourcing_case_id=$1",
       [created.value.sourcingCaseId],
@@ -2634,6 +2662,22 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const result = await service.recordManagementDecision(managerActor(),id,{...input,decisionReason:"第一款增加工序"},randomUUID());
     expect(result.value.decision).toMatchObject({totalAmount:"180.10",decisionReason:"第一款增加工序"});
     expect(result.value.status).toBe("pending_owner_approval");
+  });
+
+  it("keeps subsequently supplemented photos out of the earlier node page", async () => {
+    const initialImage = await readyCuttingSheet(merchandiserId);
+    const created = await service.createCase(merchandiserActor(), {
+      gender: "女装", styleName: "历史图片", estimatedCutPieceSendDate: "2026-10-01", deliveryDate: "2026-10-10",
+      lineItems: [{styleNo: "HISTORY-PHOTOS", color: "蓝", quantity: 20}], daxingUnitPrice: "7.00", attachmentIds: [initialImage],
+    }, randomUUID());
+    const id = created.value.sourcingCaseId;
+    await expect(service.nodeHistory(readerActor(), id, "ie_quote")).rejects.toMatchObject({ statusCode: 404 });
+    await service.quoteIePrice(ieActor(), id, {linePrices: [{position: 1, unitPrice: "8.50"}]}, randomUUID());
+    const laterImage = await readyCuttingSheet(merchandiserId);
+    await service.supplementImages({...merchandiserActor(), actorRoles: ["root_superuser"], authorizationCapability: "tools:user"}, id, { attachmentIds: [laterImage] }, randomUUID());
+    expect((await service.listAttachments(readerActor(), id)).items).toHaveLength(2);
+    expect((await service.nodeHistory(readerActor(), id, "created")).attachments.map(image => image.attachmentId)).toEqual([initialImage]);
+    expect((await service.nodeHistory(readerActor(), id, "ie_quote")).attachments.map(image => image.attachmentId)).toEqual([initialImage]);
   });
 
 });
