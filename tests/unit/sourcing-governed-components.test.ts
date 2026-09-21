@@ -39,4 +39,20 @@ describe("governed sourcing responsive facts", () => {
     expect(html).not.toContain("合计");
     expect(html).not.toContain("¥0.03");
   });
+  it("keeps secondary facts available on mobile without replacing desktop values or totals", () => {
+    const html = renderToStaticMarkup(createElement(ResponsiveFactsTable<Line>, {
+      caption: "款式明细", mobileLayout: "compact", rows, rowKey: row => row.style,
+      columns: [{ ...columns[0]!, mobileRender: row => createElement("details", null,
+        createElement("summary", null, row.style), "代用：ALT-001") }, ...columns.slice(1)],
+      totals: { style: "合计", quantity: "2 件", amount: "¥0.03" },
+    }));
+    const desktop = html.slice(html.indexOf("<table"), html.indexOf("</table>"));
+    const mobile = html.slice(html.indexOf('class="dx-facts-cards"'));
+    expect(desktop).toContain("DX-long-style");
+    expect(desktop).not.toContain("<details");
+    expect(mobile).toContain("<details><summary>DX-long-style</summary>代用：ALT-001</details>");
+    expect(mobile).toContain('class="dx-facts-cards__total-label"');
+    expect(mobile).toContain("¥0.03");
+    expect(render(false)).not.toContain("dx-responsive-facts--compact");
+  });
 });

@@ -348,7 +348,7 @@ function SourcingOrderCard({
     <a className="sourcing-order-card__main" href={detailHref(item, returnTo)}>
       <div className="sourcing-order-card__heading">
         <div>
-          <strong>{item.lineItems[0]?.styleNo ?? item.styleNo}{item.lineItems.length > 1 ? ` 等 ${item.lineItems.length} 行` : ""}</strong>
+          <strong>{item.lineItems[0]?.styleNo ?? item.styleNo}{item.lineItems.length > 1 ? <span className="sourcing-order-card__line-count"> 等 {item.lineItems.length} 行</span> : null}</strong>
           <small>{item.gender ?? "历史未维护"} · {item.styleName ?? "历史未维护"}</small>
         </div>
         <StatusBadge tone={item.status === "closed" ? "success" : "info"}>
@@ -357,21 +357,21 @@ function SourcingOrderCard({
       </div>
       <ul className="sourcing-order-card__lines" aria-label="款色明细">
         {item.lineItems.slice(0, 3).map((line) => <li key={line.position}>
-          <span>{line.styleNo}{line.alternateStyleNo ? ` / ${line.alternateStyleNo}` : ""}</span>
+          <span>{line.styleNo}{line.alternateStyleNo && line.alternateStyleNo !== line.styleNo ? ` / ${line.alternateStyleNo}` : ""}</span>
           <span>{line.color ?? "历史未维护颜色"}</span>
           <span>{formatBusinessDecimal(line.quantity)} 件</span>
           <span>{sourcingLinePriceLabel(item, line.position)}</span>
         </li>)}
         {item.lineItems.length > 3 ? <li><span>另有 {item.lineItems.length - 3} 行</span></li> : null}
       </ul>
-      <KeyFacts className="sourcing-list-facts">
-        <div><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
+      <dl className="sourcing-list-facts">
         <div><dt>订单数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)}</dd></div>
         {"daxingUnitPrice" in item ? <div><dt>预算价</dt><dd>{formatBusinessCurrency(item.daxingUnitPrice ?? "")}</dd></div> : null}
         <div><dt>IE 单价</dt><dd>{sourcingPriceSummary(item.ieQuote)}</dd></div>
         <div><dt>生产单价</dt><dd>{sourcingPriceSummary(item.decision)}</dd></div>
-        <div><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
-      </KeyFacts>
+        <div className="sourcing-list-facts__factory"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
+        <div className="sourcing-list-facts__date"><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
+      </dl>
       <small className="sourcing-order-card__activity">更新于 {formatDateTime(item.updatedAt)}</small>
     </a>
     {canDelete ? <button
@@ -1476,7 +1476,6 @@ function OrderDetailPage({
         action={todoBackPath ? "返回我的待办" : "返回订单列表"}
         actionHref={detailReturnPath ?? (item.status === "closed" ? "/ui/sourcing/history" : "/ui/sourcing/pending")}
       />
-      <p className="sourcing-order-meta">预计裁片发出：{item.estimatedCutPieceSendDate ?? "历史未维护"}</p>
       {!item.decision && item.processes.length > 0 ? <p className="sourcing-order-meta">工艺及承包范围：{item.processes.join("、")}</p> : null}
       <div className="sourcing-detail-layout">
         <KeyFacts className="sourcing-key-facts" aria-label="外发定价选厂订单核心信息">
@@ -1485,7 +1484,8 @@ function OrderDetailPage({
           <div><dt>生产总额</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.totalAmount) : "—"}</dd></div>
           <div><dt>IE 总额</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.totalAmount) : "—"}</dd></div>
           <div><dt>较 IE 总额变化</dt><dd className={ownerTotalDelta?.startsWith("-") ? "sourcing-price-lower" : undefined}>{ownerTotalDelta ?? "—"}</dd></div>
-          <div><dt>要求交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
+          <div className="sourcing-key-facts__date"><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
+          <div className="sourcing-key-facts__date"><dt>要求交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
         </KeyFacts>
         <div className="sourcing-supporting-overview">
           <section className="sourcing-photo-section" aria-label="订单图片">
@@ -1541,10 +1541,25 @@ function OrderDetailPage({
           {item.decision.decisionReason ? <p>生产管理说明：{item.decision.decisionReason}</p> : null}
           {selectedNode === "owner" && selectedState === "current" ? <p>请核对价格、加工厂及交期，确认后审批。</p> : null}
         </DecisionSummary> : null}
-        <ResponsiveFactsTable caption="款式明细" rows={item.lineItems} rowKey={line => line.position}
+        <ResponsiveFactsTable caption="款式明细" mobileLayout="compact" rows={item.lineItems} rowKey={line => line.position}
           totals={{ style: "合计", quantity: `${formatBusinessDecimal(item.orderQuantity)} 件`, amount: item.decision ? formatBusinessCurrency(item.decision.totalAmount) : "—" }}
           columns={[
-            { key: "style", label: "款号", mobileHeading: true, render: line => <>{line.styleNo || "—"}{line.alternateStyleNo ? <small>代用：{line.alternateStyleNo}</small> : null}{line.externalUnitPrice && !sourcingLinePricing(item.ieQuote, line.position, item.lineItems.length) && !sourcingLinePricing(item.decision, line.position, item.lineItems.length) ? <small>原登记加工价：{historicalSourcingPrice(line.externalUnitPrice)}</small> : null}</> },
+            {
+              key: "style", label: "款号", mobileHeading: true,
+              mobileRender: line => {
+                const alternate = line.alternateStyleNo && line.alternateStyleNo !== line.styleNo ? line.alternateStyleNo : null;
+                const historical = line.externalUnitPrice
+                  && !sourcingLinePricing(item.ieQuote, line.position, item.lineItems.length)
+                  && !sourcingLinePricing(item.decision, line.position, item.lineItems.length)
+                  ? line.externalUnitPrice : null;
+                return <>{line.styleNo || "—"}{alternate || historical ? <details className="sourcing-style-secondary">
+                  <summary>补充信息</summary>
+                  {alternate ? <small>代用：{alternate}</small> : null}
+                  {historical ? <small>原登记加工价：{historicalSourcingPrice(historical)}</small> : null}
+                </details> : null}</>;
+              },
+              render: line => <>{line.styleNo || "—"}{line.alternateStyleNo && line.alternateStyleNo !== line.styleNo ? <small>代用：{line.alternateStyleNo}</small> : null}{line.externalUnitPrice && !sourcingLinePricing(item.ieQuote, line.position, item.lineItems.length) && !sourcingLinePricing(item.decision, line.position, item.lineItems.length) ? <small>原登记加工价：{historicalSourcingPrice(line.externalUnitPrice)}</small> : null}</>,
+            },
             { key: "color", label: "颜色", mobileHeading: true, render: line => line.color ?? "历史未维护" },
             { key: "quantity", label: "数量", render: line => `${formatBusinessDecimal(line.quantity)} 件` },
             ...("daxingUnitPrice" in item ? [{ key: "budget", label: "预算价", render: () => item.daxingUnitPrice ? formatBusinessCurrency(item.daxingUnitPrice) : "历史未维护" }] : []),

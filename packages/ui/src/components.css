@@ -113,3 +113,19 @@
 }
 
 [data-dx-ui="governed"] .dx-decision-summary__icon { width: 28px; height: 32px; color: var(--dx-v2-color-primary); }
+
+/* Opt-in compact cards: headings stay readable; whole metrics wrap as units. */
+@media (max-width: 800px) {
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card { padding: 10px; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card dl { display: flex; flex-wrap: wrap; gap: 8px 4px; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card dl > div { flex: 1 0 auto; min-width: 48px; max-width: 100%; text-align: center; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card dt { font-size: 12px; line-height: 1.5; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card dd { margin: 2px 0 0; font-size: 16px; line-height: 1.4; white-space: nowrap; overflow-wrap: normal; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card dl > .dx-facts-card__heading { flex: 1 0 100%; text-align: left; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card__heading dd { white-space: normal; overflow-wrap: anywhere; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card__heading + .dx-facts-card__heading { margin-top: -6px; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card__heading + .dx-facts-card__heading dd { font-size: 14px; color: var(--dx-governed-muted); }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-cards__totals { padding: 10px; align-items: center; gap: 8px; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-cards__total-label dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-cards__totals dd { white-space: nowrap; font-size: 16px; }
+}

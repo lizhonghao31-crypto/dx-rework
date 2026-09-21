@@ -1,22 +1,22 @@
 /* Only migrated sourcing pages use these surfaces; existing module styles stay scoped out. */
 [data-dx-ui="governed"].sourcing-governed { min-width: 0; color: var(--dx-v2-color-text); }
-[data-dx-ui="governed"] .sourcing-workspace { min-width: 0; gap: 16px; }
+[data-dx-ui="governed"] .sourcing-workspace:not(:has(.sourcing-order-list)) { min-width: 0; gap: 16px; }
 [data-dx-ui="governed"] .sourcing-detail-layout { display: grid; gap: 20px; min-width: 0; padding: 18px; border: 1px solid #dce5ef; border-radius: 12px; background: #f9fbfe; }
 [data-dx-ui="governed"] .sourcing-order-detail .page-heading h1 { font-size: 26px; line-height: 1.3; }
 [data-dx-ui="governed"] .sourcing-order-detail .page-heading { margin-bottom: 0; }
-[data-dx-ui="governed"] .sourcing-key-facts { grid-template-columns: 1.3fr repeat(5, minmax(0, 1fr)); }
+[data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts { grid-template-columns: 1.2fr repeat(4, minmax(0, 1fr)) repeat(2, minmax(108px, 1fr)); gap: 8px; padding: 14px 10px; }
 [data-dx-ui="governed"] .sourcing-price-lower { color: #078337; }
 [data-dx-ui="governed"] .sourcing-node-workspace { display: grid; min-width: 0; gap: 14px; }
 [data-dx-ui="governed"] .sourcing-node-workspace:empty { display: none; }
-[data-dx-ui="governed"] :is(.dx-surface, .sourcing-order-card, .sourcing-create-card) { background: #fff; border: 1px solid var(--dx-governed-border); box-shadow: none; border-radius: 10px; }
+[data-dx-ui="governed"] :is(.sourcing-order-detail, .sourcing-create-card) :is(.dx-surface), [data-dx-ui="governed"] .sourcing-create-card { background: #fff; border: 1px solid var(--dx-governed-border); box-shadow: none; border-radius: 10px; }
 [data-dx-ui="governed"] .sourcing-node-workspace .rework-detail-node-preview { padding: 16px; }
 [data-dx-ui="governed"] .sourcing-node-workspace h2 { margin: 0 0 8px; font-size: 16px; }
 [data-dx-ui="governed"] .sourcing-node-workspace p { font-size: 14px; line-height: 1.7; }
 [data-dx-ui="governed"] .sourcing-supporting-overview { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 24px; align-items: start; }
 [data-dx-ui="governed"] :is(.sourcing-photo-section, .sourcing-workflow-section) { min-width: 0; }
-[data-dx-ui="governed"] .sourcing-supporting-overview .rework-detail-panel-title { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; margin: 0 0 8px; }
+[data-dx-ui="governed"] .sourcing-supporting-overview .rework-detail-panel-title { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; min-height: 32px; margin: 0 0 8px; }
 [data-dx-ui="governed"] .sourcing-supporting-overview h2 { margin: 0; font-size: 16px; }
-[data-dx-ui="governed"] .sourcing-supporting-overview .dx-badge { min-height: 20px; padding: 0; background: transparent; color: var(--dx-governed-muted); }
+[data-dx-ui="governed"] .sourcing-supporting-overview .dx-badge { margin-left: auto; min-height: 20px; padding: 0; background: transparent; color: var(--dx-governed-muted); }
 [data-dx-ui="governed"] .sourcing-photo { padding: 2px; border: 1px solid var(--dx-governed-border); border-radius: 6px; background: #f0f4f8; cursor: pointer; }
 [data-dx-ui="governed"] .sourcing-photo__filename { display: block; max-width: 76px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 10px; color: var(--dx-governed-muted); }
 [data-dx-ui="governed"] .sourcing-supporting-overview .rework-detail-mobile-panel-toggle { display: none; }
@@ -26,19 +26,14 @@
 [data-dx-ui="governed"] .dx-action-bar.sourcing-owner-actions .sourcing-owner-reject { color: var(--dx-v2-color-primary); border: 1px solid #cbdaf0; background: #fff; }
 [data-dx-ui="governed"] .dx-action-bar.sourcing-owner-actions .sourcing-owner-reject:hover:not(:disabled) { background: #edf3ff; }
 [data-dx-ui="governed"] .sourcing-create-card { padding: 18px; gap: 16px; }
-[data-dx-ui="governed"] .sourcing-order-card { padding: 14px 16px; }
-[data-dx-ui="governed"] .sourcing-order-card dl > div { box-shadow: none; background: transparent; }
 [data-dx-ui="governed"] .sourcing-mobile-navigation { padding: 4px; border: 1px solid var(--dx-governed-border); border-radius: 8px; background: #fff; }
 [data-dx-ui="governed"] .sourcing-mobile-navigation a { background: transparent; }
 [data-dx-ui="governed"] .sourcing-mobile-navigation a.is-active { background: #e5eeff; color: var(--dx-v2-color-primary); }
 @media (max-width: 1100px) and (min-width: 801px) {
-  [data-dx-ui="governed"] .sourcing-key-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  [data-dx-ui="governed"] .sourcing-supporting-overview { grid-template-columns: minmax(0, 1fr); }
+  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (max-width: 800px) {
   [data-dx-ui="governed"] .sourcing-detail-layout { gap: 18px; padding: 0; background: transparent; border: 0; }
-  [data-dx-ui="governed"] .sourcing-key-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  [data-dx-ui="governed"] .sourcing-key-facts > div:last-child { grid-column: span 2; }
   [data-dx-ui="governed"] .sourcing-order-detail .page-heading h1 { font-size: 22px; }
   [data-dx-ui="governed"] .sourcing-supporting-overview { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   [data-dx-ui="governed"] .sourcing-workspace :is(input, select, textarea) { max-width: 100%; font-size: 16px; }
@@ -52,20 +47,72 @@
   [data-dx-ui="governed"] .sourcing-order-detail:has(.dx-action-bar.sourcing-owner-actions) { padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
   [data-dx-ui="governed"] .sourcing-create-card { padding: 12px; }
 }
-[data-dx-ui="governed"] .sourcing-list-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 12px 0 0; border: 0; border-top: 1px solid var(--dx-governed-border); border-radius: 0; }
-[data-dx-ui="governed"] .sourcing-list-facts > div { padding: 0; border: 0; }
 [data-dx-ui="governed"] .sourcing-create-actions { width: 100%; margin-top: 0; }
-@media (max-width: 800px) {
-  [data-dx-ui="governed"] .sourcing-list-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  [data-dx-ui="governed"] .sourcing-list-facts > div:first-child { grid-column: 1 / -1; }
-}
 [data-dx-ui="governed"] .sourcing-price-note { margin: -8px 0 0; color: var(--dx-governed-muted); font-size: 12px; line-height: 1.6; }
 
 /* UI-01 follow-up: the approved facts and detail cells share centered alignment. */
 [data-dx-ui="governed"] .sourcing-key-facts > div { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding-inline: 8px; }
-[data-dx-ui="governed"] .sourcing-order-detail .dx-facts-table :is(th, td) { text-align: center; vertical-align: middle; }
-[data-dx-ui="governed"] .sourcing-order-detail .dx-facts-card dl > div { align-content: center; text-align: center; }
+[data-dx-ui="governed"] .sourcing-order-detail .dx-responsive-facts .dx-facts-table :is(th, td) { text-align: center; vertical-align: middle; }
 [data-dx-ui="governed"] .sourcing-order-detail .dx-facts-cards__totals > div { text-align: center; align-content: center; }
 [data-dx-ui="governed"] .sourcing-order-meta { margin: 0; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 [data-dx-ui="governed"] .sourcing-transfer-form { margin-top: 12px; padding: 14px; border: 1px solid var(--dx-governed-border); border-radius: 8px; background: #fff; }
 [data-dx-ui="governed"] .sourcing-factory-change > h2 { font-size: 16px; margin: 0 0 8px; }
+
+/* Detail-only geometry outranks the shared defaults regardless of bundle order. */
+[data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts dd { overflow-wrap: normal; }
+[data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts__date dd { white-space: nowrap; font-size: 14px; }
+[data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts__factory dd { overflow-wrap: anywhere; }
+[data-dx-ui="governed"] .sourcing-supporting-overview .rework-detail-panel-title { display: grid; grid-template-columns: auto auto minmax(0, 1fr); grid-auto-rows: minmax(32px, auto); }
+[data-dx-ui="governed"] .sourcing-supporting-overview .rework-workflow__step-count { grid-column: 2 / -1; justify-self: end; font-size: 12px; white-space: nowrap; }
+[data-dx-ui="governed"] .sourcing-photo-section .rework-detail-image-upload { display: contents; }
+[data-dx-ui="governed"] .sourcing-photo-section .rework-detail-image-upload__button { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; padding: 0 8px; border-radius: 6px; font-size: 12px; line-height: 1.4; box-shadow: none; white-space: nowrap; }
+[data-dx-ui="governed"] .sourcing-photo-section .rework-detail-image-upload > p { grid-column: 1 / -1; order: 1; margin: 0; font-size: 12px; overflow-wrap: anywhere; }
+[data-dx-ui="governed"] .sourcing-photo-section .rework-detail-panel-title > .dx-badge { grid-column: 3; justify-self: end; }
+[data-dx-ui="governed"] .sourcing-order-detail .sourcing-supporting-overview h2 { line-height: 24px; white-space: nowrap; }
+
+/* Desktop order lists keep their original dl and original workspace styles.
+   Every list override below is explicitly mobile-only. */
+@media (max-width: 800px) {
+  [data-dx-ui="governed"] .sourcing-workspace:has(.sourcing-order-list) { gap: 12px; }
+  [data-dx-ui="governed"] .sourcing-list-card { padding: 12px; }
+  [data-dx-ui="governed"] .sourcing-order-list .sourcing-order-card { padding: 0; border: 1px solid var(--dx-governed-border); border-radius: 8px; box-shadow: none; background: var(--dx-governed-surface); }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-order-card__main { padding: 12px; gap: 10px; }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-order-card__heading { flex-wrap: wrap; justify-content: flex-start; gap: 6px 8px; padding-right: 26px; }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-order-card__heading > div { display: contents; }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-order-card__heading strong { font-size: 16px; overflow-wrap: anywhere; }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-order-card__heading small { order: 1; flex-basis: 100%; font-size: 14px; line-height: 1.5; }
+  [data-dx-ui="governed"] .sourcing-order-card__line-count { display: inline-block; font-size: 12px; font-weight: 400; white-space: nowrap; }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-order-card__heading .dx-badge { white-space: normal; max-width: 100%; }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-order-card__lines { display: grid; gap: 8px; padding: 0; }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-order-card__lines li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 4px 10px; font-size: 14px; line-height: 1.5; }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-order-card__lines li > span:first-child { grid-column: 1 / -1; overflow-wrap: anywhere; color: var(--dx-v2-color-text); }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-order-card__lines li > span:nth-child(n + 3) { white-space: nowrap; overflow-wrap: normal; }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-list-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; padding: 10px 0 0; border: 0; border-top: 1px solid var(--dx-governed-border); border-radius: 0; background: transparent; }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-list-facts > div { min-width: 0; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-list-facts dt { font-size: 12px; line-height: 1.5; }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-list-facts dd { margin: 2px 0 0; font-size: 16px; line-height: 1.5; overflow: visible; overflow-wrap: normal; }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-list-facts .sourcing-list-facts__factory { grid-column: 1 / -1; grid-row: 1; flex-direction: row; align-items: baseline; gap: 10px; }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-list-facts__factory dd { overflow-wrap: anywhere; }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-list-facts .sourcing-list-facts__date { grid-column: 1 / -1; flex-direction: row; align-items: baseline; gap: 10px; }
+  [data-dx-ui="governed"] .sourcing-order-card .sourcing-list-facts__date dd { white-space: nowrap; }
+
+  [data-dx-ui="governed"] .sourcing-workspace.sourcing-order-detail { gap: 12px; }
+  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-detail-layout { gap: 14px; }
+  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; gap: 10px 12px; }
+  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts > div { padding: 0; border: 0; gap: 2px; }
+  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts dt { font-size: 12px; line-height: 1.5; }
+  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts dd { margin: 0; font-size: 16px; line-height: 1.5; }
+  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts > .sourcing-key-facts__factory { grid-column: 1 / -1; align-items: flex-start; padding-bottom: 8px; border-bottom: 1px solid var(--dx-governed-border); text-align: left; }
+  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts > .sourcing-key-facts__date { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; align-items: baseline; padding-top: 6px; border-top: 1px solid var(--dx-governed-border); }
+  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts__date dd { font-size: 14px; }
+  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-supporting-overview { gap: 8px; }
+  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-supporting-overview .rework-detail-desktop-panel-heading { display: none; }
+  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-photo-section .dx-image-strip { padding: 0; }
+  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-workflow-section .rework-detail-mobile-panel-toggle { padding: 0; min-height: 44px; margin: 0; box-shadow: none; }
+  [data-dx-ui="governed"] .sourcing-order-detail .rework-detail-mobile-panel-toggle > span { display: flex; flex-direction: row; align-items: baseline; gap: 8px; }
+  [data-dx-ui="governed"] .sourcing-order-detail .rework-detail-mobile-panel-toggle strong { font-size: 16px; }
+  [data-dx-ui="governed"] .sourcing-order-detail .rework-detail-mobile-panel-toggle small { font-size: 12px; }
+  [data-dx-ui="governed"] .sourcing-order-detail .dx-decision-summary { padding: 12px; gap: 8px; }
+  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-style-secondary { margin-top: 4px; font-weight: 400; font-size: 12px; }
+  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-style-secondary summary { cursor: pointer; color: var(--dx-v2-color-primary); }
+}
