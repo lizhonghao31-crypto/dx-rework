@@ -29,5 +29,5 @@ export function Surface({ children, className = "" }: { children: ReactNode; cla
   return <section className={`dx-surface ${className}`.trim()}>{children}</section>;
 }
 
-export { KeyFacts, Disclosure, ImageStrip, WorkflowRail, ResponsiveFactsTable, ActionBar } from "./governed.js";
+export { DecisionSummary, KeyFacts, Disclosure, ImageStrip, WorkflowRail, ResponsiveFactsTable, ActionBar } from "./governed.js";
 export type { FactsColumn } from "./governed.js";

@@ -37,7 +37,7 @@ describe("sourcing PC form and owner approval finish", () => {
       "最终审批",
       "生产管理建议由",
       "相对 IE 总额变化",
-      "老板逐款审批摘要",
+      "款式明细",
       "查看完整订单资料",
       "批准方案",
       "驳回并退回生产管理",
@@ -45,7 +45,7 @@ describe("sourcing PC form and owner approval finish", () => {
     expect(page).toContain("craftIds: crafts.map");
     expect(css).toContain("@media (min-width: 761px)");
     expect(page).toContain("subtractFixedPoint");
-    expect(page).toContain('<ResponsiveFactsTable caption="老板逐款审批摘要"');
+    expect(page).toContain('<ResponsiveFactsTable caption="款式明细"');
     expect(page).not.toContain('className="sourcing-owner-mobile-summary"');
     expect(css).toContain(".sourcing-owner-decision__desktop");
     expect(css).not.toMatch(/\.sourcing-owner-decision__desktop\s*\{\s*display:\s*none/);
