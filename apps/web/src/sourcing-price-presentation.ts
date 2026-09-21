@@ -39,7 +39,7 @@ export function sourcingPriceSummary(pricing: Readonly<{
   return historicalSourcingPrice(pricing.linePrices[0]?.unitPrice ?? pricing.unitPrice);
 }
 
-/** Read current pricing without attributing an old snapshot to a transferred factory. */
+/** Prefer authoritative lines belonging to this decision; fall back only for legacy gaps. */
 export function sourcingLinePricing(pricing: Readonly<{
   unitPrice: string;
   totalAmount: string;
@@ -47,11 +47,11 @@ export function sourcingLinePricing(pricing: Readonly<{
   linePrices: readonly Readonly<{ position: number; unitPrice: string; totalAmount: string }>[];
 }> | null, position: number, lineCount: number): { unitPrice: string; totalAmount: string | null } | null {
   if (!pricing) return null;
+  const line = pricing.linePrices.find(entry => entry.position === position);
+  if (line) return { unitPrice: line.unitPrice, totalAmount: line.totalAmount };
   if (pricing.sourceType === "factory_change") {
     return { unitPrice: pricing.unitPrice, totalAmount: lineCount === 1 ? pricing.totalAmount : null };
   }
-  const line = pricing.linePrices.find(entry => entry.position === position);
-  if (line) return { unitPrice: line.unitPrice, totalAmount: line.totalAmount };
   // A legacy single-line order can use the original order-level facts unambiguously.
   return lineCount === 1 ? { unitPrice: pricing.unitPrice, totalAmount: pricing.totalAmount } : null;
 }
