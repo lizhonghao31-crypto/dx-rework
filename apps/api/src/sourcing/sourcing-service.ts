@@ -1753,7 +1753,9 @@ export class SourcingService {
     this.assertActor(actor, CASE_CREATE_CAPABILITY, CASE_CREATE_ROLE);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
     const parsedPrice = SourcingNewUnitPriceSchema.safeParse(input.daxingUnitPrice);
-    if (!parsedPrice.success) fail(parsedPrice.error.issues[0]?.message ?? "预算价无效");
+    if (!parsedPrice.success || parsedPrice.data === undefined) {
+      fail(parsedPrice.success ? "预算价无效" : parsedPrice.error.issues[0]?.message ?? "预算价无效");
+    }
     const nextPrice = normalizeSourcingUnitPrice(parsedPrice.data);
     const reason = normalizeText(input.reason, "更正原因", 500);
     const scope = "sourcing.budget_price.correct";
@@ -1792,16 +1794,16 @@ export class SourcingService {
            FOR UPDATE OF source_case`,
           [sourcingCaseId],
         );
-        const source = current.rows[0];
-        if (!source) fail("报价选厂询价不存在", 404, "NOT_FOUND");
+        const source = current.rows[0] ?? fail("报价选厂询价不存在", 404, "NOT_FOUND");
         if (!actor.actorRoles.includes(ROOT_ROLE) && source.created_by !== actor.actorId) {
           fail("只能更正本人负责订单的预算价", 403, "FORBIDDEN");
         }
         if (source.approved || !["pending_ie_quote","pending_management_decision","pending_owner_approval"].includes(source.status)) {
           fail("老板已批准，订单数字已锁定", 409, "INVALID_STATE_TRANSITION");
         }
-        if (!source.current_price) fail("该订单没有可更正的预算价", 409, "INVALID_STATE_TRANSITION");
-        if (normalizeSourcingUnitPrice(source.current_price) === nextPrice) fail("新预算价与当前预算价相同");
+        const currentPrice = source.current_price
+          ?? fail("该订单没有可更正的预算价", 409, "INVALID_STATE_TRANSITION");
+        if (normalizeSourcingUnitPrice(currentPrice) === nextPrice) fail("新预算价与当前预算价相同");
         const correctionVersion = Number(source.correction_version) + 1;
         const eventId = await this.events.append(client, actor, {
           action: "sourcing.budget_price.correct",
@@ -1816,7 +1818,7 @@ export class SourcingService {
              correction_id,sourcing_case_id,correction_version,old_unit_price,new_unit_price,
              reason,corrected_by,operation_event_id,request_id
            ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          [randomUUID(),sourcingCaseId,correctionVersion,source.current_price,nextPrice,reason,actor.actorId,eventId,actor.requestId],
+          [randomUUID(),sourcingCaseId,correctionVersion,currentPrice,nextPrice,reason,actor.actorId,eventId,actor.requestId],
         );
         return { statusCode: 200, response: await this.readCase(client, sourcingCaseId, actor) };
       });
