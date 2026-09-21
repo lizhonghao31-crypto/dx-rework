@@ -51,7 +51,10 @@ export function SourcingNodeHistoryPage({ sourcingCaseId, node, returnTo }: {
     if (version) query.set("entryId", version);
     return `${pageUrl(`ui/sourcing/orders/${sourcingCaseId}`)}?${query}`;
   };
-  if (!history) return <div className="sourcing-workspace sourcing-order-detail"><p role="status">{error || "正在加载历史页面…"}</p><a className="dx-button dx-button--primary" href={href()}>返回当前节点</a></div>;
+  if (!history) return <div className="sourcing-workspace sourcing-order-detail" aria-busy={!error}>
+    <p role="status">{error || "正在加载历史页面…"}</p>
+    {error ? <div className="sourcing-history-navigation"><a className="dx-button dx-button--primary" href={href()}>返回当前节点</a></div> : null}
+  </div>;
   return <SourcingNodeHistoryView history={history} currentHref={href()} nodeHref={href}
     expanded={expanded} onToggle={() => setExpanded(value => !value)} onImage={setSelectedImage}>
     {selectedImage ? <div className="rework-image-modal"><section className="rework-image-modal__content" role="dialog" aria-modal="true" aria-label={selectedImage.filename}><div className="rework-image-modal__heading"><strong>{selectedImage.filename}</strong><button type="button" onClick={() => setSelectedImage(null)}>关闭</button></div><ImageViewer src={pictureUrl(selectedImage.attachmentId)} alt={selectedImage.filename} /></section></div> : null}
