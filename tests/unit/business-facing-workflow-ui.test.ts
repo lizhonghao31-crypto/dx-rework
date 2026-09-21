@@ -185,7 +185,7 @@ describe("business-facing workflow UI", () => {
     expect(detail).toContain("rework-detail-target-layout");
     expect(detail).toContain("rework-detail-overview-grid");
     expect(detail).toContain("rework-workflow__mobile-rail");
-    expect(detail).toContain("rework-workflow__stage");
+    expect(detail).toContain('<WorkflowRail className="rework-workflow__desktop-grid"');
     expect(detail).toContain("<ProcessConfigurationForm");
     expect(detail).toContain("<WorkReportingForm");
     expect(detail).toContain("<ResponsibilityDeterminationPanel");

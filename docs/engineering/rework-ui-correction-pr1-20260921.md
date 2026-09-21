@@ -7,7 +7,7 @@
 - base SHA: 4af4f9d838675a98d60b1f1134af4ee2af830f0f（含 #550 预算价修复）
 - working branch: fix/rework-ui-correction-pr1
 - task scope: 撤回返工列表样式覆盖，详情沿用已验收外发流程视觉并删除节点冗余说明。
-- allowed files: rework-detail-page.tsx、rework-governed.css、reporting/rework-query-page.tsx、reporting/basic-rework-board.tsx、两项现有页面契约测试、本记录与 UI Golden Source。
+- allowed files: rework-detail-page.tsx、rework-governed.css、reporting/rework-query-page.tsx、reporting/basic-rework-board.tsx、三项现有页面契约测试、本记录与 UI Golden Source。
 - forbidden files: API、数据库、合同及金额计算、权限与状态机、共享 UI 样式、其他模块、创建页及各业务办理表单、历史节点数据实现。
 - gate class: FULL（用户明确要求）
 
@@ -28,3 +28,5 @@
 ## 下一 PR 的独立范围
 
 历史节点完整原页面只读还原、工人工序明细、IE 核对内容、数字格式及重复标题在 PR2 修复，本 PR 不宣称解决这些问题。停止向其他模块扩展。
+
+- 首轮 Full Gate：1743 项通过，1 项旧测试仍要求已删除的阶段折叠结构；已将该断言改为使用 WorkflowRail，保留原办理组件检查，业务代码没有追加修改。
