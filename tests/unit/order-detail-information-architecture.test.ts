@@ -77,18 +77,18 @@ describe("order detail information architecture", () => {
     expect(styles).toContain("flex: 0 0 126px");
   });
 
-  it("renders only real images up to six while preserving overflow access and the full process on desktop hover", async () => {
+  it("renders all real images in the governed strip while preserving preview navigation", async () => {
     const [detail, styles] = await Promise.all([
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
       readFile("apps/web/src/rework-detail-compact.css", "utf8"),
     ]);
     expect(detail).toContain("const visibleImageAttachments = imageAttachments;");
-    const responsive = await readFile("apps/web/src/order-overview-responsive.css", "utf8");
-    expect(responsive).toContain(".rework-detail-image-card:nth-child(n + 7) { display: none; }");
-    expect(responsive).toContain("scroll-snap-type: x proximity;");
+    const governed = await readFile("apps/web/src/rework-governed.css", "utf8");
+    expect(governed).toContain(".rework-detail-image-card:nth-child(n+7) { display: grid; }");
+    expect(governed).toContain("overflow-x: auto;");
     expect(detail).not.toContain("暂无图片");
     expect(detail).not.toContain("rework-detail-image-card--empty");
-    expect(detail).toContain("imageAttachments.length - 5");
+    expect(detail).not.toContain("imageAttachments.length - 5");
     expect(detail).toContain("showRelativeImage(1)");
     expect(detail).toContain("title={detail.reworkProcess ?? undefined}");
     expect(styles).toContain(".rework-detail-image-card__overflow");

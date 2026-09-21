@@ -21,15 +21,15 @@ describe("1.0 prelaunch PR-06 UI and workspace clarity", () => {
     expect(styles).toContain(".whole-order-review-flow .dx-field__control { min-height: 36px;");
   });
 
-  it("defaults mobile photos and workflow to collapsed without changing desktop content", async () => {
+  it("keeps photos expanded and workflow collapsed on mobile", async () => {
     const [detail, compact] = await Promise.all([
       read("apps/web/src/rework-detail-page.tsx"),
       read("apps/web/src/rework-detail-compact.css"),
     ]);
 
-    expect(detail).toContain("const [mobileImagesExpanded, setMobileImagesExpanded] = useState(true)");
+    expect(detail).toContain('id="order-images-content" className="rework-detail-mobile-collapsible is-expanded"');
     expect(detail).toContain("const [mobileWorkflowExpanded, setMobileWorkflowExpanded] = useState(false)");
-    expect(detail).toContain('aria-controls="order-images-content"');
+    expect(detail).toContain('rework-governed-image-heading');
     expect(detail).toContain('aria-controls="order-workflow-content"');
     expect(detail).toContain("activeWorkflowNode.number");
     expect(compact).toContain(".rework-detail-mobile-collapsible {\n  display: grid;");
