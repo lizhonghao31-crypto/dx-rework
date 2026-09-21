@@ -203,6 +203,7 @@
     { "version": "0201_cutting_sheet_required_upload", "checksum": "6b4b180f0ad1e6db4ec1f9b59f01b9af89e9e45993f0204360d123bd6a2f87dd" },
     { "version": "0202_todo_terminal_delivery_closure", "checksum": "4ba7d554c68eac3c849760fc6f8f1ce47c8efb4922bca8700b7197d330c7052c" },
     { "version": "0203_wage_adjustment_restore_compatibility", "checksum": "34a3cde24a384075fd5f7ed095e575997ff6656dabb42f662e838cbfa1c6e998" },
-    { "version": "0204_operation_diagnostic_latency", "checksum": "ad9416ef8c7c3150d6cb05e4ed0cd95a61ad3f5a11c5bcde3df2f15ca08bcab0" }
+    { "version": "0204_operation_diagnostic_latency", "checksum": "ad9416ef8c7c3150d6cb05e4ed0cd95a61ad3f5a11c5bcde3df2f15ca08bcab0" },
+    { "version": "0205_sourcing_budget_price_corrections", "checksum": "5b0034cb8d5385c6f110bc834d66ef691c8f1825f4edcd43e4a45f9f0a03e368" }
   ]
 }

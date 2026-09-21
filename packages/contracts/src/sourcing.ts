@@ -140,6 +140,11 @@ export const CreateSourcingCaseSchema = z.object({
     .refine((ids) => new Set(ids).size === ids.length, "订单图片不能重复"),
 }).strict().refine(order => order.lineItems.every(line => !line.imageAttachmentId || order.attachmentIds.includes(line.imageAttachmentId)), "款图必须包含在订单图片中");
 
+export const CorrectSourcingBudgetPriceSchema = z.object({
+  daxingUnitPrice: SourcingNewUnitPriceSchema,
+  reason: z.string().trim().min(1, "更正原因不能为空").max(500, "更正原因不能超过500个字符"),
+}).strict();
+
 export const SourcingLinePriceInputSchema = z.object({
   position: z.number().int().min(1).max(MAX_SOURCING_LINE_ITEMS),
   unitPrice: MoneyInputSchema,
@@ -543,6 +548,7 @@ export type SourcingLinePriceReview = z.infer<typeof SourcingLinePriceReviewSche
 export type SourcingCaseLineInput = z.infer<typeof SourcingCaseLineInputSchema>;
 export type SourcingCaseLine = z.infer<typeof SourcingCaseLineSchema>;
 export type CreateSourcingCase = z.infer<typeof CreateSourcingCaseSchema>;
+export type CorrectSourcingBudgetPrice = z.infer<typeof CorrectSourcingBudgetPriceSchema>;
 export type CreateSourcingIeQuote = z.input<typeof CreateSourcingIeQuoteSchema>;
 export type RecordSourcingContract = z.infer<typeof RecordSourcingContractSchema>;
 export type RequestSourcingFactoryChange = z.infer<typeof RequestSourcingFactoryChangeSchema>;

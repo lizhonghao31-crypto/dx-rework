@@ -745,6 +745,36 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await service.listCases(readerActor(), "整烫")).items).toHaveLength(1);
     expect(firstDecision.value.processes).toEqual(["净色车缝", "整烫", "按样衣复核"]);
 
+    const budgetCorrectionKey = randomUUID();
+    const correctedBudget = await service.correctBudgetPrice(
+      merchandiserActor("budget-correction-1"),
+      created.value.sourcingCaseId,
+      { daxingUnitPrice: "10.25", reason: "原预算价录入错误" },
+      budgetCorrectionKey,
+    );
+    expect(correctedBudget.reused).toBe(false);
+    expect(correctedBudget.value).toMatchObject({
+      status: "pending_owner_approval",
+      version: 3,
+      daxingUnitPrice: "10.2500",
+    });
+    expect((await service.correctBudgetPrice(
+      merchandiserActor("budget-correction-replay"),
+      created.value.sourcingCaseId,
+      { daxingUnitPrice: "10.25", reason: "原预算价录入错误" },
+      budgetCorrectionKey,
+    )).reused).toBe(true);
+    await expect(service.correctBudgetPrice(
+      { ...anotherMerchandiserReader(), authorizationCapability: "sourcing:inquiry:create",
+        authorizationCapabilities: ["sourcing:view", "sourcing:inquiry:create"] },
+      created.value.sourcingCaseId,
+      { daxingUnitPrice: "10.30", reason: "无权修改他人订单" },
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+    expect((await service.nodeHistory(
+      readerActor(), created.value.sourcingCaseId, "created",
+    )).item.daxingUnitPrice).toBe("10.0000");
+
     const rejected = await service.decideOwner(
       ownerActor(),
       created.value.sourcingCaseId,
@@ -802,6 +832,31 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       approvalKey,
     );
     expect(approvalReplay.reused).toBe(true);
+    await expect(service.correctBudgetPrice(
+      merchandiserActor("budget-after-approval"),
+      created.value.sourcingCaseId,
+      { daxingUnitPrice: "10.40", reason: "批准后不应允许修改" },
+      randomUUID(),
+    )).rejects.toMatchObject({
+      code: "INVALID_STATE_TRANSITION",
+      statusCode: 409,
+      message: "老板已批准，订单数字已锁定",
+    });
+    const correctionRows = await database.query<{ old_unit_price: string; new_unit_price: string; reason: string }>(
+      `SELECT old_unit_price::text,new_unit_price::text,reason
+       FROM sourcing_budget_price_corrections
+       WHERE sourcing_case_id=$1 ORDER BY correction_version`,
+      [created.value.sourcingCaseId],
+    );
+    expect(correctionRows.rows).toEqual([{
+      old_unit_price: "10.0000",
+      new_unit_price: "10.2500",
+      reason: "原预算价录入错误",
+    }]);
+    await expect(database.query(
+      "UPDATE sourcing_budget_price_corrections SET reason='tampered' WHERE sourcing_case_id=$1",
+      [created.value.sourcingCaseId],
+    )).rejects.toMatchObject({ code: "55000" });
     expect(approved.value).toMatchObject({
       status: "pending_finance_reconciliation",
       version: 6,
@@ -817,7 +872,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         supplierName: "一号加工厂",
         quantity: 137,
         totalAmount: "1481.46",
-        daxingUnitPrice: "10.0000",
+        daxingUnitPrice: "10.2500",
         estimatedCutPieceSendDate: "2026-09-10",
         deliveryDate: "2026-09-15",
         linePrices: [{

@@ -163,3 +163,14 @@
 [data-dx-ui="governed"] .sourcing-history-related article { padding:12px 0; border-top:1px solid var(--dx-governed-border); }
 [data-dx-ui="governed"] .sourcing-history-related article > div { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; }
 [data-dx-ui="governed"] .sourcing-history-related p { overflow-wrap:anywhere; }
+
+/* Budget correction is a micro-action inside the existing value cell. */
+[data-dx-ui="governed"] .sourcing-budget-price-value { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-width:0; }
+[data-dx-ui="governed"] .sourcing-budget-price-correct { margin:0; padding:0; border:0; background:transparent; color:var(--dx-v2-color-primary); font:inherit; font-size:12px; line-height:1.4; cursor:pointer; white-space:nowrap; }
+[data-dx-ui="governed"] .sourcing-budget-price-correct:hover { text-decoration:underline; }
+[data-dx-ui="governed"] .sourcing-budget-price-correct:focus-visible { outline:2px solid var(--dx-v2-color-focus); outline-offset:2px; border-radius:2px; }
+.sourcing-budget-price-correction-dialog .sourcing-budget-price-correction__current { display:flex; align-items:baseline; justify-content:space-between; gap:16px; padding:10px 0; }
+.sourcing-budget-price-correction-dialog .sourcing-budget-price-correction__current strong { font-size:18px; }
+.sourcing-budget-price-correction-dialog .system-dialog__field textarea { width:100%; min-height:76px; resize:vertical; font:inherit; }
+.sourcing-budget-price-correction-dialog .system-dialog__field small,
+.sourcing-budget-price-correction-dialog .sourcing-budget-price-correction__error { color:var(--dx-status-danger); font-size:12px; }

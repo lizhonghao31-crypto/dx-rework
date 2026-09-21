@@ -10,12 +10,14 @@ import {
   type SourcingStyleIdentity,
   calculateSourcingOrderQuantity,
   calculateSourcingTotalExact,
+  SourcingNewUnitPriceSchema,
   MAX_SOURCING_ATTACHMENTS,
   ReviseSourcingStylesSchema,
   SOURCING_IMAGE_SUPPLEMENT_ROLES,
 } from "@dx-rework/contracts";
 import type {
   CreateSourcingCase,
+  CorrectSourcingBudgetPrice,
   ReviseSourcingStyles,
   CreateSourcingIeQuote,
   DeleteSourcingCaseResponse,
@@ -477,7 +479,12 @@ export class SourcingService {
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
          (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=case_view.sourcing_case_id) AS identity_revision,
          source_case.gender,source_case.style_name_snapshot,
-         source_case.daxing_unit_price::text AS daxing_unit_price,
+         COALESCE((
+            SELECT correction.new_unit_price FROM sourcing_budget_price_corrections correction
+            WHERE correction.sourcing_case_id=source_case.sourcing_case_id
+              ${history ? "AND correction.corrected_at <= $2::timestamptz" : ""}
+            ORDER BY correction.correction_version DESC LIMIT 1
+          ),source_case.daxing_unit_price)::text AS daxing_unit_price,
          to_char(source_case.estimated_cut_piece_send_date,'YYYY-MM-DD')
            AS estimated_cut_piece_send_date,
          lines_row.line_items,
@@ -677,7 +684,11 @@ export class SourcingService {
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
          (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=case_view.sourcing_case_id) AS identity_revision,
          source_case.gender,source_case.style_name_snapshot,
-         source_case.daxing_unit_price::text AS daxing_unit_price,
+         COALESCE((
+            SELECT correction.new_unit_price FROM sourcing_budget_price_corrections correction
+            WHERE correction.sourcing_case_id=source_case.sourcing_case_id
+            ORDER BY correction.correction_version DESC LIMIT 1
+          ),source_case.daxing_unit_price)::text AS daxing_unit_price,
          to_char(source_case.estimated_cut_piece_send_date,'YYYY-MM-DD')
            AS estimated_cut_piece_send_date,
          lines_row.line_items,
@@ -1733,6 +1744,92 @@ export class SourcingService {
     }
   }
 
+  async correctBudgetPrice(
+    actor: TrustedActorContext,
+    sourcingCaseId: string,
+    input: CorrectSourcingBudgetPrice,
+    idempotencyKey: string,
+  ): Promise<Result<SourcingCaseSummary>> {
+    this.assertActor(actor, CASE_CREATE_CAPABILITY, CASE_CREATE_ROLE);
+    if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
+    const parsedPrice = SourcingNewUnitPriceSchema.safeParse(input.daxingUnitPrice);
+    if (!parsedPrice.success) fail(parsedPrice.error.issues[0]?.message ?? "预算价无效");
+    const nextPrice = normalizeSourcingUnitPrice(parsedPrice.data);
+    const reason = normalizeText(input.reason, "更正原因", 500);
+    const scope = "sourcing.budget_price.correct";
+    const client = await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      const outcome = await this.idempotency.execute(client, {
+        scope,
+        actorKey: actor.actorId,
+        key: idempotencyKey,
+        requestHash: requestHash(scope, { sourcingCaseId, daxingUnitPrice: nextPrice, reason }),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      }, async () => {
+        const current = await client.query<{
+          created_by: string;
+          status: string;
+          current_price: string | null;
+          correction_version: number | string;
+          approved: boolean;
+        }>(
+          `SELECT source_case.created_by,current_transition.to_status AS status,
+                  COALESCE((SELECT correction.new_unit_price FROM sourcing_budget_price_corrections correction
+                    WHERE correction.sourcing_case_id=source_case.sourcing_case_id
+                    ORDER BY correction.correction_version DESC LIMIT 1),source_case.daxing_unit_price)::text AS current_price,
+                  COALESCE((SELECT max(correction.correction_version) FROM sourcing_budget_price_corrections correction
+                    WHERE correction.sourcing_case_id=source_case.sourcing_case_id),0) AS correction_version,
+                  EXISTS(SELECT 1 FROM sourcing_approval_snapshots approval
+                    WHERE approval.sourcing_case_id=source_case.sourcing_case_id) AS approved
+           FROM sourcing_cases source_case
+           JOIN LATERAL (
+             SELECT transition_row.to_status FROM sourcing_case_transitions transition_row
+             WHERE transition_row.sourcing_case_id=source_case.sourcing_case_id
+             ORDER BY transition_row.sequence DESC LIMIT 1
+           ) current_transition ON true
+           WHERE source_case.sourcing_case_id=$1 AND source_case.deleted_at IS NULL
+           FOR UPDATE OF source_case`,
+          [sourcingCaseId],
+        );
+        const source = current.rows[0];
+        if (!source) fail("报价选厂询价不存在", 404, "NOT_FOUND");
+        if (!actor.actorRoles.includes(ROOT_ROLE) && source.created_by !== actor.actorId) {
+          fail("只能更正本人负责订单的预算价", 403, "FORBIDDEN");
+        }
+        if (source.approved || !["pending_ie_quote","pending_management_decision","pending_owner_approval"].includes(source.status)) {
+          fail("老板已批准，订单数字已锁定", 409, "INVALID_STATE_TRANSITION");
+        }
+        if (!source.current_price) fail("该订单没有可更正的预算价", 409, "INVALID_STATE_TRANSITION");
+        if (normalizeSourcingUnitPrice(source.current_price) === nextPrice) fail("新预算价与当前预算价相同");
+        const correctionVersion = Number(source.correction_version) + 1;
+        const eventId = await this.events.append(client, actor, {
+          action: "sourcing.budget_price.correct",
+          entityType: "sourcing_case",
+          entityId: sourcingCaseId,
+          before: { budgetPriceRecorded: true },
+          after: { budgetPriceCorrected: true, correctionVersion },
+          reason,
+        });
+        await client.query(
+          `INSERT INTO sourcing_budget_price_corrections(
+             correction_id,sourcing_case_id,correction_version,old_unit_price,new_unit_price,
+             reason,corrected_by,operation_event_id,request_id
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [randomUUID(),sourcingCaseId,correctionVersion,source.current_price,nextPrice,reason,actor.actorId,eventId,actor.requestId],
+        );
+        return { statusCode: 200, response: await this.readCase(client, sourcingCaseId, actor) };
+      });
+      await client.query("COMMIT");
+      return { value: outcome.response, reused: outcome.reused };
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async quoteIePrice(
     actor: TrustedActorContext,
     sourcingCaseId: string,
@@ -2240,7 +2337,11 @@ export class SourcingService {
                   decision_row.sourcing_decision_id,decision_row.decision_version,
                   decision_row.source_type,decision_row.supplier_id,
                   decision_row.supplier_code_snapshot,decision_row.supplier_name_snapshot,
-                  decision_row.quantity,source_case.daxing_unit_price::text AS daxing_unit_price,
+                  decision_row.quantity,COALESCE((
+                    SELECT correction.new_unit_price FROM sourcing_budget_price_corrections correction
+                    WHERE correction.sourcing_case_id=source_case.sourcing_case_id
+                    ORDER BY correction.correction_version DESC LIMIT 1
+                  ),source_case.daxing_unit_price)::text AS daxing_unit_price,
                   source_case.estimated_cut_piece_send_date::text AS estimated_cut_piece_send_date,
                   source_case.delivery_date::text AS delivery_date,source_case.gender,source_case.style_name_snapshot,
                   CASE WHEN decision_row.crafts IS NULL THEN source_case.process_items
