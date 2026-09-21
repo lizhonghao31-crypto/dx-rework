@@ -59,3 +59,12 @@
 @media (max-width: 520px) {
   :root { --dx-content-padding: 12px; }
 }
+
+/* UI-01 pilot: existing palette and control scale, opt-in surface hierarchy. */
+[data-dx-ui="governed"] {
+  --dx-governed-surface: #fff;
+  --dx-governed-border: var(--dx-form-control-border);
+  --dx-governed-radius: var(--dx-v2-radius-lg);
+  --dx-governed-gap: var(--dx-v2-space-5);
+  --dx-governed-muted: var(--dx-v2-color-text-secondary);
+}

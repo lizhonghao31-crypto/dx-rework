@@ -40,7 +40,7 @@ import {
   type SourcingTimelineEntry,
 } from "@dx-rework/contracts";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
-import { StatusBadge, Surface } from "@dx-rework/ui";
+import { ActionBar, Disclosure, ImageStrip, KeyFacts, ResponsiveFactsTable, WorkflowRail, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
@@ -79,6 +79,7 @@ import "./rework-detail.css";
 import "./rework-detail-compact.css";
 import "./sourcing-workspace.css";
 import "./order-overview-responsive.css";
+import "./sourcing-governed.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -407,6 +408,7 @@ export function SourcingWorkspacePage({
 
   return (
     <Shell active={ACTIVE_NAVIGATION[view]}>
+      <div data-dx-ui="governed" className="sourcing-governed">
       <nav className="sourcing-mobile-navigation" aria-label="外发业务页面">
         {canCreateOrder ? <a
           className={mobileActiveView === "create" ? "is-active" : ""}
@@ -430,6 +432,7 @@ export function SourcingWorkspacePage({
       {view === "detail" && sourcingCaseId
         ? <OrderDetailPage sourcingCaseId={sourcingCaseId} user={user} />
         : null}
+      </div>
     </Shell>
   );
 }
@@ -1479,19 +1482,19 @@ function OrderDetailPage({
         actionHref={detailReturnPath ?? (item.status === "closed" ? "/ui/sourcing/history" : "/ui/sourcing/pending")}
       />
       <div className="rework-detail-layout rework-detail-target-layout">
-        <dl className="rework-detail-core-facts" aria-label="外发定价选厂订单核心信息">
+        <KeyFacts className="rework-detail-core-facts" aria-label="外发定价选厂订单核心信息">
+          <div className="rework-detail-core-fact"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
           <div className="rework-detail-core-fact"><dt>订单总数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
           {"daxingUnitPrice" in item ? <div className="rework-detail-core-fact"><dt>预算价</dt><dd>{formatBusinessCurrency(item.daxingUnitPrice ?? "")}</dd></div> : null}
           <div className="rework-detail-core-fact"><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
           <div className="rework-detail-core-fact"><dt>要求交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>IE 单价</dt><dd>{sourcingPriceSummary(item.ieQuote)}</dd></div>
           <div className="rework-detail-core-fact"><dt>生产单价</dt><dd>{sourcingPriceSummary(item.decision)}</dd></div>
-          <div className="rework-detail-core-fact"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
           <div className="rework-detail-core-fact"><dt>总额</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.totalAmount) : item.ieQuote ? formatBusinessCurrency(item.ieQuote.totalAmount) : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>调价情况</dt><dd>{priceAdjusted ? "生产管理已调整" : item.decision ? "沿用 IE 价格" : "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>性别 / 款式</dt><dd>{item.gender ?? "历史未维护"} / {item.styleName ?? "历史未维护"}</dd></div>
           {selectedNode !== "owner" ? <div className="rework-detail-core-fact sourcing-core-processes"><dt>工艺及承包范围</dt><dd>{item.processes.length ? <ol>{item.processes.map((process) => <li key={process}>{process}</li>)}</ol> : "—"}</dd></div> : null}
-        </dl>
+        </KeyFacts>
 
         <div className="rework-detail-overview-grid order-overview--compact">
           <section className="rework-detail-images" aria-label="订单图片">
@@ -1504,13 +1507,12 @@ function OrderDetailPage({
             /> : null}
               <StatusBadge tone="info">{formatBusinessDecimal(attachments.length)} 张</StatusBadge>
             </div>
-            {attachments.length > 0 ? <div className="rework-detail-image-grid">
-              {attachments.map((attachment, index) => <button className="rework-detail-image-card" type="button" key={attachment.attachmentId} onClick={() => setSelectedImage(attachment)}>
+            {attachments.length > 0 ? <ImageStrip aria-label="订单照片，可横向滚动">
+              {attachments.map((attachment) => <button className="rework-detail-image-card" type="button" key={attachment.attachmentId} onClick={() => setSelectedImage(attachment)}>
                 <img src={attachmentUrl(attachment.attachmentId, "preview")} alt={attachment.filename} loading="lazy" />
                 <span className="rework-detail-image-card__filename">{attachment.filename}</span>
-                {index === 5 && attachments.length > 6 ? <strong className="rework-detail-image-card__overflow">+{attachments.length - 5}</strong> : null}
               </button>)}
-            </div> : <p className="sourcing-list-message">本单没有图片</p>}
+            </ImageStrip> : <p className="sourcing-list-message">本单没有图片</p>}
 
           </section>
 
@@ -1538,7 +1540,7 @@ function OrderDetailPage({
                   : <a className={`rework-workflow__node is-${state}`} href={sourcingWorkflowNodeHref(item.sourcingCaseId, node.key, detailReturnPath)} aria-current={state === "current" ? "step" : undefined} key={node.key}>{content}</a>;
               })}
               </div>
-              <div className="rework-workflow__mobile-rail" ref={workflowRailRef}>
+              <WorkflowRail className="rework-workflow__mobile-rail" ref={workflowRailRef}>
               {WORKFLOW.map((node, index) => {
                 const state: SourcingWorkflowNodeState = item.status === "closed" || index < step ? "completed" : index === step ? "current" : "future";
                 const content = <>
@@ -1550,7 +1552,7 @@ function OrderDetailPage({
                   ? <div className="rework-workflow__node is-future" aria-disabled="true" key={node.key}>{content}</div>
                   : <a className={`rework-workflow__node is-${state}`} href={sourcingWorkflowNodeHref(item.sourcingCaseId, node.key, detailReturnPath)} aria-current={state === "current" ? "step" : undefined} key={node.key}>{content}</a>;
               })}
-              </div>
+              </WorkflowRail>
             </div>
           </section>
         </div>
@@ -1582,8 +1584,7 @@ function OrderDetailPage({
                 </div>)}
               </div>
             </section> : null}
-            {selectedState === "completed" ? <details className="rework-detail-node-history">
-              <summary>处理历史{selectedTimeline.length ? ` · ${formatBusinessDecimal(selectedTimeline.length)} 条` : ""}</summary>
+            {selectedState === "completed" ? <Disclosure className="rework-detail-node-history" summary={`处理历史${selectedTimeline.length ? ` · ${formatBusinessDecimal(selectedTimeline.length)} 条` : ""}`}>
               {selectedTimeline.length ? <div className="sourcing-timeline">
                 {selectedTimeline.map((entry) => <article key={entry.entryId}>
                   <div><strong>{timelineLabel(entry)}</strong><small>{formatDateTime(entry.handledAt)} · {entry.handledBy}</small></div>
@@ -1601,7 +1602,7 @@ function OrderDetailPage({
                   </dl>
                 </article>)}
               </div> : <p>该节点暂无历史记录。</p>}
-            </details> : null}
+            </Disclosure> : null}
           </Surface> : null}
           <SubmissionFeedback feedback={feedback} busy={busy} />
           {item.status === "pending_ie_quote" && selectedNode === "ie_quote" ? <Surface className="rework-detail-node-preview">
@@ -1666,29 +1667,27 @@ function OrderDetailPage({
           </Surface> : null}
 
           {item.status === "pending_owner_approval" && selectedNode === "owner" ? <Surface className="rework-detail-node-preview sourcing-owner-decision">
-            <div className="sourcing-owner-mobile-summary">
-              <h2>04 · 最终审批</h2>
-              <p>{item.decision?.supplierName ?? "—"} · {formatBusinessDecimal(item.orderQuantity)} 件 · {item.decision ? formatBusinessCurrency(item.decision.totalAmount) : "—"}</p>
-            </div>
             <div className="sourcing-owner-decision__desktop">
               <h2>04 · 最终审批</h2>
               <p className="sourcing-owner-decision__lead">生产管理建议由 <strong>{item.decision?.supplierName ?? "—"}</strong> 承接 <strong>{formatBusinessDecimal(item.orderQuantity)} 件</strong>，逐款汇总 <strong>{item.decision ? formatBusinessCurrency(item.decision.totalAmount) : "—"}</strong>，相对 IE 总额变化 <strong>{ownerTotalDelta ?? "—"}</strong>。{ownerCraftSummary}</p>
-              <div className="sourcing-owner-line-review" role="table" aria-label="老板逐款审批摘要">
-                {item.lineItems.map((line) => {
-                  const ieLine = item.ieQuote?.linePrices.find((entry) => entry.position === line.position);
-                  const decisionLine = item.decision?.linePrices.find((entry) => entry.position === line.position);
-                  return <div className="sourcing-owner-line-review__row" key={line.position}><b>{String(line.position).padStart(2, "0")}</b><span>{line.styleNo}<small>{line.color ?? "历史未维护颜色"} · {formatBusinessDecimal(line.quantity)} 件</small></span><span>IE <strong>{ieLine ? formatBusinessCurrency(ieLine.unitPrice) : "—"}</strong></span><span>生产 <strong>{decisionLine ? formatBusinessCurrency(decisionLine.unitPrice) : "—"}</strong></span><span>行金额 <strong>{decisionLine ? formatBusinessCurrency(decisionLine.totalAmount) : "—"}</strong></span></div>;
-                })}
-              </div>
+              <ResponsiveFactsTable caption="老板逐款审批摘要" rows={item.lineItems} rowKey={line => line.position}
+                columns={[
+                  { key: "style", label: "款号", render: line => <>{line.styleNo || "—"}{line.alternateStyleNo ? <small>代用：{line.alternateStyleNo}</small> : null}</> },
+                  { key: "color", label: "颜色", render: line => line.color ?? "历史未维护" },
+                  { key: "quantity", label: "数量", render: line => `${formatBusinessDecimal(line.quantity)} 件` },
+                  ...("daxingUnitPrice" in item ? [{ key: "budget", label: "预算价", render: () => item.daxingUnitPrice ? formatBusinessCurrency(item.daxingUnitPrice) : "历史未维护" }] : []),
+                  { key: "ie", label: "IE 单价", render: line => { const price = item.ieQuote?.linePrices.find(entry => entry.position === line.position); return price ? formatBusinessCurrency(price.unitPrice) : "—"; } },
+                  { key: "production", label: "生产单价", render: line => { const price = item.decision?.linePrices.find(entry => entry.position === line.position); return price ? formatBusinessCurrency(price.unitPrice) : "—"; } },
+                  { key: "amount", label: "本款金额", render: line => { const price = item.decision?.linePrices.find(entry => entry.position === line.position); return price ? formatBusinessCurrency(price.totalAmount) : "—"; } },
+                ]} />
               <p>{"daxingUnitPrice" in item ? `预算价：${formatBusinessCurrency(item.daxingUnitPrice ?? "")}。` : ""}{item.decision?.decisionReason ? `生产管理说明：${item.decision.decisionReason}` : "生产管理未补充说明。"}</p>
-              <details className="sourcing-owner-decision__details">
-                <summary>查看完整订单资料</summary>
+              <Disclosure className="sourcing-owner-decision__details" summary="查看完整订单资料">
                 <p>性别：{item.gender ?? "历史未维护"}；款式：{item.styleName ?? "历史未维护"}；款色：{item.lineItems.length} 行；预计裁片发出：{item.estimatedCutPieceSendDate ?? "历史未维护"}；要求交货：{item.deliveryDate ?? "—"}。</p>
-              </details>
+              </Disclosure>
             </div>
-            {canOwner ? <div className="sourcing-owner-actions" aria-label="老板审批操作">
-              <div><button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "approved" }, "老板已批准")}>批准方案</button><button className="dx-button dx-button--secondary sourcing-owner-reject" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "rejected" }, "已驳回生产管理重新调整")}>驳回并退回生产管理</button></div>
-            </div> : <p>当前账号仅可查看，本节点由老板办理。</p>}
+            {canOwner ? <ActionBar className="sourcing-owner-actions" aria-label="老板审批操作">
+              <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "approved" }, "老板已批准")}>批准方案</button><button className="dx-button dx-button--secondary sourcing-owner-reject" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "rejected" }, "已驳回生产管理重新调整")}>驳回并退回生产管理</button>
+            </ActionBar> : <p>当前账号仅可查看，本节点由老板办理。</p>}
           </Surface> : null}
 
           {item.approvalSnapshot ? <Surface className="rework-detail-node-preview sourcing-contract-bar">

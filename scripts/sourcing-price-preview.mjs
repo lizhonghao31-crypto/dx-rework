@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 const root = resolve(import.meta.dirname, "..");
+const governed = process.argv[3]?.endsWith("sourcing-governed-preview.tsx");
 const output = resolve(process.argv[2] ?? "sourcing-price-preview");
 await mkdir(output, { recursive: true });
 await build({ configFile: false, root, define: { "import.meta.env.BASE_URL": '"/rework/"', "process.env.NODE_ENV": '"production"' },
@@ -16,7 +17,12 @@ await build({ configFile: false, root, define: { "import.meta.env.BASE_URL": '"/
       if (id === "./system-management-navigation.js") return "\0supplier-nav";
       if (id === "@dx-rework/contracts/business-display") return join(root, "packages/contracts/src/business-display.ts");
     },
+    transform(code, id) {
+      if (governed && id.endsWith("/sourcing-workspace-page.tsx")) return code.replace('apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`)', '(globalThis.__ui01Image ?? "")');
+    },
     load(id) {
+      if (governed && id === "\0supplier-auth") return 'export async function verifySession(){return {status:"authorized",user:globalThis.__ui01User}}';
+      if (governed && id === "\0supplier-shell") return 'import {createElement as h} from "react"; export function Shell({children}){return children;} export function Header({title,subtitle,badge}){return h("header",{className:"page-heading"},h("div",null,h("h1",null,title),h("p",null,subtitle),h("small",null,badge)));}';
       if (id === "\0supplier-auth") return 'export async function verifySession(){return {status:"authorized",user:{id:"fixture-root",isRoot:true,capabilities:[],businessRoles:[]}}}';
       if (id === "\0supplier-shell") return "export function Shell({children}){return children;} export function Header({title,subtitle,badge}){return [title,subtitle,badge].filter(Boolean).join(' · ');}";
       if (id === "\0supplier-nav") return "export function SystemManagementNavigation(){return null;}";

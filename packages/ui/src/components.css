@@ -47,3 +47,29 @@
 @media (max-width: 800px) {
   .dx-field { min-width: 0; }
 }
+
+[data-dx-ui="governed"] .dx-key-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--dx-governed-gap); margin: 0; }
+[data-dx-ui="governed"] .dx-key-facts > div { min-width: 0; }
+[data-dx-ui="governed"] .dx-key-facts dt { color: var(--dx-governed-muted); font-size: 12px; }
+[data-dx-ui="governed"] .dx-key-facts dd { margin: 6px 0 0; font-weight: 700; overflow-wrap: anywhere; }
+[data-dx-ui="governed"] .dx-disclosure { min-width: 0; border-top: 1px solid var(--dx-governed-border); }
+[data-dx-ui="governed"] .dx-disclosure > summary { min-height: 40px; align-content: center; cursor: pointer; font-weight: 700; }
+[data-dx-ui="governed"] .dx-image-strip { display: flex; gap: 8px; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; padding: 4px; }
+[data-dx-ui="governed"] .dx-image-strip > button { flex: 0 0 144px; min-width: 0; scroll-snap-align: start; }
+[data-dx-ui="governed"] .dx-image-strip img { width: 100%; height: 112px; object-fit: contain; }
+[data-dx-ui="governed"] .dx-workflow-rail { min-width: 0; overscroll-behavior-x: contain; }
+[data-dx-ui="governed"] .dx-action-bar { display: flex; flex-wrap: wrap; gap: 12px; padding-top: 12px; border-top: 1px solid var(--dx-governed-border); }
+[data-dx-ui="governed"] .dx-facts-table-scroll { max-width: 100%; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; border: 1px solid var(--dx-governed-border); border-radius: var(--dx-v2-radius-md); }
+[data-dx-ui="governed"] .dx-facts-table { width: 100%; min-width: 720px; border-collapse: collapse; font-variant-numeric: tabular-nums; text-align: left; }
+[data-dx-ui="governed"] .dx-facts-table caption { padding: 12px; text-align: left; font-weight: 700; }
+[data-dx-ui="governed"] .dx-facts-table :is(th, td) { padding: 12px; border-top: 1px solid var(--dx-governed-border); vertical-align: top; }
+[data-dx-ui="governed"] .dx-facts-table th { background: var(--dx-v2-color-surface); white-space: nowrap; }
+[data-dx-ui="governed"] .dx-facts-table td { max-width: 240px; overflow-wrap: anywhere; }
+[data-dx-ui="governed"] .dx-facts-table small { display: block; color: var(--dx-governed-muted); }
+[data-dx-ui="governed"] :is(.dx-facts-table-scroll, .dx-disclosure > summary):focus-visible { outline: 3px solid var(--dx-v2-color-focus); outline-offset: 2px; }
+[data-dx-ui="governed"] .dx-facts-empty { padding: 12px; color: var(--dx-governed-muted); }
+@media (max-width: 800px) {
+  [data-dx-ui="governed"] .dx-disclosure > summary { min-height: 44px; }
+  [data-dx-ui="governed"] .dx-action-bar > .dx-button { flex: 1 1 160px; min-height: 48px; }
+  [data-dx-ui="governed"] .dx-key-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

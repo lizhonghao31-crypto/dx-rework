@@ -45,7 +45,8 @@ describe("sourcing PC form and owner approval finish", () => {
     expect(page).toContain("craftIds: crafts.map");
     expect(css).toContain("@media (min-width: 761px)");
     expect(page).toContain("subtractFixedPoint");
-    expect(page).toContain("sourcing-owner-mobile-summary");
+    expect(page).toContain('<ResponsiveFactsTable caption="老板逐款审批摘要"');
+    expect(page).not.toContain('className="sourcing-owner-mobile-summary"');
     expect(css).toContain(".sourcing-owner-decision__desktop");
     expect(css).not.toMatch(/\.sourcing-owner-decision__desktop\s*\{\s*display:\s*none/);
     expect(css).toMatch(/@media \(max-width: 760px\)[\s\S]*\.sourcing-owner-line-review__row\s*\{\s*grid-template-columns: 1fr/);
