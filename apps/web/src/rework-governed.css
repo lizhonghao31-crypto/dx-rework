@@ -82,11 +82,11 @@
 }
 
 /* Use the accepted sourcing WorkflowRail directly. Only page geometry differs. */
-.rework-governed .rework-detail-target-layout .rework-workflow__desktop-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px 0; }
+.rework-governed .rework-detail-target-layout .rework-workflow__desktop-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: none; grid-auto-rows: max-content; align-items: start; gap: 16px 0; }
 .rework-governed .rework-workflow__desktop-grid > :nth-child(5n + 1)::before { left: 50%; }
 .rework-governed .rework-workflow__desktop-grid > :nth-child(5n)::before { right: 50%; }
 .rework-governed .rework-workflow-step { min-width: 0; align-content: start; }
-.rework-governed .rework-workflow-step strong { display: block; line-height: 1.5; min-height: 3em; padding: 0 4px; overflow-wrap: anywhere; }
+.rework-governed .rework-workflow-step strong { display: block; line-height: 1.5; min-height: 0; padding: 0 4px; overflow-wrap: anywhere; }
 .rework-governed .rework-detail-target-layout .rework-detail-image-upload { margin: 0; }
 .rework-governed .rework-detail-target-layout .rework-workflow__heading { justify-content: space-between; }
 .rework-governed .rework-detail-target-layout .rework-workflow__mobile-rail { display: none; }
@@ -102,3 +102,8 @@
  .rework-governed .rework-detail-target-layout .rework-workflow .rework-detail-mobile-collapsible.is-expanded { display: block; }
  .rework-governed .rework-detail-target-layout .order-overview--compact .rework-workflow__mobile-rail { display: flex; flex-direction: row; overflow-x: auto; gap: 0; padding: 8px 0; }
 }
+
+/* History uses each role's original page; mutation controls remain unavailable. */
+.rework-history-readonly button:disabled { display: none; }
+.rework-history-readonly :is(input, select, textarea):disabled { opacity: 1; color: inherit; -webkit-text-fill-color: currentColor; }
+.rework-history-readonly .rework-detail-core-facts { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }

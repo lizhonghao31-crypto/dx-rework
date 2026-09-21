@@ -244,6 +244,7 @@ function ManagerProcessProgressGroup({
   writable: boolean;
   expanded: boolean;
   iePrecounts?: IePrecountOverview;
+  history?: ReworkWorkTasksResponse;
   removableTaskIds: ReadonlySet<string>;
   onToggle: () => void;
   onIePrecountChanged?: () => Promise<void> | void;
@@ -293,6 +294,7 @@ export function WorkReportingForm({
   frontlineContext,
   onFrontlineExit,
   iePrecounts,
+  history,
 }: {
   reworkOrderId?: string;
   taskMode?: "workspace" | "task_assignment" | "work_reporting" | "whole_order_review";
@@ -301,9 +303,10 @@ export function WorkReportingForm({
   frontlineContext?: FrontlineWorkContext;
   onFrontlineExit?: () => void;
   iePrecounts?: IePrecountOverview;
+  history?: ReworkWorkTasksResponse;
 } = {}) {
   const reworkOrderId = providedReworkOrderId ?? new URLSearchParams(window.location.search).get("rework");
-  const [data, setData] = useState<ReworkWorkTasksResponse | null>(null);
+  const [data, setData] = useState<ReworkWorkTasksResponse | null>(history ?? null);
   const [configItems, setConfigItems] = useState<Array<{ configurationItemId: string; processName: string; executionKind: "worker" | "tail_inspection" }>>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [peopleType, setPeopleType] = useState<"internal" | "temporary">("internal");
@@ -364,6 +367,7 @@ export function WorkReportingForm({
   }, [adjustmentConfigurationItemId, adjustmentDialogOpen, configItems, data?.tasks, people, peopleQuery, peopleType]);
 
   const reload = async (): Promise<ReworkWorkTasksResponse | null> => {
+    if (history) return history;
     if (!reworkOrderId) return null;
     const loaded = await request(`rework-orders/${reworkOrderId}/work-tasks`, ReworkWorkTasksResponseSchema.parse);
     setData(loaded);
@@ -377,6 +381,7 @@ export function WorkReportingForm({
   };
 
   useEffect(() => {
+    if (history) return;
     if (!reworkOrderId) { setMessage("请从当前节点工作台选择一张订单进入处理。"); return; }
     const load = async () => {
       const session = await verifySession();
@@ -703,7 +708,7 @@ export function WorkReportingForm({
   const incompleteTasks = visibleTasks.filter((task) => task.remainingQuantity !== 0);
   const completedTasks = visibleTasks.filter((task) => task.remainingQuantity === 0);
   const progressProcessGroups = buildProgressProcessGroups(visibleTasks);
-  const managerProgressView = !frontlineContext && (canAssign || canAdjustActive || iePrecounts !== undefined);
+  const managerProgressView = !frontlineContext && (Boolean(history) || canAssign || canAdjustActive || iePrecounts !== undefined);
   const activeAdjustmentWritable = data?.reworkStatus === "in_progress" && canAdjustActive;
   const pendingTasks = visibleTasks.filter((task) => workReportingWritable && task.canSubmitReport);
   const temporaryTasks = pendingTasks.filter((task) => task.members.some((member) => member.personType === "temporary"));
