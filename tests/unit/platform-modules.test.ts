@@ -99,7 +99,16 @@ describe("thin platform module routing", () => {
     expect(sourcingCss).toContain(".sourcing-order-detail .rework-detail-core-facts");
     expect(sourcingCss).toContain("grid-template-columns: repeat(7, minmax(0, 1fr))");
     expect(sourcingCss).toContain("grid-column: 1 / -1");
-    expect(sourcingPage.indexOf("<dt>调价情况</dt>"))
-      .toBeLessThan(sourcingPage.indexOf("<dt>工艺及承包范围</dt>"));
+    // UI-01 replaces the old fact-card order with the approved task hierarchy.
+    const regions = [
+      '<KeyFacts className="sourcing-key-facts"',
+      '<DecisionSummary title=',
+      '<ResponsiveFactsTable caption="款式明细"',
+      'className="sourcing-supporting-overview"',
+      'className="sourcing-order-supplement"',
+      '<ActionBar className="sourcing-owner-actions"',
+    ].map(marker => sourcingPage.indexOf(marker));
+    expect(regions.every(index => index >= 0)).toBe(true);
+    expect(regions).toEqual([...regions].sort((left, right) => left - right));
   });
 });
