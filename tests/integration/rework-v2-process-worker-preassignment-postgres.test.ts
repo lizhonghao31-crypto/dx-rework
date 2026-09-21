@@ -260,8 +260,13 @@ runWithPostgres("PR-04 unified execution PostgreSQL", () => {
     expect(configuredHistory.fields.find(field => field.label === "核价结果")?.value).toBe("pending_ie_review");
     expect(configuredHistory.sections.find(section => section.title === "本次工人分配")?.rows).toHaveLength(2);
     expect(configuredHistory.sections.find(section => section.title === "工序与单价")?.rows).toHaveLength(2);
+    expect(configuredHistory.page?.workerPlan?.assignments.flatMap(item=>item.members)).toHaveLength(2);
+    expect(configuredHistory.page?.configuration?.configuration?.status).toBe('pending_ie_review');
+    expect(configuredHistory.page?.configuration?.configuration?.reviewedAt).toBeNull();
     const reviewedHistory = await historyService.history(historyReader, order.value.reworkOrderId, "ie_review");
     expect(reviewedHistory.fields.find(field => field.label === "核价结果")?.value).toBe("approved");
+    expect(reviewedHistory.page?.configuration?.configuration?.status).toBe('approved');
+    expect(reviewedHistory.page?.configuration?.configuration?.reviewedAt).not.toBeNull();
     const initiationHistory = await historyService.history(historyReader, order.value.reworkOrderId, "initiation");
     expect(initiationHistory.fields.find(field => field.label === "款号")?.value).toBe("PR04-PG-ORDINARY");
     expect(initiationHistory.attachments).toHaveLength(1);

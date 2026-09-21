@@ -63,6 +63,7 @@ type ReceivingReworkEntry = Readonly<{
 }>;
 type ReworkInitiationV2FormProps = Readonly<{
   reworkOrderId?: string;
+  history?: ReadonlyArray<{label:string;value:string|null}>;
   embedded?: boolean;
   existingAttachmentCount?: number;
   onOrderChanged?: () => Promise<void> | void;
@@ -246,9 +247,10 @@ export function ReworkInitiationV2Form({
   embedded = false,
   existingAttachmentCount = 0,
   onOrderChanged,
+  history,
 }: ReworkInitiationV2FormProps = {}) {
   const [moduleWritable, setModuleWritable] = useState<boolean | null>(null);
-  useEffect(() => { let active = true; void currentModuleCanWrite("rework").then(value => { if (active) setModuleWritable(value); }).catch(() => { if (active) setModuleWritable(false); }); return () => { active = false; }; }, []);
+  useEffect(() => { if(history) return; let active = true; void currentModuleCanWrite("rework").then(value => { if (active) setModuleWritable(value); }).catch(() => { if (active) setModuleWritable(false); }); return () => { active = false; }; }, []);
   const localDraftSeed = reworkOrderId ? null : readLocalN01Draft();
   const receivingBatchId = reworkOrderId
     ? undefined
@@ -278,6 +280,7 @@ export function ReworkInitiationV2Form({
   const previewUrls = useRef<string[]>([]);
 
   useEffect(() => {
+    if(history) return;
     const controller = new AbortController();
     let active = true;
     const coreOptions = request(
@@ -682,7 +685,8 @@ export function ReworkInitiationV2Form({
     label: supplier.supplierName,
   })), [supplyOptions.fabricSuppliers]);
 
-  if (moduleWritable !== true) return <Surface><p>{moduleWritable === null ? "正在读取操作权限…" : "当前账号仅可查看返工订单。"}</p>{reworkOrderId ? <a href={pageUrl(`ui/tasks/${reworkOrderId}`)}>查看订单详情</a> : null}</Surface>;
+  const historicalValue=(label:string)=>history?.find(field=>field.label===label)?.value ?? "—";
+  if (!history && moduleWritable !== true) return <Surface><p>{moduleWritable === null ? "正在读取操作权限…" : "当前账号仅可查看返工订单。"}</p>{reworkOrderId ? <a href={pageUrl(`ui/tasks/${reworkOrderId}`)}>查看订单详情</a> : null}</Surface>;
   return <div data-dx-ui="governed" className={`rework-v2-page rework-governed${embedded ? " is-embedded" : ""}`}>
     {!embedded ? <div className="rework-v2-heading">
       <div>
@@ -698,27 +702,27 @@ export function ReworkInitiationV2Form({
         {embedded ? <StatusBadge tone={availableImageCount ? "success" : "info"}>{formatBusinessDecimal(availableImageCount)} 份报告</StatusBadge> : null}
       </div>
       <div className="rework-v2-grid">
-        <label><span>款号 <b>*</b></span><input value={form.styleNo} disabled={busy || Boolean(receivingBatchId || order?.receivingBatchId)} readOnly={Boolean(receivingBatchId || order?.receivingBatchId)} onChange={(event) => { setForm({ ...form, styleNo: event.target.value }); pendingSubmit.current = null; }} placeholder="从订单回货自动带入" /></label>
-        <label><span>加工厂 <b>*</b></span><div className="rework-v2-control"><FactorySearch factories={options.factories} value={form.factory} disabled={busy} onChange={(factory) => { setForm({ ...form, factory, tailInspectionCostBearer: factory === "own_factory" && form.tailInspectionCostBearer === "processing_factory" ? "" : form.tailInspectionCostBearer }); pendingSubmit.current = null; }} /></div></label>
-        <label><span>订单跟单 <b>*</b></span><div className="rework-v2-control"><SearchSelect options={options.merchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.merchandiserUserId} placeholder="搜索订单跟单" emptyText="没有匹配的订单跟单" disabled={busy} onChange={(merchandiserUserId) => { setForm({ ...form, merchandiserUserId }); pendingSubmit.current = null; }} /></div></label>
-        <fieldset className="rework-v2-tail-choice" disabled={busy}>
+        <label><span>款号 <b>*</b></span><input value={history ? historicalValue("款号") : form.styleNo} disabled={Boolean(history) || busy || Boolean(receivingBatchId || order?.receivingBatchId)} readOnly={Boolean(receivingBatchId || order?.receivingBatchId)} onChange={(event) => { setForm({ ...form, styleNo: event.target.value }); pendingSubmit.current = null; }} placeholder="从订单回货自动带入" /></label>
+        <label><span>加工厂 <b>*</b></span><div className="rework-v2-control">{history ? <input readOnly value={historicalValue("加工厂")} /> : <FactorySearch factories={options.factories} value={form.factory} disabled={busy} onChange={(factory) => { setForm({ ...form, factory, tailInspectionCostBearer: factory === "own_factory" && form.tailInspectionCostBearer === "processing_factory" ? "" : form.tailInspectionCostBearer }); pendingSubmit.current = null; }} />}</div></label>
+        <label><span>订单跟单 <b>*</b></span><div className="rework-v2-control">{history ? <input readOnly value={historicalValue("订单跟单")} /> : <SearchSelect options={options.merchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.merchandiserUserId} placeholder="搜索订单跟单" emptyText="没有匹配的订单跟单" disabled={busy} onChange={(merchandiserUserId) => { setForm({ ...form, merchandiserUserId }); pendingSubmit.current = null; }} />}</div></label>
+        <fieldset className="rework-v2-tail-choice" disabled={busy || Boolean(history)}>
           <legend>是否需要整查？</legend>
-          <label><input type="radio" name="tailInspectionRequired" checked={form.tailInspectionRequired} onChange={() => { setForm({ ...form, tailInspectionRequired: true }); pendingSubmit.current = null; }} />是</label>
-          <label><input type="radio" name="tailInspectionRequired" checked={!form.tailInspectionRequired} onChange={() => { setForm({ ...form, tailInspectionRequired: false, tailInspectionCostBearer: "" }); pendingSubmit.current = null; }} />否</label>
+          <label><input type="radio" name="tailInspectionRequired" checked={history ? historicalValue("需要整查")==="是" : form.tailInspectionRequired} onChange={() => { setForm({ ...form, tailInspectionRequired: true }); pendingSubmit.current = null; }} />是</label>
+          <label><input type="radio" name="tailInspectionRequired" checked={history ? historicalValue("需要整查")==="否" : !form.tailInspectionRequired} onChange={() => { setForm({ ...form, tailInspectionRequired: false, tailInspectionCostBearer: "" }); pendingSubmit.current = null; }} />否</label>
         </fieldset>
-        {form.tailInspectionRequired ? <fieldset className="rework-v2-tail-choice" disabled={busy}>
+        {(history ? historicalValue("需要整查")==="是" : form.tailInspectionRequired) ? <fieldset className="rework-v2-tail-choice" disabled={busy || Boolean(history)}>
           <legend>谁承担整查费用？ <b>*</b></legend>
-          <label><input type="radio" name="tailInspectionCostBearer" checked={form.tailInspectionCostBearer === "own_factory"} onChange={() => { setForm({ ...form, tailInspectionCostBearer: "own_factory" }); pendingSubmit.current = null; }} />本厂</label>
-          <label><input type="radio" name="tailInspectionCostBearer" checked={form.tailInspectionCostBearer === "processing_factory"} disabled={form.factory === "own_factory"} onChange={() => { setForm({ ...form, tailInspectionCostBearer: "processing_factory" }); pendingSubmit.current = null; }} />加工厂</label>
+          <label><input type="radio" name="tailInspectionCostBearer" checked={(history ? historicalValue("整查费用承担方") : form.tailInspectionCostBearer) === "own_factory"} onChange={() => { setForm({ ...form, tailInspectionCostBearer: "own_factory" }); pendingSubmit.current = null; }} />本厂</label>
+          <label><input type="radio" name="tailInspectionCostBearer" checked={(history ? historicalValue("整查费用承担方") : form.tailInspectionCostBearer) === "processing_factory"} disabled={form.factory === "own_factory"} onChange={() => { setForm({ ...form, tailInspectionCostBearer: "processing_factory" }); pendingSubmit.current = null; }} />加工厂</label>
         </fieldset> : null}
       </div>
       <details className="rework-v2-more">
         <summary>更多信息</summary>
         <div className="rework-v2-grid rework-v2-grid--more">
-          <label><span>洗水厂</span><div className="rework-v2-control"><SearchSelect options={embroiderySupplierOptions} value={form.washingSupplierId} placeholder="没有可留空" emptyText="没有匹配的洗水厂" disabled={busy} onChange={(washingSupplierId) => { setForm({ ...form, washingSupplierId }); pendingSubmit.current = null; }} /></div></label>
-          <label><span>印绣花厂</span><div className="rework-v2-control"><SearchSelect options={embroiderySupplierOptions} value={form.embroiderySupplierId} placeholder="没有可留空" emptyText="没有匹配的印绣花厂" disabled={busy} onChange={(embroiderySupplierId) => { setForm({ ...form, embroiderySupplierId }); pendingSubmit.current = null; }} /></div></label>
-          <label><span>面辅料供应商</span><div className="rework-v2-control"><SearchSelect options={fabricSupplierOptions} value={form.fabricSupplierId} placeholder="没有可留空" emptyText="没有匹配的面辅料供应商" disabled={busy} onChange={(fabricSupplierId) => { setForm({ ...form, fabricSupplierId }); pendingSubmit.current = null; }} /></div></label>
-          <label><span>印绣花跟单</span><div className="rework-v2-control"><SearchSelect options={supplyOptions.embroideryWashingMerchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.embroideryMerchandiserUserId} placeholder="没有可留空" emptyText="没有匹配的印绣花跟单" disabled={busy} onChange={(embroideryMerchandiserUserId) => { setForm({ ...form, embroideryMerchandiserUserId }); pendingSubmit.current = null; }} /></div></label>
+          <label><span>洗水厂</span><div className="rework-v2-control">{history ? <input readOnly value={historicalValue("洗水厂")} /> : <SearchSelect options={embroiderySupplierOptions} value={form.washingSupplierId} placeholder="没有可留空" emptyText="没有匹配的洗水厂" disabled={busy} onChange={(washingSupplierId) => { setForm({ ...form, washingSupplierId }); pendingSubmit.current = null; }} />}</div></label>
+          <label><span>印绣花厂</span><div className="rework-v2-control">{history ? <input readOnly value={historicalValue("印绣花厂")} /> : <SearchSelect options={embroiderySupplierOptions} value={form.embroiderySupplierId} placeholder="没有可留空" emptyText="没有匹配的印绣花厂" disabled={busy} onChange={(embroiderySupplierId) => { setForm({ ...form, embroiderySupplierId }); pendingSubmit.current = null; }} />}</div></label>
+          <label><span>面辅料供应商</span><div className="rework-v2-control">{history ? <input readOnly value={historicalValue("面辅料供应商")} /> : <SearchSelect options={fabricSupplierOptions} value={form.fabricSupplierId} placeholder="没有可留空" emptyText="没有匹配的面辅料供应商" disabled={busy} onChange={(fabricSupplierId) => { setForm({ ...form, fabricSupplierId }); pendingSubmit.current = null; }} />}</div></label>
+          <label><span>印绣花跟单</span><div className="rework-v2-control">{history ? <input readOnly value={historicalValue("印绣花跟单")} /> : <SearchSelect options={supplyOptions.embroideryWashingMerchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.embroideryMerchandiserUserId} placeholder="没有可留空" emptyText="没有匹配的印绣花跟单" disabled={busy} onChange={(embroideryMerchandiserUserId) => { setForm({ ...form, embroideryMerchandiserUserId }); pendingSubmit.current = null; }} />}</div></label>
         </div>
       </details>
       {order?.hasOtherOpenStyleOrder ? <p className="rework-v2-same-style-warning">同款号存在其他未完结单；系统仅提示，不会自动合并</p> : null}
@@ -741,7 +745,7 @@ export function ReworkInitiationV2Form({
       </div> : null}
     </Surface> : null}
 
-    <div className="rework-v2-action-area">
+    {!history && <div className="rework-v2-action-area">
       <div className="rework-v2-actions">
         <Button
           type="button"
@@ -760,6 +764,6 @@ export function ReworkInitiationV2Form({
         >提交返工</Button>
       </div>
       <p className="rework-v2-action-feedback" role="status">{message}</p>
-    </div>
+    </div>}
   </div>;
 }

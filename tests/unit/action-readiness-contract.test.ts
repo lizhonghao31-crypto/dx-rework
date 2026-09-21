@@ -40,7 +40,7 @@ describe("business action readiness contract", () => {
     }
     expect(source).toContain("const configurationIssue =");
     expect(source).toContain('title: "工序与人员暂不能提交"');
-    expect(source).toContain('disabled={busy || assignmentOptionsLoading}');
+    expect(source).toContain('disabled={Boolean(history) || busy || assignmentOptionsLoading}');
     expect(source).not.toContain('disabled={busy || !submitReady}');
     expect(source).toContain('title: "核价暂不能驳回"');
     expect(legacy).toContain('title: "工序配置暂不能提交"');
@@ -68,7 +68,7 @@ describe("business action readiness contract", () => {
     expect(wholeOrder).toContain('title: "数量暂不能提交 IE"');
     expect(wholeOrder).toContain('title: "IE 复核暂不能提交"');
     expect(wholeOrder).toContain('data-ready={ready ? "true" : "false"}');
-    expect(wholeOrder).toContain('onClick={() => void confirmQuantities()} disabled={busy}');
+    expect(wholeOrder).toContain('onClick={() => void confirmQuantities()} disabled={busy || Boolean(history)}');
     expect(wholeOrder).not.toContain('disabled={busy || !ready}');
     expect(wholeOrder).toContain('data-ready={priceReviewReady ? "true" : "false"}');
     expect(wholeOrder).not.toContain('disabled={busy || !priceReviewReady}');

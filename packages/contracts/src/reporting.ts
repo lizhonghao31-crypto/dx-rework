@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { InspectionReportDraftSchema } from "./index.js";
+import { InspectionReportDraftSchema, TailInspectionResponseSchema, ReworkWorkTasksResponseSchema, ProcessConfigurationResponseSchema, WholeOrderReviewResponseSchema, ResponsibilityDeterminationResponseSchema } from "./compat-index.js";
+import { ProcessWorkerPlanResponseSchema } from "./process-worker-plan.js";
 
 import { BUSINESS_TIME_ZONE } from "./business-display.js";
 
@@ -272,6 +273,17 @@ export type ReportPreviewResponse = z.infer<typeof ReportPreviewResponseSchema>;
 
 const ReworkHistoryEntrySchema = z.object({ id: z.string().uuid(), label: z.string(), at: z.string(), actor: z.string() }).strict();
 export const ReworkNodeHistorySchema = z.object({
+  navigation: z.array(z.object({node: FinanceNodeKeySchema, available:z.boolean(), completed:z.boolean()}).strict()).optional(),
+  orderId: z.string().uuid().optional(),
+  page: z.object({
+    iePrecounts: z.object({entries:z.array(z.object({configurationItemId:IdSchema,quantity:z.number(),note:z.string().nullable(),recordedBy:z.string(),recordedAt:z.string().datetime()}).strict())}).strict(),
+    tailInspection: TailInspectionResponseSchema.nullable(),
+    workTasks: ReworkWorkTasksResponseSchema.nullable(),
+    configuration: ProcessConfigurationResponseSchema.nullable(),
+    workerPlan: ProcessWorkerPlanResponseSchema.nullable(),
+    wholeOrderReview: WholeOrderReviewResponseSchema.nullable(),
+    responsibility: ResponsibilityDeterminationResponseSchema.nullable(),
+  }).strict().optional(),
   inspectionReport: InspectionReportDraftSchema.nullable(),
   node: FinanceNodeKeySchema,
   entry: ReworkHistoryEntrySchema,

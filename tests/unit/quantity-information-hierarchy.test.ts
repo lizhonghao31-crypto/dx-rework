@@ -46,7 +46,7 @@ describe("N04-N05 quantity information hierarchy", () => {
     expect(review).toContain("<small>整查余量</small>");
     expect(review).toContain("主管修改，原值");
     expect(review).toContain('process.pricingUnit === "piece" ? "件" : "小时"');
-    expect(review).toContain("formatBusinessDecimal(value, 3)");
+    expect(review).toContain("formatBusinessDecimal(value, history ? 2 : 3)");
     expect(review).toContain('tone={ready ? "success" : "warning"}');
     expect(review).toContain('填写每个工序有效的最终单价');
     expect(review).toContain("processPrices: prices.map");

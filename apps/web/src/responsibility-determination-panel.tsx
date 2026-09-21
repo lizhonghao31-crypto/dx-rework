@@ -198,10 +198,10 @@ const processValidationIssue = (process: ProcessForm): string | null => {
   return null;
 };
 
-export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged, embedded = false }: { reworkOrderId: string | null; onOrderChanged?: () => void; embedded?: boolean }) {
-  const [response, setResponse] = useState<ResponsibilityDeterminationResponse | null>(null);
-  const [processes, setProcesses] = useState<ProcessForm[]>([]);
-  const [tailCostBearer, setTailCostBearer] = useState<TailInspectionCostBearer | null>(null);
+export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged, embedded = false, history }: { reworkOrderId: string | null; history?: ResponsibilityDeterminationResponse; onOrderChanged?: () => void; embedded?: boolean }) {
+  const [response, setResponse] = useState<ResponsibilityDeterminationResponse | null>(history ?? null);
+  const [processes, setProcesses] = useState<ProcessForm[]>(history ? formsFromResponse(history) : []);
+  const [tailCostBearer, setTailCostBearer] = useState<TailInspectionCostBearer | null>(history?.tailInspectionCostBearer ?? null);
   const [tailBearerEditing, setTailBearerEditing] = useState(false);
   const [mobileEditing,setMobileEditing]=useState<string[]>([]);
   const [selectedProcessIds, setSelectedProcessIds] = useState<string[]>([]);
@@ -210,7 +210,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [changeReason, setChangeReason] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
-  const [message, setMessage] = useState("正在加载责任判定…");
+  const [message, setMessage] = useState(history ? "" : "正在加载责任判定…");
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const pendingMutationKeys = useRef<Record<string, string>>({});
   const batchDialogRef = useRef<HTMLDivElement | null>(null);
@@ -248,6 +248,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     }
   };
   const reload = async (): Promise<void> => {
+    if (history) { setMessage(""); return; }
     if (!reworkOrderId) return;
     const [next, userId] = await Promise.all([
       request(`rework-orders/${reworkOrderId}/responsibility-determination`),
@@ -584,7 +585,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
                 <div className="responsibility-party__amount"><span>自动计算金额</span><strong>{estimatedAllocationAmount(process.baseAmount, allocation)}</strong></div>
                 <Button disabled={Boolean(busyAction) || process.allocations.length === 1} onClick={() => removeAllocation(process.configurationItemId, allocationIndex)}>移除</Button>
               </> : <>
-                <div><b>{meta.label}</b><p>{allocation.sharePercent}% · {allocation.multiplier}×</p></div>
+                <div><b>{meta.label}</b><p>{formatBusinessDecimal(allocation.sharePercent,2)}% · {formatBusinessDecimal(allocation.multiplier,2)}×</p></div>
                 {isExternal(allocation.responsibilityType) && <div><span>责任供应商</span><p>{persistedAllocation?.supplier?.name ?? "未填写"}</p></div>}
                 <div className="responsibility-party__amount"><span>责任金额</span><strong>{persistedAllocation ? displayMoney(persistedAllocation.roundedAmount) : estimatedAllocationAmount(process.baseAmount, allocation)}</strong></div>
               </>}

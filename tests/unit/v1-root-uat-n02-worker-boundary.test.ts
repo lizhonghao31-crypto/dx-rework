@@ -27,7 +27,7 @@ describe("Root UAT PR-03 N02 worker boundary", () => {
 
     expect(form).toContain("openTemporaryWorkerProfile(personId)");
     expect(form).toContain("补录或修改临时工资料");
-    expect(form).toContain("disabled={busy || Boolean(temporaryEditingPersonId)}");
+    expect(form).toContain("disabled={Boolean(history) || busy || Boolean(temporaryEditingPersonId)}");
     expect(editBranch).toContain('method: "PUT"');
     expect(editBranch).not.toContain("reloadPeople()");
     expect(editBranch).not.toContain("onOrderChanged");

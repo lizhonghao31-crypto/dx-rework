@@ -74,8 +74,7 @@ const reworkStatusLabel = (status: WholeOrderReviewResponse["reworkStatus"]): st
   deleted: "已删除",
 })[status] ?? status;
 
-const formatUnitPrice = (value: number | null): string =>
-  value === null ? "—" : `¥${formatBusinessDecimal(value, 3)}`;
+
 
 type ReviewReport = WholeOrderReviewResponse["reports"][number];
 type IePrecountEntry = Readonly<{
@@ -93,16 +92,21 @@ export function WholeOrderReviewPanel({
   onChanged,
   embedded = false,
   iePrecounts,
+  history,
 }: {
   reworkOrderId: string;
   onChanged: () => Promise<void>;
   embedded?: boolean;
   iePrecounts?: IePrecountOverview;
+  history?: { data: WholeOrderReviewResponse; tail?: TailInspectionResponse | null; node: "whole_order_review" | "final_quantity_ie_review" };
 }) {
+  const historyMessage = history?.node === 'final_quantity_ie_review' && history.data.finalConfirmation
+    ? `复核结果：${history.data.finalConfirmation.status==='approved'?'已通过':history.data.finalConfirmation.status==='rejected'?'已退回':'待复核'}${history.data.finalConfirmation.reviewReason ? ` · ${history.data.finalConfirmation.reviewReason}` : ''}` : '';
+  const formatUnitPrice = (value:number|null) => value === null ? "—" : `¥${formatBusinessDecimal(value, history ? 2 : 3)}`;
   const [moduleWritable, setModuleWritable] = useState(false);
-  const [data, setData] = useState<WholeOrderReviewResponse | null>(null);
-  const [tailData, setTailData] = useState<TailInspectionResponse | null>(null);
-  const [message, setMessage] = useState("正在加载数量确认状态…");
+  const [data, setData] = useState<WholeOrderReviewResponse | null>(history?.data ?? null);
+  const [tailData, setTailData] = useState<TailInspectionResponse | null>(history?.tail ?? null);
+  const [message, setMessage] = useState(history ? historyMessage : "正在加载数量确认状态…");
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [tailExpanded, setTailExpanded] = useState(false);
@@ -138,6 +142,7 @@ export function WholeOrderReviewPanel({
   };
 
   const load = async () => {
+    if (history) { applyOverview(history.data); setMessage(historyMessage); return; }
     setModuleWritable(await currentModuleCanWrite("rework"));
     if (requestInFlight.current) return;
     requestInFlight.current = true;
@@ -181,6 +186,7 @@ export function WholeOrderReviewPanel({
     body: unknown,
     applyResult?: (result: T) => void,
   ) => {
+    if (history) throw new Error("历史页面只读");
     const signature = path + JSON.stringify(body);
     const idempotencyKey = attempts.current[signature] ?? createClientRequestId();
     attempts.current[signature] = idempotencyKey;
@@ -405,8 +411,8 @@ export function WholeOrderReviewPanel({
   };
 
   if (!data || ["draft", "pending_process_configuration", "pending_ie_review", "pending_task_assignment"].includes(data.reworkStatus)) return null;
-  const tailStage = data.reworkStatus === "pending_order_review";
-  const ieStage = data.reworkStatus === "pending_final_quantity_ie_review";
+  const tailStage = history ? history.node === "whole_order_review" : data.reworkStatus === "pending_order_review";
+  const ieStage = history ? history.node === "final_quantity_ie_review" : data.reworkStatus === "pending_final_quantity_ie_review";
   const allComplete = data.processes.length > 0 && data.processes.every((process) => process.complete);
   const changedPriceIds = ieStage
     ? data.finalConfirmation?.prices.filter((price) => price.changed).map((price) => price.configurationItemId) ?? []
@@ -472,19 +478,19 @@ export function WholeOrderReviewPanel({
           step="1"
           inputMode="numeric"
           value={correctionInputs[report.workReportId] ?? String(report.effectiveQuantity)}
-          disabled={busy}
+          disabled={busy || Boolean(history)}
           onChange={(event) => setCorrectionInputs((current) => ({
             ...current,
             [report.workReportId]: event.target.value,
           }))}
         />
         <Button
-          disabled={busy}
+          disabled={busy || Boolean(history)}
           onClick={() => void reject(report.workReportId, report.members[0]?.personId ?? null, report.executionKind)}
         >驳回</Button>
       </div>}
       {tailStage && (moduleWritable && data.canReview) && !report.rejected && !canCorrect && <Button
-        disabled={busy}
+        disabled={busy || Boolean(history)}
         onClick={() => void reject(report.workReportId, null, report.executionKind)}
       >驳回整条记录</Button>}
     </div>;
@@ -566,14 +572,14 @@ export function WholeOrderReviewPanel({
                 <b>最终价格</b>
                 <small>{`N03 已审 ${formatUnitPrice(process.finalUnitPrice)}；不调整可保留原价`}</small>
               </div>
-              {(moduleWritable && data.canReview) && <InsetField
+              {(history || moduleWritable && data.canReview) && <InsetField
                 label={`拟提交单价（元/${process.pricingUnit === "piece" ? "件" : "小时"}）`}
                 type="number"
                 min="0.001"
                 step="0.001"
                 inputMode="decimal"
-                value={priceInputs[process.configurationItemId] ?? ""}
-                disabled={busy}
+                value={history ? formatBusinessDecimal(data.finalConfirmation?.prices.find(price => price.configurationItemId === process.configurationItemId)?.proposedUnitPrice ?? process.finalUnitPrice ?? "", 2) : priceInputs[process.configurationItemId] ?? ""}
+                disabled={busy || Boolean(history)}
                 onChange={(event) => setPriceInputs((current) => ({
                   ...current,
                   [process.configurationItemId]: event.target.value,
@@ -592,7 +598,7 @@ export function WholeOrderReviewPanel({
                     className="quantity-price-decision__button is-approve"
                     type="button"
                     aria-pressed={priceReviewDecisions[process.configurationItemId] === "approved"}
-                    disabled={busy}
+                    disabled={busy || Boolean(history)}
                     onClick={() => setPriceReviewDecisions((current) => ({
                       ...current,
                       [process.configurationItemId]: "approved",
@@ -602,7 +608,7 @@ export function WholeOrderReviewPanel({
                     className="quantity-price-decision__button is-reject"
                     type="button"
                     aria-pressed={priceReviewDecisions[process.configurationItemId] === "rejected"}
-                    disabled={busy}
+                    disabled={busy || Boolean(history)}
                     onClick={() => setPriceReviewDecisions((current) => ({
                       ...current,
                       [process.configurationItemId]: "rejected",
@@ -650,11 +656,11 @@ export function WholeOrderReviewPanel({
       <h2>历史整查报数记录</h2>
       {submittedTailAssignments.map((assignment) => <div className="section-title whole-order-row" key={assignment.assignmentId}>
         <div><b>{assignment.tailInspectorName}</b><p>返件总数 {formatBusinessDecimal(assignment.returnedQuantity ?? 0)} 件</p></div>
-        {(moduleWritable && data.canReview) && <Button disabled={busy} onClick={() => void rejectTailInspection(assignment.assignmentId, assignment.tailInspectorName)}>驳回整查</Button>}
+        {(moduleWritable && data.canReview) && <Button disabled={busy || Boolean(history)} onClick={() => void rejectTailInspection(assignment.assignmentId, assignment.tailInspectorName)}>驳回整查</Button>}
       </div>)}
     </Surface>}
 
-    {tailStage && (moduleWritable && data.canReview) && temporaryWorkerGroups.length > 0 && <Surface>
+    {tailStage && (history || moduleWritable && data.canReview) && temporaryWorkerGroups.length > 0 && <Surface>
       <button
         className="quantity-coefficient-section-toggle"
         type="button"
@@ -706,14 +712,14 @@ export function WholeOrderReviewPanel({
                       max="10"
                       step="0.001"
                       inputMode="decimal"
-                      value={multipliers[id] ?? "1"}
-                      disabled={busy}
+                      value={history ? formatBusinessDecimal(worker.multiplier, 2) : multipliers[id] ?? "1"}
+                      disabled={busy || Boolean(history)}
                       onChange={(event) => setMultipliers((current) => ({ ...current, [id]: event.target.value }))}
                     />
                     <InsetField
                       label="调整原因（非 1.0 必填）"
                       value={multiplierReasons[id] ?? ""}
-                      disabled={busy}
+                      disabled={busy || Boolean(history)}
                       onChange={(event) => setMultiplierReasons((current) => ({ ...current, [id]: event.target.value }))}
                     />
                   </div>
@@ -731,7 +737,7 @@ export function WholeOrderReviewPanel({
           <h2>提交 IE 复核</h2>
           <p>{data.tailInspectionRequired ? "系统按各工序有效数量生成最终数量；价格提案与数量一并交 IE 复核。" : "本单无需整查；工人有效数量与价格提案一并交 IE 复核。"}</p>
         </div>
-        <Button variant="primary" data-ready={ready ? "true" : "false"} onClick={() => void confirmQuantities()} disabled={busy}>
+        <Button variant="primary" data-ready={ready ? "true" : "false"} onClick={() => void confirmQuantities()} disabled={busy || Boolean(history)}>
           {busy ? "提交中…" : data.tailInspectionRequired ? "确认数量并提交 IE" : "确认数量并提交 IE"}
         </Button>
       </div>
@@ -749,10 +755,10 @@ export function WholeOrderReviewPanel({
             variant="primary"
             onClick={() => void reviewQuantities(anyPriceRejected ? "rejected" : "approved")}
             data-ready={priceReviewReady ? "true" : "false"}
-            disabled={busy}
+            disabled={busy || Boolean(history)}
           >提交复核结果</Button> : <>
-            <Button onClick={() => void reviewQuantities("rejected")} disabled={busy}>退回</Button>
-            <Button variant="primary" onClick={() => void reviewQuantities("approved")} disabled={busy}>通过</Button>
+            <Button onClick={() => void reviewQuantities("rejected")} disabled={busy || Boolean(history)}>退回</Button>
+            <Button variant="primary" onClick={() => void reviewQuantities("approved")} disabled={busy || Boolean(history)}>通过</Button>
           </>}
         </div>
       </div>
