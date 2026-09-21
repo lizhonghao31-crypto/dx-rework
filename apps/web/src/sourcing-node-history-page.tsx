@@ -63,7 +63,7 @@ export function SourcingNodeHistoryView({ history, currentHref, nodeHref, expand
   history: SourcingNodeHistory; currentHref: string; nodeHref: (node: SourcingHistoryNode, entryId?: string) => string;
   expanded: boolean; onToggle: () => void; onImage: (image: SourcingAttachment) => void; children?: React.ReactNode;
 }) {
-  const { item, node, entry, versions, attachments, notices } = history;
+  const { item, node, entry, versions, attachments, notices, relatedEntries } = history;
   const index = nodes.findIndex(([key]) => key === node);
   const prices = node === "ie_quote" ? item.ieQuote : item.decision;
   const cutting = item.decision?.cuttingProcess === "in_house" ? "本厂裁" : item.decision?.cuttingProcess === "outsourced" ? "外厂裁" : item.decision?.cuttingProcessOther;
@@ -129,6 +129,18 @@ export function SourcingNodeHistoryView({ history, currentHref, nodeHref, expand
         </div>
       </Surface>
     </div>
+    {relatedEntries.length ? <section className="sourcing-history-related" aria-label="订单相关处理记录">
+      <h2>{node === "management" ? "订单转厂记录" : node === "finance" ? "合同与差异处理记录" : "款号修订记录"}</h2>
+      <p>以下为该订单的相关记录，时间范围独立于上方选定的节点版本。</p>
+      {relatedEntries.map(record => <article key={record.entryId}>
+        <div><strong>{record.kind === "factory_change_request" ? "转厂申请" : record.kind === "factory_change_verification" ? "转厂审核" : record.kind === "contract" ? "合同" : record.kind === "exception_verification" ? "差异处理" : "款号修订"}
+          {record.decision ? ` · ${record.decision === "approved" ? "通过" : "驳回"}` : ""}</strong><span>{dateTime(record.handledAt)} · {record.handledBy}</span></div>
+        {record.supplierName ? <p>申请加工厂：{record.supplierName}；单价：{record.unitPrice ? historicalSourcingPrice(record.unitPrice) : "—"}；数量：{record.quantity ? formatBusinessDecimal(record.quantity) : "—"}；总额：{record.totalAmount ? formatBusinessCurrency(record.totalAmount) : "—"}</p> : null}
+        {record.contractReference ? <p>合同编号：{record.contractReference}</p> : null}
+        {record.resolution ? <p>{record.resolution === "close" ? "确认差异并闭环" : "退回财务重核"}</p> : null}
+        <p>{record.reason}</p>
+      </article>)}
+    </section> : null}
     {children}
   </div>;
 }

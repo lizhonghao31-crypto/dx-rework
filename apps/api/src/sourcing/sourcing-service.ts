@@ -1133,7 +1133,12 @@ export class SourcingService {
       [entry.entryId, sourcingCaseId]) : null;
     const notices: string[] = [];
     if (!ids) notices.push("该历史版本未保存图片清单，不能还原当时的图片。");
-    return { item, node, entry, versions,
+    // Related order-level audits remain readable, explicitly separate from the selected snapshot.
+    const relatedEntries = timeline.items.filter(record => node === "management"
+      ? record.kind === "factory_change_request" || record.kind === "factory_change_verification"
+      : node === "finance" ? record.kind === "exception_verification" || record.kind === "contract"
+        : node === "created" && record.kind === "style_revision");
+    return { item, node, entry, versions, relatedEntries,
       attachments: ids ? attachments.items.filter(image => ids.includes(image.attachmentId)) : [], notices,
       contractReference: contract?.rows[0]?.reference ?? null };
   }

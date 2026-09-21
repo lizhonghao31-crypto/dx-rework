@@ -584,6 +584,7 @@ export const SourcingNodeHistorySchema = z.object({
   node: SourcingHistoryNodeSchema,
   entry: SourcingTimelineEntrySchema,
   versions: z.array(SourcingTimelineEntrySchema),
+  relatedEntries: z.array(SourcingTimelineEntrySchema),
   attachments: SourcingAttachmentListResponseSchema.shape.items,
   notices: z.array(z.string()),
   contractReference: z.string().nullable(),

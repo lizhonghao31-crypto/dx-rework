@@ -14,7 +14,7 @@ const item = SourcingCaseSummarySchema.parse({
   ieQuote: { sourcingIeQuoteId: id, quoteVersion: 1, unitPrice: "12.34", quantity: 120, totalAmount: "1480.80", linePrices: [{position: 1, quantity: 120, unitPrice: "12.34", totalAmount: "1480.80"}], quoteReason: "当时报价说明", quotedBy: id, quotedAt: at },
   decision: null, ownerDecision: null,
 });
-const history: SourcingNodeHistory = { item, node: "ie_quote", entry: { entryId: id, kind: "ie_quote", version: 1, handledBy: "IE同事", handledAt: at, reason: "当时报价说明", unitPrice: "12.34", totalAmount: "1480.80", supplierName: null, decision: null, contractReference: null, signedOn: null, quantity: 120, differenceFields: [], result: null, resolution: null }, versions: [], attachments: [], notices: [], contractReference: null };
+const history: SourcingNodeHistory = { item, node: "ie_quote", entry: { entryId: id, kind: "ie_quote", version: 1, handledBy: "IE同事", handledAt: at, reason: "当时报价说明", unitPrice: "12.34", totalAmount: "1480.80", supplierName: null, decision: null, contractReference: null, signedOn: null, quantity: 120, differenceFields: [], result: null, resolution: null }, versions: [], relatedEntries: [], attachments: [], notices: [], contractReference: null };
 const render = (node: SourcingHistoryNode = "ie_quote") => renderToStaticMarkup(createElement(SourcingNodeHistoryView, {
   history: { ...history, node }, currentHref: "/current", nodeHref: key => `/history/${key}`, expanded: true, onToggle: () => {}, onImage: () => {},
 }));
@@ -25,6 +25,16 @@ describe("historical sourcing node pages", () => {
     for (const input of html.match(/<input\b[^>]*>/g) ?? []) expect(input).toContain('readOnly=""');
     expect(html).toContain('<textarea readOnly="">当时报价说明</textarea>');
     expect(html).not.toContain("预算价");
+  });
+  it("retains rejected transfer audits outside the selected historical snapshot", () => {
+    const html = renderToStaticMarkup(createElement(SourcingNodeHistoryView, {
+      history: { ...history, node: "management", relatedEntries: [{ ...history.entry, kind: "factory_change_verification", decision: "rejected", reason: "交期不符合要求" }] },
+      currentHref: "/current", nodeHref: key => `/history/${key}`, expanded: false, onToggle: () => {}, onImage: () => {},
+    }));
+    expect(html).toContain("订单转厂记录");
+    expect(html).toContain("转厂审核 · 驳回");
+    expect(html).toContain("交期不符合要求");
+    expect(html).not.toContain("<form");
   });
   it.each(["created", "ie_quote", "management", "owner", "finance"] as const)("%s has no writable business controls", node => {
     const html = render(node);

@@ -159,3 +159,7 @@
   [data-dx-ui="governed"] .sourcing-node-history .sourcing-line-price-row { grid-template-columns:minmax(0,1fr) minmax(90px,1fr); }
   [data-dx-ui="governed"] .sourcing-node-history .sourcing-line-price-row > span { grid-column:1/-1; }
 }
+
+[data-dx-ui="governed"] .sourcing-history-related article { padding:12px 0; border-top:1px solid var(--dx-governed-border); }
+[data-dx-ui="governed"] .sourcing-history-related article > div { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; }
+[data-dx-ui="governed"] .sourcing-history-related p { overflow-wrap:anywhere; }

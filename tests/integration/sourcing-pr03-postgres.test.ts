@@ -1054,6 +1054,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(firstHistory.item.decision?.totalAmount).toBe("1507.00");
     expect(firstHistory.item.ownerDecision).toBeNull();
     expect(firstHistory.versions).toHaveLength(3);
+    expect(firstHistory.relatedEntries.filter(record => record.kind === "factory_change_request")).toHaveLength(2);
+    expect(firstHistory.relatedEntries).toEqual(expect.arrayContaining([expect.objectContaining({kind: "factory_change_verification", decision: "rejected"})]));
     const rejectedHistory = await service.nodeHistory(readerActor(), historyCaseId, "owner", rejected.value.ownerDecision!.sourcingOwnerDecisionId);
     expect(rejectedHistory.item.ownerDecision?.decision).toBe("rejected");
     expect(rejectedHistory.item.decision?.totalAmount).toBe("1507.00");
