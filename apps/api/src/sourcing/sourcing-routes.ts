@@ -6,6 +6,7 @@ import { registerProductionReportingRoutes } from "./production-reporting-routes
 import type { ProductionReportingService } from "./production-reporting-service.js";
 import {
   CreateSourcingCaseSchema,
+  CorrectSourcingBudgetPriceSchema,
   SourcingHistoryNodeSchema,
   ReviseSourcingStylesSchema,
   DispatchSourcingOrderSchema,
@@ -142,6 +143,20 @@ export function registerSourcingRoutes(
       authorizationCapabilities: user.capabilities,
       requestId: request.id,
     };
+  };
+
+  const rootBudgetCorrectionActor = async (request: FastifyRequest) => {
+    const user = await dependencies.authenticate(token(request));
+    const root = await isRootUser(dependencies.root, user.id);
+    if (!root) {
+      throw new ApplicationError("FORBIDDEN", "只有超级用户可以更正预算价", 403);
+    }
+    return businessActor(
+      dependencies.root,
+      user,
+      request.id,
+      "sourcing:inquiry:create",
+    );
   };
 
   const rootDeleteActor = async (request: FastifyRequest) => {
@@ -329,6 +344,20 @@ export function registerSourcingRoutes(
     if (result.reused) void reply.header("idempotency-replayed", "true");
     return reply.code(201).send(result.value);
   });
+
+  app.post<{ Params: { sourcingCaseId: string } }>(
+    "/sourcing/cases/:sourcingCaseId/budget-price-corrections",
+    async (request, reply) => {
+      const parsed = CorrectSourcingBudgetPriceSchema.safeParse(request.body);
+      const data = parsed.success ? parsed.data : validationError(parsed.error.issues[0]?.message ?? "预算价更正信息不完整");
+      const result = await dependencies.service.correctBudgetPrice(
+        await rootBudgetCorrectionActor(request),
+        caseId(request.params.sourcingCaseId), data, idempotencyKey(request),
+      );
+      if (result.reused) void reply.header("idempotency-replayed", "true");
+      return reply.code(200).send(result.value);
+    },
+  );
 
   app.post<{ Params: { sourcingCaseId: string } }>(
     "/sourcing/cases/:sourcingCaseId/ie-quotes",

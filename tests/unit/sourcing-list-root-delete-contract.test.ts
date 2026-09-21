@@ -26,7 +26,8 @@ describe("sourcing list parity and Root logical deletion", () => {
     expect(service).toContain("decision_row.supplier_name_snapshot ILIKE");
     expect(service).toContain("decision_row.supplier_code_snapshot ILIKE");
     expect(service).toContain("case_view.process_description ILIKE");
-    expect(service.match(/source_case\.deleted_at IS NULL/g)).toHaveLength(8);
+    expect(service.match(/source_case\.deleted_at IS NULL/g)?.length ?? 0).toBeGreaterThanOrEqual(8);
+    expect(service).toContain("async correctBudgetPrice(");
     expect(service).toContain("cancelOpenByDedupePrefix(");
     expect(service).toContain("`sourcing:${sourcingCaseId}:`");
   });

@@ -73,6 +73,7 @@ import { useDebouncedValue } from "./use-debounced-value.js";
 import { SourcingImageSupplementUploader } from "./sourcing-image-supplement-uploader.js";
 import { SourcingNodeHistoryPage } from "./sourcing-node-history-page.js";
 import { SourcingFinanceDifferenceDialog } from "./sourcing-finance-difference-dialog.js";
+import { SourcingBudgetPriceCorrectionDialog } from "./sourcing-budget-price-correction-dialog.js";
 import { alertInApp, confirmInApp } from "./system-dialog.js";
 import { SubmissionFeedback, useSubmissionFeedback } from "./submission-feedback.js";
 import { SubmissionCancelled, SubmissionRequestError } from "./submission-validation.js";
@@ -1055,6 +1056,7 @@ function OrderDetailPage({
   const [styleEdits,setStyleEdits] = useState<Array<{position:number;styleNo:string;alternateStyleNo:string}>>([]);
   const [styleEditRevision,setStyleEditRevision] = useState(0);
   const styleEditKey = useRef<string | null>(null);
+  const budgetCorrectionKey = useRef<string | null>(null);
   const [attachments, setAttachments] = useState<readonly SourcingAttachment[]>([]);
   const [timeline, setTimeline] = useState<readonly SourcingTimelineEntry[]>([]);
   const [factories, setFactories] = useState<readonly SourcingFactory[]>([]);
@@ -1064,6 +1066,8 @@ function OrderDetailPage({
   const [activeCraftQuery, setActiveCraftQuery] = useState("");
   const [decision, setDecision] = useState<DecisionDraft>({ supplierId: "", linePrices: [], decisionReason: "", cuttingProcess: "", cuttingProcessOther: "" });
   const [financeDifferenceOpen, setFinanceDifferenceOpen] = useState(false);
+  const [budgetCorrectionOpen, setBudgetCorrectionOpen] = useState(false);
+  const [budgetCorrectionError, setBudgetCorrectionError] = useState("");
   const [financeReview, setFinanceReview] = useState<FinanceReviewDraft>({ differenceFields: [], differenceReason: "" });
   const [factoryChange, setFactoryChange] = useState<SourcingFactoryChangeState | null>(null);
   const [contract, setContract] = useState<SourcingContractDocument | null>(null);
@@ -1174,6 +1178,12 @@ function OrderDetailPage({
   useEffect(() => { void load(); }, [sourcingCaseId]);
   const canQuote = canAct(user, "ie_reviewer", "sourcing:price:quote");
   const canManage = canAct(user, "production_management", "sourcing:decision:record");
+  const canCorrectBudget = !!item
+    && user?.isRoot === true
+    && "daxingUnitPrice" in item
+    && !!item.daxingUnitPrice
+    && !item.approvalSnapshot
+    && ["pending_ie_quote", "pending_management_decision", "pending_owner_approval"].includes(item.status);
   useEffect(() => {
     if (!canManage) return;
     let mounted = true;
@@ -1217,6 +1227,29 @@ function OrderDetailPage({
   const canEditStyles = moduleWritable && !!item?.approvalSnapshot && ["pending_finance_reconciliation", "closed"].includes(item.status) && contract?.status === "ready" && !!contract.pdfAttachmentId
     && (user?.isRoot === true || canManage || (canAct(user,"order_merchandiser","sourcing:inquiry:create") && item?.createdBy === user?.id));
   const styleDuplicateMessage = duplicateSourcingLineMessage(styleEdits.map(line => ({...line,color:item?.lineItems.find(row => row.position===line.position)?.color})));
+  const submitBudgetCorrection = async (daxingUnitPrice: string, reason: string): Promise<void> => {
+    if (!item || !canCorrectBudget || busy) return;
+    setBusy(true);
+    setBudgetCorrectionError("");
+    const key = budgetCorrectionKey.current ?? createClientRequestId();
+    budgetCorrectionKey.current = key;
+    try {
+      const corrected = await request(`sourcing/cases/${sourcingCaseId}/budget-price-corrections`, SourcingCaseSummarySchema, {
+        method: "POST",
+        headers: { "idempotency-key": key },
+        body: JSON.stringify({ daxingUnitPrice, reason }),
+      });
+      setItem(corrected);
+      budgetCorrectionKey.current = null;
+      setBudgetCorrectionOpen(false);
+      setMessage("预算价已更正");
+    } catch (error) {
+      setBudgetCorrectionError(error instanceof Error ? error.message : "预算价更正失败");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const saveStyles = async (): Promise<void> => {
     if (!item || busy || !canEditStyles) return;
     if (styleEdits.some(line => !line.styleNo.trim() && !line.alternateStyleNo.trim())) {setMessage("每行须填写正式款号或代用款号");return;}
@@ -1440,6 +1473,18 @@ function OrderDetailPage({
 
   return (
     <div className="sourcing-workspace sourcing-order-detail">
+      {budgetCorrectionOpen && item?.daxingUnitPrice ? <SourcingBudgetPriceCorrectionDialog
+        currentPrice={item.daxingUnitPrice}
+        busy={busy}
+        error={budgetCorrectionError}
+        onClose={() => {
+          if (busy) return;
+          budgetCorrectionKey.current = null;
+          setBudgetCorrectionError("");
+          setBudgetCorrectionOpen(false);
+        }}
+        onSubmit={(daxingUnitPrice, reason) => void submitBudgetCorrection(daxingUnitPrice, reason)}
+      /> : null}
       <Header
         iconRoute="/ui/sourcing/pending"
         title={item.styleNo}
@@ -1535,7 +1580,11 @@ function OrderDetailPage({
             },
             { key: "color", label: "颜色", mobileHeading: true, render: line => line.color ?? "历史未维护" },
             { key: "quantity", label: "数量", render: line => `${formatBusinessDecimal(line.quantity)} 件` },
-            ...("daxingUnitPrice" in item ? [{ key: "budget", label: "预算价", render: () => item.daxingUnitPrice ? formatBusinessCurrency(item.daxingUnitPrice) : "历史未维护" }] : []),
+            ...("daxingUnitPrice" in item ? [{ key: "budget", label: "预算价", render: (line: SourcingCaseSummary["lineItems"][number]) => item.daxingUnitPrice ? <span className="sourcing-budget-price-value">
+              {formatBusinessCurrency(item.daxingUnitPrice)}
+              {canCorrectBudget && line.position === item.lineItems[0]?.position ? <button type="button" className="sourcing-budget-price-correct"
+                onClick={() => { budgetCorrectionKey.current = null; setBudgetCorrectionError(""); setBudgetCorrectionOpen(true); }}>更正</button> : null}
+            </span> : "历史未维护" }] : []),
             { key: "ie", label: "IE 单价", render: line => { const price = sourcingLinePricing(item.ieQuote, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
             { key: "production", label: "生产单价", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
             { key: "amount", label: "本款金额", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price?.totalAmount ? formatBusinessCurrency(price.totalAmount) : "—"; } },

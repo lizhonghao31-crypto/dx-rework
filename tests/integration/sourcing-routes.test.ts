@@ -69,6 +69,7 @@ const create = (
     })),
     reviseStyles: vi.fn(async () => ({value:caseSummary,reused:false})),
     createCase: vi.fn(async () => ({ value: caseSummary, reused: false })),
+    correctBudgetPrice: vi.fn(async () => ({ value: { ...caseSummary, daxingUnitPrice: "10.2500" }, reused: false })),
     supplementImages: vi.fn(async () => ({
       value: {
         items: [{
@@ -235,6 +236,55 @@ describe("sourcing PR03 routes", () => {
       },
       "sourcing-create-key-1",
     );
+  });
+
+  it("routes budget correction only for Root and validates its payload", async () => {
+    const allowed = create([], [], true);
+    const corrected = await allowed.app.inject({
+      method: "POST",
+      url: `/sourcing/cases/${caseSummary.sourcingCaseId}/budget-price-corrections`,
+      headers: {
+        cookie: "dx_rework_session=trusted",
+        "x-request-id": "budget-correction-1",
+        "idempotency-key": "budget-correction-key-1",
+      },
+      payload: { daxingUnitPrice: "10.25", reason: "原预算价录入错误" },
+    });
+    expect(corrected.statusCode).toBe(200);
+    expect(allowed.service.correctBudgetPrice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorRoles: ["root_superuser"],
+        authorizationCapability: "sourcing:inquiry:create",
+        requestId: "budget-correction-1",
+      }),
+      caseSummary.sourcingCaseId,
+      { daxingUnitPrice: "10.25", reason: "原预算价录入错误" },
+      "budget-correction-key-1",
+    );
+
+    const beforeInvalid = allowed.service.correctBudgetPrice.mock.calls.length;
+    for (const payload of [
+      { daxingUnitPrice: "10.251", reason: "精度错误" },
+      { daxingUnitPrice: "10.8元", reason: "格式错误" },
+      { daxingUnitPrice: "10.25", reason: "" },
+    ]) {
+      expect((await allowed.app.inject({
+        method: "POST",
+        url: `/sourcing/cases/${caseSummary.sourcingCaseId}/budget-price-corrections`,
+        headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "invalid-budget-correction" },
+        payload,
+      })).statusCode).toBe(400);
+    }
+    expect(allowed.service.correctBudgetPrice).toHaveBeenCalledTimes(beforeInvalid);
+
+    const forbidden = create(["sourcing:view", "sourcing:inquiry:create"], ["order_merchandiser"]);
+    expect((await forbidden.app.inject({
+      method: "POST",
+      url: `/sourcing/cases/${caseSummary.sourcingCaseId}/budget-price-corrections`,
+      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "forbidden-budget-correction" },
+      payload: { daxingUnitPrice: "10.25", reason: "普通跟单不应允许" },
+    })).statusCode).toBe(403);
+    expect(forbidden.service.correctBudgetPrice).not.toHaveBeenCalled();
   });
 
   it("lets IE quote but prevents IE from creating an inquiry", async () => {
