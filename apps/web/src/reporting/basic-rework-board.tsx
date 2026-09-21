@@ -1,3 +1,4 @@
+import "../rework-governed.css";
 import type { BasicReworkPage } from "@dx-rework/contracts/reporting";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useState, type ReactNode } from "react";
@@ -34,7 +35,7 @@ export function BasicReworkBoard(){
       .then(value=>{if(!controller.signal.aborted)setData(value);}).catch((e:unknown)=>{if(!controller.signal.aborted)setError(e instanceof Error?e.message:"读取失败");})
       .finally(()=>{if(!controller.signal.aborted)setBusy(false);});return()=>controller.abort();
   },[search,status,page,refresh]);
-  return <Shell active="返工单看板"><div className="rework-query-content">
+  return <Shell active="返工单看板"><div className="rework-query-content rework-governed" data-dx-ui="governed">
     <Header title="返工单看板" subtitle="查看返工基础资料、照片与当前进度。" badge={busy?"查询中":`${data?.totalCount??0} 条返工单`} />
     <Surface className="reporting-filters">
       <InsetField label="关键词" value={q} onChange={event=>{setQ(event.target.value);setPage(1);}} placeholder="返工号 / 款号 / 加工厂 / 跟单姓名" />

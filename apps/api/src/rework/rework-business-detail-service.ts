@@ -1,3 +1,5 @@
+import { readReworkNodeHistory } from "./rework-node-history.js";
+import type { FinanceNodeKey } from "@dx-rework/contracts/reporting";
 import { canReadFinanceOrders, isScopedFinanceReader } from "./finance-order-access.js";
 import { createHash, randomUUID } from "node:crypto";
 
@@ -229,6 +231,11 @@ export class ReworkBusinessDetailService {
     private readonly idempotency = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
   ) {}
+
+  async history(actor: TrustedActorContext, orderId: string, node: FinanceNodeKey, entryId?: string) {
+    const detail = await this.get(actor, orderId);
+    return readReworkNodeHistory(this.database, actor, detail, node, entryId);
+  }
 
   async get(actor: TrustedActorContext, reworkOrderId: string): Promise<ReworkBusinessDetail> {
     const result = await this.database.query<DetailRow>(

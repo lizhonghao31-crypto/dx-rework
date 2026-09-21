@@ -30,7 +30,7 @@ describe("1.0 prelaunch PR-09 mobile workspace density", () => {
     expect(styles).toContain(".page-heading__subtitle-row");
     expect(compact).toContain(".rework-detail-target-layout .rework-detail-desktop-panel-heading");
     expect(compact).toContain("display: none !important;");
-    expect(detail).toContain("const [mobileImagesExpanded, setMobileImagesExpanded] = useState(true)");
+    expect(detail).toContain('id="order-images-content" className="rework-detail-mobile-collapsible is-expanded"');
     expect(detail).toContain("const [mobileWorkflowExpanded, setMobileWorkflowExpanded] = useState(false)");
   });
 

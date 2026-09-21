@@ -127,14 +127,14 @@ describe("rework initiation contracts", () => {
     expect(CreateReworkDraftSchema.safeParse({ attachmentIds }).success).toBe(false);
   });
 
-  it("keeps the detail image region at six visible slots while all eight remain previewable", async () => {
+  it("keeps every detail image available without a sixth-slot count overlay", async () => {
     const source = await readFile(
       new URL("../../apps/web/src/rework-detail-page.tsx", import.meta.url),
       "utf8",
     );
     expect(source).toContain("const visibleImageAttachments = imageAttachments;");
-    expect(source).toContain("index === 5 && imageAttachments.length > 6");
-    expect(source).toContain("imageAttachments.length - 5");
+    expect(source).not.toContain("index === 5 && imageAttachments.length > 6");
+    expect(source).not.toContain("imageAttachments.length - 5");
   });
 
   it("requires a non-empty, unique, capped image supplement batch", () => {

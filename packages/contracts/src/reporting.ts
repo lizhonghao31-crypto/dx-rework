@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { InspectionReportDraftSchema } from "./index.js";
 
 import { BUSINESS_TIME_ZONE } from "./business-display.js";
 
@@ -268,3 +269,16 @@ export type ManagementDashboardResponse = z.infer<typeof ManagementDashboardResp
 export type SiteDashboardResponse = z.infer<typeof SiteDashboardResponseSchema>;
 export type ManagementReworkPage = z.infer<typeof ManagementReworkPageSchema>;
 export type ReportPreviewResponse = z.infer<typeof ReportPreviewResponseSchema>;
+
+const ReworkHistoryEntrySchema = z.object({ id: z.string().uuid(), label: z.string(), at: z.string(), actor: z.string() }).strict();
+export const ReworkNodeHistorySchema = z.object({
+  inspectionReport: InspectionReportDraftSchema.nullable(),
+  node: FinanceNodeKeySchema,
+  entry: ReworkHistoryEntrySchema,
+  versions: z.array(ReworkHistoryEntrySchema),
+  fields: z.array(z.object({ label: z.string(), value: z.string().nullable() }).strict()),
+  sections: z.array(z.object({ title: z.string(), columns: z.array(z.string()), rows: z.array(z.array(z.string().nullable())) }).strict()),
+  attachments: z.array(z.object({ attachmentId: z.string().uuid(), filename: z.string(), mimeType: z.string() }).strict()),
+  notices: z.array(z.string()),
+}).strict();
+export type ReworkNodeHistory = z.infer<typeof ReworkNodeHistorySchema>;

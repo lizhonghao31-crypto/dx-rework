@@ -1,3 +1,4 @@
+import "../rework-governed.css";
 import { BasicReworkBoard, ReworkBoardAccess } from "./basic-rework-board.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import type { ManagementReworkPage, ManagementReworkRow } from "@dx-rework/contracts/reporting";
@@ -92,7 +93,7 @@ function BusinessReworkQueryPage() {
       .finally(() => setDeletingOrderId(""));
   };
   const items = state.kind === "ready" ? state.value.items : [];
-  return <Shell active="返工单看板"><div className="rework-query-content">
+  return <Shell active="返工单看板"><div className="rework-query-content rework-governed" data-dx-ui="governed">
     <Header title="返工单看板" subtitle="查看权限范围内返工单；进入订单详情查看完整流程并处理对应节点。" badge={!refreshing && state.kind === "ready" ? `${formatBusinessDecimal(items.length)} 条当前结果` : "查询中"} />
     {canSandbox ? <ReworkModuleTabs active="board" /> : null}
     <Surface className="reporting-filters reporting-filters--orders">
