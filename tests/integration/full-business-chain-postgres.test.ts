@@ -2353,7 +2353,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     } finally { await app.close(); }
   });
 
-  it("recovers a required-tail order only after every unified worker and tail task has a valid report", async () => {
+  it.each([200, 180])("recovers a required-tail order only after every unified worker and tail task has a valid report (%i pieces)", async (reportedQuantity) => {
     const imageId = randomUUID();
     await database.query(
       `INSERT INTO attachments(
@@ -2459,13 +2459,19 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const tailTask = started.tasks.find((task) => task.executionKind === "tail_inspection")!;
     await work.submitReport(worker(), workerTask.workTaskId, CreateWorkReportSchema.parse({
       expectedOrderVersion: started.orderVersion,
-      actualQuantity: 200,
+      actualQuantity: reportedQuantity,
       completedAt: new Date().toISOString(),
     }), randomUUID());
+    const historical = await businessDetail.history(actor(ids.ownerOne, ["owner_group"], "responsibility:owner_sign"), submitted.value.reworkOrderId, "work_reporting");
+    const live = await work.list(tailAssign(), submitted.value.reworkOrderId);
+    const historicalTask = historical.page!.workTasks!.tasks.find(task => task.workTaskId === workerTask.workTaskId)!;
+    expect(historicalTask).toMatchObject({ plannedQuantity: 200, submittedQuantity: reportedQuantity, remainingQuantity: 0, canSubmitReport: false });
+    expect(historicalTask.remainingQuantity).toBe(live.tasks.find(task => task.workTaskId === workerTask.workTaskId)!.remainingQuantity);
+    expect(historical.page!.workTasks!.tasks.find(task => task.workTaskId === tailTask.workTaskId)).toMatchObject({ submittedQuantity: 0, remainingQuantity: tailTask.plannedQuantity });
     const afterWorker = await work.list(tailInspect(), submitted.value.reworkOrderId);
     await work.submitReport(tailInspect(), tailTask.workTaskId, CreateWorkReportSchema.parse({
       expectedOrderVersion: afterWorker.orderVersion,
-      actualQuantity: 200,
+      actualQuantity: reportedQuantity,
       completedAt: new Date().toISOString(),
     }), randomUUID());
 
@@ -2499,8 +2505,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       tailInspectionRequired: true,
       processes: [expect.objectContaining({
         configurationItemId: workerItem.configurationItemId,
-        completedQuantity: 200,
-        tailCheckedQuantity: 200,
+        completedQuantity: reportedQuantity,
+        tailCheckedQuantity: reportedQuantity,
         countGap: 0,
         complete: true,
       })],
@@ -2533,9 +2539,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
        WHERE confirmation.rework_order_id=$1`,
       [submitted.value.reworkOrderId],
     )).rows).toEqual([{
-      worker_reported_quantity: "200.00",
-      tail_reported_quantity: "200.00",
-      final_confirmed_quantity: "200.00",
+      worker_reported_quantity: reportedQuantity.toFixed(2),
+      tail_reported_quantity: reportedQuantity.toFixed(2),
+      final_confirmed_quantity: reportedQuantity.toFixed(2),
     }]);
 
   });
