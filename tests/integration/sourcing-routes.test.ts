@@ -238,8 +238,8 @@ describe("sourcing PR03 routes", () => {
     );
   });
 
-  it("routes budget correction through the merchandiser capability and validates its payload", async () => {
-    const allowed = create(["sourcing:view", "sourcing:inquiry:create"], ["order_merchandiser"]);
+  it("routes budget correction only for Root and validates its payload", async () => {
+    const allowed = create([], [], true);
     const corrected = await allowed.app.inject({
       method: "POST",
       url: `/sourcing/cases/${caseSummary.sourcingCaseId}/budget-price-corrections`,
@@ -253,7 +253,7 @@ describe("sourcing PR03 routes", () => {
     expect(corrected.statusCode).toBe(200);
     expect(allowed.service.correctBudgetPrice).toHaveBeenCalledWith(
       expect.objectContaining({
-        actorRoles: ["order_merchandiser"],
+        actorRoles: ["root_superuser"],
         authorizationCapability: "sourcing:inquiry:create",
         requestId: "budget-correction-1",
       }),
@@ -277,12 +277,12 @@ describe("sourcing PR03 routes", () => {
     }
     expect(allowed.service.correctBudgetPrice).toHaveBeenCalledTimes(beforeInvalid);
 
-    const forbidden = create(["sourcing:view", "sourcing:price:quote"], ["ie_reviewer"]);
+    const forbidden = create(["sourcing:view", "sourcing:inquiry:create"], ["order_merchandiser"]);
     expect((await forbidden.app.inject({
       method: "POST",
       url: `/sourcing/cases/${caseSummary.sourcingCaseId}/budget-price-corrections`,
       headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "forbidden-budget-correction" },
-      payload: { daxingUnitPrice: "10.25", reason: "不应允许" },
+      payload: { daxingUnitPrice: "10.25", reason: "普通跟单不应允许" },
     })).statusCode).toBe(403);
     expect(forbidden.service.correctBudgetPrice).not.toHaveBeenCalled();
   });

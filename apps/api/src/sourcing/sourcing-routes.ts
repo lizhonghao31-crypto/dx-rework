@@ -145,6 +145,20 @@ export function registerSourcingRoutes(
     };
   };
 
+  const rootBudgetCorrectionActor = async (request: FastifyRequest) => {
+    const user = await dependencies.authenticate(token(request));
+    const root = await isRootUser(dependencies.root, user.id);
+    if (!root) {
+      throw new ApplicationError("FORBIDDEN", "只有超级用户可以更正预算价", 403);
+    }
+    return businessActor(
+      dependencies.root,
+      user,
+      request.id,
+      "sourcing:inquiry:create",
+    );
+  };
+
   const rootDeleteActor = async (request: FastifyRequest) => {
     const user = await dependencies.authenticate(token(request));
     const root = await isRootUser(dependencies.root, user.id);
@@ -337,7 +351,7 @@ export function registerSourcingRoutes(
       const parsed = CorrectSourcingBudgetPriceSchema.safeParse(request.body);
       const data = parsed.success ? parsed.data : validationError(parsed.error.issues[0]?.message ?? "预算价更正信息不完整");
       const result = await dependencies.service.correctBudgetPrice(
-        await actionActor(request, "order_merchandiser", "sourcing:inquiry:create"),
+        await rootBudgetCorrectionActor(request),
         caseId(request.params.sourcingCaseId), data, idempotencyKey(request),
       );
       if (result.reused) void reply.header("idempotency-replayed", "true");

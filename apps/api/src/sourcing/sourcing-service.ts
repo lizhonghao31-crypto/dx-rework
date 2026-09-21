@@ -1750,13 +1750,18 @@ export class SourcingService {
     input: CorrectSourcingBudgetPrice,
     idempotencyKey: string,
   ): Promise<Result<SourcingCaseSummary>> {
-    this.assertActor(actor, CASE_CREATE_CAPABILITY, CASE_CREATE_ROLE);
+    if (
+      actor.authorizationCapability !== CASE_CREATE_CAPABILITY
+      || !actor.actorRoles.includes(ROOT_ROLE)
+    ) {
+      fail("只有超级用户可以更正预算价", 403, "FORBIDDEN");
+    }
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
     const parsedPrice = SourcingNewUnitPriceSchema.safeParse(input.daxingUnitPrice);
-    if (!parsedPrice.success || parsedPrice.data === undefined) {
-      fail(parsedPrice.success ? "预算价无效" : parsedPrice.error.issues[0]?.message ?? "预算价无效");
-    }
-    const nextPrice = normalizeSourcingUnitPrice(parsedPrice.data);
+    const parsedPriceValue = parsedPrice.success
+      ? parsedPrice.data
+      : fail(parsedPrice.error.issues[0]?.message ?? "预算价无效");
+    const nextPrice = normalizeSourcingUnitPrice(parsedPriceValue);
     const reason = normalizeText(input.reason, "更正原因", 500);
     const scope = "sourcing.budget_price.correct";
     const client = await this.database.connect();
@@ -1770,13 +1775,12 @@ export class SourcingService {
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
         const current = await client.query<{
-          created_by: string;
           status: string;
           current_price: string | null;
           correction_version: number | string;
           approved: boolean;
         }>(
-          `SELECT source_case.created_by,current_transition.to_status AS status,
+          `SELECT current_transition.to_status AS status,
                   COALESCE((SELECT correction.new_unit_price FROM sourcing_budget_price_corrections correction
                     WHERE correction.sourcing_case_id=source_case.sourcing_case_id
                     ORDER BY correction.correction_version DESC LIMIT 1),source_case.daxing_unit_price)::text AS current_price,
@@ -1795,9 +1799,6 @@ export class SourcingService {
           [sourcingCaseId],
         );
         const source = current.rows[0] ?? fail("报价选厂询价不存在", 404, "NOT_FOUND");
-        if (!actor.actorRoles.includes(ROOT_ROLE) && source.created_by !== actor.actorId) {
-          fail("只能更正本人负责订单的预算价", 403, "FORBIDDEN");
-        }
         if (source.approved || !["pending_ie_quote","pending_management_decision","pending_owner_approval"].includes(source.status)) {
           fail("老板已批准，订单数字已锁定", 409, "INVALID_STATE_TRANSITION");
         }

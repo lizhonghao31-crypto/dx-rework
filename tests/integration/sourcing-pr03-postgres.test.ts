@@ -189,6 +189,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     authorizationCapabilities: ["sourcing:view", "sourcing:delete"],
     requestId,
   });
+  const rootBudgetActor = (requestId = randomUUID()): TrustedActorContext => ({
+    ...rootActor(requestId),
+    authorizationCapability: "sourcing:inquiry:create",
+    authorizationCapabilities: ["sourcing:view", "sourcing:inquiry:create"],
+  });
 
   beforeAll(async () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
@@ -746,8 +751,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(firstDecision.value.processes).toEqual(["净色车缝", "整烫", "按样衣复核"]);
 
     const budgetCorrectionKey = randomUUID();
+    await expect(service.correctBudgetPrice(
+      merchandiserActor("budget-correction-merchandiser-denied"),
+      created.value.sourcingCaseId,
+      { daxingUnitPrice: "10.20", reason: "普通跟单不再允许更正" },
+      randomUUID(),
+    )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
     const correctedBudget = await service.correctBudgetPrice(
-      merchandiserActor("budget-correction-1"),
+      rootBudgetActor("budget-correction-1"),
       created.value.sourcingCaseId,
       { daxingUnitPrice: "10.25", reason: "原预算价录入错误" },
       budgetCorrectionKey,
@@ -759,18 +770,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       daxingUnitPrice: "10.2500",
     });
     expect((await service.correctBudgetPrice(
-      merchandiserActor("budget-correction-replay"),
+      rootBudgetActor("budget-correction-replay"),
       created.value.sourcingCaseId,
       { daxingUnitPrice: "10.25", reason: "原预算价录入错误" },
       budgetCorrectionKey,
     )).reused).toBe(true);
-    await expect(service.correctBudgetPrice(
-      { ...anotherMerchandiserReader(), authorizationCapability: "sourcing:inquiry:create",
-        authorizationCapabilities: ["sourcing:view", "sourcing:inquiry:create"] },
-      created.value.sourcingCaseId,
-      { daxingUnitPrice: "10.30", reason: "无权修改他人订单" },
-      randomUUID(),
-    )).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
     expect((await service.nodeHistory(
       readerActor(), created.value.sourcingCaseId, "created",
     )).item.daxingUnitPrice).toBe("10.0000");
@@ -833,7 +837,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     );
     expect(approvalReplay.reused).toBe(true);
     await expect(service.correctBudgetPrice(
-      merchandiserActor("budget-after-approval"),
+      rootBudgetActor("budget-after-approval"),
       created.value.sourcingCaseId,
       { daxingUnitPrice: "10.40", reason: "批准后不应允许修改" },
       randomUUID(),

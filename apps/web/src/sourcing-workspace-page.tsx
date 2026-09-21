@@ -1179,12 +1179,11 @@ function OrderDetailPage({
   const canQuote = canAct(user, "ie_reviewer", "sourcing:price:quote");
   const canManage = canAct(user, "production_management", "sourcing:decision:record");
   const canCorrectBudget = !!item
+    && user?.isRoot === true
     && "daxingUnitPrice" in item
     && !!item.daxingUnitPrice
     && !item.approvalSnapshot
-    && ["pending_ie_quote", "pending_management_decision", "pending_owner_approval"].includes(item.status)
-    && (user?.isRoot === true
-      || (canAct(user, "order_merchandiser", "sourcing:inquiry:create") && item.createdBy === user?.id));
+    && ["pending_ie_quote", "pending_management_decision", "pending_owner_approval"].includes(item.status);
   useEffect(() => {
     if (!canManage) return;
     let mounted = true;
