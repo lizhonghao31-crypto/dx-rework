@@ -1026,7 +1026,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect((await service.handoff(designer, created.orderId, roundAction(complete), randomUUID())).status).toBe("completed");
   });
 
-  it("carries one real order from N01 through N11 without losing cross-node facts", async () => {
+  // Also invoked by the mapped-PostgreSQL gate with the default Vitest config.
+  // Keep the existing business-chain 60s budget for this multi-step scenario.
+  it("carries one real order from N01 through N11 without losing cross-node facts", { timeout: 60_000 }, async () => {
     // N01 - QC initiates one order with the business total quantity.
     const initialImageId = randomUUID();
     await database.query(
@@ -2237,7 +2239,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     } finally { await history.end(); await adminPool.query(`DROP SCHEMA ${historySchema} CASCADE`); }
   });
 
-  it("opens ordinary work with 501 exact wage IDs, real-person grouping, cross-month release and late unpaid rework", async () => {
+  // Also invoked by the mapped-PostgreSQL gate with the default Vitest config.
+  // Keep the existing business-chain 60s budget for this multi-step scenario.
+  it("opens ordinary work with 501 exact wage IDs, real-person grouping, cross-month release and late unpaid rework", { timeout: 60_000 }, async () => {
     // Isolated scale fixture: real create/assign/complete/handoff; 500 historical segments are synthesized below.
     // It validates a large release and financial scope, not 501 claimed UI orders or production records.
     const service = new PatternRoomOrderService(database, todoProjection);
@@ -2299,7 +2303,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect((await database.query("SELECT count(*)::int count FROM rework_todos WHERE entity_id=$1 AND status='open' AND todo_type='actionable'", [created.orderId])).rows[0].count).toBe(0);
   });
 
-  it("enforces real finance roles on unified HTTP report, settlement and XLSX with only minimal wage basis", async () => {
+  // Also invoked by the mapped-PostgreSQL gate with the default Vitest config.
+  // Keep the existing business-chain 60s budget for this multi-step scenario.
+  it("enforces real finance roles on unified HTTP report, settlement and XLSX with only minimal wage basis", { timeout: 60_000 }, async () => {
     const reporting = new ManagementReportingService(database), exporter = new ReportExportService(reporting, database, "pr06-http-verification");
     let current = financeWages(); const app = Fastify();
     registerManagementReportingRoutes(app, { service: reporting, exportService: exporter, authenticate: async () => ({ id: current.actorId, businessRoles: current.actorRoles, capabilities: ["wage:view", "wage:export", "wage:settlement_mark"] }) });
