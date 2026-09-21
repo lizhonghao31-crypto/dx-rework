@@ -1541,6 +1541,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     for (const node of ["initiation", "process_configuration", "ie_review", "work_reporting", "whole_order_review", "final_quantity_ie_review", "responsibility", "owner_signature"] as const) {
       const historical = await businessDetail.history(historyActor, submitted.value.reworkOrderId, node);
       expect(historical.node).toBe(node);
+      expect(historical.fields.find(field => field.label === "订单数量")?.value).toBe("1000");
+      expect(historical.fields.find(field => field.label === "整查费用承担方")?.value).toBe("processing_factory");
+      expect(historical.inspectionReport).toEqual(n01CoreInspectionReport("全链测试款"));
       expect(historical.versions.some(entry => entry.id === historical.entry.id)).toBe(true);
       if (node !== "initiation") expect(historical.sections.some(section => section.rows.length > 0)).toBe(true);
     }

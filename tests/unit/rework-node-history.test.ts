@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import { describe,it,expect,vi } from 'vitest';
-import { canReadReworkHistoryNode, reworkHistoryNode } from '../../apps/api/src/rework/rework-node-history.js';
+import { canReadReworkHistoryNode, reworkHistoryNode, selectReworkInitiationSnapshot } from '../../apps/api/src/rework/rework-node-history.js';
 import type { TrustedActorContext } from '../../apps/api/src/tools/repositories.js';
 import type { ReworkNodeHistory } from '@dx-rework/contracts/reporting';
 vi.mock('../../apps/web/src/components.js',()=>({Header:()=>null,Shell:()=>null}));
@@ -16,6 +16,20 @@ describe('rework historical node boundary',()=>{
   expect(canReadReworkHistoryNode(actor('worker',['work:report']),'responsibility')).toBe(false);
   expect(canReadReworkHistoryNode(actor('factory_payables',['rework:finance_orders:read']),'owner_signature')).toBe(false);
   expect(canReadReworkHistoryNode(actor('finance_director',['rework:finance_nodes:read']),'owner_signature')).toBe(true);
+ });
+ it('preserves complete submitted fields when later node audits contain only partial order facts',()=>{
+  const submission={styleNo:'HISTORY',orderQuantity:1000,reworkReason:'断线',reworkProcess:'修线',tailInspectionCostBearer:'processing_factory',inspectionReport:{styleName:'历史验货报告'}};
+  expect(selectReworkInitiationSnapshot([
+   {action:'rework.draft.create',after:{...submission,orderQuantity:900}},
+   {action:'rework.submit',after:submission},
+   {action:'rework.process_configuration.review',after:{styleNo:'HISTORY',reworkQuantity:200}},
+  ])).toEqual(submission);
+  expect(selectReworkInitiationSnapshot([
+   {action:'rework.submit',after:submission},
+   {action:'rework.draft.update',after:{...submission,reworkReason:null}},
+   {action:'rework.work_report.submit',after:{styleNo:'HISTORY'}},
+  ]).reworkReason).toBeNull();
+  expect(selectReworkInitiationSnapshot([{action:'rework.work_report.submit',after:{styleNo:'HISTORY'}}])).toEqual({});
  });
  it('keeps supplements and draft edits out of submitted initiation versions',()=>{
   expect(reworkHistoryNode('rework.submit')).toBe('initiation');
