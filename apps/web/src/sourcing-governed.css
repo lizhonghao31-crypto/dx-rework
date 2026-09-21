@@ -32,6 +32,7 @@
 @media (max-width: 1100px) and (min-width: 801px) {
   [data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
 @media (max-width: 800px) {
   [data-dx-ui="governed"] .sourcing-detail-layout { gap: 18px; padding: 0; background: transparent; border: 0; }
   [data-dx-ui="governed"] .sourcing-order-detail .page-heading h1 { font-size: 22px; }
@@ -103,7 +104,7 @@
   [data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts dt { font-size: 12px; line-height: 1.5; }
   [data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts dd { margin: 0; font-size: 16px; line-height: 1.5; }
   [data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts > .sourcing-key-facts__factory { grid-column: 1 / -1; align-items: flex-start; padding-bottom: 8px; border-bottom: 1px solid var(--dx-governed-border); text-align: left; }
-  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts > .sourcing-key-facts__date { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; align-items: baseline; padding-top: 6px; border-top: 1px solid var(--dx-governed-border); }
+  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts > .sourcing-key-facts__date { grid-column: auto; flex-direction: column; justify-content: center; align-items: center; padding-top: 6px; border-top: 1px solid var(--dx-governed-border); }
   [data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts__date dd { font-size: 14px; }
   [data-dx-ui="governed"] .sourcing-order-detail .sourcing-supporting-overview { gap: 8px; }
   [data-dx-ui="governed"] .sourcing-order-detail .sourcing-supporting-overview .rework-detail-desktop-panel-heading { display: none; }
@@ -115,4 +116,31 @@
   [data-dx-ui="governed"] .sourcing-order-detail .dx-decision-summary { padding: 12px; gap: 8px; }
   [data-dx-ui="governed"] .sourcing-order-detail .sourcing-style-secondary { margin-top: 4px; font-weight: 400; font-size: 12px; }
   [data-dx-ui="governed"] .sourcing-order-detail .sourcing-style-secondary summary { cursor: pointer; color: var(--dx-v2-color-primary); }
+}
+
+/* Finance-only presentation: one section, unboxed facts, equal actions. */
+[data-dx-ui="governed"] .sourcing-finance-panel .sourcing-finance-reference { display: grid; grid-template-columns: 1.2fr 1.2fr .8fr .9fr 1.6fr; gap: 12px; padding: 12px 0; }
+[data-dx-ui="governed"] .sourcing-finance-panel .sourcing-finance-reference > div { padding: 0 10px 0 0; border: 0; border-right: 1px solid var(--dx-governed-border); border-radius: 0; background: transparent; box-shadow: none; align-content: start; }
+[data-dx-ui="governed"] .sourcing-finance-panel .sourcing-finance-reference > div:last-child { padding-right: 0; border-right: 0; }
+[data-dx-ui="governed"] .sourcing-finance-panel .sourcing-finance-reference dd { font-size: 16px; line-height: 1.5; }
+[data-dx-ui="governed"] .sourcing-finance-panel .sourcing-finance-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+[data-dx-ui="governed"] .sourcing-finance-panel .sourcing-finance-actions > button { width: 100%; min-width: 0; min-height: 44px; padding: 8px 10px; line-height: 1.5; box-shadow: none; }
+[data-dx-ui="governed"] .sourcing-finance-difference-dialog { width: min(480px, calc(100% - 24px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; }
+[data-dx-ui="governed"] .sourcing-finance-difference-dialog::backdrop { background: var(--dx-dialog-backdrop); }
+[data-dx-ui="governed"] .sourcing-finance-difference-dialog form { gap: 16px; padding: 20px; }
+[data-dx-ui="governed"] .sourcing-finance-difference-dialog fieldset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 10px 0; border: 0; }
+[data-dx-ui="governed"] .sourcing-finance-difference-dialog fieldset label { display: flex; align-items: center; min-height: 36px; gap: 8px; font-size: 16px; }
+[data-dx-ui="governed"] .sourcing-finance-difference-dialog fieldset input { width: 18px; height: 18px; min-height: 0; margin: 0; }
+[data-dx-ui="governed"] .sourcing-finance-difference-dialog .system-dialog__actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+[data-dx-ui="governed"] .sourcing-finance-difference-dialog .system-dialog__actions > button { min-width: 0; padding-inline: 8px; }
+@media (max-width: 800px) {
+  [data-dx-ui="governed"] .sourcing-finance-panel .sourcing-finance-reference { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+  [data-dx-ui="governed"] .sourcing-finance-panel .sourcing-finance-reference > div { padding: 0; border: 0; }
+  [data-dx-ui="governed"] .sourcing-finance-panel .sourcing-finance-reference > div:first-child,
+  [data-dx-ui="governed"] .sourcing-finance-panel .sourcing-finance-reference > div:last-child { grid-column: 1 / -1; }
+  [data-dx-ui="governed"] .sourcing-finance-panel .sourcing-finance-actions { gap: 8px; }
+  [data-dx-ui="governed"] .sourcing-finance-panel .sourcing-finance-actions > button { min-height: 48px; font-size: 14px; }
+}
+@media (max-width: 340px) {
+  [data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts > .sourcing-key-facts__date { grid-column: 1 / -1; }
 }

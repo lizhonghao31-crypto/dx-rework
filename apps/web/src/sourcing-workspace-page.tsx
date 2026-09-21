@@ -71,6 +71,7 @@ import {
 } from "./sourcing-list-query.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import { SourcingImageSupplementUploader } from "./sourcing-image-supplement-uploader.js";
+import { SourcingFinanceDifferenceDialog } from "./sourcing-finance-difference-dialog.js";
 import { alertInApp, confirmInApp } from "./system-dialog.js";
 import { SubmissionFeedback, useSubmissionFeedback } from "./submission-feedback.js";
 import { SubmissionCancelled, SubmissionRequestError } from "./submission-validation.js";
@@ -1093,6 +1094,7 @@ function OrderDetailPage({
   const [craftCatalog, setCraftCatalog] = useState<readonly CraftCatalogItem[]>([]);
   const [activeCraftQuery, setActiveCraftQuery] = useState("");
   const [decision, setDecision] = useState<DecisionDraft>({ supplierId: "", linePrices: [], decisionReason: "", cuttingProcess: "", cuttingProcessOther: "" });
+  const [financeDifferenceOpen, setFinanceDifferenceOpen] = useState(false);
   const [financeReview, setFinanceReview] = useState<FinanceReviewDraft>({ differenceFields: [], differenceReason: "" });
   const [factoryChange, setFactoryChange] = useState<SourcingFactoryChangeState | null>(null);
   const [contract, setContract] = useState<SourcingContractDocument | null>(null);
@@ -1698,7 +1700,7 @@ function OrderDetailPage({
             </> : <p>批准事实正在准备合同，请刷新后查看。</p>}
           </Surface> : null}
 
-          {item.status === "pending_finance_reconciliation" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview">
+          {item.status === "pending_finance_reconciliation" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview sourcing-finance-panel">
             <h2>05 · 财务核对</h2>
             <p>财务在付款、对账时核对系统信息；核对不影响跟单派单和生产。加工厂、单价、数量及总额只读。</p>
             {item.decision ? <dl className="sourcing-finance-reference" aria-label="老板批准的选厂决定">
@@ -1708,25 +1710,42 @@ function OrderDetailPage({
               <div><dt>批准总额</dt><dd>{formatBusinessCurrency(item.decision.totalAmount)}</dd></div>
               <div><dt>对应合同</dt><dd>{contract?.status === "ready" ? `${contract.contractNumber} · V${contract.contractVersion}` : "合同 PDF 尚未就绪"}</dd></div>
             </dl> : null}
-            {item.decision && item.decision.sourceType !== "factory_change" && item.decision.linePrices.length > 1 ? <div className="sourcing-owner-line-review" aria-label="财务逐款核对明细">
-              {item.decision.linePrices.map((price) => {
-                const line = item.lineItems.find((entry) => entry.position === price.position);
-                return <div className="sourcing-owner-line-review__row" key={price.position}><b>{String(price.position).padStart(2, "0")}</b><span>{line?.styleNo ?? "历史款号缺失"}<small>{line?.color ?? "历史颜色缺失"} · {formatBusinessDecimal(price.quantity)} 件</small></span><span>批准价 <strong>{historicalSourcingPrice(price.unitPrice)}</strong></span><span>批准行金额 <strong>{formatBusinessCurrency(price.totalAmount)}</strong></span></div>;
-              })}
-            </div> : null}
+            {item.decision && item.decision.sourceType !== "factory_change" && item.decision.linePrices.length > 1 ? <ResponsiveFactsTable
+              caption="财务逐款核对明细" mobileLayout="compact"
+              rows={item.decision.linePrices} rowKey={price => price.position}
+              columns={[
+                { key: "style", label: "款号", mobileHeading: true, render: price => item.lineItems.find(line => line.position === price.position)?.styleNo ?? "历史款号缺失" },
+                { key: "color", label: "颜色", mobileHeading: true, render: price => item.lineItems.find(line => line.position === price.position)?.color ?? "历史颜色缺失" },
+                { key: "quantity", label: "批准数量", render: price => `${formatBusinessDecimal(price.quantity)} 件` },
+                { key: "price", label: "批准价", render: price => historicalSourcingPrice(price.unitPrice) },
+                { key: "amount", label: "批准行金额", render: price => formatBusinessCurrency(price.totalAmount) },
+              ]} /> : null}
             {hasPendingFactoryChange ? <p className="sourcing-finance-waiting">订单转厂正在审批，财务核对已暂停；转厂生效或驳回后会自动恢复。</p> : contract?.status !== "ready" ? <p className="sourcing-finance-waiting">系统合同 PDF 未就绪，暂不能提交财务核对。</p> : canFinance ? <div className="sourcing-finance-confirmation">
               <p>请对照已批准的选厂决定确认上述四项事实。若发现不一致，只记录差异项和说明，由生产管理核实；财务不能在此页改写业务数据。</p>
-              <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/finance-reconciliations`, { result: "match" }, "与合同一致，订单已归档")}>确认与合同一致</button>
-              <details>
-                <summary>发现不一致</summary>
-                <fieldset><legend>差异项目</legend>{([
-                  ["supplier", "加工厂"], ["unit_price", "单价"], ["quantity", "数量"], ["total_amount", "总额"],
-                ] as const).map(([value, label]) => <label key={value}><input type="checkbox" checked={financeReview.differenceFields.includes(value)} onChange={(event) => {
-                  setFinanceReview((current) => ({ ...current, differenceFields: event.target.checked ? [...current.differenceFields, value] : current.differenceFields.filter((field) => field !== value) })); actionKey.current = null;
-                }} />{label}</label>)}</fieldset>
-                <label><span>差异说明</span><input value={financeReview.differenceReason} maxLength={500} onChange={(event) => { setFinanceReview({ ...financeReview, differenceReason: event.target.value }); actionKey.current = null; }} /></label>
-                <button className="dx-button dx-button--secondary" type="button" disabled={busy || !financeReview.differenceFields.length || !financeReview.differenceReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/finance-reconciliations`, { result: "difference", differenceFields: financeReview.differenceFields, differenceReason: financeReview.differenceReason.trim() }, "财务差异已提交生产管理核实")}>提交差异核实</button>
-              </details>
+              <div className="sourcing-finance-actions">
+                <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/finance-reconciliations`, { result: "match" }, "与合同一致，订单已归档")}>确认与合同一致</button>
+                <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => { setMessage(""); setFinanceDifferenceOpen(true); }}>发现不一致</button>
+              </div>
+              {financeDifferenceOpen ? <SourcingFinanceDifferenceDialog busy={busy} onClose={() => setFinanceDifferenceOpen(false)}>
+                <form onSubmit={event => {
+                  event.preventDefault();
+                  if (busy || !financeReview.differenceFields.length || !financeReview.differenceReason.trim()) return;
+                  void submit(`sourcing/cases/${item.sourcingCaseId}/finance-reconciliations`, { result: "difference", differenceFields: financeReview.differenceFields, differenceReason: financeReview.differenceReason.trim() }, "财务差异已提交生产管理核实");
+                }}>
+                  <div className="system-dialog__copy"><h2>发现不一致</h2><p>请选择差异项目并填写说明。</p></div>
+                  <fieldset disabled={busy}><legend>差异项目</legend>{([
+                    ["supplier", "加工厂"], ["unit_price", "单价"], ["quantity", "数量"], ["total_amount", "总额"],
+                  ] as const).map(([value, label]) => <label key={value}><input type="checkbox" checked={financeReview.differenceFields.includes(value)} onChange={(event) => {
+                    setFinanceReview((current) => ({ ...current, differenceFields: event.target.checked ? [...current.differenceFields, value] : current.differenceFields.filter((field) => field !== value) })); actionKey.current = null;
+                  }} />{label}</label>)}</fieldset>
+                  <label className="system-dialog__field"><span>差异说明</span><input disabled={busy} required value={financeReview.differenceReason} maxLength={500} onChange={(event) => { setFinanceReview({ ...financeReview, differenceReason: event.target.value }); actionKey.current = null; }} /></label>
+                  {message ? <p role="status">{message}</p> : null}
+                  <div className="system-dialog__actions">
+                    <button className="dx-button dx-button--secondary" type="button" disabled={busy} onClick={() => setFinanceDifferenceOpen(false)}>取消</button>
+                    <button className="dx-button dx-button--primary" type="submit" disabled={busy || !financeReview.differenceFields.length || !financeReview.differenceReason.trim()}>{busy ? "正在提交…" : "提交差异核实"}</button>
+                  </div>
+                </form>
+              </SourcingFinanceDifferenceDialog> : null}
             </div> : <p>当前账号仅可查看，本节点由财务核对。</p>}
           </Surface> : null}
 
