@@ -64,6 +64,7 @@ BEGIN
     OR audit_event.entity_type<>'sourcing_case'
     OR audit_event.entity_id<>NEW.sourcing_case_id::text
     OR audit_event.authorization_capability<>'sourcing:inquiry:create'
+    OR NOT (audit_event.actor_roles @> ARRAY['root_superuser']::text[])
     OR audit_event.actor_id<>NEW.corrected_by
     OR audit_event.request_id<>NEW.request_id
     OR audit_event.reason IS DISTINCT FROM NEW.reason
