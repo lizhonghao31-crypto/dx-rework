@@ -1,7 +1,7 @@
 import { moduleCanWrite } from "./member-module-policy.js";
 import { todoReturnPath } from "./todo-query-state.js";
 import {WorkAnalysisPanel} from "./work-analysis-panel.js";
-import { isNewSourcingPrice, newSourcingPriceDisplay, historicalSourcingPrice, sourcingPriceSummary, sourcingDeleteConfirmation, sourcingDecisionNeedsReason } from "./sourcing-price-presentation.js";
+import { isNewSourcingPrice, newSourcingPriceDisplay, historicalSourcingPrice, sourcingPriceSummary, sourcingLinePricing, sourcingDeleteConfirmation, sourcingDecisionNeedsReason } from "./sourcing-price-presentation.js";
 import { createSourcingPriceInput } from "./sourcing-price-input.js";
 import { applySourcingPriceCascade } from "./sourcing-price-cascade.js";
 import { NavigationIcon } from "./navigation-icons.js";
@@ -1493,14 +1493,15 @@ function OrderDetailPage({
         <ResponsiveFactsTable caption="款式明细" rows={item.lineItems} rowKey={line => line.position}
           totals={{ style: "合计", quantity: `${formatBusinessDecimal(item.orderQuantity)} 件`, amount: item.decision ? formatBusinessCurrency(item.decision.totalAmount) : "—" }}
           columns={[
-            { key: "style", label: "款号", mobileHeading: true, render: line => <>{line.styleNo || "—"}{line.alternateStyleNo ? <small>代用：{line.alternateStyleNo}</small> : null}</> },
+            { key: "style", label: "款号", mobileHeading: true, render: line => <>{line.styleNo || "—"}{line.alternateStyleNo ? <small>代用：{line.alternateStyleNo}</small> : null}{line.externalUnitPrice && !sourcingLinePricing(item.ieQuote, line.position, item.lineItems.length) && !sourcingLinePricing(item.decision, line.position, item.lineItems.length) ? <small>原登记加工价：{historicalSourcingPrice(line.externalUnitPrice)}</small> : null}</> },
             { key: "color", label: "颜色", mobileHeading: true, render: line => line.color ?? "历史未维护" },
             { key: "quantity", label: "数量", render: line => `${formatBusinessDecimal(line.quantity)} 件` },
             ...("daxingUnitPrice" in item ? [{ key: "budget", label: "预算价", render: () => item.daxingUnitPrice ? formatBusinessCurrency(item.daxingUnitPrice) : "历史未维护" }] : []),
-            { key: "ie", label: "IE 单价", render: line => { const price = item.ieQuote?.linePrices.find(entry => entry.position === line.position); return price ? formatBusinessCurrency(price.unitPrice) : "—"; } },
-            { key: "production", label: "生产单价", render: line => { const price = item.decision?.linePrices.find(entry => entry.position === line.position); return price ? formatBusinessCurrency(price.unitPrice) : "—"; } },
-            { key: "amount", label: "本款金额", render: line => { const price = item.decision?.linePrices.find(entry => entry.position === line.position); return price ? formatBusinessCurrency(price.totalAmount) : "—"; } },
+            { key: "ie", label: "IE 单价", render: line => { const price = sourcingLinePricing(item.ieQuote, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
+            { key: "production", label: "生产单价", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
+            { key: "amount", label: "本款金额", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price?.totalAmount ? formatBusinessCurrency(price.totalAmount) : "—"; } },
           ]} />
+        {item.decision?.sourceType === "factory_change" && item.lineItems.length > 1 ? <p className="sourcing-price-note">转厂后按统一生产单价执行，逐款金额未单独登记，生产总额见合计。</p> : null}
 
         <section id="node-workspace" className="sourcing-node-workspace" aria-label="节点办理区">
           {selectedState !== "current" ? <Surface className="rework-detail-node-preview">
