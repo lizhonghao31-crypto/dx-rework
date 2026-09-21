@@ -59,7 +59,8 @@ describe("receiving board operations", () => {
     }
     expect(page).toContain("本次送货单");
     expect(page).toContain("本次实收");
-    expect(page).toContain("alertInApp(text, { title: \"提交失败\" })");
+    expect(page).toContain('className="order-board-dialog__error" role="alert"');
+    expect(page).not.toContain("alertInApp(text, { title: \"提交失败\" })");
     const main = page.slice(page.indexOf('<div className="order-board-row__main">'), page.indexOf('<div className="order-board-row__facts">'));
     const facts = page.slice(page.indexOf('<div className="order-board-row__facts">'), page.indexOf("</Surface>", page.indexOf('<div className="order-board-row__facts">')));
     const fieldOrder = ["实裁数", "送货单数量", "实收", "次品", "收货差异", "装箱数量", "装箱差异"];
