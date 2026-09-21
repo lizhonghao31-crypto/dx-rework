@@ -25,7 +25,6 @@ import {
   SourcingFactoryChangeStateResponseSchema,
   SourcingTimelineResponseSchema,
   UploadIntentResponseSchema,
-  calculateSourcingOrderQuantity,
   duplicateSourcingLineMessage,
   sourcingStyleNumbers,
   type SourcingStyleIdentity,
@@ -72,7 +71,10 @@ import {
 } from "./sourcing-list-query.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import { SourcingImageSupplementUploader } from "./sourcing-image-supplement-uploader.js";
-import { confirmInApp } from "./system-dialog.js";
+import { alertInApp, confirmInApp } from "./system-dialog.js";
+import { SubmissionFeedback, useSubmissionFeedback } from "./submission-feedback.js";
+import { SubmissionCancelled, SubmissionRequestError } from "./submission-validation.js";
+import { validateSourcingCreate, validateSourcingDecision, validateSourcingPrices } from "./sourcing-submit-validation.js";
 import "./rework-detail.css";
 import "./rework-detail-compact.css";
 import "./sourcing-workspace.css";
@@ -130,9 +132,7 @@ type FinanceReviewDraft = Readonly<{ differenceFields: readonly string[]; differ
 type FactoryChangeDraft = Readonly<{ supplierId: string; unitPrice: string; changeReason: string }>;
 type ContractSupplementDraft = Readonly<Partial<Record<SourcingContractMissingField, string>>>;
 
-class SourcingRequestError extends Error {
-  constructor(message: string, readonly code?: string) { super(message); }
-}
+class SourcingRequestError extends SubmissionRequestError {}
 
 const request = async <T,>(
   path: string,
@@ -151,23 +151,31 @@ const request = async <T,>(
   });
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { error?: { message?: string; code?: string } } | null;
-    throw new SourcingRequestError(body?.error?.message ?? "操作失败，请稍后重试", body?.error?.code);
+    throw new SourcingRequestError(body?.error?.message ?? "操作失败，请稍后重试", body?.error?.code, response.status);
   }
   return schema.parse(await response.json());
 };
 
-const requestWithStyleCheck = async <T,>(path: string, schema: ApiSchema<T>, init: RequestInit, lines: readonly SourcingStyleIdentity[]): Promise<T> => {
+const requestSubmission = async <T,>(path: string, schema: ApiSchema<T>, init: RequestInit): Promise<T> => {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 30_000);
+  try { return await request(path, schema, { ...init, signal: controller.signal }); }
+  finally { window.clearTimeout(timeout); }
+};
+
+const requestWithStyleCheck = async <T,>(path: string, schema: ApiSchema<T>, init: RequestInit, lines: readonly SourcingStyleIdentity[], submission = false): Promise<T> => {
+  const send = submission ? requestSubmission : request;
   const duplicate = duplicateSourcingLineMessage(lines);
   if (duplicate) throw new Error(duplicate);
   try {
-    return await request(path,schema,init);
+    return await send(path,schema,init);
   } catch (error) {
     if (!(error instanceof SourcingRequestError) || error.code !== "STYLE_NUMBER_EXISTS") throw error;
     const confirmed = await confirmInApp(`${error.message}\n仅确认属于追加或分批外发时继续提交。`,{
       title:"发现重复款号",confirmLabel:"已核对，继续提交",cancelLabel:"返回修改",
     });
-    if (!confirmed) throw new Error("已取消提交，请核对款号");
-    return request(path,schema,{...init,body:JSON.stringify({
+    if (!confirmed) throw new SubmissionCancelled("已取消提交，请核对款号");
+    return send(path,schema,{...init,body:JSON.stringify({
       ...JSON.parse(String(init.body)),confirmedDuplicateStyles:sourcingStyleNumbers(lines),
     })});
   }
@@ -444,6 +452,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   const [uploadFailed, setUploadFailed] = useState(false);
   const [activeCreateInput, setActiveCreateInput] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const feedback = useSubmissionFeedback(setBusy);
   const [message, setMessage] = useState("填写订单资料并上传现场或款式照片。");
   const createKey = useRef<string | null>(null);
   const previewUrls = useRef<string[]>([]);
@@ -623,7 +632,10 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
       createKey.current = null;
     } catch (error) {
       setUploadFailed(true);
-      setMessage(error instanceof Error ? error.message : "订单图片上传失败");
+      const failureMessage = error instanceof Error ? error.message : "订单图片上传失败";
+      setMessage(failureMessage);
+      setUploading(false);
+      await feedback.reject([{ fieldId: "sourcing-create-photos", message: failureMessage }]);
     } finally {
       setUploading(false);
     }
@@ -664,63 +676,33 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   };
 
   const createOrder = async (): Promise<void> => {
-    if (busy || uploading || uploadFailed) { setMessage("请等待图片上传成功，失败时重新选择图片上传。"); return; }
+    if (busy || feedback.uncertain) return;
+    if (!canCreate) { await alertInApp("当前账号没有创建订单权限", { title: "无权执行此操作" }); return; }
+    const normalizedDaxingPrice = businessInputChange(daxingUnitPrice).trim();
+    const issues = validateSourcingCreate({ gender, styleName, estimatedCutPieceSendDate, deliveryDate,
+      lineItems, daxingUnitPrice: normalizedDaxingPrice, imageCount: images.length, uploading, uploadFailed });
+    if (issues.length) { await feedback.reject(issues); return; }
     const normalizedLines = lineItems.map((line) => ({
       ...(line.styleNo.trim() ? { styleNo: line.styleNo.trim() } : {}),
       ...(line.alternateStyleNo.trim() ? { alternateStyleNo: line.alternateStyleNo.trim() } : {}),
-      color: line.color.trim(),
-      quantity: Number(line.quantity),
+      color: line.color.trim(), quantity: Number(line.quantity),
       ...(line.imageAttachmentId ? { imageAttachmentId: line.imageAttachmentId } : {}),
     }));
-    if (!canCreate) { setMessage("当前账号没有创建订单权限"); return; }
-    if (!gender || !styleName.trim()) { setMessage("请选择性别并填写款式"); return; }
-    if (!estimatedCutPieceSendDate || !deliveryDate) {
-      setMessage("请填写裁片发出日期和到工厂的交货日期"); return;
-    }
-    if (normalizedLines.some((line) => (!line.styleNo && !line.alternateStyleNo) || !line.color)) {
-      setMessage("每行须填写正式款号或代用款号，并填写颜色");
-      return;
-    }
-    if (lineItems.some((line) => !/^\d+$/.test(line.quantity))
-      || normalizedLines.some((line) => line.quantity < 1 || line.quantity > 10_000_000)) {
-      setMessage("每行数量必须是1至10000000之间的整数");
-      return;
-    }
-    const normalizedDaxingPrice = businessInputChange(daxingUnitPrice).trim();
-    if (!isNewSourcingPrice(normalizedDaxingPrice)) {
-      setMessage("请填写预算价，最多2位有效小数且必须大于0");
-      return;
-    }
-    try {
-      calculateSourcingOrderQuantity(normalizedLines);
-    } catch {
-      setMessage("订单总数量必须是1至10000000之间的整数");
-      return;
-    }
-    if (images.length === 0) { setMessage("请至少上传一张订单照片"); return; }
-    setBusy(true);
     const requestKey = createKey.current ?? createClientRequestId();
     createKey.current = requestKey;
-    try {
+    const body = JSON.stringify({ gender, styleName: styleName.trim(), estimatedCutPieceSendDate, deliveryDate,
+      lineItems: normalizedLines, daxingUnitPrice: normalizedDaxingPrice,
+      attachmentIds: images.map(image => image.attachmentId) });
+    await feedback.run(async () => {
+      // Same snapshot and key on recovery: the existing API checks its idempotency record first.
       const created = await requestWithStyleCheck("sourcing/cases", SourcingCaseSummarySchema, {
-        method: "POST",
-        headers: { "idempotency-key": requestKey },
-        body: JSON.stringify({
-          gender,
-          styleName: styleName.trim(),
-          estimatedCutPieceSendDate,
-          deliveryDate,
-          lineItems: normalizedLines,
-          daxingUnitPrice: normalizedDaxingPrice,
-          attachmentIds: images.map((image) => image.attachmentId),
-        }),
-      }, normalizedLines);
-      if (user?.id) clearLocalSourcingDraft(user.id);
+        method: "POST", headers: { "idempotency-key": requestKey }, body,
+      }, normalizedLines, true);
+      feedback.confirmed();
+      // A local storage failure after a confirmed write must never invite another submission.
+      try { if (user?.id) clearLocalSourcingDraft(user.id); } catch { /* Navigation still proceeds. */ }
       window.location.assign(detailHref(created));
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "订单创建失败");
-      setBusy(false);
-    }
+    });
   };
 
   return (
@@ -731,20 +713,22 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
         subtitle="跟单登记订单资料、款色数量和照片，提交后由 IE 首次给加工报价。"
         badge="外发定价&选厂"
       />
+      <SubmissionFeedback feedback={feedback} busy={busy} />
       <Surface className="sourcing-create-card">
+        <fieldset className="sourcing-submission-fields" disabled={busy || feedback.uncertain}>
         <div className="section-title">
           <div><h2>订单资料</h2><p>请按实际订单填写；预算价仅供内部核价。</p></div>
           <StatusBadge tone="info">跟单提交</StatusBadge>
         </div>
         <div className="sourcing-form-grid">
           <div className="sourcing-order-classification">
-            <label><span>性别（必填）</span><select required value={gender} onChange={(event) => { setGender(event.target.value as typeof gender); createKey.current = null; }}><option value="">请选择</option><option value="男装">男装</option><option value="女装">女装</option></select></label>
-            <label><span>款式（必填）</span><input required list="sourcing-style-options" value={styleName} maxLength={100} onChange={(event) => { setStyleName(event.target.value); createKey.current = null; }} placeholder="搜索或输入，如梭织短裤" /></label>
+            <label><span>性别（必填）</span><select {...feedback.field("sourcing-create-gender")} required value={gender} onChange={(event) => { setGender(event.target.value as typeof gender); createKey.current = null; }}><option value="">请选择</option><option value="男装">男装</option><option value="女装">女装</option></select></label>
+            <label><span>款式（必填）</span><input {...feedback.field("sourcing-create-style")} required list="sourcing-style-options" value={styleName} maxLength={100} onChange={(event) => { setStyleName(event.target.value); createKey.current = null; }} placeholder="搜索或输入，如梭织短裤" /></label>
             <datalist id="sourcing-style-options">{styleCatalog.map((style) => <option key={style.styleId} value={style.styleName} />)}</datalist>
           </div>
-          <label><span>预计裁片发出日期（工厂发出，必填）</span><input type="date" required aria-required="true" value={estimatedCutPieceSendDate} onChange={(event) => { setEstimatedCutPieceSendDate(event.target.value); createKey.current = null; }} /></label>
-          <label><span>要求交货日期（到工厂，必填）</span><input type="date" required aria-required="true" value={deliveryDate} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
-          <label><span>预算价（内部，必填）</span><input value={activeCreateInput === "daxing" ? daxingUnitPrice : newSourcingPriceDisplay(daxingUnitPrice)} onFocus={() => setActiveCreateInput("daxing")} onBlur={() => setActiveCreateInput(null)} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="必填，最多2位有效小数；仅内部授权岗位可见" aria-invalid={!isNewSourcingPrice(daxingUnitPrice)} /><small>{!isNewSourcingPrice(daxingUnitPrice) ? "请填写大于0且最多2位有效小数的预算价。" : "仅内部授权岗位可见，不进入供应商合同。"}</small></label>
+          <label><span>预计裁片发出日期（工厂发出，必填）</span><input type="date" required aria-required="true" value={estimatedCutPieceSendDate} {...feedback.field("sourcing-create-send-date")} onChange={(event) => { setEstimatedCutPieceSendDate(event.target.value); createKey.current = null; }} /></label>
+          <label><span>要求交货日期（到工厂，必填）</span><input type="date" required aria-required="true" value={deliveryDate} {...feedback.field("sourcing-create-delivery-date")} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
+          <label><span>预算价（内部，必填）</span><input {...feedback.field("sourcing-create-budget")} value={activeCreateInput === "daxing" ? daxingUnitPrice : newSourcingPriceDisplay(daxingUnitPrice)} onFocus={() => setActiveCreateInput("daxing")} onBlur={() => setActiveCreateInput(null)} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="必填，最多2位有效小数；仅内部授权岗位可见" aria-invalid={!isNewSourcingPrice(daxingUnitPrice)} /><small>{!isNewSourcingPrice(daxingUnitPrice) ? "请填写大于0且最多2位有效小数的预算价。" : "仅内部授权岗位可见，不进入供应商合同。"}</small></label>
           <section className="sourcing-line-editor sourcing-form-wide" aria-label="订单款色明细">
             <div className="sourcing-line-editor__heading">
               <div>
@@ -759,10 +743,10 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
             <div className="sourcing-line-editor__list">
               {lineItems.map((line, index) => <article className="sourcing-line-row" key={index}>
                 <b>{String(index + 1).padStart(2, "0")}</b>
-                <label><span>正式款号</span><input value={line.styleNo} maxLength={100} onChange={(event) => updateLineItem(index, "styleNo", event.target.value)} placeholder="可后补" /></label>
+                <label><span>正式款号</span><input {...feedback.field(`sourcing-create-style-${index}`)} value={line.styleNo} maxLength={100} onChange={(event) => updateLineItem(index, "styleNo", event.target.value)} placeholder="可后补" /></label>
                 <label><span>代用款号</span><input value={line.alternateStyleNo} maxLength={100} onChange={(event) => updateLineItem(index, "alternateStyleNo", event.target.value)} placeholder="无正式款号时必填" /></label>
-                <label><span>颜色</span><input value={line.color} maxLength={100} onChange={(event) => updateLineItem(index, "color", event.target.value)} placeholder="必填" /></label>
-                <label><span>数量</span><input value={activeCreateInput === `quantity-${index}` ? line.quantity : businessInputValue(line.quantity)} onFocus={() => setActiveCreateInput(`quantity-${index}`)} onBlur={() => setActiveCreateInput(null)} inputMode="numeric" onChange={(event) => updateLineItem(index, "quantity", businessInputChange(event.target.value))} placeholder="整数" /></label>
+                <label><span>颜色</span><input {...feedback.field(`sourcing-create-color-${index}`)} value={line.color} maxLength={100} onChange={(event) => updateLineItem(index, "color", event.target.value)} placeholder="必填" /></label>
+                <label><span>数量</span><input {...feedback.field(`sourcing-create-quantity-${index}`)} value={activeCreateInput === `quantity-${index}` ? line.quantity : businessInputValue(line.quantity)} onFocus={() => setActiveCreateInput(`quantity-${index}`)} onBlur={() => setActiveCreateInput(null)} inputMode="numeric" onChange={(event) => updateLineItem(index, "quantity", businessInputChange(event.target.value))} placeholder="整数" /></label>
                 <div className="sourcing-line-photo">
                   {line.imageAttachmentId ? <img src={images.find((image) => image.attachmentId === line.imageAttachmentId)?.previewUrl} alt={`第 ${index + 1} 款图片`} /> : null}
                   <label className="rework-v2-upload">
@@ -780,7 +764,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
           </section>
 
         </div>
-        <section className="sourcing-photo-field" aria-label="订单照片">
+        <section className="sourcing-photo-field" aria-label="订单照片" tabIndex={-1} {...feedback.field("sourcing-create-photos")}>
           <div className="section-title">
             <div><h2>订单照片（必填）</h2><p>至少上传1张；款图也会显示在这里，无需重复上传。支持 JPG、PNG、WebP。</p></div>
             <StatusBadge tone="info">{images.length}/{MAX_SOURCING_ATTACHMENTS}</StatusBadge>
@@ -803,11 +787,12 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
           {uploadFailed && !uploading ? <p role="alert">本次图片上传未完成，请重新选择图片上传成功后再提交。</p> : null}
           <div className="sourcing-create-actions">
             <button className="dx-button dx-button--secondary" type="button" disabled={busy || uploading} onClick={saveLocalDraft}>保存草稿</button>
-            <button className="dx-button dx-button--primary" type="button" disabled={busy || uploading || uploadFailed || !images.length || !canCreate} onClick={() => void createOrder()}>
+            <button className="dx-button dx-button--primary" type="button" disabled={busy || feedback.uncertain || !canCreate} onClick={() => void createOrder()}>
               {busy ? "正在提交…" : "提交并进入审批"}
             </button>
           </div>
         </div>
+        </fieldset>
       </Surface>
     </div>
   );
@@ -1120,6 +1105,7 @@ function OrderDetailPage({
     if (mobileWorkflowExpanded) workflowRailRef.current?.querySelector('[aria-current="step"]')?.scrollIntoView({ block: "nearest", inline: "center" });
   }, [mobileWorkflowExpanded]);
   const [busy, setBusy] = useState(false);
+  const feedback = useSubmissionFeedback(setBusy);
   const [message, setMessage] = useState("正在加载订单…");
   const [activeBusinessInput, setActiveBusinessInput] = useState<string | null>(null);
   const [factoryChangeUnitPriceEdited, setFactoryChangeUnitPriceEdited] = useState(false);
@@ -1294,9 +1280,24 @@ function OrderDetailPage({
     success: string,
     resetFactoryChange = false,
   ): Promise<void> => {
-    if (path.endsWith("/ie-quotes") && priceComposing("quote")) return;
-    if (path.endsWith("/ie-quotes") && (!quote.linePrices.length || quote.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice)))) {
-      setMessage("请填写各款大于0且最多2位有效小数的IE价格"); return;
+    if (path.endsWith("/ie-quotes")) {
+      if (busy || feedback.uncertain || priceComposing("quote")) return;
+      const issues = validateSourcingPrices("quote", quote.linePrices);
+      if (issues.length) { await feedback.reject(issues); return; }
+      const requestKey = actionKey.current ?? createClientRequestId();
+      actionKey.current = requestKey;
+      const snapshot = JSON.stringify(body);
+      await feedback.run(async () => {
+        await requestSubmission(path, SourcingCaseSummarySchema, {
+          method: "POST", headers: { "idempotency-key": requestKey }, body: snapshot,
+        });
+        feedback.confirmed();
+        actionKey.current = null;
+        await load();
+        setMessage(success);
+        await alertInApp(success, { title: "提交成功" });
+      });
+      return;
     }
     setBusy(true);
     const requestKey = actionKey.current ?? createClientRequestId();
@@ -1379,28 +1380,35 @@ function OrderDetailPage({
   const needsDecisionReason = sourcingDecisionNeedsReason(decision.linePrices, item.ieQuote?.linePrices ?? []);
   const missingDecisionReason = needsDecisionReason && !decision.decisionReason.trim();
   const submitManagement = async (): Promise<void> => {
-    if (priceComposing("decision")) return;
-    if (!decision.linePrices.length || decision.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice))) { setMessage("请填写各款大于0且最多2位有效小数的生产价格"); return; }
-    if (missingDecisionReason) { setMessage("价格高于 IE，请填写原因"); return; }
-    if (decision.cuttingProcess === "other" && !decision.cuttingProcessOther.trim()) { setMessage("请填写其它裁床工序"); return; }
-    const names = processes.map((value) => value.trim());
-    if (names.some((value) => !value) || new Set(names).size !== names.length) {
-      setMessage("请完整填写工艺及承包范围，不能重复"); return;
-    }
-    setBusy(true);
-    try {
-      const crafts = await request("master-data/crafts/ensure", CraftCatalogListResponseSchema, {
-        method: "POST", body: JSON.stringify({ craftNames: names }),
+    if (busy || feedback.uncertain || priceComposing("decision")) return;
+    const issues = validateSourcingDecision(decision, item.ieQuote?.linePrices ?? [], processes);
+    if (issues.length) { await feedback.reject(issues); return; }
+    const names = processes.map(value => value.trim());
+    const requestKey = actionKey.current ?? createClientRequestId();
+    actionKey.current = requestKey;
+    // Snapshot before awaiting craft resolution; recovery cannot pick up edited values.
+    const decisionSnapshot = JSON.stringify({ supplierId: decision.supplierId, linePrices: decision.linePrices,
+      ...(decision.cuttingProcess ? { cuttingProcess: decision.cuttingProcess } : {}),
+      ...(decision.cuttingProcess === "other" ? { cuttingProcessOther: decision.cuttingProcessOther.trim() } : {}),
+      ...(decision.decisionReason.trim() ? { decisionReason: decision.decisionReason.trim() } : {}) });
+    let body: string | null = null;
+    await feedback.run(async () => {
+      if (!body) {
+        const crafts = await requestSubmission("master-data/crafts/ensure", CraftCatalogListResponseSchema, {
+          method: "POST", body: JSON.stringify({ craftNames: names }),
+        });
+        body = JSON.stringify({ ...JSON.parse(decisionSnapshot), craftIds: crafts.map(craft => craft.craftId) });
+      }
+      await requestSubmission(`sourcing/cases/${item.sourcingCaseId}/management-decisions`, SourcingCaseSummarySchema, {
+        method: "POST", headers: { "idempotency-key": requestKey }, body,
       });
-      await submit(`sourcing/cases/${item.sourcingCaseId}/management-decisions`, {
-        supplierId: decision.supplierId, linePrices: decision.linePrices,
-        craftIds: crafts.map((craft) => craft.craftId),
-        ...(decision.cuttingProcess ? { cuttingProcess: decision.cuttingProcess } : {}),
-        ...(decision.cuttingProcess === "other" ? { cuttingProcessOther: decision.cuttingProcessOther.trim() } : {}),
-        ...(decision.decisionReason.trim() ? { decisionReason: decision.decisionReason.trim() } : {}),
-      }, "逐款调价、选厂与工艺及承包范围已提交老板审批");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "工艺确认失败"); }
-    finally { setBusy(false); }
+      feedback.confirmed();
+      actionKey.current = null;
+      await load();
+      const success = "逐款调价、选厂与工艺及承包范围已提交老板审批";
+      setMessage(success);
+      await alertInApp(success, { title: "提交成功" });
+    });
   };
 
   const mainStep = statusStep(item.status);
@@ -1595,10 +1603,11 @@ function OrderDetailPage({
               </div> : <p>该节点暂无历史记录。</p>}
             </details> : null}
           </Surface> : null}
+          <SubmissionFeedback feedback={feedback} busy={busy} />
           {item.status === "pending_ie_quote" && selectedNode === "ie_quote" ? <Surface className="rework-detail-node-preview">
             <h2>02 · IE 给价</h2>
             <p>逐款核定加工单价；每行金额独立四舍五入到分后汇总。</p>
-            {canQuote ? <div className="sourcing-form-grid">
+            {canQuote ? <fieldset className="sourcing-submission-fields sourcing-form-grid" disabled={busy || feedback.uncertain}>
               <div className="sourcing-line-price-table sourcing-form-wide" role="table" aria-label="IE逐款价格">
                 {item.lineItems.map((line) => {
                   const price = quote.linePrices.find((entry) => entry.position === line.position)?.unitPrice ?? "";
@@ -1606,22 +1615,22 @@ function OrderDetailPage({
                   const errorId = `sourcing-quote-price-error-${line.position}`;
                   return <label className="sourcing-line-price-row" key={line.position}>
                     <span><b>{String(line.position).padStart(2, "0")}</b> {line.styleNo} · {line.color ?? "历史未维护颜色"} · {formatBusinessDecimal(line.quantity)} 件</span>
-                    <span className="sourcing-price-control"><input aria-label={`${line.styleNo} IE单价`} {...control.props} aria-describedby={control.error ? errorId : undefined} />{control.error ? <small id={errorId} role="status">{control.error}</small> : null}</span>
+                    <span className="sourcing-price-control"><input aria-label={`${line.styleNo} IE单价`} {...control.props} {...feedback.field(`sourcing-quote-price-${line.position}`)} aria-describedby={control.error ? errorId : feedback.field(errorId.replace("-error-", "-"))["aria-describedby"]} />{control.error ? <small id={errorId} role="status">{control.error}</small> : null}</span>
                     <strong>{formatBusinessCurrency(isNewSourcingPrice(price) ? totalPreview(price, line.quantity) : "—")}</strong>
                   </label>;
                 })}
               </div>
               <label><span>逐款汇总</span><input value={businessInputValue(linesTotalPreview(quote.linePrices, item.lineItems))} readOnly /></label>
               <label className="sourcing-form-wide"><span>价格说明</span><input value={quote.quoteReason} maxLength={500} onChange={(event) => { setQuote({ ...quote, quoteReason: event.target.value }); actionKey.current = null; }} /></label>
-              <button className="dx-button dx-button--primary" type="button" disabled={busy || priceComposing("quote") || quote.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice))} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/ie-quotes`, { linePrices: quote.linePrices, ...(quote.quoteReason.trim() ? { quoteReason: quote.quoteReason.trim() } : {}) }, "IE 逐款价格已提交")}>提交 IE 逐款价格</button>
-            </div> : <p>当前账号仅可查看，本节点由 IE 办理。</p>}
+              <button className="dx-button dx-button--primary" type="button" disabled={busy || feedback.uncertain || priceComposing("quote")} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/ie-quotes`, { linePrices: quote.linePrices, ...(quote.quoteReason.trim() ? { quoteReason: quote.quoteReason.trim() } : {}) }, "IE 逐款价格已提交")}>提交 IE 逐款价格</button>
+            </fieldset> : <p>当前账号仅可查看，本节点由 IE 办理。</p>}
           </Surface> : null}
 
           {item.status === "pending_management_decision" && selectedNode === "management" ? <Surface className="rework-detail-node-preview">
             <h2>03 · 生产管理调价与选厂</h2>
             <p>逐款确认 IE 价格并选择一个启用加工厂。</p>
-            {canManage ? <div className="sourcing-form-grid">
-              <label><span>加工厂</span><select value={decision.supplierId} onChange={(event) => { setDecision({ ...decision, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择加工厂</option>{factories.map((factory) => <option key={factory.supplierId} value={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
+            {canManage ? <fieldset className="sourcing-submission-fields sourcing-form-grid" disabled={busy || feedback.uncertain}>
+              <label><span>加工厂</span><select {...feedback.field("sourcing-decision-factory")} value={decision.supplierId} onChange={(event) => { setDecision({ ...decision, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择加工厂</option>{factories.map((factory) => <option key={factory.supplierId} value={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
               {selectedFactory ? <div className="sourcing-factory-facts sourcing-form-wide"><strong>{selectedFactory.supplierName} · {selectedFactory.supplierCode}</strong><span>工艺：{selectedFactory.supportedCrafts.join("、") || "未维护"}</span><span>日产能：{selectedFactory.dailyCapacity ? `${formatBusinessDecimal(selectedFactory.dailyCapacity)} 件` : "未维护"}</span><span>{selectedFactory.notes || "暂无协同备注"}</span><em>{selectedFactory.contractDataMissing.length ? `合同缺项：${selectedFactory.contractDataMissing.map((field) => contractMissingLabels[field] ?? field).join("、")}` : "合同资料完整"}</em></div> : null}
               <div className="sourcing-line-price-table sourcing-form-wide" role="table" aria-label="生产管理逐款价格">
                 {item.lineItems.map((line) => {
@@ -1629,7 +1638,7 @@ function OrderDetailPage({
                   const control = priceInput("decision", line.position, price);
                   const errorId = `sourcing-decision-price-error-${line.position}`;
                   const iePrice = item.ieQuote?.linePrices.find((entry) => entry.position === line.position)?.unitPrice;
-                  return <label className="sourcing-line-price-row" key={line.position}><span><b>{String(line.position).padStart(2, "0")}</b> {line.styleNo} · {line.color ?? "历史未维护颜色"}<small>IE {iePrice ? formatBusinessCurrency(iePrice) : "—"}</small></span><span className="sourcing-price-control"><input aria-label={`${line.styleNo} 生产单价`} {...control.props} aria-describedby={control.error ? errorId : undefined} />{control.error ? <small id={errorId} role="status">{control.error}</small> : null}</span><strong>{formatBusinessCurrency(isNewSourcingPrice(price) ? totalPreview(price, line.quantity) : "—")}</strong></label>;
+                  return <label className="sourcing-line-price-row" key={line.position}><span><b>{String(line.position).padStart(2, "0")}</b> {line.styleNo} · {line.color ?? "历史未维护颜色"}<small>IE {iePrice ? formatBusinessCurrency(iePrice) : "—"}</small></span><span className="sourcing-price-control"><input aria-label={`${line.styleNo} 生产单价`} {...control.props} {...feedback.field(`sourcing-decision-price-${line.position}`)} aria-describedby={control.error ? errorId : feedback.field(errorId.replace("-error-", "-"))["aria-describedby"]} />{control.error ? <small id={errorId} role="status">{control.error}</small> : null}</span><strong>{formatBusinessCurrency(isNewSourcingPrice(price) ? totalPreview(price, line.quantity) : "—")}</strong></label>;
                 })}
               </div>
               <label><span>逐款汇总</span><input value={businessInputValue(linesTotalPreview(decision.linePrices, item.lineItems))} readOnly /></label>
@@ -1641,7 +1650,7 @@ function OrderDetailPage({
             <div className="sourcing-process-editor__list">
               {processes.map((process, index) => <div className="sourcing-process-row" key={index}>
                 <b>{String(index + 1).padStart(2, "0")}</b>
-                <label><span className="visually-hidden">第 {index + 1} 项工艺</span><input list="sourcing-craft-options" value={process} maxLength={100} onChange={(event) => updateProcess(index, event.target.value)} placeholder="例如：车缝+线+包装，回厂装箱+一程运费" /></label>
+                <label><span className="visually-hidden">第 {index + 1} 项工艺</span><input {...feedback.field(`sourcing-decision-process-${index}`)} list="sourcing-craft-options" value={process} maxLength={100} onChange={(event) => updateProcess(index, event.target.value)} placeholder="例如：车缝+线+包装，回厂装箱+一程运费" /></label>
                 <button type="button" aria-label={`删除第 ${index + 1} 项工艺`} disabled={processes.length === 1} onClick={() => removeProcess(index)}>删除</button>
               </div>)}
             </div>
@@ -1650,10 +1659,10 @@ function OrderDetailPage({
             </datalist>
           </section>
               <label><span>裁床工序</span><select value={decision.cuttingProcess} onChange={(event) => { setDecision({ ...decision, cuttingProcess: event.target.value as DecisionDraft["cuttingProcess"], cuttingProcessOther: "" }); actionKey.current = null; }}><option value="">请选择</option><option value="in_house">本厂裁</option><option value="outsourced">外厂裁</option><option value="other">其它</option></select></label>
-              {decision.cuttingProcess === "other" ? <label><span>其它裁床工序（必填）</span><input value={decision.cuttingProcessOther} maxLength={100} onChange={(event) => { setDecision({ ...decision, cuttingProcessOther: event.target.value }); actionKey.current = null; }} /></label> : null}
-              <label className="sourcing-form-wide"><span>选厂/调价说明{needsDecisionReason ? "（必填）" : ""}</span><input value={decision.decisionReason} maxLength={500} required={needsDecisionReason} aria-invalid={missingDecisionReason} aria-describedby={missingDecisionReason ? "sourcing-decision-reason-hint" : undefined} onChange={(event) => { setDecision({ ...decision, decisionReason: event.target.value }); actionKey.current = null; }} />{missingDecisionReason ? <small id="sourcing-decision-reason-hint" role="status">价格高于 IE，请填写原因</small> : null}</label>
-              <button className="dx-button dx-button--primary" type="button" disabled={busy || priceComposing("decision") || !decision.supplierId || missingDecisionReason || decision.linePrices.some((line) => !isNewSourcingPrice(line.unitPrice))} onClick={() => void submitManagement()}>提交调价与选厂</button>
-            </div> : <p>当前账号仅可查看，本节点由生产管理办理。</p>}
+              {decision.cuttingProcess === "other" ? <label><span>其它裁床工序（必填）</span><input {...feedback.field("sourcing-decision-cutting-other")} value={decision.cuttingProcessOther} maxLength={100} onChange={(event) => { setDecision({ ...decision, cuttingProcessOther: event.target.value }); actionKey.current = null; }} /></label> : null}
+              <label className="sourcing-form-wide"><span>选厂/调价说明{needsDecisionReason ? "（必填）" : ""}</span><input {...feedback.field("sourcing-decision-reason")} value={decision.decisionReason} maxLength={500} required={needsDecisionReason} aria-invalid={missingDecisionReason} aria-describedby={missingDecisionReason ? "sourcing-decision-reason-hint" : undefined} onChange={(event) => { setDecision({ ...decision, decisionReason: event.target.value }); actionKey.current = null; }} />{missingDecisionReason ? <small id="sourcing-decision-reason-hint" role="status">价格高于 IE，请填写原因</small> : null}</label>
+              <button className="dx-button dx-button--primary" type="button" disabled={busy || feedback.uncertain || priceComposing("decision")} onClick={() => void submitManagement()}>提交调价与选厂</button>
+            </fieldset> : <p>当前账号仅可查看，本节点由生产管理办理。</p>}
           </Surface> : null}
 
           {item.status === "pending_owner_approval" && selectedNode === "owner" ? <Surface className="rework-detail-node-preview sourcing-owner-decision">

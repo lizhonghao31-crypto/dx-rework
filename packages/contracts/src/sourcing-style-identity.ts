@@ -13,7 +13,7 @@ export const sourcingStyleNumbers = (lines: readonly SourcingStyleIdentity[]): s
   [...new Set(lines.flatMap(line => [line.styleNo, line.alternateStyleNo])
     .filter((value): value is string => !!value?.trim()).map(normalizeSourcingStyleNumber))].sort();
 
-export function duplicateSourcingLineMessage(lines: readonly SourcingStyleIdentity[]): string | null {
+export function findDuplicateSourcingLine(lines: readonly SourcingStyleIdentity[]): { index: number; message: string } | null {
   const seen = new Map<string, number>();
   for (const [index, line] of lines.entries()) {
     const position = line.position ?? index + 1;
@@ -21,9 +21,13 @@ export function duplicateSourcingLineMessage(lines: readonly SourcingStyleIdenti
     for (const style of sourcingStyleNumbers([line])) {
       const key = JSON.stringify([style, color]);
       const previous = seen.get(key);
-      if (previous !== undefined) return `第 ${previous} 行与第 ${position} 行款号（含代用款号）及颜色重复，请核对后修正`;
+      if (previous !== undefined) return { index, message: `第 ${previous} 行与第 ${position} 行款号（含代用款号）及颜色重复，请核对后修正` };
       seen.set(key, position);
     }
   }
   return null;
+}
+
+export function duplicateSourcingLineMessage(lines: readonly SourcingStyleIdentity[]): string | null {
+  return findDuplicateSourcingLine(lines)?.message ?? null;
 }
