@@ -30,7 +30,22 @@ describe("外发提交前的真实校验", () => {
       { ...valid.lineItems[0]!, quantity: "6000000" }, { ...valid.lineItems[0]!, styleNo: "TEST-B", quantity: "6000000" },
     ] })).toEqual([expect.objectContaining({ fieldId: "sourcing-create-quantity-0" })]);
     expect(validateSourcingCreate({ ...valid, lineItems: [...valid.lineItems, ...valid.lineItems] }))
-      .toEqual([expect.objectContaining({ fieldId: "sourcing-create-style-0" })]);
+      .toEqual([expect.objectContaining({ fieldId: "sourcing-create-style-1" })]);
+  });
+  it.each(["TEST-FIRST", ""])("targets later duplicate rows while retaining missing fields: %s", firstStyle => {
+    const issues = validateSourcingCreate({ ...valid, lineItems: [
+      { ...valid.lineItems[0]!, styleNo: firstStyle },
+      { ...valid.lineItems[0]!, styleNo: "TEST-B" },
+      { ...valid.lineItems[0]!, styleNo: "", alternateStyleNo: " test-b " },
+    ] });
+    expect(issues.map(issue => issue.fieldId)).toEqual(firstStyle
+      ? ["sourcing-create-style-2"] : ["sourcing-create-style-0", "sourcing-create-style-2"]);
+    expect(issues.at(-1)?.message).toContain("第 2 行与第 3 行");
+  });
+  it("rejects case and whitespace variants of craft names before writing", () => {
+    expect(validateSourcingDecision({ supplierId: "factory", linePrices: [], decisionReason: "",
+      cuttingProcess: "", cuttingProcessOther: "" }, [], [" Cutting ", "cutting"]).map(issue => issue.fieldId))
+      .toEqual(["sourcing-decision-process-1"]);
   });
   it.each([{ uploading: true, uploadFailed: false }, { uploading: false, uploadFailed: true }])("blocks an incomplete upload even with older images present: %j", flags => {
     expect(validateSourcingCreate({ ...valid, ...flags })).toEqual([expect.objectContaining({ fieldId: "sourcing-create-photos" })]);

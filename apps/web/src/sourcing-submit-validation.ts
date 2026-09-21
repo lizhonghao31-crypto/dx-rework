@@ -1,4 +1,4 @@
-import { calculateSourcingOrderQuantity, duplicateSourcingLineMessage } from "@dx-rework/contracts";
+import { calculateSourcingOrderQuantity, findDuplicateSourcingLine } from "@dx-rework/contracts";
 import { isNewSourcingPrice, sourcingDecisionNeedsReason } from "./sourcing-price-presentation.js";
 import type { SubmissionIssue } from "./submission-validation.js";
 
@@ -26,8 +26,8 @@ export function validateSourcingCreate(input: {
     try { calculateSourcingOrderQuantity(input.lineItems.map(line => ({ quantity: Number(line.quantity) }))); }
     catch { add("quantity-0", "订单总数量必须是1至10000000之间的整数"); }
   }
-  const duplicate = duplicateSourcingLineMessage(input.lineItems);
-  if (duplicate && !issues.some(issue => issue.fieldId === "sourcing-create-style-0")) add("style-0", duplicate);
+  const duplicate = findDuplicateSourcingLine(input.lineItems);
+  if (duplicate) add(`style-${duplicate.index}`, duplicate.message);
   if (input.uploading) add("photos", "照片正在上传，请等待上传完成后提交");
   else if (input.uploadFailed) add("photos", "本次照片上传未完成，请重新选择图片上传成功后提交");
   else if (!input.imageCount) add("photos", "请至少上传一张订单照片");
@@ -48,7 +48,7 @@ export function validateSourcingDecision(input: {
   const issues = validateSourcingPrices("decision", input.linePrices);
   if (!input.supplierId) issues.unshift({ fieldId: "sourcing-decision-factory", message: "请选择加工厂" });
   processes.forEach((process, index) => {
-    if (!process.trim() || processes.findIndex(value => value.trim() === process.trim()) !== index) {
+    if (!process.trim() || processes.findIndex(value => value.trim().toLowerCase() === process.trim().toLowerCase()) !== index) {
       issues.push({ fieldId: `sourcing-decision-process-${index}`, message: `第 ${index + 1} 项工艺及承包范围须填写完整，且不能重复` });
     }
   });
