@@ -28,3 +28,6 @@ export function InsetField({ label, suffix, ...props }: InputHTMLAttributes<HTML
 export function Surface({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <section className={`dx-surface ${className}`.trim()}>{children}</section>;
 }
+
+export { KeyFacts, Disclosure, ImageStrip, WorkflowRail, ResponsiveFactsTable, ActionBar } from "./governed.js";
+export type { FactsColumn } from "./governed.js";

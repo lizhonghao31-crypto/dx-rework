@@ -1,0 +1,23 @@
+/* UI-01 is opt-in; no selectors target unmigrated pages or the shared shell. */
+[data-dx-ui="governed"].sourcing-governed { min-width: 0; color: var(--dx-v2-color-text); }
+[data-dx-ui="governed"] .sourcing-workspace { min-width: 0; }
+[data-dx-ui="governed"] :is(.dx-surface, .rework-detail-core-facts, .rework-detail-images, .rework-workflow, .sourcing-action-panel) { background: var(--dx-governed-surface); border: 1px solid var(--dx-governed-border); box-shadow: none; border-radius: var(--dx-governed-radius); }
+[data-dx-ui="governed"] .sourcing-order-detail .rework-detail-core-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--dx-governed-gap); padding: var(--dx-v2-space-5); }
+[data-dx-ui="governed"] .rework-detail-core-facts > .rework-detail-core-fact { min-width: 0; padding: 0; border: 0; background: transparent; }
+[data-dx-ui="governed"] .rework-detail-core-facts > .rework-detail-core-fact:first-child { color: var(--dx-v2-color-primary); }
+[data-dx-ui="governed"] .rework-detail-target-layout .order-overview--compact > .rework-detail-images { height: auto; min-height: 180px; }
+[data-dx-ui="governed"] .dx-image-strip > .rework-detail-image-card { display: block; height: auto; padding: 4px; }
+[data-dx-ui="governed"] .dx-image-strip .rework-detail-image-card__filename { display: block; overflow-wrap: anywhere; white-space: normal; }
+[data-dx-ui="governed"] .sourcing-owner-decision__desktop { display: grid; min-width: 0; }
+[data-dx-ui="governed"] .sourcing-owner-decision__lead { padding: 12px; border-left: 3px solid var(--dx-v2-color-primary); background: var(--dx-v2-color-surface); }
+[data-dx-ui="governed"] .sourcing-owner-actions { display: flex; }
+[data-dx-ui="governed"] :is(.sourcing-create-card, .sourcing-order-card, .sourcing-action-panel) { min-width: 0; }
+[data-dx-ui="governed"] .sourcing-mobile-navigation { background: var(--dx-v2-color-control); padding: 6px; border-radius: var(--dx-v2-radius-md); }
+[data-dx-ui="governed"] .sourcing-mobile-navigation a { color: #fff; }
+[data-dx-ui="governed"] .sourcing-mobile-navigation a.is-active { background: var(--dx-v2-color-primary); }
+@media (max-width: 800px) {
+  [data-dx-ui="governed"] .sourcing-order-detail .rework-detail-core-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-dx-ui="governed"] .rework-detail-core-facts > .rework-detail-core-fact:first-child { grid-column: 1 / -1; }
+  [data-dx-ui="governed"] .sourcing-workspace :is(input, select, textarea) { font-size: 16px; max-width: 100%; }
+  [data-dx-ui="governed"] .sourcing-owner-actions > button { min-width: 0; min-height: 48px; white-space: normal; }
+}
