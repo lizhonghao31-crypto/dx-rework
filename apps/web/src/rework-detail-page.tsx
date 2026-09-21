@@ -438,8 +438,8 @@ function CurrentReworkDetailPage({
   const [mobileWorkflowExpanded, setMobileWorkflowExpanded] = useState(false);
   const mobileWorkflowRailRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (mobileWorkflowExpanded) mobileWorkflowRailRef.current?.querySelector(".is-current")?.scrollIntoView({ block: "nearest", inline: "center" });
-  }, [mobileWorkflowExpanded]);
+    if (mobileWorkflowExpanded) mobileWorkflowRailRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [mobileWorkflowExpanded, state]);
 
   const load = useCallback(async (signal?: AbortSignal): Promise<ReworkBusinessDetail | null> => {
     if (!reworkOrderId) {
@@ -571,7 +571,8 @@ function CurrentReworkDetailPage({
   const meta = statusMeta[detail.status];
   const stages = buildWorkflow(detail, currentUser, returnToTodos ? focusedNode : undefined);
   const workflowNodes = stages.flatMap((stage) => stage.nodes);
-  const activeNode = workflowNodes.find((node) => node.state === "current" || node.state === "followup")?.key;
+  const activeNode = workflowNodes.find((node) => node.state === "current" || node.state === "followup")?.key
+    ?? (detail.status === "completed" ? "settlement_followup" : undefined);
   const activeWorkflowNode = workflowNodes.find((node) => node.key === activeNode);
   const selectedFromUrl = workflowNodeFromSearch();
   const defaultSelectedNode = activeNode ?? "settlement_followup";
@@ -714,7 +715,7 @@ function CurrentReworkDetailPage({
   };
 
   const renderWorkflowNode = (node: WorkflowNode) => (
-    <a className={`rework-workflow-step is-${node.state}`} aria-current={node.state === "current" ? "step" : undefined} href={node.state === "completed" && !["settlement_ledger", "archive", "settlement_followup"].includes(node.key) ? reworkHistoryHref(detail.reworkOrderId, node.key) : nodeHref(detail.reworkOrderId, node.key)} key={node.key}>
+    <a className={`rework-workflow-step is-${node.state}`} data-active={node.key === activeNode} aria-current={node.state === "current" ? "step" : undefined} href={node.state === "completed" && !["settlement_ledger", "archive", "settlement_followup"].includes(node.key) ? reworkHistoryHref(detail.reworkOrderId, node.key) : nodeHref(detail.reworkOrderId, node.key)} key={node.key}>
       <b aria-hidden="true">{node.state === "completed" ? "✓" : Number(node.number)}</b>
       <span><strong>{node.label}</strong><small>{node.ownerRole}</small></span>
       <em>{nodeStatusLabel(node, detail)}</em>

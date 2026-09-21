@@ -69,6 +69,9 @@ describe("order detail information architecture", () => {
     expect(detail).toContain('reworkHistoryHref(detail.reworkOrderId, node.key) : nodeHref(detail.reworkOrderId, node.key)');
     expect(detail).toContain('useState(false)');
     expect(detail).toContain('aria-expanded={mobileWorkflowExpanded}');
+    expect(detail).toContain('data-active={node.key === activeNode}');
+    expect(detail).toContain(`querySelector('[data-active="true"]')`);
+    expect(detail).toContain('?? (detail.status === "completed" ? "settlement_followup" : undefined)');
     expect(governed).toContain('repeat(5, minmax(0, 1fr))');
     expect(governed).toContain('flex-direction: row; overflow-x: auto');
     expect(governed).not.toContain('--dx-v2-color-border');
