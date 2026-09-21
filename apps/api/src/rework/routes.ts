@@ -1,3 +1,4 @@
+import { FinanceNodeParamsSchema } from "@dx-rework/contracts/reporting";
 import {
   AddIePrecountSchema,
   AddTailDefectiveQuantitySchema,
@@ -348,6 +349,10 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     };
   });
   if (dependencies.businessDetailService) {
+    app.get<{ Params: { reworkOrderId: string; node: string }; Querystring: { entryId?: string } }>("/rework-orders/:reworkOrderId/history/:node", async (request) => {
+      const params = parse(FinanceNodeParamsSchema, request.params);
+      return dependencies.businessDetailService!.history(await authenticatedActor(request), params.reworkOrderId, params.node, request.query.entryId);
+    });
     app.get<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/business-detail", async (request) =>
       dependencies.businessDetailService!.get(
         await authenticatedActor(request),

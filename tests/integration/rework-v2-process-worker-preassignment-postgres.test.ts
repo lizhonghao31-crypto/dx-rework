@@ -1,3 +1,4 @@
+import { ReworkBusinessDetailService } from "../../apps/api/src/rework/rework-business-detail-service.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -253,6 +254,20 @@ runWithPostgres("PR-04 unified execution PostgreSQL", () => {
       randomUUID(),
     );
     expect(activated).toMatchObject({ reworkStatus: "in_progress", tasksCreated: 2 });
+    const historyService = new ReworkBusinessDetailService(database);
+    const historyReader = actor(ids.owner, ["owner_group"], "rework:view");
+    const configuredHistory = await historyService.history(historyReader, order.value.reworkOrderId, "process_configuration");
+    expect(configuredHistory.fields.find(field => field.label === "核价结果")?.value).toBe("pending_ie_review");
+    expect(configuredHistory.sections.find(section => section.title === "本次工人分配")?.rows).toHaveLength(2);
+    expect(configuredHistory.sections.find(section => section.title === "工序与单价")?.rows).toHaveLength(2);
+    const reviewedHistory = await historyService.history(historyReader, order.value.reworkOrderId, "ie_review");
+    expect(reviewedHistory.fields.find(field => field.label === "核价结果")?.value).toBe("approved");
+    const initiationHistory = await historyService.history(historyReader, order.value.reworkOrderId, "initiation");
+    expect(initiationHistory.fields.find(field => field.label === "款号")?.value).toBe("PR04-PG-ORDINARY");
+    expect(initiationHistory.attachments).toHaveLength(1);
+    await expect(historyService.history(historyReader, order.value.reworkOrderId, "ie_review", configuredHistory.entry.id)).rejects.toMatchObject({statusCode:404});
+    await expect(historyService.history(workerReport(), order.value.reworkOrderId, "responsibility")).rejects.toMatchObject({statusCode:403});
+
     expect((await database.query("SELECT status FROM rework_orders WHERE rework_order_id=$1", [order.value.reworkOrderId])).rows[0]?.status).toBe("in_progress");
     expect((await database.query(
       `SELECT item.execution_kind,task.work_task_id,task.status,member.person_id

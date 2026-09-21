@@ -1,3 +1,5 @@
+import { FinanceNodeKeySchema } from "@dx-rework/contracts/reporting";
+import { ReworkNodeHistoryPage, reworkHistoryHref } from "./rework-node-history-page.js";
 import { moduleCanWrite } from "./member-module-policy.js";
 import { canOperateReworkNode, WHOLE_ORDER_REVIEW_CAPABILITIES } from "./rework-node-access.js";
 import { FinanceNodePanel } from "./reporting/finance-node-panel.js";
@@ -25,6 +27,7 @@ import "./rework-detail.css";
 import "./rework-detail-compact.css";
 import "./rework-mobile.css";
 import "./order-overview-responsive.css";
+import "./rework-governed.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -410,7 +413,15 @@ const historyActionLabel = (action: string): string => {
   return "流程处理";
 };
 
-export function ReworkDetailPage({
+export function ReworkDetailPage(props: { reworkOrderId?: string; focusedNode?: WorkflowNodeKey; focusedExternalCaseId?: string; returnToTodos?: boolean } = {}) {
+  const query = new URLSearchParams(window.location.search);
+  const node = FinanceNodeKeySchema.safeParse(query.get("node"));
+  const orderId = props.reworkOrderId ?? orderIdFromLocation();
+  if (orderId && query.get("view") === "node-history" && node.success) return <ReworkNodeHistoryPage orderId={orderId} node={node.data} />;
+  return <CurrentReworkDetailPage {...props} />;
+}
+
+function CurrentReworkDetailPage({
   reworkOrderId: providedReworkOrderId,
   focusedNode,
   focusedExternalCaseId,
@@ -430,7 +441,6 @@ export function ReworkDetailPage({
   const [tailDefectMessage, setTailDefectMessage] = useState("");
   const [tailDefectBusy, setTailDefectBusy] = useState(false);
   const defectDialogRef = useRef<HTMLDialogElement | null>(null);
-  const [mobileImagesExpanded, setMobileImagesExpanded] = useState(true);
   const [mobileWorkflowExpanded, setMobileWorkflowExpanded] = useState(false);
   const mobileWorkflowRailRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -638,10 +648,16 @@ export function ReworkDetailPage({
     </Surface>;
   };
 
+  if (selected?.state === "completed" && !["settlement_ledger", "archive", "settlement_followup"].includes(selected.key)) {
+    const historyKey = FinanceNodeKeySchema.safeParse(selected.key);
+    if (historyKey.success) return <ReworkNodeHistoryPage orderId={detail.reworkOrderId} node={historyKey.data} />;
+  }
+
   const scopedFinanceOrderReader = hasCapability(currentUser,"rework:finance_orders:read") && !elevated(currentUser) && !hasCapability(currentUser,"rework:finance_nodes:read");
   const financeNodeReader = !elevated(currentUser) && hasCapability(currentUser,"rework:finance_nodes:read");
   const renderSelectedTask = () => {
     if (!selected) return null;
+    if (selected.state === "completed" && !["settlement_ledger", "archive", "settlement_followup"].includes(selected.key)) return <a className="dx-button dx-button--primary" href={reworkHistoryHref(detail.reworkOrderId, selected.key)}>查看完整历史页面</a>;
     if (scopedFinanceOrderReader && selected.state !== "future"
       && !["settlement_ledger","settlement_followup"].includes(selected.key)
       && !canOperateReworkNode(currentUser?.capabilities??[],selected.key)) {
@@ -707,7 +723,7 @@ export function ReworkDetailPage({
   };
 
   const renderWorkflowNode = (node: WorkflowNode) => (
-    <a className={`rework-workflow__node is-${node.state}`} href={nodeHref(detail.reworkOrderId, node.key)} key={node.key}>
+    <a className={`rework-workflow__node is-${node.state}`} href={node.state === "completed" && !["settlement_ledger", "archive", "settlement_followup"].includes(node.key) ? reworkHistoryHref(detail.reworkOrderId, node.key) : nodeHref(detail.reworkOrderId, node.key)} key={node.key}>
       <b>{node.number}</b>
       <span><strong>{node.label}</strong><small>{node.ownerRole} · {node.ownerName}</small></span>
       <em>{nodeStatusLabel(node, detail)}</em>
@@ -716,12 +732,12 @@ export function ReworkDetailPage({
 
   return (
     <Shell active="全部订单">
-      <div className="rework-detail-header"><Header title={detail.styleNo ?? "款号未填写"} subtitle={detail.reworkNo ?? "未提交返工草稿"} badge={meta.label} badgePlacement="subtitle" {...backAction} /></div>
+      <div className="rework-governed" data-dx-ui="governed"><div className="rework-detail-header"><Header title={detail.styleNo ?? "款号未填写"} subtitle={detail.reworkNo ?? "未提交返工草稿"} badge={meta.label} badgePlacement="subtitle" {...backAction} /></div>
       <div className="rework-detail-layout rework-detail-target-layout">
       {canSeeResponsibility && ["pending_responsibility_determination","pending_owner_signature","pending_responsibility_action","completed"].includes(detail.status) && <OrderResponsibilityRevisionPanel readOnly={!moduleWritable} orderId={detail.reworkOrderId} orderVersion={detail.version} onChanged={syncAfterNodeAction} />}
         <dl className="rework-detail-core-facts" aria-label="返工单核心信息">
-          <div className="rework-detail-core-fact"><dt>返工工序</dt><dd title={detail.reworkProcess ?? undefined}>{detail.reworkProcess ?? "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>加工厂</dt><dd>{detail.processingFactory?.displayName ?? "—"}</dd></div>
+          <div className="rework-detail-core-fact"><dt>返工工序</dt><dd title={detail.reworkProcess ?? undefined}>{detail.reworkProcess ?? "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>发起时间</dt><dd>{formatTime(detail.createdAt)}</dd></div>
           <div className="rework-detail-core-fact"><dt>发起人</dt><dd>{detail.createdBy.displayName}</dd></div>
           <div className="rework-detail-core-fact rework-detail-core-fact--merchandiser"><dt>订单跟单</dt><dd>{detail.merchandiser?.displayName ?? "—"}</dd></div>
@@ -729,37 +745,10 @@ export function ReworkDetailPage({
           <div className="rework-detail-core-fact rework-detail-core-fact--defective"><dt>次品数量</dt><dd><button type="button" onClick={() => { setTailDefectMessage(""); setDefectDialogOpen(true); }}>{formatBusinessDecimal(detail.defectiveQuantity.total)} 件 · 查看</button></dd></div>
         </dl>
 
-        {dynamicFacts.length > 0 ? <Surface className="rework-detail-dynamic-information">
-          <div className="section-title rework-detail-panel-title">
-            <div><h2>订单补充信息</h2><p>仅展示本单已填写的业务字段。</p></div>
-            <StatusBadge tone="info">{formatBusinessDecimal(dynamicFacts.length)} 项</StatusBadge>
-          </div>
-          <dl className="rework-detail-dynamic-facts">
-            {dynamicFacts.map((fact) => <div key={fact.label}>
-              <dt>{fact.label}</dt><dd>{fact.value}</dd>
-            </div>)}
-          </dl>
-        </Surface> : null}
-
-        {detail.inspectionReport ? <InspectionReportReadonly report={detail.inspectionReport} /> : null}
-
         <div className="rework-detail-overview-grid order-overview--compact">
           <section className="rework-detail-images" aria-label="订单图片">
-            <div className="section-title rework-detail-panel-title rework-detail-desktop-panel-heading">
-              <div><h2>订单图片</h2></div>
-              {imageAttachments.length > 0 ? <StatusBadge tone="info">{formatBusinessDecimal(imageAttachments.length)} 张图片</StatusBadge> : null}
-            </div>
-            <button
-              className="rework-detail-mobile-panel-toggle"
-              type="button"
-              aria-controls="order-images-content"
-              aria-expanded={mobileImagesExpanded}
-              onClick={() => setMobileImagesExpanded((value) => !value)}
-            >
-              <span><strong>订单图片</strong>{imageAttachments.length > 0 ? <small>{formatBusinessDecimal(imageAttachments.length)} 张</small> : null}</span>
-              <b aria-hidden="true">{mobileImagesExpanded ? "−" : "+"}</b>
-            </button>
-            <div id="order-images-content" className={`rework-detail-mobile-collapsible${mobileImagesExpanded ? " is-expanded" : ""}`}>
+            <div className="section-title rework-detail-panel-title rework-governed-image-heading">
+              <h2>订单图片</h2>
               {canSupplementOrderImages && (
                 <OrderImageSupplementUploader
                   reworkOrderId={detail.reworkOrderId}
@@ -768,8 +757,11 @@ export function ReworkDetailPage({
                   onUploaded={async () => { await load(); }}
                 />
               )}
+              <span className="rework-governed-image-count">{formatBusinessDecimal(imageAttachments.length)} 张</span>
+            </div>
+            <div id="order-images-content" className="rework-detail-mobile-collapsible is-expanded">
               {visibleImageAttachments.length > 0 ? <div className="rework-detail-image-grid">
-                {visibleImageAttachments.map((attachment, index) => (
+                {visibleImageAttachments.map((attachment) => (
                   <button
                     className="rework-detail-image-card"
                     type="button"
@@ -779,7 +771,6 @@ export function ReworkDetailPage({
                   >
                     <img src={attachmentUrl(attachment.attachmentId, "preview")} alt={attachment.filename} loading="lazy" />
                     <span className="rework-detail-image-card__filename">{attachment.filename}</span>
-                    {index === 5 && imageAttachments.length > 6 ? <strong className="rework-detail-image-card__overflow">+{imageAttachments.length - 5}</strong> : null}
                   </button>
                 ))}
               </div> : null}
@@ -842,8 +833,23 @@ export function ReworkDetailPage({
           </section>
         </div>
 
+        {dynamicFacts.length > 0 ? <Surface className="rework-detail-dynamic-information">
+          <div className="section-title rework-detail-panel-title">
+            <div><h2>订单补充信息</h2><p>仅展示本单已填写的业务字段。</p></div>
+            <StatusBadge tone="info">{formatBusinessDecimal(dynamicFacts.length)} 项</StatusBadge>
+          </div>
+          <dl className="rework-detail-dynamic-facts">
+            {dynamicFacts.map((fact) => <div key={fact.label}>
+              <dt>{fact.label}</dt><dd>{fact.value}</dd>
+            </div>)}
+          </dl>
+        </Surface> : null}
+
+        {detail.inspectionReport ? <InspectionReportReadonly report={detail.inspectionReport} /> : null}
+
         <section id="node-workspace" className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
           <div className="rework-detail-task__heading"><h2>办理区<span className="rework-mobile-current-node"> · {selected?.number} {selected?.label}</span></h2>{detail.canReadBusinessDetails !== false && <span className="rework-detail-single-piece-total">单件返工总价：{detail.singlePieceReworkTotal === null ? "待核价" : formatBusinessCurrency(detail.singlePieceReworkTotal)}</span>}</div>
+          {detail.status === "pending_process_configuration" && canHandleInitiation ? <InitiationFollowUpActions detail={detail} canHandleInitiation={canHandleInitiation} onChanged={() => { void load(); }} /> : null}
           {canWaiveTailInspection ? <TailInspectionWaiverAction detail={detail} onChanged={syncAfterNodeAction} /> : null}
           {renderSelectedTask()}
         </section>
@@ -893,6 +899,7 @@ export function ReworkDetailPage({
           </section>
         </div>
       )}
+    </div>
     </Shell>
   );
 }

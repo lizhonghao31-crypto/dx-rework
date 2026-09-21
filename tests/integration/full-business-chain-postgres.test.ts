@@ -1535,6 +1535,14 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect((await responsibility.get(deniedOwner,submitted.value.reworkOrderId)).canOwnerSign).toBe(false);
     await expect(responsibility.approveOwnerSignature(deniedOwner,submitted.value.reworkOrderId,{expectedOrderVersion:unpaidFinal.value.orderVersion},randomUUID())).rejects.toMatchObject({statusCode:403});
     await responsibility.approveOwnerSignature(actor(ids.ownerOne,["owner_group"],"responsibility:owner_sign","responsibility:determine"),submitted.value.reworkOrderId,{expectedOrderVersion:unpaidFinal.value.orderVersion},randomUUID());
+    const historyActor = actor(ids.ownerOne, ["owner_group"], "responsibility:owner_sign");
+    for (const node of ["initiation", "process_configuration", "ie_review", "work_reporting", "whole_order_review", "final_quantity_ie_review", "responsibility", "owner_signature"] as const) {
+      const historical = await businessDetail.history(historyActor, submitted.value.reworkOrderId, node);
+      expect(historical.node).toBe(node);
+      expect(historical.versions.some(entry => entry.id === historical.entry.id)).toBe(true);
+      if (node !== "initiation") expect(historical.sections.some(section => section.rows.length > 0)).toBe(true);
+    }
+
 
     const externalCases = await database.query<{
       caseId: string;

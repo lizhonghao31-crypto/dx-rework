@@ -114,6 +114,21 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
   const [temporaryRemark, setTemporaryRemark] = useState("");
   const [temporaryPhoneNumber, setTemporaryPhoneNumber] = useState("");
   const [temporaryIdentityNumber, setTemporaryIdentityNumber] = useState("");
+  useEffect(() => {
+    if (!temporaryDialogOpen && !mobileAssignment) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      if (busy) return;
+      if (temporaryDialogOpen) {
+        setTemporaryDialogOpen(false); setTemporaryEditingPersonId(null);
+        setTemporaryName(""); setTemporaryRemark(""); setTemporaryPhoneNumber(""); setTemporaryIdentityNumber("");
+      } else { setMobileAssignment(null); setMobileAssignmentSearch(""); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [temporaryDialogOpen, mobileAssignment, busy]);
+
   const pendingKeys = useRef<Record<string, string>>({});
   const pendingSubmit = useRef<PendingSubmit | null>(null);
 
@@ -268,6 +283,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
     });
   };
   const cancelMobileAssignment = () => {
+    if (busy) return;
     setMobileAssignment(null);
     setMobileAssignmentSearch("");
   };
@@ -606,7 +622,7 @@ export function ProcessWorkerAssignmentForm({ reworkOrderId, initialDetail, onOr
         <div className="process-worker-mobile-sheet__groups">{mobileAssignmentGroups.map((group) => <fieldset className="process-worker-people-group" key={group.label}><legend><span>{group.label}</span><small>{formatBusinessDecimal(group.people.length)} 人</small>{group.label === "临时工" && canCreateTemporary ? <button type="button" disabled={busy} onClick={openTemporaryWorkerCreate}>＋新增</button> : null}</legend><div>{group.people.length ? group.people.map((person) => <label key={person.personId}><input type="checkbox" checked={mobileAssignment.selectedIds.includes(person.personId)} disabled={busy} onChange={() => toggleMobileAssignmentPerson(person.personId)} /><span>{person.displayName}</span></label>) : <p>{optionLoadIssue ? "人员目录暂不可用" : "没有匹配人员"}</p>}</div></fieldset>)}</div>
         <div className="process-worker-mobile-sheet__actions"><Button disabled={busy} onClick={cancelMobileAssignment}>取消</Button><Button variant="primary" disabled={busy || mobileAssignment.selectedIds.length === 0} onClick={confirmMobileAssignment}>确认本单分工</Button></div>
       </section></div> : null}
-      {temporaryDialogOpen ? <div className="process-worker-dialog" role="presentation" onMouseDown={closeTemporaryWorkerDialog}><div role="dialog" aria-modal="true" aria-label={temporaryEditingPersonId ? "补录或修改临时工资料" : "新增临时工"} onMouseDown={(event) => event.stopPropagation()}><Surface><h2>{temporaryEditingPersonId ? "补录或修改临时工资料" : "新增临时工"}</h2><InsetField label="姓名（必填）" value={temporaryName} maxLength={100} disabled={busy || Boolean(temporaryEditingPersonId)} onChange={(event) => setTemporaryName(event.target.value)} /><InsetField label="手机号（选填）" value={temporaryPhoneNumber} maxLength={30} inputMode="tel" disabled={busy} onChange={(event) => setTemporaryPhoneNumber(event.target.value)} /><InsetField label="身份证号（选填）" value={temporaryIdentityNumber} maxLength={18} disabled={busy} onChange={(event) => setTemporaryIdentityNumber(event.target.value)} /><InsetField label="备注（选填）" value={temporaryRemark} maxLength={100} disabled={busy} onChange={(event) => setTemporaryRemark(event.target.value)} /><div className="mobile-actions"><Button disabled={busy} onClick={closeTemporaryWorkerDialog}>返回</Button><Button variant="primary" disabled={busy || !temporaryName.trim()} onClick={() => void saveTemporaryWorker()}>{temporaryEditingPersonId ? "保存资料" : "添加临时工"}</Button></div></Surface></div></div> : null}
+      {temporaryDialogOpen ? <div className="process-worker-dialog" role="presentation" onMouseDown={closeTemporaryWorkerDialog}><div role="dialog" aria-modal="true" aria-label={temporaryEditingPersonId ? "补录或修改临时工资料" : "新增临时工"} onMouseDown={(event) => event.stopPropagation()}><Surface><h2>{temporaryEditingPersonId ? "补录或修改临时工资料" : "新增临时工"}</h2><InsetField label="姓名（必填）" value={temporaryName} maxLength={100} disabled={busy || Boolean(temporaryEditingPersonId)} onChange={(event) => setTemporaryName(event.target.value)} /><InsetField label="手机号（选填）" value={temporaryPhoneNumber} maxLength={30} inputMode="tel" disabled={busy} onChange={(event) => setTemporaryPhoneNumber(event.target.value)} /><InsetField label="身份证号（选填）" value={temporaryIdentityNumber} maxLength={18} disabled={busy} onChange={(event) => setTemporaryIdentityNumber(event.target.value)} /><InsetField label="备注（选填）" value={temporaryRemark} maxLength={100} disabled={busy} onChange={(event) => setTemporaryRemark(event.target.value)} />{message ? <p role="status">{message}</p> : null}<div className="mobile-actions"><Button disabled={busy} onClick={closeTemporaryWorkerDialog}>返回</Button><Button variant="primary" disabled={busy || !temporaryName.trim()} onClick={() => void saveTemporaryWorker()}>{temporaryEditingPersonId ? "保存资料" : "添加临时工"}</Button></div></Surface></div></div> : null}
     </div>;
   }
   if (response.reworkStatus === "pending_ie_review") {
