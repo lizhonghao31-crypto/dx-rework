@@ -54,7 +54,8 @@ describe("sourcing craft database separation", () => {
     expect(routes).toContain('includes("order_merchandiser")');
     expect(routes).toContain('"sourcing:inquiry:create"');
 
-    expect(sourcingPage).toContain('request("master-data/crafts/ensure"');
+    expect(sourcingPage).toContain('requestSubmission("master-data/crafts/ensure"');
+    expect(sourcingPage).toContain('return await request(path, schema, { ...init, signal: controller.signal });');
     expect(sourcingPage).toContain("craftNames: names");
     expect(sourcingPage).toContain("craftIds: crafts.map");
     expect(sourcingPage).not.toContain("processes: normalizedProcesses");
