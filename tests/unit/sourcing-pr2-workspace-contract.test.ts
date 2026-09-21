@@ -30,7 +30,8 @@ describe("sourcing PR2 unified desktop workspace", () => {
     expect(source).toContain("sourcingWorkflowNodeHref");
     expect(source).toContain('{ key: "finance", number: "05"');
     expect(source).not.toContain('{ key: "contract"');
-    expect(source).toContain("rework-detail-node-history");
+    expect(source).toContain("SourcingNodeHistoryPage");
+    expect(source).not.toContain("rework-detail-node-history");
     expect(source).toContain('sourcing-detail-layout');
     expect(source).not.toContain('<h2>流程记录</h2>');
     expect(source).toContain('import "./rework-detail.css"');

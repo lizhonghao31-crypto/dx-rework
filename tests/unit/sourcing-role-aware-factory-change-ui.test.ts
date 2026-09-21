@@ -3,14 +3,14 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("sourcing role-aware transfer UI", () => {
-  it("keeps five main nodes and exposes transfer only from the three business role pages", async () => {
+  it("keeps five main nodes and exposes transfer for the three authorized roles on the current page", async () => {
     const page = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
     expect(page).toContain('{ key: "finance", number: "05", label: "财务核对", role: "财务" }');
     expect(page).not.toContain('{ key: "contract"');
-    expect(page).toContain('selectedNode === "created"');
+    expect(page).toContain('canMerchandiserTransfer ? "order_merchandiser" : null');
     expect(page).toContain('selectedNode === "management"');
     expect(page).toContain('selectedNode === "owner"');
-    expect(page).toContain(': selectedNode === "owner" ? "owner_group" : null');
+    expect(page).toContain('canOwnerTransfer ? "owner_group"');
     expect(page).toContain("生产管理首次提交加工厂和单价后开放");
     expect(page).not.toContain("订单已完成归档，转厂入口已关闭");
     expect(page).toContain('factoryChange?.status === "pending_owner" ? Math.max(mainStep, 3)');

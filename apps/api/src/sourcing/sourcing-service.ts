@@ -31,6 +31,8 @@ import type {
   SourcingFactoryChangeStateResponse,
   SourcingCaseStatus,
   SourcingCaseSummary,
+  SourcingHistoryNode,
+  SourcingNodeHistory,
   SourcingAttachmentListResponse,
   SourcingTimelineResponse,
   SupplementSourcingImages,
@@ -467,6 +469,7 @@ export class SourcingService {
     client: Pick<PoolClient, "query">,
     sourcingCaseId: string,
     actor: TrustedActorContext,
+    history?: { at: string; node: SourcingHistoryNode; entryId: string },
   ): Promise<SourcingCaseSummary> {
     const result = await client.query<SourcingCaseRow>(
       `SELECT
@@ -529,8 +532,8 @@ export class SourcingService {
          SELECT jsonb_agg(
            jsonb_build_object(
              'position',line.position,
-             'styleNo',line.style_no,'formalStyleNo',line.formal_style_no,'imageAttachmentId',line.image_attachment_id,
-             'alternateStyleNo',line.alternate_style_no,
+             'styleNo',${history ? 'line.historical_style_no' : 'line.style_no'},'formalStyleNo',line.formal_style_no,'imageAttachmentId',line.image_attachment_id,
+             'alternateStyleNo',${history ? 'line.historical_alternate' : 'line.alternate_style_no'},
              'color',line.color,
              'quantity',line.quantity,
              'externalUnitPrice',line.external_unit_price::text,
@@ -538,7 +541,19 @@ export class SourcingService {
            )
            ORDER BY line.position
          ) AS line_items
-         FROM current_sourcing_case_lines line
+         FROM ${history ? `(SELECT original.*,
+           COALESCE(identity.style_no,identity.alternate_style_no) AS historical_style_no,
+           identity.style_no AS formal_style_no, identity.alternate_style_no AS historical_alternate
+           FROM sourcing_case_lines original
+           LEFT JOIN LATERAL (SELECT revision,lines FROM sourcing_style_revisions
+             WHERE sourcing_case_id=original.sourcing_case_id AND created_at <= $2::timestamptz
+             ORDER BY revision DESC LIMIT 1) revision ON true
+           LEFT JOIN LATERAL (SELECT value FROM jsonb_array_elements(revision.lines)
+             WHERE (value->>'position')::integer=original.position) revised ON true
+           CROSS JOIN LATERAL (SELECT
+             CASE WHEN revision.revision IS NULL THEN original.style_no ELSE revised.value->>'styleNo' END AS style_no,
+             CASE WHEN revision.revision IS NULL THEN original.alternate_style_no ELSE revised.value->>'alternateStyleNo' END AS alternate_style_no
+           ) identity) line` : "current_sourcing_case_lines line"}
          WHERE line.sourcing_case_id=case_view.sourcing_case_id
        ) lines_row ON true
        LEFT JOIN LATERAL (
@@ -559,6 +574,7 @@ export class SourcingService {
          SELECT quote.*
          FROM sourcing_ie_quotes quote
          WHERE quote.sourcing_case_id=case_view.sourcing_case_id
+           ${history ? "AND quote.quoted_at <= $2::timestamptz AND $3::text <> 'created' AND ($3::text <> 'ie_quote' OR quote.sourcing_ie_quote_id=$4::uuid)" : ""}
          ORDER BY quote.quote_version DESC
          LIMIT 1
        ) quote_row ON true
@@ -574,6 +590,7 @@ export class SourcingService {
          SELECT decision_fact.*
          FROM sourcing_decisions decision_fact
          WHERE decision_fact.sourcing_case_id=case_view.sourcing_case_id
+           ${history ? "AND decision_fact.decided_at <= $2::timestamptz AND $3::text NOT IN ('created','ie_quote') AND ($3::text <> 'management' OR decision_fact.sourcing_decision_id=$4::uuid) AND ($3::text <> 'owner' OR decision_fact.sourcing_decision_id=(SELECT sourcing_decision_id FROM sourcing_owner_decisions WHERE sourcing_owner_decision_id=$4::uuid)) AND ($3::text <> 'finance' OR decision_fact.sourcing_decision_id=(SELECT sourcing_decision_id FROM sourcing_finance_reconciliations WHERE sourcing_reconciliation_id=$4::uuid))" : ""}
          ORDER BY decision_fact.decision_version DESC
          LIMIT 1
        ) decision_row ON true
@@ -587,10 +604,12 @@ export class SourcingService {
        ) decision_lines_row ON true
        LEFT JOIN sourcing_owner_decisions owner_row
          ON owner_row.sourcing_decision_id=decision_row.sourcing_decision_id
+         ${history ? "AND owner_row.decided_at <= $2::timestamptz AND $3::text IN ('owner','finance') AND ($3::text <> 'owner' OR owner_row.sourcing_owner_decision_id=$4::uuid)" : ""}
        LEFT JOIN LATERAL (
          SELECT approval.*
          FROM sourcing_approval_snapshots approval
          WHERE approval.sourcing_case_id=case_view.sourcing_case_id
+           ${history ? "AND approval.approved_at <= $2::timestamptz AND $3::text IN ('owner','finance')" : ""}
          ORDER BY approval.decision_version DESC LIMIT 1
        ) snapshot ON true
        LEFT JOIN LATERAL (
@@ -604,11 +623,23 @@ export class SourcingService {
          WHERE line.sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id
        ) snapshot_lines ON true
        WHERE case_view.sourcing_case_id=$1`,
-      [sourcingCaseId],
+      history ? [sourcingCaseId, history.at, history.node, history.entryId] : [sourcingCaseId],
     );
     const row = result.rows[0];
     if (!row) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
-    return mapCase(row, actor);
+    const item = mapCase(row, actor);
+    if (history) {
+      item.styleNo = item.lineItems[0]?.styleNo ?? item.styleNo;
+      // Current lifecycle/version are not a historical state; never present them as such.
+      item.updatedAt = toIso(history.at);
+      const transition = await client.query<{ status: SourcingCaseStatus; version: number }>(
+        `SELECT to_status AS status,sequence AS version FROM sourcing_case_transitions
+         WHERE sourcing_case_id=$1 AND transitioned_at <= $2::timestamptz ORDER BY sequence DESC LIMIT 1`,
+        [sourcingCaseId, history.at]);
+      if (transition.rows[0]) { item.status = transition.rows[0].status; item.version = Number(transition.rows[0].version); }
+      delete item.identityRevision;
+    }
+    return item;
   }
 
   async analysis(actor: TrustedActorContext, input: unknown) {
@@ -1066,6 +1097,45 @@ export class SourcingService {
     } finally {
       client.release();
     }
+  }
+
+  async nodeHistory(actor: TrustedActorContext, sourcingCaseId: string, node: SourcingHistoryNode, entryId?: string): Promise<SourcingNodeHistory> {
+    this.assertReader(actor);
+    const timeline = await this.listTimeline(actor, sourcingCaseId);
+    const sources = {
+      created: ["created", "sourcing_cases", "sourcing_case_id", "created_at"],
+      ie_quote: ["ie_quote", "sourcing_ie_quotes", "sourcing_ie_quote_id", "quoted_at"],
+      management: ["management_decision", "sourcing_decisions", "sourcing_decision_id", "decided_at"],
+      owner: ["owner_decision", "sourcing_owner_decisions", "sourcing_owner_decision_id", "decided_at"],
+      finance: ["finance_reconciliation", "sourcing_finance_reconciliations", "sourcing_reconciliation_id", "reconciled_at"],
+    } as const;
+    const [kind, table, id, time] = sources[node];
+    const versions = timeline.items.filter(entry => entry.kind === kind);
+    const entry = entryId ? versions.find(entry => entry.entryId === entryId) : versions.at(-1);
+    if (!entry) return fail("该节点没有已提交的历史记录", 404, "NOT_FOUND");
+    const cutoff = await this.database.query<{ at: string }>(
+      `SELECT ${time}::text AS at FROM ${table} WHERE ${id}=$1 AND sourcing_case_id=$2`, [entry.entryId, sourcingCaseId]);
+    const at = cutoff.rows[0]?.at;
+    if (!at) return fail("历史记录不存在", 404, "NOT_FOUND");
+    const item = await this.readCase(this.database, sourcingCaseId, actor, { at, node, entryId: entry.entryId });
+    const evidence = await this.database.query<{ ids: string[] | null }>(
+      `SELECT after_state->'attachmentIds' AS ids FROM operation_events
+       WHERE entity_type='sourcing_case' AND entity_id=$1 AND created_at <= $2::timestamptz
+         AND action IN ('sourcing.case.create','sourcing.attachments.supplement')
+         AND jsonb_typeof(after_state->'attachmentIds')='array'
+       ORDER BY created_at DESC,event_id DESC LIMIT 1`, [sourcingCaseId, at]);
+    const ids = evidence.rows[0]?.ids;
+    const attachments = await this.listAttachments(actor, sourcingCaseId);
+    const contract = node === "finance" ? await this.database.query<{ reference: string }>(
+      `SELECT document.contract_number AS reference FROM sourcing_finance_reconciliations reconciliation
+       JOIN sourcing_contract_documents document ON document.sourcing_contract_document_id=reconciliation.sourcing_contract_document_id
+       WHERE reconciliation.sourcing_reconciliation_id=$1 AND reconciliation.sourcing_case_id=$2`,
+      [entry.entryId, sourcingCaseId]) : null;
+    const notices: string[] = [];
+    if (!ids) notices.push("该历史版本未保存图片清单，不能还原当时的图片。");
+    return { item, node, entry, versions,
+      attachments: ids ? attachments.items.filter(image => ids.includes(image.attachmentId)) : [], notices,
+      contractReference: contract?.rows[0]?.reference ?? null };
   }
 
   async listTimeline(

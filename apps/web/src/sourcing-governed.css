@@ -144,3 +144,18 @@
 @media (max-width: 340px) {
   [data-dx-ui="governed"] .sourcing-order-detail .sourcing-key-facts > .sourcing-key-facts__date { grid-column: 1 / -1; }
 }
+
+/* Historical node pages only; accepted current pages and lists are unchanged. */
+[data-dx-ui="governed"] .sourcing-history-navigation { display:flex; align-items:center; flex-wrap:wrap; gap:12px; }
+[data-dx-ui="governed"] .sourcing-history-navigation > div { flex:1; min-width:180px; }
+[data-dx-ui="governed"] .sourcing-history-navigation h2 { margin:0 0 4px; }
+[data-dx-ui="governed"] .sourcing-history-navigation label { display:flex; align-items:center; gap:8px; }
+[data-dx-ui="governed"] .sourcing-history-fields { margin-top:12px; }
+[data-dx-ui="governed"] .sourcing-history-fields textarea { width:100%; min-height:64px; resize:vertical; font:inherit; }
+[data-dx-ui="governed"] .sourcing-history-fields input[readonly] { min-width:0; width:100%; }
+@media(max-width:800px) {
+  [data-dx-ui="governed"] .sourcing-history-navigation > label { width:100%; }
+  [data-dx-ui="governed"] .sourcing-history-navigation select { min-width:0; flex:1; }
+  [data-dx-ui="governed"] .sourcing-node-history .sourcing-line-price-row { grid-template-columns:minmax(0,1fr) minmax(90px,1fr); }
+  [data-dx-ui="governed"] .sourcing-node-history .sourcing-line-price-row > span { grid-column:1/-1; }
+}

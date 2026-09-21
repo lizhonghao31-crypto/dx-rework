@@ -6,7 +6,7 @@ describe("sourcing list parity and Root logical deletion", () => {
   it("keeps the rework card information order and Root-only delete affordance", async () => {
     const page = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
     const heading = page.indexOf('className="sourcing-order-card__heading"');
-    const facts = page.indexOf("<dl>", heading);
+    const facts = page.indexOf('<dl className="sourcing-list-facts">', heading);
 
     expect(heading).toBeGreaterThan(-1);
     expect(page.indexOf("<StatusBadge", heading)).toBeLessThan(facts);
