@@ -28,13 +28,14 @@ export function DecisionSummary({ title, children }: { title: string; children: 
   </section>;
 }
 
-export type FactsColumn<Row> = Readonly<{ key: string; label: string; render: (row: Row) => ReactNode; mobileHeading?: boolean }>;
-export function ResponsiveFactsTable<Row>({ caption, columns, rows, rowKey, totals }: {
+export type FactsColumn<Row> = Readonly<{ key: string; label: string; render: (row: Row) => ReactNode; mobileHeading?: boolean; mobileRender?: (row: Row) => ReactNode }>;
+export function ResponsiveFactsTable<Row>({ caption, columns, rows, rowKey, totals, mobileLayout }: {
+  mobileLayout?: "compact";
   caption: string; columns: readonly FactsColumn<Row>[]; rows: readonly Row[]; rowKey: (row: Row) => string | number;
   /** Authoritative totals supplied by the caller, never recomputed from formatted cells. */
   totals?: Readonly<Record<string, ReactNode>>;
 }) {
-  return <section className="dx-responsive-facts" aria-label={caption}>
+  return <section className={`dx-responsive-facts${mobileLayout === "compact" ? " dx-responsive-facts--compact" : ""}`} aria-label={caption}>
     <div className="dx-facts-table-scroll">
     <table className="dx-facts-table"><caption>{caption}</caption>
       <thead><tr>{columns.map(column => <th scope="col" key={column.key}>{column.label}</th>)}</tr></thead>
@@ -48,11 +49,11 @@ export function ResponsiveFactsTable<Row>({ caption, columns, rows, rowKey, tota
       <h2>{caption}</h2>
       {rows.map(row => <article className="dx-facts-card" key={rowKey(row)}>
         <dl>{columns.map(column => <div className={column.mobileHeading ? "dx-facts-card__heading" : undefined} key={column.key}>
-          <dt>{column.label}</dt><dd>{column.render(row)}</dd>
+          <dt>{column.label}</dt><dd>{(column.mobileRender ?? column.render)(row)}</dd>
         </div>)}</dl>
       </article>)}
       {totals && rows.length > 0 ? <dl className="dx-facts-cards__totals">{columns.filter(column => totals[column.key] !== undefined).map(column =>
-        <div key={column.key}><dt>{column.label}</dt><dd>{totals[column.key]}</dd></div>)}</dl> : null}
+        <div key={column.key} className={mobileLayout === "compact" && column.mobileHeading ? "dx-facts-cards__total-label" : undefined}><dt>{column.label}</dt><dd>{totals[column.key]}</dd></div>)}</dl> : null}
     </div>
     {!rows.length ? <p className="dx-facts-empty">暂无明细</p> : null}
   </section>;
