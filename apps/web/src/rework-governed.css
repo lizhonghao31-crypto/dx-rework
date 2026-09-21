@@ -23,13 +23,6 @@
 .rework-governed .rework-detail-target-layout .rework-detail-image-card { display: grid; flex: 0 0 80px; width: 80px; padding: 2px; grid-template-rows: 80px auto; box-shadow: none; }
 .rework-governed .rework-detail-target-layout .rework-detail-image-card img { width: 100%; height: 80px; object-fit: contain; }
 .rework-governed .rework-detail-image-card__filename { display: block; max-width: 76px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.rework-governed .rework-detail-target-layout .rework-workflow__desktop-grid { gap: 16px 8px; grid-template-columns: repeat(5,minmax(0,1fr)); }
-.rework-governed .rework-detail-target-layout .rework-workflow__desktop-grid .rework-workflow__node { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 5px; padding: 0; min-height: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; text-align: center; }
-.rework-governed .rework-workflow__desktop-grid .rework-workflow__node > b { width: 24px; height: 24px; min-width: 24px; border-radius: 50%; background: var(--dx-v2-color-border); color: var(--dx-v2-color-text); z-index: 1; }
-.rework-governed .rework-workflow__desktop-grid .rework-workflow__node.is-current > b { background: var(--dx-v2-color-primary); color: white; }
-.rework-governed .rework-workflow__desktop-grid .rework-workflow__node.is-completed > b { background: var(--dx-v2-color-primary); color: white; opacity: .7; }
-.rework-governed .rework-workflow__desktop-grid .rework-workflow__node:not(:nth-child(5n)):not(:last-child)::after { content: ""; position: absolute; top: 11px; left: 50%; width: calc(100% + 8px); height: 2px; background: var(--dx-governed-border); }
-.rework-governed .rework-workflow__desktop-grid .rework-workflow__node :is(strong,small,em) { white-space: normal; overflow-wrap: anywhere; font-size: 12px; color: var(--dx-v2-color-text); }
 .rework-governed .rework-detail-target-layout :is(.rework-detail-dynamic-information,.rework-detail-workspace,.dx-surface) { box-shadow: none; background: var(--dx-governed-surface); }
 .rework-governed .rework-detail-dynamic-facts > div { border: 0; padding: 4px 0; background: transparent; box-shadow: none; }
 .rework-governed .rework-detail-dynamic-information .section-title p { display: none; }
@@ -38,14 +31,6 @@
 .rework-governed :is(.mobile-actions,.process-worker-actions,.responsibility-actions,.rework-v2-actions) > button { flex: 1 1 140px; min-width: 0; box-shadow: none; }
 .rework-governed :is(.mobile-actions,.process-worker-actions,.responsibility-actions) > p { flex-basis: 100%; }
 .rework-governed :is(.work-reporting-dialog,.responsibility-batch-dialog,[role="dialog"]) { max-width: calc(100vw - 24px); max-height: 80dvh; overflow-y: auto; box-sizing: border-box; }
-.rework-governed.rework-query-content .reporting-order-grid { grid-template-columns: minmax(0,1fr); }
-.rework-governed .reporting-order-card { border: 1px solid var(--dx-governed-border); box-shadow: none; padding: 0; }
-.rework-governed .reporting-order-card__main { padding: 16px; display: grid; gap: 12px; }
-.rework-governed .reporting-order-card dl { display: grid; grid-template-columns: repeat(auto-fit,minmax(120px,1fr)); margin: 0; gap: 12px; }
-.rework-governed .reporting-order-card dl > div { padding: 0; border: 0; background: transparent; box-shadow: none; }
-.rework-governed .reporting-order-card dd { margin: 4px 0 0; white-space: normal; overflow-wrap: anywhere; }
-.rework-governed .reporting-order-card__heading { padding-right: 32px; }
-.rework-governed.rework-query-content .reporting-filters { grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); }
 .rework-governed.rework-v2-page .dx-surface { box-shadow: none; }
 @media (max-width:1100px) and (min-width:761px) {
  .rework-governed .rework-detail-core-facts { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px 0; }
@@ -60,17 +45,9 @@
  .rework-governed .rework-detail-target-layout .rework-detail-overview-grid { grid-template-columns: minmax(0,1fr); gap: 12px; }
  .rework-governed .rework-detail-target-layout .rework-workflow__heading.rework-detail-desktop-panel-heading { display: none; }
  .rework-governed .rework-detail-target-layout .rework-governed-image-heading { display: flex; }
- .rework-governed .rework-detail-target-layout .rework-workflow__mobile-rail .rework-workflow__node { display: grid; grid-template-columns: 28px minmax(0,1fr) auto; padding: 8px 0; border: 0; border-bottom: 1px solid var(--dx-governed-border); border-radius: 0; background: transparent; box-shadow: none; }
- .rework-governed .rework-detail-target-layout .rework-workflow__mobile-rail .rework-workflow__node :is(strong,small,em) { font-size: 14px; color: var(--dx-v2-color-text); }
  .rework-governed .rework-detail-target-layout .rework-detail-workspace { padding: 12px; }
  .rework-governed .rework-detail-dynamic-facts { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
  .rework-governed .rework-detail-dynamic-facts > div { min-width: 0; }
- .rework-governed.rework-query-content .reporting-filters { grid-template-columns: repeat(2,minmax(0,1fr)); padding: 12px; }
- .rework-governed.rework-query-content .reporting-filters > .dx-field { grid-column: 1/-1; }
- .rework-governed.rework-query-content .reporting-order-card dl { grid-template-columns: repeat(2,minmax(0,1fr)); }
- .rework-governed.rework-query-content .reporting-order-card :is(dt,small) { font-size: 14px; }
- .rework-governed.rework-query-content .reporting-order-card dd { font-size: 16px; }
- .rework-governed .reporting-order-card__heading strong { font-size: 18px; }
  .rework-governed :is(.mobile-actions,.process-worker-actions,.responsibility-actions,.rework-v2-actions) > button { flex-basis: calc(50% - 10px); min-height: 44px; }
 }
 .rework-governed .rework-history-navigation { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
@@ -98,11 +75,30 @@
 .rework-governed .rework-history-fields textarea { width: 100%; box-sizing: border-box; font-size: 16px; padding: 8px; resize: vertical; }
 @media (max-width:800px) {
  .rework-governed .rework-detail-target-layout .order-overview--compact { grid-template-columns: minmax(0,1fr); }
- .rework-governed .rework-detail-target-layout .rework-workflow__desktop-grid { display: none; }
- .rework-governed .rework-detail-target-layout .order-overview--compact .rework-workflow__mobile-rail { flex-direction: column; overflow: visible; }
- .rework-governed .rework-detail-target-layout .order-overview--compact .rework-workflow__mobile-rail .rework-workflow__node { flex: 0 0 auto; width: 100%; min-height: 0; }
  .rework-governed .rework-detail-target-layout .order-overview--compact .rework-detail-image-card { display: grid; flex: 0 0 80px; width: 80px; }
  .rework-governed .rework-detail-target-layout .order-overview--compact .rework-detail-image-card img { width: 76px; height: 80px; }
  .rework-governed .process-worker-line__body,.rework-governed .process-worker-tail-body { grid-template-columns: minmax(0,1fr); gap: 12px; }
  .rework-governed .process-worker-picker { border-left: 0; padding-left: 0; }
+}
+
+/* Use the accepted sourcing WorkflowRail directly. Only page geometry differs. */
+.rework-governed .rework-detail-target-layout .rework-workflow__desktop-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px 0; }
+.rework-governed .rework-workflow__desktop-grid > :nth-child(5n + 1)::before { left: 50%; }
+.rework-governed .rework-workflow__desktop-grid > :nth-child(5n)::before { right: 50%; }
+.rework-governed .rework-workflow-step { min-width: 0; align-content: start; }
+.rework-governed .rework-workflow-step strong { display: block; line-height: 1.5; min-height: 3em; padding: 0 4px; overflow-wrap: anywhere; }
+.rework-governed .rework-detail-target-layout .rework-detail-image-upload { margin: 0; }
+.rework-governed .rework-detail-target-layout .rework-workflow__heading { justify-content: space-between; }
+.rework-governed .rework-detail-target-layout .rework-workflow__mobile-rail { display: none; }
+@media (min-width: 801px) {
+ .rework-governed .rework-detail-target-layout .rework-detail-mobile-workflow-toggle { display: none; }
+ .rework-governed .rework-detail-target-layout .rework-workflow .rework-detail-mobile-collapsible { display: block; }
+}
+@media (max-width: 800px) {
+ .rework-governed .rework-detail-target-layout .rework-workflow__desktop-grid,
+ .rework-governed .rework-detail-target-layout .rework-workflow__heading { display: none; }
+ .rework-governed .rework-detail-target-layout .rework-detail-mobile-workflow-toggle { display: flex; padding: 0; min-height: 44px; margin: 0; box-shadow: none; }
+ .rework-governed .rework-detail-target-layout .rework-workflow .rework-detail-mobile-collapsible { display: none; }
+ .rework-governed .rework-detail-target-layout .rework-workflow .rework-detail-mobile-collapsible.is-expanded { display: block; }
+ .rework-governed .rework-detail-target-layout .order-overview--compact .rework-workflow__mobile-rail { display: flex; flex-direction: row; overflow-x: auto; gap: 0; padding: 8px 0; }
 }

@@ -33,20 +33,18 @@ describe("order-centered workflow UI", () => {
     expect(page).toContain("相关金额");
   });
 
-  it("groups the order flow into collapsible stages and renders one current node workspace", async () => {
+  it("keeps the mobile flow collapsible and renders one current node workspace", async () => {
     const [detail, styles, task] = await Promise.all([
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
       readFile("apps/web/src/rework-detail.css", "utf8"),
       readFile("apps/web/src/responsibility-task-page.tsx", "utf8"),
     ]);
-    expect(detail).toContain("rework-workflow__stage");
-    expect(detail).toContain("<details");
-    expect(detail).toContain("const [collapsedStages, setCollapsedStages]");
-    expect(detail).toContain('open={isOpen}');
-    expect(detail).toContain('{isOpen ? "−" : "+"}');
+    expect(detail).toContain('<WorkflowRail className="rework-workflow__desktop-grid"');
+    expect(detail).toContain('aria-expanded={mobileWorkflowExpanded}');
+    expect(detail).toContain('{mobileWorkflowExpanded ? "−" : "+"}');
     expect(detail).toContain('"01", "发起返工"');
     expect(detail).toContain('"09", "返工业务完成"');
-    expect(detail).toContain("N07 选择每道工序的主责任方后提交老板签字；供应商计划扣款暂不生成。");
+    expect(detail).not.toContain("N07 选择每道工序的主责任方后提交老板签字；供应商计划扣款暂不生成。");
     expect(detail).toContain('selected.state !== "future"');
     expect(detail).toContain("return renderNodePreview()");
     expect(detail).toContain("<ProcessConfigurationForm reworkOrderId={detail.reworkOrderId}");

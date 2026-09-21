@@ -51,30 +51,38 @@ describe("order detail information architecture", () => {
     expect(styles).toContain("repeat(auto-fit, minmax(180px, 1fr))");
   });
 
-  it("uses the confirmed desktop overview, five-column two-row workflow and mobile horizontal rail", async () => {
-    const [detail, styles, responsive] = await Promise.all([
+  it("uses the accepted sourcing rail without changing real node links or workspaces", async () => {
+    const [detail, sourcing, governed, query, board] = await Promise.all([
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
-      readFile("apps/web/src/rework-detail-compact.css", "utf8"),
-      readFile("apps/web/src/order-overview-responsive.css", "utf8"),
+      readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8"),
+      readFile("apps/web/src/rework-governed.css", "utf8"),
+      readFile("apps/web/src/reporting/rework-query-page.tsx", "utf8"),
+      readFile("apps/web/src/reporting/basic-rework-board.tsx", "utf8"),
     ]);
-    expect(detail).toContain('className="rework-detail-overview-grid order-overview--compact"');
-    expect(detail).toContain('className="rework-workflow__desktop-grid"');
-    expect(detail).toContain('className="rework-workflow__mobile-rail"');
-    expect(detail).toContain("{workflowNodes.map(renderWorkflowNode)}");
-    expect(detail).toMatch(/<div className="rework-detail-task__heading"><h2>办理区[\s\S]*?<\/h2>\{detail\.canReadBusinessDetails !== false && <span className="rework-detail-single-piece-total">/);
-    expect(detail).not.toContain("当前工作区");
-    expect(detail).toContain("当前步骤 {activeStepIndex} / {workflowNodes.length}");
-    expect(styles).toContain(".rework-detail-overview-grid");
-    expect(responsive).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
-    expect(styles).toContain(".rework-workflow__desktop-grid");
-    expect(styles).toContain("grid-template-columns: repeat(5, minmax(0, 1fr));");
-    expect(responsive).toContain("height: 260px;");
-    expect(responsive).toContain("flex-direction: row;");
-    expect(styles).toContain("grid-template-rows: repeat(2, minmax(0, 1fr));");
-    expect(styles).toContain(".rework-workflow__mobile-rail");
-    expect(styles).toContain("overflow-x: auto");
-    expect(styles).toContain("scroll-snap-type: x proximity;");
-    expect(styles).toContain("flex: 0 0 126px");
+    expect(detail).toContain('<WorkflowRail className="rework-workflow__desktop-grid"');
+    expect(detail).toContain('<WorkflowRail className="rework-workflow__mobile-rail"');
+    expect(sourcing).toContain('<WorkflowRail className="sourcing-workflow-rail"');
+    expect(detail).toContain('node.state === "completed" ? "✓" : Number(node.number)');
+    expect(detail).toContain('<small>{node.ownerRole}</small>');
+    expect(detail).not.toContain('{node.ownerName}</small>');
+    expect(detail).not.toContain('rework-workflow__pending-path');
+    expect(detail).toContain('reworkHistoryHref(detail.reworkOrderId, node.key) : nodeHref(detail.reworkOrderId, node.key)');
+    expect(detail).toContain('useState(false)');
+    expect(detail).toContain('aria-expanded={mobileWorkflowExpanded}');
+    expect(detail).toContain('data-active={node.key === activeNode}');
+    expect(detail).toContain(`querySelector('[data-active="true"]')`);
+    expect(detail).toContain('?? (detail.status === "completed" ? "settlement_followup" : undefined)');
+    expect(governed).toContain('repeat(5, minmax(0, 1fr))');
+    expect(governed).toContain('flex-direction: row; overflow-x: auto');
+    expect(governed).not.toContain('--dx-v2-color-border');
+    // A detail-only stylesheet must not recapture either list or its nested metrics.
+    expect(governed).not.toContain('.reporting-order');
+    expect(governed).not.toContain('.reporting-filters');
+    for (const list of [query, board]) {
+      expect(list).toContain('className="rework-query-content"');
+      expect(list).not.toContain('rework-governed');
+      expect(list).not.toContain('data-dx-ui="governed"');
+    }
   });
 
   it("renders all real images in the governed strip while preserving preview navigation", async () => {

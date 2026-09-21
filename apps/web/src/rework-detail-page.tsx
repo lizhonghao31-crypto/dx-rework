@@ -3,7 +3,7 @@ import { ReworkNodeHistoryPage, reworkHistoryHref } from "./rework-node-history-
 import { moduleCanWrite } from "./member-module-policy.js";
 import { canOperateReworkNode, WHOLE_ORDER_REVIEW_CAPABILITIES } from "./rework-node-access.js";
 import { FinanceNodePanel } from "./reporting/finance-node-panel.js";
-import { Button, StatusBadge, Surface } from "@dx-rework/ui";
+import { Button, StatusBadge, Surface, WorkflowRail } from "@dx-rework/ui";
 import { REWORK_IMAGE_SUPPLEMENT_ROLES, type InspectionReportDraft } from "@dx-rework/contracts";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -349,12 +349,6 @@ const buildWorkflow = (
   ];
 };
 
-const stageState = (stage: WorkflowStage): WorkflowNodeState => stage.nodes.every((node) => node.state === "completed")
-  ? "completed"
-  : stage.nodes.some((node) => node.state === "current")
-    ? "current"
-    : stage.nodes.some((node) => node.state === "followup") ? "followup" : "future";
-
 const followUpStatusLabel = (detail: ReworkBusinessDetail): string =>
   detail.settlementStatus === "revision_in_progress"
     ? "责任调整中"
@@ -444,11 +438,8 @@ function CurrentReworkDetailPage({
   const [mobileWorkflowExpanded, setMobileWorkflowExpanded] = useState(false);
   const mobileWorkflowRailRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (mobileWorkflowExpanded) mobileWorkflowRailRef.current?.querySelector(".is-current")?.scrollIntoView({ block: "nearest", inline: "center" });
-  }, [mobileWorkflowExpanded]);
-  const [collapsedStages, setCollapsedStages] = useState<Set<WorkflowStage["key"]>>(() =>
-    window.matchMedia("(max-width: 640px)").matches ? new Set(["planning", "execution", "responsibility"]) : new Set(),
-  );
+    if (mobileWorkflowExpanded) mobileWorkflowRailRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [mobileWorkflowExpanded, state]);
 
   const load = useCallback(async (signal?: AbortSignal): Promise<ReworkBusinessDetail | null> => {
     if (!reworkOrderId) {
@@ -580,7 +571,8 @@ function CurrentReworkDetailPage({
   const meta = statusMeta[detail.status];
   const stages = buildWorkflow(detail, currentUser, returnToTodos ? focusedNode : undefined);
   const workflowNodes = stages.flatMap((stage) => stage.nodes);
-  const activeNode = workflowNodes.find((node) => node.state === "current" || node.state === "followup")?.key;
+  const activeNode = workflowNodes.find((node) => node.state === "current" || node.state === "followup")?.key
+    ?? (detail.status === "completed" ? "settlement_followup" : undefined);
   const activeWorkflowNode = workflowNodes.find((node) => node.key === activeNode);
   const selectedFromUrl = workflowNodeFromSearch();
   const defaultSelectedNode = activeNode ?? "settlement_followup";
@@ -723,9 +715,9 @@ function CurrentReworkDetailPage({
   };
 
   const renderWorkflowNode = (node: WorkflowNode) => (
-    <a className={`rework-workflow__node is-${node.state}`} href={node.state === "completed" && !["settlement_ledger", "archive", "settlement_followup"].includes(node.key) ? reworkHistoryHref(detail.reworkOrderId, node.key) : nodeHref(detail.reworkOrderId, node.key)} key={node.key}>
-      <b>{node.number}</b>
-      <span><strong>{node.label}</strong><small>{node.ownerRole} · {node.ownerName}</small></span>
+    <a className={`rework-workflow-step is-${node.state}`} data-active={node.key === activeNode} aria-current={node.state === "current" ? "step" : undefined} href={node.state === "completed" && !["settlement_ledger", "archive", "settlement_followup"].includes(node.key) ? reworkHistoryHref(detail.reworkOrderId, node.key) : nodeHref(detail.reworkOrderId, node.key)} key={node.key}>
+      <b aria-hidden="true">{node.state === "completed" ? "✓" : Number(node.number)}</b>
+      <span><strong>{node.label}</strong><small>{node.ownerRole}</small></span>
       <em>{nodeStatusLabel(node, detail)}</em>
     </a>
   );
@@ -779,7 +771,7 @@ function CurrentReworkDetailPage({
 
           <section className="rework-workflow" key={detail.status} aria-label="订单流程">
             <div className="rework-workflow__heading rework-detail-panel-title rework-detail-desktop-panel-heading">
-              <div><h2>订单流程</h2></div>
+              <h2>订单流程</h2>
               <span className="rework-workflow__step-count">当前步骤 {activeStepIndex} / {workflowNodes.length}</span>
             </div>
             <button
@@ -796,39 +788,12 @@ function CurrentReworkDetailPage({
               <span><small>{activeStepIndex}/{workflowNodes.length}</small><b aria-hidden="true">{mobileWorkflowExpanded ? "−" : "+"}</b></span>
             </button>
             <div id="order-workflow-content" className={`rework-detail-mobile-collapsible${mobileWorkflowExpanded ? " is-expanded" : ""}`}>
-              <div className="rework-workflow__desktop-grid" aria-label="电脑端流程节点">
+              <WorkflowRail className="rework-workflow__desktop-grid" aria-label="电脑端流程节点">
                 {workflowNodes.map(renderWorkflowNode)}
-              </div>
-              <div className="rework-workflow__stages rework-workflow__desktop-stages">
-                {stages.map((stage) => {
-                  const state = stageState(stage);
-                  const isOpen = !collapsedStages.has(stage.key);
-                  return <details
-                    className={`rework-workflow__stage is-${state}`}
-                    key={stage.key}
-                    open={isOpen}
-                    onToggle={(event) => {
-                      const nextOpen = event.currentTarget.open;
-                      setCollapsedStages((current) => {
-                        const next = new Set(current);
-                        if (nextOpen) next.delete(stage.key);
-                        else next.add(stage.key);
-                        return next;
-                      });
-                    }}
-                  >
-                    <summary>
-                      <span><b>{stage.title}</b><small>{state === "completed" ? "阶段已完成" : state === "current" ? "当前阶段" : state === "followup" ? "订单已完成 · 后续结算中" : "待前序完成"}</small></span>
-                      <span className="rework-workflow__stage-toggle"><strong>{stage.nodes.filter((node) => node.state === "completed" || node.state === "followup").length}/{stage.nodes.length}</strong><i aria-hidden="true">{isOpen ? "−" : "+"}</i></span>
-                    </summary>
-                    <div className="rework-workflow__nodes">{stage.nodes.map(renderWorkflowNode)}</div>
-                  </details>;
-                })}
-              </div>
-              <div className="rework-workflow__mobile-rail" ref={mobileWorkflowRailRef} aria-label="移动端流程节点">
+              </WorkflowRail>
+              <WorkflowRail className="rework-workflow__mobile-rail" ref={mobileWorkflowRailRef} aria-label="移动端流程节点">
                 {workflowNodes.map(renderWorkflowNode)}
-              </div>
-              {detail.status === "pending_responsibility_determination" ? <div className="rework-workflow__pending-path">N07 选择每道工序的主责任方后提交老板签字；供应商计划扣款暂不生成。</div> : null}
+              </WorkflowRail>
             </div>
           </section>
         </div>
