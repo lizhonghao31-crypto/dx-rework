@@ -60,3 +60,12 @@
   [data-dx-ui="governed"] .sourcing-list-facts > div:first-child { grid-column: 1 / -1; }
 }
 [data-dx-ui="governed"] .sourcing-price-note { margin: -8px 0 0; color: var(--dx-governed-muted); font-size: 12px; line-height: 1.6; }
+
+/* UI-01 follow-up: the approved facts and detail cells share centered alignment. */
+[data-dx-ui="governed"] .sourcing-key-facts > div { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding-inline: 8px; }
+[data-dx-ui="governed"] .sourcing-order-detail .dx-facts-table :is(th, td) { text-align: center; vertical-align: middle; }
+[data-dx-ui="governed"] .sourcing-order-detail .dx-facts-card dl > div { align-content: center; text-align: center; }
+[data-dx-ui="governed"] .sourcing-order-detail .dx-facts-cards__totals > div { text-align: center; align-content: center; }
+[data-dx-ui="governed"] .sourcing-order-meta { margin: 0; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+[data-dx-ui="governed"] .sourcing-transfer-form { margin-top: 12px; padding: 14px; border: 1px solid var(--dx-governed-border); border-radius: 8px; background: #fff; }
+[data-dx-ui="governed"] .sourcing-factory-change > h2 { font-size: 16px; margin: 0 0 8px; }

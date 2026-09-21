@@ -102,10 +102,9 @@ describe("thin platform module routing", () => {
     // UI-01 replaces the old fact-card order with the approved task hierarchy.
     const regions = [
       '<KeyFacts className="sourcing-key-facts"',
+      'className="sourcing-supporting-overview"',
       '<DecisionSummary title=',
       '<ResponsiveFactsTable caption="款式明细"',
-      'className="sourcing-supporting-overview"',
-      'className="sourcing-order-supplement"',
       '<ActionBar className="sourcing-owner-actions"',
     ].map(marker => sourcingPage.indexOf(marker));
     expect(regions.every(index => index >= 0)).toBe(true);

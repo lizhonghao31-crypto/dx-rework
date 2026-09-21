@@ -1100,6 +1100,7 @@ function OrderDetailPage({
   const [contractSupplement, setContractSupplement] = useState<ContractSupplementDraft>({});
   const [factoryChangeDraft, setFactoryChangeDraft] = useState<FactoryChangeDraft>({ supplierId: "", unitPrice: "", changeReason: "" });
   const [factoryChangeReviewReason, setFactoryChangeReviewReason] = useState("");
+  const [transferFormOpen, setTransferFormOpen] = useState(false);
   const [exceptionReason, setExceptionReason] = useState("");
   const [selectedImage, setSelectedImage] = useState<SourcingAttachment | null>(null);
   const [mobileWorkflowExpanded, setMobileWorkflowExpanded] = useState(false);
@@ -1475,6 +1476,8 @@ function OrderDetailPage({
         action={todoBackPath ? "返回我的待办" : "返回订单列表"}
         actionHref={detailReturnPath ?? (item.status === "closed" ? "/ui/sourcing/history" : "/ui/sourcing/pending")}
       />
+      <p className="sourcing-order-meta">预计裁片发出：{item.estimatedCutPieceSendDate ?? "历史未维护"}</p>
+      {!item.decision && item.processes.length > 0 ? <p className="sourcing-order-meta">工艺及承包范围：{item.processes.join("、")}</p> : null}
       <div className="sourcing-detail-layout">
         <KeyFacts className="sourcing-key-facts" aria-label="外发定价选厂订单核心信息">
           <div className="sourcing-key-facts__factory"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
@@ -1484,6 +1487,54 @@ function OrderDetailPage({
           <div><dt>较 IE 总额变化</dt><dd className={ownerTotalDelta?.startsWith("-") ? "sourcing-price-lower" : undefined}>{ownerTotalDelta ?? "—"}</dd></div>
           <div><dt>要求交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
         </KeyFacts>
+        <div className="sourcing-supporting-overview">
+          <section className="sourcing-photo-section" aria-label="订单图片">
+            <div className="section-title rework-detail-panel-title">
+              <h2>订单图片</h2>
+            {canSupplementImages ? <SourcingImageSupplementUploader
+              sourcingCaseId={sourcingCaseId}
+              currentAttachmentCount={attachments.length}
+              onUploaded={load}
+            /> : null}
+              <StatusBadge tone="info">{formatBusinessDecimal(attachments.length)} 张</StatusBadge>
+            </div>
+            {attachments.length > 0 ? <ImageStrip aria-label="订单照片，可横向滚动">
+              {attachments.map((attachment) => <button className="sourcing-photo" type="button" key={attachment.attachmentId} onClick={() => setSelectedImage(attachment)}>
+                <img src={attachmentUrl(attachment.attachmentId, "preview")} alt={attachment.filename} loading="lazy" />
+                <span className="sourcing-photo__filename">{attachment.filename}</span>
+              </button>)}
+            </ImageStrip> : <p className="sourcing-list-message">本单没有图片</p>}
+
+          </section>
+
+          <section className="sourcing-workflow-section" aria-label="订单流程">
+            <div className="rework-workflow__heading rework-detail-panel-title rework-detail-desktop-panel-heading">
+              <h2>订单流程</h2><span className="rework-workflow__step-count">当前步骤 {Math.min(step + 1, WORKFLOW.length)} / {WORKFLOW.length}</span>
+            </div>
+            <button className="rework-detail-mobile-panel-toggle rework-detail-mobile-workflow-toggle" type="button"
+              aria-controls="sourcing-workflow-content" aria-expanded={mobileWorkflowExpanded}
+              onClick={() => setMobileWorkflowExpanded(value => !value)}>
+              <span><strong>订单流程</strong><small>{WORKFLOW[Math.min(step, WORKFLOW.length - 1)]?.label}</small></span>
+              <span><small>{Math.min(step + 1, WORKFLOW.length)}/{WORKFLOW.length}</small><b aria-hidden="true">{mobileWorkflowExpanded ? "−" : "+"}</b></span>
+            </button>
+            <div id="sourcing-workflow-content" className={`rework-detail-mobile-collapsible${mobileWorkflowExpanded ? " is-expanded" : ""}`}>
+              <WorkflowRail className="sourcing-workflow-rail" ref={workflowRailRef}>
+              {WORKFLOW.map((node, index) => {
+                const state: SourcingWorkflowNodeState = item.status === "closed" || index < step ? "completed" : index === step ? "current" : "future";
+                const content = <>
+                  <b aria-hidden="true">{state === "completed" ? "✓" : index + 1}</b>
+                  <span><strong>{node.label}</strong><small>{node.role}</small></span>
+                  <em>{state === "completed" ? "已完成" : state === "current" ? "处理中" : "未开始"}</em>
+                </>;
+                return state === "future"
+                  ? <div className="sourcing-workflow-step is-future" aria-disabled="true" key={node.key}>{content}</div>
+                  : <a className={`sourcing-workflow-step is-${state}`} href={sourcingWorkflowNodeHref(item.sourcingCaseId, node.key, detailReturnPath)} aria-current={state === "current" ? "step" : undefined} key={node.key}>{content}</a>;
+              })}
+              </WorkflowRail>
+            </div>
+          </section>
+        </div>
+
         {item.decision ? <DecisionSummary title={selectedNode === "owner" ? "审批摘要" : "选厂摘要"}>
           <p className="sourcing-owner-decision__lead">生产管理建议由 <strong>{item.decision.supplierName}</strong> 承接 <strong>{formatBusinessDecimal(item.orderQuantity)} 件</strong>，生产总额 <strong>{formatBusinessCurrency(item.decision.totalAmount)}</strong>，相对 IE 总额变化 <strong>{ownerTotalDelta ?? "—"}</strong>。</p>
           <p>{ownerCraftSummary}</p>
@@ -1501,7 +1552,7 @@ function OrderDetailPage({
             { key: "production", label: "生产单价", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
             { key: "amount", label: "本款金额", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price?.totalAmount ? formatBusinessCurrency(price.totalAmount) : "—"; } },
           ]} />
-        {item.decision?.sourceType === "factory_change" && item.lineItems.length > 1 ? <p className="sourcing-price-note">转厂后按统一生产单价执行，逐款金额未单独登记，生产总额见合计。</p> : null}
+        {item.decision?.sourceType === "factory_change" && item.lineItems.length > 1 && item.lineItems.some(line => !item.decision?.linePrices.some(price => price.position === line.position)) ? <p className="sourcing-price-note">转厂后按统一生产单价执行，部分款式缺少逐款金额记录，生产总额见合计。</p> : null}
 
         <section id="node-workspace" className="sourcing-node-workspace" aria-label="节点办理区">
           {selectedState !== "current" ? <Surface className="rework-detail-node-preview">
@@ -1682,69 +1733,24 @@ function OrderDetailPage({
           </Surface> : null}
           {message ? <p className="sourcing-action-message" role="status">{message}</p> : null}
         </section>
-        <div className="sourcing-supporting-overview">
-          <section className="sourcing-photo-section" aria-label="订单图片">
-            <div className="section-title rework-detail-panel-title">
-              <h2>订单图片</h2>
-            {canSupplementImages ? <SourcingImageSupplementUploader
-              sourcingCaseId={sourcingCaseId}
-              currentAttachmentCount={attachments.length}
-              onUploaded={load}
-            /> : null}
-              <StatusBadge tone="info">{formatBusinessDecimal(attachments.length)} 张</StatusBadge>
-            </div>
-            {attachments.length > 0 ? <ImageStrip aria-label="订单照片，可横向滚动">
-              {attachments.map((attachment) => <button className="sourcing-photo" type="button" key={attachment.attachmentId} onClick={() => setSelectedImage(attachment)}>
-                <img src={attachmentUrl(attachment.attachmentId, "preview")} alt={attachment.filename} loading="lazy" />
-                <span className="sourcing-photo__filename">{attachment.filename}</span>
-              </button>)}
-            </ImageStrip> : <p className="sourcing-list-message">本单没有图片</p>}
-
-          </section>
-
-          <section className="sourcing-workflow-section" aria-label="订单流程">
-            <div className="rework-workflow__heading rework-detail-panel-title rework-detail-desktop-panel-heading">
-              <h2>订单流程</h2><span className="rework-workflow__step-count">当前步骤 {Math.min(step + 1, WORKFLOW.length)} / {WORKFLOW.length}</span>
-            </div>
-            <button className="rework-detail-mobile-panel-toggle rework-detail-mobile-workflow-toggle" type="button"
-              aria-controls="sourcing-workflow-content" aria-expanded={mobileWorkflowExpanded}
-              onClick={() => setMobileWorkflowExpanded(value => !value)}>
-              <span><strong>订单流程</strong><small>{WORKFLOW[Math.min(step, WORKFLOW.length - 1)]?.label}</small></span>
-              <span><small>{Math.min(step + 1, WORKFLOW.length)}/{WORKFLOW.length}</small><b aria-hidden="true">{mobileWorkflowExpanded ? "−" : "+"}</b></span>
-            </button>
-            <div id="sourcing-workflow-content" className={`rework-detail-mobile-collapsible${mobileWorkflowExpanded ? " is-expanded" : ""}`}>
-              <WorkflowRail className="sourcing-workflow-rail" ref={workflowRailRef}>
-              {WORKFLOW.map((node, index) => {
-                const state: SourcingWorkflowNodeState = item.status === "closed" || index < step ? "completed" : index === step ? "current" : "future";
-                const content = <>
-                  <b aria-hidden="true">{state === "completed" ? "✓" : index + 1}</b>
-                  <span><strong>{node.label}</strong><small>{node.role}</small></span>
-                  <em>{state === "completed" ? "已完成" : state === "current" ? "处理中" : "未开始"}</em>
-                </>;
-                return state === "future"
-                  ? <div className="sourcing-workflow-step is-future" aria-disabled="true" key={node.key}>{content}</div>
-                  : <a className={`sourcing-workflow-step is-${state}`} href={sourcingWorkflowNodeHref(item.sourcingCaseId, node.key, detailReturnPath)} aria-current={state === "current" ? "step" : undefined} key={node.key}>{content}</a>;
-              })}
-              </WorkflowRail>
-            </div>
-          </section>
-        </div>
-
-          {transferNodeRole ? <Disclosure className="sourcing-factory-change" summary="订单转厂" open={factoryChange?.status === "pending_management" || factoryChange?.status === "pending_owner"}>
-            {!item.decision ? <p>生产管理首次提交加工厂和单价后开放。</p> : factoryChange?.status === "pending_management" ? <>
+          {transferNodeRole ? <section className="sourcing-factory-change" aria-label="订单转厂">
+            {!item.decision ? <button className="dx-button dx-button--primary" type="button" disabled title="生产管理首次提交加工厂和单价后开放">订单转厂</button> : factoryChange?.status === "pending_management" ? <>
+              <h2>订单转厂</h2>
               <p><strong>{factoryChange.proposedSupplierName}</strong> · {formatBusinessCurrency(factoryChange.proposedUnitPrice)}/件 · {formatBusinessCurrency(factoryChange.proposedTotalAmount)}。跟单申请，等待生产管理审批。</p>
               {selectedNode === "management" && canReviewManagementTransfer ? <div className="sourcing-factory-change__review">
                 <label><span>审批说明</span><input maxLength={500} value={factoryChangeReviewReason} onChange={(event) => { setFactoryChangeReviewReason(event.target.value); actionKey.current = null; }} /></label>
                 <div><button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/decision`, { decision: "approved", verificationReason: factoryChangeReviewReason.trim() }, factoryChange.requiresOwnerApproval ? "生产管理已通过，转老板审批" : "转厂已生效", true)}>批准转厂</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/decision`, { decision: "rejected", verificationReason: factoryChangeReviewReason.trim() }, "转厂申请已驳回", true)}>驳回</button></div>
               </div> : null}
             </> : factoryChange?.status === "pending_owner" ? <>
+              <h2>订单转厂</h2>
               <p><strong>{factoryChange.proposedSupplierName}</strong> · {formatBusinessCurrency(factoryChange.proposedUnitPrice)}/件，超过当前单价，等待老板批准。</p>
               {selectedNode === "owner" && canOwner ? <div className="sourcing-factory-change__review">
                 <label><span>审批说明</span><input maxLength={500} value={factoryChangeReviewReason} onChange={(event) => { setFactoryChangeReviewReason(event.target.value); actionKey.current = null; }} /></label>
                 <div><button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/owner-decision`, { decision: "approved", verificationReason: factoryChangeReviewReason.trim() }, "老板已批准，转厂生效", true)}>批准转厂</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/owner-decision`, { decision: "rejected", verificationReason: factoryChangeReviewReason.trim() }, "老板已驳回转厂", true)}>驳回</button></div>
               </div> : null}
-            </> : canInitiateTransfer ? <details>
-              <summary>订单转厂</summary>
+            </> : canInitiateTransfer ? <>
+              <button className="dx-button dx-button--primary" type="button" aria-expanded={transferFormOpen} aria-controls="sourcing-transfer-form" onClick={() => setTransferFormOpen(value => !value)}>订单转厂</button>
+              {transferFormOpen ? <div id="sourcing-transfer-form" className="sourcing-transfer-form">
               <p>当前：{item.decision.supplierName} · {formatBusinessCurrency(item.decision.unitPrice)}/件。新单价不高于当前价时按角色规则直接生效；超过时交老板批准。</p>
               <div className="sourcing-form-grid">
                 <label><span>新加工厂</span><select value={factoryChangeDraft.supplierId} onChange={(event) => { setFactoryChangeDraft({ ...factoryChangeDraft, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择不同的加工厂</option>{factories.filter((factory) => factory.supplierId !== item.decision?.supplierId).map((factory) => <option value={factory.supplierId} key={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
@@ -1754,12 +1760,9 @@ function OrderDetailPage({
                 <label className="sourcing-form-wide"><span>转厂原因</span><input maxLength={500} value={factoryChangeDraft.changeReason} onChange={(event) => { setFactoryChangeDraft({ ...factoryChangeDraft, changeReason: event.target.value }); actionKey.current = null; }} /></label>
                 <button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeDraft.supplierId || !factoryChangeDraft.unitPrice || !factoryChangeDraft.changeReason.trim()} onClick={() => void submit(transferRequestPath, { supplierId: factoryChangeDraft.supplierId, unitPrice: factoryChangeDraft.unitPrice, changeReason: factoryChangeDraft.changeReason.trim() }, transferNodeRole === "owner_group" ? "老板发起的转厂已直接生效" : transferNodeRole === "production_management" && (transferPriceDelta?.startsWith("+") !== true) ? "转厂已生效" : "转厂申请已提交", true)}>提交转厂</button>
               </div>
-            </details> : <p>当前账号可查看转厂记录，但不能在本节点发起。</p>}
-          </Disclosure> : null}
-        <Disclosure className="sourcing-order-supplement" summary="查看完整订单资料">
-          <p>性别：{item.gender ?? "历史未维护"}；款式：{item.styleName ?? "历史未维护"}；预计裁片发出：{item.estimatedCutPieceSendDate ?? "历史未维护"}；要求交货：{item.deliveryDate ?? "—"}。</p>
-          <p>工艺及承包范围：{item.processes.join("、") || "未填写"}。</p>
-        </Disclosure>
+            </div> : null}
+            </> : <p>当前账号可查看转厂记录，但不能在本节点发起。</p>}
+          </section> : null}
         {item.status === "pending_owner_approval" && selectedNode === "owner" && canOwner ? <ActionBar className="sourcing-owner-actions" aria-label="老板审批操作">
           <button className="dx-button dx-button--secondary sourcing-owner-reject" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "rejected" }, "已驳回生产管理重新调整")}>驳回并退回生产管理</button>
           <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "approved" }, "老板已批准")}>批准方案</button>

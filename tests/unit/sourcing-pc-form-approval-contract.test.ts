@@ -38,7 +38,6 @@ describe("sourcing PC form and owner approval finish", () => {
       "生产管理建议由",
       "相对 IE 总额变化",
       "款式明细",
-      "查看完整订单资料",
       "批准方案",
       "驳回并退回生产管理",
     ]) expect(page).toContain(text);

@@ -57,7 +57,7 @@ describe("ordinary sourcing price precision and readable facts", () => {
     expect(sourcingPriceSummary({ sourceType: "factory_change", unitPrice: "99", linePrices: [{ unitPrice: "12.34" }, { unitPrice: "9.50" }] })).toBe("¥99");
   });
 
-  it("preserves legacy facts and never labels old line snapshots as current transfer prices", () => {
+  it("preserves authoritative transfer lines and uses legacy fallbacks only for missing positions", () => {
     const historical = { unitPrice: "12.3456", totalAmount: "123.46", linePrices: [] };
     expect(sourcingLinePricing(historical, 1, 1)).toEqual({ unitPrice: "12.3456", totalAmount: "123.46" });
     expect(sourcingLinePricing(historical, 1, 2)).toBeNull();
@@ -66,7 +66,8 @@ describe("ordinary sourcing price precision and readable facts", () => {
     expect(sourcingLinePricing(current, 2, 2)).toEqual({ unitPrice: "8.61", totalAmount: "86.10" });
     expect(sourcingLinePricing(current, 1, 2)).toBeNull();
     const transfer = { ...current, sourceType: "factory_change", unitPrice: "9.1234", totalAmount: "182.47" };
-    expect(sourcingLinePricing(transfer, 2, 2)).toEqual({ unitPrice: "9.1234", totalAmount: null });
+    expect(sourcingLinePricing(transfer, 2, 2)).toEqual({ unitPrice: "8.61", totalAmount: "86.10" });
+    expect(sourcingLinePricing(transfer, 1, 2)).toEqual({ unitPrice: "9.1234", totalAmount: null });
     expect(sourcingLinePricing(transfer, 1, 1)).toEqual({ unitPrice: "9.1234", totalAmount: "182.47" });
   });
 
