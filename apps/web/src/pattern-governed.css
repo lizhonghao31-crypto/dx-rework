@@ -118,7 +118,7 @@
   .pattern-create .pattern-form-secondary { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .pattern-create .pattern-form-primary.is-pattern-create > :nth-child(5),
   .pattern-create .pattern-form-primary.is-pattern-create > :nth-child(6) { grid-column: 1 / -1; }
-  .pattern-form-page :is(input, select) { min-height: 44px; height: 44px; min-width: 0; width: 100%; font-size: 16px; }
+  .pattern-form-page :is(input, select) { min-height: 48px; height: 48px; min-width: 0; width: 100%; font-size: 16px; }
   .pattern-detail .pattern-summary-core { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
   .pattern-detail .pattern-summary-core dd { font-size: 16px; }
   .pattern-detail .pattern-summary-extra { gap: 8px 16px; }
@@ -126,7 +126,7 @@
   .pattern-detail .pattern-assignment.has-rework-price,
   .pattern-detail .pattern-hours { grid-template-columns: minmax(0,1fr); justify-content: stretch; }
   .pattern-detail .pattern-workspace-actions > .dx-button,
-  .pattern-detail .pattern-workspace-actions > .pattern-actions > .dx-button { flex: 1 1 130px; min-height: 44px; font-size: 16px; }
+  .pattern-detail .pattern-workspace-actions > .pattern-actions > .dx-button { flex: 1 1 130px; min-height: 48px; font-size: 16px; }
   .pattern-detail .pattern-history-section { padding: 0; }
 }
 @media (max-width: 360px) {
