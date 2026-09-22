@@ -1,0 +1,62 @@
+/* Only the detail workspace. The order board and its cards retain their existing layout. */
+.pattern-detail { gap: 16px; }
+.pattern-detail .page-heading h1 { font-size: 26px; line-height: 1.35; overflow-wrap: anywhere; }
+.pattern-detail > .dx-surface, .pattern-detail .pattern-workspace { box-shadow: none; border: 1px solid #d9e2ec; border-radius: 12px; padding: 16px; }
+.pattern-detail .pattern-detail-toolbar { margin: 0; justify-content: flex-end; }
+.pattern-detail .pattern-facts { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px 20px; margin: 8px 0; align-items: start; }
+.pattern-detail .pattern-facts > div { padding: 0; background: transparent; border: 0; box-shadow: none; }
+.pattern-detail .pattern-facts dt { font-size: 12px; line-height: 1.4; color: #64748b; }
+.pattern-detail .pattern-facts dd { margin: 4px 0 0; font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.pattern-detail .pattern-detail-overview { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 24px; align-items: start; padding: 0 16px; }
+.pattern-detail .pattern-detail-overview > * { min-width: 0; }
+.pattern-detail .pattern-detail-overview > :only-child { grid-column: 1 / -1; }
+.pattern-detail .pattern-material-section > .pattern-section-heading,
+.pattern-detail .pattern-flow-section > details > summary { box-sizing: border-box; display: flex; align-items: center; min-height: 40px; margin: 0 0 12px; padding: 0; gap: 12px; font-size: 18px; font-weight: 700; }
+.pattern-detail .pattern-section-heading h2 { margin: 0; }
+.pattern-detail .pattern-section-heading > small { margin-left: auto; font-size: 12px; font-weight: 400; }
+.pattern-detail .pattern-flow-section summary::marker { content: ""; }
+.pattern-detail .pattern-flow-section summary::before { content: none; }
+.pattern-detail .pattern-flow-section summary small { font-size: 12px; }
+.pattern-detail .pattern-material-grid { display: flex; gap: 8px; overflow-x: auto; margin: 0; padding: 0 0 8px; overscroll-behavior-x: contain; }
+.pattern-detail .pattern-material-grid > li { flex: 0 0 96px; min-width: 0; border: 1px solid #d9e2ec; border-radius: 8px; padding: 4px; background: #fff; box-shadow: none; }
+.pattern-detail .pattern-material-thumb { height: 88px; width: 100%; aspect-ratio: auto; border: 0; background: #f4f7fb; padding: 0; }
+.pattern-detail .pattern-material-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.pattern-detail .pattern-material-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; margin-top: 4px; }
+.pattern-detail .pattern-material-grid .pattern-actions { margin: 4px 0 0; font-size: 12px; }
+.pattern-detail .pattern-flow { margin: 0; }
+.pattern-detail .pattern-flow > a { flex-basis: 100px; align-content: start; }
+.pattern-detail .pattern-flow strong { font-size: 13px; line-height: 1.4; }
+.pattern-detail .pattern-flow .is-selected strong { color: var(--dx-v2-color-primary); }
+.pattern-detail .pattern-flow .is-cancelled b, .pattern-detail .pattern-flow .is-stopped b { background: #64748b; }
+.pattern-detail .pattern-history-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 16px; border-radius: 8px; background: #eaf2ff; font-size: 13px; }
+.pattern-detail .pattern-history-notice a { margin-left: auto; white-space: nowrap; }
+.pattern-detail .pattern-history-notice p { flex-basis: 100%; margin: 0; }
+.pattern-detail .pattern-readonly-workspace { display: grid; gap: 12px; }
+.pattern-detail .pattern-readonly-workspace input { background: #f7f9fc; color: #1c2939; box-shadow: none; }
+.pattern-action-dialog { box-sizing: border-box; width: min(640px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 20px; border: 1px solid #c9ced6; border-radius: 16px; background: #fff; color: #1c2939; box-shadow: 0 4px 16px rgb(24 38 54 / 14%); }
+.pattern-action-dialog::backdrop { background: rgb(24 38 54 / 42%); }
+.pattern-action-dialog .pattern-exception { margin: 0; padding: 0; border: 0; box-shadow: none; }
+.pattern-action-dialog .pattern-form-page { border: 0; padding: 0; box-shadow: none; }
+.pattern-form-page .pattern-fields { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px 16px; }
+.pattern-form-page :is(input, select, textarea) { box-shadow: none; font-size: 16px; }
+.pattern-form-page .pattern-total strong { font-size: 20px; }
+.pattern-action-dialog :is(input, select, textarea) { font-size: 16px; box-shadow: none; }
+.pattern-action-dialog .rework-v2-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+@media (max-width: 760px) {
+  .pattern-detail { gap: 12px; }
+  .pattern-detail .page-heading h1 { font-size: 20px; }
+  .pattern-detail .pattern-detail-overview { grid-template-columns: minmax(0,1fr); gap: 12px; padding: 0; }
+  .pattern-detail .pattern-facts { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px 12px; }
+  .pattern-detail .pattern-facts dt { font-size: 12px; }
+  .pattern-detail .pattern-facts dd { font-size: 14px; }
+  .pattern-detail .pattern-disclosure > summary { font-size: 15px; }
+  .pattern-detail .pattern-flow-section summary::after { content: "+"; color: var(--dx-v2-color-primary); }
+  .pattern-detail .pattern-flow-section details[open] summary::after { content: "−"; }
+  .pattern-detail .pattern-flow-section summary small { margin-left: auto; }
+  .pattern-detail .pattern-assignment, .pattern-detail .pattern-hours { grid-template-columns: minmax(0,1fr); }
+  .pattern-detail .pattern-actions { gap: 8px; }
+  .pattern-detail .pattern-actions > .dx-button { flex: 1 1 130px; font-size: 14px; padding: 8px 12px; }
+  .pattern-action-dialog { width: calc(100vw - 24px); max-height: calc(100dvh - 24px); padding: 16px; }
+  .pattern-action-dialog .rework-v2-actions button { min-height: 48px; }
+  .pattern-form-page .pattern-fields { grid-template-columns: minmax(0,1fr); }
+}

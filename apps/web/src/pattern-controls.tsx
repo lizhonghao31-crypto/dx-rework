@@ -1,6 +1,6 @@
 import type { InputHTMLAttributes } from "react";
 import type { PatternOrderDetail } from "@dx-rework/contracts/pattern-orders";
-import { elapsedText } from "./pattern-order-client.js";
+import { WorkflowRail } from "@dx-rework/ui";
 import { patternNodeQuery, patternWorkflow, type PatternStage } from "./pattern-workflow.js";
 import "./rework-v2-form.css";
 import "./rework-detail.css";
@@ -12,9 +12,10 @@ export function PatternField({ label, ...props }: InputHTMLAttributes<HTMLInputE
 }
 
 export function PatternProgress({ round, misc, selected, search, disabled = false }: { round: PatternOrderDetail["rounds"][number]; misc: boolean; selected: PatternStage; search: string; disabled?: boolean }) {
-  return <nav className="rework-detail-target-layout" aria-label="本轮流程"><div className="pattern-progress">{patternWorkflow(round, misc).map(item =>
-    <a key={item.stage} href={patternNodeQuery(search, item.stage)} className={`rework-workflow__node is-${item.state}${item.stage === selected ? " is-selected" : ""}`} aria-current={item.stage === selected ? "step" : undefined} aria-disabled={disabled || undefined} onClick={event => { if (disabled) event.preventDefault(); }}>
-      <b>{item.number}</b><span><strong>{item.label}</strong><small>{item.status}{item.node ? ` · ${elapsedText(item.node.elapsedSeconds)}` : ""}</small></span>
+  const roles = ["板房主管", "板房师傅", misc ? "发起人" : "设计师", "系统"];
+  return <nav aria-label="本轮流程"><WorkflowRail className="pattern-flow">{patternWorkflow(round, misc).map((item, index) =>
+    <a key={item.stage} href={item.state === "future" || disabled ? undefined : patternNodeQuery(search, item.stage)} className={`is-${item.state}${item.stage === selected ? " is-selected" : ""}`} aria-current={item.stage === selected ? "step" : undefined} aria-disabled={disabled || item.state === "future" || undefined}>
+      <b>{item.state === "completed" ? "✓" : index + 1}</b><span><strong>{item.label}</strong><small>{roles[index]}</small></span><em>{item.status}</em>
     </a>
-  )}</div></nav>;
+  )}</WorkflowRail></nav>;
 }

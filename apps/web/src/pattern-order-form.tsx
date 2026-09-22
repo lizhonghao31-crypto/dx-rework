@@ -1,3 +1,5 @@
+import { PatternDialog } from "./pattern-dialog.js";
+import "./pattern-governed.css";
 import { PatternMaterials } from "./pattern-materials.js";
 import { PatternField as InsetField } from "./pattern-controls.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -64,15 +66,15 @@ export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSav
   };
   const disabled = busy || uploading;
   const estimated = patternEstimate(quote?.amount ?? null, quantity);
-  return <Surface><form className="pattern-order-form" onSubmit={event => void submit(event)}><h2>{order ? "更新任务资料" : misc ? "新建杂事" : "新建打板"}</h2>
+  const content = <Surface className="pattern-form-page" data-dx-ui="governed"><form className="pattern-order-form" onSubmit={event => void submit(event)}><h2>{order ? "更新任务资料" : misc ? "新建杂事" : "新建打板"}</h2>
     <div className="pattern-fields">
       {misc ? <InsetField label="任务名称 *" value={values.taskName} required maxLength={200} onChange={e => setValues({ ...values, taskName: e.target.value })} disabled={disabled} /> : null}
       <InsetField label={misc ? "关联款号" : "款号 *"} value={values.styleNo} required={!misc} maxLength={100} onChange={e => setValues({ ...values, styleNo: e.target.value })} disabled={disabled} />
       {!order && !misc ? <><label>品类 *<select className="rework-v2-control" required value={categoryId} onChange={e => setCategoryId(e.target.value)} disabled={disabled}><option value="">请选择品类</option>{categories.map(category => <option key={category.priceId} value={category.priceId}>{category.name}（{category.unit}）</option>)}</select></label>
         <InsetField label="数量 *" type="number" min={1} max={1_000_000} step={1} required value={quantity} onChange={e => setQuantity(e.target.value)} disabled={disabled} />
-        <div className="pattern-total"><span>本单价格</span><strong>{price.status === "loading" ? "正在读取…" : estimated !== null ? `¥${formatBusinessDecimal(estimated, 3)}` : "—"}</strong></div></> : null}
+        <div className="pattern-total"><span>本单价格</span><strong>{price.status === "loading" ? "正在读取…" : estimated !== null ? `¥${formatBusinessDecimal(estimated, 2)}` : "—"}</strong></div></> : null}
       <InsetField label="要求完成日期" type="date" value={values.requiredDate} onChange={e => setValues({ ...values, requiredDate: e.target.value })} disabled={disabled} />
-      {misc && !order ? <div className="pattern-hourly"><p role="status">小时单价：{price.status === "loading" ? "正在读取…" : price.status === "error" ? "读取失败" : quote?.amount === null ? "尚未配置，请联系老板配置。" : quote ? `${formatBusinessDecimal(quote.amount, 3)} 元/小时` : "—"}</p><Button type="button" disabled={disabled || price.status === "loading"} onClick={() => setRefreshPrice(value => value + 1)}>刷新价格</Button></div> : null}
+      {misc && !order ? <div className="pattern-hourly"><p role="status">小时单价：{price.status === "loading" ? "正在读取…" : price.status === "error" ? "读取失败" : quote?.amount === null ? "尚未配置，请联系老板配置。" : quote ? `${formatBusinessDecimal(quote.amount, 2)} 元/小时` : "—"}</p><Button type="button" disabled={disabled || price.status === "loading"} onClick={() => setRefreshPrice(value => value + 1)}>刷新价格</Button></div> : null}
       {!misc ? <><InsetField label="客户" value={values.customer} maxLength={100} onChange={e => setValues({ ...values, customer: e.target.value })} disabled={disabled} />
       <InsetField label="尺码与颜色" value={values.sizeColor} maxLength={200} onChange={e => setValues({ ...values, sizeColor: e.target.value })} disabled={disabled} />
       <label>版型<select className="rework-v2-control" value={values.variant} onChange={e => setValues({ ...values, variant: e.target.value })} disabled={disabled}><option value="">未指定</option>{["初版", "复版", "齐色版"].map(value => <option key={value}>{value}</option>)}</select></label>
@@ -87,4 +89,5 @@ export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSav
     {price.status === "error" && <div><p role="alert">{price.message}</p>{!misc && <Button type="button" disabled={disabled} onClick={() => setRefreshPrice(value => value + 1)}>重读价格</Button>}</div>}
     <div className="rework-v2-action-area"><div className="rework-v2-actions"><Button type="button" disabled={disabled} onClick={async () => { if (await draft.requestLeave()) onCancel(); }}>取消</Button><Button type="submit" variant="primary" disabled={disabled || (!order && (!quote || quote.amount === null))}>{busy ? "提交中…" : order ? "保存资料" : misc ? "提交杂事" : "提交打板"}</Button></div></div>
   </form></Surface>;
+  return order ? <PatternDialog title="更新任务资料" busy={disabled} onClose={async () => { if (await draft.requestLeave()) onCancel(); }}>{content}</PatternDialog> : content;
 }

@@ -9,12 +9,12 @@ export function PatternRoundRecord({ round, misc, idPrefix = "" }: { round: Patt
     {round.requestReason && <p className="pattern-note">返工要求：{round.requestReason}</p>}
     <dl className="pattern-facts">
       <div><dt>品类</dt><dd>{round.categoryName}</dd></div>
-      {misc ? round.actualHours !== undefined && <div><dt>实际工时</dt><dd>{round.actualHours === null ? "待填写" : `${formatBusinessDecimal(round.actualHours, 3)} 小时`}</dd></div>
+      {misc ? round.actualHours !== undefined && <div><dt>实际工时</dt><dd>{round.actualHours === null ? "待填写" : `${formatBusinessDecimal(round.actualHours, 2)} 小时`}</dd></div>
         : round.quantity !== null && <div><dt>数量</dt><dd>{formatBusinessDecimal(round.quantity)} {round.unit}</dd></div>}
-      {round.agreedAmount !== undefined && <div><dt>本轮价格</dt><dd>{round.agreedAmount === null ? "待核定" : `${formatBusinessDecimal(round.agreedAmount, 3)} 元`}</dd></div>}
-      {misc && round.unitPrice !== undefined && <div><dt>小时单价</dt><dd>{formatBusinessDecimal(round.unitPrice, 3)} 元/小时</dd></div>}
+      {round.agreedAmount !== undefined && <div><dt>本轮价格</dt><dd>{round.agreedAmount === null ? "待核定" : `${formatBusinessDecimal(round.agreedAmount, 2)} 元`}</dd></div>}
+      {misc && round.unitPrice !== undefined && <div><dt>小时单价</dt><dd>{formatBusinessDecimal(round.unitPrice, 2)} 元/小时</dd></div>}
       {round.cancelledAt && <div><dt>取消时间</dt><dd>{patternTime(round.cancelledAt)}</dd></div>}
-      {round.cancelledAmount != null && <div><dt>取消费用</dt><dd>{formatBusinessDecimal(round.cancelledAmount, 3)} 元</dd></div>}
+      {round.cancelledAmount != null && <div><dt>取消费用</dt><dd>{formatBusinessDecimal(round.cancelledAmount, 2)} 元</dd></div>}
       {round.feeConfirmedAt && <div><dt>费用确认</dt><dd>{patternTime(round.feeConfirmedAt)}</dd></div>}
     </dl>
     {round.segments.length > 0 && <div className="pattern-segments">{round.segments.map(segment => <section className="pattern-segment" id={`${idPrefix}segment-${segment.segmentId}`} key={segment.segmentId}>
@@ -22,8 +22,8 @@ export function PatternRoundRecord({ round, misc, idPrefix = "" }: { round: Patt
       <dl className="pattern-facts">
         <div><dt>开始</dt><dd>{patternTime(segment.startedAt)}</dd></div>
         <div><dt>结束</dt><dd>{segment.endedAt ? patternTime(segment.endedAt) : "进行中"}</dd></div>
-        {misc && segment.actualHours !== null && <div><dt>实际工时</dt><dd>{formatBusinessDecimal(segment.actualHours, 3)} 小时</dd></div>}
-        {segment.amount != null && <div><dt>分配金额</dt><dd>{formatBusinessDecimal(segment.amount, 3)} 元</dd></div>}
+        {misc && segment.actualHours !== null && <div><dt>实际工时</dt><dd>{formatBusinessDecimal(segment.actualHours, 2)} 小时</dd></div>}
+        {segment.amount != null && <div><dt>分配金额</dt><dd>{formatBusinessDecimal(segment.amount, 2)} 元</dd></div>}
       </dl>
     </section>)}</div>}
   </>;

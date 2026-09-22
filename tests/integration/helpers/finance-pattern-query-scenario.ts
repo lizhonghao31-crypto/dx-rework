@@ -13,8 +13,21 @@ export async function exerciseMixedFinancePatternScope(input: {database:Pool;ser
   const {database,service,orderId}=input;
   const access=new AccessMasterDataService(database,"corp");
   const root:TrustedActorContext={actorId:input.rootId,actorRoles:["root_superuser"],authorizationCapability:"access:admin",requestId:randomUUID()};
+  const current = await service.get(root, orderId);
+  const firstRound = current.rounds[0]!;
+  const assignment = await service.get(root, orderId, { round: firstRound.roundId, node: "pending_assignment" });
+  expect(assignment.historicalView?.node).toBe("pending_assignment");
+  expect(assignment.rounds[0]!.segments).toHaveLength(1);
+  expect(Number(assignment.rounds[0]!.segments[0]!.amount)).toBe(80);
+  expect(assignment.rounds[0]!.segments[0]!.endedAt).toBeNull();
+  expect(assignment.rounds[0]!.completedAt).toBeNull();
+  expect(Object.values(assignment.actions).every(value => !value)).toBe(true);
+  const execution = await service.get(root, orderId, { round: firstRound.roundId, node: "in_progress" });
+  expect(execution.rounds[0]!.segments.map(segment => Number(segment.amount))).toEqual([25.125, 10.875, 44]);
+  expect(execution.rounds[0]!.segments.every(segment => !segment.wageEligible)).toBe(true);
   for(const reader of input.readers) {
     const original=await service.get(reader,orderId).catch(error=>{expect(error).toMatchObject({statusCode:404});return null;});
+    if (!original) await expect(service.get(reader, orderId, { round: firstRound.roundId, node: "in_progress" })).rejects.toMatchObject({ statusCode: 404 });
     const assignment=await access.assignRole(root,{userId:reader.actorId,roleCode:"finance_read",reason:"验证混合财务不扩制作资料范围"});
     try {
       const mixed={...reader,actorRoles:[...reader.actorRoles,"finance_read"]};
@@ -23,6 +36,10 @@ export async function exerciseMixedFinancePatternScope(input: {database:Pool;ser
       for(const round of detail.rounds) expect(round.requestReason).toBe(original?.rounds.find(item=>item.roundId===round.roundId)?.requestReason??null);
       expect(detail.attachments).toEqual(original?.attachments??[]);
       expect(detail.canReadMaterials).toBe(original?.canReadMaterials??false);
+      const historical = await service.get(mixed, orderId, { round: firstRound.roundId, node: "in_progress" });
+      expect(Object.values(historical.actions).every(value => !value)).toBe(true);
+      expect(historical.rounds[0]!.handedOverAt).toBeNull();
+      if (!original?.canReadMaterials) { expect(historical.note).toBeNull(); expect(historical.attachments).toEqual([]); }
       if(original) expect(detail.actions).toEqual(original.actions);
       else expect(Object.values(detail.actions).every(value=>!value)).toBe(true);
     } finally {await access.revokeRole(root,assignment.assignmentId,"恢复混合角色测试身份");}
