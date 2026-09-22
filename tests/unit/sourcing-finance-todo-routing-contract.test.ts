@@ -56,7 +56,7 @@ describe("sourcing finance confirmation and explicit-role todo routing", () => {
 
   it("uses the explicit-role router for every sourcing business todo", async () => {
     const service = await readFile("apps/api/src/sourcing/sourcing-service.ts", "utf8");
-    expect(service.match(/actionableForAllAssignedRole\(/g)).toHaveLength(13);
+    expect(service.match(/actionableForAllAssignedRole\(/g)).toHaveLength(14);
     expect(service).toContain(':resume:${factoryChangeRequestId}');
     expect(service).toContain('source.status === "pending_factory_change_verification"');
     expect(service).toContain('sourcing:${source.sourcing_case_id}:exception:');
