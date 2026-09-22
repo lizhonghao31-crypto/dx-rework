@@ -5,6 +5,7 @@ import type { ProductionDashboardService } from "./production-dashboard-service.
 import { registerProductionReportingRoutes } from "./production-reporting-routes.js";
 import type { ProductionReportingService } from "./production-reporting-service.js";
 import {
+  CorrectSourcingCaseSchema, ReturnSourcingCaseSchema,
   CreateSourcingCaseSchema,
   CorrectSourcingBudgetPriceSchema,
   SourcingHistoryNodeSchema,
@@ -173,6 +174,21 @@ export function registerSourcingRoutes(
       requestId: request.id,
     };
   };
+
+  app.post<{Params:{sourcingCaseId:string}}>("/sourcing/cases/:sourcingCaseId/return-to-merchandiser",async(request,reply)=>{
+    const actor=await actionActor(request,"owner_group","sourcing:owner:approve");
+    const parsed=ReturnSourcingCaseSchema.safeParse(request.body);
+    if(!parsed.success) validationError(parsed.error.issues[0]?.message ?? "请填写退回原因");
+    const result=await dependencies.service.returnToMerchandiser(actor,caseId(request.params.sourcingCaseId),parsed.data!,idempotencyKey(request));
+    return reply.code(200).send(result.value);
+  });
+  app.post<{Params:{sourcingCaseId:string}}>("/sourcing/cases/:sourcingCaseId/corrections",async(request,reply)=>{
+    const actor=await actionActor(request,"order_merchandiser","sourcing:inquiry:create");
+    const parsed=CorrectSourcingCaseSchema.safeParse(request.body);
+    if(!parsed.success) validationError(parsed.error.issues[0]?.message ?? "修改资料无效");
+    const result=await dependencies.service.correctCase(actor,caseId(request.params.sourcingCaseId),parsed.data!,idempotencyKey(request));
+    return reply.code(200).send(result.value);
+  });
 
   if (dependencies.production) {
     const production = dependencies.production;

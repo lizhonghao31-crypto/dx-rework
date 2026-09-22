@@ -1,3 +1,5 @@
+import { SourcingReturnDialog } from "./sourcing-return-dialog.js";
+import { sourcingDatesValid, SOURCING_DATE_ORDER_ERROR } from "@dx-rework/contracts";
 import { moduleCanWrite } from "./member-module-policy.js";
 import { todoReturnPath } from "./todo-query-state.js";
 import {WorkAnalysisPanel} from "./work-analysis-panel.js";
@@ -87,6 +89,7 @@ import "./sourcing-governed.css";
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 const STATUS_LABELS: Readonly<Record<SourcingCaseStatus, string>> = {
+  pending_merchandiser_correction: "待跟单修改",
   pending_ie_quote: "待 IE 报价",
   pending_management_decision: "待生产管理调价选厂",
   pending_owner_approval: "待老板终审",
@@ -442,23 +445,27 @@ export function SourcingWorkspacePage({
   );
 }
 
-function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
-  const [gender, setGender] = useState<"" | "男装" | "女装">("");
-  const [styleName, setStyleName] = useState("");
+function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; correction?: {item:SourcingCaseSummary; attachments:readonly SourcingAttachment[]} }) {
+  const [gender, setGender] = useState<"" | "男装" | "女装">(correction?.item.gender ?? "");
+  const [styleName, setStyleName] = useState(correction?.item.styleName ?? "");
   const [styleCatalog, setStyleCatalog] = useState<readonly { styleId: string; styleName: string }[]>([]);
-  const [estimatedCutPieceSendDate, setEstimatedCutPieceSendDate] = useState("");
-  const [deliveryDate, setDeliveryDate] = useState("");
-  const [lineItems, setLineItems] = useState<SourcingLineDraft[]>([{
+  const [estimatedCutPieceSendDate, setEstimatedCutPieceSendDate] = useState(correction?.item.estimatedCutPieceSendDate ?? "");
+  const [deliveryDate, setDeliveryDate] = useState(correction?.item.deliveryDate ?? "");
+  const [lineItems, setLineItems] = useState<SourcingLineDraft[]>(correction ? correction.item.lineItems.map(line => ({
+    styleNo:line.formalStyleNo === undefined ? line.styleNo : line.formalStyleNo ?? "", alternateStyleNo:line.alternateStyleNo ?? "",
+    color:line.color ?? "", quantity:String(line.quantity), ...(line.imageAttachmentId ? {imageAttachmentId:line.imageAttachmentId} : {}),
+  })) : [{
     styleNo: "",
     alternateStyleNo: "",
     color: "",
     quantity: "",
   }]);
-  const [daxingUnitPrice, setDaxingUnitPrice] = useState("");
-  const [images, setImages] = useState<UploadedImage[]>([]);
+  const [daxingUnitPrice, setDaxingUnitPrice] = useState(correction?.item.daxingUnitPrice ?? "");
+  const [images, setImages] = useState<UploadedImage[]>(correction?.attachments.map(image => ({...image, previewUrl:attachmentUrl(image.attachmentId,"preview")})) ?? []);
   const [uploading, setUploading] = useState(false);
   const [uploadFailed, setUploadFailed] = useState(false);
   const [activeCreateInput, setActiveCreateInput] = useState<string | null>(null);
+  const [correctionReason, setCorrectionReason] = useState("");
   const [busy, setBusy] = useState(false);
   const feedback = useSubmissionFeedback(setBusy);
   const [message, setMessage] = useState("填写订单资料并上传现场或款式照片。");
@@ -485,7 +492,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
   }, [styleName, canCreate]);
 
   useEffect(() => {
-    if (!user?.id || restoredDraftUserId.current === user.id) return;
+    if (correction || !user?.id || restoredDraftUserId.current === user.id) return;
     restoredDraftUserId.current = user.id;
     const localDraft = readLocalSourcingDraft(user.id);
     if (!localDraft) return;
@@ -497,7 +504,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     setDaxingUnitPrice(localDraft.daxingUnitPrice);
     setImages([...localDraft.images]);
     setMessage("已恢复当前账号在本机保存的订单草稿。");
-  }, [user?.id]);
+  }, [user?.id, correction]);
 
   useEffect(() => () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
@@ -689,7 +696,9 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     const normalizedDaxingPrice = businessInputChange(daxingUnitPrice).trim();
     const issues = validateSourcingCreate({ gender, styleName, estimatedCutPieceSendDate, deliveryDate,
       lineItems, daxingUnitPrice: normalizedDaxingPrice, imageCount: images.length, uploading, uploadFailed });
-    if (issues.length) { await feedback.reject(issues); return; }
+    const effectiveIssues = correction ? issues.filter(issue=>issue.fieldId!=="sourcing-create-budget") : issues;
+    if (correction && !correctionReason.trim()) effectiveIssues.push({fieldId:"sourcing-correction-reason",message:"请填写修改说明"});
+    if (effectiveIssues.length) { await feedback.reject(effectiveIssues); return; }
     const normalizedLines = lineItems.map((line) => ({
       ...(line.styleNo.trim() ? { styleNo: line.styleNo.trim() } : {}),
       ...(line.alternateStyleNo.trim() ? { alternateStyleNo: line.alternateStyleNo.trim() } : {}),
@@ -699,16 +708,16 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     const requestKey = createKey.current ?? createClientRequestId();
     createKey.current = requestKey;
     const body = JSON.stringify({ gender, styleName: styleName.trim(), estimatedCutPieceSendDate, deliveryDate,
-      lineItems: normalizedLines, daxingUnitPrice: normalizedDaxingPrice,
+      lineItems: normalizedLines, ...(correction ? {expectedVersion:correction.item.version,reason:correctionReason.trim()} : {daxingUnitPrice: normalizedDaxingPrice}),
       attachmentIds: images.map(image => image.attachmentId) });
     await feedback.run(async () => {
       // Same snapshot and key on recovery: the existing API checks its idempotency record first.
-      const created = await requestWithStyleCheck("sourcing/cases", SourcingCaseSummarySchema, {
+      const created = await requestWithStyleCheck(correction ? `sourcing/cases/${correction.item.sourcingCaseId}/corrections` : "sourcing/cases", SourcingCaseSummarySchema, {
         method: "POST", headers: { "idempotency-key": requestKey }, body,
       }, normalizedLines, true);
       feedback.confirmed();
       // A local storage failure after a confirmed write must never invite another submission.
-      try { if (user?.id) clearLocalSourcingDraft(user.id); } catch { /* Navigation still proceeds. */ }
+      try { if (!correction && user?.id) clearLocalSourcingDraft(user.id); } catch { /* Navigation still proceeds. */ }
       window.location.assign(detailHref(created));
     });
   };
@@ -717,10 +726,11 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
     <div className="sourcing-workspace sourcing-workspace--create">
       <Header
         iconRoute="/ui/sourcing/create"
-        title="创建订单"
+        title={correction ? "修改订单资料" : "创建订单"}
         subtitle="跟单登记订单资料、款色数量和照片，提交后由 IE 首次给加工报价。"
         badge="外发定价&选厂"
       />
+      {correction ? <p role="status">退回原因：{correction.item.correctionReason}<a href={detailHref(correction.item)}>返回订单</a></p> : null}
       <SubmissionFeedback feedback={feedback} busy={busy} />
       <Surface className="sourcing-create-card">
         <fieldset className="sourcing-submission-fields" disabled={busy || feedback.uncertain}>
@@ -736,7 +746,7 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
           </div>
           <label><span>预计裁片发出日期（工厂发出，必填）</span><input type="date" required aria-required="true" value={estimatedCutPieceSendDate} {...feedback.field("sourcing-create-send-date")} onChange={(event) => { setEstimatedCutPieceSendDate(event.target.value); createKey.current = null; }} /></label>
           <label><span>要求交货日期（到工厂，必填）</span><input type="date" required aria-required="true" value={deliveryDate} {...feedback.field("sourcing-create-delivery-date")} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
-          <label><span>预算价（内部，必填）</span><input {...feedback.field("sourcing-create-budget")} value={activeCreateInput === "daxing" ? daxingUnitPrice : newSourcingPriceDisplay(daxingUnitPrice)} onFocus={() => setActiveCreateInput("daxing")} onBlur={() => setActiveCreateInput(null)} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="必填，最多2位有效小数；仅内部授权岗位可见" aria-invalid={!isNewSourcingPrice(daxingUnitPrice)} /><small>{!isNewSourcingPrice(daxingUnitPrice) ? "请填写大于0且最多2位有效小数的预算价。" : "仅内部授权岗位可见，不进入供应商合同。"}</small></label>
+          <label><span>预算价（内部，必填）</span><input readOnly={!!correction} {...feedback.field("sourcing-create-budget")} value={activeCreateInput === "daxing" ? daxingUnitPrice : newSourcingPriceDisplay(daxingUnitPrice)} onFocus={() => setActiveCreateInput("daxing")} onBlur={() => setActiveCreateInput(null)} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="必填，最多2位有效小数；仅内部授权岗位可见" aria-invalid={!isNewSourcingPrice(daxingUnitPrice)} /><small>{!isNewSourcingPrice(daxingUnitPrice) ? "请填写大于0且最多2位有效小数的预算价。" : "仅内部授权岗位可见，不进入供应商合同。"}</small></label>
           <section className="sourcing-line-editor sourcing-form-wide" aria-label="订单款色明细">
             <div className="sourcing-line-editor__heading">
               <div>
@@ -790,11 +800,12 @@ function CreateOrderPage({ user }: { user: AuthorizedUser | null }) {
             <input type="file" accept="image/*" multiple disabled={busy || uploading || images.length >= MAX_SOURCING_ATTACHMENTS} onChange={(event) => { void uploadImages(event.target.files); event.target.value = ""; }} />
           </label>
         </section>
+        {correction ? <label className="sourcing-form-wide"><span>修改说明（必填）</span><textarea {...feedback.field("sourcing-correction-reason")} value={correctionReason} maxLength={500} onChange={event=>{setCorrectionReason(event.target.value);createKey.current=null;}} /></label> : null}
         <div className="sourcing-submit-row">
           <p role="status">{duplicateLinesMessage ?? message}</p>
           {uploadFailed && !uploading ? <p role="alert">本次图片上传未完成，请重新选择图片上传成功后再提交。</p> : null}
           <ActionBar className="sourcing-create-actions">
-            <button className="dx-button dx-button--secondary" type="button" disabled={busy || uploading} onClick={saveLocalDraft}>保存草稿</button>
+            {!correction ? <button className="dx-button dx-button--secondary" type="button" disabled={busy || uploading} onClick={saveLocalDraft}>保存草稿</button> : null}
             <button className="dx-button dx-button--primary" type="button" disabled={busy || feedback.uncertain || !canCreate} onClick={() => void createOrder()}>
               {busy ? "正在提交…" : "提交并进入审批"}
             </button>
@@ -1010,6 +1021,7 @@ const WORKFLOW = [
 ] as const;
 
 const statusStep = (status: SourcingCaseStatus): number => ({
+  pending_merchandiser_correction: 0,
   pending_ie_quote: 1,
   pending_management_decision: 2,
   pending_owner_approval: 3,
@@ -1067,6 +1079,10 @@ function OrderDetailPage({
   const [decision, setDecision] = useState<DecisionDraft>({ supplierId: "", linePrices: [], decisionReason: "", cuttingProcess: "", cuttingProcessOther: "" });
   const [financeDifferenceOpen, setFinanceDifferenceOpen] = useState(false);
   const [budgetCorrectionOpen, setBudgetCorrectionOpen] = useState(false);
+  const [returnOpen, setReturnOpen] = useState(false);
+  const [returnError, setReturnError] = useState("");
+  const returnKey = useRef<string | null>(null);
+  const returnReason = useRef("");
   const [budgetCorrectionError, setBudgetCorrectionError] = useState("");
   const [financeReview, setFinanceReview] = useState<FinanceReviewDraft>({ differenceFields: [], differenceReason: "" });
   const [factoryChange, setFactoryChange] = useState<SourcingFactoryChangeState | null>(null);
@@ -1227,6 +1243,18 @@ function OrderDetailPage({
   const canEditStyles = moduleWritable && !!item?.approvalSnapshot && ["pending_finance_reconciliation", "closed"].includes(item.status) && contract?.status === "ready" && !!contract.pdfAttachmentId
     && (user?.isRoot === true || canManage || (canAct(user,"order_merchandiser","sourcing:inquiry:create") && item?.createdBy === user?.id));
   const styleDuplicateMessage = duplicateSourcingLineMessage(styleEdits.map(line => ({...line,color:item?.lineItems.find(row => row.position===line.position)?.color})));
+  const submitReturn = async (reason:string):Promise<void> => {
+    if (!item || busy) return;
+    setBusy(true);setReturnError("");
+    if(returnReason.current!==reason){returnKey.current=null;returnReason.current=reason;}
+    const key=returnKey.current ?? createClientRequestId();returnKey.current=key;
+    try {
+      await requestSubmission(`sourcing/cases/${item.sourcingCaseId}/return-to-merchandiser`,SourcingCaseSummarySchema,{
+        method:"POST",headers:{"idempotency-key":key},body:JSON.stringify({expectedVersion:item.version,reason})});
+      window.location.assign(detailHref(item));
+    } catch(error) {setReturnError(error instanceof Error?error.message:"退回失败");}
+    finally {setBusy(false);}
+  };
   const submitBudgetCorrection = async (daxingUnitPrice: string, reason: string): Promise<void> => {
     if (!item || !canCorrectBudget || busy) return;
     setBusy(true);
@@ -1471,8 +1499,16 @@ function OrderDetailPage({
   if (requestedNode && selectedState === "completed" && !requestedTransferReview) return <SourcingNodeHistoryPage
     sourcingCaseId={sourcingCaseId} node={selectedNode} returnTo={detailReturnPath} />;
 
+  if (item.status === "pending_merchandiser_correction" && new URLSearchParams(window.location.search).get("edit") === "correction"
+    && canAct(user,"order_merchandiser","sourcing:inquiry:create") && (user?.isRoot || user?.id===item.createdBy)) {
+    return <CreateOrderPage key={`${item.sourcingCaseId}:${item.version}`} user={user} correction={{item,attachments}} />;
+  }
+  const datesValid = sourcingDatesValid(item.estimatedCutPieceSendDate,item.deliveryDate);
+  const canReturn = canAct(user,"owner_group","sourcing:owner:approve") && !item.approvalSnapshot
+    && ["pending_ie_quote","pending_management_decision","pending_owner_approval"].includes(item.status);
   return (
     <div className="sourcing-workspace sourcing-order-detail">
+      {returnOpen ? <SourcingReturnDialog busy={busy} error={returnError} onClose={()=>{setReturnOpen(false);returnKey.current=null;}} onSubmit={reason=>void submitReturn(reason)} /> : null}
       {budgetCorrectionOpen && item?.daxingUnitPrice ? <SourcingBudgetPriceCorrectionDialog
         currentPrice={item.daxingUnitPrice}
         busy={busy}
@@ -1494,6 +1530,13 @@ function OrderDetailPage({
         action={todoBackPath ? "返回我的待办" : "返回订单列表"}
         actionHref={detailReturnPath ?? (item.status === "closed" ? "/ui/sourcing/history" : "/ui/sourcing/pending")}
       />
+      {canReturn ? <button type="button" className="dx-button dx-button--secondary" disabled={busy} onClick={()=>{setReturnOpen(true);setReturnError("");}}>退回跟单修改</button> : null}
+      {!datesValid ? <p role="alert">{SOURCING_DATE_ORDER_ERROR}，请退回跟单纠正后再提交。</p> : null}
+      {item.status === "pending_merchandiser_correction" ? <section><p>退回原因：{item.correctionReason}</p>
+        {canAct(user,"order_merchandiser","sourcing:inquiry:create") && (user?.isRoot || user?.id===item.createdBy)
+          ? <a className="dx-button dx-button--primary" href={`${detailHref(item)}?edit=correction`}>修改订单资料</a> : <p>等待原跟单修改资料</p>}
+        <a href={sourcingWorkflowNodeHref(item.sourcingCaseId,"created",detailReturnPath,true)}>查看历次提交资料</a>
+      </section> : null}
       {!item.decision && item.processes.length > 0 ? <p className="sourcing-order-meta">工艺及承包范围：{item.processes.join("、")}</p> : null}
       <div className="sourcing-detail-layout">
         <KeyFacts className="sourcing-key-facts" aria-label="外发定价选厂订单核心信息">
