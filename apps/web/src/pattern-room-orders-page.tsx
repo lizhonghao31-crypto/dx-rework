@@ -9,7 +9,7 @@ import { confirmInApp } from "./system-dialog.js";
 import { PatternField as InsetField, PatternProgress } from "./pattern-controls.js";
 import { useEffect, useRef, useState } from "react";
 import type { z } from "zod";
-import { Button, StatusBadge, Surface } from "@dx-rework/ui";
+import { Button, Surface } from "@dx-rework/ui";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { AssignPatternOrderSchema, PATTERN_ORDER_STATUS_LABELS, PatternOrderDetailSchema, PatternOrderListSchema, PatternPeopleFiltersSchema, PatternWorkerOptionsSchema, RecordPatternHoursSchema, type PatternOrderDetail } from "@dx-rework/contracts/pattern-orders";
 import { Header } from "./components.js";
@@ -152,9 +152,21 @@ function PatternRoomDetailWorkspace({ orderId }: { orderId: string }) {
     {!order && !error ? <p role="status">正在读取订单…</p> : null}
     {order ? <>
       {order.historicalView ? <div className="pattern-history-notice"><span>历史节点 · 只读 · {order.historicalView.actorName} · {patternTime(order.historicalView.at)}</span><a href={currentHref}>返回当前节点</a>{order.historicalView.missingFacts && <p>本次提交的任务资料未完整留存，缺失字段未使用当前资料补齐。</p>}</div> : null}
-      <Surface><div className="pattern-section-heading"><h2>订单信息</h2>{displayRound && <StatusBadge tone={displayRound.status === "cancelled" ? "danger" : displayRound.status === "completed" ? "success" : "info"}>{order.historicalView ? "历史节点 · 只读" : PATTERN_ORDER_STATUS_LABELS[displayRound.status]}</StatusBadge>}</div><dl className="pattern-facts">
-        <div><dt>板房师傅</dt><dd>{displayRound?.segments.at(-1)?.workerName ?? order.currentWorkerName ?? (order.historicalView ? "无可见分配记录" : "待分配")}</dd></div><div><dt>创建人</dt><dd>{order.creatorName}</dd></div><div><dt>要求完成</dt><dd>{order.requiredDate ?? "—"}</dd></div>{order.kind === "misc" ? <div><dt>关联款号</dt><dd>{order.styleNo || "—"}</dd></div> : <><div><dt>客户</dt><dd>{order.customer || "—"}</dd></div><div><dt>尺码与颜色</dt><dd>{order.sizeColor || "—"}</dd></div><div><dt>版型</dt><dd>{order.variant ?? "—"}</dd></div><div><dt>参考历史款号</dt><dd>{order.referenceStyleNo || "—"}</dd></div></>}
-      </dl>{order.note ? <p className="pattern-note">{order.note}</p> : null}
+      <Surface className="pattern-order-summary">
+        <div className="pattern-summary-core"><dl className="pattern-facts">
+          <div><dt>板房师傅</dt><dd>{displayRound?.segments.at(-1)?.workerName ?? order.currentWorkerName ?? (order.historicalView ? "无可见分配记录" : "待分配")}</dd></div>
+          <div><dt>要求完成</dt><dd>{order.requiredDate ?? "—"}</dd></div>
+          <div><dt>创建人</dt><dd>{order.creatorName}</dd></div>
+        </dl>{displayRound && <PatternRoundRecord round={displayRound} misc={order.kind === "misc"} summaryOnly />}</div>
+        {(order.kind === "misc" ? order.styleNo : order.customer || order.sizeColor || order.variant || order.referenceStyleNo) ? <dl className="pattern-facts pattern-summary-extra">
+          {order.kind === "misc" ? <div><dt>关联款号</dt><dd>{order.styleNo}</dd></div> : <>
+            {order.customer && <div><dt>客户</dt><dd>{order.customer}</dd></div>}
+            {order.sizeColor && <div><dt>尺码与颜色</dt><dd>{order.sizeColor}</dd></div>}
+            {order.variant && <div><dt>版型</dt><dd>{order.variant}</dd></div>}
+            {order.referenceStyleNo && <div><dt>参考历史款号</dt><dd>{order.referenceStyleNo}</dd></div>}
+          </>}
+        </dl> : null}
+        {order.note ? <p className="pattern-note">备注：{order.note}</p> : null}
       </Surface>
       <div className="pattern-detail-overview">
         {order.canReadMaterials !== false && displayRound ? <section className="pattern-material-section"><div className="pattern-section-heading"><h2>制作资料</h2><small>{order.attachments.filter(file => file.roundId === displayRound.roundId && file.active).length} 份</small></div><PatternMaterials files={order.attachments.filter(file => file.roundId === displayRound.roundId && file.active)} /></section> : null}
@@ -164,8 +176,8 @@ function PatternRoomDetailWorkspace({ orderId }: { orderId: string }) {
       {currentWorkspace && !editing ? <>
         {!exception && order.actions.assign ? <div className={`pattern-fields pattern-assignment${currentRound?.roundType === "rework" ? " has-rework-price" : ""}`}><label>板房师傅<div className="rework-v2-control"><SearchSelect options={workers.map(worker => ({ value: worker.personId, label: worker.name }))} value={personId} onChange={setPersonId} onSearchChange={setWorkerSearch} placeholder="输入姓名选择师傅" ariaLabel="板房师傅" emptyText="没有匹配的师傅" disabled={busy} /></div></label>{currentRound?.roundType === "rework" ? <InsetField label="本轮返工金额（元）" inputMode="decimal" value={reworkAmount} onChange={e => setReworkAmount(e.target.value)} disabled={busy} /> : null}<div className="rework-v2-actions pattern-single-action"><Button variant="primary" disabled={busy || !personId || (currentRound?.roundType === "rework" && !reworkAmount)} onClick={() => void act("assign")}>{busy ? "提交中…" : "确认分配"}</Button></div></div> : null}
         {!exception && order.actions.hours ? <div><h3>实际工时</h3><p>合计：{currentRound?.actualHours ? `${formatBusinessDecimal(currentRound.actualHours, 2)} 小时` : "待填写"}</p><div className="pattern-fields pattern-hours"><InsetField label="当前执行段实际工时（小时）" type="number" inputMode="decimal" min="0.1" max="999999.9" step="0.1" value={hours} onChange={e => setHours(e.target.value)} disabled={busy} /><div className="rework-v2-actions pattern-single-action"><Button variant="primary" disabled={busy || !hours} onClick={() => void act("hours")}>保存实际工时</Button></div></div></div> : null}
-        {!exception ? <div className="pattern-actions">{order.actions.edit ? <Button disabled={busy} onClick={() => setEditing(true)}>更新任务资料</Button> : null}{order.actions.complete ? <Button variant="primary" disabled={busy} onClick={() => void confirmAction("complete")}>报完工</Button> : null}{order.actions.handoff ? <Button variant="primary" disabled={busy} onClick={() => void confirmAction("handoff")}>{order.kind === "misc" ? "确认完成" : "确认收到样板"}</Button> : null}</div> : null}
-        <PatternOrderExceptions order={order} active={exception} onActive={value => { setException(value); }} busy={busy} onBusy={setBusy} onSaved={showUpdatedOrder} />
+        <div className="pattern-workspace-actions">{!exception ? <div className="pattern-actions">{order.actions.edit ? <Button disabled={busy} onClick={() => setEditing(true)}>更新任务资料</Button> : null}{order.actions.complete ? <Button variant="primary" disabled={busy} onClick={() => void confirmAction("complete")}>报完工</Button> : null}{order.actions.handoff ? <Button variant="primary" disabled={busy} onClick={() => void confirmAction("handoff")}>{order.kind === "misc" ? "确认完成" : "确认收到样板"}</Button> : null}</div> : null}
+        <PatternOrderExceptions order={order} active={exception} onActive={value => { setException(value); }} busy={busy} onBusy={setBusy} onSaved={showUpdatedOrder} /></div>
       </> : null}
       {order.historicalView && displayRound && <div className="pattern-readonly-workspace">
         {selectedStage === "pending_assignment" ? <div className={`pattern-fields pattern-assignment${displayRound.roundType === "rework" ? " has-rework-price" : ""}`}>
@@ -179,12 +191,12 @@ function PatternRoomDetailWorkspace({ orderId }: { orderId: string }) {
       </div>}
       </section></Surface>
       {editing && !staleRound ? <PatternOrderForm key={order.version} order={order} onCancel={() => setEditing(false)} onSaved={updated => { showUpdatedOrder(updated); setEditing(false); }} /> : null}
-      {visibleRounds.map(round => <Surface key={round.roundId}><details className="pattern-disclosure" open={staleRound || round.roundId === requestedRound || (round.roundId === order.currentRoundId && !window.matchMedia("(max-width: 760px)").matches)}><summary><strong>{order.kind === "misc" ? "杂事" : round.index === 0 ? "首次打板" : round.index === null ? "返工请求（未派工）" : `第 ${round.index} 次返工`} · {order.historicalView ? `${selectedNode?.label ?? "历史节点"}提交记录` : PATTERN_ORDER_STATUS_LABELS[round.status]}</strong></summary>
-        <PatternRoundRecord round={round} misc={order.kind === "misc"} />
+      <section className="pattern-history-section" aria-label="办理明细与历史">{visibleRounds.map(round => <section className="pattern-round-history" key={round.roundId}><details className="pattern-disclosure" open={staleRound || round.roundId === requestedRound || (round.roundId === order.currentRoundId && !window.matchMedia("(max-width: 760px)").matches)}><summary><strong>{order.kind === "misc" ? "杂事" : round.index === 0 ? "首次打板" : round.index === null ? "返工请求（未派工）" : `第 ${round.index} 次返工`} · {order.historicalView ? `${selectedNode?.label ?? "历史节点"}提交记录` : PATTERN_ORDER_STATUS_LABELS[round.status]}</strong></summary>
+        <PatternRoundRecord round={round} misc={order.kind === "misc"} omitSummary={round.roundId === displayRound?.roundId} />
         {!order.historicalView && <details className="pattern-node-history"><summary>节点用时</summary><PatternNodeHistory round={round} misc={order.kind === "misc"} /></details>}
         {order.canReadMaterials !== false && order.attachments.some(file => file.roundId === round.roundId && (round.roundId !== displayRound?.roundId || !file.active)) && <details><summary>历史制作资料</summary><PatternMaterials files={order.attachments.filter(file => file.roundId === round.roundId && (round.roundId !== displayRound?.roundId || !file.active))} /></details>}
-      </details></Surface>)}
-      <Surface><details className="pattern-disclosure"><summary>订单记录（{formatBusinessDecimal(order.history.length)} 条）</summary><ol className="pattern-audit-list">{order.history.map((entry, index) => <li key={`${entry.at}:${index}`}><div><strong>{historyLabels[entry.action] ?? "订单操作"}</strong><span>{entry.actorName}</span><time>{patternTime(entry.at)}</time></div>{entry.reason && <p className="pattern-note">{entry.reason}</p>}</li>)}</ol></details></Surface>
+      </details></section>)}
+      <section className="pattern-audit-section"><details className="pattern-disclosure"><summary>订单记录（{formatBusinessDecimal(order.history.length)} 条）</summary><ol className="pattern-audit-list">{order.history.map((entry, index) => <li key={`${entry.at}:${index}`}><div><strong>{historyLabels[entry.action] ?? "订单操作"}</strong><span>{entry.actorName}</span><time>{patternTime(entry.at)}</time></div>{entry.reason && <p className="pattern-note">{entry.reason}</p>}</li>)}</ol></details></section></section>
     </> : null}
   </div>;
 }
