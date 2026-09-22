@@ -58,6 +58,8 @@ const create = (
   isRoot = false,
 ) => {
   const service = {
+    returnToMerchandiser:vi.fn(async()=>({value:caseSummary,reused:false})),
+    correctCase:vi.fn(async()=>({value:caseSummary,reused:false})),
     nodeHistory: vi.fn(async () => ({ item: caseSummary })),
     listCases: vi.fn(async () => ({ items: [caseSummary] })),
     listFactories: vi.fn(async () => ({
@@ -69,7 +71,6 @@ const create = (
     })),
     reviseStyles: vi.fn(async () => ({value:caseSummary,reused:false})),
     createCase: vi.fn(async () => ({ value: caseSummary, reused: false })),
-    correctBudgetPrice: vi.fn(async () => ({ value: { ...caseSummary, daxingUnitPrice: "10.2500" }, reused: false })),
     supplementImages: vi.fn(async () => ({
       value: {
         items: [{
@@ -236,55 +237,6 @@ describe("sourcing PR03 routes", () => {
       },
       "sourcing-create-key-1",
     );
-  });
-
-  it("routes budget correction only for Root and validates its payload", async () => {
-    const allowed = create([], [], true);
-    const corrected = await allowed.app.inject({
-      method: "POST",
-      url: `/sourcing/cases/${caseSummary.sourcingCaseId}/budget-price-corrections`,
-      headers: {
-        cookie: "dx_rework_session=trusted",
-        "x-request-id": "budget-correction-1",
-        "idempotency-key": "budget-correction-key-1",
-      },
-      payload: { daxingUnitPrice: "10.25", reason: "原预算价录入错误" },
-    });
-    expect(corrected.statusCode).toBe(200);
-    expect(allowed.service.correctBudgetPrice).toHaveBeenCalledWith(
-      expect.objectContaining({
-        actorRoles: ["root_superuser"],
-        authorizationCapability: "sourcing:inquiry:create",
-        requestId: "budget-correction-1",
-      }),
-      caseSummary.sourcingCaseId,
-      { daxingUnitPrice: "10.25", reason: "原预算价录入错误" },
-      "budget-correction-key-1",
-    );
-
-    const beforeInvalid = allowed.service.correctBudgetPrice.mock.calls.length;
-    for (const payload of [
-      { daxingUnitPrice: "10.251", reason: "精度错误" },
-      { daxingUnitPrice: "10.8元", reason: "格式错误" },
-      { daxingUnitPrice: "10.25", reason: "" },
-    ]) {
-      expect((await allowed.app.inject({
-        method: "POST",
-        url: `/sourcing/cases/${caseSummary.sourcingCaseId}/budget-price-corrections`,
-        headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "invalid-budget-correction" },
-        payload,
-      })).statusCode).toBe(400);
-    }
-    expect(allowed.service.correctBudgetPrice).toHaveBeenCalledTimes(beforeInvalid);
-
-    const forbidden = create(["sourcing:view", "sourcing:inquiry:create"], ["order_merchandiser"]);
-    expect((await forbidden.app.inject({
-      method: "POST",
-      url: `/sourcing/cases/${caseSummary.sourcingCaseId}/budget-price-corrections`,
-      headers: { cookie: "dx_rework_session=trusted", "idempotency-key": "forbidden-budget-correction" },
-      payload: { daxingUnitPrice: "10.25", reason: "普通跟单不应允许" },
-    })).statusCode).toBe(403);
-    expect(forbidden.service.correctBudgetPrice).not.toHaveBeenCalled();
   });
 
   it("lets IE quote but prevents IE from creating an inquiry", async () => {
@@ -710,6 +662,19 @@ describe("sourcing PR03 routes", () => {
       expect((await app.inject({method:"POST",url:`/sourcing/cases/${caseSummary.sourcingCaseId}/styles`,headers:{cookie:"dx_rework_session=trusted","idempotency-key":"style-invalid"},payload:{...body,lines:[line]}})).statusCode).toBe(400);
     }
     expect(service.reviseStyles).not.toHaveBeenCalled();
+  });
+
+  it("limits return to owner capability and validates correction dates before writes",async()=>{
+    const headers={cookie:"dx_rework_session=trusted","idempotency-key":"correction-route"};
+    const allowed=create(["sourcing:view","sourcing:owner:approve"],["owner_group"]);
+    const denied=create(["sourcing:view","sourcing:inquiry:create"],["order_merchandiser"]);
+    const url=`/sourcing/cases/${caseSummary.sourcingCaseId}/return-to-merchandiser`;
+    expect((await allowed.app.inject({method:"POST",url,headers,payload:{expectedVersion:1,reason:"日期有误"}})).statusCode).toBe(200);
+    expect(allowed.service.returnToMerchandiser).toHaveBeenCalledOnce();
+    expect((await denied.app.inject({method:"POST",url,headers,payload:{expectedVersion:1,reason:"日期有误"}})).statusCode).toBe(403);
+    expect(denied.service.returnToMerchandiser).not.toHaveBeenCalled();
+    expect((await denied.app.inject({method:"POST",url:`/sourcing/cases/${caseSummary.sourcingCaseId}/corrections`,headers,payload:{gender:"男装",styleName:"长裤",estimatedCutPieceSendDate:"2026-10-01",deliveryDate:"2026-09-30",expectedVersion:2,reason:"修正",lineItems:[{styleNo:"A",color:"黑",quantity:1}],attachmentIds:["00000000-0000-4000-8000-000000000301"]}})).statusCode).toBe(400);
+    expect(denied.service.correctCase).not.toHaveBeenCalled();
   });
 
 });

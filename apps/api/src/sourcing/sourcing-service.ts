@@ -8,6 +8,7 @@ import {
   sourcingStyleNumbers,
   normalizeSourcingStyleNumber,
   type SourcingStyleIdentity,
+  cumulativeSourcingTiming, CorrectSourcingCaseSchema, ReturnSourcingCaseSchema, sourcingDatesValid, SOURCING_DATE_ORDER_ERROR,
   calculateSourcingOrderQuantity,
   calculateSourcingTotalExact,
   SourcingNewUnitPriceSchema,
@@ -16,6 +17,7 @@ import {
   SOURCING_IMAGE_SUPPLEMENT_ROLES,
 } from "@dx-rework/contracts";
 import type {
+  CorrectSourcingCase, ReturnSourcingCase,
   CreateSourcingCase,
   CorrectSourcingBudgetPrice,
   ReviseSourcingStyles,
@@ -421,7 +423,7 @@ export class SourcingService {
       TodoProjectionService,
       "actionableForAllAssignedRole" | "cancelOpenByDedupePrefix"
         | "completeOpenByDedupePrefix" | "information"
-    >,
+    > & Partial<Pick<TodoProjectionService,"actionableForNamedRecipient">>,
     private readonly contractService?: SourcingContractService,
   ) {}
 
@@ -476,7 +478,7 @@ export class SourcingService {
     const result = await client.query<SourcingCaseRow>(
       `SELECT
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
-         case_view.style_no,case_view.lane_key,case_view.order_quantity,
+         case_view.style_no,case_view.lane_key,source_case.order_quantity,
          (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=case_view.sourcing_case_id) AS identity_revision,
          source_case.gender,source_case.style_name_snapshot,
          COALESCE((
@@ -488,7 +490,7 @@ export class SourcingService {
          to_char(source_case.estimated_cut_piece_send_date,'YYYY-MM-DD')
            AS estimated_cut_piece_send_date,
          lines_row.line_items,
-         to_char(case_view.delivery_date,'YYYY-MM-DD') AS delivery_date,
+         to_char(source_case.delivery_date,'YYYY-MM-DD') AS delivery_date,
          case_view.process_description,case_view.process_items,
          COALESCE(decision_row.crafts,crafts_row.crafts) AS crafts,
          case_view.status,case_view.version,case_view.created_by,
@@ -532,8 +534,7 @@ export class SourcingService {
          snapshot_lines.line_prices AS approval_line_prices,
          snapshot.approved_by AS approval_by,snapshot.approved_at AS approval_at
        FROM current_sourcing_cases case_view
-       JOIN sourcing_cases source_case
-         ON source_case.sourcing_case_id=case_view.sourcing_case_id
+       JOIN LATERAL sourcing_case_facts_at(case_view.sourcing_case_id${history ? ', $2::timestamptz' : ''}) source_case ON true
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(
@@ -551,7 +552,7 @@ export class SourcingService {
          FROM ${history ? `(SELECT original.*,
            COALESCE(identity.style_no,identity.alternate_style_no) AS historical_style_no,
            identity.style_no AS formal_style_no, identity.alternate_style_no AS historical_alternate
-           FROM sourcing_case_lines original
+           FROM sourcing_case_lines_at(case_view.sourcing_case_id, $2::timestamptz) original
            LEFT JOIN LATERAL (SELECT revision,lines FROM sourcing_style_revisions
              WHERE sourcing_case_id=original.sourcing_case_id AND created_at <= $2::timestamptz
              ORDER BY revision DESC LIMIT 1) revision ON true
@@ -581,7 +582,7 @@ export class SourcingService {
          SELECT quote.*
          FROM sourcing_ie_quotes quote
          WHERE quote.sourcing_case_id=case_view.sourcing_case_id
-           ${history ? "AND quote.quoted_at <= $2::timestamptz AND $3::text <> 'created' AND ($3::text <> 'ie_quote' OR quote.sourcing_ie_quote_id=$4::uuid)" : ""}
+           ${history ? "AND quote.quoted_at <= $2::timestamptz AND $3::text <> 'created' AND ($3::text <> 'ie_quote' OR quote.sourcing_ie_quote_id=$4::uuid)" : "AND quote.quoted_at > COALESCE((SELECT max(transitioned_at) FROM sourcing_case_transitions WHERE sourcing_case_id=case_view.sourcing_case_id AND business_action='returned_to_merchandiser'), '-infinity'::timestamptz)"}
          ORDER BY quote.quote_version DESC
          LIMIT 1
        ) quote_row ON true
@@ -597,7 +598,7 @@ export class SourcingService {
          SELECT decision_fact.*
          FROM sourcing_decisions decision_fact
          WHERE decision_fact.sourcing_case_id=case_view.sourcing_case_id
-           ${history ? "AND decision_fact.decided_at <= $2::timestamptz AND $3::text NOT IN ('created','ie_quote') AND ($3::text <> 'management' OR decision_fact.sourcing_decision_id=$4::uuid) AND ($3::text <> 'owner' OR decision_fact.sourcing_decision_id=(SELECT sourcing_decision_id FROM sourcing_owner_decisions WHERE sourcing_owner_decision_id=$4::uuid)) AND ($3::text <> 'finance' OR decision_fact.sourcing_decision_id=(SELECT sourcing_decision_id FROM sourcing_finance_reconciliations WHERE sourcing_reconciliation_id=$4::uuid))" : ""}
+           ${history ? "AND decision_fact.decided_at <= $2::timestamptz AND $3::text NOT IN ('created','ie_quote') AND ($3::text <> 'management' OR decision_fact.sourcing_decision_id=$4::uuid) AND ($3::text <> 'owner' OR decision_fact.sourcing_decision_id=(SELECT sourcing_decision_id FROM sourcing_owner_decisions WHERE sourcing_owner_decision_id=$4::uuid)) AND ($3::text <> 'finance' OR decision_fact.sourcing_decision_id=(SELECT sourcing_decision_id FROM sourcing_finance_reconciliations WHERE sourcing_reconciliation_id=$4::uuid))" : "AND decision_fact.decided_at > COALESCE((SELECT max(transitioned_at) FROM sourcing_case_transitions WHERE sourcing_case_id=case_view.sourcing_case_id AND business_action='returned_to_merchandiser'), '-infinity'::timestamptz)"}
          ORDER BY decision_fact.decision_version DESC
          LIMIT 1
        ) decision_row ON true
@@ -646,7 +647,16 @@ export class SourcingService {
       if (transition.rows[0]) { item.status = transition.rows[0].status; item.version = Number(transition.rows[0].version); }
       delete item.identityRevision;
     }
-    return item;
+    const latestReturn = history ? null : (await client.query<{reason:string}>(
+      "SELECT transition_reason AS reason FROM sourcing_case_transitions WHERE sourcing_case_id=$1 AND business_action='returned_to_merchandiser' ORDER BY sequence DESC LIMIT 1",[sourcingCaseId])).rows[0];
+    const visits = await client.query<{to:string;changesNode:boolean;enteredAt:string;leftAt:string|null;asOf:string}>(
+      `SELECT to_status AS to,true AS "changesNode",transitioned_at::text AS "enteredAt",
+        lead(transitioned_at) OVER(ORDER BY sequence)::text AS "leftAt",CURRENT_TIMESTAMP::text AS "asOf"
+       FROM sourcing_case_transitions WHERE sourcing_case_id=$1 AND from_status IS DISTINCT FROM to_status
+         AND ($2::timestamptz IS NULL OR transitioned_at<=$2::timestamptz)
+       ORDER BY sequence`,[sourcingCaseId,history?.at ?? null]);
+    const timing=cumulativeSourcingTiming(visits.rows,item.createdAt,history?.at ?? visits.rows[0]?.asOf ?? item.createdAt);
+    return {...item, correctionReason: latestReturn?.reason ?? null,timing};
   }
 
   async analysis(actor: TrustedActorContext, input: unknown) {
@@ -736,8 +746,7 @@ export class SourcingService {
          snapshot_lines.line_prices AS approval_line_prices,
          snapshot.approved_by AS approval_by,snapshot.approved_at AS approval_at
        FROM current_sourcing_cases case_view
-       JOIN sourcing_cases source_case
-         ON source_case.sourcing_case_id=case_view.sourcing_case_id
+       JOIN LATERAL sourcing_case_facts_at(case_view.sourcing_case_id) source_case ON true
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(
@@ -773,6 +782,7 @@ export class SourcingService {
          SELECT quote.*
          FROM sourcing_ie_quotes quote
          WHERE quote.sourcing_case_id=case_view.sourcing_case_id
+         AND quote.quoted_at > COALESCE((SELECT max(transitioned_at) FROM sourcing_case_transitions WHERE sourcing_case_id=case_view.sourcing_case_id AND business_action='returned_to_merchandiser'), '-infinity'::timestamptz)
          ORDER BY quote.quote_version DESC
          LIMIT 1
        ) quote_row ON true
@@ -788,6 +798,7 @@ export class SourcingService {
          SELECT decision_fact.*
          FROM sourcing_decisions decision_fact
          WHERE decision_fact.sourcing_case_id=case_view.sourcing_case_id
+         AND decision_fact.decided_at > COALESCE((SELECT max(transitioned_at) FROM sourcing_case_transitions WHERE sourcing_case_id=case_view.sourcing_case_id AND business_action='returned_to_merchandiser'), '-infinity'::timestamptz)
          ORDER BY decision_fact.decision_version DESC
          LIMIT 1
        ) decision_row ON true
@@ -977,6 +988,7 @@ export class SourcingService {
   async listAttachments(
     actor: TrustedActorContext,
     sourcingCaseId: string,
+    historical = false,
   ): Promise<SourcingAttachmentListResponse> {
     this.assertReader(actor);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
@@ -993,8 +1005,13 @@ export class SourcingService {
        ORDER BY created_at,attachment_id`,
       [sourcingCaseId],
     );
+    const revision = historical ? null : (await this.database.query<{ids:string[]}>(
+      `SELECT after_state->'attachmentIds' AS ids FROM operation_events
+       WHERE entity_type='sourcing_case' AND entity_id=$1 AND action IN ('sourcing.case.correct','sourcing.attachments.supplement','sourcing.case.create')
+       AND jsonb_typeof(after_state->'attachmentIds')='array'
+       ORDER BY created_at DESC, CASE WHEN action='sourcing.case.correct' THEN 0 ELSE 1 END, event_id DESC LIMIT 1`,[sourcingCaseId])).rows[0];
     return {
-      items: result.rows.map((row) => ({
+      items: result.rows.filter(row=>!revision || revision.ids.includes(row.attachment_id)).map((row) => ({
         attachmentId: row.attachment_id,
         filename: row.original_filename,
         mimeType: row.mime_type,
@@ -1125,18 +1142,20 @@ export class SourcingService {
     const entry = entryId ? versions.find(entry => entry.entryId === entryId) : versions.at(-1);
     if (!entry) return fail("该节点没有已提交的历史记录", 404, "NOT_FOUND");
     const cutoff = await this.database.query<{ at: string }>(
-      `SELECT ${time}::text AS at FROM ${table} WHERE ${id}=$1 AND sourcing_case_id=$2`, [entry.entryId, sourcingCaseId]);
+      node === "created" && entry.entryId !== sourcingCaseId
+        ? "SELECT corrected_at::text AS at FROM sourcing_case_corrections WHERE correction_id=$1 AND sourcing_case_id=$2"
+        : `SELECT ${time}::text AS at FROM ${table} WHERE ${id}=$1 AND sourcing_case_id=$2`, [entry.entryId, sourcingCaseId]);
     const at = cutoff.rows[0]?.at;
     if (!at) return fail("历史记录不存在", 404, "NOT_FOUND");
     const item = await this.readCase(this.database, sourcingCaseId, actor, { at, node, entryId: entry.entryId });
     const evidence = await this.database.query<{ ids: string[] | null }>(
       `SELECT after_state->'attachmentIds' AS ids FROM operation_events
        WHERE entity_type='sourcing_case' AND entity_id=$1 AND created_at <= $2::timestamptz
-         AND action IN ('sourcing.case.create','sourcing.attachments.supplement')
+         AND action IN ('sourcing.case.create','sourcing.attachments.supplement','sourcing.case.correct')
          AND jsonb_typeof(after_state->'attachmentIds')='array'
        ORDER BY created_at DESC,event_id DESC LIMIT 1`, [sourcingCaseId, at]);
     const ids = evidence.rows[0]?.ids;
-    const attachments = await this.listAttachments(actor, sourcingCaseId);
+    const attachments = await this.listAttachments(actor, sourcingCaseId, true);
     const contract = node === "finance" ? await this.database.query<{ reference: string }>(
       `SELECT document.contract_number AS reference FROM sourcing_finance_reconciliations reconciliation
        JOIN sourcing_contract_documents document ON document.sourcing_contract_document_id=reconciliation.sourcing_contract_document_id
@@ -1193,6 +1212,11 @@ export class SourcingService {
                 NULL::text AS result,NULL::text AS resolution
          FROM sourcing_cases source_case
          WHERE source_case.sourcing_case_id=$1
+         UNION ALL
+         SELECT correction.correction_id,'created',correction.correction_version+1,correction.corrected_by,
+                correction.corrected_at,correction.reason,NULL::numeric,NULL::numeric,NULL::text,NULL::text,
+                NULL::text,NULL::date,correction.order_quantity,'{}'::text[],NULL::text,NULL::text
+         FROM sourcing_case_corrections correction WHERE correction.sourcing_case_id=$1
          UNION ALL
          SELECT revision.operation_event_id,'style_revision',revision.revision,revision.changed_by,
                 revision.created_at,'补充或修改款号',NULL::numeric,NULL::numeric,
@@ -1422,6 +1446,7 @@ export class SourcingService {
          ON owner_review.factory_change_request_id=change.factory_change_request_id
         AND owner_review.decision_role='owner_group'
        WHERE change.sourcing_case_id=$1
+       AND change.requested_at > COALESCE((SELECT max(transitioned_at) FROM sourcing_case_transitions WHERE sourcing_case_id=$1 AND business_action='returned_to_merchandiser'),'-infinity'::timestamptz)
        ORDER BY change.requested_at DESC,change.factory_change_request_id DESC
        LIMIT 1`,
       [sourcingCaseId],
@@ -1534,6 +1559,100 @@ export class SourcingService {
     finally { client.release(); }
   }
 
+  async returnToMerchandiser(actor: TrustedActorContext, sourcingCaseId: string, input: ReturnSourcingCase, key: string): Promise<Result<SourcingCaseSummary>> {
+    this.assertActor(actor, OWNER_DECISION_CAPABILITY, OWNER_DECISION_ROLE);
+    const parsed = ReturnSourcingCaseSchema.safeParse(input);
+    if (!parsed.success || !UUID_PATTERN.test(sourcingCaseId)) fail("请填写退回原因并刷新订单版本");
+    return this.writeCorrection(actor, sourcingCaseId, parsed.data!, key, false);
+  }
+
+  async correctCase(actor: TrustedActorContext, sourcingCaseId: string, input: CorrectSourcingCase, key: string): Promise<Result<SourcingCaseSummary>> {
+    this.assertActor(actor, CASE_CREATE_CAPABILITY, CASE_CREATE_ROLE);
+    const parsed = CorrectSourcingCaseSchema.safeParse(input);
+    if (!parsed.success || !UUID_PATTERN.test(sourcingCaseId)) fail(parsed.error?.issues[0]?.message ?? "修改资料无效");
+    return this.writeCorrection(actor, sourcingCaseId, parsed.data!, key, true);
+  }
+
+  private async writeCorrection(actor: TrustedActorContext, sourcingCaseId: string, input: ReturnSourcingCase | CorrectSourcingCase, key: string, correcting: boolean): Promise<Result<SourcingCaseSummary>> {
+    const scope = correcting ? "sourcing.case.correct" : "sourcing.case.return";
+    const client = await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      const root = actor.actorRoles.includes(ROOT_ROLE);
+      const source = (await client.query<{created_by: string}>(
+        "SELECT created_by FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE", [sourcingCaseId],
+      )).rows[0] ?? fail("外发订单不存在",404,"NOT_FOUND");
+      if (!root && (!await memberCanWriteModule(client,actor.actorId,"sourcing") || correcting && source.created_by !== actor.actorId)) fail("无权修改本订单",403,"FORBIDDEN");
+      const result = await this.idempotency.execute(client, {scope,actorKey:actor.actorId,key,
+        requestHash:requestHash(scope,{sourcingCaseId,input:{...input,confirmedDuplicateStyles:undefined}}),expiresAt:new Date(Date.now()+86400000)}, async () => {
+        const before = await this.readCase(client,sourcingCaseId,actor);
+        if (before.approvalSnapshot) fail("老板已批准，不能直接退回修改生效订单",409,"INVALID_STATE_TRANSITION");
+        if (before.version !== input.expectedVersion) fail("订单已被他人处理，请刷新后重试",409,"CONFLICT");
+        if (correcting ? before.status !== "pending_merchandiser_correction"
+          : !["pending_ie_quote","pending_management_decision","pending_owner_approval"].includes(before.status)) fail("当前节点不能执行该操作",409,"INVALID_STATE_TRANSITION");
+        const nextStatus = correcting ? "pending_ie_quote" : "pending_merchandiser_correction";
+        let after: Record<string,unknown> = {status:nextStatus};
+        const facts = correcting ? input as CorrectSourcingCase : null;
+        let correctionVersion = 0;
+        let correctionStyleId: string | null = null;
+        if (facts) {
+          await client.query("INSERT INTO sourcing_style_catalog(style_id,style_name,created_by) VALUES($1,$2,$3) ON CONFLICT(normalized_name) DO NOTHING",[randomUUID(),facts.styleName,actor.actorId]);
+          correctionStyleId=(await client.query<{style_id:string}>("SELECT style_id FROM sourcing_style_catalog WHERE normalized_name=lower(btrim($1))",[facts.styleName])).rows[0]!.style_id;
+          const confirmedDuplicateStyles = await this.checkStyleNumbers(client,facts.lineItems,facts.confirmedDuplicateStyles,sourcingCaseId,before.lineItems);
+          const quantity = calculateSourcingOrderQuantity(facts.lineItems);
+          const images = await client.query<{attachment_id:string;entity_type:string|null;entity_id:string|null;uploaded_by:string}>(
+            `SELECT attachment_id,entity_type,entity_id,uploaded_by FROM attachments WHERE attachment_id=ANY($1::uuid[])
+             AND status='ready' AND mime_type IN ('image/jpeg','image/png','image/webp') FOR UPDATE`,[facts.attachmentIds]);
+          if (images.rows.length !== facts.attachmentIds.length || images.rows.some(image => image.entity_type === null
+            ? image.entity_id !== null || image.uploaded_by !== actor.actorId
+            : image.entity_type !== "sourcing_case" || image.entity_id !== sourcingCaseId)) fail("图片必须属于本订单或由当前账号上传完成");
+          const newIds = images.rows.filter(image => image.entity_type === null).map(image => image.attachment_id);
+          const newLineIds = facts.lineItems.flatMap(line => line.imageAttachmentId && newIds.includes(line.imageAttachmentId) ? [line.imageAttachmentId] : []);
+          if (newLineIds.length) {
+            const contracts = this.contractService ?? fail("款图校验服务暂不可用",503,"STORAGE_UNAVAILABLE");
+            await contracts.validateLineImages(client,actor,newLineIds);
+          }
+          if (newIds.length) {
+            const existing = (await client.query<{attachment_id:string}>("SELECT attachment_id FROM attachments WHERE entity_type='sourcing_case' AND entity_id=$1",[sourcingCaseId])).rows.map(row=>row.attachment_id);
+            const imageEvent = await this.events.append(client,{...actor,authorizationCapability:IMAGE_SUPPLEMENT_CAPABILITY},{action:"sourcing.attachments.supplement",entityType:"sourcing_case",entityId:sourcingCaseId,
+              before:{attachmentIds:existing},after:{attachmentIds:[...existing,...newIds]},reason:"纠错补充订单图片"});
+            await client.query("SELECT set_config('dx_rework.sourcing_event_id',$1,true),set_config('dx_rework.sourcing_request_id',$2,true)",[imageEvent,actor.requestId]);
+            await client.query("UPDATE attachments SET entity_type='sourcing_case',entity_id=$2,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=ANY($1::uuid[])",[newIds,sourcingCaseId]);
+          }
+          correctionVersion = Number((await client.query<{version:number}>("SELECT count(*)+1 AS version FROM sourcing_case_corrections WHERE sourcing_case_id=$1",[sourcingCaseId])).rows[0]!.version);
+          after = {...after,gender:facts.gender,styleName:facts.styleName,estimatedCutPieceSendDate:facts.estimatedCutPieceSendDate,
+            deliveryDate:facts.deliveryDate,lineItems:facts.lineItems,orderQuantity:quantity,attachmentIds:facts.attachmentIds,correctionVersion,confirmedDuplicateStyles};
+        }
+        // Budget values never enter ordinary operation-event history.
+        const eventId = await this.events.append(client,actor,{action:scope,entityType:"sourcing_case",entityId:sourcingCaseId,
+          before:{status:before.status,gender:before.gender,styleName:before.styleName,estimatedCutPieceSendDate:before.estimatedCutPieceSendDate,
+            deliveryDate:before.deliveryDate,lineItems:before.lineItems.map(({position,formalStyleNo,alternateStyleNo,color,quantity,imageAttachmentId})=>({position,styleNo:formalStyleNo,alternateStyleNo,color,quantity,imageAttachmentId}))},
+          after,reason:input.reason});
+        if (facts) {
+          await client.query(`INSERT INTO sourcing_case_corrections(correction_id,sourcing_case_id,correction_version,gender,style_name_snapshot,
+            estimated_cut_piece_send_date,delivery_date,order_quantity,lines,attachment_ids,reason,corrected_by,operation_event_id,request_id,style_id)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13,$14,$15)`,
+          [randomUUID(),sourcingCaseId,correctionVersion,facts.gender,facts.styleName,facts.estimatedCutPieceSendDate,facts.deliveryDate,
+            after.orderQuantity,JSON.stringify(facts.lineItems),facts.attachmentIds,input.reason,actor.actorId,eventId,actor.requestId,correctionStyleId]);
+        }
+        await client.query(`INSERT INTO sourcing_case_transitions(sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,
+          business_action,transition_reason,actor_id,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [randomUUID(),sourcingCaseId,before.version+1,before.status,nextStatus,correcting?"correction_submitted":"returned_to_merchandiser",input.reason,actor.actorId,eventId,actor.requestId]);
+        await this.todoProjection?.completeOpenByDedupePrefix(client,actor,`sourcing:${sourcingCaseId}:`,correcting?"跟单已修改，重新交 IE 报价":"老板退回跟单修改");
+        const projection = {category:correcting?"sourcing_ie_quote":"sourcing_merchandiser_correction",sourceEventId:eventId,sourceAction:scope,
+          entityType:"sourcing_case",entityId:sourcingCaseId,requiredRole:correcting?IE_QUOTE_ROLE:CASE_CREATE_ROLE,
+          requiredCapability:correcting?IE_QUOTE_CAPABILITY:CASE_CREATE_CAPABILITY,
+          route:{routeName:"sourcing_detail" as const,entityId:sourcingCaseId},policyKey:"general" as const,
+          dedupeKey:`sourcing:${sourcingCaseId}:${correcting?"ie_quote":"correction"}:${before.version+1}`};
+        if (correcting) await this.todoProjection?.actionableForAllAssignedRole(client,actor,projection);
+        else await this.todoProjection?.actionableForNamedRecipient?.(client,actor,{...projection,recipientUserId:source.created_by});
+        return {statusCode:200,response:await this.readCase(client,sourcingCaseId,actor)};
+      });
+      await client.query("COMMIT");return {value:result.response,reused:result.reused};
+    } catch(error) {await client.query("ROLLBACK").catch(()=>undefined);throw error;}
+    finally {client.release();}
+  }
+
   async createCase(
     actor: TrustedActorContext,
     input: CreateSourcingCase,
@@ -1541,6 +1660,7 @@ export class SourcingService {
   ): Promise<Result<SourcingCaseSummary>> {
     this.assertActor(actor, CASE_CREATE_CAPABILITY, CASE_CREATE_ROLE);
     if (input.gender !== "男装" && input.gender !== "女装") fail("请选择男装或女装");
+    if (!sourcingDatesValid(input.estimatedCutPieceSendDate,input.deliveryDate)) fail(SOURCING_DATE_ORDER_ERROR);
     const styleName = normalizeText(input.styleName, "款式", 100);
     const lineItems = input.lineItems.map((line, index) => ({
       position: index + 1,
@@ -1788,14 +1908,15 @@ export class SourcingService {
                     WHERE correction.sourcing_case_id=source_case.sourcing_case_id),0) AS correction_version,
                   EXISTS(SELECT 1 FROM sourcing_approval_snapshots approval
                     WHERE approval.sourcing_case_id=source_case.sourcing_case_id) AS approved
-           FROM sourcing_cases source_case
+           FROM sourcing_cases source_lock
+           CROSS JOIN LATERAL sourcing_case_facts_at(source_lock.sourcing_case_id) source_case
            JOIN LATERAL (
              SELECT transition_row.to_status FROM sourcing_case_transitions transition_row
              WHERE transition_row.sourcing_case_id=source_case.sourcing_case_id
              ORDER BY transition_row.sequence DESC LIMIT 1
            ) current_transition ON true
            WHERE source_case.sourcing_case_id=$1 AND source_case.deleted_at IS NULL
-           FOR UPDATE OF source_case`,
+           FOR UPDATE OF source_lock`,
           [sourcingCaseId],
         );
         const source = current.rows[0] ?? fail("报价选厂询价不存在", 404, "NOT_FOUND");
@@ -1831,6 +1952,18 @@ export class SourcingService {
     } finally {
       client.release();
     }
+  }
+
+  private async assertCurrentTransferBasis(client:PoolClient,caseId:string,decisionId:string):Promise<void> {
+    const stale=await client.query(`SELECT 1 FROM sourcing_decisions d JOIN sourcing_case_transitions t ON t.sourcing_case_id=d.sourcing_case_id
+      WHERE d.sourcing_decision_id=$2 AND t.sourcing_case_id=$1 AND t.business_action='returned_to_merchandiser' AND t.transitioned_at>=d.decided_at LIMIT 1`,[caseId,decisionId]);
+    if(stale.rowCount) fail("订单已退回修改，请完成重新选厂后再发起转厂",409,"INVALID_STATE_TRANSITION");
+  }
+
+  private async assertValidOrderDates(client: PoolClient, sourcingCaseId: string):Promise<void> {
+    const dates=(await client.query<{send:string|null;delivery:string|null}>(
+      "SELECT estimated_cut_piece_send_date::text AS send,delivery_date::text AS delivery FROM sourcing_case_facts_at($1)",[sourcingCaseId])).rows[0];
+    if (dates && !sourcingDatesValid(dates.send,dates.delivery)) fail(SOURCING_DATE_ORDER_ERROR);
   }
 
   async quoteIePrice(
@@ -1873,7 +2006,8 @@ export class SourcingService {
                     FROM sourcing_ie_quotes quote
                     WHERE quote.sourcing_case_id=source_case.sourcing_case_id
                   ),0) AS quote_version
-           FROM sourcing_cases source_case
+           FROM sourcing_cases source_lock
+           CROSS JOIN LATERAL sourcing_case_facts_at(source_lock.sourcing_case_id) source_case
            JOIN LATERAL (
              SELECT transition_row.to_status,transition_row.sequence
              FROM sourcing_case_transitions transition_row
@@ -1883,16 +2017,17 @@ export class SourcingService {
            ) current_transition ON true
            WHERE source_case.sourcing_case_id=$1
              AND source_case.deleted_at IS NULL
-           FOR UPDATE OF source_case`,
+           FOR UPDATE OF source_lock`,
           [sourcingCaseId],
         );
+        await this.assertValidOrderDates(client,sourcingCaseId);
         const source = current.rows[0];
         if (!source) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
         if (source.status !== "pending_ie_quote") {
           fail("该询价已完成 IE 报价，请刷新后查看", 409, "INVALID_STATE_TRANSITION");
         }
         const caseLines = await client.query<{ position: number; quantity: number | string }>(
-          `SELECT position,quantity FROM sourcing_case_lines
+          `SELECT position,quantity FROM current_sourcing_case_lines
            WHERE sourcing_case_id=$1 ORDER BY position`,
           [sourcingCaseId],
         );
@@ -2060,7 +2195,8 @@ export class SourcingService {
                   quote_row.unit_price AS quote_unit_price,
                   decision_row.sourcing_decision_id,decision_row.decision_version,
                   owner_row.decision AS owner_decision
-           FROM sourcing_cases source_case
+           FROM sourcing_cases source_lock
+           CROSS JOIN LATERAL sourcing_case_facts_at(source_lock.sourcing_case_id) source_case
            JOIN LATERAL (
              SELECT transition_row.to_status,transition_row.sequence
              FROM sourcing_case_transitions transition_row
@@ -2086,9 +2222,10 @@ export class SourcingService {
              ON owner_row.sourcing_decision_id=decision_row.sourcing_decision_id
            WHERE source_case.sourcing_case_id=$1
              AND source_case.deleted_at IS NULL
-           FOR UPDATE OF source_case`,
+           FOR UPDATE OF source_lock`,
           [sourcingCaseId],
         );
+        await this.assertValidOrderDates(client,sourcingCaseId);
         const source = current.rows[0];
         if (!source) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
         if (source.status !== "pending_management_decision") {
@@ -2099,7 +2236,11 @@ export class SourcingService {
         if (!sourceIeQuoteId || !quoteUnitPrice) {
           return fail("生产管理决定必须引用当前 IE 报价", 409, "INVALID_STATE_TRANSITION");
         }
-        if (source.sourcing_decision_id && source.owner_decision !== "rejected") {
+        if (source.sourcing_decision_id && source.owner_decision !== "rejected" && !(await client.query(
+          `SELECT 1 FROM sourcing_case_corrections correction JOIN sourcing_ie_quotes quote ON quote.sourcing_ie_quote_id=$2
+           JOIN sourcing_decisions decision ON decision.sourcing_decision_id=$3
+           WHERE correction.sourcing_case_id=$1 AND correction.corrected_at>=decision.decided_at AND correction.corrected_at<=quote.quoted_at`,
+          [sourcingCaseId,sourceIeQuoteId,source.sourcing_decision_id])).rowCount) {
           fail("只有老板驳回后才能提交新版本", 409, "INVALID_STATE_TRANSITION");
         }
         const quoteLines = await client.query<{
@@ -2349,7 +2490,8 @@ export class SourcingService {
                   source_case.delivery_date::text AS delivery_date,source_case.gender,source_case.style_name_snapshot,
                   CASE WHEN decision_row.crafts IS NULL THEN source_case.process_items
                     ELSE ARRAY(SELECT craft->>'craftName' FROM jsonb_array_elements(decision_row.crafts) craft) END AS process_items
-           FROM sourcing_cases source_case
+           FROM sourcing_cases source_lock
+           CROSS JOIN LATERAL sourcing_case_facts_at(source_lock.sourcing_case_id) source_case
            JOIN LATERAL (
              SELECT transition_row.to_status,transition_row.sequence
              FROM sourcing_case_transitions transition_row
@@ -2366,9 +2508,10 @@ export class SourcingService {
            ) decision_row ON true
            WHERE source_case.sourcing_case_id=$1
              AND source_case.deleted_at IS NULL
-           FOR UPDATE OF source_case`,
+           FOR UPDATE OF source_lock`,
           [sourcingCaseId],
         );
+        if(input.decision === "approved") await this.assertValidOrderDates(client,sourcingCaseId);
         const source = current.rows[0];
         if (!source) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
         if (
@@ -2585,7 +2728,8 @@ export class SourcingService {
           `SELECT transition_row.to_status AS status,transition_row.sequence,
                   decision_row.sourcing_decision_id,decision_row.decision_version,
                   COALESCE(reconciliation_row.reconciliation_version,0) AS reconciliation_version
-           FROM sourcing_cases source_case
+           FROM sourcing_cases source_lock
+           CROSS JOIN LATERAL sourcing_case_facts_at(source_lock.sourcing_case_id) source_case
            JOIN LATERAL (
              SELECT transition.to_status,transition.sequence
              FROM sourcing_case_transitions transition
@@ -2606,7 +2750,7 @@ export class SourcingService {
            ) reconciliation_row ON true
            WHERE source_case.sourcing_case_id=$1
              AND source_case.deleted_at IS NULL
-           FOR UPDATE OF source_case`,
+           FOR UPDATE OF source_lock`,
           [sourcingCaseId],
         );
         const source = current.rows[0];
@@ -2805,7 +2949,8 @@ export class SourcingService {
                 CASE WHEN decision.crafts IS NULL THEN COALESCE(source_case.process_items,'{}'::text[])
                   ELSE ARRAY(SELECT craft->>'craftName' FROM jsonb_array_elements(decision.crafts) craft) END,
                 $9,$10,$11,source_case.gender,source_case.style_name_snapshot
-         FROM sourcing_cases source_case
+         FROM sourcing_cases source_lock
+           CROSS JOIN LATERAL sourcing_case_facts_at(source_lock.sourcing_case_id) source_case
          JOIN current_supplier_catalog supplier ON supplier.supplier_id=$5
          JOIN sourcing_decisions decision ON decision.sourcing_decision_id=$3
          WHERE source_case.sourcing_case_id=$2`,
@@ -2944,7 +3089,8 @@ export class SourcingService {
                   decision_row.decision_version,
                   COALESCE(reconciliation_row.reconciliation_version,0) AS reconciliation_version,
                   open_change.factory_change_request_id AS open_change_id
-           FROM sourcing_cases source_case
+           FROM sourcing_cases source_lock
+           CROSS JOIN LATERAL sourcing_case_facts_at(source_lock.sourcing_case_id) source_case
            JOIN LATERAL (
              SELECT transition.to_status,transition.sequence
              FROM sourcing_case_transitions transition
@@ -2967,6 +3113,7 @@ export class SourcingService {
              SELECT change.factory_change_request_id
              FROM sourcing_factory_change_requests change
              WHERE change.sourcing_case_id=source_case.sourcing_case_id
+               AND change.requested_at > COALESCE((SELECT max(transitioned_at) FROM sourcing_case_transitions WHERE sourcing_case_id=source_case.sourcing_case_id AND business_action='returned_to_merchandiser'),'-infinity'::timestamptz)
                AND NOT EXISTS (
                  SELECT 1 FROM sourcing_decisions effective
                  WHERE effective.source_change_request_id=change.factory_change_request_id
@@ -2979,7 +3126,7 @@ export class SourcingService {
              ORDER BY change.requested_at DESC LIMIT 1
            ) open_change ON true
            WHERE source_case.sourcing_case_id=$1 AND source_case.deleted_at IS NULL
-           FOR UPDATE OF source_case`,
+           FOR UPDATE OF source_lock`,
           [sourcingCaseId],
         );
         const source = current.rows[0];
@@ -2987,6 +3134,7 @@ export class SourcingService {
         if (!source.sourcing_decision_id || !source.decision_unit_price) {
           fail("生产管理首次提交选厂信息后才可发起订单转厂", 409, "INVALID_STATE_TRANSITION");
         }
+        await this.assertCurrentTransferBasis(client,sourcingCaseId,source.sourcing_decision_id!);
         if (source.open_change_id) fail("该订单已有待处理的转厂申请", 409, "CONFLICT");
         if (source.supplier_id === input.supplierId) fail("新加工厂不能与当前加工厂相同");
         const factory = await client.query<{
@@ -3000,7 +3148,7 @@ export class SourcingService {
         const selected = factory.rows[0] ?? fail("请选择当前有效的加工厂");
         const quantity = Number(source.order_quantity);
         const caseLines = await client.query<{ position: number; quantity: number | string }>(
-          `SELECT position,quantity FROM sourcing_case_lines
+          `SELECT position,quantity FROM current_sourcing_case_lines
            WHERE sourcing_case_id=$1 ORDER BY position`,
           [sourcingCaseId],
         );
@@ -3187,7 +3335,8 @@ export class SourcingService {
                     SELECT 1 FROM sourcing_decisions effective
                     WHERE effective.source_change_request_id=change.factory_change_request_id
                   ) AS effective
-           FROM sourcing_cases source_case
+           FROM sourcing_cases source_lock
+           CROSS JOIN LATERAL sourcing_case_facts_at(source_lock.sourcing_case_id) source_case
            JOIN LATERAL (
              SELECT transition.to_status,transition.sequence
              FROM sourcing_case_transitions transition
@@ -3216,7 +3365,7 @@ export class SourcingService {
              ORDER BY reconciliation.reconciliation_version DESC LIMIT 1
            ) reconciliation_row ON true
            WHERE source_case.sourcing_case_id=$1 AND source_case.deleted_at IS NULL
-           FOR UPDATE OF source_case`,
+           FOR UPDATE OF source_lock`,
           [sourcingCaseId,factoryChangeRequestId],
         );
         const source = current.rows[0];
@@ -3224,6 +3373,7 @@ export class SourcingService {
         if (source.effective || source.management_decision === "rejected" || source.owner_decision) {
           fail("该转厂申请已经处理", 409, "INVALID_STATE_TRANSITION");
         }
+        await this.assertCurrentTransferBasis(client,sourcingCaseId,source.from_decision_id);
         if (source.from_decision_id !== source.sourcing_decision_id) {
           fail("转厂基准版本已经变化，请重新发起", 409, "INVALID_STATE_TRANSITION");
         }
@@ -3404,7 +3554,8 @@ export class SourcingService {
                   contract_row.snapshot_fingerprint AS contract_fingerprint,
                   contract_row.pdf_attachment_id,
                   COALESCE(reconciliation_row.reconciliation_version,0) AS reconciliation_version
-           FROM sourcing_cases source_case
+           FROM sourcing_cases source_lock
+           CROSS JOIN LATERAL sourcing_case_facts_at(source_lock.sourcing_case_id) source_case
            JOIN LATERAL (
              SELECT transition.to_status,transition.sequence
              FROM sourcing_case_transitions transition
@@ -3441,7 +3592,7 @@ export class SourcingService {
            ) reconciliation_row ON true
            WHERE source_case.sourcing_case_id=$1
              AND source_case.deleted_at IS NULL
-           FOR UPDATE OF source_case`,
+           FOR UPDATE OF source_lock`,
           [sourcingCaseId],
         );
         const source = current.rows[0];
@@ -3611,7 +3762,8 @@ export class SourcingService {
         }>(
           `SELECT transition_row.to_status AS status,transition_row.sequence,
                   decision_row.decision_version,reconciliation_row.reconciliation_version
-           FROM sourcing_cases source_case
+           FROM sourcing_cases source_lock
+           CROSS JOIN LATERAL sourcing_case_facts_at(source_lock.sourcing_case_id) source_case
            JOIN LATERAL (
              SELECT transition.to_status,transition.sequence
              FROM sourcing_case_transitions transition
@@ -3632,7 +3784,7 @@ export class SourcingService {
            ) reconciliation_row ON true
            WHERE source_case.sourcing_case_id=$1
              AND source_case.deleted_at IS NULL
-           FOR UPDATE OF source_case`,
+           FOR UPDATE OF source_lock`,
           [sourcingCaseId],
         );
         const source = current.rows[0];

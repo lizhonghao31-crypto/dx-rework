@@ -62,6 +62,7 @@ export const calculateSourcingLinesTotalExact = (
 };
 
 export const SourcingCaseStatusSchema = z.enum([
+  "pending_merchandiser_correction",
   "pending_ie_quote",
   "pending_management_decision",
   "pending_owner_approval",
@@ -116,7 +117,7 @@ export const calculateSourcingOrderQuantity = (
   return total;
 };
 
-export const CreateSourcingCaseSchema = z.object({
+const SourcingCaseInputSchema = z.object({
   confirmedDuplicateStyles: z.array(ShortTextSchema).max(40).optional(),
   gender: z.enum(["男装", "女装"]),
   styleName: ShortTextSchema,
@@ -138,7 +139,22 @@ export const CreateSourcingCaseSchema = z.object({
   daxingUnitPrice: SourcingNewUnitPriceSchema,
   attachmentIds: z.array(IdSchema).min(1, "请至少上传一张订单图片").max(MAX_SOURCING_ATTACHMENTS)
     .refine((ids) => new Set(ids).size === ids.length, "订单图片不能重复"),
-}).strict().refine(order => order.lineItems.every(line => !line.imageAttachmentId || order.attachmentIds.includes(line.imageAttachmentId)), "款图必须包含在订单图片中");
+}).strict();
+export const SOURCING_DATE_ORDER_ERROR = "预计裁片发出日期不能晚于要求交货日期";
+export const sourcingDatesValid = (send: string | null, delivery: string | null): boolean => !send || !delivery || send <= delivery;
+const validLineImages = (order: { lineItems: readonly { imageAttachmentId?: string | undefined }[]; attachmentIds: readonly string[] }) =>
+  order.lineItems.every(line => !line.imageAttachmentId || order.attachmentIds.includes(line.imageAttachmentId));
+export const CreateSourcingCaseSchema = SourcingCaseInputSchema
+  .refine(validLineImages, "款图必须包含在订单图片中")
+  .refine(order => sourcingDatesValid(order.estimatedCutPieceSendDate, order.deliveryDate), { path: ["deliveryDate"], message: SOURCING_DATE_ORDER_ERROR });
+export const ReturnSourcingCaseSchema = z.object({ expectedVersion: z.number().int().positive(), reason: z.string().trim().min(1).max(500) }).strict();
+export const CorrectSourcingCaseSchema = SourcingCaseInputSchema.omit({ daxingUnitPrice: true }).extend({
+  expectedVersion: z.number().int().positive(), reason: z.string().trim().min(1).max(500),
+}).strict().refine(validLineImages, "款图必须包含在订单图片中")
+  .refine(order => sourcingDatesValid(order.estimatedCutPieceSendDate, order.deliveryDate), { path: ["deliveryDate"], message: SOURCING_DATE_ORDER_ERROR });
+export type ReturnSourcingCase = z.infer<typeof ReturnSourcingCaseSchema>;
+export type CorrectSourcingCase = z.infer<typeof CorrectSourcingCaseSchema>;
+
 
 export const CorrectSourcingBudgetPriceSchema = z.object({
   daxingUnitPrice: SourcingNewUnitPriceSchema,
@@ -474,6 +490,8 @@ export const SourcingCaseSummarySchema = z.object({
   decision: SourcingDecisionSchema.nullable(),
   ownerDecision: SourcingOwnerDecisionSchema.nullable(),
   approvalSnapshot: SourcingApprovalSnapshotSchema.nullable().default(null),
+  correctionReason: z.string().nullable().optional(),
+  timing: z.object({totalSeconds:z.number().nonnegative(),nodeSeconds:z.record(z.string(),z.number().nonnegative())}).optional(),
 }).strict();
 
 export const SourcingStyleCatalogSchema = z.array(z.object({
@@ -597,3 +615,21 @@ export const SourcingNodeHistorySchema = z.object({
 }).strict();
 export type SourcingHistoryNode = z.infer<typeof SourcingHistoryNodeSchema>;
 export type SourcingNodeHistory = z.infer<typeof SourcingNodeHistorySchema>;
+
+/** Sum actual visits; never change entry timestamps to disguise accumulated time. */
+export function cumulativeSourcingTiming(history: readonly {
+  to: string | null; changesNode: boolean; enteredAt: string | null; leftAt: string | null;
+}[], createdAt: string | null, asOf: string): { totalSeconds: number; nodeSeconds: Record<string, number> } {
+  const nodeSeconds: Record<string, number> = {};
+  const now = Date.parse(asOf);
+  const terminal = history.find(event => event.changesNode && event.to === "closed" && event.enteredAt);
+  const end = terminal?.enteredAt ? Math.min(now, Date.parse(terminal.enteredAt)) : now;
+  for (const event of history) {
+    if (!event.changesNode || !event.to || event.to === "closed" || !event.enteredAt) continue;
+    const start = Date.parse(event.enteredAt);
+    const left = event.leftAt ? Math.min(end, Date.parse(event.leftAt)) : end;
+    if (Number.isFinite(start) && Number.isFinite(left)) nodeSeconds[event.to] = (nodeSeconds[event.to] ?? 0) + Math.max(0,(left-start)/1000);
+  }
+  const start = createdAt ? Date.parse(createdAt) : Number.NaN;
+  return {totalSeconds: Number.isFinite(start) && Number.isFinite(end) ? Math.max(0,(end-start)/1000) : 0,nodeSeconds};
+}

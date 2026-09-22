@@ -1,4 +1,4 @@
-import { calculateSourcingOrderQuantity, findDuplicateSourcingLine } from "@dx-rework/contracts";
+import { sourcingDatesValid, SOURCING_DATE_ORDER_ERROR, calculateSourcingOrderQuantity, findDuplicateSourcingLine } from "@dx-rework/contracts";
 import { isNewSourcingPrice, sourcingDecisionNeedsReason } from "./sourcing-price-presentation.js";
 import type { SubmissionIssue } from "./submission-validation.js";
 
@@ -14,6 +14,7 @@ export function validateSourcingCreate(input: {
   if (!input.styleName.trim()) add("style", "请填写款式");
   if (!input.estimatedCutPieceSendDate) add("send-date", "请填写裁片发出日期");
   if (!input.deliveryDate) add("delivery-date", "请填写到工厂的交货日期");
+  if (!sourcingDatesValid(input.estimatedCutPieceSendDate, input.deliveryDate)) add("delivery-date", SOURCING_DATE_ORDER_ERROR);
   if (!isNewSourcingPrice(input.daxingUnitPrice)) add("budget", "请填写大于0且最多2位有效小数的预算价");
   input.lineItems.forEach((line, index) => {
     if (!line.styleNo.trim() && !line.alternateStyleNo.trim()) add(`style-${index}`, `第 ${index + 1} 行须填写正式款号或代用款号`);

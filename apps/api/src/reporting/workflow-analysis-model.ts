@@ -1,4 +1,4 @@
-import { WorkflowAnalysisResponseSchema, type WorkflowAnalysisQuery, type WorkflowAnalysisResponse } from "@dx-rework/contracts";
+import { cumulativeSourcingTiming, WorkflowAnalysisResponseSchema, type WorkflowAnalysisQuery, type WorkflowAnalysisResponse } from "@dx-rework/contracts";
 
 type Item = WorkflowAnalysisResponse["items"][number];
 type NodeMetric = WorkflowAnalysisResponse["nodeMetrics"][number];
@@ -12,7 +12,12 @@ type SummaryOverride = Partial<Pick<WorkflowAnalysisResponse,
 >>;
 
 function buildResult(rows: Item[], filters: WorkflowAnalysisQuery, asOf: string, summary: SummaryOverride = {}): WorkflowAnalysisResponse {
-  const matches = rows.filter(row => {
+  const measured = rows.map(row=>{
+    if(row.kind!=="sourcing") return row;
+    const timing=cumulativeSourcingTiming(row.history,row.createdAt,asOf);
+    return {...row,cumulativeNodeSeconds:timing.nodeSeconds[row.status]??0,totalElapsedSeconds:timing.totalSeconds};
+  });
+  const matches = measured.filter(row => {
     const waiting = !closed(row) && !row.independentFinance;
     return (filters.group === "all" || (filters.group === "finance" ? row.independentFinance : filters.group === "waiting" ? waiting : filters.group === "closed" ? closed(row) : row.kind === filters.group))
       && (!filters.node || row.status === filters.node)
@@ -21,7 +26,9 @@ function buildResult(rows: Item[], filters: WorkflowAnalysisQuery, asOf: string,
       && (filters.issue !== "missing" || row.enteredAt === null || row.history.length === 0);
   }).sort((a, b) => {
     if (a.enteredAt === null || b.enteredAt === null) return a.enteredAt === b.enteredAt ? a.id.localeCompare(b.id) : a.enteredAt === null ? 1 : -1;
-    return (filters.sort === "longest" ? 1 : -1) * a.enteredAt.localeCompare(b.enteredAt) || a.id.localeCompare(b.id);
+    const ageA=a.cumulativeNodeSeconds ?? (Date.parse(asOf)-Date.parse(a.enteredAt))/1000;
+    const ageB=b.cumulativeNodeSeconds ?? (Date.parse(asOf)-Date.parse(b.enteredAt))/1000;
+    return (filters.sort === "longest" ? -1 : 1) * (ageA-ageB) || a.id.localeCompare(b.id);
   });
   const groups = new Map<string, { key: string; count: number; missingEntryCount: number }>();
   for (const row of matches) {
