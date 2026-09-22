@@ -66,8 +66,8 @@ export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSav
   };
   const disabled = busy || uploading;
   const estimated = patternEstimate(quote?.amount ?? null, quantity);
-  const content = <Surface className="pattern-form-page" data-dx-ui="governed"><form className="pattern-order-form" onSubmit={event => void submit(event)}><h2>{order ? "更新任务资料" : misc ? "新建杂事" : "新建打板"}</h2>
-    <div className="pattern-fields">
+  const content = <Surface className="pattern-form-page" data-dx-ui="governed"><form className="pattern-order-form" onSubmit={event => void submit(event)}>{order && <h2>更新任务资料</h2>}
+    <div className={`pattern-fields pattern-form-primary${!order && !misc ? " is-pattern-create" : ""}`}>
       {misc ? <InsetField label="任务名称 *" value={values.taskName} required maxLength={200} onChange={e => setValues({ ...values, taskName: e.target.value })} disabled={disabled} /> : null}
       <InsetField label={misc ? "关联款号" : "款号 *"} value={values.styleNo} required={!misc} maxLength={100} onChange={e => setValues({ ...values, styleNo: e.target.value })} disabled={disabled} />
       {!order && !misc ? <><label>品类 *<select className="rework-v2-control" required value={categoryId} onChange={e => setCategoryId(e.target.value)} disabled={disabled}><option value="">请选择品类</option>{categories.map(category => <option key={category.priceId} value={category.priceId}>{category.name}（{category.unit}）</option>)}</select></label>
@@ -75,12 +75,13 @@ export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSav
         <div className="pattern-total"><span>本单价格</span><strong>{price.status === "loading" ? "正在读取…" : estimated !== null ? `¥${formatBusinessDecimal(estimated, 2)}` : "—"}</strong></div></> : null}
       <InsetField label="要求完成日期" type="date" value={values.requiredDate} onChange={e => setValues({ ...values, requiredDate: e.target.value })} disabled={disabled} />
       {misc && !order ? <div className="pattern-hourly"><p role="status">小时单价：{price.status === "loading" ? "正在读取…" : price.status === "error" ? "读取失败" : quote?.amount === null ? "尚未配置，请联系老板配置。" : quote ? `${formatBusinessDecimal(quote.amount, 2)} 元/小时` : "—"}</p><Button type="button" disabled={disabled || price.status === "loading"} onClick={() => setRefreshPrice(value => value + 1)}>刷新价格</Button></div> : null}
-      {!misc ? <><InsetField label="客户" value={values.customer} maxLength={100} onChange={e => setValues({ ...values, customer: e.target.value })} disabled={disabled} />
+      {!misc && <InsetField label="客户" value={values.customer} maxLength={100} onChange={e => setValues({ ...values, customer: e.target.value })} disabled={disabled} />}
+    </div>
+    {!misc ? <div className="pattern-fields pattern-form-secondary">
       <InsetField label="尺码与颜色" value={values.sizeColor} maxLength={200} onChange={e => setValues({ ...values, sizeColor: e.target.value })} disabled={disabled} />
       <label>版型<select className="rework-v2-control" value={values.variant} onChange={e => setValues({ ...values, variant: e.target.value })} disabled={disabled}><option value="">未指定</option>{["初版", "复版", "齐色版"].map(value => <option key={value}>{value}</option>)}</select></label>
-      <InsetField label="参考款号" value={values.referenceStyleNo} maxLength={100} onChange={e => setValues({ ...values, referenceStyleNo: e.target.value })} disabled={disabled} /></> : null}
-    </div>
-    <label>备注<textarea className="rework-v2-control" value={values.note} maxLength={2000} onChange={e => setValues({ ...values, note: e.target.value })} disabled={disabled} /></label>
+      <InsetField label="参考款号" value={values.referenceStyleNo} maxLength={100} onChange={e => setValues({ ...values, referenceStyleNo: e.target.value })} disabled={disabled} /></div> : null}
+    <label className="pattern-form-note">备注<textarea rows={2} className="rework-v2-control" value={values.note} maxLength={2000} onChange={e => setValues({ ...values, note: e.target.value })} disabled={disabled} /></label>
     <PatternMaterialInput kind={kind} count={files.length} label={misc ? "上传图片 / PDF" : "上传制作图片 / PDF *"} disabled={disabled} onFiles={selected => void upload(selected)} />
     {uploading ? <p role="status">正在上传原始制作资料…</p> : null}
     {files.length > 0 && <PatternMaterials files={files} disabled={disabled} onRemove={id => setFiles(current => current.filter(file => file.attachmentId !== id))} />}

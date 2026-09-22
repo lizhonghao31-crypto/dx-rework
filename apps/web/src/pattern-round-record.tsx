@@ -4,20 +4,22 @@ import { PATTERN_ORDER_STATUS_LABELS } from "@dx-rework/contracts/pattern-orders
 import { elapsedText, patternTime } from "./pattern-order-client.js";
 import { patternWorkflow, type PatternRound, type PatternStage } from "./pattern-workflow.js";
 
-export function PatternRoundRecord({ round, misc, idPrefix = "" }: { round: PatternRound; misc: boolean; idPrefix?: string }) {
+export function PatternRoundRecord({ round, misc, idPrefix = "", summaryOnly = false, omitSummary = false }: { round: PatternRound; misc: boolean; idPrefix?: string; summaryOnly?: boolean; omitSummary?: boolean }) {
   return <>
-    {round.requestReason && <p className="pattern-note">返工要求：{round.requestReason}</p>}
+    {!summaryOnly && round.requestReason && <p className="pattern-note">返工要求：{round.requestReason}</p>}
     <dl className="pattern-facts">
-      <div><dt>品类</dt><dd>{round.categoryName}</dd></div>
+      {!omitSummary && <><div><dt>品类</dt><dd>{round.categoryName}</dd></div>
       {misc ? round.actualHours !== undefined && <div><dt>实际工时</dt><dd>{round.actualHours === null ? "待填写" : `${formatBusinessDecimal(round.actualHours, 2)} 小时`}</dd></div>
         : round.quantity !== null && <div><dt>数量</dt><dd>{formatBusinessDecimal(round.quantity)} {round.unit}</dd></div>}
       {round.agreedAmount !== undefined && <div><dt>本轮价格</dt><dd>{round.agreedAmount === null ? "待核定" : `${formatBusinessDecimal(round.agreedAmount, 2)} 元`}</dd></div>}
       {misc && round.unitPrice !== undefined && <div><dt>小时单价</dt><dd>{formatBusinessDecimal(round.unitPrice, 2)} 元/小时</dd></div>}
+      </>}{!summaryOnly && <>
       {round.cancelledAt && <div><dt>取消时间</dt><dd>{patternTime(round.cancelledAt)}</dd></div>}
       {round.cancelledAmount != null && <div><dt>取消费用</dt><dd>{formatBusinessDecimal(round.cancelledAmount, 2)} 元</dd></div>}
       {round.feeConfirmedAt && <div><dt>费用确认</dt><dd>{patternTime(round.feeConfirmedAt)}</dd></div>}
+      </>}
     </dl>
-    {round.segments.length > 0 && <div className="pattern-segments">{round.segments.map(segment => <section className="pattern-segment" id={`${idPrefix}segment-${segment.segmentId}`} key={segment.segmentId}>
+    {!summaryOnly && round.segments.length > 0 && <div className="pattern-segments">{round.segments.map(segment => <section className="pattern-segment" id={`${idPrefix}segment-${segment.segmentId}`} key={segment.segmentId}>
       <div className="pattern-section-heading"><strong>{segment.workerName}</strong><StatusBadge tone={segment.wageEligible ? "success" : "info"}>{segment.wageEligible ? "可计薪" : misc && segment.actualHours === null ? "工时待填写" : "待计薪"}</StatusBadge></div>
       <dl className="pattern-facts">
         <div><dt>开始</dt><dd>{patternTime(segment.startedAt)}</dd></div>

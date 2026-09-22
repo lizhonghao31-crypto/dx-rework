@@ -71,4 +71,18 @@ describe("pattern room order presentation", () => {
     const visible = renderToStaticMarkup(createElement(PatternRoundRecord, { round: { ...round, agreedAmount: "1234.567", segments: [{ ...segment, amount: "1234.567" }] }, misc: true }));
     expect(visible).toContain("1,234.57");
   });
+  it("moves summary facts without dropping worker and cancellation records or exposing hidden prices", () => {
+    const data: PatternRound = { ...round, agreedAmount: "60.00", cancelledAt: time, cancelledAmount: "12.50", segments: [{ segmentId: "kept", personId: "p", workerUserId: "w", workerName: "保留师傅", actualHours: null, startedAt: time, endedAt: time, wageEligible: false }] };
+    const top = renderToStaticMarkup(createElement(PatternRoundRecord, { round: data, misc: false, summaryOnly: true }));
+    const history = renderToStaticMarkup(createElement(PatternRoundRecord, { round: data, misc: false, omitSummary: true }));
+    expect(top).toContain("60 元");
+    expect(top).not.toContain("取消费用");
+    expect(history).not.toContain("本轮价格");
+    expect(history).toContain("保留师傅");
+    expect(history).toContain("12.5 元");
+    expect(history).toContain('id="segment-kept"');
+    const hidden = renderToStaticMarkup(createElement(PatternRoundRecord, { round, misc: false, summaryOnly: true }));
+    expect(hidden).not.toContain("本轮价格");
+  });
+
 });

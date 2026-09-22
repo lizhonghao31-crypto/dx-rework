@@ -29,7 +29,7 @@ export function PatternOrderCreatePage() {
     }).catch(() => { if (live) setError("读取创建权限失败，请刷新重试"); });
     return () => { live = false; };
   }, []);
-  return <div className="pattern-orders"><Header title="创建订单" badge="订单打板" badgePlacement="subtitle" backHref={returnPath} />
+  return <div className="pattern-orders pattern-create" data-dx-ui="governed"><Header title="创建订单" badge="订单打板" badgePlacement="subtitle" backHref={returnPath} />
     {error ? <Surface><p role="alert">{error}</p></Surface> : !allowed ? <p role="status">正在读取…</p> : <>
       <div className="pattern-kind" role="group" aria-label="创建订单类型">{allowed.pattern && <Button aria-pressed={kind === "pattern"} variant={kind === "pattern" ? "primary" : "secondary"} onClick={() => void changeKind("pattern")}>打板</Button>}{allowed.misc && <Button aria-pressed={kind === "misc"} variant={kind === "misc" ? "primary" : "secondary"} onClick={() => void changeKind("misc")}>杂事</Button>}</div>
       <PatternOrderForm key={kind} kind={kind} onCancel={() => { void navigateInternalPage(patternUrls.pageUrl(returnPath)); }} onSaved={order => {
