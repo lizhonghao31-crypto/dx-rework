@@ -3,20 +3,20 @@
   max-height: calc(100dvh - 32px);
   box-sizing: border-box;
   padding: 0;
-  border: 1px solid var(--dx-v2-color-border, #d9e2ec);
+  border: 1px solid #c9ced6;
   border-radius: 16px;
   background: var(--dx-v2-color-surface, #fff);
   color: inherit;
-  box-shadow: var(--dx-v2-shadow-raised);
+  box-shadow: 0 4px 16px rgba(24, 38, 54, .14);
 }
 .receiving-dialog::backdrop { background: rgba(24, 38, 54, .42); }
 .receiving-dialog .order-board-dialog,
 .receiving-dialog .order-board-attachment-modal__content {
   box-sizing: border-box; width: 100%; max-width: none; max-height: none;
-  margin: 0; padding: 20px; border: 0; box-shadow: none; border-radius: 0;
+  margin: 0; padding: 16px; border: 0; box-shadow: none; border-radius: 0;
 }
-.receiving-dialog .order-board-dialog { gap: 12px; }
-.receiving-dialog .order-board-dialog h2 { font-size: 20px; line-height: 1.4; }
+.receiving-dialog .order-board-dialog { gap: 10px; }
+.receiving-dialog .order-board-dialog h2 { font-size: 18px; line-height: 1.4; }
 .receiving-dialog .order-board-dialog label { font-size: 14px; font-weight: 600; }
 .receiving-dialog .order-board-dialog :is(input, select, textarea) {
   box-sizing: border-box; min-width: 0; width: 100%; font-size: 16px;
@@ -44,4 +44,21 @@
   .receiving-dialog .order-board-dialog__quantity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .receiving-dialog .order-board-dialog :is(input, select, textarea),
   .receiving-dialog .order-board-dialog__actions button { min-height: 48px; }
+}
+
+/* Keep the native file input accessible, with a compact application-style button. */
+.receiving-dialog .order-board-dialog input[type="file"] {
+  min-height: 40px; padding: 0; border: 0; border-radius: 0;
+  background: transparent; box-shadow: none; font-size: 14px;
+}
+.receiving-dialog input[type="file"]::file-selector-button {
+  margin: 0 10px 0 0; padding: 8px 12px; min-height: 40px;
+  border: 1px solid var(--dx-v2-color-primary, #1268e8); border-radius: 8px;
+  background: var(--dx-v2-color-primary, #1268e8); color: #fff;
+  font: inherit; font-weight: 600; cursor: pointer; box-shadow: none;
+}
+.receiving-dialog input[type="file"]:disabled::file-selector-button { opacity: .55; cursor: not-allowed; }
+@media (max-width: 600px) {
+  .receiving-dialog .order-board-dialog input[type="file"],
+  .receiving-dialog input[type="file"]::file-selector-button { min-height: 48px; }
 }
