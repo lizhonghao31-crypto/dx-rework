@@ -2,7 +2,6 @@ import { PatternNodeHistory, PatternRoundRecord } from "./pattern-round-record.j
 import { patternSelectedStage, patternWorkflow } from "./pattern-workflow.js";
 import { PatternOrderCard } from "./pattern-order-card.js";
 import { PatternMaterials } from "./pattern-materials.js";
-import { PatternOrderDelete } from "./pattern-order-delete.js";
 import { ListPagination } from "./list-pagination.js";
 import { SearchSelect } from "./search-select.js";
 import { confirmInApp } from "./system-dialog.js";
@@ -19,7 +18,7 @@ import { PatternOrderForm } from "./pattern-order-form.js";
 import { PatternOrderExceptions, type PatternExceptionAction } from "./pattern-order-exceptions.js";
 import { patternRequest, patternTime, patternUrls } from "./pattern-order-client.js";
 import { patternListPath, patternReturnPath, readPatternListQuery } from "./pattern-order-query.js";
-import { canLeaveInternalPage, navigateInternalPage } from "./internal-navigation.js";
+import { canLeaveInternalPage } from "./internal-navigation.js";
 import { useInternalReturnScroll } from "./use-internal-return-scroll.js";
 import "./pattern-room.css";
 import "./pattern-governed.css";
@@ -146,7 +145,6 @@ function PatternRoomDetailWorkspace({ orderId }: { orderId: string }) {
     if(segment&&order.rounds.some(round=>round.segments.some(item=>item.segmentId===segment))) document.getElementById(`segment-${segment}`)?.scrollIntoView({block:"center"});
   },[order]);
   return <div className="pattern-orders pattern-detail" data-dx-ui="governed"><Header title={order ? order.kind === "misc" ? order.taskName ?? "杂事" : order.styleNo : "板房订单"} subtitle={order?.orderNo ?? ""} badge={order?.historicalView ? "历史节点 · 只读" : order ? PATTERN_ORDER_STATUS_LABELS[order.status] : "订单打板"} badgePlacement="subtitle" backHref={patternReturnPath(window.location.search)} />
-    {order?.actions.delete && !staleRound && <div className="pattern-actions pattern-detail-toolbar"><PatternOrderDelete orderId={order.orderId} version={order.version} label={order.orderNo} disabled={busy || editing || exception !== null} onBusy={setBusy} onDeleted={() => { void navigateInternalPage(pageUrl(patternReturnPath(window.location.search))); }} /></div>}
     {error ? <Surface><p role="alert">{error}</p><Button disabled={busy} onClick={async () => { if (await canLeaveInternalPage()) { setEditing(false); setRefresh(value => value + 1); } }}>重新读取订单</Button></Surface> : null}
     {!order && !error ? <p role="status">正在读取订单…</p> : null}
     {order ? <>
