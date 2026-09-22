@@ -73,7 +73,6 @@ export function PatternRoomOrdersPage() {
   </div>;
 }
 
-const historyLabels: Record<string, string> = { "pattern_room.order.submitted": "提交打板", "pattern_room.misc.submitted": "提交杂事", "pattern_room.misc.confirmed": "发起人确认杂事完成", "pattern_room.misc.hours_recorded": "主管填写实际工时", "pattern_room.order.assigned": "分配工人", "pattern_room.order.work_completed": "工人完工", "pattern_room.order.handed_over": "设计师确认交接", "pattern_room.order.materials_changed": "更新任务资料", "pattern_room.order.rework_requested": "发起原单返工", "pattern_room.order.worker_changed": "主管原单换人", "pattern_room.order.cancelled": "取消本次任务", "pattern_room.order.cancel_fees_confirmed": "设计师确认取消费用" };
 export function PatternRoomOrderDetailPage({ orderId }: { orderId: string }) {
   const params = new URLSearchParams(window.location.search);
   // The app keeps this route mounted when SPA navigation changes only its query.
@@ -147,7 +146,7 @@ function PatternRoomDetailWorkspace({ orderId }: { orderId: string }) {
     if(segment&&order.rounds.some(round=>round.segments.some(item=>item.segmentId===segment))) document.getElementById(`segment-${segment}`)?.scrollIntoView({block:"center"});
   },[order]);
   return <div className="pattern-orders pattern-detail" data-dx-ui="governed"><Header title={order ? order.kind === "misc" ? order.taskName ?? "杂事" : order.styleNo : "板房订单"} subtitle={order?.orderNo ?? ""} badge={order?.historicalView ? "历史节点 · 只读" : order ? PATTERN_ORDER_STATUS_LABELS[order.status] : "订单打板"} badgePlacement="subtitle" backHref={patternReturnPath(window.location.search)} />
-    <div className="pattern-actions pattern-detail-toolbar"><Button disabled={busy || editing || exception !== null} onClick={() => setRefresh(value => value + 1)}>刷新订单</Button>{order?.actions.delete && !staleRound && <PatternOrderDelete orderId={order.orderId} version={order.version} label={order.orderNo} disabled={busy || editing || exception !== null} onBusy={setBusy} onDeleted={() => { void navigateInternalPage(pageUrl(patternReturnPath(window.location.search))); }} />}</div>
+    {order?.actions.delete && !staleRound && <div className="pattern-actions pattern-detail-toolbar"><PatternOrderDelete orderId={order.orderId} version={order.version} label={order.orderNo} disabled={busy || editing || exception !== null} onBusy={setBusy} onDeleted={() => { void navigateInternalPage(pageUrl(patternReturnPath(window.location.search))); }} /></div>}
     {error ? <Surface><p role="alert">{error}</p><Button disabled={busy} onClick={async () => { if (await canLeaveInternalPage()) { setEditing(false); setRefresh(value => value + 1); } }}>重新读取订单</Button></Surface> : null}
     {!order && !error ? <p role="status">正在读取订单…</p> : null}
     {order ? <>
@@ -191,12 +190,17 @@ function PatternRoomDetailWorkspace({ orderId }: { orderId: string }) {
       </div>}
       </section></Surface>
       {editing && !staleRound ? <PatternOrderForm key={order.version} order={order} onCancel={() => setEditing(false)} onSaved={updated => { showUpdatedOrder(updated); setEditing(false); }} /> : null}
-      <section className="pattern-history-section" aria-label="办理明细与历史">{visibleRounds.map(round => <section className="pattern-round-history" key={round.roundId}><details className="pattern-disclosure" open={staleRound || round.roundId === requestedRound || (round.roundId === order.currentRoundId && !window.matchMedia("(max-width: 760px)").matches)}><summary><strong>{order.kind === "misc" ? "杂事" : round.index === 0 ? "首次打板" : round.index === null ? "返工请求（未派工）" : `第 ${round.index} 次返工`} · {order.historicalView ? `${selectedNode?.label ?? "历史节点"}提交记录` : PATTERN_ORDER_STATUS_LABELS[round.status]}</strong></summary>
-        <PatternRoundRecord round={round} misc={order.kind === "misc"} omitSummary={round.roundId === displayRound?.roundId} />
-        {!order.historicalView && <details className="pattern-node-history"><summary>节点用时</summary><PatternNodeHistory round={round} misc={order.kind === "misc"} /></details>}
-        {order.canReadMaterials !== false && order.attachments.some(file => file.roundId === round.roundId && (round.roundId !== displayRound?.roundId || !file.active)) && <details><summary>历史制作资料</summary><PatternMaterials files={order.attachments.filter(file => file.roundId === round.roundId && (round.roundId !== displayRound?.roundId || !file.active))} /></details>}
-      </details></section>)}
-      <section className="pattern-audit-section"><details className="pattern-disclosure"><summary>订单记录（{formatBusinessDecimal(order.history.length)} 条）</summary><ol className="pattern-audit-list">{order.history.map((entry, index) => <li key={`${entry.at}:${index}`}><div><strong>{historyLabels[entry.action] ?? "订单操作"}</strong><span>{entry.actorName}</span><time>{patternTime(entry.at)}</time></div>{entry.reason && <p className="pattern-note">{entry.reason}</p>}</li>)}</ol></details></section></section>
+      {order.historicalView && displayRound ? <section className="pattern-history-section" aria-label="本节点执行明细">
+        <PatternRoundRecord round={displayRound} misc={order.kind === "misc"} omitSummary />
+        {order.canReadMaterials !== false && order.attachments.some(file => file.roundId === displayRound.roundId && !file.active) && <section><h3>历史制作资料</h3><PatternMaterials files={order.attachments.filter(file => file.roundId === displayRound.roundId && !file.active)} /></section>}
+      </section> : null}
+      <section className="pattern-history-section"><details className="pattern-disclosure"><summary>节点用时</summary>
+        {visibleRounds.map(round => <section key={round.roundId}>
+          {visibleRounds.length > 1 && <h3>{order.kind === "misc" ? "杂事" : round.index === 0 ? "首次打板" : round.index === null ? "返工请求（未派工）" : `第 ${round.index} 次返工`}</h3>}
+          <PatternNodeHistory round={round} misc={order.kind === "misc"} />
+          {!order.historicalView && <a href={`?${new URLSearchParams({ ...Object.fromEntries(new URLSearchParams(window.location.search)), round: round.roundId, node: round.status === "pending_assignment" ? "pending_assignment" : round.status === "cancelled" ? "cancelled" : round.status === "completed" ? "completed" : "in_progress" })}`}>查看本轮节点明细</a>}
+        </section>)}
+      </details></section>
     </> : null}
   </div>;
 }
