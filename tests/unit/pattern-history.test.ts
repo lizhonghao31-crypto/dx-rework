@@ -20,6 +20,24 @@ function fixture(): PatternOrderDetail {
 }
 const options = { technical: true, allCosts: true, unitPrices: new Map([["round", "40"]]), wageEligibleAt: new Map([["one", time(6)], ["two", time(6)]]) };
 describe("board-room submitted node pages", () => {
+  it.each(["rework", "handoff", "cancel"] as const)("attributes a prior round's %s to the cross-round terminal event", action => {
+    const detail = fixture(); detail.currentRoundId = "later-round";
+    const round = detail.rounds[0]!;
+    const cross = { ...event(6, action === "rework" ? "rework_requested" : action === "handoff" ? "handed_over" : "cancelled", { previousRoundId: "round" }), actor_name: "实际处理人" };
+    cross.after_state!.roundId = "later-round";
+    if (action === "rework") round.nodes[2]!.exitReason = "rework";
+    if (action === "cancel") { round.status = "cancelled"; round.cancelledAt = time(6); }
+    const history = [...events.slice(0, -1), cross];
+    const node = action === "rework" ? "pending_confirmation" : action === "handoff" ? "completed" : "cancelled";
+    const result = patternOrderAtNode(detail, { round: "round", node }, history, options);
+    expect(result.historicalView?.actorName).toBe("实际处理人");
+  });
+  it("does not substitute an earlier editor or unrelated event when the terminal actor is missing", () => {
+    const detail = fixture(); detail.currentRoundId = "later-round";
+    const unrelated = { ...event(6, "materials_changed", {}), actor_name: "无关编辑人" };
+    const result = patternOrderAtNode(detail, { round: "round", node: "completed" }, [...events.slice(0, -1), unrelated], options);
+    expect(result.historicalView?.actorName).toBe("历史未记录");
+  });
   it("restores submitted material fields, withdrawn attachments and original assignment before later transfers", () => {
     const original = fixture();
     const result = patternOrderAtNode(original, { node: "pending_assignment" }, events, options);

@@ -75,22 +75,31 @@ export function PatternRoomOrdersPage() {
 
 const historyLabels: Record<string, string> = { "pattern_room.order.submitted": "提交打板", "pattern_room.misc.submitted": "提交杂事", "pattern_room.misc.confirmed": "发起人确认杂事完成", "pattern_room.misc.hours_recorded": "主管填写实际工时", "pattern_room.order.assigned": "分配工人", "pattern_room.order.work_completed": "工人完工", "pattern_room.order.handed_over": "设计师确认交接", "pattern_room.order.materials_changed": "更新任务资料", "pattern_room.order.rework_requested": "发起原单返工", "pattern_room.order.worker_changed": "主管原单换人", "pattern_room.order.cancelled": "取消本次任务", "pattern_room.order.cancel_fees_confirmed": "设计师确认取消费用" };
 export function PatternRoomOrderDetailPage({ orderId }: { orderId: string }) {
+  const params = new URLSearchParams(window.location.search);
+  // The app keeps this route mounted when SPA navigation changes only its query.
+  // Reset the entire workspace, including pending requests and writable state.
+  const viewKey = JSON.stringify([orderId, params.get("round"), params.get("node")]);
+  return <PatternRoomDetailWorkspace key={viewKey} orderId={orderId} />;
+}
+
+function PatternRoomDetailWorkspace({ orderId }: { orderId: string }) {
   const [order, setOrder] = useState<PatternOrderDetail | null>(null), [error, setError] = useState(""), [busy, setBusy] = useState(false), [editing, setEditing] = useState(false), [refresh, setRefresh] = useState(0);
   const [workers, setWorkers] = useState<z.infer<typeof PatternWorkerOptionsSchema>>([]), [workerSearch, setWorkerSearch] = useState(""), [personId, setPersonId] = useState("");
   const [hours, setHours] = useState("");
   const [workflowOpen, setWorkflowOpen] = useState(() => !window.matchMedia("(max-width: 760px)").matches);
   const [reworkAmount, setReworkAmount] = useState(""), [exception, setException] = useState<PatternExceptionAction | null>(null);
   const search = useDebouncedValue(workerSearch.trim(), 250), requestedRound = new URLSearchParams(window.location.search).get("round");
+  const requestedNode = new URLSearchParams(window.location.search).get("node");
   const staleRound = Boolean(order && requestedRound && requestedRound !== order.currentRoundId);
   const attempt = useRef<{ body: string; action: string; key: string } | null>(null);
   useEffect(() => {
-    const abort = new AbortController(); setError("");
-    const params = new URLSearchParams(window.location.search);
+    const abort = new AbortController(); setError(""); setOrder(null);
     const historical = new URLSearchParams();
-    for (const key of ["round", "node"]) if (params.get(key)) historical.set(key, params.get(key)!);
+    if (requestedRound) historical.set("round", requestedRound);
+    if (requestedNode) historical.set("node", requestedNode);
     void patternRequest(`orders/${orderId}${historical.size ? `?${historical}` : ""}`, PatternOrderDetailSchema, { signal: abort.signal }).then(data => { if (!abort.signal.aborted) { setOrder(data); setException(null); } }).catch(e => { if (!abort.signal.aborted) { setOrder(null); setError(e.message); } });
     return () => abort.abort();
-  }, [orderId, refresh]);
+  }, [orderId, refresh, requestedRound, requestedNode]);
   useEffect(() => {
     if (!order?.actions.assign || staleRound) return;
     const abort = new AbortController();

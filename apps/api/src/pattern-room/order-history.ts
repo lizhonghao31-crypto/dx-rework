@@ -25,6 +25,18 @@ export function patternOrderAtNode(detail: PatternOrderDetail, selection: Patter
   const before = (time: string | null) => time !== null && new Date(time).getTime() <= at;
   const past = events.filter(event => event.created_at.getTime() <= at);
   const local = past.filter(event => event.after_state?.roundId === round.roundId);
+  const terminalAction = node?.exitReason === "rework" ? "rework_requested"
+    : node?.exitReason === "cancelled" || stage === "cancelled" ? "cancelled"
+    : stage === "pending_assignment" ? "assigned" : stage === "in_progress" ? "work_completed"
+    : detail.kind === "misc" ? "confirmed" : "handed_over";
+  const terminalEvents = past.filter(event => {
+    if (event.created_at.getTime() !== at || !event.action.endsWith(`.${terminalAction}`)) return false;
+    if (event.after_state?.roundId === round.roundId) return true;
+    if (terminalAction === "rework_requested") return event.after_state?.value?.previousRoundId === round.roundId;
+    // Handoff/cancellation also finalize older rounds in the same transaction.
+    return (terminalAction === "handed_over" && round.handedOverAt === cutoff)
+      || (terminalAction === "cancelled" && round.cancelledAt === cutoff);
+  });
   const facts = past.filter(event => /\.(submitted|materials_changed)$/.test(event.action)).at(-1)?.after_state?.value;
   const text = (key: string) => typeof facts?.[key] === "string" ? facts[key] as string : null;
   const originalRoundId = detail.currentRoundId;
@@ -86,6 +98,6 @@ export function patternOrderAtNode(detail: PatternOrderDetail, selection: Patter
   result.history = result.history.filter(event => before(event.at));
   result.reworkCount = snapshot.index ?? 0;
   result.actions = { delete: false, assign: false, complete: false, handoff: false, edit: false, hours: false, rework: false, transfer: false, cancel: false, cancelFees: false };
-  result.historicalView = { node: stage, at: cutoff, actorName: local.at(-1)?.actor_name ?? "历史未记录", currentRoundId: originalRoundId, missingFacts: !facts };
+  result.historicalView = { node: stage, at: cutoff, actorName: terminalEvents.length === 1 ? terminalEvents[0]!.actor_name : "历史未记录", currentRoundId: originalRoundId, missingFacts: !facts };
   return result;
 }
