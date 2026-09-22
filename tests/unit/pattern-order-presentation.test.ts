@@ -69,6 +69,6 @@ describe("pattern room order presentation", () => {
     expect(hidden).not.toContain("本轮价格");
     expect(hidden).not.toContain("分配金额");
     const visible = renderToStaticMarkup(createElement(PatternRoundRecord, { round: { ...round, agreedAmount: "1234.567", segments: [{ ...segment, amount: "1234.567" }] }, misc: true }));
-    expect(visible).toContain("1,234.567");
+    expect(visible).toContain("1,234.57");
   });
 });

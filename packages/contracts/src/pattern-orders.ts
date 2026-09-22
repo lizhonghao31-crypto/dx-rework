@@ -94,6 +94,7 @@ export const PatternOrderDetailSchema = PatternOrderSummarySchema.extend({
       startedAt: z.string(), endedAt: z.string().nullable(), wageEligible: z.boolean() })),
     nodes: z.array(z.object({ stage: z.enum(["pending_assignment", "in_progress", "pending_confirmation"]), enteredAt: z.string(), exitedAt: z.string().nullable(), exitReason: z.string().nullable(), elapsedSeconds: z.number().nonnegative() })),
   })),
+  historicalView: z.object({ node: PatternOrderStatusSchema, at: z.string(), actorName: z.string(), currentRoundId: z.string().uuid(), missingFacts: z.boolean() }).optional(),
   canReadMaterials: z.boolean().optional(),
   attachments: z.array(PatternAttachmentSchema),
   history: z.array(z.object({ action: z.string(), actorName: z.string(), at: z.string(), reason: z.string().nullable() })),

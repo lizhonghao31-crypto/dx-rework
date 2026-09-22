@@ -1,3 +1,4 @@
+import type { PatternHistorySelection } from "./order-history.js";
 import { createHash, randomUUID } from "node:crypto";
 import { DeletePatternOrderSchema, AssignPatternOrderSchema, CancelPatternOrderSchema, CreatePatternOrderSchema, CreateMiscOrderSchema, PATTERN_ROOM_ORDERS_ENABLED, PatternRoundActionSchema, RecordPatternHoursSchema, RequestPatternReworkSchema, TransferPatternOrderSchema, UpdateMiscMaterialsSchema, UpdatePatternMaterialsSchema, type PatternOrderCapability, type PatternOrderQuery, type PatternRoundAction } from "@dx-rework/contracts/pattern-orders";
 import type { Pool, PoolClient } from "pg";
@@ -26,7 +27,7 @@ export class PatternRoomOrderService {
   }
   list(actor: TrustedActorContext, query: PatternOrderQuery) { return this.reader.list(actor, query); }
   peopleFilters(actor: TrustedActorContext) { return this.reader.peopleFilters(actor); }
-  get(actor: TrustedActorContext, orderId: string) { return this.reader.get(actor, orderId); }
+  get(actor: TrustedActorContext, orderId: string, selection?: PatternHistorySelection) { return this.reader.get(actor, orderId, selection); }
   uploadActor(actor: TrustedActorContext, kind: "pattern" | "misc" = "pattern", purpose: "create" | "rework" = "create") { return authorizePatternOrder(this.db, actor, purpose === "rework" ? "pattern_room:orders:rework" : kind === "pattern" ? "pattern_room:orders:create" : "pattern_room:misc:create", this.enabled); }
   downloadActor(actor: TrustedActorContext) { return authorizePatternOrder(this.db, actor, "pattern_room:orders:view", this.enabled); }
   async canDownload(actor: TrustedActorContext, binding: { entityType: string; entityId: string }): Promise<boolean> {
