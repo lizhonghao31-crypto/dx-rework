@@ -453,7 +453,7 @@ export function ReceivingPage() {
     }
   };
 
-  return <main className="receiving-shell">
+  return <main className="receiving-shell receiving-governed">
     <a className="dx-button dx-button--secondary receiving-order-link" href={pageUrl("/ui/orders?returnTo=%2Fui%2Freceiving")}>查看订货回货</a>
     <section className="receiving-hero">
       <div className="receiving-brand">达兴 · 仓库收货</div>
@@ -485,6 +485,7 @@ export function ReceivingPage() {
         <Surface className="receiving-form-card">
           <h1>多次收货</h1>
           <p className="receiving-repeat-hint">请选择本次收货来源</p>
+          {message ? <p className="receiving-message" role="status">{message}</p> : null}
           <button className="receiving-source-choice receiving-source-choice-jiashun" type="button" onClick={() => { setRepeatSource("jiashun"); setDocumentQuantity(""); setMessage(""); }}>
             嘉顺收货
           </button>
@@ -552,7 +553,8 @@ export function ReceivingPage() {
             <span>次品数量</span>
             <input type="number" min="0" step="1" inputMode="numeric" placeholder="0" value={defectiveQuantity} disabled={busy} onChange={(event) => { setDefectiveQuantity(event.target.value); pendingKey.current = null; }} />
           </label>
-          <Button variant="primary" className="receiving-submit" disabled={busy} onClick={() => void submitRepeated()}>{busy ? "提交中…" : "提交多次收货"}</Button>
+          {message ? <p className="receiving-message" role="status">{message}</p> : null}
+          <div className="receiving-form-actions">
           <button className="receiving-cancel" type="button" disabled={busy} onClick={() => {
             pendingKey.current = null;
             setRepeatSource(null);
@@ -561,6 +563,8 @@ export function ReceivingPage() {
             setSelectedRepeatOrder(null);
             setOpen(false);
           }}>返回</button>
+          <Button variant="primary" className="receiving-submit" disabled={busy} onClick={() => void submitRepeated()}>{busy ? "提交中…" : "提交多次收货"}</Button>
+          </div>
         </Surface>
       ) : (
         <Surface className="receiving-form-card">
@@ -649,11 +653,14 @@ export function ReceivingPage() {
               </article>)}
             </div> : null}
           </div>
-          <Button variant="primary" className="receiving-submit" disabled={busy} onClick={() => void submit()}>{busy ? "提交中…" : backfill ? "提交补录" : "提交收货"}</Button>
+          {message ? <p className="receiving-message" role="status">{message}</p> : null}
+          <div className="receiving-form-actions">
           <button className="receiving-cancel" type="button" disabled={busy} onClick={() => { pendingKey.current = null; clearImages(); setBackfill(false); setOpen(false); }}>返回</button>
+          <Button variant="primary" className="receiving-submit" disabled={busy} onClick={() => void submit()}>{busy ? "提交中…" : backfill ? "提交补录" : "提交收货"}</Button>
+          </div>
         </Surface>
       )}
-      {message ? <p className="receiving-message" role="status">{message}</p> : null}
+      {!open && message ? <p className="receiving-message" role="status">{message}</p> : null}
     </section>
   </main>;
 }

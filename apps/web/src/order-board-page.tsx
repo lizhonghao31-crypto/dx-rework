@@ -14,6 +14,7 @@ import {
 } from "./attachment-upload.js";
 import { verifySession } from "./auth.js";
 import { createClientRequestId } from "./client-request-id.js";
+import { ReceivingDialog } from "./receiving-dialog.js";
 import { ImageViewer } from "./image-viewer.js";
 import { ListPagination } from "./list-pagination.js";
 import { alertInApp } from "./system-dialog.js";
@@ -425,7 +426,6 @@ export function OrderBoardPage() {
     } catch (error) {
       const text = error instanceof Error ? error.message : "装箱数量保存失败";
       setMutationMessage(text);
-      await alertInApp(text, { title: "保存失败" });
     } finally {
       setMutationBusy(false);
     }
@@ -486,7 +486,6 @@ export function OrderBoardPage() {
     } catch (error) {
       const text = error instanceof Error ? error.message : "差异处理提交失败";
       setMutationMessage(text);
-      await alertInApp(text, { title: "提交失败" });
     } finally {
       differenceSubmitting.current = false;
       setMutationBusy(false);
@@ -871,15 +870,10 @@ export function OrderBoardPage() {
       ? <p className="order-board-mutation-message" role="status">{mutationMessage}</p>
       : null}
 
-    {attachmentViewer && selectedAttachment ? <div
-      className="order-board-attachment-modal"
-      role="presentation"
-      onMouseDown={() => setAttachmentViewer(null)}
-    >
+    {attachmentViewer && selectedAttachment ? <ReceivingDialog title={attachmentViewer.title ?? "送货单附件"} onClose={() => setAttachmentViewer(null)}>
       <section
         className="order-board-attachment-modal__content"
-        role="dialog"
-        aria-modal="true"
+        role="region"
         aria-label={`查看${attachmentViewer.title ?? "送货单附件"}`}
         onMouseDown={(event) => event.stopPropagation()}
       >
@@ -904,10 +898,10 @@ export function OrderBoardPage() {
           <a href={attachmentUrl(selectedAttachment.attachmentId, "download")} rel="noreferrer" target="_blank">下载原图</a>
         </div>
       </section>
-    </div> : null}
+    </ReceivingDialog> : null}
 
-    {packingEditing ? <div className="order-board-dialog-backdrop" role="presentation" onMouseDown={() => !mutationBusy && setPackingEditing(null)}>
-      <form className="order-board-dialog" role="dialog" aria-modal="true" aria-label="录入装箱数量" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitPacking(); }}>
+    {packingEditing ? <ReceivingDialog title="录入装箱数量" busy={mutationBusy} onClose={() => setPackingEditing(null)}>
+      <form className="order-board-dialog" aria-label="录入装箱数量" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitPacking(); }}>
         <h2>{packingEditing.packingQuantity === null ? "录入" : "修改"}装箱数量</h2>
         <p>款号：<strong>{packingEditing.styleNo}</strong>。填写当前累计已装箱数量；保存后保留上一版本。</p>
         <label>当前累计已装箱数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={packingQuantity} disabled={mutationBusy} onChange={(event) => setPackingQuantity(event.target.value)} /></label>
@@ -917,10 +911,10 @@ export function OrderBoardPage() {
           <button type="submit" className="is-primary" disabled={mutationBusy || packingQuantity === ""}>{mutationBusy ? "保存中…" : "保存"}</button>
         </div>
       </form>
-    </div> : null}
+    </ReceivingDialog> : null}
 
-    {differenceEditing ? <div className="order-board-dialog-backdrop" role="presentation" onMouseDown={() => !mutationBusy && closeDifference()}>
-      <form className="order-board-dialog order-board-difference-dialog" role="dialog" aria-modal="true" aria-label={`${differenceEditing.type === "receiving" ? "收货" : "装箱"}差异处理`} onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitDifference(); }}>
+    {differenceEditing ? <ReceivingDialog title="差异处理" busy={mutationBusy} onClose={() => closeDifference()}>
+      <form className="order-board-dialog order-board-difference-dialog" aria-label={`${differenceEditing.type === "receiving" ? "收货" : "装箱"}差异处理`} onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitDifference(); }}>
         <h2>{differenceEditing.type === "receiving" ? "收货差异" : "装箱差异"}{differenceEditing.resolution ? "处理结果" : "去处理"}</h2>
         <dl className="order-board-difference-snapshot">
           <div><dt>款号</dt><dd>{differenceEditing.row.styleNo}</dd></div>
@@ -966,10 +960,10 @@ export function OrderBoardPage() {
           {!differenceEditing.resolution ? <button type="submit" className="is-primary" disabled={mutationBusy || !differenceResult.trim()}>{mutationBusy ? "提交中…" : "提交处理"}</button> : null}
         </div>
       </form>
-    </div> : null}
+    </ReceivingDialog> : null}
 
-    {correctingReceipt ? <div className="order-board-dialog-backdrop" role="presentation" onMouseDown={() => !mutationBusy && setCorrectingReceipt(null)}>
-      <form className="order-board-dialog" role="dialog" aria-modal="true" aria-label="修正本次收货" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitReceiptCorrection(); }}>
+    {correctingReceipt ? <ReceivingDialog title="修正本次收货" busy={mutationBusy} onClose={() => setCorrectingReceipt(null)}>
+      <form className="order-board-dialog" aria-label="修正本次收货" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitReceiptCorrection(); }}>
         <h2>修正第{correctingReceipt.sequence}次收货</h2>
         <p>原始收货记录不会被覆盖，本次修正会单独保存操作人和时间。</p>
         <label>收货来源<select value={receiptSource} disabled={mutationBusy} onChange={(event) => setReceiptSource(event.target.value as "" | "jiashun" | "other_factory")}>
@@ -988,10 +982,10 @@ export function OrderBoardPage() {
           <button type="submit" className="is-primary" disabled={mutationBusy || !receiptSource || !receiptDocumentQuantity || receiptActualQuantity === "" || receiptDefectiveQuantity === ""}>{mutationBusy ? "保存中…" : "保存修正"}</button>
         </div>
       </form>
-    </div> : null}
+    </ReceivingDialog> : null}
 
-    {editing ? <div className="order-board-dialog-backdrop" role="presentation" onMouseDown={() => !mutationBusy && setEditing(null)}>
-      <form className="order-board-dialog" role="dialog" aria-modal="true" aria-label="修改收货订单" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitCorrection(); }}>
+    {editing ? <ReceivingDialog title="修改收货订单" busy={mutationBusy} onClose={() => setEditing(null)}>
+      <form className="order-board-dialog" aria-label="修改收货订单" onMouseDown={(event) => event.stopPropagation()} onSubmit={(event) => { event.preventDefault(); void submitCorrection(); }}>
         <h2>修改收货订单</h2>
         <p>{editing.rootDeletable
           ? "款号改成已有款号时会自动合并；原始收货记录与被替换图片继续保留审计。"
@@ -1031,10 +1025,10 @@ export function OrderBoardPage() {
           <button type="submit" className="is-primary" disabled={mutationBusy || !editStyleNo.trim() || !editDocumentQuantity || editActualQuantity === "" || editDefectiveQuantity === ""}>{mutationBusy ? "保存中…" : "保存修改"}</button>
         </div>
       </form>
-    </div> : null}
+    </ReceivingDialog> : null}
 
-    {deleting ? <div className="order-board-dialog-backdrop" role="presentation" onMouseDown={() => !mutationBusy && setDeleting(null)}>
-      <div className="order-board-dialog order-board-delete-dialog" role="dialog" aria-modal="true" aria-label="删除收货订单" onMouseDown={(event) => event.stopPropagation()}>
+    {deleting ? <ReceivingDialog title="删除收货订单" busy={mutationBusy} onClose={() => setDeleting(null)}>
+      <div className="order-board-dialog order-board-delete-dialog" aria-label="删除收货订单" onMouseDown={(event) => event.stopPropagation()}>
         <h2>确认删除收货订单？</h2>
         <p>款号：<strong>{deleting.styleNo}</strong></p>
         <p>删除后从订单回货隐藏，原始收货记录与图片仍保留审计。此操作仅限尚未发起返工的订单。</p>
@@ -1044,6 +1038,6 @@ export function OrderBoardPage() {
           <button type="button" className="is-danger" disabled={mutationBusy} onClick={() => void confirmDelete()}>{mutationBusy ? "删除中…" : "确认删除"}</button>
         </div>
       </div>
-    </div> : null}
+    </ReceivingDialog> : null}
   </div>;
 }
