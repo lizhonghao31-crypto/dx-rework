@@ -1515,6 +1515,38 @@
   overflow-wrap: anywhere;
 }
 .sourcing-order-card__activity { grid-area: 3 / 1 / auto / -1; }
+.sourcing-search {
+  grid-template-columns: minmax(220px, 2fr) repeat(4, minmax(110px, 1fr));
+}
+.sourcing-order-card__title-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+}
+.sourcing-order-card__title-line > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sourcing-return-badge {
+  flex: none;
+  box-sizing: border-box;
+  min-height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: #dbe6ff;
+  color: #245fe9;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.sourcing-return-badge--returned_on_time { background: #dcf7ed; color: #087f61; }
+.sourcing-return-badge--overdue_pending,
+.sourcing-return-badge--returned_late { background: #fff0cc; color: #a35e00; }
 .sourcing-order-detail .rework-detail-overview-grid { align-items: start; }
 .sourcing-order-detail .sourcing-workflow-fold { min-height: 0; }
 .sourcing-workflow-fold > summary {
@@ -1565,6 +1597,13 @@
 .sourcing-price-control > small { color: #b91c1c; }
 
 @media (max-width: 520px) {
+  .sourcing-return-badge {
+    min-height: 15px;
+    padding: 0 4px;
+    border-radius: 7px;
+    font-size: 9px;
+    line-height: 15px;
+  }
   .sourcing-search {
     grid-template-columns: minmax(0, 1fr);
   }

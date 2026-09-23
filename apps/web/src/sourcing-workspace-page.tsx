@@ -1,5 +1,5 @@
 import { SourcingReturnDialog } from "./sourcing-return-dialog.js";
-import { sourcingContractReturnLabel } from "./sourcing-contract-return-presentation.js";
+import { sourcingContractReturnBadgeLabel, sourcingContractReturnLabel } from "./sourcing-contract-return-presentation.js";
 import { sourcingDatesValid, SOURCING_DATE_ORDER_ERROR } from "@dx-rework/contracts";
 import { moduleCanWrite } from "./member-module-policy.js";
 import { todoReturnPath } from "./todo-query-state.js";
@@ -71,6 +71,7 @@ import {
   sourcingReturnPath,
   withSourcingReturn,
   type SourcingGenderFilter,
+  type SourcingContractReturnFilter,
   type SourcingListQuery,
   type SourcingStageFilter,
 } from "./sourcing-list-query.js";
@@ -357,7 +358,13 @@ function SourcingOrderCard({
     <a className="sourcing-order-card__main" href={detailHref(item, returnTo)}>
       <div className="sourcing-order-card__heading">
         <div>
-          <strong>{item.lineItems[0]?.styleNo ?? item.styleNo}{item.lineItems.length > 1 ? <span className="sourcing-order-card__line-count"> 等 {item.lineItems.length} 行</span> : null}</strong>
+          <span className="sourcing-order-card__title-line">
+            <strong title={item.lineItems[0]?.styleNo ?? item.styleNo}>{item.lineItems[0]?.styleNo ?? item.styleNo}{item.lineItems.length > 1 ? <span className="sourcing-order-card__line-count"> 等 {item.lineItems.length} 行</span> : null}</strong>
+            {item.contractReturnMonitoring && sourcingContractReturnBadgeLabel(item) ? <span
+              className={`sourcing-return-badge sourcing-return-badge--${item.contractReturnStatus}`}
+              title={sourcingContractReturnLabel({contractReturnStatus:item.contractReturnStatus ?? null,contractReturnOverdueHours:item.contractReturnOverdueHours ?? null})}
+            >{sourcingContractReturnBadgeLabel(item)}</span> : null}
+          </span>
           <small>{item.gender ?? "历史未维护"} · {item.styleName ?? "历史未维护"}</small>
         </div>
         <StatusBadge tone={item.status === "closed" ? "success" : "info"}>
@@ -833,6 +840,7 @@ function OrderListPage({
   const [stage, setStage] = useState<SourcingStageFilter>(mode === "history" ? "all" : initial.stage);
   const [gender, setGender] = useState<SourcingGenderFilter>(initial.gender);
   const [styleName, setStyleName] = useState(initial.styleName);
+  const [contractReturn,setContractReturn] = useState<SourcingContractReturnFilter | null>(initial.contractReturn);
   const [message, setMessage] = useState("正在加载订单…");
   const [deletingCaseId, setDeletingCaseId] = useState("");
   const [deleteError, setDeleteError] = useState("");
@@ -846,6 +854,7 @@ function OrderListPage({
     stage: mode === "history" ? "all" : stage,
     gender,
     styleName: debouncedStyleName,
+    contractReturn,
     page,
   };
   const listPath = sourcingListPath(mode, listState);
@@ -861,6 +870,7 @@ function OrderListPage({
         styleName: state.styleName,
         page: String(state.page),
       });
+      if (state.contractReturn !== null) params.set("contractReturn",state.contractReturn);
       const body = await request(
         `sourcing/cases?${params.toString()}`,
         SourcingCaseListResponseSchema,
@@ -882,7 +892,7 @@ function OrderListPage({
 
   useEffect(() => {
     void load(listState);
-  }, [debouncedSearch, debouncedStyleName, stage, gender, page, mode]);
+  }, [debouncedSearch, debouncedStyleName, stage, gender, contractReturn, page, mode]);
 
   const changeStage = (value: SourcingStageFilter): void => {
     setStage(value);
@@ -990,6 +1000,21 @@ function OrderListPage({
               {[...new Set(items.map((item) => item.styleName).filter((value): value is string => !!value))]
                 .map((value) => <option value={value} key={value} />)}
             </datalist>
+          </label>
+          <label>
+            <span>合同回签</span>
+            <select aria-label="合同回签" value={contractReturn ?? ""} onChange={event=>{
+              setContractReturn(event.target.value ? event.target.value as SourcingContractReturnFilter : null);
+              setPage(1);
+            }}>
+              <option value="">不筛选</option>
+              <option value="all">全部监控订单</option>
+              <option value="pending">待回签</option>
+              <option value="returned_on_time">按时回签</option>
+              <option value="overdue_pending">逾期未回签</option>
+              <option value="returned_late">逾期已回签</option>
+              <option value="all_overdue">全部逾期</option>
+            </select>
           </label>
         </div>
         {deleteError ? <p className="sourcing-delete-error" role="alert">{deleteError}</p> : null}
