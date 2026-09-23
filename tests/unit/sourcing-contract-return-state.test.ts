@@ -14,14 +14,17 @@ describe("contract return 48-hour clock", () => {
     expect(contractReturnState({ ...facts,contract_generated_at: null,contract_return_due_at: null }, due).contractReturnMonitoring).toBe(false);
     expect(contractReturnCutoff("")).toBeNull();
     expect(() => contractReturnCutoff("2026-09-23")).toThrow();
+    expect(() => contractReturnCutoff("2026-09-31T10:00:00+08:00")).toThrow();
+    expect(() => contractReturnCutoff("2026-09-23T24:00:00+08:00")).toThrow();
   });
 
   it("uses an inclusive deadline and continuous hours across local dates", () => {
     expect(contractReturnState(facts, due).contractReturnStatus).toBe("pending");
     expect(contractReturnState(facts, "2026-09-25T02:00:01Z")).toMatchObject({
-      contractReturnStatus: "overdue_pending",contractReturnOverdueHours: 1,
+      contractReturnStatus: "overdue_pending",contractReturnOverdueHours: 0,
     });
     expect(contractReturnState(facts, "2026-09-25T08:00:00Z").contractReturnOverdueHours).toBe(6);
+    expect(contractReturnState(facts, "2026-09-25T08:00:01Z").contractReturnOverdueHours).toBe(6);
   });
 
   it("freezes lateness at the first persisted return, including when checked the next day", () => {

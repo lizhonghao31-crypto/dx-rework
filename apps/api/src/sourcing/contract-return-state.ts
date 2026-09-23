@@ -36,7 +36,7 @@ export function contractReturnState(facts: ContractReturnFacts, asOf: Date | str
     contractReturnDueAt: iso(facts.contract_return_due_at),
     contractReturnedAt: iso(facts.contract_returned_at),
     contractReturnOverdueHours: status === "returned_late" || status === "overdue_pending"
-      ? Math.max(1, Math.ceil(elapsed / 3_600_000)) : 0,
+      ? Math.max(0, Math.floor(elapsed / 3_600_000)) : 0,
   };
 }
 
@@ -46,6 +46,14 @@ export function contractReturnCutoff(raw = process.env.CONTRACT_RETURN_MONITOR_E
   if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?(?:Z|[+-]\d\d:\d\d)$/.test(raw)
     || !Number.isFinite(Date.parse(raw))) {
     throw new Error("CONTRACT_RETURN_MONITOR_ENABLED_AT 必须为带时区的 ISO 8601 时间");
+  }
+  if (Number(raw.slice(11,13)) > 23 || Number(raw.slice(14,16)) > 59 || Number(raw.slice(17,19)) > 59) {
+    throw new Error("CONTRACT_RETURN_MONITOR_ENABLED_AT 包含无效时间");
+  }
+  // Date.parse normalizes impossible calendar days (for example September 31).
+  // The rollout cutoff must never silently move to another day.
+  if (new Date(`${raw.slice(0,10)}T00:00:00Z`).toISOString().slice(0,10) !== raw.slice(0,10)) {
+    throw new Error("CONTRACT_RETURN_MONITOR_ENABLED_AT 包含不存在的日历日期");
   }
   return new Date(raw).toISOString();
 }
