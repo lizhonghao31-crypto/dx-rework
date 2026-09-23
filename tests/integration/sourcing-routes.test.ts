@@ -183,6 +183,13 @@ describe("sourcing contract return routes", () => {
     expect(owner.contractReturns.submit).toHaveBeenCalledWith(
       expect.objectContaining({authorizationCapability:"sourcing:owner:approve"}),id,[attachmentId],"return-b",
     );
+    const manager=create(["sourcing:view","sourcing:decision:record"],["production_management"]);
+    expect((await manager.app.inject({method:"POST",url:`/sourcing/cases/${id}/contract-return`,
+      headers:{cookie:"dx_rework_session=trusted","idempotency-key":"return-c"},
+      payload:{attachmentIds:[attachmentId]}})).statusCode).toBe(200);
+    expect(manager.contractReturns.submit).toHaveBeenCalledWith(
+      expect.objectContaining({authorizationCapability:"sourcing:decision:record"}),id,[attachmentId],"return-c",
+    );
   });
 });
 

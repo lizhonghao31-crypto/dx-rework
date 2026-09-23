@@ -2893,13 +2893,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}],
       },randomUUID());
       await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
-      const pdfId=randomUUID(),imageId=randomUUID(),wrongOwnerId=randomUUID();
+      const pdfId=randomUUID(),imageId=randomUUID(),wrongOwnerId=randomUUID(),managerFileId=randomUUID();
       await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,
         size_bytes,sha256,uploaded_by,status,ready_at)
         VALUES($1,$4,'回签.pdf','application/pdf',128,$5,$7,'ready',CURRENT_TIMESTAMP),
               ($2,$4||'-image','回签补图.jpg','image/jpeg',128,$6,$8,'ready',CURRENT_TIMESTAMP),
-              ($3,$4||'-wrong','其他人.png','image/png',128,$5,$8,'ready',CURRENT_TIMESTAMP)`,
-        [pdfId,imageId,wrongOwnerId,`contract-return-test/${pdfId}`,"a".repeat(64),"b".repeat(64),merchandiserId,ownerId]);
+              ($3,$4||'-wrong','其他人.png','image/png',128,$5,$8,'ready',CURRENT_TIMESTAMP),
+              ($9,$4||'-manager','管理补传.png','image/png',128,$6,$10,'ready',CURRENT_TIMESTAMP)`,
+        [pdfId,imageId,wrongOwnerId,`contract-return-test/${pdfId}`,"a".repeat(64),"b".repeat(64),merchandiserId,ownerId,managerFileId,managerId]);
       await expect(contractReturns.submit(financeActor(),id,[pdfId],randomUUID())).rejects.toMatchObject({statusCode:403});
       await expect(contractReturns.submit(contractActor(),id,[wrongOwnerId],randomUUID())).rejects.toMatchObject({statusCode:400});
       expect((await contractReturns.get(readerActor(),id)).contractReturnedAt).toBeNull();
@@ -2907,21 +2908,29 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       const first=await contractReturns.submit(contractActor(),id,[pdfId],key);
       expect(first.contractReturnStatus).toBe("returned_on_time");
       expect(first.contractReturnedAt).toBeTruthy();
+      expect(first.canUpload).toBe(false);
       expect((await contractReturns.submit(contractActor(),id,[pdfId],key)).contractReturnedAt).toBe(first.contractReturnedAt);
       await expect(contractReturns.submit(contractActor(),id,[imageId],key)).rejects.toMatchObject({statusCode:409});
       const identicalKey=randomUUID();
-      expect((await contractReturns.submit(contractActor(),id,[pdfId],identicalKey)).contractReturnedAt).toBe(first.contractReturnedAt);
-      await expect(contractReturns.submit(contractActor(),id,[imageId],identicalKey)).rejects.toMatchObject({statusCode:409});
+      await expect(contractReturns.submit(contractActor(),id,[pdfId],identicalKey)).rejects.toMatchObject({statusCode:403});
+      await expect(contractReturns.submit(contractActor(),id,[imageId],identicalKey)).rejects.toMatchObject({statusCode:403});
       expect((await database.query("SELECT count(*)::int AS count FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[id])).rows[0].count).toBe(1);
       const replaced=await contractReturns.submit({...ownerActor(),authorizationCapabilities:["sourcing:view","sourcing:owner:approve"]},id,[imageId],randomUUID());
       expect(replaced.contractReturnedAt).toBe(first.contractReturnedAt);
       expect(replaced.uploadedByName).toBe("老板");
-      expect((await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id)).attachments
-        .map(file=>file.attachmentId)).toEqual([imageId]);
+      const managed=await contractReturns.submit(managerActor(),id,[managerFileId],randomUUID());
+      expect(managed.contractReturnedAt).toBe(first.contractReturnedAt);
+      const rootView=await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id);
+      expect(rootView.attachments.map(file=>file.attachmentId)).toEqual([managerFileId]);
+      expect(rootView.history.map(version=>version.revision)).toEqual([2,1]);
+      expect(rootView.history.map(version=>version.attachments[0]?.attachmentId)).toEqual([imageId,pdfId]);
+      expect(rootView.history.every(version=>!!version.uploadedByName && !!version.submittedAt)).toBe(true);
+      expect(rootView.canUpload).toBe(true);
       expect((await contractReturns.get(readerActor(),id)).attachments).toEqual([]);
+      expect((await contractReturns.get(readerActor(),id)).history).toEqual([]);
       expect((await contractReturns.get({...readerActor(),authorizationCapabilities:["sourcing:view","supplier_contract_data:read"]},id)).attachments
-        .map(file=>file.attachmentId)).toEqual([imageId]);
-      expect((await database.query("SELECT count(*)::int AS count FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[id])).rows[0].count).toBe(2);
+        .map(file=>file.attachmentId)).toEqual([managerFileId]);
+      expect((await database.query("SELECT count(*)::int AS count FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[id])).rows[0].count).toBe(3);
       expect(service.canDownloadBoundAttachment(readerActor(),{entityType:"sourcing_contract_return",entityId:id,mimeType:"application/pdf"})).toBe(false);
       expect(service.canDownloadBoundAttachment({...rootActor(),authorizationCapability:"sourcing:view"},{entityType:"sourcing_contract_return",entityId:id,mimeType:"application/pdf"})).toBe(true);
     } finally {

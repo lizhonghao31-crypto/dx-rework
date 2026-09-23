@@ -9,6 +9,7 @@ import { contractReturnState } from "./contract-return-state.js";
 const ROOT = "root_superuser";
 const READ = "sourcing:view";
 const MERCHANDISER = "order_merchandiser";
+const MANAGEMENT = "production_management";
 const OWNER = "owner_group";
 const MIME_TYPES = ["application/pdf","image/jpeg","image/png"] as const;
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
@@ -25,7 +26,8 @@ type MonitorRow = {
   uploader_name: string | null;
   as_of: Date | string;
 };
-type FileRow = { attachment_id: string; original_filename: string; mime_type: string; size_bytes: string };
+type FileRow = { attachment_id: string; original_filename: string; mime_type: string; size_bytes: string;
+  revision: number; submitted_at: Date | string; uploaded_by_name: string };
 const forbidden = (): never => { throw new ApplicationError("FORBIDDEN","当前账号无权回传合同",403); };
 const fileDto = (row: FileRow) => ({
   attachmentId: row.attachment_id,filename: row.original_filename,
@@ -41,12 +43,14 @@ export class SourcingContractReturnService {
     }
   }
 
-  private async canUpload(actor: TrustedActorContext, creator: string): Promise<boolean> {
+  private async canUpload(actor: TrustedActorContext, creator: string, alreadyReturned: boolean): Promise<boolean> {
     if (actor.actorRoles.includes(ROOT)) return true;
     if (!(await memberCanWriteModule(this.database,actor.actorId,"sourcing"))) return false;
     const capabilities = actor.authorizationCapabilities ?? [];
-    return actor.actorRoles.includes(MERCHANDISER) && actor.actorId === creator && capabilities.includes("sourcing:contract:record")
-      || actor.actorRoles.includes(OWNER) && capabilities.includes("sourcing:owner:approve");
+    return actor.actorRoles.includes(OWNER) && capabilities.includes("sourcing:owner:approve")
+      || actor.actorRoles.includes(MANAGEMENT) && capabilities.includes("sourcing:decision:record")
+      || !alreadyReturned && actor.actorRoles.includes(MERCHANDISER)
+        && actor.actorId === creator && capabilities.includes("sourcing:contract:record");
   }
 
   async get(actor: TrustedActorContext, sourcingCaseId: string) {
@@ -69,16 +73,31 @@ export class SourcingContractReturnService {
       || (actor.authorizationCapabilities ?? []).includes(READ)
         && (actor.authorizationCapabilities ?? []).includes("supplier_contract_data:read");
     const files=canViewFile && status.contractReturnMonitoring
-      ? await this.database.query<FileRow>(`SELECT file.attachment_id,file.original_filename,file.mime_type,file.size_bytes
+      ? await this.database.query<FileRow>(`SELECT submission.revision,submission.submitted_at,
+        uploader.display_name AS uploaded_by_name,
+        file.attachment_id,file.original_filename,file.mime_type,file.size_bytes
         FROM sourcing_contract_return_submissions submission
         JOIN sourcing_contract_return_attachments link ON link.submission_id=submission.submission_id
         JOIN attachments file ON file.attachment_id=link.attachment_id AND file.status='ready'
+        JOIN app_users uploader ON uploader.id=submission.submitted_by
         WHERE submission.sourcing_case_id=$1
-          AND submission.revision=(SELECT max(revision) FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1)
-        ORDER BY link.position`,[sourcingCaseId]) : null;
+        ORDER BY submission.revision DESC,link.position`,[sourcingCaseId]) : null;
+    const versions=new Map<number,{revision:number;submittedAt:string;uploadedByName:string;
+      attachments:ReturnType<typeof fileDto>[] }>();
+    for (const file of files?.rows ?? []) {
+      if (!versions.has(file.revision)) versions.set(file.revision,{
+        revision:file.revision,
+        submittedAt:file.submitted_at instanceof Date ? file.submitted_at.toISOString() : new Date(file.submitted_at).toISOString(),
+        uploadedByName:file.uploaded_by_name,
+        attachments:[],
+      });
+      versions.get(file.revision)!.attachments.push(fileDto(file));
+    }
+    const [current,...history]=[...versions.values()];
     return { ...status,uploadedByName:status.contractReturnMonitoring ? row.uploader_name : null,
-      canUpload: status.contractReturnMonitoring && await this.canUpload(actor,row.created_by),
-      attachments:files?.rows.map(fileDto) ?? [] };
+      canUpload: status.contractReturnMonitoring
+        && await this.canUpload(actor,row.created_by,row.contract_returned_at !== null),
+      attachments:current?.attachments ?? [],history };
   }
 
   async submit(actor: TrustedActorContext,sourcingCaseId: string,attachmentIds: readonly string[],key: string) {
@@ -87,6 +106,7 @@ export class SourcingContractReturnService {
       !(
         actor.authorizationCapability === "sourcing:contract:record" && actor.actorRoles.includes(MERCHANDISER)
         || actor.authorizationCapability === "sourcing:owner:approve" && actor.actorRoles.includes(OWNER)
+        || actor.authorizationCapability === "sourcing:decision:record" && actor.actorRoles.includes(MANAGEMENT)
       )) forbidden();
     if (attachmentIds.length < 1 || attachmentIds.length > 10 || new Set(attachmentIds).size !== attachmentIds.length) {
       throw new ApplicationError("VALIDATION_ERROR","请上传 1 至 10 个不重复的回签合同文件",400);
@@ -108,7 +128,7 @@ export class SourcingContractReturnService {
       if (!monitor?.contract_return_monitor_enabled || !monitor.contract_generated_at) {
         throw new ApplicationError("INVALID_STATE_TRANSITION","合同未生成或该订单不属于回签监控范围",409);
       }
-      if (!(await this.canUpload(actor,monitor.created_by))) forbidden();
+      if (!(await this.canUpload(actor,monitor.created_by,false))) forbidden();
       const previous=await client.query<{submitted_by:string;attachment_ids:string[]}>(`SELECT submission.submitted_by,
         submission.attachment_ids
         FROM sourcing_contract_return_requests submission
@@ -121,6 +141,7 @@ export class SourcingContractReturnService {
         await client.query("COMMIT");
         return this.get({...actor,authorizationCapability:READ},sourcingCaseId);
       }
+      if (!(await this.canUpload(actor,monitor.created_by,monitor.contract_returned_at !== null))) forbidden();
       const latest=await client.query<{submitted_by:string;attachment_ids:string[]}>(`SELECT submission.submitted_by,
         array_agg(link.attachment_id::text ORDER BY link.position) AS attachment_ids
         FROM sourcing_contract_return_submissions submission

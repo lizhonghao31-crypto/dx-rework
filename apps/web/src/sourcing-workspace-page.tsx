@@ -362,15 +362,12 @@ function SourcingOrderCard({
               </span>
               <small>{item.gender ?? "历史未维护"} · {item.styleName ?? "历史未维护"}</small>
             </div>
-            <StatusBadge tone={item.status === "closed" ? "success" : "info"}>
-              {STATUS_LABELS[item.status]}
-            </StatusBadge>
           </div>
           <ul className="sourcing-order-card__lines" aria-label="款色明细">
-            {item.lineItems.slice(0, item.lineItems.length > 1 ? 2 : 1).map((line) => <li key={line.position}>
+            {item.lineItems.slice(0, 1).map((line) => <li key={line.position}>
               {line.styleNo}{line.alternateStyleNo && line.alternateStyleNo !== line.styleNo ? ` / ${line.alternateStyleNo}` : ""} · {line.color ?? "历史未维护颜色"} · {formatBusinessDecimal(line.quantity)} 件
             </li>)}
-            {item.lineItems.length > 2 ? <li>另有 {item.lineItems.length - 2} 款色</li> : null}
+            {item.lineItems.length > 1 ? <li>另有 {item.lineItems.length - 1} 个颜色</li> : null}
           </ul>
           <p className="sourcing-order-card__merchant">跟单：{item.merchandiserName ?? "历史未维护"}{contractBadge ? <> · 合同：<span
             className={`sourcing-return-badge sourcing-return-badge--${item.contractReturnStatus}`}
@@ -378,6 +375,9 @@ function SourcingOrderCard({
           >{contractBadge}</span></> : null}</p>
         </div>
       </div>
+      <span className="sourcing-order-card__workflow-status"><StatusBadge tone={item.status === "closed" ? "success" : "info"}>
+        {STATUS_LABELS[item.status]}
+      </StatusBadge></span>
       <dl className="sourcing-list-facts">
         <div className="sourcing-list-facts__quantity">
           <div><dt>订单数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
@@ -1807,28 +1807,40 @@ function OrderDetailPage({
                       onChange={event=>{void uploadContractReturn(event.target.files);event.target.value="";}} />
                     <button className="dx-button dx-button--secondary" type="button" disabled={contractUploading || busy}
                       onClick={()=>contractFileInput.current?.click()}>
-                      {contractUploading?"正在上传…":contractReturn.attachments.length?"上传/更新回签合同":"上传回签合同"}
+                      {contractUploading?"正在上传…":contractReturn.attachments.length?"补传回签合同":"上传回签合同"}
                     </button>
                   </> : null}
                   {contractReturn.attachments.length ? <div className="sourcing-contract-return-links" aria-label="回签附件，可左右滑动查看更多">
                     {contractReturn.attachments.map((file,index)=>
                       <a className="dx-button dx-button--secondary" key={file.attachmentId}
                         href={attachmentUrl(file.attachmentId,"preview")} target="_blank" rel="noreferrer">
-                        {index===0?"查看回签合同":`查看第 ${index+1} 张`}
+                        {index===0?"查看已回签合同":`查看第 ${index+1} 张`}
                       </a>)}
                   </div> : null}
                   {contractPendingSubmission && contractReturnError ? <button className="dx-button dx-button--secondary" type="button"
                     disabled={contractUploading} onClick={()=>void retryContractReturn()}>重试保存</button> : null}
                 </div>
+                {contractReturn.history.length ? <details className="sourcing-contract-return-history">
+                  <summary>历史回签 · {contractReturn.history.length} 次</summary>
+                  {contractReturn.history.map(version=><div key={version.revision}>
+                    <span>第 {version.revision} 次 · {version.uploadedByName} · {formatDateTime(version.submittedAt)}</span>
+                    <div className="sourcing-contract-return-links">
+                      {version.attachments.map((file,index)=><a className="dx-button dx-button--secondary" key={file.attachmentId}
+                        href={attachmentUrl(file.attachmentId,"preview")} target="_blank" rel="noreferrer">
+                        {index===0?"查看回签合同":`查看第 ${index+1} 张`}
+                      </a>)}
+                    </div>
+                  </div>)}
+                </details> : null}
                 {contractReturnError ? <p role="alert" className="sourcing-contract-return-error">{contractReturnError}</p> : null}
                 <details className="sourcing-contract-return-facts" open={!window.matchMedia("(max-width: 768px)").matches}>
-                  <summary>回签资料 · {sourcingContractReturnLabel(contractReturn)}</summary>
+                  <summary className={`sourcing-contract-return-status--${contractReturn.contractReturnStatus}`}>回签资料 · {sourcingContractReturnLabel(contractReturn)}</summary>
                   <dl className="sourcing-finance-reference">
                     <div><dt>合同生成时间</dt><dd>{contractReturn.contractGeneratedAt?formatDateTime(contractReturn.contractGeneratedAt):"—"}</dd></div>
                     <div><dt>回传截止时间</dt><dd>{contractReturn.contractReturnDueAt?formatDateTime(contractReturn.contractReturnDueAt):"—"}</dd></div>
                     <div><dt>实际回传时间</dt><dd>{contractReturn.contractReturnedAt?formatDateTime(contractReturn.contractReturnedAt):"—"}</dd></div>
                     <div><dt>上传人</dt><dd>{contractReturn.uploadedByName??"—"}</dd></div>
-                    <div><dt>合同回签状态</dt><dd>{sourcingContractReturnLabel(contractReturn)}</dd></div>
+                    <div><dt>合同回签状态</dt><dd className={`sourcing-contract-return-status sourcing-contract-return-status--${contractReturn.contractReturnStatus}`}>{sourcingContractReturnLabel(contractReturn)}</dd></div>
                   </dl>
                 </details>
               </> : null}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { contractReturnCutoff, contractReturnState } from "../../apps/api/src/sourcing/contract-return-state.js";
+import { sourcingContractReturnBadgeLabel, sourcingContractReturnLabel } from "../../apps/web/src/sourcing-contract-return-presentation.js";
 
 const generated = "2026-09-23T02:00:00.000Z";
 const due = "2026-09-25T02:00:00.000Z";
@@ -44,5 +45,13 @@ describe("contract return 48-hour clock", () => {
     expect(contractReturnState(weekend,"2026-09-29T10:00:00Z")).toMatchObject({
       contractReturnStatus:"returned_late",contractReturnOverdueHours:1,
     });
+  });
+});
+
+describe("contract return wording", () => {
+  it("distinguishes unreturned lateness from a late signed contract", () => {
+    expect(sourcingContractReturnBadgeLabel({contractReturnStatus:"overdue_pending",contractReturnOverdueHours:0})).toBe("逾期 <1 小时");
+    expect(sourcingContractReturnBadgeLabel({contractReturnStatus:"returned_late",contractReturnOverdueHours:7})).toBe("逾期回签 7 小时");
+    expect(sourcingContractReturnLabel({contractReturnStatus:"returned_late",contractReturnOverdueHours:7})).toBe("逾期回签 7 小时");
   });
 });

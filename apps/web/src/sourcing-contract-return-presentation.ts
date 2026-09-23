@@ -8,8 +8,8 @@ export function sourcingContractReturnLabel(
   switch(state.contractReturnStatus) {
     case "pending": return "合同待回签";
     case "returned_on_time": return "合同已回签";
-    case "overdue_pending": return `合同回传逾期 ${suffix}`;
-    case "returned_late": return `合同已回传，逾期 ${suffix}`;
+    case "overdue_pending": return `逾期 ${suffix}`;
+    case "returned_late": return `逾期回签 ${suffix}`;
     default: return "";
   }
 }
@@ -19,7 +19,7 @@ export function sourcingContractReturnBadgeLabel(
   state: Pick<SourcingCaseSummary,"contractReturnStatus"|"contractReturnOverdueHours">,
 ): string | null {
   const hours=state.contractReturnOverdueHours;
-  const elapsed=hours == null || hours < 1 ? "<1h" : `${hours}h`;
+  const elapsed=hours == null || hours < 1 ? "<1 小时" : `${hours} 小时`;
   switch(state.contractReturnStatus) {
     case "pending": return "待回签";
     case "returned_on_time": return "已回签";

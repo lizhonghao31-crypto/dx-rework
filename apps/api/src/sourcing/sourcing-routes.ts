@@ -498,6 +498,7 @@ export function registerSourcingRoutes(
         const capabilities=actor.authorizationCapabilities??[];
         const capability=actor.actorRoles.includes("root_superuser") ? "sourcing:contract:record"
           : actor.actorRoles.includes("owner_group") && capabilities.includes("sourcing:owner:approve") ? "sourcing:owner:approve"
+          : actor.actorRoles.includes("production_management") && capabilities.includes("sourcing:decision:record") ? "sourcing:decision:record"
           : actor.actorRoles.includes("order_merchandiser") && capabilities.includes("sourcing:contract:record") ? "sourcing:contract:record"
           : (() => { throw new ApplicationError("FORBIDDEN","当前账号无权回传合同",403); })();
         return SourcingContractReturnResponseSchema.parse(
