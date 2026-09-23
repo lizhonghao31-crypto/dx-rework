@@ -2726,4 +2726,46 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
 
 
+  it("fixes eligibility at approval and clock at first ready PDF without resetting after a revision", async () => {
+    const previous = process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
+    const makeApproved = async (styleNo: string) => {
+      const created = await service.createCase(merchandiserActor(), {
+        gender: "女装",styleName: "回签测试",estimatedCutPieceSendDate: "2026-10-01",
+        deliveryDate: "2026-10-20",lineItems: [{styleNo,color:"黑",quantity:20}],
+        daxingUnitPrice: "8",
+      },randomUUID());
+      const id = created.value.sourcingCaseId;
+      await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
+      await service.recordManagementDecision(managerActor(),id,{
+        supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}],
+      },randomUUID());
+      await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+      return id;
+    };
+    try {
+      delete process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
+      const legacy = await makeApproved("RETURN-LEGACY");
+      expect((await service.getCase(readerActor(),legacy)).contractReturnStatus).toBeNull();
+      process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT="2020-01-01T00:00:00Z";
+      const active = await makeApproved("RETURN-ACTIVE");
+      const first = await service.getCase(readerActor(),active);
+      expect(first.contractReturnMonitoring).toBe(true);
+      expect(first.contractReturnStatus).toBe("pending");
+      expect(new Date(first.contractReturnDueAt!).getTime()-new Date(first.contractGeneratedAt!).getTime()).toBe(48*3_600_000);
+      const selected = await service.listCases(readerActor(),"RETURN-", "all",1,{contractReturn:"all"});
+      expect(selected.items.map(item=>item.sourcingCaseId)).toContain(active);
+      expect(selected.items.map(item=>item.sourcingCaseId)).not.toContain(legacy);
+      await service.reviseStyles(merchandiserActor(),active,{
+        expectedRevision:0,lines:[{position:1,styleNo:"RETURN-REVISED",alternateStyleNo:null}],
+      },randomUUID());
+      const revised = await service.getCase(readerActor(),active);
+      expect(revised.contractGeneratedAt).toBe(first.contractGeneratedAt);
+      expect(revised.contractReturnDueAt).toBe(first.contractReturnDueAt);
+      expect((await service.listCases(readerActor(),"RETURN-","all",1,{contractReturn:"all_overdue"})).items
+        .some(item=>item.sourcingCaseId===active)).toBe(false);
+    } finally {
+      if (previous === undefined) delete process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
+      else process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT=previous;
+    }
+  });
 });

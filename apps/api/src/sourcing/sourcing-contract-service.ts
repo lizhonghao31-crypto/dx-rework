@@ -9,6 +9,7 @@ import type {
   SupplementSourcingContract,
 } from "@dx-rework/contracts";
 import { ApplicationError } from "../platform/errors.js";
+import { contractReturnCutoff } from "./contract-return-state.js";
 import type { AttachmentService } from "../tools/attachments.js";
 import {
   IdempotencyService,
@@ -129,6 +130,24 @@ export class SourcingContractService {
     // Serialize with style corrections, approvals and dispatch before reading the revision.
     await client.query(`SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=(
       SELECT sourcing_case_id FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1) FOR UPDATE`,[approvalSnapshotId]);
+    // The cutoff is an explicit deployment decision. Existing approved cases stay excluded
+    // even if a later approval or document revision occurs after rollout.
+    const cutoff = contractReturnCutoff();
+    if (cutoff) {
+      await client.query(`INSERT INTO sourcing_contract_return_monitors(
+        sourcing_case_id,contract_return_monitor_enabled
+      )
+      SELECT current_snapshot.sourcing_case_id,true
+      FROM sourcing_approval_snapshots current_snapshot
+      WHERE current_snapshot.sourcing_approval_snapshot_id=$1
+        AND current_snapshot.approved_at >= $2::timestamptz
+        AND NOT EXISTS (
+          SELECT 1 FROM sourcing_approval_snapshots earlier
+          WHERE earlier.sourcing_case_id=current_snapshot.sourcing_case_id
+            AND earlier.approved_at < $2::timestamptz
+        )
+      ON CONFLICT(sourcing_case_id) DO NOTHING`,[approvalSnapshotId,cutoff]);
+    }
     const metadata = (await client.query<{identity_version:number;template_version:number}>(`SELECT
       (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=snapshot.sourcing_case_id) AS identity_version,
       (SELECT max(template_version) FROM sourcing_contract_template_versions WHERE effective_from<=CURRENT_TIMESTAMP) AS template_version

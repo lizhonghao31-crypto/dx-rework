@@ -239,12 +239,14 @@ export function registerSourcingRoutes(
     stage?: string;
     gender?: string;
     styleName?: string;
+    contractReturn?: string;
   } }>("/sourcing/cases", async (request) => {
     for (const [value, message] of [
       [request.query.q, "搜索内容无效"],
       [request.query.stage, "流程状态筛选无效"],
       [request.query.gender, "性别筛选无效"],
       [request.query.styleName, "款式类别筛选无效"],
+      [request.query.contractReturn, "合同回签状态筛选无效"],
     ] as const) {
       if (value !== undefined && typeof value !== "string") validationError(message);
     }
@@ -261,6 +263,8 @@ export function registerSourcingRoutes(
     const gender = request.query.gender ?? "all";
     if (!["all","男装","女装","missing"].includes(gender)) validationError("性别筛选无效");
     if ((request.query.styleName ?? "").length > 100) validationError("款式类别不能超过100个字符");
+    const contractReturn = request.query.contractReturn;
+    if (contractReturn !== undefined && !["all","pending","returned_on_time","overdue_pending","returned_late","all_overdue"].includes(contractReturn)) validationError("合同回签状态筛选无效");
     const statusFilter = status === "pending" || status === "closed" ? status : "all";
     return dependencies.service.listCases(
       await readActor(request),
@@ -271,6 +275,7 @@ export function registerSourcingRoutes(
         stage: stage as "all"|"ie"|"management"|"owner"|"finance"|"factory_change"|"exception",
         gender: gender as "all"|"男装"|"女装"|"missing",
         styleName: request.query.styleName ?? "",
+        ...(contractReturn !== undefined ? { contractReturn: contractReturn as "all"|"pending"|"returned_on_time"|"overdue_pending"|"returned_late"|"all_overdue" } : {}),
       },
     );
   });
