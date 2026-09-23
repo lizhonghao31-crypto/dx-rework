@@ -696,6 +696,41 @@
   margin-top: 12px;
 }
 
+.sourcing-contract-return-actions {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sourcing-contract-return-facts {
+  margin-top: 8px;
+}
+.sourcing-contract-return-facts summary {
+  cursor: pointer;
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 13px;
+}
+.sourcing-contract-return-facts .sourcing-finance-reference {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 8px;
+  gap: 6px 16px;
+}
+.sourcing-contract-return-facts .sourcing-finance-reference > div {
+  grid-template-columns: 94px minmax(0, 1fr);
+  align-items: baseline;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+@media (max-width: 768px) {
+  .sourcing-contract-return-facts .sourcing-finance-reference {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.sourcing-contract-return-error {
+  color: var(--dx-v2-color-danger, #dc2626);
+  margin: 6px 0 0;
+}
+
 .sourcing-finance-confirmation summary {
   cursor: pointer;
   color: var(--dx-v2-color-text);

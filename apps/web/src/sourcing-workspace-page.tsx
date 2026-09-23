@@ -1,4 +1,5 @@
 import { SourcingReturnDialog } from "./sourcing-return-dialog.js";
+import { sourcingContractReturnLabel } from "./sourcing-contract-return-presentation.js";
 import { sourcingDatesValid, SOURCING_DATE_ORDER_ERROR } from "@dx-rework/contracts";
 import { moduleCanWrite } from "./member-module-policy.js";
 import { todoReturnPath } from "./todo-query-state.js";
@@ -20,6 +21,7 @@ import {
   SourcingCaseSummarySchema,
   SourcingStyleCatalogSchema,
   SourcingContractStateResponseSchema,
+  SourcingContractReturnResponseSchema,
   SourcingDispatchStateSchema,
   SourcingProductionOrderSchema,
   type SourcingDispatchState,
@@ -36,6 +38,7 @@ import {
   type SourcingCaseStatus,
   type SourcingCaseSummary,
   type SourcingContractDocument,
+  type SourcingContractReturnResponse,
   type SourcingContractMissingField,
   type SourcingFactory,
   type SourcingFactoryChangeState,
@@ -1087,6 +1090,12 @@ function OrderDetailPage({
   const [financeReview, setFinanceReview] = useState<FinanceReviewDraft>({ differenceFields: [], differenceReason: "" });
   const [factoryChange, setFactoryChange] = useState<SourcingFactoryChangeState | null>(null);
   const [contract, setContract] = useState<SourcingContractDocument | null>(null);
+  const [contractReturn,setContractReturn] = useState<SourcingContractReturnResponse | null>(null);
+  const [contractUploading,setContractUploading] = useState(false);
+  const contractUploadGuard=useRef(false);
+  const contractFileInput=useRef<HTMLInputElement | null>(null);
+  const [contractReturnError,setContractReturnError] = useState("");
+  const [contractPendingSubmission,setContractPendingSubmission] = useState<{attachmentIds:string[];key:string}|null>(null);
   const [dispatchState, setDispatchState] = useState<SourcingDispatchState>({ item: null, canDispatch: false });
   const [contractSupplement, setContractSupplement] = useState<ContractSupplementDraft>({});
   const [factoryChangeDraft, setFactoryChangeDraft] = useState<FactoryChangeDraft>({ supplierId: "", unitPrice: "", changeReason: "" });
@@ -1143,13 +1152,14 @@ function OrderDetailPage({
 
   const load = async (): Promise<void> => {
     try {
-      const [detail, evidence, history, currentFactoryChange, currentContract, currentDispatch] = await Promise.all([
+      const [detail, evidence, history, currentFactoryChange, currentContract, currentDispatch, currentContractReturn] = await Promise.all([
         request(`sourcing/cases/${sourcingCaseId}`, SourcingCaseSummarySchema),
         request(`sourcing/cases/${sourcingCaseId}/attachments`, SourcingAttachmentListResponseSchema),
         request(`sourcing/cases/${sourcingCaseId}/timeline`, SourcingTimelineResponseSchema),
         request(`sourcing/cases/${sourcingCaseId}/factory-changes/current`, SourcingFactoryChangeStateResponseSchema),
         request(`sourcing/cases/${sourcingCaseId}/contract`, SourcingContractStateResponseSchema),
         request(`sourcing/cases/${sourcingCaseId}/dispatch`, SourcingDispatchStateSchema),
+        request(`sourcing/cases/${sourcingCaseId}/contract-return`, SourcingContractReturnResponseSchema),
       ]);
       setItem(detail);
       setProcesses((current) => current.some((value) => value.trim()) ? current : detail.processes.length ? [...detail.processes] : [""]);
@@ -1157,6 +1167,7 @@ function OrderDetailPage({
       setTimeline(history.items);
       setFactoryChange(currentFactoryChange.item);
       setContract(currentContract.item);
+      setContractReturn(currentContractReturn);
       setDispatchState(currentDispatch);
       setFactoryChangeDraft((current) => ({
         supplierId: current.supplierId,
@@ -1242,6 +1253,55 @@ function OrderDetailPage({
 
   const canEditStyles = moduleWritable && !!item?.approvalSnapshot && ["pending_finance_reconciliation", "closed"].includes(item.status) && contract?.status === "ready" && !!contract.pdfAttachmentId
     && (user?.isRoot === true || canManage || (canAct(user,"order_merchandiser","sourcing:inquiry:create") && item?.createdBy === user?.id));
+  const saveContractReturn = async (submission: {attachmentIds:string[];key:string}):Promise<void> => {
+    const result=await requestSubmission(`sourcing/cases/${sourcingCaseId}/contract-return`,SourcingContractReturnResponseSchema,{
+      method:"POST",headers:{"idempotency-key":submission.key},body:JSON.stringify({attachmentIds:submission.attachmentIds}),
+    });
+    setContractReturn(result);
+    setContractPendingSubmission(null);
+    setContractReturnError("");
+    setItem(await request(`sourcing/cases/${sourcingCaseId}`,SourcingCaseSummarySchema));
+  };
+  const uploadContractReturn = async (files:FileList|null):Promise<void> => {
+    if (!files?.length || contractUploadGuard.current || !contractReturn?.canUpload) return;
+    const chosen=Array.from(files);
+    if (chosen.length>10 || chosen.some(file=>!["application/pdf","image/jpeg","image/png"].includes(file.type))
+      || (chosen.some(file=>file.type==="application/pdf") && chosen.length!==1)
+      || chosen.reduce((size,file)=>size+file.size,0)>20*1024*1024) {
+      setContractReturnError("请选择单份 PDF 或最多 10 张 JPG/PNG，合计不超过 20 MB");
+      return;
+    }
+    contractUploadGuard.current=true;setContractUploading(true);setContractReturnError("");
+    try {
+      const attachmentIds:string[]=[];
+      for (const file of chosen) {
+        const intent=await request("tools/attachments/upload-intents",UploadIntentResponseSchema,{
+          method:"POST",body:JSON.stringify({
+            filename:file.name,mimeType:file.type,sizeBytes:file.size,sha256:await sha256Hex(file),
+          }),
+        });
+        const upload=new FormData();
+        for (const [name,value] of Object.entries(intent.uploadFields)) upload.append(name,value);
+        upload.append("file",file);
+        const response=await fetch(intent.uploadUrl,{method:"POST",body:upload});
+        if (!response.ok) throw new Error(`${file.name} 上传失败，请重试`);
+        const ready=await request(`tools/attachments/${intent.attachmentId}/finalize`,AttachmentResponseSchema,{method:"POST"});
+        if (ready.status!=="ready") throw new Error(`${file.name} 尚未完成校验，请重试`);
+        attachmentIds.push(ready.attachmentId);
+      }
+      const submission={attachmentIds,key:createClientRequestId()};
+      setContractPendingSubmission(submission);
+      await saveContractReturn(submission);
+    } catch(error) {setContractReturnError(error instanceof Error?error.message:"回签合同上传失败");}
+    finally {contractUploadGuard.current=false;setContractUploading(false);}
+  };
+  const retryContractReturn=async():Promise<void>=>{
+    if (!contractPendingSubmission || contractUploadGuard.current) return;
+    contractUploadGuard.current=true;setContractUploading(true);setContractReturnError("");
+    try {await saveContractReturn(contractPendingSubmission);}
+    catch(error){setContractReturnError(error instanceof Error?error.message:"保存失败，请重试");}
+    finally {contractUploadGuard.current=false;setContractUploading(false);}
+  };
   const styleDuplicateMessage = duplicateSourcingLineMessage(styleEdits.map(line => ({...line,color:item?.lineItems.find(row => row.position===line.position)?.color})));
   const submitReturn = async (reason:string):Promise<void> => {
     if (!item || busy) return;
@@ -1713,6 +1773,36 @@ function OrderDetailPage({
           setStyleEdits(item.lineItems.map(line => ({position:line.position,styleNo:(line.formalStyleNo === undefined ? line.styleNo : line.formalStyleNo) ?? "",alternateStyleNo:line.alternateStyleNo ?? ""})));
           setStyleEditRevision(item.identityRevision ?? 0);styleEditKey.current=null;setEditingStyles(true);
         }}>修改款号</button> : null}</div> : null}
+              {contractReturn?.contractReturnMonitoring ? <>
+                <div className="sourcing-contract-bar__actions sourcing-contract-return-actions">
+                  {contractReturn.canUpload ? <>
+                    <input ref={contractFileInput} type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" multiple hidden
+                      onChange={event=>{void uploadContractReturn(event.target.files);event.target.value="";}} />
+                    <button className="dx-button dx-button--secondary" type="button" disabled={contractUploading || busy}
+                      onClick={()=>contractFileInput.current?.click()}>
+                      {contractUploading?"正在上传…":contractReturn.attachments.length?"上传/更新回签合同":"上传回签合同"}
+                    </button>
+                  </> : null}
+                  {contractReturn.attachments.map((file,index)=>
+                    <a className="dx-button dx-button--secondary" key={file.attachmentId}
+                      href={attachmentUrl(file.attachmentId,"preview")} target="_blank" rel="noreferrer">
+                      {index===0?"查看回签合同":`查看第 ${index+1} 张`}
+                    </a>)}
+                  {contractPendingSubmission && contractReturnError ? <button className="dx-button dx-button--secondary" type="button"
+                    disabled={contractUploading} onClick={()=>void retryContractReturn()}>重试保存</button> : null}
+                </div>
+                {contractReturnError ? <p role="alert" className="sourcing-contract-return-error">{contractReturnError}</p> : null}
+                <details className="sourcing-contract-return-facts" open={!window.matchMedia("(max-width: 768px)").matches}>
+                  <summary>回签资料 · {sourcingContractReturnLabel(contractReturn)}</summary>
+                  <dl className="sourcing-finance-reference">
+                    <div><dt>合同生成时间</dt><dd>{contractReturn.contractGeneratedAt?formatDateTime(contractReturn.contractGeneratedAt):"—"}</dd></div>
+                    <div><dt>回传截止时间</dt><dd>{contractReturn.contractReturnDueAt?formatDateTime(contractReturn.contractReturnDueAt):"—"}</dd></div>
+                    <div><dt>实际回传时间</dt><dd>{contractReturn.contractReturnedAt?formatDateTime(contractReturn.contractReturnedAt):"—"}</dd></div>
+                    <div><dt>上传人</dt><dd>{contractReturn.uploadedByName??"—"}</dd></div>
+                    <div><dt>合同回签状态</dt><dd>{sourcingContractReturnLabel(contractReturn)}</dd></div>
+                  </dl>
+                </details>
+              </> : null}
               {editingStyles && canEditStyles ? <form className="sourcing-style-editor" onSubmit={event=>{event.preventDefault();void saveStyles();}}>
                 {styleDuplicateMessage ? <p role="alert">{styleDuplicateMessage}</p> : null}
         {styleEdits.map((line,index)=><div className="sourcing-style-editor__row" key={line.position}>

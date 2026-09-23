@@ -1405,6 +1405,12 @@ export class SourcingService {
           && (actor.authorizationCapabilities ?? []).includes("supplier_contract_data:read")
         );
     }
+    if (binding.entityType === "sourcing_contract_return"
+      && ["application/pdf","image/jpeg","image/png"].includes(binding.mimeType)) {
+      return actor.actorRoles.includes(ROOT_ROLE)
+        || ((actor.authorizationCapabilities ?? []).includes(READ_CAPABILITY)
+          && (actor.authorizationCapabilities ?? []).includes("supplier_contract_data:read"));
+    }
     return false;
   }
 

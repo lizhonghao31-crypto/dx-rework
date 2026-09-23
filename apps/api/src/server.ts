@@ -39,6 +39,7 @@ import { RuntimeOperationalMonitor } from "./platform/runtime-observability.js";
 import { ReceivingService } from "./receiving/receiving-service.js";
 import { SourcingService } from "./sourcing/sourcing-service.js";
 import { SourcingContractService } from "./sourcing/sourcing-contract-service.js";
+import { SourcingContractReturnService } from "./sourcing/sourcing-contract-return-service.js";
 import { ManagementReportingService } from "./reporting/management-reporting-service.js";
 import { ReportExportService } from "./reporting/report-export-service.js";
 import { BusinessAwareWholeOrderReviewService } from "./rework/business-aware-whole-order-review-service.js";
@@ -268,6 +269,7 @@ const app = buildApp({
     authenticate: (token) => auth.authenticate(token),
     service: sourcingService,
     contracts: sourcingContractService,
+    contractReturns: new SourcingContractReturnService(database),
     production: sourcingProductionService,
     reporting: new ProductionReportingService(database,undefined,undefined,productionClosure),
     closure: productionClosure,

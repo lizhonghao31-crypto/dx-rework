@@ -24,6 +24,8 @@ import {
   RequestSourcingFactoryChangeSchema,
   SOURCING_IMAGE_SUPPLEMENT_ROLES,
   SourcingContractStateResponseSchema,
+  SourcingContractReturnUploadSchema,
+  SourcingContractReturnResponseSchema,
   SupplementSourcingContractSchema,
   SupplementSourcingImagesSchema,
 } from "@dx-rework/contracts";
@@ -34,6 +36,7 @@ import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { SourcingContractService } from "./sourcing-contract-service.js";
+import type { SourcingContractReturnService } from "./sourcing-contract-return-service.js";
 import type { SourcingProductionService } from "./sourcing-production-service.js";
 import type { SourcingService } from "./sourcing-service.js";
 
@@ -66,6 +69,7 @@ export type SourcingHttpDependencies = Readonly<{
   authenticate(value: string | undefined): Promise<AuthUser>;
   service: SourcingService;
   contracts?: SourcingContractService;
+  contractReturns?: SourcingContractReturnService;
   production?: SourcingProductionService;
   reporting?: ProductionReportingService;
   dashboard?: ProductionDashboardService;
@@ -478,6 +482,32 @@ export function registerSourcingRoutes(
     );
   }
 
+  if (dependencies.contractReturns) {
+    app.get<{ Params: { sourcingCaseId: string } }>(
+      "/sourcing/cases/:sourcingCaseId/contract-return",
+      async (request) => SourcingContractReturnResponseSchema.parse(
+        await dependencies.contractReturns!.get(await readActor(request),caseId(request.params.sourcingCaseId)),
+      ),
+    );
+    app.post<{ Params: { sourcingCaseId: string } }>(
+      "/sourcing/cases/:sourcingCaseId/contract-return",
+      async (request) => {
+        const parsed=SourcingContractReturnUploadSchema.safeParse(request.body);
+        const input=parsed.success?parsed.data:validationError(parsed.error.issues[0]?.message??"回签附件信息不完整");
+        const actor=await readActor(request);
+        const capabilities=actor.authorizationCapabilities??[];
+        const capability=actor.actorRoles.includes("root_superuser") ? "sourcing:contract:record"
+          : actor.actorRoles.includes("owner_group") && capabilities.includes("sourcing:owner:approve") ? "sourcing:owner:approve"
+          : actor.actorRoles.includes("order_merchandiser") && capabilities.includes("sourcing:contract:record") ? "sourcing:contract:record"
+          : (() => { throw new ApplicationError("FORBIDDEN","当前账号无权回传合同",403); })();
+        return SourcingContractReturnResponseSchema.parse(
+          await dependencies.contractReturns!.submit({...actor,authorizationCapability:capability},
+            caseId(request.params.sourcingCaseId),input.attachmentIds,idempotencyKey(request)),
+        );
+      },
+    );
+  }
+
   app.get<{ Params: { sourcingCaseId: string } }>(
     "/sourcing/cases/:sourcingCaseId/factory-changes/current",
     async (request) => dependencies.service.getCurrentFactoryChange(
@@ -615,4 +645,3 @@ export function registerSourcingRoutes(
   );
 
 }
-
