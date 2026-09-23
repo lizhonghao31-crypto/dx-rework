@@ -48,6 +48,9 @@ export function contractReturnCutoff(raw = process.env.CONTRACT_RETURN_MONITOR_E
     || !Number.isFinite(Date.parse(raw))) {
     throw new Error("CONTRACT_RETURN_MONITOR_ENABLED_AT 必须为带时区的 ISO 8601 时间");
   }
+  if (Number(raw.slice(0,4)) === 0) {
+    throw new Error("CONTRACT_RETURN_MONITOR_ENABLED_AT 年份必须在 PostgreSQL 支持范围内");
+  }
   if (Number(raw.slice(11,13)) > 23 || Number(raw.slice(14,16)) > 59 || Number(raw.slice(17,19)) > 59) {
     throw new Error("CONTRACT_RETURN_MONITOR_ENABLED_AT 包含无效时间");
   }

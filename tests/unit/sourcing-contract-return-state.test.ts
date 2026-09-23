@@ -16,6 +16,7 @@ describe("contract return 48-hour clock", () => {
     expect(contractReturnCutoff("")).toBeNull();
     expect(() => contractReturnCutoff("2026-09-23")).toThrow();
     expect(() => contractReturnCutoff("2026-09-31T10:00:00+08:00")).toThrow();
+    expect(() => contractReturnCutoff("0000-01-01T00:00:00Z")).toThrow();
     expect(() => contractReturnCutoff("2026-09-23T24:00:00+08:00")).toThrow();
   });
 
