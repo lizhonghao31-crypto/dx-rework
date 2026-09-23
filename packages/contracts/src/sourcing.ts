@@ -490,6 +490,12 @@ export const SourcingCaseSummarySchema = z.object({
   decision: SourcingDecisionSchema.nullable(),
   ownerDecision: SourcingOwnerDecisionSchema.nullable(),
   approvalSnapshot: SourcingApprovalSnapshotSchema.nullable().default(null),
+  contractReturnMonitoring: z.boolean().optional(),
+  contractReturnStatus: z.enum(["pending","returned_on_time","overdue_pending","returned_late"]).nullable().optional(),
+  contractGeneratedAt: z.string().datetime().nullable().optional(),
+  contractReturnDueAt: z.string().datetime().nullable().optional(),
+  contractReturnedAt: z.string().datetime().nullable().optional(),
+  contractReturnOverdueHours: z.number().int().nonnegative().nullable().optional(),
   correctionReason: z.string().nullable().optional(),
   timing: z.object({totalSeconds:z.number().nonnegative(),nodeSeconds:z.record(z.string(),z.number().nonnegative())}).optional(),
 }).strict();

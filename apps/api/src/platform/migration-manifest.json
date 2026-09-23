@@ -205,6 +205,7 @@
     { "version": "0203_wage_adjustment_restore_compatibility", "checksum": "34a3cde24a384075fd5f7ed095e575997ff6656dabb42f662e838cbfa1c6e998" },
     { "version": "0204_operation_diagnostic_latency", "checksum": "ad9416ef8c7c3150d6cb05e4ed0cd95a61ad3f5a11c5bcde3df2f15ca08bcab0" },
     { "version": "0205_sourcing_budget_price_corrections", "checksum": "5fbd5b88f1fc3c9b1f8bf980abccead62e17f56e9a99548a0ac0ff9d81c895e1" },
-    { "version": "0206_sourcing_merchandiser_corrections", "checksum": "0df17ea261502a303d095e5584f879aad18c5eb6137ea72e9242e791a5ed90ef" }
+    { "version": "0206_sourcing_merchandiser_corrections", "checksum": "0df17ea261502a303d095e5584f879aad18c5eb6137ea72e9242e791a5ed90ef" },
+    { "version": "0207_sourcing_contract_return_monitor", "checksum": "baa970efb51b15f7543b683a35cf88d8212f9ec42e5bb31e28cf788ba322ba7e" }
   ]
 }

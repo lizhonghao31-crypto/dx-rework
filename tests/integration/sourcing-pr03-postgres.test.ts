@@ -2726,4 +2726,74 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
 
 
+  it("skips Shanghai Sundays for both deadline and elapsed hours", async () => {
+    const samples: [string,string][] = [
+      ["2026-09-25T02:00:00Z","2026-09-28T02:00:00.000Z"], // Friday 10:00 to Monday 10:00
+      ["2026-09-26T02:00:00Z","2026-09-29T02:00:00.000Z"], // Saturday 10:00 to Tuesday 10:00
+      ["2026-09-27T02:00:00Z","2026-09-29T16:00:00.000Z"], // Sunday 10:00 to Wednesday 00:00
+      ["2026-09-25T16:00:00Z","2026-09-28T16:00:00.000Z"], // Saturday 00:00 to Tuesday 00:00
+    ];
+    for (const [start,expected] of samples) {
+      const result = await database.query<{due: Date}>(
+        "SELECT sourcing_contract_return_add_hours($1::timestamptz,48) AS due",[start],
+      );
+      expect(result.rows[0]?.due.toISOString()).toBe(expected);
+    }
+    const elapsed = await database.query<{saturday: string;sunday: string;monday: string}>(`
+      SELECT sourcing_contract_return_elapsed_seconds('2026-09-26T15:00:00Z','2026-09-26T15:59:59Z')::text AS saturday,
+             sourcing_contract_return_elapsed_seconds('2026-09-26T15:00:00Z','2026-09-27T15:00:00Z')::text AS sunday,
+             sourcing_contract_return_elapsed_seconds('2026-09-26T15:00:00Z','2026-09-27T17:00:00Z')::text AS monday
+    `);
+    expect(elapsed.rows[0]).toEqual({saturday:"3599",sunday:"3600",monday:"7200"});
+    const midnight = await database.query<{due: Date}>(
+      "SELECT sourcing_contract_return_add_hours('2026-09-25T16:00:00Z'::timestamptz,24) AS due",
+    );
+    expect(midnight.rows[0]?.due.toISOString()).toBe("2026-09-27T16:00:00.000Z");
+  });
+
+  it("fixes eligibility at approval and clock at first ready PDF without resetting after a revision", async () => {
+    const previous = process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
+    const makeApproved = async (styleNo: string) => {
+      const created = await service.createCase(merchandiserActor(), {
+        gender: "女装",styleName: "回签测试",estimatedCutPieceSendDate: "2026-10-01",
+        deliveryDate: "2026-10-20",lineItems: [{styleNo,color:"黑",quantity:20}],
+        daxingUnitPrice: "8",
+      },randomUUID());
+      const id = created.value.sourcingCaseId;
+      await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
+      await service.recordManagementDecision(managerActor(),id,{
+        supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}],
+      },randomUUID());
+      await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+      return id;
+    };
+    try {
+      delete process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
+      const legacy = await makeApproved("RETURN-LEGACY");
+      expect((await service.getCase(readerActor(),legacy)).contractReturnStatus).toBeNull();
+      process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT="2020-01-01T00:00:00Z";
+      const active = await makeApproved("RETURN-ACTIVE");
+      const first = await service.getCase(readerActor(),active);
+      expect(first.contractReturnMonitoring).toBe(true);
+      expect(first.contractReturnStatus).toBe("pending");
+      const authoritative = await database.query<{due: Date}>(
+        "SELECT sourcing_contract_return_add_hours($1::timestamptz,48) AS due",[first.contractGeneratedAt],
+      );
+      expect(first.contractReturnDueAt).toBe(authoritative.rows[0]?.due.toISOString());
+      const selected = await service.listCases(readerActor(),"RETURN-", "all",1,{contractReturn:"all"});
+      expect(selected.items.map(item=>item.sourcingCaseId)).toContain(active);
+      expect(selected.items.map(item=>item.sourcingCaseId)).not.toContain(legacy);
+      await service.reviseStyles(merchandiserActor(),active,{
+        expectedRevision:0,lines:[{position:1,styleNo:"RETURN-REVISED",alternateStyleNo:null}],
+      },randomUUID());
+      const revised = await service.getCase(readerActor(),active);
+      expect(revised.contractGeneratedAt).toBe(first.contractGeneratedAt);
+      expect(revised.contractReturnDueAt).toBe(first.contractReturnDueAt);
+      expect((await service.listCases(readerActor(),"RETURN-","all",1,{contractReturn:"all_overdue"})).items
+        .some(item=>item.sourcingCaseId===active)).toBe(false);
+    } finally {
+      if (previous === undefined) delete process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
+      else process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT=previous;
+    }
+  });
 });

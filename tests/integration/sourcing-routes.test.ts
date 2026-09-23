@@ -305,8 +305,18 @@ describe("sourcing PR03 routes", () => {
       2,
       { stage: "finance", gender: "女装", styleName: "针织" },
     );
+    expect((await allowed.app.inject({
+      method: "GET",
+      url: "/sourcing/cases?q=%E5%BC%A0%E4%B8%89&contractReturn=all_overdue",
+      headers: { cookie: "dx_rework_session=trusted" },
+    })).statusCode).toBe(200);
+    expect(allowed.service.listCases).toHaveBeenLastCalledWith(
+      expect.objectContaining({ authorizationCapability: "sourcing:view" }),
+      "张三","all",1,
+      { stage: "all",gender: "all",styleName: "",contractReturn: "all_overdue" },
+    );
     const beforeInvalidFilters = allowed.service.listCases.mock.calls.length;
-    for (const query of ["stage=bad", "gender=bad", `styleName=${"x".repeat(101)}`]) {
+    for (const query of ["stage=bad", "gender=bad", "contractReturn=bad", `styleName=${"x".repeat(101)}`]) {
       expect((await allowed.app.inject({
         method: "GET",
         url: `/sourcing/cases?${query}`,

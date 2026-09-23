@@ -52,6 +52,7 @@ import {
   type TrustedActorContext,
 } from "../tools/repositories.js";
 import type { SourcingContractService } from "./sourcing-contract-service.js";
+import { contractReturnState, type ContractReturnFilter } from "./contract-return-state.js";
 
 const CASE_CREATE_CAPABILITY = "sourcing:inquiry:create";
 const IE_QUOTE_CAPABILITY = "sourcing:price:quote";
@@ -195,6 +196,12 @@ type SourcingCaseRow = Readonly<{
   })[] | null;
   approval_by: string | null;
   approval_at: Date | string | null;
+  contract_return_monitor_enabled: boolean;
+  contract_generated_at: Date | string | null;
+  contract_return_due_at: Date | string | null;
+  contract_returned_at: Date | string | null;
+  contract_return_overdue_seconds: number | string | null;
+  contract_return_as_of: Date | string;
   total_count?: string;
 }>;
 
@@ -302,6 +309,7 @@ const mapCase = (
   laneKey: LANE_KEY,
   orderQuantity: Number(row.order_quantity),
   lineItems,
+  ...contractReturnState(row, row.contract_return_as_of),
   ...(canViewSourcingDaxingPrice(actor, row.created_by) && row.daxing_unit_price !== null
     ? { daxingUnitPrice: row.daxing_unit_price }
     : {}),
@@ -495,6 +503,12 @@ export class SourcingService {
          COALESCE(decision_row.crafts,crafts_row.crafts) AS crafts,
          case_view.status,case_view.version,case_view.created_by,
          case_view.created_at,case_view.updated_at,
+         COALESCE(monitor_case.contract_return_monitor_enabled,false) AS contract_return_monitor_enabled,monitor_case.contract_generated_at,
+         monitor_case.contract_return_due_at,monitor_case.contract_returned_at,
+         sourcing_contract_return_elapsed_seconds(
+           monitor_case.contract_return_due_at,COALESCE(monitor_case.contract_returned_at,CURRENT_TIMESTAMP)
+         ) AS contract_return_overdue_seconds,
+         CURRENT_TIMESTAMP AS contract_return_as_of,
          quote_row.sourcing_ie_quote_id,quote_row.quote_version,
          quote_row.unit_price,quote_row.quantity AS quote_quantity,
          quote_row.total_amount,quote_row.quote_reason,
@@ -535,6 +549,7 @@ export class SourcingService {
          snapshot.approved_by AS approval_by,snapshot.approved_at AS approval_at
        FROM current_sourcing_cases case_view
        JOIN LATERAL sourcing_case_facts_at(case_view.sourcing_case_id${history ? ', $2::timestamptz' : ''}) source_case ON true
+       LEFT JOIN sourcing_contract_return_monitors monitor_case ON monitor_case.sourcing_case_id=case_view.sourcing_case_id
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(
@@ -635,7 +650,7 @@ export class SourcingService {
     );
     const row = result.rows[0];
     if (!row) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
-    const item = mapCase(row, actor);
+    const item = mapCase(history ? { ...row,contract_return_monitor_enabled:false } : row, actor);
     if (history) {
       item.styleNo = item.lineItems[0]?.styleNo ?? item.styleNo;
       // Current lifecycle/version are not a historical state; never present them as such.
@@ -673,6 +688,7 @@ export class SourcingService {
       stage?: "all"|"ie"|"management"|"owner"|"finance"|"factory_change"|"exception";
       gender?: "all"|"男装"|"女装"|"missing";
       styleName?: string;
+      contractReturn?: ContractReturnFilter;
     }> = {},
   ): Promise<SourcingCaseListResponse> {
     this.assertReader(actor);
@@ -680,11 +696,13 @@ export class SourcingService {
     const stage = filters.stage ?? "all";
     const gender = filters.gender ?? "all";
     const normalizedStyleName = filters.styleName?.trim() ?? "";
+    const contractReturn = filters.contractReturn ?? null;
     if (normalizedQuery.length > 100) fail("搜索内容不能超过100个字符");
     if (!["all", "pending", "closed"].includes(statusFilter)) fail("订单状态筛选无效");
     if (!["all","ie","management","owner","finance","factory_change","exception"].includes(stage)) fail("流程状态筛选无效");
     if (!["all","男装","女装","missing"].includes(gender)) fail("性别筛选无效");
     if (normalizedStyleName.length > 100) fail("款式类别不能超过100个字符");
+    if (contractReturn !== null && !["all","pending","returned_on_time","overdue_pending","returned_late","all_overdue"].includes(contractReturn)) fail("合同回签状态筛选无效");
     if (!Number.isInteger(page) || page < 1 || page > 100_000) fail("分页页码无效");
     const offset = (page - 1) * SOURCING_LIST_PAGE_SIZE;
     const result = await this.database.query<SourcingCaseRow>(
@@ -707,6 +725,12 @@ export class SourcingService {
          COALESCE(decision_row.crafts,crafts_row.crafts) AS crafts,
          case_view.status,case_view.version,case_view.created_by,
          case_view.created_at,case_view.updated_at,
+         COALESCE(monitor_case.contract_return_monitor_enabled,false) AS contract_return_monitor_enabled,monitor_case.contract_generated_at,
+         monitor_case.contract_return_due_at,monitor_case.contract_returned_at,
+         sourcing_contract_return_elapsed_seconds(
+           monitor_case.contract_return_due_at,COALESCE(monitor_case.contract_returned_at,CURRENT_TIMESTAMP)
+         ) AS contract_return_overdue_seconds,
+         CURRENT_TIMESTAMP AS contract_return_as_of,
          quote_row.sourcing_ie_quote_id,quote_row.quote_version,
          quote_row.unit_price,quote_row.quantity AS quote_quantity,
          quote_row.total_amount,quote_row.quote_reason,
@@ -747,6 +771,7 @@ export class SourcingService {
          snapshot.approved_by AS approval_by,snapshot.approved_at AS approval_at
        FROM current_sourcing_cases case_view
        JOIN LATERAL sourcing_case_facts_at(case_view.sourcing_case_id) source_case ON true
+       LEFT JOIN sourcing_contract_return_monitors monitor_case ON monitor_case.sourcing_case_id=case_view.sourcing_case_id
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(
@@ -878,14 +903,33 @@ export class SourcingService {
            OR ($5::text='历史未维护' AND (source_case.style_name_snapshot IS NULL OR btrim(source_case.style_name_snapshot)=''))
            OR ($5::text<>'历史未维护' AND source_case.style_name_snapshot ILIKE '%'||$5::text||'%')
          )
+         AND (
+           $6::text IS NULL
+           OR (
+             monitor_case.contract_return_monitor_enabled
+             AND monitor_case.contract_return_due_at IS NOT NULL
+             AND (
+               $6::text='all'
+               OR ($6::text='pending' AND monitor_case.contract_returned_at IS NULL AND CURRENT_TIMESTAMP<=monitor_case.contract_return_due_at)
+               OR ($6::text='returned_on_time' AND monitor_case.contract_returned_at<=monitor_case.contract_return_due_at)
+               OR ($6::text='overdue_pending' AND monitor_case.contract_returned_at IS NULL AND CURRENT_TIMESTAMP>monitor_case.contract_return_due_at)
+               OR ($6::text='returned_late' AND monitor_case.contract_returned_at>monitor_case.contract_return_due_at)
+               OR ($6::text='all_overdue' AND (
+                 monitor_case.contract_returned_at>monitor_case.contract_return_due_at
+                 OR (monitor_case.contract_returned_at IS NULL AND CURRENT_TIMESTAMP>monitor_case.contract_return_due_at)
+               ))
+             )
+           )
+         )
        ORDER BY case_view.created_at DESC,case_view.sourcing_case_id DESC
-       LIMIT 15 OFFSET $6`,
+       LIMIT 15 OFFSET $7`,
       [
         normalizedQuery,
         statusFilter,
         stage,
         gender,
         normalizedStyleName,
+        contractReturn,
         offset,
       ],
     );
