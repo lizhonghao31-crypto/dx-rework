@@ -16,7 +16,7 @@ export type SourcingListQuery = Readonly<{
   stage: SourcingStageFilter;
   gender: SourcingGenderFilter;
   styleName: string;
-  contractReturn: SourcingContractReturnFilter | null;
+  contractReturn?: SourcingContractReturnFilter | null;
   page: number;
 }>;
 
@@ -39,7 +39,9 @@ export function readSourcingListQuery(search: string): SourcingListQuery {
     stage: stage && stages.has(stage) ? stage : "all",
     gender: gender && genders.has(gender) ? gender : "all",
     styleName: (params.get("styleName") ?? "").slice(0, 100),
-    contractReturn: contractReturn && contractReturns.has(contractReturn) ? contractReturn : null,
+    ...(params.has("contractReturn") ? {
+      contractReturn: contractReturn && contractReturns.has(contractReturn) ? contractReturn : null,
+    } : {}),
     page: Number.isSafeInteger(page) && page > 0 && page <= 100_000 ? page : 1,
   };
 }
@@ -50,7 +52,7 @@ export function sourcingListPath(mode: SourcingListMode, value: SourcingListQuer
   if (mode === "pending" && value.stage !== "all") params.set("stage", value.stage);
   if (value.gender !== "all") params.set("gender", value.gender);
   if (value.styleName.trim()) params.set("styleName", value.styleName.trim());
-  if (value.contractReturn !== null) params.set("contractReturn", value.contractReturn);
+  if (value.contractReturn != null) params.set("contractReturn", value.contractReturn);
   if (value.page > 1) params.set("page", String(value.page));
   return `/ui/sourcing/${mode}${params.size ? `?${params}` : ""}`;
 }

@@ -840,7 +840,7 @@ function OrderListPage({
   const [stage, setStage] = useState<SourcingStageFilter>(mode === "history" ? "all" : initial.stage);
   const [gender, setGender] = useState<SourcingGenderFilter>(initial.gender);
   const [styleName, setStyleName] = useState(initial.styleName);
-  const [contractReturn,setContractReturn] = useState<SourcingContractReturnFilter | null>(initial.contractReturn);
+  const [contractReturn,setContractReturn] = useState<SourcingContractReturnFilter | null>(initial.contractReturn ?? null);
   const [message, setMessage] = useState("正在加载订单…");
   const [deletingCaseId, setDeletingCaseId] = useState("");
   const [deleteError, setDeleteError] = useState("");
@@ -870,7 +870,7 @@ function OrderListPage({
         styleName: state.styleName,
         page: String(state.page),
       });
-      if (state.contractReturn !== null) params.set("contractReturn",state.contractReturn);
+      if (state.contractReturn != null) params.set("contractReturn",state.contractReturn);
       const body = await request(
         `sourcing/cases?${params.toString()}`,
         SourcingCaseListResponseSchema,
