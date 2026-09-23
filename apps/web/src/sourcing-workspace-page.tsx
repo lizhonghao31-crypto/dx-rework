@@ -333,14 +333,6 @@ const detailHref = (
   );
 };
 
-const sourcingLinePriceLabel = (item: SourcingCaseSummary, position: number): string => {
-  const line = item.lineItems.find((entry) => entry.position === position);
-  const price = item.decision?.linePrices.find((entry) => entry.position === position)?.unitPrice
-    ?? item.ieQuote?.linePrices.find((entry) => entry.position === position)?.unitPrice
-    ?? line?.externalUnitPrice;
-  return price ? formatBusinessCurrency(price) : line?.legacy ? "历史未维护价格" : "待 IE 给价";
-};
-
 function SourcingOrderCard({
   item,
   returnTo,
@@ -354,39 +346,49 @@ function SourcingOrderCard({
   deleting: boolean;
   onDelete: (item: SourcingCaseSummary) => void;
 }) {
-  return <Surface className="sourcing-order-card">
+  const contractBadge = item.contractReturnMonitoring ? sourcingContractReturnBadgeLabel(item) : null;
+  return <Surface className="sourcing-order-card sourcing-order-card--overview">
     <a className="sourcing-order-card__main" href={detailHref(item, returnTo)}>
-      <div className="sourcing-order-card__heading">
-        <div>
-          <span className="sourcing-order-card__title-line">
-            <strong title={item.lineItems[0]?.styleNo ?? item.styleNo}>{item.lineItems[0]?.styleNo ?? item.styleNo}{item.lineItems.length > 1 ? <span className="sourcing-order-card__line-count"> 等 {item.lineItems.length} 行</span> : null}</strong>
-            {item.contractReturnMonitoring && sourcingContractReturnBadgeLabel(item) ? <span
-              className={`sourcing-return-badge sourcing-return-badge--${item.contractReturnStatus}`}
-              title={sourcingContractReturnLabel({contractReturnStatus:item.contractReturnStatus ?? null,contractReturnOverdueHours:item.contractReturnOverdueHours ?? null})}
-            >{sourcingContractReturnBadgeLabel(item)}</span> : null}
-          </span>
-          <small>{item.gender ?? "历史未维护"} · {item.styleName ?? "历史未维护"}</small>
+      <div className="sourcing-order-card__identity">
+        <span className="sourcing-order-card__photo">
+          {item.firstImageAttachmentId ? <img src={attachmentUrl(item.firstImageAttachmentId, "preview")} alt="订单首张图片" loading="lazy" onError={(event) => { event.currentTarget.hidden = true; }} /> : <span>暂无图片</span>}
+        </span>
+        <div className="sourcing-order-card__identity-text">
+          <div className="sourcing-order-card__heading">
+            <div>
+              <span className="sourcing-order-card__title-line">
+                <strong title={item.lineItems[0]?.styleNo ?? item.styleNo}>{item.lineItems[0]?.styleNo ?? item.styleNo}</strong>
+                {item.lineItems.length > 1 ? <span className="sourcing-order-card__line-count">共 {item.lineItems.length} 款色</span> : null}
+              </span>
+              <small>{item.gender ?? "历史未维护"} · {item.styleName ?? "历史未维护"}</small>
+            </div>
+            <StatusBadge tone={item.status === "closed" ? "success" : "info"}>
+              {STATUS_LABELS[item.status]}
+            </StatusBadge>
+          </div>
+          <ul className="sourcing-order-card__lines" aria-label="款色明细">
+            {item.lineItems.slice(0, item.lineItems.length > 1 ? 2 : 1).map((line) => <li key={line.position}>
+              {line.styleNo}{line.alternateStyleNo && line.alternateStyleNo !== line.styleNo ? ` / ${line.alternateStyleNo}` : ""} · {line.color ?? "历史未维护颜色"} · {formatBusinessDecimal(line.quantity)} 件
+            </li>)}
+            {item.lineItems.length > 2 ? <li>另有 {item.lineItems.length - 2} 款色</li> : null}
+          </ul>
+          <p className="sourcing-order-card__merchant">跟单：{item.merchandiserName ?? "历史未维护"}{contractBadge ? <> · 合同：<span
+            className={`sourcing-return-badge sourcing-return-badge--${item.contractReturnStatus}`}
+            title={sourcingContractReturnLabel({contractReturnStatus:item.contractReturnStatus ?? null,contractReturnOverdueHours:item.contractReturnOverdueHours ?? null})}
+          >{contractBadge}</span></> : null}</p>
         </div>
-        <StatusBadge tone={item.status === "closed" ? "success" : "info"}>
-          {STATUS_LABELS[item.status]}
-        </StatusBadge>
       </div>
-      <ul className="sourcing-order-card__lines" aria-label="款色明细">
-        {item.lineItems.slice(0, 3).map((line) => <li key={line.position}>
-          <span>{line.styleNo}{line.alternateStyleNo && line.alternateStyleNo !== line.styleNo ? ` / ${line.alternateStyleNo}` : ""}</span>
-          <span>{line.color ?? "历史未维护颜色"}</span>
-          <span>{formatBusinessDecimal(line.quantity)} 件</span>
-          <span>{sourcingLinePriceLabel(item, line.position)}</span>
-        </li>)}
-        {item.lineItems.length > 3 ? <li><span>另有 {item.lineItems.length - 3} 行</span></li> : null}
-      </ul>
       <dl className="sourcing-list-facts">
-        <div><dt>订单数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)}</dd></div>
-        {"daxingUnitPrice" in item ? <div><dt>预算价</dt><dd>{formatBusinessCurrency(item.daxingUnitPrice ?? "")}</dd></div> : null}
-        <div><dt>IE 单价</dt><dd>{sourcingPriceSummary(item.ieQuote)}</dd></div>
-        <div><dt>生产单价</dt><dd>{sourcingPriceSummary(item.decision)}</dd></div>
-        <div className="sourcing-list-facts__factory"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
-        <div className="sourcing-list-facts__date"><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
+        <div className="sourcing-list-facts__quantity">
+          <div><dt>订单数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
+          {item.decision ? <><div><dt>生产单价</dt><dd>{sourcingPriceSummary(item.decision)}</dd></div><div><dt>加工厂</dt><dd>{item.decision.supplierName}</dd></div></>
+            : item.ieQuote ? <div><dt>IE 单价</dt><dd>{sourcingPriceSummary(item.ieQuote)}</dd></div>
+              : "daxingUnitPrice" in item ? <div><dt>预算价</dt><dd>{formatBusinessCurrency(item.daxingUnitPrice ?? "")}</dd></div> : null}
+        </div>
+        <div className="sourcing-list-facts__dates">
+          <div><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
+          <div><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
+        </div>
       </dl>
       <small className="sourcing-order-card__activity">更新于 {formatDateTime(item.updatedAt)}</small>
     </a>

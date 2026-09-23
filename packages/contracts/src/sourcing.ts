@@ -504,6 +504,8 @@ export const SourcingCaseSummarySchema = z.object({
   status: SourcingCaseStatusSchema,
   version: z.number().int().positive(),
   createdBy: IdSchema,
+  merchandiserName: z.string().nullable().optional(),
+  firstImageAttachmentId: IdSchema.nullable().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   ieQuote: SourcingIeQuoteSchema.nullable(),

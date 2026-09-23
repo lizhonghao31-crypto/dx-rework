@@ -2684,6 +2684,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
 
   it("returns an unapproved order for versioned correction and reapproval", async () => {
     const image = await readyCuttingSheet(merchandiserId);
+    const replacementImage = await readyCuttingSheet(merchandiserId);
     const original = {gender:"男装" as const,styleName:"纠错测试",estimatedCutPieceSendDate:"2026-10-01",deliveryDate:"2026-10-12",lineItems:[{styleNo:"CORRECTION-01",color:"黑",quantity:100}],daxingUnitPrice:"7",attachmentIds:[image]};
     const created = await service.createCase(merchandiserActor(),original,randomUUID());
     const id = created.value.sourcingCaseId;
@@ -2693,13 +2694,16 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const returned=await service.returnToMerchandiser(ownerActor(),id,returnInput,returnKey);
     expect(returned.value.status).toBe("pending_merchandiser_correction");
     expect((await service.returnToMerchandiser(ownerActor(),id,returnInput,returnKey)).reused).toBe(true);
-    const facts={...original};
+    const facts={...original,attachmentIds:[replacementImage]};
     Reflect.deleteProperty(facts,"daxingUnitPrice");
     const correction={...facts,expectedVersion:returned.value.version,reason:"核实后修改",estimatedCutPieceSendDate:"2026-10-02",lineItems:[{styleNo:"CORRECTION-01",color:"白",quantity:120}]};
     await expect(service.correctCase(merchandiserActor(),id,{...correction,deliveryDate:"2026-09-30"},randomUUID())).rejects.toThrow();
     const key=randomUUID();const corrected=await service.correctCase(merchandiserActor(),id,correction,key);
     expect(corrected.value.status).toBe("pending_ie_quote");
     expect(corrected.value.orderQuantity).toBe(120);
+    expect((await service.listAttachments(readerActor(),id)).items.map(photo=>photo.attachmentId)).toEqual([replacementImage]);
+    expect((await service.listCases(readerActor(),"CORRECTION-01")).items[0]?.firstImageAttachmentId).toBe(replacementImage);
+    expect((await database.query("SELECT entity_id FROM attachments WHERE attachment_id=$1",[image])).rows[0]?.entity_id).toBe(id);
     expect((await service.correctCase(merchandiserActor(),id,correction,key)).reused).toBe(true);
     expect((await database.query("SELECT order_quantity FROM sourcing_cases WHERE sourcing_case_id=$1",[id])).rows[0].order_quantity).toBe(100);
     await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"9"}]},randomUUID());

@@ -91,4 +91,17 @@ describe("sourcing list pagination", () => {
     });
     expect(query).not.toHaveBeenCalled();
   });
+
+  it("returns the order's first ready image and merchandiser in the existing paginated list", async () => {
+    const firstImage = "00000000-0000-4000-8000-000000000099";
+    const query = vi.fn().mockResolvedValue({ rows: [{ ...row(1, 1), merchandiser_name: "订单跟单", first_image_attachment_id: firstImage }] });
+    const service = new SourcingService({ query } as unknown as Pool);
+
+    const result = await service.listCases(actor, "", "pending", 1);
+    expect(result.items[0]).toMatchObject({ merchandiserName: "订单跟单", firstImageAttachmentId: firstImage });
+    expect(query.mock.calls[0]?.[0]).toContain("creator_user.display_name AS merchandiser_name");
+    expect(query.mock.calls[0]?.[0]).toContain("image.entity_id=case_view.sourcing_case_id::text");
+    expect(query.mock.calls[0]?.[0]).toContain("image.status='ready'");
+    expect(query.mock.calls[0]?.[0]).toContain("ORDER BY image.created_at,image.attachment_id LIMIT 1");
+  });
 });
