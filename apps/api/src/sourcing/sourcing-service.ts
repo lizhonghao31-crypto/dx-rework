@@ -141,6 +141,8 @@ type SourcingCaseRow = Readonly<{
   status: string;
   version: number | string;
   created_by: string;
+  merchandiser_name?: string | null;
+  first_image_attachment_id?: string | null;
   created_at: Date | string;
   updated_at: Date | string;
   sourcing_ie_quote_id: string | null;
@@ -325,6 +327,8 @@ const mapCase = (
   status: row.status as SourcingCaseStatus,
   version: Number(row.version),
   createdBy: row.created_by,
+  ...(row.merchandiser_name !== undefined ? { merchandiserName: row.merchandiser_name } : {}),
+  ...(row.first_image_attachment_id !== undefined ? { firstImageAttachmentId: row.first_image_attachment_id } : {}),
   createdAt: toIso(row.created_at),
   updatedAt: toIso(row.updated_at),
   ieQuote: row.sourcing_ie_quote_id && row.quote_version !== null
@@ -550,7 +554,6 @@ export class SourcingService {
        FROM current_sourcing_cases case_view
        JOIN LATERAL sourcing_case_facts_at(case_view.sourcing_case_id${history ? ', $2::timestamptz' : ''}) source_case ON true
        LEFT JOIN sourcing_contract_return_monitors monitor_case ON monitor_case.sourcing_case_id=case_view.sourcing_case_id
-       JOIN app_users creator_user ON creator_user.id=case_view.created_by
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(
            jsonb_build_object(
@@ -712,6 +715,8 @@ export class SourcingService {
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
          (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=case_view.sourcing_case_id) AS identity_revision,
          source_case.gender,source_case.style_name_snapshot,
+         creator_user.display_name AS merchandiser_name,
+         first_image.attachment_id AS first_image_attachment_id,
          COALESCE((
             SELECT correction.new_unit_price FROM sourcing_budget_price_corrections correction
             WHERE correction.sourcing_case_id=source_case.sourcing_case_id
@@ -773,6 +778,12 @@ export class SourcingService {
        JOIN LATERAL sourcing_case_facts_at(case_view.sourcing_case_id) source_case ON true
        LEFT JOIN sourcing_contract_return_monitors monitor_case ON monitor_case.sourcing_case_id=case_view.sourcing_case_id
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
+       LEFT JOIN LATERAL (
+         SELECT image.attachment_id FROM attachments image
+         WHERE image.entity_type='sourcing_case' AND image.entity_id=case_view.sourcing_case_id
+           AND image.status='ready' AND image.mime_type IN ('image/jpeg','image/png','image/webp')
+         ORDER BY image.created_at,image.attachment_id LIMIT 1
+       ) first_image ON true
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(
            jsonb_build_object(

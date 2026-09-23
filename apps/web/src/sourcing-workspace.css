@@ -1611,3 +1611,122 @@
     grid-column: 1;
   }
 }
+
+/* Sourcing list overview: preserve the card link and existing status palette. */
+.sourcing-order-card--overview .sourcing-order-card__main {
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 4px var(--dx-v2-space-3);
+  align-items: center;
+  padding: 12px 46px 10px 12px;
+}
+.sourcing-order-card--overview .sourcing-order-card__identity {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: var(--dx-v2-space-3);
+  align-items: center;
+  min-width: 0;
+}
+.sourcing-order-card--overview .sourcing-order-card__photo {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  overflow: hidden;
+  border-radius: var(--dx-v2-radius-sm);
+  background: var(--dx-v2-color-inset);
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 11px;
+}
+.sourcing-order-card--overview .sourcing-order-card__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.sourcing-order-card--overview .sourcing-order-card__identity-text { min-width: 0; }
+.sourcing-order-card--overview .sourcing-order-card__heading {
+  justify-content: flex-start;
+  gap: var(--dx-v2-space-2);
+}
+.sourcing-order-card--overview .sourcing-order-card__title-line > strong { max-width: 100%; }
+.sourcing-order-card--overview .sourcing-order-card__line-count {
+  flex: none;
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.sourcing-order-card--overview .sourcing-order-card__lines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  grid-area: auto;
+  margin: 4px 0 0;
+}
+.sourcing-order-card--overview .sourcing-order-card__lines li {
+  display: block;
+  min-width: 0;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.sourcing-order-card--overview .sourcing-order-card__merchant {
+  margin: 4px 0 0;
+  color: var(--dx-v2-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.sourcing-order-card--overview .sourcing-order-card__merchant .sourcing-return-badge {
+  display: inline-block;
+  vertical-align: baseline;
+}
+.sourcing-order-card--overview .sourcing-order-card__main dl {
+  display: grid;
+  grid-area: 1 / 2;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--dx-v2-space-3);
+  align-items: center;
+}
+.sourcing-order-card--overview .sourcing-order-card__main dl > div { margin-top: 0; }
+.sourcing-order-card--overview .sourcing-list-facts__quantity,
+.sourcing-order-card--overview .sourcing-list-facts__dates { display: grid; gap: 3px; min-width: 0; }
+.sourcing-order-card--overview .sourcing-list-facts__quantity > div,
+.sourcing-order-card--overview .sourcing-list-facts__dates > div {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+  align-items: baseline;
+}
+.sourcing-order-card--overview .sourcing-list-facts__quantity > div:first-child { display: block; }
+.sourcing-order-card--overview .sourcing-list-facts__quantity > div:first-child dd {
+  font-size: 17px;
+  font-weight: 700;
+}
+.sourcing-order-card--overview dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 600;
+  white-space: normal;
+}
+.sourcing-order-card--overview dt { flex: none; font-size: 11px; }
+.sourcing-order-card--overview .sourcing-order-card__activity {
+  grid-area: 2 / 1 / auto / -1;
+  font-size: 11px;
+}
+@media (max-width: 800px) {
+  .sourcing-order-card--overview .sourcing-order-card__main {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .sourcing-order-card--overview .sourcing-order-card__identity {
+    grid-template-columns: 56px minmax(0, 1fr);
+    gap: 9px;
+  }
+  .sourcing-order-card--overview .sourcing-order-card__photo { width: 56px; height: 56px; }
+  .sourcing-order-card--overview .sourcing-order-card__heading { flex-wrap: wrap; }
+  .sourcing-order-card--overview .sourcing-order-card__main dl {
+    grid-area: 2 / 1;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 8px;
+  }
+  .sourcing-order-card--overview .sourcing-order-card__activity { grid-area: 3 / 1; }
+}
