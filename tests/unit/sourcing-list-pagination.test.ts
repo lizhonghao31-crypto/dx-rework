@@ -69,16 +69,16 @@ describe("sourcing list pagination", () => {
     expect(first.items).toHaveLength(15);
     expect(first).toMatchObject({ page: 1, pageSize: 15, totalCount: 16, totalPages: 2 });
     expect(query.mock.calls[0]?.[0]).toContain("count(*) OVER()");
-    expect(query.mock.calls[0]?.[0]).toContain("LIMIT 15 OFFSET $6");
+    expect(query.mock.calls[0]?.[0]).toContain("LIMIT 15 OFFSET $7");
     expect(query.mock.calls[0]?.[0]).toContain(
       "ORDER BY case_view.created_at DESC,case_view.sourcing_case_id DESC",
     );
-    expect(query.mock.calls[0]?.[1]).toEqual(["", "pending", "all", "all", "", 0]);
+    expect(query.mock.calls[0]?.[1]).toEqual(["", "pending", "all", "all", "", null, 0]);
 
     const second = await service.listCases(actor, "", "pending", 2);
     expect(second.items).toHaveLength(1);
     expect(second).toMatchObject({ page: 2, pageSize: 15, totalCount: 16, totalPages: 2 });
-    expect(query.mock.calls[1]?.[1]).toEqual(["", "pending", "all", "all", "", 15]);
+    expect(query.mock.calls[1]?.[1]).toEqual(["", "pending", "all", "all", "", null, 15]);
   });
 
   it("rejects invalid page numbers before querying PostgreSQL", async () => {
