@@ -779,9 +779,17 @@ export class SourcingService {
        LEFT JOIN sourcing_contract_return_monitors monitor_case ON monitor_case.sourcing_case_id=case_view.sourcing_case_id
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
        LEFT JOIN LATERAL (
+         SELECT after_state->'attachmentIds' AS ids FROM operation_events
+         WHERE entity_type='sourcing_case' AND entity_id=case_view.sourcing_case_id::text
+           AND action IN ('sourcing.case.correct','sourcing.attachments.supplement','sourcing.case.create')
+           AND jsonb_typeof(after_state->'attachmentIds')='array'
+         ORDER BY created_at DESC, CASE WHEN action='sourcing.case.correct' THEN 0 ELSE 1 END, event_id DESC LIMIT 1
+       ) current_images ON true
+       LEFT JOIN LATERAL (
          SELECT image.attachment_id FROM attachments image
          WHERE image.entity_type='sourcing_case' AND image.entity_id=case_view.sourcing_case_id::text
            AND image.status='ready' AND image.mime_type IN ('image/jpeg','image/png','image/webp')
+           AND (current_images.ids IS NULL OR current_images.ids ? image.attachment_id::text)
          ORDER BY image.created_at,image.attachment_id LIMIT 1
        ) first_image ON true
        LEFT JOIN LATERAL (
