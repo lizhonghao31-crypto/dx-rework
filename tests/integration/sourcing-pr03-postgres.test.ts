@@ -2820,6 +2820,51 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       expect((await service.getCase(readerActor(),approvedTomorrow)).contractReturnMonitoring).toBe(false);
       await database.query(backfillSql);
       expect((await service.getCase(readerActor(),approvedToday)).contractGeneratedAt).toBe(backfilled.contractGeneratedAt);
+      // A same-day management-only transfer cannot enroll an older owner approval.
+      await service.requestFactoryChange(managerActor(),legacy,{
+        supplierId:replacementFactoryId,unitPrice:"9.0000",
+        changeReason:"生产管理自行低价转厂不能代替老板审批",
+      },randomUUID());
+      await database.query(backfillSql);
+      expect((await service.getCase(readerActor(),legacy)).contractReturnMonitoring).toBe(false);
+
+      // Backfill accepts an owner's same-day transfer of an older order,
+      // and starts from that transfer's ready PDF rather than the earlier one.
+      const ownerBackfill=await makeApproved("RETURN-OWNER-BACKFILL");
+      await database.query("ALTER TABLE sourcing_approval_snapshots DISABLE TRIGGER sourcing_approval_snapshots_no_update");
+      try {
+        await database.query(`UPDATE sourcing_approval_snapshots
+          SET approved_at='2026-09-22T12:00:00+08'::timestamptz
+          WHERE sourcing_case_id=$1`,[ownerBackfill]);
+      } finally {
+        await database.query("ALTER TABLE sourcing_approval_snapshots ENABLE TRIGGER sourcing_approval_snapshots_no_update");
+      }
+      await service.requestFactoryChange(ownerActor(),ownerBackfill,{
+        supplierId:replacementFactoryId,unitPrice:"10.0000",
+        changeReason:"当天老板确认旧单转厂",
+      },randomUUID());
+      await database.query(backfillSql);
+      const ownerBackfilled=await service.getCase(readerActor(),ownerBackfill);
+      expect(ownerBackfilled.contractReturnMonitoring).toBe(true);
+      const ownerDocument=await contractService.getCurrent(readerActor(),ownerBackfill);
+      expect(ownerBackfilled.contractGeneratedAt).toBe(ownerDocument.item?.generatedAt);
+
+      // A later genuine owner approval enrolls a previously excluded case.
+      const reapproved=await makeApproved("RETURN-REAPPROVED");
+      await database.query("ALTER TABLE sourcing_approval_snapshots DISABLE TRIGGER sourcing_approval_snapshots_no_update");
+      try {
+        await database.query(`UPDATE sourcing_approval_snapshots
+          SET approved_at='2026-09-22T12:00:00+08'::timestamptz
+          WHERE sourcing_case_id=$1`,[reapproved]);
+      } finally {
+        await database.query("ALTER TABLE sourcing_approval_snapshots ENABLE TRIGGER sourcing_approval_snapshots_no_update");
+      }
+      process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT="2026-09-23T00:00:00+08:00";
+      await service.requestFactoryChange(ownerActor(),reapproved,{
+        supplierId:replacementFactoryId,unitPrice:"10.0000",
+        changeReason:"老板确认换厂，首次纳入合同回签监控",
+      },randomUUID());
+      expect((await service.getCase(readerActor(),reapproved)).contractReturnMonitoring).toBe(true);
       await service.reviseStyles(merchandiserActor(),active,{
         expectedRevision:0,lines:[{position:1,styleNo:"RETURN-REVISED",alternateStyleNo:null}],
       },randomUUID());

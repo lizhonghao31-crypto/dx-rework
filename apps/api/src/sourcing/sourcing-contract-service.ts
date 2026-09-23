@@ -130,8 +130,8 @@ export class SourcingContractService {
     // Serialize with style corrections, approvals and dispatch before reading the revision.
     await client.query(`SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=(
       SELECT sourcing_case_id FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1) FOR UPDATE`,[approvalSnapshotId]);
-    // The cutoff is an explicit deployment decision. Existing approved cases stay excluded
-    // even if a later approval or document revision occurs after rollout.
+    // Enroll the current owner/root approval even when this case has older
+    // approval snapshots. A management-only factory change does not qualify.
     const cutoff = contractReturnCutoff();
     if (cutoff) {
       await client.query(`INSERT INTO sourcing_contract_return_monitors(
@@ -141,10 +141,22 @@ export class SourcingContractService {
       FROM sourcing_approval_snapshots current_snapshot
       WHERE current_snapshot.sourcing_approval_snapshot_id=$1
         AND current_snapshot.approved_at >= $2::timestamptz
-        AND NOT EXISTS (
-          SELECT 1 FROM sourcing_approval_snapshots earlier
-          WHERE earlier.sourcing_case_id=current_snapshot.sourcing_case_id
-            AND earlier.approved_at < $2::timestamptz
+        AND (
+          EXISTS (
+            SELECT 1 FROM sourcing_owner_decisions owner_decision
+            WHERE owner_decision.operation_event_id=current_snapshot.operation_event_id
+              AND owner_decision.sourcing_decision_id=current_snapshot.sourcing_decision_id
+              AND owner_decision.decision='approved'
+          )
+          OR EXISTS (
+            SELECT 1 FROM sourcing_decisions decision
+            JOIN sourcing_factory_change_decisions owner_change
+              ON owner_change.factory_change_request_id=decision.source_change_request_id
+            WHERE decision.sourcing_decision_id=current_snapshot.sourcing_decision_id
+              AND owner_change.operation_event_id=current_snapshot.operation_event_id
+              AND owner_change.decision='approved'
+              AND owner_change.decision_role='owner_group'
+          )
         )
       ON CONFLICT(sourcing_case_id) DO NOTHING`,[approvalSnapshotId,cutoff]);
     }
