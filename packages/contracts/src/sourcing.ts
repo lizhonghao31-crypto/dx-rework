@@ -286,6 +286,26 @@ export const SourcingContractStateResponseSchema = z.object({
   item: SourcingContractDocumentSchema.nullable(),
 }).strict();
 
+export const SourcingContractReturnUploadSchema = z.object({
+  attachmentIds: z.array(IdSchema).min(1).max(10).refine(ids=>new Set(ids).size===ids.length),
+}).strict();
+export const SourcingContractReturnResponseSchema = z.object({
+  contractReturnMonitoring: z.boolean(),
+  contractReturnStatus: z.enum(["pending","returned_on_time","overdue_pending","returned_late"]).nullable(),
+  contractGeneratedAt: z.string().datetime().nullable(),
+  contractReturnDueAt: z.string().datetime().nullable(),
+  contractReturnedAt: z.string().datetime().nullable(),
+  contractReturnOverdueHours: z.number().int().nonnegative().nullable(),
+  uploadedByName: z.string().nullable(),
+  canUpload: z.boolean(),
+  attachments: z.array(z.object({
+    attachmentId: IdSchema,filename: z.string(),
+    mimeType: z.enum(["application/pdf","image/jpeg","image/png"]),
+    sizeBytes: z.number().int().positive(),
+  }).strict()).max(10),
+}).strict();
+export type SourcingContractReturnResponse = z.infer<typeof SourcingContractReturnResponseSchema>;
+
 export const RecordSourcingContractSchema = z.object({
   contractReference: z.string().trim().min(1).max(200),
   signedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "合同日期格式无效"),

@@ -129,6 +129,16 @@ const create = (
     supplement: vi.fn(async () => contractState),
     generateIfReady: vi.fn(async () => contractState),
   };
+  const contractReturnResponse = {
+    contractReturnMonitoring: true,contractReturnStatus: "pending" as const,
+    contractGeneratedAt: "2026-09-23T02:00:00.000Z",contractReturnDueAt: "2026-09-25T02:00:00.000Z",
+    contractReturnedAt: null,contractReturnOverdueHours: 0,uploadedByName: null,
+    canUpload: true,attachments: [],
+  };
+  const contractReturns = {
+    get: vi.fn(async()=>contractReturnResponse),
+    submit: vi.fn(async()=>contractReturnResponse),
+  };
   const app = buildApp({
     config,
     checkDatabase: async () => undefined,
@@ -147,12 +157,34 @@ const create = (
       },
       service: service as never,
       contracts: contracts as never,
+      contractReturns: contractReturns as never,
       root: root as never,
     },
   });
   apps.push(app);
-  return { app, service, contracts };
+  return { app, service, contracts, contractReturns };
 };
+
+describe("sourcing contract return routes", () => {
+  const id=caseSummary.sourcingCaseId;
+  const attachmentId="00000000-0000-4000-8000-000000000301";
+  it("lets an order reader see status but denies writes without the correct business role and capability", async()=>{
+    const reader=create(["sourcing:view"],["factory_payables"]);
+    expect((await reader.app.inject({method:"GET",url:`/sourcing/cases/${id}/contract-return`,
+      headers:{cookie:"dx_rework_session=trusted"}})).statusCode).toBe(200);
+    expect((await reader.app.inject({method:"POST",url:`/sourcing/cases/${id}/contract-return`,
+      headers:{cookie:"dx_rework_session=trusted","idempotency-key":"return-a"},
+      payload:{attachmentIds:[attachmentId]}})).statusCode).toBe(403);
+    expect(reader.contractReturns.submit).not.toHaveBeenCalled();
+    const owner=create(["sourcing:view","sourcing:owner:approve"],["owner_group"]);
+    expect((await owner.app.inject({method:"POST",url:`/sourcing/cases/${id}/contract-return`,
+      headers:{cookie:"dx_rework_session=trusted","idempotency-key":"return-b"},
+      payload:{attachmentIds:[attachmentId]}})).statusCode).toBe(200);
+    expect(owner.contractReturns.submit).toHaveBeenCalledWith(
+      expect.objectContaining({authorizationCapability:"sourcing:owner:approve"}),id,[attachmentId],"return-b",
+    );
+  });
+});
 
 describe("sourcing PR03 routes", () => {
   it("reads historical nodes through the existing read permission without granting a write endpoint", async () => {

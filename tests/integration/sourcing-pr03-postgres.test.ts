@@ -14,6 +14,7 @@ import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { CuttingSourceService } from "../../apps/api/src/cutting/cutting-source-service.js";
 import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
 import { SourcingContractService } from "../../apps/api/src/sourcing/sourcing-contract-service.js";
+import { SourcingContractReturnService } from "../../apps/api/src/sourcing/sourcing-contract-return-service.js";
 import { SourcingProductionService } from "../../apps/api/src/sourcing/sourcing-production-service.js";
 import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
 import { AttachmentService } from "../../apps/api/src/tools/attachments.js";
@@ -41,6 +42,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     prefix: "tests",ttlSeconds: 60,maxUploadBytes: 5_000_000,
   });
   const contractService = new SourcingContractService(database, attachments);
+  const contractReturns = new SourcingContractReturnService(database);
   const service = new SourcingService(
     database,undefined,undefined,todoProjection,contractService,
   );
@@ -2728,10 +2730,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
 
   it("skips Shanghai Sundays for both deadline and elapsed hours", async () => {
     const samples: [string,string][] = [
-      ["2026-09-25T02:00:00Z","2026-09-28T02:00:00.000Z"], // Friday 10:00 to Monday 10:00
-      ["2026-09-26T02:00:00Z","2026-09-29T02:00:00.000Z"], // Saturday 10:00 to Tuesday 10:00
-      ["2026-09-27T02:00:00Z","2026-09-29T16:00:00.000Z"], // Sunday 10:00 to Wednesday 00:00
-      ["2026-09-25T16:00:00Z","2026-09-28T16:00:00.000Z"], // Saturday 00:00 to Tuesday 00:00
+      ["2026-09-25T02:00:00Z","2026-09-28T02:00:00.000Z"],
+      ["2026-09-26T02:00:00Z","2026-09-29T02:00:00.000Z"],
+      ["2026-09-27T02:00:00Z","2026-09-29T16:00:00.000Z"],
+      ["2026-09-25T16:00:00Z","2026-09-28T16:00:00.000Z"],
     ];
     for (const [start,expected] of samples) {
       const result = await database.query<{due: Date}>(
@@ -2793,6 +2795,57 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         .some(item=>item.sourcingCaseId===active)).toBe(false);
     } finally {
       if (previous === undefined) delete process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
+      else process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT=previous;
+    }
+  });
+  it("keeps the first persisted return when the file is replaced, with role and file ownership checks", async () => {
+    const previous=process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
+    process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT="2020-01-01T00:00:00Z";
+    try {
+      const created=await service.createCase(merchandiserActor(),{
+        gender:"男装",styleName:"回签附件测试",estimatedCutPieceSendDate:"2026-10-01",
+        deliveryDate:"2026-10-20",lineItems:[{styleNo:"RETURN-FILE",color:"黑",quantity:20}],
+        daxingUnitPrice:"8",
+      },randomUUID());
+      const id=created.value.sourcingCaseId;
+      await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
+      await service.recordManagementDecision(managerActor(),id,{
+        supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}],
+      },randomUUID());
+      await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+      const pdfId=randomUUID(),imageId=randomUUID(),wrongOwnerId=randomUUID();
+      await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,
+        size_bytes,sha256,uploaded_by,status,ready_at)
+        VALUES($1,$4,'回签.pdf','application/pdf',128,$5,$7,'ready',CURRENT_TIMESTAMP),
+              ($2,$4||'-image','回签补图.jpg','image/jpeg',128,$6,$8,'ready',CURRENT_TIMESTAMP),
+              ($3,$4||'-wrong','其他人.png','image/png',128,$5,$8,'ready',CURRENT_TIMESTAMP)`,
+        [pdfId,imageId,wrongOwnerId,`contract-return-test/${pdfId}`,"a".repeat(64),"b".repeat(64),merchandiserId,ownerId]);
+      await expect(contractReturns.submit(financeActor(),id,[pdfId],randomUUID())).rejects.toMatchObject({statusCode:403});
+      await expect(contractReturns.submit(contractActor(),id,[wrongOwnerId],randomUUID())).rejects.toMatchObject({statusCode:400});
+      expect((await contractReturns.get(readerActor(),id)).contractReturnedAt).toBeNull();
+      const key=randomUUID();
+      const first=await contractReturns.submit(contractActor(),id,[pdfId],key);
+      expect(first.contractReturnStatus).toBe("returned_on_time");
+      expect(first.contractReturnedAt).toBeTruthy();
+      expect((await contractReturns.submit(contractActor(),id,[pdfId],key)).contractReturnedAt).toBe(first.contractReturnedAt);
+      await expect(contractReturns.submit(contractActor(),id,[imageId],key)).rejects.toMatchObject({statusCode:409});
+      const identicalKey=randomUUID();
+      expect((await contractReturns.submit(contractActor(),id,[pdfId],identicalKey)).contractReturnedAt).toBe(first.contractReturnedAt);
+      await expect(contractReturns.submit(contractActor(),id,[imageId],identicalKey)).rejects.toMatchObject({statusCode:409});
+      expect((await database.query("SELECT count(*)::int AS count FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[id])).rows[0].count).toBe(1);
+      const replaced=await contractReturns.submit({...ownerActor(),authorizationCapabilities:["sourcing:view","sourcing:owner:approve"]},id,[imageId],randomUUID());
+      expect(replaced.contractReturnedAt).toBe(first.contractReturnedAt);
+      expect(replaced.uploadedByName).toBe("老板");
+      expect((await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id)).attachments
+        .map(file=>file.attachmentId)).toEqual([imageId]);
+      expect((await contractReturns.get(readerActor(),id)).attachments).toEqual([]);
+      expect((await contractReturns.get({...readerActor(),authorizationCapabilities:["sourcing:view","supplier_contract_data:read"]},id)).attachments
+        .map(file=>file.attachmentId)).toEqual([imageId]);
+      expect((await database.query("SELECT count(*)::int AS count FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[id])).rows[0].count).toBe(2);
+      expect(service.canDownloadBoundAttachment(readerActor(),{entityType:"sourcing_contract_return",entityId:id,mimeType:"application/pdf"})).toBe(false);
+      expect(service.canDownloadBoundAttachment({...rootActor(),authorizationCapability:"sourcing:view"},{entityType:"sourcing_contract_return",entityId:id,mimeType:"application/pdf"})).toBe(true);
+    } finally {
+      if(previous===undefined) delete process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
       else process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT=previous;
     }
   });
