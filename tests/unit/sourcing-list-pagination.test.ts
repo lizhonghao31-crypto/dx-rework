@@ -100,6 +100,7 @@ describe("sourcing list pagination", () => {
     const result = await service.listCases(actor, "", "pending", 1);
     expect(result.items[0]).toMatchObject({ merchandiserName: "订单跟单", firstImageAttachmentId: firstImage });
     expect(query.mock.calls[0]?.[0]).toContain("creator_user.display_name AS merchandiser_name");
+    expect(query.mock.calls[0]?.[0]).toContain("image.entity_id=case_view.sourcing_case_id::text");
     expect(query.mock.calls[0]?.[0]).toContain("image.status='ready'");
     expect(query.mock.calls[0]?.[0]).toContain("ORDER BY image.created_at,image.attachment_id LIMIT 1");
   });

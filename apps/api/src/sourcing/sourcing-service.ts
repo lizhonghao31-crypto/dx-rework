@@ -780,7 +780,7 @@ export class SourcingService {
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
        LEFT JOIN LATERAL (
          SELECT image.attachment_id FROM attachments image
-         WHERE image.entity_type='sourcing_case' AND image.entity_id=case_view.sourcing_case_id
+         WHERE image.entity_type='sourcing_case' AND image.entity_id=case_view.sourcing_case_id::text
            AND image.status='ready' AND image.mime_type IN ('image/jpeg','image/png','image/webp')
          ORDER BY image.created_at,image.attachment_id LIMIT 1
        ) first_image ON true
