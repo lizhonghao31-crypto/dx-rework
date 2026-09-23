@@ -200,6 +200,7 @@ type SourcingCaseRow = Readonly<{
   contract_generated_at: Date | string | null;
   contract_return_due_at: Date | string | null;
   contract_returned_at: Date | string | null;
+  contract_return_overdue_seconds: number | string | null;
   contract_return_as_of: Date | string;
   total_count?: string;
 }>;
@@ -504,6 +505,9 @@ export class SourcingService {
          case_view.created_at,case_view.updated_at,
          COALESCE(monitor_case.contract_return_monitor_enabled,false) AS contract_return_monitor_enabled,monitor_case.contract_generated_at,
          monitor_case.contract_return_due_at,monitor_case.contract_returned_at,
+         sourcing_contract_return_elapsed_seconds(
+           monitor_case.contract_return_due_at,COALESCE(monitor_case.contract_returned_at,CURRENT_TIMESTAMP)
+         ) AS contract_return_overdue_seconds,
          CURRENT_TIMESTAMP AS contract_return_as_of,
          quote_row.sourcing_ie_quote_id,quote_row.quote_version,
          quote_row.unit_price,quote_row.quantity AS quote_quantity,
@@ -723,6 +727,9 @@ export class SourcingService {
          case_view.created_at,case_view.updated_at,
          COALESCE(monitor_case.contract_return_monitor_enabled,false) AS contract_return_monitor_enabled,monitor_case.contract_generated_at,
          monitor_case.contract_return_due_at,monitor_case.contract_returned_at,
+         sourcing_contract_return_elapsed_seconds(
+           monitor_case.contract_return_due_at,COALESCE(monitor_case.contract_returned_at,CURRENT_TIMESTAMP)
+         ) AS contract_return_overdue_seconds,
          CURRENT_TIMESTAMP AS contract_return_as_of,
          quote_row.sourcing_ie_quote_id,quote_row.quote_version,
          quote_row.unit_price,quote_row.quantity AS quote_quantity,

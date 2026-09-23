@@ -6,6 +6,8 @@ export type ContractReturnFacts = {
   contract_generated_at: Date | string | null;
   contract_return_due_at: Date | string | null;
   contract_returned_at: Date | string | null;
+  // Calculated in SQL using the same Shanghai calendar rule as the deadline.
+  contract_return_overdue_seconds: number | string | null;
 };
 
 // A pending contract has no clock and is intentionally absent from the monitored list.
@@ -29,14 +31,13 @@ export function contractReturnState(facts: ContractReturnFacts, asOf: Date | str
   const status: ContractReturnStatus = returned !== null
     ? returned <= due ? "returned_on_time" : "returned_late"
     : new Date(asOf).getTime() <= due ? "pending" : "overdue_pending";
-  const elapsed = (status === "returned_late" ? returned! : new Date(asOf).getTime()) - due;
   return {
     contractReturnMonitoring: true,contractReturnStatus: status,
     contractGeneratedAt: iso(facts.contract_generated_at),
     contractReturnDueAt: iso(facts.contract_return_due_at),
     contractReturnedAt: iso(facts.contract_returned_at),
     contractReturnOverdueHours: status === "returned_late" || status === "overdue_pending"
-      ? Math.max(0, Math.floor(elapsed / 3_600_000)) : 0,
+      ? Math.max(0, Math.floor(Number(facts.contract_return_overdue_seconds ?? 0) / 3600)) : 0,
   };
 }
 
