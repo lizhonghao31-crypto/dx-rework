@@ -303,6 +303,16 @@ export const SourcingContractReturnResponseSchema = z.object({
     mimeType: z.enum(["application/pdf","image/jpeg","image/png"]),
     sizeBytes: z.number().int().positive(),
   }).strict()).max(10),
+  history: z.array(z.object({
+    revision: z.number().int().positive(),
+    submittedAt: z.string().datetime(),
+    uploadedByName: z.string(),
+    attachments: z.array(z.object({
+      attachmentId: IdSchema,filename: z.string(),
+      mimeType: z.enum(["application/pdf","image/jpeg","image/png"]),
+      sizeBytes: z.number().int().positive(),
+    }).strict()).min(1).max(10),
+  }).strict()).default([]),
 }).strict();
 export type SourcingContractReturnResponse = z.infer<typeof SourcingContractReturnResponseSchema>;
 
