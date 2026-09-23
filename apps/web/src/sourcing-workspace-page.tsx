@@ -1783,11 +1783,13 @@ function OrderDetailPage({
                       {contractUploading?"正在上传…":contractReturn.attachments.length?"上传/更新回签合同":"上传回签合同"}
                     </button>
                   </> : null}
-                  {contractReturn.attachments.map((file,index)=>
-                    <a className="dx-button dx-button--secondary" key={file.attachmentId}
-                      href={attachmentUrl(file.attachmentId,"preview")} target="_blank" rel="noreferrer">
-                      {index===0?"查看回签合同":`查看第 ${index+1} 张`}
-                    </a>)}
+                  {contractReturn.attachments.length ? <div className="sourcing-contract-return-links" aria-label="回签附件，可左右滑动查看更多">
+                    {contractReturn.attachments.map((file,index)=>
+                      <a className="dx-button dx-button--secondary" key={file.attachmentId}
+                        href={attachmentUrl(file.attachmentId,"preview")} target="_blank" rel="noreferrer">
+                        {index===0?"查看回签合同":`查看第 ${index+1} 张`}
+                      </a>)}
+                  </div> : null}
                   {contractPendingSubmission && contractReturnError ? <button className="dx-button dx-button--secondary" type="button"
                     disabled={contractUploading} onClick={()=>void retryContractReturn()}>重试保存</button> : null}
                 </div>

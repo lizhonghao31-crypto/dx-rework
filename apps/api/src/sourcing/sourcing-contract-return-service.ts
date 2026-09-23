@@ -110,11 +110,9 @@ export class SourcingContractReturnService {
       }
       if (!(await this.canUpload(actor,monitor.created_by))) forbidden();
       const previous=await client.query<{submitted_by:string;attachment_ids:string[]}>(`SELECT submission.submitted_by,
-        array_agg(link.attachment_id::text ORDER BY link.position) AS attachment_ids
-        FROM sourcing_contract_return_submissions submission
-        JOIN sourcing_contract_return_attachments link ON link.submission_id=submission.submission_id
-        WHERE submission.sourcing_case_id=$1 AND submission.request_id=$2
-        GROUP BY submission.submission_id`,[sourcingCaseId,key]);
+        submission.attachment_ids
+        FROM sourcing_contract_return_requests submission
+        WHERE submission.sourcing_case_id=$1 AND submission.request_id=$2`,[sourcingCaseId,key]);
       if (previous.rows[0]) {
         if (previous.rows[0].submitted_by !== actor.actorId
           || JSON.stringify(previous.rows[0].attachment_ids)!==JSON.stringify(attachmentIds)) {
@@ -132,6 +130,9 @@ export class SourcingContractReturnService {
         GROUP BY submission.submission_id`,[sourcingCaseId]);
       if (latest.rows[0]?.submitted_by===actor.actorId
         && JSON.stringify(latest.rows[0].attachment_ids)===JSON.stringify(attachmentIds)) {
+        await client.query(`INSERT INTO sourcing_contract_return_requests(
+          sourcing_case_id,request_id,submitted_by,attachment_ids
+        ) VALUES($1,$2,$3,$4::uuid[])`,[sourcingCaseId,key,actor.actorId,attachmentIds]);
         await client.query("COMMIT");
         return this.get({...actor,authorizationCapability:READ},sourcingCaseId);
       }
@@ -159,6 +160,9 @@ export class SourcingContractReturnService {
         await client.query(`INSERT INTO sourcing_contract_return_attachments(submission_id,attachment_id,position)
           VALUES($1,$2,$3)`,[submissionId,attachmentId,index+1]);
       }
+      await client.query(`INSERT INTO sourcing_contract_return_requests(
+        sourcing_case_id,request_id,submitted_by,attachment_ids
+      ) VALUES($1,$2,$3,$4::uuid[])`,[sourcingCaseId,key,actor.actorId,attachmentIds]);
       await client.query(`UPDATE sourcing_contract_return_monitors
         SET contract_returned_at=COALESCE(contract_returned_at,$2::timestamptz),
             contract_return_uploaded_by=COALESCE(contract_return_uploaded_by,$3::uuid),

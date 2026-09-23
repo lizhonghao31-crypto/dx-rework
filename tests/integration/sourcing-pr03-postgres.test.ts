@@ -2829,6 +2829,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       expect(first.contractReturnedAt).toBeTruthy();
       expect((await contractReturns.submit(contractActor(),id,[pdfId],key)).contractReturnedAt).toBe(first.contractReturnedAt);
       await expect(contractReturns.submit(contractActor(),id,[imageId],key)).rejects.toMatchObject({statusCode:409});
+      const identicalKey=randomUUID();
+      expect((await contractReturns.submit(contractActor(),id,[pdfId],identicalKey)).contractReturnedAt).toBe(first.contractReturnedAt);
+      await expect(contractReturns.submit(contractActor(),id,[imageId],identicalKey)).rejects.toMatchObject({statusCode:409});
+      expect((await database.query("SELECT count(*)::int AS count FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[id])).rows[0].count).toBe(1);
       const replaced=await contractReturns.submit({...ownerActor(),authorizationCapabilities:["sourcing:view","sourcing:owner:approve"]},id,[imageId],randomUUID());
       expect(replaced.contractReturnedAt).toBe(first.contractReturnedAt);
       expect(replaced.uploadedByName).toBe("老板");

@@ -20,6 +20,16 @@ CREATE TABLE sourcing_contract_return_attachments (
   PRIMARY KEY(submission_id,position)
 );
 
+-- A request key is consumed even when the current files are identical and no
+-- new revision is necessary. This prevents reusing that key with other files.
+CREATE TABLE sourcing_contract_return_requests (
+  sourcing_case_id uuid NOT NULL REFERENCES sourcing_contract_return_monitors(sourcing_case_id),
+  request_id text NOT NULL CHECK(request_id ~ '^[A-Za-z0-9._:-]{1,200}$'),
+  submitted_by uuid NOT NULL REFERENCES app_users(id),
+  attachment_ids uuid[] NOT NULL CHECK(cardinality(attachment_ids) BETWEEN 1 AND 10),
+  PRIMARY KEY(sourcing_case_id,request_id)
+);
+
 CREATE INDEX sourcing_contract_return_submissions_latest_idx
   ON sourcing_contract_return_submissions(sourcing_case_id,revision DESC);
 
