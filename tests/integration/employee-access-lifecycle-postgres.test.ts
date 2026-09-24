@@ -72,10 +72,13 @@ runWithPostgres("employee access role lifecycle", () => {
       new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url),
       "utf8",
     )) as Manifest;
-    const lifecycle = manifest.migrations.at(-1);
-    expect(lifecycle?.version).toBe("0089_employee_access_role_lifecycle");
+    const lifecycleIndex = manifest.migrations.findIndex(
+      (migration) => migration.version === "0089_employee_access_role_lifecycle",
+    );
+    expect(lifecycleIndex).toBeGreaterThanOrEqual(0);
+    const lifecycle = manifest.migrations[lifecycleIndex]!;
 
-    for (const migration of manifest.migrations.slice(0, -1)) {
+    for (const migration of manifest.migrations.slice(0, lifecycleIndex)) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration.version}.sql`, import.meta.url),
         "utf8",
@@ -182,6 +185,16 @@ runWithPostgres("employee access role lifecycle", () => {
       [candidateId],
     )).rows[0]?.enabled).toBe(false);
 
+    // The assertions above isolate the 0089 migration behavior. From this point on,
+    // run the current service against the complete current schema rather than a
+    // historical partial schema.
+    for (const migration of manifest.migrations.slice(lifecycleIndex + 1)) {
+      await database.query(await readFile(
+        new URL(`../../apps/api/migrations/${migration.version}.sql`, import.meta.url),
+        "utf8",
+      ));
+    }
+
     const service = new AccessMasterDataService(database, "corp");
     await service.ensureOrganizationPolicy();
     const rootActor: TrustedActorContext = {
@@ -255,7 +268,7 @@ runWithPostgres("employee access role lifecycle", () => {
     expect((await database.query<{ action: string }>(
       `SELECT action FROM operation_events
        WHERE entity_id=$1 AND action IN ('access.employee.auto_enable','access.employee.auto_disable')
-       ORDER BY occurred_at`,
+       ORDER BY created_at,event_id`,
       [candidateId],
     )).rows.map((row) => row.action)).toEqual([
       "access.employee.auto_enable",
