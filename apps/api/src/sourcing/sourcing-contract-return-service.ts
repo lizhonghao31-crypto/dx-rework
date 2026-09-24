@@ -4,6 +4,8 @@ import type { TrustedActorContext } from "../tools/repositories.js";
 import { OperationEventRepository } from "../tools/repositories.js";
 import { memberCanWriteModule } from "../access/member-module-policy.js";
 import { ApplicationError } from "../platform/errors.js";
+import { TodoProjectionService } from "../todos/projection-service.js";
+import { TodoService } from "../todos/service.js";
 import { contractReturnState } from "./contract-return-state.js";
 
 const ROOT = "root_superuser";
@@ -36,7 +38,8 @@ const fileDto = (row: FileRow) => ({
 });
 
 export class SourcingContractReturnService {
-  constructor(private readonly database: Pool, private readonly events = new OperationEventRepository()) {}
+  constructor(private readonly database: Pool, private readonly events = new OperationEventRepository(),
+    private readonly todos = new TodoProjectionService(new TodoService(database))) {}
 
   private assertReader(actor: TrustedActorContext): void {
     if (!actor.actorRoles.includes(ROOT) || actor.authorizationCapability !== READ) {
@@ -193,6 +196,11 @@ export class SourcingContractReturnService {
       await this.events.append(client,actor,{action:"sourcing.contract_return.upload",
         entityType:"sourcing_case",entityId:sourcingCaseId,
         after:{submissionId,revision:next,attachmentIds:[...attachmentIds],firstReturn:monitor.contract_returned_at === null}});
+      if (monitor.contract_returned_at === null) {
+        await this.todos.completeOpenByDedupePrefix(
+          client,actor,`sourcing:${sourcingCaseId}:return:`,"回签合同已上传",
+        );
+      }
       await client.query("COMMIT");
       return this.get({...actor,authorizationCapability:READ},sourcingCaseId);
     } catch(error) {

@@ -17,6 +17,7 @@ export type TodoPresentation = Readonly<{
 }>;
 
 const catalog: Readonly<Record<string, TodoPresentation>> = {
+  sourcing_contract_return: { title: "回传合同", action: "老板已批准，请与供应商签署合同并上传回签文件。" },
   sample_borrow_confirm: { title: "确认样衣借出", action: "请实际交付样衣后，扫描申请人的交接码确认。" },
   sample_return_confirm: { title: "确认样衣归还", action: "请实际收到样衣后，扫描申请人的交接码并填写在库位置。" },
   process_configuration: { title: "配置返工工序", action: "请配置工序、计划数量和单价。" },
@@ -88,16 +89,19 @@ export const buildTodoPresentation = (input: Readonly<{
   wagePeriodMonth?: string | null;
 }>): Readonly<{ subject: string; description: string }> => {
   const presentation = todoPresentationForCategory(input.category);
+  const isSourcingReturn = input.category === "sourcing_contract_return";
   const contextLines = input.orderContext
-    ? [
-        `款号：${value(input.orderContext.styleNo)}`,
-        `返工单：${value(input.orderContext.reworkNo)}`,
-      ]
+    ? isSourcingReturn
+      ? [`款号：${value(input.orderContext.styleNo)}`]
+      : [
+          `款号：${value(input.orderContext.styleNo)}`,
+          `返工单：${value(input.orderContext.reworkNo)}`,
+        ]
     : input.wagePeriodMonth
       ? [`工资月份：${input.wagePeriodMonth.slice(0, 7)}`]
       : [];
   return {
-    subject: `${deliveryPrefix(input.deliveryKind, input.category)}${orderSubject(input.orderContext)}${presentation.title}`,
+    subject: `${deliveryPrefix(input.deliveryKind, input.category)}${isSourcingReturn && input.orderContext ? `【款号:${value(input.orderContext.styleNo)}】` : orderSubject(input.orderContext)}${presentation.title}`,
     description: [...contextLines, `事项：${presentation.action}`].join("\n"),
   };
 };

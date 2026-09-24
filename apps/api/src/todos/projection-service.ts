@@ -18,7 +18,7 @@ type ActionableProjection = Readonly<{
   requiredRole: string;
   requiredCapability: string;
   route: TodoRouteTemplate;
-  policyKey: "general" | "finance_return_or_wage_review" | "deduction_follow_up";
+  policyKey: "general" | "finance_return_or_wage_review" | "deduction_follow_up" | "sourcing_contract_return";
   authoritativeDueAt?: Date;
   delegationScopeId?: string;
   dedupeKey: string;

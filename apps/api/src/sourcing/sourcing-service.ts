@@ -2541,6 +2541,7 @@ export class SourcingService {
         const current = await client.query<{
           status: string;
           sequence: number | string;
+          created_by: string;
           sourcing_decision_id: string | null;
           decision_version: number | string | null;
           source_type: string | null;
@@ -2556,6 +2557,7 @@ export class SourcingService {
           style_name_snapshot: string | null;
         }>(
           `SELECT current_transition.to_status AS status,current_transition.sequence,
+                  source_case.created_by,
                   decision_row.sourcing_decision_id,decision_row.decision_version,
                   decision_row.source_type,decision_row.supplier_id,
                   decision_row.supplier_code_snapshot,decision_row.supplier_name_snapshot,
@@ -2723,6 +2725,30 @@ export class SourcingService {
           `sourcing:${sourcingCaseId}:owner:${decisionVersion}:`,
           approved ? "老板已批准" : "老板已驳回",
         );
+        if (approved) {
+          const returnFact = await client.query<{ contract_returned_at: Date | null }>(
+            "SELECT contract_returned_at FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1",
+            [sourcingCaseId],
+          );
+          if (returnFact.rows[0]?.contract_returned_at === null) {
+            await this.todoProjection?.completeOpenByDedupePrefix(
+              client, actor, `sourcing:${sourcingCaseId}:return:`, "选厂批准版本已更新",
+            );
+            await this.todoProjection?.actionableForNamedRecipient?.(client, actor, {
+              category: "sourcing_contract_return",
+              sourceEventId: eventId,
+              sourceAction: "sourcing.owner.approve",
+              entityType: "sourcing_case",
+              entityId: sourcingCaseId,
+              recipientUserId: source.created_by,
+              requiredRole: CONTRACT_ROLE,
+              requiredCapability: CONTRACT_CAPABILITY,
+              route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
+              policyKey: "sourcing_contract_return",
+              dedupeKey: `sourcing:${sourcingCaseId}:return:${decisionVersion}`,
+            });
+          }
+        }
         if (!approved) {
           await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
             category: "sourcing_management_decision",
@@ -3121,6 +3147,35 @@ export class SourcingService {
         policyKey: "general",
         dedupeKey: `sourcing:${source.sourcing_case_id}:finance:${nextDecisionVersion}:${Number(source.reconciliation_version)+1}`,
       });
+      if (actor.authorizationCapability === OWNER_DECISION_CAPABILITY) {
+        const returnFact = await client.query<{ created_by: string; contract_returned_at: Date | null }>(
+          `SELECT source_case.created_by,monitor.contract_returned_at
+           FROM sourcing_cases source_case
+           JOIN sourcing_contract_return_monitors monitor
+             ON monitor.sourcing_case_id=source_case.sourcing_case_id
+           WHERE source_case.sourcing_case_id=$1 AND monitor.contract_return_monitor_enabled`,
+          [source.sourcing_case_id],
+        );
+        const pending = returnFact.rows[0];
+        if (pending?.contract_returned_at === null) {
+          await this.todoProjection?.completeOpenByDedupePrefix(
+            client, actor, `sourcing:${source.sourcing_case_id}:return:`, "选厂批准版本已更新",
+          );
+          await this.todoProjection?.actionableForNamedRecipient?.(client, actor, {
+            category: "sourcing_contract_return",
+            sourceEventId: eventId,
+            sourceAction: "sourcing.factory_change.effective",
+            entityType: "sourcing_case",
+            entityId: source.sourcing_case_id,
+            recipientUserId: pending.created_by,
+            requiredRole: CONTRACT_ROLE,
+            requiredCapability: CONTRACT_CAPABILITY,
+            route: { routeName: "sourcing_detail", entityId: source.sourcing_case_id },
+            policyKey: "sourcing_contract_return",
+            dedupeKey: `sourcing:${source.sourcing_case_id}:return:${nextDecisionVersion}`,
+          });
+        }
+      }
     }
   }
 

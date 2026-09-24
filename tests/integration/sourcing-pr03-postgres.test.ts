@@ -15,6 +15,8 @@ import { CuttingSourceService } from "../../apps/api/src/cutting/cutting-source-
 import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
 import { SourcingContractService } from "../../apps/api/src/sourcing/sourcing-contract-service.js";
 import { SourcingContractReturnService } from "../../apps/api/src/sourcing/sourcing-contract-return-service.js";
+import { TodoService } from "../../apps/api/src/todos/service.js";
+import { TodoProjectionService } from "../../apps/api/src/todos/projection-service.js";
 import { SourcingProductionService } from "../../apps/api/src/sourcing/sourcing-production-service.js";
 import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
 import { AttachmentService } from "../../apps/api/src/tools/attachments.js";
@@ -2895,5 +2897,83 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       if(previous===undefined) delete process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
       else process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT=previous;
     }
+  });
+  it("adds one actionable merchandiser todo on approval and completes it on first return", async () => {
+    const todoService=new TodoService(database);
+    const realProjection=new TodoProjectionService(todoService);
+    const approvingService=new SourcingService(database,undefined,undefined,realProjection,contractService);
+    const created=await service.createCase(merchandiserActor(),{
+      gender:"男装",styleName:"通知闭环",estimatedCutPieceSendDate:"2026-10-01",
+      deliveryDate:"2026-10-20",lineItems:[{styleNo:"RETURN-TODO-ONE",color:"黑",quantity:20}],
+      daxingUnitPrice:"8",
+    },randomUUID());
+    const id=created.value.sourcingCaseId;
+    await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
+    await service.recordManagementDecision(managerActor(),id,{
+      supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}],
+    },randomUUID());
+    await approvingService.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    const rows=await database.query<{todo_id:string;recipient_user_id:string;status:string;due_at:Date|null}>(
+      `SELECT todo_id,recipient_user_id,status,due_at FROM rework_todos
+       WHERE entity_type='sourcing_case' AND entity_id=$1 AND category='sourcing_contract_return'`,[id]);
+    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows[0]).toMatchObject({recipient_user_id:merchandiserId,status:"pending",due_at:null});
+    const todoId=rows.rows[0]!.todo_id;
+    expect((await todoService.listForActor({
+      ...merchandiserActor(),authorizationCapability:"todo:view",
+      authorizationCapabilities:["todo:view","sourcing:view","sourcing:contract:record"],
+    },{module:"sourcing"})).todos.map(todo=>todo.todoId)).toContain(todoId);
+    const attempts=await database.query<{delivery_kind:string;outcome:string}>(
+      "SELECT delivery_kind,outcome FROM todo_delivery_attempts WHERE todo_id=$1",[todoId]);
+    expect(attempts.rows).toContainEqual({delivery_kind:"create",outcome:"queued"});
+    await approvingService.requestFactoryChange(ownerActor(),id,{
+      supplierId:replacementFactoryId,unitPrice:"12.0000",changeReason:"老板批准转厂",
+    },randomUUID());
+    expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1",[todoId]))
+      .rows[0]?.status).toBe("completed");
+    const currentTodo=(await database.query<{todo_id:string}>(
+      `SELECT todo_id FROM rework_todos WHERE entity_id=$1 AND category='sourcing_contract_return'
+       AND status='pending'`,[id])).rows[0]?.todo_id;
+    expect(currentTodo).toBeTruthy();
+    const attachmentId=randomUUID();
+    await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,
+      size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'签回.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+      [attachmentId,`contract-return-todo/${attachmentId}`,"d".repeat(64),merchandiserId]);
+    await contractReturns.submit(contractActor(),id,[attachmentId],randomUUID());
+    expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1",[currentTodo]))
+      .rows[0]?.status).toBe("completed");
+    expect((await database.query("SELECT delivery_kind FROM todo_delivery_attempts WHERE todo_id=$1 ORDER BY attempted_at",[currentTodo]))
+      .rows.map(row=>row.delivery_kind)).toEqual(["create","complete"]);
+    expect((await database.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_contract_return'",[id]))
+      .rows[0]?.count).toBe(2);
+  });
+
+  it("backfills a single pending contract todo for a historic approval and enqueues delivery once", async () => {
+    const created=await service.createCase(merchandiserActor(),{
+      gender:"女装",styleName:"历史待办补录",estimatedCutPieceSendDate:"2026-10-01",
+      deliveryDate:"2026-10-20",lineItems:[{styleNo:"RETURN-TODO-HISTORY",color:"黑",quantity:20}],
+      daxingUnitPrice:"8",
+    },randomUUID());
+    const id=created.value.sourcingCaseId;
+    await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
+    await service.recordManagementDecision(managerActor(),id,{
+      supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}],
+    },randomUUID());
+    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    expect((await database.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_contract_return'",[id])).rows[0]?.count).toBe(0);
+    const migration=await readFile(new URL(
+      "../../apps/api/migrations/0211_sourcing_contract_return_todos.sql",import.meta.url),"utf8");
+    const backfill=migration.slice(migration.indexOf("DO $$"));
+    await database.query(backfill);
+    const createdTodos=await database.query<{todo_id:string;status:string;recipient_user_id:string}>(
+      "SELECT todo_id,status,recipient_user_id FROM rework_todos WHERE entity_id=$1 AND category='sourcing_contract_return'",[id]);
+    expect(createdTodos.rows).toHaveLength(1);
+    expect(createdTodos.rows[0]).toMatchObject({status:"pending",recipient_user_id:merchandiserId});
+    expect((await database.query("SELECT outcome FROM todo_delivery_attempts WHERE todo_id=$1",[createdTodos.rows[0]!.todo_id]))
+      .rows[0]?.outcome).toBe("queued");
+    await database.query(backfill);
+    expect((await database.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_contract_return'",[id]))
+      .rows[0]?.count).toBe(1);
   });
 });

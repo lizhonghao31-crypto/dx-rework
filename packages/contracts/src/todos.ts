@@ -39,6 +39,7 @@ export const TodoPolicyKeySchema = z.enum([
   "general",
   "finance_return_or_wage_review",
   "deduction_follow_up",
+  "sourcing_contract_return",
 ]);
 export const TodoStatusSchema = z.enum([
   "pending",
