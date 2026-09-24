@@ -109,7 +109,8 @@ BEGIN
     dedupe_value := 'sourcing:'||candidate.sourcing_case_id||
       ':return:'||candidate.decision_version;
     route_value := jsonb_build_object('routeName','sourcing_detail',
-      'entityId',candidate.sourcing_case_id::text,'todoId',todo_id_value::text);
+      'entityId',candidate.sourcing_case_id::text,'todoId',todo_id_value::text,
+      'tab','contract_return');
 
     INSERT INTO operation_events(
       event_id,request_id,actor_id,actor_roles,authorization_capability,

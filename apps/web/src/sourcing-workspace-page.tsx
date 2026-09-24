@@ -1118,6 +1118,7 @@ function OrderDetailPage({
   const [factoryChange, setFactoryChange] = useState<SourcingFactoryChangeState | null>(null);
   const [contract, setContract] = useState<SourcingContractDocument | null>(null);
   const [contractReturn,setContractReturn] = useState<SourcingContractReturnResponse | null>(null);
+  const contractReturnSectionRef=useRef<HTMLDivElement>(null);
   const [contractUploading,setContractUploading] = useState(false);
   const contractUploadGuard=useRef(false);
   const contractFileInput=useRef<HTMLInputElement | null>(null);
@@ -1230,6 +1231,15 @@ function OrderDetailPage({
   };
 
   useEffect(() => { void load(); }, [sourcingCaseId]);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("section") !== "contract-return"
+      || item?.sourcingCaseId !== sourcingCaseId || !contractReturn?.contractReturnMonitoring) return;
+    const frame=window.requestAnimationFrame(() => {
+      contractReturnSectionRef.current?.scrollIntoView({block:"start"});
+      contractReturnSectionRef.current?.focus({preventScroll:true});
+    });
+    return () => window.cancelAnimationFrame(frame);
+  },[sourcingCaseId,item?.sourcingCaseId,contractReturn?.contractReturnMonitoring]);
   const canQuote = canAct(user, "ie_reviewer", "sourcing:price:quote");
   const canManage = canAct(user, "production_management", "sourcing:decision:record");
   const canCorrectBudget = !!item
@@ -1801,7 +1811,7 @@ function OrderDetailPage({
           setStyleEditRevision(item.identityRevision ?? 0);styleEditKey.current=null;setEditingStyles(true);
         }}>修改款号</button> : null}</div> : null}
               {contractReturn?.contractReturnMonitoring ? <>
-                <div className="sourcing-contract-bar__actions sourcing-contract-return-actions">
+                <div ref={contractReturnSectionRef} tabIndex={-1} className="sourcing-contract-bar__actions sourcing-contract-return-actions">
                   {contractReturn.canUpload ? <>
                     <input ref={contractFileInput} type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" multiple hidden
                       onChange={event=>{void uploadContractReturn(event.target.files);event.target.value="";}} />

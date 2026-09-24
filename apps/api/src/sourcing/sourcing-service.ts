@@ -2743,7 +2743,7 @@ export class SourcingService {
               recipientUserId: source.created_by,
               requiredRole: CONTRACT_ROLE,
               requiredCapability: CONTRACT_CAPABILITY,
-              route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
+              route: { routeName: "sourcing_detail", entityId: sourcingCaseId, tab: "contract_return" },
               policyKey: "sourcing_contract_return",
               dedupeKey: `sourcing:${sourcingCaseId}:return:${decisionVersion}`,
             });
@@ -3170,7 +3170,7 @@ export class SourcingService {
             recipientUserId: pending.created_by,
             requiredRole: CONTRACT_ROLE,
             requiredCapability: CONTRACT_CAPABILITY,
-            route: { routeName: "sourcing_detail", entityId: source.sourcing_case_id },
+            route: { routeName: "sourcing_detail", entityId: source.sourcing_case_id, tab: "contract_return" },
             policyKey: "sourcing_contract_return",
             dedupeKey: `sourcing:${source.sourcing_case_id}:return:${nextDecisionVersion}`,
           });

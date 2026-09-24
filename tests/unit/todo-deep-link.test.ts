@@ -32,6 +32,12 @@ describe("todo deep links", () => {
       entityId,
       todoId,
     })).toBe(`/ui/sourcing/orders/${entityId}?todo=${todoId}`);
+    expect(buildTodoDeepLink("/", {
+      routeName: "sourcing_detail",
+      entityId,
+      todoId,
+      tab: "contract_return",
+    })).toBe(`/ui/sourcing/orders/${entityId}?todo=${todoId}&section=contract-return`);
   });
 
   it("opens whole-order review todos directly in the N05 workspace", () => {
@@ -66,4 +72,3 @@ describe("todo deep links", () => {
     })).toThrow("Application base path is invalid");
   });
 });
-

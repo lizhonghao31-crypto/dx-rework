@@ -17,6 +17,8 @@ import { SourcingContractService } from "../../apps/api/src/sourcing/sourcing-co
 import { SourcingContractReturnService } from "../../apps/api/src/sourcing/sourcing-contract-return-service.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
 import { TodoProjectionService } from "../../apps/api/src/todos/projection-service.js";
+import { TodoDeliveryWorker } from "../../apps/api/src/todos/delivery-worker.js";
+import { FakeDingTalkTodoProvider } from "../../apps/api/src/todos/provider.js";
 import { SourcingProductionService } from "../../apps/api/src/sourcing/sourcing-production-service.js";
 import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
 import { AttachmentService } from "../../apps/api/src/tools/attachments.js";
@@ -76,6 +78,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
          id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at
        ) VALUES($1,$2,'dingtalk','corp',$3,$4,true,true,CURRENT_TIMESTAMP)`,
       [randomUUID(),merchandiserId,`ding-${merchandiserId}`,`union-${merchandiserId}`],
+    );
+    await database.query(
+      `INSERT INTO identity_mappings(
+         id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at
+       ) VALUES($1,$2,'dingtalk','corp',$3,$4,true,true,CURRENT_TIMESTAMP)`,
+      [randomUUID(),ownerId,`ding-${ownerId}`,`union-${ownerId}`],
     );
     await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
     try {
@@ -2954,6 +2962,13 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const attempts=await database.query<{delivery_kind:string;outcome:string}>(
       "SELECT delivery_kind,outcome FROM todo_delivery_attempts WHERE todo_id=$1",[todoId]);
     expect(attempts.rows).toContainEqual({delivery_kind:"create",outcome:"queued"});
+    const provider=new FakeDingTalkTodoProvider();
+    await new TodoDeliveryWorker(database,provider,"https://staging.example/rework/").runOnce(100);
+    const delivered=provider.calls.find(call=>call.method==="create" && call.input.todoId===todoId);
+    expect(delivered?.input).toMatchObject({
+      subject:"【款号:RETURN-TODO-ONE】回传合同",
+      deepLink:expect.stringContaining("section=contract-return"),
+    });
     await approvingService.requestFactoryChange(ownerActor(),id,{
       supplierId:replacementFactoryId,unitPrice:"12.0000",changeReason:"老板批准转厂",
     },randomUUID());
