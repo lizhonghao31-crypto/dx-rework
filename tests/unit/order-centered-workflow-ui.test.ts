@@ -42,7 +42,7 @@ describe("order-centered workflow UI", () => {
     expect(detail).toContain('<WorkflowRail className="rework-workflow__desktop-grid"');
     expect(detail).toContain('aria-expanded={mobileWorkflowExpanded}');
     expect(detail).toContain('{mobileWorkflowExpanded ? "−" : "+"}');
-    expect(detail).toContain('"01", "发起返工"');
+    expect(detail).toContain('"01", detail.reworkKind === "inhouse_finishing" ? "本厂做尾" : "发起返工"');
     expect(detail).toContain('"09", "返工业务完成"');
     expect(detail).not.toContain("N07 选择每道工序的主责任方后提交老板签字；供应商计划扣款暂不生成。");
     expect(detail).toContain('selected.state !== "future"');

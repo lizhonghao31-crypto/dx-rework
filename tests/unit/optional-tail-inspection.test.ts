@@ -62,7 +62,7 @@ describe("optional tail inspection", () => {
     expect(migration).toContain("NOT tail_required AND tail_process_count<>0");
     expect(migration).toContain("unified_execution AND tail_required AND EXISTS");
     expect(integration).toContain("review.reviewFinalQuantity");
-    expect(integration).toContain('reworkStatus: "pending_responsibility_determination"');
+    expect(integration).toContain('kind === "inhouse_finishing" ? "completed" : "pending_responsibility_determination"');
     expect(panel).toContain("embedded && message");
   });
 

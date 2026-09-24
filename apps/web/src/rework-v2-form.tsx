@@ -731,7 +731,7 @@ export function ReworkInitiationV2Form({
     {!embedded ? <div className="rework-v2-heading">
       <div>
         <h1>{isFinishing ? "本厂做尾" : "发起返工"}</h1>
-        <p>款号由订单回货自动带入。</p>
+        <p>{isFinishing ? "沿用订单回货与源单资料发起做尾。" : "只填返工真正需要的资料；款号由订单回货自动带入。"}</p>
       </div>
       <StatusBadge tone={complete ? "success" : "info"}>{complete ? "可以提交" : "填写中"}</StatusBadge>
     </div> : null}

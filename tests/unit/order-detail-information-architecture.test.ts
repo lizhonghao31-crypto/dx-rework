@@ -71,7 +71,7 @@ describe("order detail information architecture", () => {
     expect(detail).toContain('aria-expanded={mobileWorkflowExpanded}');
     expect(detail).toContain('data-active={node.key === activeNode}');
     expect(detail).toContain(`querySelector('[data-active="true"]')`);
-    expect(detail).toContain('?? (detail.status === "completed" ? "settlement_followup" : undefined)');
+    expect(detail).toContain('?? (detail.status === "completed" ? detail.reworkKind === "inhouse_finishing" ? "final_quantity_ie_review" : "settlement_followup" : undefined)');
     expect(governed).toContain('repeat(5, minmax(0, 1fr))');
     expect(governed).toContain('flex-direction: row; overflow-x: auto');
     expect(governed).not.toContain('--dx-v2-color-border');
@@ -112,7 +112,7 @@ describe("order detail information architecture", () => {
 
   it("keeps real workflow numbering and existing node workspaces instead of copying mock data", async () => {
     const detail = await readFile("apps/web/src/rework-detail-page.tsx", "utf8");
-    expect(detail).toContain('node("initiation", "01", "发起返工"');
+    expect(detail).toContain('node("initiation", "01", detail.reworkKind === "inhouse_finishing" ? "本厂做尾" : "发起返工"');
     expect(detail).toContain('node("process_configuration", "02", "分配工序 &工人"');
     expect(detail).toContain('node("ie_review", "03", "IE 核价"');
     expect(detail).toContain('node("work_reporting", "04", "返工执行报数"');
@@ -153,7 +153,7 @@ describe("order detail information architecture", () => {
 
   it("removes the unused order-number placeholder from desktop and mobile order cards", async () => {
     const card = await readFile("apps/web/src/reporting/management-order-card.tsx", "utf8");
-    expect(card).toContain('<small>{order.reworkNo ?? "返工单"}</small>');
+    expect(card).toContain('<small>{order.reworkNo ?? "返工单"} · {order.reworkKind === "inhouse_finishing" ? "本厂做尾" : "QC返工"}</small>');
     expect(card).not.toContain("订单号未填写");
   });
 });

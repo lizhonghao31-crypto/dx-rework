@@ -31,6 +31,7 @@ const now = "2026-08-05T00:00:00.000Z";
 const order = {
   reworkOrderId: orderId,
   reworkNo: "RW-20260805-001",
+  reworkKind: "qc_rework" as const,
   styleNo: "STYLE-001",
   orderNo: "ORDER-001",
   status: "in_progress" as const,
