@@ -168,7 +168,7 @@ export class ReworkInitiationService {
                 WHERE existing_order.source_receiving_batch_id=batch.receiving_batch_id
                   AND existing_order.status NOT IN ('cancelled','deleted')
               ) AS has_existing_rework,
-              COALESCE(current_decision.supplier_id,snapshot.supplier_id) AS processing_factory_supplier_id,
+              snapshot.supplier_id AS processing_factory_supplier_id,
               source_case.created_by AS merchandiser_user_id,
               source_line.image_attachment_id AS source_image_attachment_id
        FROM receiving_batches batch
@@ -182,13 +182,6 @@ export class ReworkInitiationService {
         AND source_line.position=cutting.sourcing_line_position
        LEFT JOIN sourcing_approval_snapshots snapshot
          ON snapshot.sourcing_approval_snapshot_id=cutting.approval_snapshot_id
-       LEFT JOIN LATERAL (
-         SELECT decision.supplier_id
-         FROM sourcing_decisions decision
-         WHERE decision.sourcing_case_id=cutting.sourcing_case_id
-         ORDER BY decision.decision_version DESC
-         LIMIT 1
-       ) current_decision ON true
        WHERE batch.receiving_batch_id=$1
          AND batch.deleted_at IS NULL`,
       [receivingBatchId],

@@ -13,6 +13,8 @@ describe("rework source linkage foundation", () => {
     expect(migration).toContain("'inhouse_finishing'");
     expect(contracts).toContain('ReworkKindSchema = z.enum(["qc_rework", "inhouse_finishing"])');
     expect(service).toContain("LEFT JOIN cutting_orders cutting");
+    expect(service).toContain("snapshot.supplier_id AS processing_factory_supplier_id");
+    expect(service).not.toContain("COALESCE(current_decision.supplier_id,snapshot.supplier_id)");
     expect(service).toContain("source_case.created_by AS merchandiser_user_id");
     expect(service).toContain("source_line.image_attachment_id AS source_image_attachment_id");
     expect(form).toContain("已从源订单自动带入款号、加工厂和订单跟单");
