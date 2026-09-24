@@ -211,6 +211,7 @@
     { "version": "0209_sourcing_contract_return_today_backfill", "checksum": "64d38eec1f26da3766c5b8f2988da9368b751c2e52e969dc2f8df4fa6b9f5d7a" },
     { "version": "0210_sourcing_contract_return_all_existing", "checksum": "792c94d8f929959c4b4276f1c52a102b0fc3b45550b1a6e60d9d0afe75d97855" },
     { "version": "0211_sourcing_contract_return_todos", "checksum": "e93250348e66f7708fdd1b44a02ffaeea14a8c7146e7bca7b13504cf874994d5" },
-    { "version": "0212_sourcing_contract_return_historic_deadlines", "checksum": "5cf2a38157d38cd970f4e9268d9c203e4016c8aa4d6a5d3f2552af97a244422b" }
+    { "version": "0212_sourcing_contract_return_historic_deadlines", "checksum": "5cf2a38157d38cd970f4e9268d9c203e4016c8aa4d6a5d3f2552af97a244422b" },
+    { "version": "0213_rework_kind_source_link", "checksum": "b4628901a0f89edd9f70819ae7365bf41f116c26beddfebe11ee2d304aa7f411" }
   ]
 }

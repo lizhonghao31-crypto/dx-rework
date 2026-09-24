@@ -60,6 +60,9 @@ type StoredImage = Readonly<{
 type ReceivingReworkEntry = Readonly<{
   receivingBatchId: string;
   styleNo: string;
+  processingFactorySupplierId: string | null;
+  merchandiserUserId: string | null;
+  sourceImageAttachmentId: string | null;
 }>;
 type ReworkInitiationV2FormProps = Readonly<{
   reworkOrderId?: string;
@@ -238,7 +241,15 @@ const ReceivingReworkEntrySchema: ApiSchema<ReceivingReworkEntry> = {
     if (typeof row.receivingBatchId !== "string" || typeof row.styleNo !== "string") {
       throw new Error("收货订单资料格式错误");
     }
-    return { receivingBatchId: row.receivingBatchId, styleNo: row.styleNo };
+    return {
+      receivingBatchId: row.receivingBatchId,
+      styleNo: row.styleNo,
+      processingFactorySupplierId: typeof row.processingFactorySupplierId === "string"
+        ? row.processingFactorySupplierId : null,
+      merchandiserUserId: typeof row.merchandiserUserId === "string" ? row.merchandiserUserId : null,
+      sourceImageAttachmentId: typeof row.sourceImageAttachmentId === "string"
+        ? row.sourceImageAttachmentId : null,
+    };
   },
 };
 
@@ -342,8 +353,21 @@ export function ReworkInitiationV2Form({
         if (!active) return;
         setOptions(core);
         setSupplyOptions(supply);
-        setForm((current) => ({ ...current, styleNo: receivingEntry.styleNo }));
-        setMessage("已从订单回货读取款号，请补充返工资料");
+        const linkedFactory = receivingEntry.processingFactorySupplierId
+          && core.factories.some((factory) => factory.supplierId === receivingEntry.processingFactorySupplierId)
+          ? `supplier:${receivingEntry.processingFactorySupplierId}` : "";
+        const linkedMerchandiser = receivingEntry.merchandiserUserId
+          && core.merchandisers.some((item) => item.userId === receivingEntry.merchandiserUserId)
+          ? receivingEntry.merchandiserUserId : "";
+        setForm((current) => ({
+          ...current,
+          styleNo: receivingEntry.styleNo,
+          factory: linkedFactory || current.factory,
+          merchandiserUserId: linkedMerchandiser || current.merchandiserUserId,
+        }));
+        setMessage(linkedFactory && linkedMerchandiser
+          ? "已从源订单自动带入款号、加工厂和订单跟单"
+          : "已从订单回货读取款号；未能确认的资料请补充");
       }).catch((error: unknown) => {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
         setMessage(error instanceof Error ? error.message : "收货订单资料加载失败");

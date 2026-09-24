@@ -471,6 +471,8 @@ export const InspectionReportSchema = InspectionReportDraftSchema.superRefine((v
   });
 });
 
+export const ReworkKindSchema = z.enum(["qc_rework", "inhouse_finishing"]);
+
 const ReworkDraftFieldsSchema = z.object({
   styleNo: DraftTextSchema(100),
   customerSupplyCode: DraftTextSchema(100),
@@ -521,6 +523,7 @@ export const ReworkOrderResponseSchema = z.object({
   reworkOrderId: IdSchema,
   reworkNo: z.string().nullable(),
   status: ReworkOrderStatusSchema,
+  reworkKind: ReworkKindSchema.optional(),
   receivingBatchId: IdSchema.nullable().optional(),
   styleNo: z.string().nullable(),
   customerSupplyCode: z.string().nullable(),
@@ -592,6 +595,7 @@ export const InspectionReportImageExtractionSchema = z.object({
 }).strict();
 
 export type ReworkOrderStatus = z.infer<typeof ReworkOrderStatusSchema>;
+export type ReworkKind = z.infer<typeof ReworkKindSchema>;
 export type AddTailDefectiveQuantity = z.infer<typeof AddTailDefectiveQuantitySchema>;
 export type ReworkProcessingFactory = z.infer<typeof ReworkProcessingFactorySchema>;
 export type InspectionStage = z.infer<typeof InspectionStageSchema>;

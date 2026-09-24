@@ -21,6 +21,7 @@ type OrderRow = Readonly<{
   rework_order_id: string;
   rework_no: string | null;
   status: ReworkOrderResponse["status"];
+  rework_kind: "qc_rework" | "inhouse_finishing";
   source_system: string;
   style_no: string | null;
   customer_supply_code: string | null;
@@ -328,6 +329,7 @@ export class ReworkV2DraftService {
       reworkOrderId: row.rework_order_id,
       reworkNo: row.rework_no,
       status: row.status,
+      reworkKind: row.rework_kind,
       styleNo: row.style_no,
       customerSupplyCode: row.customer_supply_code,
       factoryStyleNo: row.factory_style_no,
@@ -358,6 +360,7 @@ export class ReworkV2DraftService {
       reworkOrderId: row.rework_order_id,
       reworkNo: row.rework_no,
       status: row.status,
+      reworkKind: row.rework_kind,
       styleNo: row.style_no,
       customerSupplyCode: row.customer_supply_code,
       factoryStyleNo: row.factory_style_no,
