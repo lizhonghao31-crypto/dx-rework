@@ -67,6 +67,23 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   const replacementFactoryId = randomUUID();
   const disabledFactoryId = randomUUID();
   const evidenceId = randomUUID();
+  let returnTodoRecipientConfigured = false;
+  const ensureReturnTodoRecipient = async () => {
+    if (returnTodoRecipientConfigured) return;
+    await craftService.ensureOrganizationPolicy();
+    await database.query(
+      `INSERT INTO identity_mappings(
+         id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at
+       ) VALUES($1,$2,'dingtalk','corp',$3,$4,true,true,CURRENT_TIMESTAMP)`,
+      [randomUUID(),merchandiserId,`ding-${merchandiserId}`,`union-${merchandiserId}`],
+    );
+    await database.query(
+      `INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason)
+       VALUES($1,$2,'order_merchandiser',$2,'contract return todo fixture')`,
+      [randomUUID(),merchandiserId],
+    );
+    returnTodoRecipientConfigured = true;
+  };
 
   const readyCuttingSheet = async (uploadedBy: string): Promise<string> => {
     const attachmentId = randomUUID();
@@ -1150,6 +1167,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         `sourcing:${created.value.sourcingCaseId}:owner:1:`,
         `sourcing:${created.value.sourcingCaseId}:management:2:`,
         `sourcing:${created.value.sourcingCaseId}:owner:2:`,
+        `sourcing:${created.value.sourcingCaseId}:return:`,
         `sourcing:${created.value.sourcingCaseId}:finance:2:1:`,
         `sourcing:${created.value.sourcingCaseId}:factory_change:${requestedChange!.entryId}:`,
         `sourcing:${created.value.sourcingCaseId}:finance:`,
@@ -2899,6 +2917,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     }
   });
   it("adds one actionable merchandiser todo on approval and completes it on first return", async () => {
+    await ensureReturnTodoRecipient();
     const todoService=new TodoService(database);
     const realProjection=new TodoProjectionService(todoService);
     const approvingService=new SourcingService(database,undefined,undefined,realProjection,contractService);
@@ -2950,6 +2969,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
 
   it("backfills a single pending contract todo for a historic approval and enqueues delivery once", async () => {
+    await ensureReturnTodoRecipient();
     const created=await service.createCase(merchandiserActor(),{
       gender:"女装",styleName:"历史待办补录",estimatedCutPieceSendDate:"2026-10-01",
       deliveryDate:"2026-10-20",lineItems:[{styleNo:"RETURN-TODO-HISTORY",color:"黑",quantity:20}],
