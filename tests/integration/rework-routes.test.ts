@@ -54,6 +54,9 @@ const create = (
     getReceivingEntry: vi.fn(async (receivingBatchId: string) => ({
       receivingBatchId,
       styleNo: "PD20529725",
+      processingFactorySupplierId: "00000000-0000-4000-8000-000000000088",
+      merchandiserUserId: "00000000-0000-4000-8000-000000000077",
+      sourceImageAttachmentId: "00000000-0000-4000-8000-000000000066",
     })),
     createDraft: vi.fn(async () => ({ value: response, reused: false })),
     updateDraft: vi.fn(async () => ({ value: { ...response, version: 2 }, reused: false })),
@@ -228,6 +231,9 @@ describe("rework initiation routes", () => {
     expect(context.json()).toEqual({
       receivingBatchId: "00000000-0000-4000-8000-000000000099",
       styleNo: "PD20529725",
+      processingFactorySupplierId: "00000000-0000-4000-8000-000000000088",
+      merchandiserUserId: "00000000-0000-4000-8000-000000000077",
+      sourceImageAttachmentId: "00000000-0000-4000-8000-000000000066",
     });
     expect(service.getReceivingEntry).toHaveBeenCalledWith(
       "00000000-0000-4000-8000-000000000099",

@@ -60,6 +60,9 @@ type StoredImage = Readonly<{
 type ReceivingReworkEntry = Readonly<{
   receivingBatchId: string;
   styleNo: string;
+  processingFactorySupplierId: string | null;
+  merchandiserUserId: string | null;
+  sourceImageAttachmentId: string | null;
 }>;
 type ReworkInitiationV2FormProps = Readonly<{
   reworkOrderId?: string;
@@ -235,10 +238,22 @@ const ReceivingReworkEntrySchema: ApiSchema<ReceivingReworkEntry> = {
   parse(value: unknown): ReceivingReworkEntry {
     if (!value || typeof value !== "object") throw new Error("收货订单资料格式错误");
     const row = value as Record<string, unknown>;
-    if (typeof row.receivingBatchId !== "string" || typeof row.styleNo !== "string") {
+    if (
+      typeof row.receivingBatchId !== "string"
+      || typeof row.styleNo !== "string"
+      || (row.processingFactorySupplierId !== undefined && row.processingFactorySupplierId !== null && typeof row.processingFactorySupplierId !== "string")
+      || (row.merchandiserUserId !== undefined && row.merchandiserUserId !== null && typeof row.merchandiserUserId !== "string")
+      || (row.sourceImageAttachmentId !== undefined && row.sourceImageAttachmentId !== null && typeof row.sourceImageAttachmentId !== "string")
+    ) {
       throw new Error("收货订单资料格式错误");
     }
-    return { receivingBatchId: row.receivingBatchId, styleNo: row.styleNo };
+    return {
+      receivingBatchId: row.receivingBatchId,
+      styleNo: row.styleNo,
+      processingFactorySupplierId: typeof row.processingFactorySupplierId === "string" ? row.processingFactorySupplierId : null,
+      merchandiserUserId: typeof row.merchandiserUserId === "string" ? row.merchandiserUserId : null,
+      sourceImageAttachmentId: typeof row.sourceImageAttachmentId === "string" ? row.sourceImageAttachmentId : null,
+    };
   },
 };
 
@@ -264,6 +279,7 @@ export function ReworkInitiationV2Form({
   });
   const [order, setOrder] = useState<ReworkOrderResponse | null>(null);
   const [images, setImages] = useState<UploadedImage[]>(() => localDraftSeed?.images.map(restoredImage) ?? []);
+  const [sourceImageAttachmentId, setSourceImageAttachmentId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState(
@@ -342,8 +358,20 @@ export function ReworkInitiationV2Form({
         if (!active) return;
         setOptions(core);
         setSupplyOptions(supply);
-        setForm((current) => ({ ...current, styleNo: receivingEntry.styleNo }));
-        setMessage("已从订单回货读取款号，请补充返工资料");
+        setForm((current) => ({
+          ...current,
+          styleNo: receivingEntry.styleNo,
+          factory: receivingEntry.processingFactorySupplierId
+            ? `supplier:${receivingEntry.processingFactorySupplierId}`
+            : current.factory,
+          merchandiserUserId: receivingEntry.merchandiserUserId ?? current.merchandiserUserId,
+        }));
+        setSourceImageAttachmentId(receivingEntry.sourceImageAttachmentId);
+        setMessage(
+          receivingEntry.processingFactorySupplierId || receivingEntry.merchandiserUserId
+            ? "已从订单回货自动带入款号、加工厂和订单跟单"
+            : "已从订单回货读取款号，请补充返工资料",
+        );
       }).catch((error: unknown) => {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) return;
         setMessage(error instanceof Error ? error.message : "收货订单资料加载失败");
@@ -733,6 +761,12 @@ export function ReworkInitiationV2Form({
         <div><h2>上传报告 <b>*</b></h2><p>至少 1 张，最多 {MAX_REWORK_ATTACHMENTS} 张；支持 JPEG / PNG / WebP。</p></div>
         <StatusBadge tone={images.length ? "success" : "info"}>{images.length}/{MAX_REWORK_ATTACHMENTS}</StatusBadge>
       </div>
+      {sourceImageAttachmentId ? <div className="rework-v2-source-image">
+        <a href={apiUrl(`tools/attachments/${sourceImageAttachmentId}/download?mode=preview`)} target="_blank" rel="noreferrer">
+          <img src={apiUrl(`tools/attachments/${sourceImageAttachmentId}/download?mode=preview`)} alt="款图" />
+        </a>
+        <span><strong>款图</strong><small>已从外发订单自动带入</small></span>
+      </div> : null}
       <label className="rework-v2-upload">
         <span>{uploading ? "正在上传…" : "＋ 上传报告"}</span>
         <input type="file" accept="image/*" multiple disabled={busy || uploading || images.length >= MAX_REWORK_ATTACHMENTS} onChange={(event) => { void uploadFiles(event.target.files); event.target.value = ""; }} />
