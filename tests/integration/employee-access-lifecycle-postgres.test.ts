@@ -68,6 +68,13 @@ runWithPostgres("employee access role lifecycle", () => {
 
   it("preserves existing role holders and atomically follows first grant and last revoke", async () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
+    await database.query(`
+      CREATE TABLE schema_migrations (
+        version text PRIMARY KEY,
+        checksum char(64) NOT NULL,
+        applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     const manifest = JSON.parse(await readFile(
       new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url),
       "utf8",
@@ -78,12 +85,28 @@ runWithPostgres("employee access role lifecycle", () => {
     expect(lifecycleIndex).toBeGreaterThanOrEqual(0);
     const lifecycle = manifest.migrations[lifecycleIndex]!;
 
-    for (const migration of manifest.migrations.slice(0, lifecycleIndex)) {
-      await database.query(await readFile(
-        new URL(`../../apps/api/migrations/${migration.version}.sql`, import.meta.url),
-        "utf8",
-      ));
-    }
+    const applyMigrations = async (migrations: Manifest["migrations"]): Promise<void> => {
+      for (const migration of migrations) {
+        const sql = await readFile(
+          new URL(`../../apps/api/migrations/${migration.version}.sql`, import.meta.url),
+          "utf8",
+        );
+        await database.query("BEGIN");
+        try {
+          await database.query(sql);
+          await database.query(
+            "INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",
+            [migration.version, migration.checksum],
+          );
+          await database.query("COMMIT");
+        } catch (error) {
+          await database.query("ROLLBACK");
+          throw error;
+        }
+      }
+    };
+
+    await applyMigrations(manifest.migrations.slice(0, lifecycleIndex));
 
     const rootId = randomUUID();
     const roleHolderId = randomUUID();
@@ -137,10 +160,7 @@ runWithPostgres("employee access role lifecycle", () => {
       );
     }
 
-    await database.query(await readFile(
-      new URL(`../../apps/api/migrations/${lifecycle!.version}.sql`, import.meta.url),
-      "utf8",
-    ));
+    await applyMigrations([lifecycle]);
 
     const migrated = await database.query<{
       id: string;
@@ -188,12 +208,7 @@ runWithPostgres("employee access role lifecycle", () => {
     // The assertions above isolate the 0089 migration behavior. From this point on,
     // run the current service against the complete current schema rather than a
     // historical partial schema.
-    for (const migration of manifest.migrations.slice(lifecycleIndex + 1)) {
-      await database.query(await readFile(
-        new URL(`../../apps/api/migrations/${migration.version}.sql`, import.meta.url),
-        "utf8",
-      ));
-    }
+    await applyMigrations(manifest.migrations.slice(lifecycleIndex + 1));
 
     const service = new AccessMasterDataService(database, "corp");
     await service.ensureOrganizationPolicy();
