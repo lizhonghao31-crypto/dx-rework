@@ -208,6 +208,7 @@
     { "version": "0206_sourcing_merchandiser_corrections", "checksum": "0df17ea261502a303d095e5584f879aad18c5eb6137ea72e9242e791a5ed90ef" },
     { "version": "0207_sourcing_contract_return_monitor", "checksum": "baa970efb51b15f7543b683a35cf88d8212f9ec42e5bb31e28cf788ba322ba7e" },
     { "version": "0208_sourcing_contract_return_uploads", "checksum": "b8c1f410d5f1f6a9f495d491c82397d054744f602572852a29742fea07f928a2" },
-    { "version": "0209_sourcing_contract_return_today_backfill", "checksum": "64d38eec1f26da3766c5b8f2988da9368b751c2e52e969dc2f8df4fa6b9f5d7a" }
+    { "version": "0209_sourcing_contract_return_today_backfill", "checksum": "64d38eec1f26da3766c5b8f2988da9368b751c2e52e969dc2f8df4fa6b9f5d7a" },
+    { "version": "0210_sourcing_contract_return_since_sep23_repair", "checksum": "f6e1d7f67d3eb81b95a61f0b6d255a0159f1772361a78a5bbfbbc081c50ba812" }
   ]
 }

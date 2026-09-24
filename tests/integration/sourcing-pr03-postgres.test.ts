@@ -2774,7 +2774,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       return id;
     };
     try {
-      delete process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
+      process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT="2099-01-01T00:00:00Z";
       const legacy = await makeApproved("RETURN-LEGACY");
       expect((await service.getCase(readerActor(),legacy)).contractReturnStatus).toBeNull();
       process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT="2020-01-01T00:00:00Z";
@@ -2791,7 +2791,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       expect(selected.items.map(item=>item.sourcingCaseId)).not.toContain(legacy);
       // The rollout backfill uses the approval day in Shanghai, not the migration time.
       // Move only disposable fixture timestamps; re-enable the immutable snapshot guard immediately.
-      delete process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
+      process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT="2099-01-01T00:00:00Z";
       const approvedToday = await makeApproved("RETURN-TODAY");
       const approvedTomorrow = await makeApproved("RETURN-TOMORROW");
       expect((await service.getCase(readerActor(),approvedToday)).contractReturnMonitoring).toBe(false);
@@ -2800,13 +2800,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         await database.query(`UPDATE sourcing_approval_snapshots
           SET approved_at=CASE WHEN sourcing_case_id=$1
             THEN '2026-09-22T12:00:00+08'::timestamptz
-            WHEN sourcing_case_id=$2 THEN '2026-09-23T12:00:00+08'::timestamptz
+            WHEN sourcing_case_id=$2 THEN '2026-09-23T23:59:56+08'::timestamptz
             ELSE '2026-09-24T00:00:00+08'::timestamptz END
           WHERE sourcing_case_id IN ($1,$2,$3)`,[legacy,approvedToday,approvedTomorrow]);
       } finally {
         await database.query("ALTER TABLE sourcing_approval_snapshots ENABLE TRIGGER sourcing_approval_snapshots_no_update");
       }
       const backfillSql=await readFile(new URL("../../apps/api/migrations/0209_sourcing_contract_return_today_backfill.sql",import.meta.url),"utf8");
+      const repairSql=await readFile(new URL("../../apps/api/migrations/0210_sourcing_contract_return_since_sep23_repair.sql",import.meta.url),"utf8");
       await database.query(backfillSql);
       const backfilled=await service.getCase(readerActor(),approvedToday);
       expect(backfilled.contractReturnMonitoring).toBe(true);
@@ -2841,9 +2842,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       }
       await service.requestFactoryChange(ownerActor(),ownerBackfill,{
         supplierId:replacementFactoryId,unitPrice:"10.0000",
-        changeReason:"当天老板确认旧单转厂",
+        changeReason:"起点后老板确认旧单转厂",
       },randomUUID());
-      await database.query(backfillSql);
+      await database.query(repairSql);
       const ownerBackfilled=await service.getCase(readerActor(),ownerBackfill);
       expect(ownerBackfilled.contractReturnMonitoring).toBe(true);
       const ownerDocument=await contractService.getCurrent(readerActor(),ownerBackfill);
@@ -2865,6 +2866,22 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         changeReason:"老板确认换厂，首次纳入合同回签监控",
       },randomUUID());
       expect((await service.getCase(readerActor(),reapproved)).contractReturnMonitoring).toBe(true);
+      // Repair approvals after 0209's one-time scan without changing existing clocks.
+      const originalActiveClock = (await service.getCase(readerActor(),active)).contractGeneratedAt;
+      await database.query(repairSql);
+      const repairedTomorrow=await service.getCase(readerActor(),approvedTomorrow);
+      expect(repairedTomorrow.contractReturnMonitoring).toBe(true);
+      expect(repairedTomorrow.contractReturnStatus).toBe("pending");
+      expect(repairedTomorrow.contractGeneratedAt).toBe(
+        (await contractService.getCurrent(readerActor(),approvedTomorrow)).item?.generatedAt);
+      expect(repairedTomorrow.contractReturnDueAt).toBe(
+        (await database.query<{due: Date}>("SELECT sourcing_contract_return_add_hours($1::timestamptz,48) AS due",
+          [repairedTomorrow.contractGeneratedAt])).rows[0]?.due.toISOString());
+      expect((await service.getCase(readerActor(),legacy)).contractReturnMonitoring).toBe(false);
+      await database.query(repairSql);
+      expect((await service.getCase(readerActor(),approvedTomorrow)).contractGeneratedAt).toBe(repairedTomorrow.contractGeneratedAt);
+      expect((await service.getCase(readerActor(),active)).contractGeneratedAt).toBe(originalActiveClock);
+      expect((await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},approvedTomorrow)).canUpload).toBe(true);
       await service.reviseStyles(merchandiserActor(),active,{
         expectedRevision:0,lines:[{position:1,styleNo:"RETURN-REVISED",alternateStyleNo:null}],
       },randomUUID());
@@ -2873,6 +2890,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       expect(revised.contractReturnDueAt).toBe(first.contractReturnDueAt);
       expect((await service.listCases(readerActor(),"RETURN-","all",1,{contractReturn:"all_overdue"})).items
         .some(item=>item.sourcingCaseId===active)).toBe(false);
+      delete process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
+      const defaultActive=await makeApproved("RETURN-DEFAULT-CUTOFF");
+      expect((await service.getCase(readerActor(),defaultActive)).contractReturnMonitoring).toBe(true);
     } finally {
       if (previous === undefined) delete process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
       else process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT=previous;

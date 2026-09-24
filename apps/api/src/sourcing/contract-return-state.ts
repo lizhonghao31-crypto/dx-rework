@@ -41,9 +41,9 @@ export function contractReturnState(facts: ContractReturnFacts, asOf: Date | str
   };
 }
 
-// Missing cutoff leaves the feature disabled until deployment explicitly enables it.
-export function contractReturnCutoff(raw = process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT): string | null {
-  if (!raw) return null;
+// This business start is fixed; an omitted production env must not silently skip approvals.
+export function contractReturnCutoff(raw = process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT ?? "2026-09-23T00:00:00+08:00"): string {
+  if (!raw) throw new Error("CONTRACT_RETURN_MONITOR_ENABLED_AT 不可为空");
   if (!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?(?:Z|[+-]\d\d:\d\d)$/.test(raw)
     || !Number.isFinite(Date.parse(raw))) {
     throw new Error("CONTRACT_RETURN_MONITOR_ENABLED_AT 必须为带时区的 ISO 8601 时间");
