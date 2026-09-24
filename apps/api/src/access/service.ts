@@ -788,6 +788,7 @@ export class AccessMasterDataService {
       daily_capacity: number | null;
       change_reason: string;
       changed_by: string;
+      changed_by_name: string | null;
       created_at: Date;
     }>(
       `SELECT item.supplier_id,item.supplier_code,item.supplier_type,
@@ -796,9 +797,10 @@ export class AccessMasterDataService {
               version.contract_entity_name,version.party_b_representative,
               version.payee_name,version.bank_account,version.bank_name,
               version.supported_crafts,version.daily_capacity,version.change_reason,
-              version.changed_by,version.created_at
+              version.changed_by,changer.display_name AS changed_by_name,version.created_at
        FROM supplier_catalog_items item
        JOIN supplier_catalog_versions version ON version.supplier_id=item.supplier_id
+       LEFT JOIN app_users changer ON changer.id=version.changed_by
        WHERE item.supplier_id=$1
        ORDER BY version.version DESC`,
       [supplierId],
@@ -1707,6 +1709,7 @@ export class AccessMasterDataService {
     daily_capacity: number | null;
     change_reason: string;
     changed_by: string;
+    changed_by_name?: string | null;
     created_at: Date;
   }, includeContractData: boolean): Record<string, unknown> {
     const profile: Record<string, unknown> = {
@@ -1725,6 +1728,7 @@ export class AccessMasterDataService {
       contractDataMissing: this.contractDataMissing(row),
       changeReason: row.change_reason,
       changedBy: row.changed_by,
+      changedByName: row.changed_by_name ?? null,
       changedAt: row.created_at.toISOString(),
     };
     if (includeContractData) {

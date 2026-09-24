@@ -824,9 +824,9 @@ runWithPostgres("role permissions and versioned master data", () => {
       [supplier.supplierId],
     )).rows[0]?.authorization_capability).toBe("supplier_profile:write");
     expect(await service.listSupplierHistory(supplier.supplierId, true)).toEqual([
-      expect.objectContaining({ supplierId: supplier.supplierId, version: 3, dailyCapacity: 1600 }),
-      expect.objectContaining({ supplierId: supplier.supplierId, version: 2, dailyCapacity: 1500 }),
-      expect.objectContaining({ supplierId: supplier.supplierId, version: 1, dailyCapacity: 1200 }),
+      expect.objectContaining({ supplierId: supplier.supplierId, version: 3, supplierName: "加工厂一号", dailyCapacity: 1600, changedByName: "系统管理员" }),
+      expect.objectContaining({ supplierId: supplier.supplierId, version: 2, supplierName: "加工厂一号", dailyCapacity: 1500, changedByName: "系统管理员" }),
+      expect.objectContaining({ supplierId: supplier.supplierId, version: 1, supplierName: "加工厂一", dailyCapacity: 1200, changedByName: "系统管理员" }),
     ]);
     const supplierAudit = await database.query<{ before_state: Record<string, unknown>; after_state: Record<string, unknown> }>(
       "SELECT before_state,after_state FROM operation_events WHERE entity_id=$1 AND action='master_data.supplier.revise'",

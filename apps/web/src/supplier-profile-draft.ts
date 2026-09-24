@@ -12,6 +12,7 @@ export type SupplierProfile = SupplierSummary & Readonly<{
   bankName?: string | null;
   changeReason: string;
   changedBy: string;
+  changedByName?: string | null;
   changedAt: string;
 }>;
 
