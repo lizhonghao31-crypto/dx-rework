@@ -77,11 +77,16 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
        ) VALUES($1,$2,'dingtalk','corp',$3,$4,true,true,CURRENT_TIMESTAMP)`,
       [randomUUID(),merchandiserId,`ding-${merchandiserId}`,`union-${merchandiserId}`],
     );
-    await database.query(
-      `INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason)
-       VALUES($1,$2,'order_merchandiser',$2,'contract return todo fixture')`,
-      [randomUUID(),merchandiserId],
-    );
+    await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
+    try {
+      await database.query(
+        `INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason)
+         VALUES($1,$2,'order_merchandiser',$2,'contract return todo fixture')`,
+        [randomUUID(),merchandiserId],
+      );
+    } finally {
+      await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation");
+    }
     returnTodoRecipientConfigured = true;
   };
 
