@@ -117,6 +117,10 @@ runWithPostgres("role permissions and versioned master data", () => {
       "utf8",
     ));
     await database.query(await readFile(
+      new URL("../../apps/api/migrations/0098_tail_default_worker_roster.sql", import.meta.url),
+      "utf8",
+    ));
+    await database.query(await readFile(
       new URL("../../apps/api/migrations/0143_sourcing_supplier_profile_foundation.sql", import.meta.url),
       "utf8",
     ));
