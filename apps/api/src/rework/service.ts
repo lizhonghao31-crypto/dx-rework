@@ -230,6 +230,9 @@ export class ReworkInitiationService {
     kind: "qc_rework" | "inhouse_finishing" = "qc_rework",
   ): Promise<MutationResult<ReworkOrderResponse>> {
     return this.mutate(actor, kind === "inhouse_finishing" ? "rework.finishing.draft.create" : "rework.draft.create", idempotencyKey, { ...input, kind }, 201, async (client) => {
+      if (kind === "inhouse_finishing" && !input.receivingBatchId) {
+        throw new ApplicationError("VALIDATION_ERROR", "本厂做尾必须选择收货批次", 400);
+      }
       if (kind === "inhouse_finishing" && (input.tailInspectionRequired !== false
         || input.tailInspectionCostBearer || input.inspectionReport || (input.attachmentIds?.length ?? 0) > 0)) {
         throw new ApplicationError("VALIDATION_ERROR", "本厂做尾无需整查和QC报告", 400);

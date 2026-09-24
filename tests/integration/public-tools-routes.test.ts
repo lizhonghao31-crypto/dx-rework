@@ -162,12 +162,12 @@ describe("public tools routes", () => {
     );
     await app.inject({ method: "GET", url: "/tools/attachments/00000000-0000-4000-8000-000000000001/download", headers: { cookie: "dx_rework_session=trusted" } });
     const authorizeBound = attachments.createDownloadIntent.mock.calls[0]?.[2];
-    await expect(authorizeBound({ entityType: "rework_order", entityId: "00000000-0000-4000-8000-000000000003", uploadedBy: "00000000-0000-4000-8000-000000000099" })).resolves.toBe(false);
+    await expect(authorizeBound({ attachmentId: "00000000-0000-4000-8000-000000000001", entityType: "rework_order", entityId: "00000000-0000-4000-8000-000000000003", mimeType: "image/webp", uploadedBy: "00000000-0000-4000-8000-000000000099" })).resolves.toBe(false);
     expect(canDownloadBoundAttachment).toHaveBeenCalledWith({
       actorId: "00000000-0000-4000-8000-000000000099",
       actorRoles: ["quality_control"],
       capabilities: ["tools:user", "rework:initiate"],
-    }, { entityType: "rework_order", entityId: "00000000-0000-4000-8000-000000000003" });
+    }, { attachmentId: "00000000-0000-4000-8000-000000000001", entityType: "rework_order", entityId: "00000000-0000-4000-8000-000000000003", mimeType: "image/webp" });
   });
 
   it("rejects unsupported MIME, invalid hash and oversized/non-numeric request shapes", async () => {

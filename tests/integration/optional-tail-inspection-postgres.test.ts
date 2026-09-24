@@ -183,7 +183,15 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
        ) VALUES($1,$2,'test-optional-tail.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
       [attachmentId, `private/${attachmentId}.webp`, "a".repeat(64), ids.qc],
     );
+    const receivingBatchId = randomUUID();
+    if (kind === "inhouse_finishing") {
+      await database.query(
+        "INSERT INTO receiving_batches(receiving_batch_id,style_no,created_by) VALUES($1,$2,$3)",
+        [receivingBatchId, `test-optional-tail-n05-${kind}`, ids.tail],
+      );
+    }
     const draft = await initiation.createDraft(kind === "inhouse_finishing" ? tailConfigure() : qc(), {
+      ...(kind === "inhouse_finishing" ? { receivingBatchId } : {}),
       styleNo: `test-optional-tail-n05-${kind}`,
       orderQuantity: 100,
       orderNo: `test-optional-tail-n05-${kind}`,
