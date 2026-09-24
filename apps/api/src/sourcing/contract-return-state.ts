@@ -29,18 +29,17 @@ export function contractReturnState(facts: ContractReturnFacts, asOf: Date | str
   }
   // Approval sets eligibility. The first ready PDF starts the separate 48-hour clock.
   const clockReady = !!facts.contract_generated_at && !!facts.contract_return_due_at;
-  const catchup = facts.contract_return_catchup === true;
   const due = clockReady ? new Date(facts.contract_return_due_at!).getTime() : null;
   const returned = facts.contract_returned_at === null ? null : new Date(facts.contract_returned_at).getTime();
   const status: ContractReturnStatus = returned !== null
-    ? catchup || due === null || returned <= due ? "returned_on_time" : "returned_late"
-    : catchup || due === null || new Date(asOf).getTime() <= due ? "pending" : "overdue_pending";
+    ? due === null || returned <= due ? "returned_on_time" : "returned_late"
+    : due === null || new Date(asOf).getTime() <= due ? "pending" : "overdue_pending";
   return {
     contractReturnMonitoring: true,contractReturnStatus: status,
     contractGeneratedAt: iso(facts.contract_generated_at),
-    contractReturnDueAt: catchup ? null : iso(facts.contract_return_due_at),
+    contractReturnDueAt: iso(facts.contract_return_due_at),
     contractReturnedAt: iso(facts.contract_returned_at),
-    contractReturnOverdueHours: !clockReady || catchup ? null
+    contractReturnOverdueHours: !clockReady ? null
       : status === "returned_late" || status === "overdue_pending"
         ? Math.max(0, Math.floor(Number(facts.contract_return_overdue_seconds ?? 0) / 3600)) : 0,
   };

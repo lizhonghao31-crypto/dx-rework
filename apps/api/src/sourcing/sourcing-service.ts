@@ -932,17 +932,17 @@ export class SourcingService {
              AND (
                $6::text='all'
                OR ($6::text='pending' AND monitor_case.contract_returned_at IS NULL
-                 AND (monitor_case.contract_return_catchup OR monitor_case.contract_return_due_at IS NULL
+                 AND (monitor_case.contract_return_due_at IS NULL
                    OR CURRENT_TIMESTAMP<=monitor_case.contract_return_due_at))
                OR ($6::text='returned_on_time' AND monitor_case.contract_returned_at IS NOT NULL
-                 AND (monitor_case.contract_return_catchup OR monitor_case.contract_return_due_at IS NULL
+                 AND (monitor_case.contract_return_due_at IS NULL
                    OR monitor_case.contract_returned_at<=monitor_case.contract_return_due_at))
-               OR ($6::text='overdue_pending' AND NOT monitor_case.contract_return_catchup
+               OR ($6::text='overdue_pending'
                  AND monitor_case.contract_returned_at IS NULL
                  AND CURRENT_TIMESTAMP>monitor_case.contract_return_due_at)
-               OR ($6::text='returned_late' AND NOT monitor_case.contract_return_catchup
+               OR ($6::text='returned_late'
                  AND monitor_case.contract_returned_at>monitor_case.contract_return_due_at)
-               OR ($6::text='all_overdue' AND NOT monitor_case.contract_return_catchup AND (
+               OR ($6::text='all_overdue' AND (
                  monitor_case.contract_returned_at>monitor_case.contract_return_due_at
                  OR (monitor_case.contract_returned_at IS NULL AND CURRENT_TIMESTAMP>monitor_case.contract_return_due_at)
                ))
