@@ -9,7 +9,6 @@ import type {
   SupplementSourcingContract,
 } from "@dx-rework/contracts";
 import { ApplicationError } from "../platform/errors.js";
-import { contractReturnCutoff } from "./contract-return-state.js";
 import type { AttachmentService } from "../tools/attachments.js";
 import {
   IdempotencyService,
@@ -132,15 +131,12 @@ export class SourcingContractService {
       SELECT sourcing_case_id FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1) FOR UPDATE`,[approvalSnapshotId]);
     // Enroll the current owner/root approval even when this case has older
     // approval snapshots. A management-only factory change does not qualify.
-    const cutoff = contractReturnCutoff();
-    if (cutoff) {
       await client.query(`INSERT INTO sourcing_contract_return_monitors(
         sourcing_case_id,contract_return_monitor_enabled
       )
       SELECT current_snapshot.sourcing_case_id,true
       FROM sourcing_approval_snapshots current_snapshot
       WHERE current_snapshot.sourcing_approval_snapshot_id=$1
-        AND current_snapshot.approved_at >= $2::timestamptz
         AND (
           EXISTS (
             SELECT 1 FROM sourcing_owner_decisions owner_decision
@@ -158,8 +154,9 @@ export class SourcingContractService {
               AND owner_change.decision_role='owner_group'
           )
         )
-      ON CONFLICT(sourcing_case_id) DO NOTHING`,[approvalSnapshotId,cutoff]);
-    }
+      ON CONFLICT(sourcing_case_id) DO UPDATE
+        SET contract_return_monitor_enabled=true
+        WHERE NOT sourcing_contract_return_monitors.contract_return_monitor_enabled`,[approvalSnapshotId]);
     const metadata = (await client.query<{identity_version:number;template_version:number}>(`SELECT
       (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=snapshot.sourcing_case_id) AS identity_version,
       (SELECT max(template_version) FROM sourcing_contract_template_versions WHERE effective_from<=CURRENT_TIMESTAMP) AS template_version
