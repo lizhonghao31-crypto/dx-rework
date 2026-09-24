@@ -345,7 +345,7 @@ runWithPostgres("rework v2 N01 PostgreSQL contracts", () => {
     const supervisor = () => actor(ids.tail, ["tail_supervisor"], "process:configure");
     const receivingBatchId = randomUUID();
     await database.query(
-      "INSERT INTO receiving_batches(receiving_batch_id,style_no,created_by) VALUES($1,'V2-FINISHING-001',$2)",
+      "INSERT INTO receiving_batches(receiving_batch_id,style_no,created_by,delivery_note_quantity) VALUES($1,'V2-FINISHING-001',$2,100)",
       [receivingBatchId, ids.tail],
     );
     const payload = {
