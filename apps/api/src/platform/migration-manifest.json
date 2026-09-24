@@ -213,6 +213,6 @@
     { "version": "0211_sourcing_contract_return_todos", "checksum": "e93250348e66f7708fdd1b44a02ffaeea14a8c7146e7bca7b13504cf874994d5" },
     { "version": "0212_sourcing_contract_return_historic_deadlines", "checksum": "5cf2a38157d38cd970f4e9268d9c203e4016c8aa4d6a5d3f2552af97a244422b" },
     { "version": "0213_rework_kind_source_link", "checksum": "b4628901a0f89edd9f70819ae7365bf41f116c26beddfebe11ee2d304aa7f411" },
-    { "version": "0214_inhouse_finishing_lifecycle", "checksum": "c72e4a7144aecbd317cf6405f513fd5316c98e93c9ab1c09f11ce0593ed62b68" }
+    { "version": "0214_inhouse_finishing_lifecycle", "checksum": "2408425c134365b454584bc40407a35035eedf1dfda329396cfdaedd16984215" }
   ]
 }

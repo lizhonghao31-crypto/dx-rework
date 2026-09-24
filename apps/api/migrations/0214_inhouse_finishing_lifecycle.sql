@@ -34,3 +34,24 @@ BEGIN
   IF revised=original THEN RAISE EXCEPTION '0214 immutable kind guard target missing'; END IF;
   EXECUTE revised;
 END $$;
+
+-- QC image evidence remains mandatory; a finishing order uses its linked source style image.
+CREATE OR REPLACE FUNCTION guard_rework_submission_requires_image()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.status='draft' AND NEW.status='pending_process_configuration'
+     AND NEW.rework_kind='qc_rework'
+     AND NOT EXISTS (
+       SELECT 1 FROM attachments attachment
+       WHERE attachment.entity_type='rework_order'
+         AND attachment.entity_id=NEW.rework_order_id::text
+         AND attachment.status='ready'
+         AND attachment.mime_type IN ('image/jpeg','image/png','image/webp')
+     )
+  THEN
+    RAISE EXCEPTION 'N01 submission requires at least one ready rework image'
+      USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END;
+$$;

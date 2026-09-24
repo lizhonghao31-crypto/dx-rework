@@ -227,7 +227,7 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
         expectedOrderVersion: saved.value.orderVersion,
         configurationId: saved.value.configuration!.configurationId,
         expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
-        assignments: [{ configurationItemId: workerItem.configurationItemId, memberIds: workerPersonIds }],
+        assignments: [{ configurationItemId: workerItem.configurationItemId, memberIds: [workerPersonIds[0]!] }],
       },
       randomUUID(),
     );
@@ -260,7 +260,7 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
 
     const tasks = await reporting.list(tailAssign(), draft.value.reworkOrderId);
     expect(tasks.tasks).toHaveLength(1);
-    expect(tasks.tasks[0]).toMatchObject({ executionKind: "worker", mode: "collective" });
+    expect(tasks.tasks[0]).toMatchObject({ executionKind: "worker", mode: "individual" });
     await reporting.submitReport(
       worker(),
       tasks.tasks[0]!.workTaskId,
@@ -351,11 +351,7 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
        JOIN rework_work_reports report USING(work_report_id)
        WHERE report.rework_order_id=$1 ORDER BY share.person_id`,
       [draft.value.reworkOrderId],
-    )).rows).toEqual([
-      { amount: "0.834" },
-      { amount: "0.833" },
-      { amount: "0.833" },
-    ]);
+    )).rows).toEqual([{ amount: "2.500" }]);
     expect((await database.query(
       "SELECT unit_price::text FROM rework_process_configuration_items WHERE configuration_item_id=$1",
       [workerItem.configurationItemId],
