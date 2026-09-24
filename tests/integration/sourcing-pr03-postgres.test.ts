@@ -2823,8 +2823,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await service.listCases(readerActor(),"RETURN-ACTIVE","all",1,{contractReturn:"all"}))
       .items.map(item=>item.sourcingCaseId)).toContain(active);
 
-    // Simulate an older approved order that predates enrollment; the migration
-    // must recover its original first-ready time without charging old lateness.
+    // A previously unmonitored approved order keeps its first ready PDF clock.
     const legacy = await makeApproved("RETURN-HISTORIC");
     const historicPdf = (await contractService.getCurrent(readerActor(),legacy)).item?.generatedAt;
     await database.query("DELETE FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1",[legacy]);
@@ -2837,14 +2836,29 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(historic.contractReturnMonitoring).toBe(true);
     expect(historic.contractReturnStatus).toBe("pending");
     expect(historic.contractGeneratedAt).toBe(historicPdf ?? null);
-    expect(historic.contractReturnDueAt).toBeNull();
+    expect(historic.contractReturnDueAt).toBe(historicPdf
+      ? (await database.query<{due:Date}>(
+        "SELECT sourcing_contract_return_add_hours($1::timestamptz,48) AS due",[historicPdf])).rows[0]!.due.toISOString()
+      : null);
     expect((await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},legacy)).canUpload).toBe(true);
     expect((await service.listCases(readerActor(),"RETURN-HISTORIC","all",1,{contractReturn:"all"}))
       .items.map(item=>item.sourcingCaseId)).toContain(legacy);
     expect((await service.listCases(readerActor(),"RETURN-HISTORIC","all",1,{contractReturn:"all_overdue"}))
       .items.map(item=>item.sourcingCaseId)).not.toContain(legacy);
+    await database.query(`UPDATE sourcing_contract_return_monitors
+      SET contract_generated_at='2026-09-15T00:00:00Z',
+          contract_return_due_at=sourcing_contract_return_add_hours('2026-09-15T00:00:00Z'::timestamptz,48)
+      WHERE sourcing_case_id=$1`,[legacy]);
+    expect((await service.getCase(readerActor(),legacy)).contractReturnStatus).toBe("overdue_pending");
+    expect((await service.listCases(readerActor(),"RETURN-HISTORIC","all",1,{contractReturn:"all_overdue"}))
+      .items.map(item=>item.sourcingCaseId)).toContain(legacy);
+    await database.query(await readFile(new URL(
+      "../../apps/api/migrations/0212_sourcing_contract_return_historic_deadlines.sql",import.meta.url),"utf8"));
+    expect((await database.query<{contract_return_catchup:boolean}>(
+      "SELECT contract_return_catchup FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1",[legacy]))
+      .rows[0]?.contract_return_catchup).toBe(false);
     await database.query(backfill);
-    expect((await service.getCase(readerActor(),legacy)).contractGeneratedAt).toBe(historic.contractGeneratedAt);
+    expect((await service.getCase(readerActor(),legacy)).contractReturnStatus).toBe("overdue_pending");
     expect((await database.query("SELECT count(*)::int AS count FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1",[legacy])).rows[0]?.count).toBe(1);
 
     // A signed attachment is accepted even if the first PDF clock is not ready.

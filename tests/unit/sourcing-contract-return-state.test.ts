@@ -21,13 +21,13 @@ describe("contract return 48-hour clock", () => {
         contractReturnedAt:"2026-09-23T01:00:00.000Z"});
   });
 
-  it("does not attribute lateness to orders first included after their original PDF date", () => {
+  it("preserves the original deadline and overdue state on orders first included after their PDF", () => {
     const historic = {...facts,contract_return_catchup:true,contract_return_overdue_seconds:1_000_000};
     expect(contractReturnState(historic, "2026-10-10T00:00:00Z"))
-      .toMatchObject({contractReturnStatus:"pending",contractGeneratedAt:generated,
-        contractReturnDueAt:null,contractReturnOverdueHours:null});
+      .toMatchObject({contractReturnStatus:"overdue_pending",contractGeneratedAt:generated,
+        contractReturnDueAt:due,contractReturnOverdueHours:277});
     expect(contractReturnState({...historic,contract_returned_at:"2026-10-11T00:00:00Z"}, "2026-10-12T00:00:00Z"))
-      .toMatchObject({contractReturnStatus:"returned_on_time",contractReturnOverdueHours:null});
+      .toMatchObject({contractReturnStatus:"returned_late",contractReturnOverdueHours:277});
   });
 
   it("uses an inclusive deadline and the SQL-calculated Sunday-free overdue duration", () => {

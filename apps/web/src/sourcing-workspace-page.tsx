@@ -1847,7 +1847,7 @@ function OrderDetailPage({
                   <summary className={`sourcing-contract-return-status--${contractReturn.contractReturnStatus}`}>回签资料 · {sourcingContractReturnLabel(contractReturn)}</summary>
                   <dl className="sourcing-finance-reference">
                     <div><dt>合同生成时间</dt><dd>{contractReturn.contractGeneratedAt?formatDateTime(contractReturn.contractGeneratedAt):"—"}</dd></div>
-                    <div><dt>回传截止时间</dt><dd>{contractReturn.contractReturnDueAt?formatDateTime(contractReturn.contractReturnDueAt):contractReturn.contractGeneratedAt?"历史待补传，不追溯逾期":"待合同生成"}</dd></div>
+                    <div><dt>回传截止时间</dt><dd>{contractReturn.contractReturnDueAt?formatDateTime(contractReturn.contractReturnDueAt):"待合同生成"}</dd></div>
                     <div><dt>实际回传时间</dt><dd>{contractReturn.contractReturnedAt?formatDateTime(contractReturn.contractReturnedAt):"—"}</dd></div>
                     <div><dt>上传人</dt><dd>{contractReturn.uploadedByName??"—"}</dd></div>
                     <div><dt>合同回签状态</dt><dd className={`sourcing-contract-return-status sourcing-contract-return-status--${contractReturn.contractReturnStatus}`}>{sourcingContractReturnLabel(contractReturn)}</dd></div>
