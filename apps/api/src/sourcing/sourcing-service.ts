@@ -199,6 +199,7 @@ type SourcingCaseRow = Readonly<{
   approval_by: string | null;
   approval_at: Date | string | null;
   contract_return_monitor_enabled: boolean;
+  contract_return_catchup: boolean;
   contract_generated_at: Date | string | null;
   contract_return_due_at: Date | string | null;
   contract_returned_at: Date | string | null;
@@ -507,7 +508,8 @@ export class SourcingService {
          COALESCE(decision_row.crafts,crafts_row.crafts) AS crafts,
          case_view.status,case_view.version,case_view.created_by,
          case_view.created_at,case_view.updated_at,
-         COALESCE(monitor_case.contract_return_monitor_enabled,false) AS contract_return_monitor_enabled,monitor_case.contract_generated_at,
+         COALESCE(monitor_case.contract_return_monitor_enabled,false) AS contract_return_monitor_enabled,
+          COALESCE(monitor_case.contract_return_catchup,false) AS contract_return_catchup,monitor_case.contract_generated_at,
          monitor_case.contract_return_due_at,monitor_case.contract_returned_at,
          sourcing_contract_return_elapsed_seconds(
            monitor_case.contract_return_due_at,COALESCE(monitor_case.contract_returned_at,CURRENT_TIMESTAMP)
@@ -730,7 +732,8 @@ export class SourcingService {
          COALESCE(decision_row.crafts,crafts_row.crafts) AS crafts,
          case_view.status,case_view.version,case_view.created_by,
          case_view.created_at,case_view.updated_at,
-         COALESCE(monitor_case.contract_return_monitor_enabled,false) AS contract_return_monitor_enabled,monitor_case.contract_generated_at,
+         COALESCE(monitor_case.contract_return_monitor_enabled,false) AS contract_return_monitor_enabled,
+          COALESCE(monitor_case.contract_return_catchup,false) AS contract_return_catchup,monitor_case.contract_generated_at,
          monitor_case.contract_return_due_at,monitor_case.contract_returned_at,
          sourcing_contract_return_elapsed_seconds(
            monitor_case.contract_return_due_at,COALESCE(monitor_case.contract_returned_at,CURRENT_TIMESTAMP)
@@ -926,14 +929,20 @@ export class SourcingService {
            $6::text IS NULL
            OR (
              monitor_case.contract_return_monitor_enabled
-             AND monitor_case.contract_return_due_at IS NOT NULL
              AND (
                $6::text='all'
-               OR ($6::text='pending' AND monitor_case.contract_returned_at IS NULL AND CURRENT_TIMESTAMP<=monitor_case.contract_return_due_at)
-               OR ($6::text='returned_on_time' AND monitor_case.contract_returned_at<=monitor_case.contract_return_due_at)
-               OR ($6::text='overdue_pending' AND monitor_case.contract_returned_at IS NULL AND CURRENT_TIMESTAMP>monitor_case.contract_return_due_at)
-               OR ($6::text='returned_late' AND monitor_case.contract_returned_at>monitor_case.contract_return_due_at)
-               OR ($6::text='all_overdue' AND (
+               OR ($6::text='pending' AND monitor_case.contract_returned_at IS NULL
+                 AND (monitor_case.contract_return_catchup OR monitor_case.contract_return_due_at IS NULL
+                   OR CURRENT_TIMESTAMP<=monitor_case.contract_return_due_at))
+               OR ($6::text='returned_on_time' AND monitor_case.contract_returned_at IS NOT NULL
+                 AND (monitor_case.contract_return_catchup OR monitor_case.contract_return_due_at IS NULL
+                   OR monitor_case.contract_returned_at<=monitor_case.contract_return_due_at))
+               OR ($6::text='overdue_pending' AND NOT monitor_case.contract_return_catchup
+                 AND monitor_case.contract_returned_at IS NULL
+                 AND CURRENT_TIMESTAMP>monitor_case.contract_return_due_at)
+               OR ($6::text='returned_late' AND NOT monitor_case.contract_return_catchup
+                 AND monitor_case.contract_returned_at>monitor_case.contract_return_due_at)
+               OR ($6::text='all_overdue' AND NOT monitor_case.contract_return_catchup AND (
                  monitor_case.contract_returned_at>monitor_case.contract_return_due_at
                  OR (monitor_case.contract_returned_at IS NULL AND CURRENT_TIMESTAMP>monitor_case.contract_return_due_at)
                ))

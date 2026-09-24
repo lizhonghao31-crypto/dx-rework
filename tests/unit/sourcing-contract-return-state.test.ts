@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contractReturnCutoff, contractReturnState } from "../../apps/api/src/sourcing/contract-return-state.js";
+import { contractReturnState } from "../../apps/api/src/sourcing/contract-return-state.js";
 import { sourcingContractReturnBadgeLabel, sourcingContractReturnLabel } from "../../apps/web/src/sourcing-contract-return-presentation.js";
 
 const generated = "2026-09-23T02:00:00.000Z";
@@ -11,14 +11,23 @@ const facts = {
 };
 
 describe("contract return 48-hour clock", () => {
-  it("excludes existing approved cases and cases whose PDF is not ready", () => {
+  it("includes every approved order even while the PDF is pending", () => {
     expect(contractReturnState({ ...facts,contract_return_monitor_enabled: false }, due).contractReturnStatus).toBeNull();
-    expect(contractReturnState({ ...facts,contract_generated_at: null,contract_return_due_at: null }, due).contractReturnMonitoring).toBe(false);
-    expect(contractReturnCutoff("")).toBeNull();
-    expect(() => contractReturnCutoff("2026-09-23")).toThrow();
-    expect(() => contractReturnCutoff("2026-09-31T10:00:00+08:00")).toThrow();
-    expect(() => contractReturnCutoff("0000-01-01T00:00:00Z")).toThrow();
-    expect(() => contractReturnCutoff("2026-09-23T24:00:00+08:00")).toThrow();
+    expect(contractReturnState({ ...facts,contract_generated_at: null,contract_return_due_at: null }, due))
+      .toMatchObject({contractReturnMonitoring:true,contractReturnStatus:"pending",contractReturnDueAt:null});
+    expect(contractReturnState({ ...facts,contract_generated_at: null,contract_return_due_at: null,
+      contract_returned_at:"2026-09-23T01:00:00Z" }, due))
+      .toMatchObject({contractReturnMonitoring:true,contractReturnStatus:"returned_on_time",
+        contractReturnedAt:"2026-09-23T01:00:00.000Z"});
+  });
+
+  it("does not attribute lateness to orders first included after their original PDF date", () => {
+    const historic = {...facts,contract_return_catchup:true,contract_return_overdue_seconds:1_000_000};
+    expect(contractReturnState(historic, "2026-10-10T00:00:00Z"))
+      .toMatchObject({contractReturnStatus:"pending",contractGeneratedAt:generated,
+        contractReturnDueAt:null,contractReturnOverdueHours:null});
+    expect(contractReturnState({...historic,contract_returned_at:"2026-10-11T00:00:00Z"}, "2026-10-12T00:00:00Z"))
+      .toMatchObject({contractReturnStatus:"returned_on_time",contractReturnOverdueHours:null});
   });
 
   it("uses an inclusive deadline and the SQL-calculated Sunday-free overdue duration", () => {

@@ -18,6 +18,7 @@ type MonitorRow = {
   sourcing_case_id: string;
   created_by: string;
   contract_return_monitor_enabled: boolean | null;
+  contract_return_catchup: boolean | null;
   contract_generated_at: Date | string | null;
   contract_return_due_at: Date | string | null;
   contract_returned_at: Date | string | null;
@@ -56,7 +57,7 @@ export class SourcingContractReturnService {
   async get(actor: TrustedActorContext, sourcingCaseId: string) {
     this.assertReader(actor);
     const result = await this.database.query<MonitorRow>(`SELECT source_case.sourcing_case_id,source_case.created_by,
-      monitor.contract_return_monitor_enabled,monitor.contract_generated_at,monitor.contract_return_due_at,
+      monitor.contract_return_monitor_enabled,monitor.contract_return_catchup,monitor.contract_generated_at,monitor.contract_return_due_at,
       monitor.contract_returned_at,monitor.contract_return_uploaded_by,
       sourcing_contract_return_elapsed_seconds(monitor.contract_return_due_at,
         COALESCE(monitor.contract_returned_at,CURRENT_TIMESTAMP)) AS contract_return_overdue_seconds,
@@ -116,7 +117,7 @@ export class SourcingContractReturnService {
     try {
       await client.query("BEGIN");
       const locked=await client.query<MonitorRow>(`SELECT monitor.sourcing_case_id,source_case.created_by,
-          monitor.contract_return_monitor_enabled,monitor.contract_generated_at,monitor.contract_return_due_at,
+          monitor.contract_return_monitor_enabled,monitor.contract_return_catchup,monitor.contract_generated_at,monitor.contract_return_due_at,
           monitor.contract_returned_at,monitor.contract_return_uploaded_by,NULL::text AS uploader_name,
           NULL::bigint AS contract_return_overdue_seconds,
           CURRENT_TIMESTAMP AS as_of
@@ -125,8 +126,8 @@ export class SourcingContractReturnService {
         WHERE monitor.sourcing_case_id=$1 AND source_case.deleted_at IS NULL
         FOR UPDATE OF monitor`,[sourcingCaseId]);
       const monitor=locked.rows[0];
-      if (!monitor?.contract_return_monitor_enabled || !monitor.contract_generated_at) {
-        throw new ApplicationError("INVALID_STATE_TRANSITION","合同未生成或该订单不属于回签监控范围",409);
+      if (!monitor?.contract_return_monitor_enabled) {
+        throw new ApplicationError("INVALID_STATE_TRANSITION","该订单尚未批准，暂不能回传合同",409);
       }
       if (!(await this.canUpload(actor,monitor.created_by,false))) forbidden();
       const previous=await client.query<{submitted_by:string;attachment_ids:string[]}>(`SELECT submission.submitted_by,

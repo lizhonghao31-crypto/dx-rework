@@ -2757,8 +2757,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(midnight.rows[0]?.due.toISOString()).toBe("2026-09-27T16:00:00.000Z");
   });
 
-  it("fixes eligibility at approval and clock at first ready PDF without resetting after a revision", async () => {
-    const previous = process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
+  it("covers approved orders without a date cutoff and backfills every missing historic monitor", async () => {
     const makeApproved = async (styleNo: string) => {
       const created = await service.createCase(merchandiserActor(), {
         gender: "女装",styleName: "回签测试",estimatedCutPieceSendDate: "2026-10-01",
@@ -2773,110 +2772,69 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
       return id;
     };
-    try {
-      delete process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
-      const legacy = await makeApproved("RETURN-LEGACY");
-      expect((await service.getCase(readerActor(),legacy)).contractReturnStatus).toBeNull();
-      process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT="2020-01-01T00:00:00Z";
-      const active = await makeApproved("RETURN-ACTIVE");
-      const first = await service.getCase(readerActor(),active);
-      expect(first.contractReturnMonitoring).toBe(true);
-      expect(first.contractReturnStatus).toBe("pending");
-      const authoritative = await database.query<{due: Date}>(
-        "SELECT sourcing_contract_return_add_hours($1::timestamptz,48) AS due",[first.contractGeneratedAt],
-      );
+    const unapproved = await service.createCase(merchandiserActor(), {
+      gender:"女装",styleName:"待审批订单",estimatedCutPieceSendDate:"2026-10-01",
+      deliveryDate:"2026-10-20",lineItems:[{styleNo:"RETURN-UNAPPROVED",color:"黑",quantity:20}],
+      daxingUnitPrice:"8",
+    },randomUUID());
+    expect((await service.getCase(readerActor(),unapproved.value.sourcingCaseId)).contractReturnMonitoring).toBe(false);
+    const active = await makeApproved("RETURN-ACTIVE");
+    const first = await service.getCase(readerActor(),active);
+    expect(first.contractReturnMonitoring).toBe(true);
+    expect(first.contractReturnStatus).toBe("pending");
+    if (first.contractGeneratedAt) {
+      const authoritative = await database.query<{due:Date}>(
+        "SELECT sourcing_contract_return_add_hours($1::timestamptz,48) AS due",[first.contractGeneratedAt]);
       expect(first.contractReturnDueAt).toBe(authoritative.rows[0]?.due.toISOString());
-      const selected = await service.listCases(readerActor(),"RETURN-", "all",1,{contractReturn:"all"});
-      expect(selected.items.map(item=>item.sourcingCaseId)).toContain(active);
-      expect(selected.items.map(item=>item.sourcingCaseId)).not.toContain(legacy);
-      // The rollout backfill uses the approval day in Shanghai, not the migration time.
-      // Move only disposable fixture timestamps; re-enable the immutable snapshot guard immediately.
-      delete process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
-      const approvedToday = await makeApproved("RETURN-TODAY");
-      const approvedTomorrow = await makeApproved("RETURN-TOMORROW");
-      expect((await service.getCase(readerActor(),approvedToday)).contractReturnMonitoring).toBe(false);
-      await database.query("ALTER TABLE sourcing_approval_snapshots DISABLE TRIGGER sourcing_approval_snapshots_no_update");
-      try {
-        await database.query(`UPDATE sourcing_approval_snapshots
-          SET approved_at=CASE WHEN sourcing_case_id=$1
-            THEN '2026-09-22T12:00:00+08'::timestamptz
-            WHEN sourcing_case_id=$2 THEN '2026-09-23T12:00:00+08'::timestamptz
-            ELSE '2026-09-24T00:00:00+08'::timestamptz END
-          WHERE sourcing_case_id IN ($1,$2,$3)`,[legacy,approvedToday,approvedTomorrow]);
-      } finally {
-        await database.query("ALTER TABLE sourcing_approval_snapshots ENABLE TRIGGER sourcing_approval_snapshots_no_update");
-      }
-      const backfillSql=await readFile(new URL("../../apps/api/migrations/0209_sourcing_contract_return_today_backfill.sql",import.meta.url),"utf8");
-      await database.query(backfillSql);
-      const backfilled=await service.getCase(readerActor(),approvedToday);
-      expect(backfilled.contractReturnMonitoring).toBe(true);
-      expect(backfilled.contractReturnStatus).toBe("pending");
-      expect(backfilled.contractReturnDueAt).toBe(
-        (await database.query<{due: Date}>("SELECT sourcing_contract_return_add_hours($1::timestamptz,48) AS due",
-          [backfilled.contractGeneratedAt])).rows[0]?.due.toISOString(),
-      );
-      expect((await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},approvedToday)).canUpload).toBe(true);
-      expect((await service.getCase(readerActor(),legacy)).contractReturnMonitoring).toBe(false);
-      expect((await service.getCase(readerActor(),approvedTomorrow)).contractReturnMonitoring).toBe(false);
-      await database.query(backfillSql);
-      expect((await service.getCase(readerActor(),approvedToday)).contractGeneratedAt).toBe(backfilled.contractGeneratedAt);
-      // A same-day management-only transfer cannot enroll an older owner approval.
-      await service.requestFactoryChange(managerActor(),legacy,{
-        supplierId:replacementFactoryId,unitPrice:"9.0000",
-        changeReason:"生产管理自行低价转厂不能代替老板审批",
-      },randomUUID());
-      await database.query(backfillSql);
-      expect((await service.getCase(readerActor(),legacy)).contractReturnMonitoring).toBe(false);
-
-      // Backfill accepts an owner's same-day transfer of an older order,
-      // and starts from that transfer's ready PDF rather than the earlier one.
-      const ownerBackfill=await makeApproved("RETURN-OWNER-BACKFILL");
-      await database.query("ALTER TABLE sourcing_approval_snapshots DISABLE TRIGGER sourcing_approval_snapshots_no_update");
-      try {
-        await database.query(`UPDATE sourcing_approval_snapshots
-          SET approved_at='2026-09-22T12:00:00+08'::timestamptz
-          WHERE sourcing_case_id=$1`,[ownerBackfill]);
-      } finally {
-        await database.query("ALTER TABLE sourcing_approval_snapshots ENABLE TRIGGER sourcing_approval_snapshots_no_update");
-      }
-      await service.requestFactoryChange(ownerActor(),ownerBackfill,{
-        supplierId:replacementFactoryId,unitPrice:"10.0000",
-        changeReason:"当天老板确认旧单转厂",
-      },randomUUID());
-      await database.query(backfillSql);
-      const ownerBackfilled=await service.getCase(readerActor(),ownerBackfill);
-      expect(ownerBackfilled.contractReturnMonitoring).toBe(true);
-      const ownerDocument=await contractService.getCurrent(readerActor(),ownerBackfill);
-      expect(ownerBackfilled.contractGeneratedAt).toBe(ownerDocument.item?.generatedAt);
-
-      // A later genuine owner approval enrolls a previously excluded case.
-      const reapproved=await makeApproved("RETURN-REAPPROVED");
-      await database.query("ALTER TABLE sourcing_approval_snapshots DISABLE TRIGGER sourcing_approval_snapshots_no_update");
-      try {
-        await database.query(`UPDATE sourcing_approval_snapshots
-          SET approved_at='2026-09-22T12:00:00+08'::timestamptz
-          WHERE sourcing_case_id=$1`,[reapproved]);
-      } finally {
-        await database.query("ALTER TABLE sourcing_approval_snapshots ENABLE TRIGGER sourcing_approval_snapshots_no_update");
-      }
-      process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT="2026-09-23T00:00:00+08:00";
-      await service.requestFactoryChange(ownerActor(),reapproved,{
-        supplierId:replacementFactoryId,unitPrice:"10.0000",
-        changeReason:"老板确认换厂，首次纳入合同回签监控",
-      },randomUUID());
-      expect((await service.getCase(readerActor(),reapproved)).contractReturnMonitoring).toBe(true);
-      await service.reviseStyles(merchandiserActor(),active,{
-        expectedRevision:0,lines:[{position:1,styleNo:"RETURN-REVISED",alternateStyleNo:null}],
-      },randomUUID());
-      const revised = await service.getCase(readerActor(),active);
-      expect(revised.contractGeneratedAt).toBe(first.contractGeneratedAt);
-      expect(revised.contractReturnDueAt).toBe(first.contractReturnDueAt);
-      expect((await service.listCases(readerActor(),"RETURN-","all",1,{contractReturn:"all_overdue"})).items
-        .some(item=>item.sourcingCaseId===active)).toBe(false);
-    } finally {
-      if (previous === undefined) delete process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
-      else process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT=previous;
     }
+    expect((await service.listCases(readerActor(),"RETURN-ACTIVE","all",1,{contractReturn:"all"}))
+      .items.map(item=>item.sourcingCaseId)).toContain(active);
+
+    // Simulate an older approved order that predates enrollment; the migration
+    // must recover its original first-ready time without charging old lateness.
+    const legacy = await makeApproved("RETURN-HISTORIC");
+    const historicPdf = (await contractService.getCurrent(readerActor(),legacy)).item?.generatedAt;
+    await database.query("DELETE FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1",[legacy]);
+    expect((await service.getCase(readerActor(),legacy)).contractReturnMonitoring).toBe(false);
+    const migration = await readFile(new URL(
+      "../../apps/api/migrations/0210_sourcing_contract_return_all_existing.sql",import.meta.url),"utf8");
+    const backfill = migration.slice(migration.indexOf("WITH qualifying AS MATERIALIZED"));
+    await database.query(backfill);
+    const historic = await service.getCase(readerActor(),legacy);
+    expect(historic.contractReturnMonitoring).toBe(true);
+    expect(historic.contractReturnStatus).toBe("pending");
+    expect(historic.contractGeneratedAt).toBe(historicPdf ?? null);
+    expect(historic.contractReturnDueAt).toBeNull();
+    expect((await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},legacy)).canUpload).toBe(true);
+    expect((await service.listCases(readerActor(),"RETURN-HISTORIC","all",1,{contractReturn:"all"}))
+      .items.map(item=>item.sourcingCaseId)).toContain(legacy);
+    expect((await service.listCases(readerActor(),"RETURN-HISTORIC","all",1,{contractReturn:"all_overdue"}))
+      .items.map(item=>item.sourcingCaseId)).not.toContain(legacy);
+    await database.query(backfill);
+    expect((await service.getCase(readerActor(),legacy)).contractGeneratedAt).toBe(historic.contractGeneratedAt);
+    expect((await database.query("SELECT count(*)::int AS count FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1",[legacy])).rows[0]?.count).toBe(1);
+
+    // A signed attachment is accepted even if the first PDF clock is not ready.
+    const pendingPdf = await makeApproved("RETURN-NO-PDF");
+    await database.query(`UPDATE sourcing_contract_return_monitors
+      SET contract_generated_at=NULL,contract_return_due_at=NULL WHERE sourcing_case_id=$1`,[pendingPdf]);
+    const beforePdf = await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},pendingPdf);
+    expect(beforePdf).toMatchObject({contractReturnMonitoring:true,contractReturnStatus:"pending",canUpload:true});
+    const attachmentId=randomUUID();
+    await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,
+      size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'回签.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,
+      [attachmentId,`contract-return-before-pdf/${attachmentId}`,"c".repeat(64),merchandiserId]);
+    const returned=await contractReturns.submit(contractActor(),pendingPdf,[attachmentId],randomUUID());
+    expect(returned.contractReturnStatus).toBe("returned_on_time");
+    expect(returned.contractReturnDueAt).toBeNull();
+    expect((await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},pendingPdf))
+      .attachments.map(file=>file.attachmentId)).toEqual([attachmentId]);
+    await database.query(`UPDATE sourcing_contract_return_monitors
+      SET contract_generated_at=contract_returned_at + INTERVAL '1 second',
+          contract_return_due_at=sourcing_contract_return_add_hours(contract_returned_at + INTERVAL '1 second',48)
+      WHERE sourcing_case_id=$1`,[pendingPdf]);
+    expect((await service.getCase(readerActor(),pendingPdf)).contractReturnStatus).toBe("returned_on_time");
   });
   it("keeps the first persisted return when the file is replaced, with role and file ownership checks", async () => {
     const previous=process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT;
