@@ -412,7 +412,7 @@ runWithPostgres("employee access role lifecycle", () => {
 
     const soleOwnerId = randomUUID();
     await database.query(
-      "INSERT INTO app_users(id,display_name,enabled) VALUES($1,'唯一可用老板',false)",
+      "INSERT INTO app_users(id,display_name,enabled) VALUES($1,'唯一可用老板',true)",
       [soleOwnerId],
     );
     await database.query(
@@ -422,10 +422,28 @@ runWithPostgres("employee access role lifecycle", () => {
        ) VALUES($1,$2,'dingtalk','corp','sole-owner','union-sole-owner',true,true,CURRENT_TIMESTAMP)`,
       [randomUUID(), soleOwnerId],
     );
-    await service.assignRole(
-      { ...rootActor, requestId: randomUUID() },
-      { userId: soleOwnerId, roleCode: "owner_group", reason: "验证离职同步不能清空最后一个可用老板" },
-    );
+    const ownerSeedClient = await database.connect();
+    try {
+      await ownerSeedClient.query("BEGIN");
+      await ownerSeedClient.query(
+        `SELECT
+           set_config('dx_rework.role_assign_event_id',$1,true),
+           set_config('dx_rework.role_assign_request_id',$2,true)`,
+        [randomUUID(), "employee-lifecycle-sole-owner"],
+      );
+      await ownerSeedClient.query(
+        `INSERT INTO user_role_assignments(
+           assignment_id,user_id,role_code,granted_by,grant_reason
+         ) VALUES($1,$2,'owner_group',$3,'验证离职同步不能清空最后一个可用老板')`,
+        [randomUUID(), soleOwnerId, rootId],
+      );
+      await ownerSeedClient.query("COMMIT");
+    } catch (error) {
+      await ownerSeedClient.query("ROLLBACK");
+      throw error;
+    } finally {
+      ownerSeedClient.release();
+    }
     expect((await database.query<{ enabled: boolean }>(
       "SELECT enabled FROM app_users WHERE id=$1",
       [soleOwnerId],
