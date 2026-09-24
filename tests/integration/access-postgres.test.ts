@@ -120,6 +120,13 @@ runWithPostgres("role permissions and versioned master data", () => {
       new URL("../../apps/api/migrations/0143_sourcing_supplier_profile_foundation.sql", import.meta.url),
       "utf8",
     ));
+    // This focused access fixture intentionally does not replay the whole historical chain.
+    // Keep the business_people shape aligned with the current service contract introduced by 0059.
+    await database.query(`
+      ALTER TABLE business_people
+        ADD COLUMN temporary_code text,
+        ADD COLUMN temporary_remark text
+    `);
     for (const [index, userId] of userIds.entries()) {
       await database.query(
         "INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)",
@@ -940,7 +947,7 @@ runWithPostgres("role permissions and versioned master data", () => {
   });
 
 
-  it("pages and searches the process catalog with a query-bound stable cursor", async () => {
+  it("pages and searches the process catalog with stable page metadata", async () => {
     await Promise.all(Array.from({ length: 17 }, (_, index) => service.createProcess(masterDataActor, {
       processCode: `PAGE_PROCESS_${String(index + 1).padStart(2, "0")}`,
       processName: `分页工序${String(index + 1).padStart(2, "0")}`,
@@ -956,41 +963,21 @@ runWithPostgres("role permissions and versioned master data", () => {
       changeReason: "验证字面量搜索",
     });
 
-    const firstPage = await service.listProcessPage({ query: "分页工序" });
+    const firstPage = await service.listProcessPage({ query: "分页工序", page: 1 });
+    expect(firstPage).toMatchObject({ page: 1, pageSize: 15, totalCount: 17, totalPages: 2 });
     expect(firstPage.items).toHaveLength(15);
-    expect(firstPage.nextCursor).toEqual(expect.any(String));
-    const secondPage = await service.listProcessPage({
-      query: "分页工序",
-      cursor: firstPage.nextCursor!,
-    });
+    const secondPage = await service.listProcessPage({ query: "分页工序", page: 2 });
+    expect(secondPage).toMatchObject({ page: 2, pageSize: 15, totalCount: 17, totalPages: 2 });
     expect(secondPage.items).toHaveLength(2);
-    expect(secondPage.nextCursor).toBeNull();
     expect(new Set([...firstPage.items, ...secondPage.items].map((item) => item.processId)).size).toBe(17);
 
     expect((await service.listProcessPage({ query: "%" })).items).toEqual([
       expect.objectContaining({ processCode: "PERCENT_PROCESS", processName: "百分比%工序" }),
     ]);
-    await expect(service.listProcessPage({
-      query: "另一个搜索",
-      cursor: firstPage.nextCursor!,
-    })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
-
-    const longQuery = "长".repeat(100);
-    await Promise.all(Array.from({ length: 16 }, (_, index) => service.createProcess(masterDataActor, {
-      processCode: `LONG_PROCESS_${String(index + 1).padStart(2, "0")}`,
-      processName: `${longQuery}${String(index + 1).padStart(2, "0")}`,
-      pricingUnit: "piece",
-      active: true,
-      changeReason: "验证多字节搜索游标",
-    })));
-    const longFirstPage = await service.listProcessPage({ query: longQuery });
-    expect(longFirstPage.items).toHaveLength(15);
-    expect(longFirstPage.nextCursor).toEqual(expect.any(String));
-    expect(longFirstPage.nextCursor!.length).toBeLessThanOrEqual(4096);
-    expect((await service.listProcessPage({
-      query: longQuery,
-      cursor: longFirstPage.nextCursor!,
-    })).items).toHaveLength(1);
+    await expect(service.listProcessPage({ query: "长".repeat(101) }))
+      .rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(service.listProcessPage({ page: 0 }))
+      .rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   });
 
   it("adds only active global delegations to session-wide capabilities", async () => {
