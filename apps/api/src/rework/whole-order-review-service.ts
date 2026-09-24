@@ -29,6 +29,7 @@ import type { TodoProjectionService } from "../todos/projection-service.js";
 type Result<T> = Readonly<{ value: T; reused: boolean }>;
 type OrderRow = Readonly<{
   rework_order_id: string; rework_no: string | null; status: string; version: number;
+  rework_kind: "qc_rework" | "inhouse_finishing";
   style_no: string | null; order_no: string | null; merchandiser_user_id: string | null;
   processing_factory_type: "own_factory" | "supplier" | null; processing_factory_supplier_id: string | null;
   processing_factory_supplier_version: number | null; problem_part: string | null;
@@ -248,7 +249,9 @@ export class WholeOrderReviewService {
         error("最终价格快照不完整，不能进行 IE 复核", 409, "CONFLICT");
       }
       const approved = input.decision === "approved";
-      const nextStatus = approved ? "pending_responsibility_determination" : "pending_order_review";
+      const nextStatus = approved
+        ? order.rework_kind === "inhouse_finishing" ? "completed" : "pending_responsibility_determination"
+        : "pending_order_review";
       const reviewId = randomUUID();
       const orderReviewId = approved ? randomUUID() : null;
       const eventId = await this.events.append(client, this.withCapability(actor, "process:review"), {
@@ -370,10 +373,13 @@ export class WholeOrderReviewService {
         [orderReviewId, reworkOrderId, actor.actorId, snapshot],
       );
       await client.query(
-        "UPDATE rework_orders SET status='pending_responsibility_determination',updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1",
-        [reworkOrderId, actor.actorId],
+        "UPDATE rework_orders SET status=$3,updated_by=$2,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE rework_order_id=$1",
+        [reworkOrderId, actor.actorId, nextStatus],
       );
       await this.todos?.completeOpenByDedupePrefix(client, actor, `final-quantity-ie-review:${reworkOrderId}:`, "IE approved the final quantities");
+      if (order.rework_kind === "inhouse_finishing") {
+        return this.dto(client, await this.order(client, reworkOrderId, false), await this.permissions(client, actor, order));
+      }
       await this.todos?.actionableForAllAssignedRole(client, actor, {
         category: "responsibility_determination",
         sourceEventId: eventId,
@@ -1610,7 +1616,7 @@ export class WholeOrderReviewService {
 
   private async order(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string, locked: boolean): Promise<OrderRow> {
     const result = await client.query<OrderRow>(
-      `SELECT rework_order_id,rework_no,status,version,style_no,order_no,merchandiser_user_id,processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,problem_part,problem_description,rework_quantity,tail_inspection_required FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'${locked ? " FOR UPDATE" : ""}`,
+      `SELECT rework_order_id,rework_no,status,version,rework_kind,style_no,order_no,merchandiser_user_id,processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,problem_part,problem_description,rework_quantity,tail_inspection_required FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'${locked ? " FOR UPDATE" : ""}`,
       [reworkOrderId],
     );
     return result.rows[0] ?? error("返工单不存在", 404, "NOT_FOUND");

@@ -65,6 +65,7 @@ export type ReworkBusinessDetail = Readonly<{
   reworkOrderId: string;
   reworkNo: string | null;
   status: ReworkStatus;
+  reworkKind?: "qc_rework" | "inhouse_finishing";
   version: number;
   styleNo: string | null;
   customerSupplyCode: string | null;
@@ -140,7 +141,7 @@ export type ReworkBusinessDetail = Readonly<{
     attachmentId: string;
     filename: string;
     mimeType: string;
-    entityType: "rework_order" | "external_responsibility_case" | "receiving_batch";
+    entityType: "rework_order" | "external_responsibility_case" | "receiving_batch" | "sourcing_case";
   }>[];
   workflowHistory: readonly Readonly<{
     action: string;
@@ -323,7 +324,7 @@ const buildWorkflow = (
       key: "planning",
       title: "发起、配置与核价",
       nodes: [
-        node("initiation", "01", "发起返工", "质检", detail.createdBy.displayName, "登记数字化验货单和纸质报告附件后提交返工单。"),
+        node("initiation", "01", detail.reworkKind === "inhouse_finishing" ? "本厂做尾" : "发起返工", detail.reworkKind === "inhouse_finishing" ? "尾部主管" : "质检", detail.createdBy.displayName, detail.reworkKind === "inhouse_finishing" ? "沿用来源款图、加工厂与跟单资料发起做尾。" : "登记数字化验货单和纸质报告附件后提交返工单。"),
         node("process_configuration", "02", "分配工序 &工人", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", detail.tailInspectionRequired ? "一次完成返工工序、候选单价、返工人员与整查分配；不再设置独立人员分配节点。" : "一次完成返工工序、候选单价与返工人员分配；本单无需整查。"),
         node("ie_review", "03", "IE 核价", "IE", "待尾部提交", "IE 只核准工序单价；通过后预分配工人自动生效并进入返工执行。"),
       ],
@@ -337,13 +338,15 @@ const buildWorkflow = (
     },
     {
       key: "responsibility",
-      title: "责任与结算",
+      title: detail.reworkKind === "inhouse_finishing" ? "最终确认与计薪" : "责任与结算",
       nodes: [
         node("whole_order_review", "05", "尾部最终数量确认", "尾部主管", "待全部执行报数完成", detail.tailInspectionRequired ? "逐工序对照工人原报数与整查数，提交最终确认数量并保留每版审计。" : "系统按工人有效上数生成最终数量，并保留每版审计。"),
         node("final_quantity_ie_review", "06", "IE 最终数量复核", "IE", "待 N05 提交", "只复核数量与质量事实；通过后生成正式工资，退回则回到 N05。"),
+        ...(detail.reworkKind === "inhouse_finishing" ? [] : [
         node("responsibility", "07", "责任判定", "生产管理", "待 N06 通过", "每道工序只选一个主责任方；外部扣款倍率默认且最低 1.2，可向上调整。"),
         node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "老板直接确认或驳回已锁定的责任方与外部扣款倍率。"),
         node("settlement_followup", "09", "返工业务完成", "系统", "N08 同意后完成", "订单完成即进入供应商扣款；工资金额仅供财务查询与对数。"),
+        ]),
       ],
     },
   ];
@@ -551,9 +554,10 @@ function CurrentReworkDetailPage({
     }
   };
   const orderAttachments = detail.attachments.filter((attachment) =>
-    attachment.entityType === "rework_order" || attachment.entityType === "receiving_batch");
+    attachment.entityType === "rework_order" || attachment.entityType === "receiving_batch" || attachment.entityType === "sourcing_case");
   const imageAttachments = orderAttachments.filter((attachment) => attachment.mimeType.startsWith("image/"));
   const dynamicFacts = [
+    { label: "业务类型", value: detail.reworkKind === "inhouse_finishing" ? "本厂做尾" : "QC返工" },
     { label: "客供款号", value: detail.customerSupplyCode },
     { label: "工厂款号", value: detail.factoryStyleNo },
     { label: "订单号", value: detail.orderNo },
@@ -572,7 +576,7 @@ function CurrentReworkDetailPage({
   const stages = buildWorkflow(detail, currentUser, returnToTodos ? focusedNode : undefined);
   const workflowNodes = stages.flatMap((stage) => stage.nodes);
   const activeNode = workflowNodes.find((node) => node.state === "current" || node.state === "followup")?.key
-    ?? (detail.status === "completed" ? "settlement_followup" : undefined);
+    ?? (detail.status === "completed" ? detail.reworkKind === "inhouse_finishing" ? "final_quantity_ie_review" : "settlement_followup" : undefined);
   const activeWorkflowNode = workflowNodes.find((node) => node.key === activeNode);
   const selectedFromUrl = workflowNodeFromSearch();
   const defaultSelectedNode = activeNode ?? "settlement_followup";

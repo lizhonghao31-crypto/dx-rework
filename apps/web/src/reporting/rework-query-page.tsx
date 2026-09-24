@@ -35,6 +35,7 @@ function BusinessReworkQueryPage() {
   const [q, setQ] = useState(initial.get("q") ?? "");
   const debouncedQ = useDebouncedValue(q, 200);
   const [status, setStatus] = useState(initial.get("status") ?? "");
+  const [reworkKind, setReworkKind] = useState(initial.get("reworkKind") ?? "");
   const [responsibilityType,setResponsibilityType]=useState(initial.get("responsibilityType")??"");
   const [from,setFrom]=useState(initial.get("from")??"");
   const [to,setTo]=useState(initial.get("to")??"");
@@ -50,15 +51,15 @@ function BusinessReworkQueryPage() {
   const [deletingOrderId, setDeletingOrderId] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const resetPage=()=>{setPage(1);};
-  const filters = useMemo(() => ({ q: debouncedQ.trim() || undefined, status: status || undefined, responsibilityType:responsibilityType||undefined,from,to, overdue: overdue || undefined, exception: exception || undefined,page: String(page), limit: "15" }), [debouncedQ,status,responsibilityType,from,to,overdue,exception,page]);
+  const filters = useMemo(() => ({ q: debouncedQ.trim() || undefined, status: status || undefined, reworkKind: reworkKind || undefined, responsibilityType:responsibilityType||undefined,from,to, overdue: overdue || undefined, exception: exception || undefined,page: String(page), limit: "15" }), [debouncedQ,status,reworkKind,responsibilityType,from,to,overdue,exception,page]);
 
   useEffect(() => {
     const url = new URL(window.location.href);
-    for (const [name,value] of Object.entries({q,status,responsibilityType,from,to,overdue,exception,page:page>1?String(page):""})) {
+    for (const [name,value] of Object.entries({q,status,reworkKind,responsibilityType,from,to,overdue,exception,page:page>1?String(page):""})) {
       if(value) url.searchParams.set(name,value); else url.searchParams.delete(name);
     }
     window.history.replaceState(window.history.state,"",url);
-  }, [q,status,responsibilityType,from,to,overdue,exception,page]);
+  }, [q,status,reworkKind,responsibilityType,from,to,overdue,exception,page]);
   useEffect(() => {
     const controller = new AbortController();
     setRefreshing(true);
@@ -97,6 +98,7 @@ function BusinessReworkQueryPage() {
     {canSandbox ? <ReworkModuleTabs active="board" /> : null}
     <Surface className="reporting-filters reporting-filters--orders">
       <InsetField label="关键词" aria-label="关键词" value={q} onChange={(event) => {setQ(event.target.value);resetPage();}} placeholder="单号 / 款号 / 订单 / 人员 / 供应商" />
+      <label>类别<select value={reworkKind} onChange={(event) => {setReworkKind(event.target.value);resetPage();}}><option value="">全部类别</option><option value="qc_rework">QC返工</option><option value="inhouse_finishing">本厂做尾</option></select></label>
       <label>状态<select value={status} onChange={(event) => {setStatus(event.target.value);resetPage();}}>{statuses.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></label>
       <label>责任<select value={responsibilityType} onChange={event=>{setResponsibilityType(event.target.value);resetPage();}}>{responsibilityTypes.map(([value,label])=><option value={value} key={value}>{label}</option>)}</select></label>
       <button type="button" className="rework-query-more-toggle" aria-expanded={moreFilters} aria-controls="rework-query-more" onClick={()=>setMoreFilters(!moreFilters)}>日期 / 更多筛选 {moreFilters?'−':'+'}</button>

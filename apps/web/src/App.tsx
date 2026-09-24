@@ -377,7 +377,11 @@ export function App() {
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/qc/new") {
-    return <AuthGate requiredAnyOf={[
+    const finishing = new URLSearchParams(search).get("kind") === "inhouse_finishing";
+    return <AuthGate requiredAnyOf={finishing ? [
+      owner,
+      { requiredRole: "tail_supervisor", requiredCapability: "process:configure" },
+    ] : [
       owner,
       { requiredRole: "quality_control", requiredCapability: "rework:initiate" },
     ]}>{page}</AuthGate>;

@@ -46,6 +46,7 @@ type ReceivingReworkEntry = Readonly<{
   processingFactorySupplierId: string | null;
   merchandiserUserId: string | null;
   sourceImageAttachmentId: string | null;
+  existingReworkOrderId?: string | null;
 }>;
 type ReworkDraftSource = Readonly<{
   receivingBatchId: string | null;
@@ -153,7 +154,8 @@ export class ReworkInitiationService {
     private readonly todoService?: TodoService,
   ) {}
 
-  async getReceivingEntry(receivingBatchId: string): Promise<ReceivingReworkEntry> {
+  async getReceivingEntry(receivingBatchId: string, finishingActor?: TrustedActorContext): Promise<ReceivingReworkEntry> {
+    if (finishingActor) this.ensureFinishingInitiator(finishingActor);
     const result = await this.database.query<{
       style_no: string;
       has_existing_rework: boolean;
@@ -188,11 +190,23 @@ export class ReworkInitiationService {
     );
     const row = result.rows[0];
     if (!row) throw new ApplicationError("NOT_FOUND", "收货批次不存在", 404);
-    if (row.has_existing_rework) {
+    let existingReworkOrderId: string | null = null;
+    if (row.has_existing_rework && finishingActor) {
+      const existing = await this.database.query<{ rework_order_id: string }>(
+        `SELECT rework_order_id FROM rework_orders
+         WHERE source_receiving_batch_id=$1 AND status='draft'
+           AND rework_kind='inhouse_finishing' AND created_by=$2
+         ORDER BY created_at DESC LIMIT 1`,
+        [receivingBatchId, finishingActor.actorId],
+      );
+      existingReworkOrderId = existing.rows[0]?.rework_order_id ?? null;
+    }
+    if (row.has_existing_rework && !existingReworkOrderId) {
       throw new ApplicationError("CONFLICT", "该收货批次已有返工单，不能重复发起", 409);
     }
     return {
       receivingBatchId,
+      ...(existingReworkOrderId ? { existingReworkOrderId } : {}),
       styleNo: row.style_no.trim().toUpperCase(),
       processingFactorySupplierId: row.processing_factory_supplier_id,
       merchandiserUserId: row.merchandiser_user_id,
@@ -200,12 +214,26 @@ export class ReworkInitiationService {
     };
   }
 
+  async getFinishingDraft(actor: TrustedActorContext, reworkOrderId: string): Promise<ReworkOrderResponse> {
+    this.ensureFinishingInitiator(actor);
+    const order = await this.getOwnedWithClient(this.database, actor.actorId, reworkOrderId);
+    if (order.reworkKind !== "inhouse_finishing" || order.status !== "draft") {
+      throw new ApplicationError("FORBIDDEN", "本厂做尾草稿不可访问", 403);
+    }
+    return order;
+  }
+
   async createDraft(
     actor: TrustedActorContext,
     input: CreateReworkDraftWithReceivingBatch,
     idempotencyKey: string,
+    kind: "qc_rework" | "inhouse_finishing" = "qc_rework",
   ): Promise<MutationResult<ReworkOrderResponse>> {
-    return this.mutate(actor, "rework.draft.create", idempotencyKey, input, 201, async (client) => {
+    return this.mutate(actor, kind === "inhouse_finishing" ? "rework.finishing.draft.create" : "rework.draft.create", idempotencyKey, { ...input, kind }, 201, async (client) => {
+      if (kind === "inhouse_finishing" && (input.tailInspectionRequired !== false
+        || input.tailInspectionCostBearer || input.inspectionReport || (input.attachmentIds?.length ?? 0) > 0)) {
+        throw new ApplicationError("VALIDATION_ERROR", "本厂做尾无需整查和QC报告", 400);
+      }
       const reworkOrderId = randomUUID();
       const sourceReceivingBatch = await this.resolveSourceReceivingBatch(
         client,
@@ -221,7 +249,7 @@ export class ReworkInitiationService {
         reworkOrderId,
         reworkNo: null,
         status: "draft" as const,
-        reworkKind: "qc_rework" as const,
+        reworkKind: kind,
         receivingBatchId: sourceReceivingBatch.receivingBatchId,
         styleNo: sourceReceivingBatch.styleNo,
         customerSupplyCode: input.customerSupplyCode ?? null,
@@ -248,7 +276,7 @@ export class ReworkInitiationService {
         version: 1,
       };
       const eventId = await this.events.append(client, actor, {
-        action: "rework.draft.create",
+        action: kind === "inhouse_finishing" ? "rework.finishing.draft.create" : "rework.draft.create",
         entityType: "rework_order",
         entityId: reworkOrderId,
         after: next,
@@ -262,8 +290,8 @@ export class ReworkInitiationService {
            processing_factory_supplier_version,rework_reason,rework_process,
            problem_part,problem_description,rework_quantity,tail_inspection_required,
            tail_inspection_cost_bearer,tail_inspection_cost_bearer_source,inspection_report,
-           source_receiving_batch_id,created_by,updated_by
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$21)`,
+           source_receiving_batch_id,created_by,updated_by,rework_kind
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$21,$22)`,
         [
           reworkOrderId,
           next.styleNo,
@@ -286,6 +314,7 @@ export class ReworkInitiationService {
           next.inspectionReport,
           sourceReceivingBatch.receivingBatchId,
           actor.actorId,
+          kind,
         ],
       );
       await this.syncAttachments(client, actor.actorId, reworkOrderId, attachmentIds);
@@ -1044,8 +1073,10 @@ export class ReworkInitiationService {
 
   async listInitiationOptions(
     actor: TrustedActorContext,
+    kind: "qc_rework" | "inhouse_finishing" = "qc_rework",
   ): Promise<ReworkInitiationOptionsResponse> {
-    this.ensureInitiator(actor);
+    if (kind === "inhouse_finishing") this.ensureFinishingInitiator(actor);
+    else this.ensureInitiator(actor);
     const [merchandisers, factories, colors] = await Promise.all([
       this.database.query<{ user_id: string; display_name: string }>(
         `SELECT users.id AS user_id,users.display_name
@@ -1145,8 +1176,22 @@ export class ReworkInitiationService {
 
   async canDownloadBoundAttachment(
     actor: Readonly<{ actorId: string; actorRoles: readonly string[]; capabilities: readonly string[] }>,
-    binding: Readonly<{ entityType: string; entityId: string }>,
+    binding: Readonly<{ attachmentId?: string; entityType: string; entityId: string }>,
   ): Promise<boolean> {
+    if (binding.entityType === "sourcing_case" && binding.attachmentId
+      && (actor.actorRoles.includes("root_superuser") || actor.actorRoles.includes("owner_group")
+        || (actor.actorRoles.includes("tail_supervisor") && actor.capabilities.includes("process:configure")))) {
+      const source = await this.database.query(
+        `SELECT 1 FROM receiving_batches batch
+         JOIN cutting_orders cutting ON cutting.cutting_order_id=batch.cutting_order_id
+         JOIN current_sourcing_case_lines line ON line.sourcing_case_id=cutting.sourcing_case_id
+           AND line.position=cutting.sourcing_line_position
+         WHERE batch.deleted_at IS NULL AND cutting.sourcing_case_id::text=$1
+           AND line.image_attachment_id::text=$2 LIMIT 1`,
+        [binding.entityId, binding.attachmentId],
+      );
+      return (source.rowCount ?? 0) > 0;
+    }
     if (binding.entityType !== "rework_order") return false;
     const result = await this.database.query<{
       created_by: string;
@@ -1178,7 +1223,9 @@ export class ReworkInitiationService {
     statusCode: number,
     work: (client: PoolClient) => Promise<T>,
   ): Promise<MutationResult<T>> {
-    if (scope === "rework.attachments.supplement") {
+    if (scope === "rework.finishing.draft.create") {
+      this.ensureFinishingInitiator(actor);
+    } else if (scope === "rework.attachments.supplement") {
       this.ensureSupplementalImageActor(actor);
     } else if (scope === "rework.tail_inspection.waive") {
       this.ensureTailInspectionWaiverActor(actor);
@@ -1229,6 +1276,14 @@ export class ReworkInitiationService {
       return translateDatabaseError(error);
     } finally {
       client.release();
+    }
+  }
+
+  private ensureFinishingInitiator(actor: TrustedActorContext): void {
+    if (actor.authorizationCapability !== "process:configure"
+      || !actor.actorRoles.includes("tail_supervisor")
+      || !actor.authorizationCapabilities?.includes("process:configure")) {
+      throw new ApplicationError("FORBIDDEN", "只有尾部主管、老板或超级用户可以发起本厂做尾", 403);
     }
   }
 

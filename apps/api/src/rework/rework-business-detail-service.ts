@@ -45,6 +45,7 @@ export type ReworkBusinessDetail = Readonly<{
   reworkOrderId: string;
   reworkNo: string | null;
   status: ReworkOrderStatus;
+  reworkKind: "qc_rework" | "inhouse_finishing";
   version: number;
   styleNo: string | null;
   customerSupplyCode: string | null;
@@ -122,7 +123,7 @@ export type ReworkBusinessDetail = Readonly<{
     attachmentId: string;
     filename: string;
     mimeType: string;
-    entityType: "rework_order" | "external_responsibility_case" | "receiving_batch";
+    entityType: "rework_order" | "external_responsibility_case" | "receiving_batch" | "sourcing_case";
   }>[];
   workflowHistory: readonly Readonly<{
     action: string;
@@ -136,7 +137,7 @@ type AttachmentRow = Readonly<{
   attachment_id: string;
   original_filename: string;
   mime_type: string;
-  entity_type: "rework_order" | "external_responsibility_case" | "receiving_batch";
+  entity_type: "rework_order" | "external_responsibility_case" | "receiving_batch" | "sourcing_case";
 }>;
 
 type WorkflowHistoryRow = Readonly<{
@@ -151,6 +152,7 @@ type DetailRow = Readonly<{
   rework_order_id: string;
   rework_no: string | null;
   status: ReworkOrderStatus;
+  rework_kind: "qc_rework" | "inhouse_finishing";
   version: number;
   style_no: string | null;
   customer_supply_code: string | null;
@@ -243,7 +245,7 @@ export class ReworkBusinessDetailService {
          orders.rework_order_id,orders.rework_no,orders.status,orders.version,orders.style_no,
          to_jsonb(orders)->>'customer_supply_code' customer_supply_code,
          to_jsonb(orders)->>'factory_style_no' factory_style_no,
-         orders.order_no,
+         orders.order_no,orders.rework_kind,
          to_jsonb(orders)->>'order_quantity' order_quantity,
          CASE WHEN orders.source_receiving_batch_id IS NULL THEN NULL
            ELSE COALESCE(receiving.actual_quantity,0)::text
@@ -402,6 +404,20 @@ export class ReworkBusinessDetailService {
              )
            )
            OR (
+             attachment.entity_type='sourcing_case'
+             AND EXISTS (
+               SELECT 1 FROM rework_orders source_order
+               JOIN receiving_batches batch ON batch.receiving_batch_id=source_order.source_receiving_batch_id
+               JOIN cutting_orders cutting ON cutting.cutting_order_id=batch.cutting_order_id
+               JOIN current_sourcing_case_lines line ON line.sourcing_case_id=cutting.sourcing_case_id
+                 AND line.position=cutting.sourcing_line_position
+               WHERE source_order.rework_order_id=$1::uuid
+                 AND source_order.rework_kind='inhouse_finishing'
+                 AND cutting.sourcing_case_id::text=attachment.entity_id
+                 AND line.image_attachment_id=attachment.attachment_id
+             )
+           )
+           OR (
              attachment.entity_type='external_responsibility_case'
              AND EXISTS (
                SELECT 1
@@ -529,6 +545,7 @@ export class ReworkBusinessDetailService {
               displayName: row.supplier_name ?? "加工厂资料已变更",
             }
           : null,
+      reworkKind: row.rework_kind,
       reworkReason: row.rework_reason,
       reworkProcess: row.rework_process,
       problemPart: row.problem_part,
@@ -796,11 +813,23 @@ export class ReworkBusinessDetailService {
 
   async canDownloadBoundAttachment(
     actor: TrustedActorContext,
-    binding: Readonly<{ entityType: string; entityId: string; mimeType?: string }>,
+    binding: Readonly<{ attachmentId?: string; entityType: string; entityId: string; mimeType?: string }>,
   ): Promise<boolean> {
     let reworkOrderIds: readonly string[] = [];
     if (binding.entityType === "rework_order") {
       reworkOrderIds = [binding.entityId];
+    } else if (binding.entityType === "sourcing_case" && binding.attachmentId) {
+      const source = await this.database.query<{ rework_order_id: string }>(
+        `SELECT source_order.rework_order_id FROM rework_orders source_order
+         JOIN receiving_batches batch ON batch.receiving_batch_id=source_order.source_receiving_batch_id
+         JOIN cutting_orders cutting ON cutting.cutting_order_id=batch.cutting_order_id
+         JOIN current_sourcing_case_lines line ON line.sourcing_case_id=cutting.sourcing_case_id
+           AND line.position=cutting.sourcing_line_position
+         WHERE source_order.rework_kind='inhouse_finishing' AND source_order.status<>'deleted'
+           AND cutting.sourcing_case_id::text=$1 AND line.image_attachment_id::text=$2`,
+        [binding.entityId, binding.attachmentId],
+      );
+      reworkOrderIds = source.rows.map((row) => row.rework_order_id);
     } else if (binding.entityType === "receiving_batch") {
       const receiving = await this.database.query<{ rework_order_id: string }>(
         `SELECT rework_order_id

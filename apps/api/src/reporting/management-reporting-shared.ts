@@ -16,6 +16,7 @@ export type FactRow = {
   style_no: string | null;
   order_no: string | null;
   status: ManagementReworkRow["status"];
+  rework_kind?: "qc_rework" | "inhouse_finishing";
   node: string;
   node_label: string;
   node_entered_at: Date;

@@ -111,6 +111,23 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     };
   };
 
+  const finishingActor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
+    const user = await dependencies.authenticate(cookieToken(request));
+    const isRoot = await dependencies.root?.isRootUser(user.id) ?? false;
+    const isOwner = user.businessRoles?.includes("owner_group") === true;
+    const supervisor = user.businessRoles?.includes("tail_supervisor") === true
+      && user.capabilities.includes("process:configure");
+    if (!user.businessRoles?.length && !isRoot) throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);
+    if (!isRoot && !isOwner && !supervisor) throw new ApplicationError("FORBIDDEN", "只有尾部主管、老板或超级用户可以发起本厂做尾", 403);
+    return {
+      actorId: user.id,
+      actorRoles: [...new Set([...(user.businessRoles ?? []), ...((isOwner || isRoot) ? ["tail_supervisor"] : []), ...(isRoot ? ["root_superuser"] : [])])],
+      authorizationCapability: "process:configure",
+      authorizationCapabilities: [...new Set([...user.capabilities, ...((isOwner || isRoot) ? ["process:configure"] : [])])],
+      requestId: request.id,
+    };
+  };
+
   const actor = async (request: FastifyRequest): Promise<TrustedActorContext> => {
     const user = await dependencies.authenticate(cookieToken(request));
     const isRoot = await dependencies.root?.isRootUser(user.id) ?? false;
@@ -223,6 +240,24 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     };
   };
 
+  app.get<{ Params: { receivingBatchId: string } }>(
+    "/rework-orders/finishing/receiving-entry/:receivingBatchId",
+    async (request) => {
+      const trustedActor = await finishingActor(request);
+      if (!UUID_PATTERN.test(request.params.receivingBatchId)) throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400);
+      return dependencies.service.getReceivingEntry(request.params.receivingBatchId, trustedActor);
+    },
+  );
+  app.get("/rework-orders/finishing/initiation-options", async (request) =>
+    dependencies.service.listInitiationOptions(await finishingActor(request), "inhouse_finishing"));
+  app.get<{ Params: { reworkOrderId: string } }>("/rework-orders/finishing/drafts/:reworkOrderId", async (request) =>
+    dependencies.service.getFinishingDraft(await finishingActor(request), parse(ReworkOrderParamsSchema, request.params).reworkOrderId));
+  app.post("/rework-orders/finishing/drafts", async (request, reply) => {
+    const input = parse(CreateReworkDraftWithReceivingBatchSchema, request.body);
+    const result = await dependencies.service.createDraft(await finishingActor(request), input, idempotencyKey(request), "inhouse_finishing");
+    if (result.reused) void reply.header("idempotency-replayed", "true");
+    return reply.code(201).send(result.value);
+  });
   app.post("/rework-orders/drafts", async (request, reply) => {
     const result = await dependencies.service.createDraft(
       await actor(request),
@@ -294,6 +329,19 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     }
   });
   if (dependencies.v2SubmissionService) {
+    app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/finishing/submit-v2", async (request, reply) => {
+      const params = parse(ReworkOrderParamsSchema, request.params);
+      try {
+        const result = await dependencies.v2SubmissionService!.submit(
+          await finishingActor(request), params.reworkOrderId,
+          parse(SubmitReworkOrderSchema, request.body), idempotencyKey(request), "inhouse_finishing",
+        );
+        if (result.reused) void reply.header("idempotency-replayed", "true");
+        return result.value;
+      } catch (error: unknown) {
+        return translateTodoRoutingError(error);
+      }
+    });
     app.post<{ Params: { reworkOrderId: string } }>("/rework-orders/:reworkOrderId/submit-v2", async (request, reply) => {
       const params = parse(ReworkOrderParamsSchema, request.params);
       try {

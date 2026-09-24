@@ -107,21 +107,23 @@ export class ReworkV2SubmissionService {
     reworkOrderId: string,
     input: SubmitReworkOrder,
     idempotencyKey: string,
+    kind: "qc_rework" | "inhouse_finishing" = "qc_rework",
   ): Promise<Readonly<{ value: ReworkOrderResponse; reused: boolean }>> {
-    this.ensureInitiator(actor);
+    if (kind === "inhouse_finishing") this.ensureFinishingInitiator(actor);
+    else this.ensureInitiator(actor);
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
-      const scope = "rework.submit.v2";
+      const scope = kind === "inhouse_finishing" ? "rework.finishing.submit.v2" : "rework.submit.v2";
       const result = await this.idempotency.execute<ReworkOrderResponse>(client, {
         scope,
         actorKey: actor.actorId,
         key: idempotencyKey,
-        requestHash: requestHash(scope, { reworkOrderId, ...input }),
+        requestHash: requestHash(scope, { reworkOrderId, kind, ...input }),
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       }, async () => ({
         statusCode: 200,
-        response: await this.submitOnce(client, actor, reworkOrderId, input),
+        response: await this.submitOnce(client, actor, reworkOrderId, input, kind),
       }));
       await client.query("COMMIT");
       return { value: result.response, reused: result.reused };
@@ -138,8 +140,16 @@ export class ReworkV2SubmissionService {
     actor: TrustedActorContext,
     reworkOrderId: string,
     input: SubmitReworkOrder,
+    kind: "qc_rework" | "inhouse_finishing",
   ): Promise<ReworkOrderResponse> {
     const current = await this.lockOwnedDraft(client, actor, reworkOrderId);
+    if (current.rework_kind !== kind) {
+      throw new ApplicationError("FORBIDDEN", "返工类别与提交入口不一致", 403);
+    }
+    if (kind === "inhouse_finishing" && (current.tail_inspection_required
+      || current.tail_inspection_cost_bearer || current.inspection_report)) {
+      throw new ApplicationError("VALIDATION_ERROR", "本厂做尾不能填写整查或QC报告", 400);
+    }
     if (current.version !== input.expectedVersion) {
       throw new ApplicationError("CONFLICT", "返工单已被更新，请刷新后重试", 409);
     }
@@ -162,7 +172,7 @@ export class ReworkV2SubmissionService {
     await this.ensureActiveMerchandiser(client, current.merchandiser_user_id);
     await this.ensureFactoryStillAvailable(client, factoryFromRow(current));
     const attachmentIds = await this.attachmentIds(client, reworkOrderId);
-    await this.ensureReadyBoundImage(client, actor, reworkOrderId, attachmentIds);
+    if (kind === "qc_rework") await this.ensureReadyBoundImage(client, actor, reworkOrderId, attachmentIds);
 
     const numberResult = current.rework_no
       ? { rows: [{ rework_no: current.rework_no }] }
@@ -178,7 +188,7 @@ export class ReworkV2SubmissionService {
       version: nextVersion,
     };
     const eventId = await this.events.append(client, actor, {
-      action: "rework.submit",
+      action: kind === "inhouse_finishing" ? "rework.finishing.submit" : "rework.submit",
       entityType: "rework_order",
       entityId: reworkOrderId,
       before,
@@ -204,7 +214,7 @@ export class ReworkV2SubmissionService {
     await this.todos?.actionableForUniqueDirectRole(client, actor, {
       category: "process_configuration",
       sourceEventId: eventId,
-      sourceAction: "rework.submit",
+      sourceAction: kind === "inhouse_finishing" ? "rework.finishing.submit" : "rework.submit",
       entityType: "rework_order",
       entityId: reworkOrderId,
       requiredRole: "tail_supervisor",
@@ -399,6 +409,14 @@ export class ReworkV2SubmissionService {
          set_config('dx_rework.rework_request_id',$2,true)`,
       [eventId, requestId],
     );
+  }
+
+  private ensureFinishingInitiator(actor: TrustedActorContext): void {
+    if (actor.authorizationCapability !== "process:configure"
+      || !actor.actorRoles.includes("tail_supervisor")
+      || !actor.authorizationCapabilities?.includes("process:configure")) {
+      throw new ApplicationError("FORBIDDEN", "只有尾部主管、老板或超级用户可以提交本厂做尾", 403);
+    }
   }
 
   private ensureInitiator(actor: TrustedActorContext): void {

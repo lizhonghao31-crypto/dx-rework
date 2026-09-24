@@ -48,6 +48,7 @@ export const DashboardQuerySchema = z.object({
 });
 
 export const ManagementReworkQuerySchema = DashboardQuerySchema.extend({
+  reworkKind: z.enum(["qc_rework", "inhouse_finishing"]).optional(),
   q: z.string().trim().min(1).max(100).optional(),
   status: ReportingReworkStatusSchema.optional(),
   responsibilityType: z.enum([
@@ -139,6 +140,7 @@ export type BasicReworkPage = z.infer<typeof BasicReworkPageSchema>;
 
 export const ManagementReworkRowSchema = z.object({
   reworkOrderId: IdSchema,
+  reworkKind: z.enum(["qc_rework", "inhouse_finishing"]).default("qc_rework"),
   reworkNo: z.string().nullable(),
   styleNo: z.string().nullable(),
   orderNo: z.string().nullable(),
