@@ -290,8 +290,8 @@ export class ReworkInitiationService {
            processing_factory_supplier_version,rework_reason,rework_process,
            problem_part,problem_description,rework_quantity,tail_inspection_required,
            tail_inspection_cost_bearer,tail_inspection_cost_bearer_source,inspection_report,
-           source_receiving_batch_id,created_by,updated_by,rework_kind
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$21,$22)`,
+           source_receiving_batch_id,created_by,updated_by${kind === "inhouse_finishing" ? ",rework_kind" : ""}
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$21${kind === "inhouse_finishing" ? ",$22" : ""})`,
         [
           reworkOrderId,
           next.styleNo,
@@ -314,7 +314,7 @@ export class ReworkInitiationService {
           next.inspectionReport,
           sourceReceivingBatch.receivingBatchId,
           actor.actorId,
-          kind,
+          ...(kind === "inhouse_finishing" ? [kind] : []),
         ],
       );
       await this.syncAttachments(client, actor.actorId, reworkOrderId, attachmentIds);
