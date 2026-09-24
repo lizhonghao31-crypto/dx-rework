@@ -60,6 +60,7 @@ export function buildTodoDeepLink(
       break;
     case "sourcing_detail":
       path = `/ui/sourcing/orders/${route.entityId}`;
+      if (route.tab === "contract_return") query.set("section", "contract-return");
       break;
     case "responsibility_detail":
     case "own_factory_approval":

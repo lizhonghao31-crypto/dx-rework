@@ -23,6 +23,7 @@ export const TodoRouteDescriptorSchema = z.object({
   todoId: TodoIdSchema,
   roundId: TodoIdSchema.optional(),
   tab: z.enum([
+    "contract_return",
     "process_configuration",
     "work_reporting",
     "tail_inspection",
@@ -39,6 +40,7 @@ export const TodoPolicyKeySchema = z.enum([
   "general",
   "finance_return_or_wage_review",
   "deduction_follow_up",
+  "sourcing_contract_return",
 ]);
 export const TodoStatusSchema = z.enum([
   "pending",

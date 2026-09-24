@@ -25,6 +25,17 @@ describe("todo business presentation", () => {
     });
   });
 
+  it("names the sourcing contract return without a fake rework number", () => {
+    expect(buildTodoPresentation({
+      category: "sourcing_contract_return",
+      deliveryKind: "create",
+      orderContext: { reworkNo:null,orderNo:null,styleNo:"DX-1002" },
+    })).toEqual({
+      subject: "【款号:DX-1002】回传合同",
+      description: "款号：DX-1002\n事项：老板已批准，请与供应商签署合同并上传回签文件。",
+    });
+  });
+
   it("never includes the retired order-number field in an order todo", () => {
     const result = buildTodoPresentation({
       category: "process_configuration",
@@ -78,7 +89,7 @@ describe("todo business presentation", () => {
       "external_payables_confirmation", "external_payables_accepted",
       "external_payables_return", "external_payables_returned",
       "external_deduction_follow_up", "external_deduction_overdue", "external_responsibility",
-      "wage_month_close", "todo_escalation", "recipient_routing_exception",
+      "wage_month_close", "todo_escalation", "recipient_routing_exception", "sourcing_contract_return",
     ];
     for (const category of categories) {
       const presentation = todoPresentationForCategory(category);

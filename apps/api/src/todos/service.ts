@@ -183,7 +183,7 @@ export type CreateTodoInTransactionInput = Readonly<{
   delegationId?: string;
   delegationScopeId?: string;
   route: TodoRouteTemplate;
-  policyKey?: "general" | "finance_return_or_wage_review" | "deduction_follow_up";
+  policyKey?: "general" | "finance_return_or_wage_review" | "deduction_follow_up" | "sourcing_contract_return";
   authoritativeDueAt?: Date;
   dedupeKey: string;
   /** Required when an otherwise valid business action has no eligible recipient. */
@@ -524,6 +524,7 @@ export class TodoService {
          CASE
            WHEN $14::text IS NULL THEN NULL
            WHEN $14='deduction_follow_up' THEN $15::timestamptz
+           WHEN $14='sourcing_contract_return' THEN NULL
            ELSE CURRENT_TIMESTAMP + (
              SELECT policy.due_after_seconds * interval '1 second'
              FROM todo_policies policy WHERE policy.policy_key=$14 AND policy.enabled=true

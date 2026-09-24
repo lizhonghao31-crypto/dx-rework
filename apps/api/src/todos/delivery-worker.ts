@@ -692,7 +692,8 @@ export class TodoDeliveryWorker {
       `SELECT todo.todo_id,todo.todo_type,todo.category,todo.recipient_user_id,
               todo.route_descriptor,todo.status,todo.completed_operation_event_id,
               todo.cancelled_operation_event_id,orders.rework_no,orders.order_no,
-              orders.style_no,period.period_month::text wage_period_month
+              COALESCE(orders.style_no,sourcing_line.style_no) AS style_no,
+              period.period_month::text wage_period_month
        FROM rework_todos todo
        LEFT JOIN rework_orders orders
          ON orders.rework_order_id=COALESCE(
@@ -702,6 +703,15 @@ export class TodoDeliveryWorker {
              THEN NULLIF(todo.route_descriptor->>'entityId','')::uuid
            END
          )
+       LEFT JOIN LATERAL (
+         SELECT COALESCE(NULLIF(line.style_no,''),NULLIF(line.alternate_style_no,'')) AS style_no
+         FROM current_sourcing_case_lines line
+         WHERE line.sourcing_case_id=CASE
+           WHEN todo.category='sourcing_contract_return' AND todo.entity_type='sourcing_case'
+             THEN todo.entity_id::uuid
+         END
+         ORDER BY line.position LIMIT 1
+       ) sourcing_line ON true
        LEFT JOIN rework_wage_periods period
          ON todo.route_descriptor->>'routeName'='wage_period_detail'
         AND period.period_id=NULLIF(todo.route_descriptor->>'entityId','')::uuid
