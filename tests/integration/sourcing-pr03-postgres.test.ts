@@ -2925,7 +2925,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await ensureReturnTodoRecipient();
     const todoService=new TodoService(database);
     const realProjection=new TodoProjectionService(todoService);
-    const approvingService=new SourcingService(database,undefined,undefined,realProjection,contractService);
+    const approvingService=new SourcingService(database,undefined,undefined,{
+      ...todoProjection,
+      actionableForNamedRecipient:realProjection.actionableForNamedRecipient.bind(realProjection),
+      completeOpenByDedupePrefix:realProjection.completeOpenByDedupePrefix.bind(realProjection),
+    },contractService);
     const created=await service.createCase(merchandiserActor(),{
       gender:"男装",styleName:"通知闭环",estimatedCutPieceSendDate:"2026-10-01",
       deliveryDate:"2026-10-20",lineItems:[{styleNo:"RETURN-TODO-ONE",color:"黑",quantity:20}],
