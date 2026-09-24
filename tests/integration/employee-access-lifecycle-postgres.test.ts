@@ -293,7 +293,7 @@ runWithPostgres("employee access role lifecycle", () => {
     await expect(database.query(
       "UPDATE app_users SET enabled=false WHERE id=$1",
       [rootId],
-    )).rejects.toMatchObject({ code: "23514" });
+    )).rejects.toMatchObject({ code: "42501" });
 
     const authStore = new PostgresAuthStore(database, "corp", rootDingtalkUserId);
     const member = (
