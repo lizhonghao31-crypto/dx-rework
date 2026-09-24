@@ -3,7 +3,7 @@ export type ContractReturnFilter = "all" | ContractReturnStatus | "all_overdue";
 
 export type ContractReturnFacts = {
   contract_return_monitor_enabled: boolean;
-  contract_return_catchup?: boolean;
+  contract_return_catchup?: boolean | null;
   contract_generated_at: Date | string | null;
   contract_return_due_at: Date | string | null;
   contract_returned_at: Date | string | null;
