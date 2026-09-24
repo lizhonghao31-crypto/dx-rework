@@ -241,7 +241,7 @@ runWithPostgres("employee access role lifecycle", () => {
       { ...rootActor, requestId: randomUUID() },
       {
         userId: manuallyDisabledRoleHolderId,
-        roleCode: "tail_inspector",
+        roleCode: "worker",
         reason: "重新授予首个角色无需人工恢复",
       },
     );
