@@ -43,6 +43,9 @@ type CreateReworkDraftWithReceivingBatch = CreateReworkDraft & Readonly<{
 type ReceivingReworkEntry = Readonly<{
   receivingBatchId: string;
   styleNo: string;
+  processingFactorySupplierId: string | null;
+  merchandiserUserId: string | null;
+  sourceImageAttachmentId: string | null;
 }>;
 type ReworkDraftSource = Readonly<{
   receivingBatchId: string | null;
@@ -52,6 +55,7 @@ type ReworkOrderRow = Readonly<{
   rework_order_id: string;
   rework_no: string | null;
   status: ReworkOrderStatus;
+  rework_kind: "qc_rework" | "inhouse_finishing";
   style_no: string | null;
   customer_supply_code: string | null;
   factory_style_no: string | null;
@@ -153,6 +157,9 @@ export class ReworkInitiationService {
     const result = await this.database.query<{
       style_no: string;
       has_existing_rework: boolean;
+      processing_factory_supplier_id: string | null;
+      merchandiser_user_id: string | null;
+      source_image_attachment_id: string | null;
     }>(
       `SELECT batch.style_no,
               EXISTS(
@@ -160,8 +167,21 @@ export class ReworkInitiationService {
                 FROM rework_orders existing_order
                 WHERE existing_order.source_receiving_batch_id=batch.receiving_batch_id
                   AND existing_order.status NOT IN ('cancelled','deleted')
-              ) AS has_existing_rework
+              ) AS has_existing_rework,
+              snapshot.supplier_id AS processing_factory_supplier_id,
+              source_case.created_by AS merchandiser_user_id,
+              source_line.image_attachment_id AS source_image_attachment_id
        FROM receiving_batches batch
+       LEFT JOIN cutting_orders cutting
+         ON cutting.cutting_order_id=batch.cutting_order_id
+       LEFT JOIN sourcing_cases source_case
+         ON source_case.sourcing_case_id=cutting.sourcing_case_id
+        AND source_case.deleted_at IS NULL
+       LEFT JOIN current_sourcing_case_lines source_line
+         ON source_line.sourcing_case_id=cutting.sourcing_case_id
+        AND source_line.position=cutting.sourcing_line_position
+       LEFT JOIN sourcing_approval_snapshots snapshot
+         ON snapshot.sourcing_approval_snapshot_id=cutting.approval_snapshot_id
        WHERE batch.receiving_batch_id=$1
          AND batch.deleted_at IS NULL`,
       [receivingBatchId],
@@ -171,7 +191,13 @@ export class ReworkInitiationService {
     if (row.has_existing_rework) {
       throw new ApplicationError("CONFLICT", "该收货批次已有返工单，不能重复发起", 409);
     }
-    return { receivingBatchId, styleNo: row.style_no.trim().toUpperCase() };
+    return {
+      receivingBatchId,
+      styleNo: row.style_no.trim().toUpperCase(),
+      processingFactorySupplierId: row.processing_factory_supplier_id,
+      merchandiserUserId: row.merchandiser_user_id,
+      sourceImageAttachmentId: row.source_image_attachment_id,
+    };
   }
 
   async createDraft(
@@ -195,6 +221,7 @@ export class ReworkInitiationService {
         reworkOrderId,
         reworkNo: null,
         status: "draft" as const,
+        reworkKind: "qc_rework" as const,
         receivingBatchId: sourceReceivingBatch.receivingBatchId,
         styleNo: sourceReceivingBatch.styleNo,
         customerSupplyCode: input.customerSupplyCode ?? null,
@@ -383,6 +410,7 @@ export class ReworkInitiationService {
         reworkOrderId,
         reworkNo: current.rework_no,
         status: "draft" as const,
+        reworkKind: current.rework_kind,
         receivingBatchId: sourceReceivingBatchId,
         styleNo: nextStyleNo,
         customerSupplyCode: input.customerSupplyCode === undefined
@@ -1605,6 +1633,7 @@ export class ReworkInitiationService {
       reworkOrderId: row.rework_order_id,
       reworkNo: row.rework_no,
       status: row.status,
+      reworkKind: row.rework_kind,
       receivingBatchId: row.source_receiving_batch_id,
       styleNo: row.style_no,
       customerSupplyCode: row.customer_supply_code,
@@ -1664,6 +1693,7 @@ export class ReworkInitiationService {
       reworkOrderId: row.rework_order_id,
       reworkNo: row.rework_no,
       status: row.status,
+      reworkKind: row.rework_kind,
       receivingBatchId: row.source_receiving_batch_id,
       styleNo: row.style_no,
       customerSupplyCode: row.customer_supply_code,
