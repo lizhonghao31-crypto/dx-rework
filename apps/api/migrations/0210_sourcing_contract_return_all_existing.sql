@@ -2,6 +2,11 @@
 -- Historic ready PDFs keep their original timestamps. Only orders without a
 -- previously usable return clock receive a catch-up exemption from old lateness.
 -- A pending PDF does not prevent a signed attachment from being returned.
+-- Approvals lock their sourcing_cases row before inserting a snapshot/monitor.
+-- Acquire this table lock first so this backfill cannot hold a snapshot or
+-- monitor lock while waiting for an in-flight approval's case row.
+LOCK TABLE sourcing_cases IN SHARE ROW EXCLUSIVE MODE;
+
 ALTER TABLE sourcing_contract_return_monitors
   ADD COLUMN contract_return_catchup boolean NOT NULL DEFAULT false;
 
