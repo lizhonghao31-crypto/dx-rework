@@ -830,8 +830,10 @@ runWithPostgres("role permissions and versioned master data", () => {
     expect((await database.query<{ authorization_capability: string }>(
       `SELECT authorization_capability
        FROM operation_events
-       WHERE entity_type='supplier_catalog' AND entity_id=$1
-       ORDER BY occurred_at DESC LIMIT 1`,
+       WHERE entity_type='supplier_catalog'
+         AND entity_id=$1
+         AND action='master_data.supplier.revise'
+         AND after_state->>'version'='3'`,
       [supplier.supplierId],
     )).rows[0]?.authorization_capability).toBe("supplier_profile:write");
     expect(await service.listSupplierHistory(supplier.supplierId, true)).toEqual([
