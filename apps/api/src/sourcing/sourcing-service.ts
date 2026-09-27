@@ -1127,7 +1127,8 @@ export class SourcingService {
           [sourcingCaseId],
         );
         if (!source.rows[0]) fail("报价选厂询价不存在", 404, "NOT_FOUND");
-        if (!actor.actorRoles.includes(ROOT_ROLE) && source.rows[0]!.additional_merchandiser_user_id === actor.actorId
+        if (!actor.actorRoles.includes(ROOT_ROLE) && !actor.actorRoles.some(role=>role!==CASE_CREATE_ROLE && SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(role as (typeof SOURCING_IMAGE_SUPPLEMENT_ROLES)[number]))
+          && source.rows[0]!.additional_merchandiser_user_id === actor.actorId
           && source.rows[0]!.created_by !== actor.actorId) fail("添加跟单仅可回传合同",403,"FORBIDDEN");
 
         const existing = await client.query<{ attachment_id: string }>(

@@ -1,4 +1,5 @@
 import { SourcingReturnDialog } from "./sourcing-return-dialog.js";
+import { isMerchandiserOnly } from "./sourcing-role-visibility.js";
 import { sourcingContractReturnBadgeLabel, sourcingContractReturnLabel } from "./sourcing-contract-return-presentation.js";
 import { sourcingDatesValid, SOURCING_DATE_ORDER_ERROR } from "@dx-rework/contracts";
 import { moduleCanWrite } from "./member-module-policy.js";
@@ -452,7 +453,7 @@ export function SourcingWorkspacePage({
       {view === "history" ? <OrderListPage mode="history" user={user} /> : null}
       {view === "detail" && sourcingCaseId
         ? (new URLSearchParams(window.location.search).get("view") === "node-history" && sourcingWorkflowNodeFromSearch()
-          && !(sourcingWorkflowNodeFromSearch()==="finance" && user?.businessRoles?.includes("order_merchandiser") && !canAct(user,"factory_payables","sourcing:finance:reconcile"))
+          && !(sourcingWorkflowNodeFromSearch()==="finance" && isMerchandiserOnly(user?.businessRoles,user?.isRoot))
           ? <SourcingNodeHistoryPage sourcingCaseId={sourcingCaseId} node={sourcingWorkflowNodeFromSearch()!} returnTo={todoReturnPath(window.location.search) ?? sourcingReturnPath(window.location.search)} />
           : <OrderDetailPage sourcingCaseId={sourcingCaseId} user={user} />)
         : null}
@@ -1191,7 +1192,7 @@ function OrderDetailPage({
 
   const moduleWritable = moduleCanWrite(user, "sourcing");
   const canSupplementImages = user?.isRoot === true
-    || moduleWritable && (item?.createdBy === user?.id || !user?.businessRoles?.includes("order_merchandiser")) && user?.businessRoles?.some((role) => SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(
+    || moduleWritable && (item?.createdBy === user?.id || user?.businessRoles?.some(role => role!=="order_merchandiser" && SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(role as (typeof SOURCING_IMAGE_SUPPLEMENT_ROLES)[number]))) && user?.businessRoles?.some((role) => SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(
       role as (typeof SOURCING_IMAGE_SUPPLEMENT_ROLES)[number],
     )) === true;
 
@@ -1411,7 +1412,7 @@ function OrderDetailPage({
   const canOwnerTransfer = canOwner;
   const canReviewManagementTransfer = canAct(user, "production_management", "sourcing:factory_change:verify");
   const canFinance = canAct(user, "factory_payables", "sourcing:finance:reconcile");
-  const hideFinanceForMerchandiser = user?.businessRoles?.includes("order_merchandiser") === true && !canFinance && !user?.isRoot;
+  const hideFinanceForMerchandiser = isMerchandiserOnly(user?.businessRoles,user?.isRoot);
   const canReadContractData = user?.isRoot === true
     || user?.capabilities.includes("supplier_contract_data:read") === true;
   const hasPendingFactoryChange = factoryChange?.status === "pending_management"
