@@ -26,6 +26,7 @@ import {
   SourcingContractStateResponseSchema,
   SourcingContractReturnUploadSchema,
   SourcingContractReturnResponseSchema,
+  SourcingMerchandiserOptionsSchema,
   SupplementSourcingContractSchema,
   SupplementSourcingImagesSchema,
 } from "@dx-rework/contracts";
@@ -349,6 +350,11 @@ export function registerSourcingRoutes(
         node.data, typeof request.query.entryId === "string" ? request.query.entryId : undefined);
     },
   );
+
+  app.get("/sourcing/merchandisers", async (request) =>
+    SourcingMerchandiserOptionsSchema.parse(await dependencies.service.listMerchandisers(
+      await actionActor(request, "order_merchandiser", "sourcing:inquiry:create"),
+    )));
 
   app.get<{ Querystring: { q?: string } }>("/sourcing/styles", async (request) =>
     dependencies.service.listStyles(

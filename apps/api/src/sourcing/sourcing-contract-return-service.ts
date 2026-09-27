@@ -19,6 +19,7 @@ const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 type MonitorRow = {
   sourcing_case_id: string;
   created_by: string;
+  additional_merchandiser_user_id: string | null;
   contract_return_monitor_enabled: boolean | null;
   contract_return_catchup: boolean | null;
   contract_generated_at: Date | string | null;
@@ -47,19 +48,20 @@ export class SourcingContractReturnService {
     }
   }
 
-  private async canUpload(actor: TrustedActorContext, creator: string, alreadyReturned: boolean): Promise<boolean> {
+  private async canUpload(actor: TrustedActorContext, creator: string, additional: string | null, alreadyReturned: boolean): Promise<boolean> {
     if (actor.actorRoles.includes(ROOT)) return true;
     if (!(await memberCanWriteModule(this.database,actor.actorId,"sourcing"))) return false;
     const capabilities = actor.authorizationCapabilities ?? [];
     return actor.actorRoles.includes(OWNER) && capabilities.includes("sourcing:owner:approve")
       || actor.actorRoles.includes(MANAGEMENT) && capabilities.includes("sourcing:decision:record")
       || !alreadyReturned && actor.actorRoles.includes(MERCHANDISER)
-        && actor.actorId === creator && capabilities.includes("sourcing:contract:record");
+        && (actor.actorId === creator || actor.actorId === additional) && capabilities.includes("sourcing:contract:record");
   }
 
   async get(actor: TrustedActorContext, sourcingCaseId: string) {
     this.assertReader(actor);
     const result = await this.database.query<MonitorRow>(`SELECT source_case.sourcing_case_id,source_case.created_by,
+      nullif(to_jsonb(source_case)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id,
       monitor.contract_return_monitor_enabled,monitor.contract_return_catchup,monitor.contract_generated_at,monitor.contract_return_due_at,
       monitor.contract_returned_at,monitor.contract_return_uploaded_by,
       sourcing_contract_return_elapsed_seconds(monitor.contract_return_due_at,
@@ -100,7 +102,7 @@ export class SourcingContractReturnService {
     const [current,...history]=[...versions.values()];
     return { ...status,uploadedByName:status.contractReturnMonitoring ? row.uploader_name : null,
       canUpload: status.contractReturnMonitoring
-        && await this.canUpload(actor,row.created_by,row.contract_returned_at !== null),
+        && await this.canUpload(actor,row.created_by,row.additional_merchandiser_user_id,row.contract_returned_at !== null),
       attachments:current?.attachments ?? [],history };
   }
 
@@ -120,6 +122,7 @@ export class SourcingContractReturnService {
     try {
       await client.query("BEGIN");
       const locked=await client.query<MonitorRow>(`SELECT monitor.sourcing_case_id,source_case.created_by,
+          nullif(to_jsonb(source_case)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id,
           monitor.contract_return_monitor_enabled,monitor.contract_return_catchup,monitor.contract_generated_at,monitor.contract_return_due_at,
           monitor.contract_returned_at,monitor.contract_return_uploaded_by,NULL::text AS uploader_name,
           NULL::bigint AS contract_return_overdue_seconds,
@@ -132,7 +135,7 @@ export class SourcingContractReturnService {
       if (!monitor?.contract_return_monitor_enabled) {
         throw new ApplicationError("INVALID_STATE_TRANSITION","该订单尚未批准，暂不能回传合同",409);
       }
-      if (!(await this.canUpload(actor,monitor.created_by,false))) forbidden();
+      if (!(await this.canUpload(actor,monitor.created_by,monitor.additional_merchandiser_user_id,false))) forbidden();
       const previous=await client.query<{submitted_by:string;attachment_ids:string[]}>(`SELECT submission.submitted_by,
         submission.attachment_ids
         FROM sourcing_contract_return_requests submission
@@ -145,7 +148,7 @@ export class SourcingContractReturnService {
         await client.query("COMMIT");
         return this.get({...actor,authorizationCapability:READ},sourcingCaseId);
       }
-      if (!(await this.canUpload(actor,monitor.created_by,monitor.contract_returned_at !== null))) forbidden();
+      if (!(await this.canUpload(actor,monitor.created_by,monitor.additional_merchandiser_user_id,monitor.contract_returned_at !== null))) forbidden();
       const latest=await client.query<{submitted_by:string;attachment_ids:string[]}>(`SELECT submission.submitted_by,
         array_agg(link.attachment_id::text ORDER BY link.position) AS attachment_ids
         FROM sourcing_contract_return_submissions submission

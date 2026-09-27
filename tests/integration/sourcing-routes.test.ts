@@ -62,6 +62,9 @@ const create = (
     correctCase:vi.fn(async()=>({value:caseSummary,reused:false})),
     nodeHistory: vi.fn(async () => ({ item: caseSummary })),
     listCases: vi.fn(async () => ({ items: [caseSummary] })),
+    listMerchandisers: vi.fn(async () => [{
+      userId:"00000000-0000-4000-8000-000000000002",displayName:"协同跟单",
+    }]),
     listFactories: vi.fn(async () => ({
       items: [{
         supplierId: "00000000-0000-4000-8000-000000000200",
@@ -111,6 +114,7 @@ const create = (
       value: { ...caseSummary, status: "pending_finance_reconciliation" as const, version: 4 },
       reused: false,
     })),
+    recordFinanceReconciliation: vi.fn(async () => ({value:caseSummary,reused:false})),
   };
   const root = { isRootUser: vi.fn(async () => isRoot) };
   const contractState = {
@@ -190,6 +194,36 @@ describe("sourcing contract return routes", () => {
     expect(manager.contractReturns.submit).toHaveBeenCalledWith(
       expect.objectContaining({authorizationCapability:"sourcing:decision:record"}),id,[attachmentId],"return-c",
     );
+  });
+});
+
+describe("sourcing additional merchandiser boundary", () => {
+  const headers={cookie:"dx_rework_session=trusted"};
+  it("accepts one optional second merchandiser and restricts the picker to creators", async()=>{
+    const creator=create(["sourcing:view","sourcing:inquiry:create"],["order_merchandiser"]);
+    const candidate="00000000-0000-4000-8000-000000000002";
+    expect((await creator.app.inject({method:"GET",url:"/sourcing/merchandisers",headers})).json())
+      .toEqual([{userId:candidate,displayName:"协同跟单"}]);
+    const payload={gender:"男装",styleName:"梭织短裤",estimatedCutPieceSendDate:"2026-09-10",
+      deliveryDate:"2026-09-15",lineItems:[{styleNo:"DX-100",color:"黑色",quantity:120,externalUnitPrice:"12.00"}],
+      daxingUnitPrice:"10.00",attachmentIds:["00000000-0000-4000-8000-000000000301"],
+      additionalMerchandiserUserId:candidate};
+    expect((await creator.app.inject({method:"POST",url:"/sourcing/cases",headers:{...headers,"idempotency-key":"add-merch"},payload})).statusCode).toBe(201);
+    expect(creator.service.createCase).toHaveBeenCalledWith(expect.anything(),payload,"add-merch");
+    expect((await creator.app.inject({method:"POST",url:"/sourcing/cases",headers:{...headers,"idempotency-key":"bad-add-merch"},
+      payload:{...payload,additionalMerchandiserUserId:[candidate,caseSummary.createdBy]}})).statusCode).toBe(400);
+    const reader=create(["sourcing:view"],["order_merchandiser"]);
+    expect((await reader.app.inject({method:"GET",url:"/sourcing/merchandisers",headers})).statusCode).toBe(403);
+    expect(reader.service.listMerchandisers).not.toHaveBeenCalled();
+  });
+
+  it("denies finance reconciliation to a merchandiser even if the capability is present", async()=>{
+    const merchandiser=create(["sourcing:view","sourcing:finance:reconcile"],["order_merchandiser"]);
+    const response=await merchandiser.app.inject({method:"POST",
+      url:`/sourcing/cases/${caseSummary.sourcingCaseId}/finance-reconciliations`,
+      headers:{...headers,"idempotency-key":"finance-denied"},payload:{result:"match"}});
+    expect(response.statusCode).toBe(403);
+    expect(merchandiser.service.recordFinanceReconciliation).not.toHaveBeenCalled();
   });
 });
 

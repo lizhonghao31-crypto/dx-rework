@@ -507,6 +507,7 @@ export class SourcingService {
          case_view.process_description,case_view.process_items,
          COALESCE(decision_row.crafts,crafts_row.crafts) AS crafts,
          case_view.status,case_view.version,case_view.created_by,
+         concat_ws('/',creator_user.display_name,additional_user.display_name) AS merchandiser_name,
          case_view.created_at,case_view.updated_at,
          COALESCE(monitor_case.contract_return_monitor_enabled,false) AS contract_return_monitor_enabled,
           COALESCE(monitor_case.contract_return_catchup,false) AS contract_return_catchup,monitor_case.contract_generated_at,
@@ -555,6 +556,9 @@ export class SourcingService {
          snapshot.approved_by AS approval_by,snapshot.approved_at AS approval_at
        FROM current_sourcing_cases case_view
        JOIN LATERAL sourcing_case_facts_at(case_view.sourcing_case_id${history ? ', $2::timestamptz' : ''}) source_case ON true
+       JOIN app_users creator_user ON creator_user.id=case_view.created_by
+       JOIN sourcing_cases additional_case ON additional_case.sourcing_case_id=case_view.sourcing_case_id
+       LEFT JOIN app_users additional_user ON additional_user.id=nullif(to_jsonb(additional_case)->>'additional_merchandiser_user_id','')::uuid
        LEFT JOIN sourcing_contract_return_monitors monitor_case ON monitor_case.sourcing_case_id=case_view.sourcing_case_id
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(
@@ -717,7 +721,7 @@ export class SourcingService {
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
          (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=case_view.sourcing_case_id) AS identity_revision,
          source_case.gender,source_case.style_name_snapshot,
-         creator_user.display_name AS merchandiser_name,
+         concat_ws('/',creator_user.display_name,additional_user.display_name) AS merchandiser_name,
          first_image.attachment_id AS first_image_attachment_id,
          COALESCE((
             SELECT correction.new_unit_price FROM sourcing_budget_price_corrections correction
@@ -781,6 +785,8 @@ export class SourcingService {
        JOIN LATERAL sourcing_case_facts_at(case_view.sourcing_case_id) source_case ON true
        LEFT JOIN sourcing_contract_return_monitors monitor_case ON monitor_case.sourcing_case_id=case_view.sourcing_case_id
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
+       JOIN sourcing_cases additional_case ON additional_case.sourcing_case_id=case_view.sourcing_case_id
+       LEFT JOIN app_users additional_user ON additional_user.id=nullif(to_jsonb(additional_case)->>'additional_merchandiser_user_id','')::uuid
        LEFT JOIN LATERAL (
          SELECT after_state->'attachmentIds' AS ids FROM operation_events
          WHERE entity_type='sourcing_case' AND entity_id=case_view.sourcing_case_id::text
@@ -889,6 +895,7 @@ export class SourcingService {
               )
           )
           OR creator_user.display_name ILIKE '%'||$1||'%'
+          OR additional_user.display_name ILIKE '%'||$1||'%'
           OR decision_row.supplier_name_snapshot ILIKE '%'||$1||'%'
           OR decision_row.supplier_code_snapshot ILIKE '%'||$1||'%'
           OR case_view.process_description ILIKE '%'||$1||'%'
@@ -1111,14 +1118,17 @@ export class SourcingService {
         requestHash: requestHash(scope, { sourcingCaseId, ...normalized }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
-        const source = await client.query<{ sourcing_case_id: string }>(
-          `SELECT sourcing_case_id
+        const source = await client.query<{ sourcing_case_id: string; created_by: string; additional_merchandiser_user_id: string | null }>(
+          `SELECT sourcing_case_id,created_by,
+             nullif(to_jsonb(sourcing_cases)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id
            FROM sourcing_cases
            WHERE sourcing_case_id=$1 AND deleted_at IS NULL
            FOR UPDATE`,
           [sourcingCaseId],
         );
         if (!source.rows[0]) fail("报价选厂询价不存在", 404, "NOT_FOUND");
+        if (!actor.actorRoles.includes(ROOT_ROLE) && source.rows[0]!.additional_merchandiser_user_id === actor.actorId
+          && source.rows[0]!.created_by !== actor.actorId) fail("添加跟单仅可回传合同",403,"FORBIDDEN");
 
         const existing = await client.query<{ attachment_id: string }>(
           `SELECT attachment_id
@@ -1557,6 +1567,23 @@ export class SourcingService {
     };
   }
 
+  async listMerchandisers(actor: TrustedActorContext): Promise<{ userId: string; displayName: string }[]> {
+    this.assertActor(actor, CASE_CREATE_CAPABILITY, CASE_CREATE_ROLE);
+    const result = await this.database.query<{ userId: string; displayName: string }>(
+      `SELECT person.id AS "userId",person.display_name AS "displayName"
+       FROM app_users person
+       JOIN user_role_assignments assignment ON assignment.user_id=person.id
+         AND assignment.role_code='order_merchandiser' AND assignment.revoked_at IS NULL
+       WHERE person.id<>$1
+         AND todo_user_has_direct_role(person.id,'order_merchandiser','sourcing:contract:record')
+         AND todo_user_has_direct_role(person.id,'order_merchandiser','sourcing:view')
+         AND todo_user_has_direct_role(person.id,'order_merchandiser','supplier_contract_data:read')
+       GROUP BY person.id,person.display_name ORDER BY person.display_name,person.id`,
+      [actor.actorId],
+    );
+    return result.rows;
+  }
+
   async listStyles(actor: TrustedActorContext, query = ""): Promise<{ styleId: string; styleName: string }[]> {
     this.assertActor(actor, CASE_CREATE_CAPABILITY, CASE_CREATE_ROLE);
     const result = await this.database.query<{ styleId: string; styleName: string }>(
@@ -1657,8 +1684,8 @@ export class SourcingService {
     try {
       await client.query("BEGIN");
       const root = actor.actorRoles.includes(ROOT_ROLE);
-      const source = (await client.query<{created_by: string}>(
-        "SELECT created_by FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE", [sourcingCaseId],
+      const source = (await client.query<{created_by: string; additional_merchandiser_user_id: string | null}>(
+        "SELECT created_by,nullif(to_jsonb(sourcing_cases)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE", [sourcingCaseId],
       )).rows[0] ?? fail("外发订单不存在",404,"NOT_FOUND");
       if (!root && (!await memberCanWriteModule(client,actor.actorId,"sourcing") || correcting && source.created_by !== actor.actorId)) fail("无权修改本订单",403,"FORBIDDEN");
       const result = await this.idempotency.execute(client, {scope,actorKey:actor.actorId,key,
@@ -1723,7 +1750,15 @@ export class SourcingService {
           route:{routeName:"sourcing_detail" as const,entityId:sourcingCaseId},policyKey:"general" as const,
           dedupeKey:`sourcing:${sourcingCaseId}:${correcting?"ie_quote":"correction"}:${before.version+1}`};
         if (correcting) await this.todoProjection?.actionableForAllAssignedRole(client,actor,projection);
-        else await this.todoProjection?.actionableForNamedRecipient?.(client,actor,{...projection,recipientUserId:source.created_by});
+        else {
+          await this.todoProjection?.actionableForNamedRecipient?.(client,actor,{...projection,recipientUserId:source.created_by});
+          if (source.additional_merchandiser_user_id) await this.todoProjection?.information(client,actor,{
+            category:"sourcing_merchandiser_correction",sourceEventId:eventId,sourceAction:scope,
+            entityType:"sourcing_case",entityId:sourcingCaseId,recipientUserId:source.additional_merchandiser_user_id,
+            route:{routeName:"sourcing_detail",entityId:sourcingCaseId},
+            dedupeKey:`sourcing:${sourcingCaseId}:correction-info:${before.version+1}:${source.additional_merchandiser_user_id}`,
+          });
+        }
         return {statusCode:200,response:await this.readCase(client,sourcingCaseId,actor)};
       });
       await client.query("COMMIT");return {value:result.response,reused:result.reused};
@@ -1762,6 +1797,7 @@ export class SourcingService {
       gender: input.gender,
       ...(input.confirmedDuplicateStyles?.length ? {confirmedDuplicateStyles:input.confirmedDuplicateStyles.map(normalizeSourcingStyleNumber)} : {}),
       styleName,
+      ...(input.additionalMerchandiserUserId ? {additionalMerchandiserUserId:input.additionalMerchandiserUserId} : {}),
       estimatedCutPieceSendDate: input.estimatedCutPieceSendDate,
       deliveryDate: input.deliveryDate,
       lineItems,
@@ -1781,6 +1817,19 @@ export class SourcingService {
         requestHash: requestHash(scope, {...normalized,confirmedDuplicateStyles:undefined}),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
+        if (normalized.additionalMerchandiserUserId) {
+          const eligible = await client.query(
+            `SELECT 1 FROM app_users person JOIN user_role_assignments assignment
+               ON assignment.user_id=person.id AND assignment.role_code='order_merchandiser'
+                 AND assignment.revoked_at IS NULL
+             WHERE person.id=$1 AND person.id<>$2
+               AND todo_user_has_direct_role(person.id,'order_merchandiser','sourcing:contract:record')
+               AND todo_user_has_direct_role(person.id,'order_merchandiser','sourcing:view')
+               AND todo_user_has_direct_role(person.id,'order_merchandiser','supplier_contract_data:read') LIMIT 1`,
+            [normalized.additionalMerchandiserUserId,actor.actorId],
+          );
+          if (!eligible.rowCount) fail("添加跟单必须是当前有效的其它跟单账号");
+        }
         const lineImageIds = normalized.lineItems.flatMap(line => line.imageAttachmentId ? [line.imageAttachmentId] : []);
         if (lineImageIds.length) {
           const contractService = this.contractService ?? fail("款图校验服务暂不可用，请稍后再试",503,"STORAGE_UNAVAILABLE");
@@ -1809,6 +1858,7 @@ export class SourcingService {
           orderQuantity: normalized.orderQuantity,
           attachmentIds: normalized.attachmentIds,
           daxingUnitPriceRecorded: true,
+          ...(normalized.additionalMerchandiserUserId ? {additionalMerchandiserUserId:normalized.additionalMerchandiserUserId} : {}),
           pricingOrigin: "ie",
           confirmedDuplicateStyles: confirmedDuplicates,
         };
@@ -1834,8 +1884,8 @@ export class SourcingService {
              sourcing_case_id,erp_order_id,erp_order_no,style_no,lane_key,
              order_quantity,delivery_date,process_description,process_items,
              created_by,operation_event_id,request_id,creation_reason,daxing_unit_price,
-             estimated_cut_piece_send_date,gender,style_id,style_name_snapshot
-           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+             estimated_cut_piece_send_date,gender,style_id,style_name_snapshot${normalized.additionalMerchandiserUserId ? ',additional_merchandiser_user_id' : ''}
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18${normalized.additionalMerchandiserUserId ? ',$19' : ''})`,
           [
             sourcingCaseId,
             sourcingCaseId,
@@ -1853,6 +1903,7 @@ export class SourcingService {
             normalized.daxingUnitPrice,
             normalized.estimatedCutPieceSendDate,
             normalized.gender,style.style_id,style.style_name,
+            ...(normalized.additionalMerchandiserUserId ? [normalized.additionalMerchandiserUserId] : []),
           ],
         );
         for (const line of normalized.lineItems) {
@@ -2542,6 +2593,7 @@ export class SourcingService {
           status: string;
           sequence: number | string;
           created_by: string;
+          additional_merchandiser_user_id: string | null;
           sourcing_decision_id: string | null;
           decision_version: number | string | null;
           source_type: string | null;
@@ -2558,6 +2610,7 @@ export class SourcingService {
         }>(
           `SELECT current_transition.to_status AS status,current_transition.sequence,
                   source_case.created_by,
+                  nullif(to_jsonb(source_lock)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id,
                   decision_row.sourcing_decision_id,decision_row.decision_version,
                   decision_row.source_type,decision_row.supplier_id,
                   decision_row.supplier_code_snapshot,decision_row.supplier_name_snapshot,
@@ -2746,6 +2799,14 @@ export class SourcingService {
               route: { routeName: "sourcing_detail", entityId: sourcingCaseId, tab: "contract_return" },
               policyKey: "sourcing_contract_return",
               dedupeKey: `sourcing:${sourcingCaseId}:return:${decisionVersion}`,
+            });
+            if (source.additional_merchandiser_user_id) await this.todoProjection?.actionableForNamedRecipient?.(client,actor,{
+              category:"sourcing_contract_return",sourceEventId:eventId,sourceAction:"sourcing.owner.approve",
+              entityType:"sourcing_case",entityId:sourcingCaseId,recipientUserId:source.additional_merchandiser_user_id,
+              requiredRole:CONTRACT_ROLE,requiredCapability:CONTRACT_CAPABILITY,
+              route:{routeName:"sourcing_detail",entityId:sourcingCaseId,tab:"contract_return"},
+              policyKey:"sourcing_contract_return",
+              dedupeKey:`sourcing:${sourcingCaseId}:return:${decisionVersion}:${source.additional_merchandiser_user_id}`,
             });
           }
         }
@@ -3148,8 +3209,10 @@ export class SourcingService {
         dedupeKey: `sourcing:${source.sourcing_case_id}:finance:${nextDecisionVersion}:${Number(source.reconciliation_version)+1}`,
       });
       if (actor.authorizationCapability === OWNER_DECISION_CAPABILITY) {
-        const returnFact = await client.query<{ created_by: string; contract_returned_at: Date | null }>(
-          `SELECT source_case.created_by,monitor.contract_returned_at
+        const returnFact = await client.query<{ created_by: string; additional_merchandiser_user_id: string | null; contract_returned_at: Date | null }>(
+          `SELECT source_case.created_by,
+             nullif(to_jsonb(source_case)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id,
+             monitor.contract_returned_at
            FROM sourcing_cases source_case
            JOIN sourcing_contract_return_monitors monitor
              ON monitor.sourcing_case_id=source_case.sourcing_case_id
@@ -3173,6 +3236,14 @@ export class SourcingService {
             route: { routeName: "sourcing_detail", entityId: source.sourcing_case_id, tab: "contract_return" },
             policyKey: "sourcing_contract_return",
             dedupeKey: `sourcing:${source.sourcing_case_id}:return:${nextDecisionVersion}`,
+          });
+          if (pending.additional_merchandiser_user_id) await this.todoProjection?.actionableForNamedRecipient?.(client,actor,{
+            category:"sourcing_contract_return",sourceEventId:eventId,sourceAction:"sourcing.factory_change.effective",
+            entityType:"sourcing_case",entityId:source.sourcing_case_id,recipientUserId:pending.additional_merchandiser_user_id,
+            requiredRole:CONTRACT_ROLE,requiredCapability:CONTRACT_CAPABILITY,
+            route:{routeName:"sourcing_detail",entityId:source.sourcing_case_id,tab:"contract_return"},
+            policyKey:"sourcing_contract_return",
+            dedupeKey:`sourcing:${source.sourcing_case_id}:return:${nextDecisionVersion}:${pending.additional_merchandiser_user_id}`,
           });
         }
       }
@@ -3214,8 +3285,11 @@ export class SourcingService {
           decision_version: number | string | null;
           reconciliation_version: number | string;
           open_change_id: string | null;
+          created_by: string;
+          additional_merchandiser_user_id: string | null;
         }>(
-          `SELECT source_case.sourcing_case_id,source_case.order_quantity,
+          `SELECT source_case.sourcing_case_id,source_case.order_quantity,source_lock.created_by,
+                  nullif(to_jsonb(source_lock)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id,
                   transition_row.to_status AS status,transition_row.sequence,
                   decision_row.sourcing_decision_id,decision_row.supplier_id,
                   decision_row.unit_price AS decision_unit_price,
@@ -3264,6 +3338,9 @@ export class SourcingService {
         );
         const source = current.rows[0];
         if (!source) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
+        if (initiatorRole === "order_merchandiser" && !actor.actorRoles.includes(ROOT_ROLE)
+          && source.additional_merchandiser_user_id === actor.actorId && source.created_by !== actor.actorId)
+          fail("添加跟单仅可回传合同",403,"FORBIDDEN");
         if (!source.sourcing_decision_id || !source.decision_unit_price) {
           fail("生产管理首次提交选厂信息后才可发起订单转厂", 409, "INVALID_STATE_TRANSITION");
         }
