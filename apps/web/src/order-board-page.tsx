@@ -210,6 +210,7 @@ export function OrderBoardPage() {
   const [pageLoading, setPageLoading] = useState(false);
   const [canReceive, setCanReceive] = useState(false);
   const [canInitiate, setCanInitiate] = useState(false);
+  const [canInitiateFinishing, setCanInitiateFinishing] = useState(false);
   const [canExport, setCanExport] = useState(false);
   const [canResolveDifferences, setCanResolveDifferences] = useState(false);
   const [canManagePacking, setCanManagePacking] = useState(false);
@@ -298,6 +299,8 @@ export function OrderBoardPage() {
           && capabilities.includes("rework:initiate");
         setCanReceive(isRoot || warehouseReceiver);
         setCanInitiate(moduleCanWrite(session.user, "rework") && (isRoot || roles.includes("owner_group") || qualityControl));
+        setCanInitiateFinishing(moduleCanWrite(session.user, "rework") && (isRoot || roles.includes("owner_group")
+          || (roles.includes("tail_supervisor") && capabilities.includes("process:configure"))));
         setCanExport(isRoot || capabilities.includes("receiving:export"));
         setCanResolveDifferences(isRoot || (
           roles.includes("order_merchandiser") && capabilities.includes("receiving:resolve_difference")
@@ -311,6 +314,7 @@ export function OrderBoardPage() {
         if (!active) return;
         setCanReceive(false);
         setCanInitiate(false);
+        setCanInitiateFinishing(false);
         setCanExport(false);
         setCanResolveDifferences(false);
         setCanManagePacking(false);
@@ -496,11 +500,14 @@ export function OrderBoardPage() {
     const className = "order-board-rework-link";
     const label = reworkLabel(row.reworkStatus);
     if (row.reworkStatus === null) {
-      if (!canInitiate) return null;
+      if (!canInitiate && !canInitiateFinishing) return null;
       const params = new URLSearchParams({ receivingBatchId: row.receivingBatchId });
-      return <a className={className} href={`${pageUrl("ui/qc/new")}?${params.toString()}`}>{label}</a>;
+      return <>
+        {canInitiate ? <a className={className} href={`${pageUrl("ui/qc/new")}?${params.toString()}`}>{label}</a> : null}
+        {canInitiateFinishing ? <a className={className} href={`${pageUrl("ui/qc/new")}?${params.toString()}&kind=inhouse_finishing`}>本厂做尾</a> : null}
+      </>;
     }
-    if (row.reworkOrderId && canInitiate) {
+    if (row.reworkOrderId && (canInitiate || canInitiateFinishing)) {
       return <a className={className} href={pageUrl(`ui/tasks/${row.reworkOrderId}`)}>{label}</a>;
     }
     return <span className={`${className} is-readonly`}>{label}</span>;

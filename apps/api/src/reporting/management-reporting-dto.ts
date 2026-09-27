@@ -9,6 +9,7 @@ export function factDto(row: FactRow, canReadWages = true): ManagementReworkRow 
     styleNo: row.style_no,
     orderNo: row.order_no,
     status: row.status,
+    reworkKind: row.rework_kind ?? "qc_rework",
     node: row.node,
     nodeLabel: row.node_label,
     nodeEnteredAt: iso(row.node_entered_at),

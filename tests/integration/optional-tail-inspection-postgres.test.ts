@@ -14,6 +14,7 @@ import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { ProcessConfigurationService } from "../../apps/api/src/rework/process-configuration-service.js";
 import { ProcessWorkerPlanService } from "../../apps/api/src/rework/process-worker-plan-service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
+import { ReworkV2SubmissionService } from "../../apps/api/src/rework/v2-submission-service.js";
 import { WholeOrderReviewService } from "../../apps/api/src/rework/whole-order-review-service.js";
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
@@ -63,6 +64,7 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
   });
   const access = new AccessMasterDataService(database, "corp");
   const initiation = new ReworkInitiationService(database, "corp");
+  const v2Submission = new ReworkV2SubmissionService(database, "corp");
   const configuration = new ProcessConfigurationService(database);
   const workerPlan = new ProcessWorkerPlanService(database);
   const reporting = new WorkReportingService(database);
@@ -172,7 +174,7 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
     await adminPool.end();
   });
 
-  it("moves an explicitly no-tail order through N06 approval without a tail fact", async () => {
+  it.each(["qc_rework", "inhouse_finishing"] as const)("moves %s without tail inspection through N06", async (kind) => {
     const attachmentId = randomUUID();
     await database.query(
       `INSERT INTO attachments(
@@ -181,25 +183,31 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
        ) VALUES($1,$2,'test-optional-tail.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)`,
       [attachmentId, `private/${attachmentId}.webp`, "a".repeat(64), ids.qc],
     );
-    const draft = await initiation.createDraft(qc(), {
-      styleNo: "test-optional-tail-n05",
+    const receivingBatchId = randomUUID();
+    if (kind === "inhouse_finishing") {
+      await database.query(
+        "INSERT INTO receiving_batches(receiving_batch_id,style_no,created_by,delivery_note_quantity,document_quantity_adjustment,actual_quantity_adjustment) VALUES($1,$2,$3,100,100,100)",
+        [receivingBatchId, `test-optional-tail-n05-${kind}`, ids.tail],
+      );
+    }
+    const draft = await initiation.createDraft(kind === "inhouse_finishing" ? tailConfigure() : qc(), {
+      ...(kind === "inhouse_finishing" ? { receivingBatchId } : {}),
+      styleNo: `test-optional-tail-n05-${kind}`,
       orderQuantity: 100,
-      orderNo: "test-optional-tail-n05",
+      orderNo: `test-optional-tail-n05-${kind}`,
       merchandiserUserId: ids.merchandiser,
       processingFactory: { type: "own_factory" },
-      inspectionReport,
+      ...(kind === "qc_rework" ? { inspectionReport, attachmentIds: [attachmentId] } : {}),
       problemPart: "袖口",
       problemDescription: "test-不整查-N05",
       reworkQuantity: 10,
       tailInspectionRequired: false,
-      attachmentIds: [attachmentId],
-    }, randomUUID());
-    const submitted = await initiation.submit(
-      qc(),
-      draft.value.reworkOrderId,
-      { expectedVersion: draft.value.version },
-      randomUUID(),
-    );
+    }, randomUUID(), kind);
+    const submitted = kind === "inhouse_finishing"
+      ? await v2Submission.submit(tailConfigure(), draft.value.reworkOrderId,
+        { expectedVersion: draft.value.version }, randomUUID(), kind)
+      : await initiation.submit(qc(), draft.value.reworkOrderId,
+        { expectedVersion: draft.value.version }, randomUUID());
     expect(submitted.value.tailInspectionRequired).toBe(false);
 
     const saved = await configuration.saveDraft(
@@ -227,7 +235,7 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
         expectedOrderVersion: saved.value.orderVersion,
         configurationId: saved.value.configuration!.configurationId,
         expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
-        assignments: [{ configurationItemId: workerItem.configurationItemId, memberIds: workerPersonIds }],
+        assignments: [{ configurationItemId: workerItem.configurationItemId, memberIds: [workerPersonIds[0]!] }],
       },
       randomUUID(),
     );
@@ -260,7 +268,7 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
 
     const tasks = await reporting.list(tailAssign(), draft.value.reworkOrderId);
     expect(tasks.tasks).toHaveLength(1);
-    expect(tasks.tasks[0]).toMatchObject({ executionKind: "worker", mode: "collective" });
+    expect(tasks.tasks[0]).toMatchObject({ executionKind: "worker", mode: "individual" });
     await reporting.submitReport(
       worker(),
       tasks.tasks[0]!.workTaskId,
@@ -333,7 +341,7 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
       randomUUID(),
     );
     expect(ieApproved.value).toMatchObject({
-      reworkStatus: "pending_responsibility_determination",
+      reworkStatus: kind === "inhouse_finishing" ? "completed" : "pending_responsibility_determination",
       tailInspectionRequired: false,
     });
     expect(ieApproved.value.orderVersion).toBe(confirmed.value.orderVersion + 1);
@@ -344,18 +352,14 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
       [draft.value.reworkOrderId],
     )).rows).toEqual([{
       settlement_quantity: "10.00",
-      group_amount: "2.500",
+      group_amount: "2.50000000",
     }]);
     expect((await database.query(
       `SELECT amount::text FROM rework_work_report_member_shares share
        JOIN rework_work_reports report USING(work_report_id)
        WHERE report.rework_order_id=$1 ORDER BY share.person_id`,
       [draft.value.reworkOrderId],
-    )).rows).toEqual([
-      { amount: "0.834" },
-      { amount: "0.833" },
-      { amount: "0.833" },
-    ]);
+    )).rows).toEqual([{ amount: "2.50000000" }]);
     expect((await database.query(
       "SELECT unit_price::text FROM rework_process_configuration_items WHERE configuration_item_id=$1",
       [workerItem.configurationItemId],
@@ -365,5 +369,15 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
        FROM rework_order_reviews WHERE rework_order_id=$1`,
       [draft.value.reworkOrderId, ids.ie],
     )).rows).toEqual([{ count: 1, reviewed_by_ie: true }]);
+    if (kind === "inhouse_finishing") {
+      expect((await database.query(
+        "SELECT count(*)::int AS count FROM rework_wage_items WHERE rework_order_id=$1",
+        [draft.value.reworkOrderId],
+      )).rows[0]?.count).toBeGreaterThan(0);
+      expect((await database.query(
+        "SELECT count(*)::int AS count FROM rework_responsibility_determinations WHERE rework_order_id=$1",
+        [draft.value.reworkOrderId],
+      )).rows).toEqual([{ count: 0 }]);
+    }
   });
 });

@@ -91,7 +91,7 @@ describe("business-chain UI handoff contracts", () => {
     expect(shell).not.toContain("flow-navigation__arrow");
     expect(detail).toContain('title: "发起、配置与核价"');
     expect(detail).toContain('title: "返工执行"');
-    expect(detail).toContain('title: "责任与结算"');
+    expect(detail).toContain('title: detail.reworkKind === "inhouse_finishing" ? "最终确认与计薪" : "责任与结算"');
     expect(detail).toContain('node("initiation", "01"');
     expect(detail).toContain('node("process_configuration", "02", "分配工序 &工人"');
     expect(detail).toContain('node("ie_review", "03", "IE 核价"');

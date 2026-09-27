@@ -245,6 +245,7 @@ export class ManagementReportingService {
     const [result, clock] = await Promise.all([fetchFacts(this.db, {
       ...(query.q ? { q: query.q } : {}),
       ...(query.status ? { status: query.status } : {}),
+      ...(query.reworkKind ? { reworkKind: query.reworkKind } : {}),
       ...(query.responsibilityType ? { responsibilityType: query.responsibilityType } : {}),
       ...(query.currentHandlerUserId ? { currentHandlerUserId: query.currentHandlerUserId } : {}),
       ...(query.supplierId ? { supplierId: query.supplierId } : {}),

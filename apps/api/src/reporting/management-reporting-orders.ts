@@ -5,6 +5,7 @@ const CLOSED_ORDER_RANK_SQL = "CASE WHEN order_record.status IN ('completed','ca
 export async function fetchFacts(source: Queryable, options: {
   q?: string;
   status?: string;
+  reworkKind?: "qc_rework" | "inhouse_finishing";
   responsibilityType?: string;
   currentHandlerUserId?: string;
   supplierId?: string;
@@ -37,6 +38,7 @@ export async function fetchFacts(source: Queryable, options: {
       ))`);
   }
   if (options.status) where.push(`order_record.status=${bind(options.status)}`);
+  if (options.reworkKind) where.push(`order_record.rework_kind=${bind(options.reworkKind)}`);
   if (options.responsibilityType) where.push(`EXISTS(SELECT 1 FROM responsibility_types types WHERE types.rework_order_id=order_record.rework_order_id AND types.responsibility_type=${bind(options.responsibilityType)})`);
   if (options.currentHandlerUserId) where.push(`COALESCE(todo_stats.current_handler,current_determination.handler_user_id,order_record.merchandiser_user_id)=${bind(options.currentHandlerUserId)}::uuid`);
   if (options.supplierId) where.push(`EXISTS(SELECT 1 FROM active_cases filtered_case WHERE filtered_case.rework_order_id=order_record.rework_order_id AND filtered_case.supplier_id=${bind(options.supplierId)}::uuid)`);
@@ -183,7 +185,7 @@ export async function fetchFacts(source: Queryable, options: {
        ORDER BY entity_id,created_at DESC,event_id DESC
      )
      SELECT order_record.rework_order_id,order_record.rework_no,order_record.style_no,order_record.order_no,
-       order_record.status,
+       order_record.status,order_record.rework_kind,
        CASE order_record.status
          WHEN 'draft' THEN 'N01' WHEN 'pending_process_configuration' THEN 'N02'
          WHEN 'pending_ie_review' THEN 'N03' WHEN 'pending_task_assignment' THEN 'N02-R'
@@ -193,7 +195,7 @@ export async function fetchFacts(source: Queryable, options: {
          WHEN 'pending_responsibility_determination' THEN 'N07'
          WHEN 'pending_owner_signature' THEN 'N08'
          WHEN 'pending_responsibility_action' THEN 'N-LEGACY'
-         WHEN 'completed' THEN 'N09' ELSE 'N-C' END node,
+         WHEN 'completed' THEN CASE WHEN order_record.rework_kind='inhouse_finishing' THEN 'N06' ELSE 'N09' END ELSE 'N-C' END node,
        CASE order_record.status
          WHEN 'draft' THEN '发起返工 / 草稿' WHEN 'pending_process_configuration' THEN '待配置工序'
          WHEN 'pending_ie_review' THEN '待 IE 审核' WHEN 'pending_task_assignment' THEN '待分配人员'
@@ -203,7 +205,7 @@ export async function fetchFacts(source: Queryable, options: {
          WHEN 'pending_responsibility_determination' THEN '责任判定与资料核验'
          WHEN 'pending_owner_signature' THEN '待老板确认签字'
          WHEN 'pending_responsibility_action' THEN '旧责任处理'
-         WHEN 'completed' THEN '订单已完成' ELSE '已取消' END node_label,
+         WHEN 'completed' THEN CASE WHEN order_record.rework_kind='inhouse_finishing' THEN '本厂做尾已完成' ELSE '订单已完成' END ELSE '已取消' END node_label,
        COALESCE(latest_event.created_at,order_record.updated_at) node_entered_at,
        (CASE WHEN order_record.status IN ('completed','cancelled') THEN 0
          ELSE greatest(0,extract(epoch FROM CURRENT_TIMESTAMP-COALESCE(latest_event.created_at,order_record.updated_at))) END)::bigint::text aging_seconds,

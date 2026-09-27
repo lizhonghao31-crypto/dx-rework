@@ -63,6 +63,7 @@ type ReceivingReworkEntry = Readonly<{
   processingFactorySupplierId: string | null;
   merchandiserUserId: string | null;
   sourceImageAttachmentId: string | null;
+  existingReworkOrderId?: string | null;
 }>;
 type ReworkInitiationV2FormProps = Readonly<{
   reworkOrderId?: string;
@@ -249,6 +250,7 @@ const ReceivingReworkEntrySchema: ApiSchema<ReceivingReworkEntry> = {
       merchandiserUserId: typeof row.merchandiserUserId === "string" ? row.merchandiserUserId : null,
       sourceImageAttachmentId: typeof row.sourceImageAttachmentId === "string"
         ? row.sourceImageAttachmentId : null,
+      existingReworkOrderId: typeof row.existingReworkOrderId === "string" ? row.existingReworkOrderId : null,
     };
   },
 };
@@ -260,9 +262,12 @@ export function ReworkInitiationV2Form({
   onOrderChanged,
   history,
 }: ReworkInitiationV2FormProps = {}) {
+  const isFinishing = !reworkOrderId && !embedded
+    && new URLSearchParams(window.location.search).get("kind") === "inhouse_finishing";
   const [moduleWritable, setModuleWritable] = useState<boolean | null>(null);
+  const [sourceImageAttachmentId, setSourceImageAttachmentId] = useState<string | null>(null);
   useEffect(() => { if(history) return; let active = true; void currentModuleCanWrite("rework").then(value => { if (active) setModuleWritable(value); }).catch(() => { if (active) setModuleWritable(false); }); return () => { active = false; }; }, []);
-  const localDraftSeed = reworkOrderId ? null : readLocalN01Draft();
+  const localDraftSeed = reworkOrderId || isFinishing ? null : readLocalN01Draft();
   const receivingBatchId = reworkOrderId
     ? undefined
     : initialReceivingBatchId() ?? localDraftSeed?.receivingBatchId ?? undefined;
@@ -295,11 +300,11 @@ export function ReworkInitiationV2Form({
     const controller = new AbortController();
     let active = true;
     const coreOptions = request(
-      "rework-orders/initiation-options",
+      isFinishing ? "rework-orders/finishing/initiation-options" : "rework-orders/initiation-options",
       ReworkInitiationOptionsResponseSchema,
       { signal: controller.signal },
     );
-    const optionalOptions = request(
+    const optionalOptions = isFinishing ? Promise.resolve(supplyOptions) : request(
       "rework-orders/supply-context-options",
       ReworkSupplyContextOptionsResponseSchema,
       { signal: controller.signal },
@@ -345,12 +350,21 @@ export function ReworkInitiationV2Form({
         coreOptions,
         optionalOptions,
         request(
-          `rework-orders/receiving-entry/${encodeURIComponent(receivingBatchId)}`,
+          `rework-orders/${isFinishing ? "finishing/" : ""}receiving-entry/${encodeURIComponent(receivingBatchId)}`,
           ReceivingReworkEntrySchema,
           { signal: controller.signal },
         ),
-      ]).then(([core, supply, receivingEntry]) => {
+      ]).then(async ([core, supply, receivingEntry]) => {
         if (!active) return;
+        if (isFinishing && receivingEntry.existingReworkOrderId) {
+          const existing = await request(
+            `rework-orders/finishing/drafts/${receivingEntry.existingReworkOrderId}`,
+            ReworkOrderResponseSchema, { signal: controller.signal },
+          );
+          if (!active) return;
+          setOrder(existing);
+        }
+        setSourceImageAttachmentId(receivingEntry.sourceImageAttachmentId);
         setOptions(core);
         setSupplyOptions(supply);
         const linkedFactory = receivingEntry.processingFactorySupplierId
@@ -375,7 +389,7 @@ export function ReworkInitiationV2Form({
     }
 
     return () => { active = false; controller.abort(); };
-  }, [receivingBatchId, reworkOrderId]);
+  }, [receivingBatchId, reworkOrderId, isFinishing]);
 
   useEffect(() => () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
@@ -391,9 +405,9 @@ export function ReworkInitiationV2Form({
       ? "请选择加工厂。"
       : !form.merchandiserUserId
         ? "请选择订单跟单。"
-        : form.tailInspectionRequired && !form.tailInspectionCostBearer
+        : !isFinishing && form.tailInspectionRequired && !form.tailInspectionCostBearer
           ? "请选择整查费用承担方。"
-          : availableImageCount <= 0
+          : !isFinishing && availableImageCount <= 0
             ? "请至少上传 1 张返工报告图片。"
             : null;
   const complete = submissionIssue === null;
@@ -408,6 +422,7 @@ export function ReworkInitiationV2Form({
 
   const fingerprint = (): string => JSON.stringify({
     reworkOrderId: reworkOrderId ?? null,
+    reworkKind: isFinishing ? "inhouse_finishing" : "qc_rework",
     receivingBatchId: receivingBatchId ?? null,
     styleNo: form.styleNo.trim(),
     factory: form.factory,
@@ -442,6 +457,7 @@ export function ReworkInitiationV2Form({
   };
 
   const persistServerDraft = async (clearPendingSubmit = true): Promise<ReworkOrderResponse> => {
+    if (isFinishing && order) return order;
     const processingFactory = coreFactory();
     const key = saveKey();
     let saved: ReworkOrderResponse;
@@ -470,12 +486,12 @@ export function ReworkInitiationV2Form({
       const payload = {
         styleNo: form.styleNo.trim() || null,
         merchandiserUserId: form.merchandiserUserId || null,
-        tailInspectionRequired: form.tailInspectionRequired,
-        tailInspectionCostBearer: form.tailInspectionRequired
+        tailInspectionRequired: isFinishing ? false : form.tailInspectionRequired,
+        tailInspectionCostBearer: isFinishing ? null : form.tailInspectionRequired
           ? form.tailInspectionCostBearer || null
           : null,
         processingFactory: processingFactory ?? null,
-        attachmentIds: images.map((image) => image.attachmentId),
+        attachmentIds: isFinishing ? [] : images.map((image) => image.attachmentId),
       };
       saved = order
         ? await request(
@@ -488,7 +504,7 @@ export function ReworkInitiationV2Form({
             },
           )
         : await request(
-            "rework-orders/drafts",
+            isFinishing ? "rework-orders/finishing/drafts" : "rework-orders/drafts",
             ReworkOrderResponseSchema,
             {
               method: "POST",
@@ -504,7 +520,7 @@ export function ReworkInitiationV2Form({
     setOrder(saved);
     pendingSave.current = null;
     if (clearPendingSubmit) pendingSubmit.current = null;
-    await saveSupplyContext(saved.reworkOrderId);
+    if (!isFinishing) await saveSupplyContext(saved.reworkOrderId);
     return saved;
   };
 
@@ -537,7 +553,7 @@ export function ReworkInitiationV2Form({
       await alertInApp(submissionIssue, { title: "返工单暂不能提交", confirmLabel: "知道了" });
       return;
     }
-    if (!(await confirmInApp("确认提交返工单？"))) return;
+    if (!(await confirmInApp(isFinishing ? "确认提交本厂做尾？" : "确认提交返工单？"))) return;
     setBusy(true);
     setMessage("正在提交返工…");
     try {
@@ -555,7 +571,7 @@ export function ReworkInitiationV2Form({
           return attempt;
         },
         (attempt) => request(
-          `rework-orders/${attempt.reworkOrderId}/submit-v2`,
+          `rework-orders/${attempt.reworkOrderId}/${isFinishing ? "finishing/" : ""}submit-v2`,
           ReworkOrderResponseSchema,
           {
             method: "POST",
@@ -714,8 +730,8 @@ export function ReworkInitiationV2Form({
   return <div data-dx-ui="governed" className={`rework-v2-page rework-governed${embedded ? " is-embedded" : ""}`}>
     {!embedded ? <div className="rework-v2-heading">
       <div>
-        <h1>发起返工</h1>
-        <p>只填返工真正需要的资料；款号由订单回货自动带入。</p>
+        <h1>{isFinishing ? "本厂做尾" : "发起返工"}</h1>
+        <p>{isFinishing ? "沿用订单回货与源单资料发起做尾。" : "只填返工真正需要的资料；款号由订单回货自动带入。"}</p>
       </div>
       <StatusBadge tone={complete ? "success" : "info"}>{complete ? "可以提交" : "填写中"}</StatusBadge>
     </div> : null}
@@ -729,18 +745,18 @@ export function ReworkInitiationV2Form({
         <label><span>款号 <b>*</b></span><input value={history ? historicalValue("款号") : form.styleNo} disabled={Boolean(history) || busy || Boolean(receivingBatchId || order?.receivingBatchId)} readOnly={Boolean(receivingBatchId || order?.receivingBatchId)} onChange={(event) => { setForm({ ...form, styleNo: event.target.value }); pendingSubmit.current = null; }} placeholder="从订单回货自动带入" /></label>
         <label><span>加工厂 <b>*</b></span><div className="rework-v2-control">{history ? <input readOnly value={historicalValue("加工厂")} /> : <FactorySearch factories={options.factories} value={form.factory} disabled={busy} onChange={(factory) => { setForm({ ...form, factory, tailInspectionCostBearer: factory === "own_factory" && form.tailInspectionCostBearer === "processing_factory" ? "" : form.tailInspectionCostBearer }); pendingSubmit.current = null; }} />}</div></label>
         <label><span>订单跟单 <b>*</b></span><div className="rework-v2-control">{history ? <input readOnly value={historicalValue("订单跟单")} /> : <SearchSelect options={options.merchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.merchandiserUserId} placeholder="搜索订单跟单" emptyText="没有匹配的订单跟单" disabled={busy} onChange={(merchandiserUserId) => { setForm({ ...form, merchandiserUserId }); pendingSubmit.current = null; }} />}</div></label>
-        <fieldset className="rework-v2-tail-choice" disabled={busy || Boolean(history)}>
+        {!isFinishing ? <fieldset className="rework-v2-tail-choice" disabled={busy || Boolean(history)}>
           <legend>是否需要整查？</legend>
           <label><input type="radio" name="tailInspectionRequired" checked={history ? historicalValue("需要整查")==="是" : form.tailInspectionRequired} onChange={() => { setForm({ ...form, tailInspectionRequired: true }); pendingSubmit.current = null; }} />是</label>
           <label><input type="radio" name="tailInspectionRequired" checked={history ? historicalValue("需要整查")==="否" : !form.tailInspectionRequired} onChange={() => { setForm({ ...form, tailInspectionRequired: false, tailInspectionCostBearer: "" }); pendingSubmit.current = null; }} />否</label>
-        </fieldset>
-        {(history ? historicalValue("需要整查")==="是" : form.tailInspectionRequired) ? <fieldset className="rework-v2-tail-choice" disabled={busy || Boolean(history)}>
+        </fieldset> : null}
+        {!isFinishing && (history ? historicalValue("需要整查")==="是" : form.tailInspectionRequired) ? <fieldset className="rework-v2-tail-choice" disabled={busy || Boolean(history)}>
           <legend>谁承担整查费用？ <b>*</b></legend>
           <label><input type="radio" name="tailInspectionCostBearer" checked={(history ? historicalValue("整查费用承担方") : form.tailInspectionCostBearer) === "own_factory"} onChange={() => { setForm({ ...form, tailInspectionCostBearer: "own_factory" }); pendingSubmit.current = null; }} />本厂</label>
           <label><input type="radio" name="tailInspectionCostBearer" checked={(history ? historicalValue("整查费用承担方") : form.tailInspectionCostBearer) === "processing_factory"} disabled={form.factory === "own_factory"} onChange={() => { setForm({ ...form, tailInspectionCostBearer: "processing_factory" }); pendingSubmit.current = null; }} />加工厂</label>
         </fieldset> : null}
       </div>
-      <details className="rework-v2-more">
+      {!isFinishing ? <details className="rework-v2-more">
         <summary>更多信息</summary>
         <div className="rework-v2-grid rework-v2-grid--more">
           <label><span>洗水厂</span><div className="rework-v2-control">{history ? <input readOnly value={historicalValue("洗水厂")} /> : <SearchSelect options={embroiderySupplierOptions} value={form.washingSupplierId} placeholder="没有可留空" emptyText="没有匹配的洗水厂" disabled={busy} onChange={(washingSupplierId) => { setForm({ ...form, washingSupplierId }); pendingSubmit.current = null; }} />}</div></label>
@@ -748,11 +764,16 @@ export function ReworkInitiationV2Form({
           <label><span>面辅料供应商</span><div className="rework-v2-control">{history ? <input readOnly value={historicalValue("面辅料供应商")} /> : <SearchSelect options={fabricSupplierOptions} value={form.fabricSupplierId} placeholder="没有可留空" emptyText="没有匹配的面辅料供应商" disabled={busy} onChange={(fabricSupplierId) => { setForm({ ...form, fabricSupplierId }); pendingSubmit.current = null; }} />}</div></label>
           <label><span>印绣花跟单</span><div className="rework-v2-control">{history ? <input readOnly value={historicalValue("印绣花跟单")} /> : <SearchSelect options={supplyOptions.embroideryWashingMerchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.embroideryMerchandiserUserId} placeholder="没有可留空" emptyText="没有匹配的印绣花跟单" disabled={busy} onChange={(embroideryMerchandiserUserId) => { setForm({ ...form, embroideryMerchandiserUserId }); pendingSubmit.current = null; }} />}</div></label>
         </div>
-      </details>
+      </details> : null}
+      {isFinishing && sourceImageAttachmentId ? <div className="rework-v2-image-grid">
+        <a href={apiUrl(`tools/attachments/${sourceImageAttachmentId}/download?mode=preview`)} target="_blank" rel="noreferrer">
+          <img src={apiUrl(`tools/attachments/${sourceImageAttachmentId}/download?mode=preview`)} alt="源订单款图" />
+        </a>
+      </div> : null}
       {order?.hasOtherOpenStyleOrder ? <p className="rework-v2-same-style-warning">同款号存在其他未完结单；系统仅提示，不会自动合并</p> : null}
     </Surface>
 
-    {!embedded ? <Surface className="rework-v2-images">
+    {!embedded && !isFinishing ? <Surface className="rework-v2-images">
       <div className="rework-v2-section-heading">
         <div><h2>上传报告 <b>*</b></h2><p>至少 1 张，最多 {MAX_REWORK_ATTACHMENTS} 张；支持 JPEG / PNG / WebP。</p></div>
         <StatusBadge tone={images.length ? "success" : "info"}>{images.length}/{MAX_REWORK_ATTACHMENTS}</StatusBadge>
@@ -771,7 +792,7 @@ export function ReworkInitiationV2Form({
 
     {!history && <div className="rework-v2-action-area">
       <div className="rework-v2-actions">
-        <Button
+        {!isFinishing ? <Button
           type="button"
           disabled={busy || uploading || (Boolean(reworkOrderId) && !order)}
           onClick={(event) => {
@@ -779,13 +800,13 @@ export function ReworkInitiationV2Form({
             event.stopPropagation();
             void save();
           }}
-        >{busy ? "处理中…" : "保存草稿"}</Button>
+        >{busy ? "处理中…" : "保存草稿"}</Button> : null}
         <Button
           type="button"
           variant="primary"
           disabled={busy || uploading || (Boolean(reworkOrderId) && !order)}
           onClick={() => void submit()}
-        >提交返工</Button>
+        >{isFinishing ? "提交做尾" : "提交返工"}</Button>
       </div>
       <p className="rework-v2-action-feedback" role="status">{message}</p>
     </div>}

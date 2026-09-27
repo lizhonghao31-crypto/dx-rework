@@ -27,13 +27,13 @@ describe("N01 local-only draft contract", () => {
   it("restores saved fields and uploaded reports after returning to or refreshing N01", async () => {
     const source = await readFile("apps/web/src/rework-v2-form.tsx", "utf8");
 
-    expect(source).toContain("const localDraftSeed = reworkOrderId ? null : readLocalN01Draft();");
+    expect(source).toContain("const localDraftSeed = reworkOrderId || isFinishing ? null : readLocalN01Draft();");
     expect(source).toContain("localDraftSeed?.form ?? emptyForm()");
     expect(source).toContain("localDraftSeed?.images.map(restoredImage) ?? []");
     expect(source).toContain("tools/attachments/${image.attachmentId}/download?mode=preview");
     expect(source).toContain("已恢复本机保存资料；尚未创建返工单");
     expect(source).toContain("initialReceivingBatchId() ?? localDraftSeed?.receivingBatchId ?? undefined");
-    expect(source).toContain("rework-orders/receiving-entry/");
+    expect(source).toContain('isFinishing ? "finishing/" : ""}receiving-entry/');
   });
 
   it("creates the server rework order only from the real submit path and clears the local copy after success", async () => {

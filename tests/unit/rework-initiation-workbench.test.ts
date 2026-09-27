@@ -15,7 +15,7 @@ describe("rework initiation information architecture", () => {
     expect(form).not.toContain('get("draft")');
     expect(form).toContain('get("receivingBatchId")');
     expect(form).not.toContain('get("styleNo")');
-    expect(form).toContain("rework-orders/receiving-entry/");
+    expect(form).toContain('isFinishing ? "finishing/" : ""}receiving-entry/');
     expect(form).toContain("window.location.assign(pageUrl(`ui/tasks/${submitted.reworkOrderId}`))");
     expect(form).toContain("只填返工真正需要的资料");
     expect(detail).toContain("InitiationFollowUpActions");

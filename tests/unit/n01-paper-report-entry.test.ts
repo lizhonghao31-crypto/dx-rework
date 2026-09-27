@@ -64,7 +64,7 @@ describe("N01 v2 streamlined initiation", () => {
     expect(board).toContain("发起返工");
     expect(navigation).not.toContain('name: "发起返工"');
     expect(form).toContain('get("receivingBatchId")');
-    expect(form).toContain("rework-orders/receiving-entry/");
+    expect(form).toContain('isFinishing ? "finishing/" : ""}receiving-entry/');
     expect(form).toContain('readOnly={Boolean(receivingBatchId || order?.receivingBatchId)}');
     expect(form).not.toContain("differenceQuantity");
     expect(form).not.toContain("lastReceiverName");

@@ -52,16 +52,16 @@ export function ManagementOrderCard({
         <div className="reporting-order-card__heading">
           <div>
             <strong>{order.styleNo ?? "款号未填写"}</strong>
-            <small>{order.reworkNo ?? "返工单"}</small>
+            <small>{order.reworkNo ?? "返工单"} · {order.reworkKind === "inhouse_finishing" ? "本厂做尾" : "QC返工"}</small>
           </div>
           <StatusBadge tone={tone}>{order.nodeLabel}</StatusBadge>
         </div>
         <dl>
           <div><dt>{terminal ? "流程状态" : "节点停留"}</dt><dd>{order.status === "cancelled" ? "已取消 · 停止计时" : order.status === "completed" ? "已完成 · 停止计时" : age(order.agingSeconds)}</dd></div>
           {order.wageAmount !== undefined ? <div><dt>工资</dt><dd>{formatBusinessCurrency(order.wageAmount)}</dd></div> : null}
-          <div><dt>责任</dt><dd>{formatBusinessCurrency(order.responsibilityAmount)}</dd></div>
-          <div><dt>外部差额</dt><dd>{formatBusinessCurrency(order.externalRemainingAmount)}</dd></div>
-          <div><dt>扣款状态</dt><dd>{deductionStatusLabel[order.deductionStatus]}</dd></div>
+          {order.reworkKind !== "inhouse_finishing" ? <div><dt>责任</dt><dd>{formatBusinessCurrency(order.responsibilityAmount)}</dd></div> : null}
+          {order.reworkKind !== "inhouse_finishing" ? <div><dt>外部差额</dt><dd>{formatBusinessCurrency(order.externalRemainingAmount)}</dd></div> : null}
+          {order.reworkKind !== "inhouse_finishing" ? <div><dt>扣款状态</dt><dd>{deductionStatusLabel[order.deductionStatus]}</dd></div> : null}
         </dl>
         {order.status === "completed" ? null : <small className="reporting-order-card__activity">{activityMessage}</small>}
     </a>

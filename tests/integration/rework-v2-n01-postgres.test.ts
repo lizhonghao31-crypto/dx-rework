@@ -340,4 +340,50 @@ runWithPostgres("rework v2 N01 PostgreSQL contracts", () => {
       actor_roles: expect.arrayContaining(["root_superuser", "quality_control"]),
     });
   });
+
+  it("keeps tail finishing separate from QC initiation and submits without a report", async () => {
+    const supervisor = () => actor(ids.tail, ["tail_supervisor"], "process:configure");
+    const receivingBatchId = randomUUID();
+    await database.query(
+      "INSERT INTO receiving_batches(receiving_batch_id,style_no,created_by,delivery_note_quantity) VALUES($1,'V2-FINISHING-001',$2,100)",
+      [receivingBatchId, ids.tail],
+    );
+    const payload = {
+      receivingBatchId,
+      styleNo: "V2-FINISHING-001",
+      merchandiserUserId: ids.merchandiser,
+      processingFactory: { type: "supplier" as const, supplierId: factorySupplierId },
+      tailInspectionRequired: false,
+    };
+    await expect(initiation.createDraft(qc(), payload, randomUUID(), "inhouse_finishing"))
+      .rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+    await expect(initiation.createDraft(supervisor(), { ...payload, receivingBatchId: undefined }, randomUUID(), "inhouse_finishing"))
+      .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    await expect(initiation.createDraft(supervisor(), { ...payload, tailInspectionRequired: true }, randomUUID(), "inhouse_finishing"))
+      .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+
+    const key = randomUUID();
+    const draft = await initiation.createDraft(supervisor(), payload, key, "inhouse_finishing");
+    expect(draft.value).toMatchObject({ status: "draft", reworkKind: "inhouse_finishing", attachmentIds: [] });
+    expect((await initiation.createDraft(supervisor(), payload, key, "inhouse_finishing")).reused).toBe(true);
+    await expect(initiation.createDraft(supervisor(), payload, randomUUID(), "inhouse_finishing"))
+      .rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+    expect(await initiation.getFinishingDraft(supervisor(), draft.value.reworkOrderId))
+      .toMatchObject({ reworkOrderId: draft.value.reworkOrderId, status: "draft" });
+    await expect(v2Submission.submit(supervisor(), draft.value.reworkOrderId,
+      { expectedVersion: draft.value.version }, randomUUID()))
+      .rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+    const submitted = await v2Submission.submit(supervisor(), draft.value.reworkOrderId,
+      { expectedVersion: draft.value.version }, randomUUID(), "inhouse_finishing");
+    expect(submitted.value).toMatchObject({
+      status: "pending_process_configuration", reworkKind: "inhouse_finishing", attachmentIds: [],
+    });
+    expect((await database.query(
+      "SELECT action,authorization_capability FROM operation_events WHERE entity_id=$1 AND action LIKE 'rework.finishing.%' ORDER BY created_at",
+      [draft.value.reworkOrderId],
+    )).rows).toEqual([
+      { action: "rework.finishing.draft.create", authorization_capability: "process:configure" },
+      { action: "rework.finishing.submit", authorization_capability: "process:configure" },
+    ]);
+  });
 });
