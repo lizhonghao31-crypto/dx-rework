@@ -121,6 +121,7 @@ const SourcingCaseInputSchema = z.object({
   confirmedDuplicateStyles: z.array(ShortTextSchema).max(40).optional(),
   gender: z.enum(["男装", "女装"]),
   styleName: ShortTextSchema,
+  additionalMerchandiserUserId: IdSchema.optional(),
   estimatedCutPieceSendDate: BusinessDateSchema,
   deliveryDate: BusinessDateSchema,
   lineItems: z.array(SourcingCaseLineInputSchema).min(1).max(MAX_SOURCING_LINE_ITEMS)
@@ -148,7 +149,7 @@ export const CreateSourcingCaseSchema = SourcingCaseInputSchema
   .refine(validLineImages, "款图必须包含在订单图片中")
   .refine(order => sourcingDatesValid(order.estimatedCutPieceSendDate, order.deliveryDate), { path: ["deliveryDate"], message: SOURCING_DATE_ORDER_ERROR });
 export const ReturnSourcingCaseSchema = z.object({ expectedVersion: z.number().int().positive(), reason: z.string().trim().min(1).max(500) }).strict();
-export const CorrectSourcingCaseSchema = SourcingCaseInputSchema.omit({ daxingUnitPrice: true }).extend({
+export const CorrectSourcingCaseSchema = SourcingCaseInputSchema.omit({ daxingUnitPrice: true, additionalMerchandiserUserId: true }).extend({
   expectedVersion: z.number().int().positive(), reason: z.string().trim().min(1).max(500),
 }).strict().refine(validLineImages, "款图必须包含在订单图片中")
   .refine(order => sourcingDatesValid(order.estimatedCutPieceSendDate, order.deliveryDate), { path: ["deliveryDate"], message: SOURCING_DATE_ORDER_ERROR });
@@ -531,6 +532,10 @@ export const SourcingCaseSummarySchema = z.object({
   correctionReason: z.string().nullable().optional(),
   timing: z.object({totalSeconds:z.number().nonnegative(),nodeSeconds:z.record(z.string(),z.number().nonnegative())}).optional(),
 }).strict();
+
+export const SourcingMerchandiserOptionsSchema = z.array(z.object({
+  userId: IdSchema, displayName: ShortTextSchema,
+}).strict());
 
 export const SourcingStyleCatalogSchema = z.array(z.object({
   styleId: IdSchema, styleName: ShortTextSchema,

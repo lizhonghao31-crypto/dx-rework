@@ -1,4 +1,5 @@
 import { SourcingReturnDialog } from "./sourcing-return-dialog.js";
+import { isMerchandiserOnly } from "./sourcing-role-visibility.js";
 import { sourcingContractReturnBadgeLabel, sourcingContractReturnLabel } from "./sourcing-contract-return-presentation.js";
 import { sourcingDatesValid, SOURCING_DATE_ORDER_ERROR } from "@dx-rework/contracts";
 import { moduleCanWrite } from "./member-module-policy.js";
@@ -20,6 +21,7 @@ import {
   SourcingCaseListResponseSchema,
   SourcingCaseSummarySchema,
   SourcingStyleCatalogSchema,
+  SourcingMerchandiserOptionsSchema,
   SourcingContractStateResponseSchema,
   SourcingContractReturnResponseSchema,
   SourcingDispatchStateSchema,
@@ -129,6 +131,7 @@ type SourcingLineDraft = Readonly<{
 type LocalSourcingDraft = Readonly<{
   gender: "" | "男装" | "女装";
   styleName: string;
+  additionalMerchandiserUserId: string;
   estimatedCutPieceSendDate: string;
   deliveryDate: string;
   lineItems: readonly SourcingLineDraft[];
@@ -298,6 +301,7 @@ const readLocalSourcingDraft = (userId: string): LocalSourcingDraft | null => {
     return {
       gender: parsed.gender === "男装" || parsed.gender === "女装" ? parsed.gender : "",
       styleName: typeof parsed.styleName === "string" ? parsed.styleName : "",
+      additionalMerchandiserUserId: typeof parsed.additionalMerchandiserUserId === "string" ? parsed.additionalMerchandiserUserId : "",
       estimatedCutPieceSendDate: typeof parsed.estimatedCutPieceSendDate === "string"
         ? parsed.estimatedCutPieceSendDate
         : "",
@@ -449,6 +453,7 @@ export function SourcingWorkspacePage({
       {view === "history" ? <OrderListPage mode="history" user={user} /> : null}
       {view === "detail" && sourcingCaseId
         ? (new URLSearchParams(window.location.search).get("view") === "node-history" && sourcingWorkflowNodeFromSearch()
+          && !(sourcingWorkflowNodeFromSearch()==="finance" && isMerchandiserOnly(user?.businessRoles,user?.isRoot))
           ? <SourcingNodeHistoryPage sourcingCaseId={sourcingCaseId} node={sourcingWorkflowNodeFromSearch()!} returnTo={todoReturnPath(window.location.search) ?? sourcingReturnPath(window.location.search)} />
           : <OrderDetailPage sourcingCaseId={sourcingCaseId} user={user} />)
         : null}
@@ -460,6 +465,8 @@ export function SourcingWorkspacePage({
 function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; correction?: {item:SourcingCaseSummary; attachments:readonly SourcingAttachment[]} }) {
   const [gender, setGender] = useState<"" | "男装" | "女装">(correction?.item.gender ?? "");
   const [styleName, setStyleName] = useState(correction?.item.styleName ?? "");
+  const [additionalMerchandiserUserId, setAdditionalMerchandiserUserId] = useState("");
+  const [merchandisers, setMerchandisers] = useState<readonly {userId:string;displayName:string}[]>([]);
   const [styleCatalog, setStyleCatalog] = useState<readonly { styleId: string; styleName: string }[]>([]);
   const [estimatedCutPieceSendDate, setEstimatedCutPieceSendDate] = useState(correction?.item.estimatedCutPieceSendDate ?? "");
   const [deliveryDate, setDeliveryDate] = useState(correction?.item.deliveryDate ?? "");
@@ -480,7 +487,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
   const [correctionReason, setCorrectionReason] = useState("");
   const [busy, setBusy] = useState(false);
   const feedback = useSubmissionFeedback(setBusy);
-  const [message, setMessage] = useState("填写订单资料并上传现场或款式照片。");
+  const [message, setMessage] = useState("");
   const createKey = useRef<string | null>(null);
   const previewUrls = useRef<string[]>([]);
   const restoredDraftUserId = useRef("");
@@ -504,12 +511,22 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
   }, [styleName, canCreate]);
 
   useEffect(() => {
+    if (correction || !canCreate) return;
+    let mounted = true;
+    void request("sourcing/merchandisers",SourcingMerchandiserOptionsSchema)
+      .then(items => { if (mounted) setMerchandisers(items); })
+      .catch(() => { if (mounted) setMessage("跟单列表加载失败，请刷新后重试。"); });
+    return () => { mounted = false; };
+  }, [canCreate,correction]);
+
+  useEffect(() => {
     if (correction || !user?.id || restoredDraftUserId.current === user.id) return;
     restoredDraftUserId.current = user.id;
     const localDraft = readLocalSourcingDraft(user.id);
     if (!localDraft) return;
     setGender(localDraft.gender);
     setStyleName(localDraft.styleName);
+    setAdditionalMerchandiserUserId(localDraft.additionalMerchandiserUserId);
     setEstimatedCutPieceSendDate(localDraft.estimatedCutPieceSendDate);
     setDeliveryDate(localDraft.deliveryDate);
     setLineItems([...localDraft.lineItems]);
@@ -691,6 +708,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
     const draft: LocalSourcingDraft = {
       gender,
       styleName,
+      additionalMerchandiserUserId,
       estimatedCutPieceSendDate,
       deliveryDate,
       lineItems,
@@ -720,7 +738,8 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
     const requestKey = createKey.current ?? createClientRequestId();
     createKey.current = requestKey;
     const body = JSON.stringify({ gender, styleName: styleName.trim(), estimatedCutPieceSendDate, deliveryDate,
-      lineItems: normalizedLines, ...(correction ? {expectedVersion:correction.item.version,reason:correctionReason.trim()} : {daxingUnitPrice: normalizedDaxingPrice}),
+      lineItems: normalizedLines, ...(correction ? {expectedVersion:correction.item.version,reason:correctionReason.trim()} : {daxingUnitPrice: normalizedDaxingPrice,
+        ...(additionalMerchandiserUserId ? {additionalMerchandiserUserId} : {})}),
       attachmentIds: images.map(image => image.attachmentId) });
     await feedback.run(async () => {
       // Same snapshot and key on recovery: the existing API checks its idempotency record first.
@@ -739,7 +758,6 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
       <Header
         iconRoute="/ui/sourcing/create"
         title={correction ? "修改订单资料" : "创建订单"}
-        subtitle="跟单登记订单资料、款色数量和照片，提交后由 IE 首次给加工报价。"
         badge="外发定价&选厂"
       />
       {correction ? <p role="status">退回原因：{correction.item.correctionReason}<a href={detailHref(correction.item)}>返回订单</a></p> : null}
@@ -747,23 +765,23 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
       <Surface className="sourcing-create-card">
         <fieldset className="sourcing-submission-fields" disabled={busy || feedback.uncertain}>
         <div className="section-title">
-          <div><h2>订单资料</h2><p>请按实际订单填写；预算价仅供内部核价。</p></div>
+          <div><h2>订单资料</h2></div>
           <StatusBadge tone="info">跟单提交</StatusBadge>
         </div>
         <div className="sourcing-form-grid">
-          <div className="sourcing-order-classification">
+          <div className={`sourcing-order-classification${correction ? "" : " sourcing-order-classification--additional"}`}>
             <label><span>性别（必填）</span><select {...feedback.field("sourcing-create-gender")} required value={gender} onChange={(event) => { setGender(event.target.value as typeof gender); createKey.current = null; }}><option value="">请选择</option><option value="男装">男装</option><option value="女装">女装</option></select></label>
             <label><span>款式（必填）</span><input {...feedback.field("sourcing-create-style")} required list="sourcing-style-options" value={styleName} maxLength={100} onChange={(event) => { setStyleName(event.target.value); createKey.current = null; }} placeholder="搜索或输入，如梭织短裤" /></label>
+            {!correction ? <label><span>添加跟单（选填）</span><select value={additionalMerchandiserUserId} onChange={event=>{setAdditionalMerchandiserUserId(event.target.value);createKey.current=null;}}><option value="">不添加</option>{additionalMerchandiserUserId && !merchandisers.some(person=>person.userId===additionalMerchandiserUserId) ? <option value={additionalMerchandiserUserId}>所选跟单已失效，请重选</option> : null}{merchandisers.map(person=><option key={person.userId} value={person.userId}>{person.displayName}</option>)}</select></label> : null}
             <datalist id="sourcing-style-options">{styleCatalog.map((style) => <option key={style.styleId} value={style.styleName} />)}</datalist>
           </div>
           <label><span>预计裁片发出日期（工厂发出，必填）</span><input type="date" required aria-required="true" value={estimatedCutPieceSendDate} {...feedback.field("sourcing-create-send-date")} onChange={(event) => { setEstimatedCutPieceSendDate(event.target.value); createKey.current = null; }} /></label>
           <label><span>要求交货日期（到工厂，必填）</span><input type="date" required aria-required="true" value={deliveryDate} {...feedback.field("sourcing-create-delivery-date")} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
-          <label><span>预算价（内部，必填）</span><input readOnly={!!correction} {...feedback.field("sourcing-create-budget")} value={activeCreateInput === "daxing" ? daxingUnitPrice : newSourcingPriceDisplay(daxingUnitPrice)} onFocus={() => setActiveCreateInput("daxing")} onBlur={() => setActiveCreateInput(null)} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="必填，最多2位有效小数；仅内部授权岗位可见" aria-invalid={!isNewSourcingPrice(daxingUnitPrice)} /><small>{!isNewSourcingPrice(daxingUnitPrice) ? "请填写大于0且最多2位有效小数的预算价。" : "仅内部授权岗位可见，不进入供应商合同。"}</small></label>
+          <label><span>预算价（内部，必填）</span><input readOnly={!!correction} {...feedback.field("sourcing-create-budget")} value={activeCreateInput === "daxing" ? daxingUnitPrice : newSourcingPriceDisplay(daxingUnitPrice)} onFocus={() => setActiveCreateInput("daxing")} onBlur={() => setActiveCreateInput(null)} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="请输入预算价" aria-invalid={!isNewSourcingPrice(daxingUnitPrice)} /></label>
           <section className="sourcing-line-editor sourcing-form-wide" aria-label="订单款色明细">
             <div className="sourcing-line-editor__heading">
               <div>
                 <strong>款色明细</strong>
-                <small>一份订单可登记多行款色；加工报价由 IE 首次填写，总数量由各行自动汇总。</small>
               </div>
               <div className="sourcing-line-editor__actions">
                 <StatusBadge tone="info">合计 {formatBusinessDecimal(lineItems.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0))} 件</StatusBadge>
@@ -814,7 +832,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
         </section>
         {correction ? <label className="sourcing-form-wide"><span>修改说明（必填）</span><textarea {...feedback.field("sourcing-correction-reason")} value={correctionReason} maxLength={500} onChange={event=>{setCorrectionReason(event.target.value);createKey.current=null;}} /></label> : null}
         <div className="sourcing-submit-row">
-          <p role="status">{duplicateLinesMessage ?? message}</p>
+          {duplicateLinesMessage || message ? <p role="status">{duplicateLinesMessage ?? message}</p> : null}
           {uploadFailed && !uploading ? <p role="alert">本次图片上传未完成，请重新选择图片上传成功后再提交。</p> : null}
           <ActionBar className="sourcing-create-actions">
             {!correction ? <button className="dx-button dx-button--secondary" type="button" disabled={busy || uploading} onClick={saveLocalDraft}>保存草稿</button> : null}
@@ -1174,7 +1192,7 @@ function OrderDetailPage({
 
   const moduleWritable = moduleCanWrite(user, "sourcing");
   const canSupplementImages = user?.isRoot === true
-    || moduleWritable && user?.businessRoles?.some((role) => SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(
+    || moduleWritable && (item?.createdBy === user?.id || user?.businessRoles?.some(role => role!=="order_merchandiser" && SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(role as (typeof SOURCING_IMAGE_SUPPLEMENT_ROLES)[number]))) && user?.businessRoles?.some((role) => SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(
       role as (typeof SOURCING_IMAGE_SUPPLEMENT_ROLES)[number],
     )) === true;
 
@@ -1389,11 +1407,12 @@ function OrderDetailPage({
     finally {setBusy(false);}
   };
   const canOwner = canAct(user, "owner_group", "sourcing:owner:approve");
-  const canMerchandiserTransfer = canAct(user, "order_merchandiser", "sourcing:factory_change:request");
+  const canMerchandiserTransfer = item?.createdBy === user?.id && canAct(user, "order_merchandiser", "sourcing:factory_change:request");
   const canManagementTransfer = canManage;
   const canOwnerTransfer = canOwner;
   const canReviewManagementTransfer = canAct(user, "production_management", "sourcing:factory_change:verify");
   const canFinance = canAct(user, "factory_payables", "sourcing:finance:reconcile");
+  const hideFinanceForMerchandiser = isMerchandiserOnly(user?.businessRoles,user?.isRoot);
   const canReadContractData = user?.isRoot === true
     || user?.capabilities.includes("supplier_contract_data:read") === true;
   const hasPendingFactoryChange = factoryChange?.status === "pending_management"
@@ -1546,8 +1565,10 @@ function OrderDetailPage({
 
   const mainStep = statusStep(item.status);
   const step = factoryChange?.status === "pending_owner" ? Math.max(mainStep, 3) : mainStep;
-  const activeNode = WORKFLOW[Math.min(step, WORKFLOW.length - 1)]?.key ?? "finance";
-  const requestedNode = sourcingWorkflowNodeFromSearch();
+  const visibleWorkflow = hideFinanceForMerchandiser ? WORKFLOW.filter(node=>node.key!=="finance") : WORKFLOW;
+  const activeNode = hideFinanceForMerchandiser && step>=4 ? "owner" : WORKFLOW[Math.min(step,WORKFLOW.length-1)]?.key ?? "finance";
+  const requestedNodeValue = sourcingWorkflowNodeFromSearch();
+  const requestedNode = hideFinanceForMerchandiser && requestedNodeValue==="finance" ? null : requestedNodeValue;
   const requestedIndex = requestedNode ? WORKFLOW.findIndex((node) => node.key === requestedNode) : -1;
   const requestedNodeIsAccessible = requestedNode !== null
     && (item.status === "closed" || requestedIndex <= step);
@@ -1637,6 +1658,7 @@ function OrderDetailPage({
       {!item.decision && item.processes.length > 0 ? <p className="sourcing-order-meta">工艺及承包范围：{item.processes.join("、")}</p> : null}
       <div className="sourcing-detail-layout">
         <KeyFacts className="sourcing-key-facts" aria-label="外发定价选厂订单核心信息">
+          <div><dt>跟单</dt><dd>{item.merchandiserName ?? "历史未维护"}</dd></div>
           <div className="sourcing-key-facts__factory"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
           <div><dt>总数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
           <div><dt>生产总额</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.totalAmount) : "—"}</dd></div>
@@ -1667,17 +1689,17 @@ function OrderDetailPage({
 
           <section className="sourcing-workflow-section" aria-label="订单流程">
             <div className="rework-workflow__heading rework-detail-panel-title rework-detail-desktop-panel-heading">
-              <h2>订单流程</h2><span className="rework-workflow__step-count">当前步骤 {Math.min(step + 1, WORKFLOW.length)} / {WORKFLOW.length}</span>
+              <h2>订单流程</h2><span className="rework-workflow__step-count">{hideFinanceForMerchandiser ? "审批环节" : "当前步骤"} {Math.min(step + 1, visibleWorkflow.length)} / {visibleWorkflow.length}</span>
             </div>
             <button className="rework-detail-mobile-panel-toggle rework-detail-mobile-workflow-toggle" type="button"
               aria-controls="sourcing-workflow-content" aria-expanded={mobileWorkflowExpanded}
               onClick={() => setMobileWorkflowExpanded(value => !value)}>
-              <span><strong>订单流程</strong><small>{WORKFLOW[Math.min(step, WORKFLOW.length - 1)]?.label}</small></span>
-              <span><small>{Math.min(step + 1, WORKFLOW.length)}/{WORKFLOW.length}</small><b aria-hidden="true">{mobileWorkflowExpanded ? "−" : "+"}</b></span>
+              <span><strong>订单流程</strong><small>{hideFinanceForMerchandiser && step>=4 ? STATUS_LABELS[item.status] : WORKFLOW[Math.min(step, WORKFLOW.length - 1)]?.label}</small></span>
+              <span><small>{Math.min(step + 1, visibleWorkflow.length)}/{visibleWorkflow.length}</small><b aria-hidden="true">{mobileWorkflowExpanded ? "−" : "+"}</b></span>
             </button>
             <div id="sourcing-workflow-content" className={`rework-detail-mobile-collapsible${mobileWorkflowExpanded ? " is-expanded" : ""}`}>
               <WorkflowRail className="sourcing-workflow-rail" ref={workflowRailRef}>
-              {WORKFLOW.map((node, index) => {
+              {visibleWorkflow.map((node, index) => {
                 const state: SourcingWorkflowNodeState = item.status === "closed" || index < step ? "completed" : index === step ? "current" : "future";
                 const content = <>
                   <b aria-hidden="true">{state === "completed" ? "✓" : index + 1}</b>
@@ -1878,7 +1900,7 @@ function OrderDetailPage({
             </> : <p>批准事实正在准备合同，请刷新后查看。</p>}
           </Surface> : null}
 
-          {item.status === "pending_finance_reconciliation" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview sourcing-finance-panel">
+          {!hideFinanceForMerchandiser && item.status === "pending_finance_reconciliation" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview sourcing-finance-panel">
             <h2>05 · 财务核对</h2>
             <p>财务在付款、对账时核对系统信息；核对不影响跟单派单和生产。加工厂、单价、数量及总额只读。</p>
             {item.decision ? <dl className="sourcing-finance-reference" aria-label="老板批准的选厂决定">
@@ -1927,7 +1949,7 @@ function OrderDetailPage({
             </div> : <p>当前账号仅可查看，本节点由财务核对。</p>}
           </Surface> : null}
 
-                    {item.status === "pending_exception_verification" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview">
+                    {!hideFinanceForMerchandiser && item.status === "pending_exception_verification" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview">
             <h2>05 · 财务差异核实</h2>
             <p>财务发现：{latestFinance?.differenceFields.map((field) => ({ supplier: "供应商", unit_price: "单价", quantity: "数量", total_amount: "总额" })[field]).join("、") || "差异项待确认"}。记录和证据已保留，老板已收到信息通知。</p>
             {canVerifyException ? <div className="sourcing-owner-actions">

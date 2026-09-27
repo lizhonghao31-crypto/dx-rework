@@ -161,7 +161,7 @@ describe("sourcing PR03 contracts", () => {
     expect(service).toContain("canViewSourcingDaxingPrice(actor, row.created_by)");
     expect(contracts).toContain("daxingUnitPrice: z.string().optional()");
     expect(contracts).not.toMatch(/RecordSourcingContractSchema[\s\S]{0,400}daxingUnitPrice/);
-    expect(page).toContain("加工报价由 IE 首次填写");
+    expect(page).not.toContain("加工报价由 IE 首次填写");
     expect(page).toContain("预计裁片发出日期");
     expect(page).not.toContain("current[0]?.externalUnitPrice");
     expect(page).toContain("删除第");
