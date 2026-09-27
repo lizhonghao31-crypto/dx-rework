@@ -452,7 +452,7 @@ export function SourcingWorkspacePage({
       {view === "history" ? <OrderListPage mode="history" user={user} /> : null}
       {view === "detail" && sourcingCaseId
         ? (new URLSearchParams(window.location.search).get("view") === "node-history" && sourcingWorkflowNodeFromSearch()
-          && !(sourcingWorkflowNodeFromSearch()==="finance" && canAct(user,"order_merchandiser","sourcing:inquiry:create") && !canAct(user,"factory_payables","sourcing:finance:reconcile"))
+          && !(sourcingWorkflowNodeFromSearch()==="finance" && user?.businessRoles?.includes("order_merchandiser") && !canAct(user,"factory_payables","sourcing:finance:reconcile"))
           ? <SourcingNodeHistoryPage sourcingCaseId={sourcingCaseId} node={sourcingWorkflowNodeFromSearch()!} returnTo={todoReturnPath(window.location.search) ?? sourcingReturnPath(window.location.search)} />
           : <OrderDetailPage sourcingCaseId={sourcingCaseId} user={user} />)
         : null}
@@ -1411,7 +1411,7 @@ function OrderDetailPage({
   const canOwnerTransfer = canOwner;
   const canReviewManagementTransfer = canAct(user, "production_management", "sourcing:factory_change:verify");
   const canFinance = canAct(user, "factory_payables", "sourcing:finance:reconcile");
-  const hideFinanceForMerchandiser = canAct(user,"order_merchandiser","sourcing:inquiry:create") && !canFinance && !user?.isRoot;
+  const hideFinanceForMerchandiser = user?.businessRoles?.includes("order_merchandiser") === true && !canFinance && !user?.isRoot;
   const canReadContractData = user?.isRoot === true
     || user?.capabilities.includes("supplier_contract_data:read") === true;
   const hasPendingFactoryChange = factoryChange?.status === "pending_management"
