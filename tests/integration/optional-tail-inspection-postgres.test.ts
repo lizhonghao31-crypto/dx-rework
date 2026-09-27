@@ -186,7 +186,7 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
     const receivingBatchId = randomUUID();
     if (kind === "inhouse_finishing") {
       await database.query(
-        "INSERT INTO receiving_batches(receiving_batch_id,style_no,created_by,delivery_note_quantity) VALUES($1,$2,$3,100)",
+        "INSERT INTO receiving_batches(receiving_batch_id,style_no,created_by,delivery_note_quantity,document_quantity_adjustment,actual_quantity_adjustment) VALUES($1,$2,$3,100,100,100)",
         [receivingBatchId, `test-optional-tail-n05-${kind}`, ids.tail],
       );
     }
