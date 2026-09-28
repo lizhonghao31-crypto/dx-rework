@@ -44,6 +44,48 @@ describe("isolated Acceptance deployment contract", () => {
     expect(workflow).toContain('[[ "$ACCEPTANCE_PUBLIC_URL" != https://dxerp.org.cn* ]]');
   });
 
+  it("loads Acceptance-only secrets through the guarded app env allowlist", () => {
+    const lib = read("scripts/deploy/lib.sh");
+    expect(lib).toContain("ACCEPTANCE_LAB_ENABLED");
+    expect(lib).toContain("ACCEPTANCE_LAB_SECRET");
+    const start = read("scripts/deploy/start-acceptance-api.sh");
+    expect(start.indexOf("load_app_config")).toBeLessThan(start.indexOf("ACCEPTANCE_LAB_ENABLED"));
+  });
+
+  it("mints one-time control credentials only from the isolated runtime", () => {
+    const mint = read("scripts/deploy/mint-acceptance-control-code.sh");
+    expect(mint).toContain("/opt/dx-rework-acceptance");
+    expect(mint).toContain("mintAcceptanceControlCode");
+    expect(mint).toContain("ACCEPTANCE_LAB_SECRET");
+    expect(mint).not.toContain("/opt/dx-rework/current");
+  });
+
+  it("seeds only deterministic digital-production roots into an Acceptance database", () => {
+    const seed = read("scripts/deploy/seed-acceptance-production-fixtures.sh");
+    expect(seed).toContain("select current_database()");
+    expect(seed).toContain("(acceptance|accept|uat|test)");
+    expect(seed).toContain("production_order_roots");
+    expect(seed).toContain("digital_production_v1");
+    expect(seed).toContain("ON CONFLICT(production_order_id) DO NOTHING");
+    expect(seed).not.toContain("sourcing_cases");
+    expect(seed).not.toContain("rework_orders");
+  });
+
+  it("runs live browser role regression and uploads exact-SHA evidence after a real Acceptance deploy", () => {
+    const workflow = read(".github/workflows/acceptance-release.yml");
+    const browser = read("scripts/acceptance/live-browser-regression.mjs");
+    expect(workflow).toContain("Install pinned Chromium regression runner");
+    expect(workflow).toContain("mint-acceptance-control-code.sh");
+    expect(workflow).toContain("seed-acceptance-production-fixtures.sh");
+    expect(workflow).toContain("acceptance-validation-${{ inputs.git_sha }}");
+    expect(workflow).toContain("candidate-lock.json");
+    expect(browser).toContain("运行全部角色权限矩阵");
+    expect(browser).toContain("[UAT] Root");
+    expect(browser).toContain("Acceptance approved matrix has failures");
+    expect(browser).toContain("dxerp.org.cn");
+    expect(browser).not.toContain("ACCEPTANCE_LAB_SECRET");
+  });
+
   it("provides an Acceptance-only nginx template and safe configuration examples", () => {
     const nginx = read("infra/nginx/dx-rework-acceptance.conf.example");
     const app = read("infra/acceptance/app.env.example");
