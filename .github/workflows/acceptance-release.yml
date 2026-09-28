@@ -105,7 +105,7 @@ jobs:
     needs: gate
     if: ${{ inputs.dry_run == false }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     environment: dx-rework-acceptance
     steps:
       - name: Checkout deployment transport script
@@ -159,3 +159,72 @@ jobs:
           curl -fsS "${ACCEPTANCE_PUBLIC_URL%/}/health/ready" >/dev/null
           curl -fsS "${ACCEPTANCE_PUBLIC_URL%/}/version" | grep -F "$TARGET_SHA" >/dev/null
           curl -fsS "${ACCEPTANCE_PUBLIC_URL%/}/ui/acceptance-lab" | grep -qi '<html'
+
+      - name: Set up Node 22 for live browser regression
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+
+      - name: Install pinned Chromium regression runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          runner="$RUNNER_TEMP/acceptance-playwright"
+          mkdir -p "$runner"
+          cd "$runner"
+          npm init -y >/dev/null
+          npm install --no-save --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+          cp "$GITHUB_WORKSPACE/scripts/acceptance/live-browser-regression.mjs" "$runner/live-browser-regression.mjs"
+
+      - name: Run synthetic seed and live Acceptance regression
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.DX_REWORK_SSH_HOST }}
+          SSH_USER: ${{ secrets.DX_REWORK_SSH_USER }}
+          ACCEPTANCE_PUBLIC_URL: ${{ secrets.DX_REWORK_ACCEPTANCE_PUBLIC_URL }}
+          TARGET_SHA: ${{ inputs.git_sha }}
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/acceptance-validation"
+          mkdir -p "$evidence"
+
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" \
+            /opt/dx-rework-acceptance/current/scripts/deploy/seed-acceptance-production-fixtures.sh \
+            > "$evidence/synthetic-fixtures.json"
+
+          CONTROL_CODE="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" \
+            /opt/dx-rework-acceptance/current/scripts/deploy/mint-acceptance-control-code.sh)"
+          test -n "$CONTROL_CODE"
+          echo "::add-mask::$CONTROL_CODE"
+
+          cd "$RUNNER_TEMP/acceptance-playwright"
+          ACCEPTANCE_PUBLIC_URL="$ACCEPTANCE_PUBLIC_URL" \
+          ACCEPTANCE_CONTROL_CODE="$CONTROL_CODE" \
+          ACCEPTANCE_EXPECTED_SHA="$TARGET_SHA" \
+          ACCEPTANCE_EVIDENCE_DIR="$evidence" \
+            node live-browser-regression.mjs
+
+          node -e '
+const fs=require("fs");
+const [path,sha,runId]=process.argv.slice(1);
+const result=JSON.parse(fs.readFileSync(path,"utf8"));
+if(result.gitSha!==sha)process.exit(2);
+fs.writeFileSync(path.replace("acceptance-result.json","candidate-lock.json"),JSON.stringify({
+  formatVersion:1,
+  gitSha:sha,
+  githubRunId:runId,
+  schemaVersion:result.schemaVersion,
+  expectedSchemaVersion:result.expectedSchemaVersion,
+  validatedAt:result.completedAt,
+},null,2)+"\\n");
+' "$evidence/acceptance-result.json" "$TARGET_SHA" "$GITHUB_RUN_ID"
+
+      - name: Upload exact-SHA Acceptance validation evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-validation-${{ inputs.git_sha }}
+          path: ${{ runner.temp }}/acceptance-validation
+          if-no-files-found: error
+          retention-days: 30
