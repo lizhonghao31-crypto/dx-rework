@@ -215,6 +215,7 @@
     { "version": "0213_rework_kind_source_link", "checksum": "b4628901a0f89edd9f70819ae7365bf41f116c26beddfebe11ee2d304aa7f411" },
     { "version": "0214_inhouse_finishing_lifecycle", "checksum": "2408425c134365b454584bc40407a35035eedf1dfda329396cfdaedd16984215" },
     { "version": "0215_sourcing_additional_merchandiser", "checksum": "c1e561c3ab67bc29e368a44d7d8fe2824942daed0b0c7f1fb042c5d15c81192e" },
-    { "version": "0216_digital_production_order_roots", "checksum": "7bfc6827d8b989a53433737d0d78d1ba27b961623c2654effaed683e1e3e11e6" }
+    { "version": "0216_digital_production_order_roots", "checksum": "7bfc6827d8b989a53433737d0d78d1ba27b961623c2654effaed683e1e3e11e6" },
+    { "version": "0217_digital_production_node_clocks", "checksum": "491537fec56b3d2cbcdd3bc3f10d6a4539324757a648d82c70317e04106a73f8" }
   ]
 }
