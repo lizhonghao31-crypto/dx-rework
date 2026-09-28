@@ -1,0 +1,86 @@
+# Dedicated Acceptance/UAT vhost template.
+# Render placeholders before enabling. Never point this vhost at /opt/dx-rework
+# or port 3201; both belong to the production/pilot runtime.
+server {
+    listen 80;
+    server_name __ACCEPTANCE_SERVER_NAME__;
+    access_log /opt/dx-rework-acceptance/logs/nginx-access.log;
+    error_log  /opt/dx-rework-acceptance/logs/nginx-error.log warn;
+    return 308 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name __ACCEPTANCE_SERVER_NAME__;
+    ssl_certificate __ACCEPTANCE_TLS_CERT__;
+    ssl_certificate_key __ACCEPTANCE_TLS_KEY__;
+
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header X-Frame-Options SAMEORIGIN always;
+
+    root /opt/dx-rework-acceptance/frontend/current;
+    index index.html;
+
+    access_log /opt/dx-rework-acceptance/logs/nginx-access.log;
+    error_log  /opt/dx-rework-acceptance/logs/nginx-error.log warn;
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types application/javascript application/json text/css text/plain;
+
+    location = /health/live {
+        proxy_set_header X-Request-Id $request_id;
+        proxy_pass http://127.0.0.1:3202/health/live;
+    }
+
+    location = /health/ready {
+        proxy_set_header X-Request-Id $request_id;
+        proxy_pass http://127.0.0.1:3202/health/ready;
+    }
+
+    location = /version {
+        proxy_set_header X-Request-Id $request_id;
+        proxy_pass http://127.0.0.1:3202/version;
+    }
+
+    location = /auth/qr/relay {
+        access_log off;
+        error_log /dev/null emerg;
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+        try_files /index.html =404;
+    }
+
+    location = /api/auth/qr/callback {
+        access_log off;
+        error_log /dev/null emerg;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-Id $request_id;
+        proxy_pass http://127.0.0.1:3202/auth/qr/callback;
+    }
+
+    location /api/ {
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-Id $request_id;
+        proxy_pass http://127.0.0.1:3202/;
+    }
+
+    location ^~ /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    location / {
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+        try_files $uri $uri/ /index.html;
+    }
+}
