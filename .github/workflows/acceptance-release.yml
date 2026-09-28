@@ -205,20 +205,7 @@ jobs:
           ACCEPTANCE_EVIDENCE_DIR="$evidence" \
             node live-browser-regression.mjs
 
-          node -e '
-const fs=require("fs");
-const [path,sha,runId]=process.argv.slice(1);
-const result=JSON.parse(fs.readFileSync(path,"utf8"));
-if(result.gitSha!==sha)process.exit(2);
-fs.writeFileSync(path.replace("acceptance-result.json","candidate-lock.json"),JSON.stringify({
-  formatVersion:1,
-  gitSha:sha,
-  githubRunId:runId,
-  schemaVersion:result.schemaVersion,
-  expectedSchemaVersion:result.expectedSchemaVersion,
-  validatedAt:result.completedAt,
-},null,2)+"\\n");
-' "$evidence/acceptance-result.json" "$TARGET_SHA" "$GITHUB_RUN_ID"
+          node -e 'const fs=require("fs");const [path,sha,runId]=process.argv.slice(1);const result=JSON.parse(fs.readFileSync(path,"utf8"));if(result.gitSha!==sha)process.exit(2);fs.writeFileSync(path.replace("acceptance-result.json","candidate-lock.json"),JSON.stringify({formatVersion:1,gitSha:sha,githubRunId:runId,schemaVersion:result.schemaVersion,expectedSchemaVersion:result.expectedSchemaVersion,validatedAt:result.completedAt},null,2)+"\\n");' "$evidence/acceptance-result.json" "$TARGET_SHA" "$GITHUB_RUN_ID"
 
       - name: Upload exact-SHA Acceptance validation evidence
         if: ${{ always() }}
