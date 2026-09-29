@@ -219,6 +219,7 @@
     { "version": "0217_digital_production_node_clocks", "checksum": "491537fec56b3d2cbcdd3bc3f10d6a4539324757a648d82c70317e04106a73f8" },
     { "version": "0218_digital_production_identity", "checksum": "f8b0d57fea1690f35a73d1f96660f9418f3984f708a89ffa5ee0c8625bbff1e0" },
     { "version": "0219_digital_production_access", "checksum": "c658d487c51af50a685a74ee2e171c2f1f36d9441e53cda73d6b0e5cad194274" },
-    {"version": "0220_digital_production_tasks", "checksum": "33c2091888b53ae3e386c448b9c10651fac59fbd047003894faa67c86db45f0c"}
+    {"version": "0220_digital_production_tasks", "checksum": "33c2091888b53ae3e386c448b9c10651fac59fbd047003894faa67c86db45f0c"},
+    {"version": "0221_digital_production_notifications", "checksum": "f97b46f3e3bd86bf764e7a2d8d2f523c2d0ef07a207c35d7bed62c9f222d1bda"}
   ]
 }

@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./digital-production-tasks": { "types": "./src/digital-production-tasks.ts", "import": "./dist/digital-production-tasks.js" },
+    "./digital-production-tasks": {
+      "types": "./src/digital-production-tasks.ts",
+      "import": "./dist/digital-production-tasks.js"
+    },
     ".": {
       "types": "./src/compat-index.ts",
       "import": "./dist/compat-index.js"
@@ -80,6 +83,10 @@
     "./digital-production": {
       "types": "./src/digital-production.ts",
       "import": "./dist/digital-production.js"
+    },
+    "./digital-production-notifications": {
+      "types": "./src/digital-production-notifications.ts",
+      "import": "./dist/digital-production-notifications.js"
     }
   },
   "scripts": {

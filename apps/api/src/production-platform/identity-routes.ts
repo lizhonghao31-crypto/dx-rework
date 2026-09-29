@@ -1,3 +1,5 @@
+import { registerDigitalNotificationRoutes } from "./notification-routes.js";
+import type { DigitalProductionNotificationService } from "./notification-service.js";
 import { registerDigitalTaskRoutes } from "./task-routes.js";
 import type { DigitalProductionTaskService } from "./task-service.js";
 import { registerDigitalAccessRoutes } from "./access-routes.js";
@@ -13,6 +15,7 @@ import { assertIdentityActor, type DigitalProductionIdentityService } from "./id
 
 export type DigitalIdentityDependencies = {
   authenticate(token: string | undefined): Promise<AuthUser>; root?: RootAuthority;
+  notificationService?: DigitalProductionNotificationService;
   taskService?: DigitalProductionTaskService; accessService?: DigitalProductionAccessService; service: DigitalProductionIdentityService; creationEnabled: boolean;
 };
 const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
@@ -21,6 +24,7 @@ const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   return result.data;
 };
 export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies: DigitalIdentityDependencies): void {
+  if (dependencies.notificationService) registerDigitalNotificationRoutes(app, dependencies, dependencies.notificationService);
   if (dependencies.taskService) registerDigitalTaskRoutes(app, dependencies, dependencies.taskService);
   if (dependencies.accessService) registerDigitalAccessRoutes(app, dependencies, dependencies.accessService);
   const actor = async (request: FastifyRequest) => {

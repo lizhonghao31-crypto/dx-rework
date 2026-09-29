@@ -1,3 +1,5 @@
+import { DigitalProductionNotificationService } from "./production-platform/notification-service.js";
+import { DigitalNotificationRuntime } from "./production-platform/notification-runtime.js";
 import { DigitalProductionTaskService } from "./production-platform/task-service.js";
 import { DigitalProductionAccessService } from "./production-platform/access-service.js";
 import { DigitalProductionIdentityService } from "./production-platform/identity-service.js";
@@ -144,7 +146,8 @@ const attachments = new AttachmentService(database, storage, {
 });
 const productionClosure = new ProductionClosureService(database,rootAuthority);
 const sampleFiles = new SampleAttachmentService(database);
-const todoService = new TodoService(database,undefined,undefined,productionClosure);
+const digitalNotifications = config.digitalProduction?.enabled ? new DigitalProductionNotificationService(database) : undefined;
+const todoService = new TodoService(database,undefined,undefined,productionClosure,digitalNotifications);
 const todoProjection = new RootAwareTodoProjectionService(todoService);
 const patternOrders = new PatternRoomOrderService(database, todoProjection);
 const cuttingService = new CuttingService(database);
@@ -227,7 +230,7 @@ const externalResponsibilityService = new ExternalResponsibilityApplicationServi
 const wageService = new WageService(database, undefined, undefined, todoProjection);
 const reportingService = new ManagementReportingService(database);
 const app = buildApp({
-  ...(config.digitalProduction?.enabled ? { digitalIdentity: { taskService: new DigitalProductionTaskService(database), accessService: new DigitalProductionAccessService(database), authenticate: (token: string | undefined) => auth.authenticate(token), root: rootAuthority, service: new DigitalProductionIdentityService(database, config.digitalProduction.creationEnabled), creationEnabled: config.digitalProduction.creationEnabled } } : {}),
+  ...(config.digitalProduction?.enabled ? { digitalIdentity: { ...(digitalNotifications ? { notificationService: digitalNotifications } : {}), taskService: new DigitalProductionTaskService(database), accessService: new DigitalProductionAccessService(database), authenticate: (token: string | undefined) => auth.authenticate(token), root: rootAuthority, service: new DigitalProductionIdentityService(database, config.digitalProduction.creationEnabled), creationEnabled: config.digitalProduction.creationEnabled } } : {}),
   operationDiagnostics: (row) => recordOperationDiagnostic(database,row),
   config,
   checkDatabase: () => checkDatabase(database),
@@ -421,6 +424,7 @@ const app = buildApp({
 });
 registerDatabasePoolErrorHandler(database, app.log);
 
+const digitalNotificationRuntime = digitalNotifications ? new DigitalNotificationRuntime(digitalNotifications, app.log, config.digitalProduction?.notificationIntervalMs) : undefined;
 const runtimeOperationalMonitor = new RuntimeOperationalMonitor(database, app.log);
 
 const todoProvider = config.todoRuntime.deliveryEnabled
@@ -466,6 +470,7 @@ async function shutdown(signal: string): Promise<void> {
   if (attachmentCleanupTimer) clearInterval(attachmentCleanupTimer);
   await runtimeOperationalMonitor.stop();
   await todoRuntime.stop();
+  await digitalNotificationRuntime?.stop();
   await app.close();
   await database.end();
 }
@@ -477,6 +482,7 @@ try {
   await app.listen({ host: config.host, port: config.port });
   runtimeOperationalMonitor.start();
   todoRuntime.start();
+  digitalNotificationRuntime?.start();
   void runAttachmentCleanup();
   attachmentCleanupTimer = setInterval(
     () => void runAttachmentCleanup(),
@@ -487,6 +493,7 @@ try {
   app.log.fatal({ err: error }, "API startup failed");
   await runtimeOperationalMonitor.stop();
   await todoRuntime.stop();
+  await digitalNotificationRuntime?.stop();
   await database.end();
   process.exitCode = 1;
 }
