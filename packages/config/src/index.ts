@@ -39,6 +39,8 @@ const EnvironmentSchema = z
     OWNER_BOOTSTRAP_SECRET: z.string().min(32).max(1024).optional(),
     ACCEPTANCE_LAB_ENABLED: BooleanTextSchema,
     ACCEPTANCE_LAB_SECRET: z.string().min(32).max(1024).optional(),
+    DIGITAL_PRODUCTION_ENABLED: BooleanTextSchema,
+    DIGITAL_PRODUCTION_CREATION_ENABLED: BooleanTextSchema,
     TODO_RUNTIME_ENABLED: BooleanTextSchema,
     TODO_DELIVERY_ENABLED: z.enum(["true", "false"]).optional(),
     TODO_TIMING_ENABLED: z.enum(["true", "false"]).optional(),
@@ -180,6 +182,7 @@ export type AppConfig = Readonly<{
     deliveryIntervalMs: number;
     timingIntervalMs: number;
   }>;
+  digitalProduction?: Readonly<{ enabled: boolean; creationEnabled: boolean }>;
   objectStorage: Readonly<{ enabled: boolean; region: string | undefined; endpoint: string | undefined; bucket: string | undefined; accessKeyId: string | undefined; accessKeySecret: string | undefined; privatePrefix: string; signedUrlTtlSeconds: number; maxUploadBytes: number }>;
   openai: Readonly<{ apiKey: string | undefined; visionModel: string }>;
 }>;
@@ -214,6 +217,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       enabled: result.data.ACCEPTANCE_LAB_ENABLED === "true",
       secret: result.data.ACCEPTANCE_LAB_SECRET,
     },
+    digitalProduction: { enabled: result.data.DIGITAL_PRODUCTION_ENABLED === "true", creationEnabled: result.data.DIGITAL_PRODUCTION_CREATION_ENABLED === "true" },
     todoRuntime: {
       enabled: (result.data.TODO_DELIVERY_ENABLED ?? result.data.TODO_RUNTIME_ENABLED) === "true"
         || (result.data.TODO_TIMING_ENABLED ?? result.data.TODO_RUNTIME_ENABLED) === "true",

@@ -15,6 +15,13 @@ const validEnvironment = {
 };
 
 describe("loadConfig", () => {
+  it("keeps digital production disabled by default and separates new creation from existing work", () => {
+    expect(loadConfig(validEnvironment).digitalProduction).toEqual({ enabled: false, creationEnabled: false });
+    expect(loadConfig({ ...validEnvironment, DIGITAL_PRODUCTION_ENABLED: "true" }).digitalProduction)
+      .toEqual({ enabled: true, creationEnabled: false });
+    expect(() => loadConfig({ ...validEnvironment, DIGITAL_PRODUCTION_ENABLED: "yes" })).toThrow(ConfigurationError);
+  });
+
   it("loads typed defaults without exposing source environment", () => {
     const config = loadConfig(validEnvironment);
     expect(config.port).toBe(3201);

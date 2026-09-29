@@ -1,3 +1,4 @@
+import { DigitalProductionPage } from "./digital-production-page.js";
 import { PatternOrderCreatePage } from "./pattern-order-create-page.js";
 import { CuttingDetailPage, CuttingListPage } from "./cutting-page.js";
 import { cuttingPageRequirements } from "./cutting-access.js";
@@ -270,7 +271,8 @@ export function App() {
   const sourcingOrderMatch = path.match(/^\/ui\/sourcing\/orders\/([0-9a-f-]{36})$/i);
   const cuttingOrderMatch = path.match(/^\/ui\/cutting\/orders\/([0-9a-f-]{36})$/i);
   let page;
-  if (path === "/ui/home") page = <HomeLanding />;
+  if (path === "/ui/digital-production") page = <Shell active="订单打板"><DigitalProductionPage /></Shell>;
+  else if (path === "/ui/home") page = <HomeLanding />;
   else if (path === "/ui/sourcing" || path === "/ui/sourcing/pending") page = <SourcingWorkspacePage view="pending" />;
   else if (path === "/ui/samples/handoff") page = <SampleHandoffPage />;
   else if (path === "/ui/samples") page = <SampleWorkspacePage />;
@@ -342,6 +344,7 @@ export function App() {
 
   const owner = { requiredRole: "owner_group" } as const;
 
+  if (path === "/ui/digital-production") return <AuthGate requiredRole="sample_designer" requiredCapability="pattern_room:orders:create">{page}</AuthGate>;
   if (path === "/ui/home") return <AuthGate>{page}</AuthGate>;
   if (path.startsWith("/ui/samples")) {
     if (path === "/ui/samples/handoff") return <AuthGate requiredRole="sample_administrative" requiredCapability="sample:view_basic">{page}</AuthGate>;
