@@ -34,6 +34,7 @@ const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
 const page = await context.newPage();
 let businessPage;
+let commandCenterPage;
 let matrixSummary = "";
 
 try {
@@ -77,6 +78,15 @@ try {
   if (businessPage.url().includes("/auth/denied")) throw new Error("Root business landing was denied");
   await businessPage.screenshot({ path: resolve(evidenceDir, "04-root-business.png"), fullPage: true });
 
+  commandCenterPage = await context.newPage();
+  await commandCenterPage.setViewportSize({ width: 1536, height: 960 });
+  await commandCenterPage.goto(new URL("ui/acceptance/production-command-center", base).toString(), { waitUntil: "domcontentloaded" });
+  await commandCenterPage.locator('[data-acceptance-command-center-ready="true"]').waitFor({ timeout: 30_000 });
+  const commandShell = commandCenterPage.locator(".production-command-shell");
+  await commandShell.screenshot({ path: resolve(evidenceDir, "05-production-command-center-desktop-1536x960.png") });
+  await commandCenterPage.setViewportSize({ width: 390, height: 844 });
+  await commandShell.screenshot({ path: resolve(evidenceDir, "06-production-command-center-mobile-390x844.png") });
+
   await page.getByRole("button", { name: "结束验收" }).click();
   await page.getByRole("heading", { name: "取得验收控制权限" }).waitFor({ timeout: 30_000 });
 
@@ -87,12 +97,14 @@ try {
     expectedSchemaVersion: version.expectedSchemaVersion ?? null,
     matrixSummary,
     rootLandingPath: new URL(businessPage.url()).pathname,
+    productionCommandCenterPath: "/ui/acceptance/production-command-center",
     completedAt: new Date().toISOString(),
   }, null, 2) + "\n");
 } catch (error) {
   await page.screenshot({ path: resolve(evidenceDir, "99-failure.png"), fullPage: true }).catch(() => undefined);
   throw error;
 } finally {
+  await commandCenterPage?.close().catch(() => undefined);
   await businessPage?.close().catch(() => undefined);
   await context.close();
   await browser.close();
