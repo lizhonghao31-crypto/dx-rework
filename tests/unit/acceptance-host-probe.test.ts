@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("Acceptance staging host probe", () => {
-  it("is manual, pilot-scoped and read-only on the remote host", async () => {
+  it("is manual, acceptance-scoped and read-only on the remote host", async () => {
     const workflow = await readFile(".github/workflows/acceptance-host-probe.yml", "utf8");
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).not.toMatch(/^\s+(push|pull_request):/m);
