@@ -39,7 +39,7 @@ for (const expression of [
 
 // Keep the integration branch subject to the same exact-Head gates as main.
 for (const [name, source] of [["Quick Gate", quick], ["Full Gate", full]]) {
-  const branches = source.match(/  pull_request:\n    branches:\n((?:      - [^\n]+\n)+)/)?.[1]
+  const branches = source.match(/ {2}pull_request:\n {4}branches:\n((?: {6}- [^\n]+\n)+)/)?.[1]
     .trim().split("\n").map(line => line.trim().slice(2));
   assert(JSON.stringify(branches) === JSON.stringify(["main", "release/digital-production-v1"]),
     `${name} must gate main and the approved digital-production integration branch only`);
