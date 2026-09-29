@@ -26,6 +26,9 @@ database_name="$(pg_exec psql "$DATABASE_URL" -XAtqc 'select current_database()'
 [[ "$database_name" =~ (^|[_-])(acceptance|accept|uat|test)([_-]|$) ]] ||
   die 'acceptance fixture seeding refused a non-acceptance database'
 
+DATABASE_URL="$DATABASE_URL" DINGTALK_CORP_ID="$DINGTALK_CORP_ID" \
+  node_exec "$DX_REWORK_ROOT/current/scripts/deploy/seed-acceptance-role-users.mjs" >/dev/null
+
 root_id="$(pg_exec psql "$DATABASE_URL" -XAtqc "
   SELECT identity.user_id
   FROM identity_mappings identity
