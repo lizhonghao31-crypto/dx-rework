@@ -235,7 +235,7 @@ export function ProductionCommandCenterView({ summary, orders, selectedOrderNo }
                 <div className="production-command-current-node-body">
                   <dl>
                     <div><dt>负责人</dt><dd>{selected.merchandiser}</dd></div>
-                    <div><dt>开始时间</dt><dd>{selected.nodeEnteredAt}</dd></div>
+                    <div><dt>进入时间</dt><dd>{selected.nodeEnteredAt}</dd></div>
                     <div><dt>标准时限</dt><dd>{selected.nodeLimit}</dd></div>
                     <div><dt>完成期限</dt><dd>{selected.nodeDeadline}</dd></div>
                     <div><dt>剩余时间</dt><dd><RiskBadge level={selected.nodeRisk}>{selected.nodeRemaining}</RiskBadge></dd></div>
