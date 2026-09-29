@@ -1,3 +1,4 @@
+import { DigitalProductionEntry } from "./digital-production-page.js";
 import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useState } from "react";
 
@@ -9,7 +10,9 @@ const ROLE_LABELS: Record<string, string> = {
   cutting_supervisor: "裁床主管",
   cutting_worker: "裁床工人",
   owner_group: "老板",
-  production_management: "生产管理",
+  production_management: "供应链总监",
+  development_clerk: "开发文员",
+  pattern_room_tail_inspector: "板房尾查",
   order_merchandiser: "订单跟单",
   factory_payables: "加工厂应付会计",
   finance_director: "财务总监",
@@ -68,6 +71,7 @@ export function PlatformHomePage() {
           <StatusBadge tone="success">组织内已认证</StatusBadge>
         </Surface>
       </header>
+      <DigitalProductionEntry />
       <section className="platform-home__modules" aria-label="可访问业务模块">
         {modules.map((module) => (
           <Surface className="platform-home__module" key={module.id}>

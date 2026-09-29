@@ -1328,7 +1328,7 @@ export class ReworkInitiationService {
       || !actor.authorizationCapabilities?.includes("tail_inspection:waive")
       || !allowedRole
     ) {
-      throw new ApplicationError("FORBIDDEN", "只有老板、生产管理或超级用户可以改为无需整查", 403);
+      throw new ApplicationError("FORBIDDEN", "只有老板、供应链总监或超级用户可以改为无需整查", 403);
     }
   }
 

@@ -97,7 +97,7 @@ const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 const STATUS_LABELS: Readonly<Record<SourcingCaseStatus, string>> = {
   pending_merchandiser_correction: "待跟单修改",
   pending_ie_quote: "待 IE 报价",
-  pending_management_decision: "待生产管理调价选厂",
+  pending_management_decision: "待供应链总监调价选厂",
   pending_owner_approval: "待老板终审",
   pending_contract: "待财务核对",
   pending_finance_reconciliation: "待财务核对",
@@ -983,7 +983,7 @@ function OrderListPage({
             >
               <option value="all">全部状态</option>
               <option value="ie">待 IE 报价</option>
-              <option value="management">待生产管理调价选厂</option>
+              <option value="management">待供应链总监调价选厂</option>
               <option value="owner">待老板终审</option>
               <option value="finance">待财务核对</option>
               <option value="factory_change">待核实换厂</option>
@@ -1063,7 +1063,7 @@ function OrderListPage({
 const WORKFLOW = [
   { key: "created", number: "01", label: "跟单创建订单", role: "订单跟单" },
   { key: "ie_quote", number: "02", label: "IE 给价", role: "IE" },
-  { key: "management", number: "03", label: "调价与选厂", role: "生产管理" },
+  { key: "management", number: "03", label: "调价与选厂", role: "供应链总监" },
   { key: "owner", number: "04", label: "最终审批", role: "老板" },
   { key: "finance", number: "05", label: "财务核对", role: "财务" },
 ] as const;
@@ -1716,9 +1716,9 @@ function OrderDetailPage({
         </div>
 
         {item.decision ? <DecisionSummary title={selectedNode === "owner" ? "审批摘要" : "选厂摘要"}>
-          <p className="sourcing-owner-decision__lead">生产管理建议由 <strong>{item.decision.supplierName}</strong> 承接 <strong>{formatBusinessDecimal(item.orderQuantity)} 件</strong>，生产总额 <strong>{formatBusinessCurrency(item.decision.totalAmount)}</strong>，相对 IE 总额变化 <strong>{ownerTotalDelta ?? "—"}</strong>。</p>
+          <p className="sourcing-owner-decision__lead">供应链总监建议由 <strong>{item.decision.supplierName}</strong> 承接 <strong>{formatBusinessDecimal(item.orderQuantity)} 件</strong>，生产总额 <strong>{formatBusinessCurrency(item.decision.totalAmount)}</strong>，相对 IE 总额变化 <strong>{ownerTotalDelta ?? "—"}</strong>。</p>
           <p>{ownerCraftSummary}</p>
-          {item.decision.decisionReason ? <p>生产管理说明：{item.decision.decisionReason}</p> : null}
+          {item.decision.decisionReason ? <p>供应链总监说明：{item.decision.decisionReason}</p> : null}
           {selectedNode === "owner" && selectedState === "current" ? <p>请核对价格、加工厂及交期，确认后审批。</p> : null}
         </DecisionSummary> : null}
         <ResponsiveFactsTable caption="款式明细" mobileLayout="compact" rows={item.lineItems} rowKey={line => line.position}
@@ -1778,12 +1778,12 @@ function OrderDetailPage({
           </Surface> : null}
 
           {item.status === "pending_management_decision" && selectedNode === "management" ? <Surface className="rework-detail-node-preview">
-            <h2>生产管理调价与选厂</h2>
+            <h2>供应链总监调价与选厂</h2>
             <p>逐款确认 IE 价格并选择一个启用加工厂。</p>
             {canManage ? <fieldset className="sourcing-submission-fields sourcing-form-grid" disabled={busy || feedback.uncertain}>
               <label><span>加工厂</span><select {...feedback.field("sourcing-decision-factory")} value={decision.supplierId} onChange={(event) => { setDecision({ ...decision, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择加工厂</option>{factories.map((factory) => <option key={factory.supplierId} value={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
               {selectedFactory ? <div className="sourcing-factory-facts sourcing-form-wide"><strong>{selectedFactory.supplierName} · {selectedFactory.supplierCode}</strong><span>工艺：{selectedFactory.supportedCrafts.join("、") || "未维护"}</span><span>日产能：{selectedFactory.dailyCapacity ? `${formatBusinessDecimal(selectedFactory.dailyCapacity)} 件` : "未维护"}</span><span>{selectedFactory.notes || "暂无协同备注"}</span><em>{selectedFactory.contractDataMissing.length ? `合同缺项：${selectedFactory.contractDataMissing.map((field) => contractMissingLabels[field] ?? field).join("、")}` : "合同资料完整"}</em></div> : null}
-              <div className="sourcing-line-price-table sourcing-form-wide" role="table" aria-label="生产管理逐款价格">
+              <div className="sourcing-line-price-table sourcing-form-wide" role="table" aria-label="供应链总监逐款价格">
                 {item.lineItems.map((line) => {
                   const price = decision.linePrices.find((entry) => entry.position === line.position)?.unitPrice ?? "";
                   const control = priceInput("decision", line.position, price);
@@ -1813,7 +1813,7 @@ function OrderDetailPage({
               {decision.cuttingProcess === "other" ? <label><span>其它裁床工序（必填）</span><input {...feedback.field("sourcing-decision-cutting-other")} value={decision.cuttingProcessOther} maxLength={100} onChange={(event) => { setDecision({ ...decision, cuttingProcessOther: event.target.value }); actionKey.current = null; }} /></label> : null}
               <label className="sourcing-form-wide"><span>选厂/调价说明{needsDecisionReason ? "（必填）" : ""}</span><input {...feedback.field("sourcing-decision-reason")} value={decision.decisionReason} maxLength={500} required={needsDecisionReason} aria-invalid={missingDecisionReason} aria-describedby={missingDecisionReason ? "sourcing-decision-reason-hint" : undefined} onChange={(event) => { setDecision({ ...decision, decisionReason: event.target.value }); actionKey.current = null; }} />{missingDecisionReason ? <small id="sourcing-decision-reason-hint" role="status">价格高于 IE，请填写原因</small> : null}</label>
               <button className="dx-button dx-button--primary" type="button" disabled={busy || feedback.uncertain || priceComposing("decision")} onClick={() => void submitManagement()}>提交调价与选厂</button>
-            </fieldset> : <p>当前账号仅可查看，本节点由生产管理办理。</p>}
+            </fieldset> : <p>当前账号仅可查看，本节点由供应链总监办理。</p>}
           </Surface> : null}
 
           {item.status === "pending_owner_approval" && selectedNode === "owner" && !canOwner ? <p>当前账号仅可查看，本节点由老板办理。</p> : null}
@@ -1921,7 +1921,7 @@ function OrderDetailPage({
                 { key: "amount", label: "批准行金额", render: price => formatBusinessCurrency(price.totalAmount) },
               ]} /> : null}
             {hasPendingFactoryChange ? <p className="sourcing-finance-waiting">订单转厂正在审批，财务核对已暂停；转厂生效或驳回后会自动恢复。</p> : contract?.status !== "ready" ? <p className="sourcing-finance-waiting">系统合同 PDF 未就绪，暂不能提交财务核对。</p> : canFinance ? <div className="sourcing-finance-confirmation">
-              <p>请对照已批准的选厂决定确认上述四项事实。若发现不一致，只记录差异项和说明，由生产管理核实；财务不能在此页改写业务数据。</p>
+              <p>请对照已批准的选厂决定确认上述四项事实。若发现不一致，只记录差异项和说明，由供应链总监核实；财务不能在此页改写业务数据。</p>
               <div className="sourcing-finance-actions">
                 <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/finance-reconciliations`, { result: "match" }, "与合同一致，订单已归档")}>确认与合同一致</button>
                 <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => { setMessage(""); setFinanceDifferenceOpen(true); }}>发现不一致</button>
@@ -1930,7 +1930,7 @@ function OrderDetailPage({
                 <form onSubmit={event => {
                   event.preventDefault();
                   if (busy || !financeReview.differenceFields.length || !financeReview.differenceReason.trim()) return;
-                  void submit(`sourcing/cases/${item.sourcingCaseId}/finance-reconciliations`, { result: "difference", differenceFields: financeReview.differenceFields, differenceReason: financeReview.differenceReason.trim() }, "财务差异已提交生产管理核实");
+                  void submit(`sourcing/cases/${item.sourcingCaseId}/finance-reconciliations`, { result: "difference", differenceFields: financeReview.differenceFields, differenceReason: financeReview.differenceReason.trim() }, "财务差异已提交供应链总监核实");
                 }}>
                   <div className="system-dialog__copy"><h2>发现不一致</h2><p>请选择差异项目并填写说明。</p></div>
                   <fieldset disabled={busy}><legend>差异项目</legend>{([
@@ -1963,17 +1963,17 @@ function OrderDetailPage({
                 { resolution: "reconcile_again", resolutionReason: exceptionReason.trim() },
                 "已退回财务重新核对",
               )}>退回财务重核</button></div>
-            </div> : <p>当前账号仅可查看，本节点由生产管理核实。</p>}
+            </div> : <p>当前账号仅可查看，本节点由供应链总监核实。</p>}
           </Surface> : null}
           {message ? <p className="sourcing-action-message" role="status">{message}</p> : null}
         </section>
           {transferNodeRole ? <section className="sourcing-factory-change" aria-label="订单转厂">
-            {!item.decision ? <button className="dx-button dx-button--primary" type="button" disabled title="生产管理首次提交加工厂和单价后开放">订单转厂</button> : factoryChange?.status === "pending_management" ? <>
+            {!item.decision ? <button className="dx-button dx-button--primary" type="button" disabled title="供应链总监首次提交加工厂和单价后开放">订单转厂</button> : factoryChange?.status === "pending_management" ? <>
               <h2>订单转厂</h2>
-              <p><strong>{factoryChange.proposedSupplierName}</strong> · {formatBusinessCurrency(factoryChange.proposedUnitPrice)}/件 · {formatBusinessCurrency(factoryChange.proposedTotalAmount)}。跟单申请，等待生产管理审批。</p>
+              <p><strong>{factoryChange.proposedSupplierName}</strong> · {formatBusinessCurrency(factoryChange.proposedUnitPrice)}/件 · {formatBusinessCurrency(factoryChange.proposedTotalAmount)}。跟单申请，等待供应链总监审批。</p>
               {canReviewManagementTransfer ? <div className="sourcing-factory-change__review">
                 <label><span>审批说明</span><input maxLength={500} value={factoryChangeReviewReason} onChange={(event) => { setFactoryChangeReviewReason(event.target.value); actionKey.current = null; }} /></label>
-                <div><button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/decision`, { decision: "approved", verificationReason: factoryChangeReviewReason.trim() }, factoryChange.requiresOwnerApproval ? "生产管理已通过，转老板审批" : "转厂已生效", true)}>批准转厂</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/decision`, { decision: "rejected", verificationReason: factoryChangeReviewReason.trim() }, "转厂申请已驳回", true)}>驳回</button></div>
+                <div><button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/decision`, { decision: "approved", verificationReason: factoryChangeReviewReason.trim() }, factoryChange.requiresOwnerApproval ? "供应链总监已通过，转老板审批" : "转厂已生效", true)}>批准转厂</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/decision`, { decision: "rejected", verificationReason: factoryChangeReviewReason.trim() }, "转厂申请已驳回", true)}>驳回</button></div>
               </div> : null}
             </> : factoryChange?.status === "pending_owner" ? <>
               <h2>订单转厂</h2>
@@ -1998,7 +1998,7 @@ function OrderDetailPage({
             </> : <p>当前账号可查看转厂记录，但不能在本节点发起。</p>}
           </section> : null}
         {item.status === "pending_owner_approval" && selectedNode === "owner" && canOwner ? <ActionBar className="sourcing-owner-actions" aria-label="老板审批操作">
-          <button className="dx-button dx-button--secondary sourcing-owner-reject" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "rejected" }, "已驳回生产管理重新调整")}>驳回并退回生产管理</button>
+          <button className="dx-button dx-button--secondary sourcing-owner-reject" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "rejected" }, "已驳回供应链总监重新调整")}>驳回并退回供应链总监</button>
           <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "approved" }, "老板已批准")}>批准方案</button>
         </ActionBar> : null}
       </div>

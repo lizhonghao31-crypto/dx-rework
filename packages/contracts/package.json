@@ -72,6 +72,10 @@
       "types": "./src/pattern-orders.ts",
       "import": "./dist/pattern-orders.js"
     },
+    "./digital-production-access": {
+      "types": "./src/digital-production-access.ts",
+      "import": "./dist/digital-production-access.js"
+    },
     "./digital-production": {
       "types": "./src/digital-production.ts",
       "import": "./dist/digital-production.js"

@@ -35,11 +35,11 @@ describe("sourcing PC form and owner approval finish", () => {
       "＋ 新增工艺",
       "按合同乙方负责的内容顺序登记",
       "最终审批",
-      "生产管理建议由",
+      "供应链总监建议由",
       "相对 IE 总额变化",
       "款式明细",
       "批准方案",
-      "驳回并退回生产管理",
+      "驳回并退回供应链总监",
     ]) expect(page).toContain(text);
     expect(page).toContain("craftIds: crafts.map");
     expect(css).toContain("@media (min-width: 761px)");

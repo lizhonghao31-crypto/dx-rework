@@ -9,6 +9,9 @@ import { registerDigitalIdentityRoutes } from "../../apps/api/src/production-pla
 import { linkNewDigitalChild, resolveDigitalChild } from "../../apps/api/src/production-platform/child-link-repository.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
+import { DigitalProductionAccessService } from "../../apps/api/src/production-platform/access-service.js";
+import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
+import { createDigitalTaskAccess, reassignDigitalTask } from "../../apps/api/src/production-platform/task-access-repository.js";
 import { ApplicationError } from "../../apps/api/src/platform/errors.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -39,9 +42,25 @@ run("digital production P01 identities", () => {
       CREATE TABLE rework_orders(rework_order_id uuid PRIMARY KEY);
       CREATE TABLE pattern_room_orders(order_id uuid PRIMARY KEY);`);
     await database.query(await readFile(new URL("../../apps/api/migrations/0218_digital_production_identity.sql", import.meta.url), "utf8"));
+    await database.query(`CREATE TABLE business_roles(role_code text PRIMARY KEY,display_name text,description text,enabled boolean DEFAULT true,updated_at timestamptz);
+      CREATE FUNCTION fixture_role_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;
+      CREATE TRIGGER business_roles_no_update BEFORE UPDATE ON business_roles FOR EACH ROW EXECUTE FUNCTION fixture_role_guard();
+      CREATE TRIGGER business_roles_no_insert BEFORE INSERT ON business_roles FOR EACH ROW EXECUTE FUNCTION fixture_role_guard();
+      CREATE TABLE capability_catalog(capability text,display_name text,description text);
+      CREATE TRIGGER capability_catalog_no_update BEFORE UPDATE ON capability_catalog FOR EACH ROW EXECUTE FUNCTION fixture_role_guard();
+      CREATE TABLE role_capabilities(role_code text,capability text);
+      CREATE TRIGGER role_capabilities_no_insert BEFORE INSERT ON role_capabilities FOR EACH ROW EXECUTE FUNCTION fixture_role_guard();
+      CREATE TABLE user_role_assignments(user_id uuid,role_code text,revoked_at timestamptz);
+      INSERT INTO business_roles(role_code) VALUES('sample_designer'),('order_merchandiser'),('pattern_room_supervisor'),('pattern_room_worker'),('production_management'),('quality_control'),('embroidery_washing_merchandiser'),('warehouse_receiver');`);
+    await database.query(await readFile(new URL("../../apps/api/migrations/0219_digital_production_access.sql", import.meta.url), "utf8"));
+    await database.query(`CREATE FUNCTION fixture_identity() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+      INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at)
+      VALUES(NEW.id,NEW.id,'dingtalk','TEST',NEW.id::text,NEW.id::text,true,true,CURRENT_TIMESTAMP); RETURN NEW; END $$;
+      CREATE TRIGGER fixture_user_identity AFTER INSERT ON app_users FOR EACH ROW EXECUTE FUNCTION fixture_identity();`);
     for (const id of [designer, other, root]) await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST P01',true)", [id]);
+    for (const id of [designer, other]) await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'sample_designer')", [id]);
     app.setErrorHandler((error, _request, reply) => { const known = error as ApplicationError; reply.code(known.statusCode ?? 500).send({ error: { code: known.code, message: known.message } }); });
-    registerDigitalIdentityRoutes(app, { service, creationEnabled: true, authenticate: async token => {
+    registerDigitalIdentityRoutes(app, { service, accessService: new DigitalProductionAccessService(database), creationEnabled: true, authenticate: async token => {
       if (token !== designer && token !== other) throw new ApplicationError("UNAUTHORIZED", "请登录", 401);
       return { id: token, displayName: "TEST", businessRoles: ["sample_designer"], capabilities: ["pattern_room:orders:create"] };
     } });
@@ -189,4 +208,84 @@ run("digital production P01 identities", () => {
     const own = await app.inject({ method: "GET", url: `/digital-production/orders/${order.productionOrderId}`, headers: { cookie: `dx_rework_session=${designer}` } });
     expect(own.statusCode).toBe(200); expect(own.headers["cache-control"]).toBe("no-store");
   });
+  it("P02 scopes primary merchandisers, defaults, leaders and technical readers without budget leakage", async () => {
+    const primary = randomUUID(); const supervisor = randomUUID();
+    for (const [id, role] of [[primary, "order_merchandiser"], [supervisor, "pattern_room_supervisor"]]) {
+      await database.query("INSERT INTO app_users(id,display_name) VALUES($1,'TEST ACCESS')", [id]);
+      await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,$2)", [id, role]);
+    }
+    const access = new DigitalProductionAccessService(database); const policy = new DigitalProductionAccessPolicy(database);
+    const boss = actor(root, ["root_superuser"]);
+    await expect(access.setCustomerDefault(actor(), "PD", primary)).rejects.toMatchObject({ statusCode: 403 });
+    await access.setCustomerDefault(boss, "PD", primary);
+    const order = await service.createOrder(actor(), input(), randomUUID());
+    expect(order.primaryMerchandiserId).toBe(primary);
+    expect((await service.read(actor(primary, ["order_merchandiser"]), order.productionOrderId)).productionOrderId).toBe(order.productionOrderId);
+    expect((await service.orders(actor(primary, ["order_merchandiser"]), 1, "TEST")).items.map(item => item.productionOrderId)).toContain(order.productionOrderId);
+    expect(await policy.allowed(actor(supervisor, ["pattern_room_supervisor"]), "order", order.productionOrderId, "technical")).toBe(true);
+    expect(await policy.allowed(actor(supervisor, ["pattern_room_supervisor"]), "order", order.productionOrderId, "budget")).toBe(false);
+    await expect(service.correctNumbers(actor(supervisor, ["pattern_room_supervisor"]), order.productionOrderId, order.lines[0]!.lineId, { expectedVersion: 1, poNumber: "NO", formalStyleNo: null }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    const request = await access.requestDelivery(actor(primary, ["order_merchandiser"]), order.productionOrderId, { expectedVersion: 1, deliveryDate: "2026-12-20", reason: "客户同意" });
+    await expect(access.decideDelivery(actor(primary, ["order_merchandiser"]), request.requestId, "approved")).rejects.toMatchObject({ statusCode: 403 });
+    expect((await service.read(boss, order.productionOrderId)).contractDeliveryDate).toBeNull();
+    await access.decideDelivery(boss, request.requestId, "approved");
+    expect((await service.read(boss, order.productionOrderId)).contractDeliveryDate).toBe("2026-12-20");
+    expect(await access.decideDelivery(boss, request.requestId, "approved")).toEqual({ decision: "approved" });
+    expect(await access.assignMerchandiser(boss, order.productionOrderId, primary, 2)).toEqual({ version: 3 });
+    await expect(access.assignMerchandiser(boss, order.productionOrderId, primary, 2)).rejects.toMatchObject({ statusCode: 409 });
+    await access.setCustomerDefault(boss, "PD", null);
+  });
+  it("P02 delegates only the specified resource, revokes immediately and separates QC from logistics", async () => {
+    const access = new DigitalProductionAccessService(database); const policy = new DigitalProductionAccessPolicy(database);
+    const boss = actor(root, ["root_superuser"]); const order = await service.createOrder(actor(), input(), randomUUID());
+    const expiresAt = new Date(Date.now() + 3600000).toISOString();
+    const grant = await access.delegate(boss, { resourceKind: "order", resourceId: order.productionOrderId, delegateId: other, purpose: "technical", expiresAt });
+    expect(await policy.allowed(actor(other), "order", order.productionOrderId, "technical")).toBe(true);
+    expect(await policy.allowed(actor(other), "order", order.productionOrderId, "budget")).toBe(false);
+    expect(await access.delegate(boss, { resourceKind: "order", resourceId: order.productionOrderId, delegateId: other, purpose: "technical", expiresAt })).toEqual(grant);
+    await access.revoke(boss, grant.delegationId);
+    expect(await policy.allowed(actor(other), "order", order.productionOrderId, "technical")).toBe(false);
+    await expect(access.delegate(boss, { resourceKind: "order", resourceId: order.productionOrderId, delegateId: other, purpose: "technical", expiresAt: "2020-01-01T00:00:00Z" })).rejects.toMatchObject({ statusCode: 409 });
+    const qc = randomUUID(); const logistics = randomUUID(); const secondQc = randomUUID();
+    for (const [id, role] of [[qc, "quality_control"], [logistics, "embroidery_washing_merchandiser"], [secondQc, "quality_control"]]) {
+      await database.query("INSERT INTO app_users(id,display_name) VALUES($1,'TEST TASK')", [id]);
+      await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,$2)", [id, role]);
+    }
+    const client = await database.connect(); let taskId: string;
+    try { taskId = await createDigitalTaskAccess(client, boss, { orderId: order.productionOrderId, kind: "bulk_qc", assigneeId: qc }); } finally { client.release(); }
+    expect(await policy.allowed(actor(qc, ["quality_control"]), "task", taskId!, "execute")).toBe(true);
+    expect(await policy.allowed(actor(qc, ["quality_control"]), "order", order.productionOrderId, "technical")).toBe(false);
+    await expect(access.delegate(boss, { resourceKind: "task", resourceId: taskId!, delegateId: logistics, purpose: "execute", expiresAt })).rejects.toMatchObject({ statusCode: 403 });
+    const taskGrant = await access.delegate(boss, { resourceKind: "task", resourceId: taskId!, delegateId: secondQc, purpose: "execute", expiresAt });
+    expect(await policy.allowed(actor(secondQc, ["quality_control"]), "task", taskId!, "execute")).toBe(true);
+    expect(await policy.allowed(actor(secondQc, ["quality_control"]), "task", taskId!, "budget")).toBe(false);
+    await database.query("UPDATE app_users SET enabled=false WHERE id=$1", [secondQc]);
+    expect(await policy.allowed(actor(secondQc, ["quality_control"]), "task", taskId!, "execute")).toBe(false);
+    await access.revoke(boss, taskGrant.delegationId);
+    await database.query("UPDATE app_users SET enabled=true WHERE id=$1", [secondQc]);
+    const client2 = await database.connect();
+    try {
+      await expect(reassignDigitalTask(client2, actor(logistics, ["embroidery_washing_merchandiser"]), taskId!, qc)).rejects.toMatchObject({ statusCode: 403 });
+      await reassignDigitalTask(client2, boss, taskId!, secondQc);
+      await expect(client2.query("UPDATE digital_production_task_access SET required_role='embroidery_washing_merchandiser' WHERE task_id=$1", [taskId!])).rejects.toMatchObject({ code: "55000" });
+    } finally { client2.release(); }
+    expect(await policy.allowed(actor(qc, ["quality_control"]), "task", taskId!, "execute")).toBe(false);
+    expect(await policy.allowed(actor(secondQc, ["quality_control"]), "task", taskId!, "execute")).toBe(true);
+  });
+
+  it("P02 expiry and revoked roles cannot authorize execution or budget access", async () => {
+    const access = new DigitalProductionAccessService(database); const policy = new DigitalProductionAccessPolicy(database);
+    const boss = actor(root, ["root_superuser"]); const order = await service.createOrder(actor(), input(), randomUUID());
+    await database.query(`INSERT INTO digital_production_delegations(delegation_id,production_order_id,delegate_id,purpose,granted_by,created_at,expires_at)
+      VALUES($1,$2,$3,'technical',$4,CURRENT_TIMESTAMP-INTERVAL '2 hours',CURRENT_TIMESTAMP-INTERVAL '1 hour')`, [randomUUID(), order.productionOrderId, other, root]);
+    expect(await policy.allowed(actor(other), "order", order.productionOrderId, "technical")).toBe(false);
+    await expect(access.delegate(actor(other, ["pattern_room_supervisor"]), { resourceKind: "order", resourceId: order.productionOrderId, delegateId: other, purpose: "budget", expiresAt: new Date(Date.now()+3600000).toISOString() })).rejects.toMatchObject({ statusCode: 403 });
+    await expect(access.assignMerchandiser(actor(), order.productionOrderId, other, 1)).rejects.toMatchObject({ statusCode: 403 });
+    await expect(access.assignMerchandiser(boss, order.productionOrderId, other, 1)).rejects.toMatchObject({ statusCode: 409 });
+    const response = await app.inject({ method: "PUT", url: "/digital-production/customers/PD/default-merchandiser", headers: { cookie: `dx_rework_session=${designer}` }, payload: { merchandiserId: other } });
+    expect(response.statusCode).toBe(403);
+    const granted = await app.inject({ method: "POST", url: "/digital-production/access/delegations", headers: { cookie: `dx_rework_session=${designer}` }, payload: { resourceKind: "order", resourceId: order.productionOrderId, delegateId: other, purpose: "technical", expiresAt: new Date(Date.now()+3600000).toISOString() } });
+    expect(granted.statusCode).toBe(403);
+  });
+
 });

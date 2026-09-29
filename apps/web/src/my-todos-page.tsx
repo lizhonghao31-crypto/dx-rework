@@ -101,7 +101,7 @@ const categoryLabel = (todo: TodoResponse): string => {
     external_responsibility: "供应商实际扣款",
     wage_review: "返工工资核对",
     sourcing_ie_quote: "IE 给价",
-    sourcing_management_decision: "生产管理调价选厂",
+    sourcing_management_decision: "供应链总监调价选厂",
     sourcing_owner_approval: "老板最终审批",
     sourcing_contract_return: "回传合同",
   };

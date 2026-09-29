@@ -11,7 +11,7 @@ describe("sourcing role-aware transfer UI", () => {
     expect(page).toContain('selectedNode === "management"');
     expect(page).toContain('selectedNode === "owner"');
     expect(page).toContain('canOwnerTransfer ? "owner_group"');
-    expect(page).toContain("生产管理首次提交加工厂和单价后开放");
+    expect(page).toContain("供应链总监首次提交加工厂和单价后开放");
     expect(page).not.toContain("订单已完成归档，转厂入口已关闭");
     expect(page).toContain('factoryChange?.status === "pending_owner" ? Math.max(mainStep, 3)');
   });

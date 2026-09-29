@@ -47,7 +47,7 @@ describe("sourcing role-aware factory change backend", () => {
     expect(service).toContain('"sourcing.factory_change.management_approved"');
     expect(service).toContain('"sourcing.factory_change.owner_rejected"');
     expect(service).toContain('"sourcing.factory_change.effective"');
-    expect(service).toContain("生产管理首次提交选厂信息后才可发起订单转厂");
+    expect(service).toContain("供应链总监首次提交选厂信息后才可发起订单转厂");
     expect(service).toContain("订单转厂审批中，财务暂不能核对");
     expect(routes).toContain('"/sourcing/cases/:sourcingCaseId/factory-changes/management"');
     expect(routes).toContain('"/sourcing/cases/:sourcingCaseId/factory-changes/owner"');

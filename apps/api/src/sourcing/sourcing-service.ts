@@ -87,7 +87,7 @@ const DAXING_PRICE_ROLES = new Set([
 const LANE_KEY = "garment_processing" as const;
 const DEFAULT_CREATION_REASON = "创建外发定价选厂询价";
 const DEFAULT_QUOTE_REASON = "IE核定加工价格";
-const DEFAULT_MANAGEMENT_REASON = "生产管理确认加工厂与价格";
+const DEFAULT_MANAGEMENT_REASON = "供应链总监确认加工厂与价格";
 const DEFAULT_OWNER_APPROVAL_REASON = "老板批准选厂决定";
 const DEFAULT_OWNER_REJECTION_REASON = "老板驳回选厂决定";
 const DEFAULT_CONTRACT_REASON = "跟单登记已签合同";
@@ -2359,12 +2359,12 @@ export class SourcingService {
         const source = current.rows[0];
         if (!source) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
         if (source.status !== "pending_management_decision") {
-          fail("该询价当前不在生产管理调价选厂阶段", 409, "INVALID_STATE_TRANSITION");
+          fail("该询价当前不在供应链总监调价选厂阶段", 409, "INVALID_STATE_TRANSITION");
         }
         const sourceIeQuoteId = source.sourcing_ie_quote_id;
         const quoteUnitPrice = source.quote_unit_price;
         if (!sourceIeQuoteId || !quoteUnitPrice) {
-          return fail("生产管理决定必须引用当前 IE 报价", 409, "INVALID_STATE_TRANSITION");
+          return fail("供应链总监决定必须引用当前 IE 报价", 409, "INVALID_STATE_TRANSITION");
         }
         if (source.sourcing_decision_id && source.owner_decision !== "rejected" && !(await client.query(
           `SELECT 1 FROM sourcing_case_corrections correction JOIN sourcing_ie_quotes quote ON quote.sourcing_ie_quote_id=$2
@@ -2385,7 +2385,7 @@ export class SourcingService {
         );
         if (quoteLines.rows.length !== requestedLinePrices.length
           || quoteLines.rows.some((line, index) => line.position !== requestedLinePrices[index]?.position)) {
-          fail("生产管理必须逐款确认全部价格，不能缺行或增加行");
+          fail("供应链总监必须逐款确认全部价格，不能缺行或增加行");
         }
         const pricedLines = quoteLines.rows.map((line, index) => ({
           position: line.position,
@@ -2534,7 +2534,7 @@ export class SourcingService {
           client,
           actor,
           `sourcing:${sourcingCaseId}:management:${decisionVersion}:`,
-          "生产管理已完成调价选厂",
+          "供应链总监已完成调价选厂",
         );
         await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
           category: "sourcing_owner_approval",
@@ -3157,7 +3157,7 @@ export class SourcingService {
       if (source.status === "pending_management_decision") {
         await this.todoProjection?.completeOpenByDedupePrefix(
           client, actor, `sourcing:${source.sourcing_case_id}:management:`,
-          "转厂方案已形成新选厂版本，原生产管理待办失效",
+          "转厂方案已形成新选厂版本，原供应链总监待办失效",
         );
       }
       await this.todoProjection?.completeOpenByDedupePrefix(
@@ -3343,7 +3343,7 @@ export class SourcingService {
           && source.additional_merchandiser_user_id === actor.actorId && source.created_by !== actor.actorId)
           fail("添加跟单仅可回传合同",403,"FORBIDDEN");
         if (!source.sourcing_decision_id || !source.decision_unit_price) {
-          fail("生产管理首次提交选厂信息后才可发起订单转厂", 409, "INVALID_STATE_TRANSITION");
+          fail("供应链总监首次提交选厂信息后才可发起订单转厂", 409, "INVALID_STATE_TRANSITION");
         }
         await this.assertCurrentTransferBasis(client,sourcingCaseId,source.sourcing_decision_id!);
         if (source.open_change_id) fail("该订单已有待处理的转厂申请", 409, "CONFLICT");
@@ -3591,7 +3591,7 @@ export class SourcingService {
         if (
           reviewerRole === "production_management"
           && (source.initiator_role !== "order_merchandiser" || source.management_decision)
-        ) fail("该转厂申请不需要生产管理审批", 409, "INVALID_STATE_TRANSITION");
+        ) fail("该转厂申请不需要供应链总监审批", 409, "INVALID_STATE_TRANSITION");
         if (
           reviewerRole === "owner_group"
           && (
