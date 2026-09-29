@@ -14,10 +14,12 @@
 
 ## 验证与A1
 
-本地PostgreSQL WASM：12个任务SQL/API场景，覆盖无SLA、真实条件/并发到齐、并发完成、事务回滚、策略与完成竞态、暂停取消、订正、跨单拒绝和来源任务；P01/P02回归22场景。WASM适配连接串行，真实多连接并发以Full Gate PostgreSQL结果为准。
+本地PostgreSQL WASM：13个任务SQL/API场景，覆盖无SLA、真实条件/并发到齐、并发完成、事务回滚、策略与完成竞态、暂停取消、订正、跨单拒绝和来源任务；P01/P02回归22场景。WASM适配连接串行，真实多连接并发以Full Gate PostgreSQL结果为准。
 
 全量220条迁移顺序通过，旧SQL内容未修改。Lint、类型检查、构建、单元回归按提交前日志核验，不将自动测试等同于业务验收。
 
 A1环境已有标准角色后执行 `NODE_ENV=test ACCEPTANCE_LAB_ENABLED=true ACCEPTANCE_DATABASE_URL=<独立测试连接> npx tsx scripts/acceptance/seed-digital-task-fixtures.ts`；脚本拒绝生产库及真实待办开关，仅生成TEST-A1-P03来源/母单及车板、设计确认任务，重复执行不重建、不恢复已办事实。该脚本本轮不连接Acceptance执行。
 
 A1核验：板房师傅办理车板；主办以外拒绝；主管24h改12h立即覆盖18h前进入的测试任务；设计确认无时限；Root核实保留历史；暂停/恢复原期限不变；完成后参数调整不重算。本地浏览器、Acceptance及生产部署均未执行。
+
+Review收口：任一必需前置事实或前置任务完成时间未知，进入时间和期限保持未知；有SLA但进入未知显示“时间待核实”。页面历史展示进入、临期、截止、策略版本、修订原因及登记时间。原事件和期限修订均保留。

@@ -122,7 +122,7 @@ run("P03 task lifecycle PostgreSQL", () => {
     const resource={kind:"source" as const,id:source.sourceId};const routeId=randomUUID();const a=await create(resource,"budget",{routeId,occurredAt:null});const b=await create(resource,"development_sewing",{routeId,predecessors:[a.taskId]});
     await tasks.handover(boss,b.taskId,{note:"补交接"},randomUUID());expect((await tasks.read(boss,b.taskId)).state).toBe("pending");
     await condition(a.taskId,"business_recorded");await tasks.complete(boss,a.taskId,{occurredAt:null,note:"未知"},randomUUID());
-    await condition(b.taskId,"materials_ready",new Date().toISOString());expect((await tasks.read(boss,b.taskId)).state).toBe("ready");
+    await condition(b.taskId,"materials_ready",new Date().toISOString());expect(await tasks.read(boss,b.taskId)).toMatchObject({state:"ready",enteredAt:null,dueAt:null,timeQuality:"缺失"});
     expect((await tasks.read(boss,a.taskId)).completedAt).toBeNull();
     expect((await database.query("SELECT * FROM production_order_node_clocks WHERE node_instance_id=$1",[b.taskId])).rows).toHaveLength(0);
   });
@@ -178,6 +178,17 @@ run("P03 task lifecycle PostgreSQL", () => {
     await expect(tasks.reassign(actor(clerk,["development_clerk"]),taskId,designer,randomUUID())).rejects.toMatchObject({statusCode:403});
     const budget=await create(await order());await expect(tasks.reassign(actor(clerk,["development_clerk"]),budget.taskId,other,randomUUID())).rejects.toMatchObject({statusCode:403});
     await database.query("UPDATE app_users SET enabled=false WHERE id=$1",[worker]);await expect(tasks.handover(actor(worker,["pattern_room_worker"]),taskId,{note:""},randomUUID())).rejects.toMatchObject({statusCode:404});
+  });
+
+  it("does not invent an entry or deadline when only some activation times are known",async()=>{
+    const {taskId}=await create(await order(),"development_sewing");
+    await condition(taskId,"materials_ready",null);await condition(taskId,"handover_received",new Date().toISOString());
+    expect(await tasks.read(boss,taskId)).toMatchObject({state:"ready",enteredAt:null,dueAt:null,slaHours:24,timeQuality:"缺失"});
+    expect((await database.query("SELECT * FROM production_order_node_clocks WHERE node_instance_id=$1",[taskId])).rows).toHaveLength(0);
+    const event=(await tasks.history(boss,taskId)).events.find(e=>e.kind==="ready")!;
+    const known=new Date(Date.now()-1000).toISOString();await tasks.correctTime(boss,taskId,{eventId:event.eventId,occurredAt:known,reason:"核实真实进入时间"},randomUUID());
+    expect((await tasks.read(boss,taskId)).dueAt).toBe(new Date(new Date(known).getTime()+24*3600000).toISOString());
+    expect((await tasks.history(boss,taskId)).revisions).toHaveLength(2);
   });
 
 });

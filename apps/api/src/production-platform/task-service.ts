@@ -74,11 +74,14 @@ export class DigitalProductionTaskService {
     if (task.state !== "pending" || !await this.conditionsReady(client, id)) return false;
     const lifecycle = (await client.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2", [this.resource(task).kind, this.resource(task).id])).rows[0]?.state;
     if (lifecycle === "paused" || lifecycle === "cancelled") return false;
-    const latest = (await client.query(`SELECT max(moment) AS latest_at FROM (
+    const facts = (await client.query(`SELECT count(*)::int AS count,bool_or(moment IS NULL) AS has_unknown,max(moment) AS latest_at FROM (
       SELECT occurred_at AS moment FROM digital_production_task_conditions WHERE task_id=$1 AND stage='activation' AND satisfied
       UNION ALL SELECT p.completed_at FROM digital_production_task_dependencies d JOIN digital_production_tasks p ON p.task_id=d.predecessor_id WHERE d.task_id=$1
-      UNION ALL SELECT $2::timestamptz) facts`, [id, occurredAt])).rows[0]?.latest_at;
-    occurredAt = latest ? iso(latest) : null;
+      ) facts`, [id])).rows[0];
+    if (facts.has_unknown) occurredAt = null;
+    else if (facts.count > 0) occurredAt = iso(facts.latest_at);
+    if (occurredAt === null) quality = "缺失";
+    else if (quality === "缺失") quality = "补报未核实";
     const policy = await this.policy(client, task.task_kind);
     const eventId = await this.event(client, actor, id, this.resource(task), "ready", occurredAt, quality);
     const deadline = await this.revision(client, actor, id, policy, occurredAt, "activation", eventId);
@@ -271,7 +274,7 @@ export class DigitalProductionTaskService {
     await policy.assert(actor, "task", id, "technical");
     const task = await this.task(this.database, id);
     const effective = (await this.database.query(`SELECT r.entered_at,r.warning_at,r.due_at,p.version,p.sla_seconds,p.label FROM digital_production_deadline_revisions r
-      JOIN digital_production_deadline_policies p ON p.node_key=r.policy_node_key AND p.version=r.policy_version WHERE r.task_id=$1 ORDER BY r.revision_id DESC LIMIT 1`, [id])).rows[0];
+      JOIN digital_production_deadline_policies p ON p.node_key=r.policy_node_key AND p.version=r.policy_version JOIN app_users u ON u.id=r.changed_by WHERE r.task_id=$1 ORDER BY r.revision_id DESC LIMIT 1`, [id])).rows[0];
     const currentPolicy = effective ?? await this.policy(this.database, task.task_kind);
     const resource = this.resource(task);
     const paused = (await this.database.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2", [resource.kind, resource.id])).rows[0]?.state === "paused";
@@ -303,7 +306,7 @@ export class DigitalProductionTaskService {
   }
   async history(actor: TrustedActorContext, id: string) {
     await new DigitalProductionAccessPolicy(this.database).assert(actor, "task", id, "technical");
-    return { events: (await this.database.query("SELECT event_id AS \"eventId\",event_kind AS kind,occurred_at AS \"occurredAt\",recorded_at AS \"recordedAt\",time_quality AS quality,corrects_event_id AS \"correctsEventId\",payload FROM digital_production_task_events WHERE task_id=$1 ORDER BY recorded_at,event_id", [id])).rows,
-      revisions: (await this.database.query("SELECT revision_id AS \"revisionId\",policy_version AS \"policyVersion\",entered_at AS \"enteredAt\",warning_at AS \"warningAt\",due_at AS \"dueAt\",reason,changed_at AS \"changedAt\" FROM digital_production_deadline_revisions WHERE task_id=$1 ORDER BY revision_id", [id])).rows };
+    return { events: (await this.database.query("SELECT event_id AS \"eventId\",event_kind AS kind,occurred_at AS \"occurredAt\",recorded_at AS \"recordedAt\",time_quality AS quality,corrects_event_id AS \"correctsEventId\",payload,u.display_name AS \"actorName\" FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id WHERE task_id=$1 ORDER BY recorded_at,event_id", [id])).rows,
+      revisions: (await this.database.query("SELECT r.revision_id AS \"revisionId\",r.policy_version AS \"policyVersion\",r.entered_at AS \"enteredAt\",r.warning_at AS \"warningAt\",r.due_at AS \"dueAt\",r.reason,r.changed_at AS \"changedAt\",p.sla_seconds IS NOT NULL AS \"hasSla\",u.display_name AS \"changedByName\" FROM digital_production_deadline_revisions r JOIN digital_production_deadline_policies p ON p.node_key=r.policy_node_key AND p.version=r.policy_version JOIN app_users u ON u.id=r.changed_by WHERE r.task_id=$1 ORDER BY r.revision_id", [id])).rows };
   }
 }
