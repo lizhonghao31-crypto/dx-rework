@@ -36,6 +36,8 @@ assert_acceptance_runtime_config() {
   [[ "${APP_BASE_PATH:-}" == /acceptance/ ]] || fail 'acceptance app base path must be /acceptance/'
   [[ "${ACCEPTANCE_LAB_ENABLED:-false}" == true ]] || fail 'acceptance lab must be enabled'
   [[ "${ROOT_DINGTALK_USER_ID:-}" == uat-root ]] || fail 'acceptance root identity must be uat-root'
+  [[ "${DIGITAL_PRODUCTION_ENABLED:-false}" == true ]] || fail 'acceptance digital production must be enabled'
+  [[ "${DIGITAL_PRODUCTION_CREATION_ENABLED:-false}" == true ]] || fail 'acceptance digital production creation must be enabled'
   [[ "${TODO_RUNTIME_ENABLED:-false}" != true ]] || fail 'acceptance forbids real todo runtime'
   [[ "${TODO_DELIVERY_ENABLED:-false}" != true ]] || fail 'acceptance forbids real todo delivery'
   [[ "${TODO_TIMING_ENABLED:-false}" != true ]] || fail 'acceptance forbids real todo timing'
