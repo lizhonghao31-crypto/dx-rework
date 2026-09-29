@@ -74,3 +74,5 @@ Codex Review 是审查渠道，不是施工渠道。高风险 PR 默认需要独
 ## 8. ECS 维护
 
 多步骤高风险维护命令必须使用独立脚本执行，不能把可能 `exit` 当前 Shell 的脚本体直接粘贴到登录会话，也不能 `source`。Acceptance 更新只做与当前 diff 对应的最小操作，不在 ECS 上运行 CI/Full Gate。
+
+Acceptance阶段统一读取 `docs/operations/acceptance-lab-runbook-v1.0.md`。A1首次canonical切换完成后，不再重建ENV；后续A2/A3/A4按固定批次流程执行。控制码失效、浏览器404、角色矩阵失败分别属于控制层/入口层/业务验收层，必须按层定位，禁止直接回退到“重部署整套Acceptance”。
