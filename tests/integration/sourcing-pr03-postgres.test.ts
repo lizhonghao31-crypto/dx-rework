@@ -2677,7 +2677,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         ...(reason ? {decisionReason:reason} : {}),
       },randomUUID());
       expect(result.value.status).toBe("pending_owner_approval");
-      expect(result.value.decision?.decisionReason).toBe(reason ?? "生产管理确认加工厂与价格");
+      expect(result.value.decision?.decisionReason).toBe(reason ?? "供应链总监确认加工厂与价格");
       if (price === "10.8") expect(result.value.decision?.linePrices[0]?.unitPrice).not.toBe(result.value.ieQuote?.linePrices[0]?.unitPrice);
     }
     const id = await make("mixed");
