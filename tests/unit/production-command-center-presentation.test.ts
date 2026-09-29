@@ -29,5 +29,8 @@ describe("production command center presentation", () => {
     for (const value of ["生产管理座舱", "开发管理", "大货生产", "实时生产看板", "今日待处理", "全部订单", "订单进度总览", "风险提示", "相关人员", "生产进度", "当前节点详情"]) expect(html).toContain(value);
     expect(html).toContain("production-command-topbar");
     expect(html).toContain("production-command-detail-aside");
+    expect(html).toContain("production-command-search-icon");
+    expect(html).toContain("production-command-garment-illustration");
+    expect(html).toContain("production-command-progress--attention");
   });
 });

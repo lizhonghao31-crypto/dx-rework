@@ -54,7 +54,6 @@ const RiskBadge = ({ level, children }: { level: CommandRisk; children?: ReactNo
 );
 
 const sideNavigation = ["首页", "生产管理座舱", "开发管理", "大货生产", "实时生产看板", "回货质检", "人员/绩效", "报表中心", "基础资料", "系统设置"] as const;
-const topNavigation = ["生产管理座舱", "开发管理", "大货生产", "实时生产看板", "回货质检", "数据分析", "基础资料"] as const;
 const detailTabs = ["生产进度", "单据信息", "面辅料", "工艺要求", "尺寸表", "生产记录", "质检记录", "客户评语", "变更记录"] as const;
 const flow = [
   ["订单创建", "done"],
@@ -92,7 +91,7 @@ export function ProductionCommandCenterView({ summary, orders, selectedOrderNo }
         <nav>
           {sideNavigation.map((label, index) => (
             <a key={label} className={label === "生产管理座舱" ? "is-active" : undefined} href={`#side-${index}`}>
-              <span className="production-command-nav-icon" aria-hidden="true">{index === 0 ? "⌂" : "▣"}</span>
+              <span className="production-command-nav-icon" aria-hidden="true"><i /></span>
               {label}
             </a>
           ))}
@@ -106,12 +105,9 @@ export function ProductionCommandCenterView({ summary, orders, selectedOrderNo }
 
       <section className="production-command-workspace">
         <header className="production-command-topbar">
-          <nav aria-label="生产平台主导航">
-            {topNavigation.map(label => <a key={label} className={label === "生产管理座舱" ? "is-active" : undefined} href={`#top-${label}`}>{label}</a>)}
-          </nav>
           <div className="production-command-userbar">
-            <span aria-hidden="true">⌕</span>
-            <span className="production-command-bell" aria-hidden="true">♧<b>12</b></span>
+            <span className="production-command-search-icon" aria-hidden="true" />
+            <span className="production-command-bell" aria-hidden="true"><i /><b>12</b></span>
             <span className="production-command-avatar">L</span>
             <span><strong>{selected.designer}</strong><small>设计师</small></span>
             <span aria-hidden="true">⌄</span>
@@ -155,7 +151,7 @@ export function ProductionCommandCenterView({ summary, orders, selectedOrderNo }
               <select aria-label="节点筛选" defaultValue="all"><option value="all">当前节点</option></select>
               <select aria-label="风险筛选" defaultValue="all"><option value="all">风险状态</option></select>
               <select aria-label="交货时间筛选" defaultValue="all"><option value="all">交货时间</option></select>
-              <button className="production-command-more-filter" type="button">⌕ 更多筛选</button>
+              <button className="production-command-more-filter" type="button"><span className="production-command-filter-icon" aria-hidden="true" />更多筛选</button>
               <button className="production-command-new-order" type="button">＋ 新建订单</button>
               <button className="production-command-more-button" type="button">•••</button>
             </div>
@@ -170,15 +166,15 @@ export function ProductionCommandCenterView({ summary, orders, selectedOrderNo }
                     const progress = progressFor(order, index);
                     return <tr key={order.orderNo} className={order.orderNo === selected.orderNo ? "is-selected" : undefined}>
                       <td><input aria-label={`选择${order.orderNo}`} type="checkbox" /></td>
-                      <td><div className="production-command-order-cell"><span className="production-command-mini-garment" aria-hidden="true">♟</span><strong>{order.orderNo}</strong></div></td>
+                      <td><div className="production-command-order-cell"><span className="production-command-mini-garment" aria-hidden="true"><i /></span><strong>{order.orderNo}</strong></div></td>
                       <td>{order.styleNo}</td>
                       <td>{order.styleName ?? order.category}</td>
                       <td>{order.customer}</td>
                       <td>{order.orderType ?? "大货"}</td>
                       <td>{order.quantity}</td>
                       <td>{order.deliveryDate}</td>
-                      <td><span className="production-command-stage-mark">▣</span>{order.currentStage}</td>
-                      <td><div className="production-command-progress"><i style={{ width: `${progress}%` }} /><span>{progress}%</span></div></td>
+                      <td><span className="production-command-stage-mark" aria-hidden="true" />{order.currentStage}</td>
+                      <td><div className={`production-command-progress production-command-progress--${order.nodeRisk}`}><i style={{ width: `${progress}%` }} /><span>{progress}%</span></div></td>
                       <td>{order.nodeDeadline}</td>
                       <td><RiskBadge level={order.nodeRisk} /></td>
                       <td><button className="production-command-row-menu" type="button">•••</button></td>
@@ -192,7 +188,7 @@ export function ProductionCommandCenterView({ summary, orders, selectedOrderNo }
           <section className="production-command-detail-grid">
             <article className="production-command-card production-command-detail">
               <div className="production-command-detail-heading">
-                <div className="production-command-thumbnail" aria-label="款图占位"><span>♟</span></div>
+                <div className="production-command-thumbnail" aria-label="款图占位"><span className="production-command-garment-illustration" aria-hidden="true" /></div>
                 <div className="production-command-detail-title">
                   <div className="production-command-title-row">
                     <h2>{selected.styleNo}</h2>
