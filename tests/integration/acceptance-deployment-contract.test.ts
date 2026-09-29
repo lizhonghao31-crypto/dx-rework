@@ -58,6 +58,7 @@ describe("isolated Acceptance deployment contract", () => {
 
   it("loads Acceptance-only secrets through the guarded app env allowlist", () => {
     const lib = read("scripts/deploy/lib.sh");
+    const remote = read("scripts/deploy/acceptance-remote-release.sh");
     expect(lib).toContain("ACCEPTANCE_LAB_ENABLED");
     expect(lib).toContain("ACCEPTANCE_LAB_SECRET");
     expect(lib).toContain("DIGITAL_PRODUCTION_ENABLED");
