@@ -54,7 +54,6 @@ const RiskBadge = ({ level, children }: { level: CommandRisk; children?: ReactNo
 );
 
 const sideNavigation = ["首页", "生产管理座舱", "开发管理", "大货生产", "实时生产看板", "回货质检", "人员/绩效", "报表中心", "基础资料", "系统设置"] as const;
-const topNavigation = ["生产管理座舱", "开发管理", "大货生产", "实时生产看板", "回货质检", "数据分析", "基础资料"] as const;
 const detailTabs = ["生产进度", "单据信息", "面辅料", "工艺要求", "尺寸表", "生产记录", "质检记录", "客户评语", "变更记录"] as const;
 const flow = [
   ["订单创建", "done"],
@@ -106,9 +105,6 @@ export function ProductionCommandCenterView({ summary, orders, selectedOrderNo }
 
       <section className="production-command-workspace">
         <header className="production-command-topbar">
-          <nav aria-label="生产平台主导航">
-            {topNavigation.map(label => <a key={label} className={label === "生产管理座舱" ? "is-active" : undefined} href={`#top-${label}`}>{label}</a>)}
-          </nav>
           <div className="production-command-userbar">
             <span className="production-command-search-icon" aria-hidden="true" />
             <span className="production-command-bell" aria-hidden="true"><i /><b>12</b></span>
