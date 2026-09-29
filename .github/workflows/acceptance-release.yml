@@ -69,8 +69,8 @@ jobs:
 
       - name: Build Acceptance candidate
         env:
-          APP_BASE_PATH: /
-          VITE_BASE_PATH: /
+          APP_BASE_PATH: /acceptance/
+          VITE_BASE_PATH: /acceptance/
         run: npm run build
 
       - name: Scan repository history and build artifacts
@@ -80,8 +80,8 @@ jobs:
         shell: bash
         env:
           TARGET_SHA: ${{ inputs.git_sha }}
-          APP_BASE_PATH: /
-          VITE_BASE_PATH: /
+          APP_BASE_PATH: /acceptance/
+          VITE_BASE_PATH: /acceptance/
           DX_REWORK_BUILD_ROOT: ${{ runner.temp }}/build
         run: |
           set -euo pipefail
@@ -139,8 +139,7 @@ jobs:
           test -n "$SSH_KEY"
           test -n "$SSH_HOST_KEY"
           [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$ACCEPTANCE_PUBLIC_URL" == https://* ]]
-          [[ "$ACCEPTANCE_PUBLIC_URL" != https://dxerp.org.cn* ]]
+          [[ "${ACCEPTANCE_PUBLIC_URL%/}" == "https://staging-api.dxerp.org.cn/acceptance" ]]
 
           cd transfer
           sha256sum -c --strict "acceptance-$TARGET_SHA.tar.gz.sha256"
