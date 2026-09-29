@@ -6,7 +6,7 @@ describe("Acceptance staging host probe", () => {
     const workflow = await readFile(".github/workflows/acceptance-host-probe.yml", "utf8");
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).not.toMatch(/^\s+(push|pull_request):/m);
-    expect(workflow).toContain("environment: dx-rework-pilot");
+    expect(workflow).toContain("environment: dx-rework-acceptance");
     expect(workflow).toContain("StrictHostKeyChecking=yes");
 
     const start = workflow.indexOf("<<'REMOTE'");
@@ -39,6 +39,8 @@ describe("Acceptance staging host probe", () => {
     expect(workflow).toContain("/opt/dx-rework-acceptance");
     expect(workflow).toContain("127.0.0.1:3202");
     expect(workflow).toContain("staging-api.dxerp.org.cn/acceptance");
+    expect(workflow).toContain("/api/health/ready");
+    expect(workflow).toContain("/api/version");
     expect(workflow).toContain("acceptance_database_configured");
     expect(workflow).not.toContain("DX_REWORK_ACCEPTANCE_PUBLIC_URL");
     expect(workflow).not.toContain("ACCEPTANCE_LAB_SECRET");
