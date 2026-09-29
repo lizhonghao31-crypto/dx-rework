@@ -1,0 +1,80 @@
+# Acceptance/UAT shared-path locations for the existing staging HTTPS vhost.
+# Include this block inside the existing staging-api.dxerp.org.cn server {}.
+# Do not create another server_name, do not touch /rework/**, and do not proxy
+# any Acceptance traffic to production port 3201.
+#
+# Initial installation/reload is an infrastructure window:
+# backup config -> insert block -> nginx -t -> approved graceful reload.
+
+# DX_REWORK_ACCEPTANCE_SHARED_PATHS_BEGIN
+location = /acceptance {
+    access_log /opt/dx-rework-acceptance/logs/nginx-access.log;
+    return 308 /acceptance/;
+}
+
+location = /acceptance/health/live {
+    access_log /opt/dx-rework-acceptance/logs/nginx-access.log;
+    proxy_set_header X-Request-Id $request_id;
+    proxy_pass http://127.0.0.1:3202/health/live;
+}
+
+location = /acceptance/health/ready {
+    access_log /opt/dx-rework-acceptance/logs/nginx-access.log;
+    proxy_set_header X-Request-Id $request_id;
+    proxy_pass http://127.0.0.1:3202/health/ready;
+}
+
+location = /acceptance/version {
+    access_log /opt/dx-rework-acceptance/logs/nginx-access.log;
+    proxy_set_header X-Request-Id $request_id;
+    proxy_pass http://127.0.0.1:3202/version;
+}
+
+location = /acceptance/auth/qr/relay {
+    access_log off;
+    error_log /dev/null emerg;
+    add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+    alias /opt/dx-rework-acceptance/frontend/current/index.html;
+}
+
+location = /acceptance/api/auth/qr/callback {
+    access_log off;
+    error_log /dev/null emerg;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Request-Id $request_id;
+    proxy_pass http://127.0.0.1:3202/auth/qr/callback;
+}
+
+location ^~ /acceptance/api/ {
+    access_log /opt/dx-rework-acceptance/logs/nginx-access.log;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Request-Id $request_id;
+    proxy_pass http://127.0.0.1:3202/;
+}
+
+location ^~ /acceptance/assets/ {
+    access_log /opt/dx-rework-acceptance/logs/nginx-access.log;
+    rewrite ^/acceptance/(.*)$ /$1 break;
+    root /opt/dx-rework-acceptance/frontend/current;
+    try_files $uri =404;
+}
+
+location ^~ /acceptance/ {
+    access_log /opt/dx-rework-acceptance/logs/nginx-access.log;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+    rewrite ^/acceptance/(.*)$ /$1 break;
+    root /opt/dx-rework-acceptance/frontend/current;
+    try_files $uri $uri/ /acceptance/index.html;
+}
+# DX_REWORK_ACCEPTANCE_SHARED_PATHS_END
