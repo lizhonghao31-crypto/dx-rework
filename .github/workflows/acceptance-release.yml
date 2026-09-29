@@ -43,7 +43,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.git_sha }}
-          fetch-depth: 1
+          # secret:scan:full scans complete repository history and must not run
+          # on a shallow checkout.
+          fetch-depth: 0
 
       - name: Verify exact candidate
         shell: bash

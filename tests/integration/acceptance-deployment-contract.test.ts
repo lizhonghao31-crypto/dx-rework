@@ -44,6 +44,15 @@ describe("isolated Acceptance deployment contract", () => {
     expect(workflow).toContain('[[ "$ACCEPTANCE_PUBLIC_URL" != https://dxerp.org.cn* ]]');
   });
 
+  it("checks out complete history before the full secret scan", () => {
+    const workflow = read(".github/workflows/acceptance-release.yml");
+    const checkoutStart = workflow.indexOf("- name: Checkout exact candidate");
+    const checkoutEnd = workflow.indexOf("- name: Verify exact candidate");
+    const gateCheckout = workflow.slice(checkoutStart, checkoutEnd);
+    expect(gateCheckout).toContain("fetch-depth: 0");
+    expect(workflow.indexOf("Checkout exact candidate")).toBeLessThan(workflow.indexOf("npm run secret:scan:full"));
+  });
+
   it("loads Acceptance-only secrets through the guarded app env allowlist", () => {
     const lib = read("scripts/deploy/lib.sh");
     expect(lib).toContain("ACCEPTANCE_LAB_ENABLED");
