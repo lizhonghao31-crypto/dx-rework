@@ -14,7 +14,7 @@
 .production-command-sidebar-footer { position: absolute; left: 20px; bottom: 24px; display: grid; gap: 3px; color: #d4dfed; font-size: 11px; line-height: 1.25; }
 .production-command-sidebar-footer small { margin-top: 8px; color: #94a8bf; letter-spacing: .13em; font-size: 9px; }
 .production-command-workspace { min-width: 0; }
-.production-command-topbar { height: 50px; display: flex; align-items: stretch; justify-content: space-between; border-bottom: 1px solid #e2e8f1; background: #fff; }
+.production-command-topbar { height: 50px; display: flex; align-items: stretch; justify-content: flex-end; border-bottom: 1px solid #e2e8f1; background: #fff; }
 .production-command-topbar nav { display: flex; align-items: stretch; min-width: 0; }
 .production-command-topbar nav a { position: relative; display: flex; align-items: center; padding: 0 20px; color: #24334a; text-decoration: none; font-size: 13px; font-weight: 600; white-space: nowrap; }
 .production-command-topbar nav a.is-active { color: #1669e8; }
