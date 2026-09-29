@@ -43,3 +43,13 @@
 - 不打开真实钉钉通知；
 - 不迁移历史正式订单；
 - 不把旧 Acceptance 的 root PM2 进程当作最终运行形态。
+
+## 2026-09-29 self-hosted deploy adjustment
+
+GitHub-hosted runners cannot reach the ECS SSH port. Acceptance deployment therefore uses a repository self-hosted runner registered under the low-privilege `dxacceptance` Linux account with the custom label `dx-rework-acceptance`.
+
+- Build, dependency audit, full secret scan and Playwright browser regression remain on GitHub-hosted runners.
+- The ECS runner only downloads the already-built checksum-bound bundle, applies Acceptance migrations, activates port 3202, and seeds isolated fixtures.
+- No public SSH ingress is required for GitHub Actions.
+- The public browser regression mints its one-time control code from the Acceptance-only GitHub environment secret `DX_REWORK_ACCEPTANCE_LAB_SECRET`; it never uses production secrets.
+- After the runner path is proven, the old four SSH environment secrets can be removed because the deployment workflow no longer reads them.

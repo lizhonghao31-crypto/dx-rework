@@ -13,36 +13,21 @@ concurrency:
 jobs:
   probe:
     name: Probe existing staging Acceptance host
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, dx-rework-acceptance]
     timeout-minutes: 5
     environment: dx-rework-acceptance
     steps:
-      - name: Validate pilot SSH credentials
+      - name: Assert dedicated Acceptance runner
         shell: bash
-        env:
-          SSH_HOST: ${{ secrets.DX_REWORK_SSH_HOST }}
-          SSH_USER: ${{ secrets.DX_REWORK_SSH_USER }}
-          SSH_KEY: ${{ secrets.DX_REWORK_SSH_KEY }}
-          SSH_HOST_KEY: ${{ secrets.DX_REWORK_SSH_HOST_KEY }}
         run: |
           set -euo pipefail
-          for name in SSH_HOST SSH_USER SSH_KEY SSH_HOST_KEY; do
-            test -n "${!name}"
-          done
-          install -m 0700 -d ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
-          chmod 0600 ~/.ssh/id_ed25519
-          printf '%s\n' "$SSH_HOST_KEY" > ~/.ssh/known_hosts
-          chmod 0600 ~/.ssh/known_hosts
+          test "$(id -un)" = dxacceptance
+          test "$HOME" = /home/dxacceptance
+          test -d /opt/dx-rework-acceptance
 
-      - name: Probe staging host read-only
+      - name: Probe Acceptance host read-only
         shell: bash
-        env:
-          SSH_HOST: ${{ secrets.DX_REWORK_SSH_HOST }}
-          SSH_USER: ${{ secrets.DX_REWORK_SSH_USER }}
         run: |
-          set -euo pipefail
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" 'bash -s' <<'REMOTE'
           set -euo pipefail
 
           report() {
@@ -54,7 +39,6 @@ jobs:
           }
 
           report probe_user "$(id -un)"
-          report pilot_root_present "$(present /opt/dx-rework)"
           report acceptance_root_present "$(present /opt/dx-rework-acceptance)"
           report acceptance_shared_present "$(present /opt/dx-rework-acceptance/shared)"
           report acceptance_app_env_present "$(present /opt/dx-rework-acceptance/shared/.env)"
@@ -62,31 +46,8 @@ jobs:
           report acceptance_current_present "$(present /opt/dx-rework-acceptance/current)"
           report acceptance_active_present "$(present /opt/dx-rework-acceptance/active)"
 
-          if [[ -L /opt/dx-rework/current ]]; then
-            report pilot_current_target "$(readlink -f /opt/dx-rework/current 2>/dev/null || true)"
-          fi
           if [[ -L /opt/dx-rework-acceptance/current ]]; then
             report acceptance_current_target "$(readlink -f /opt/dx-rework-acceptance/current 2>/dev/null || true)"
-          fi
-
-          deploy_env=/opt/dx-rework/shared/deploy.env
-          if [[ -r "$deploy_env" ]]; then
-            value() { awk -F= -v key="$1" '$1==key {sub(/^[^=]*=/,""); print; exit}' "$deploy_env"; }
-            nginx_mode="$(value DX_REWORK_NGINX_MODE)"
-            server_name="$(value DX_REWORK_SERVER_NAME)"
-            nginx_config="$(value DX_REWORK_NGINX_CONFIG)"
-            report pilot_nginx_mode "${nginx_mode:-missing}"
-            report pilot_server_name "${server_name:-missing}"
-            if [[ -n "$nginx_config" && -r "$nginx_config" ]]; then
-              report pilot_nginx_config_readable yes
-              report nginx_acceptance_location_count "$(grep -Ec 'location[[:space:]].*/acceptance' "$nginx_config" || true)"
-              report nginx_rework_location_count "$(grep -Ec 'location[[:space:]].*/rework' "$nginx_config" || true)"
-              report nginx_proxy_3202_count "$(grep -Fc '127.0.0.1:3202' "$nginx_config" || true)"
-            else
-              report pilot_nginx_config_readable no
-            fi
-          else
-            report pilot_deploy_env_readable no
           fi
 
           if command -v ss >/dev/null 2>&1; then
@@ -132,9 +93,8 @@ jobs:
               report acceptance_database_configured no
             fi
           fi
-          REMOTE
 
-      - name: Probe legacy Acceptance public paths
+      - name: Probe Acceptance public paths
         shell: bash
         run: |
           set -euo pipefail

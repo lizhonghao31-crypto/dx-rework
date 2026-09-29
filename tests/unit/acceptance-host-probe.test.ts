@@ -2,18 +2,15 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("Acceptance staging host probe", () => {
-  it("is manual, acceptance-scoped and read-only on the remote host", async () => {
+  it("is manual, acceptance-scoped, self-hosted and read-only", async () => {
     const workflow = await readFile(".github/workflows/acceptance-host-probe.yml", "utf8");
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).not.toMatch(/^\s+(push|pull_request):/m);
     expect(workflow).toContain("environment: dx-rework-acceptance");
-    expect(workflow).toContain("StrictHostKeyChecking=yes");
-
-    const start = workflow.indexOf("<<'REMOTE'");
-    const end = workflow.indexOf("\n          REMOTE", start);
-    expect(start).toBeGreaterThanOrEqual(0);
-    expect(end).toBeGreaterThan(start);
-    const remote = workflow.slice(start, end);
+    expect(workflow).toContain("runs-on: [self-hosted, linux, x64, dx-rework-acceptance]");
+    expect(workflow).not.toMatch(/\bssh\b/);
+    expect(workflow).not.toContain("DX_REWORK_SSH_KEY");
+    expect(workflow).not.toContain("StrictHostKeyChecking=yes");
 
     for (const forbidden of [
       /\bsudo\b/,
@@ -30,11 +27,11 @@ describe("Acceptance staging host probe", () => {
       /\bpsql\b/,
       /pm2\s+(?:start|restart|reload|delete|stop)/,
     ]) {
-      expect(remote).not.toMatch(forbidden);
+      expect(workflow).not.toMatch(forbidden);
     }
   });
 
-  it("reports only non-secret Acceptance facts and legacy public reachability", async () => {
+  it("reports only non-secret Acceptance facts and public reachability", async () => {
     const workflow = await readFile(".github/workflows/acceptance-host-probe.yml", "utf8");
     expect(workflow).toContain("/opt/dx-rework-acceptance");
     expect(workflow).toContain("127.0.0.1:3202");

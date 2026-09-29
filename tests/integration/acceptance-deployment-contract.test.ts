@@ -41,10 +41,14 @@ describe("isolated Acceptance deployment contract", () => {
     expect(workflow).toContain("Exact repository commit SHA");
     expect(workflow).toContain("/opt/dx-rework-acceptance");
     expect(workflow).toContain("DX_REWORK_ACCEPTANCE_PUBLIC_URL");
+    expect(workflow).toContain("DX_REWORK_ACCEPTANCE_LAB_SECRET");
     expect(workflow).not.toContain("environment: dx-rework-production");
     expect(workflow).toContain('[[ "${ACCEPTANCE_PUBLIC_URL%/}" == "https://staging-api.dxerp.org.cn/acceptance" ]]');
     expect(workflow).toContain("APP_BASE_PATH: /acceptance/");
     expect(workflow).toContain("VITE_BASE_PATH: /acceptance/");
+    expect(workflow).toContain("runs-on: [self-hosted, linux, x64, dx-rework-acceptance]");
+    expect(workflow).not.toContain("DX_REWORK_SSH_KEY");
+    expect(workflow).not.toContain("StrictHostKeyChecking");
   });
 
   it("checks out complete history before the full secret scan", () => {
@@ -87,7 +91,8 @@ describe("isolated Acceptance deployment contract", () => {
     const workflow = read(".github/workflows/acceptance-release.yml");
     const browser = read("scripts/acceptance/live-browser-regression.mjs");
     expect(workflow).toContain("Install pinned Chromium regression runner");
-    expect(workflow).toContain("mint-acceptance-control-code.sh");
+    expect(workflow).toContain("DX_REWORK_ACCEPTANCE_LAB_SECRET");
+    expect(workflow).toContain("mintAcceptanceControlCode");
     expect(workflow).toContain("seed-acceptance-production-fixtures.sh");
     expect(workflow).toContain("acceptance-validation-${{ inputs.git_sha }}");
     expect(workflow).toContain("candidate-lock.json");
