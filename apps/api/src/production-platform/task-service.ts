@@ -117,14 +117,14 @@ export class DigitalProductionTaskService {
     await this.activate(client, actor, id, input.occurredAt === undefined ? new Date().toISOString() : input.occurredAt, input.occurredAt === null ? "缺失" : input.occurredAt === undefined ? "现场登记" : "补报未核实");
     return { taskId: id };
   }
-  async setConditionWithClient(client: PoolClient, actor: TrustedActorContext, id: string, condition: typeof DIGITAL_CONDITION_KEYS[number], satisfied: boolean, occurredAt: string | null) {
+  async setConditionWithClient(client: PoolClient, actor: TrustedActorContext, id: string, condition: typeof DIGITAL_CONDITION_KEYS[number], satisfied: boolean, occurredAt: string | null, note = "") {
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
     const task = await this.task(client, id, true);
     if (["completed", "cancelled"].includes(task.state)) fail("已结束任务不能重写条件");
     if (occurredAt !== null && (!Number.isFinite(new Date(occurredAt).getTime()) || new Date(occurredAt).getTime() > Date.now())) fail("条件发生时间无效");
     const updated = await client.query("UPDATE digital_production_task_conditions SET satisfied=$3,occurred_at=$4 WHERE task_id=$1 AND condition_key=$2 RETURNING task_id", [id, condition, satisfied, occurredAt]);
     if (!updated.rowCount) fail("任务不包含该前置条件");
-    await this.event(client, actor, id, this.resource(task), "condition", occurredAt, occurredAt === null ? "缺失" : "补报未核实", { condition, satisfied });
+    await this.event(client, actor, id, this.resource(task), "condition", occurredAt, occurredAt === null ? "缺失" : "补报未核实", { condition, satisfied, note });
     if (!satisfied && task.state === "ready") await client.query("UPDATE digital_production_tasks SET state='blocked',blocked_reason='前置条件未满足' WHERE task_id=$1", [id]);
     return this.activate(client, actor, id, occurredAt, occurredAt === null ? "缺失" : "补报未核实");
   }
@@ -162,7 +162,7 @@ export class DigitalProductionTaskService {
         const task = await this.task(client, id, true);
         if (["completed", "cancelled"].includes(task.state)) fail("已结束任务不能补交接");
         const at = input.occurredAt === undefined ? new Date().toISOString() : input.occurredAt;
-        await this.setConditionWithClient(client, actor, id, "handover_received", true, at);
+        await this.setConditionWithClient(client, actor, id, "handover_received", true, at, input.note);
         return { taskId: id };
       });
     });

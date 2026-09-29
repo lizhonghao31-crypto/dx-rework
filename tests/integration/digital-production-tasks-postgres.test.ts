@@ -120,7 +120,7 @@ run("P03 task lifecycle PostgreSQL", () => {
   it("records downstream receipt without inventing the unknown upstream completion and blocks missing material",async()=>{
     const source=await service.createSource(actor(),DigitalSourceCreateSchema.parse({developmentType:"头版",designStyleNo:"TEST-SOURCE"}),randomUUID());
     const resource={kind:"source" as const,id:source.sourceId};const routeId=randomUUID();const a=await create(resource,"budget",{routeId,occurredAt:null});const b=await create(resource,"development_sewing",{routeId,predecessors:[a.taskId]});
-    await tasks.handover(boss,b.taskId,{note:"补交接"},randomUUID());expect((await tasks.read(boss,b.taskId)).state).toBe("pending");
+    await tasks.handover(boss,b.taskId,{note:"补交接"},randomUUID());expect((await tasks.history(boss,b.taskId)).events.some(e=>e.kind==="condition"&&e.payload.note==="补交接")).toBe(true);expect((await tasks.read(boss,b.taskId)).state).toBe("pending");
     await condition(a.taskId,"business_recorded");await tasks.complete(boss,a.taskId,{occurredAt:null,note:"未知"},randomUUID());
     await condition(b.taskId,"materials_ready",new Date().toISOString());expect(await tasks.read(boss,b.taskId)).toMatchObject({state:"ready",enteredAt:null,dueAt:null,timeQuality:"缺失"});
     expect((await tasks.read(boss,a.taskId)).completedAt).toBeNull();
