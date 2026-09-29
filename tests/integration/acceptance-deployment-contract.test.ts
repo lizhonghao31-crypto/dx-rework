@@ -60,8 +60,12 @@ describe("isolated Acceptance deployment contract", () => {
     const lib = read("scripts/deploy/lib.sh");
     expect(lib).toContain("ACCEPTANCE_LAB_ENABLED");
     expect(lib).toContain("ACCEPTANCE_LAB_SECRET");
+    expect(lib).toContain("DIGITAL_PRODUCTION_ENABLED");
+    expect(lib).toContain("DIGITAL_PRODUCTION_CREATION_ENABLED");
     const start = read("scripts/deploy/start-acceptance-api.sh");
     expect(start.indexOf("load_app_config")).toBeLessThan(start.indexOf("ACCEPTANCE_LAB_ENABLED"));
+    expect(start).toContain("acceptance runtime requires digital production");
+    expect(remote).toContain("acceptance digital production must be enabled");
   });
 
   it("mints one-time control credentials only from the isolated runtime", () => {
@@ -113,6 +117,8 @@ describe("isolated Acceptance deployment contract", () => {
     expect(app).toContain("dx_rework_acceptance");
     expect(app).toContain("ROOT_DINGTALK_USER_ID=uat-root");
     expect(app).toContain("ACCEPTANCE_LAB_ENABLED=true");
+    expect(app).toContain("DIGITAL_PRODUCTION_ENABLED=true");
+    expect(app).toContain("DIGITAL_PRODUCTION_CREATION_ENABLED=true");
     expect(app).toContain("APP_BASE_PATH=/acceptance/");
     expect(app).toContain("TODO_RUNTIME_ENABLED=false");
     expect(app).not.toContain("OSS_BUCKET=");
