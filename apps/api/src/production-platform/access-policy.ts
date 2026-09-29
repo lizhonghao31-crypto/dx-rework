@@ -33,7 +33,7 @@ export class DigitalProductionAccessPolicy {
       if (purpose === "budget") return false;
       if (purpose === "execute") return await this.activeRole(actor.actorId, task.required_role)
         && (task.assignee_id === actor.actorId || await this.delegated(actor, kind, id, "execute"));
-      return isDigitalLeader(actor) || isDigitalTechnicalManager(actor) || (task.assignee_id === actor.actorId && await this.activeRole(actor.actorId, task.required_role))
+      return isDigitalLeader(actor) || isDigitalTechnicalManager(actor) || (actor.actorRoles.includes("development_clerk") && task.task_kind.startsWith("development_")) || (task.assignee_id === actor.actorId && await this.activeRole(actor.actorId, task.required_role))
         || await this.delegated(actor, kind, id, "technical") || await this.delegated(actor, kind, id, "execute")
         || await this.allowed(actor, task.production_order_id ? "order" : "source", task.production_order_id ?? task.source_id, "technical");
     }

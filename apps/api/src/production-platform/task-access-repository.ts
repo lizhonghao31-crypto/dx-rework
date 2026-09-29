@@ -5,6 +5,10 @@ import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDig
 export const DIGITAL_TASK_ROLES = {
   development_materials: "development_clerk", development_pattern: "pattern_room_worker", development_cutting: "pattern_room_worker",
   development_sewing: "pattern_room_worker", development_tail_check: "pattern_room_tail_inspector",
+  development_printing: "pattern_room_worker", development_embroidery: "pattern_room_worker", development_print_embroidery: "pattern_room_worker",
+  development_washing: "development_clerk", development_shipping: "sample_designer", development_confirmation: "sample_designer",
+  bulk_pattern: "pattern_room_worker", warehouse_preshrink: "warehouse_receiver", bulk_cutting: "cutting_worker",
+  factory_material_count: "order_merchandiser", budget: "sample_designer", production_sheet: "order_merchandiser",
   process_logistics: "embroidery_washing_merchandiser", bulk_qc: "quality_control", warehouse_dispatch: "warehouse_receiver",
 } as const;
 export type DigitalTaskKind = keyof typeof DIGITAL_TASK_ROLES;
@@ -21,7 +25,7 @@ export async function createDigitalTaskAccess(client: PoolClient, actor: Trusted
 }
 export async function reassignDigitalTask(client: PoolClient, actor: TrustedActorContext, taskId: string, assigneeId: string) {
   const task = (await client.query("SELECT * FROM digital_production_task_access WHERE task_id=$1 FOR UPDATE", [taskId])).rows[0] ?? digitalNotFound();
-  const development = task.task_kind.startsWith("development_");
+  const development = task.task_kind.startsWith("development_") || task.task_kind === "bulk_pattern";
   if (!isDigitalLeader(actor) && !(development && (isDigitalTechnicalManager(actor) || actor.actorRoles.includes("development_clerk")))) digitalForbidden();
   if (!await new DigitalProductionAccessPolicy(client).activeRole(assigneeId, task.required_role)) digitalForbidden();
   await client.query("UPDATE digital_production_task_access SET assignee_id=$2 WHERE task_id=$1", [taskId, assigneeId]);

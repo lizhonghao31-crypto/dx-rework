@@ -11,7 +11,7 @@ const fail = (message: string, status = 409): never => { throw new ApplicationEr
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const dateText = (value: Date | string | null) => value instanceof Date ? value.toISOString().slice(0, 10) : value;
 export function assertIdentityActor(actor: TrustedActorContext): void {
-  if (!isRootActor(actor) && !actor.actorRoles.some(role => ["sample_designer", "order_merchandiser", "owner_group", "production_management", "pattern_room_supervisor", "development_clerk", "pattern_room_tail_inspector", "pattern_room_worker", "quality_control", "embroidery_washing_merchandiser", "warehouse_receiver"].includes(role))) digitalForbidden();
+  if (!isRootActor(actor) && !actor.actorRoles.some(role => ["sample_designer", "order_merchandiser", "owner_group", "production_management", "pattern_room_supervisor", "development_clerk", "pattern_room_tail_inspector", "pattern_room_worker", "quality_control", "embroidery_washing_merchandiser", "warehouse_receiver", "cutting_worker"].includes(role))) digitalForbidden();
 }
 const assertCreator = (actor: TrustedActorContext) => {
   if (!isRootActor(actor) && (!actor.actorRoles.includes("sample_designer") || !(actor.authorizationCapabilities ?? []).includes("pattern_room:orders:create"))) digitalForbidden();

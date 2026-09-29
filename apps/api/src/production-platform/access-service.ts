@@ -20,8 +20,8 @@ export class DigitalProductionAccessService {
       VALUES($1,$2,$3,$4,'digital_access',$5,$6,$7)`, [randomUUID(), actor.requestId, actor.actorId, action, id, JSON.stringify(before), JSON.stringify(after)]);
   }
   async candidates(actor: TrustedActorContext) {
-    if (!isDigitalLeader(actor) && !isDigitalTechnicalManager(actor) && !actor.actorRoles.includes("sample_designer")) digitalForbidden();
-    const roles = isDigitalLeader(actor) || isDigitalTechnicalManager(actor) ? null : ["order_merchandiser"];
+    if (!isDigitalLeader(actor) && !isDigitalTechnicalManager(actor) && !actor.actorRoles.includes("sample_designer") && !actor.actorRoles.includes("development_clerk")) digitalForbidden();
+    const roles = isDigitalLeader(actor) || isDigitalTechnicalManager(actor) ? null : actor.actorRoles.includes("development_clerk") ? ["development_clerk", "pattern_room_worker", "pattern_room_tail_inspector"] : ["order_merchandiser"];
     return (await this.database.query(`SELECT u.id,u.display_name AS "displayName",array_agg(DISTINCT a.role_code) AS roles
       FROM app_users u JOIN user_role_assignments a ON a.user_id=u.id AND a.revoked_at IS NULL
       JOIN business_roles r ON r.role_code=a.role_code AND r.enabled

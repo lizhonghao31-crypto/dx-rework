@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./digital-task-deadline": { "types": "./src/digital-task-deadline.ts", "import": "./dist/digital-task-deadline.js" },
     ".": {
       "types": "./src/index.ts",
       "import": "./dist/index.js"
