@@ -77,6 +77,19 @@ describe("isolated Acceptance deployment contract", () => {
     expect(mint).not.toContain("/opt/dx-rework/current");
   });
 
+  it("seeds A1 role identities before deterministic digital-production roots", () => {
+    const seed = read("scripts/deploy/seed-acceptance-production-fixtures.sh");
+    const roles = read("scripts/deploy/seed-acceptance-role-users.mjs");
+    expect(seed).toContain("seed-acceptance-role-users.mjs");
+    expect(roles).toContain('databaseName !== "dx_rework_acceptance"');
+    for (const alias of [
+      "development-clerk",
+      "pattern-room-tail-inspector",
+      "pattern-room-supervisor",
+      "pattern-room-worker",
+    ]) expect(roles).toContain(alias);
+  });
+
   it("seeds only deterministic digital-production roots into an Acceptance database", () => {
     const seed = read("scripts/deploy/seed-acceptance-production-fixtures.sh");
     expect(seed).toContain("select current_database()");
