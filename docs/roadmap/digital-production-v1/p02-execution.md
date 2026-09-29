@@ -30,3 +30,9 @@ gate class: FULL
 - 21个真实SQL/API场景在PGlite通过，包含主跟单、预算隔离、代理范围、到期撤销停用、QC/物流、Root错绑保护；PGlite连接适配串行，不能代替Gate PostgreSQL并发证明。
 - 全部340个单元测试文件、1536个测试通过。Lint、workspace类型检查及构建通过；219条迁移按序执行、manifest校验通过。
 - Full Gate和Codex Review以发布后的精确Head结果为准；无本地浏览器验收证据，A1在Acceptance统一验收。
+
+## Gate兼容性修复
+
+首轮Full Gate激活旧access-postgres回归后，发现其夹具未包含0059已存在的临时工身份字段，且仍断言已淘汰的cursor分页。夹具改为执行0059实际临时工身份DDL段及0098尾查默认名单迁移，保留全部权限与并发断言；分页测试改为现有page/totalCount/totalPages契约并保留页码非法、字面搜索、多字节搜索覆盖。不改业务服务、不跳过Gate。恢复manifest原格式，避免重排既有迁移项。
+
+本地定向回归进一步修正旧测试把审计时间写作occurred_at（实际created_at）、构造102字工序名超过既有100字约束的问题；保留100字边界及101字查询拒绝断言。
