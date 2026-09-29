@@ -36,3 +36,7 @@ High-risk means migration/schema, auth/permissions, financial or quantity semant
 `scripts/ci/verify-actions-policy.mjs` enforces the mutually exclusive `[QUICK]` / `[FULL]` topology, lightweight Quick Gate, no automatic Preview/Governance runners, and stale-run cancellation.
 
 Weakening or bypassing this policy requires explicit business-owner approval.
+
+## Digital production integration branch
+
+PRs targeting `release/digital-production-v1` use the same title-selected, exact-Head Quick/Full Gates as PRs targeting `main`. This exact branch is explicitly allowed; unrelated release branches are not enabled. Gate classification continues to use the event's actual base and head SHA. This does not enable deployment, Preview or extra runners.

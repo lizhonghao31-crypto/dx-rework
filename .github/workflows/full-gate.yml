@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - release/digital-production-v1
     types:
       - opened
       - synchronize

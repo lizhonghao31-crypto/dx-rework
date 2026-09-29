@@ -37,6 +37,14 @@ for (const expression of [
   assert(containsSecretsContext(expression), `secret context detector must reject ${expression}`);
 }
 
+// Keep the integration branch subject to the same exact-Head gates as main.
+for (const [name, source] of [["Quick Gate", quick], ["Full Gate", full]]) {
+  const branches = source.match(/ {2}pull_request:\n {4}branches:\n((?: {6}- [^\n]+\n)+)/)?.[1]
+    .trim().split("\n").map(line => line.trim().slice(2));
+  assert(JSON.stringify(branches) === JSON.stringify(["main", "release/digital-production-v1"]),
+    `${name} must gate main and the approved digital-production integration branch only`);
+}
+
 assert(quick.includes("timeout-minutes: 5"), "Quick Gate timeout must stay at 5 minutes");
 assert(quick.includes("!startsWith(github.event.pull_request.title, '[FULL]')"), "Quick Gate must skip FULL-title PRs before allocating its job");
 assert(stepBlock(quick, "Require explicit Quick Gate title").includes("[QUICK]"), "Quick Gate must require an explicit QUICK title");
