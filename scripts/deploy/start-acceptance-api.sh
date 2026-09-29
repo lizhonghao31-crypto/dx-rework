@@ -13,6 +13,8 @@ load_node_config
 
 [[ "${ACCEPTANCE_LAB_ENABLED:-false}" == true ]] || die 'acceptance lab must be enabled'
 [[ "${ROOT_DINGTALK_USER_ID:-}" == uat-root ]] || die 'acceptance runtime requires uat-root'
+[[ "${DIGITAL_PRODUCTION_ENABLED:-false}" == true ]] || die 'acceptance runtime requires digital production'
+[[ "${DIGITAL_PRODUCTION_CREATION_ENABLED:-false}" == true ]] || die 'acceptance runtime requires digital production creation'
 [[ "${TODO_RUNTIME_ENABLED:-false}" != true ]] || die 'acceptance runtime forbids real todo runtime'
 [[ "${TODO_DELIVERY_ENABLED:-false}" != true ]] || die 'acceptance runtime forbids real todo delivery'
 [[ "${TODO_TIMING_ENABLED:-false}" != true ]] || die 'acceptance runtime forbids real todo timing'
