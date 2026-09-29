@@ -1,3 +1,4 @@
+import { createClientRequestId } from "./client-request-id.js";
 import { useEffect, useRef, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import type { DigitalCustomer, DigitalOrder, DigitalOrderInput, DigitalSource } from "@dx-rework/contracts/digital-production";
@@ -55,7 +56,7 @@ export function DigitalProductionPage() {
     writing.current = true;
     setBusy(true); setError("");
     const payload = JSON.stringify([path, method, body]);
-    if (operation.current?.payload !== payload) operation.current = { payload, key: crypto.randomUUID() };
+    if (operation.current?.payload !== payload) operation.current = { payload, key: createClientRequestId() };
     try {
       const value = await request<DigitalOrder | { sourceId: string }>(path, method, body, operation.current.key);
       operation.current = null;
