@@ -24,7 +24,7 @@ run("digital production P01 identities", () => {
     { color: "黑", sizes: [{ size: "M", quantity: 2000 }, { size: "L", quantity: 1000 }], deliveryDate: "2026-10-10" },
     { color: "白", poNumber: "PO-2", sizes: [{ size: "M", quantity: 2000 }], deliveryDate: "2026-10-12" },
   ] });
-  const sourceInput = () => DigitalSourceCreateSchema.parse({ developmentType: "头版", designStyleNo: "TEST-STYLE", customerCode: "PD" });
+  const sourceInput = () => DigitalSourceCreateSchema.parse({ developmentType: "头版", designStyleNo: "TEST-STYLE", temporaryStyleNo: "TEST-TEMP", customerCode: "PD" });
   const app = Fastify();
   beforeAll(async () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
@@ -60,6 +60,23 @@ run("digital production P01 identities", () => {
     expect(result.lines.map(line => line.deliveryDate)).toEqual(["2026-10-10", "2026-10-12"]);
     expect(result.lines[0]?.formalStyleNo).toBeNull(); expect(result).not.toHaveProperty("dueAt");
     expect((await database.query("SELECT count(*)::int AS n FROM digital_production_child_links")).rows[0].n).toBe(0);
+  });
+  it("rejects normalized duplicate colors in service and database", async () => {
+    const request = input(); request.lines[0]!.color = "Blue"; request.lines[1]!.color = " blue ";
+    await expect(service.createOrder(actor(), request, randomUUID())).rejects.toMatchObject({ statusCode: 400 });
+    const order = await service.createOrder(actor(), input(), randomUUID());
+    await expect(database.query("INSERT INTO digital_production_po_lines(line_id,production_order_id,position,color) VALUES($1,$2,3,' 黑 ')", [randomUUID(), order.productionOrderId])).rejects.toMatchObject({ code: "23505" });
+  });
+  it("preserves source substitute numbers on confirmation and later attachment", async () => {
+    const source = await service.createSource(actor(), sourceInput(), randomUUID());
+    for (const temporaryStyleNo of [null, "CHANGED"]) {
+      await expect(service.createOrder(actor(), { ...input(), temporaryStyleNo }, randomUUID(), source.sourceId)).rejects.toMatchObject({ statusCode: 409 });
+      const order = await service.createOrder(actor(), { ...input(), temporaryStyleNo }, randomUUID());
+      await expect(service.attachSource(actor(), order.productionOrderId, source.sourceId, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+      expect((await service.read(actor(), order.productionOrderId)).sourceId).toBeNull();
+    }
+    const confirmed = await service.createOrder(actor(), input(), randomUUID(), source.sourceId);
+    expect(confirmed.temporaryStyleNo).toBe("TEST-TEMP");
   });
   it("deduplicates direct-order retries and rejects a changed payload on the same key", async () => {
     const key = randomUUID(); const request = input();

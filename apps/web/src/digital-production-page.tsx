@@ -1,3 +1,4 @@
+import { initialDigitalProductGroup } from "./digital-production-defaults.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { useEffect, useRef, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
@@ -66,7 +67,7 @@ export function DigitalProductionPage() {
     finally { writing.current = false; setBusy(false); }
   };
   const updateLine = (index: number, patch: Partial<DigitalOrderInput["lines"][number]>) => setForm(current => ({ ...current, lines: current.lines.map((line, i) => i === index ? { ...line, ...patch } : line) }));
-  const start = (next: "source" | "order", source?: DigitalSource) => { setSelected(null); setSourceId(source?.sourceId ?? null); setForm({ ...emptyOrder(), designStyleNo: source?.designStyleNo ?? "", temporaryStyleNo: source?.temporaryStyleNo ?? null, customerCode: source?.customerCode ?? "" }); setMode(next); setError(""); };
+  const start = (next: "source" | "order", source?: DigitalSource) => { setSelected(null); setSourceId(source?.sourceId ?? null); setForm({ ...emptyOrder(), designStyleNo: source?.designStyleNo ?? "", temporaryStyleNo: source?.temporaryStyleNo ?? null, customerCode: source?.customerCode ?? "", productGroup: initialDigitalProductGroup(options?.customers ?? [], source?.customerCode) }); setMode(next); setError(""); };
   return <div className="pattern-orders digital-production"><Header title="数字生产订单" badge="订单源头" badgePlacement="subtitle" />
     {error && <p role="alert">{error}</p>}
     {options && <><Surface><div className="pattern-actions"><Button onClick={() => { setMode("list"); setSelected(null); }}>订单列表</Button>
@@ -76,7 +77,7 @@ export function DigitalProductionPage() {
       <h2>{mode === "source" ? "新增开发来源" : sourceId ? "确认下单" : "直接下单"}</h2><fieldset disabled={busy}>
       {mode === "source" && <label>开发类型<select value={developmentType} onChange={event => setDevelopmentType(event.target.value as "头版" | "开发板")}><option>头版</option><option>开发板</option></select></label>}
       <label>设计款号<input required maxLength={100} value={form.designStyleNo} readOnly={Boolean(sourceId)} onChange={event => setForm({ ...form, designStyleNo: event.target.value })} /></label>
-      <label>代用款号<input maxLength={100} value={form.temporaryStyleNo ?? ""} onChange={event => setForm({ ...form, temporaryStyleNo: event.target.value || null })} /></label>
+      <label>代用款号<input maxLength={100} value={form.temporaryStyleNo ?? ""} readOnly={Boolean(sourceId)} onChange={event => setForm({ ...form, temporaryStyleNo: event.target.value || null })} /></label>
       <label>客户<select required={mode === "order"} value={form.customerCode} onChange={event => { const code = event.target.value; const group = options.customers.find(item => item.code === code)?.productGroups[0]; setForm({ ...form, customerCode: code, productGroup: (group ?? form.productGroup) as DigitalOrderInput["productGroup"] }); }}><option value="">请选择</option>{options.customers.map(customer => <option key={customer.code} value={customer.code}>{customer.code} · {customer.name}</option>)}</select></label>
       {mode === "order" && <><label>产品分组<select value={form.productGroup} onChange={event => setForm({ ...form, productGroup: event.target.value as DigitalOrderInput["productGroup"] })}>{(options.customers.find(item => item.code === form.customerCode)?.productGroups ?? [form.productGroup]).map(group => <option key={group}>{group}</option>)}</select></label>
         <label>客户下单日期<input required type="date" value={form.orderDate} onChange={event => setForm({ ...form, orderDate: event.target.value })} /></label>

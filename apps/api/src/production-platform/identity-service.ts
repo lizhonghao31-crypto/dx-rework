@@ -85,13 +85,14 @@ export class DigitalProductionIdentityService {
   }
   async createOrder(actor: TrustedActorContext, input: DigitalOrderInput, key: string, sourceId: string | null = null): Promise<DigitalOrder> {
     this.assertCreation();
+    if (new Set(input.lines.map(line => line.color.trim().toLowerCase())).size !== input.lines.length) fail("同一母单颜色不能重复", 400);
     return this.command(actor, sourceId ? `confirm-source:${sourceId}` : "direct-order", key, input, async client => {
       await this.customer(client, input.customerCode, input.productGroup);
       let createdBy = actor.actorId;
       if (sourceId) {
         const source = await this.visibleSource(client, actor, sourceId, true);
         createdBy = source.created_by;
-        if (source.design_style_no !== input.designStyleNo || (source.customer_code && source.customer_code !== input.customerCode)) fail("下单资料与开发来源不一致");
+        if (source.design_style_no !== input.designStyleNo || (source.temporary_style_no ?? "") !== (input.temporaryStyleNo ?? "") || (source.customer_code && source.customer_code !== input.customerCode)) fail("下单资料与开发来源不一致");
         const existing = await client.query("SELECT production_order_id,creation_hash FROM digital_production_orders WHERE source_id=$1", [sourceId]);
         if (existing.rows[0]) {
           if (existing.rows[0].creation_hash !== digest(input)) fail("该开发来源已确认下单，不能重复建立不同订单");
@@ -116,7 +117,7 @@ export class DigitalProductionIdentityService {
       const source = await this.visibleSource(client, actor, sourceId, true);
       const order = await this.visibleOrder(client, actor, id, true);
       if (order.source_id === sourceId) return this.readWith(client, actor, id);
-      if (order.source_id || order.design_style_no !== source.design_style_no || (source.customer_code && source.customer_code !== order.customer_code)) fail("开发来源与订单不匹配或已有关联");
+      if (order.source_id || order.design_style_no !== source.design_style_no || (order.temporary_style_no ?? "") !== (source.temporary_style_no ?? "") || (source.customer_code && source.customer_code !== order.customer_code)) fail("开发来源与订单不匹配或已有关联");
       const used = await client.query("SELECT 1 FROM digital_production_orders WHERE source_id=$1", [sourceId]);
       if (used.rowCount) fail("该开发来源已有履约母单");
       await client.query("UPDATE digital_production_orders SET source_id=$2,version=version+1 WHERE production_order_id=$1", [id, sourceId]);

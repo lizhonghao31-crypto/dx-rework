@@ -31,7 +31,10 @@ export const DigitalOrderCreateSchema = z.object({
   orderDate: date,
   contractDeliveryDate: date.nullable().default(null),
   lines: z.array(DigitalPoInputSchema).min(1).max(50),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (new Set(value.lines.map(line => line.color.trim().toLowerCase())).size !== value.lines.length)
+    context.addIssue({ code: "custom", path: ["lines"], message: "同一母单颜色不能重复" });
+});
 export const DigitalNumberCorrectionSchema = z.object({
   expectedVersion: z.number().int().positive(),
   poNumber: optionalText,

@@ -41,6 +41,7 @@ CREATE TABLE digital_production_po_lines (
  color text NOT NULL CHECK(length(btrim(color)) BETWEEN 1 AND 100), color_foreign text, delivery_date date,
  UNIQUE(production_order_id,position), UNIQUE(production_order_id,line_id)
 );
+CREATE UNIQUE INDEX digital_production_po_color_unique ON digital_production_po_lines(production_order_id,lower(btrim(color)));
 CREATE TABLE digital_production_po_sizes (
  line_id uuid NOT NULL REFERENCES digital_production_po_lines(line_id), size text NOT NULL CHECK(length(btrim(size)) BETWEEN 1 AND 100),
  quantity integer NOT NULL CHECK(quantity BETWEEN 1 AND 10000000), PRIMARY KEY(line_id,size)
