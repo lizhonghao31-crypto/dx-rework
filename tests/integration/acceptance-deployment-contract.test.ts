@@ -41,7 +41,9 @@ describe("isolated Acceptance deployment contract", () => {
     expect(workflow).toContain("/opt/dx-rework-acceptance");
     expect(workflow).toContain("DX_REWORK_ACCEPTANCE_PUBLIC_URL");
     expect(workflow).not.toContain("environment: dx-rework-production");
-    expect(workflow).toContain('[[ "$ACCEPTANCE_PUBLIC_URL" != https://dxerp.org.cn* ]]');
+    expect(workflow).toContain('[[ "${ACCEPTANCE_PUBLIC_URL%/}" == "https://staging-api.dxerp.org.cn/acceptance" ]]');
+    expect(workflow).toContain("APP_BASE_PATH: /acceptance/");
+    expect(workflow).toContain("VITE_BASE_PATH: /acceptance/");
   });
 
   it("checks out complete history before the full secret scan", () => {
@@ -96,12 +98,17 @@ describe("isolated Acceptance deployment contract", () => {
   });
 
   it("provides an Acceptance-only nginx template and safe configuration examples", () => {
-    const nginx = read("infra/nginx/dx-rework-acceptance.conf.example");
+    const nginx = read("infra/nginx/dx-rework-acceptance-shared-paths.conf.example");
     const app = read("infra/acceptance/app.env.example");
+    expect(nginx).toContain("DX_REWORK_ACCEPTANCE_SHARED_PATHS_BEGIN");
+    expect(nginx).toContain("/acceptance/");
     expect(nginx).toContain("/opt/dx-rework-acceptance/frontend/current");
     expect(nginx).toContain("127.0.0.1:3202");
     expect(nginx).not.toContain("127.0.0.1:3201");
+    expect(nginx).not.toContain("server_name");
     expect(app).toContain("dx_rework_acceptance");
+    expect(app).toContain("APP_BASE_PATH=/acceptance/");
+    expect(app).toContain("DINGTALK_QR_REDIRECT_URI=https://staging-api.dxerp.org.cn/acceptance/auth/qr/callback");
     expect(app).toContain("ROOT_DINGTALK_USER_ID=uat-root");
     expect(app).toContain("ACCEPTANCE_LAB_ENABLED=true");
     expect(app).toContain("TODO_RUNTIME_ENABLED=false");
