@@ -32,5 +32,5 @@ if (!css || !js) throw new Error("Production command-center preview assets were 
 
 await writeFile(
   join(output, "index.html"),
-  `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>生产管理座舱视觉验收</title><style>${await readFile(join(output, "assets", css), "utf8")}</style></head><body><div id="root"></div><script>${(await readFile(join(output, "assets", js), "utf8")).replace(/<\/script/gi, "<\\/script")}</script></body></html>`,
+  `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>生产管理座舱视觉验收</title><style>html,body,#root{margin:0;min-height:100%;}body{background:#eef3f8;}${await readFile(join(output, "assets", css), "utf8")}</style></head><body><div id="root"></div><script>${(await readFile(join(output, "assets", js), "utf8")).replace(/<\/script/gi, "<\\/script")}</script></body></html>`,
 );
