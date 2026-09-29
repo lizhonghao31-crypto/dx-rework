@@ -60,7 +60,9 @@ type VersionPayload = AcceptanceRuntimeVersion & Readonly<{ service?: string }>;
 
 const roleLabels: Readonly<Record<string, string>> = {
   owner_group: "老板",
-  production_management: "生产管理",
+  production_management: "供应链总监",
+  development_clerk: "开发文员",
+  pattern_room_tail_inspector: "板房尾查",
   ie_reviewer: "IE",
   tail_supervisor: "尾部主管",
   quality_control: "质检",

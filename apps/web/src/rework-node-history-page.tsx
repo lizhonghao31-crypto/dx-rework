@@ -44,7 +44,7 @@ export function ReworkNodeHistoryPage({orderId,node}:{orderId:string;node:Financ
 const historyNodes = [
  ['initiation','发起返工','质检'],['process_configuration','分配工序 &工人','尾部主管'],['ie_review','IE 核价','IE'],
  ['work_reporting','返工执行报数','返工人员 / 整查'],['whole_order_review','尾部最终数量确认','尾部主管'],
- ['final_quantity_ie_review','IE 最终数量复核','IE'],['responsibility','责任判定','生产管理'],['owner_signature','老板确认签字','老板'],['settlement_followup','返工业务完成','系统'],
+ ['final_quantity_ie_review','IE 最终数量复核','IE'],['responsibility','责任判定','供应链总监'],['owner_signature','老板确认签字','老板'],['settlement_followup','返工业务完成','系统'],
 ] as const;
 export function ReworkNodeHistoryView({data,currentHref,onVersion,onImage}:{data:ReworkNodeHistory;currentHref:string;onVersion:(id:string)=>void;onImage:(image:ReworkNodeHistory['attachments'][number])=>void}) {
  const [expanded,setExpanded]=useState(false);

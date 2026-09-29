@@ -1,0 +1,33 @@
+import { randomUUID } from "node:crypto";
+import type { PoolClient } from "pg";
+import type { TrustedActorContext } from "../tools/repositories.js";
+import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDigitalLeader, isDigitalTechnicalManager } from "./access-policy.js";
+export const DIGITAL_TASK_ROLES = {
+  development_materials: "development_clerk", development_pattern: "pattern_room_worker", development_cutting: "pattern_room_worker",
+  development_sewing: "pattern_room_worker", development_tail_check: "pattern_room_tail_inspector",
+  process_logistics: "embroidery_washing_merchandiser", bulk_qc: "quality_control", warehouse_dispatch: "warehouse_receiver",
+} as const;
+export type DigitalTaskKind = keyof typeof DIGITAL_TASK_ROLES;
+// Internal transactional adapter: no public endpoint can invent a task to obtain access.
+export async function createDigitalTaskAccess(client: PoolClient, actor: TrustedActorContext, input: { taskId?: string; orderId?: string; sourceId?: string; kind: DigitalTaskKind; assigneeId: string | null }) {
+  const policy = new DigitalProductionAccessPolicy(client);
+  const role = DIGITAL_TASK_ROLES[input.kind];
+  if (!role || Boolean(input.orderId) === Boolean(input.sourceId)) digitalForbidden();
+  if (input.assigneeId && !await policy.activeRole(input.assigneeId, role)) digitalForbidden();
+  const taskId = input.taskId ?? randomUUID();
+  await client.query(`INSERT INTO digital_production_task_access(task_id,production_order_id,source_id,task_kind,required_role,assignee_id,created_by)
+    VALUES($1,$2,$3,$4,$5,$6,$7)`, [taskId, input.orderId ?? null, input.sourceId ?? null, input.kind, role, input.assigneeId, actor.actorId]);
+  return taskId;
+}
+export async function reassignDigitalTask(client: PoolClient, actor: TrustedActorContext, taskId: string, assigneeId: string) {
+  const task = (await client.query("SELECT * FROM digital_production_task_access WHERE task_id=$1 FOR UPDATE", [taskId])).rows[0] ?? digitalNotFound();
+  const development = task.task_kind.startsWith("development_");
+  if (!isDigitalLeader(actor) && !(development && (isDigitalTechnicalManager(actor) || actor.actorRoles.includes("development_clerk")))) digitalForbidden();
+  if (!await new DigitalProductionAccessPolicy(client).activeRole(assigneeId, task.required_role)) digitalForbidden();
+  await client.query("UPDATE digital_production_task_access SET assignee_id=$2 WHERE task_id=$1", [taskId, assigneeId]);
+  await client.query("UPDATE digital_production_delegations SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2 WHERE task_id=$1 AND revoked_at IS NULL", [taskId, actor.actorId]);
+  // Daily dispatch never changes wage attribution. Wage reassignment remains with its original service.
+  await client.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state)
+    VALUES($1,$2,$3,'digital_task_reassigned','digital_task',$4,$5,$6)`, [randomUUID(), actor.requestId, actor.actorId, taskId, JSON.stringify({ assigneeId: task.assignee_id }), JSON.stringify({ assigneeId })]);
+  return { taskId, assigneeId };
+}

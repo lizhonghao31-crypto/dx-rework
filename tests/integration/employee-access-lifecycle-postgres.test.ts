@@ -72,14 +72,17 @@ runWithPostgres("employee access role lifecycle", () => {
       new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url),
       "utf8",
     )) as Manifest;
-    const lifecycle = manifest.migrations.at(-1);
+    const lifecycleIndex = manifest.migrations.findIndex(item => item.version === "0089_employee_access_role_lifecycle");
+    const lifecycle = manifest.migrations[lifecycleIndex];
     expect(lifecycle?.version).toBe("0089_employee_access_role_lifecycle");
 
-    for (const migration of manifest.migrations.slice(0, -1)) {
+    await database.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum text NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+    for (const migration of manifest.migrations.slice(0, lifecycleIndex)) {
       await database.query(await readFile(
         new URL(`../../apps/api/migrations/${migration.version}.sql`, import.meta.url),
         "utf8",
       ));
+      await database.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)", [migration.version, migration.checksum]);
     }
 
     const rootId = randomUUID();
@@ -186,7 +189,7 @@ runWithPostgres("employee access role lifecycle", () => {
     await service.ensureOrganizationPolicy();
     const rootActor: TrustedActorContext = {
       actorId: rootId,
-      actorRoles: ["root_superuser"],
+      actorRoles: ["owner_group", "root_superuser"],
       authorizationCapability: "access:admin",
       authorizationCapabilities: ["access:admin"],
       requestId: randomUUID(),
@@ -255,7 +258,7 @@ runWithPostgres("employee access role lifecycle", () => {
     expect((await database.query<{ action: string }>(
       `SELECT action FROM operation_events
        WHERE entity_id=$1 AND action IN ('access.employee.auto_enable','access.employee.auto_disable')
-       ORDER BY occurred_at`,
+       ORDER BY created_at`,
       [candidateId],
     )).rows.map((row) => row.action)).toEqual([
       "access.employee.auto_enable",

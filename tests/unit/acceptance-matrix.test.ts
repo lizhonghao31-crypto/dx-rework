@@ -38,6 +38,7 @@ describe("acceptance authorization matrix", () => {
     const aliases = ACCEPTANCE_ROLE_MATRIX.map((entry) => entry.alias);
     expect(new Set(aliases).size).toBe(aliases.length);
     expect(aliases).toEqual([
+      "development-clerk", "pattern-room-tail-inspector", "pattern-room-supervisor", "pattern-room-worker",
       "root", "owner", "production-management", "ie", "tail-supervisor", "qc", "warehouse",
       "worker-a", "worker-b", "merchandiser", "embroidery-washing-merchandiser", "finance-read",
       "finance-director", "factory-payables", "embroidery-washing-payables", "fabric-payables",

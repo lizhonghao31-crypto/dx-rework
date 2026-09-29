@@ -175,7 +175,7 @@ const statusMeta: Record<ReworkStatus, { label: string; next: string }> = {
   pending_final_quantity_ie_review: { label: "最终数量待 IE 复核", next: "IE 核对数量与质量事实；通过后生成正式工资并进入责任判定" },
   pending_quantity_adjustment_ie_review: { label: "数量调整待 IE", next: "异常数量增加申请等待 IE 复核" },
   pending_responsibility_determination: { label: "待责任判定", next: "返工已完成整单确认，正在选择主责任方和外部扣款倍率" },
-  pending_owner_signature: { label: "待老板签字", next: "生产管理资料已齐全，等待老板确认同意或驳回" },
+  pending_owner_signature: { label: "待老板签字", next: "供应链总监资料已齐全，等待老板确认同意或驳回" },
   pending_responsibility_action: { label: "责任处理中", next: "责任已判定，正在完成本厂审批或外部责任结算" },
   completed: { label: "已完成", next: "订单完成即进入扣款；工资金额仅供财务查询与对数" },
   cancelled: { label: "已取消", next: "返工单已取消，历史资料和操作记录继续保留" },
@@ -343,7 +343,7 @@ const buildWorkflow = (
         node("whole_order_review", "05", "尾部最终数量确认", "尾部主管", "待全部执行报数完成", detail.tailInspectionRequired ? "逐工序对照工人原报数与整查数，提交最终确认数量并保留每版审计。" : "系统按工人有效上数生成最终数量，并保留每版审计。"),
         node("final_quantity_ie_review", "06", "IE 最终数量复核", "IE", "待 N05 提交", "只复核数量与质量事实；通过后生成正式工资，退回则回到 N05。"),
         ...(detail.reworkKind === "inhouse_finishing" ? [] : [
-        node("responsibility", "07", "责任判定", "生产管理", "待 N06 通过", "每道工序只选一个主责任方；外部扣款倍率默认且最低 1.2，可向上调整。"),
+        node("responsibility", "07", "责任判定", "供应链总监", "待 N06 通过", "每道工序只选一个主责任方；外部扣款倍率默认且最低 1.2，可向上调整。"),
         node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "老板直接确认或驳回已锁定的责任方与外部扣款倍率。"),
         node("settlement_followup", "09", "返工业务完成", "系统", "N08 同意后完成", "订单完成即进入供应商扣款；工资金额仅供财务查询与对数。"),
         ]),
@@ -919,7 +919,7 @@ function TailInspectionWaiverAction({
   return <Surface className="rework-detail-node-preview">
     <StatusBadge tone="info">旧订单纠正</StatusBadge>
     <h2>改为无需整查</h2>
-    <p>仅老板、生产管理和超级用户可操作。已上报的整查数会保留审计记录，但不再计入最终数量、工资和责任。</p>
+    <p>仅老板、供应链总监和超级用户可操作。已上报的整查数会保留审计记录，但不再计入最终数量、工资和责任。</p>
     <Button disabled={busy} onClick={() => { void waive(); }}>{busy ? "处理中…" : "改为无需整查"}</Button>
     {message ? <p role="status">{message}</p> : null}
   </Surface>;

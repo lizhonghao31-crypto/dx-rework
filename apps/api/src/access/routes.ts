@@ -202,7 +202,7 @@ export function registerAccessRoutes(app: FastifyInstance, dependencies: AccessH
       && user.capabilities.includes("sourcing:decision:record");
     const readsSourcing = user.capabilities.includes("sourcing:view") || createsSourcingOrders || managesSourcing;
     if (!isRoot && !managesMasterData && (mutation ? !managesSourcing : !readsSourcing)) {
-      throw new ApplicationError("FORBIDDEN", mutation ? "仅生产管理可新增工艺及承包范围" : "无权查看工艺数据库", 403);
+      throw new ApplicationError("FORBIDDEN", mutation ? "仅供应链总监可新增工艺及承包范围" : "无权查看工艺数据库", 403);
     }
     if (!user.businessRoles?.length && !isRoot) {
       throw new ApplicationError("NO_BUSINESS_ROLE", "未分配业务角色", 403);

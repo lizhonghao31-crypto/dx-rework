@@ -30,6 +30,7 @@ export const DigitalOrderCreateSchema = z.object({
   temporaryStyleNo: optionalText,
   orderDate: date,
   contractDeliveryDate: date.nullable().default(null),
+  primaryMerchandiserId: z.string().uuid().nullable().optional(),
   lines: z.array(DigitalPoInputSchema).min(1).max(50),
 }).strict().superRefine((value, context) => {
   if (new Set(value.lines.map(line => line.color.trim().toLowerCase())).size !== value.lines.length)
@@ -48,7 +49,7 @@ export const DigitalPageSchema = z.object({
 export type DigitalSourceInput = z.infer<typeof DigitalSourceCreateSchema>;
 export type DigitalOrderInput = z.infer<typeof DigitalOrderCreateSchema>;
 export type DigitalNumberCorrection = z.infer<typeof DigitalNumberCorrectionSchema>;
-export type DigitalCustomer = { code: string; name: string; productGroups: string[] };
+export type DigitalCustomer = { code: string; name: string; productGroups: string[]; defaultMerchandiserId?: string | null; defaultMerchandiserName?: string | null };
 export type DigitalSource = DigitalSourceInput & { sourceId: string; createdBy: string; createdAt: string; productionOrderId: string | null };
 export type DigitalOrder = Omit<DigitalOrderInput, "lines"> & {
   productionOrderId: string; sourceId: string | null; createdBy: string; createdAt: string;

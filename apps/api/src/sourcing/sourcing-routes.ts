@@ -414,7 +414,7 @@ export function registerSourcingRoutes(
       const parsed = RecordSourcingManagementDecisionSchema.safeParse(request.body);
       const data = parsed.success
         ? parsed.data
-        : validationError(parsed.error.issues[0]?.message ?? "生产管理决定信息不完整");
+        : validationError(parsed.error.issues[0]?.message ?? "供应链总监决定信息不完整");
       const result = await dependencies.service.recordManagementDecision(
         await actionActor(
           request,

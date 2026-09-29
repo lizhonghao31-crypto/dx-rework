@@ -111,6 +111,30 @@ const sampleMutationDenyRules = Object.fromEntries(
  */
 const EXISTING_ACCEPTANCE_ROLE_MATRIX: readonly AcceptanceRoleExpectation[] = [
   {
+    alias: "development-clerk", expectedRole: "development_clerk",
+    forbiddenCapabilities: ["access:admin"],
+    probes: [accessRolesDeny],
+    ruleRefs: { ...approvedKeys("PERM-DIGITAL-P02-20260929", ["cap:access:admin:deny", "http:access-roles"]) },
+  },
+  {
+    alias: "pattern-room-tail-inspector", expectedRole: "pattern_room_tail_inspector",
+    forbiddenCapabilities: ["access:admin"],
+    probes: [accessRolesDeny],
+    ruleRefs: { ...approvedKeys("PERM-DIGITAL-P02-20260929", ["cap:access:admin:deny", "http:access-roles"]) },
+  },
+  {
+    alias: "pattern-room-supervisor", expectedRole: "pattern_room_supervisor",
+    forbiddenCapabilities: ["access:admin"],
+    probes: [accessRolesDeny],
+    ruleRefs: { ...approvedKeys("PERM-DIGITAL-P02-20260929", ["cap:access:admin:deny", "http:access-roles"]) },
+  },
+  {
+    alias: "pattern-room-worker", expectedRole: "pattern_room_worker",
+    forbiddenCapabilities: ["access:admin"],
+    probes: [accessRolesDeny],
+    ruleRefs: { ...approvedKeys("PERM-DIGITAL-P02-20260929", ["cap:access:admin:deny", "http:access-roles"]) },
+  },
+  {
     alias: "root",
     expectedRole: "owner_group",
     expectedRoot: true,
