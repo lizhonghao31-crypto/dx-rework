@@ -16,6 +16,7 @@ describe("isolated Acceptance deployment contract", () => {
     expect(pm2).toContain("/opt/dx-rework-acceptance");
     expect(remote).toContain('DX_ROOT="/opt/dx-rework-acceptance"');
     expect(remote).not.toContain('DX_ROOT="/opt/dx-rework"');
+    expect(remote).toContain("acceptance app base path must be /acceptance/");
   });
 
   it("fails closed before touching a non-Acceptance database or external side effects", () => {
@@ -41,7 +42,9 @@ describe("isolated Acceptance deployment contract", () => {
     expect(workflow).toContain("/opt/dx-rework-acceptance");
     expect(workflow).toContain("DX_REWORK_ACCEPTANCE_PUBLIC_URL");
     expect(workflow).not.toContain("environment: dx-rework-production");
-    expect(workflow).toContain('[[ "$ACCEPTANCE_PUBLIC_URL" != https://dxerp.org.cn* ]]');
+    expect(workflow).toContain('[[ "${ACCEPTANCE_PUBLIC_URL%/}" == "https://staging-api.dxerp.org.cn/acceptance" ]]');
+    expect(workflow).toContain("APP_BASE_PATH: /acceptance/");
+    expect(workflow).toContain("VITE_BASE_PATH: /acceptance/");
   });
 
   it("checks out complete history before the full secret scan", () => {
@@ -96,12 +99,17 @@ describe("isolated Acceptance deployment contract", () => {
     expect(browser).not.toContain("ACCEPTANCE_LAB_SECRET");
   });
 
-  it("provides an Acceptance-only nginx template and safe configuration examples", () => {
+  it("provides Acceptance nginx templates and safe shared-path configuration", () => {
     const nginx = read("infra/nginx/dx-rework-acceptance.conf.example");
+    const shared = read("infra/nginx/dx-rework-acceptance-shared-paths.conf.example");
     const app = read("infra/acceptance/app.env.example");
-    expect(nginx).toContain("/opt/dx-rework-acceptance/frontend/current");
-    expect(nginx).toContain("127.0.0.1:3202");
-    expect(nginx).not.toContain("127.0.0.1:3201");
+    for (const source of [nginx, shared]) {
+      expect(source).toContain("/opt/dx-rework-acceptance/frontend/current");
+      expect(source).toContain("127.0.0.1:3202");
+      expect(source).not.toContain("127.0.0.1:3201");
+    }
+    expect(shared).toContain("location = /acceptance");
+    expect(shared).toContain("location ^~ /acceptance/api/");
     expect(app).toContain("dx_rework_acceptance");
     expect(app).toContain("ROOT_DINGTALK_USER_ID=uat-root");
     expect(app).toContain("ACCEPTANCE_LAB_ENABLED=true");
