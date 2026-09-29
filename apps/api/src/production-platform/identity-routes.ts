@@ -1,3 +1,5 @@
+import { registerDigitalTaskRoutes } from "./task-routes.js";
+import type { DigitalProductionTaskService } from "./task-service.js";
 import { registerDigitalAccessRoutes } from "./access-routes.js";
 import type { DigitalProductionAccessService } from "./access-service.js";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -11,7 +13,7 @@ import { assertIdentityActor, type DigitalProductionIdentityService } from "./id
 
 export type DigitalIdentityDependencies = {
   authenticate(token: string | undefined): Promise<AuthUser>; root?: RootAuthority;
-  accessService?: DigitalProductionAccessService; service: DigitalProductionIdentityService; creationEnabled: boolean;
+  taskService?: DigitalProductionTaskService; accessService?: DigitalProductionAccessService; service: DigitalProductionIdentityService; creationEnabled: boolean;
 };
 const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   const result = schema.safeParse(value);
@@ -19,6 +21,7 @@ const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   return result.data;
 };
 export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies: DigitalIdentityDependencies): void {
+  if (dependencies.taskService) registerDigitalTaskRoutes(app, dependencies, dependencies.taskService);
   if (dependencies.accessService) registerDigitalAccessRoutes(app, dependencies, dependencies.accessService);
   const actor = async (request: FastifyRequest) => {
     const token = request.headers.cookie?.split(";").map(value => value.trim()).find(value => value.startsWith("dx_rework_session="))?.slice(18);

@@ -1,0 +1,20 @@
+import { z } from "zod";
+export const DigitalTaskStateSchema = z.enum(["pending", "ready", "blocked", "completed", "cancelled"]);
+export const DigitalTimeQualitySchema = z.enum(["现场登记", "补报未核实", "已核实", "缺失"]);
+export const DigitalTaskCompleteSchema = z.object({ occurredAt: z.iso.datetime({ offset: true }).nullable().optional(), note: z.string().trim().max(1000).default("") }).strict();
+export const DigitalTaskBlockSchema = z.object({ reason: z.string().trim().min(1).max(1000) }).strict();
+export const DigitalTaskAssignmentSchema = z.object({ assigneeId: z.string().uuid() }).strict();
+export const DigitalDeadlinePolicySchema = z.object({ expectedVersion: z.number().int().positive(), slaHours: z.number().positive().max(8760).nullable(), warningRatio: z.number().gt(0).lt(1), note: z.string().trim().max(1000).default("") }).strict();
+export const DigitalTimeCorrectionSchema = z.object({ eventId: z.string().uuid(), occurredAt: z.iso.datetime({ offset: true }).nullable(), reason: z.string().trim().min(1).max(1000) }).strict();
+export type DigitalTaskState = z.infer<typeof DigitalTaskStateSchema>;
+export type DigitalTimeQuality = z.infer<typeof DigitalTimeQualitySchema>;
+export type DigitalTask = {
+  taskId: string; orderId: string | null; sourceId: string | null; taskKind: string; label: string;
+  assigneeId: string | null; state: DigitalTaskState; routeVersion: number; occurrence: number;
+  enteredAt: string | null; recordedAt: string; completedAt: string | null; paused: boolean;
+  dueAt: string | null; warningAt: string | null; slaHours: number | null; policyVersion: number;
+  routeProgress: {applicable:number;completed:number;cancelled:number};
+  assigneeName: string | null; requiredRole: string; hasHandover: boolean; canManage: boolean; canCorrect: boolean; canControl: boolean;
+  timeQuality: DigitalTimeQuality; blockedReason: string | null; canExecute: boolean;
+};
+export type DigitalDeadlinePolicy = { nodeKey: string; label: string; version: number; slaHours: number | null; warningRatio: number; changedAt: string; changedBy: string | null; note: string };

@@ -344,7 +344,7 @@ export function App() {
 
   const owner = { requiredRole: "owner_group" } as const;
 
-  if (path === "/ui/digital-production") return <AuthGate requiredAnyOf={["sample_designer", "order_merchandiser", "production_management", "owner_group", "pattern_room_supervisor", "development_clerk", "pattern_room_tail_inspector", "pattern_room_worker", "quality_control", "embroidery_washing_merchandiser", "warehouse_receiver"].map(requiredRole => ({ requiredRole }))}>{page}</AuthGate>;
+  if (path === "/ui/digital-production") return <AuthGate requiredAnyOf={["sample_designer", "order_merchandiser", "production_management", "owner_group", "pattern_room_supervisor", "development_clerk", "pattern_room_tail_inspector", "pattern_room_worker", "quality_control", "embroidery_washing_merchandiser", "warehouse_receiver", "cutting_worker"].map(requiredRole => ({ requiredRole }))}>{page}</AuthGate>;
   if (path === "/ui/home") return <AuthGate>{page}</AuthGate>;
   if (path.startsWith("/ui/samples")) {
     if (path === "/ui/samples/handoff") return <AuthGate requiredRole="sample_administrative" requiredCapability="sample:view_basic">{page}</AuthGate>;

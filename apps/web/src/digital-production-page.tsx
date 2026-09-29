@@ -1,3 +1,4 @@
+import { DigitalTasksPanel } from "./digital-production-tasks-panel.js";
 import { digitalRequest } from "./digital-production-api.js";
 import { DigitalAccessPanel, type DigitalAccessOptions } from "./digital-production-access-panel.js";
 import { initialDigitalProductGroup } from "./digital-production-defaults.js";
@@ -64,6 +65,7 @@ export function DigitalProductionPage() {
   const start = (next: "source" | "order", source?: DigitalSource) => { setSelected(null); setSourceId(source?.sourceId ?? null); setForm({ ...emptyOrder(), designStyleNo: source?.designStyleNo ?? "", temporaryStyleNo: source?.temporaryStyleNo ?? null, customerCode: source?.customerCode ?? "", primaryMerchandiserId: options?.customers.find(customer => customer.code === source?.customerCode)?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(options?.customers ?? [], source?.customerCode) }); setMode(next); setError(""); };
   return <div className="pattern-orders digital-production"><Header title="数字生产订单" badge="订单源头" badgePlacement="subtitle" />
     {error && <p role="alert">{error}</p>}
+    {access && <DigitalTasksPanel options={access} />}
     {options && <><Surface><div className="pattern-actions"><Button onClick={() => { setMode("list"); setSelected(null); }}>订单列表</Button>
       {options.creationEnabled && access?.create && <><Button onClick={() => start("order")}>直接下单</Button><Button onClick={() => start("source")}>新增开发来源</Button></>}
     </div></Surface>
