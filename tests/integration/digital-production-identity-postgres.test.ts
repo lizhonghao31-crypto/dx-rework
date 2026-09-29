@@ -235,6 +235,40 @@ run("digital production P01 identities", () => {
     await expect(access.assignMerchandiser(boss, order.productionOrderId, primary, 2)).rejects.toMatchObject({ statusCode: 409 });
     await access.setCustomerDefault(boss, "PD", null);
   });
+  it("P02 rejects creator assignment overrides and non-root self-decisions", async () => {
+    const primary = randomUUID(); const alternate = randomUUID(); const director = randomUUID();
+    for (const [id, role] of [[primary, "order_merchandiser"], [alternate, "order_merchandiser"], [director, "production_management"]]) {
+      await database.query("INSERT INTO app_users(id,display_name) VALUES($1,'TEST REVIEW')", [id]);
+      await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,$2)", [id, role]);
+    }
+    await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'production_management')", [primary]);
+    const access = new DigitalProductionAccessService(database);
+    const boss = actor(root, ["root_superuser"]);
+    await access.setCustomerDefault(boss, "PD", primary);
+    const count = await database.query("SELECT count(*) FROM digital_production_orders");
+    for (const primaryMerchandiserId of [alternate, null]) {
+      await expect(service.createOrder(actor(), { ...input(), primaryMerchandiserId }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+      const source = await service.createSource(actor(), sourceInput(), randomUUID());
+      await expect(service.createOrder(actor(), { ...input(), primaryMerchandiserId }, randomUUID(), source.sourceId)).rejects.toMatchObject({ statusCode: 403 });
+    }
+    expect((await database.query("SELECT count(*) FROM digital_production_orders")).rows).toEqual(count.rows);
+    const order = await service.createOrder(actor(), { ...input(), primaryMerchandiserId: primary }, randomUUID());
+    expect(order.primaryMerchandiserId).toBe(primary);
+    expect((await service.createOrder(boss, { ...input(), primaryMerchandiserId: alternate }, randomUUID())).primaryMerchandiserId).toBe(alternate);
+    const dual = actor(primary, ["order_merchandiser", "production_management"]);
+    const request = await access.requestDelivery(dual, order.productionOrderId, { expectedVersion: 1, deliveryDate: "2026-12-22", reason: "客户改期" });
+    for (const decision of ["approved", "rejected"] as const) await expect(access.decideDelivery(dual, request.requestId, decision)).rejects.toMatchObject({ statusCode: 403 });
+    expect((await service.read(boss, order.productionOrderId)).contractDeliveryDate).toBeNull();
+    expect((await database.query("SELECT * FROM digital_production_delivery_decisions WHERE request_id=$1", [request.requestId])).rows).toHaveLength(0);
+    expect(await access.decideDelivery(actor(director, ["production_management"]), request.requestId, "approved")).toEqual({ decision: "approved" });
+    await expect(access.decideDelivery(dual, request.requestId, "approved")).rejects.toMatchObject({ statusCode: 403 });
+    const rootRequest = await access.requestDelivery(boss, order.productionOrderId, { expectedVersion: 2, deliveryDate: "2026-12-23", reason: "Root纠正" });
+    expect(await access.decideDelivery(boss, rootRequest.requestId, "approved")).toEqual({ decision: "approved" });
+    expect((await service.read(boss, order.productionOrderId)).contractDeliveryDate).toBe("2026-12-23");
+    await access.setCustomerDefault(boss, "PD", null);
+    await expect(service.createOrder(actor(), { ...input(), primaryMerchandiserId: alternate }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    expect((await service.createOrder(actor(), { ...input(), primaryMerchandiserId: null }, randomUUID())).primaryMerchandiserId).toBeNull();
+  });
   it("P02 delegates only the specified resource, revokes immediately and separates QC from logistics", async () => {
     const access = new DigitalProductionAccessService(database); const policy = new DigitalProductionAccessPolicy(database);
     const boss = actor(root, ["root_superuser"]); const order = await service.createOrder(actor(), input(), randomUUID());

@@ -111,7 +111,9 @@ export class DigitalProductionIdentityService {
         }
       }
       let merchandiserId = input.primaryMerchandiserId;
-      if (merchandiserId === undefined) merchandiserId = (await client.query("SELECT default_merchandiser_id FROM digital_production_customers WHERE code=$1", [input.customerCode])).rows[0]?.default_merchandiser_id ?? null;
+      const defaultMerchandiserId = (await client.query("SELECT default_merchandiser_id FROM digital_production_customers WHERE code=$1", [input.customerCode])).rows[0]?.default_merchandiser_id ?? null;
+      if (!isDigitalLeader(actor) && merchandiserId !== undefined && merchandiserId !== defaultMerchandiserId) digitalForbidden();
+      if (merchandiserId === undefined) merchandiserId = defaultMerchandiserId;
       if (merchandiserId && !await new DigitalProductionAccessPolicy(client).activeRole(merchandiserId, "order_merchandiser")) fail("主跟单必须为在职有效订单跟单", 400);
       const root = await new ProductionOrderRootRepository(client).create(createdBy);
       await client.query(`INSERT INTO digital_production_orders(production_order_id,source_id,customer_code,product_group,design_style_no,temporary_style_no,order_date,contract_delivery_date,created_by,creation_hash,primary_merchandiser_id)

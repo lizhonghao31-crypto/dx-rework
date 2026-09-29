@@ -116,6 +116,7 @@ export class DigitalProductionAccessService {
     if (!isRootActor(actor) && !actor.actorRoles.includes("production_management")) digitalForbidden();
     return this.transaction(async client => {
       const request = (await client.query("SELECT * FROM digital_production_delivery_requests WHERE request_id=$1 FOR UPDATE", [requestId])).rows[0] ?? digitalNotFound();
+      if (!isRootActor(actor) && request.requested_by === actor.actorId) digitalForbidden();
       const previous = (await client.query("SELECT decision FROM digital_production_delivery_decisions WHERE request_id=$1", [requestId])).rows[0];
       if (previous) { if (previous.decision !== decision) conflict("该申请已处理"); return { decision }; }
       const order = (await client.query("SELECT version FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE", [request.production_order_id])).rows[0]!;
