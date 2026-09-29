@@ -1,14 +1,15 @@
-:root {
-  font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
-  color: #1f2937;
+.production-command-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
   background: #eef3f8;
+  color: #1f2937;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
 }
-* { box-sizing: border-box; }
-body { margin: 0; background: #eef3f8; }
-button, input, select { font: inherit; }
-button { cursor: pointer; }
+.production-command-shell, .production-command-shell * { box-sizing: border-box; }
+.production-command-shell button, .production-command-shell input, .production-command-shell select { font: inherit; }
+.production-command-shell button { cursor: pointer; }
 
-.production-command-shell { min-height: 100vh; display: grid; grid-template-columns: 220px minmax(0, 1fr); background: #eef3f8; }
 .production-command-sidebar { background: #0f3f70; color: #fff; padding: 24px 16px; }
 .production-command-brand { font-size: 20px; font-weight: 800; letter-spacing: .04em; margin: 0 8px 28px; }
 .production-command-sidebar nav { display: grid; gap: 6px; }
