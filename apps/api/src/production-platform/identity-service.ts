@@ -117,6 +117,7 @@ export class DigitalProductionIdentityService {
       const source = await this.visibleSource(client, actor, sourceId, true);
       const order = await this.visibleOrder(client, actor, id, true);
       if (order.source_id === sourceId) return this.readWith(client, actor, id);
+      if (source.created_by !== order.created_by) fail("开发来源与订单必须归属同一设计师");
       if (order.source_id || order.design_style_no !== source.design_style_no || (order.temporary_style_no ?? "") !== (source.temporary_style_no ?? "") || (source.customer_code && source.customer_code !== order.customer_code)) fail("开发来源与订单不匹配或已有关联");
       const used = await client.query("SELECT 1 FROM digital_production_orders WHERE source_id=$1", [sourceId]);
       if (used.rowCount) fail("该开发来源已有履约母单");

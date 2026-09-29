@@ -104,6 +104,16 @@ run("digital production P01 identities", () => {
     const second = await service.createOrder(actor(), input(), randomUUID());
     await expect(service.attachSource(actor(), second.productionOrderId, source.sourceId, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
   });
+  it("root cannot attach a different designer's source to a direct order", async () => {
+    const third = randomUUID();
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST third designer',true)", [third]);
+    const source = await service.createSource(actor(third), sourceInput(), randomUUID());
+    const order = await service.createOrder(actor(), input(), randomUUID());
+    await expect(service.attachSource(actor(root, ["root_superuser"]), order.productionOrderId, source.sourceId, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    expect((await service.read(actor(), order.productionOrderId)).sourceId).toBeNull();
+    const ownSource = await service.createSource(actor(), sourceInput(), randomUUID());
+    expect((await service.attachSource(actor(root, ["root_superuser"]), order.productionOrderId, ownSource.sourceId, randomUUID())).sourceId).toBe(ownSource.sourceId);
+  });
   it("number correction preserves root, PO identity, dates and quantities; rejects stale updates", async () => {
     const order = await service.createOrder(actor(), input(), randomUUID());
     const line = order.lines[0]!;
