@@ -33,7 +33,7 @@ prepare_incoming() {
 }
 
 assert_acceptance_runtime_config() {
-  [[ "${APP_BASE_PATH:-}" == / ]] || fail 'acceptance app base path must be /'
+  [[ "${APP_BASE_PATH:-}" == /acceptance/ ]] || fail 'acceptance app base path must be /acceptance/'
   [[ "${ACCEPTANCE_LAB_ENABLED:-false}" == true ]] || fail 'acceptance lab must be enabled'
   [[ "${ROOT_DINGTALK_USER_ID:-}" == uat-root ]] || fail 'acceptance root identity must be uat-root'
   [[ "${TODO_RUNTIME_ENABLED:-false}" != true ]] || fail 'acceptance forbids real todo runtime'

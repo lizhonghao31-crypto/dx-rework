@@ -15,7 +15,7 @@ jobs:
     name: Probe existing staging Acceptance host
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    environment: dx-rework-pilot
+    environment: dx-rework-acceptance
     steps:
       - name: Validate pilot SSH credentials
         shell: bash
@@ -139,7 +139,7 @@ jobs:
         run: |
           set -euo pipefail
           base='https://staging-api.dxerp.org.cn/acceptance'
-          for path in '/' '/health/ready' '/api/health/ready' '/version' '/api/version' '/ui/acceptance-lab'; do
+          for path in '/' '/api/health/live' '/api/health/ready' '/api/version' '/ui/acceptance-lab'; do
             status="$(curl --silent --show-error --location --max-time 10 --output /dev/null --write-out '%{http_code}' "$base$path" || true)"
             printf 'public%s=%s\n' "$path" "${status:-000}"
           done

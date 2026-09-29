@@ -1,5 +1,13 @@
 # 数字生产平台｜独立 Acceptance/UAT 发布底座
 
+> 2026-09-29 现场核验更新：现有 ECS 已运行独立 Acceptance API（3202）与独立
+> `dx_rework_acceptance` 数据库，公网入口固定为
+> `https://staging-api.dxerp.org.cn/acceptance/`。首次收口不再新购主机或新建域名；
+> runtime 迁移到 `/opt/dx-rework-acceptance`，继续复用现有 shared-path 入口。
+> 具体现场事实与切换步骤以
+> `docs/roadmap/acceptance-environment-cutover-20260929.md` 为准；下文“独立主机/独立
+> vhost”描述仅保留为原设计历史，不再作为本轮执行入口。
+
 ## 目标
 
 为重大升级提供一套与正式生产隔离的可运行环境。该环境用于 Root 快速跑通、Acceptance Lab 多角色接力、真实数据库事务、站内待办与浏览器回归；不得向正式数据库、正式附件资源或真实钉钉待办写入。

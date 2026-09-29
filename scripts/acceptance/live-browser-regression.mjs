@@ -23,7 +23,7 @@ base.hash = "";
 
 await mkdir(evidenceDir, { recursive: true });
 
-const versionResponse = await fetch(new URL("version", base));
+const versionResponse = await fetch(new URL("api/version", base));
 if (!versionResponse.ok) throw new Error(`Acceptance version endpoint returned HTTP ${versionResponse.status}`);
 const version = await versionResponse.json();
 if (version.gitSha !== expectedSha) {
@@ -97,7 +97,7 @@ try {
     expectedSchemaVersion: version.expectedSchemaVersion ?? null,
     matrixSummary,
     rootLandingPath: new URL(businessPage.url()).pathname,
-    productionCommandCenterPath: "/ui/acceptance/production-command-center",
+    productionCommandCenterPath: new URL(commandCenterPage.url()).pathname,
     completedAt: new Date().toISOString(),
   }, null, 2) + "\n");
 } catch (error) {
