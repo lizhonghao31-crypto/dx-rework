@@ -1,3 +1,4 @@
+import { DigitalNotificationToast } from "./digital-notification-toast.js";
 import { canAccessPatternRoom, canAccessPatternRoomPrices, canAccessPatternRoomOrders, canCreatePatternRoomOrders } from "./pattern-room-access.js";
 import { financeNavigationEntries } from "./finance-access.js";
 import { canAccessCutting } from "./cutting-access.js";
@@ -325,6 +326,7 @@ export function Shell({
         }
         const indicator = TodoCountIndicatorSchema.parse(await response.json());
         setPendingTodoCount(indicator.pendingCount);
+        window.dispatchEvent(new Event("dx-rework:todo-refresh"));
       } catch (error: unknown) {
         if (!controller.signal.aborted) console.warn("Todo indicator refresh failed", error);
       } finally {
@@ -609,6 +611,7 @@ export function Shell({
       ) : null}
 
       <main>{children}</main>
+      {currentUser?.capabilities.includes("todo:view") && <DigitalNotificationToast key={currentUser.id} userId={currentUser.id} />}
     </div>
   );
 }

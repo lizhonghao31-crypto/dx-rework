@@ -1,3 +1,4 @@
+import { digitalTodoOrder } from "../production-platform/notification-policy.js";
 import type { ProductionClosureService } from "../sourcing/production-closure-service.js";
 import { memberCanReceiveFact } from "../access/member-module-policy.js";
 import { randomUUID } from "node:crypto";
@@ -83,7 +84,7 @@ export type TodoListOptions = Readonly<{
 
 const TODO_LIST_PAGE_SIZE = 15;
 const TODO_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const TODO_MODULES: readonly TodoModule[] = ["rework", "sourcing", "production", "samples", "pattern_room", "suppliers"];
+const TODO_MODULES: readonly TodoModule[] = ["rework", "sourcing", "production", "samples", "pattern_room", "suppliers", "digital_production"];
 
 const TODO_WITH_CONTEXT_SQL = `SELECT
   todos.todo_id,todos.todo_type,todos.category,todos.source_event_id,todos.source_action,
@@ -276,6 +277,7 @@ export class TodoService {
     private readonly events = new OperationEventRepository(),
     private readonly outbox = new MessageOutboxRepository(),
     private readonly production?: Pick<ProductionClosureService,"todos">,
+    private readonly digital?: {todos(actor:TrustedActorContext):Promise<TodoResponse[]>},
   ) {}
 
   async listForActor(
@@ -314,11 +316,13 @@ export class TodoService {
     }
     const productionTodos = this.production ? await this.production.todos(actor) : [];
     if (this.production) moduleCounts.production = productionTodos.length;
+    const digitalTodos = this.digital ? await this.digital.todos(actor) : [];
+    if (this.digital) moduleCounts.digital_production = digitalTodos.length;
     const activeModule = options.module
       ?? TODO_MODULES.find((module) => (moduleCounts[module] ?? 0) > 0)
       ?? "rework";
-    if (activeModule === "production") {
-      const filtered = productionTodos.filter(todo => !normalizedQuery ||
+    if (activeModule === "production" || activeModule === "digital_production") {
+      const filtered = (activeModule === "production" ? productionTodos : digitalTodos).filter(todo => !normalizedQuery ||
         [todo.orderContext?.styleNo, todo.orderContext?.supplierName, todo.orderContext?.merchandiserName].some(value => value?.toUpperCase().includes(normalizedQuery.toUpperCase())));
       const totalCount = filtered.length, totalPages = Math.ceil(totalCount / 15), page = totalPages ? Math.min(requestedPage,totalPages) : 1;
       return {todos:filtered.slice((page-1)*15,page*15),activeModule,moduleCounts,page,pageSize:15,totalCount,totalPages};
@@ -405,6 +409,7 @@ export class TodoService {
     );
     const row = result.rows[0];
     if (!row && this.production) { const todo = (await this.production.todos(actor)).find(item=>item.todoId===todoId); if(todo)return todo; }
+    if (!row && this.digital) { const todo = (await this.digital.todos(actor)).find(item=>item.todoId===todoId); if(todo)return todo; }
     if (!row) throw new ApplicationError("NOT_FOUND", "待办不存在或已不再分配给你", 404);
     return todoResponse(row);
   }
@@ -428,7 +433,7 @@ export class TodoService {
       [actor.actorId],
     );
     return {
-      pendingCount: Number(result.rows[0]?.pending_count ?? 0) + (this.production ? (await this.production.todos(actor)).filter(todo=>todo.unread).length : 0),
+      pendingCount: Number(result.rows[0]?.pending_count ?? 0) + (this.production ? (await this.production.todos(actor)).filter(todo=>todo.unread).length : 0) + (this.digital ? (await this.digital.todos(actor)).length : 0),
     };
   }
 
@@ -1266,6 +1271,7 @@ export class TodoService {
     operationRequestId: string,
     deliveryKind: "create" | "complete" | "reminder" | "escalation" | "information",
   ): Promise<void> {
+    if (todo.route_descriptor.routeName === "digital_production_task" || await digitalTodoOrder(client, TodoRouteDescriptorSchema.parse(todo.route_descriptor))) return;
     const outboxEventId = await this.outbox.enqueue(client, {
       topic: TODO_DELIVERY_TOPIC,
       aggregateType: "rework_todo",

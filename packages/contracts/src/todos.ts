@@ -13,6 +13,7 @@ export const TodoRouteDescriptorSchema = z.object({
     "wage_period_detail",
     "sourcing_detail",
     "production_detail",
+    "digital_production_task",
     "sample_detail",
     "pattern_room_order",
     "supplier_onboarding",
@@ -129,7 +130,7 @@ export const TodoRoutingExceptionSchema = z.object({
   updatedAt: z.string().datetime(),
 }).strict();
 
-export const TodoModuleSchema = z.enum(["rework", "sourcing", "production", "samples", "pattern_room", "suppliers"]);
+export const TodoModuleSchema = z.enum(["rework", "sourcing", "production", "samples", "pattern_room", "suppliers", "digital_production"]);
 
 export const TodoModuleCountsSchema = z.object({
   rework: z.number().int().nonnegative(),
@@ -137,6 +138,7 @@ export const TodoModuleCountsSchema = z.object({
   production: z.number().int().nonnegative().optional(),
   samples: z.number().int().nonnegative().optional(),
   pattern_room: z.number().int().nonnegative().optional(),
+  digital_production: z.number().int().nonnegative().optional(),
   suppliers: z.number().int().nonnegative().optional(),
 }).strict();
 

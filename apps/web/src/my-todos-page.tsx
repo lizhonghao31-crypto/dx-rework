@@ -1,3 +1,4 @@
+import { todoRouteHref } from "./todo-route-link.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import {
@@ -36,6 +37,7 @@ type LoadState =
   | { kind: "error"; message: string };
 
 const todoModules: readonly Readonly<{ id: TodoModule; label: string }>[] = [
+  { id: "digital_production", label: "数字生产" },
   { id: "sourcing", label: "外发定价&选厂" },
   { id: "rework", label: "订单返工" },
   { id: "production", label: "实时生产" },
@@ -53,6 +55,7 @@ const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
   external_responsibility_detail: "记录供应商实际扣款",
   wage_period_detail: "核对返工工资",
   sourcing_detail: "处理外发定价选厂订单",
+  digital_production_task: "办理数字生产任务",
   production_detail: "查看生产风险",
   sample_detail: "处理样衣事项",
   pattern_room_order: "处理板房订单",
@@ -108,52 +111,7 @@ const categoryLabel = (todo: TodoResponse): string => {
   return labels[todo.category] ?? taskTitle(todo);
 };
 
-const todoHref = (todo: TodoResponse): string => {
-  const route = todo.route;
-  const orderId = route.reworkOrderId ?? route.entityId;
-  const query = new URLSearchParams({ todo: todo.todoId });
-  let target: string;
-  switch (route.routeName) {
-    case "supplier_onboarding":
-      target = `ui/suppliers/requests/${route.entityId}`;
-      break;
-    case "pattern_room_order":
-      target = `ui/pattern-room/orders/${route.entityId}`;
-      if (route.roundId) query.set("round", route.roundId);
-      break;
-    case "sample_detail":
-      target = `ui/samples/${route.entityId}`;
-      break;
-    case "production_detail":
-      target = `ui/production-dashboard/${route.entityId}`;
-      break;
-    case "process_configuration":
-      target = "ui/process-configuration";
-      query.set("rework", route.entityId);
-      break;
-    case "whole_order_review":
-      target = "ui/work-reporting";
-      query.set("rework", orderId);
-      break;
-    case "wage_period_detail":
-      target = `ui/wages/${route.entityId}`;
-      break;
-    case "sourcing_detail":
-      target = `ui/sourcing/orders/${route.entityId}`;
-      break;
-    case "responsibility_detail":
-    case "own_factory_approval":
-    case "external_responsibility_detail":
-      target = `ui/tasks/${orderId}`;
-      query.set("tab", route.tab ?? route.routeName.replace("_detail", ""));
-      break;
-    case "rework_detail":
-      target = `ui/tasks/${orderId}`;
-      if (route.tab) query.set("node", route.tab);
-      break;
-  }
-  return `${pageUrl(target)}?${query.toString()}`;
-};
+const todoHref = (todo: TodoResponse): string => todoRouteHref(todo.route);
 
 const formatDueAt = (value: string | null): string => {
   if (!value) return "无固定截止时间";
@@ -297,13 +255,13 @@ export function MyTodosPage() {
   const pageSize = state.kind === "ready" ? state.pageSize : 15;
   const totalPages = state.kind === "ready" ? state.totalPages : 0;
   const renderedTotalPages = Math.max(totalPages, 1);
-  const totalActionable = moduleCounts.rework + moduleCounts.sourcing + (moduleCounts.production ?? 0) + (moduleCounts.samples ?? 0) + (moduleCounts.pattern_room ?? 0) + (moduleCounts.suppliers ?? 0);
+  const totalActionable = moduleCounts.rework + moduleCounts.sourcing + (moduleCounts.production ?? 0) + (moduleCounts.samples ?? 0) + (moduleCounts.pattern_room ?? 0) + (moduleCounts.suppliers ?? 0) + (moduleCounts.digital_production ?? 0);
   const visiblePages = todoPageWindow(page, renderedTotalPages);
   const pageWindowStart = visiblePages[0] ?? 1;
   const pageWindowEnd = visiblePages.at(-1) ?? 1;
   const visibleTodoModules = accessibleTodoModules === null
     ? []
-    : todoModules.filter((module) => accessibleTodoModules.has(module.id));
+    : todoModules.filter((module) => module.id === "digital_production" ? moduleCounts.digital_production !== undefined : accessibleTodoModules.has(module.id));
 
   const openModule = (module: TodoModule): void => {
     setRequestedModule(module);
