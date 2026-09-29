@@ -2,7 +2,7 @@
 
 状态：长期施工规则 V2.0  
 适用仓库：`lizhonghao31-crypto/dx-rework`  
-生效日期：2026-09-10
+生效日期：2026-09-10（Acceptance规则补充：2026-09-30）
 
 本文件只保留长期有效的施工纪律。阶段性 PR 计划、临时授权、已完成迁移步骤不得继续作为默认施工入口。
 
@@ -123,6 +123,10 @@ GitHub Actions 是验收层，不是开发 scratchpad。
 - Acceptance 更新按实际 diff 选择最小动作；没有前端/依赖变化时不得默认 `npm ci`、全量 build 或在 ECS 上重跑 Gate。
 - 低配置 ECS 上不得把 CI/Full Gate 当部署步骤执行。
 - 任何轻量更新都必须保持运行代码、数据库 schema 与版本标识一致，不能只改显示版本号。
+- **Acceptance Lab 唯一操作手册：`docs/operations/acceptance-lab-runbook-v1.0.md`。**进入A1/A2/A3/A4验收前必须先读该文件；不得重新发明Runner/SSH/tar传输链路、不得重复ENV初始化、不得把控制码错误当成部署错误。
+- A1首次canonical切换完成后，后续批次只走“候选准备 → Acceptance数据库一次必要备份（仅存在migration时）→ 本机候选部署 → 公网技术验证 → Acceptance Lab业务验收”；**不再重复Nginx首次切换、旧root 3202清理、HBA/用户/目录初始化。**
+- 当前Acceptance固定边界：生产API `127.0.0.1:3201` 不动；Acceptance API `127.0.0.1:3202`；独立DB `dx_rework_acceptance`；运行用户 `dxacceptance`；canonical root `/opt/dx-rework-acceptance`；公网入口 `https://staging-api.dxerp.org.cn/acceptance`。
+- Acceptance控制码是**5分钟、一次性**凭证；复制不完整、过期或已使用只需重新生成控制码，**不得因此重启API、重跑migration或重做部署**；凭证不得粘贴进聊天、PR、Issue、日志或文档。
 
 ## 11. 高风险红线
 
