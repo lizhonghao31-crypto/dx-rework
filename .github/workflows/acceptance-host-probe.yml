@@ -1,0 +1,145 @@
+name: Acceptance host probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acceptance-host-probe
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    name: Probe existing staging Acceptance host
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: dx-rework-pilot
+    steps:
+      - name: Validate pilot SSH credentials
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.DX_REWORK_SSH_HOST }}
+          SSH_USER: ${{ secrets.DX_REWORK_SSH_USER }}
+          SSH_KEY: ${{ secrets.DX_REWORK_SSH_KEY }}
+          SSH_HOST_KEY: ${{ secrets.DX_REWORK_SSH_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          for name in SSH_HOST SSH_USER SSH_KEY SSH_HOST_KEY; do
+            test -n "${!name}"
+          done
+          install -m 0700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 0600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/known_hosts
+
+      - name: Probe staging host read-only
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.DX_REWORK_SSH_HOST }}
+          SSH_USER: ${{ secrets.DX_REWORK_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+
+          report() {
+            printf '%s=%s\n' "$1" "$2"
+          }
+
+          present() {
+            if [[ -e "$1" || -L "$1" ]]; then printf yes; else printf no; fi
+          }
+
+          report probe_user "$(id -un)"
+          report pilot_root_present "$(present /opt/dx-rework)"
+          report acceptance_root_present "$(present /opt/dx-rework-acceptance)"
+          report acceptance_shared_present "$(present /opt/dx-rework-acceptance/shared)"
+          report acceptance_app_env_present "$(present /opt/dx-rework-acceptance/shared/.env)"
+          report acceptance_deploy_env_present "$(present /opt/dx-rework-acceptance/shared/deploy.env)"
+          report acceptance_current_present "$(present /opt/dx-rework-acceptance/current)"
+          report acceptance_active_present "$(present /opt/dx-rework-acceptance/active)"
+
+          if [[ -L /opt/dx-rework/current ]]; then
+            report pilot_current_target "$(readlink -f /opt/dx-rework/current 2>/dev/null || true)"
+          fi
+          if [[ -L /opt/dx-rework-acceptance/current ]]; then
+            report acceptance_current_target "$(readlink -f /opt/dx-rework-acceptance/current 2>/dev/null || true)"
+          fi
+
+          deploy_env=/opt/dx-rework/shared/deploy.env
+          if [[ -r "$deploy_env" ]]; then
+            value() { awk -F= -v key="$1" '$1==key {sub(/^[^=]*=/,""); print; exit}' "$deploy_env"; }
+            nginx_mode="$(value DX_REWORK_NGINX_MODE)"
+            server_name="$(value DX_REWORK_SERVER_NAME)"
+            nginx_config="$(value DX_REWORK_NGINX_CONFIG)"
+            report pilot_nginx_mode "${nginx_mode:-missing}"
+            report pilot_server_name "${server_name:-missing}"
+            if [[ -n "$nginx_config" && -r "$nginx_config" ]]; then
+              report pilot_nginx_config_readable yes
+              report nginx_acceptance_location_count "$(grep -Ec 'location[[:space:]].*/acceptance' "$nginx_config" || true)"
+              report nginx_rework_location_count "$(grep -Ec 'location[[:space:]].*/rework' "$nginx_config" || true)"
+              report nginx_proxy_3202_count "$(grep -Fc '127.0.0.1:3202' "$nginx_config" || true)"
+            else
+              report pilot_nginx_config_readable no
+            fi
+          else
+            report pilot_deploy_env_readable no
+          fi
+
+          if command -v ss >/dev/null 2>&1; then
+            for port in 3201 3202; do
+              if ss -ltn 2>/dev/null | awk -v p=":$port" '$4 ~ p"$" {found=1} END {exit !found}'; then
+                report "port_${port}_listening" yes
+              else
+                report "port_${port}_listening" no
+              fi
+            done
+          else
+            report socket_probe unavailable
+          fi
+
+          if command -v pm2 >/dev/null 2>&1 && command -v node >/dev/null 2>&1; then
+            names="$(pm2 jlist 2>/dev/null | node -e '
+              let body="";
+              process.stdin.on("data",chunk=>body+=chunk);
+              process.stdin.on("end",()=>{
+                try {
+                  const rows=JSON.parse(body);
+                  process.stdout.write(rows.map(row=>row.name).filter(Boolean).sort().join(","));
+                } catch {}
+              });
+            ' || true)"
+            report pm2_process_names "${names:-none}"
+          else
+            report pm2_probe unavailable
+          fi
+
+          app_env=/opt/dx-rework-acceptance/shared/.env
+          if [[ -r "$app_env" ]]; then
+            env_value() { awk -F= -v key="$1" '$1==key {sub(/^[^=]*=/,""); print; exit}' "$app_env"; }
+            report acceptance_app_env_mode "$(stat -c '%a' "$app_env" 2>/dev/null || true)"
+            report acceptance_app_env_owner "$(stat -c '%U' "$app_env" 2>/dev/null || true)"
+            report acceptance_app_base_path "$(env_value APP_BASE_PATH)"
+            report acceptance_lab_enabled "$(env_value ACCEPTANCE_LAB_ENABLED)"
+            report acceptance_root_identity "$(env_value ROOT_DINGTALK_USER_ID)"
+            report acceptance_todo_runtime "$(env_value TODO_RUNTIME_ENABLED)"
+            if [[ -n "$(env_value DATABASE_URL)" ]]; then
+              report acceptance_database_configured yes
+            else
+              report acceptance_database_configured no
+            fi
+          fi
+          REMOTE
+
+      - name: Probe legacy Acceptance public paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://staging-api.dxerp.org.cn/acceptance'
+          for path in '/' '/health/ready' '/api/health/ready' '/version' '/api/version' '/ui/acceptance-lab'; do
+            status="$(curl --silent --show-error --location --max-time 10 --output /dev/null --write-out '%{http_code}' "$base$path" || true)"
+            printf 'public%s=%s\n' "$path" "${status:-000}"
+          done
