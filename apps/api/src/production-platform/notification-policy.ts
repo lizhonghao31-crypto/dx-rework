@@ -7,7 +7,7 @@ export async function digitalTodoOrder(database: Pick<Pool | PoolClient, "query"
   const module = route.routeName === "sourcing_detail" ? "sourcing"
     : route.routeName === "production_detail" ? "production"
     : route.routeName === "pattern_room_order" ? "pattern_room"
-    : route.reworkOrderId || ["rework_detail", "process_configuration", "whole_order_review"].includes(route.routeName) ? "rework" : null;
+    : route.reworkOrderId || ["rework_detail", "process_configuration", "whole_order_review", "responsibility_detail", "own_factory_approval"].includes(route.routeName) ? "rework" : null;
   if (!module) return null;
   // Older isolated schemas and legacy installations do not contain P01 tables.
   if (!(await database.query("SELECT to_regclass('digital_production_child_links') AS relation")).rows[0]?.relation) return null;

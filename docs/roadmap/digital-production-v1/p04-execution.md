@@ -27,3 +27,7 @@
 - 6 种已排队投递动作（create/information/complete/reminder/escalation/update）验证新子单 provider 调用为零。
 - 本地使用 PGlite 执行 SQL/API 测试与 221 个迁移回放；它的客户端串行化不能替代 Full Gate 的原生 PostgreSQL 并发证据。
 - 按用户要求不做本地浏览器验收；多标签真实交互、移动端布局及阶段业务场景留在 A1 Acceptance。Gate、Review、合并、部署和业务验收分别记录，不互相替代。
+
+## 首轮 Review 收口
+
+两项 P2 均核验并修复：按任务状态及单调事件意图序号淘汰被后续阻断/解除/改派覆盖的旧提醒，投影与领取都检查；补齐 entityId 即返工单 ID 的责任判定及本厂审批路由的 IN_APP_ONLY 隔离。增加延迟扫描、已投影后失效及真实 worker 零外发回归。修改后运行新 Head Full Gate，不追加第二轮 Review。

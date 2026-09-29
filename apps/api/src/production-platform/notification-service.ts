@@ -39,6 +39,18 @@ export class DigitalProductionNotificationService {
       AND EXISTS(SELECT 1 FROM identity_mappings i WHERE i.user_id=u.id AND i.active AND i.employed)
       GROUP BY u.id`)).rows.map(row=>({actorId:row.id,actorRoles:row.roles,authorizationCapability:"todo:view",requestId:"digital-notification"}));
   }
+  private async currentTaskEvent(database:Database,task:Task,eventId:string,kind:string):Promise<boolean> {
+    if(kind==="completed")return task.state==="completed";
+    if(!["pending","ready","blocked"].includes(task.state))return false;
+    if(kind==="blocked"&&task.state!=="blocked")return false;
+    if(["ready","unblocked"].includes(kind)&&task.state!=="ready")return false;
+    if(["ready","reassigned","blocked","unblocked"].includes(kind)) {
+      const latest=(await database.query(`SELECT event_id FROM digital_production_event_intents WHERE task_id=$1
+        AND event_kind IN ('ready','reassigned','blocked','unblocked') ORDER BY notification_sequence DESC LIMIT 1`,[task.task_id])).rows[0];
+      return latest?.event_id===eventId;
+    }
+    return true;
+  }
   private async recipients(database:Database,task:Task,kind:string,people:TrustedActorContext[]):Promise<TrustedActorContext[]> {
     const policy=new DigitalProductionAccessPolicy(database);
     const assignee=people.find(p=>p.actorId===task.assignee_id&&p.actorRoles.includes(task.required_role));
@@ -84,7 +96,7 @@ export class DigitalProductionNotificationService {
       for(const intent of intents){
         const task=intent.task_id?(await client.query<Task>(`${TASKS} WHERE t.task_id=$1`,[intent.task_id])).rows[0]:undefined;
         if(task&&people.some(p=>p.actorId===task.assignee_id&&p.actorRoles.includes(task.required_role))&&labels[intent.event_kind]&&task.lifecycle==="active"&&
-          (intent.event_kind==="completed"?task.state==="completed":["pending","ready","blocked"].includes(task.state))&&
+          await this.currentTaskEvent(client,task,intent.event_id,intent.event_kind)&&
           (intent.event_kind!=="created"||(task.state==="pending"&&!task.assignee_id))){
           await this.notice(client,{key:`event:${intent.event_id}`,eventId:intent.event_id,taskId:task.task_id,kind:intent.event_kind},(await this.recipients(client,task,intent.event_kind,people)).map(p=>p.actorId));
         }
@@ -134,7 +146,7 @@ export class DigitalProductionNotificationService {
     if(event.task_id){
       const task=(await database.query<Task>(`${TASKS} WHERE t.task_id=$1`,[event.task_id])).rows[0];
       if(!task||task.lifecycle!=="active")return null;
-      if(event.event_kind==="completed"?task.state!=="completed":!["pending","ready","blocked"].includes(task.state))return null;
+      if(!await this.currentTaskEvent(database,task,event.event_id,event.event_kind))return null;
       if(event.deadline_revision_id&&String(event.deadline_revision_id)!==String(task.revision_id))return null;
       if(event.event_kind==="warning"&&task.due_at&&new Date(task.due_at).getTime()<=Date.now())return null;
       const missing=!people.some(p=>p.actorId===task.assignee_id&&p.actorRoles.includes(task.required_role));

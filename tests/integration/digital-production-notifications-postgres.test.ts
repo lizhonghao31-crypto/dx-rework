@@ -98,6 +98,26 @@ run("P04 in-app notifications PostgreSQL", () => {
     expect((await notifications.todos(actor(other))).some(t=>t.todoId===taskId)).toBe(true);
     expect((await notifications.claim(actor(other))).notification?.route.entityId).toBe(taskId);
   });
+  it("drops superseded blocked/ready/reassigned prompts both before projection and after projection",async()=>{
+    await drain();const {taskId}=await create(await order());
+    await tasks.feedback(actor(),taskId,"blocked",true,randomUUID());
+    await notifications.runOnce(); // A blocked event has already been projected.
+    await tasks.feedback(actor(),taskId,"resolved",false,randomUUID());
+    expect((await notifications.claim(actor())).notification).toBeNull();
+    await notifications.runOnce();
+    expect((await notifications.claim(actor())).notification?.title).toContain("已解除阻断");
+    expect((await notifications.claim(actor())).notification).toBeNull();
+    await tasks.feedback(actor(),taskId,"blocked again",true,randomUUID());
+    await tasks.feedback(actor(),taskId,"resolved again",false,randomUUID());
+    await notifications.runOnce();
+    expect((await notifications.claim(actor())).notification?.title).toContain("已解除阻断");
+    expect((await notifications.claim(actor())).notification).toBeNull();
+    const next=await create(await order());
+    await tasks.reassign(boss,next.taskId,other,randomUUID());await notifications.runOnce();
+    const fresh=(await notifications.claim(actor(other))).notification!;
+    expect(fresh.route.entityId).toBe(next.taskId);expect(fresh.title).toContain("已改派给你");
+    expect((await notifications.claim(actor(other))).notification).toBeNull();
+  });
   it("filters revoked roles and outsider receipts without leaking count or payload",async()=>{
     await drain();const {taskId}=await create(await order());await notifications.runOnce();
     await database.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=$1",[designer]);
@@ -173,6 +193,24 @@ run("P04 in-app notifications PostgreSQL", () => {
     expect(await new TodoDeliveryWorker(database,provider,"https://acceptance.example/").runOnce()).toEqual({claimed:6,suppressed:6,sent:0,failed:0});
     expect(provider.createTodo).not.toHaveBeenCalled();expect(provider.updateTodo).not.toHaveBeenCalled();expect(provider.completeTodo).not.toHaveBeenCalled();
     expect((await database.query("SELECT count(*)::int count FROM message_outbox WHERE status='sent'")).rows[0].count).toBe(6);
+  });
+  it("suppresses rework responsibility and own-factory routes without an optional reworkOrderId",async()=>{
+    const child=randomUUID(),resource=await order(),outbox=new MessageOutboxRepository();
+    const provider={createTodo:vi.fn(async()=>{throw new Error("external forbidden");}),updateTodo:vi.fn(),completeTodo:vi.fn()};
+    await tx(async c=>{
+      await c.query("INSERT INTO rework_orders(rework_order_id) VALUES($1)",[child]);
+      for(const routeName of ["responsibility_detail","own_factory_approval"] as const){
+        const todoId=randomUUID(),eventId=randomUUID(),requestId=randomUUID(),route={routeName,entityId:child,todoId};
+        expect(await digitalTodoOrder(c,route)).toBeNull();
+        await c.query("INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id) VALUES($1,$2,$3,ARRAY['sample_designer'],'todo:view','todo.create','rework_todo',$4)",[eventId,requestId,designer,todoId]);
+        await outbox.enqueue(c,{topic:"todo.delivery",aggregateType:"rework_todo",aggregateId:todoId,recipientKey:`user:${designer}`,idempotencyKey:randomUUID(),payload:{todoId,recipientUserId:designer,category:"responsibility_determination",deliveryKind:"create",route,operationEventId:eventId,operationRequestId:requestId}});
+      }
+      await linkNewDigitalChild(c,{module:"rework",childId:child,productionOrderId:resource.id,lines:[]});
+      for(const routeName of ["responsibility_detail","own_factory_approval"] as const)
+        expect(await digitalTodoOrder(c,{routeName,entityId:child,todoId:randomUUID()})).toBe(resource.id);
+    });
+    expect(await new TodoDeliveryWorker(database,provider,"https://acceptance.example/").runOnce()).toEqual({claimed:2,suppressed:2,sent:0,failed:0});
+    expect(provider.createTodo).not.toHaveBeenCalled();
   });
   it("projects child notices only in-app, deduplicates one business event for one recipient and hides price payload",async()=>{
     await drain();const child=randomUUID(),resource=await order(),source=randomUUID();

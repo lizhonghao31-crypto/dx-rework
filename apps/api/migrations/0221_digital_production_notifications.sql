@@ -1,4 +1,7 @@
 -- Prompt receipts never update business tasks, deadlines or existing todo read state.
+-- A monotonic intent order disambiguates multiple lifecycle events in one transaction.
+ALTER TABLE digital_production_event_intents ADD COLUMN notification_sequence bigint GENERATED ALWAYS AS IDENTITY;
+CREATE INDEX digital_intent_task_sequence ON digital_production_event_intents(task_id,notification_sequence DESC);
 CREATE TABLE digital_production_notification_events (
  event_id uuid PRIMARY KEY,
  source_key text NOT NULL UNIQUE,
