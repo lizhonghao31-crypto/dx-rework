@@ -1,0 +1,4 @@
+.digital-production fieldset { border: 0; margin: 0 0 1rem; padding: 0; }
+.digital-production label { display: inline-flex; flex-direction: column; gap: .3rem; margin: .5rem 1rem .5rem 0; max-width: 100%; }
+.digital-production input, .digital-production select { max-width: 100%; }
+.digital-production .pattern-actions { flex-wrap: wrap; }

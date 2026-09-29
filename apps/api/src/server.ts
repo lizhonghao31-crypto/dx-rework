@@ -1,3 +1,4 @@
+import { DigitalProductionIdentityService } from "./production-platform/identity-service.js";
 import { SupplierOnboardingService } from "./access/supplier-onboarding-service.js";
 import { PatternRoomPriceService } from "./pattern-room/price-service.js";
 import { PatternRoomOrderService } from "./pattern-room/order-service.js";
@@ -224,6 +225,7 @@ const externalResponsibilityService = new ExternalResponsibilityApplicationServi
 const wageService = new WageService(database, undefined, undefined, todoProjection);
 const reportingService = new ManagementReportingService(database);
 const app = buildApp({
+  ...(config.digitalProduction?.enabled ? { digitalIdentity: { authenticate: (token: string | undefined) => auth.authenticate(token), root: rootAuthority, service: new DigitalProductionIdentityService(database, config.digitalProduction.creationEnabled), creationEnabled: config.digitalProduction.creationEnabled } } : {}),
   operationDiagnostics: (row) => recordOperationDiagnostic(database,row),
   config,
   checkDatabase: () => checkDatabase(database),

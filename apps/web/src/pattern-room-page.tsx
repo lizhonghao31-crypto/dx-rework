@@ -1,3 +1,4 @@
+import { DigitalProductionEntry } from "./digital-production-page.js";
 import { Surface } from "@dx-rework/ui";
 import { Header } from "./components.js";
 import { patternUrls } from "./pattern-order-client.js";
@@ -13,5 +14,6 @@ export function PatternRoomPage() {
     {canAccessPatternRoomOrders(user) && <a className="dx-button dx-button--primary" href={patternUrls.pageUrl("ui/pattern-room/orders")}>订单打板/杂事看板</a>}
     {canCreatePatternRoomOrders(user) && <a className="dx-button dx-button--secondary" href={patternUrls.pageUrl("ui/pattern-room/create")}>创建订单</a>}
     {canAccessPatternRoomPrices(user) && <a className="dx-button dx-button--secondary" href={patternUrls.pageUrl("ui/pattern-room/prices")}>价格管控</a>}
+    {canCreatePatternRoomOrders(user) && <DigitalProductionEntry />}
   </div></Surface>}</div>;
 }

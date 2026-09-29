@@ -1,3 +1,4 @@
+import { registerDigitalIdentityRoutes, type DigitalIdentityDependencies } from "./production-platform/identity-routes.js";
 import { registerMemberModuleHttpGuard } from "./access/member-module-http.js";
 import { registerSupplierOnboardingRoutes, type SupplierOnboardingDependencies } from "./access/supplier-onboarding-routes.js";
 import { registerPatternRoomPriceRoutes, type PatternRoomPriceDependencies } from "./pattern-room/price-routes.js";
@@ -60,6 +61,7 @@ export type AppDependencies = Readonly<{
   checkDatabase: () => Promise<void>;
   getAppliedSchemaHistory: () => Promise<AppliedSchemaState[] | null>;
   auth?: AuthService;
+  digitalIdentity?: DigitalIdentityDependencies;
   tools?: ToolsHttpDependencies;
   access?: AccessHttpDependencies;
   employeeAccess?: EmployeeAccessHttpDependencies;
@@ -183,6 +185,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
       } : {}),
     });
   }
+  if (dependencies.digitalIdentity) registerDigitalIdentityRoutes(app, dependencies.digitalIdentity);
   if (dependencies.tools) registerToolsRoutes(app, dependencies.tools);
   if (dependencies.access) {
     registerAccessRoutes(app, dependencies.access);
