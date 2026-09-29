@@ -1,44 +1,18 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { ProductionCommandCenterView, type CommandOrder } from "../../apps/web/src/production-command-center-view.js";
-
-const orders: readonly CommandOrder[] = [
-  {
-    orderNo: "MO-260928-001", styleNo: "DX2609281", customer: "SE", category: "女装 · 连衣裙",
-    merchandiser: "黄建华", designer: "李阳阳", quantity: "1,308件", deliveryDate: "2026-10-16",
-    currentStage: "开裁", nodeEnteredAt: "09-28 08:00", nodeLimit: "24小时", nodeDeadline: "09-29 08:00",
-    nodeRemaining: "剩余 6小时", nodeRisk: "attention", overallRisk: "high", overallRiskText: "预计晚 1天",
-    reason: "关键辅料预计晚于裁床需要时间，若不调整将影响后续二次工艺与发厂。"
-  },
-  {
-    orderNo: "MO-260928-002", styleNo: "DX2609273", customer: "PD", category: "男装 · 上衣",
-    merchandiser: "陈洁", designer: "王敏", quantity: "860件", deliveryDate: "2026-10-18",
-    currentStage: "大货纸样", nodeEnteredAt: "09-27 15:00", nodeLimit: "48小时", nodeDeadline: "09-29 15:00",
-    nodeRemaining: "剩余 20小时", nodeRisk: "normal", overallRisk: "normal", overallRiskText: "正常",
-    reason: "当前已知条件下未发现交付风险。"
-  },
-  {
-    orderNo: "MO-260927-009", styleNo: "DX2609219", customer: "GA", category: "女装 · 裤子",
-    merchandiser: "刘洁华", designer: "周琪", quantity: "520件", deliveryDate: "2026-10-12",
-    currentStage: "预缩", nodeEnteredAt: "09-26 10:30", nodeLimit: "36小时", nodeDeadline: "09-27 22:30",
-    nodeRemaining: "已超时 9小时", nodeRisk: "overdue", overallRisk: "attention", overallRiskText: "需关注",
-    reason: "预缩节点已经超时，但当前整单仍有可追回余量，需主管确认后续安排。"
-  },
-  {
-    orderNo: "MO-260927-004", styleNo: "DX2609202", customer: "PA", category: "男装 · 衬衫",
-    merchandiser: "林洁", designer: "陈敏", quantity: "1,100件", deliveryDate: "2026-10-20",
-    currentStage: "待二次工艺", nodeEnteredAt: "—", nodeLimit: "待前序", nodeDeadline: "待前序完成后生成",
-    nodeRemaining: "未计时", nodeRisk: "unknown", overallRisk: "normal", overallRiskText: "正常",
-    reason: "尚未进入二次工艺，不提前启动节点时钟。"
-  },
-];
+import {
+  PRODUCTION_COMMAND_CENTER_DEMO_ORDERS,
+  PRODUCTION_COMMAND_CENTER_DEMO_SELECTED,
+  PRODUCTION_COMMAND_CENTER_DEMO_SUMMARY,
+} from "../../apps/web/src/production-command-center-demo-data.js";
+import { ProductionCommandCenterView } from "../../apps/web/src/production-command-center-view.js";
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ProductionCommandCenterView
-      summary={{ active: 38, dueSoon: 7, highRisk: 3, overdue: 2 }}
-      orders={orders}
-      selectedOrderNo="MO-260928-001"
+      summary={PRODUCTION_COMMAND_CENTER_DEMO_SUMMARY}
+      orders={PRODUCTION_COMMAND_CENTER_DEMO_ORDERS}
+      selectedOrderNo={PRODUCTION_COMMAND_CENTER_DEMO_SELECTED}
     />
   </React.StrictMode>,
 );

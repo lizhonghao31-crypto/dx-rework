@@ -1,0 +1,37 @@
+.acceptance-command-center-state {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #eef3f8;
+}
+
+.acceptance-command-center-state > * {
+  width: min(560px, 100%);
+}
+
+.acceptance-command-center-preview {
+  min-height: 100vh;
+  background: #eef3f8;
+}
+
+.acceptance-command-center-preview__notice {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 5px 14px;
+  border-bottom: 1px solid #d7e1ea;
+  background: #f8fbfe;
+  color: #5f7488;
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .acceptance-command-center-preview__notice {
+    align-items: flex-start;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
