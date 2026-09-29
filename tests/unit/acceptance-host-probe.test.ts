@@ -34,7 +34,7 @@ describe("Acceptance staging host probe", () => {
   it("reports only non-secret Acceptance facts and public reachability", async () => {
     const workflow = await readFile(".github/workflows/acceptance-host-probe.yml", "utf8");
     expect(workflow).toContain("/opt/dx-rework-acceptance");
-    expect(workflow).toContain("127.0.0.1:3202");
+    expect(workflow).toContain("for port in 3201 3202");
     expect(workflow).toContain("staging-api.dxerp.org.cn/acceptance");
     expect(workflow).toContain("/api/health/ready");
     expect(workflow).toContain("/api/version");
