@@ -11,12 +11,25 @@ describe("Acceptance production command center preview", () => {
     ]);
     expect(main).toContain("acceptanceCommandCenterPath");
     expect(main).toContain("/ui/acceptance/production-command-center");
-    expect(main).toContain("<AcceptanceProductionCommandCenterPage />");
+    expect(main).toContain('lazy(async () =>');
+    expect(main).toContain('import("./acceptance-production-command-center-page.js")');
     expect(app).not.toContain("acceptance/production-command-center");
     expect(components).not.toContain("acceptance/production-command-center");
     expect(page).toContain('apiUrl("acceptance/control/status")');
     expect(page).toContain("response.status === 200 || response.status === 401");
     expect(page).toContain("正式生产站点不提供此视觉样板");
+  });
+
+  it("does not leak visual-preview globals into the production document", async () => {
+    const [css, preview] = await Promise.all([
+      readFile("apps/web/src/production-command-center-view.css", "utf8"),
+      readFile("scripts/production-command-center-preview.mjs", "utf8"),
+    ]);
+    expect(css).not.toMatch(/^:root\s*\{/m);
+    expect(css).not.toMatch(/^body\s*\{/m);
+    expect(css).not.toMatch(/^button\s*\{/m);
+    expect(css).toContain(".production-command-shell button");
+    expect(preview).toContain("html,body,#root{margin:0;min-height:100%;}");
   });
 
   it("shares one demo-data source between the live Acceptance page and offline preview", async () => {
