@@ -91,6 +91,7 @@ describe("isolated Acceptance deployment contract", () => {
     expect(browser).toContain("运行全部角色权限矩阵");
     expect(browser).toContain("[UAT] Root");
     expect(browser).toContain("Acceptance approved matrix has failures");
+    expect(browser).toContain('new URL("api/version", base)');
     expect(browser).toContain("dxerp.org.cn");
     expect(browser).not.toContain("ACCEPTANCE_LAB_SECRET");
   });
@@ -104,6 +105,7 @@ describe("isolated Acceptance deployment contract", () => {
     expect(app).toContain("dx_rework_acceptance");
     expect(app).toContain("ROOT_DINGTALK_USER_ID=uat-root");
     expect(app).toContain("ACCEPTANCE_LAB_ENABLED=true");
+    expect(app).toContain("APP_BASE_PATH=/acceptance/");
     expect(app).toContain("TODO_RUNTIME_ENABLED=false");
     expect(app).not.toContain("OSS_BUCKET=");
     expect(app).not.toContain("OPENAI_API_KEY=");
