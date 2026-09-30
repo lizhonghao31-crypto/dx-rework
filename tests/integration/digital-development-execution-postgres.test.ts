@@ -53,6 +53,7 @@ run("P06 development execution PostgreSQL", () => {
     await database.query(await readFile(new URL("../../apps/api/migrations/0221_digital_production_notifications.sql", import.meta.url), "utf8"));
     await database.query(await readFile(new URL("../../apps/api/migrations/0222_digital_development_documents.sql", import.meta.url), "utf8"));
     await database.query(await readFile(new URL("../../apps/api/migrations/0223_digital_development_execution.sql", import.meta.url), "utf8"));
+    await database.query(await readFile(new URL("../../apps/api/migrations/0224_digital_development_route.sql", import.meta.url), "utf8"));
     await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'development_clerk'),($2,'pattern_room_worker')",[root,other]);
   });
 

@@ -1,3 +1,4 @@
+import {exerciseDevelopmentRoute} from "../helpers/digital-development-route-fixture.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
 import { exerciseReceivingDifferenceAuthority } from "./helpers/receiving-difference-authority-scenario.js";
@@ -3106,6 +3107,10 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       await Promise.allSettled([deletion, marking]);
       await markingPool.end();
     }
+  });
+
+  it("P07 development routes preserve original pattern wages and final confirmation",async()=>{
+    await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"));
   });
 
 });

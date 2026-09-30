@@ -1,3 +1,4 @@
+import {DevelopmentRouteService} from "./development-route-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { developmentPublishErrors, type DevelopmentDocument, type DevelopmentMaterialEvent, type DevelopmentSheet } from "@dx-rework/contracts/digital-development";
@@ -108,6 +109,7 @@ export class DigitalDevelopmentService {
       if (input.action === "确认代用" && material!.category !== "辅料") conflict("设计师代用确认仅适用于辅料；问题面料须供应链总监决定");
       const eventId = randomUUID();
       await db.query("INSERT INTO digital_development_material_events(event_id,source_id,material_id,action,expected_date,note,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7)", [eventId, sourceId, materialId, input.action, input.expectedDate, input.note, actor.actorId]);
+      await new DevelopmentRouteService(this.database).releaseSewing(db,actor,sourceId);
       return this.read(actor, sourceId, db);
     });
   }

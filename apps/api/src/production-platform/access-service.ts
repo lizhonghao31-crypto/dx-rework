@@ -21,7 +21,7 @@ export class DigitalProductionAccessService {
   }
   async candidates(actor: TrustedActorContext) {
     if (!isDigitalLeader(actor) && !isDigitalTechnicalManager(actor) && !actor.actorRoles.includes("sample_designer") && !actor.actorRoles.includes("development_clerk")) digitalForbidden();
-    const roles = isDigitalLeader(actor) || isDigitalTechnicalManager(actor) ? null : actor.actorRoles.includes("development_clerk") ? ["development_clerk", "pattern_room_worker", "pattern_room_tail_inspector"] : ["order_merchandiser"];
+    const roles = isDigitalLeader(actor) || isDigitalTechnicalManager(actor) ? null : actor.actorRoles.includes("development_clerk") ? ["development_clerk", "pattern_room_worker", "pattern_room_tail_inspector"] : ["order_merchandiser", "pattern_room_worker"];
     return (await this.database.query(`SELECT u.id,u.display_name AS "displayName",array_agg(DISTINCT a.role_code) AS roles
       FROM app_users u JOIN user_role_assignments a ON a.user_id=u.id AND a.revoked_at IS NULL
       JOIN business_roles r ON r.role_code=a.role_code AND r.enabled
