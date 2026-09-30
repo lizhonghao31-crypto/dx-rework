@@ -3076,7 +3076,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       try{
         await database.query(`INSERT INTO supplier_catalog_versions(supplier_id,version,supplier_name,active,change_reason,changed_by,
           address,contract_entity_name,party_b_representative,payee_name,bank_account,bank_name)
-          SELECT supplier_id,version+1,supplier_name,true,'合同刷新测试',$2,address||'（资料更新）',contract_entity_name,party_b_representative,payee_name,bank_account||'9',bank_name
+          SELECT supplier_id,version+1,supplier_name,true,'合同刷新测试',$2,address||'（资料更新）',NULL,party_b_representative,payee_name,bank_account||'9',bank_name
           FROM current_supplier_catalog WHERE supplier_id=$1`,[factoryId,managerId]);
       }finally{await database.query("ALTER TABLE supplier_catalog_versions ENABLE TRIGGER supplier_catalog_versions_guard_creation, ENABLE TRIGGER supplier_profile_maintenance_authority");}
     };
@@ -3094,6 +3094,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await contractService.generateIfReady(managerActor(),id,combined);
     const effective=(await database.query("SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[combined])).rows[0]!.approval_snapshot;
     expect(effective.bankAccount).toBe(String(originalRow.approval_snapshot.bankAccount)+"99");
+    expect(effective.contractEntityName).toBe(originalRow.approval_snapshot.contractEntityName);
     const refreshedSupplier={address:effective.address,bankAccount:effective.bankAccount};
     await service.reviseStyles(merchandiserActor(),id,{expectedRevision:0,lines:[{position:1,styleNo:"CONTRACT-INFO-REVISED",alternateStyleNo:null}]},randomUUID());
     const withStyle=(await contractService.getCurrent(readerActor(),id)).item!;
@@ -3107,6 +3108,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await contractReturns.submit(contractActor(),id,[attachmentId],randomUUID());
     const returned=(await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id));
     const returnRows=(await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[id])).rows;
+    expect(returned).toMatchObject({currentContractReturned:true,signedContractDocumentId:withStyle.sourcingContractDocumentId,
+      signedContractVersion:withStyle.contractVersion,signedContractNumber:withStyle.contractNumber});
+    expect(returnRows[0].sourcing_contract_document_id).toBe(withStyle.sourcingContractDocumentId);
     expect((await contractService.getCurrent(contractActor(),id)).item?.canRefreshInformation).toBe(false);
     expect((await contractService.getCurrent(managerActor(),id)).item?.canRefreshInformation).toBe(false);
     await expect(management.previewInformation(contractActor(),id)).rejects.toMatchObject({code:"FORBIDDEN"});
@@ -3118,10 +3122,21 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const rootDocument=await management.refreshInformation(rootActor(),id,rootPreview,randomUUID());
     await contractService.generateIfReady(rootActor(),id,rootDocument);
     expect((await contractService.getCurrent(rootActor(),id)).item?.canRefreshInformation).toBe(true);
-    expect(await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id)).toEqual(returned);
+    expect(await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id)).toEqual({...returned,currentContractReturned:false,currentContractDocumentId:rootDocument});
     expect((await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[id])).rows).toEqual(returnRows);
+    await expect(database.query("UPDATE sourcing_contract_return_submissions SET sourcing_contract_document_id=$2 WHERE submission_id=$1",[returnRows[0].submission_id,rootDocument]))
+      .rejects.toMatchObject({code:"55000"});
     expect((await database.query("SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[withStyle.sourcingContractDocumentId])).rows[0]!.approval_snapshot).toMatchObject(refreshedSupplier);
+    const newFile=randomUUID();
+    await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'新版回签.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[newFile,`contract-info-new-return/${newFile}`,"f".repeat(64),rootActor().actorId]);
+    const resign=await contractReturns.submit(rootActor(),id,[newFile],randomUUID());
+    expect(resign).toMatchObject({currentContractReturned:true,signedContractDocumentId:rootDocument,
+      contractReturnedAt:returned.contractReturnedAt,contractReturnDueAt:returned.contractReturnDueAt,
+      contractReturnStatus:returned.contractReturnStatus});
+    expect(resign.history[0]).toMatchObject({signedContractDocumentId:withStyle.sourcingContractDocumentId,
+      signedContractVersion:withStyle.contractVersion,attachments:returned.attachments});
+    expect((await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE submission_id=$1",[returnRows[0].submission_id])).rows[0]).toEqual(returnRows[0]);
   });
 
 });
-

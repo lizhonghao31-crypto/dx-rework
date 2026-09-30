@@ -1834,6 +1834,7 @@ function OrderDetailPage({
           setStyleEditRevision(item.identityRevision ?? 0);styleEditKey.current=null;setEditingStyles(true);
         }}>修改款号</button> : null}</div> : null}
               {contractReturn?.contractReturnMonitoring ? <>
+                {contractReturn.contractReturnedAt ? <p>{contractReturn.currentContractReturned && contractReturn.currentContractDocumentId === contract.sourcingContractDocumentId ? `本版本 V${contract.contractVersion} 已回签` : `本版本 V${contract.contractVersion} 无回签记录`}</p> : null}
                 <div ref={contractReturnSectionRef} tabIndex={-1} className="sourcing-contract-bar__actions sourcing-contract-return-actions">
                   {contractReturn.canUpload ? <>
                     <input ref={contractFileInput} type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" multiple hidden
@@ -1847,7 +1848,7 @@ function OrderDetailPage({
                     {contractReturn.attachments.map((file,index)=>
                       <a className="dx-button dx-button--secondary" key={file.attachmentId}
                         href={attachmentUrl(file.attachmentId,"preview")} target="_blank" rel="noreferrer">
-                        {index===0?"查看已回签合同":`查看第 ${index+1} 张`}
+                        {index===0?(contractReturn.signedContractVersion ? `查看 V${contractReturn.signedContractVersion} 回签合同` : "查看历史回签（版本未记录）"):`查看第 ${index+1} 张`}
                       </a>)}
                   </div> : null}
                   {contractPendingSubmission && contractReturnError ? <button className="dx-button dx-button--secondary" type="button"
@@ -1856,7 +1857,7 @@ function OrderDetailPage({
                 {contractReturn.history.length ? <details className="sourcing-contract-return-history">
                   <summary>历史回签 · {contractReturn.history.length} 次</summary>
                   {contractReturn.history.map(version=><div key={version.revision}>
-                    <span>第 {version.revision} 次 · {version.uploadedByName} · {formatDateTime(version.submittedAt)}</span>
+                    <span>第 {version.revision} 次 · {version.signedContractVersion ? `合同 V${version.signedContractVersion} · ${version.signedContractNumber}` : "合同版本未记录"} · {version.uploadedByName} · {formatDateTime(version.submittedAt)}</span>
                     <div className="sourcing-contract-return-links">
                       {version.attachments.map((file,index)=><a className="dx-button dx-button--secondary" key={file.attachmentId}
                         href={attachmentUrl(file.attachmentId,"preview")} target="_blank" rel="noreferrer">
@@ -1867,13 +1868,13 @@ function OrderDetailPage({
                 </details> : null}
                 {contractReturnError ? <p role="alert" className="sourcing-contract-return-error">{contractReturnError}</p> : null}
                 <details className="sourcing-contract-return-facts" open={!window.matchMedia("(max-width: 768px)").matches}>
-                  <summary className={`sourcing-contract-return-status--${contractReturn.contractReturnStatus}`}>回签资料 · {sourcingContractReturnLabel(contractReturn)}</summary>
+                  <summary className={`sourcing-contract-return-status--${contractReturn.contractReturnStatus}`}>首次回签时效 · {sourcingContractReturnLabel(contractReturn)}</summary>
                   <dl className="sourcing-finance-reference">
                     <div><dt>合同生成时间</dt><dd>{contractReturn.contractGeneratedAt?formatDateTime(contractReturn.contractGeneratedAt):"—"}</dd></div>
                     <div><dt>回传截止时间</dt><dd>{contractReturn.contractReturnDueAt?formatDateTime(contractReturn.contractReturnDueAt):"待合同生成"}</dd></div>
                     <div><dt>实际回传时间</dt><dd>{contractReturn.contractReturnedAt?formatDateTime(contractReturn.contractReturnedAt):"—"}</dd></div>
                     <div><dt>上传人</dt><dd>{contractReturn.uploadedByName??"—"}</dd></div>
-                    <div><dt>合同回签状态</dt><dd className={`sourcing-contract-return-status sourcing-contract-return-status--${contractReturn.contractReturnStatus}`}>{sourcingContractReturnLabel(contractReturn)}</dd></div>
+                    <div><dt>首次回签状态</dt><dd className={`sourcing-contract-return-status sourcing-contract-return-status--${contractReturn.contractReturnStatus}`}>{sourcingContractReturnLabel(contractReturn)}</dd></div>
                   </dl>
                 </details>
               </> : null}

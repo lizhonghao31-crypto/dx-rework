@@ -114,7 +114,7 @@ export class SourcingContractManagementService {
   private async supplier(db: Queryable, row: CurrentContract): Promise<{values:SupplierValues;hash:string}> {
     const profile = (await db.query<{version:number;active:boolean;values:SupplierValues}>(`SELECT version,active,
       jsonb_build_object('supplierName',supplier_name,'supplierCode',supplier_code,
-        'contractEntityName',COALESCE(contract_entity_name,supplier_name),'address',COALESCE(address,''),
+        'contractEntityName',COALESCE(contract_entity_name,''),'address',COALESCE(address,''),
         'partyBRepresentative',COALESCE(party_b_representative,''),'payeeName',COALESCE(payee_name,''),
         'bankAccount',COALESCE(bank_account,''),'bankName',COALESCE(bank_name,'')) AS values
       FROM current_supplier_catalog WHERE supplier_id=$1`,[row.approval_snapshot.supplierId])).rows[0];
@@ -124,7 +124,7 @@ export class SourcingContractManagementService {
       "SELECT field_name,field_value FROM sourcing_contract_supplements WHERE sourcing_contract_document_id=$1",[row.sourcing_contract_document_id])).rows;
     const old = {...row.approval_snapshot,...Object.fromEntries(supplements.map(x=>[x.field_name,x.field_value]))};
     const values = Object.fromEntries((Object.keys(CONTRACT_SUPPLIER_FIELDS) as SupplierField[]).map(field=>[
-      field,profile.values[field] || String(old[field] ?? ""),
+      field,profile.values[field] || String(old[field] ?? (field === "contractEntityName" ? old.supplierName ?? "" : "")),
     ])) as SupplierValues;
     return {values,hash:fingerprint({supplierId:row.approval_snapshot.supplierId,...profile,values})};
   }

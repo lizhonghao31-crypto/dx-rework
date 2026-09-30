@@ -28,10 +28,13 @@ type MonitorRow = {
   contract_return_overdue_seconds: number | string | null;
   contract_return_uploaded_by: string | null;
   uploader_name: string | null;
+  current_contract_returned: boolean;
+  current_contract_document_id: string | null;
   as_of: Date | string;
 };
 type FileRow = { attachment_id: string; original_filename: string; mime_type: string; size_bytes: string;
-  revision: number; submitted_at: Date | string; uploaded_by_name: string };
+  revision: number; submitted_at: Date | string; uploaded_by_name: string;
+  signed_contract_document_id: string | null; signed_contract_version: number | null; signed_contract_number: string | null };
 const forbidden = (): never => { throw new ApplicationError("FORBIDDEN","当前账号无权回传合同",403); };
 const fileDto = (row: FileRow) => ({
   attachmentId: row.attachment_id,filename: row.original_filename,
@@ -66,7 +69,14 @@ export class SourcingContractReturnService {
       monitor.contract_returned_at,monitor.contract_return_uploaded_by,
       sourcing_contract_return_elapsed_seconds(monitor.contract_return_due_at,
         COALESCE(monitor.contract_returned_at,CURRENT_TIMESTAMP)) AS contract_return_overdue_seconds,
-      uploader.display_name AS uploader_name,CURRENT_TIMESTAMP AS as_of
+      uploader.display_name AS uploader_name,CURRENT_TIMESTAMP AS as_of,
+      (SELECT document.sourcing_contract_document_id FROM sourcing_contract_documents document
+        WHERE document.sourcing_case_id=source_case.sourcing_case_id
+        ORDER BY document.contract_version DESC LIMIT 1) AS current_contract_document_id,
+      EXISTS(SELECT 1 FROM sourcing_contract_return_submissions signed
+        WHERE signed.sourcing_contract_document_id=(SELECT document.sourcing_contract_document_id
+          FROM sourcing_contract_documents document WHERE document.sourcing_case_id=source_case.sourcing_case_id
+          ORDER BY document.contract_version DESC LIMIT 1)) AS current_contract_returned
       FROM sourcing_cases source_case
       LEFT JOIN sourcing_contract_return_monitors monitor ON monitor.sourcing_case_id=source_case.sourcing_case_id
       LEFT JOIN app_users uploader ON uploader.id=COALESCE(
@@ -81,26 +91,36 @@ export class SourcingContractReturnService {
     const files=canViewFile && status.contractReturnMonitoring
       ? await this.database.query<FileRow>(`SELECT submission.revision,submission.submitted_at,
         uploader.display_name AS uploaded_by_name,
-        file.attachment_id,file.original_filename,file.mime_type,file.size_bytes
+        file.attachment_id,file.original_filename,file.mime_type,file.size_bytes,
+        document.sourcing_contract_document_id AS signed_contract_document_id,
+        document.contract_version AS signed_contract_version,document.contract_number AS signed_contract_number
         FROM sourcing_contract_return_submissions submission
         JOIN sourcing_contract_return_attachments link ON link.submission_id=submission.submission_id
         JOIN attachments file ON file.attachment_id=link.attachment_id AND file.status='ready'
         JOIN app_users uploader ON uploader.id=submission.submitted_by
+        LEFT JOIN sourcing_contract_documents document ON document.sourcing_contract_document_id=submission.sourcing_contract_document_id
         WHERE submission.sourcing_case_id=$1
         ORDER BY submission.revision DESC,link.position`,[sourcingCaseId]) : null;
     const versions=new Map<number,{revision:number;submittedAt:string;uploadedByName:string;
+      signedContractDocumentId:string|null;signedContractVersion:number|null;signedContractNumber:string|null;
       attachments:ReturnType<typeof fileDto>[] }>();
     for (const file of files?.rows ?? []) {
       if (!versions.has(file.revision)) versions.set(file.revision,{
         revision:file.revision,
         submittedAt:file.submitted_at instanceof Date ? file.submitted_at.toISOString() : new Date(file.submitted_at).toISOString(),
         uploadedByName:file.uploaded_by_name,
+        signedContractDocumentId:file.signed_contract_document_id,
+        signedContractVersion:file.signed_contract_version,signedContractNumber:file.signed_contract_number,
         attachments:[],
       });
       versions.get(file.revision)!.attachments.push(fileDto(file));
     }
     const [current,...history]=[...versions.values()];
     return { ...status,uploadedByName:status.contractReturnMonitoring ? row.uploader_name : null,
+      currentContractReturned:row.current_contract_returned,
+      currentContractDocumentId:row.current_contract_document_id,
+      signedContractDocumentId:current?.signedContractDocumentId ?? null,
+      signedContractVersion:current?.signedContractVersion ?? null,signedContractNumber:current?.signedContractNumber ?? null,
       canUpload: status.contractReturnMonitoring
         && await this.canUpload(actor,row.created_by,row.additional_merchandiser_user_id,row.contract_returned_at !== null),
       attachments:current?.attachments ?? [],history };
@@ -121,6 +141,8 @@ export class SourcingContractReturnService {
     const client=await this.database.connect();
     try {
       await client.query("BEGIN");
+      // Serialize version selection with refresh, style edits and approvals.
+      await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId]);
       const locked=await client.query<MonitorRow>(`SELECT monitor.sourcing_case_id,source_case.created_by,
           nullif(to_jsonb(source_case)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id,
           monitor.contract_return_monitor_enabled,monitor.contract_return_catchup,monitor.contract_generated_at,monitor.contract_return_due_at,
@@ -149,7 +171,11 @@ export class SourcingContractReturnService {
         return this.get({...actor,authorizationCapability:READ},sourcingCaseId);
       }
       if (!(await this.canUpload(actor,monitor.created_by,monitor.additional_merchandiser_user_id,monitor.contract_returned_at !== null))) forbidden();
-      const latest=await client.query<{submitted_by:string;attachment_ids:string[]}>(`SELECT submission.submitted_by,
+      const document=(await client.query<{sourcing_contract_document_id:string}>(`SELECT sourcing_contract_document_id
+        FROM sourcing_contract_documents WHERE sourcing_case_id=$1 ORDER BY contract_version DESC LIMIT 1`,[sourcingCaseId])).rows[0];
+      const documentId=document?.sourcing_contract_document_id ?? null;
+      const latest=await client.query<{submitted_by:string;attachment_ids:string[];sourcing_contract_document_id:string|null}>(`SELECT submission.submitted_by,
+        submission.sourcing_contract_document_id,
         array_agg(link.attachment_id::text ORDER BY link.position) AS attachment_ids
         FROM sourcing_contract_return_submissions submission
         JOIN sourcing_contract_return_attachments link ON link.submission_id=submission.submission_id
@@ -157,6 +183,7 @@ export class SourcingContractReturnService {
           AND submission.revision=(SELECT max(revision) FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1)
         GROUP BY submission.submission_id`,[sourcingCaseId]);
       if (latest.rows[0]?.submitted_by===actor.actorId
+        && latest.rows[0].sourcing_contract_document_id===documentId
         && JSON.stringify(latest.rows[0].attachment_ids)===JSON.stringify(attachmentIds)) {
         await client.query(`INSERT INTO sourcing_contract_return_requests(
           sourcing_case_id,request_id,submitted_by,attachment_ids
@@ -178,9 +205,9 @@ export class SourcingContractReturnService {
         FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1`,[sourcingCaseId])).rows[0]!.revision;
       const submissionId=randomUUID();
       const submission=await client.query<{submitted_at:Date|string}>(`INSERT INTO sourcing_contract_return_submissions(
-        submission_id,sourcing_case_id,revision,request_id,submitted_by,submitted_at
-      ) VALUES($1,$2,$3,$4,$5,clock_timestamp()) RETURNING submitted_at`,
-      [submissionId,sourcingCaseId,next,key,actor.actorId]);
+        submission_id,sourcing_case_id,revision,request_id,submitted_by,submitted_at,sourcing_contract_document_id
+      ) VALUES($1,$2,$3,$4,$5,clock_timestamp(),$6) RETURNING submitted_at`,
+      [submissionId,sourcingCaseId,next,key,actor.actorId,documentId]);
       for (let index=0;index<attachmentIds.length;index++) {
         const attachmentId=attachmentIds[index]!;
         await client.query(`UPDATE attachments SET entity_type='sourcing_contract_return',entity_id=$2,
@@ -198,7 +225,7 @@ export class SourcingContractReturnService {
         WHERE sourcing_case_id=$1`,[sourcingCaseId,submission.rows[0]!.submitted_at,actor.actorId]);
       await this.events.append(client,actor,{action:"sourcing.contract_return.upload",
         entityType:"sourcing_case",entityId:sourcingCaseId,
-        after:{submissionId,revision:next,attachmentIds:[...attachmentIds],firstReturn:monitor.contract_returned_at === null}});
+        after:{submissionId,revision:next,attachmentIds:[...attachmentIds],sourcingContractDocumentId:documentId,firstReturn:monitor.contract_returned_at === null}});
       if (monitor.contract_returned_at === null) {
         await this.todos.completeOpenByDedupePrefix(
           client,actor,`sourcing:${sourcingCaseId}:return:`,"回签合同已上传",

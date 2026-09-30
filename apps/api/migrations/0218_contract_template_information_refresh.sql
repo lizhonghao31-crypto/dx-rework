@@ -70,3 +70,26 @@ BEGIN
 END $$;
 CREATE TRIGGER sourcing_contract_information_refresh_guard BEFORE INSERT OR UPDATE ON sourcing_contract_documents
   FOR EACH ROW EXECUTE FUNCTION guard_sourcing_contract_information_refresh();
+
+-- Future returns identify the document signed. Legacy evidence has no recorded
+-- version: keep it unbound rather than guessing from timestamps or the current PDF.
+ALTER TABLE sourcing_contract_return_submissions
+  ADD COLUMN sourcing_contract_document_id uuid REFERENCES sourcing_contract_documents(sourcing_contract_document_id);
+
+CREATE FUNCTION guard_sourcing_contract_return_document() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP='UPDATE' THEN
+    IF NEW.sourcing_contract_document_id IS DISTINCT FROM OLD.sourcing_contract_document_id THEN
+      RAISE EXCEPTION 'signed contract document binding is immutable' USING ERRCODE='55000';
+    END IF;
+  ELSIF NEW.sourcing_contract_document_id IS NOT NULL AND NOT EXISTS(
+    SELECT 1 FROM sourcing_contract_documents WHERE sourcing_contract_document_id=NEW.sourcing_contract_document_id
+      AND sourcing_case_id=NEW.sourcing_case_id
+  ) THEN
+    RAISE EXCEPTION 'signed contract document must belong to the same order' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER sourcing_contract_return_document_guard
+  BEFORE INSERT OR UPDATE OF sourcing_contract_document_id ON sourcing_contract_return_submissions
+  FOR EACH ROW EXECUTE FUNCTION guard_sourcing_contract_return_document();
