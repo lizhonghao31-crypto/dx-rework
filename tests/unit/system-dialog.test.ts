@@ -1,0 +1,117 @@
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+
+const webSourceRoot = "apps/web/src";
+const nativeDialogCall = /(?<![.\w$])(?:window\s*\.\s*|globalThis\s*\.\s*)?(?:alert|confirm|prompt)\s*\(/g;
+
+const collectSourceFiles = async (directory: string): Promise<string[]> => {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = await Promise.all(entries.map(async (entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return collectSourceFiles(path);
+    return /\.(?:ts|tsx)$/.test(entry.name) ? [path] : [];
+  }));
+  return files.flat().sort();
+};
+
+describe("system dialog automation contract", () => {
+  it("renders an accessible in-page dialog with stable automation controls", async () => {
+    const source = await readFile("apps/web/src/system-dialog.tsx", "utf8");
+    const css = await readFile("apps/web/src/system-dialog.css", "utf8");
+
+    expect(source).toContain('role="dialog"');
+    expect(source).toContain('aria-modal="true"');
+    expect(source).toContain('data-system-dialog-confirm="true"');
+    expect(source).toContain('data-system-dialog-cancel="true"');
+    expect(source).toContain('data-system-dialog-input="true"');
+    expect(source).toContain("if (completed) return");
+    expect(source).toContain('request.kind === "prompt"');
+    expect(source).toContain('kind: "alert"');
+    expect(source).toContain("export const alertInApp");
+    expect(source).toContain('request.kind !== "alert"');
+    expect(source).toContain("mountNextDialog");
+    expect(css).toContain(".system-dialog-backdrop");
+    expect(css).toContain("background: #fff;");
+    expect(css).toContain("box-shadow: 0 20px 52px");
+    expect(css).toContain(".system-dialog__actions .dx-button");
+    expect(css).toContain("@media (max-width: 520px)");
+  });
+
+  it("forbids browser-native dialogs across the web application", async () => {
+    const files = await collectSourceFiles(webSourceRoot);
+    const offenders: string[] = [];
+
+    for (const file of files) {
+      const source = await readFile(file, "utf8");
+      if (nativeDialogCall.test(source)) offenders.push(file);
+      nativeDialogCall.lastIndex = 0;
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it("uses the shared dialog in the unattended acceptance workflow", async () => {
+    const sources = await Promise.all([
+      readFile("apps/web/src/rework-v2-form.tsx", "utf8"),
+      readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8"),
+      readFile("apps/web/src/whole-order-review-panel.tsx", "utf8"),
+      readFile("apps/web/src/responsibility-determination-panel.tsx", "utf8"),
+      readFile("apps/web/src/tail-inspection-panel.tsx", "utf8"),
+    ]);
+
+    expect(sources[0]).toContain("await alertInApp");
+    expect(sources[0]).toContain('await confirmInApp(isFinishing ? "确认提交本厂做尾？" : "确认提交返工单？")');
+    expect(sources[1]).toContain('await confirmInApp("确认提交当前工序、候选单价和预分配工人给 IE 核价？")');
+    expect(sources[2]).toContain("await confirmInApp");
+    expect(sources[2]).toContain("await promptInApp");
+    expect(sources[3]).toContain("await confirmInApp");
+    expect(sources[3]).toContain("await alertInApp");
+    expect(sources[4]).toContain("await alertInApp");
+  });
+
+  it("keeps custom report and image dialogs on the same clean overlay treatment", async () => {
+    const [reportingCss, detailCss] = await Promise.all([
+      readFile("apps/web/src/work-reporting-form.css", "utf8"),
+      readFile("apps/web/src/rework-detail.css", "utf8"),
+    ]);
+    expect(reportingCss).toContain(".work-reporting-dialog-backdrop");
+    expect(reportingCss).toContain("z-index: 1000;");
+    expect(reportingCss).toContain("background: #fff;");
+    expect(detailCss).toContain(".rework-image-modal__content");
+    expect(detailCss).toContain("box-shadow: 0 20px 52px");
+  });
+
+  it("applies one explicit high-contrast visual boundary contract to every dialog variant", async () => {
+    const [main, visual] = await Promise.all([
+      readFile("apps/web/src/main.tsx", "utf8"),
+      readFile("apps/web/src/dialog-visual-system.css", "utf8"),
+    ]);
+
+    expect(main).toContain('import "./dialog-visual-system.css";');
+    expect(visual).toContain("--dx-dialog-border: #8195a6;");
+    expect(visual).toContain("--dx-dialog-field-border: #8fa2b3;");
+    expect(visual).toContain(".system-dialog.system-dialog");
+    expect(visual).toContain(".work-reporting-dialog.work-reporting-dialog");
+    expect(visual).toContain(".rework-image-modal .rework-image-modal__content");
+    expect(visual).toContain(".work-reporting-dialog .dx-field__control");
+    expect(visual).toContain(".system-dialog .system-dialog__actions .dx-button--secondary");
+    expect(visual).toContain(".rework-image-modal .rework-image-modal__heading button");
+    expect(visual).toContain("z-index: 1000;");
+    expect(visual).toContain("border: 1px solid var(--dx-dialog-border);");
+  });
+
+  it("defines every spacing token used by the dialog shells so padding cannot silently collapse", async () => {
+    const [tokens, systemCss, reportingCss, detailCss] = await Promise.all([
+      readFile("packages/ui/src/tokens.css", "utf8"),
+      readFile("apps/web/src/system-dialog.css", "utf8"),
+      readFile("apps/web/src/work-reporting-form.css", "utf8"),
+      readFile("apps/web/src/rework-detail.css", "utf8"),
+    ]);
+
+    expect(tokens).toContain("--dx-v2-space-5: 16px;");
+    expect(systemCss).toContain("var(--dx-v2-space-5)");
+    expect(reportingCss).toContain("var(--dx-v2-space-5)");
+    expect(detailCss).toContain("var(--dx-v2-space-5)");
+  });
+});

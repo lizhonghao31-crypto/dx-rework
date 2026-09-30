@@ -1,0 +1,83 @@
+{
+  "name": "@dx-rework/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/compat-index.ts",
+      "import": "./dist/compat-index.js"
+    },
+    "./business-person-id": {
+      "types": "./src/business-person-id.ts",
+      "import": "./dist/business-person-id.js"
+    },
+    "./responsibility-queue": {
+      "types": "./src/responsibility-queue.ts",
+      "import": "./dist/responsibility-queue.js"
+    },
+    "./responsibility-transfer": {
+      "types": "./src/responsibility-transfer.ts",
+      "import": "./dist/responsibility-transfer.js"
+    },
+    "./external-responsibility": {
+      "types": "./src/external-responsibility.ts",
+      "import": "./dist/external-responsibility.js"
+    },
+    "./rework-supply-context": {
+      "types": "./src/rework-supply-context.ts",
+      "import": "./dist/rework-supply-context.js"
+    },
+    "./process-worker-plan": {
+      "types": "./src/process-worker-plan.ts",
+      "import": "./dist/process-worker-plan.js"
+    },
+    "./wages": {
+      "types": "./src/wages.ts",
+      "import": "./dist/wages.js"
+    },
+    "./reporting": {
+      "types": "./src/reporting.ts",
+      "import": "./dist/reporting.js"
+    },
+    "./admin-console": {
+      "types": "./src/admin-console.ts",
+      "import": "./dist/admin-console.js"
+    },
+    "./erp-integration": {
+      "types": "./src/erp-integration.ts",
+      "import": "./dist/erp-integration.js"
+    },
+    "./employee-access": {
+      "types": "./src/employee-access.ts",
+      "import": "./dist/employee-access.js"
+    },
+    "./business-display": {
+      "types": "./src/business-display.ts",
+      "import": "./dist/business-display.js"
+    },
+    "./finance-access": {
+      "types": "./src/finance-access.ts",
+      "import": "./dist/finance-access.js"
+    },
+    "./pattern-room": {
+      "types": "./src/pattern-room.ts",
+      "import": "./dist/pattern-room.js"
+    },
+    "./supplier-onboarding": {
+      "types": "./src/supplier-onboarding.ts",
+      "import": "./dist/supplier-onboarding.js"
+    },
+    "./pattern-orders": {
+      "types": "./src/pattern-orders.ts",
+      "import": "./dist/pattern-orders.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  }
+}

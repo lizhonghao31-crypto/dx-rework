@@ -1,0 +1,148 @@
+# 本文件应由 Nginx 的 http 层 include；格式不记录 query string 或 Referer。
+log_format dx_rework_query_free '$remote_addr [$time_local] "$request_method $uri $server_protocol" '
+                                '$status $body_bytes_sent $request_time "$request_id"';
+
+# 独立 vhost 示例。PR-17 routine release 不安装、不 reload Nginx，也不修改 ERP 配置。
+server {
+    listen 80;
+    server_name __DX_REWORK_SERVER_NAME__;
+    access_log /opt/dx-rework/logs/nginx-access.log dx_rework_query_free;
+    error_log  /opt/dx-rework/logs/nginx-error.log warn;
+    return 308 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name __DX_REWORK_SERVER_NAME__;
+    ssl_certificate __DX_REWORK_TLS_CERT__;
+    ssl_certificate_key __DX_REWORK_TLS_KEY__;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header X-Frame-Options SAMEORIGIN always;
+
+    # Both stable paths resolve through one atomic /opt/dx-rework/active
+    # generation pointer. During its switch, return 503 without reloading Nginx
+    # so no request can observe frontend and API from different releases.
+    if (-f /opt/dx-rework/shared/release-switch.lock) {
+        return 503;
+    }
+
+    root /opt/dx-rework/frontend/current;
+    index index.html;
+
+    access_log /opt/dx-rework/logs/nginx-access.log dx_rework_query_free;
+    error_log  /opt/dx-rework/logs/nginx-error.log warn;
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types application/javascript application/json text/css text/plain;
+
+    location = /health/live {
+        proxy_set_header X-Request-Id $request_id;
+        proxy_pass http://127.0.0.1:3201/health/live;
+    }
+
+    location = /health/ready {
+        proxy_set_header X-Request-Id $request_id;
+        proxy_pass http://127.0.0.1:3201/health/ready;
+    }
+
+    location = /version {
+        proxy_set_header X-Request-Id $request_id;
+        proxy_pass http://127.0.0.1:3201/version;
+    }
+
+    # DingTalk redirects its iframe to this same-origin SPA relay with authCode
+    # in the query string. Never write that request line to access/error logs.
+    location = /auth/qr/relay {
+        access_log off;
+        error_log /dev/null emerg;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+        try_files /index.html =404;
+    }
+
+    location = /rework/auth/qr/relay {
+        access_log off;
+        error_log /dev/null emerg;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+        try_files /index.html =404;
+    }
+
+    # Legacy OAuth callback request lines contain credentials. Suppress Nginx
+    # error diagnostics for only these exact locations; Fastify sanitizes logs.
+    location = /api/auth/qr/callback {
+        error_log /dev/null emerg;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-Id $request_id;
+        proxy_pass http://127.0.0.1:3201/auth/qr/callback;
+    }
+
+    location = /rework/api/auth/qr/callback {
+        error_log /dev/null emerg;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-Id $request_id;
+        proxy_pass http://127.0.0.1:3201/auth/qr/callback;
+    }
+
+    location /api/ {
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-Id $request_id;
+        proxy_pass http://127.0.0.1:3201/;
+    }
+
+    # Prefixed deployment: strip /rework/api/ before forwarding to the API.
+    location ^~ /rework/api/ {
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-Id $request_id;
+        proxy_pass http://127.0.0.1:3201/;
+    }
+
+    # Vite emits /rework/assets/* URLs, while the artifact stores files in assets/*.
+    # alias strips the public prefix; missing assets return 404 and never the SPA HTML.
+    location ^~ /rework/assets/ {
+        alias /opt/dx-rework/frontend/current/assets/;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+    }
+
+    location ^~ /assets/ {
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    location / {
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+        try_files $uri $uri/ /index.html;
+    }
+}

@@ -1,0 +1,11 @@
+[Unit]
+Description=Check DX Rework PostgreSQL backup health every morning
+
+[Timer]
+OnCalendar=*-*-* 08:30:00 Asia/Shanghai
+Persistent=true
+AccuracySec=1min
+Unit=dx-rework-postgres-backup-health.service
+
+[Install]
+WantedBy=timers.target

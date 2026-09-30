@@ -1,0 +1,45 @@
+# dx-rework
+
+内部计件返工上数系统，当前以独立应用方式建设，并预留未来接入达兴 ERP“质检返工”节点的显式 adapter 边界。
+
+## 当前阶段
+
+路线 PR-01：独立技术基座。业务需求以 `docs/requirements/startup-requirements-v1.2.md` 为确认基线；已验收的混合工业风页面以 Figma Product 文件为 UI Golden Source，在路线 PR-01A 进入代码。
+
+## 工程结构
+
+```text
+apps/web          React 19 + Vite 8 独立前端
+apps/api          Fastify API、健康检查和版本证据
+packages/config   类型化配置与启动校验
+packages/contracts 版本化 API 契约
+packages/domain   领域/集成端口，ERP adapter 默认禁用
+packages/ui       UI 代码边界（PR-01A 填充）
+infra             独立 Nginx、PM2、logrotate 模板
+scripts           数据库迁移、备份与安全检查
+```
+
+## 本地验证
+
+要求 Node 22、npm 10 与 PostgreSQL 16。
+
+```bash
+npm ci
+npm run check
+DATABASE_URL=postgresql://... npm run db:migrate:check
+```
+
+API 环境变量名见 `.env.example`。真实值不得进入仓库、日志或 PR。
+
+## 健康与版本
+
+- `GET /health/live`：只验证进程存活，不依赖数据库；
+- `GET /health/ready`：验证数据库与 migration schema；
+- `GET /version`：返回 Git SHA、构建时间、已应用/预期 schema 版本。
+
+## Golden Source
+
+- GitHub `main`：唯一代码 Golden Source；
+- `docs/requirements/startup-requirements-v1.2.md`：业务规则基线；
+- Figma Product：页面和交互验收载体；
+- 需求变化先进入版本化文档或 ADR，再施工。

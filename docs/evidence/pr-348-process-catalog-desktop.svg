@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+<rect width="1280" height="720" fill="#f5f7fa"/><rect x="56" y="42" width="1168" height="636" rx="18" fill="#fff" stroke="#d7dde5"/>
+<text x="88" y="90" font-family="sans-serif" font-size="28" font-weight="700" fill="#17202a">工序</text>
+<rect x="88" y="116" width="760" height="46" rx="9" fill="#fff" stroke="#aeb8c4"/><text x="108" y="146" font-family="sans-serif" font-size="16" fill="#657180">搜索工序名称或系统编码</text>
+<rect x="864" y="116" width="92" height="46" rx="9" fill="#edf3ff" stroke="#8aa9dd"/><text x="893" y="145" font-family="sans-serif" font-size="16" fill="#183b70">搜索</text>
+<rect x="88" y="184" width="1090" height="100" rx="12" fill="#fbfcfe" stroke="#d7dde5"/><text x="112" y="220" font-family="sans-serif" font-size="19" font-weight="700" fill="#17202a">成品返查</text><text x="112" y="250" font-family="sans-serif" font-size="14" fill="#657180">QC_RECHECK · 按件 · 版本 2 · 默认候选人 3 人</text><rect x="1065" y="202" width="80" height="30" rx="15" fill="#e7f7ed"/><text x="1089" y="222" font-family="sans-serif" font-size="14" fill="#247445">启用</text>
+<rect x="88" y="300" width="1090" height="100" rx="12" fill="#fbfcfe" stroke="#d7dde5"/><text x="112" y="336" font-family="sans-serif" font-size="19" font-weight="700" fill="#17202a">锁眼</text><text x="112" y="366" font-family="sans-serif" font-size="14" fill="#657180">PROC_BUTTONHOLE · 按件 · 版本 1 · 默认候选人 2 人</text>
+<text x="88" y="626" font-family="sans-serif" font-size="15" fill="#657180">每页最多 15 条</text><rect x="970" y="592" width="92" height="44" rx="9" fill="#fff" stroke="#aeb8c4"/><text x="992" y="620" font-family="sans-serif" font-size="15" fill="#657180">上一页</text><rect x="1074" y="592" width="92" height="44" rx="9" fill="#edf3ff" stroke="#8aa9dd"/><text x="1096" y="620" font-family="sans-serif" font-size="15" fill="#183b70">下一页</text>
+</svg>

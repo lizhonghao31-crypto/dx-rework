@@ -1,0 +1,30 @@
+/* Layout only. Controls, surfaces, typography and colours inherit the rework baseline. */
+.production-reporting { min-width: 0; }
+.production-reporting .sourcing-order-card { overflow-wrap: anywhere; }
+.production-reporting__line { padding: var(--dx-form-section-padding); min-width: 0; }
+.production-reporting__report { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+.production-reporting__actions { display: flex; flex-wrap: wrap; gap: var(--dx-v2-space-3); align-items: end; }
+.production-reporting__history { padding-block: var(--dx-v2-space-3); overflow-wrap: anywhere; }
+
+/* PR08: compact order directory; business handlers and permissions remain in the page. */
+.production-reporting > .dx-button { justify-self: start; }
+.production-reporting > .sourcing-list-card .sourcing-order-card { box-shadow: none; border-radius: 0; border-bottom: 1px solid var(--dx-form-control-border); }
+.production-reporting .sourcing-order-card__main { display: grid; grid-template-columns: minmax(220px,1fr) minmax(0,2fr); align-items: center; gap: var(--dx-v2-space-4); }
+.production-reporting .sourcing-order-card__heading { align-items: start; }
+.production-reporting .sourcing-order-card__main dl { margin: 0; grid-template-columns: repeat(3,minmax(0,1fr)); }
+.production-reporting__line { display: grid; grid-template-columns: minmax(180px,1fr) minmax(220px,1fr) minmax(260px,1fr); align-items: center; gap: var(--dx-v2-space-4); }
+.production-reporting__line > p { margin: 0; }
+.production-reporting__report { margin: 0; }
+.production-reporting summary { cursor: pointer; }
+@media(max-width:1000px) {
+  .production-reporting .sourcing-order-card__main { grid-template-columns: 1fr; }
+  .production-reporting__line { grid-template-columns: 1fr 1fr; }
+  .production-reporting__report { grid-column: 1 / -1; }
+}
+@media(max-width:600px) {
+  .production-reporting .sourcing-order-card__main dl { grid-template-columns: 1fr; }
+  .production-reporting__line { grid-template-columns: minmax(0,1fr); }
+  .production-reporting__report { grid-template-columns: minmax(0,1fr); }
+  .production-reporting__report .dx-button { justify-self: stretch; }
+}
+

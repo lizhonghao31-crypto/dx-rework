@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+  <rect width="1440" height="900" fill="#edf2f7"/>
+  <g font-family="PingFang SC, Microsoft YaHei, sans-serif" fill="#17212b">
+    <rect x="200" y="40" width="1040" height="96" rx="14" fill="#fff" stroke="#d7e0e8"/>
+    <text x="226" y="78" font-size="24" font-weight="700">N05 · 尾部最终数量确认</text>
+    <text x="226" y="108" font-size="14" fill="#607080">主管可修正个人有效数量并调整最终单价；原始上数和 N03 价格始终保留。</text>
+    <rect x="1115" y="70" width="92" height="30" rx="15" fill="#fff2d7"/><text x="1131" y="90" font-size="13" font-weight="700" fill="#915b00">待尾部确认</text>
+
+    <rect x="200" y="154" width="1040" height="596" rx="14" fill="#fff" stroke="#d7e0e8"/>
+    <text x="226" y="198" font-size="19" font-weight="700">按工序核对</text><text x="226" y="224" font-size="14" fill="#607080">数量与价格将作为同一版本提交 IE 复核。</text>
+    <rect x="1110" y="185" width="98" height="28" rx="14" fill="#e7f6ec"/><text x="1124" y="204" font-size="12" font-weight="700" fill="#17713a">全部可确认</text>
+
+    <rect x="218" y="250" width="1004" height="151" rx="9" fill="#fff" stroke="#cfdae4"/><rect x="218" y="250" width="4" height="151" fill="#36a269"/>
+    <rect x="222" y="250" width="1000" height="60" fill="#f5f8fb"/>
+    <text x="240" y="285" font-size="17" font-weight="700">拆线及清理返工</text>
+    <g font-size="11" fill="#687888"><text x="535" y="273">工人合计</text><text x="655" y="273">IE预核</text><text x="765" y="273">整查</text><text x="865" y="273">整查余量</text></g>
+    <g font-size="15" font-weight="700"><text x="535" y="295">5,000</text><text x="655" y="295">5,000</text><text x="765" y="295">5,000</text><text x="865" y="295">0</text></g>
+    <rect x="1010" y="268" width="82" height="27" rx="13" fill="#e7f6ec"/><text x="1025" y="287" font-size="12" font-weight="700" fill="#17713a">✓ 可确认</text><text x="1182" y="289" font-size="22" font-weight="700" fill="#1f6feb">+</text>
+    <text x="240" y="342" font-size="15" font-weight="700">最终价格</text><text x="240" y="371" font-size="13" fill="#607080">N03 已审 ¥12,345.678；不调整可保留原价</text>
+    <text x="930" y="335" font-size="11" fill="#526272">拟提交单价（元/件）</text><rect x="930" y="345" width="250" height="38" rx="8" fill="#fff" stroke="#b8c7d5"/><text x="944" y="370" font-size="14">12345.678</text>
+
+    <rect x="218" y="415" width="1004" height="151" rx="9" fill="#fff" stroke="#cfdae4"/><rect x="218" y="415" width="4" height="151" fill="#36a269"/>
+    <rect x="222" y="415" width="1000" height="60" fill="#f5f8fb"/>
+    <text x="240" y="450" font-size="17" font-weight="700">设备辅助修复</text>
+    <g font-size="11" fill="#687888"><text x="535" y="438">工人合计</text><text x="655" y="438">IE预核</text><text x="765" y="438">整查</text><text x="865" y="438">整查余量</text></g>
+    <g font-size="15" font-weight="700"><text x="535" y="460">8</text><text x="655" y="460">8</text><text x="765" y="460">8</text><text x="865" y="460">0</text></g>
+    <rect x="1010" y="433" width="82" height="27" rx="13" fill="#e7f6ec"/><text x="1025" y="452" font-size="12" font-weight="700" fill="#17713a">✓ 可确认</text><text x="1182" y="454" font-size="22" font-weight="700" fill="#1f6feb">+</text>
+    <text x="240" y="507" font-size="15" font-weight="700">最终价格</text><text x="240" y="536" font-size="13" fill="#607080">N03 已审 ¥88.5；不调整可保留原价</text>
+    <text x="930" y="500" font-size="11" fill="#526272">拟提交单价（元/小时）</text><rect x="930" y="510" width="250" height="38" rx="8" fill="#fff" stroke="#b8c7d5"/><text x="944" y="535" font-size="14">88.5</text>
+
+    <line x1="200" y1="602" x2="1240" y2="602" stroke="#d7e0e8"/><text x="226" y="646" font-size="18" font-weight="700">提交 IE 复核</text><text x="226" y="674" font-size="13" fill="#607080">系统按各工序有效数量生成最终数量；价格提案与数量一并交 IE 复核。</text>
+    <rect x="1020" y="630" width="188" height="42" rx="8" fill="#1f6feb"/><text x="1043" y="657" font-size="14" font-weight="700" fill="#fff">确认数量并提交 IE</text>
+    <text x="1140" y="850" font-size="11" fill="#6c7b89">PR #343 · current-head isolated responsive fixture</text>
+  </g>
+</svg>

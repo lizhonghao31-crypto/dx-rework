@@ -1,0 +1,218 @@
+name: Acceptance isolated release
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_sha:
+        description: Exact repository commit SHA to deploy into isolated Acceptance/UAT
+        required: true
+        type: string
+      dry_run:
+        description: Build and package only; do not connect to Acceptance ECS
+        required: true
+        type: boolean
+        default: true
+      apply_migrations:
+        description: Apply pending migrations to the isolated Acceptance database
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acceptance-isolated-release
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Build exact Acceptance candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Validate requested SHA
+        shell: bash
+        env:
+          TARGET_SHA: ${{ inputs.git_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]
+
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_sha }}
+          # secret:scan:full scans complete repository history and must not run
+          # on a shallow checkout.
+          fetch-depth: 0
+
+      - name: Verify exact candidate
+        shell: bash
+        env:
+          TARGET_SHA: ${{ inputs.git_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: npm
+
+      - name: Pin npm 10
+        run: npm install --global npm@10.9.9 --no-audit --no-fund --prefer-offline
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund --prefer-offline
+
+      - name: Build Acceptance candidate
+        env:
+          APP_BASE_PATH: /acceptance/
+          VITE_BASE_PATH: /acceptance/
+        run: npm run build
+
+      - name: Scan repository history and build artifacts
+        run: npm run secret:scan:full
+
+      - name: Package Acceptance candidate
+        shell: bash
+        env:
+          TARGET_SHA: ${{ inputs.git_sha }}
+          APP_BASE_PATH: /acceptance/
+          VITE_BASE_PATH: /acceptance/
+          DX_REWORK_BUILD_ROOT: ${{ runner.temp }}/build
+        run: |
+          set -euo pipefail
+          build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          mkdir -p "$DX_REWORK_BUILD_ROOT"
+          scripts/deploy/package-release.sh "$TARGET_SHA" "$build_time" "$DX_REWORK_BUILD_ROOT/$TARGET_SHA"
+          scripts/deploy/verify-runtime.sh "$DX_REWORK_BUILD_ROOT/$TARGET_SHA/api"
+          scripts/deploy/create-transfer-bundle.sh             "$DX_REWORK_BUILD_ROOT/$TARGET_SHA"             "$RUNNER_TEMP/acceptance-$TARGET_SHA.tar.gz"
+          (cd "$RUNNER_TEMP" && sha256sum -c --strict "acceptance-$TARGET_SHA.tar.gz.sha256")
+
+      - name: Upload checksum-bound Acceptance bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-transfer-${{ inputs.git_sha }}
+          path: |
+            ${{ runner.temp }}/acceptance-${{ inputs.git_sha }}.tar.gz
+            ${{ runner.temp }}/acceptance-${{ inputs.git_sha }}.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  deploy:
+    name: Deploy isolated Acceptance/UAT
+    needs: gate
+    if: ${{ inputs.dry_run == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: dx-rework-acceptance
+    steps:
+      - name: Checkout deployment transport script
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_sha }}
+          fetch-depth: 1
+
+      - name: Download verified Acceptance bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: acceptance-transfer-${{ inputs.git_sha }}
+          path: transfer
+
+      - name: Verify and transfer Acceptance release
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.DX_REWORK_SSH_HOST }}
+          SSH_USER: ${{ secrets.DX_REWORK_SSH_USER }}
+          SSH_KEY: ${{ secrets.DX_REWORK_SSH_KEY }}
+          SSH_HOST_KEY: ${{ secrets.DX_REWORK_SSH_HOST_KEY }}
+          ACCEPTANCE_PUBLIC_URL: ${{ secrets.DX_REWORK_ACCEPTANCE_PUBLIC_URL }}
+          TARGET_SHA: ${{ inputs.git_sha }}
+          APPLY_MIGRATIONS: ${{ inputs.apply_migrations }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST"
+          test -n "$SSH_USER"
+          test -n "$SSH_KEY"
+          test -n "$SSH_HOST_KEY"
+          [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "${ACCEPTANCE_PUBLIC_URL%/}" == "https://staging-api.dxerp.org.cn/acceptance" ]]
+
+          cd transfer
+          sha256sum -c --strict "acceptance-$TARGET_SHA.tar.gz.sha256"
+          cd ..
+
+          install -m 0700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 0600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/known_hosts
+
+          root=/opt/dx-rework-acceptance
+          incoming="$root/incoming/${GITHUB_RUN_ID}-$TARGET_SHA"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST"             'bash -s --' prepare "$incoming"             < scripts/deploy/acceptance-remote-release.sh
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes             "transfer/acceptance-$TARGET_SHA.tar.gz"             "$SSH_USER@$SSH_HOST:$incoming/transfer.tar.gz"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST"             'bash -s --' apply "$incoming" "$TARGET_SHA" "$APPLY_MIGRATIONS" "$GITHUB_RUN_ID"             < scripts/deploy/acceptance-remote-release.sh
+
+          curl -fsS "${ACCEPTANCE_PUBLIC_URL%/}/api/health/ready" >/dev/null
+          curl -fsS "${ACCEPTANCE_PUBLIC_URL%/}/api/version" | grep -F "$TARGET_SHA" >/dev/null
+          curl -fsS "${ACCEPTANCE_PUBLIC_URL%/}/ui/acceptance-lab" | grep -qi '<html'
+
+      - name: Set up Node 22 for live browser regression
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+
+      - name: Install pinned Chromium regression runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          runner="$RUNNER_TEMP/acceptance-playwright"
+          mkdir -p "$runner"
+          cd "$runner"
+          npm init -y >/dev/null
+          npm install --no-save --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+          cp "$GITHUB_WORKSPACE/scripts/acceptance/live-browser-regression.mjs" "$runner/live-browser-regression.mjs"
+
+      - name: Run synthetic seed and live Acceptance regression
+        shell: bash
+        env:
+          SSH_HOST: ${{ secrets.DX_REWORK_SSH_HOST }}
+          SSH_USER: ${{ secrets.DX_REWORK_SSH_USER }}
+          ACCEPTANCE_PUBLIC_URL: ${{ secrets.DX_REWORK_ACCEPTANCE_PUBLIC_URL }}
+          TARGET_SHA: ${{ inputs.git_sha }}
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/acceptance-validation"
+          mkdir -p "$evidence"
+
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" \
+            /opt/dx-rework-acceptance/current/scripts/deploy/seed-acceptance-production-fixtures.sh \
+            > "$evidence/synthetic-fixtures.json"
+
+          CONTROL_CODE="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" \
+            /opt/dx-rework-acceptance/current/scripts/deploy/mint-acceptance-control-code.sh)"
+          test -n "$CONTROL_CODE"
+          echo "::add-mask::$CONTROL_CODE"
+
+          cd "$RUNNER_TEMP/acceptance-playwright"
+          ACCEPTANCE_PUBLIC_URL="$ACCEPTANCE_PUBLIC_URL" \
+          ACCEPTANCE_CONTROL_CODE="$CONTROL_CODE" \
+          ACCEPTANCE_EXPECTED_SHA="$TARGET_SHA" \
+          ACCEPTANCE_EVIDENCE_DIR="$evidence" \
+            node live-browser-regression.mjs
+
+          node -e 'const fs=require("fs");const [path,sha,runId]=process.argv.slice(1);const result=JSON.parse(fs.readFileSync(path,"utf8"));if(result.gitSha!==sha)process.exit(2);fs.writeFileSync(path.replace("acceptance-result.json","candidate-lock.json"),JSON.stringify({formatVersion:1,gitSha:sha,githubRunId:runId,schemaVersion:result.schemaVersion,expectedSchemaVersion:result.expectedSchemaVersion,validatedAt:result.completedAt},null,2)+"\\n");' "$evidence/acceptance-result.json" "$TARGET_SHA" "$GITHUB_RUN_ID"
+
+      - name: Upload exact-SHA Acceptance validation evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-validation-${{ inputs.git_sha }}
+          path: ${{ runner.temp }}/acceptance-validation
+          if-no-files-found: error
+          retention-days: 30

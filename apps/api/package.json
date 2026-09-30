@@ -1,0 +1,26 @@
+{
+  "name": "@dx-rework/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json && node scripts/copy-contract-font.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@dx-rework/config": "0.1.0",
+    "@dx-rework/contracts": "0.1.0",
+    "@dx-rework/domain": "0.1.0",
+    "fastify": "5.12.5",
+    "pdfkit": "0.20.2",
+    "pg": "8.22.0",
+    "qrcode": "1.5.4",
+    "sharp": "0.35.4"
+  },
+  "devDependencies": {
+    "@types/qrcode": "1.5.6"
+  }
+}

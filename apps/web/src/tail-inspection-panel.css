@@ -1,0 +1,53 @@
+.tail-inspection-page { display: grid; gap: var(--dx-v2-space-4); }
+.tail-inspection-feedback { margin: 0; color: var(--dx-v2-color-text-secondary); }
+.tail-inspection-assignment-list,
+.tail-inspection-processes { display: grid; gap: var(--dx-v2-space-2); }
+.tail-inspection-assignment-list { margin-top: var(--dx-v2-space-3); }
+.tail-inspection-assignment-list > div,
+.tail-inspection-process {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dx-v2-space-3);
+  padding: var(--dx-v2-space-3);
+  border-radius: var(--dx-v2-radius-md);
+  background: var(--dx-v2-color-inset);
+}
+.tail-inspection-assignment-list > div > div,
+.tail-inspection-process > div { display: grid; gap: 2px; min-width: 0; }
+.tail-inspection-assignment-list b,
+.tail-inspection-process b {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dx-v2-color-text);
+}
+.tail-inspection-assignment-list small { color: var(--dx-v2-color-text-secondary); }
+.tail-inspection-process small {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dx-v2-color-primary);
+}
+.tail-inspection-entry .section-title { margin-bottom: var(--dx-v2-space-3); }
+.tail-inspection-entry > .dx-field > span:first-child,
+.tail-inspection-process .dx-field > span:first-child {
+  font-weight: 700;
+  color: var(--dx-v2-color-text);
+}
+.tail-inspection-entry > .dx-field input,
+.tail-inspection-process .dx-field input {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--dx-v2-color-text);
+}
+.tail-inspection-entry > .dx-field input {
+  font-size: 20px;
+  color: var(--dx-v2-color-primary);
+}
+.tail-inspection-processes { margin-top: var(--dx-v2-space-3); }
+.tail-inspection-process .dx-field { width: min(100%, 220px); margin: 0; }
+.tail-inspection-page .tail-inspection-actions { position: static; margin-top: var(--dx-v2-space-4); padding: 0; }
+@media (max-width: 640px) {
+  .tail-inspection-assignment-list > div,
+  .tail-inspection-process { align-items: stretch; flex-direction: column; }
+  .tail-inspection-process .dx-field { width: 100%; }
+}
