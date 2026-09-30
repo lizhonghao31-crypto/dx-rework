@@ -256,7 +256,9 @@ export class PatternRoomOrderService {
       if (kind === "pattern") {
         if((await client.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation){
           const linked=(await client.query("SELECT source_id FROM digital_development_pattern_links WHERE order_id=$1",[orderId])).rows[0];
-          if(linked&&!(await client.query("SELECT 1 FROM digital_development_route_facts WHERE source_id=$1 AND kind='最终设计确认'",[linked.source_id])).rowCount)throw new ApplicationError("CONFLICT","请在开发单尾查通过后完成最终设计确认",409);
+          if(linked&&!(await client.query(`SELECT 1 FROM digital_development_route_facts f
+            WHERE f.source_id=$1 AND f.kind='最终设计确认' AND f.payload->>'nativeRoundId'=$2::text
+              AND f.route_version=COALESCE((SELECT max(t.route_version) FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1),1)`,[linked.source_id,round.round_id])).rowCount)throw new ApplicationError("CONFLICT","请在开发单当前轮次尾查通过后完成本打板轮次的最终设计确认",409);
         }
         const pending = (await client.query<PatternRoundRow>("SELECT * FROM pattern_room_rounds WHERE order_id=$1 AND completed_at IS NOT NULL AND handed_over_at IS NULL AND cancelled_at IS NULL ORDER BY requested_at,round_id FOR UPDATE", [orderId])).rows;
         for (const historical of pending) {

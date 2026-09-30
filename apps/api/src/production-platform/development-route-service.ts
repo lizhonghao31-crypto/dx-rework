@@ -67,7 +67,8 @@ export class DevelopmentRouteService {
      const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db);
      if(missingSewingMaterials(sheet.document!,sheet.materialEvents).length)fail('本轮所需物料尚未齐备');
    }
-   await db.query('INSERT INTO digital_development_route_facts(fact_id,source_id,task_id,route_version,kind,payload,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7)',[randomUUID(),sourceId,input.taskId,task.route_version,kind,JSON.stringify(input),actor.actorId]);
+   const nativeRoundId=task.task_kind==='development_confirmation'?(await db.query("SELECT o.current_round_id FROM digital_development_pattern_links l JOIN pattern_room_orders o USING(order_id) WHERE l.source_id=$1 AND o.deleted_at IS NULL FOR UPDATE OF o",[sourceId])).rows[0]?.current_round_id??null:null;
+   await db.query('INSERT INTO digital_development_route_facts(fact_id,source_id,task_id,route_version,kind,payload,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7)',[randomUUID(),sourceId,input.taskId,task.route_version,kind,JSON.stringify(task.task_kind==='development_confirmation'?{...input,nativeRoundId}:input),actor.actorId]);
    if(task.task_kind==='development_sewing'||task.task_kind==='development_confirmation'){
      const native=(await db.query("SELECT o.order_id,o.current_round_id,o.version,o.status FROM digital_development_pattern_links l JOIN pattern_room_orders o USING(order_id) WHERE l.source_id=$1 AND o.deleted_at IS NULL FOR UPDATE OF o",[sourceId])).rows[0];
      if(!native||!this.patternOrders)fail('请先由设计师提交原打板执行单，并由技术主管确认派工');
