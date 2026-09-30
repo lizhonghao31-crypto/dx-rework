@@ -21,7 +21,7 @@ export function registerDevelopmentRoutes(app: FastifyInstance, dependencies: Di
   const id = (request: FastifyRequest, name: string) => parse(z.string().uuid(), (request.params as Record<string, unknown>)[name]);
   const key = (request: FastifyRequest) => typeof request.headers["idempotency-key"] === "string" ? request.headers["idempotency-key"] : "";
   const base = "/digital-production/sources/:sourceId/development";
-  app.get(base, async request => service.read(await actor(request), id(request,"sourceId")));
+  app.get(base, async request => {const query=parse(z.object({round:z.coerce.number().int().positive().optional()}).strict(),request.query);return service.read(await actor(request),id(request,"sourceId"),undefined,query.round);});
   app.put(base, async request => service.save(await actor(request), id(request,"sourceId"), parse(SaveDevelopmentSchema, request.body), key(request)));
   app.post(`${base}/publish`, async request => service.publish(await actor(request), id(request,"sourceId"), parse(PublishDevelopmentSchema, request.body).expectedVersion, key(request)));
   app.post(`${base}/materials/:materialId/events`, async request => service.materialEvent(await actor(request), id(request,"sourceId"), id(request,"materialId"), parse(DevelopmentMaterialEventSchema, request.body), key(request)));

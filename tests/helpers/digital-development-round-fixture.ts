@@ -1,0 +1,46 @@
+import {randomUUID} from 'node:crypto';
+import type {Pool} from 'pg';
+import {expect} from 'vitest';
+import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
+import type {DevelopmentRevision} from '@dx-rework/contracts/digital-development-rounds';
+import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
+import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
+import type {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
+export async function exerciseDevelopmentRounds(db:Pool,execution:DevelopmentExecutionService,root:TrustedActorContext,sourceId:string,workerId:string,patternRoundId:string,outsider:TrustedActorContext){
+ const rounds=new DevelopmentRoundService(db,true),forms=new DigitalDevelopmentService(db,true);
+ const original=await forms.read(root,sourceId),wages=async()=>Number((await db.query('SELECT count(*) AS n FROM pattern_room_segments WHERE round_id=$1 AND wage_eligible_at IS NOT NULL',[patternRoundId])).rows[0].n);
+ const before=await wages();
+ const revision:DevelopmentRevision={basedOnRound:1,document:{...original.document!,craft:'印花'},origin:'客户新增要求',customerComment:'只改胸前印花，先寄工艺布片',internalProblem:'',explanation:'保留客户原话',categories:['工艺'],affectedNodes:['工艺'],outputKind:'工艺布片'};
+ await expect(rounds.save(outsider,sourceId,{expectedDraftVersion:0,revision},randomUUID())).rejects.toMatchObject({statusCode:404});
+ const saved=await rounds.save(root,sourceId,{expectedDraftVersion:0,revision},randomUUID());
+ expect((await forms.read(root,sourceId)).roundNumber).toBe(1);
+ const key=randomUUID(),input={expectedDraftVersion:saved.draftVersion,basedOnRound:1};
+ const outcomes=await Promise.allSettled([rounds.publish(root,sourceId,input,key),rounds.publish(root,sourceId,input,randomUUID())]);
+ if(outcomes[0]!.status==='fulfilled')expect(await rounds.publish(root,sourceId,input,key)).toMatchObject({roundNumber:2});
+ expect(outcomes.filter(item=>item.status==='fulfilled')).toHaveLength(1);expect(outcomes.filter(item=>item.status==='rejected')).toHaveLength(1);
+ const current=await forms.read(root,sourceId);expect(current).toMatchObject({roundNumber:2,document:{craft:'印花'}});
+ expect(await forms.read(root,sourceId,undefined,1)).toMatchObject({roundNumber:1,canEdit:false,document:{craft:'无'}});
+ const versionTasks=async(round:number)=>(await execution.read(root,sourceId)).tasks.filter(task=>task.routeVersion===round);
+ expect((await versionTasks(2)).some(task=>['development_sewing','development_tail_check','development_pattern'].includes(task.taskKind))).toBe(false);
+ const act=async(round:number,kind:string,returned=false)=>{
+  const available=await versionTasks(round),task=available.find(task=>task.taskKind===kind)!;
+  expect(task,JSON.stringify({round,kind,available:available.map(t=>[t.taskKind,t.state])})).toBeDefined();
+  return execution.route(root,sourceId,{taskId:task.taskId,result:returned?'退回':'通过',note:returned?'内部发现：领口车缝不平':'本轮完成',craftExecution:kind==='development_craft_dispatch'?'内部':null,nextAssigneeId:kind==='development_craft_dispatch'?workerId:null,sentDate:kind==='development_shipping'?'2026-09-30':null,trackingNo:kind==='development_shipping'?'P08-TEST':null,...(returned?{returnNodes:['车板' as const],problemCategories:['车缝' as const]}:{})},randomUUID());
+ };
+ for(const kind of ['development_craft_dispatch','development_printing','development_craft_confirmation','development_confirmation','development_shipping'])await act(2,kind);
+ expect(await wages()).toBe(before);
+ const second:DevelopmentRevision={...revision,basedOnRound:2,document:current.document!,origin:'内部发现',customerComment:'',internalProblem:'调整领口车缝',categories:['车缝'],affectedNodes:['车板'],outputKind:'整件样板'};
+ const draft=await rounds.save(root,sourceId,{expectedDraftVersion:0,revision:second},randomUUID());await rounds.publish(root,sourceId,{expectedDraftVersion:draft.draftVersion,basedOnRound:2},randomUUID());
+ await act(3,'development_sewing_transfer');await act(3,'development_sewing');
+ const oldTail=(await versionTasks(3)).find(task=>task.taskKind==='development_tail_check')!;
+ await act(3,'development_tail_check',true);
+ expect((await forms.read(root,sourceId)).roundNumber).toBe(4);
+ const history=await rounds.read(root,sourceId);expect(history.rounds.at(-1)).toMatchObject({origin:'内部发现',customerComment:'',internalProblem:'内部发现：领口车缝不平'});
+ expect(history.rounds.at(-1).inherited.development_pattern.roundNumber).toBe(1);
+ await act(4,'development_sewing_transfer');await act(4,'development_sewing');
+ const newTail=(await versionTasks(4)).find(task=>task.taskKind==='development_tail_check')!;
+ expect(newTail.taskId).not.toBe(oldTail.taskId);expect(newTail).toMatchObject({state:'ready',slaHours:4});
+ for(const kind of ['development_tail_check','development_confirmation','development_shipping'])await act(4,kind);
+ expect(await wages()).toBe(before);
+ await expect(db.query("UPDATE digital_development_rounds SET customer_comment='覆盖' WHERE source_id=$1 AND round_number=2",[sourceId])).rejects.toThrow();
+}

@@ -1,3 +1,4 @@
+import {developmentDocumentRow,developmentRoundsAvailable} from "./development-round-repository.js";
 import {DevelopmentRouteService} from "./development-route-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -29,15 +30,17 @@ export class DigitalDevelopmentService {
     await this.source(this.database, actor, sourceId);
     return Boolean((await this.database.query("SELECT 1 FROM digital_development_attachment_bindings WHERE source_id=$1 AND attachment_id=$2", [sourceId, attachmentId])).rowCount);
   }
-  async read(actor: TrustedActorContext, sourceId: string, db: Database = this.database): Promise<DevelopmentSheet> {
+  async read(actor: TrustedActorContext, sourceId: string, db: Database = this.database, roundNumber?: number): Promise<DevelopmentSheet> {
     const source = await this.source(db, actor, sourceId);
-    const row = (await db.query("SELECT * FROM digital_development_documents WHERE source_id=$1", [sourceId])).rows[0];
+    const row = await developmentDocumentRow(db,sourceId,roundNumber);
+    const rounds=await developmentRoundsAvailable(db);
+    if(roundNumber&&!row)digitalNotFound();
     const materialEvents = (await db.query(`SELECT event_id AS "eventId",material_id AS "materialId",action,expected_date::text AS "expectedDate",note,created_at AS "createdAt"
-      FROM digital_development_material_events WHERE source_id=$1 ORDER BY sequence`, [sourceId])).rows;
+      FROM digital_development_material_events WHERE source_id=$1 ${rounds?"AND route_version<=$2":""} ORDER BY sequence`, rounds?[sourceId,row?.round_number??1]:[sourceId])).rows;
     return { sourceId, designStyleNo: source.design_style_no, temporaryStyleNo: source.temporary_style_no, customerCode: source.customer_code,
       developmentType: source.development_type, designerName: source.designer_name, version: row?.version ?? 0, status: row?.status ?? "draft",
       document: row?.document ?? null, publishedAt: row?.published_at ? new Date(row.published_at).toISOString() : null, taskId: row?.task_id ?? null,
-      canEdit: source.can_edit, materialEvents };
+      canRevise:source.can_edit,roundNumber:row?.round_number??1,latestRoundNumber:row?.latest_round_number??1,canEdit: source.can_edit && (!row || row.round_number===row.latest_round_number), materialEvents };
   }
   private async command<T>(actor: TrustedActorContext, sourceId: string, command: string, key: string, input: unknown, action: (db: PoolClient) => Promise<T>): Promise<T> {
     if (!/^[A-Za-z0-9._:-]{1,128}$/.test(key)) conflict("缺少有效操作标识");
@@ -100,7 +103,7 @@ export class DigitalDevelopmentService {
   }
   async materialEvent(actor: TrustedActorContext, sourceId: string, materialId: string, input: DevelopmentMaterialEvent, key: string) {
     return this.command(actor, sourceId, "material", key, { materialId, ...input }, async db => {
-      const row = (await db.query("SELECT * FROM digital_development_documents WHERE source_id=$1", [sourceId])).rows[0] ?? digitalNotFound();
+      const row = await developmentDocumentRow(db,sourceId) ?? digitalNotFound();
       if (row.status !== "published" || row.version !== input.expectedVersion) conflict("请在当前已发布开发单上确认物料");
       const revision=Number((await db.query("SELECT count(*) AS revision FROM digital_development_material_events WHERE source_id=$1 AND material_id=$2",[sourceId,materialId])).rows[0].revision);
       if(revision!==input.expectedMaterialRevision)conflict("物料记录已更新，请刷新后重新确认");
@@ -108,7 +111,8 @@ export class DigitalDevelopmentService {
       if (!material || !material.requiredThisRound) conflict("该物料不属于本轮所需");
       if (input.action === "确认代用" && material!.category !== "辅料") conflict("设计师代用确认仅适用于辅料；问题面料须供应链总监决定");
       const eventId = randomUUID();
-      await db.query("INSERT INTO digital_development_material_events(event_id,source_id,material_id,action,expected_date,note,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7)", [eventId, sourceId, materialId, input.action, input.expectedDate, input.note, actor.actorId]);
+      const rounds=await developmentRoundsAvailable(db);
+      await db.query(`INSERT INTO digital_development_material_events(event_id,source_id,material_id,action,expected_date,note,actor_id${rounds?',route_version':''}) VALUES($1,$2,$3,$4,$5,$6,$7${rounds?',$8':''})`, [eventId, sourceId, materialId, input.action, input.expectedDate, input.note, actor.actorId,...(rounds?[row.round_number]:[])]);
       await new DevelopmentRouteService(this.database).releaseSewing(db,actor,sourceId);
       return this.read(actor, sourceId, db);
     });

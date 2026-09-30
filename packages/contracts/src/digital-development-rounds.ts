@@ -1,0 +1,16 @@
+import {z} from 'zod';
+import {DevelopmentDocumentSchema} from './digital-development.js';
+export const DEVELOPMENT_REVISION_NODES=['核配','纸样','裁板','工艺','车板','洗水'] as const;
+export const DEVELOPMENT_PROBLEM_CATEGORIES=['尺寸','版型','工艺','面料','辅料','车缝','洗水','其他'] as const;
+export const DevelopmentRevisionSchema=z.object({
+ basedOnRound:z.number().int().positive(),document:DevelopmentDocumentSchema,
+ origin:z.enum(['客户新增要求','未达原要求','内部发现']),customerComment:z.string().trim().max(4000),internalProblem:z.string().trim().max(4000),explanation:z.string().trim().max(4000),
+ categories:z.array(z.enum(DEVELOPMENT_PROBLEM_CATEGORIES)).min(1).max(8),affectedNodes:z.array(z.enum(DEVELOPMENT_REVISION_NODES)).min(1).max(6),outputKind:z.enum(['整件样板','工艺布片'])
+}).strict().superRefine((value,ctx)=>{
+ if(value.origin==='内部发现'?(!value.internalProblem||Boolean(value.customerComment)):(!value.customerComment||Boolean(value.internalProblem)))ctx.addIssue({code:'custom',message:'客户修改须填客户原评语；内部修改须填内部问题，不能混写'});
+ if(new Set(value.affectedNodes).size!==value.affectedNodes.length||new Set(value.categories).size!==value.categories.length)ctx.addIssue({code:'custom',message:'问题分类和受影响节点不能重复'});
+ if(value.outputKind==='工艺布片'&&(value.document.craft==='无'||value.affectedNodes.some(node=>['车板','洗水'].includes(node))))ctx.addIssue({code:'custom',message:'工艺布片须有印绣花，且不包含整件车板或洗水'});
+});
+export const SaveDevelopmentRevisionSchema=z.object({expectedDraftVersion:z.number().int().nonnegative(),revision:DevelopmentRevisionSchema}).strict();
+export const PublishDevelopmentRevisionSchema=z.object({expectedDraftVersion:z.number().int().positive(),basedOnRound:z.number().int().positive()}).strict();
+export type DevelopmentRevision=z.infer<typeof DevelopmentRevisionSchema>;

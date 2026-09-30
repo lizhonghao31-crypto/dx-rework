@@ -57,5 +57,6 @@ export type DevelopmentSheet = {
   sourceId: string; designStyleNo: string; temporaryStyleNo: string | null; customerCode: string | null;
   developmentType: string; designerName: string; version: number; status: "draft" | "published";
   document: DevelopmentDocument | null; publishedAt: string | null; taskId: string | null; canEdit: boolean;
+  canRevise?: boolean; roundNumber?: number; latestRoundNumber?: number;
   materialEvents: Array<{ eventId: string; materialId: string; action: string; expectedDate: string | null; note: string; createdAt: string }>;
 };

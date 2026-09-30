@@ -24,6 +24,7 @@ export const TodoRouteDescriptorSchema = z.object({
   reworkOrderId: TodoIdSchema.optional(),
   todoId: TodoIdSchema,
   roundId: TodoIdSchema.optional(),
+  developmentRound: z.number().int().positive().optional(),
   tab: z.enum([
     "contract_return",
     "process_configuration",
