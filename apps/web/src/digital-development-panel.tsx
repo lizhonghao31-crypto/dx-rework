@@ -48,7 +48,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound}:{sourceI
       else{setDraftVersion(response.draftVersion!);setRounds(await digitalRequest<Rounds>(`${base}/rounds`));}
     }catch(reason){setError(reason instanceof Error?reason.message:"复版操作失败");}finally{writing.current=false;setBusy(false);}
   };
-  const upload=async(files:FileList|null)=>{
+  const upload=async(files:File[])=>{
     if(!files?.length||writing.current)return;writing.current=true;setBusy(true);setError("");
     try{
       const limits=await digitalRequest<{maxUploadBytes:number}>(`${base}/upload-limits`);
@@ -105,7 +105,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound}:{sourceI
       </fieldset>)}</div>
       {!readonly&&<div className="pattern-actions development-controls">{(["主布","配布","辅料"]as const).map(category=><Button key={category} type="button" disabled={document.materials.length>=100} onClick={()=>edit({materials:[...document.materials,material(category,category)]})}>添加{category}</Button>)}</div>}
       </fieldset>
-      <div className="development-controls">{!readonly&&<><label>附件类型<select disabled={busy} value={fileKind} onChange={event=>setFileKind(event.target.value as typeof fileKind)}>{["款图","局部图","菲林","工艺开发板"].map(value=><option key={value}>{value}</option>)}</select></label><label>上传图片 / 文件<input disabled={busy} type="file" multiple accept={fileKind==="款图"||fileKind==="局部图"?"image/jpeg,image/png,image/webp":"image/jpeg,image/png,image/webp,application/pdf"} onChange={event=>{void upload(event.target.files);event.target.value="";}}/></label></>}
+      <div className="development-controls">{!readonly&&<><label>附件类型<select disabled={busy} value={fileKind} onChange={event=>setFileKind(event.target.value as typeof fileKind)}>{["款图","局部图","菲林","工艺开发板"].map(value=><option key={value}>{value}</option>)}</select></label><label>上传图片 / 文件<input disabled={busy} type="file" multiple accept={fileKind==="款图"||fileKind==="局部图"?"image/jpeg,image/png,image/webp":"image/jpeg,image/png,image/webp,application/pdf"} onChange={event=>{const files=Array.from(event.currentTarget.files??[]);event.currentTarget.value="";void upload(files);}}/></label></>}
       {document.files.map(file=><div className="pattern-actions" key={file.attachmentId}><a href={imageUrl(file.attachmentId)} target="_blank" rel="noreferrer">{file.kind}</a>{!readonly&&<Button type="button" disabled={busy} onClick={()=>edit({files:document.files.filter(item=>item.attachmentId!==file.attachmentId)})}>移除</Button>}</div>)}
       {!readonly&&<div className="pattern-actions"><Button type="submit" disabled={busy}>保存草稿</Button><Button type="button" disabled={busy||dirty||(revision?!draftVersion:!sheet.version)} onClick={()=>{if(revision)void revisionAction(true);else void run(`${base}/publish`,{expectedVersion:sheet.version});}}>{revision?"正式发布本轮修改":"发布开发单"}</Button></div>}</div>
     </form>
