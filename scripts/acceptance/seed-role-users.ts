@@ -1,3 +1,4 @@
+import { ensureAcceptanceWorkerPerson } from "./worker-people.js";
 import { randomUUID } from "node:crypto";
 
 import pg from "pg";
@@ -192,6 +193,13 @@ try {
         { userId, roleCode, reason: "隔离验收中心标准角色" },
       );
     }
+  }
+
+  // Existing role grants must also repair missing personnel on rerun.
+  for (const [alias, displayName, roleCode] of ACCEPTANCE_USERS) {
+    await ensureAcceptanceWorkerPerson(pool, access, rootActor, {
+      alias, displayName, roleCode, userId: userIdByAlias.get(alias)!,
+    });
   }
 
   console.log(JSON.stringify({
