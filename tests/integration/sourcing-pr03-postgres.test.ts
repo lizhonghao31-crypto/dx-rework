@@ -3240,6 +3240,36 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await service.getCase(rootReader,id)).deliveryDate).toBe("2026-12-01");
   });
 
+  it("preserves the previous dashboard risk when only the contract delivery date changes",async()=>{
+    const reporting=new ProductionReportingService(database);
+    const dates=(await database.query<{today:string;later:string}>(
+      "SELECT (clock_timestamp() AT TIME ZONE 'Asia/Shanghai')::date::text AS today,((clock_timestamp() AT TIME ZONE 'Asia/Shanghai')::date+60)::text AS later")).rows[0]!;
+    const created=await service.createCase(merchandiserActor(),{gender:"女装",styleName:"合同交期看板历史测试",
+      estimatedCutPieceSendDate:dates.today,deliveryDate:dates.today,
+      lineItems:[{styleNo:"CONTRACT-DATE-RISK",color:"蓝",quantity:20}],daxingUnitPrice:"8",attachmentIds:[]},randomUUID());
+    const id=created.value.sourcingCaseId;
+    await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
+    await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
+    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    const contract=(await contractService.getCurrent(rootActor(),id)).item!;
+    const order=(await production.dispatch(rootActor(),id,{sourcingContractDocumentId:contract.sourcingContractDocumentId,confirmed:true},randomUUID())).value;
+    await reporting.report(rootActor(),order.productionOrderId,{position:1,businessDate:dates.today,quantity:10},randomUUID());
+    const dashboard=new ProductionDashboardService(database,reporting);
+    const before=await dashboard.list(rootActor(),{q:"CONTRACT-DATE-RISK"});
+    expect(before.items[0]!.progress.progressState).toBe("high_risk");
+    const draft=await contractService.content.get(rootActor(),id);
+    const document=await contractService.content.save(rootActor(),id,{...draft,content:{...draft.content,deliveryDate:dates.later}},randomUUID());
+    await contractService.generateIfReady(rootActor(),id,document);
+    const after=await dashboard.list(rootActor(),{q:"CONTRACT-DATE-RISK",previousAsOf:before.asOf});
+    expect(after.items[0]!.order.deliveryDate).toBe(dates.later);
+    expect(after.items[0]!.progress.progressState).toBe("normal");
+    expect(after.events).toEqual(expect.arrayContaining([expect.objectContaining({
+      kind:"progress_changed",productionOrderId:order.productionOrderId,previousState:"high_risk",progressState:"normal",
+    })]));
+    const historical=await new ProductionDashboardService(database,reporting,()=>new Date(before.asOf)).list(rootActor(),{q:"CONTRACT-DATE-RISK"});
+    expect(historical.items[0]!.progress).toEqual(before.items[0]!.progress);
+  });
+
   it.each(["match","difference"] as const)("permanently locks Root edits after finance %s, including drafts opened before reconciliation",async result=>{
     const created=await service.createCase(merchandiserActor(),{gender:"男装",styleName:"财务锁合同测试",estimatedCutPieceSendDate:"2026-10-01",deliveryDate:"2026-10-20",
       lineItems:[{styleNo:"FINANCE-CONTRACT-LOCK-"+result,color:"蓝",quantity:20}],daxingUnitPrice:"8",attachmentIds:[]},randomUUID());

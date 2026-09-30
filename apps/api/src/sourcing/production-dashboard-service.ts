@@ -34,7 +34,7 @@ export function selectDashboardPage(items:ProductionDashboardItem[],input:Produc
 }
 export async function readProductionProgressFacts(client:PoolClient,ids:string[],asOf:string) {
     const result=await client.query<FactsRow>(`SELECT production.production_order_id AS id,production.quantity,
-      sourcing_effective_delivery_date(production.sourcing_case_id,production.delivery_date)::text AS due,transition.status,
+      sourcing_effective_delivery_date(production.sourcing_case_id,production.delivery_date,$2::timestamptz)::text AS due,transition.status,
       CASE WHEN transition.status='in_production' THEN COALESCE(reports.quantity,0) ELSE snapshot.completed_quantity END AS completed_quantity,
       CASE WHEN transition.status='in_production' THEN reports.first_on ELSE snapshot.first_reported_on END::text AS first_on,
       CASE WHEN transition.status='in_production' THEN reports.last_at ELSE snapshot.last_updated_at END AS last_at,

@@ -14,3 +14,7 @@ gate class: FULL
 ## Full Gate 测试入口修复
 
 Gate 36686300281 在执行映射的 PostgreSQL 用例时，将 `.cases.ts` 模块误当成 Vitest 独立入口，报 `No test files found`。补齐当前六个共享用例模块到实际 `.test.ts` 导入入口的映射，校验拒绝非测试入口，保留数据库敏感路径升级规则。新增映射回归并修正原样衣策略测试中同样错误的入口预期。修复范围扩展至 `scripts/ci/full-gate-risk-map.mjs` 及其两个单元测试。
+
+## 独立 Review 跟进
+
+Review `5363501924` 对 Head `b2b383c` 提出 1 个 P2：看板历史进度比较未将快照时点传给有效交期函数。现按 `asOf` 读取当时合同版本。新增真实服务链路回归验证仅延后合同交期时，从 high_risk 变为 normal，并保留旧进度、产生 progress_changed。旧实现下该用例按预期失败；修复后 PGlite 合同链路 43 项通过，类型检查与定向 lint 通过。最终真实 PostgreSQL 验收以修复 Head 的 Full Gate 为准。
