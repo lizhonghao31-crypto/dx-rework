@@ -486,6 +486,7 @@ export function Shell({
   }
 
   const platformNavigation: NavigationEntry[] = [];
+  if (isRoot) platformNavigation.push({name:"合同模板设置",description:"维护合同文字与固定参数",href:"/ui/contract-template"});
   if (canManageEmployeeAccess) {
     platformNavigation.push({
       name: "人员与权限",

@@ -307,12 +307,14 @@ const renderStructuredContractPdf = async (
 
   // Keep the responsibility clause intact; only the dynamic responsibility segment is red.
   document.fontSize(9);
-  const responsibility = `二、乙方负责${snapshot.processes.join("、")}，甲方提供样板及面/辅料。`;
+  const [responsibilityPrefix,responsibilitySuffix] = (snapshot.terms.processingResponsibility && (snapshot.templateVersion ?? 1)>=4
+    ? snapshot.terms.processingResponsibility : "乙方负责{{工艺}}，甲方提供样板及面/辅料。").split("{{工艺}}");
+  const responsibility = `二、${responsibilityPrefix}${snapshot.processes.join("、")}${responsibilitySuffix}`;
   const responsibilityHeight = document.heightOfString(responsibility, { width, lineGap: 2 });
   if (y + responsibilityHeight > bottom && responsibilityHeight < bottom - 32) { document.addPage(); y = 32; }
-  document.fillColor("#111111").text("二、乙方负责", 32, y, { width, lineGap: 2, continued: true });
+  document.fillColor("#111111").text(`二、${responsibilityPrefix}`, 32, y, { width, lineGap: 2, continued: true });
   document.fillColor("#c00000").text(snapshot.processes.join("、"), { continued: true });
-  document.fillColor("#111111").text("，甲方提供样板及面/辅料。");
+  document.fillColor("#111111").text(responsibilitySuffix ?? "");
   y = document.y + (polished ? 10 : 6);
 
   const clauses = [
@@ -397,7 +399,7 @@ const renderStructuredContractPdf = async (
 // Generated attachments remain immutable. The current V2 template now uses the
 // approved presentation refinements for newly generated documents only.
 export const renderSourcingContractPdf = async (snapshot: ContractPdfSnapshot): Promise<Buffer> => {
-  if (snapshot.templateVersion === 2 || snapshot.templateVersion === 3) {
+  if ((snapshot.templateVersion ?? 1) >= 2) {
     return renderStructuredContractPdf(snapshot, "v3");
   }
   return renderLegacyContractPdf(snapshot);

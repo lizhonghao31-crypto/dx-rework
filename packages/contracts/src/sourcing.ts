@@ -281,6 +281,7 @@ export const SourcingContractDocumentSchema = z.object({
   preparedAt: z.string().datetime(),
   generatedAt: z.string().datetime().nullable(),
   canSupplement: z.boolean(),
+  canRefreshInformation: z.boolean().optional(),
 }).strict();
 
 export const SourcingContractStateResponseSchema = z.object({
@@ -299,6 +300,11 @@ export const SourcingContractReturnResponseSchema = z.object({
   contractReturnOverdueHours: z.number().int().nonnegative().nullable(),
   uploadedByName: z.string().nullable(),
   canUpload: z.boolean(),
+  currentContractReturned: z.boolean().default(false),
+  currentContractDocumentId: IdSchema.nullable().default(null),
+  signedContractDocumentId: IdSchema.nullable().default(null),
+  signedContractVersion: z.number().int().positive().nullable().default(null),
+  signedContractNumber: z.string().nullable().default(null),
   attachments: z.array(z.object({
     attachmentId: IdSchema,filename: z.string(),
     mimeType: z.enum(["application/pdf","image/jpeg","image/png"]),
@@ -308,6 +314,9 @@ export const SourcingContractReturnResponseSchema = z.object({
     revision: z.number().int().positive(),
     submittedAt: z.string().datetime(),
     uploadedByName: z.string(),
+    signedContractDocumentId: IdSchema.nullable().default(null),
+    signedContractVersion: z.number().int().positive().nullable().default(null),
+    signedContractNumber: z.string().nullable().default(null),
     attachments: z.array(z.object({
       attachmentId: IdSchema,filename: z.string(),
       mimeType: z.enum(["application/pdf","image/jpeg","image/png"]),

@@ -29,6 +29,8 @@ import {
   SourcingMerchandiserOptionsSchema,
   SupplementSourcingContractSchema,
   SupplementSourcingImagesSchema,
+  ContractTemplateContentSchema, ContractTemplateStateSchema, SaveContractTemplateSchema,
+  ContractRefreshPreviewSchema, RefreshContractInformationSchema,
 } from "@dx-rework/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
@@ -449,6 +451,45 @@ export function registerSourcingRoutes(
   );
 
   if (dependencies.contracts) {
+    const templateActor = async (request: FastifyRequest) => {
+      const user = await dependencies.authenticate(token(request));
+      if (!await isRootUser(dependencies.root,user.id)) throw new ApplicationError("FORBIDDEN","仅Root可设置合同模板",403);
+      return businessActor(dependencies.root,user,request.id,"sourcing:contract:record");
+    };
+    const refreshActor = async (request: FastifyRequest) => {
+      const actor = await readActor(request);
+      const capabilities = actor.authorizationCapabilities ?? [];
+      if (actor.actorRoles.includes("root_superuser")) return {...actor,authorizationCapability:"sourcing:contract:record"};
+      if (actor.actorRoles.includes("production_management") && capabilities.includes("sourcing:decision:record")) return {...actor,authorizationCapability:"sourcing:decision:record"};
+      if (actor.actorRoles.includes("order_merchandiser") && capabilities.includes("sourcing:contract:record")) return {...actor,authorizationCapability:"sourcing:contract:record"};
+      throw new ApplicationError("FORBIDDEN","当前岗位无权更新合同信息",403);
+    };
+    app.get("/sourcing/contract-template",async request => ContractTemplateStateSchema.parse(
+      await dependencies.contracts!.management.templates(await templateActor(request))));
+    app.post("/sourcing/contract-template",async request => {
+      const actor = await templateActor(request);
+      const parsed = SaveContractTemplateSchema.safeParse(request.body);
+      if (!parsed.success) validationError(parsed.error.issues[0]?.message ?? "模板资料不完整");
+      return ContractTemplateStateSchema.parse(await dependencies.contracts!.management.saveTemplate(actor,parsed.data!,idempotencyKey(request)));
+    });
+    app.post("/sourcing/contract-template/preview",async (request,reply) => {
+      const actor = await templateActor(request);
+      const parsed = ContractTemplateContentSchema.safeParse(request.body);
+      if (!parsed.success) validationError(parsed.error.issues[0]?.message ?? "模板资料不完整");
+      return reply.type("application/pdf").header("Content-Disposition","inline; filename=contract-template-preview.pdf")
+        .send(await dependencies.contracts!.management.previewTemplate(actor,parsed.data!));
+    });
+    app.get<{Params:{sourcingCaseId:string}}>("/sourcing/cases/:sourcingCaseId/contract/refresh",async request =>
+      ContractRefreshPreviewSchema.parse(await dependencies.contracts!.management.previewInformation(
+        await refreshActor(request),caseId(request.params.sourcingCaseId))));
+    app.post<{Params:{sourcingCaseId:string}}>("/sourcing/cases/:sourcingCaseId/contract/refresh",async request => {
+      const actor = await refreshActor(request);
+      const parsed = RefreshContractInformationSchema.safeParse(request.body);
+      if (!parsed.success) validationError(parsed.error.issues[0]?.message ?? "请先查看供应商资料差异");
+      const id = caseId(request.params.sourcingCaseId);
+      const documentId = await dependencies.contracts!.management.refreshInformation(actor,id,parsed.data!,idempotencyKey(request));
+      return SourcingContractStateResponseSchema.parse(await dependencies.contracts!.generateIfReady(actor,id,documentId));
+    });
     app.get<{ Params: { sourcingCaseId: string } }>(
       "/sourcing/cases/:sourcingCaseId/contract",
       async (request) => SourcingContractStateResponseSchema.parse(

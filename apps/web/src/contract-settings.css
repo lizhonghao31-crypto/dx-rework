@@ -1,0 +1,9 @@
+.contract-template-settings { width:100%; max-width:960px; margin:0 auto; padding:16px; }
+.contract-template-settings label,.contract-template-fields { display:grid; gap:8px; }
+.contract-template-fields { border:0; margin:16px 0; padding:0; gap:16px; }
+.contract-template-settings input,.contract-template-settings select,.contract-template-settings textarea { width:100%; max-width:100%; box-sizing:border-box; font:inherit; padding:8px; }
+.contract-template-settings textarea { resize:vertical; }
+.contract-template-actions { display:flex; flex-wrap:wrap; gap:8px; }
+.contract-supplier-dialog { max-height:85dvh; overflow-y:auto; }
+.contract-supplier-changes { display:grid; gap:12px; max-height:50dvh; overflow-y:auto; }
+.contract-supplier-change { display:grid; gap:4px; overflow-wrap:anywhere; }
