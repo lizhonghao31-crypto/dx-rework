@@ -1,3 +1,4 @@
+import { AcceptanceObjectStorage, registerAcceptanceStorageRoutes } from "./tools/acceptance-storage.js";
 import {DevelopmentRoundService} from "./production-platform/development-round-service.js";
 import { DevelopmentExecutionService } from "./production-platform/development-execution-service.js";
 import { DigitalDevelopmentService } from "./production-platform/development-service.js";
@@ -133,7 +134,12 @@ const employeeAccessService = new EmployeeAccessService(
   config.ownerBootstrap,
   config.rootDingtalkUserId,
 );
-const storage = config.objectStorage.enabled
+const acceptanceStorage = config.acceptanceLab.enabled
+  ? new AcceptanceObjectStorage("/opt/dx-rework-acceptance/shared/attachments",
+      new URL(`${config.appBasePath}api`, config.dingtalk.qrRedirectUri).href.replace(/\/$/, ""),
+      config.acceptanceLab.secret!)
+  : undefined;
+const storage = acceptanceStorage ?? (config.objectStorage.enabled
   ? new AliyunPrivateObjectStorage(new AliyunOssV4RestClient({
       region: config.objectStorage.region!,
       endpoint: config.objectStorage.endpoint!,
@@ -141,7 +147,7 @@ const storage = config.objectStorage.enabled
       accessKeyId: config.objectStorage.accessKeyId!,
       accessKeySecret: config.objectStorage.accessKeySecret!,
     }))
-  : new DisabledObjectStorage();
+  : new DisabledObjectStorage());
 const attachments = new AttachmentService(database, storage, {
   prefix: config.objectStorage.privatePrefix,
   ttlSeconds: config.objectStorage.signedUrlTtlSeconds,
@@ -451,6 +457,8 @@ const todoRuntime = new TodoRuntimeLifecycle(database, {
   ...(todoProvider ? { provider: todoProvider } : {}),
   logger: app.log,
 });
+
+if (acceptanceStorage) registerAcceptanceStorageRoutes(app, acceptanceStorage);
 
 const ATTACHMENT_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 let attachmentCleanupTimer: ReturnType<typeof setInterval> | undefined;
