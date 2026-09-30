@@ -44,6 +44,9 @@ export class DigitalProductionAccessPolicy {
     if (!row) return false;
     if (isDigitalLeader(actor)) return true;
     if (purpose === "technical" && isDigitalTechnicalManager(actor)) return true;
+    if(kind==="source"&&purpose==="technical"&&actor.actorRoles.includes("order_merchandiser")&&await this.activeRole(actor.actorId,"order_merchandiser")){
+      if((await this.database.query("SELECT 1 FROM digital_production_orders WHERE source_id=$1 AND primary_merchandiser_id=$2",[id,actor.actorId])).rowCount)return true;
+    }
     const owns = actor.actorRoles.includes("sample_designer") && row.created_by === actor.actorId;
     const primary = kind === "order" && actor.actorRoles.includes("order_merchandiser") && row.primary_merchandiser_id === actor.actorId;
     if (owns || primary) return true;

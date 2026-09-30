@@ -95,6 +95,7 @@ export class DevelopmentExecutionService {
       if(!["development_pattern","development_cutting"].includes(task.task_kind)||task.state!=="ready")fail("当前任务不具备完工条件");await this.fabricReady(db,sourceId);
       const sheet=await this.forms().read(actor,sourceId,db);
       if(task.task_kind==="development_pattern"&&sheet.document!.craft!=="无"&&!input.attachmentIds.length&&!sheet.document!.files.some(file=>file.kind==="工艺开发板"))fail("有印绣花时，纸样完工前请上传工艺开发板");
+      await this.assertUploadPurpose(db,sourceId,input.attachmentIds,"工艺开发板");
       if(input.attachmentIds.length)await this.forms().bindFiles(db,actor,sourceId,{...sheet.document!,files:input.attachmentIds.map(attachmentId=>({attachmentId,kind:"工艺开发板"}))});
       await this.fact(db,actor,sourceId,input.taskId,task.task_kind==="development_pattern"?"纸样完成":"裁板完成",input);
       const now=new Date().toISOString();await this.tasks().setConditionWithClient(db,actor,input.taskId,"business_recorded",true,now,input.note);await this.tasks().completeWithClient(db,actor,input.taskId,{note:input.note},`work:${key}`);
@@ -107,11 +108,23 @@ export class DevelopmentExecutionService {
   }
   async report(actor:TrustedActorContext,sourceId:string,input:{recommendation:string;note:string;attachmentIds:string[]},key:string){
     if(!isRootActor(actor)&&!actor.actorRoles.some(role=>["pattern_room_worker","pattern_room_supervisor","order_merchandiser"].includes(role)))digitalForbidden();
-    return this.command(actor,sourceId,"fabric-report",key,input,async db=>{const sheet=await this.forms().read(actor,sourceId,db);await this.forms().bindFiles(db,actor,sourceId,{...sheet.document!,files:input.attachmentIds.map(attachmentId=>({attachmentId,kind:"菲林"}))});return {reportId:await this.fact(db,actor,sourceId,null,"面料报告",input)};});
+    return this.command(actor,sourceId,"fabric-report",key,input,async db=>{const sheet=await this.forms().read(actor,sourceId,db);await this.assertUploadPurpose(db,sourceId,input.attachmentIds,"面料报告");await this.forms().bindFiles(db,actor,sourceId,{...sheet.document!,files:input.attachmentIds.map(attachmentId=>({attachmentId,kind:"菲林"}))});return {reportId:await this.fact(db,actor,sourceId,null,"面料报告",input)};});
   }
   async decideFabric(actor:TrustedActorContext,sourceId:string,input:{reportId:string;decision:string;note:string},key:string){
     if(!isRootActor(actor)&&!actor.actorRoles.includes("production_management"))digitalForbidden();
     return this.command(actor,sourceId,"fabric-decision",key,input,async db=>{const reports=(await this.facts(db,sourceId)).filter(f=>f.kind==="面料报告");const report=reports.find(f=>f.factId===input.reportId);if(!report)fail("面料报告不存在");if(report!.payload.recommendation!=="建议停用")fail("正常面料不需要总监审批");return {factId:await this.fact(db,actor,sourceId,null,"面料决定",input)};});
+  }
+  private async assertUploadPurpose(db:Pick<Pool,"query">,sourceId:string,ids:string[],purpose:"工艺开发板"|"面料报告"){
+    for(const attachmentId of ids)if(!(await db.query("SELECT 1 FROM digital_development_upload_purposes WHERE source_id=$1 AND attachment_id=$2 AND purpose=$3",[sourceId,attachmentId,purpose])).rowCount)fail(`附件用途不符，请在${purpose}栏重新上传`);
+  }
+  async recordUploadPurpose(actor:TrustedActorContext,sourceId:string,attachmentId:string,purpose:"工艺开发板"|"面料报告"){
+    await this.authorizeUpload(actor,sourceId);
+    const result=await this.database.query("INSERT INTO digital_development_upload_purposes(attachment_id,source_id,purpose,uploaded_by) SELECT attachment_id,$2,$3,$4 FROM attachments WHERE attachment_id=$1 AND uploaded_by=$4 AND entity_type IS NULL ON CONFLICT DO NOTHING RETURNING attachment_id",[attachmentId,sourceId,purpose,actor.actorId]);
+    if(!result.rowCount)fail("上传用途登记失败，请重新上传");
+  }
+  async authorizeFinalize(actor:TrustedActorContext,sourceId:string,attachmentId:string){
+    await this.authorizeUpload(actor,sourceId);
+    if(!(await this.database.query("SELECT 1 FROM digital_development_upload_purposes WHERE source_id=$1 AND attachment_id=$2 AND uploaded_by=$3",[sourceId,attachmentId,actor.actorId])).rowCount)digitalForbidden();
   }
   async authorizeUpload(actor:TrustedActorContext,sourceId:string){await this.forms().read(actor,sourceId);if(!isRootActor(actor)&&!actor.actorRoles.some(role=>["pattern_room_worker","pattern_room_supervisor","order_merchandiser"].includes(role)))digitalForbidden();}
 }

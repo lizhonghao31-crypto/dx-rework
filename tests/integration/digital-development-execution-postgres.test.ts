@@ -107,11 +107,13 @@ run("P06 development execution PostgreSQL", () => {
     await expect(execution.complete(worker(),id,{taskId:paper.taskId,note:"",attachmentIds:[]},randomUUID())).rejects.toThrow("工艺开发板");
     await expect(execution.complete(actor(),id,{taskId:paper.taskId,note:"",attachmentIds:[]},randomUUID())).rejects.toMatchObject({statusCode:404});
     const file=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'工艺.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[file,`test/${file}`,"a".repeat(64),other]);
+    await execution.recordUploadPurpose(worker(),id,file,"工艺开发板");
     await execution.complete(worker(),id,{taskId:paper.taskId,note:"",attachmentIds:[file]},randomUUID());
     expect(await development.canDownload(actor(),id,file)).toBe(true);
   });
   it("requires director decision for unsafe fabric, even if a later report says normal",async()=>{
     const {id,taskId,materialId}=await prepare();const file=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'检测.pdf','application/pdf',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[file,`test/${file}`,"a".repeat(64),root]);
+    await execution.recordUploadPurpose(boss(),id,file,"面料报告");
     const report=await execution.report(boss(),id,{recommendation:"建议停用",note:"缩水异常",attachmentIds:[file]},randomUUID()) as {reportId:string};
     await execution.report(boss(),id,{recommendation:"正常",note:"另一样品正常",attachmentIds:[file]},randomUUID());
     await expect(execution.check(clerk(),id,{taskId,result:"通过",note:"",items:checks(materialId)},randomUUID())).rejects.toThrow("供应链总监");
@@ -119,4 +121,36 @@ run("P06 development execution PostgreSQL", () => {
     await execution.decideFabric(boss(),id,{reportId:report.reportId,decision:"允许使用",note:"已确认可用范围"},randomUUID());
     await execution.check(clerk(),id,{taskId,result:"通过",note:"",items:checks(materialId)},randomUUID());
   });
+  it("never accepts a fabric report as the paper craft-board attachment",async()=>{
+    const {id,taskId,materialId}=await prepare(false,"印花");
+    await execution.check(clerk(),id,{taskId,result:"通过",note:"",items:checks(materialId)},randomUUID());
+    const paper=(await execution.read(worker(),id)).tasks.find(task=>task.taskKind==="development_pattern")!;
+    const file=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'报告.pdf','application/pdf',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[file,`test/${file}`,"a".repeat(64),other]);
+    await execution.recordUploadPurpose(worker(),id,file,"面料报告");
+    await expect(execution.complete(worker(),id,{taskId:paper.taskId,note:"误用报告",attachmentIds:[file]},randomUUID())).rejects.toThrow("附件用途不符");
+    expect((await tasks.read(worker(),paper.taskId)).state).toBe("ready");
+    await execution.report(worker(),id,{recommendation:"正常",note:"正确提交报告",attachmentIds:[file]},randomUUID());
+    await expect(execution.recordUploadPurpose(worker(),id,file,"工艺开发板")).rejects.toMatchObject({statusCode:409});
+  });
+  it("lets only the linked active primary merchandiser follow up fabric reports",async()=>{
+    const {id}=await prepare(),primary=randomUUID(),unrelated=randomUUID();
+    for(const person of [primary,unrelated]){
+      await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'跟单验收',true)",[person]);
+      await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'order_merchandiser')",[person]);
+    }
+    const sheet=await development.read(boss(),id);
+    await service.createOrder(boss(),{customerCode:"PD",productGroup:"男装",designStyleNo:sheet.designStyleNo,temporaryStyleNo:null,orderDate:"2026-09-30",contractDeliveryDate:null,primaryMerchandiserId:primary,lines:[{poNumber:null,formalStyleNo:null,temporaryStyleNo:null,color:"黑",colorForeign:null,deliveryDate:null,sizes:[{size:"M",quantity:1}]}]},randomUUID(),id);
+    const merchant=actor(primary,["order_merchandiser"]),outsider=actor(unrelated,["order_merchandiser"]);
+    expect((await execution.read(merchant,id)).canReportFabric).toBe(true);
+    expect((await development.read(merchant,id)).canEdit).toBe(false);
+    await execution.authorizeUpload(merchant,id);
+    await expect(execution.read(outsider,id)).rejects.toMatchObject({statusCode:404});
+    await expect(execution.authorizeUpload(outsider,id)).rejects.toMatchObject({statusCode:404});
+    const file=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'跟单报告.pdf','application/pdf',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[file,`test/${file}`,"a".repeat(64),primary]);
+    await execution.recordUploadPurpose(merchant,id,file,"面料报告");
+    await execution.report(merchant,id,{recommendation:"正常",note:"主跟单跟进",attachmentIds:[file]},randomUUID());
+    await database.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=$1",[primary]);
+    await expect(execution.authorizeUpload(merchant,id)).rejects.toMatchObject({statusCode:404});
+  });
+
 });

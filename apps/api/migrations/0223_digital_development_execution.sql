@@ -23,3 +23,13 @@ CREATE INDEX digital_development_execution_history ON digital_development_execut
 CREATE UNIQUE INDEX digital_development_one_work_fact ON digital_development_execution_facts(task_id,kind) WHERE kind IN ('核配通过','缺项退回','纸样完成','裁板完成');
 CREATE TRIGGER digital_development_execution_history_immutable BEFORE UPDATE OR DELETE ON digital_development_execution_facts
  FOR EACH ROW EXECUTE FUNCTION guard_production_order_root_immutable();
+
+CREATE TABLE digital_development_upload_purposes (
+ attachment_id uuid PRIMARY KEY REFERENCES attachments(attachment_id),
+ source_id uuid NOT NULL REFERENCES digital_production_sources(source_id),
+ purpose text NOT NULL CHECK(purpose IN ('工艺开发板','面料报告')),
+ uploaded_by uuid NOT NULL REFERENCES app_users(id),
+ created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TRIGGER digital_development_upload_purpose_immutable BEFORE UPDATE OR DELETE ON digital_development_upload_purposes
+ FOR EACH ROW EXECUTE FUNCTION guard_production_order_root_immutable();

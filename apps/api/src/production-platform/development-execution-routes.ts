@@ -22,8 +22,8 @@ export function registerDevelopmentExecutionRoutes(app:FastifyInstance,dependenc
   app.post(`${base}/fabric-reports`,async request=>service.report(await actor(request),id(request),parse(DevelopmentFabricReportSchema,request.body),key(request)));
   app.post(`${base}/fabric-decisions`,async request=>service.decideFabric(await actor(request),id(request),parse(DevelopmentFabricDecisionSchema,request.body),key(request)));
   app.get(`${base}/upload-limits`,async request=>{await service.authorizeUpload(await actor(request),id(request));return attachments.uploadLimits();});
-  app.post(`${base}/upload-intents`,async request=>{const trusted=await actor(request);await service.authorizeUpload(trusted,id(request));return attachments.createUploadIntent(trusted,parse(CreateUploadIntentSchema,request.body));});
-  app.post(`${base}/attachments/:attachmentId/finalize`,async request=>{const trusted=await actor(request);await service.authorizeUpload(trusted,id(request));return attachments.finalize(trusted,id(request,"attachmentId"));});
+  app.post(`${base}/upload-intents`,async request=>{const trusted=await actor(request);await service.authorizeUpload(trusted,id(request));const {purpose,...input}=parse(CreateUploadIntentSchema.extend({purpose:z.enum(["工艺开发板","面料报告"])}),request.body);const intent=await attachments.createUploadIntent(trusted,input);await service.recordUploadPurpose(trusted,id(request),intent.attachmentId,purpose);return intent;});
+  app.post(`${base}/attachments/:attachmentId/finalize`,async request=>{const trusted=await actor(request);await service.authorizeFinalize(trusted,id(request),id(request,"attachmentId"));return attachments.finalize(trusted,id(request,"attachmentId"));});
   app.get(`${base}/tasks/:taskId/qr`,async(request,reply)=>{
     const state=await service.read(await actor(request),id(request));const taskId=id(request,"taskId");if(!state.tasks.some(task=>task.taskId===taskId))throw new ApplicationError("NOT_FOUND","任务不存在",404);
     if(!dependencies.developmentQrBase)throw new ApplicationError("NOT_FOUND","随单码地址未配置，请从待办查单",404);
