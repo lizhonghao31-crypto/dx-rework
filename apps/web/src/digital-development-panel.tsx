@@ -1,3 +1,4 @@
+import { confirmInApp } from "./system-dialog.js";
 import { DevelopmentPrint } from "./digital-development-print.js";
 import { useEffect, useRef, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
@@ -9,7 +10,7 @@ import { sha256Hex } from "./attachment-upload.js";
 import { createWebUrls } from "../url-contract.js";
 import "./digital-development.css";
 const urls = createWebUrls(import.meta.env.BASE_URL);
-const material = (category: DevelopmentMaterial["category"], label: string): DevelopmentMaterial => ({materialId:crypto.randomUUID(),category,label,supplier:"",name:"",width:"",weight:"",composition:"",consumption:"",color:"",specification:"",quantity:"",requiredThisRound:true,available:false,expectedDate:null});
+const material = (category: DevelopmentMaterial["category"], label: string): DevelopmentMaterial => ({materialId:createClientRequestId(),category,label,supplier:"",name:"",width:"",weight:"",composition:"",consumption:"",color:"",specification:"",quantity:"",requiredThisRound:true,available:false,expectedDate:null});
 const initial = (): DevelopmentDocument => ({template:"上衣",quantity:null,sampleSize:"",orderDate:null,returnDate:null,unit:"cm",sizes:["M","L"],measurements:DEVELOPMENT_MEASUREMENTS.上衣.map(name=>({name,values:["",""]})),interlining:"",placketInterlining:"",sewingThread:"",buttonholeThread:"",stitchDensity:"",washingIroning:"",packaging:"",formalSizes:"",casualSizes:"",mainLabel:false,mainLabelMethod:"",sizeLabel:false,careLabel:false,instructions:"",craft:"无",washing:"免洗",materials:[material("主布","主布 A"),material("配布","配布 B"),material("配布","配布 C")].map(item=>({...item,requiredThisRound:false})),files:[]});
 const labels = {interlining:"朴号",placketInterlining:"门筒朴",sewingThread:"车缝线",buttonholeThread:"纽门线",stitchDensity:"针距",washingIroning:"洗水整烫方法",packaging:"包装方法",formalSizes:"正装尺码",casualSizes:"休闲尺码",mainLabelMethod:"主唛车法",instructions:"制作说明"} as const;
 export function DigitalDevelopmentPanel({sourceId,onClose}:{sourceId:string;onClose:()=>void}) {
@@ -44,7 +45,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose}:{sourceId:string;onCl
   const imageUrl=(id:string)=>urls.apiUrl(`digital-production/${base}/attachments/${id}`);
   const changeMaterial=(index:number,patch:Partial<DevelopmentMaterial>)=>edit({materials:document.materials.map((item,i)=>i===index?{...item,...patch}:item)});
   return <Surface><section className="development-editor">
-    <div className="pattern-actions development-controls"><Button disabled={busy} onClick={()=>{if(!dirty||window.confirm("有未保存修改，确定离开？"))onClose();}}>返回</Button>
+    <div className="pattern-actions development-controls"><Button disabled={busy} onClick={async()=>{if(!dirty||await confirmInApp("有未保存修改，确定离开？"))onClose();}}>返回</Button>
       <Button disabled={!sheet?.document||dirty||busy} onClick={()=>window.print()}>打印 / 保存 PDF</Button>
       <span>{sheet?.status==="published"?"已发布":"草稿"}{sheet?.version?` · 版本 ${sheet.version}`:""}</span></div>
     {error&&<p role="alert">{error}</p>}
@@ -52,7 +53,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose}:{sourceId:string;onCl
       <fieldset disabled={readonly||busy}>
       <header><h2>广州市达兴制衣有限公司</h2><h3>款式设计与制作说明单</h3></header>
       <div className="development-heading"><span>客户：{sheet.customerCode??"通用开发"}</span><span>款号：{sheet.designStyleNo}</span><span>代用号：{sheet.temporaryStyleNo??"—"}</span><span>{sheet.developmentType}</span><span>设计师：{sheet.designerName}</span></div>
-      <div className="pattern-actions"><label>模板<select value={document.template} onChange={event=>{const template=event.target.value as DevelopmentDocument["template"];if(window.confirm("切换模板将重置尺寸项目，继续？"))edit({template,measurements:DEVELOPMENT_MEASUREMENTS[template].map(name=>({name,values:document.sizes.map(()=>"")}))});}}><option>上衣</option><option>裤子</option></select></label>
+      <div className="pattern-actions"><label>模板<select value={document.template} onChange={async event=>{const template=event.target.value as DevelopmentDocument["template"];if(await confirmInApp("切换模板将重置尺寸项目，继续？"))edit({template,measurements:DEVELOPMENT_MEASUREMENTS[template].map(name=>({name,values:document.sizes.map(()=>"")}))});}}><option>上衣</option><option>裤子</option></select></label>
         <label>数量<input type="number" min={1} max={100000} value={document.quantity??""} onChange={event=>edit({quantity:event.target.value?Number(event.target.value):null})}/></label>
         <label>样板尺码<input value={document.sampleSize} onChange={event=>edit({sampleSize:event.target.value})}/></label>
         <label>下单日期<input type="date" value={document.orderDate??""} onChange={event=>edit({orderDate:event.target.value||null})}/></label>
