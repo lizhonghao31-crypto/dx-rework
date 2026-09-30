@@ -91,6 +91,10 @@
     "./digital-development": {
       "types": "./src/digital-development.ts",
       "import": "./dist/digital-development.js"
+    },
+    "./digital-development-execution": {
+      "types": "./src/digital-development-execution.ts",
+      "import": "./dist/digital-development-execution.js"
     }
   },
   "scripts": {

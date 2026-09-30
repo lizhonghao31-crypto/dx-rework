@@ -1,3 +1,4 @@
+import { DevelopmentExecutionPanel } from "./digital-development-execution-panel.js";
 import { confirmInApp } from "./system-dialog.js";
 import { DevelopmentPrint } from "./digital-development-print.js";
 import { useEffect, useRef, useState } from "react";
@@ -84,6 +85,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose}:{sourceId:string;onCl
       {document.files.map(file=><div className="pattern-actions" key={file.attachmentId}><a href={imageUrl(file.attachmentId)} target="_blank" rel="noreferrer">{file.kind}</a>{!readonly&&<Button type="button" disabled={busy} onClick={()=>edit({files:document.files.filter(item=>item.attachmentId!==file.attachmentId)})}>移除</Button>}</div>)}
       {!readonly&&<div className="pattern-actions"><Button type="submit" disabled={busy}>保存草稿</Button><Button type="button" disabled={busy||dirty||!sheet.version} onClick={()=>void run(`${base}/publish`,{expectedVersion:sheet.version})}>发布开发单</Button></div>}</div>
     </form>
+    {sheet.status==="published"&&<DevelopmentExecutionPanel sourceId={sourceId}/>}
     {sheet.status==="published"&&<section className="development-controls"><h3>本轮物料记录</h3>{document.materials.filter(item=>item.requiredThisRound).map(item=><div key={item.materialId}><h4>{item.label||item.name}</h4><p>{item.available?"发布时已有实物":"发布时未到"} · 原预计：{item.expectedDate??"未定"}</p>{sheet.materialEvents.filter(event=>event.materialId===item.materialId).map(event=><p key={event.eventId}>{event.action} · {event.expectedDate??""} · {event.note} · {new Date(event.createdAt).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai"})}</p>)}
       {sheet.canEdit&&<form onSubmit={event=>{event.preventDefault();const form=new FormData(event.currentTarget);void run(`${base}/materials/${item.materialId}/events`,{expectedMaterialRevision:sheet.materialEvents.filter(event=>event.materialId===item.materialId).length,expectedVersion:sheet.version,action:form.get("action"),expectedDate:form.get("date")||null,note:form.get("note")});}}><fieldset disabled={busy}><label>操作<select name="action"><option>到货</option><option>修改预计日期</option>{item.category==="辅料"&&<option>确认代用</option>}</select></label><label>预计日期<input type="date" name="date"/></label><label>说明<input name="note" maxLength={1000}/></label><Button type="submit">确认记录</Button></fieldset></form>}</div>)}</section>}
     </>}

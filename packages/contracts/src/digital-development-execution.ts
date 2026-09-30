@@ -1,0 +1,9 @@
+import { z } from "zod";
+export const DevelopmentDispatchSchema=z.object({expectedVersion:z.number().int().nonnegative(),patternWorkerId:z.string().uuid(),cuttingWorkerId:z.string().uuid(),sewingWorkerId:z.string().uuid()}).strict();
+export const DevelopmentCheckSchema=z.object({taskId:z.string().uuid(),result:z.enum(["通过","缺项退回"]),note:z.string().trim().max(1000),items:z.array(z.object({materialId:z.string().uuid(),physical:z.boolean(),quantity:z.boolean(),color:z.boolean(),specification:z.boolean()}).strict()).max(100)}).strict().superRefine((value,ctx)=>{if(value.result==="缺项退回"&&!value.note)ctx.addIssue({code:"custom",path:["note"],message:"请说明缺项"});if(new Set(value.items.map(item=>item.materialId)).size!==value.items.length)ctx.addIssue({code:"custom",path:["items"],message:"核配物料不能重复"});});
+export const DevelopmentWorkSchema=z.object({taskId:z.string().uuid(),note:z.string().trim().max(1000),attachmentIds:z.array(z.string().uuid()).max(20)}).strict();
+export const DevelopmentFabricReportSchema=z.object({recommendation:z.enum(["正常","建议停用"]),note:z.string().trim().min(1).max(1000),attachmentIds:z.array(z.string().uuid()).min(1).max(10)}).strict();
+export const DevelopmentFabricDecisionSchema=z.object({reportId:z.string().uuid(),decision:z.enum(["允许使用","停止使用"]),note:z.string().trim().min(1).max(1000)}).strict();
+export type DevelopmentDispatch=z.infer<typeof DevelopmentDispatchSchema>;
+export type DevelopmentCheck=z.infer<typeof DevelopmentCheckSchema>;
+export type DevelopmentWork=z.infer<typeof DevelopmentWorkSchema>;

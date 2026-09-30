@@ -191,4 +191,11 @@ run("P03 task lifecycle PostgreSQL", () => {
     expect((await tasks.history(boss,taskId)).revisions).toHaveLength(2);
   });
 
+  it("limits business-adapter task authority to the exact originating resource",async()=>{
+    const first=await order(),second=await order(),origin=await create(first,"budget");
+    await expect(tx(client=>tasks.createWithClient(client,boss,{resource:second,authorizingTaskId:origin.taskId,kind:"production_sheet",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:null}))).rejects.toMatchObject({statusCode:403});
+    const next=await tx(client=>tasks.createWithClient(client,boss,{resource:first,authorizingTaskId:origin.taskId,kind:"production_sheet",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:null}));
+    expect((await tasks.read(boss,next.taskId)).orderId).toBe(first.id);
+  });
+
 });

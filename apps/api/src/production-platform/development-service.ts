@@ -59,7 +59,7 @@ export class DigitalDevelopmentService {
       await db.query("COMMIT"); return result;
     } catch (error) { await db.query("ROLLBACK"); throw error; } finally { db.release(); }
   }
-  private async bindFiles(db: PoolClient, actor: TrustedActorContext, sourceId: string, document: DevelopmentDocument) {
+  async bindFiles(db: PoolClient, actor: TrustedActorContext, sourceId: string, document: DevelopmentDocument) {
     for (const file of [...document.files].sort((a,b) => a.attachmentId.localeCompare(b.attachmentId))) {
       const row = (await db.query("SELECT * FROM attachments WHERE attachment_id=$1 FOR UPDATE", [file.attachmentId])).rows[0];
       if (!row || row.status !== "ready" || !["image/jpeg","image/png","image/webp","application/pdf"].includes(row.mime_type)) conflict("附件必须是已上传完成的图片或 PDF");

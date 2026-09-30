@@ -95,10 +95,14 @@ export class DigitalProductionTaskService {
     return true;
   }
   // Called by fixed business adapters inside their own transaction; no public task-builder route.
-  async createWithClient(client: PoolClient, actor: TrustedActorContext, input: { resource: Resource; kind: DigitalTaskKind; routeId: string; routeVersion: number; occurrence: number; assigneeId: string | null; predecessors?: string[]; conditions?: typeof DIGITAL_CONDITION_KEYS[number][]; occurredAt?: string | null }) {
+  async createWithClient(client: PoolClient, actor: TrustedActorContext, input: { resource: Resource; authorizingTaskId?: string; kind: DigitalTaskKind; routeId: string; routeVersion: number; occurrence: number; assigneeId: string | null; predecessors?: string[]; conditions?: typeof DIGITAL_CONDITION_KEYS[number][]; occurredAt?: string | null }) {
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
     await this.active(client, input.resource);
-    await new DigitalProductionAccessPolicy(client).assert(actor, input.resource.kind, input.resource.id, "technical");
+    if (input.authorizingTaskId) {
+      const origin = await this.task(client, input.authorizingTaskId);
+      if (this.resource(origin).kind !== input.resource.kind || this.resource(origin).id !== input.resource.id) digitalForbidden();
+      await new DigitalProductionAccessPolicy(client).assert(actor, "task", input.authorizingTaskId, "execute");
+    } else await new DigitalProductionAccessPolicy(client).assert(actor, input.resource.kind, input.resource.id, "technical");
     const column = input.resource.kind === "order" ? "production_order_id" : "source_id";
     const existing = (await client.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.${column}=$1 AND a.task_kind=$2 AND t.occurrence=$3`, [input.resource.id, input.kind, input.occurrence])).rows[0];
     if (existing) fail("本轮该节点任务已经存在");
@@ -282,7 +286,7 @@ export class DigitalProductionTaskService {
     const canManage = isDigitalLeader(actor) || ((task.task_kind.startsWith("development_") || task.task_kind === "bulk_pattern") && (isDigitalTechnicalManager(actor) || actor.actorRoles.includes("development_clerk")));
     const canControl = isDigitalLeader(actor) || (resource.kind === "order" ? actor.actorRoles.includes("order_merchandiser") && parent.primary_merchandiser_id === actor.actorId : actor.actorRoles.includes("sample_designer") && parent.created_by === actor.actorId);
     const assignee = task.assignee_id ? (await this.database.query("SELECT display_name FROM app_users WHERE id=$1", [task.assignee_id])).rows[0]?.display_name ?? null : null;
-    const route = (await this.database.query("SELECT count(*)::int AS applicable,count(*) FILTER(WHERE state='completed')::int AS completed,count(*) FILTER(WHERE state='cancelled')::int AS cancelled FROM digital_production_tasks WHERE route_instance_id=$1", [task.route_instance_id])).rows[0];
+    const route = (await this.database.query("SELECT count(*)::int AS applicable,count(*) FILTER(WHERE state='completed')::int AS completed,count(*) FILTER(WHERE state='cancelled')::int AS cancelled FROM digital_production_tasks t WHERE route_instance_id=$1 AND node_key<>'development_material_supply' AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned')", [task.route_instance_id])).rows[0];
     const handover = await this.database.query("SELECT 1 FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='handover_received'", [id]);
     return { taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: currentPolicy.label as string,
       routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage, canControl, canCorrect: isDigitalLeader(actor) || isDigitalTechnicalManager(actor),
