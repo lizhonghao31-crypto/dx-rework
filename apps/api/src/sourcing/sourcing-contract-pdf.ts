@@ -206,10 +206,12 @@ const renderStructuredContractPdf = async (
   layout: StructuredContractLayout,
 ): Promise<Buffer> => {
   const polished = layout === "v3";
+  const parsedDate = new Date(`${snapshot.contractDate}T00:00:00Z`);
+  const metadataDate = Number.isNaN(parsedDate.getTime()) ? new Date(0) : parsedDate;
   const document = new PDFDocument({
     size: "A4", margin: 32, bufferPages: true,
-    info: { Title: snapshot.contractTitle ?? "服装加工合同", CreationDate: Number.isNaN(Date.parse(`${snapshot.contractDate}T00:00:00Z`)) ? new Date(0) : new Date(`${snapshot.contractDate}T00:00:00Z`),
-      ModDate: new Date(`${snapshot.contractDate}T00:00:00Z`) },
+    info: { Title: snapshot.contractTitle ?? "服装加工合同", CreationDate: metadataDate,
+      ModDate: metadataDate },
   });
   const chunks: Buffer[] = [];
   const completed = new Promise<Buffer>((resolve, reject) => {
@@ -311,11 +313,12 @@ const renderStructuredContractPdf = async (
 
   // Keep the responsibility clause intact; only the dynamic responsibility segment is red.
   document.fontSize(9);
-  const [responsibilityPrefix,responsibilitySuffix] = (snapshot.terms.processingResponsibility && (snapshot.templateVersion ?? 1)>=4
-    ? snapshot.terms.processingResponsibility : "乙方负责{{工艺}}，甲方提供样板及面/辅料。").split("{{工艺}}");
-  const customResponsibility = (snapshot.templateVersion ?? 1)>=4 && !snapshot.terms.processingResponsibility?.includes("{{工艺}}");
-  const responsibility = customResponsibility ? `二、${snapshot.terms.processingResponsibility ?? ""}`
-    : `二、${responsibilityPrefix}${snapshot.processes.join("、")}${responsibilitySuffix}`;
+  const responsibilityClause = (snapshot.templateVersion ?? 1)>=4
+    ? snapshot.terms.processingResponsibility ?? "" : "乙方负责{{工艺}}，甲方提供样板及面/辅料。";
+  const responsibilityParts = responsibilityClause.split("{{工艺}}");
+  const [responsibilityPrefix,responsibilitySuffix] = responsibilityParts;
+  const customResponsibility = responsibilityParts.length !== 2;
+  const responsibility = `二、${responsibilityClause.replaceAll("{{工艺}}",snapshot.processes.join("、"))}`;
   const responsibilityHeight = document.heightOfString(responsibility, { width, lineGap: 2 });
   if (y + responsibilityHeight > bottom && responsibilityHeight < bottom - 32) { document.addPage(); y = 32; }
   if (customResponsibility) document.fillColor("#111111").text(responsibility,32,y,{width,lineGap:2});

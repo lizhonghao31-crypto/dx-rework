@@ -13,3 +13,4 @@
 .contract-content-editor input,.contract-content-editor textarea { width:100%; box-sizing:border-box; padding:8px; font:inherit; }
 .contract-content-editor textarea { resize:vertical; }
 .contract-content-image { max-width:200px; max-height:160px; object-fit:contain; }
+.contract-content-editor .system-dialog__actions { flex-wrap:wrap; }

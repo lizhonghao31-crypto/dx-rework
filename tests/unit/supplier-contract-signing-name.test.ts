@@ -1,3 +1,4 @@
+import { loadContractContent } from "../../apps/api/src/sourcing/sourcing-contract-content.js";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { draftFromProfile, type SupplierProfile } from "../../apps/web/src/supplier-profile-draft.js";
@@ -35,11 +36,19 @@ describe("optional supplier contract signing name", () => {
       .toBe("广州市嘉顺服装有限公司");
   });
 
-  it("does not count signing name as a new-contract missing field and renders supplier name as fallback", () => {
+  it("does not count signing name as a new-contract missing field and renders supplier name as fallback", async () => {
     const service = source("apps/api/src/sourcing/sourcing-contract-service.ts");
     expect(service).toContain("'contractEntityName',COALESCE(snapshot.contract_entity_name,snapshot.supplier_name_snapshot)");
     expect(service).not.toContain("CASE WHEN snapshot.contract_entity_name IS NULL THEN 'contractEntityName' END");
-    expect(service).toContain('partyBName: value("contractEntityName") || String(approval.supplierName ?? "")');
+    for (const [legalName,supplements,expected] of [
+      [null,[],"嘉顺制衣"],["",[],"嘉顺制衣"],["广州市嘉顺服装有限公司",[],"广州市嘉顺服装有限公司"],
+      [null,[{field_name:"contractEntityName",field_value:"本单补充签约名称"}],"本单补充签约名称"],
+    ] as const) {
+      let queryCount=0;
+      const database={query:async()=>({rows:queryCount++===0?[{template_version:4,contract_number:"DX-WF-20260930-000001",party_a_name:"甲方",signing_place:"广州",terms:{},
+        approval_snapshot:{supplierName:"嘉顺制衣",contractEntityName:legalName,approvedAt:"2026-09-30T00:00:00Z",quantity:20,totalAmount:"200.00",lines:[]}}]:supplements})};
+      expect((await loadContractContent(database as never,"document")).partyBName).toBe(expected);
+    }
   });
 
   it("projects supplier name as the current fallback and releases existing pending documents from the old missing marker", () => {

@@ -43,4 +43,17 @@ describe("Root contract content",()=>{
       expect(text).not.toContain("undefined");expect(text).not.toContain("{{工艺}}");
     }finally{await document.destroy?.();}
   });
+  it("keeps arbitrary date text and repeated process placeholders without corrupting or truncating the PDF",async()=>{
+    const pdf=await renderSourcingContractPdf({...content,contractDate:"2026年10月1日",templateVersion:4,
+      terms:{...content.terms,processingResponsibility:"负责{{工艺}}；复核{{工艺}}；完整末尾约定。"}});
+    expect(pdf.toString("latin1")).not.toContain("NaN");
+    const task=getDocument({data:new Uint8Array(pdf),useSystemFonts:false});
+    const document=await task.promise;
+    try {
+      let text="";for(let page=1;page<=document.numPages;page++)text+=(await (await document.getPage(page)).getTextContent()).items.flatMap(item=>"str" in item?[item.str]:[]).join("");
+      expect(text.replace(/\s/g,"")).toContain("负责人工工艺；复核人工工艺；完整末尾约定。");
+      expect(text.replace(/\s/g,"")).toContain("2026年10月1日");
+    } finally {await task.destroy();}
+  });
+
 });
