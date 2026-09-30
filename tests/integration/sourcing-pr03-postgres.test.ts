@@ -3140,6 +3140,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
 
   it("lets only Root append a complete contract-only edit, preserving approvals, PDFs, returns and supplier refresh inheritance",async()=>{
+    const rootReader={...rootActor(),authorizationCapability:"sourcing:view"};
     const created=await service.createCase(merchandiserActor(),{gender:"女装",styleName:"人工修改合同测试",estimatedCutPieceSendDate:"2026-10-01",deliveryDate:"2026-10-20",
       lineItems:[{styleNo:"MANUAL-CONTRACT",color:"红",quantity:20}],daxingUnitPrice:"8"},randomUUID());
     const id=created.value.sourcingCaseId;
@@ -3180,7 +3181,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[original.sourcingContractDocumentId])).rows[0]).toEqual(originalRow);
     expect((await database.query("SELECT * FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1",[id])).rows[0]).toEqual(clock);
     expect((await database.query("SELECT entity_type,entity_id FROM attachments WHERE attachment_id=$1",[intent.attachmentId])).rows[0]).toMatchObject({entity_type:"sourcing_contract_document",entity_id:doc});
-    expect((await service.getCase(rootActor(),id)).quantity).toBe(20);
+    expect((await service.getCase(rootReader,id)).quantity).toBe(20);
     await expect(contractService.content.save(rootActor(),id,input,randomUUID())).rejects.toMatchObject({statusCode:409});
     await expect(database.query("UPDATE sourcing_contract_content_overrides SET content='{}' WHERE sourcing_contract_document_id=$1",[doc])).rejects.toMatchObject({code:"55000"});
     const template=(await contractService.management.templates(rootActor())).item;
@@ -3200,12 +3201,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
       VALUES($1,$2,'人工合同回签.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[returnId,`manual-return/${returnId}`,"a".repeat(64),merchandiserId]);
     await contractReturns.submit(contractActor(),id,[returnId],randomUUID());
-    const returned=await contractReturns.get(rootActor(),id);
+    const returned=await contractReturns.get(rootReader,id);
     expect(returned.signedContractNumber).toBe("本单人工编号");
     const returnedDraft=await contractService.content.get(rootActor(),id);
     const next=await contractService.content.save(rootActor(),id,{...returnedDraft,content:{...returnedDraft.content,deliveryDate:"2026-12-01"}},randomUUID());
     await contractService.generateIfReady(rootActor(),id,next);
-    expect(await contractReturns.get(rootActor(),id)).toMatchObject({currentContractReturned:false,contractReturnedAt:returned.contractReturnedAt,contractReturnDueAt:returned.contractReturnDueAt});
+    expect(await contractReturns.get(rootReader,id)).toMatchObject({currentContractReturned:false,contractReturnedAt:returned.contractReturnedAt,contractReturnDueAt:returned.contractReturnDueAt});
   });
 
   it.each(["match","difference"] as const)("permanently locks Root edits after finance %s, including drafts opened before reconciliation",async result=>{
