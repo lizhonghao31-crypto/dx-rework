@@ -1,3 +1,4 @@
+import {DigitalProductionAccessPolicy} from "../production-platform/access-policy.js";
 import {DigitalDevelopmentService} from "../production-platform/development-service.js";
 import type { PatternHistorySelection } from "./order-history.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -188,11 +189,43 @@ export class PatternRoomOrderService {
       const { order, round } = await this.target(client, effective, orderId, parsed, "in_progress");
       const segment = (await client.query<PatternSegmentRow>("SELECT * FROM pattern_room_segments WHERE round_id=$1 AND ended_at IS NULL FOR UPDATE", [round.round_id])).rows[0];
       if (!segment || (!isPatternRoot(effective) && segment.worker_user_id !== effective.actorId)) throw new ApplicationError("FORBIDDEN", "只有当前执行工人可以报完工", 403);
+      await this.recordWorkCompletion(client,effective,order,round,segment);
+      return orderId;
+    });
+  }
+
+
+  // Completion facts may come from the assigned development task without moving wage ownership.
+  async completeDevelopment(actor: TrustedActorContext, sourceId: string, taskId: string, orderId: string, input: unknown) {
+    const client=this.options.transactionClient;
+    if(!client) throw new ApplicationError("CONFLICT","开发车板完工须在业务事务内执行",409);
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+    await new DigitalProductionAccessPolicy(client).assert(actor,"task",taskId,"execute");
+    const effective=await authorizePatternOrder(client,actor,"pattern_room:orders:complete",this.enabled);
+    const linked=(await client.query(`SELECT 1 FROM digital_production_tasks t
+      JOIN digital_production_task_access a USING(task_id)
+      JOIN digital_development_pattern_links l ON l.source_id=a.source_id
+      JOIN digital_development_route_facts f ON f.task_id=t.task_id AND f.source_id=a.source_id AND f.route_version=t.route_version
+      WHERE t.task_id=$1 AND a.source_id=$2 AND l.order_id=$3 AND a.task_kind='development_sewing'
+        AND t.state='ready' AND f.kind='车板完成' AND f.actor_id=$4`,[taskId,sourceId,orderId,effective.actorId])).rowCount;
+    if(!linked) throw new ApplicationError("FORBIDDEN","仅本开发单当前车板任务的有效完工可衔接原打板",403);
+    const parsed=parse(PatternRoundActionSchema,input);
+    const order=(await client.query<PatternOrderRow>("SELECT * FROM pattern_room_orders WHERE order_id=$1 AND deleted_at IS NULL FOR UPDATE",[orderId])).rows[0];
+    if(!order||order.kind!=="pattern"||order.version!==parsed.version||order.current_round_id!==parsed.roundId||order.status!=="in_progress")
+      throw new ApplicationError("CONFLICT","原打板订单或轮次已变化，请刷新",409);
+    const round=(await client.query<PatternRoundRow>("SELECT * FROM pattern_room_rounds WHERE round_id=$1 AND order_id=$2 FOR UPDATE",[parsed.roundId,orderId])).rows[0];
+    const segment=(await client.query<PatternSegmentRow>("SELECT * FROM pattern_room_segments WHERE round_id=$1 AND ended_at IS NULL FOR UPDATE",[parsed.roundId])).rows[0];
+    if(!round||round.status!=="in_progress"||!segment) throw new ApplicationError("CONFLICT","原打板执行段尚不可完工",409);
+    await this.recordWorkCompletion(client,effective,order,round,segment,taskId);
+    return {orderId};
+  }
+  private async recordWorkCompletion(client: PoolClient, effective: TrustedActorContext, order: PatternOrderRow, round: PatternRoundRow, segment: PatternSegmentRow, developmentTaskId?: string) {
+    const orderId=order.order_id,action="pattern_room.order.work_completed";
       await client.query("UPDATE pattern_room_segments SET ended_at=CURRENT_TIMESTAMP,worker_completed_at=CURRENT_TIMESTAMP WHERE segment_id=$1", [segment.segment_id]);
       await client.query("UPDATE pattern_room_rounds SET status='pending_confirmation',completed_at=CURRENT_TIMESTAMP WHERE round_id=$1", [round.round_id]);
       await client.query("UPDATE pattern_room_orders SET status='pending_confirmation',version=version+1,updated_at=CURRENT_TIMESTAMP WHERE order_id=$1", [orderId]);
       await this.moveNode(client, round.round_id, "pending_confirmation");
-      const eventId = await this.event(client, effective, action, orderId, round.round_id, { segmentId: segment.segment_id, awaitingDesignerHandoff: order.kind === "pattern", awaitingCreatorConfirmation: order.kind === "misc" });
+      const eventId = await this.event(client, effective, action, orderId, round.round_id, { segmentId: segment.segment_id, awaitingDesignerHandoff: order.kind === "pattern", awaitingCreatorConfirmation: order.kind === "misc", ...(developmentTaskId ? {developmentTaskId,executorUserId:effective.actorId,wageWorkerUserId:segment.worker_user_id} : {}) });
       if (order.kind === "misc") await this.qualifyMisc(client, round.round_id);
       await this.todos.completeOpenByDedupeKey(client, effective, patternTodoKey(orderId, round.round_id, `execution:${segment.segment_id}`), "工人已完工");
       if (this.enabled) {
@@ -210,8 +243,6 @@ export class PatternRoomOrderService {
         await this.todos.information(client, effective, { category: "pattern_room_completion_notice", sourceEventId: eventId, sourceAction: action, entityType: "pattern_room_order", entityId: orderId,
           recipientUserId: recipient, route: { routeName: "pattern_room_order", entityId: orderId, roundId: round.round_id }, dedupeKey: patternTodoKey(orderId, round.round_id, `completion-notice:${recipient}`) });
       }
-      return orderId;
-    });
   }
 
   handoff(actor: TrustedActorContext, orderId: string, input: unknown, key: string) { return this.confirmOrder(actor, orderId, "pattern", input, key); }

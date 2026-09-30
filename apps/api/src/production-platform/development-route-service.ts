@@ -38,7 +38,7 @@ export class DevelopmentRouteService {
    const next=await service.createWithClient(db,actor,{resource:{kind:'source',id:sourceId},authorizingTaskId:taskId,kind,routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:task.route_version,assigneeId:await this.recipient(db,sourceId,kind,nextAssigneeId),predecessors:[taskId]});
    const now=new Date().toISOString();
    if(kind==='development_sewing'){
-     await service.setConditionWithClient(db,actor,next.taskId,'handover_received',true,now,'文员转交车板');
+     await service.setConditionWithClient(db,actor,next.taskId,'handover_received',true,now,sheet.document!.craft==='无'?'裁板完成交车板':'文员转交车板');
      if(!missingSewingMaterials(sheet.document!,sheet.materialEvents).length)await service.setConditionWithClient(db,actor,next.taskId,'materials_ready',true,now,'本轮物料齐备');
    }
    if(kind==='development_washing')await service.setConditionWithClient(db,actor,next.taskId,'handover_received',true,now,'文员登记实际送洗');
@@ -74,7 +74,7 @@ export class DevelopmentRouteService {
      const original=this.patternOrders!.inTransaction(db);
      if(task.task_kind==='development_shipping'&&input.sentDate&&input.sentDate>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'}))fail('实际寄出日期不能晚于今天');
    if(task.task_kind==='development_sewing'){
-       if(native.status==='in_progress')await original.complete(actor,native.order_id,{roundId:native.current_round_id,version:native.version},`development-work:${key}`);
+       if(native.status==='in_progress')await original.completeDevelopment(actor,sourceId,input.taskId,native.order_id,{roundId:native.current_round_id,version:native.version});
        else if(native.status!=='pending_confirmation')fail('原打板执行状态不允许报车板完成');
      }else{
        if(native.status==='pending_confirmation')await original.handoff(actor,native.order_id,{roundId:native.current_round_id,version:native.version},`development-final:${key}`);

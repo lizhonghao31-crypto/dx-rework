@@ -3110,7 +3110,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   });
 
   it("P07 development routes preserve original pattern wages and final confirmation",async()=>{
-    await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"));
+    await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker);
   });
 
 });

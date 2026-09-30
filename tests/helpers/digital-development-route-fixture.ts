@@ -1,3 +1,4 @@
+import {DigitalProductionTaskService} from "../../apps/api/src/production-platform/task-service.js";
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import {expect} from 'vitest';
@@ -9,8 +10,8 @@ import {digitalTodoTarget} from '../../apps/api/src/production-platform/notifica
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
 import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
 import type {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
-export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionService,root:TrustedActorContext,workerId:string,workerPersonId:string,qc:TrustedActorContext){
- const native=new PatternRoomOrderService(db,todos),execution=new DevelopmentExecutionService(db,true,native),forms=new DigitalDevelopmentService(db,true),identity=new DigitalProductionIdentityService(db,true);
+export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionService,root:TrustedActorContext,workerId:string,workerPersonId:string,qc:TrustedActorContext,replacementWorkerId:string){
+ const native=new PatternRoomOrderService(db,todos,{ordersEnabled:true}),execution=new DevelopmentExecutionService(db,true,native),forms=new DigitalDevelopmentService(db,true),identity=new DigitalProductionIdentityService(db,true);
  for(const [craft,washing]of [['无','免洗'],['印花','内洗'],['绣花','外洗'],['印绣花','免洗']] as const){
   const source=await identity.createSource(root,{developmentType:'头版',designStyleNo:`P07-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID());
   const sourceId=source.sourceId,fileId=randomUUID(),mainId=randomUUID(),trimId=randomUUID();
@@ -41,11 +42,33 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
    await route(kind);await route('development_craft_confirmation');
    expect((await db.query('SELECT count(*)::int n FROM pattern_room_segments WHERE round_id=$1 AND wage_eligible_at IS NOT NULL',[order.currentRoundId])).rows[0].n).toBe(0);
   }
-  await route('development_sewing_transfer');expect(await task('development_sewing')).toMatchObject({state:'pending',enteredAt:null});
+  if(craft!=='无')await route('development_sewing_transfer');
+  else expect(await task('development_sewing_transfer')).toBeUndefined();
+  expect(await task('development_sewing')).toMatchObject({state:'pending',enteredAt:null});
   await expect(route('development_sewing')).rejects.toMatchObject({statusCode:409});
   await forms.materialEvent(root,sourceId,trimId,{expectedVersion:sheet.version,expectedMaterialRevision:0,action:'确认代用',expectedDate:null,note:'设计师确认代用'},randomUUID());
   expect(await task('development_sewing')).toMatchObject({state:'ready',slaHours:24});
-  await route('development_sewing');order=await native.get(root,order.orderId);
+  const sewing=await task('development_sewing'),digitalTasks=new DigitalProductionTaskService(db);
+  const executorId=craft==='无'?replacementWorkerId:workerId;
+  if(craft==='无')await digitalTasks.reassign(root,sewing.taskId,executorId,randomUUID());
+  const executor:TrustedActorContext={actorId:executorId,actorRoles:['pattern_room_worker'],authorizationCapability:'pattern_room:orders:complete',authorizationCapabilities:['pattern_room:orders:complete','pattern_room:orders:view','digital_production:view'],requestId:randomUUID()};
+  const completion={taskId:sewing.taskId,result:'通过' as const,note:'实际任务执行人完工',craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null},completionKey=randomUUID();
+  if(craft==='无'){
+    await expect(native.complete(executor,order.orderId,{roundId:order.currentRoundId,version:order.version},randomUUID())).rejects.toMatchObject({statusCode:404});
+    await expect(execution.route({...executor,actorId:workerId},sourceId,completion,randomUUID())).rejects.toMatchObject({statusCode:404});
+    const client=await db.connect();try{
+      await client.query('BEGIN');
+      await expect(native.inTransaction(client).completeDevelopment(executor,randomUUID(),sewing.taskId,order.orderId,{roundId:order.currentRoundId,version:order.version})).rejects.toMatchObject({statusCode:403});
+      await client.query('ROLLBACK');
+    }finally{client.release();}
+  }
+  await execution.route(executor,sourceId,completion,completionKey);
+  await execution.route(executor,sourceId,completion,completionKey);
+  order=await native.get(root,order.orderId);
+  expect(order.status).toBe('pending_confirmation');
+  const segments=(await db.query('SELECT worker_user_id,wage_eligible_at FROM pattern_room_segments WHERE round_id=$1',[order.currentRoundId])).rows;
+  expect(segments).toHaveLength(1);expect(segments[0]).toMatchObject({worker_user_id:workerId,wage_eligible_at:null});
+  expect((await db.query("SELECT actor_id,after_state FROM operation_events WHERE entity_id=$1 AND action='pattern_room.order.work_completed'",[order.orderId])).rows).toMatchObject([{actor_id:executorId,after_state:{value:{developmentTaskId:sewing.taskId,executorUserId:executorId,wageWorkerUserId:workerId}}}]);
   await expect(native.handoff(root,order.orderId,{roundId:order.currentRoundId,version:order.version},randomUUID())).rejects.toMatchObject({statusCode:409});
   if(washing!=='免洗'){expect(await task('development_tail_check')).toBeUndefined();expect(await task('development_washing')).toBeUndefined();await execution.sendWashing(root,sourceId,(await task('development_washing_dispatch')).taskId,'文员实际送洗',randomUUID());expect((await task('development_washing')).slaHours).toBe(24);await route('development_washing');}
   const tail=await task('development_tail_check');expect(tail).toMatchObject({state:'ready',slaHours:4});

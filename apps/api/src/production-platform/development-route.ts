@@ -7,9 +7,9 @@ export function developmentRoute(document: Pick<DevelopmentDocument,'craft'|'was
   if(document.craft!=='无') {
     route.push('development_craft_dispatch');
     route.push(document.craft==='印花'?'development_printing':document.craft==='绣花'?'development_embroidery':'development_print_embroidery');
-    route.push('development_craft_confirmation');
+    route.push('development_craft_confirmation','development_sewing_transfer');
   }
-  route.push('development_sewing_transfer','development_sewing');
+  route.push('development_sewing');
   if(document.washing!=='免洗') route.push('development_washing_dispatch','development_washing');
   route.push('development_tail_check','development_confirmation','development_shipping');
   return route;
