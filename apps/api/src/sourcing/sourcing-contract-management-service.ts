@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import {
   CONTRACT_SUPPLIER_FIELDS, CONTRACT_TERM_LABELS, ContractTemplateSchema,
-  type ContractTemplate, type ContractTemplateContent, type ContractTemplateState,
+  type ContractTemplate, type ContractTemplateContent, type ContractTemplateState, type ContractContent,
   type ContractRefreshPreview, type SaveContractTemplate, type RefreshContractInformation,
 } from "@dx-rework/contracts";
 import { memberCanWriteModule } from "../access/member-module-policy.js";
@@ -111,6 +111,16 @@ export class SourcingContractManagementService {
     return row;
   }
 
+  private async override(db:Queryable,row:CurrentContract):Promise<ContractContent | null> {
+    return (await db.query<{content:ContractContent}>("SELECT content FROM sourcing_contract_content_overrides WHERE sourcing_contract_document_id=$1",[row.sourcing_contract_document_id])).rows[0]?.content ?? null;
+  }
+  private async effectiveSupplier(db:Queryable,row:CurrentContract):Promise<Record<string,unknown>> {
+    const supplements=(await db.query<{field_name:string;field_value:string}>("SELECT field_name,field_value FROM sourcing_contract_supplements WHERE sourcing_contract_document_id=$1",[row.sourcing_contract_document_id])).rows;
+    const content=await this.override(db,row);
+    return {...row.approval_snapshot,...Object.fromEntries(supplements.map(x=>[x.field_name,x.field_value])),...(content?{
+      contractEntityName:content.partyBName,address:content.partyBAddress,partyBRepresentative:content.partyBRepresentative,
+      payeeName:content.payeeName,bankAccount:content.bankAccount,bankName:content.bankName}: {})};
+  }
   private async supplier(db: Queryable, row: CurrentContract): Promise<{values:SupplierValues;hash:string}> {
     // The catalog view substitutes supplier_name for an absent legal entity.
     // Read the raw version field so that substitution cannot erase contract-only values.
@@ -123,9 +133,7 @@ export class SourcingContractManagementService {
       WHERE catalog.supplier_id=$1`,[row.approval_snapshot.supplierId])).rows[0];
     if (!profile) throw new ApplicationError("NOT_FOUND","供应商资料不存在",404);
     // Contract-only supplements remain valid when the master profile still has no value.
-    const supplements = (await db.query<{field_name:string;field_value:string}>(
-      "SELECT field_name,field_value FROM sourcing_contract_supplements WHERE sourcing_contract_document_id=$1",[row.sourcing_contract_document_id])).rows;
-    const old = {...row.approval_snapshot,...Object.fromEntries(supplements.map(x=>[x.field_name,x.field_value]))};
+    const old = await this.effectiveSupplier(db,row);
     const values = Object.fromEntries((Object.keys(CONTRACT_SUPPLIER_FIELDS) as SupplierField[]).map(field=>[
       field,profile.values[field] || String(old[field] ?? (field === "contractEntityName" ? old.supplierName ?? "" : "")),
     ])) as SupplierValues;
@@ -133,9 +141,7 @@ export class SourcingContractManagementService {
   }
 
   private async differences(db: Queryable, row: CurrentContract, values: SupplierValues): Promise<ContractRefreshPreview["changes"]> {
-    const supplements = (await db.query<{field_name:string;field_value:string}>(
-      "SELECT field_name,field_value FROM sourcing_contract_supplements WHERE sourcing_contract_document_id=$1",[row.sourcing_contract_document_id])).rows;
-    const old = {...row.approval_snapshot,...Object.fromEntries(supplements.map(x=>[x.field_name,x.field_value]))};
+    const old = await this.effectiveSupplier(db,row);
     return (Object.keys(CONTRACT_SUPPLIER_FIELDS) as SupplierField[]).flatMap(field => {
       const before = String(old[field] ?? (field === "contractEntityName" ? old.supplierName ?? "" : ""));
       return before === values[field] ? [] : [{field,before,after:values[field]}];
@@ -154,8 +160,10 @@ export class SourcingContractManagementService {
 
   private async templateDifferences(db:Queryable,row:CurrentContract,latest:ContractTemplate):Promise<ContractRefreshPreview["changes"]> {
     if(Number(row.template_version)===latest.templateVersion)return [];
-    const previous = (await db.query<{party_a_name:string;party_a_address:string;signing_place:string;terms:Record<string,string>}>(
+    const stored = (await db.query<{party_a_name:string;party_a_address:string;signing_place:string;terms:Record<string,string>}>(
       "SELECT * FROM sourcing_contract_template_versions WHERE template_version=$1",[row.template_version])).rows[0]!;
+    const content=await this.override(db,row);
+    const previous=content ? {party_a_name:content.partyAName,party_a_address:content.partyAAddress,signing_place:content.signingPlace,terms:content.terms} : stored;
     const changes:ContractRefreshPreview["changes"]=[{field:"templateVersion",before:`V${row.template_version}`,after:`V${latest.templateVersion}`}];
     for(const field of ["partyAName","partyAAddress","signingPlace"] as const){
       const before={partyAName:previous.party_a_name,partyAAddress:previous.party_a_address,signingPlace:previous.signing_place}[field]??"";
@@ -191,9 +199,13 @@ export class SourcingContractManagementService {
         const changes = [...await this.differences(client,row,profile.values),...await this.templateDifferences(client,row,latest)];
         if (!changes.length) return {statusCode:200,response:{documentId:row.sourcing_contract_document_id}};
         const id = randomUUID();
+        const previousContent=await this.override(client,row);
+        const inherited=previousContent ? {...previousContent,partyBName:profile.values.contractEntityName,partyBAddress:profile.values.address,
+          partyBRepresentative:profile.values.partyBRepresentative,payeeName:profile.values.payeeName,bankAccount:profile.values.bankAccount,bankName:profile.values.bankName,
+          ...(Number(row.template_version)!==latest.templateVersion?{partyAName:latest.partyAName,partyAAddress:latest.partyAAddress,signingPlace:latest.signingPlace,terms:latest.terms}:{})} : null;
         const eventId = await this.events.append(client,actor,{action:"sourcing.contract.information.refresh",
           entityType:"sourcing_contract_document",entityId:id,
-          before:{documentId:row.sourcing_contract_document_id},after:{supplierValues:profile.values,templateVersion:latest.templateVersion,changes,returned:row.returned},
+          before:{documentId:row.sourcing_contract_document_id},after:{supplierValues:profile.values,templateVersion:latest.templateVersion,changes,returned:row.returned,...(inherited?{mode:"inherit_content",content:inherited}:{})},
           reason:row.returned?"Root更新已回传合同信息":"同步最新供应商资料及合同模板"});
         const supplements = (await client.query<{field_name:string;field_value:string}>(
           "SELECT field_name,field_value FROM sourcing_contract_supplements WHERE sourcing_contract_document_id=$1",[row.sourcing_contract_document_id])).rows;
@@ -206,6 +218,7 @@ export class SourcingContractManagementService {
             $6,$7,'{}','generation_pending',$8,$9,$10,$11,$12)`,
           [id,caseId,row.sourcing_approval_snapshot_id,row.sourcing_decision_id,Number(row.contract_version)+1,latest.templateVersion,
             snapshot,actor.actorId,row.identity_version,row.sourcing_contract_document_id,Number(row.information_revision)+1,eventId]);
+        if (inherited) await client.query("INSERT INTO sourcing_contract_content_overrides(sourcing_contract_document_id,content,operation_event_id) VALUES($1,$2,$3)",[id,inherited,eventId]);
         return {statusCode:200,response:{documentId:id}};
       });
       await client.query("COMMIT");

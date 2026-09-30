@@ -1437,7 +1437,7 @@ export class SourcingService {
         || (actor.authorizationCapabilities ?? []).includes(READ_CAPABILITY);
     }
     if (binding.entityType === "sourcing_contract_document"
-      && binding.mimeType === "application/pdf") {
+      && ["application/pdf","image/jpeg","image/png","image/webp"].includes(binding.mimeType)) {
       return actor.actorRoles.includes(ROOT_ROLE)
         || (
           (actor.authorizationCapabilities ?? []).includes(READ_CAPABILITY)

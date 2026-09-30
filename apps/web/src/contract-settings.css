@@ -7,3 +7,9 @@
 .contract-supplier-dialog { max-height:85dvh; overflow-y:auto; }
 .contract-supplier-changes { display:grid; gap:12px; max-height:50dvh; overflow-y:auto; }
 .contract-supplier-change { display:grid; gap:4px; overflow-wrap:anywhere; }
+
+.contract-content-editor { width:min(900px,calc(100vw - 32px)); }
+.contract-content-editor label { display:grid; gap:4px; }
+.contract-content-editor input,.contract-content-editor textarea { width:100%; box-sizing:border-box; padding:8px; font:inherit; }
+.contract-content-editor textarea { resize:vertical; }
+.contract-content-image { max-width:200px; max-height:160px; object-fit:contain; }
