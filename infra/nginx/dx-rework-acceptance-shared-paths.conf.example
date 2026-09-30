@@ -7,6 +7,18 @@ location = /acceptance {
     return 308 /acceptance/ui/acceptance-lab;
 }
 
+# Private short-lived file grants must not appear in proxy logs.
+location ^~ /acceptance/api/acceptance-files/ {
+    client_max_body_size 21m;
+    access_log off;
+    error_log /dev/null emerg;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Request-Id $request_id;
+    proxy_pass http://127.0.0.1:3202/acceptance-files/;
+}
+
 location ^~ /acceptance/api/ {
     proxy_http_version 1.1;
     proxy_set_header Host $host;

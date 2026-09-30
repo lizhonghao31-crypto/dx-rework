@@ -260,3 +260,24 @@ final_decision: accepted / fix-required
 ```
 
 “部署通过”与“业务验收通过”必须分开记录。
+
+## 9. Acceptance 隔离附件存储
+
+Acceptance 启动通过既有独立数据库和 uat-root 校验后，自动使用
+`/opt/dx-rework-acceptance/shared/attachments` 保存真实测试附件；首次上传由
+`dxacceptance` 创建目录（0700），文件0600。目录位于release外，更新及重启保留附件。
+不需要新增环境变量、OSS凭证或数据库migration；不允许接入生产OSS。
+首次启用需将仓库shared-paths模板中的 `/acceptance/api/acceptance-files/` 专用location
+补入现有Acceptance配置：请求上限21MiB（含multipart开销），关闭带短期授权的文件访问日志。
+先执行 `nginx -t`，通过后reload；只增加Acceptance文件路径，不替换生产server块。
+后续更新不重复此步骤。
+生产仍使用原OSS实现。前端上传、业务权限、附件绑定、发布必填校验保持原路径。
+
+上传授权只允许指定文件类型、大小和SHA256，最长5分钟；并发或重复上传不能覆盖。
+下载仍先经过原业务权限校验获取短期地址。每文件上限20MiB，测试附件会占用ECS磁盘，
+运维应计入验收磁盘使用量。此适配器用于附件业务验收，不代表OSS云端签名和图片处理验收通过；
+缩略图请求返回原图，生产缩略图处理保持不变。不要单独清空目录，否则数据库附件引用会失效。
+
+本次更新仅后端代码和文档变化，依赖及schema不变。按既有本机candidate更新路径构建API，
+保留同SHA候选manifest一致性；无需重建环境、执行migration或配置真实OSS。
+部署后在测试开发单上传PNG和PDF、保存重开、查看附件，再发布并继续岗位接力验收。
