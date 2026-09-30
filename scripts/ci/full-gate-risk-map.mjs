@@ -24,6 +24,16 @@ const TESTS = Object.freeze({
   ],
 });
 
+// Case modules are imported by runnable Vitest suites, never CLI entry points.
+export const POSTGRES_CASE_SUITES = Object.freeze({
+  "tests/integration/receiving-analysis-postgres.cases.ts": "tests/integration/receiving-postgres.test.ts",
+  "tests/integration/work-analysis-postgres.cases.ts": "tests/integration/sourcing-pr03-postgres.test.ts",
+  "tests/integration/production-analysis-postgres.cases.ts": "tests/integration/production-closure-postgres.test.ts",
+  "tests/integration/sample-analysis-postgres.cases.ts": "tests/integration/sample-read-postgres.test.ts",
+  "tests/integration/member-module-policy-postgres.cases.ts": "tests/integration/full-business-chain-postgres.test.ts",
+  "tests/integration/own-tail-responsibility-history.cases.ts": "tests/integration/own-tail-responsibility-history-postgres.test.ts",
+});
+
 const isMigration = (path) =>
   path.startsWith("apps/api/migrations/")
   || path === "apps/api/src/platform/migration-manifest.json"
@@ -106,10 +116,14 @@ export const classifyFullGatePaths = (inputPaths) => {
       businessChainSensitive = true;
       domains.add("business-chain");
     }
-    if (isPostgresTest(path)) {
+    if (isPostgresTest(path) || Object.hasOwn(POSTGRES_CASE_SUITES, path)) {
       businessChainSensitive = true;
       domains.add("postgres-test");
-      if (existsSync(path)) mappedTests.add(path);
+      if (path.endsWith(".cases.ts")) {
+        const suite = POSTGRES_CASE_SUITES[path];
+        if (!suite && existsSync(path)) throw new Error(`PostgreSQL case module has no mapped suite: ${path}`);
+        if (suite) mappedTests.add(suite);
+      } else if (existsSync(path)) mappedTests.add(path);
     }
     if (matchesAccess(path)) {
       businessChainSensitive = true;
@@ -165,6 +179,7 @@ export const classifyFullGatePaths = (inputPaths) => {
 
 export const assertMappedPostgresTests = (tests) => {
   for (const test of tests) {
+    if (!test.endsWith(".test.ts")) throw new Error(`Mapped PostgreSQL entry is not a runnable test suite: ${test}`);
     if (!existsSync(test)) throw new Error(`Mapped PostgreSQL test does not exist: ${test}`);
     const source = readFileSync(test, "utf8");
     if (!source.includes("TEST_DATABASE_URL")) {

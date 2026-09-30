@@ -10,3 +10,7 @@ forbidden files: 原订单及审批/派单快照写入、财务锁定权限、�
 gate class: FULL
 
 完成标准：当前交期同步、历史日期保留、已保存日期直接生效、财务核对后拒绝修改；各处编号按关联版本一致；款号修订不吞掉待同步模板；本地完整合同回归、Full Gate 和独立 Review。
+
+## Full Gate 测试入口修复
+
+Gate 36686300281 在执行映射的 PostgreSQL 用例时，将 `.cases.ts` 模块误当成 Vitest 独立入口，报 `No test files found`。补齐当前六个共享用例模块到实际 `.test.ts` 导入入口的映射，校验拒绝非测试入口，保留数据库敏感路径升级规则。新增映射回归并修正原样衣策略测试中同样错误的入口预期。修复范围扩展至 `scripts/ci/full-gate-risk-map.mjs` 及其两个单元测试。

@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
+import { basename } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
-import { classifyFullGatePaths } from "../../scripts/ci/full-gate-risk-map.mjs";
+import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES } from "../../scripts/ci/full-gate-risk-map.mjs";
 
 describe("Full Gate sensitive path mapping", () => {
   it.each([
@@ -17,6 +20,22 @@ describe("Full Gate sensitive path mapping", () => {
     expect(result.businessChainSensitive).toBe(true);
     expect(result.domains).toContain(domain);
     for (const test of expectedTests) expect(result.mappedPostgresTests).toContain(test);
+  });
+
+  it.each(Object.entries(POSTGRES_CASE_SUITES))("maps imported module %s to runnable suite %s", (module, suite) => {
+    const result = classifyFullGatePaths([module]);
+    expect(result.dbRequired).toBe(true);
+    expect(result.businessChainSensitive).toBe(true);
+    expect(result.mappedPostgresTests).toEqual([suite]);
+    expect(readFileSync(suite, "utf8")).toContain(basename(module).replace(/\.ts$/, ".js"));
+    expect(() => assertMappedPostgresTests(result.mappedPostgresTests)).not.toThrow();
+  });
+
+  it("deduplicates a case module and its suite and rejects non-runnable entries", () => {
+    const module = "tests/integration/receiving-analysis-postgres.cases.ts";
+    const suite = "tests/integration/receiving-postgres.test.ts";
+    expect(classifyFullGatePaths([module, suite]).mappedPostgresTests).toEqual([suite]);
+    expect(() => assertMappedPostgresTests([module])).toThrow("not a runnable test suite");
   });
 
   it("fails closed for an unknown backend or shared-contract path", () => {
