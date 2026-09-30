@@ -30,7 +30,7 @@ import {
   SupplementSourcingContractSchema,
   SupplementSourcingImagesSchema,
   ContractTemplateContentSchema, ContractTemplateStateSchema, SaveContractTemplateSchema,
-  ContractRefreshPreviewSchema, RefreshContractInformationSchema,
+  ContractRefreshPreviewSchema, RefreshContractInformationSchema, ContractContentStateSchema, SaveContractContentSchema,
 } from "@dx-rework/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
@@ -478,6 +478,28 @@ export function registerSourcingRoutes(
       if (!parsed.success) validationError(parsed.error.issues[0]?.message ?? "模板资料不完整");
       return reply.type("application/pdf").header("Content-Disposition","inline; filename=contract-template-preview.pdf")
         .send(await dependencies.contracts!.management.previewTemplate(actor,parsed.data!));
+    });
+    const contentActor = async (request:FastifyRequest) => {
+      const user = await dependencies.authenticate(token(request));
+      if (!await isRootUser(dependencies.root,user.id)) throw new ApplicationError("FORBIDDEN","仅Root可修改合同内容",403);
+      return businessActor(dependencies.root,user,request.id,"sourcing:contract:record");
+    };
+    app.get<{Params:{sourcingCaseId:string}}>("/sourcing/cases/:sourcingCaseId/contract/content",async request =>
+      ContractContentStateSchema.parse(await dependencies.contracts!.content.get(await contentActor(request),caseId(request.params.sourcingCaseId))));
+    app.post<{Params:{sourcingCaseId:string}}>("/sourcing/cases/:sourcingCaseId/contract/content",{bodyLimit:4*1024*1024},async request => {
+      const actor=await contentActor(request);
+      const parsed=SaveContractContentSchema.safeParse(request.body);
+      if (!parsed.success) validationError(parsed.error.issues[0]?.message ?? "合同内容不完整");
+      const id=caseId(request.params.sourcingCaseId);
+      const documentId=await dependencies.contracts!.content.save(actor,id,parsed.data!,idempotencyKey(request));
+      return SourcingContractStateResponseSchema.parse(await dependencies.contracts!.generateIfReady(actor,id,documentId));
+    });
+    app.post<{Params:{sourcingCaseId:string}}>("/sourcing/cases/:sourcingCaseId/contract/content/preview",{bodyLimit:4*1024*1024},async (request,reply) => {
+      const actor=await contentActor(request);
+      const parsed=SaveContractContentSchema.safeParse(request.body);
+      if (!parsed.success) validationError(parsed.error.issues[0]?.message ?? "合同内容不完整");
+      return reply.type("application/pdf").header("Content-Disposition","inline; filename=contract-content-preview.pdf")
+        .send(await dependencies.contracts!.content.preview(actor,caseId(request.params.sourcingCaseId),parsed.data!));
     });
     app.get<{Params:{sourcingCaseId:string}}>("/sourcing/cases/:sourcingCaseId/contract/refresh",async request =>
       ContractRefreshPreviewSchema.parse(await dependencies.contracts!.management.previewInformation(

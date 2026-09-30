@@ -65,6 +65,15 @@ export class AttachmentService {
     return this.readVerifiedSourcingImage(row);
   }
 
+  async readContractContentImage(sourcingCaseId: string, attachmentId: string): Promise<{bytes:Buffer;sha256:string}> {
+    const row = (await this.pool.query<AttachmentRow>(`SELECT a.* FROM attachments a
+      WHERE a.attachment_id=$1 AND a.status='ready' AND a.mime_type IN ('image/jpeg','image/png','image/webp')
+        AND (a.entity_type='sourcing_case' AND a.entity_id=$2 OR a.entity_type='sourcing_contract_document' AND EXISTS(
+          SELECT 1 FROM sourcing_contract_documents d WHERE d.sourcing_contract_document_id::text=a.entity_id AND d.sourcing_case_id=$2::uuid))`,[attachmentId,sourcingCaseId])).rows[0];
+    if (!row) throw new ApplicationError("ATTACHMENT_NOT_READY","合同款图不存在或不属于本订单",409);
+    return this.readVerifiedSourcingImage(row);
+  }
+
   async readUnboundSourcingImage(client: Pick<PoolClient, "query">, actorId: string, attachmentId: string): Promise<{ bytes: Buffer; sha256: string; filename: string }> {
     const row = (await client.query<AttachmentRow>(`SELECT * FROM attachments
       WHERE attachment_id=$1 AND uploaded_by=$2 AND status='ready'

@@ -14,8 +14,8 @@ export const normalizeSourcingContractImage = async (bytes: Buffer): Promise<Buf
   .flatten({background:"#ffffff"}).jpeg({quality:80}).toBuffer();
 
 export type ContractPdfLine = Readonly<{
-  imageAttachmentId?: string | null;
-  imageSha256?: string;
+  imageAttachmentId?: string | null | undefined;
+  imageSha256?: string | undefined;
   imageBytes?: Buffer;
   position: number;
   styleNo: string;
@@ -31,6 +31,10 @@ export type ContractPdfSnapshot = Readonly<{
   gender?: string;
   styleName?: string;
   partyAAddress?: string;
+  contractTitle?: string | undefined;
+  partyARepresentative?: string | undefined;
+  partyASigningDate?: string | undefined;
+  partyBSigningDate?: string | undefined;
   contractNumber: string;
   contractDate: string;
   partyAName: string;
@@ -73,7 +77,7 @@ const wrapPdfLine = (value: string): string[] => {
 };
 
 const contractTextLines = (snapshot: ContractPdfSnapshot): string[] => [
-  "外发服装加工合同",
+  snapshot.contractTitle ?? "外发服装加工合同",
   `合同编号：${snapshot.contractNumber}`,
   `合同日期：${snapshot.contractDate}    签订地点：${snapshot.signingPlace}`,
   `甲方：${snapshot.partyAName}`,
@@ -202,10 +206,12 @@ const renderStructuredContractPdf = async (
   layout: StructuredContractLayout,
 ): Promise<Buffer> => {
   const polished = layout === "v3";
+  const parsedDate = new Date(`${snapshot.contractDate}T00:00:00Z`);
+  const metadataDate = Number.isNaN(parsedDate.getTime()) ? new Date(0) : parsedDate;
   const document = new PDFDocument({
     size: "A4", margin: 32, bufferPages: true,
-    info: { Title: "服装加工合同", CreationDate: new Date(`${snapshot.contractDate}T00:00:00Z`),
-      ModDate: new Date(`${snapshot.contractDate}T00:00:00Z`) },
+    info: { Title: snapshot.contractTitle ?? "服装加工合同", CreationDate: metadataDate,
+      ModDate: metadataDate },
   });
   const chunks: Buffer[] = [];
   const completed = new Promise<Buffer>((resolve, reject) => {
@@ -245,7 +251,7 @@ const renderStructuredContractPdf = async (
   };
 
   if (polished) {
-    text("服装加工合同", 18, "#111111", { align: "center", characterSpacing: 5, after: 9 });
+    text(snapshot.contractTitle ?? "服装加工合同", 18, "#111111", { align: "center", characterSpacing: 5, after: 9 });
     text(
       `合同编号：${snapshot.contractNumber}    生成日期：${snapshot.contractDate}    签订地点：${snapshot.signingPlace}`,
       9,
@@ -256,7 +262,7 @@ const renderStructuredContractPdf = async (
     text(`乙方：${snapshot.partyBName}`, 9.5, "#111111", { x: 38, width: width - 12, after: 13 });
     text("一、加工明细", 10, "#111111", { after: 7 });
   } else {
-    text("服装加工合同", 17);
+    text(snapshot.contractTitle ?? "服装加工合同", 17);
     text(`合同编号：${snapshot.contractNumber}    生成日期：${snapshot.contractDate}    签订地点：${snapshot.signingPlace}`);
     text(`甲方：${snapshot.partyAName}`);
     text(`乙方：${snapshot.partyBName}`);
@@ -307,14 +313,20 @@ const renderStructuredContractPdf = async (
 
   // Keep the responsibility clause intact; only the dynamic responsibility segment is red.
   document.fontSize(9);
-  const [responsibilityPrefix,responsibilitySuffix] = (snapshot.terms.processingResponsibility && (snapshot.templateVersion ?? 1)>=4
-    ? snapshot.terms.processingResponsibility : "乙方负责{{工艺}}，甲方提供样板及面/辅料。").split("{{工艺}}");
-  const responsibility = `二、${responsibilityPrefix}${snapshot.processes.join("、")}${responsibilitySuffix}`;
+  const responsibilityClause = (snapshot.templateVersion ?? 1)>=4
+    ? snapshot.terms.processingResponsibility ?? "" : "乙方负责{{工艺}}，甲方提供样板及面/辅料。";
+  const responsibilityParts = responsibilityClause.split("{{工艺}}");
+  const [responsibilityPrefix,responsibilitySuffix] = responsibilityParts;
+  const customResponsibility = responsibilityParts.length !== 2;
+  const responsibility = `二、${responsibilityClause.replaceAll("{{工艺}}",snapshot.processes.join("、"))}`;
   const responsibilityHeight = document.heightOfString(responsibility, { width, lineGap: 2 });
   if (y + responsibilityHeight > bottom && responsibilityHeight < bottom - 32) { document.addPage(); y = 32; }
-  document.fillColor("#111111").text(`二、${responsibilityPrefix}`, 32, y, { width, lineGap: 2, continued: true });
-  document.fillColor("#c00000").text(snapshot.processes.join("、"), { continued: true });
-  document.fillColor("#111111").text(responsibilitySuffix ?? "");
+  if (customResponsibility) document.fillColor("#111111").text(responsibility,32,y,{width,lineGap:2});
+  else {
+    document.fillColor("#111111").text(`二、${responsibilityPrefix}`, 32, y, { width, lineGap: 2, continued: true });
+    document.fillColor("#c00000").text(snapshot.processes.join("、"), { continued: true });
+    document.fillColor("#111111").text(responsibilitySuffix ?? "");
+  }
   y = document.y + (polished ? 10 : 6);
 
   const clauses = [
@@ -341,8 +353,8 @@ const renderStructuredContractPdf = async (
     const left = [
       `甲方（盖章）：${snapshot.partyAName}`,
       `地址：${snapshot.partyAAddress ?? "历史未维护"}`,
-      "甲方代表：________________",
-      "签署日期：____年____月____日",
+      `甲方代表：${snapshot.partyARepresentative || "________________"}`,
+      `签署日期：${snapshot.partyASigningDate || "____年____月____日"}`,
     ];
     const right = [
       `乙方（盖章）：${snapshot.partyBName}`,
@@ -351,7 +363,7 @@ const renderStructuredContractPdf = async (
       `收款人：${snapshot.payeeName}`,
       `开户行：${snapshot.bankName}`,
       `银行账号：${snapshot.bankAccount}`,
-      "签署日期：____年____月____日",
+      `签署日期：${snapshot.partyBSigningDate || "____年____月____日"}`,
     ];
     const columnHeight = (lines: readonly string[]): number => lines.reduce((sum, line) => (
       sum + document.heightOfString(line, { width: columnWidth, lineGap: 2 }) + 5
@@ -374,11 +386,11 @@ const renderStructuredContractPdf = async (
     if (y + 130 > bottom) { document.addPage(); y = 32; }
     text(`甲方（盖章）：${snapshot.partyAName}`);
     text(`地址：${snapshot.partyAAddress ?? "历史未维护"}`);
-    text("甲方代表：________________    签署日期：____年____月____日");
+    text(`甲方代表：${snapshot.partyARepresentative || "________________"}    签署日期：${snapshot.partyASigningDate || "____年____月____日"}`);
     text(`乙方（盖章）：${snapshot.partyBName}`);
     text(`地址：${snapshot.partyBAddress}    乙方代表：${snapshot.partyBRepresentative}`);
     text(`收款人：${snapshot.payeeName}    开户行：${snapshot.bankName}`);
-    text(`银行账号：${snapshot.bankAccount}    签署日期：____年____月____日`);
+    text(`银行账号：${snapshot.bankAccount}    签署日期：${snapshot.partyBSigningDate || "____年____月____日"}`);
   }
 
   const pages = document.bufferedPageRange();

@@ -93,7 +93,7 @@ export class SourcingContractReturnService {
         uploader.display_name AS uploaded_by_name,
         file.attachment_id,file.original_filename,file.mime_type,file.size_bytes,
         document.sourcing_contract_document_id AS signed_contract_document_id,
-        document.contract_version AS signed_contract_version,document.contract_number AS signed_contract_number
+        document.contract_version AS signed_contract_version,COALESCE((SELECT content->>'contractNumber' FROM sourcing_contract_content_overrides WHERE sourcing_contract_document_id=document.sourcing_contract_document_id),document.contract_number) AS signed_contract_number
         FROM sourcing_contract_return_submissions submission
         JOIN sourcing_contract_return_attachments link ON link.submission_id=submission.submission_id
         JOIN attachments file ON file.attachment_id=link.attachment_id AND file.status='ready'

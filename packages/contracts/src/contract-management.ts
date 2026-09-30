@@ -71,3 +71,34 @@ export type ContractTemplateState = z.infer<typeof ContractTemplateStateSchema>;
 export type SaveContractTemplate = z.infer<typeof SaveContractTemplateSchema>;
 export type ContractRefreshPreview = z.infer<typeof ContractRefreshPreviewSchema>;
 export type RefreshContractInformation = z.infer<typeof RefreshContractInformationSchema>;
+
+// A contract-only snapshot. Editing it never writes the approved order facts.
+const contentText = z.string().max(4000);
+const decimal = z.string().regex(/^\d{1,12}(?:\.\d{1,4})?$/, "请输入有效的非负金额");
+export const ContractContentSchema = z.object({
+  contractNumber: z.string().trim().min(1).max(100), contractDate: contentText,
+  contractTitle: contentText.optional(), partyARepresentative: contentText.optional(),
+  partyASigningDate: contentText.optional(), partyBSigningDate: contentText.optional(),
+  partyAName: contentText, partyAAddress: contentText, partyBName: contentText,
+  partyBAddress: contentText, partyBRepresentative: contentText,
+  payeeName: contentText, bankAccount: contentText, bankName: contentText,
+  signingPlace: contentText, gender: contentText, styleName: contentText,
+  estimatedCutPieceSendDate: contentText, deliveryDate: contentText,
+  processes: z.array(z.string().max(200)).max(100),
+  lines: z.array(z.object({
+    position: z.number().int().positive(), styleNo: contentText,
+    alternateStyleNo: contentText.nullable(), color: contentText.nullable(),
+    imageAttachmentId: z.string().uuid().nullable().optional(), imageSha256: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+    quantity: z.number().int().min(0).max(999999999), unitPrice: decimal, totalAmount: decimal,
+  }).strict()).min(1).max(100),
+  totalQuantity: z.number().int().min(0).max(999999999), totalAmount: decimal,
+  terms: z.object(Object.fromEntries(Object.keys(CONTRACT_TERM_LABELS).map(key => [key,contentText])) as Record<keyof typeof CONTRACT_TERM_LABELS, typeof contentText>).strict(),
+}).strict();
+export const ContractContentStateSchema = z.object({
+  sourcingContractDocumentId: z.string().uuid(), informationFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+  content: ContractContentSchema,
+}).strict();
+export const SaveContractContentSchema = ContractContentStateSchema;
+export type ContractContent = z.infer<typeof ContractContentSchema>;
+export type ContractContentState = z.infer<typeof ContractContentStateSchema>;
+export type SaveContractContent = z.infer<typeof SaveContractContentSchema>;
