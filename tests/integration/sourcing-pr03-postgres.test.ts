@@ -3191,7 +3191,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const inherited=await contractService.content.get(rootActor(),id);
     expect(inherited.content.lines).toEqual(input.content.lines);
     expect(inherited.content.deliveryDate).toBe("2026-11-11");expect(inherited.content.terms.payment).toBe("同步后的付款条款");
-    expect(inherited.content.partyBName).not.toBe("本单人工乙方");
+    expect(inherited.content.partyBName).toBe(refresh.changes.find(change=>change.field==="contractEntityName")?.after ?? input.content.partyBName);
     await service.reviseStyles(merchandiserActor(),id,{expectedRevision:0,lines:[{position:1,styleNo:"MANUAL-CONTRACT-REVISED",alternateStyleNo:null}]},randomUUID());
     const afterStyle=await contractService.content.get(rootActor(),id);
     expect(afterStyle.content.lines[0]).toMatchObject({...input.content.lines[0],styleNo:"MANUAL-CONTRACT-REVISED"});
