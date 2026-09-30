@@ -88,9 +88,10 @@ run("P05 development forms PostgreSQL", () => {
     const notices=new DigitalProductionNotificationService(database);await notices.runOnce();await notices.runOnce();
     const before=(await database.query("SELECT title FROM digital_development_notices WHERE source_id=$1",[id])).rows;
     expect(before).toHaveLength(1);expect(before[0].title).toContain("已逾期");
-    await development.materialEvent(actor(),id,materialId,{expectedVersion:3,action:"修改预计日期",expectedDate:"2099-01-01",note:"供应商延期"},randomUUID());
+    await development.materialEvent(actor(),id,materialId,{expectedMaterialRevision:0,expectedVersion:3,action:"修改预计日期",expectedDate:"2099-01-01",note:"供应商延期"},randomUUID());
     await notices.runOnce();expect((await database.query("SELECT title FROM digital_development_notices WHERE source_id=$1",[id])).rowCount).toBe(1);
-    await development.materialEvent(actor(),id,materialId,{expectedVersion:3,action:"到货",expectedDate:null,note:"实物已到"},randomUUID());await notices.runOnce();
+    await development.materialEvent(actor(),id,materialId,{expectedMaterialRevision:1,expectedVersion:3,action:"到货",expectedDate:null,note:"实物已到"},randomUUID());await notices.runOnce();
+    await expect(development.materialEvent(actor(),id,materialId,{expectedMaterialRevision:1,expectedVersion:3,action:"修改预计日期",expectedDate:"2099-02-01",note:"旧页面"},randomUUID())).rejects.toMatchObject({statusCode:409});
     const sheet=await development.read(actor(),id);expect(sheet.materialEvents).toHaveLength(2);expect(sheet.document!.materials[0]!.expectedDate).toBe("2020-01-01");
     expect(await notices.claim(actor())).toMatchObject({notification:{route:{routeName:"digital_development",entityId:id},actionable:false}});
   });

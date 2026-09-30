@@ -101,6 +101,8 @@ export class DigitalDevelopmentService {
     return this.command(actor, sourceId, "material", key, { materialId, ...input }, async db => {
       const row = (await db.query("SELECT * FROM digital_development_documents WHERE source_id=$1", [sourceId])).rows[0] ?? digitalNotFound();
       if (row.status !== "published" || row.version !== input.expectedVersion) conflict("请在当前已发布开发单上确认物料");
+      const revision=Number((await db.query("SELECT count(*) AS revision FROM digital_development_material_events WHERE source_id=$1 AND material_id=$2",[sourceId,materialId])).rows[0].revision);
+      if(revision!==input.expectedMaterialRevision)conflict("物料记录已更新，请刷新后重新确认");
       const material = (row.document as DevelopmentDocument).materials.find(item => item.materialId === materialId);
       if (!material || !material.requiredThisRound) conflict("该物料不属于本轮所需");
       if (input.action === "确认代用" && material!.category !== "辅料") conflict("设计师代用确认仅适用于辅料；问题面料须供应链总监决定");
