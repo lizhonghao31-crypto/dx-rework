@@ -157,8 +157,14 @@ export class SourcingContractService {
         WHERE NOT sourcing_contract_return_monitors.contract_return_monitor_enabled`,[approvalSnapshotId]);
     const metadata = (await client.query<{identity_version:number;template_version:number}>(`SELECT
       (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=snapshot.sourcing_case_id) AS identity_version,
-      (SELECT max(template_version) FROM sourcing_contract_template_versions WHERE effective_from<=CURRENT_TIMESTAMP) AS template_version
-      FROM sourcing_approval_snapshots snapshot WHERE sourcing_approval_snapshot_id=$1`,[approvalSnapshotId])).rows[0];
+      CASE WHEN previous.identity_version<(SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=snapshot.sourcing_case_id)
+        AND EXISTS(SELECT 1 FROM sourcing_contract_content_overrides WHERE sourcing_contract_document_id=previous.sourcing_contract_document_id)
+        THEN previous.template_version
+        ELSE (SELECT max(template_version) FROM sourcing_contract_template_versions WHERE effective_from<=CURRENT_TIMESTAMP) END AS template_version
+      FROM sourcing_approval_snapshots snapshot
+      LEFT JOIN LATERAL (SELECT sourcing_contract_document_id,identity_version,template_version FROM sourcing_contract_documents
+        WHERE sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id ORDER BY contract_version DESC LIMIT 1) previous ON true
+      WHERE snapshot.sourcing_approval_snapshot_id=$1`,[approvalSnapshotId])).rows[0];
     if (!metadata) throw new ApplicationError("INVALID_STATE_TRANSITION","合同批准快照不存在",409);
     const documentId = randomUUID();
     const inserted = await client.query<{ sourcing_contract_document_id: string }>(

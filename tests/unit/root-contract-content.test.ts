@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { ContractContentSchema, type ContractContent } from "@dx-rework/contracts";
+import { ContractContentSchema, SaveContractContentSchema, type ContractContent } from "@dx-rework/contracts";
 import { canEditContractContent, SourcingContractContentService } from "../../apps/api/src/sourcing/sourcing-contract-content.js";
 import { renderSourcingContractPdf } from "../../apps/api/src/sourcing/sourcing-contract-pdf.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
@@ -32,6 +32,14 @@ describe("Root contract content",()=>{
     expect(ContractContentSchema.safeParse(content).success).toBe(true);
     expect(ContractContentSchema.safeParse({...content,supplierId:actor("root_superuser").actorId}).success).toBe(false);
     expect(ContractContentSchema.safeParse({...content,totalAmount:"NaN"}).success).toBe(false);
+  });
+  it("requires a real delivery date for edits that synchronize the order",()=>{
+    const input={sourcingContractDocumentId:actor("root_superuser").actorId,informationFingerprint:"a".repeat(64),content};
+    expect(SaveContractContentSchema.safeParse(input).success).toBe(true);
+    for(const deliveryDate of ["", "0000-01-01", "2026-02-30", "2026-13-01", "收到后交货"])
+      expect(SaveContractContentSchema.safeParse({...input,content:{...content,deliveryDate}}).success).toBe(false);
+    // Existing PDFs can still render historical free-text fields.
+    expect(ContractContentSchema.safeParse({...content,deliveryDate:"历史交期另议"}).success).toBe(true);
   });
   it("renders manually edited facts and complete responsibility clauses without appending stale processes",async()=>{
     const pdf=await renderSourcingContractPdf({...content,templateVersion:4});

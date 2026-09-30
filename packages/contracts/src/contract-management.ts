@@ -98,7 +98,14 @@ export const ContractContentStateSchema = z.object({
   sourcingContractDocumentId: z.string().uuid(), informationFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
   content: ContractContentSchema,
 }).strict();
-export const SaveContractContentSchema = ContractContentStateSchema;
+export const SaveContractContentSchema = ContractContentStateSchema.extend({
+  content: ContractContentSchema.extend({
+    deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "请选择交货日期").refine(value => {
+      const date = new Date(`${value}T00:00:00.000Z`);
+      return !value.startsWith("0000-") && Number.isFinite(date.getTime()) && date.toISOString().slice(0,10) === value;
+    }, "交货日期必须是真实的日历日期"),
+  }),
+});
 export type ContractContent = z.infer<typeof ContractContentSchema>;
 export type ContractContentState = z.infer<typeof ContractContentStateSchema>;
 export type SaveContractContent = z.infer<typeof SaveContractContentSchema>;
