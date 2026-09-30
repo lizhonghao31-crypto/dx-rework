@@ -153,10 +153,10 @@ export class DigitalProductionNotificationService {
     let title:string,actionable:boolean,route:TodoRouteDescriptor;
     if(event.development_source_id){
       if(!await new DigitalProductionAccessPolicy(database).allowed(actor,"source",event.development_source_id,"technical"))return null;
-      const notice=(await database.query("SELECT title FROM digital_development_notices WHERE event_id=$1",[event.event_id])).rows[0];
+      const notice=(await database.query("SELECT title,COALESCE((to_jsonb(d)->>'round_number')::integer,1) AS round_number FROM digital_development_notices d WHERE event_id=$1",[event.event_id])).rows[0];
       if(!notice)return null;
       title=notice.title;actionable=false;
-      route={routeName:"digital_development",entityId:event.development_source_id,todoId:event.event_id};
+      route={routeName:"digital_development",entityId:event.development_source_id,todoId:event.event_id,developmentRound:notice.round_number};
     }else if(event.task_id){
       const task=(await database.query<Task>(`${TASKS} WHERE t.task_id=$1`,[event.task_id])).rows[0];
       if(!task||task.lifecycle!=="active")return null;

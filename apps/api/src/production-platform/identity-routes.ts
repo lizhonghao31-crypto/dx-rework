@@ -1,3 +1,5 @@
+import {registerDevelopmentRoundRoutes} from "./development-round-routes.js";
+import type {DevelopmentRoundService} from "./development-round-service.js";
 import { registerDevelopmentExecutionRoutes } from "./development-execution-routes.js";
 import type { DevelopmentExecutionService } from "./development-execution-service.js";
 import { registerDevelopmentRoutes } from "./development-routes.js";
@@ -21,6 +23,7 @@ import { assertIdentityActor, type DigitalProductionIdentityService } from "./id
 export type DigitalIdentityDependencies = {
   authenticate(token: string | undefined): Promise<AuthUser>; root?: RootAuthority;
   developmentQrBase?: string;
+  developmentRounds?:DevelopmentRoundService;
   developmentExecution?: DevelopmentExecutionService;
   developmentService?: DigitalDevelopmentService; developmentAttachments?: AttachmentService;
   notificationService?: DigitalProductionNotificationService;
@@ -35,6 +38,7 @@ const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   return result.data;
 };
 export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies: DigitalIdentityDependencies): void {
+  if(dependencies.developmentRounds)registerDevelopmentRoundRoutes(app,dependencies,dependencies.developmentRounds);
   if (dependencies.developmentExecution && dependencies.developmentAttachments) registerDevelopmentExecutionRoutes(app, dependencies, dependencies.developmentExecution, dependencies.developmentAttachments);
   if (dependencies.developmentService && dependencies.developmentAttachments) registerDevelopmentRoutes(app, dependencies, dependencies.developmentService, dependencies.developmentAttachments);
   if (dependencies.notificationService) registerDigitalNotificationRoutes(app, dependencies, dependencies.notificationService);

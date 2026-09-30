@@ -1,3 +1,4 @@
+import {DevelopmentRoundService} from "./development-round-service.js";
 import {DevelopmentRouteService,type DevelopmentRouteAction} from "./development-route-service.js";
 import type {PatternRoomOrderService} from "../pattern-room/order-service.js";
 import {createHash,randomUUID} from "node:crypto";
@@ -77,16 +78,19 @@ export class DevelopmentExecutionService {
         for(const item of required){const checked=input.items.find(check=>check.materialId===item.materialId)??prior.find((check:{materialId:string})=>check.materialId===item.materialId);if(!checked||!checked.physical||!checked.quantity||!checked.color||!checked.specification)fail(`${item.label||item.name}实物、数量、颜色及规格须全部核实`);}
         await this.fabricReady(db,sourceId);
         const dispatch=(await db.query("SELECT * FROM digital_development_dispatch WHERE source_id=$1",[sourceId])).rows[0]??fail("请先预派纸样、裁板和车板人员");
+        if(task.route_version===1){
         const pattern=await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:input.taskId,kind:"development_pattern",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:task.route_version,assigneeId:dispatch.pattern_worker_id});
         await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:input.taskId,kind:"development_cutting",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:task.route_version,assigneeId:dispatch.cutting_worker_id,predecessors:[pattern.taskId]});
         const now=new Date().toISOString();await this.tasks().setConditionWithClient(db,actor,pattern.taskId,"materials_ready",true,now);await this.tasks().setConditionWithClient(db,actor,pattern.taskId,"handover_received",true,now,"核配通过并交纸样");
+        }
       }
       await this.fact(db,actor,sourceId,input.taskId,input.result==="通过"?"核配通过":"缺项退回",input);
       const now=new Date().toISOString();await this.tasks().setConditionWithClient(db,actor,input.taskId,"business_recorded",true,now,input.note);await this.tasks().completeWithClient(db,actor,input.taskId,{note:input.note},`check:${key}`);
+      if(input.result==="通过"&&task.route_version>1)await new DevelopmentRouteService(this.database,this.patternOrders).advance(db,actor,sourceId,input.taskId);
       if(input.result==="缺项退回"){
         await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload) VALUES($1,$2,'source',$3,'material_returned',$4,CURRENT_TIMESTAMP,'现场登记',$5)",[randomUUID(),input.taskId,sourceId,actor.actorId,JSON.stringify({note:input.note})]);
         const designer=(await db.query("SELECT created_by FROM digital_production_sources WHERE source_id=$1",[sourceId])).rows[0].created_by;
-        await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:input.taskId,kind:"development_material_supply",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:task.occurrence,assigneeId:await new DigitalProductionAccessPolicy(db).activeRole(designer,"sample_designer")?designer:null});
+        await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:input.taskId,kind:"development_material_supply",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:Number((await db.query("SELECT GREATEST(COALESCE(max(t.occurrence),0)+1,$2::integer) AS n FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_material_supply'",[sourceId,task.occurrence])).rows[0].n),assigneeId:await new DigitalProductionAccessPolicy(db).activeRole(designer,"sample_designer")?designer:null});
       }
       return {taskId:input.taskId,result:input.result};
     });
@@ -96,7 +100,7 @@ export class DevelopmentExecutionService {
       await new DigitalProductionAccessPolicy(db).assert(actor,"task",taskId,"execute");const task=await this.task(db,sourceId,taskId);if(task.task_kind!=="development_material_supply"||task.state!=="ready")fail("当前不是补料事项");
       const sheet=await this.forms().read(actor,sourceId,db);for(const material of sheet.document!.materials.filter(item=>item.requiredThisRound&&item.category!=="辅料"))if(!material.available&&!sheet.materialEvents.some(event=>event.materialId===material.materialId&&event.action==="到货"))fail("请先记录主配料实物到货");
       const clerk=(await db.query("SELECT a.assignee_id FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id) WHERE a.source_id=$1 AND a.task_kind IN ('development_materials','development_material_recheck') ORDER BY t.created_at DESC LIMIT 1",[sourceId])).rows[0]?.assignee_id;
-      const next=await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:taskId,kind:"development_material_recheck",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:task.occurrence+1,assigneeId:clerk&&await new DigitalProductionAccessPolicy(db).activeRole(clerk,"development_clerk")?clerk:null});
+      const next=await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:taskId,kind:"development_material_recheck",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:Number((await db.query("SELECT GREATEST(COALESCE(max(t.occurrence),0)+1,$2::integer) AS n FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_material_recheck'",[sourceId,task.occurrence+1])).rows[0].n),assigneeId:clerk&&await new DigitalProductionAccessPolicy(db).activeRole(clerk,"development_clerk")?clerk:null});
       await this.fact(db,actor,sourceId,taskId,"补料复核",{nextTaskId:next.taskId});await this.tasks().setConditionWithClient(db,actor,taskId,"business_recorded",true,new Date().toISOString());await this.tasks().completeWithClient(db,actor,taskId,{note:"补料后提交复核"},`resubmit:${key}`);return next;
     });
   }
@@ -110,11 +114,11 @@ export class DevelopmentExecutionService {
       if(input.attachmentIds.length)await this.forms().bindFiles(db,actor,sourceId,{...sheet.document!,files:input.attachmentIds.map(attachmentId=>({attachmentId,kind:"工艺开发板"}))});
       await this.fact(db,actor,sourceId,input.taskId,task.task_kind==="development_pattern"?"纸样完成":"裁板完成",input);
       const now=new Date().toISOString();await this.tasks().setConditionWithClient(db,actor,input.taskId,"business_recorded",true,now,input.note);await this.tasks().completeWithClient(db,actor,input.taskId,{note:input.note},`work:${key}`);
-      if(task.task_kind==="development_pattern"){
+      if(task.task_kind==="development_pattern"&&task.route_version===1){
         const next=(await db.query("SELECT d.task_id FROM digital_production_task_dependencies d JOIN digital_production_task_access a USING(task_id) WHERE d.predecessor_id=$1 AND a.task_kind='development_cutting'",[input.taskId])).rows[0];
         if(next)await this.tasks().setConditionWithClient(db,actor,next.task_id,"handover_received",true,now,"纸样完成并交裁板");
       }
-      if(task.task_kind==="development_cutting")await new DevelopmentRouteService(this.database,this.patternOrders).advance(db,actor,sourceId,input.taskId);
+      if(task.task_kind==="development_cutting"||(task.task_kind==="development_pattern"&&task.route_version>1))await new DevelopmentRouteService(this.database,this.patternOrders).advance(db,actor,sourceId,input.taskId);
       return {taskId:input.taskId,state:"completed"};
     });
   }
@@ -130,7 +134,13 @@ export class DevelopmentExecutionService {
     });
   }
   async route(actor:TrustedActorContext,sourceId:string,input:DevelopmentRouteAction,key:string){
-    return this.command(actor,sourceId,"route",key,input,async db=>{await this.fabricReady(db,sourceId);return new DevelopmentRouteService(this.database,this.patternOrders).complete(db,actor,sourceId,input,key);});
+    return this.command(actor,sourceId,"route",key,input,async db=>{await this.fabricReady(db,sourceId);const result=await new DevelopmentRouteService(this.database,this.patternOrders).complete(db,actor,sourceId,input,key);
+      if(input.result==="退回"){
+        const task=await this.task(db,sourceId,input.taskId),sheet=await this.forms().read(actor,sourceId,db);
+        if(!input.returnNodes?.length)fail("请选择退回的问题节点");
+        await new DevelopmentRoundService(this.database,this.enabled).publishWithClient(db,actor,sourceId,{basedOnRound:task.route_version,document:sheet.document!,origin:"内部发现",customerComment:"",internalProblem:input.note,explanation:"板房尾查退回",categories:input.problemCategories?.length?input.problemCategories:["其他"],affectedNodes:input.returnNodes!,outputKind:"整件样板"},input.taskId);
+      }
+      return result;});
   }
   async customerSample(actor:TrustedActorContext,sourceId:string,input:{routeVersion:number;note:string},key:string){
     return this.command(actor,sourceId,"customer-sample",key,input,async db=>{

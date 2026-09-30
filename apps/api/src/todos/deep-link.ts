@@ -48,6 +48,7 @@ export function buildTodoDeepLink(
     case "digital_development":
       path = "/ui/digital-production";
       query.set("development", route.entityId);
+      if(route.developmentRound)query.set("round",String(route.developmentRound));
       break;
     case "digital_production_task":
       path = "/ui/digital-production";
