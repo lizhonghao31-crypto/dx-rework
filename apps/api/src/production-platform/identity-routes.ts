@@ -20,7 +20,10 @@ export type DigitalIdentityDependencies = {
 };
 const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   const result = schema.safeParse(value);
-  if (!result.success) throw new ApplicationError("VALIDATION_ERROR", "请检查客户、款色、尺码数量和日期", 400);
+  if (!result.success) {
+    const businessMessage = result.error.issues.find((issue) => issue.code === "custom")?.message;
+    throw new ApplicationError("VALIDATION_ERROR", businessMessage ?? "请检查客户、款色、尺码数量和日期", 400);
+  }
   return result.data;
 };
 export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies: DigitalIdentityDependencies): void {

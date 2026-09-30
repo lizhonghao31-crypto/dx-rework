@@ -9,7 +9,14 @@ import { ProductionOrderRootRepository } from "./order-root-repository.js";
 
 const fail = (message: string, status = 409): never => { throw new ApplicationError(status === 404 ? "NOT_FOUND" : status === 403 ? "FORBIDDEN" : "DIGITAL_PRODUCTION_CONFLICT", message, status); };
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-const dateText = (value: Date | string | null) => value instanceof Date ? value.toISOString().slice(0, 10) : value;
+export const digitalDateText = (value: Date | string | null) => value instanceof Date
+  ? new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Shanghai",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(value)
+  : value;
 export function assertIdentityActor(actor: TrustedActorContext): void {
   if (!isRootActor(actor) && !actor.actorRoles.some(role => ["sample_designer", "order_merchandiser", "owner_group", "production_management", "pattern_room_supervisor", "development_clerk", "pattern_room_tail_inspector", "pattern_room_worker", "quality_control", "embroidery_washing_merchandiser", "warehouse_receiver", "cutting_worker"].includes(role))) digitalForbidden();
 }
@@ -151,7 +158,7 @@ export class DigitalProductionIdentityService {
       (SELECT jsonb_agg(jsonb_build_object('size',s.size,'quantity',s.quantity) ORDER BY s.size) FROM digital_production_po_sizes s WHERE s.line_id=l.line_id) AS sizes
       FROM digital_production_po_lines l WHERE production_order_id=$1 ORDER BY position`, [id]);
     return { productionOrderId: id, sourceId: row.source_id, customerCode: row.customer_code, productGroup: row.product_group,
-      designStyleNo: row.design_style_no, temporaryStyleNo: row.temporary_style_no, orderDate: dateText(row.order_date)!, contractDeliveryDate: dateText(row.contract_delivery_date),
+      designStyleNo: row.design_style_no, temporaryStyleNo: row.temporary_style_no, orderDate: digitalDateText(row.order_date)!, contractDeliveryDate: digitalDateText(row.contract_delivery_date),
       createdBy: row.created_by, createdAt: new Date(row.created_at).toISOString(), status: row.source_id ? "development_linked" : "waiting_development",
       version: row.version, primaryMerchandiserId: row.primary_merchandiser_id, workflowGeneration: "digital_production_v1", notificationPolicy: "IN_APP_ONLY", lines: lines.rows };
   }
