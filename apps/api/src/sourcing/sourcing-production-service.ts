@@ -35,10 +35,12 @@ export type ProductionRow = { production_order_id: string; dispatched_at: Date |
 const iso = (date: Date | string): string => new Date(date).toISOString();
 // Only explicit production fields are projected. Never serialize an approval row.
 export const selectProduction = `SELECT production.production_order_id,production.sourcing_case_id,
-  production.decision_version,production.sourcing_contract_document_id,production.contract_number,
+  production.decision_version,production.sourcing_contract_document_id,
+  sourcing_contract_display_number(production.sourcing_contract_document_id,production.contract_number) AS contract_number,
   production.contract_version,production.supplier_id,production.supplier_name_snapshot,
   production.gender,production.style_name_snapshot,production.quantity,production.processes,
-  production.delivery_date::text,sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,production.dispatched_by,production.dispatched_at,
+  sourcing_effective_delivery_date(production.sourcing_case_id,production.delivery_date)::text AS delivery_date,
+  sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,production.dispatched_by,production.dispatched_at,
   transition.status,source_case.deleted_at IS NOT NULL AS source_case_archived,
   (SELECT COALESCE(sum(quantity),0)::integer FROM effective_sourcing_production_reports
     WHERE production_order_id=production.production_order_id) AS completed_quantity,

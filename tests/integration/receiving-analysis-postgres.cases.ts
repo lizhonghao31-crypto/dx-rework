@@ -29,13 +29,18 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
       CREATE TABLE receiving_difference_resolutions(resolution_id uuid,receiving_batch_id uuid,difference_type text,document_quantity_snapshot bigint,
         actual_quantity_snapshot bigint,packing_revision_id uuid,packing_quantity_snapshot bigint,difference_quantity_snapshot bigint,result text,created_at timestamptz);
       CREATE TABLE sourcing_production_receipt_links(receipt_id uuid PRIMARY KEY,production_order_id uuid);
-      CREATE TABLE sourcing_production_orders(production_order_id uuid PRIMARY KEY,supplier_id uuid,supplier_name_snapshot text,contract_number text);
+      CREATE TABLE sourcing_production_orders(production_order_id uuid PRIMARY KEY,supplier_id uuid,supplier_name_snapshot text,contract_number text,sourcing_contract_document_id uuid);
+      CREATE TABLE sourcing_contract_documents(sourcing_contract_document_id uuid PRIMARY KEY,sourcing_case_id uuid,contract_version int,prepared_at timestamptz);
+      CREATE TABLE sourcing_contract_content_overrides(sourcing_contract_document_id uuid PRIMARY KEY,content jsonb);
       CREATE TABLE sourcing_production_exclusions(production_order_id uuid PRIMARY KEY);
       CREATE TABLE attachments(attachment_id uuid,original_filename text,entity_type text,entity_id text,status text,mime_type text);
       CREATE TABLE receiving_attachment_retirements(attachment_id uuid);`);
+    await database.query(await readFile(new URL("../../apps/api/migrations/0220_contract_display_consistency.sql",import.meta.url),"utf8"));
     await database.query("INSERT INTO receiving_batches(receiving_batch_id,style_no,delivery_note_quantity) VALUES($1,'SAME',200),($2,' same ',200)", [batch, secondBatch]);
     await database.query("INSERT INTO receiving_receipts(receipt_id,receiving_batch_id,received_at,document_quantity,actual_quantity) VALUES($1,$2,'2026-09-02',200,70),($3,$4,'2026-09-03',200,30)", [receipt, batch, randomUUID(), secondBatch]);
-    await database.query("INSERT INTO sourcing_production_orders VALUES($1,$2,'同名供应商','HT-1')", [production, supplier]);
+    const contract=randomUUID();
+    await database.query("INSERT INTO sourcing_production_orders VALUES($1,$2,'同名供应商','HT-1',$3)", [production, supplier,contract]);
+    await database.query("INSERT INTO sourcing_contract_content_overrides VALUES($1,$2)",[contract,{contractNumber:"人工-HT-1"}]);
     await database.query("INSERT INTO sourcing_production_receipt_links VALUES($1,$2)", [receipt, production]);
     await database.query("INSERT INTO receiving_packing_revisions VALUES($1,$2,80,'2026-09-04'),($3,$2,90,'2026-09-05')", [oldPacking, secondBatch, packing]);
     await database.query("INSERT INTO receiving_difference_resolutions VALUES($1,$2,'packing',200,100,$3,80,20,'旧方向快照','2026-09-04'),($4,$2,'packing',200,100,$5,90,-10,'短装待继续','2026-09-05')", [historicalResolution, secondBatch, oldPacking, randomUUID(), packing]);
@@ -60,6 +65,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     expect(item.resolutions.find(row => row.resolutionId === historicalResolution)?.differenceQuantity).toBe("20");
     expect(item.batchIds).toHaveLength(2); expect(item.receipts).toHaveLength(2);
     expect(item.receipts.find(row => row.receiptId === receipt)?.productionOrderId).toBe(production);
+    expect(item.receipts.find(row => row.receiptId === receipt)?.contractNumber).toBe("人工-HT-1");
     expect(item.receipts.filter(row => row.productionOrderId === null)).toHaveLength(1);
   });
   it("missing packing stays null and does not become a final loss", async () => {

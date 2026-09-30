@@ -145,7 +145,7 @@ WITH cutting_read AS (
          COALESCE(current_decision.supplier_name_snapshot,snapshot.supplier_name_snapshot) AS supplier_name,
          source_case.created_by AS merchandiser_id,
          creator.display_name AS merchandiser_name,
-         to_char(snapshot.delivery_date,'YYYY-MM-DD') AS delivery_date,
+         to_char(sourcing_effective_delivery_date(cutting.sourcing_case_id,snapshot.delivery_date),'YYYY-MM-DD') AS delivery_date,
          current_decision.cutting_process,current_decision.cutting_process_other,
          snapshot.processes,
          snapshot.approved_at,
@@ -184,7 +184,7 @@ WITH cutting_read AS (
     LIMIT 1
   ) current_decision ON true
   LEFT JOIN LATERAL (
-    SELECT document.contract_number
+    SELECT sourcing_contract_display_number(document.sourcing_contract_document_id,document.contract_number) AS contract_number
     FROM sourcing_contract_documents document
     WHERE document.sourcing_case_id=cutting.sourcing_case_id
     ORDER BY document.contract_version DESC

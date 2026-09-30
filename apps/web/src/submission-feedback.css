@@ -1,6 +1,0 @@
-.submission-feedback { margin-block: 12px; color: var(--dx-v2-color-text); white-space: pre-line; }
-.submission-feedback ul { margin-block: 8px; padding-inline-start: 24px; }
-.submission-feedback button { color: var(--dx-v2-color-primary); background: transparent; border: 0; padding: 8px 0; text-align: left; font: inherit; cursor: pointer; }
-.submission-feedback button:focus-visible { outline: 2px solid var(--dx-v2-color-focus); }
-.sourcing-submission-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
-[id^="sourcing-create-"], [id^="sourcing-quote-"], [id^="sourcing-decision-"] { scroll-margin-block: 100px; }

@@ -1489,7 +1489,7 @@ function OrderDetailPage({
     setBusy(true);
     try {
       const confirmed = await confirmInApp(
-        `供应商：${snapshot.supplierName}\n总数量：${formatBusinessDecimal(snapshot.quantity)} 件\n交期：${snapshot.deliveryDate ?? "历史未维护"}\n合同编号：${contract.contractNumber}`,
+        `供应商：${snapshot.supplierName}\n总数量：${formatBusinessDecimal(snapshot.quantity)} 件\n交期：${item.deliveryDate ?? "历史未维护"}\n合同编号：${contract.contractNumber}`,
         { title: "确认正式派单", confirmLabel: "确认派单", cancelLabel: "取消" },
       );
       if (!confirmed) return;

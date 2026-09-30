@@ -3185,6 +3185,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(unchangedOrder.orderQuantity).toBe(20);
     expect(unchangedOrder.lineItems[0]?.quantity).toBe(20);
     expect(unchangedOrder.approvalSnapshot?.quantity).toBe(20);
+    expect(unchangedOrder.deliveryDate).toBe("2026-11-11");
+    expect(unchangedOrder.approvalSnapshot?.deliveryDate).toBe("2026-10-20");
+    expect((await service.listCases(rootReader,"MANUAL-CONTRACT")).items.find(row=>row.sourcingCaseId===id)?.deliveryDate).toBe("2026-11-11");
+    expect((await service.nodeHistory(rootReader,id,"owner")).item.deliveryDate).toBe("2026-10-20");
+    expect((await cutting.list(cuttingOwnerActor(),{q:"本单人工编号"})).items.find(row=>row.sourcingCaseId===id)).toMatchObject({contractNumber:"本单人工编号",deliveryDate:"2026-11-11"});
+    expect((await service.listTimeline(rootReader,id)).items.find(row=>row.entryId===doc)?.contractReference).toBe("本单人工编号");
     await expect(contractService.content.save(rootActor(),id,input,randomUUID())).rejects.toMatchObject({statusCode:409});
     await expect(database.query("UPDATE sourcing_contract_content_overrides SET content='{}' WHERE sourcing_contract_document_id=$1",[doc])).rejects.toMatchObject({code:"55000"});
     const template=(await contractService.management.templates(rootActor())).item;
@@ -3196,10 +3202,23 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(inherited.content.lines).toEqual(input.content.lines);
     expect(inherited.content.deliveryDate).toBe("2026-11-11");expect(inherited.content.terms.payment).toBe("同步后的付款条款");
     expect(inherited.content.partyBName).toBe(refresh.changes.find(change=>change.field==="contractEntityName")?.after ?? input.content.partyBName);
+    const beforeStyleTemplate=(await contractService.management.templates(rootActor())).item;
+    await contractService.management.saveTemplate(rootActor(),{...beforeStyleTemplate,expectedVersion:beforeStyleTemplate.templateVersion,
+      terms:{...beforeStyleTemplate.terms,payment:"改款后仍需同步的新条款"}},randomUUID());
     await service.reviseStyles(merchandiserActor(),id,{expectedRevision:0,lines:[{position:1,styleNo:"MANUAL-CONTRACT-REVISED",alternateStyleNo:null}]},randomUUID());
     const afterStyle=await contractService.content.get(rootActor(),id);
     expect(afterStyle.content.lines[0]).toMatchObject({...input.content.lines[0],styleNo:"MANUAL-CONTRACT-REVISED"});
     expect(afterStyle.content.totalAmount).toBe("412.50");expect(afterStyle.content.deliveryDate).toBe("2026-11-11");
+    expect((await contractService.getCurrent(rootActor(),id)).item?.templateVersion).toBe(beforeStyleTemplate.templateVersion);
+    expect(afterStyle.content.terms.payment).toBe("同步后的付款条款");
+    const deferredTemplate=await contractService.management.previewInformation(contractActor(),id);
+    expect(deferredTemplate.changes).toEqual(expect.arrayContaining([expect.objectContaining({field:"templateVersion"}),expect.objectContaining({field:"payment",after:"改款后仍需同步的新条款"})]));
+    const withLatestTemplate=await contractService.management.refreshInformation(contractActor(),id,deferredTemplate,randomUUID());
+    await contractService.generateIfReady(contractActor(),id,withLatestTemplate);
+    expect((await contractService.content.get(rootActor(),id)).content.terms.payment).toBe("改款后仍需同步的新条款");
+    const dispatched=await production.dispatch(contractActor(),id,{sourcingContractDocumentId:withLatestTemplate,confirmed:true},randomUUID());
+    expect(dispatched.value).toMatchObject({contractNumber:"本单人工编号",deliveryDate:"2026-11-11",quantity:20});
+    const dispatchFact=(await database.query("SELECT * FROM sourcing_production_orders WHERE production_order_id=$1",[dispatched.value.productionOrderId])).rows[0];
     const returnId=randomUUID();
     await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
       VALUES($1,$2,'人工合同回签.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[returnId,`manual-return/${returnId}`,"a".repeat(64),merchandiserId]);
@@ -3210,6 +3229,15 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const next=await contractService.content.save(rootActor(),id,{...returnedDraft,content:{...returnedDraft.content,deliveryDate:"2026-12-01"}},randomUUID());
     await contractService.generateIfReady(rootActor(),id,next);
     expect(await contractReturns.get(rootReader,id)).toMatchObject({currentContractReturned:false,contractReturnedAt:returned.contractReturnedAt,contractReturnDueAt:returned.contractReturnDueAt});
+    expect((await service.getCase(rootReader,id)).deliveryDate).toBe("2026-12-01");
+    expect((await production.get(rootReader,dispatched.value.productionOrderId)).deliveryDate).toBe("2026-12-01");
+    expect((await database.query("SELECT * FROM sourcing_production_orders WHERE production_order_id=$1",[dispatched.value.productionOrderId])).rows[0]).toEqual(dispatchFact);
+    await service.recordFinanceReconciliation(financeActor(),id,{result:"match"},randomUUID());
+    const financeHistory=await service.nodeHistory(rootReader,id,"finance");
+    expect(financeHistory.contractReference).toBe("本单人工编号");
+    expect(financeHistory.item.deliveryDate).toBe("2026-12-01");
+    await expect(contractService.content.save(rootActor(),id,{...returnedDraft,content:{...returnedDraft.content,deliveryDate:"2027-01-01"}},randomUUID())).rejects.toMatchObject({statusCode:403});
+    expect((await service.getCase(rootReader,id)).deliveryDate).toBe("2026-12-01");
   });
 
   it.each(["match","difference"] as const)("permanently locks Root edits after finance %s, including drafts opened before reconciliation",async result=>{

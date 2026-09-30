@@ -87,7 +87,7 @@ export async function readReceivingAnalysis(database: Pool, baseSql: string, act
           'documentQuantity',COALESCE(correction.document_quantity,receipt.document_quantity)::text,
           'actualQuantity',COALESCE(correction.actual_quantity,receipt.actual_quantity)::text,'correctionId',correction.correction_id,
           'productionOrderId',production.production_order_id,'supplierId',production.supplier_id,
-          'supplierName',production.supplier_name_snapshot,'contractNumber',production.contract_number,
+          'supplierName',production.supplier_name_snapshot,'contractNumber',sourcing_contract_display_number(production.sourcing_contract_document_id,production.contract_number),
           'excluded',link.production_order_id IS NOT NULL AND production.production_order_id IS NULL,
           'attachments',COALESCE((SELECT jsonb_agg(jsonb_build_object('attachmentId',attachment.attachment_id,'filename',attachment.original_filename))
             FROM attachments attachment WHERE attachment.entity_type='receiving_batch'

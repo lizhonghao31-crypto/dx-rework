@@ -76,9 +76,9 @@ export function ContractContentEditor({caseId,onClose,onUpdated}:{caseId:string;
   };
   return <dialog ref={dialog} className="system-dialog contract-supplier-dialog contract-content-editor" aria-label="修改合同内容"
     onCancel={event=>{event.preventDefault();if(!busy)onClose();}}>
-    <div className="system-dialog__copy"><h2>修改合同内容</h2><p>仅修改本单合同，不改变原订单和审批数据。保存后生成新版，旧合同和回签保留；财务核对后不能修改。</p></div>
+    <div className="system-dialog__copy"><h2>修改合同内容</h2><p>交货日期同步到订单当前交期，其他内容仅修改本单合同。保存后生成新版，旧合同、审批记录和回签保留；财务核对后不能修改。</p></div>
     {draft?<fieldset className="contract-template-fields" disabled={busy}>
-      {Object.entries(fields).map(([name,label])=><label key={name}>{label}<input value={draft.content[name as keyof typeof fields] ?? ""}
+      {Object.entries(fields).map(([name,label])=><label key={name}>{label}<input type={name==="deliveryDate"?"date":"text"} value={draft.content[name as keyof typeof fields] ?? ""}
         onChange={event=>update(content=>({...content,[name]:event.target.value}))}/></label>)}
       <label>工艺（每行一项）<textarea value={draft.content.processes.join("\n")} onChange={event=>update(content=>({...content,processes:event.target.value.split("\n")}))}/></label>
       {draft.content.lines.map((line,index)=><fieldset key={index} className="contract-template-fields"><legend>第 {index+1} 行加工明细</legend>
