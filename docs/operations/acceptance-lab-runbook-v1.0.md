@@ -182,15 +182,11 @@ printf '\n第一段：\n%s\n\n第二段：\n%s\n\n' \
 
 不一致才回到部署层；一致则继续。
 
-### 第二步：自动角色权限矩阵
+### 第二步：确认本次验收范围
 
-点击“运行全部角色权限矩阵”，记录：
+按业务负责人本次明确指定的范围执行。本轮A1要求在当前页面做业务验收，不运行自动角色权限矩阵，也不把矩阵结果代替真实业务办理。
 
-- 通过数；
-- 失败数；
-- 标准待确认数。
-
-矩阵失败时看具体角色/规则，不直接重部署。
+本次范围包含权限回归时，再点击“运行全部角色权限矩阵”，记录通过、失败和标准待确认数；矩阵失败时看具体角色/规则，不直接重部署。业务范围不包含矩阵时记录 `role_matrix: not-run (business-only)`。
 
 ### 第三步：代表性浏览器场景
 
@@ -216,10 +212,25 @@ printf '\n第一段：\n%s\n\n第二段：\n%s\n\n' \
 | schema不是目标版本 | migration层 | 查Acceptance DB migration |
 | 3201异常 | 生产红线 | 立即停止Acceptance操作并优先恢复生产 |
 | 前端HTML对但静态资源不一致 | Nginx/前端层 | 查canonical frontend alias和资源路径 |
+| 待办列表500，数据库错误42501 | 数据库对象授权层 | 核对API连接的实际数据库/端口及视图所有者依赖权限；只补证据确认缺失的SELECT |
 
 核心纪律：
 
 > 先判断是哪一层，再处理该层。控制码错误不升级成部署问题，浏览器入口错误不升级成migration问题。
+
+### 待办42501的已验证案例（2026-09-30）
+
+候选 `0b748a82ea8e2972154b0a6ce4156d297c895857` 的原待办与合并列表报 `permission denied for view current_sourcing_case_lines`，数字生产待办、实时生产待办及计数查询成功。原 `TodoService` 通过 `current_sourcing_cases` 读取嵌套视图；不能因此改成另一套待办或重跑业务角色矩阵。
+
+维护连接必须使用API实际连接的端口，并核对当前数据库、数据库OID以及两个视图OID。不要用默认端口连接一个同名数据库后就认为已授权成功。应用账号可以查询这些对象标识和 `current_setting('port')`；不要要求普通账号读取 `unix_socket_directories` 等受限设置。
+
+默认视图按视图所有者检查底层关系的读取权限，因此只给运行角色 `dx_rework_acceptance_app` 授权可能不够。核对 `pg_class.relowner`、`reloptions`、`pg_rewrite/pg_depend` 以及 `has_table_privilege`；`security_invoker` 视图按实际调用账号检查，不盲目给所有者补权。
+
+本次已确认 `current_sourcing_cases` 的所有者为 `dx_rework_acceptance`、`security_invoker=false`。嵌套视图读取通过后仍报底层表 `sourcing_style_revisions` 无权读取；按视图实际依赖补齐该所有者缺失的SELECT后，原列表、原计数、数字生产列表、实时生产列表、合并列表及合并计数全部PASS。浏览器“我的待办”模块切换、搜索和刷新也通过。维护只修改Acceptance库中证据确认缺失的SELECT，不改所有者、不授予全库权限、不涉及生产3201。
+
+Acceptance以 `NODE_ENV=test` 启动时Fastify请求日志关闭，日志中没有 `request failed` 不代表接口未失败。必要时从当前已部署的dist调用原待办和各提供方，使用数据库只读连接逐段诊断；不要输出连接串或凭证。部分提供方可能包含写投影，遇到只读错误25006应记录为诊断边界，不能直接当成线上业务故障。
+
+数据库诊断通过不等于业务流程全部通过。本次全部列表计数为0，只能证明读取恢复；仍须从页面验收真正产生的业务事项。
 
 ## 8. A1后的当前基线
 
