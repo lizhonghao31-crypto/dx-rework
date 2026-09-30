@@ -171,7 +171,7 @@ export class TodoDeliveryWorker {
         throw new ApplicationError("CONFLICT", "Todo delivery aggregate is invalid", 409);
       }
       await this.assertDeliveryEvent(input);
-      if (input.route.routeName === "digital_production_task" || await digitalTodoOrder(this.database, input.route)) {
+      if (["digital_production_task", "digital_development"].includes(input.route.routeName) || await digitalTodoOrder(this.database, input.route)) {
         await this.markSuppressed(claimed);
         return "suppressed";
       }

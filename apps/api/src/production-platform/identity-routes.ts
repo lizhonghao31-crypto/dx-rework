@@ -1,3 +1,6 @@
+import { registerDevelopmentRoutes } from "./development-routes.js";
+import type { DigitalDevelopmentService } from "./development-service.js";
+import type { AttachmentService } from "../tools/attachments.js";
 import { registerDigitalNotificationRoutes } from "./notification-routes.js";
 import type { DigitalProductionNotificationService } from "./notification-service.js";
 import { registerDigitalTaskRoutes } from "./task-routes.js";
@@ -15,6 +18,7 @@ import { assertIdentityActor, type DigitalProductionIdentityService } from "./id
 
 export type DigitalIdentityDependencies = {
   authenticate(token: string | undefined): Promise<AuthUser>; root?: RootAuthority;
+  developmentService?: DigitalDevelopmentService; developmentAttachments?: AttachmentService;
   notificationService?: DigitalProductionNotificationService;
   taskService?: DigitalProductionTaskService; accessService?: DigitalProductionAccessService; service: DigitalProductionIdentityService; creationEnabled: boolean;
 };
@@ -27,6 +31,7 @@ const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   return result.data;
 };
 export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies: DigitalIdentityDependencies): void {
+  if (dependencies.developmentService && dependencies.developmentAttachments) registerDevelopmentRoutes(app, dependencies, dependencies.developmentService, dependencies.developmentAttachments);
   if (dependencies.notificationService) registerDigitalNotificationRoutes(app, dependencies, dependencies.notificationService);
   if (dependencies.taskService) registerDigitalTaskRoutes(app, dependencies, dependencies.taskService);
   if (dependencies.accessService) registerDigitalAccessRoutes(app, dependencies, dependencies.accessService);

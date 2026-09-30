@@ -45,6 +45,10 @@ export function buildTodoDeepLink(
     case "wage_period_detail":
       path = `/ui/wages/${route.entityId}`;
       break;
+    case "digital_development":
+      path = "/ui/digital-production";
+      query.set("development", route.entityId);
+      break;
     case "digital_production_task":
       path = "/ui/digital-production";
       query.set("task", route.entityId);
@@ -81,7 +85,7 @@ export function buildTodoExternalDeepLink(
   publicBaseUrl: string,
   descriptor: TodoRouteDescriptor,
 ): string {
-  if (descriptor.routeName === "digital_production_task") throw new ApplicationError("FORBIDDEN", "数字生产任务仅限站内通知", 403);
+  if (["digital_production_task", "digital_development"].includes(descriptor.routeName)) throw new ApplicationError("FORBIDDEN", "数字生产任务仅限站内通知", 403);
   let base: URL;
   try {
     base = new URL(publicBaseUrl);

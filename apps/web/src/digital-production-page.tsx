@@ -1,3 +1,4 @@
+import { DigitalDevelopmentPanel } from "./digital-development-panel.js";
 import { DigitalTasksPanel } from "./digital-production-tasks-panel.js";
 import { digitalRequest } from "./digital-production-api.js";
 import { DigitalAccessPanel, type DigitalAccessOptions } from "./digital-production-access-panel.js";
@@ -21,6 +22,7 @@ const newLine = (): DigitalOrderInput["lines"][number] => ({ poNumber: null, for
 const emptyOrder = (): DigitalOrderInput => ({ customerCode: "", productGroup: "男装", designStyleNo: "", temporaryStyleNo: null,
   orderDate: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()), contractDeliveryDate: null, lines: [newLine()] });
 export function DigitalProductionPage() {
+  const [developmentSource, setDevelopmentSource] = useState<string | null>(() => new URLSearchParams(window.location.search).get("development"));
   const [options, setOptions] = useState<{ creationEnabled: boolean; customers: DigitalCustomer[] } | null>(null);
   const [access, setAccess] = useState<DigitalAccessOptions | null>(null);
   const [orders, setOrders] = useState<DigitalOrder[]>([]);
@@ -63,6 +65,7 @@ export function DigitalProductionPage() {
   };
   const updateLine = (index: number, patch: Partial<DigitalOrderInput["lines"][number]>) => setForm(current => ({ ...current, lines: current.lines.map((line, i) => i === index ? { ...line, ...patch } : line) }));
   const start = (next: "source" | "order", source?: DigitalSource) => { setSelected(null); setSourceId(source?.sourceId ?? null); setForm({ ...emptyOrder(), designStyleNo: source?.designStyleNo ?? "", temporaryStyleNo: source?.temporaryStyleNo ?? null, customerCode: source?.customerCode ?? "", primaryMerchandiserId: options?.customers.find(customer => customer.code === source?.customerCode)?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(options?.customers ?? [], source?.customerCode) }); setMode(next); setError(""); };
+  if (developmentSource) return <div className="pattern-orders digital-production"><DigitalDevelopmentPanel key={developmentSource} sourceId={developmentSource} onClose={() => { setDevelopmentSource(null); const url = new URL(window.location.href); url.searchParams.delete("development"); window.history.replaceState(null, "", url); }} /></div>;
   return <div className="pattern-orders digital-production"><Header title="数字生产订单" badge="订单源头" badgePlacement="subtitle" />
     {error && <p role="alert">{error}</p>}
     {access && <DigitalTasksPanel options={access} />}
@@ -93,12 +96,12 @@ export function DigitalProductionPage() {
     </form></Surface>}
     {mode === "list" && !selected && <><Surface><label>搜索款号 / PO<input value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} /></label>
       <h2>履约母单</h2>{orders.length === 0 && <p>暂无订单</p>}{orders.map(order => <div className="pattern-actions" key={order.productionOrderId}><Button onClick={() => { void digitalRequest<DigitalOrder>(`orders/${order.productionOrderId}`).then(setSelected).catch(reason => setError(reason.message)); }}>{order.designStyleNo}</Button><span>{order.customerCode} · {order.lines.length} 个款色 · {order.status === "waiting_development" ? "待提交开发单" : "已关联开发来源"}</span></div>)}
-      <h2>开发来源</h2>{sources.length === 0 && <p>暂无开发来源</p>}{sources.map(source => <div className="pattern-actions" key={source.sourceId}><span>{source.designStyleNo} · {source.developmentType}</span>{source.productionOrderId ? <span>已下单</span> : options.creationEnabled && access?.create && <Button onClick={() => start("order", source)}>确认下单</Button>}</div>)}
+      <h2>开发来源</h2>{sources.length === 0 && <p>暂无开发来源</p>}{sources.map(source => <div className="pattern-actions" key={source.sourceId}><span>{source.designStyleNo} · {source.developmentType}</span><Button onClick={() => setDevelopmentSource(source.sourceId)}>开发单</Button>{source.productionOrderId ? <span>已下单</span> : options.creationEnabled && access?.create && <Button onClick={() => start("order", source)}>确认下单</Button>}</div>)}
       <div className="pattern-actions"><Button disabled={page === 1} onClick={() => setPage(page - 1)}>上一页</Button><span>{page}</span><Button disabled={orders.length < 20 && sources.length < 20} onClick={() => setPage(page + 1)}>下一页</Button></div>
     </Surface></>}
     {options && access && mode === "list" && <DigitalAccessPanel options={access} customers={options.customers} order={selected} onChanged={async () => { if (selected) setSelected(await digitalRequest<DigitalOrder>(`orders/${selected.productionOrderId}`)); await reload(); }} />}
     {mode === "list" && selected && <Surface><h2>{selected.designStyleNo}</h2><p>{selected.customerCode} · {selected.productGroup} · {selected.status === "waiting_development" ? "待提交开发单 · 未设时限" : "已关联开发来源"}</p>
-      <p>客户下单：{selected.orderDate} · 合同交付：{selected.contractDeliveryDate ?? "待补"}</p>
+      {selected.sourceId && <Button onClick={() => setDevelopmentSource(selected.sourceId)}>查看开发单</Button>}<p>客户下单：{selected.orderDate} · 合同交付：{selected.contractDeliveryDate ?? "待补"}</p>
       {selected.lines.map(line => <form key={`${line.lineId}:${selected.version}`} onSubmit={event => { event.preventDefault(); const data = new FormData(event.currentTarget); void run(`orders/${selected.productionOrderId}/lines/${line.lineId}/numbers`, { expectedVersion: selected.version, poNumber: data.get("poNumber") || null, formalStyleNo: data.get("formalStyleNo") || null }, "PATCH"); }}><fieldset disabled={busy || !(access?.manage || (access?.roles.includes("sample_designer") && selected.createdBy === access.actorId) || (access?.roles.includes("order_merchandiser") && selected.primaryMerchandiserId === access.actorId))}><legend>{line.color}</legend><p>{line.sizes.map(size => `${size.size}：${size.quantity.toLocaleString()}`).join(" / ")}</p><label>PO 号<input name="poNumber" maxLength={100} defaultValue={line.poNumber ?? ""} /></label><label>正式款号<input name="formalStyleNo" maxLength={100} defaultValue={line.formalStyleNo ?? ""} /></label><Button type="submit">保存编号</Button></fieldset></form>)}
       {!selected.sourceId && (access?.manage || (access?.roles.includes("sample_designer") && selected.createdBy === access.actorId)) && <form onSubmit={event => { event.preventDefault(); const data = new FormData(event.currentTarget); void run(`orders/${selected.productionOrderId}/source/${String(data.get("sourceId"))}`, {}); }}><label>关联开发来源<select name="sourceId" required><option value="">请选择</option>{sources.filter(source => !source.productionOrderId && source.createdBy === selected.createdBy && source.designStyleNo === selected.designStyleNo && (source.temporaryStyleNo ?? "") === (selected.temporaryStyleNo ?? "") && (!source.customerCode || source.customerCode === selected.customerCode)).map(source => <option key={source.sourceId} value={source.sourceId}>{source.designStyleNo} · {source.developmentType}</option>)}</select></label><Button type="submit" disabled={busy}>关联</Button></form>}
     </Surface>}

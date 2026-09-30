@@ -55,6 +55,7 @@ const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
   external_responsibility_detail: "记录供应商实际扣款",
   wage_period_detail: "核对返工工资",
   sourcing_detail: "处理外发定价选厂订单",
+  digital_development: "查看开发单",
   digital_production_task: "办理数字生产任务",
   production_detail: "查看生产风险",
   sample_detail: "处理样衣事项",

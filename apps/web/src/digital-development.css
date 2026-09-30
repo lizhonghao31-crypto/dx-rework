@@ -1,0 +1,31 @@
+.development-editor header { text-align:center; }
+.development-heading { display:flex;flex-wrap:wrap;gap:16px;padding:12px 0; }
+.development-sheet-layout { display:grid;grid-template-columns:minmax(0, 3fr) minmax(300px, 1fr);gap:16px; }
+.development-images figure { margin:0 0 12px;break-inside:avoid; }
+.development-images img { max-width:100%;max-height:640px;object-fit:contain; }
+.development-specifications label { display:block; }
+.development-table-scroll { overflow-x:auto; }
+.development-editor table { width:100%;border-collapse:collapse; }
+.development-editor th,.development-editor td { border:1px solid currentColor;padding:4px;min-width:60px; }
+.development-editor td input,.development-editor th input { width:100%;min-width:60px;box-sizing:border-box; }
+.development-materials { display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px; }
+.development-materials fieldset { min-width:0; }
+.development-materials label { display:block; }
+.development-editor textarea { width:100%;box-sizing:border-box; }
+@media(max-width:760px) { .development-sheet-layout { grid-template-columns:1fr; } }
+.development-print { display:none; }
+@media print {
+  body * { visibility:hidden; }
+  .development-print,.development-print * { visibility:visible; }
+  .development-editor>form,.development-controls,.development-editor>p[role=alert] { display:none!important; }
+  .development-print { display:block;position:absolute;left:0;top:0;width:100%;font-size:10pt;color:black;background:white; }
+  .development-print-grid { display:block; }
+  .development-print img { max-width:100%;max-height:180mm;object-fit:contain; }
+  .development-print figure { margin:0;break-inside:avoid; }
+  .development-print p,.development-print td { white-space:pre-wrap;overflow-wrap:anywhere; }
+  .development-print table { table-layout:fixed; }
+  .development-print th,.development-print td { min-width:0;overflow-wrap:anywhere; }
+  .development-print tr { break-inside:avoid; }
+  .development-print thead { display:table-header-group; }
+  .development-print h4 { break-after:avoid; }
+}

@@ -87,6 +87,10 @@
     "./digital-production-notifications": {
       "types": "./src/digital-production-notifications.ts",
       "import": "./dist/digital-production-notifications.js"
+    },
+    "./digital-development": {
+      "types": "./src/digital-development.ts",
+      "import": "./dist/digital-development.js"
     }
   },
   "scripts": {
