@@ -281,6 +281,7 @@ export const SourcingContractDocumentSchema = z.object({
   preparedAt: z.string().datetime(),
   generatedAt: z.string().datetime().nullable(),
   canSupplement: z.boolean(),
+  canRefreshInformation: z.boolean().optional(),
 }).strict();
 
 export const SourcingContractStateResponseSchema = z.object({

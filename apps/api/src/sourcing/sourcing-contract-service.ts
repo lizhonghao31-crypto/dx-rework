@@ -9,6 +9,7 @@ import type {
   SupplementSourcingContract,
 } from "@dx-rework/contracts";
 import { ApplicationError } from "../platform/errors.js";
+import { SourcingContractManagementService, canRefreshContractInformation } from "./sourcing-contract-management-service.js";
 import type { AttachmentService } from "../tools/attachments.js";
 import {
   IdempotencyService,
@@ -53,6 +54,7 @@ type ContractRow = Readonly<{
   party_a_address?: string;
   signing_place?: string;
   terms?: Record<string, string>;
+  returned?: boolean;
 }>;
 
 const iso = (value: Date | string): string => value instanceof Date
@@ -70,12 +72,13 @@ const requestHash = (scope: string, payload: unknown): string =>
   createHash("sha256").update(JSON.stringify({ scope,payload })).digest("hex");
 
 export class SourcingContractService {
+  readonly management: SourcingContractManagementService;
   constructor(
     private readonly database: Pool,
     private readonly attachments: AttachmentService,
     private readonly idempotency = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
-  ) {}
+  ) { this.management = new SourcingContractManagementService(database); }
 
   async validateLineImages(client: Pick<PoolClient, "query">, actor: TrustedActorContext, attachmentIds: readonly string[]): Promise<void> {
     for (const attachmentId of new Set(attachmentIds)) {
@@ -215,7 +218,7 @@ export class SourcingContractService {
          WHERE sourcing_contract_document_id=previous.sourcing_contract_document_id)
          || '{}'::jsonb AS direct_values) direct ON true
        LEFT JOIN LATERAL (SELECT COALESCE(jsonb_object_agg(key,value),'{}'::jsonb) || COALESCE(direct.direct_values,'{}'::jsonb) AS values
-         FROM jsonb_each(previous.approval_snapshot) WHERE key=ANY(ARRAY['address','contractEntityName','partyBRepresentative','payeeName','bankAccount','bankName'])) supplements ON true
+         FROM jsonb_each(previous.approval_snapshot) WHERE key=ANY(ARRAY['supplierName','supplierCode','address','contractEntityName','partyBRepresentative','payeeName','bankAccount','bankName'])) supplements ON true
        CROSS JOIN LATERAL (
          SELECT template_version
          FROM sourcing_contract_template_versions
@@ -231,13 +234,14 @@ export class SourcingContractService {
          ],NULL)::text[] AS fields
        ) missing
        WHERE snapshot.sourcing_approval_snapshot_id=$3
-       ON CONFLICT(sourcing_approval_snapshot_id,identity_version,template_version) DO NOTHING
+       ON CONFLICT(sourcing_approval_snapshot_id,identity_version,template_version,information_revision) DO NOTHING
        RETURNING sourcing_contract_document_id`,
       [documentId,actor.actorId,approvalSnapshotId,metadata.identity_version,metadata.template_version],
     );
     const existing = inserted.rows[0] ? null : await client.query<{ sourcing_contract_document_id: string }>(
       `SELECT sourcing_contract_document_id FROM sourcing_contract_documents
-       WHERE sourcing_approval_snapshot_id=$1 AND identity_version=$2 AND template_version=$3`,
+       WHERE sourcing_approval_snapshot_id=$1 AND identity_version=$2 AND template_version=$3
+       ORDER BY contract_version DESC LIMIT 1`,
       [approvalSnapshotId,metadata.identity_version,metadata.template_version],
     );
     const id = inserted.rows[0]?.sourcing_contract_document_id
@@ -252,7 +256,8 @@ export class SourcingContractService {
   ): Promise<SourcingContractStateResponse> {
     this.assertReader(actor);
     const result = await this.database.query<ContractRow>(
-      `SELECT document.*,source_case.created_by
+      `SELECT document.*,source_case.created_by,
+              EXISTS(SELECT 1 FROM sourcing_contract_return_submissions WHERE sourcing_case_id=document.sourcing_case_id) AS returned
        FROM sourcing_contract_documents document
        JOIN sourcing_cases source_case ON source_case.sourcing_case_id=document.sourcing_case_id
        WHERE document.sourcing_case_id=$1 AND source_case.deleted_at IS NULL
@@ -484,6 +489,8 @@ export class SourcingContractService {
       generatedAt: row.generated_at ? iso(row.generated_at) : null,
       canSupplement: await memberCanWriteModule(this.database, actor.actorId, "sourcing") && (actor.actorRoles.includes(ROOT_ROLE)
         || (actor.actorRoles.includes(MERCHANDISER_ROLE) && actor.actorId === row.created_by)),
+      canRefreshInformation: row.status !== "generating" && canRefreshContractInformation(actor,row.created_by,row.returned === true)
+        && (actor.actorRoles.includes(ROOT_ROLE) || await memberCanWriteModule(this.database,actor.actorId,"sourcing")),
     };
   }
 }

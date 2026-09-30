@@ -6,6 +6,7 @@ export * from "./todos.js";
 export * from "./todo-presentation.js";
 export * from "./admin-audit.js";
 export * from "./sourcing.js";
+export * from "./contract-management.js";
 export * from "./sourcing-style-identity.js";
 export * from "./cutting.js";
 export * from "./samples.js";

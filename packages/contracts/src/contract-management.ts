@@ -1,0 +1,73 @@
+import { z } from "zod";
+
+export const CONTRACT_TERM_LABELS = {
+  processingResponsibility: "加工责任（保留 {{工艺}} 自动带入订单工艺）",
+  qualityRequirements: "质量要求",
+  delayPenalty: "交货时间与延期扣款",
+  logistics: "交货地点及运输方式",
+  reasonableLoss: "物料合理损耗及计算方法",
+  defectRate: "次品率",
+  payment: "付款方式",
+  effectiveness: "生效与补充协议",
+  validity: "有效期",
+} as const;
+const clause = z.string().trim().min(1).max(4000);
+export const ContractTemplateContentSchema = z.object({
+  templateName: z.string().trim().min(1).max(100),
+  partyAName: z.string().trim().min(1).max(200),
+  partyAAddress: z.string().trim().min(1).max(500),
+  signingPlace: z.string().trim().min(1).max(200),
+  terms: z.object({
+    processingResponsibility: clause.refine(value => value.split("{{工艺}}").length === 2,
+      "加工责任须保留一个 {{工艺}}，用于自动带入订单工艺"),
+    qualityRequirements: clause, delayPenalty: clause, logistics: clause,
+    reasonableLoss: clause, defectRate: clause, payment: clause,
+    effectiveness: clause, validity: clause,
+  }).strict(),
+}).strict();
+export const ContractTemplateSchema = ContractTemplateContentSchema.extend({
+  templateVersion: z.number().int().positive(),
+  createdAt: z.string().datetime(),
+});
+export const ContractTemplateStateSchema = z.object({
+  item: ContractTemplateSchema,
+  history: z.array(ContractTemplateSchema),
+}).strict();
+export const SaveContractTemplateSchema = ContractTemplateContentSchema.extend({
+  expectedVersion: z.number().int().positive(),
+}).strict();
+export const CONTRACT_SUPPLIER_FIELDS = {
+  supplierName: "供应商名称", supplierCode: "供应商编号",
+  contractEntityName: "合同主体", address: "地址",
+  partyBRepresentative: "乙方代表", payeeName: "收款人",
+  bankAccount: "银行账号", bankName: "开户行",
+} as const;
+export const CONTRACT_REFRESH_FIELDS = {
+  ...CONTRACT_SUPPLIER_FIELDS,
+  templateVersion: "模板版本", partyAName: "甲方名称", partyAAddress: "甲方地址", signingPlace: "签订地点",
+  processingResponsibility: CONTRACT_TERM_LABELS.processingResponsibility,
+  qualityRequirements: CONTRACT_TERM_LABELS.qualityRequirements, delayPenalty: CONTRACT_TERM_LABELS.delayPenalty,
+  logistics: CONTRACT_TERM_LABELS.logistics, reasonableLoss: CONTRACT_TERM_LABELS.reasonableLoss,
+  defectRate: CONTRACT_TERM_LABELS.defectRate, payment: CONTRACT_TERM_LABELS.payment,
+  effectiveness: CONTRACT_TERM_LABELS.effectiveness, validity: CONTRACT_TERM_LABELS.validity,
+} as const;
+export const ContractRefreshPreviewSchema = z.object({
+  sourcingContractDocumentId: z.string().uuid(),
+  informationFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+  returned: z.boolean(),
+  changes: z.array(z.object({
+    field: z.enum(Object.keys(CONTRACT_REFRESH_FIELDS) as [keyof typeof CONTRACT_REFRESH_FIELDS, ...(keyof typeof CONTRACT_REFRESH_FIELDS)[]]),
+    before: z.string(), after: z.string(),
+  }).strict()),
+  missingFields: z.array(z.string()),
+}).strict();
+export const RefreshContractInformationSchema = z.object({
+  sourcingContractDocumentId: z.string().uuid(),
+  informationFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+}).strict();
+export type ContractTemplateContent = z.infer<typeof ContractTemplateContentSchema>;
+export type ContractTemplate = z.infer<typeof ContractTemplateSchema>;
+export type ContractTemplateState = z.infer<typeof ContractTemplateStateSchema>;
+export type SaveContractTemplate = z.infer<typeof SaveContractTemplateSchema>;
+export type ContractRefreshPreview = z.infer<typeof ContractRefreshPreviewSchema>;
+export type RefreshContractInformation = z.infer<typeof RefreshContractInformationSchema>;

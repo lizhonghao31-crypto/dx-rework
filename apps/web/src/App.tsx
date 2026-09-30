@@ -42,6 +42,7 @@ import { ReworkQueryPage } from "./reporting/rework-query-page.js";
 import { ReportCenterPage } from "./reporting/report-center-page.js";
 import { WorkflowQueuePage } from "./reporting/workflow-queue-page.js";
 import { AdminConsolePage } from "./admin-console-page.js";
+import { ContractTemplateSettingsPage } from "./contract-template-settings-page.js";
 import { EmployeeAccessPage } from "./employee-access-page.js";
 import { MasterDataPage } from "./master-data-page.js";
 import { SupplierDirectoryPage, SupplierMaintenancePage } from "./supplier-center-page.js";
@@ -293,6 +294,7 @@ export function App() {
     page = <Shell active="系统管理"><AdminConsolePage initialTab={adminTab} /></Shell>;
   }
   else if (path === "/ui/employee-access") page = <EmployeeAccessPage />;
+  else if (path === "/ui/contract-template") page = <Shell active="合同模板设置"><ContractTemplateSettingsPage /></Shell>;
   else if (path === "/ui/production-dashboard" || /^\/ui\/production-dashboard\/[0-9a-f-]+$/i.test(path)) page = <ProductionDashboardPage productionOrderId={path.split("/")[3]} />;
   else if (path === "/ui/production-reporting" || /^\/ui\/production-reporting\/[0-9a-f-]+$/i.test(path)) page = <ProductionReportingPage productionOrderId={path.split("/")[3]} />;
   else if (path === "/ui/suppliers/requests") page = <SupplierOnboardingPage key="requests" />;
@@ -471,6 +473,9 @@ export function App() {
   }
   if (path === "/ui/employee-access") {
     return <AuthGate requiredRole="root_superuser" requiredCapability="access:admin">{page}</AuthGate>;
+  }
+  if (path === "/ui/contract-template") {
+    return <AuthGate requiredRole="root_superuser">{page}</AuthGate>;
   }
   if (path === "/ui/supervisor") {
     return <AuthGate requiredAnyOf={[

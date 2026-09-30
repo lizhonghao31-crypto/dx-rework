@@ -890,7 +890,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       readerActor(),created.value.sourcingCaseId,
     )).item;
     expect(firstContract).toMatchObject({
-      contractVersion: 2,templateVersion: 3,status: "ready",missingFields: [],
+      contractVersion: 2,templateVersion: 4,status: "ready",missingFields: [],
     });
     const frozenContract = (await database.query<{ approval_snapshot: Record<string, unknown> }>(
       "SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",
@@ -2415,7 +2415,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await service.recordManagementDecision(managerActor(), id, { supplierId: factoryId, craftIds: [craftId("净色车缝")], linePrices, cuttingProcess: "other", cuttingProcessOther: "IMAGE-INTERNAL-CUT" }, randomUUID());
     await service.decideOwner(ownerActor(), id, { decision: "approved" }, randomUUID());
     const original = (await contractService.getCurrent(readerActor(), id)).item!;
-    expect(original).toMatchObject({ templateVersion: 3, status: "ready" });
+    expect(original).toMatchObject({ templateVersion: 4, status: "ready" });
     const query = "SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1";
     const snapshot = (await database.query(query, [original.sourcingContractDocumentId])).rows[0]!.approval_snapshot;
     expect(snapshot.lines.map((line: { imageAttachmentId: string }) => line.imageAttachmentId)).toEqual([imageIds[0], imageIds[0], imageIds[1]]);
@@ -3034,4 +3034,94 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_contract_return'",[id]))
       .rows[0]?.count).toBe(1);
   });
+  it("refreshes template-only, supplier-only and combined information without changing approvals or return facts",async()=>{
+    const created=await service.createCase(merchandiserActor(),{gender:"女装",styleName:"合同信息更新测试",estimatedCutPieceSendDate:"2026-10-01",deliveryDate:"2026-10-20",
+      lineItems:[{styleNo:"CONTRACT-INFO-REFRESH",color:"红",quantity:20}],daxingUnitPrice:"8"},randomUUID());
+    const id=created.value.sourcingCaseId;
+    await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
+    await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
+    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    const management=contractService.management;
+    const original=(await contractService.getCurrent(readerActor(),id)).item!;
+    const originalRow=(await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[original.sourcingContractDocumentId])).rows[0]!;
+    const approval=(await database.query("SELECT * FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1",[original.sourcingApprovalSnapshotId])).rows[0]!;
+    const clock=(await database.query("SELECT * FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1",[id])).rows[0]!;
+    const unchanged=await management.previewInformation(contractActor(),id);
+    expect(unchanged.changes).toEqual([]);
+    expect(await management.refreshInformation(contractActor(),id,unchanged,randomUUID())).toBe(original.sourcingContractDocumentId);
+    await expect(management.previewInformation({...contractActor(),actorId:managerId},id)).rejects.toMatchObject({code:"FORBIDDEN"});
+    await expect(management.templates(managerActor())).rejects.toMatchObject({code:"FORBIDDEN"});
+    const template=(await management.templates(rootActor())).item;
+    const templateInput={expectedVersion:template.templateVersion,templateName:template.templateName,partyAName:template.partyAName,partyAAddress:template.partyAAddress,signingPlace:template.signingPlace,
+      terms:{...template.terms,logistics:template.terms.logistics+"（模板更新测试）"}};
+    const saveKey=randomUUID();
+    const saved=await management.saveTemplate(rootActor(),templateInput,saveKey);
+    expect(saved.item.templateVersion).toBe(template.templateVersion+1);
+    await management.saveTemplate(rootActor(),templateInput,saveKey);
+    expect((await management.templates(rootActor())).history.filter(row=>row.templateVersion===template.templateVersion)).toHaveLength(1);
+    await expect(management.saveTemplate(rootActor(),templateInput,randomUUID())).rejects.toMatchObject({statusCode:409});
+    await expect(management.refreshInformation(contractActor(),id,unchanged,randomUUID())).rejects.toMatchObject({statusCode:409});
+    const templatePreview=await management.previewInformation(managerActor(),id);
+    expect(templatePreview.changes.map(change=>change.field)).toEqual(["templateVersion","logistics"]);
+    const refreshKey=randomUUID();
+    const [first,retry]=await Promise.all([
+      management.refreshInformation(managerActor(),id,templatePreview,refreshKey),
+      management.refreshInformation(managerActor(),id,templatePreview,refreshKey),
+    ]);
+    expect(retry).toBe(first);
+    await contractService.generateIfReady(managerActor(),id,first);
+    expect((await contractService.getCurrent(readerActor(),id)).item).toMatchObject({contractVersion:original.contractVersion+1,templateVersion:saved.item.templateVersion,status:"ready"});
+    const updateSupplier=async()=>{
+      await database.query("ALTER TABLE supplier_catalog_versions DISABLE TRIGGER supplier_catalog_versions_guard_creation, DISABLE TRIGGER supplier_profile_maintenance_authority");
+      try{
+        await database.query(`INSERT INTO supplier_catalog_versions(supplier_id,version,supplier_name,active,change_reason,changed_by,
+          address,contract_entity_name,party_b_representative,payee_name,bank_account,bank_name)
+          SELECT supplier_id,version+1,supplier_name,true,'合同刷新测试',$2,address||'（资料更新）',contract_entity_name,party_b_representative,payee_name,bank_account||'9',bank_name
+          FROM current_supplier_catalog WHERE supplier_id=$1`,[factoryId,managerId]);
+      }finally{await database.query("ALTER TABLE supplier_catalog_versions ENABLE TRIGGER supplier_catalog_versions_guard_creation, ENABLE TRIGGER supplier_profile_maintenance_authority");}
+    };
+    await updateSupplier();
+    const supplierPreview=await management.previewInformation(contractActor(),id);
+    expect(supplierPreview.changes.map(change=>change.field)).toEqual(["address","bankAccount"]);
+    const supplierDocument=await management.refreshInformation(contractActor(),id,supplierPreview,randomUUID());
+    await contractService.generateIfReady(contractActor(),id,supplierDocument);
+    await updateSupplier();
+    const now=(await management.templates(rootActor())).item;
+    await management.saveTemplate(rootActor(),{...templateInput,expectedVersion:now.templateVersion,terms:{...now.terms,payment:now.terms.payment+"（合并更新测试）"}},randomUUID());
+    const both=await management.previewInformation(managerActor(),id);
+    expect(both.changes.map(change=>change.field)).toEqual(["address","bankAccount","templateVersion","payment"]);
+    const combined=await management.refreshInformation(managerActor(),id,both,randomUUID());
+    await contractService.generateIfReady(managerActor(),id,combined);
+    const effective=(await database.query("SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[combined])).rows[0]!.approval_snapshot;
+    expect(effective.bankAccount).toBe(String(originalRow.approval_snapshot.bankAccount)+"99");
+    const refreshedSupplier={address:effective.address,bankAccount:effective.bankAccount};
+    await service.reviseStyles(merchandiserActor(),id,{expectedRevision:0,lines:[{position:1,styleNo:"CONTRACT-INFO-REVISED",alternateStyleNo:null}]},randomUUID());
+    const withStyle=(await contractService.getCurrent(readerActor(),id)).item!;
+    expect((await database.query("SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[withStyle.sourcingContractDocumentId])).rows[0]!.approval_snapshot).toMatchObject(refreshedSupplier);
+    expect((await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[original.sourcingContractDocumentId])).rows[0]).toEqual(originalRow);
+    expect((await database.query("SELECT * FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1",[original.sourcingApprovalSnapshotId])).rows[0]).toEqual(approval);
+    expect((await database.query("SELECT * FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1",[id])).rows[0]).toEqual(clock);
+    const attachmentId=randomUUID();
+    await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'已回传合同.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[attachmentId,`contract-info-return/${attachmentId}`,"e".repeat(64),merchandiserId]);
+    await contractReturns.submit(contractActor(),id,[attachmentId],randomUUID());
+    const returned=(await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id));
+    const returnRows=(await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[id])).rows;
+    expect((await contractService.getCurrent(contractActor(),id)).item?.canRefreshInformation).toBe(false);
+    expect((await contractService.getCurrent(managerActor(),id)).item?.canRefreshInformation).toBe(false);
+    await expect(management.previewInformation(contractActor(),id)).rejects.toMatchObject({code:"FORBIDDEN"});
+    await expect(management.previewInformation(managerActor(),id)).rejects.toMatchObject({code:"FORBIDDEN"});
+    await expect(management.refreshInformation(managerActor(),id,both,randomUUID())).rejects.toMatchObject({code:"FORBIDDEN"});
+    await updateSupplier();
+    const rootPreview=await management.previewInformation(rootActor(),id);
+    expect(rootPreview.returned).toBe(true);
+    const rootDocument=await management.refreshInformation(rootActor(),id,rootPreview,randomUUID());
+    await contractService.generateIfReady(rootActor(),id,rootDocument);
+    expect((await contractService.getCurrent(rootActor(),id)).item?.canRefreshInformation).toBe(true);
+    expect(await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id)).toEqual(returned);
+    expect((await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[id])).rows).toEqual(returnRows);
+    expect((await database.query("SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[withStyle.sourcingContractDocumentId])).rows[0]!.approval_snapshot).toMatchObject(refreshedSupplier);
+  });
+
 });
+

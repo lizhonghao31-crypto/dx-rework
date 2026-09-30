@@ -129,6 +129,14 @@ const create = (
     },
   };
   const contracts = {
+    management: {
+      templates: vi.fn(async()=>({item:{templateVersion:4,templateName:"测试模板",partyAName:"测试甲方",partyAAddress:"测试地址",signingPlace:"广州",createdAt:"2026-09-30T00:00:00.000Z",
+        terms:{processingResponsibility:"乙方负责{{工艺}}。",qualityRequirements:"质量",delayPenalty:"延期",logistics:"物流",reasonableLoss:"损耗",defectRate:"次品",payment:"付款",effectiveness:"生效",validity:"有效期"}},history:[]})),
+      previewTemplate:vi.fn(async()=>Buffer.from("%PDF-1.7 preview")),
+      saveTemplate:vi.fn(),
+      previewInformation:vi.fn(async()=>({sourcingContractDocumentId:"00000000-0000-4000-8000-000000000501",informationFingerprint:"a".repeat(64),returned:false,changes:[],missingFields:[]})),
+      refreshInformation:vi.fn(async()=>"00000000-0000-4000-8000-000000000501"),
+    },
     getCurrent: vi.fn(async () => contractState),
     supplement: vi.fn(async () => contractState),
     generateIfReady: vi.fn(async () => contractState),
@@ -760,4 +768,39 @@ describe("sourcing PR03 routes", () => {
     expect(denied.service.correctCase).not.toHaveBeenCalled();
   });
 
+});
+
+describe("contract template and information routes",()=>{
+  const headers={cookie:"dx_rework_session=trusted","idempotency-key":"contract-info-refresh"};
+  const url=`/sourcing/cases/${caseSummary.sourcingCaseId}/contract/refresh`;
+  it("allows only verified root to access template settings",async()=>{
+    for(const [role,capability] of [["order_merchandiser","sourcing:contract:record"],["production_management","sourcing:decision:record"],["system_admin","admin:read"],["root_superuser","sourcing:contract:record"]]){
+      const {app,contracts}=create(["sourcing:view",capability!],[role!]);
+      expect((await app.inject({method:"GET",url:"/sourcing/contract-template",headers})).statusCode).toBe(403);
+      expect((await app.inject({method:"POST",url:"/sourcing/contract-template/preview",headers,payload:{}})).statusCode).toBe(403);
+      expect((await app.inject({method:"POST",url:"/sourcing/contract-template",headers,payload:{}})).statusCode).toBe(403);
+      expect(contracts.management.templates).not.toHaveBeenCalled();
+    }
+    const root=create([],[],true);
+    expect((await root.app.inject({method:"GET",url:"/sourcing/contract-template",headers})).statusCode).toBe(200);
+  });
+  it("routes responsible merchandiser, manager and root updates through the same checked service",async()=>{
+    for(const [role,capability,isRoot] of [["order_merchandiser","sourcing:contract:record",false],["production_management","sourcing:decision:record",false],["root_superuser","sourcing:contract:record",true]] as const){
+      const {app,contracts}=create(["sourcing:view",capability],[role],isRoot);
+      expect((await app.inject({method:"GET",url,headers})).statusCode).toBe(200);
+      expect((await app.inject({method:"POST",url,headers,payload:{sourcingContractDocumentId:"00000000-0000-4000-8000-000000000501",informationFingerprint:"a".repeat(64)}})).statusCode).toBe(200);
+      expect(contracts.management.refreshInformation).toHaveBeenCalledWith(expect.objectContaining({authorizationCapability:capability}),caseSummary.sourcingCaseId,expect.any(Object),"contract-info-refresh");
+      expect(contracts.generateIfReady).toHaveBeenCalled();
+    }
+  });
+  it("rejects unapproved roles, missing capabilities and arbitrary order edits",async()=>{
+    for(const [role,capability] of [["factory_payables","sourcing:finance:reconcile"],["owner_group","sourcing:owner:approve"],["order_merchandiser","sourcing:view"],["production_management","sourcing:view"]]){
+      const {app,contracts}=create(["sourcing:view",capability!],[role!]);
+      expect((await app.inject({method:"GET",url,headers})).statusCode).toBe(403);
+      expect(contracts.management.previewInformation).not.toHaveBeenCalled();
+    }
+    const {app,contracts}=create(["sourcing:view","sourcing:contract:record"],["order_merchandiser"]);
+    expect((await app.inject({method:"POST",url,headers,payload:{sourcingContractDocumentId:"00000000-0000-4000-8000-000000000501",informationFingerprint:"a".repeat(64),unitPrice:"0"}})).statusCode).toBe(400);
+    expect(contracts.management.refreshInformation).not.toHaveBeenCalled();
+  });
 });
