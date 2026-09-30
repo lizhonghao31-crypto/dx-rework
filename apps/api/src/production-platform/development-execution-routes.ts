@@ -1,0 +1,32 @@
+import type {FastifyInstance,FastifyRequest} from "fastify";
+import {z} from "zod";
+import QRCode from "qrcode";
+import {CreateUploadIntentSchema} from "@dx-rework/contracts";
+import {DevelopmentDispatchSchema,DevelopmentCheckSchema,DevelopmentWorkSchema,DevelopmentFabricReportSchema,DevelopmentFabricDecisionSchema} from "@dx-rework/contracts/digital-development-execution";
+import {businessActor} from "../access/business-authority.js";
+import {ApplicationError} from "../platform/errors.js";
+import type {AttachmentService} from "../tools/attachments.js";
+import type {DigitalIdentityDependencies} from "./identity-routes.js";
+import type {DevelopmentExecutionService} from "./development-execution-service.js";
+export function registerDevelopmentExecutionRoutes(app:FastifyInstance,dependencies:DigitalIdentityDependencies,service:DevelopmentExecutionService,attachments:AttachmentService){
+  const parse=<T>(schema:z.ZodType<T>,input:unknown):T=>{const result=schema.safeParse(input);if(!result.success)throw new ApplicationError("VALIDATION_ERROR",result.error.issues[0]?.message??"请检查办理资料",400);return result.data;};
+  const actor=async(request:FastifyRequest)=>{const token=request.headers.cookie?.split(";").map(v=>v.trim()).find(v=>v.startsWith("dx_rework_session="))?.slice(18);return businessActor(dependencies.root,await dependencies.authenticate(token),request.id,"digital_production:view");};
+  const id=(request:FastifyRequest,name="sourceId")=>parse(z.string().uuid(),(request.params as Record<string,unknown>)[name]);
+  const key=(request:FastifyRequest)=>typeof request.headers["idempotency-key"]==="string"?request.headers["idempotency-key"]:"";
+  const base="/digital-production/sources/:sourceId/execution";
+  app.get(base,async request=>({...await service.read(await actor(request),id(request)),qrAvailable:Boolean(dependencies.developmentQrBase)}));
+  app.put(`${base}/dispatch`,async request=>service.dispatch(await actor(request),id(request),parse(DevelopmentDispatchSchema,request.body),key(request)));
+  app.post(`${base}/check`,async request=>service.check(await actor(request),id(request),parse(DevelopmentCheckSchema,request.body),key(request)));
+  app.post(`${base}/resubmit`,async request=>service.resubmit(await actor(request),id(request),parse(z.object({taskId:z.string().uuid()}).strict(),request.body).taskId,key(request)));
+  app.post(`${base}/complete`,async request=>service.complete(await actor(request),id(request),parse(DevelopmentWorkSchema,request.body),key(request)));
+  app.post(`${base}/fabric-reports`,async request=>service.report(await actor(request),id(request),parse(DevelopmentFabricReportSchema,request.body),key(request)));
+  app.post(`${base}/fabric-decisions`,async request=>service.decideFabric(await actor(request),id(request),parse(DevelopmentFabricDecisionSchema,request.body),key(request)));
+  app.get(`${base}/upload-limits`,async request=>{await service.authorizeUpload(await actor(request),id(request));return attachments.uploadLimits();});
+  app.post(`${base}/upload-intents`,async request=>{const trusted=await actor(request);await service.authorizeUpload(trusted,id(request));return attachments.createUploadIntent(trusted,parse(CreateUploadIntentSchema,request.body));});
+  app.post(`${base}/attachments/:attachmentId/finalize`,async request=>{const trusted=await actor(request);await service.authorizeUpload(trusted,id(request));return attachments.finalize(trusted,id(request,"attachmentId"));});
+  app.get(`${base}/tasks/:taskId/qr`,async(request,reply)=>{
+    const state=await service.read(await actor(request),id(request));const taskId=id(request,"taskId");if(!state.tasks.some(task=>task.taskId===taskId))throw new ApplicationError("NOT_FOUND","任务不存在",404);
+    if(!dependencies.developmentQrBase)throw new ApplicationError("NOT_FOUND","随单码地址未配置，请从待办查单",404);
+    reply.type("image/png");reply.header("cache-control","no-store");return reply.send(await QRCode.toBuffer(`${dependencies.developmentQrBase}ui/digital-production?task=${taskId}`,{width:240,margin:2}));
+  });
+}

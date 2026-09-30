@@ -3,7 +3,7 @@ import type { PoolClient } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDigitalLeader, isDigitalTechnicalManager } from "./access-policy.js";
 export const DIGITAL_TASK_ROLES = {
-  development_materials: "development_clerk", development_pattern: "pattern_room_worker", development_cutting: "pattern_room_worker",
+  development_material_supply: "sample_designer", development_material_recheck: "development_clerk", development_materials: "development_clerk", development_pattern: "pattern_room_worker", development_cutting: "pattern_room_worker",
   development_sewing: "pattern_room_worker", development_tail_check: "pattern_room_tail_inspector",
   development_printing: "pattern_room_worker", development_embroidery: "pattern_room_worker", development_print_embroidery: "pattern_room_worker",
   development_washing: "development_clerk", development_shipping: "sample_designer", development_confirmation: "sample_designer",
