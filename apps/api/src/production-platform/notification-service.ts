@@ -1,3 +1,4 @@
+import { projectDevelopmentNotices } from "./development-notifications.js";
 import { isRootActor } from "../access/business-authority.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -90,6 +91,7 @@ export class DigitalProductionNotificationService {
   async runOnce():Promise<void> {
     await this.transaction(async client=>{
       const people=await this.people(client);
+      if ((await client.query("SELECT to_regclass('digital_development_documents') AS table_name")).rows[0]?.table_name) await projectDevelopmentNotices(client,people);
       const intents=(await client.query(`SELECT i.* FROM digital_production_event_intents i
         WHERE NOT EXISTS(SELECT 1 FROM digital_production_notification_projection p WHERE p.event_id=i.event_id)
         ORDER BY i.created_at,i.event_id LIMIT 200`)).rows;
@@ -140,10 +142,16 @@ export class DigitalProductionNotificationService {
     }
     return result;
   }
-  private async render(database:Database,actor:TrustedActorContext,event:{event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date},people:TrustedActorContext[]):Promise<DigitalNotification|null> {
+  private async render(database:Database,actor:TrustedActorContext,event:{development_source_id?:string|null;event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date},people:TrustedActorContext[]):Promise<DigitalNotification|null> {
     if(!people.some(p=>p.actorId===actor.actorId))return null;
     let title:string,actionable:boolean,route:TodoRouteDescriptor;
-    if(event.task_id){
+    if(event.development_source_id){
+      if(!await new DigitalProductionAccessPolicy(database).allowed(actor,"source",event.development_source_id,"technical"))return null;
+      const notice=(await database.query("SELECT title FROM digital_development_notices WHERE event_id=$1",[event.event_id])).rows[0];
+      if(!notice)return null;
+      title=notice.title;actionable=false;
+      route={routeName:"digital_development",entityId:event.development_source_id,todoId:event.event_id};
+    }else if(event.task_id){
       const task=(await database.query<Task>(`${TASKS} WHERE t.task_id=$1`,[event.task_id])).rows[0];
       if(!task||task.lifecycle!=="active")return null;
       if(!await this.currentTaskEvent(database,task,event.event_id,event.event_kind))return null;
