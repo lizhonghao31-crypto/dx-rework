@@ -25,14 +25,14 @@ export async function wageReport(source: Queryable, query: ReportQuery, range: R
    SELECT person_id,wage_source source,wage_kind kind,sum(wage_amount)::text amount,count(*)::int "lineCount"
    FROM filtered GROUP BY person_id,wage_source,wage_kind
  ), people AS (
-   SELECT person_id "personId",max(person_name_snapshot) name,
+   SELECT person_id "personId",max(person_name_snapshot) AS "name",
      count(DISTINCT (wage_source,source_order_id))::int "orderCount",sum(wage_amount)::text amount,
      count(*)::int "lineCount",count(DISTINCT round_id)::int "roundCount",
      (SELECT jsonb_agg(jsonb_build_object('source',p.source,'kind',p.kind,'amount',p.amount,'lineCount',p."lineCount") ORDER BY p.source,p.kind)
        FROM person_sources p WHERE p.person_id=filtered.person_id) sources
    FROM filtered GROUP BY person_id ORDER BY sum(wage_amount) DESC,person_id
  ) SELECT
-   COALESCE((SELECT jsonb_agg(to_jsonb(preview) ORDER BY completed_date DESC,person_name_snapshot,line_id) FROM preview),'[]'::jsonb) rows,
+   COALESCE((SELECT jsonb_agg(to_jsonb(preview) ORDER BY completed_date DESC,person_name_snapshot,line_id) FROM preview),'[]'::jsonb) AS "rows",
    (SELECT page FROM paging) page,(SELECT total_pages FROM paging) total_pages,
    COALESCE((SELECT jsonb_agg(to_jsonb(people)) FROM people),'[]'::jsonb) people,
    count(*)::int row_count,COALESCE(sum(wage_amount),0)::text wage_total,

@@ -76,9 +76,17 @@ const url=process.env.TEST_DATABASE_URL;
   expect(report.totals.wageAmount).toBe("502.00");
   expect(report.wageSummary).toMatchObject({rowCount:502,pendingLineCount:502,pendingPersonCount:2});
   expect(report.wageSummary?.people.map(p=>p.personId).sort()).toEqual([person,sameName].sort());
+  expect(report.wageSummary?.people.every(p=>p.name==="同名工人")).toBe(true);
   const temporary=await service.report(actor(),"wages",{...filters,personType:"temporary"});
   expect(temporary.rows).toHaveLength(1);expect(temporary.rows[0]?.settlementStatus).toBe("unsettled");
   expect((await service.exportData(actor(),"wages",filters)).data.rows).toHaveLength(502);
+ });
+ it("returns an empty wage page with stable rows and people fields",async()=>{
+  const report=await service.report(actor(),"wages",{...filters,q:"NO-MATCH-A2-SQL-REGRESSION"},1);
+  expect(report.rows).toEqual([]);
+  expect(report.pagination).toEqual({page:1,pageSize:15,totalPages:1,totalCount:0});
+  expect(report.totals).toEqual({wageAmount:"0.00",unsettledWageAmount:"0.00",settledWageAmount:"0.00"});
+  expect(report.wageSummary).toMatchObject({rowCount:0,people:[]});
  });
  it("marks only the confirmed IDs, skips retries, keeps marker/time and leaves future wages unpaid",async()=>{
   const preview=await service.previewWageSettlement(actor(),filters);
