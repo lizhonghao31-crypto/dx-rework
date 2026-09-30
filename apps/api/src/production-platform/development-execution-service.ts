@@ -39,8 +39,15 @@ export class DevelopmentExecutionService {
     if(!isDigitalLeader(actor)&&!isDigitalTechnicalManager(actor)&&!actor.actorRoles.includes("development_clerk"))digitalForbidden();
     return this.command(actor,sourceId,"dispatch",key,input,async db=>{
       const before=(await db.query("SELECT * FROM digital_development_dispatch WHERE source_id=$1 FOR UPDATE",[sourceId])).rows[0];if((before?.version??0)!==input.expectedVersion)fail("派工已更新，请刷新");
-      for(const person of [input.patternWorkerId,input.cuttingWorkerId,input.sewingWorkerId])if(!await new DigitalProductionAccessPolicy(db).activeRole(person,"pattern_room_worker"))fail("请选择有效板房工人");
-      if(before){const active=(await db.query("SELECT 1 FROM digital_production_task_access WHERE source_id=$1 AND task_kind IN ('development_pattern','development_cutting','development_sewing') LIMIT 1",[sourceId])).rowCount;if(active)fail("任务已派出，请在对应任务使用改派；不更改工资归属");}
+      for(const [field,column,kind] of [
+        ["patternWorkerId","pattern_worker_id","development_pattern"],
+        ["cuttingWorkerId","cutting_worker_id","development_cutting"],
+        ["sewingWorkerId","sewing_worker_id","development_sewing"],
+      ] as const){
+        if(before?.[column]===input[field])continue;
+        if(before&&(await db.query("SELECT 1 FROM digital_production_task_access WHERE source_id=$1 AND task_kind=$2 LIMIT 1",[sourceId,kind])).rowCount)fail("该节点任务已派出，请在对应任务使用改派；不更改工资归属");
+        if(!await new DigitalProductionAccessPolicy(db).activeRole(input[field],"pattern_room_worker"))fail("请选择有效板房工人");
+      }
       await db.query(`INSERT INTO digital_development_dispatch(source_id,pattern_worker_id,cutting_worker_id,sewing_worker_id,changed_by) VALUES($1,$2,$3,$4,$5)
         ON CONFLICT(source_id) DO UPDATE SET version=digital_development_dispatch.version+1,pattern_worker_id=$2,cutting_worker_id=$3,sewing_worker_id=$4,changed_by=$5,changed_at=CURRENT_TIMESTAMP`,[sourceId,input.patternWorkerId,input.cuttingWorkerId,input.sewingWorkerId,actor.actorId]);
       await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_dispatch','digital_development',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify(input)]);
