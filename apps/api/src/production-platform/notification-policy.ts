@@ -16,3 +16,11 @@ export async function digitalTodoOrder(database: Pick<Pool | PoolClient, "query"
     WHERE l.module=$1 AND l.child_id=$2 AND o.notification_policy='IN_APP_ONLY'`, [module, route.reworkOrderId ?? route.entityId])).rows[0];
   return row?.production_order_id ?? null;
 }
+
+export async function digitalTodoTarget(database: Pick<Pool|PoolClient,"query">,route:TodoRouteDescriptor):Promise<{kind:"order"|"source";id:string}|null>{
+  const order=await digitalTodoOrder(database,route);
+  if(order)return {kind:"order",id:order};
+  if(route.routeName!=="pattern_room_order"||!(await database.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation)return null;
+  const source=(await database.query("SELECT source_id FROM digital_development_pattern_links WHERE order_id=$1",[route.entityId])).rows[0];
+  return source?{kind:"source",id:source.source_id}:null;
+}

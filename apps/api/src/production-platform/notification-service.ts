@@ -6,7 +6,7 @@ import type { TodoResponse, TodoRouteDescriptor } from "@dx-rework/contracts";
 import type { DigitalNotification } from "@dx-rework/contracts/digital-production-notifications";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy } from "./access-policy.js";
-import { digitalTodoOrder } from "./notification-policy.js";
+import { digitalTodoTarget } from "./notification-policy.js";
 
 type Database = Pick<Pool | PoolClient, "query">;
 const iso = (value: Date | string) => new Date(value).toISOString();
@@ -122,6 +122,12 @@ export class DigitalProductionNotificationService {
       l.child_id=coalesce(nullif(t.route_descriptor->>'reworkOrderId',''),t.route_descriptor->>'entityId')::uuid
       AND l.module=CASE t.route_descriptor->>'routeName' WHEN 'sourcing_detail' THEN 'sourcing' WHEN 'production_detail' THEN 'production' WHEN 'pattern_room_order' THEN 'pattern_room' ELSE 'rework' END
       WHERE t.status IN ('pending','blocked_recipient')`)).rows;
+    if((await client.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation){
+      const development=(await client.query(`SELECT t.* FROM rework_todos t JOIN digital_development_pattern_links l
+        ON t.route_descriptor->>'routeName'='pattern_room_order' AND t.route_descriptor->>'entityId'=l.order_id::text
+        WHERE t.status IN ('pending','blocked_recipient')`)).rows;
+      for(const row of development)if(!rows.some(existing=>existing.todo_id===row.todo_id))rows.push(row);
+    }
     for(const row of rows){
       const kind=row.todo_type==="information"?"information":"ready";
       await this.notice(client,{key:`child:${row.source_event_id}:${row.todo_id}`,todoId:row.todo_id,kind,sourceEventId:row.source_event_id},[row.recipient_user_id]);
@@ -166,9 +172,9 @@ export class DigitalProductionNotificationService {
     }else{
       const row=(await database.query("SELECT * FROM rework_todos WHERE todo_id=$1 AND recipient_user_id=$2 AND status IN ('pending','blocked_recipient')",[event.todo_id,actor.actorId])).rows[0];
       if(!row)return null;
-      const parent=await digitalTodoOrder(database,row.route_descriptor);
+      const parent=await digitalTodoTarget(database,row.route_descriptor);
       if(!parent)return null;
-      if(row.todo_type==="information"&&!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(database).allowed(people.find(p=>p.actorId===actor.actorId)!,"order",parent,"technical"))return null;
+      if(row.todo_type==="information"&&!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(database).allowed(people.find(p=>p.actorId===actor.actorId)!,parent.kind,parent.id,"technical"))return null;
       if(row.required_role&&!await new DigitalProductionAccessPolicy(database).activeRole(actor.actorId,row.required_role))return null;
       if(row.required_capability&&!(actor.authorizationCapabilities??[]).includes(row.required_capability))return null;
       actionable=row.todo_type!=="information";title=actionable?(event.event_kind==="overdue"?"订单待办已超时":"你有新的订单待办"):"订单事项已更新";

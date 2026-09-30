@@ -14,7 +14,7 @@ const iso = (value: Date | string | null) => value === null ? null : new Date(va
 export const DIGITAL_CONDITION_KEYS = ["customer_confirmed", "owner_approved", "materials_ready", "handover_received", "pattern_ready", "preshrink_ready", "qc_approved", "all_po_complete", "factory_arrived", "washing_finished", "business_recorded"] as const;
 const REQUIRED_ACTIVATION: Partial<Record<DigitalTaskKind, readonly typeof DIGITAL_CONDITION_KEYS[number][]>> = {
   development_pattern: ["materials_ready", "handover_received"], development_cutting: ["handover_received"], development_sewing: ["materials_ready", "handover_received"],
-  development_tail_check: ["washing_finished"], bulk_pattern: ["owner_approved"], warehouse_preshrink: ["owner_approved"],
+  development_washing: ["handover_received"], development_tail_check: ["washing_finished"], bulk_pattern: ["owner_approved"], warehouse_preshrink: ["owner_approved"],
   bulk_cutting: ["owner_approved", "pattern_ready", "preshrink_ready"], warehouse_dispatch: ["qc_approved", "all_po_complete"], factory_material_count: ["factory_arrived"],
 };
 export class DigitalProductionTaskService {
@@ -286,7 +286,7 @@ export class DigitalProductionTaskService {
     const canManage = isDigitalLeader(actor) || ((task.task_kind.startsWith("development_") || task.task_kind === "bulk_pattern") && (isDigitalTechnicalManager(actor) || actor.actorRoles.includes("development_clerk")));
     const canControl = isDigitalLeader(actor) || (resource.kind === "order" ? actor.actorRoles.includes("order_merchandiser") && parent.primary_merchandiser_id === actor.actorId : actor.actorRoles.includes("sample_designer") && parent.created_by === actor.actorId);
     const assignee = task.assignee_id ? (await this.database.query("SELECT display_name FROM app_users WHERE id=$1", [task.assignee_id])).rows[0]?.display_name ?? null : null;
-    const route = (await this.database.query("SELECT count(*)::int AS applicable,count(*) FILTER(WHERE state='completed')::int AS completed,count(*) FILTER(WHERE state='cancelled')::int AS cancelled FROM digital_production_tasks t WHERE route_instance_id=$1 AND node_key<>'development_material_supply' AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned')", [task.route_instance_id])).rows[0];
+    const route = (await this.database.query("SELECT count(*)::int AS applicable,count(*) FILTER(WHERE state='completed')::int AS completed,count(*) FILTER(WHERE state='cancelled')::int AS cancelled FROM digital_production_tasks t WHERE route_instance_id=$1 AND node_key NOT IN ('development_material_supply','development_craft_dispatch','development_sewing_transfer','development_washing_dispatch') AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned')", [task.route_instance_id])).rows[0];
     const handover = await this.database.query("SELECT 1 FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='handover_received'", [id]);
     return { taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: currentPolicy.label as string,
       routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage, canControl, canCorrect: isDigitalLeader(actor) || isDigitalTechnicalManager(actor),

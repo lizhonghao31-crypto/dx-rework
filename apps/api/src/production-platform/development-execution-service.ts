@@ -1,3 +1,5 @@
+import {DevelopmentRouteService,type DevelopmentRouteAction} from "./development-route-service.js";
+import type {PatternRoomOrderService} from "../pattern-room/order-service.js";
 import {createHash,randomUUID} from "node:crypto";
 import type {Pool,PoolClient} from "pg";
 import type {DevelopmentCheck,DevelopmentDispatch,DevelopmentWork} from "@dx-rework/contracts/digital-development-execution";
@@ -9,7 +11,7 @@ import {DigitalDevelopmentService} from "./development-service.js";
 import {DigitalProductionTaskService} from "./task-service.js";
 const fail=(message:string):never=>{throw new ApplicationError("DEVELOPMENT_EXECUTION_CONFLICT",message,409);};
 export class DevelopmentExecutionService {
-  constructor(private readonly database:Pool,private readonly enabled:boolean){}
+  constructor(private readonly database:Pool,private readonly enabled:boolean,private readonly patternOrders?:PatternRoomOrderService){}
   private forms(){return new DigitalDevelopmentService(this.database,this.enabled);}
   private tasks(){return new DigitalProductionTaskService(this.database);}
   private async task(db:PoolClient,sourceId:string,taskId:string){return (await db.query("SELECT t.*,a.task_kind,a.assignee_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.task_id=$2",[sourceId,taskId])).rows[0]??digitalNotFound();}
@@ -19,7 +21,9 @@ export class DevelopmentExecutionService {
     const dispatch=(await this.database.query('SELECT version,pattern_worker_id AS "patternWorkerId",cutting_worker_id AS "cuttingWorkerId",sewing_worker_id AS "sewingWorkerId" FROM digital_development_dispatch WHERE source_id=$1',[sourceId])).rows[0]??null;
     const ids=(await this.database.query("SELECT task_id FROM digital_production_task_access WHERE source_id=$1 ORDER BY created_at,task_id",[sourceId])).rows;
     const tasks=[];for(const row of ids)if(await new DigitalProductionAccessPolicy(this.database).allowed(actor,"task",row.task_id,"technical"))tasks.push(await this.tasks().read(actor,row.task_id));
-    return {sheet,dispatch,tasks,facts:await this.facts(this.database,sourceId),canReportFabric:isRootActor(actor)||actor.actorRoles.some(role=>["pattern_room_worker","pattern_room_supervisor","order_merchandiser"].includes(role)),canDispatch:isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes("development_clerk"),canDecideFabric:isRootActor(actor)||actor.actorRoles.includes("production_management")};
+    const routeFacts=(await this.database.query('SELECT fact_id AS "factId",task_id AS "taskId",route_version AS "routeVersion",kind,payload,recorded_at AS "recordedAt" FROM digital_development_route_facts WHERE source_id=$1 ORDER BY sequence',[sourceId])).rows;
+    const patternOrder=(await this.database.query('SELECT order_id AS "orderId" FROM digital_development_pattern_links WHERE source_id=$1',[sourceId])).rows[0]??null;
+    return {sheet,dispatch,tasks,routeFacts,patternOrder,facts:await this.facts(this.database,sourceId),canReportFabric:isRootActor(actor)||actor.actorRoles.some(role=>["pattern_room_worker","pattern_room_supervisor","order_merchandiser"].includes(role)),canDispatch:isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes("development_clerk"),canDecideFabric:isRootActor(actor)||actor.actorRoles.includes("production_management")};
   }
   private async command(actor:TrustedActorContext,sourceId:string,kind:string,key:string,input:unknown,action:(db:PoolClient)=>Promise<unknown>){
     if(!this.enabled)digitalForbidden();if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail("缺少操作标识");
@@ -110,7 +114,37 @@ export class DevelopmentExecutionService {
         const next=(await db.query("SELECT d.task_id FROM digital_production_task_dependencies d JOIN digital_production_task_access a USING(task_id) WHERE d.predecessor_id=$1 AND a.task_kind='development_cutting'",[input.taskId])).rows[0];
         if(next)await this.tasks().setConditionWithClient(db,actor,next.task_id,"handover_received",true,now,"纸样完成并交裁板");
       }
+      if(task.task_kind==="development_cutting")await new DevelopmentRouteService(this.database,this.patternOrders).advance(db,actor,sourceId,input.taskId);
       return {taskId:input.taskId,state:"completed"};
+    });
+  }
+  async sendWashing(actor:TrustedActorContext,sourceId:string,taskId:string,note:string,key:string){
+    return this.command(actor,sourceId,"send-washing",key,{taskId,note},async db=>{
+      await new DigitalProductionAccessPolicy(db).assert(actor,"task",taskId,"execute");
+      const task=await this.task(db,sourceId,taskId);if(task.task_kind!=="development_washing_dispatch"||task.state!=="ready")fail("当前不是待送洗任务");
+      await db.query("INSERT INTO digital_development_route_facts(fact_id,source_id,task_id,route_version,kind,payload,actor_id) VALUES($1,$2,$3,$4,'洗水送出',$5,$6)",[randomUUID(),sourceId,taskId,task.route_version,JSON.stringify({note}),actor.actorId]);
+      await this.tasks().setConditionWithClient(db,actor,taskId,"business_recorded",true,new Date().toISOString(),note);
+      await this.tasks().completeWithClient(db,actor,taskId,{note},`send-washing:${key}`);
+      await new DevelopmentRouteService(this.database,this.patternOrders).advance(db,actor,sourceId,taskId);
+      return {taskId,state:"ready"};
+    });
+  }
+  async route(actor:TrustedActorContext,sourceId:string,input:DevelopmentRouteAction,key:string){
+    return this.command(actor,sourceId,"route",key,input,async db=>{await this.fabricReady(db,sourceId);return new DevelopmentRouteService(this.database,this.patternOrders).complete(db,actor,sourceId,input,key);});
+  }
+  async customerSample(actor:TrustedActorContext,sourceId:string,input:{routeVersion:number;note:string},key:string){
+    return this.command(actor,sourceId,"customer-sample",key,input,async db=>{
+      const sheet=await this.forms().read(actor,sourceId,db);if(!sheet.canEdit)digitalForbidden();
+      if(!(await db.query("SELECT 1 FROM digital_development_route_facts WHERE source_id=$1 AND route_version=$2 AND kind='最终设计确认'",[sourceId,input.routeVersion])).rowCount)fail("请先完成该轮样板的最终设计确认");
+      const factId=randomUUID();await db.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,$3,'客户样板确认',$4,$5) ON CONFLICT DO NOTHING",[factId,sourceId,input.routeVersion,JSON.stringify(input),actor.actorId]);
+      return {sourceId,routeVersion:input.routeVersion,customerSampleConfirmed:true};
+    });
+  }
+  async patternOrder(actor:TrustedActorContext,sourceId:string,input:{categoryId:string;priceVersion:number},key:string){
+    return this.command(actor,sourceId,"pattern-order",key,input,async db=>{
+      if(!this.patternOrders)fail("打板衔接服务未配置");
+      const order=await this.patternOrders!.inTransaction(db).createDevelopment(actor,sourceId,input.categoryId,input.priceVersion,`development:${key}`);
+      return {orderId:order.orderId};
     });
   }
   async report(actor:TrustedActorContext,sourceId:string,input:{recommendation:string;note:string;attachmentIds:string[]},key:string){

@@ -1,4 +1,4 @@
-import { digitalTodoOrder } from "../production-platform/notification-policy.js";
+import { digitalTodoTarget } from "../production-platform/notification-policy.js";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -171,7 +171,7 @@ export class TodoDeliveryWorker {
         throw new ApplicationError("CONFLICT", "Todo delivery aggregate is invalid", 409);
       }
       await this.assertDeliveryEvent(input);
-      if (["digital_production_task", "digital_development"].includes(input.route.routeName) || await digitalTodoOrder(this.database, input.route)) {
+      if (["digital_production_task", "digital_development"].includes(input.route.routeName) || await digitalTodoTarget(this.database, input.route)) {
         await this.markSuppressed(claimed);
         return "suppressed";
       }

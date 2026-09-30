@@ -28,7 +28,7 @@ export async function scopedPatternOrder(client: PoolClient, actor: TrustedActor
 }
 
 export class PatternOrderReader {
-  constructor(private readonly db: Pool, private readonly enabled: boolean) {}
+  constructor(private readonly db: Pool, private readonly enabled: boolean, private readonly transactionClient?: PoolClient) {}
   async peopleFilters(actor: TrustedActorContext) {
     return this.read(actor, async (client, effective) => {
       if (!canReadAllPatternOrders(effective)) throw new ApplicationError("FORBIDDEN", "当前账号不能筛选其他人员", 403);
@@ -38,6 +38,7 @@ export class PatternOrderReader {
     });
   }
   private async read<T>(actor: TrustedActorContext, work: (client: PoolClient, effective: TrustedActorContext) => Promise<T>): Promise<T> {
+    if (this.transactionClient) return work(this.transactionClient, await authorizePatternOrder(this.transactionClient, actor, "pattern_room:orders:view", this.enabled));
     const client = await this.db.connect();
     try {
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");

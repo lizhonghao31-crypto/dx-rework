@@ -7,3 +7,6 @@ export const DevelopmentFabricDecisionSchema=z.object({reportId:z.string().uuid(
 export type DevelopmentDispatch=z.infer<typeof DevelopmentDispatchSchema>;
 export type DevelopmentCheck=z.infer<typeof DevelopmentCheckSchema>;
 export type DevelopmentWork=z.infer<typeof DevelopmentWorkSchema>;
+export const DevelopmentRouteActionSchema=z.object({craftExecution:z.enum(["内部","外发"]).nullable(),taskId:z.string().uuid(),note:z.string().trim().max(2000),result:z.enum(["通过","退回"]),nextAssigneeId:z.string().uuid().nullable(),sentDate:z.iso.date().nullable(),trackingNo:z.string().trim().max(100).nullable()}).strict();
+export const DevelopmentPatternOrderSchema=z.object({categoryId:z.string().uuid(),priceVersion:z.number().int().positive()}).strict();
+export const DevelopmentCustomerSampleSchema=z.object({routeVersion:z.number().int().positive(),note:z.string().trim().min(1).max(2000)}).strict();

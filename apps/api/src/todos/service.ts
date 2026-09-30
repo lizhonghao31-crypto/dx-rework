@@ -1,4 +1,4 @@
-import { digitalTodoOrder } from "../production-platform/notification-policy.js";
+import { digitalTodoTarget } from "../production-platform/notification-policy.js";
 import type { ProductionClosureService } from "../sourcing/production-closure-service.js";
 import { memberCanReceiveFact } from "../access/member-module-policy.js";
 import { randomUUID } from "node:crypto";
@@ -1278,7 +1278,7 @@ export class TodoService {
     operationRequestId: string,
     deliveryKind: "create" | "complete" | "reminder" | "escalation" | "information",
   ): Promise<void> {
-    if (todo.route_descriptor.routeName === "digital_production_task" || await digitalTodoOrder(client, TodoRouteDescriptorSchema.parse(todo.route_descriptor))) return;
+    if (todo.route_descriptor.routeName === "digital_production_task" || await digitalTodoTarget(client, TodoRouteDescriptorSchema.parse(todo.route_descriptor))) return;
     const outboxEventId = await this.outbox.enqueue(client, {
       topic: TODO_DELIVERY_TOPIC,
       aggregateType: "rework_todo",
