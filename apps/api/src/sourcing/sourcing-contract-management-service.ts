@@ -112,12 +112,15 @@ export class SourcingContractManagementService {
   }
 
   private async supplier(db: Queryable, row: CurrentContract): Promise<{values:SupplierValues;hash:string}> {
-    const profile = (await db.query<{version:number;active:boolean;values:SupplierValues}>(`SELECT version,active,
-      jsonb_build_object('supplierName',supplier_name,'supplierCode',supplier_code,
-        'contractEntityName',COALESCE(contract_entity_name,''),'address',COALESCE(address,''),
-        'partyBRepresentative',COALESCE(party_b_representative,''),'payeeName',COALESCE(payee_name,''),
-        'bankAccount',COALESCE(bank_account,''),'bankName',COALESCE(bank_name,'')) AS values
-      FROM current_supplier_catalog WHERE supplier_id=$1`,[row.approval_snapshot.supplierId])).rows[0];
+    // The catalog view substitutes supplier_name for an absent legal entity.
+    // Read the raw version field so that substitution cannot erase contract-only values.
+    const profile = (await db.query<{version:number;active:boolean;values:SupplierValues}>(`SELECT catalog.version,catalog.active,
+      jsonb_build_object('supplierName',catalog.supplier_name,'supplierCode',catalog.supplier_code,
+        'contractEntityName',COALESCE(raw.contract_entity_name,''),'address',COALESCE(catalog.address,''),
+        'partyBRepresentative',COALESCE(catalog.party_b_representative,''),'payeeName',COALESCE(catalog.payee_name,''),
+        'bankAccount',COALESCE(catalog.bank_account,''),'bankName',COALESCE(catalog.bank_name,'')) AS values
+      FROM current_supplier_catalog catalog JOIN supplier_catalog_versions raw USING(supplier_id,version)
+      WHERE catalog.supplier_id=$1`,[row.approval_snapshot.supplierId])).rows[0];
     if (!profile) throw new ApplicationError("NOT_FOUND","供应商资料不存在",404);
     // Contract-only supplements remain valid when the master profile still has no value.
     const supplements = (await db.query<{field_name:string;field_value:string}>(
