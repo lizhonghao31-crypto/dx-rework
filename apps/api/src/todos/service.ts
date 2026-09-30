@@ -84,6 +84,7 @@ export type TodoListOptions = Readonly<{
 
 const TODO_LIST_PAGE_SIZE = 15;
 const TODO_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const TODO_ID_SQL_PATTERN = "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$";
 const TODO_MODULES: readonly TodoModule[] = ["rework", "sourcing", "production", "samples", "pattern_room", "suppliers", "digital_production"];
 
 const TODO_WITH_CONTEXT_SQL = `SELECT
@@ -120,14 +121,18 @@ const TODO_WITH_CONTEXT_SQL = `SELECT
   END todo_module,
   CASE todos.status WHEN 'pending' THEN 0 WHEN 'blocked_recipient' THEN 1 ELSE 2 END status_rank
 FROM rework_todos todos
-LEFT JOIN supplier_onboarding_requests supplier_request ON supplier_request.request_id=CASE WHEN todos.entity_type='supplier_onboarding' THEN todos.entity_id::uuid END
+LEFT JOIN supplier_onboarding_requests supplier_request ON supplier_request.request_id=CASE
+  WHEN todos.entity_type='supplier_onboarding' AND todos.entity_id~*'${TODO_ID_SQL_PATTERN}' THEN todos.entity_id::uuid END
 LEFT JOIN supplier_onboarding_request_versions supplier_version ON (supplier_version.request_id,supplier_version.version)=(supplier_request.request_id,supplier_request.current_version)
-LEFT JOIN pattern_room_orders pattern ON pattern.order_id=CASE WHEN todos.entity_type='pattern_room_order' THEN todos.entity_id::uuid END
-LEFT JOIN sample_items sample ON sample.sample_id=CASE WHEN todos.entity_type='sample' THEN todos.entity_id::uuid END
+LEFT JOIN pattern_room_orders pattern ON pattern.order_id=CASE
+  WHEN todos.entity_type='pattern_room_order' AND todos.entity_id~*'${TODO_ID_SQL_PATTERN}' THEN todos.entity_id::uuid END
+LEFT JOIN sample_items sample ON sample.sample_id=CASE
+  WHEN todos.entity_type='sample' AND todos.entity_id~*'${TODO_ID_SQL_PATTERN}' THEN todos.entity_id::uuid END
 LEFT JOIN rework_orders orders
   ON orders.rework_order_id=COALESCE(
-    NULLIF(todos.route_descriptor->>'reworkOrderId','')::uuid,
-    CASE WHEN todos.entity_type='rework_order' THEN todos.entity_id::uuid END
+    CASE WHEN NULLIF(todos.route_descriptor->>'reworkOrderId','')~*'${TODO_ID_SQL_PATTERN}'
+      THEN (todos.route_descriptor->>'reworkOrderId')::uuid END,
+    CASE WHEN todos.entity_type='rework_order' AND todos.entity_id~*'${TODO_ID_SQL_PATTERN}' THEN todos.entity_id::uuid END
   )
 LEFT JOIN app_users rework_merchandiser ON rework_merchandiser.id=orders.merchandiser_user_id
 LEFT JOIN supplier_catalog_versions rework_supplier
@@ -135,7 +140,7 @@ LEFT JOIN supplier_catalog_versions rework_supplier
  AND rework_supplier.version=orders.processing_factory_supplier_version
 LEFT JOIN current_sourcing_cases sourcing
   ON sourcing.sourcing_case_id=CASE
-    WHEN todos.entity_type='sourcing_case' THEN todos.entity_id::uuid
+    WHEN todos.entity_type='sourcing_case' AND todos.entity_id~*'${TODO_ID_SQL_PATTERN}' THEN todos.entity_id::uuid
   END
 LEFT JOIN app_users sourcing_merchandiser ON sourcing_merchandiser.id=sourcing.created_by
 LEFT JOIN LATERAL (
@@ -228,7 +233,7 @@ const todoResponse = (row: TodoRow): TodoResponse => {
   recipientUserId: row.recipient_user_id,
   requiredRole: row.required_role,
   requiredCapability: row.required_capability,
-  route: TodoRouteDescriptorSchema.parse(row.route_descriptor),
+  route: TodoRouteDescriptorSchema.parse({ ...row.route_descriptor, todoId: row.todo_id }),
   policyKey: row.policy_key,
   dueAt: row.due_at?.toISOString() ?? null,
   reminderCount: row.reminder_count,
@@ -421,10 +426,12 @@ export class TodoService {
        FROM rework_todos todos
        LEFT JOIN rework_orders orders
          ON orders.rework_order_id=COALESCE(
-           NULLIF(todos.route_descriptor->>'reworkOrderId','')::uuid,
-           CASE WHEN todos.entity_type='rework_order' THEN todos.entity_id::uuid END
+           CASE WHEN NULLIF(todos.route_descriptor->>'reworkOrderId','')~*'${TODO_ID_SQL_PATTERN}'
+             THEN (todos.route_descriptor->>'reworkOrderId')::uuid END,
+           CASE WHEN todos.entity_type='rework_order' AND todos.entity_id~*'${TODO_ID_SQL_PATTERN}' THEN todos.entity_id::uuid END
          )
-       LEFT JOIN pattern_room_orders pattern ON pattern.order_id=CASE WHEN todos.entity_type='pattern_room_order' THEN todos.entity_id::uuid END
+       LEFT JOIN pattern_room_orders pattern ON pattern.order_id=CASE
+         WHEN todos.entity_type='pattern_room_order' AND todos.entity_id~*'${TODO_ID_SQL_PATTERN}' THEN todos.entity_id::uuid END
        WHERE pattern.deleted_at IS NULL AND todos.recipient_user_id=$1
          AND todos.todo_type<>'information'
          AND todos.status IN ('pending','blocked_recipient')
