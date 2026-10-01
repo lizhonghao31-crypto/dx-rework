@@ -1,3 +1,5 @@
+import type { BudgetSourcingPreparation } from "@dx-rework/contracts/digital-budget";
+import { digitalRequest } from "./digital-production-api.js";
 import { SourcingReturnDialog } from "./sourcing-return-dialog.js";
 import { isMerchandiserOnly } from "./sourcing-role-visibility.js";
 import { sourcingContractReturnBadgeLabel, sourcingContractReturnLabel } from "./sourcing-contract-return-presentation.js";
@@ -463,6 +465,8 @@ export function SourcingWorkspacePage({
 }
 
 function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; correction?: {item:SourcingCaseSummary; attachments:readonly SourcingAttachment[]} }) {
+  const [budgetOrderId] = useState(() => correction ? null : new URLSearchParams(window.location.search).get("budget"));
+  const [budgetPreparation, setBudgetPreparation] = useState<BudgetSourcingPreparation | null>(null);
   const [gender, setGender] = useState<"" | "男装" | "女装">(correction?.item.gender ?? "");
   const [styleName, setStyleName] = useState(correction?.item.styleName ?? "");
   const [additionalMerchandiserUserId, setAdditionalMerchandiserUserId] = useState("");
@@ -493,6 +497,20 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
   const restoredDraftUserId = useRef("");
   const canCreate = canAct(user, "order_merchandiser", "sourcing:inquiry:create");
   const duplicateLinesMessage = duplicateSourcingLineMessage(lineItems);
+  useEffect(() => {
+    if (!budgetOrderId || !canCreate) return;
+    let live = true;
+    const version = Number(new URLSearchParams(window.location.search).get("budgetVersion"));
+    void digitalRequest<BudgetSourcingPreparation>(`orders/${budgetOrderId}/budget/prepare-sourcing`, "POST", { expectedVersion: version }).then(prepared => {
+      if (!live) return;
+      setBudgetPreparation(prepared); setGender(prepared.gender); setStyleName(prepared.styleName);
+      setDaxingUnitPrice(prepared.daxingUnitPrice); setDeliveryDate(prepared.deliveryDate ?? "");
+      setLineItems(prepared.lineItems.map(line => ({ styleNo: line.styleNo, alternateStyleNo: line.alternateStyleNo, color: line.color, quantity: String(line.quantity) })));
+      setImages(prepared.images.map(image => ({ ...image, previewUrl: attachmentUrl(image.attachmentId, "preview") })));
+    }).catch(reason => { if (live) setMessage(reason.message); });
+    return () => { live = false; };
+  }, [budgetOrderId, canCreate]);
+
 
   useEffect(() => {
     if (!canCreate) return;
@@ -520,7 +538,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
   }, [canCreate,correction]);
 
   useEffect(() => {
-    if (correction || !user?.id || restoredDraftUserId.current === user.id) return;
+    if (correction || budgetOrderId || !user?.id || restoredDraftUserId.current === user.id) return;
     restoredDraftUserId.current = user.id;
     const localDraft = readLocalSourcingDraft(user.id);
     if (!localDraft) return;
@@ -533,7 +551,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
     setDaxingUnitPrice(localDraft.daxingUnitPrice);
     setImages([...localDraft.images]);
     setMessage("已恢复当前账号在本机保存的订单草稿。");
-  }, [user?.id, correction]);
+  }, [user?.id, correction, budgetOrderId]);
 
   useEffect(() => () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
@@ -722,6 +740,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
 
   const createOrder = async (): Promise<void> => {
     if (busy || feedback.uncertain) return;
+    if (budgetOrderId && !budgetPreparation) return;
     if (!canCreate) { await alertInApp("当前账号没有创建订单权限", { title: "无权执行此操作" }); return; }
     const normalizedDaxingPrice = businessInputChange(daxingUnitPrice).trim();
     const issues = validateSourcingCreate({ gender, styleName, estimatedCutPieceSendDate, deliveryDate,
@@ -740,6 +759,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
     const body = JSON.stringify({ gender, styleName: styleName.trim(), estimatedCutPieceSendDate, deliveryDate,
       lineItems: normalizedLines, ...(correction ? {expectedVersion:correction.item.version,reason:correctionReason.trim()} : {daxingUnitPrice: normalizedDaxingPrice,
         ...(additionalMerchandiserUserId ? {additionalMerchandiserUserId} : {})}),
+      ...(budgetPreparation ? { digitalBudget: { productionOrderId: budgetPreparation.productionOrderId, budgetVersion: budgetPreparation.budgetVersion, orderVersion: budgetPreparation.orderVersion } } : {}),
       attachmentIds: images.map(image => image.attachmentId) });
     await feedback.run(async () => {
       // Same snapshot and key on recovery: the existing API checks its idempotency record first.
@@ -770,14 +790,14 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
         </div>
         <div className="sourcing-form-grid">
           <div className={`sourcing-order-classification${correction ? "" : " sourcing-order-classification--additional"}`}>
-            <label><span>性别（必填）</span><select {...feedback.field("sourcing-create-gender")} required value={gender} onChange={(event) => { setGender(event.target.value as typeof gender); createKey.current = null; }}><option value="">请选择</option><option value="男装">男装</option><option value="女装">女装</option></select></label>
-            <label><span>款式（必填）</span><input {...feedback.field("sourcing-create-style")} required list="sourcing-style-options" value={styleName} maxLength={100} onChange={(event) => { setStyleName(event.target.value); createKey.current = null; }} placeholder="搜索或输入，如梭织短裤" /></label>
+            <label><span>性别（必填）</span><select disabled={Boolean(budgetOrderId)} {...feedback.field("sourcing-create-gender")} required value={gender} onChange={(event) => { setGender(event.target.value as typeof gender); createKey.current = null; }}><option value="">请选择</option><option value="男装">男装</option><option value="女装">女装</option></select></label>
+            <label><span>款式（必填）</span><input readOnly={Boolean(budgetOrderId)} {...feedback.field("sourcing-create-style")} required list="sourcing-style-options" value={styleName} maxLength={100} onChange={(event) => { setStyleName(event.target.value); createKey.current = null; }} placeholder="搜索或输入，如梭织短裤" /></label>
             {!correction ? <label><span>添加跟单（选填）</span><select value={additionalMerchandiserUserId} onChange={event=>{setAdditionalMerchandiserUserId(event.target.value);createKey.current=null;}}><option value="">不添加</option>{additionalMerchandiserUserId && !merchandisers.some(person=>person.userId===additionalMerchandiserUserId) ? <option value={additionalMerchandiserUserId}>所选跟单已失效，请重选</option> : null}{merchandisers.map(person=><option key={person.userId} value={person.userId}>{person.displayName}</option>)}</select></label> : null}
             <datalist id="sourcing-style-options">{styleCatalog.map((style) => <option key={style.styleId} value={style.styleName} />)}</datalist>
           </div>
           <label><span>预计裁片发出日期（工厂发出，必填）</span><input type="date" required aria-required="true" value={estimatedCutPieceSendDate} {...feedback.field("sourcing-create-send-date")} onChange={(event) => { setEstimatedCutPieceSendDate(event.target.value); createKey.current = null; }} /></label>
-          <label><span>要求交货日期（到工厂，必填）</span><input type="date" required aria-required="true" value={deliveryDate} {...feedback.field("sourcing-create-delivery-date")} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
-          <label><span>预算价（内部，必填）</span><input readOnly={!!correction} {...feedback.field("sourcing-create-budget")} value={activeCreateInput === "daxing" ? daxingUnitPrice : newSourcingPriceDisplay(daxingUnitPrice)} onFocus={() => setActiveCreateInput("daxing")} onBlur={() => setActiveCreateInput(null)} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="请输入预算价" aria-invalid={!isNewSourcingPrice(daxingUnitPrice)} /></label>
+          <label><span>要求交货日期（到工厂，必填）</span><input type="date" required aria-required="true" value={deliveryDate} readOnly={Boolean(budgetPreparation?.deliveryDate)} {...feedback.field("sourcing-create-delivery-date")} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
+          <label><span>预算价（内部，必填）</span><input readOnly={!!correction || Boolean(budgetOrderId)} {...feedback.field("sourcing-create-budget")} value={activeCreateInput === "daxing" ? daxingUnitPrice : newSourcingPriceDisplay(daxingUnitPrice)} onFocus={() => setActiveCreateInput("daxing")} onBlur={() => setActiveCreateInput(null)} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="请输入预算价" aria-invalid={!isNewSourcingPrice(daxingUnitPrice)} /></label>
           <section className="sourcing-line-editor sourcing-form-wide" aria-label="订单款色明细">
             <div className="sourcing-line-editor__heading">
               <div>
@@ -785,16 +805,16 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
               </div>
               <div className="sourcing-line-editor__actions">
                 <StatusBadge tone="info">合计 {formatBusinessDecimal(lineItems.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0))} 件</StatusBadge>
-                <button className="dx-button dx-button--secondary" type="button" disabled={busy || uploading || lineItems.length >= MAX_SOURCING_LINE_ITEMS} onClick={addLineItem}>＋ 新增款色</button>
+                <button className="dx-button dx-button--secondary" type="button" disabled={Boolean(budgetOrderId) || busy || uploading || lineItems.length >= MAX_SOURCING_LINE_ITEMS} onClick={addLineItem}>＋ 新增款色</button>
               </div>
             </div>
             <div className="sourcing-line-editor__list">
               {lineItems.map((line, index) => <article className="sourcing-line-row" key={index}>
                 <b>{String(index + 1).padStart(2, "0")}</b>
-                <label><span>正式款号</span><input {...feedback.field(`sourcing-create-style-${index}`)} value={line.styleNo} maxLength={100} onChange={(event) => updateLineItem(index, "styleNo", event.target.value)} placeholder="可后补" /></label>
-                <label><span>代用款号</span><input value={line.alternateStyleNo} maxLength={100} onChange={(event) => updateLineItem(index, "alternateStyleNo", event.target.value)} placeholder="无正式款号时必填" /></label>
-                <label><span>颜色</span><input {...feedback.field(`sourcing-create-color-${index}`)} value={line.color} maxLength={100} onChange={(event) => updateLineItem(index, "color", event.target.value)} placeholder="必填" /></label>
-                <label><span>数量</span><input {...feedback.field(`sourcing-create-quantity-${index}`)} value={activeCreateInput === `quantity-${index}` ? line.quantity : businessInputValue(line.quantity)} onFocus={() => setActiveCreateInput(`quantity-${index}`)} onBlur={() => setActiveCreateInput(null)} inputMode="numeric" onChange={(event) => updateLineItem(index, "quantity", businessInputChange(event.target.value))} placeholder="整数" /></label>
+                <label><span>正式款号</span><input readOnly={Boolean(budgetOrderId)} {...feedback.field(`sourcing-create-style-${index}`)} value={line.styleNo} maxLength={100} onChange={(event) => updateLineItem(index, "styleNo", event.target.value)} placeholder="可后补" /></label>
+                <label><span>代用款号</span><input readOnly={Boolean(budgetOrderId)} value={line.alternateStyleNo} maxLength={100} onChange={(event) => updateLineItem(index, "alternateStyleNo", event.target.value)} placeholder="无正式款号时必填" /></label>
+                <label><span>颜色</span><input readOnly={Boolean(budgetOrderId)} {...feedback.field(`sourcing-create-color-${index}`)} value={line.color} maxLength={100} onChange={(event) => updateLineItem(index, "color", event.target.value)} placeholder="必填" /></label>
+                <label><span>数量</span><input readOnly={Boolean(budgetOrderId)} {...feedback.field(`sourcing-create-quantity-${index}`)} value={activeCreateInput === `quantity-${index}` ? line.quantity : businessInputValue(line.quantity)} onFocus={() => setActiveCreateInput(`quantity-${index}`)} onBlur={() => setActiveCreateInput(null)} inputMode="numeric" onChange={(event) => updateLineItem(index, "quantity", businessInputChange(event.target.value))} placeholder="整数" /></label>
                 <div className="sourcing-line-photo">
                   {line.imageAttachmentId ? <img src={images.find((image) => image.attachmentId === line.imageAttachmentId)?.previewUrl} alt={`第 ${index + 1} 款图片`} /> : null}
                   <label className="rework-v2-upload">
@@ -806,7 +826,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
                     {images.map((image, imageIndex) => <option key={image.attachmentId} value={image.attachmentId}>{imageIndex + 1}. {image.filename}</option>)}
                   </select> : null}
                 </div>
-                <button className="dx-button dx-button--secondary" type="button" aria-label={`删除第 ${index + 1} 行款色`} disabled={busy || uploading || lineItems.length === 1} onClick={() => void removeLineItem(index)}>删除</button>
+                <button className="dx-button dx-button--secondary" type="button" aria-label={`删除第 ${index + 1} 行款色`} disabled={Boolean(budgetOrderId) || busy || uploading || lineItems.length === 1} onClick={() => void removeLineItem(index)}>删除</button>
               </article>)}
             </div>
           </section>
@@ -835,8 +855,8 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
           {duplicateLinesMessage || message ? <p role="status">{duplicateLinesMessage ?? message}</p> : null}
           {uploadFailed && !uploading ? <p role="alert">本次图片上传未完成，请重新选择图片上传成功后再提交。</p> : null}
           <ActionBar className="sourcing-create-actions">
-            {!correction ? <button className="dx-button dx-button--secondary" type="button" disabled={busy || uploading} onClick={saveLocalDraft}>保存草稿</button> : null}
-            <button className="dx-button dx-button--primary" type="button" disabled={busy || feedback.uncertain || !canCreate} onClick={() => void createOrder()}>
+            {!correction && !budgetOrderId ? <button className="dx-button dx-button--secondary" type="button" disabled={busy || uploading} onClick={saveLocalDraft}>保存草稿</button> : null}
+            <button className="dx-button dx-button--primary" type="button" disabled={busy || feedback.uncertain || !canCreate || Boolean(budgetOrderId && !budgetPreparation)} onClick={() => void createOrder()}>
               {busy ? "正在提交…" : "提交并进入审批"}
             </button>
           </ActionBar>
@@ -2018,3 +2038,4 @@ function OrderDetailPage({
     </div>
   );
 }
+

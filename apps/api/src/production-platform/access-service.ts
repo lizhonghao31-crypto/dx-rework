@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { DigitalProductionTaskService } from "./task-service.js";
 import type { Pool, PoolClient } from "pg";
 import type { z } from "zod";
 import type { DigitalDelegationSchema, DigitalResourceKind } from "@dx-rework/contracts/digital-production-access";
@@ -42,10 +43,12 @@ export class DigitalProductionAccessService {
   async assignMerchandiser(actor: TrustedActorContext, id: string, merchandiserId: string, expectedVersion: number) {
     if (!isDigitalLeader(actor)) digitalForbidden();
     return this.transaction(async client => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       if (!await new DigitalProductionAccessPolicy(client).activeRole(merchandiserId, "order_merchandiser")) conflict("主跟单必须为在职有效订单跟单");
       const before = (await client.query("SELECT primary_merchandiser_id,version FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE", [id])).rows[0] ?? digitalNotFound();
       if (before.version !== expectedVersion) conflict("订单已更新，请刷新");
       await client.query("UPDATE digital_production_orders SET primary_merchandiser_id=$2,version=version+1 WHERE production_order_id=$1", [id, merchandiserId]);
+      await new DigitalProductionTaskService(this.database).syncSourcingAssignee(client, actor, id, merchandiserId);
       await this.audit(client, actor, "digital_primary_merchandiser_assigned", id, before, { merchandiserId });
       return { version: expectedVersion + 1 };
     });

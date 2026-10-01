@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { readBudgetSourcing } from "../production-platform/budget-sourcing-adapter.js";
 import type { Pool, PoolClient } from "pg";
 
 import type {
@@ -54,6 +55,37 @@ export class AttachmentService {
   ) {}
 
   uploadLimits(): { maxUploadBytes: number } { return { maxUploadBytes: this.options.maxUploadBytes }; }
+
+  async copyDigitalBudgetImage(actor: TrustedActorContext, orderId: string, budgetVersion: number, sourceId: string): Promise<AttachmentResponse> {
+    const client = await this.pool.connect();
+    let createdKey: string | null = null;
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT production_order_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE", [orderId]);
+      const source = await readBudgetSourcing(client, actor, orderId);
+      if (source.budgetVersion !== budgetVersion || !source.document.imageAttachmentIds.includes(sourceId)) throw new ApplicationError("BUDGET_CONFLICT", "预算图片已更新，请重新进入外发发起", 409);
+      const prior = (await client.query<AttachmentRow>(`SELECT a.* FROM digital_budget_image_copies c JOIN attachments a USING(attachment_id)
+        WHERE c.production_order_id=$1 AND c.budget_version=$2 AND c.source_attachment_id=$3 AND c.actor_id=$4`, [orderId, budgetVersion, sourceId, actor.actorId])).rows[0];
+      if (prior) { await client.query("COMMIT"); return this.dto(prior); }
+      const original = (await client.query<AttachmentRow>(`SELECT a.* FROM attachments a JOIN digital_budget_attachment_bindings b USING(attachment_id)
+        WHERE a.attachment_id=$1 AND b.production_order_id=$2::uuid AND a.entity_type='digital_budget' AND a.entity_id=$2::text
+        AND a.status='ready' AND a.mime_type IN ('image/jpeg','image/png','image/webp')`, [sourceId, orderId])).rows[0];
+      if (!original) throw new ApplicationError("ATTACHMENT_NOT_READY", "预算图片不可用", 409);
+      const { bytes, sha256 } = await this.readVerifiedSourcingImage(original);
+      const attachmentId = randomUUID();
+      createdKey = createPrivateObjectKey(this.options.prefix, original.original_filename);
+      await this.storageCall(() => this.storage.writeImmutable(createdKey!, bytes, { mimeType: original.mime_type, sha256 }));
+      const copied = (await client.query<AttachmentRow>(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7,'ready',CURRENT_TIMESTAMP) RETURNING *`, [attachmentId, createdKey, original.original_filename, original.mime_type, bytes.byteLength, sha256, actor.actorId])).rows[0]!;
+      await client.query("INSERT INTO digital_budget_image_copies(production_order_id,budget_version,source_attachment_id,actor_id,attachment_id) VALUES($1,$2,$3,$4,$5)", [orderId, budgetVersion, sourceId, actor.actorId, attachmentId]);
+      await this.events.append(client, actor, { action: "attachment.budget_sourcing_copy", entityType: "attachment", entityId: attachmentId, after: { sourceAttachmentId: sourceId, productionOrderId: orderId, budgetVersion } });
+      await client.query("COMMIT"); return this.dto(copied);
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      if (createdKey) await this.storage.deleteObject(createdKey).catch(() => undefined);
+      throw error;
+    } finally { client.release(); }
+  }
 
   // Internal contract rendering only: callers supply the already-frozen case and image IDs.
   // Read private storage directly; never accept a URL or issue a public download grant.

@@ -224,6 +224,8 @@
     {"version": "0222_digital_development_documents", "checksum": "d8f21da27b906eb9619ce651fb70cffd43dbc2be88c32bab4c5190855a248feb"},
     {"version": "0223_digital_development_execution", "checksum": "ee3427ba4cce450d3cffc464ddd5701fd651604a450a88e64087de5be54b14b7"},
     {"version": "0224_digital_development_route", "checksum": "5f57dc1202b50b172f2db8347647dfcda4c8c76c9ed17b634cf11a2799871244"},
-    {"version": "0225_digital_development_rounds", "checksum": "299ac4b17ef8a618a4b740b8ffcc30d377b4c51ca6b1880dbe1e19d49514a6f3"}
+    {"version": "0225_digital_development_rounds", "checksum": "299ac4b17ef8a618a4b740b8ffcc30d377b4c51ca6b1880dbe1e19d49514a6f3"},
+    {"version": "0226_digital_production_budgets", "checksum": "83432181bd2ee6d48ce44abb854edc554d4a0213a4a2b95301243226b35bd144"}
   ]
 }
+

@@ -20,6 +20,15 @@ const REQUIRED_ACTIVATION: Partial<Record<DigitalTaskKind, readonly typeof DIGIT
 };
 export class DigitalProductionTaskService {
   constructor(private readonly database: Pool) {}
+  async syncSourcingAssignee(client: PoolClient, actor: TrustedActorContext, orderId: string, assigneeId: string) {
+    if (!(await client.query("SELECT to_regclass('digital_budget_preparations') AS relation")).rows[0]?.relation) return;
+    const tasks = (await client.query(`SELECT a.task_id FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
+      WHERE a.production_order_id=$1 AND a.task_kind='sourcing_preparation' AND t.state NOT IN ('completed','cancelled')`, [orderId])).rows;
+    for (const task of tasks) {
+      await reassignDigitalTask(client, actor, task.task_id, assigneeId);
+      await this.event(client, actor, task.task_id, { kind: "order", id: orderId }, "reassigned", new Date().toISOString(), "现场登记", { assigneeId });
+    }
+  }
   private async transaction<T>(action: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.database.connect();
     try {

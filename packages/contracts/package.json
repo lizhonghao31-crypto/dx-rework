@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./digital-budget": {
+      "types": "./src/digital-budget.ts",
+      "import": "./dist/digital-budget.js"
+    },
     "./digital-production-tasks": {
       "types": "./src/digital-production-tasks.ts",
       "import": "./dist/digital-production-tasks.js"

@@ -2,6 +2,7 @@ import { AcceptanceObjectStorage, registerAcceptanceStorageRoutes } from "./tool
 import {DevelopmentRoundService} from "./production-platform/development-round-service.js";
 import { DevelopmentExecutionService } from "./production-platform/development-execution-service.js";
 import { DigitalDevelopmentService } from "./production-platform/development-service.js";
+import { DigitalBudgetService } from "./production-platform/budget-service.js";
 import { DigitalProductionNotificationService } from "./production-platform/notification-service.js";
 import { DigitalNotificationRuntime } from "./production-platform/notification-runtime.js";
 import { DigitalProductionTaskService } from "./production-platform/task-service.js";
@@ -239,7 +240,7 @@ const externalResponsibilityService = new ExternalResponsibilityApplicationServi
 const wageService = new WageService(database, undefined, undefined, todoProjection);
 const reportingService = new ManagementReportingService(database);
 const app = buildApp({
-  ...(config.digitalProduction?.enabled ? { digitalIdentity: { ...(config.todoRuntime.publicBaseUrl ? { developmentQrBase: new URL(config.todoRuntime.publicBaseUrl).origin + config.appBasePath } : {}), developmentRounds:new DevelopmentRoundService(database,config.digitalProduction.creationEnabled), developmentExecution: new DevelopmentExecutionService(database, config.digitalProduction.creationEnabled, patternOrders), developmentService: new DigitalDevelopmentService(database, config.digitalProduction.creationEnabled), developmentAttachments: attachments, ...(digitalNotifications ? { notificationService: digitalNotifications } : {}), taskService: new DigitalProductionTaskService(database), accessService: new DigitalProductionAccessService(database), authenticate: (token: string | undefined) => auth.authenticate(token), root: rootAuthority, service: new DigitalProductionIdentityService(database, config.digitalProduction.creationEnabled), creationEnabled: config.digitalProduction.creationEnabled } } : {}),
+  ...(config.digitalProduction?.enabled ? { digitalIdentity: { budgetService: new DigitalBudgetService(database, config.digitalProduction.creationEnabled), ...(config.todoRuntime.publicBaseUrl ? { developmentQrBase: new URL(config.todoRuntime.publicBaseUrl).origin + config.appBasePath } : {}), developmentRounds:new DevelopmentRoundService(database,config.digitalProduction.creationEnabled), developmentExecution: new DevelopmentExecutionService(database, config.digitalProduction.creationEnabled, patternOrders), developmentService: new DigitalDevelopmentService(database, config.digitalProduction.creationEnabled), developmentAttachments: attachments, ...(digitalNotifications ? { notificationService: digitalNotifications } : {}), taskService: new DigitalProductionTaskService(database), accessService: new DigitalProductionAccessService(database), authenticate: (token: string | undefined) => auth.authenticate(token), root: rootAuthority, service: new DigitalProductionIdentityService(database, config.digitalProduction.creationEnabled), creationEnabled: config.digitalProduction.creationEnabled } } : {}),
   operationDiagnostics: (row) => recordOperationDiagnostic(database,row),
   config,
   checkDatabase: () => checkDatabase(database),

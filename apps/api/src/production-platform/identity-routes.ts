@@ -1,3 +1,5 @@
+import { registerBudgetRoutes } from "./budget-routes.js";
+import type { DigitalBudgetService } from "./budget-service.js";
 import {registerDevelopmentRoundRoutes} from "./development-round-routes.js";
 import type {DevelopmentRoundService} from "./development-round-service.js";
 import { registerDevelopmentExecutionRoutes } from "./development-execution-routes.js";
@@ -21,6 +23,7 @@ import { ApplicationError } from "../platform/errors.js";
 import { assertIdentityActor, type DigitalProductionIdentityService } from "./identity-service.js";
 
 export type DigitalIdentityDependencies = {
+  budgetService?: DigitalBudgetService;
   authenticate(token: string | undefined): Promise<AuthUser>; root?: RootAuthority;
   developmentQrBase?: string;
   developmentRounds?:DevelopmentRoundService;
@@ -38,6 +41,7 @@ const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   return result.data;
 };
 export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies: DigitalIdentityDependencies): void {
+  if (dependencies.budgetService && dependencies.developmentAttachments) registerBudgetRoutes(app, dependencies, dependencies.budgetService, dependencies.developmentAttachments);
   if(dependencies.developmentRounds)registerDevelopmentRoundRoutes(app,dependencies,dependencies.developmentRounds);
   if (dependencies.developmentExecution && dependencies.developmentAttachments) registerDevelopmentExecutionRoutes(app, dependencies, dependencies.developmentExecution, dependencies.developmentAttachments);
   if (dependencies.developmentService && dependencies.developmentAttachments) registerDevelopmentRoutes(app, dependencies, dependencies.developmentService, dependencies.developmentAttachments);
