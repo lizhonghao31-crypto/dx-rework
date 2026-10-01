@@ -16,7 +16,7 @@ export class FactoryFlowService{
  private tasks(){return new DigitalProductionTaskService(this.database);}
  private async state(db:DB,id:string){
   const gate=await new BulkPreparationService(this.database).gates(db,id);
-  const route=(await db.query('SELECT * FROM digital_factory_routes WHERE production_order_id=$1',[id])).rows[0];
+  const route=(await db.query('SELECT route.*,completion.completed_at AS cutting_completed_at FROM digital_factory_routes route JOIN digital_bulk_cutting_completions completion USING(preparation_id) WHERE route.production_order_id=$1',[id])).rows[0];
   const facts=route?(await db.query('SELECT f.*,u.display_name AS actor_name FROM digital_factory_facts f JOIN app_users u ON u.id=f.actor_id WHERE preparation_id=$1 ORDER BY sequence',[route.preparation_id])).rows:[];
   const tasks=route?(await db.query("SELECT t.*,a.task_kind,a.assignee_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.route_instance_id=$1 AND a.task_kind IN ('process_logistics','bulk_qc','warehouse_dispatch','factory_material_count','bulk_ship_sample') ORDER BY t.created_at",[route.preparation_id])).rows:[];
   const lines=(await db.query('SELECT line_id,po_number,color FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[id])).rows;
@@ -78,6 +78,7 @@ export class FactoryFlowService{
    await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'digital_factory_route',$5,$6)",[randomUUID(),actor.requestId,actor.actorId,action,id,JSON.stringify(input)]);await db.query('COMMIT');return response;
   }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
  }
+ private latestTime(...values:Array<Date|string|null|undefined>){const times=values.filter((v):v is Date|string=>v!=null).map(v=>new Date(v).getTime());return times.length?new Date(Math.max(...times)):null;}
  private checkTime(at:string|null,earliest?:Date|string|null){if(at&&(!Number.isFinite(new Date(at).getTime())||new Date(at).getTime()>Date.now()||earliest&&new Date(at)<new Date(earliest)))fail('真实时间不能晚于当前或早于前置发生时间');}
  private async fact(db:PoolClient,actor:TrustedActorContext,prep:string,kind:string,at:string|null,payload:unknown){const id=randomUUID();await db.query('INSERT INTO digital_factory_facts(fact_id,preparation_id,sequence,kind,payload,actor_id,occurred_at) SELECT $1,$2,coalesce(max(sequence),0)+1,$3,$4,$5,$6 FROM digital_factory_facts WHERE preparation_id=$2',[id,prep,kind,JSON.stringify(payload),actor.actorId,at]);return id;}
  async logistics(actor:TrustedActorContext,id:string,input:FactoryLogistics,key:string){return this.command(actor,id,'logistics',input,key,async(db,s)=>{
@@ -86,7 +87,7 @@ export class FactoryFlowService{
   if(input.kind==='工艺发出'&&s.lastMovement?.kind==='工艺发出')fail('整款已在工艺厂，不能重复发出');
   if(input.kind==='工艺发出'&&!input.supplier.trim())fail('请登记实际工艺供应厂');
   if(input.kind==='工艺回仓'&&s.lastMovement?.kind!=='工艺发出')fail('须有整款工艺发出事实才能回仓');
-  this.checkTime(input.occurredAt,input.kind==='工艺回仓'?s.lastMovement?.occurred_at:null);
+  this.checkTime(input.occurredAt,input.kind==='工艺沟通'?null:this.latestTime(s.route.cutting_completed_at,s.lastMovement?.occurred_at));
   await this.fact(db,actor,s.route.preparation_id,input.kind,input.occurredAt,{supplier:input.supplier,note:input.note});
   if(input.kind==='工艺回仓'){const task=s.tasks.find(t=>t.task_kind==='bulk_qc');await this.tasks().setConditionWithClient(db,actor,task.task_id,'handover_received',true,input.occurredAt,'整款工艺已回仓待QC');}
  });}
@@ -105,7 +106,7 @@ export class FactoryFlowService{
   if(!await this.authorized(db,actor,s,'warehouse_dispatch'))digitalForbidden();if(s.dispatched)fail('整款已实际发厂，不能重复发出');if(!s.allQc)fail('任一PO工艺QC未合格，整款不可发厂');
   if(input.supplierId!==s.gate.approval?.supplier_id)fail('请刷新确认当前原批准的唯一加工厂');
   const task=s.tasks.find(t=>t.task_kind==='warehouse_dispatch');if(task.state!=='ready')fail('仓库发厂尚不可办理');
-  this.checkTime(input.occurredAt,s.returned?.occurred_at);
+  this.checkTime(input.occurredAt,this.latestTime(s.route.cutting_completed_at,s.returned?.occurred_at,...s.latest.map(l=>l.check?.checked_at)));
   const factId=await this.fact(db,actor,s.route.preparation_id,'仓库实际发厂',input.occurredAt,{supplierId:input.supplierId,note:input.note});
   await new SourcingProductionService(this.database).dispatchDigitalWithClient(db,actor,id,factId);
   await this.tasks().completeFactoryDispatchFactsWithClient(db,actor,id,factId);
