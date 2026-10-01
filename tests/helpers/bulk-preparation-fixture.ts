@@ -1,3 +1,4 @@
+import {DigitalProductionAccessService} from "../../apps/api/src/production-platform/access-service.js";
 import { DevelopmentRoundService } from "../../apps/api/src/production-platform/development-round-service.js";
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
@@ -93,13 +94,17 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
   return;
  }
  // New technical release invalidates the old completed facts and the old pending cutting event.
+ await new DigitalProductionAccessService(db).delegate(actors.root,{resourceKind:'task',resourceId:complete.tasks.find(t=>t.taskKind==='bulk_pattern')!.taskId,delegateId:people.cutting_worker!.actorId,purpose:'technical',expiresAt:new Date(Date.now()+3600000).toISOString()});
+
  order=await identity.read(primary,id);await instruction.save(primary,id,{expectedVersion:1,orderVersion:order.version,document:{...doc,comments:'TEST新技术要求'}},randomUUID());await instruction.publish(primary,id,{expectedVersion:2,orderVersion:order.version},randomUUID());
  const revised=await bulk.read(primary,id);expect(revised.preparationId).not.toBe(sheet.preparationId);expect(revised.tasks.some(t=>t.taskKind==='bulk_cutting')).toBe(false);expect(revised.facts.some(f=>f.kind==='纸样完成')).toBe(false);
+ await expect(bulk.read(people.cutting_worker!,id)).rejects.toMatchObject({statusCode:404});await expect(instruction.read(people.cutting_worker!,id)).rejects.toMatchObject({statusCode:404});expect((await instruction.read(worker,id)).canEdit).toBe(false);
  await expect(done('纸样完成')).rejects.toMatchObject({statusCode:409});expect((await cutting.get(actors.root,cuttingId)).canRecord).toBe(false);
  if(mode==='none'){
   const rounds=new DevelopmentRoundService(db,true);
   await rounds.save(designer,source.sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:{...development,instructions:'TEST客户新技术要求'},origin:'客户新增要求',customerComment:'TEST改版',internalProblem:'',explanation:'',categories:['尺寸'],affectedNodes:['纸样'],outputKind:'整件样板'}},randomUUID());
   await rounds.publish(designer,source.sourceId,{expectedDraftVersion:1,basedOnRound:1},randomUUID());
+  await expect(instruction.read(worker,id)).rejects.toMatchObject({statusCode:404});
   expect((await bulk.read(primary,id))).toMatchObject({customerConfirmed:false,instructionValid:false,preparationId:null});
   await execution.customerSample(designer,source.sourceId,{routeVersion:1,note:'TEST旧确认不能解新轮'},randomUUID());
   expect((await bulk.read(primary,id)).customerConfirmed).toBe(false);
