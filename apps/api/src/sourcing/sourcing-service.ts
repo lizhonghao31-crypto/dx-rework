@@ -1,4 +1,6 @@
 import { memberCanWriteModule } from "../access/member-module-policy.js";
+import { validateBudgetSourcing, bindBudgetSourcing } from "../production-platform/budget-sourcing-adapter.js";
+import { resolveDigitalChild } from "../production-platform/child-link-repository.js";
 import {readQuoteAnalysis} from "./sourcing-analysis.js";
 import { createHash, randomUUID } from "node:crypto";
 
@@ -108,6 +110,7 @@ type SourcingPricedLineRow = Readonly<{
 }>;
 
 type SourcingCaseRow = Readonly<{
+  workflow_generation?: "legacy" | "digital_production_v1";
   identity_revision?: number;
   sourcing_case_id: string;
   gender: "男装" | "女装" | null;
@@ -491,6 +494,7 @@ export class SourcingService {
     const result = await client.query<SourcingCaseRow>(
       `SELECT
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
+         COALESCE(to_jsonb(source_case)->>'workflow_generation','legacy') AS workflow_generation,
          case_view.style_no,case_view.lane_key,source_case.order_quantity,
          (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=case_view.sourcing_case_id) AS identity_revision,
          source_case.gender,source_case.style_name_snapshot,
@@ -659,6 +663,7 @@ export class SourcingService {
     );
     const row = result.rows[0];
     if (!row) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
+    if (row.workflow_generation === "digital_production_v1") await resolveDigitalChild(client, "sourcing", sourcingCaseId, row.workflow_generation);
     const item = mapCase(history ? { ...row,contract_return_monitor_enabled:false } : row, actor);
     if (history) {
       item.styleNo = item.lineItems[0]?.styleNo ?? item.styleNo;
@@ -1796,6 +1801,7 @@ export class SourcingService {
     }
     const normalized = {
       gender: input.gender,
+      ...(input.digitalBudget ? { digitalBudget: input.digitalBudget } : {}),
       ...(input.confirmedDuplicateStyles?.length ? {confirmedDuplicateStyles:input.confirmedDuplicateStyles.map(normalizeSourcingStyleNumber)} : {}),
       styleName,
       ...(input.additionalMerchandiserUserId ? {additionalMerchandiserUserId:input.additionalMerchandiserUserId} : {}),
@@ -1818,6 +1824,7 @@ export class SourcingService {
         requestHash: requestHash(scope, {...normalized,confirmedDuplicateStyles:undefined}),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
+        const digitalLines = await validateBudgetSourcing(client, actor, input);
         if (normalized.additionalMerchandiserUserId) {
           const eligible = await client.query(
             `SELECT 1 FROM app_users person JOIN user_role_assignments assignment
@@ -1848,6 +1855,7 @@ export class SourcingService {
         )).rows[0]!;
         const sourcingCaseId = randomUUID();
         const auditedCreationFacts = {
+          ...(input.digitalBudget ? { digitalBudget: input.digitalBudget } : {}),
           erpOrderNo: sourcingCaseId,
           erpOrderId: sourcingCaseId,
           gender: normalized.gender,
@@ -1885,8 +1893,8 @@ export class SourcingService {
              sourcing_case_id,erp_order_id,erp_order_no,style_no,lane_key,
              order_quantity,delivery_date,process_description,process_items,
              created_by,operation_event_id,request_id,creation_reason,daxing_unit_price,
-             estimated_cut_piece_send_date,gender,style_id,style_name_snapshot${normalized.additionalMerchandiserUserId ? ',additional_merchandiser_user_id' : ''}
-           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18${normalized.additionalMerchandiserUserId ? ',$19' : ''})`,
+             estimated_cut_piece_send_date,gender,style_id,style_name_snapshot${normalized.additionalMerchandiserUserId ? ',additional_merchandiser_user_id' : ''}${input.digitalBudget ? ',workflow_generation' : ''}
+           ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18${normalized.additionalMerchandiserUserId ? ',$19' : ''}${input.digitalBudget ? (normalized.additionalMerchandiserUserId ? ',$20' : ',$19') : ''})`,
           [
             sourcingCaseId,
             sourcingCaseId,
@@ -1905,6 +1913,7 @@ export class SourcingService {
             normalized.estimatedCutPieceSendDate,
             normalized.gender,style.style_id,style.style_name,
             ...(normalized.additionalMerchandiserUserId ? [normalized.additionalMerchandiserUserId] : []),
+            ...(input.digitalBudget ? ["digital_production_v1"] : []),
           ],
         );
         for (const line of normalized.lineItems) {
@@ -1967,6 +1976,7 @@ export class SourcingService {
             actor.requestId,
           ],
         );
+        await bindBudgetSourcing(client, this.database, actor, input, sourcingCaseId, digitalLines);
         await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
           category: "sourcing_ie_quote",
           sourceEventId: eventId,

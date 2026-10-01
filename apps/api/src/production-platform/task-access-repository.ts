@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDigitalLeader, isDigitalTechnicalManager } from "./access-policy.js";
 export const DIGITAL_TASK_ROLES = {
+  sourcing_preparation: "order_merchandiser",
   development_washing_dispatch: "development_clerk",
   development_craft_dispatch: "sample_designer", development_craft_confirmation: "sample_designer", development_sewing_transfer: "development_clerk",
   development_material_supply: "sample_designer", development_material_recheck: "development_clerk", development_materials: "development_clerk", development_pattern: "pattern_room_worker", development_cutting: "pattern_room_worker",
@@ -27,6 +28,7 @@ export async function createDigitalTaskAccess(client: PoolClient, actor: Trusted
 }
 export async function reassignDigitalTask(client: PoolClient, actor: TrustedActorContext, taskId: string, assigneeId: string) {
   const task = (await client.query("SELECT * FROM digital_production_task_access WHERE task_id=$1 FOR UPDATE", [taskId])).rows[0] ?? digitalNotFound();
+  if (task.task_kind === "sourcing_preparation" && !(await client.query("SELECT 1 FROM digital_production_orders WHERE production_order_id=$1 AND primary_merchandiser_id=$2", [task.production_order_id, assigneeId])).rowCount) digitalForbidden();
   const development = task.task_kind.startsWith("development_") || task.task_kind === "bulk_pattern";
   if (!isDigitalLeader(actor) && !(development && (isDigitalTechnicalManager(actor) || actor.actorRoles.includes("development_clerk")))) digitalForbidden();
   if (!await new DigitalProductionAccessPolicy(client).activeRole(assigneeId, task.required_role)) digitalForbidden();

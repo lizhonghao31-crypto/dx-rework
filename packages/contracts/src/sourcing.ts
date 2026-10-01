@@ -146,6 +146,7 @@ export const sourcingDatesValid = (send: string | null, delivery: string | null)
 const validLineImages = (order: { lineItems: readonly { imageAttachmentId?: string | undefined }[]; attachmentIds: readonly string[] }) =>
   order.lineItems.every(line => !line.imageAttachmentId || order.attachmentIds.includes(line.imageAttachmentId));
 export const CreateSourcingCaseSchema = SourcingCaseInputSchema
+  .extend({ digitalBudget: z.object({ productionOrderId: IdSchema, budgetVersion: z.number().int().positive(), orderVersion: z.number().int().positive() }).strict().optional() })
   .refine(validLineImages, "款图必须包含在订单图片中")
   .refine(order => sourcingDatesValid(order.estimatedCutPieceSendDate, order.deliveryDate), { path: ["deliveryDate"], message: SOURCING_DATE_ORDER_ERROR });
 export const ReturnSourcingCaseSchema = z.object({ expectedVersion: z.number().int().positive(), reason: z.string().trim().min(1).max(500) }).strict();

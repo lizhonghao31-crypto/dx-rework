@@ -11,6 +11,12 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
+import { DigitalBudgetService } from "../../apps/api/src/production-platform/budget-service.js";
+import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
+import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
+import { digitalTodoOrder } from "../../apps/api/src/production-platform/notification-policy.js";
+import { DigitalOrderCreateSchema } from "@dx-rework/contracts/digital-production";
+import { BudgetDocumentSchema } from "@dx-rework/contracts/digital-budget";
 import { CuttingSourceService } from "../../apps/api/src/cutting/cutting-source-service.js";
 import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
 import { SourcingContractService } from "../../apps/api/src/sourcing/sourcing-contract-service.js";
@@ -3034,4 +3040,102 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_contract_return'",[id]))
       .rows[0]?.count).toBe(1);
   });
+  const budgetFixture = async () => {
+    await ensureReturnTodoRecipient();
+    const designerId = randomUUID();
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST P09 designer',true)", [designerId]);
+    await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2::uuid,'dingtalk','corp',$2::text,$2::text,true,true,CURRENT_TIMESTAMP)", [randomUUID(), designerId]);
+    await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
+    try {
+      await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'sample_designer',$3,'TEST P09 fixture')", [randomUUID(), designerId, merchandiserId]);
+    } finally { await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation"); }
+    const designer: TrustedActorContext = { actorId: designerId, actorRoles: ["sample_designer"], authorizationCapability: "digital_production:view", authorizationCapabilities: ["digital_production:view", "pattern_room:orders:create"], requestId: randomUUID() };
+    await database.query("UPDATE digital_production_customers SET default_merchandiser_id=$1 WHERE code='PD'", [merchandiserId]);
+    const identity = new DigitalProductionIdentityService(database, true);
+    const order = await identity.createOrder(designer, DigitalOrderCreateSchema.parse({
+      customerCode: "PD", productGroup: "男装", designStyleNo: `TEST-P09-${randomUUID()}`,
+      orderDate: "2026-09-30", contractDeliveryDate: "2026-11-20", primaryMerchandiserId: merchandiserId,
+      lines: [{ poNumber: "TEST-PO1", color: "黑", sizes: [{ size: "M", quantity: 137 }] }, { poNumber: "TEST-PO2", color: "白", sizes: [{ size: "M", quantity: 63 }] }],
+    }), randomUUID());
+    const bytes = await sharp({ create: { width: 2, height: 2, channels: 3, background: "white" } }).png().toBuffer();
+    const imageId = randomUUID(), objectKey = `tests/p09/${imageId}.png`, sha256 = createHash("sha256").update(bytes).digest("hex");
+    await contractStorage.writeImmutable(objectKey, bytes, { mimeType: "image/png", sha256 });
+    await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',$3,$4,$5,'ready',CURRENT_TIMESTAMP)", [imageId, objectKey, bytes.length, sha256, designerId]);
+    const document = BudgetDocumentSchema.parse({ fabricType: "梭织", productCategory: "短裤", monthSeries: "", date: "2026-09-30", currency: "人民币", rows: [],
+      freight: "0.3", cm: "8.3", salePrice: "48", outsourcingScope: "车缝、整烫", outsourcingUnitPrice: "5.25", imageAttachmentIds: [imageId] });
+    const budget = new DigitalBudgetService(database, true);
+    return { order, designer, document, imageId, budget };
+  };
+
+  it("P09 preserves published budgets, rejects technical readers and stale or unauthorized writes", async () => {
+    const { order, designer, document, imageId, budget } = await budgetFixture(), id = order.productionOrderId;
+    const key = randomUUID();
+    const saved = await budget.save(designer, id, { expectedVersion: 0, document }, key);
+    expect((await budget.save(designer, id, { expectedVersion: 0, document }, key)).version).toBe(saved.version);
+    await expect(budget.save(designer, id, { expectedVersion: 0, document: { ...document, cm: "9" } }, key)).rejects.toMatchObject({ statusCode: 409 });
+    await expect(budget.save(merchandiserActor(), id, { expectedVersion: 1, document }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    const technical = { ...ieActor(), actorRoles: ["pattern_room_supervisor"], authorizationCapability: "digital_production:view" };
+    await expect(budget.read(technical, id)).rejects.toMatchObject({ statusCode: 404 });
+    await expect(budget.canDownload(technical, id, imageId)).rejects.toMatchObject({ statusCode: 404 });
+    expect(await budget.canDownload(designer, id, imageId)).toBe(true);
+    const publishKey = randomUUID();
+    const published = await Promise.all([budget.publish(designer, id, 1, publishKey), budget.publish(designer, id, 1, publishKey)]);
+    expect(published.map(value => value.status)).toEqual(["published", "published"]);
+    const task = (await database.query("SELECT p.task_id,t.state,a.assignee_id FROM digital_budget_preparations p JOIN digital_production_tasks t USING(task_id) JOIN digital_production_task_access a USING(task_id) WHERE p.production_order_id=$1", [id])).rows[0];
+    expect(task).toMatchObject({ state: "ready", assignee_id: merchandiserId });
+    await expect(new DigitalProductionTaskService(database).complete(merchandiserActor(), task.task_id, { note: "不能直接完成" }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    const disabled = new DigitalBudgetService(database, false);
+    await disabled.save(designer, id, { expectedVersion: 1, document: { ...document, cm: "9" } }, randomUUID());
+    expect((await budget.read(designer, id, undefined, 1)).document?.cm).toBe("8.3");
+    await expect(budget.prepareSourcing(merchandiserActor(), id, 1, attachments)).rejects.toMatchObject({ statusCode: 409 });
+    await expect(database.query("UPDATE digital_budget_versions SET document='{}' WHERE production_order_id=$1", [id])).rejects.toThrow("immutable");
+    expect((await database.query("SELECT count(*)::int AS n FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='sourcing_preparation'", [id])).rows[0].n).toBe(1);
+  });
+
+  it("P09 carries all PO quantities and owned image copies into exactly one original sourcing case", async () => {
+    const { order, designer, document, imageId, budget } = await budgetFixture(), id = order.productionOrderId;
+    await budget.save(designer, id, { expectedVersion: 0, document }, randomUUID());
+    await budget.publish(designer, id, 1, randomUUID());
+    const prepared = await budget.prepareSourcing(merchandiserActor(), id, 1, attachments);
+    expect(prepared.lineItems.map(line => line.quantity)).toEqual([137, 63]);
+    expect(prepared.daxingUnitPrice).toBe("5.25");
+    expect(prepared.contractDeliveryDate).toBe("2026-11-20");
+    expect(prepared.images[0]!.attachmentId).not.toBe(imageId);
+    expect((await budget.prepareSourcing(merchandiserActor(), id, 1, attachments)).images).toEqual(prepared.images);
+    const input = {
+      gender: prepared.gender, styleName: prepared.styleName, deliveryDate: "2026-11-10",
+      estimatedCutPieceSendDate: "2026-10-20", daxingUnitPrice: prepared.daxingUnitPrice,
+      attachmentIds: prepared.images.map(image => image.attachmentId),
+      lineItems: prepared.lineItems.map(({ styleNo, alternateStyleNo, color, quantity }) => ({ styleNo, alternateStyleNo, color, quantity })),
+      digitalBudget: { productionOrderId: id, budgetVersion: prepared.budgetVersion, orderVersion: prepared.orderVersion },
+    };
+    await expect(service.createCase(merchandiserActor(), { ...input, lineItems: input.lineItems.slice(0, 1) }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    await expect(service.createCase(merchandiserActor(), { ...input, daxingUnitPrice: "8.30" }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    const key = randomUUID();
+    const results = await Promise.all([service.createCase(merchandiserActor(), input, key), service.createCase(merchandiserActor(), input, key)]);
+    const caseId = results[0]!.value.sourcingCaseId;
+    expect(results[1]!.value.sourcingCaseId).toBe(caseId);
+    expect(results[0]!.value.status).toBe("pending_ie_quote");
+    expect(results[0]!.value.deliveryDate).toBe("2026-11-10");
+    expect((await database.query("SELECT workflow_generation FROM sourcing_cases WHERE sourcing_case_id=$1", [caseId])).rows[0].workflow_generation).toBe("digital_production_v1");
+    expect((await database.query("SELECT count(*)::int AS n FROM digital_production_child_lines WHERE child_id=$1", [caseId])).rows[0].n).toBe(2);
+    expect((await database.query("SELECT entity_type,entity_id FROM attachments WHERE attachment_id=$1", [imageId])).rows[0]).toEqual({ entity_type: "digital_budget", entity_id: id });
+    expect((await database.query("SELECT entity_type,entity_id FROM attachments WHERE attachment_id=$1", [input.attachmentIds[0]])).rows[0]).toEqual({ entity_type: "sourcing_case", entity_id: caseId });
+    expect((await database.query("SELECT t.state FROM digital_budget_preparations p JOIN digital_production_tasks t USING(task_id) WHERE p.production_order_id=$1", [id])).rows[0].state).toBe("completed");
+    expect(await digitalTodoOrder(database, { routeName: "sourcing_detail", entityId: caseId })).toBe(id);
+    await expect(service.createCase(merchandiserActor(), input, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    await expect(budget.save(designer, id, { expectedVersion: 1, document }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    // Corrupt only this owned test schema to prove a missing mapping never falls back to legacy.
+    const corruption = await database.connect();
+    try {
+      await corruption.query("BEGIN");
+      await corruption.query("ALTER TABLE digital_production_child_lines DISABLE TRIGGER digital_production_child_lines_immutable");
+      await corruption.query("ALTER TABLE digital_production_child_links DISABLE TRIGGER digital_production_child_links_immutable");
+      await corruption.query("DELETE FROM digital_production_child_lines WHERE child_id=$1", [caseId]);
+      await corruption.query("DELETE FROM digital_production_child_links WHERE child_id=$1", [caseId]);
+      await expect(digitalTodoOrder(corruption, { routeName: "sourcing_detail", entityId: caseId })).rejects.toMatchObject({ code: "DIGITAL_LINK_MISSING" });
+    } finally { await corruption.query("ROLLBACK"); corruption.release(); }
+  });
+
+
 });

@@ -1,0 +1,26 @@
+.budget-editor fieldset { border: 0; padding: 0; min-width: 0; }
+.budget-editor header { text-align: center; }
+.budget-heading, .budget-editor footer { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.budget-editor label { display: flex; flex-direction: column; gap: 4px; }
+.budget-editor table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+.budget-editor th, .budget-editor td { border: 1px solid currentColor; padding: 5px; text-align: left; }
+.budget-editor td input { box-sizing: border-box; width: 100%; min-width: 70px; }
+.budget-table-scroll { overflow-x: auto; }
+.budget-summary { display: grid; gap: 12px; margin: 16px 0; }
+.budget-images { display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0; }
+.budget-images img { max-width: 200px; max-height: 200px; object-fit: contain; }
+.budget-print-value { display: none; }
+@media print {
+  .budget-editor, .budget-editor * { visibility: visible; }
+  .budget-editor { position: absolute; left: 0; top: 0; width: 100%; }
+  .budget-editor table { table-layout: fixed; }
+  .budget-editor th, .budget-editor td { overflow-wrap: anywhere; }
+  .budget-editor .budget-controls, .budget-editor input, .budget-editor [role="alert"] { display: none !important; }
+  .budget-editor .budget-print-value { display: inline; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .budget-editor th, .budget-editor td { font-size: 10px; }
+  .budget-editor thead { display: table-header-group; }
+  .budget-editor tfoot { display: table-row-group; }
+  .budget-editor tr, .budget-images { break-inside: avoid; }
+  .budget-table-scroll { overflow: visible; }
+  .budget-editor input:disabled, .budget-editor fieldset:disabled { opacity: 1; }
+}
