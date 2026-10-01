@@ -1,3 +1,5 @@
+import {registerOrderClosureRoutes} from "./order-closure-routes.js";
+import type {OrderClosureService} from "./order-closure-service.js";
 import {registerFactoryFlowRoutes} from "./factory-flow-routes.js";
 import type {FactoryFlowService} from "./factory-flow-service.js";
 import { registerBulkPreparationRoutes } from "./bulk-preparation-routes.js";
@@ -32,6 +34,7 @@ export type DigitalIdentityDependencies = {
   budgetService?: DigitalBudgetService;
   instructionService?: ProductionInstructionService;
   bulkPreparationService?: BulkPreparationService;
+  closureService?:OrderClosureService;
   factoryFlowService?:FactoryFlowService;
   authenticate(token: string | undefined): Promise<AuthUser>; root?: RootAuthority;
   developmentQrBase?: string;
@@ -50,6 +53,7 @@ const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   return result.data;
 };
 export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies: DigitalIdentityDependencies): void {
+  if(dependencies.closureService)registerOrderClosureRoutes(app,dependencies,dependencies.closureService);
   if(dependencies.factoryFlowService&&dependencies.developmentAttachments)registerFactoryFlowRoutes(app,dependencies,dependencies.factoryFlowService,dependencies.developmentAttachments);
   if(dependencies.bulkPreparationService)registerBulkPreparationRoutes(app,dependencies,dependencies.bulkPreparationService);
   if (dependencies.instructionService && dependencies.developmentAttachments) registerInstructionRoutes(app,dependencies,dependencies.instructionService,dependencies.developmentAttachments);

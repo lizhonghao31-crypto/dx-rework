@@ -1,0 +1,61 @@
+import {hasFinanceWageRole} from "@dx-rework/contracts/finance-access";
+import {createHash,randomUUID} from 'node:crypto';
+import type {Pool,PoolClient} from 'pg';
+import type {ClosureLine,OrderClosureSheet,SpecialClosure} from '@dx-rework/contracts/order-closure';
+import type {TrustedActorContext} from '../tools/repositories.js';
+import {ApplicationError} from '../platform/errors.js';
+import {DigitalProductionAccessPolicy,digitalForbidden} from './access-policy.js';
+import {DIGITAL_RECEIVING_BASE_SQL} from '../receiving/receiving-service.js';
+import {DigitalProductionTaskService} from './task-service.js';
+type DB=Pick<Pool|PoolClient,'query'>;
+const fail=(message:string):never=>{throw new ApplicationError('DIGITAL_CLOSURE_CONFLICT',message,409);};
+const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+export class OrderClosureService{
+ constructor(private readonly database:Pool){}
+ private async canClose(db:DB,actor:TrustedActorContext){if(actor.actorRoles.includes('root_superuser')&&(await db.query('SELECT access_is_root_actor($1) AS allowed',[actor.actorId])).rows[0]?.allowed)return true;const policy=new DigitalProductionAccessPolicy(db);for(const role of ['production_management'])if(actor.actorRoles.includes(role)&&await policy.activeRole(actor.actorId,role))return true;return false;}
+ async read(actor:TrustedActorContext,id:string,db:DB=this.database):Promise<OrderClosureSheet>{
+  await new DigitalProductionAccessPolicy(db).assert(actor,'order',id,'technical');
+  const original=(await db.query(`SELECT p.*,(SELECT sum(quantity) FROM digital_production_po_sizes WHERE line_id=p.line_id) total_quantity,c.child_id AS cutting_id FROM digital_production_po_lines p LEFT JOIN digital_production_child_lines c ON c.production_order_id=p.production_order_id AND c.line_id=p.line_id AND c.module='cutting' WHERE p.production_order_id=$1 ORDER BY p.position`,[id])).rows;
+  const cutIds=original.map(r=>r.cutting_id).filter(Boolean);
+  const totals=cutIds.length?(await db.query(`${DIGITAL_RECEIVING_BASE_SQL}
+   SELECT totals.*,action.receiving_batch_id,packing.packing_revision_id,packing.packing_quantity,
+    receiving.result AS receiving_resolution,packed.result AS packing_resolution
+   FROM style_totals totals JOIN LATERAL(SELECT b.receiving_batch_id FROM batch_totals b WHERE b.group_key=totals.group_key ORDER BY b.last_all_received_at DESC,b.receiving_batch_id DESC LIMIT 1) action ON true
+   LEFT JOIN LATERAL(SELECT p.* FROM receiving_packing_revisions p WHERE p.receiving_batch_id=action.receiving_batch_id ORDER BY p.created_at DESC,p.packing_revision_id DESC LIMIT 1) packing ON true
+   LEFT JOIN LATERAL(SELECT r.result FROM receiving_difference_resolutions r WHERE r.receiving_batch_id=action.receiving_batch_id AND r.difference_type='receiving' AND r.document_quantity_snapshot=totals.document_quantity AND r.actual_quantity_snapshot=totals.current_actual_quantity AND r.difference_quantity_snapshot=totals.current_actual_quantity-totals.document_quantity ORDER BY r.created_at DESC,r.resolution_id DESC LIMIT 1) receiving ON true
+   LEFT JOIN LATERAL(SELECT r.result FROM receiving_difference_resolutions r WHERE r.receiving_batch_id=action.receiving_batch_id AND r.difference_type='packing' AND r.actual_quantity_snapshot=totals.current_actual_quantity AND r.packing_revision_id=packing.packing_revision_id AND r.packing_quantity_snapshot=packing.packing_quantity AND r.difference_quantity_snapshot=packing.packing_quantity-totals.current_actual_quantity ORDER BY r.created_at DESC,r.resolution_id DESC LIMIT 1) packed ON true
+  `,['2000-01-01','2999-12-31','#',cutIds])).rows:[];
+  const receipts=(await db.query(`SELECT l.line_id,r.receipt_id,r.received_at,coalesce(c.actual_quantity,r.actual_quantity) actual_quantity,coalesce(c.defective_quantity,r.defective_quantity) defective_quantity FROM digital_production_child_lines l JOIN receiving_receipts r ON r.receipt_id=l.child_id JOIN receiving_batches b USING(receiving_batch_id)
+   LEFT JOIN LATERAL(SELECT x.actual_quantity,x.defective_quantity FROM receiving_receipt_corrections x WHERE x.receipt_id=r.receipt_id ORDER BY x.created_at DESC,x.correction_id DESC LIMIT 1)c ON true
+   WHERE l.module='receiving' AND l.production_order_id=$1 AND b.deleted_at IS NULL ORDER BY r.received_at,r.receipt_id`,[id])).rows;
+  const reworks=(await db.query(`SELECT l.line_id,r.*, (SELECT count(*)::int FROM rework_wage_items w WHERE w.rework_order_id=r.rework_order_id) wage_items FROM digital_production_child_lines l JOIN rework_orders r ON r.rework_order_id=l.child_id WHERE l.module='rework' AND l.production_order_id=$1 AND r.status<>'deleted' ORDER BY r.created_at,r.rework_order_id`,[id])).rows;
+  const lines:ClosureLine[]=original.map(r=>{const t=totals.find(t=>t.group_key===`cut:${r.cutting_id}`);return {lineId:r.line_id,poNumber:r.po_number,color:r.color,orderedQuantity:Number(r.total_quantity),cuttingId:r.cutting_id??null,receivingBatchId:t?.receiving_batch_id??null,actualQuantity:Number(t?.current_actual_quantity??0),documentQuantity:Number(t?.document_quantity??0),defectiveQuantity:Number(t?.current_defective_quantity??0),receiptCount:Number(t?.receipt_count??0),packingQuantity:t?.packing_quantity==null?null:Number(t.packing_quantity),packingRevisionId:t?.packing_revision_id??null,receivingResolution:t?.receiving_resolution??null,packingResolution:t?.packing_resolution??null,receipts:receipts.filter(x=>x.line_id===r.line_id).map(x=>({receiptId:x.receipt_id,receivedAt:new Date(x.received_at).toISOString(),actualQuantity:Number(x.actual_quantity),defectiveQuantity:Number(x.defective_quantity)})),reworks:reworks.filter(x=>x.line_id===r.line_id).map(x=>({reworkId:x.rework_order_id,reworkNo:x.rework_no,status:x.status,problem:[x.problem_part,x.problem_description].filter(Boolean).join('：'),quantity:x.rework_quantity,wageItemCount:x.wage_items}))};});
+  const outstanding:string[]=[];
+  for(const l of lines){const label=`${l.poNumber??'待补PO'} ${l.color}`;if(l.actualQuantity<l.orderedQuantity)outstanding.push(`${label}：实收${l.actualQuantity}，订购${l.orderedQuantity}，未到足量`);if(!l.receiptCount)outstanding.push(`${label}：尚无原收货事实`);if(l.packingQuantity===null)outstanding.push(`${label}：尚无原装箱事实`);else if(l.packingQuantity<l.orderedQuantity)outstanding.push(`${label}：装箱${l.packingQuantity}，少于订购${l.orderedQuantity}`);if(l.receiptCount&&l.actualQuantity!==l.documentQuantity&&!l.receivingResolution)outstanding.push(`${label}：原收货差异待处理`);if(l.packingQuantity!==null&&l.packingQuantity!==l.actualQuantity&&!l.packingResolution)outstanding.push(`${label}：原装箱差异待处理`);for(const r of l.reworks)if(!['completed','cancelled'].includes(r.status))outstanding.push(`${label}：原返工${r.reworkNo??r.reworkId}未完成`);if(l.defectiveQuantity>0&&!l.reworks.some(r=>r.status==='completed'))outstanding.push(`${label}：原次品${l.defectiveQuantity}，未见已完成返工依据`);}
+  const pending=(await db.query(`SELECT t.task_id,t.node_key,t.state,(SELECT label FROM digital_production_deadline_policies WHERE node_key=t.node_key ORDER BY version DESC LIMIT 1) label FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND t.state NOT IN ('completed','cancelled') ORDER BY t.task_id`,[id])).rows;
+  for(const t of pending)outstanding.push(`待办 ${t.label}：${({pending:"未就绪",ready:"待办理",blocked:"阻断"} as Record<string,string>)[t.state]??"待核对"}`);
+  const native=(await db.query("SELECT child_id FROM digital_production_child_links WHERE module='production' AND production_order_id=$1",[id])).rows[0];
+  const closed=(await db.query('SELECT c.*,u.display_name FROM digital_order_closures c JOIN app_users u ON u.id=c.closed_by WHERE c.production_order_id=$1',[id])).rows[0];
+  const revision=hash({lines,pending,productionId:native?.child_id??null,closed:closed?.source_revision??null});
+  const roles=actor.actorRoles;
+  return {orderId:id,revision,productionId:native?.child_id??null,stage:closed?'特殊结案':lines.length>0&&lines.every(l=>l.packingRevisionId&&l.packingQuantity!==null&&l.packingQuantity>=l.orderedQuantity)&&outstanding.length===0?'本期装箱完成':'等待回货与装箱',lines,outstanding,canClose:!closed&&Boolean(native)&&outstanding.length>0&&await this.canClose(db,actor),canOpenReceiving:roles.some(r=>['root_superuser','owner_group','production_management','order_merchandiser','warehouse_receiver','quality_control'].includes(r)),canOpenRework:roles.some(r=>['root_superuser','owner_group','production_management','quality_control','order_merchandiser'].includes(r)),canOpenWages:roles.includes('root_superuser')||hasFinanceWageRole(roles)&&(actor.authorizationCapabilities??[]).includes('wage:view'),closed:closed?{reason:closed.reason,outstanding:closed.outstanding,closedBy:closed.display_name,closedAt:new Date(closed.closed_at).toISOString()}:null,shipmentStatus:'未知',customerReceiptStatus:'未知'};
+ }
+ async close(actor:TrustedActorContext,id:string,input:SpecialClosure,key:string){
+  if(!input.reason.trim()||input.reason.length>2000)fail('特殊结案必须填写具体原因');if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail('缺少有效操作标识');
+  const db=await this.database.connect();try{await db.query('BEGIN');await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");if(!await this.canClose(db,actor))digitalForbidden();await new DigitalProductionAccessPolicy(db).assert(actor,'order',id,'technical');
+   const command=`closure:${id}`,payloadHash=hash(input),prior=(await db.query('SELECT * FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',[actor.actorId,command,key])).rows[0];if(prior){if(prior.payload_hash!==payloadHash)fail('操作标识已用于不同内容');await db.query('COMMIT');return prior.response as OrderClosureSheet;}
+   // A rare, short finalization barrier: native writers use several unrelated locks.
+   // SHARE blocks every insert/update/delete (including new reworks and wage links)
+   // until the immutable snapshot commits, without changing native writer permissions.
+   // Acquire before the mother-order lock; do not also take native style/cutting
+   // locks, which writers may already hold while waiting to insert their facts.
+   await db.query('LOCK TABLE receiving_batches, receiving_receipts, receiving_receipt_corrections, receiving_packing_revisions, receiving_difference_resolutions, rework_orders, rework_wage_items IN SHARE MODE');
+   await db.query('SELECT production_order_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE',[id]);
+   const sheet=await this.read(actor,id,db);if(!sheet.canClose)fail('尚未进入原生产、已经结案或已正常完成，无需特殊结案');if(sheet.revision!==input.expectedRevision)fail('实绩或未清事项已变化，请刷新核对后再结案');
+   const audit=randomUUID();await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'digital.order.special_close','digital_production_order',$4,$5)",[audit,actor.requestId,actor.actorId,id,JSON.stringify({reason:input.reason,outstanding:sheet.outstanding,revision:sheet.revision})]);
+   await db.query('INSERT INTO digital_order_closures(production_order_id,reason,outstanding,source_revision,closed_by,audit_event_id) VALUES($1,$2,$3,$4,$5,$6)',[id,input.reason,JSON.stringify(sheet.outstanding),sheet.revision,actor.actorId,audit]);
+   await new DigitalProductionTaskService(this.database).cancelForSpecialClosureWithClient(db,actor,id,input.reason);
+   const response=await this.read(actor,id,db);await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,payloadHash,JSON.stringify(response)]);await db.query('COMMIT');return response;
+  }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
+ }
+}

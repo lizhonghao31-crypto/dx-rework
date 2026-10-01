@@ -1,3 +1,4 @@
+import {linkDigitalRework} from "../production-platform/receiving-link-adapter.js";
 import { createHash, randomUUID } from "node:crypto";
 
 import {
@@ -320,6 +321,7 @@ export class ReworkInitiationService {
           ...(kind === "inhouse_finishing" ? [kind] : []),
         ],
       );
+      await linkDigitalRework(client,reworkOrderId,sourceReceivingBatch.receivingBatchId);
       await this.syncAttachments(client, actor.actorId, reworkOrderId, attachmentIds);
       return this.getOwnedWithClient(client, actor.actorId, reworkOrderId);
     });

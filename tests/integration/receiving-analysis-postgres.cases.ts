@@ -1,6 +1,6 @@
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import {randomUUID} from "node:crypto";
-import {readFile} from "node:fs/promises";
+import {RECEIVING_BOARD_BASE_SQL} from "../../apps/api/src/receiving/receiving-service.js";
 import pg from "pg";
 import {afterAll, beforeAll, describe, expect, it} from "vitest";
 import {readReceivingAnalysis, RECEIVING_ANALYSIS_LINKS_SQL} from "../../apps/api/src/receiving/receiving-analysis.js";
@@ -16,8 +16,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
   let base = "";
   const query = {startDate: "2026-09-01", endDate: "2026-09-07"};
   beforeAll(async () => {
-    const source = await readFile(new URL("../../apps/api/src/receiving/receiving-service.ts", import.meta.url), "utf8");
-    base = source.match(/const RECEIVING_BOARD_BASE_SQL = `([\s\S]*?)`;/)![1]!;
+    base = RECEIVING_BOARD_BASE_SQL;
     await admin.query(`CREATE SCHEMA ${schema}`);
     // Isolated table fixtures for the production SQL, not replacement business migrations.
     await database.query(`CREATE TABLE receiving_batches(receiving_batch_id uuid PRIMARY KEY,style_no text,cutting_order_id uuid,deleted_at timestamptz,

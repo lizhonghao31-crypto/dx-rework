@@ -229,7 +229,8 @@
     {"version": "0227_digital_production_instructions", "checksum": "bd40ce060768ee0449d9178113e4673002cdee6bf7c8ffd58cdca354ce0ca685"},
     {"version": "0228_digital_bulk_preparation", "checksum": "c50f93ea731b5e9e2b8cab781ad870bb53a1bef8271b913720d63d6efb5e7bb6"},
     {"version": "0229_digital_bulk_cutting", "checksum": "be60e800d1c513da9ae9e25463eba2a92d9ca69b86489f847269743d0e1672bb"},
-    {"version": "0230_digital_factory_flow", "checksum": "1d1fe7d53d4f84f8d0fc28b3b4bd309928f99e2df3e589f749ce5948e3b4ed18"}
+    {"version": "0230_digital_factory_flow", "checksum": "1d1fe7d53d4f84f8d0fc28b3b4bd309928f99e2df3e589f749ce5948e3b4ed18"},
+    { "version": "0231_digital_order_closure", "checksum": "b1698097af226f2c0a2a52fe5463f54365dde375fe45e40f4b11677b778ba782" }
   ]
 }
 

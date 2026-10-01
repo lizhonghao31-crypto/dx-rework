@@ -59,6 +59,13 @@ describe("Full Gate sensitive path mapping", () => {
     expect(deleted.mappedPostgresTests).not.toContain("tests/integration/removed-postgres.test.ts");
   });
 
+  it("runs receiving analysis cases through the real receiving suite", () => {
+    const result = classifyFullGatePaths(["tests/integration/receiving-analysis-postgres.cases.ts"]);
+    expect(result.dbRequired).toBe(true);
+    expect(result.businessChainSensitive).toBe(true);
+    expect(result.mappedPostgresTests).toEqual(["tests/integration/receiving-postgres.test.ts"]);
+  });
+
   it("maps migration, deployment and changed PostgreSQL tests explicitly", () => {
     const migration = classifyFullGatePaths(["apps/api/migrations/9999_test.sql"]);
     expect(migration.migrationSensitive).toBe(true);

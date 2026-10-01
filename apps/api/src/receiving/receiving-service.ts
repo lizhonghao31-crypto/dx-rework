@@ -1,3 +1,4 @@
+import {linkDigitalReceipt} from "../production-platform/receiving-link-adapter.js";
 import { RECEIVING_BOARD_FILTERS_SQL } from "./receiving-board-filters.js";
 import { readReceivingAnalysis } from "./receiving-analysis.js";
 import type { ProductionClosureService } from "../sourcing/production-closure-service.js";
@@ -282,24 +283,8 @@ const normalizeOptionalUuid = (value: string | null | undefined, label: string):
   return value;
 };
 
-const RECEIVING_BOARD_BASE_SQL = `WITH scoped_groups AS (
-         SELECT DISTINCT
-                COALESCE('cut:'||batch.cutting_order_id::text,
-                  'style:'||upper(btrim(batch.style_no))) AS group_key,
-                upper(btrim(batch.style_no)) AS style_key
-         FROM receiving_receipts receipt
-         JOIN receiving_batches batch
-           ON batch.receiving_batch_id=receipt.receiving_batch_id
-          AND batch.deleted_at IS NULL
-         WHERE (
-           $3::text<>''
-           AND strpos(upper(btrim(batch.style_no)),$3)>0
-         ) OR (
-           $3::text=''
-           AND receipt.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
-           AND receipt.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
-         )
-       ), scoped_batches AS (
+// Shared native aggregation; the digital adapter changes only the exact-ID scope.
+const receivingBoardBaseSql = (scope: string) => `WITH scoped_groups AS (${scope}), scoped_batches AS (
          SELECT batch.receiving_batch_id,
                 scope.group_key,
                 scope.style_key,
@@ -503,6 +488,30 @@ const RECEIVING_BOARD_BASE_SQL = `WITH scoped_groups AS (
          FROM batch_totals totals
          GROUP BY totals.group_key,totals.style_key
        )`;
+export const RECEIVING_BOARD_BASE_SQL = receivingBoardBaseSql(`
+         SELECT DISTINCT
+                COALESCE('cut:'||batch.cutting_order_id::text,
+                  'style:'||upper(btrim(batch.style_no))) AS group_key,
+                upper(btrim(batch.style_no)) AS style_key
+         FROM receiving_receipts receipt
+         JOIN receiving_batches batch
+           ON batch.receiving_batch_id=receipt.receiving_batch_id
+          AND batch.deleted_at IS NULL
+         WHERE (
+           $3::text<>''
+           AND strpos(upper(btrim(batch.style_no)),$3)>0
+         ) OR (
+           $3::text=''
+           AND receipt.received_at>=($1::date::timestamp AT TIME ZONE 'Asia/Shanghai')
+           AND receipt.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
+         )
+`);
+export const DIGITAL_RECEIVING_BASE_SQL = receivingBoardBaseSql(`
+ SELECT DISTINCT 'cut:'||batch.cutting_order_id::text AS group_key,
+                 'cut:'||batch.cutting_order_id::text AS style_key
+ FROM receiving_batches batch JOIN receiving_receipts receipt USING(receiving_batch_id)
+ WHERE batch.deleted_at IS NULL AND batch.cutting_order_id=ANY($4::uuid[])
+`);
 
 const validateQuantity = (value: number, label: string, allowZero: boolean): number => {
   if (!Number.isInteger(value) || value < (allowZero ? 0 : 1) || value > 10_000_000) {
@@ -1792,6 +1801,7 @@ export class ReceivingService {
       if (updated.rowCount !== 1) fail("该订单已不可追加收货，请重新搜索选择", 409, "INVALID_STATE_TRANSITION");
     }
     const row = inserted.rows[0]!;
+    await linkDigitalReceipt(client,receiptId,receivingBatchId);
     if (this.production && input.cuttingOrderId) {
       await this.production.linkReceiptByCuttingOrder(client,actor,{
         cuttingOrderId:input.cuttingOrderId,receiptId,

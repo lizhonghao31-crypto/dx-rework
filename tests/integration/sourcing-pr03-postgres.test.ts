@@ -1,5 +1,6 @@
 import {ProductionClosureService} from "../../apps/api/src/sourcing/production-closure-service.js";
 import {DigitalProductionAccessService} from "../../apps/api/src/production-platform/access-service.js";
+import {exerciseOrderClosure} from "../helpers/order-closure-fixture.js";
 import {FactoryFlowService} from "../../apps/api/src/production-platform/factory-flow-service.js";
 import { exerciseBulkPreparation } from "../helpers/bulk-preparation-fixture.js";
 import { exerciseInstructions } from "../helpers/production-instruction-fixture.js";
@@ -3185,7 +3186,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query('SELECT 1 FROM digital_bulk_cutting_completions WHERE production_order_id=$1',[id])).rowCount).toBe(1);
   });
 
-  it.each(['无','印花'] as const)('P13 whole-order %s QC and actual warehouse dispatch activate original production once',async secondaryCraft=>{
+  it.each(['无','印花'] as const)('P13/P14 whole-order %s flow links native receiving and preserves closure facts',async secondaryCraft=>{
     const fixture=await budgetFixture(),primary=merchandiserActor(),root=rootActor(),flow=new FactoryFlowService(database),tasks=new DigitalProductionTaskService(database);
     const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId("净色车缝"),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft}))!;
     const {id,caseId,people,cutting}=ready;
@@ -3251,6 +3252,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await reminders.todos(todoActor(replacement))).some(t=>t.entityId===dispatched.productionId)).toBe(true);expect((await reminders.todos(todoActor(primary))).some(t=>t.entityId===dispatched.productionId)).toBe(false);
     await access.assignMerchandiser(root,id,primary.actorId,assigned.version);
 
+    await exerciseOrderClosure(database,service,id,ids,{root,primary,manager:managerActor(),warehouse,qc},secondaryCraft==='无');
   });
 
 });

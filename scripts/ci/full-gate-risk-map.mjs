@@ -48,6 +48,11 @@ const isBackendOrContract = (path) =>
 const isPostgresTest = (path) =>
   /^tests\/integration\/.*postgres.*\.(?:test|cases)\.ts$/.test(path);
 
+// Case modules are imported by discoverable suites, not standalone Vitest entries.
+const POSTGRES_CASE_ENTRIES = Object.freeze({
+  "tests/integration/receiving-analysis-postgres.cases.ts": "tests/integration/receiving-postgres.test.ts",
+});
+
 const matchesAccess = (path) =>
   path.startsWith("apps/api/src/access/")
   || path.startsWith("apps/api/src/auth/")
@@ -109,7 +114,7 @@ export const classifyFullGatePaths = (inputPaths) => {
     if (isPostgresTest(path)) {
       businessChainSensitive = true;
       domains.add("postgres-test");
-      if (existsSync(path)) mappedTests.add(path);
+      if (existsSync(path)) mappedTests.add(POSTGRES_CASE_ENTRIES[path] ?? path);
     }
     if (matchesAccess(path)) {
       businessChainSensitive = true;

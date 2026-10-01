@@ -57,6 +57,7 @@ export class DigitalProductionTaskService {
     return task.production_order_id ? { kind: "order", id: task.production_order_id } : { kind: "source", id: task.source_id! };
   }
   private async active(client: PoolClient, resource: Resource) {
+    if(resource.kind==='order'&&(await client.query("SELECT to_regclass('digital_order_closures') AS relation")).rows[0]?.relation&&(await client.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1',[resource.id])).rowCount)fail('母单已特殊结案');
     const state = (await client.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2", [resource.kind, resource.id])).rows[0]?.state ?? "active";
     if (state !== "active") fail(state === "paused" ? "订单已暂停" : "订单已取消");
   }
@@ -365,6 +366,11 @@ export class DigitalProductionTaskService {
       dueAt: iso(effective?.due_at ?? null), warningAt: iso(effective?.warning_at ?? null), slaHours: currentPolicy.sla_seconds === null ? null : Number(currentPolicy.sla_seconds) / 3600,
       policyVersion: currentPolicy.version as number, timeQuality: task.entered_quality as DigitalTimeQuality, completedTimeQuality: task.completed_quality as string,
       blockedReason: task.blocked_reason as string | null, canExecute: !paused && await policy.allowed(actor, "task", id, "execute") };
+  }
+  async cancelForSpecialClosureWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,reason:string){
+    if(!(await client.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1 AND closed_by=$2',[orderId,actor.actorId])).rowCount)digitalForbidden();
+    const rows=(await client.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND t.state NOT IN ('completed','cancelled') FOR UPDATE OF t",[orderId])).rows;
+    for(const row of rows){await client.query("UPDATE digital_production_tasks SET state='cancelled',blocked_reason=$2,terminal_recorded_at=CURRENT_TIMESTAMP WHERE task_id=$1",[row.task_id,`特殊结案：${reason}`]);await this.event(client,actor,row.task_id,{kind:'order',id:orderId},'cancelled',new Date().toISOString(),'现场登记',{reason,specialClosure:true});}
   }
   async reassignWithClient(client:PoolClient,actor:TrustedActorContext,id:string,assigneeId:string){
     const task=await this.task(client,id,true);if(['completed','cancelled'].includes(task.state))fail("已结束任务不可改派");
