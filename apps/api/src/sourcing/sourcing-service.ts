@@ -1,3 +1,4 @@
+import { syncBulkSourcing } from "../production-platform/bulk-preparation-service.js";
 import { memberCanWriteModule } from "../access/member-module-policy.js";
 import { validateBudgetSourcing, bindBudgetSourcing } from "../production-platform/budget-sourcing-adapter.js";
 import { resolveDigitalChild } from "../production-platform/child-link-repository.js";
@@ -2306,6 +2307,7 @@ export class SourcingService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       const outcome = await this.idempotency.execute(client, {
         scope,
         actorKey: actor.actorId,
@@ -2560,6 +2562,7 @@ export class SourcingService {
         });
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
+      await syncBulkSourcing(client,this.database,actor,sourcingCaseId);
       await client.query("COMMIT");
       return { value: outcome.response, reused: outcome.reused };
     } catch (error) {
@@ -2589,6 +2592,7 @@ export class SourcingService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       const outcome = await this.idempotency.execute(client, {
         scope,
         actorKey: actor.actorId,
@@ -2764,6 +2768,7 @@ export class SourcingService {
             actor.requestId,
           ],
         );
+        await syncBulkSourcing(client,this.database,actor,sourcingCaseId);
         const decisionVersion = Number(source.decision_version);
         const openFactoryChange = approved
           ? await client.query(
@@ -3276,6 +3281,7 @@ export class SourcingService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       const outcome = await this.idempotency.execute(client, {
         scope,
         actorKey: actor.actorId,
@@ -3481,6 +3487,7 @@ export class SourcingService {
         }
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
+      await syncBulkSourcing(client,this.database,actor,sourcingCaseId);
       await client.query("COMMIT");
       await this.contractService?.generateIfReady(actor, sourcingCaseId).catch(() => undefined);
       return { value: outcome.response, reused: outcome.reused };
@@ -3511,6 +3518,7 @@ export class SourcingService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       const outcome = await this.idempotency.execute(client, {
         scope,
         actorKey: actor.actorId,
@@ -3703,6 +3711,7 @@ export class SourcingService {
         }
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
+      await syncBulkSourcing(client,this.database,actor,sourcingCaseId);
       await client.query("COMMIT");
       await this.contractService?.generateIfReady(actor, sourcingCaseId).catch(() => undefined);
       return { value: outcome.response, reused: outcome.reused };

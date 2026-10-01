@@ -25,7 +25,7 @@ const assertCreator = (actor: TrustedActorContext) => {
 };
 const readScope = (kind: "order" | "source", alias: string) => {
   const id = kind === "order" ? "production_order_id" : "source_id";
-  return `($1::boolean OR ($5::boolean AND ${alias}.created_by=$2) ${kind === "order" ? `OR ($6::boolean AND ${alias}.primary_merchandiser_id=$2)` : ""}
+  return `($1::boolean OR ($5::boolean AND ${alias}.created_by=$2) ${kind === "order" ? `OR ($6::boolean AND ${alias}.primary_merchandiser_id=$2) OR ($7::boolean AND ${alias}.source_id IS NOT NULL)` : ""}
     OR EXISTS(SELECT 1 FROM digital_production_delegations d WHERE d.${id}=${alias}.${id} AND d.delegate_id=$2 AND d.purpose='technical' AND d.revoked_at IS NULL AND d.expires_at>CURRENT_TIMESTAMP))`;
 };
 export class DigitalProductionIdentityService {
@@ -169,7 +169,7 @@ export class DigitalProductionIdentityService {
       WHERE ${readScope("order", "o")} AND ($3='' OR strpos(lower(design_style_no),lower($3))>0 OR strpos(lower(coalesce(temporary_style_no,'')),lower($3))>0
         OR EXISTS(SELECT 1 FROM digital_production_po_lines l WHERE l.production_order_id=o.production_order_id AND
           (strpos(lower(coalesce(l.formal_style_no,'')),lower($3))>0 OR strpos(lower(coalesce(l.po_number,'')),lower($3))>0)))
-      ORDER BY created_at DESC,production_order_id DESC LIMIT 20 OFFSET $4`, [isDigitalLeader(actor) || isDigitalTechnicalManager(actor), actor.actorId, search, (page - 1) * 20, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser")]);
+      ORDER BY created_at DESC,production_order_id DESC LIMIT 20 OFFSET $4`, [isDigitalLeader(actor) || isDigitalTechnicalManager(actor), actor.actorId, search, (page - 1) * 20, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser"), actor.actorRoles.includes("development_clerk") && await new DigitalProductionAccessPolicy(this.database).activeRole(actor.actorId,"development_clerk")]);
     return { items: await Promise.all(rows.rows.map(row => this.readWith(this.database, actor, row.production_order_id))), page };
   }
   async correctNumbers(actor: TrustedActorContext, id: string, lineId: string, input: DigitalNumberCorrection, key: string): Promise<DigitalOrder> {

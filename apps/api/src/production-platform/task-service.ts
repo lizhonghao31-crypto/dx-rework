@@ -1,3 +1,4 @@
+import type { DigitalTaskState, DigitalTimeQuality } from "@dx-rework/contracts/digital-production-tasks";
 import {developmentRoute} from "./development-route.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -174,6 +175,7 @@ export class DigitalProductionTaskService {
       await new DigitalProductionAccessPolicy(client).assert(actor, "task", id, "execute");
       return this.command(client, actor, `task-handover:${id}`, key, input, async () => {
         const task = await this.task(client, id, true);
+        if(["bulk_pattern","warehouse_preshrink"].includes(task.task_kind))fail("请在产前准备页面由授权岗位派交");
         if (["completed", "cancelled"].includes(task.state)) fail("已结束任务不能补交接");
         const at = input.occurredAt === undefined ? new Date().toISOString() : input.occurredAt;
         await this.setConditionWithClient(client, actor, id, "handover_received", true, at, input.note);
@@ -283,37 +285,46 @@ export class DigitalProductionTaskService {
       });
     });
   }
-  async read(actor: TrustedActorContext, id: string) {
-    const policy = new DigitalProductionAccessPolicy(this.database);
+  async read(actor: TrustedActorContext, id: string, db: Pick<Pool, "query"> = this.database) {
+    const policy = new DigitalProductionAccessPolicy(db);
     await policy.assert(actor, "task", id, "technical");
-    const task = await this.task(this.database, id);
-    const effective = (await this.database.query(`SELECT r.entered_at,r.warning_at,r.due_at,p.version,p.sla_seconds,p.label FROM digital_production_deadline_revisions r
+    const task = await this.task(db, id);
+    const effective = (await db.query(`SELECT r.entered_at,r.warning_at,r.due_at,p.version,p.sla_seconds,p.label FROM digital_production_deadline_revisions r
       JOIN digital_production_deadline_policies p ON p.node_key=r.policy_node_key AND p.version=r.policy_version JOIN app_users u ON u.id=r.changed_by WHERE r.task_id=$1 ORDER BY r.revision_id DESC LIMIT 1`, [id])).rows[0];
-    const currentPolicy = effective ?? await this.policy(this.database, task.task_kind);
+    const currentPolicy = effective ?? await this.policy(db, task.task_kind);
     const resource = this.resource(task);
-    const paused = (await this.database.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2", [resource.kind, resource.id])).rows[0]?.state === "paused";
-    const parent = (await this.database.query(resource.kind === "order" ? "SELECT created_by,primary_merchandiser_id FROM digital_production_orders WHERE production_order_id=$1" : "SELECT created_by FROM digital_production_sources WHERE source_id=$1", [resource.id])).rows[0];
+    const paused = (await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2", [resource.kind, resource.id])).rows[0]?.state === "paused";
+    const parent = (await db.query(resource.kind === "order" ? "SELECT created_by,primary_merchandiser_id FROM digital_production_orders WHERE production_order_id=$1" : "SELECT created_by FROM digital_production_sources WHERE source_id=$1", [resource.id])).rows[0];
     const canManage = isDigitalLeader(actor) || ((task.task_kind.startsWith("development_") || task.task_kind === "bulk_pattern") && (isDigitalTechnicalManager(actor) || actor.actorRoles.includes("development_clerk")));
     const canControl = isDigitalLeader(actor) || (resource.kind === "order" ? actor.actorRoles.includes("order_merchandiser") && parent.primary_merchandiser_id === actor.actorId : actor.actorRoles.includes("sample_designer") && parent.created_by === actor.actorId);
-    const assignee = task.assignee_id ? (await this.database.query("SELECT display_name FROM app_users WHERE id=$1", [task.assignee_id])).rows[0]?.display_name ?? null : null;
-    let route = (await this.database.query("SELECT count(*)::int AS applicable,count(*) FILTER(WHERE state='completed')::int AS completed,count(*) FILTER(WHERE state='cancelled')::int AS cancelled FROM digital_production_tasks t WHERE route_instance_id=$1 AND node_key NOT IN ('development_material_supply','development_craft_dispatch','development_sewing_transfer','development_washing_dispatch') AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned')", [task.route_instance_id])).rows[0];
-    if(task.source_id&&(await this.database.query("SELECT to_regclass('digital_development_documents') AS relation")).rows[0]?.relation){
-      const document=(await this.database.query("SELECT document FROM digital_development_documents WHERE source_id=$1 AND status='published'",[task.source_id])).rows[0];
+    const assignee = task.assignee_id ? (await db.query("SELECT display_name FROM app_users WHERE id=$1", [task.assignee_id])).rows[0]?.display_name ?? null : null;
+    let route = (await db.query("SELECT count(*)::int AS applicable,count(*) FILTER(WHERE state='completed')::int AS completed,count(*) FILTER(WHERE state='cancelled')::int AS cancelled FROM digital_production_tasks t WHERE route_instance_id=$1 AND node_key NOT IN ('development_material_supply','development_craft_dispatch','development_sewing_transfer','development_washing_dispatch') AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned')", [task.route_instance_id])).rows[0];
+    if(task.source_id&&(await db.query("SELECT to_regclass('digital_development_documents') AS relation")).rows[0]?.relation){
+      const document=(await db.query("SELECT document FROM digital_development_documents WHERE source_id=$1 AND status='published'",[task.source_id])).rows[0];
       if(document){
-        const nodes:string[]=task.route_version===1?["development_materials",...developmentRoute(document.document)]:(await this.database.query("SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2",[task.source_id,task.route_version])).rows[0]?.route_nodes??[];
+        const nodes:string[]=task.route_version===1?["development_materials",...developmentRoute(document.document)]:(await db.query("SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2",[task.source_id,task.route_version])).rows[0]?.route_nodes??[];
         const business=nodes.filter(node=>!["development_material_supply","development_craft_dispatch","development_sewing_transfer","development_washing_dispatch"].includes(node));
-        const rows=(await this.database.query("SELECT DISTINCT CASE WHEN node_key='development_material_recheck' THEN 'development_materials' ELSE node_key END AS node,state FROM digital_production_tasks t WHERE route_instance_id=$1 AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned')",[task.route_instance_id])).rows;
+        const rows=(await db.query("SELECT DISTINCT CASE WHEN node_key='development_material_recheck' THEN 'development_materials' ELSE node_key END AS node,state FROM digital_production_tasks t WHERE route_instance_id=$1 AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned')",[task.route_instance_id])).rows;
         route={applicable:business.length,completed:business.filter(node=>rows.some(row=>row.node===node&&row.state==='completed')).length,cancelled:business.filter(node=>rows.some(row=>row.node===node&&row.state==='cancelled')&&!rows.some(row=>row.node===node&&row.state==='completed')).length};
       }
     }
-    const handover = await this.database.query("SELECT 1 FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='handover_received'", [id]);
+    const handover = await db.query("SELECT 1 FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='handover_received'", [id]);
     return { taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: currentPolicy.label as string,
       routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage, canControl, canCorrect: isDigitalLeader(actor) || isDigitalTechnicalManager(actor),
-      assigneeId: task.assignee_id as string | null, state: task.state as string, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
+      assigneeId: task.assignee_id as string | null, state: task.state as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
       enteredAt: iso(task.entered_at), recordedAt: iso(task.created_at)!, completedAt: iso(task.completed_at), paused,
       dueAt: iso(effective?.due_at ?? null), warningAt: iso(effective?.warning_at ?? null), slaHours: currentPolicy.sla_seconds === null ? null : Number(currentPolicy.sla_seconds) / 3600,
-      policyVersion: currentPolicy.version as number, timeQuality: task.entered_quality as string, completedTimeQuality: task.completed_quality as string,
+      policyVersion: currentPolicy.version as number, timeQuality: task.entered_quality as DigitalTimeQuality, completedTimeQuality: task.completed_quality as string,
       blockedReason: task.blocked_reason as string | null, canExecute: !paused && await policy.allowed(actor, "task", id, "execute") };
+  }
+  async reassignWithClient(client:PoolClient,actor:TrustedActorContext,id:string,assigneeId:string){
+    const task=await this.task(client,id,true);if(['completed','cancelled'].includes(task.state))fail("已结束任务不可改派");
+    await reassignDigitalTask(client,actor,id,assigneeId);await this.event(client,actor,id,this.resource(task),"reassigned",new Date().toISOString(),"现场登记",{assigneeId});
+  }
+  async supersedeBulkTasksWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string){
+    // Internal adapter only: the source/approval command already authorized its actor.
+    const rows=(await client.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind IN ('bulk_pattern','warehouse_preshrink','bulk_cutting') AND t.state IN ('pending','ready','blocked') FOR UPDATE OF t",[orderId])).rows;
+    for(const row of rows){await client.query("UPDATE digital_production_tasks SET state='cancelled',blocked_reason='批准或技术要求已变更，保留原办理记录',terminal_recorded_at=CURRENT_TIMESTAMP WHERE task_id=$1",[row.task_id]);await this.event(client,actor,row.task_id,{kind:"order",id:orderId},"cancelled",new Date().toISOString(),"现场登记",{reason:"bulk_requirements_changed"});}
   }
   async supersedeSourceTasksWithClient(client:PoolClient,actor:TrustedActorContext,sourceId:string,throughRound:number,authorizingTaskId?:string){
     if(authorizingTaskId){const origin=await this.task(client,authorizingTaskId);if(origin.source_id!==sourceId)digitalForbidden();await new DigitalProductionAccessPolicy(client).assert(actor,"task",authorizingTaskId,"execute");}

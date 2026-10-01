@@ -769,9 +769,10 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
               </>
             ) : (
               <>
+                {item.productionGate&&!item.productionGate.ready&&<p className="cutting-range-note is-warning">{item.productionGate.reason}</p>}
                 {!item.formalStyleNo ? (
                   <p className="cutting-range-note is-warning">
-                    正式款号尚未补齐。请沿用外发订单原有补号入口，补齐后再登记实裁。
+                    {item.productionGate?"正式款号待补；急单沿用稳定代用号办理，不重复创建裁单。":"正式款号尚未补齐。请沿用外发订单原有补号入口，补齐后再登记实裁。"}
                   </p>
                 ) : null}
                 <div className="cutting-record-grid">

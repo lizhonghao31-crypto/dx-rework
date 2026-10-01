@@ -1,3 +1,4 @@
+import { BulkPreparationService } from "./bulk-preparation-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { initialInstruction, instructionErrors, type InstructionDocument, type InstructionSheet } from "@dx-rework/contracts/production-instruction";
@@ -56,7 +57,7 @@ export class ProductionInstructionService {
       CASE WHEN d.request_id IS NULL THEN '待批准' WHEN d.decision='approved' THEN '已批准' ELSE '已驳回' END AS status
       FROM digital_production_delivery_requests r LEFT JOIN digital_production_delivery_decisions d USING(request_id) WHERE r.production_order_id=$1 ORDER BY r.created_at DESC`,[id])).rows);
     return { order: selectedVersion ? {...row.order_snapshot,lines:(row.order_snapshot as DigitalOrder).lines.map(line=>{const current=order.lines.find(l=>l.lineId===line.lineId);return current?{...line,poNumber:current.poNumber,formalStyleNo:current.formalStyleNo,temporaryStyleNo:current.temporaryStyleNo}:line;})} : order, currentOrderVersion:order.version,currentDeliveryDate:order.contractDeliveryDate, document: seeded.document, version: row?.version ?? 0,
-      publishedVersion: selectedVersion ?? published, isPublishedSnapshot:Boolean(selectedVersion), sourceRound: seeded.sourceRound,
+      publishedVersion: selectedVersion ?? published, isPublishedSnapshot:Boolean(selectedVersion), sourceRound: seeded.sourceRound, latestSourceRound: order.sourceId?(await developmentDocumentRow(db,order.sourceId))?.round_number??null:null,
       versions: (await db.query("SELECT version FROM digital_instruction_versions WHERE production_order_id=$1 ORDER BY version DESC", [id])).rows.map(r => r.version),
       canEdit: draftAccess && !version && (Boolean(row) || this.creationEnabled), cutStarted, merchandiserName: name,
       canApproveDate: isRootActor(actor) || actor.actorRoles.includes("production_management"), printedBy: (await db.query("SELECT display_name FROM app_users WHERE id=$1",[actor.actorId])).rows[0]?.display_name ?? "", dateRequests };
@@ -102,7 +103,7 @@ export class ProductionInstructionService {
       if (!current.canEdit || current.version !== input.expectedVersion || order.version !== input.orderVersion) fail("母单或制单已更新，请重新打开");
       await this.bindImages(db,actor,order,input.document);
       await db.query(`INSERT INTO digital_instruction_documents(production_order_id,version,order_version,document,source_round,updated_by) VALUES($1,1,$2,$3,$4,$5)
-        ON CONFLICT(production_order_id) DO UPDATE SET version=digital_instruction_documents.version+1,order_version=EXCLUDED.order_version,document=EXCLUDED.document,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP`, [id,order.version,JSON.stringify(input.document),current.sourceRound,actor.actorId]);
+        ON CONFLICT(production_order_id) DO UPDATE SET version=digital_instruction_documents.version+1,order_version=EXCLUDED.order_version,document=EXCLUDED.document,source_round=EXCLUDED.source_round,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP`, [id,order.version,JSON.stringify(input.document),current.latestSourceRound,actor.actorId]);
       return this.read(actor,id,db);
     });
   }
@@ -120,11 +121,13 @@ export class ProductionInstructionService {
       const current=await this.read(actor,id,db);
       if (!current.canEdit || !current.version || current.version!==input.expectedVersion || order.version!==input.orderVersion) fail("母单或制单已更新，请重新打开");
       if(current.publishedVersion===current.version)return current;
+      if(current.sourceRound!==current.latestSourceRound)fail("开发资料已更新，请核对制单并保存新版本后发布");
       const issues=instructionErrors(current.document,order);if(issues.length)fail(issues.join("；"));
       await this.bindImages(db,actor,order,current.document);
       await db.query("INSERT INTO digital_instruction_versions(production_order_id,version,order_version,document,order_snapshot,source_round,published_by) VALUES($1,$2,$3,$4,$5,$6,$7)",[id,current.version,order.version,JSON.stringify(current.document),JSON.stringify(order),current.sourceRound,actor.actorId]);
       await db.query("UPDATE digital_instruction_documents SET published_version=version WHERE production_order_id=$1",[id]);
       await this.notice(db,order,current.version,"大货制单已发布",`instruction:${id}:${current.version}`);
+      await new BulkPreparationService(this.database).sync(db,actor,id);
       return this.read(actor,id,db);
     });
   }

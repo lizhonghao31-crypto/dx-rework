@@ -1,3 +1,4 @@
+import { digitalCuttingGate } from "../production-platform/bulk-preparation-service.js";
 import { createHash, randomUUID } from "node:crypto";
 
 import {
@@ -418,12 +419,14 @@ export class CuttingService {
         })),
       };
     }
+    const productionGate=await digitalCuttingGate(db,this.database,cuttingOrderId);
     return {
       ...base,
+      ...(productionGate?{productionGate}:{}),
       allowedRange: cuttingAllowedRange(contractQuantity),
       photos,
       record,
-      canRecord: !record && Boolean(row.formal_style_no) && this.canRecord(actor),
+      canRecord: !record && (productionGate?productionGate.ready:Boolean(row.formal_style_no)) && this.canRecord(actor),
       canCorrect: Boolean(record) && this.isRoot(actor),
     };
   }
@@ -442,6 +445,7 @@ export class CuttingService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       const outcome = await this.idempotency.execute<CuttingRecordMutationResponse>(client, {
         scope,
         actorKey: actor.actorId,
@@ -449,6 +453,8 @@ export class CuttingService {
         requestHash: hash({ cuttingOrderId, ...input }),
         expiresAt: new Date("9999-12-31T00:00:00Z"),
       }, async () => {
+        const productionGate=await digitalCuttingGate(client,this.database,cuttingOrderId);
+        if(productionGate&&!productionGate.ready)fail(productionGate.reason);
         await this.lockActiveOrder(client, cuttingOrderId);
         const source = await client.query<{
           formal_style_no: string | null;
@@ -478,7 +484,7 @@ export class CuttingService {
             },
           };
         }
-        if (!row.formal_style_no?.trim()) {
+        if (!row.formal_style_no?.trim() && !productionGate) {
           fail("正式款号尚未补齐，暂不能登记实裁", 409, "INVALID_STATE_TRANSITION");
         }
         if (input.attachmentIds.length < 1 || input.attachmentIds.length > 3
