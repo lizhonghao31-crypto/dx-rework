@@ -39,6 +39,7 @@ export function instructionErrors(doc: InstructionDocument, order: DigitalOrder)
   if (!doc.images.some(image => image.kind === "款图")) errors.push("请上传或沿用款图");
   if (order.lines.some(line => line.sizes.some(size => !doc.sizes.includes(size.size)))) errors.push("尺寸表须包含母单全部尺码");
   if (!doc.measurements.length) errors.push("请填写齐码尺寸");
+  if(doc.measurements.some(row=>!row.name.trim()||row.values.length!==doc.sizes.length||row.values.some(value=>!value.trim())))errors.push("每个尺寸项目须有名称，所有尺码须填写尺寸值");
   if (doc.fabrics.some(row => Object.keys(row.colors).some(id => !order.lines.some(line => line.lineId === id)))) errors.push("面料颜色必须对应母单款色");
   return errors;
 }

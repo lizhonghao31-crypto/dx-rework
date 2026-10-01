@@ -55,7 +55,7 @@ export class ProductionInstructionService {
     dateRequests.push(...(await db.query(`SELECT r.request_id AS "requestId",true AS legacy,r.previous_date::text AS "oldDate",r.requested_date::text AS date,r.reason,
       CASE WHEN d.request_id IS NULL THEN '待批准' WHEN d.decision='approved' THEN '已批准' ELSE '已驳回' END AS status
       FROM digital_production_delivery_requests r LEFT JOIN digital_production_delivery_decisions d USING(request_id) WHERE r.production_order_id=$1 ORDER BY r.created_at DESC`,[id])).rows);
-    return { order: selectedVersion ? row.order_snapshot : order, currentOrderVersion:order.version,currentDeliveryDate:order.contractDeliveryDate, document: seeded.document, version: row?.version ?? 0,
+    return { order: selectedVersion ? {...row.order_snapshot,lines:(row.order_snapshot as DigitalOrder).lines.map(line=>{const current=order.lines.find(l=>l.lineId===line.lineId);return current?{...line,poNumber:current.poNumber,formalStyleNo:current.formalStyleNo,temporaryStyleNo:current.temporaryStyleNo}:line;})} : order, currentOrderVersion:order.version,currentDeliveryDate:order.contractDeliveryDate, document: seeded.document, version: row?.version ?? 0,
       publishedVersion: selectedVersion ?? published, isPublishedSnapshot:Boolean(selectedVersion), sourceRound: seeded.sourceRound,
       versions: (await db.query("SELECT version FROM digital_instruction_versions WHERE production_order_id=$1 ORDER BY version DESC", [id])).rows.map(r => r.version),
       canEdit: draftAccess && !version && (Boolean(row) || this.creationEnabled), cutStarted, merchandiserName: name,
