@@ -1,4 +1,4 @@
-import { productionNotExcluded } from "./production-visibility.js";
+import { productionNotExcluded, productionMerchandiserId } from "./production-visibility.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
@@ -73,9 +73,9 @@ export class ProductionClosureService {
   const client=await this.database.connect();
   try{await client.query("BEGIN");await client.query("SELECT pg_advisory_xact_lock(hashtext('production-closure'))");
    const timestamp=await client.query<{as_of:Date}>("SELECT clock_timestamp() AS as_of"),asOf=(this.clock?.()??timestamp.rows[0]!.as_of).toISOString();
-   const orders=await client.query<{production_order_id:string;created_by:string;operation_event_id:string;first_style_no:string;supplier_name_snapshot:string;merchandiser_name:string|null}>(`SELECT production.production_order_id,source_case.created_by,production.operation_event_id,sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,production.supplier_name_snapshot,merchandiser.display_name merchandiser_name
+   const orders=await client.query<{production_order_id:string;created_by:string;operation_event_id:string;first_style_no:string;supplier_name_snapshot:string;merchandiser_name:string|null}>(`SELECT production.production_order_id,${productionMerchandiserId} AS created_by,production.operation_event_id,sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,production.supplier_name_snapshot,merchandiser.display_name merchandiser_name
     FROM sourcing_production_orders production JOIN sourcing_cases source_case USING(sourcing_case_id)
-    LEFT JOIN app_users merchandiser ON merchandiser.id=source_case.created_by
+    LEFT JOIN app_users merchandiser ON merchandiser.id=${productionMerchandiserId}
     JOIN sourcing_production_pilots pilot ON pilot.supplier_id=production.supplier_id AND pilot.enabled=true WHERE ${productionNotExcluded}`);
    const facts=await readProductionProgressFacts(client,orders.rows.map(r=>r.production_order_id),asOf);
    await this.project(client,orders.rows.map(o=>o.production_order_id),facts);

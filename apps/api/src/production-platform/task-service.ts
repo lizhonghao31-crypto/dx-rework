@@ -1,3 +1,4 @@
+import {FactoryFlowService} from "./factory-flow-service.js";
 import type { DigitalTaskState, DigitalTimeQuality } from "@dx-rework/contracts/digital-production-tasks";
 import {developmentRoute} from "./development-route.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -24,7 +25,7 @@ export class DigitalProductionTaskService {
   async syncSourcingAssignee(client: PoolClient, actor: TrustedActorContext, orderId: string, assigneeId: string) {
     if (!(await client.query("SELECT to_regclass('digital_budget_preparations') AS relation")).rows[0]?.relation) return;
     const tasks = (await client.query(`SELECT a.task_id FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
-      WHERE a.production_order_id=$1 AND a.task_kind IN ('sourcing_preparation','bulk_cutting_external') AND t.state NOT IN ('completed','cancelled')`, [orderId])).rows;
+      WHERE a.production_order_id=$1 AND a.task_kind IN ('sourcing_preparation','bulk_cutting_external','factory_material_count','bulk_ship_sample') AND t.state NOT IN ('completed','cancelled')`, [orderId])).rows;
     for (const task of tasks) {
       await reassignDigitalTask(client, actor, task.task_id, assigneeId);
       await this.event(client, actor, task.task_id, { kind: "order", id: orderId }, "reassigned", new Date().toISOString(), "现场登记", { assigneeId });
@@ -194,7 +195,29 @@ export class DigitalProductionTaskService {
     if(task.baseline_clock_id)await new ProductionOrderNodeClockRepository(client).complete(id,new Date(at));
     await client.query('INSERT INTO digital_bulk_cutting_completions(preparation_id,production_order_id,task_id,completed_by) VALUES($1,$2,$3,$4) ON CONFLICT(preparation_id) DO NOTHING',[native.preparation_id,task.production_order_id,id,actor.actorId]);
     for(const next of (await client.query('SELECT task_id FROM digital_production_task_dependencies WHERE predecessor_id=$1',[id])).rows)await this.activate(client,actor,next.task_id,at,'现场登记');
+    await new FactoryFlowService(this.database).sync(client,actor,task.production_order_id);
     return true;
+  }
+  async completeFactoryDispatchFactsWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,factId:string){
+    const fact=(await client.query(`SELECT f.* FROM digital_factory_facts f JOIN digital_factory_routes r USING(preparation_id) WHERE r.production_order_id=$1 AND f.fact_id=$2 AND f.kind='仓库实际发厂' AND f.actor_id=$3`,[orderId,factId,actor.actorId])).rows[0];
+    if(!fact||!actor.actorRoles.some(r=>['root_superuser','warehouse_receiver'].includes(r)))digitalForbidden();
+    const tasks=(await client.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.route_instance_id=$1 AND a.task_kind IN ('process_logistics','bulk_qc','warehouse_dispatch')",[fact.preparation_id])).rows;
+    for(const row of tasks){
+      const task=await this.task(client,row.task_id,true);if(task.state==='completed')continue;
+      await this.active(client,this.resource(task));if(task.state!=='ready'||!await this.conditionsReady(client,task.task_id))fail('发厂相关任务尚未就绪');
+      const at=new Date().toISOString();await this.setConditionWithClient(client,actor,task.task_id,'business_recorded',true,at,'QC事实及实际发厂已齐');
+      const eventId=await this.event(client,actor,task.task_id,this.resource(task),'completed',at,'现场登记',{factId,note:'实际发厂收口，QC判定人仍由原检查事实保留'});
+      await this.revision(client,actor,task.task_id,await this.policy(client,task.task_kind),iso(task.entered_at),'completion',eventId);
+      await client.query("UPDATE digital_production_tasks SET state='completed',completed_at=$2,completed_quality='现场登记',terminal_recorded_at=CURRENT_TIMESTAMP WHERE task_id=$1",[task.task_id,at]);
+      if(task.baseline_clock_id)await new ProductionOrderNodeClockRepository(client).complete(task.task_id,new Date(at));
+    }
+  }
+  async refreshBusinessConditionsWithClient(client:PoolClient,actor:TrustedActorContext,id:string){
+    const task=await this.task(client,id,true);await this.active(client,this.resource(task));
+    if(task.state==='blocked'&&task.blocked_reason==='前置条件未满足'&&await this.conditionsReady(client,id)){
+      await client.query("UPDATE digital_production_tasks SET state='ready',blocked_reason=NULL WHERE task_id=$1",[id]);
+      await this.event(client,actor,id,this.resource(task),'unblocked',new Date().toISOString(),'现场登记',{note:'业务前置恢复，保留原进入时间'});
+    }
   }
   async handover(actor: TrustedActorContext, id: string, input: { occurredAt?: string | null | undefined; note: string }, key: string) {
     return this.transaction(async client => {

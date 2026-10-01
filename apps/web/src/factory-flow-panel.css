@@ -1,0 +1,14 @@
+.factory-flow { min-width: 0; overflow-wrap: anywhere; }
+.factory-flow fieldset { min-width: 0; display: grid; gap: 14px; margin: 20px 0; padding: 16px; border: 1px solid #cbd5df; border-radius: 12px; }
+.factory-flow legend { padding: 0 6px; font-weight: 600; }
+.factory-flow label { display: grid; gap: 6px; min-width: 0; line-height: 1.5; }
+.factory-flow input, .factory-flow select, .factory-flow textarea { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; padding: 8px; border: 1px solid #bac6d1; border-radius: 6px; background: #fff; font: inherit; }
+.factory-flow textarea { min-height: 80px; resize: vertical; }
+.factory-flow label:has(input[type="checkbox"]) { display: flex; gap: 8px; align-items: flex-start; }
+.factory-flow input[type="checkbox"] { width: auto; margin-top: 5px; }
+.factory-flow fieldset > section { display: grid; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid #d4dde6; }
+.factory-flow fieldset h4, .factory-flow fieldset p { margin: 0; }
+.factory-flow section > form { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.factory-flow section > form label { flex: 1 1 180px; }
+.factory-flow button { justify-self: start; }
+.factory-flow fieldset:disabled { opacity: .65; }

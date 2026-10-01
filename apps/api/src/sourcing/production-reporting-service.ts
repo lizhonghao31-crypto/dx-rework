@@ -1,6 +1,6 @@
 import { memberCanWriteModule } from "../access/member-module-policy.js";
 import { ProductionExclusionService } from "./production-exclusion-service.js";
-import { productionNotExcluded } from "./production-visibility.js";
+import { productionNotExcluded, productionMerchandiserId } from "./production-visibility.js";
 import type { ProductionExclusionInput } from "@dx-rework/contracts";
 import type { ProductionClosureService } from "./production-closure-service.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -31,7 +31,7 @@ const asIso = (date: string | Date) => new Date(date).toISOString();
 type Query = Pick<PoolClient,"query">;
 // Parent case deletion does not hide production. Scope uses the frozen supplier.
 const visible = `${productionNotExcluded} AND ($1::boolean OR ($2::boolean AND sourcing_production_reporter_allowed($3,production.production_order_id))
-  OR ($4::boolean AND source_case.created_by=$3))`;
+  OR ($4::boolean AND ${productionMerchandiserId}=$3))`;
 const visibility = (actor: TrustedActorContext) => [manager(actor), isProductionReporter(actor), actor.actorId, actor.actorRoles.includes("order_merchandiser") && (actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes("sourcing:view")];
 
 export class ProductionReportingService {
