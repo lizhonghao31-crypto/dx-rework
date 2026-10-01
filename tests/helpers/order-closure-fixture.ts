@@ -30,7 +30,18 @@ export async function exerciseOrderClosure(db:Pool,sourcing:SourcingService,id:s
   expect((await db.query("SELECT count(*)::int n FROM digital_production_child_lines WHERE module='receiving' AND production_order_id=$1 AND line_id=$2",[id,order.lines[i]!.lineId])).rows[0].n).toBe(2);
   await receiving.recordPacking({...root,authorizationCapability:'receiving:packing_manage'}, {receivingBatchId:board.receivingBatchId,expectedVersion:board.version,expectedPackingRevisionId:null,packingQuantity:qty},randomUUID());
  }
- if(!special){expect((await closure.read(primary,id)).stage).toBe('本期装箱完成');return;}
+ if(!special){
+  const complete=await closure.read(manager,id);expect(complete.stage).toBe('本期装箱完成');
+  expect(complete.canClose).toBe(false);expect((await closure.read(root,id)).canClose).toBe(false);
+  for(const actor of [manager,root])await expect(closure.close(actor,id,{reason:'TEST正常完成不得特殊结案',expectedRevision:complete.revision},randomUUID())).rejects.toMatchObject({statusCode:409});
+  expect((await db.query('SELECT count(*)::int n FROM digital_order_closures WHERE production_order_id=$1',[id])).rows[0].n).toBe(0);
+  const source=complete.lines[0]!,target=complete.lines[1]!;
+  const native=(await receiving.board('2000-01-01','2999-12-31',order.lines[0]!.formalStyleNo!)).rows.find(r=>r.receivingBatchId===source.receivingBatchId)!;
+  await expect(receiving.correctBatch({...root,authorizationCapability:'receiving:correct'},source.receivingBatchId!,{expectedVersion:native.version,styleNo:order.lines[1]!.formalStyleNo!,documentQuantity:source.documentQuantity,actualQuantity:source.actualQuantity,defectiveQuantity:source.defectiveQuantity})).rejects.toMatchObject({code:'55000'});
+  const unchanged=await closure.read(manager,id);expect(unchanged.lines).toEqual(complete.lines);expect(unchanged.stage).toBe('本期装箱完成');
+  expect((await db.query('SELECT DISTINCT cutting_order_id FROM receiving_receipts WHERE receiving_batch_id=$1',[target.receivingBatchId])).rows).toEqual([{cutting_order_id:target.cuttingId}]);
+  return;
+ }
  const rework=new ReworkInitiationService(db,'corp');const draft=await rework.createDraft({...qc,authorizationCapability:'rework:initiate',authorizationCapabilities:['rework:initiate']},{receivingBatchId:created[0]!.first.receivingBatchId,problemPart:'TEST领口',problemDescription:'TEST成衣检查问题',reworkQuantity:2},randomUUID());
  expect((await db.query("SELECT production_order_id FROM digital_production_child_links WHERE module='rework' AND child_id=$1",[draft.value.reworkOrderId])).rows[0].production_order_id).toBe(id);
  let sheet=await closure.read(primary,id);expect((await closure.read(root,id)).canClose).toBe(true);expect(sheet.lines[0]!.reworks[0]).toMatchObject({reworkId:draft.value.reworkOrderId,wageItemCount:0});expect(sheet.outstanding.some(x=>x.includes('未到足量'))).toBe(true);

@@ -28,3 +28,9 @@
 - 桌面和390px手机模拟数据布局无脚本错误/横向溢出；点击特殊结案并核对reason和expectedRevision请求。不是线上验收。
 
 未部署；逐PR门禁、独立Review及合并按实际候选记录。
+
+## 独立 Review 核验
+
+- 正常装箱完成且没有未清事项时，不提供特殊结案；服务端对总监及 Root 的直接提交均拒绝，避免把正常完成永久改为特殊结案。
+- 跨裁单合并的数量串线疑虑经核对已有 0199 `receiving_receipts_cutting_link_no_update` 触发器阻止；新增实际 Root `correctBatch` 跨裁单调用回归，验证数据库拒绝后双方收货、装箱及母单状态保持不变。没有取消既有身份保护，也没有新增 Root 权限限制。
+- 首轮 Full Gate 暴露收货分析 `.cases.ts` 被直接当测试入口，已映射到导入它的 `receiving-postgres.test.ts`，保留原回归覆盖。
