@@ -17,14 +17,14 @@ export const DIGITAL_CONDITION_KEYS = ["customer_confirmed", "owner_approved", "
 const REQUIRED_ACTIVATION: Partial<Record<DigitalTaskKind, readonly typeof DIGITAL_CONDITION_KEYS[number][]>> = {
   development_pattern: ["materials_ready", "handover_received"], development_cutting: ["handover_received"], development_sewing: ["materials_ready", "handover_received"],
   development_washing: ["handover_received"], development_tail_check: ["washing_finished"], bulk_pattern: ["owner_approved"], warehouse_preshrink: ["owner_approved"],
-  bulk_cutting: ["owner_approved", "pattern_ready", "preshrink_ready"], warehouse_dispatch: ["qc_approved", "all_po_complete"], factory_material_count: ["factory_arrived"],
+  bulk_cutting: ["owner_approved", "pattern_ready", "preshrink_ready"], bulk_cutting_external: ["owner_approved", "pattern_ready", "preshrink_ready"], warehouse_dispatch: ["qc_approved", "all_po_complete"], factory_material_count: ["factory_arrived"],
 };
 export class DigitalProductionTaskService {
   constructor(private readonly database: Pool) {}
   async syncSourcingAssignee(client: PoolClient, actor: TrustedActorContext, orderId: string, assigneeId: string) {
     if (!(await client.query("SELECT to_regclass('digital_budget_preparations') AS relation")).rows[0]?.relation) return;
     const tasks = (await client.query(`SELECT a.task_id FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
-      WHERE a.production_order_id=$1 AND a.task_kind='sourcing_preparation' AND t.state NOT IN ('completed','cancelled')`, [orderId])).rows;
+      WHERE a.production_order_id=$1 AND a.task_kind IN ('sourcing_preparation','bulk_cutting_external') AND t.state NOT IN ('completed','cancelled')`, [orderId])).rows;
     for (const task of tasks) {
       await reassignDigitalTask(client, actor, task.task_id, assigneeId);
       await this.event(client, actor, task.task_id, { kind: "order", id: orderId }, "reassigned", new Date().toISOString(), "现场登记", { assigneeId });
@@ -169,6 +169,32 @@ export class DigitalProductionTaskService {
         for (const row of next.rows) await this.activate(client, actor, row.task_id, occurredAt, quality);
         return { taskId: id, state: "completed" };
       });
+  }
+  async completeCuttingFactWithClient(client:PoolClient,actor:TrustedActorContext,id:string){
+    const task=await this.task(client,id,true);
+    if(!['bulk_cutting','bulk_cutting_external'].includes(task.task_kind))fail('不是整款实裁任务');
+    const native=(await client.query(`SELECT o.primary_merchandiser_id,p.preparation_id FROM digital_bulk_preparations p JOIN digital_production_orders o USING(production_order_id) WHERE p.preparation_id=$1 AND o.production_order_id=$2`,[task.route_instance_id,task.production_order_id])).rows[0];
+    if(!native)fail('实裁任务来源不完整');
+    const root=actor.actorRoles.includes('root_superuser');
+    if(!root){
+      if(task.task_kind==='bulk_cutting_external'){
+        if(native.primary_merchandiser_id!==actor.actorId||!actor.actorRoles.includes('order_merchandiser')||!await new DigitalProductionAccessPolicy(client).activeRole(actor.actorId,'order_merchandiser'))digitalForbidden();
+      }else if(!actor.actorRoles.some(r=>['cutting_worker','cutting_supervisor'].includes(r))||!(actor.authorizationCapabilities??[]).includes('cutting:records:create'))digitalForbidden();
+    }
+    const coverage=(await client.query(`SELECT count(*)::int AS total,count(r.cutting_record_id)::int AS completed FROM digital_production_po_lines po LEFT JOIN digital_production_child_lines l ON l.module='cutting' AND l.line_id=po.line_id AND l.production_order_id=po.production_order_id LEFT JOIN cutting_records r ON r.cutting_order_id=l.child_id WHERE po.production_order_id=$1`,[task.production_order_id])).rows[0];
+    if(!coverage.total||coverage.completed!==coverage.total)return false;
+    if(task.state==='completed')return true;
+    await this.active(client,this.resource(task));
+    if(task.state!=='ready'||!await this.conditionsReady(client,id))fail('整款开裁未就绪');
+    const at=new Date().toISOString();
+    await this.setConditionWithClient(client,actor,id,'business_recorded',true,at,'所有PO原实裁记录已齐');
+    const eventId=await this.event(client,actor,id,this.resource(task),'completed',at,'现场登记',{note:'全部PO原实裁登记完成'});
+    await this.revision(client,actor,id,await this.policy(client,task.task_kind),iso(task.entered_at),'completion',eventId);
+    await client.query("UPDATE digital_production_tasks SET state='completed',completed_at=$2,completed_quality='现场登记',terminal_recorded_at=CURRENT_TIMESTAMP WHERE task_id=$1",[id,at]);
+    if(task.baseline_clock_id)await new ProductionOrderNodeClockRepository(client).complete(id,new Date(at));
+    await client.query('INSERT INTO digital_bulk_cutting_completions(preparation_id,production_order_id,task_id,completed_by) VALUES($1,$2,$3,$4) ON CONFLICT(preparation_id) DO NOTHING',[native.preparation_id,task.production_order_id,id,actor.actorId]);
+    for(const next of (await client.query('SELECT task_id FROM digital_production_task_dependencies WHERE predecessor_id=$1',[id])).rows)await this.activate(client,actor,next.task_id,at,'现场登记');
+    return true;
   }
   async handover(actor: TrustedActorContext, id: string, input: { occurredAt?: string | null | undefined; note: string }, key: string) {
     return this.transaction(async client => {
@@ -323,7 +349,7 @@ export class DigitalProductionTaskService {
   }
   async supersedeBulkTasksWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string){
     // Internal adapter only: the source/approval command already authorized its actor.
-    const rows=(await client.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind IN ('bulk_pattern','warehouse_preshrink','bulk_cutting') AND t.state IN ('pending','ready','blocked') FOR UPDATE OF t",[orderId])).rows;
+    const rows=(await client.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind IN ('bulk_pattern','warehouse_preshrink','bulk_cutting','bulk_cutting_external') AND t.state IN ('pending','ready','blocked') FOR UPDATE OF t",[orderId])).rows;
     for(const row of rows){await client.query("UPDATE digital_production_tasks SET state='cancelled',blocked_reason='批准或技术要求已变更，保留原办理记录',terminal_recorded_at=CURRENT_TIMESTAMP WHERE task_id=$1",[row.task_id]);await this.event(client,actor,row.task_id,{kind:"order",id:orderId},"cancelled",new Date().toISOString(),"现场登记",{reason:"bulk_requirements_changed"});}
   }
   async supersedeSourceTasksWithClient(client:PoolClient,actor:TrustedActorContext,sourceId:string,throughRound:number,authorizingTaskId?:string){

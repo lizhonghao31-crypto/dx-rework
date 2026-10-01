@@ -56,7 +56,7 @@ export class DigitalProductionNotificationService {
     const policy=new DigitalProductionAccessPolicy(database);
     const assignee=people.find(p=>p.actorId===task.assignee_id&&p.actorRoles.includes(task.required_role));
     const development=task.task_kind.startsWith("development_");
-    const technical=development||["bulk_pattern","bulk_cutting","process_logistics"].includes(task.task_kind);
+    const technical=development||["bulk_pattern","bulk_cutting","bulk_cutting_external","process_logistics"].includes(task.task_kind);
     const missing=!assignee;
     const risk=["warning","overdue","blocked"].includes(kind);
     const delegates = ["ready","reassigned","unblocked"].includes(kind) ? (await database.query("SELECT delegate_id FROM digital_production_delegations WHERE task_id=$1 AND purpose='execute' AND revoked_at IS NULL AND expires_at>CURRENT_TIMESTAMP",[task.task_id])).rows.map(row=>row.delegate_id as string) : [];

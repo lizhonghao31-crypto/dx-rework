@@ -3150,4 +3150,36 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await exerciseBulkPreparation(database,await budgetFixture(),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()},factoryId,craftId("净色车缝"),mode);
   });
 
+  it.each(['in_house','outsourced'] as const)('P12 aggregates all original PO cutting facts and syncs numbers without restarting %s',async mode=>{
+    const fixture=await budgetFixture(),primary=merchandiserActor(),root=rootActor();
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId("净色车缝"),'none',{cuttingProcess:mode,stopAtReady:true}))!;
+    const {id,caseId,people,cutting,bulk,instruction}=ready;
+    const ids=(await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[caseId])).rows.map(r=>r.cutting_order_id);
+    const internal={...people.cutting_worker!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create','cutting:orders:view']};
+    const external={...primary,authorizationCapability:'cutting:records:create'};
+    const recorder=mode==='in_house'?internal:external,wrong=mode==='in_house'?external:internal;
+    const photo=async(actor:typeof recorder)=>{const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-P12.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/P12/${image}`,'c'.repeat(64),actor.actorId]);return image;};
+    await expect(cutting.record(wrong,ids[0],{pieceCount:2,actualCutCount:99,attachmentIds:[await photo(wrong)]},randomUUID())).rejects.toMatchObject({statusCode:403});
+    await cutting.record(recorder,ids[0],{pieceCount:2,actualCutCount:99,attachmentIds:[await photo(recorder)]},randomUUID());
+    expect((await bulk.read(primary,id)).cutting.completed).toBe(false);
+    expect((await database.query('SELECT 1 FROM digital_bulk_cutting_completions WHERE production_order_id=$1',[id])).rowCount).toBe(0);
+    const before=(await bulk.read(primary,id)).tasks.find(t=>t.taskKind.startsWith('bulk_cutting'))!;
+    const identity=new DigitalProductionIdentityService(database,true,service),current=await identity.read(primary,id);
+    const formal=`TEST-P12-${randomUUID().slice(0,8)}`;
+    await identity.correctNumbers(primary,id,current.lines[0]!.lineId,{expectedVersion:current.version,formalStyleNo:formal,poNumber:'TEST-PO-P12'},randomUUID());
+    expect((await cutting.get(root,ids[0])).formalStyleNo).toBe(formal);
+    expect((await instruction.read(root,id,database,1)).order.lines[0]!.formalStyleNo).toBe(formal);
+    expect((await database.query('SELECT max(identity_version)::int AS n FROM sourcing_contract_documents WHERE sourcing_case_id=$1',[caseId])).rows[0].n).toBe(1);
+    const after=(await bulk.read(primary,id)).tasks.find(t=>t.taskKind.startsWith('bulk_cutting'))!;
+    expect([after.taskId,after.enteredAt,after.dueAt]).toEqual([before.taskId,before.enteredAt,before.dueAt]);
+    const input={pieceCount:3,actualCutCount:101,attachmentIds:[await photo(recorder)]},key=randomUUID();
+    await cutting.record(recorder,ids[1],input,key);await cutting.record(recorder,ids[1],input,key);
+    expect((await bulk.read(primary,id)).cutting.completed).toBe(true);
+    expect((await database.query('SELECT 1 FROM digital_bulk_cutting_completions WHERE production_order_id=$1',[id])).rowCount).toBe(1);
+    await cutting.correct({...root,authorizationCapability:'cutting:records:correct'},ids[0],{expectedVersion:1,pieceCount:4,actualCutCount:103,reason:'TEST真实实绩更正'},randomUUID());
+    const final=await bulk.read(primary,id);expect(final.cutting.lines[0]).toMatchObject({orderQuantity:137,actualCutCount:103,pieceCount:4,corrected:true});
+    expect(final.tasks.find(t=>t.taskId===before.taskId)).toMatchObject({state:'completed',enteredAt:before.enteredAt,dueAt:before.dueAt});
+    expect((await database.query('SELECT 1 FROM digital_bulk_cutting_completions WHERE production_order_id=$1',[id])).rowCount).toBe(1);
+  });
+
 });

@@ -1621,6 +1621,29 @@ export class SourcingService {
     return matches.rows.map(row => row.style_no);
   }
 
+  async reviseDigitalNumbersWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string){
+    const order=(await client.query('SELECT * FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE',[orderId])).rows[0];
+    const leader=actor.actorRoles.some(role=>['root_superuser','owner_group','production_management'].includes(role));
+    if(!order||!leader&&!(actor.actorRoles.includes('sample_designer')&&order.created_by===actor.actorId)&&!(actor.actorRoles.includes('order_merchandiser')&&order.primary_merchandiser_id===actor.actorId))fail('无权补齐本单编号',403,'FORBIDDEN');
+    const links=(await client.query("SELECT s.sourcing_case_id,s.workflow_generation FROM digital_production_child_links l JOIN sourcing_cases s ON s.sourcing_case_id=l.child_id WHERE l.module='sourcing' AND l.production_order_id=$1 ORDER BY l.child_id",[orderId])).rows;
+    for(const link of links){
+      await resolveDigitalChild(client,'sourcing',link.sourcing_case_id,link.workflow_generation);
+      await client.query('SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 FOR UPDATE',[link.sourcing_case_id]);
+      const before=await this.readCase(client,link.sourcing_case_id,actor);
+      const mapped=(await client.query(`SELECT l.child_line_key::int AS position,p.formal_style_no AS "styleNo",coalesce(p.temporary_style_no,o.temporary_style_no,o.design_style_no) AS "alternateStyleNo" FROM digital_production_child_lines l JOIN digital_production_po_lines p USING(line_id) JOIN digital_production_orders o ON o.production_order_id=p.production_order_id WHERE l.module='sourcing' AND l.child_id=$1 ORDER BY l.child_line_key::int`,[link.sourcing_case_id])).rows as Array<{position:number;styleNo:string|null;alternateStyleNo:string|null}>;
+      if(mapped.length!==before.lineItems.length)fail('原外发款色关联不完整');
+      const previous=before.lineItems.map(line=>({position:line.position,styleNo:line.formalStyleNo===undefined?line.styleNo:line.formalStyleNo,alternateStyleNo:line.alternateStyleNo}));
+      if(JSON.stringify(previous)===JSON.stringify(mapped))continue;
+      await this.checkStyleNumbers(client,mapped.map(line=>({...line,color:before.lineItems.find(row=>row.position===line.position)?.color})),undefined,link.sourcing_case_id,previous);
+      const auditActor={...actor,authorizationCapability:'digital_production:numbers:correct'};
+      const eventId=await this.events.append(client,auditActor,{action:'sourcing.styles.revise',entityType:'sourcing_case',entityId:link.sourcing_case_id,before:{lines:previous},after:{lines:mapped},reason:'数字母单补号同步，原数量价格审批及实裁计时保持不变'});
+      await client.query('INSERT INTO sourcing_style_revisions(sourcing_case_id,revision,lines,changed_by,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6)',[link.sourcing_case_id,(before.identityRevision??0)+1,JSON.stringify(mapped),actor.actorId,eventId,actor.requestId]);
+      if(before.approvalSnapshot){if(!this.contractService)fail('合同服务未就绪，补号不能只改单据一侧');await this.contractService!.prepareForApproval(client,before.approvalSnapshot.sourcingApprovalSnapshotId,actor);}
+    }
+  }
+  async generateDigitalNumberContracts(actor:TrustedActorContext,orderId:string){
+    for(const row of (await this.database.query("SELECT child_id FROM digital_production_child_links WHERE module='sourcing' AND production_order_id=$1",[orderId])).rows)await this.contractService?.generateIfReady({...actor,authorizationCapability:READ_CAPABILITY},row.child_id).catch(()=>undefined);
+  }
   async reviseStyles(actor: TrustedActorContext, sourcingCaseId: string, input: ReviseSourcingStyles, key: string): Promise<Result<SourcingCaseSummary>> {
     const parsed = ReviseSourcingStylesSchema.safeParse(input);
     if (!parsed.success || !UUID_PATTERN.test(sourcingCaseId)) fail("款号修改信息无效");
@@ -1634,6 +1657,7 @@ export class SourcingService {
     const scope = "sourcing.styles.revise";
     try {
       await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       const source = (await client.query<{created_by:string}>("SELECT created_by FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId])).rows[0];
       if (!source) fail("外发订单不存在",404,"NOT_FOUND");
       if (!root && ((!manager && source!.created_by !== actor.actorId) || !await memberCanWriteModule(client,actor.actorId,"sourcing"))) fail("无权修改本订单款号",403,"FORBIDDEN");
@@ -1661,6 +1685,13 @@ export class SourcingService {
         });
         await client.query(`INSERT INTO sourcing_style_revisions(sourcing_case_id,revision,lines,changed_by,operation_event_id,request_id)
           VALUES($1,$2,$3::jsonb,$4,$5,$6)`,[sourcingCaseId,(before.identityRevision ?? 0)+1,JSON.stringify(lines),actor.actorId,eventId,actor.requestId]);
+        if((await client.query("SELECT to_regclass('digital_production_child_lines') AS relation")).rows[0]?.relation){
+          const link=(await client.query("SELECT l.production_order_id FROM digital_production_child_links l JOIN sourcing_cases s ON s.sourcing_case_id=l.child_id WHERE l.module='sourcing' AND l.child_id=$1 AND s.workflow_generation='digital_production_v1'",[sourcingCaseId])).rows[0];
+          if(link){
+            for(const line of lines)await client.query("UPDATE digital_production_po_lines p SET formal_style_no=$3,temporary_style_no=$4 FROM digital_production_child_lines l WHERE l.module='sourcing' AND l.child_id=$1 AND l.child_line_key=$2 AND p.line_id=l.line_id",[sourcingCaseId,String(line.position),line.styleNo,line.alternateStyleNo]);
+            await client.query('UPDATE digital_production_orders SET version=version+1 WHERE production_order_id=$1',[link.production_order_id]);
+          }
+        }
         if (before.approvalSnapshot) await this.contractService?.prepareForApproval(client,before.approvalSnapshot.sourcingApprovalSnapshotId,actor);
         return {statusCode:200,response:await this.readCase(client,sourcingCaseId,actor)};
       });
@@ -2367,6 +2398,8 @@ export class SourcingService {
            FOR UPDATE OF source_lock`,
           [sourcingCaseId],
         );
+        const generation=(await client.query("SELECT to_jsonb(sourcing_cases)->>'workflow_generation' AS generation FROM sourcing_cases WHERE sourcing_case_id=$1",[sourcingCaseId])).rows[0]?.generation;
+        if(generation==='digital_production_v1'&&!['in_house','outsourced'].includes(cuttingProcess??''))fail('新数字母单请明确选择本厂裁或外厂裁');
         await this.assertValidOrderDates(client,sourcingCaseId);
         const source = current.rows[0];
         if (!source) return fail("报价选厂询价不存在", 404, "NOT_FOUND");

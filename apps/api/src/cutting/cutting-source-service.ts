@@ -1,3 +1,6 @@
+import { DigitalProductionAccessPolicy } from "../production-platform/access-policy.js";
+import { DigitalProductionTaskService } from "../production-platform/task-service.js";
+import { linkNewDigitalChild, resolveDigitalChild } from "../production-platform/child-link-repository.js";
 import { digitalCuttingGate } from "../production-platform/bulk-preparation-service.js";
 import { createHash, randomUUID } from "node:crypto";
 
@@ -83,6 +86,13 @@ export async function ensureCuttingOrdersForApproval(
        ON CONFLICT(sourcing_case_id,sourcing_line_position) DO NOTHING`,
       [randomUUID(), sourcingCaseId, line.position, approvalSnapshotId],
     );
+  }
+  const generation=(await client.query("SELECT to_jsonb(sourcing_cases)->>'workflow_generation' AS generation FROM sourcing_cases WHERE sourcing_case_id=$1",[sourcingCaseId])).rows[0]?.generation;
+  if(generation==='digital_production_v1'){
+    const orderId=await resolveDigitalChild(client,'sourcing',sourcingCaseId,generation);
+    const rows=(await client.query("SELECT c.cutting_order_id,l.line_id FROM cutting_orders c JOIN digital_production_child_lines l ON l.module='sourcing' AND l.child_id=c.sourcing_case_id AND l.child_line_key=c.sourcing_line_position::text WHERE c.sourcing_case_id=$1",[sourcingCaseId])).rows;
+    if(rows.length!==approvedLines.rows.length)fail('原裁单与母单PO映射不完整');
+    for(const row of rows)await linkNewDigitalChild(client,{module:'cutting',childId:row.cutting_order_id,productionOrderId:orderId!,lines:[{childLineKey:'record',lineId:row.line_id}]});
   }
   const positions = approvedLines.rows.map((line) => line.position);
   const persisted = await client.query<{ count: number }>(
@@ -210,6 +220,19 @@ export class CuttingService {
       && actor.actorRoles.includes("order_merchandiser");
   }
 
+  private async readCte(db:Queryable){
+    if(!(await db.query("SELECT to_regclass('digital_production_child_links') AS relation")).rows[0]?.relation)return READ_CTE;
+    return READ_CTE.replace('source_case.created_by AS merchandiser_id',"CASE WHEN source_case.workflow_generation='digital_production_v1' THEN digital_order.primary_merchandiser_id ELSE source_case.created_by END AS merchandiser_id")
+      .replace('creator.display_name AS merchandiser_name',"CASE WHEN source_case.workflow_generation='digital_production_v1' THEN primary_actor.display_name ELSE creator.display_name END AS merchandiser_name")
+      .replace('JOIN app_users creator ON creator.id=source_case.created_by',"JOIN app_users creator ON creator.id=source_case.created_by LEFT JOIN digital_production_child_links digital_link ON digital_link.module='sourcing' AND digital_link.child_id=source_case.sourcing_case_id LEFT JOIN digital_production_orders digital_order ON digital_order.production_order_id=digital_link.production_order_id LEFT JOIN app_users primary_actor ON primary_actor.id=digital_order.primary_merchandiser_id");
+  }
+  private async authorizedRecorder(db:Queryable,actor:TrustedActorContext,gate:Awaited<ReturnType<typeof digitalCuttingGate>>){
+    if(gate?.external){
+      if(this.isRoot(actor))return true;
+      return gate.primaryMerchandiserId===actor.actorId&&actor.actorRoles.includes('order_merchandiser')&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'order_merchandiser');
+    }
+    return this.canRecord(actor);
+  }
   private assertReader(actor: TrustedActorContext): void {
     if (this.isRoot(actor)) return;
     if (
@@ -269,6 +292,8 @@ export class CuttingService {
     const status = query.status;
     const outOnly = query.outOfRange === "true";
     const params = [search, merchOnly, actor.actorId, status, outOnly] as const;
+    const digital=(await this.database.query("SELECT to_regclass('digital_production_child_lines') AS relation")).rows[0]?.relation;
+    const poSearch=digital?" OR EXISTS(SELECT 1 FROM digital_production_child_lines l JOIN digital_production_po_lines p USING(line_id) WHERE l.module='cutting' AND l.child_id=cutting_read.cutting_order_id AND p.po_number ILIKE '%'||$1||'%')":'';
     const filter = `
       WHERE ($1::text='' OR display_style_no ILIKE '%'||$1||'%'
         OR formal_style_no ILIKE '%'||$1||'%'
@@ -276,12 +301,12 @@ export class CuttingService {
         OR contract_number ILIKE '%'||$1||'%'
         OR supplier_name ILIKE '%'||$1||'%'
         OR merchandiser_name ILIKE '%'||$1||'%'
-        OR recorded_by_name ILIKE '%'||$1||'%')
+        OR recorded_by_name ILIKE '%'||$1||'%' OR EXISTS(SELECT 1 FROM sourcing_style_aliases alias WHERE alias.sourcing_case_id=cutting_read.sourcing_case_id AND alias.position=cutting_read.sourcing_line_position AND alias.style_no ILIKE '%'||$1||'%') ${poSearch})
         AND ($2::boolean=false OR merchandiser_id=$3::uuid)
         AND ($4::text='all' OR status=$4::text)
         AND ($5::boolean=false OR is_out_of_range=true)`;
     const totalResult = await this.database.query<{ total_count: number | string }>(
-      READ_CTE + `SELECT count(*) AS total_count FROM cutting_read ${filter}`,
+      (await this.readCte(this.database)) + `SELECT count(*) AS total_count FROM cutting_read ${filter}`,
       [...params],
     );
     const totalCount = Number(totalResult.rows[0]?.total_count ?? 0);
@@ -289,7 +314,7 @@ export class CuttingService {
     const page = Math.min(query.page, totalPages);
     const offset = (page - 1) * LIST_PAGE_SIZE;
     const rows = await this.database.query<CuttingReadRow>(
-      READ_CTE + `SELECT * FROM cutting_read ${filter}
+      (await this.readCte(this.database)) + `SELECT * FROM cutting_read ${filter}
         ORDER BY (status='pending') DESC,
           CASE WHEN status='pending' THEN approved_at END ASC,
           CASE WHEN status='recorded' THEN recorded_at END DESC,
@@ -309,7 +334,7 @@ export class CuttingService {
     this.assertReader(actor);
     const merchOnly = this.merchandiserOnly(actor);
     const rows = await this.database.query<CuttingReadRow>(
-      READ_CTE + `SELECT * FROM cutting_read
+      (await this.readCte(this.database)) + `SELECT * FROM cutting_read
        WHERE ($1::boolean=false OR merchandiser_id=$2::uuid)
        ORDER BY approved_at,cutting_order_id`,
       [merchOnly, actor.actorId],
@@ -329,7 +354,7 @@ export class CuttingService {
   ): Promise<CuttingOrderDetail> {
     const merchOnly = this.merchandiserOnly(actor);
     const result = await db.query<CuttingReadRow>(
-      READ_CTE + `SELECT * FROM cutting_read
+      (await this.readCte(db)) + `SELECT * FROM cutting_read
        WHERE cutting_order_id=$1
          AND ($2::boolean=false OR merchandiser_id=$3::uuid)`,
       [cuttingOrderId, merchOnly, actor.actorId],
@@ -426,7 +451,7 @@ export class CuttingService {
       allowedRange: cuttingAllowedRange(contractQuantity),
       photos,
       record,
-      canRecord: !record && (productionGate?productionGate.ready:Boolean(row.formal_style_no)) && this.canRecord(actor),
+      canRecord: !record && (productionGate?productionGate.ready:Boolean(row.formal_style_no)) && await this.authorizedRecorder(db,actor,productionGate),
       canCorrect: Boolean(record) && this.isRoot(actor),
     };
   }
@@ -437,7 +462,6 @@ export class CuttingService {
     input: CreateCuttingRecord,
     idempotencyKey: string,
   ): Promise<{ value: CuttingRecordMutationResponse; reused: boolean }> {
-    this.assertRecorder(actor);
     if (!KEY_PATTERN.test(idempotencyKey)) {
       fail("缺少有效操作标识，请重试", 400, "VALIDATION_ERROR");
     }
@@ -446,6 +470,9 @@ export class CuttingService {
     try {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+      const authority=await digitalCuttingGate(client,this.database,cuttingOrderId);
+      if(!await this.authorizedRecorder(client,actor,authority))throw new ApplicationError('FORBIDDEN','当前岗位无权登记此内外裁实裁',403);
+      if(!authority?.external)this.assertRecorder(actor);
       const outcome = await this.idempotency.execute<CuttingRecordMutationResponse>(client, {
         scope,
         actorKey: actor.actorId,
@@ -542,6 +569,7 @@ export class CuttingService {
         if (boundAttachments.rowCount !== input.attachmentIds.length) {
           fail("裁床单图片绑定失败，请重试", 409, "INVALID_STATE_TRANSITION");
         }
+        if(productionGate?.taskId)await new DigitalProductionTaskService(this.database).completeCuttingFactWithClient(client,actor,productionGate.taskId);
         return {
           statusCode: 201,
           response: {
@@ -665,34 +693,9 @@ export class CuttingService {
       throw error;
     }
     const merchOnly = this.merchandiserOnly(actor);
-    if (binding.entityType === "sourcing_case") {
-      const result = await this.database.query(
-        `SELECT 1
-         FROM cutting_orders cutting
-         JOIN sourcing_cases source_case
-           ON source_case.sourcing_case_id=cutting.sourcing_case_id
-          AND source_case.deleted_at IS NULL
-         WHERE cutting.sourcing_case_id=$1::uuid
-           AND ($2::boolean=false OR source_case.created_by=$3::uuid)
-         LIMIT 1`,
-        [binding.entityId, merchOnly, actor.actorId],
-      );
-      return Boolean(result.rowCount);
-    }
-    if (binding.entityType === "cutting_record") {
-      const result = await this.database.query(
-        `SELECT 1
-         FROM cutting_records record
-         JOIN cutting_orders cutting ON cutting.cutting_order_id=record.cutting_order_id
-         JOIN sourcing_cases source_case
-           ON source_case.sourcing_case_id=cutting.sourcing_case_id
-          AND source_case.deleted_at IS NULL
-         WHERE record.cutting_record_id=$1::uuid
-           AND ($2::boolean=false OR source_case.created_by=$3::uuid)
-         LIMIT 1`,
-        [binding.entityId, merchOnly, actor.actorId],
-      );
-      return Boolean(result.rowCount);
+    if(binding.entityType==='sourcing_case'||binding.entityType==='cutting_record'){
+      const field=binding.entityType==='sourcing_case'?'sourcing_case_id':'cutting_record_id';
+      return Boolean((await this.database.query((await this.readCte(this.database))+`SELECT 1 FROM cutting_read WHERE ${field}=$1::uuid AND ($2::boolean=false OR merchandiser_id=$3::uuid) LIMIT 1`,[binding.entityId,merchOnly,actor.actorId])).rowCount);
     }
     return false;
   }

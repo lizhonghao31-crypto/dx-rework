@@ -23,7 +23,7 @@ export class BulkPreparationService {
   let approval;
   if(sourcing){
    await resolveDigitalChild(db,'sourcing',sourcing.sourcing_case_id,sourcing.workflow_generation);
-   approval=(await db.query(`SELECT a.* FROM sourcing_approval_snapshots a WHERE a.sourcing_case_id=$1 AND a.sourcing_decision_id=(SELECT sourcing_decision_id FROM sourcing_decisions WHERE sourcing_case_id=$1 ORDER BY decision_version DESC LIMIT 1)
+   approval=(await db.query(`SELECT a.*,decision.cutting_process FROM sourcing_approval_snapshots a JOIN sourcing_decisions decision ON decision.sourcing_decision_id=a.sourcing_decision_id WHERE a.sourcing_case_id=$1 AND a.sourcing_decision_id=(SELECT sourcing_decision_id FROM sourcing_decisions WHERE sourcing_case_id=$1 ORDER BY decision_version DESC LIMIT 1)
     AND (EXISTS(SELECT 1 FROM sourcing_owner_decisions d WHERE d.sourcing_case_id=$1 AND d.sourcing_decision_id=a.sourcing_decision_id AND d.decision='approved') OR EXISTS(SELECT 1 FROM sourcing_decisions effective WHERE effective.sourcing_decision_id=a.sourcing_decision_id AND effective.source_type='factory_change' AND effective.source_change_request_id IS NOT NULL)) ORDER BY a.approved_at DESC LIMIT 1`,[sourcing.sourcing_case_id])).rows[0];
   }
   const instructionValid=Boolean(instruction&&source&&instruction.source_round===source.round_number&&['需要预缩','无需预缩'].includes(instruction.document.preshrink));
@@ -31,6 +31,7 @@ export class BulkPreparationService {
   const lifecycle=(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE (resource_kind='order' AND resource_id=$1) OR (resource_kind='source' AND resource_id=$2)",[id,order.source_id])).rows;
   const reasons:string[]=[];
   if(!customerConfirmed)reasons.push('当前开发轮次尚未确认客户样板');
+  if(ownerApproved&&!['in_house','outsourced'].includes(approval.cutting_process))reasons.push('请在原外发选厂审批中明确本厂裁或外厂裁');
   if(!ownerApproved)reasons.push('原外发老板批准尚未通过或已换版');
   if(!instructionValid)reasons.push('请核对当前开发资料并发布有效大货制单');
   if(lifecycle.some(r=>r.state!=='active'))reasons.push('母单或开发来源已暂停/取消');
@@ -68,9 +69,10 @@ export class BulkPreparationService {
   }
   const tasks=await this.routeTasks(db,prep.preparation_id);
   const pattern=tasks.find(t=>t.task_kind==='bulk_pattern'),preshrink=tasks.find(t=>t.task_kind==='warehouse_preshrink');
-  if(pattern?.state==='completed'&&(prep.preshrink==='无需预缩'||preshrink?.state==='completed')&&!tasks.some(t=>t.task_kind==='bulk_cutting')){
+  if(pattern?.state==='completed'&&(prep.preshrink==='无需预缩'||preshrink?.state==='completed')&&!tasks.some(t=>['bulk_cutting','bulk_cutting_external'].includes(t.task_kind))){
    const dispatch=(await db.query("SELECT * FROM digital_bulk_dispatch WHERE production_order_id=$1",[id])).rows[0];
-   const task=await this.tasks().createWithClient(db,actor,{resource:{kind:'order',id},kind:'bulk_cutting',routeId:prep.preparation_id,routeVersion:prep.instruction_version,occurrence:await this.nextOccurrence(db,id,'bulk_cutting'),assigneeId:await this.validAssignee(db,dispatch?.cutting_worker_id,'cutting_worker')});
+   const external=g.approval.cutting_process==='outsourced',kind=external?'bulk_cutting_external':'bulk_cutting';
+   const task=await this.tasks().createWithClient(db,actor,{resource:{kind:'order',id},kind,routeId:prep.preparation_id,routeVersion:prep.instruction_version,occurrence:await this.nextOccurrence(db,id,kind),assigneeId:await this.validAssignee(db,external?g.order.primary_merchandiser_id:dispatch?.cutting_worker_id,external?'order_merchandiser':'cutting_worker')});
    for(const condition of ['owner_approved','pattern_ready','preshrink_ready'] as const)await this.tasks().setConditionWithClient(db,actor,task.taskId,condition,true,new Date().toISOString(),'全部PO前置汇合');
   }
  }
@@ -81,7 +83,8 @@ export class BulkPreparationService {
  async read(actor:TrustedActorContext,id:string,db:DB=this.database):Promise<BulkPreparationSheet>{
   await new DigitalProductionAccessPolicy(db).assert(actor,'order',id,'technical');const g=await this.gates(db,id),prep=await this.current(db,id,g);
   const row=(await db.query("SELECT * FROM digital_bulk_dispatch WHERE production_order_id=$1",[id])).rows[0];
-  return {orderId:id,instructionVersion:g.instruction?.version??null,sourceRound:g.source?.round_number??null,customerConfirmed:g.customerConfirmed,ownerApproved:g.ownerApproved,instructionValid:g.instructionValid,reasons:g.reasons,preparationId:prep?.preparation_id??null,preshrink:g.instruction?.document.preshrink??null,
+  const cuttingRows=(await db.query(`SELECT po.line_id AS "lineId",po.po_number AS "poNumber",po.formal_style_no AS "formalStyleNo",po.temporary_style_no AS "temporaryStyleNo",po.color,l.child_id AS "cuttingOrderId",(SELECT sum(quantity)::int FROM digital_production_po_sizes WHERE line_id=po.line_id) AS "orderQuantity",r.actual_cut_count AS "actualCutCount",r.piece_count AS "pieceCount",coalesce(r.corrected,false) AS corrected FROM digital_production_po_lines po LEFT JOIN digital_production_child_lines l ON l.module='cutting' AND l.line_id=po.line_id LEFT JOIN current_cutting_records r ON r.cutting_order_id=l.child_id WHERE po.production_order_id=$1 ORDER BY po.position`,[id])).rows;
+  return {cutting:{mode:g.approval?.cutting_process??null,completed:cuttingRows.length>0&&cuttingRows.every(r=>r.actualCutCount!==null),lines:cuttingRows.map(r=>({...r,actualCutCount:r.actualCutCount===null?null:Number(r.actualCutCount),pieceCount:r.pieceCount===null?null:Number(r.pieceCount)})) as BulkPreparationSheet['cutting']['lines']},orderId:id,instructionVersion:g.instruction?.version??null,sourceRound:g.source?.round_number??null,customerConfirmed:g.customerConfirmed,ownerApproved:g.ownerApproved,instructionValid:g.instructionValid,reasons:g.reasons,preparationId:prep?.preparation_id??null,preshrink:g.instruction?.document.preshrink??null,
    dispatch:{version:row?.version??0,patternWorkerId:row?.pattern_worker_id??null,warehouseWorkerId:row?.warehouse_worker_id??null,cuttingWorkerId:row?.cutting_worker_id??null},canDispatchPattern:isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes('development_clerk'),canDispatchWarehouse:isDigitalLeader(actor),
    facts:prep?(await db.query('SELECT kind,recorded_at AS "recordedAt" FROM digital_bulk_preparation_facts WHERE preparation_id=$1 ORDER BY recorded_at',[prep.preparation_id])).rows:[],tasks:prep?await Promise.all((await this.routeTasks(db,prep.preparation_id)).map(t=>this.tasks().read(actor,t.task_id,db))):[]};
  }
@@ -113,6 +116,7 @@ export class BulkPreparationService {
    if(!prep)return;
    const tasks=await this.routeTasks(db,prep.preparation_id);
    for(const t of tasks){
+    if(t.task_kind==='bulk_cutting_external')continue;
     const assignee=t.task_kind==='bulk_pattern'?input.patternWorkerId:t.task_kind==='warehouse_preshrink'?warehouse:cutting;
     if(!assignee&&t.assignee_id&&!['completed','cancelled'].includes(t.state))fail('已生成任务不能清空主办，请直接改派到在职对应岗位');
     if(assignee&&assignee!==t.assignee_id&&!['completed','cancelled'].includes(t.state))await this.tasks().reassignWithClient(db,actor,t.task_id,assignee);
@@ -150,7 +154,7 @@ export async function digitalCuttingGate(db:DB,pool:Pool,cuttingId:string){
  if(row.generation!=='digital_production_v1'){if((await db.query("SELECT to_regclass('digital_production_child_links') AS relation")).rows[0]?.relation)await resolveDigitalChild(db,'sourcing',row.sourcing_case_id,'legacy');return null;}
  const id=await resolveDigitalChild(db,'sourcing',row.sourcing_case_id,'digital_production_v1');
  const g=await new BulkPreparationService(pool).gates(db,id!);if(g.reasons.length)return {orderId:id!,ready:false,reason:g.reasons.join('；')};
- const task=(await db.query(`SELECT t.state FROM digital_bulk_preparations p JOIN digital_production_tasks t ON t.route_instance_id=p.preparation_id JOIN digital_production_task_access a USING(task_id)
-  WHERE p.production_order_id=$1 AND p.instruction_version=$2 AND p.source_round=$3 AND a.task_kind='bulk_cutting'`,[id,g.instruction.version,g.source!.round_number])).rows[0];
- return {orderId:id!,ready:task?.state==='ready'||task?.state==='completed',reason:task?.state==='ready'||task?.state==='completed'?'':'纸样、唛架及预缩条件未齐'};
+ const task=(await db.query(`SELECT t.state,t.task_id,p.preparation_id FROM digital_bulk_preparations p JOIN digital_production_tasks t ON t.route_instance_id=p.preparation_id JOIN digital_production_task_access a USING(task_id)
+  WHERE p.production_order_id=$1 AND p.instruction_version=$2 AND p.source_round=$3 AND a.task_kind IN ('bulk_cutting','bulk_cutting_external')`,[id,g.instruction.version,g.source!.round_number])).rows[0];
+ return {orderId:id!,external:g.approval.cutting_process==='outsourced',primaryMerchandiserId:g.order.primary_merchandiser_id as string|null,taskId:task?.task_id as string|undefined,preparationId:task?.preparation_id as string|undefined,ready:task?.state==='ready'||task?.state==='completed',reason:task?.state==='ready'||task?.state==='completed'?'':'纸样、唛架及预缩条件未齐'};
 }
