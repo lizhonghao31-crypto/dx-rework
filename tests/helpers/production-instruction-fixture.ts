@@ -1,0 +1,33 @@
+import { randomUUID } from "node:crypto";
+import type { Pool } from "pg";
+import { expect } from "vitest";
+import { initialInstruction, InstructionDocumentSchema } from "@dx-rework/contracts/production-instruction";
+import type { DigitalOrder } from "@dx-rework/contracts/digital-production";
+import { ProductionInstructionService } from "../../apps/api/src/production-platform/production-instruction-service.js";
+import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
+export async function exerciseInstructions(database:Pool,order:DigitalOrder,primary:TrustedActorContext,designer:TrustedActorContext,manager:TrustedActorContext,budgetImageId:string){
+ const service=new ProductionInstructionService(database,true),id=order.productionOrderId;
+ const imageId=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-instruction.png','image/png',10,$3,$4,'ready',CURRENT_TIMESTAMP)",[imageId,`TEST/p10/${imageId}`,"a".repeat(64),primary.actorId]);
+ const doc=InstructionDocumentSchema.parse({...initialInstruction(),styleName:"TEST连衣裙",category:"连衣裙",date:"2026-10-01",preshrink:"无需预缩",sizes:["M"],measurements:[{id:randomUUID(),name:"袖长",tolerance:"±1/4",method:"平量",values:["6 1/8"]}],images:[{attachmentId:imageId,kind:"款图",description:"TEST款图"}]});
+ await expect(service.save(designer,id,{expectedVersion:0,orderVersion:order.version,document:doc},randomUUID())).rejects.toMatchObject({statusCode:403});
+ await expect(service.save(primary,id,{expectedVersion:0,orderVersion:order.version,document:{...doc,images:[{attachmentId:budgetImageId,kind:"款图",description:"不能偷读预算图"}]}},randomUUID())).rejects.toMatchObject({statusCode:403});
+ const key=randomUUID();const saved=await service.save(primary,id,{expectedVersion:0,orderVersion:order.version,document:doc},key);
+ expect((await service.save(primary,id,{expectedVersion:0,orderVersion:order.version,document:doc},key)).version).toBe(1);
+ const pk=randomUUID();const published=await Promise.all([service.publish(primary,id,{expectedVersion:1,orderVersion:order.version},pk),service.publish(primary,id,{expectedVersion:1,orderVersion:order.version},pk)]);
+ expect(published.map(x=>x.publishedVersion)).toEqual([1,1]);expect(await service.canDownload(designer,id,imageId)).toBe(true);
+ expect(await service.canDownload(primary,id,budgetImageId)).toBe(false);
+ expect((await service.read(primary,id,undefined,1)).document.measurements[0]?.values[0]).toBe("6 1/8");
+ await service.save(primary,id,{expectedVersion:saved.version,orderVersion:order.version,document:{...doc,remarks:"新版未发布"}},randomUUID());
+ expect((await service.read(primary,id)).publishedVersion).toBe(1);
+ expect((await service.read(primary,id,undefined,1)).document.remarks).toBe("");
+ await expect(database.query("UPDATE digital_instruction_versions SET document='{}' WHERE production_order_id=$1",[id])).rejects.toThrow("immutable");
+ expect((await database.query("SELECT count(*)::int n FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind LIKE 'bulk_%'",[id])).rows[0].n).toBe(0);
+ const request=await service.requestDate(primary,id,{orderVersion:order.version,date:"2026-11-25",reason:"TEST 客户要求"},randomUUID());
+ expect(request.order.contractDeliveryDate).toBe("2026-11-20");const requestId=request.dateRequests[0]!.requestId;
+ await expect(service.decideDate(primary,id,requestId,true,randomUUID())).rejects.toMatchObject({statusCode:403});
+ const decided=await service.decideDate(manager,id,requestId,true,randomUUID());expect(decided.order.contractDeliveryDate).toBe("2026-11-25");
+ await expect(service.publish(primary,id,{expectedVersion:2,orderVersion:order.version},randomUUID())).rejects.toMatchObject({statusCode:409});
+ expect((await service.read(primary,id,undefined,1)).order.contractDeliveryDate).toBe("2026-11-20");
+ const other={...primary,actorId:randomUUID()};await expect(service.read(other,id)).rejects.toMatchObject({statusCode:404});
+ expect((await database.query("SELECT count(*)::int n FROM digital_instruction_versions WHERE production_order_id=$1",[id])).rows[0].n).toBe(1);
+}

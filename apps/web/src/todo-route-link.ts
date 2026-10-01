@@ -16,6 +16,11 @@ export const todoRouteHref = (route: TodoRouteDescriptor): string => {
     case "sample_detail":
       target = `ui/samples/${route.entityId}`;
       break;
+    case "digital_production_instruction":
+      target = "ui/digital-production";
+      query.set("instruction", route.entityId);
+      if (route.developmentRound) query.set("instructionVersion", String(route.developmentRound));
+      break;
     case "digital_development":
       target = "ui/digital-production";
       query.set("development", route.entityId);

@@ -1,0 +1,44 @@
+.instruction-editor fieldset {border:0;padding:0;min-width:0;}
+.instruction-heading,.instruction-edit-heading {display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;}
+.instruction-editor label {display:flex;flex-direction:column;gap:4px;margin:8px 0;}
+.instruction-editor input,.instruction-editor textarea {width:100%;box-sizing:border-box;}
+.instruction-editor textarea {min-height:80px;}
+.instruction-editor h2 {text-align:center;}
+.instruction-main {display:grid;grid-template-columns:1fr 3fr;gap:12px;}
+.instruction-main img {width:100%;object-fit:contain;}
+.instruction-editor table {border-collapse:collapse;width:100%;margin:12px 0;}
+.instruction-editor th,.instruction-editor td {border:1px solid currentColor;padding:4px;}
+.instruction-table-scroll {overflow-x:auto;}
+.instruction-editor td {min-width:60px;}
+.instruction-images {display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;}
+.instruction-images figure {margin:0;break-inside:avoid;}
+.instruction-images img {max-width:100%;max-height:280px;object-fit:contain;}
+.instruction-page {margin:24px 0;}
+.instruction-print-value {display:none;}
+@media(max-width:760px){.instruction-main {grid-template-columns:1fr;}.instruction-main img{max-height:240px;}}
+@media print {
+ .instruction-editor,.instruction-editor * {visibility:visible;}
+ .instruction-editor {position:absolute;left:0;top:0;width:100%;font-size:9pt;}
+ .instruction-editor .instruction-controls,.instruction-editor input,.instruction-editor textarea,.instruction-editor select {display:none!important;}
+ .instruction-editor .instruction-print-value {display:block;white-space:pre-wrap;overflow-wrap:anywhere;}
+ .instruction-page {break-before:page;margin:0;}
+ .instruction-page:first-child {break-before:auto;}
+ .instruction-editor table {table-layout:fixed;}
+ .instruction-editor th,.instruction-editor td {min-width:0;overflow-wrap:anywhere;}
+ .instruction-editor thead {display:table-header-group;}
+ .instruction-editor tr {break-inside:avoid;}
+ .instruction-table-scroll {overflow:visible;}
+ .instruction-heading {grid-template-columns:repeat(4,minmax(0,1fr));}
+ .instruction-images {grid-template-columns:repeat(4,minmax(0,1fr));}
+ .instruction-main {grid-template-columns:1fr 3fr;}
+ .instruction-editor fieldset:disabled {opacity:1;}
+}
+@media print {
+ .instruction-editor {background:white;color:black;}
+ .instruction-editor th,.instruction-editor td {font-size:9pt;}
+ .instruction-editor h2 {font-size:14pt;}
+ html:has(.instruction-editor),body:has(.instruction-editor) {background:white!important;}
+ .instruction-size-part + .instruction-size-part {margin-top:16px;}
+}
+
+.instruction-main > div {min-width:0;}

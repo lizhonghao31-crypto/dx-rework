@@ -151,6 +151,7 @@ export class DigitalProductionIdentityService {
     });
   }
   async read(actor: TrustedActorContext, id: string): Promise<DigitalOrder> { assertIdentityActor(actor); return this.readWith(this.database, actor, id); }
+  async readWithClient(actor: TrustedActorContext, id: string, client: Pick<Pool, "query">): Promise<DigitalOrder> { assertIdentityActor(actor); return this.readWith(client, actor, id); }
   private async readWith(client: Pick<Pool, "query"> | PoolClient, actor: TrustedActorContext, id: string): Promise<DigitalOrder> {
     const row = await this.visibleOrder(client, actor, id);
     const lines = await client.query(`SELECT l.line_id AS "lineId",l.po_number AS "poNumber",l.formal_style_no AS "formalStyleNo",l.temporary_style_no AS "temporaryStyleNo",

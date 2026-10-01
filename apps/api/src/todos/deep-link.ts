@@ -45,6 +45,11 @@ export function buildTodoDeepLink(
     case "wage_period_detail":
       path = `/ui/wages/${route.entityId}`;
       break;
+    case "digital_production_instruction":
+      path = "/ui/digital-production";
+      query.set("instruction", route.entityId);
+      if (route.developmentRound) query.set("instructionVersion", String(route.developmentRound));
+      break;
     case "digital_development":
       path = "/ui/digital-production";
       query.set("development", route.entityId);

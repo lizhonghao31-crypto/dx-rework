@@ -103,6 +103,10 @@
     "./digital-development-execution": {
       "types": "./src/digital-development-execution.ts",
       "import": "./dist/digital-development-execution.js"
+    },
+    "./production-instruction": {
+      "types": "./src/production-instruction.ts",
+      "import": "./dist/production-instruction.js"
     }
   },
   "scripts": {
