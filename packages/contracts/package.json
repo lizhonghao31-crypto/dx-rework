@@ -115,6 +115,10 @@
     "./factory-flow": {
       "types": "./src/factory-flow.ts",
       "default": "./dist/factory-flow.js"
+    },
+    "./order-closure": {
+      "types": "./src/order-closure.ts",
+      "import": "./dist/order-closure.js"
     }
   },
   "scripts": {

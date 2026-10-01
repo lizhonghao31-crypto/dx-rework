@@ -30,6 +30,7 @@ export class BulkPreparationService {
   const ownerApproved=Boolean(approval&&!sourcing?.deleted_at);
   const lifecycle=(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE (resource_kind='order' AND resource_id=$1) OR (resource_kind='source' AND resource_id=$2)",[id,order.source_id])).rows;
   const reasons:string[]=[];
+  if((await db.query("SELECT to_regclass('digital_order_closures') AS relation")).rows[0]?.relation&&(await db.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1',[id])).rowCount)reasons.push('母单已特殊结案，原实绩及历史继续保留');
   if(!customerConfirmed)reasons.push('当前开发轮次尚未确认客户样板');
   if(ownerApproved&&!['in_house','outsourced'].includes(approval.cutting_process))reasons.push('请在原外发选厂审批中明确本厂裁或外厂裁');
   if(!ownerApproved)reasons.push('原外发老板批准尚未通过或已换版');
