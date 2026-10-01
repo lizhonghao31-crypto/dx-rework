@@ -48,6 +48,13 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  await service.decideOwner(actors.owner,caseId,{decision:'approved'},randomUUID());
  if(mode!=='none'){expect((await bulk.read(primary,id)).tasks).toHaveLength(0);await execution.customerSample(designer,source.sourceId,{routeVersion:1,note:'TEST客户确认'},randomUUID());}
  let sheet=await bulk.read(primary,id);expect(sheet.tasks.find(t=>t.taskKind==='bulk_pattern')).toMatchObject({state:'pending',enteredAt:null,dueAt:null});
+ // Reject clearing an already-created assignment atomically; UI and execution remain aligned.
+ for(const field of ['patternWorkerId',...(mode==='none'?[]:['warehouseWorkerId'])]){
+  const before=await bulk.read(primary,id);
+  await expect(bulk.dispatch(actors.root,id,{expectedVersion:before.dispatch.version,patternWorkerId:worker.actorId,warehouseWorkerId:warehouse.actorId,cuttingWorkerId:people.cutting_worker!.actorId,deliverPattern:false,[field]:null},randomUUID())).rejects.toMatchObject({statusCode:409});
+  expect((await bulk.read(primary,id)).dispatch).toEqual(before.dispatch);
+ }
+
  const cuttingId=(await db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[caseId])).rows[0].cutting_order_id;
  expect((await cutting.get(actors.root,cuttingId)).canRecord).toBe(false);
  await expect(cutting.record(actors.root,cuttingId,{pieceCount:1,actualCutCount:137,attachmentIds:[]},randomUUID())).rejects.toMatchObject({statusCode:409});
@@ -62,8 +69,17 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  await done('纸样完成');expect((await bulk.read(primary,id)).tasks.some(t=>t.taskKind==='bulk_cutting')).toBe(false);
  if(mode==='concurrent')await Promise.all([done('唛架完成'),done('预缩完成')]);else await done('唛架完成');
  if(mode==='pattern-first'){expect((await bulk.read(primary,id)).tasks.some(t=>t.taskKind==='bulk_cutting')).toBe(false);await expect(bulk.complete(worker,id,{preparationId:sheet.preparationId!,kind:'预缩完成'},randomUUID())).rejects.toMatchObject({statusCode:404});await done('预缩完成');}
+ {
+  const before=await bulk.read(primary,id);await expect(bulk.dispatch(actors.root,id,{expectedVersion:before.dispatch.version,patternWorkerId:worker.actorId,warehouseWorkerId:warehouse.actorId,cuttingWorkerId:null,deliverPattern:false},randomUUID())).rejects.toMatchObject({statusCode:409});expect((await bulk.read(primary,id)).dispatch).toEqual(before.dispatch);
+ }
  const complete=await bulk.read(primary,id);expect(complete.tasks.filter(t=>t.taskKind==='bulk_cutting')).toHaveLength(1);expect(complete.tasks.find(t=>t.taskKind==='bulk_cutting')).toMatchObject({state:'ready',slaHours:24});
  await Promise.all([done('唛架完成'),done('唛架完成')]);expect((await bulk.read(primary,id)).tasks.filter(t=>t.taskKind==='bulk_cutting')).toHaveLength(1);
+ if(mode==='concurrent'){
+  const nextFactory=(await db.query("SELECT supplier_id FROM supplier_catalog_items WHERE supplier_code='FAC-02'")).rows[0].supplier_id;
+  await service.requestFactoryChange(actors.manager,caseId,{supplierId:nextFactory,unitPrice:'5.50',changeReason:'TEST已批准后的有效同价转厂'},randomUUID());
+  const effective=await bulk.read(primary,id);expect(effective.ownerApproved).toBe(true);expect(effective.preparationId).toBe(complete.preparationId);
+  expect((await db.query("SELECT 1 FROM sourcing_owner_decisions WHERE sourcing_decision_id=(SELECT sourcing_decision_id FROM sourcing_decisions WHERE sourcing_case_id=$1 ORDER BY decision_version DESC LIMIT 1)",[caseId])).rowCount).toBe(0);
+ }
  expect((await cutting.get(actors.root,cuttingId)).canRecord).toBe(true);
  expect((await db.query('SELECT 1 FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1',[caseId])).rowCount).toBe(0);
  expect((await db.query('SELECT sum(quantity)::int n FROM digital_production_po_sizes WHERE line_id IN (SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1)',[id])).rows[0].n).toBe(200);

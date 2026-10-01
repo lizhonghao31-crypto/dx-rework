@@ -24,7 +24,7 @@ export class BulkPreparationService {
   if(sourcing){
    await resolveDigitalChild(db,'sourcing',sourcing.sourcing_case_id,sourcing.workflow_generation);
    approval=(await db.query(`SELECT a.* FROM sourcing_approval_snapshots a WHERE a.sourcing_case_id=$1 AND a.sourcing_decision_id=(SELECT sourcing_decision_id FROM sourcing_decisions WHERE sourcing_case_id=$1 ORDER BY decision_version DESC LIMIT 1)
-    AND EXISTS(SELECT 1 FROM sourcing_owner_decisions d WHERE d.sourcing_case_id=$1 AND d.sourcing_decision_id=a.sourcing_decision_id AND d.decision='approved') ORDER BY a.approved_at DESC LIMIT 1`,[sourcing.sourcing_case_id])).rows[0];
+    AND (EXISTS(SELECT 1 FROM sourcing_owner_decisions d WHERE d.sourcing_case_id=$1 AND d.sourcing_decision_id=a.sourcing_decision_id AND d.decision='approved') OR EXISTS(SELECT 1 FROM sourcing_decisions effective WHERE effective.sourcing_decision_id=a.sourcing_decision_id AND effective.source_type='factory_change' AND effective.source_change_request_id IS NOT NULL)) ORDER BY a.approved_at DESC LIMIT 1`,[sourcing.sourcing_case_id])).rows[0];
   }
   const instructionValid=Boolean(instruction&&source&&instruction.source_round===source.round_number&&['需要预缩','无需预缩'].includes(instruction.document.preshrink));
   const ownerApproved=Boolean(approval&&!sourcing?.deleted_at);
@@ -114,6 +114,7 @@ export class BulkPreparationService {
    const tasks=await this.routeTasks(db,prep.preparation_id);
    for(const t of tasks){
     const assignee=t.task_kind==='bulk_pattern'?input.patternWorkerId:t.task_kind==='warehouse_preshrink'?warehouse:cutting;
+    if(!assignee&&t.assignee_id&&!['completed','cancelled'].includes(t.state))fail('已生成任务不能清空主办，请直接改派到在职对应岗位');
     if(assignee&&assignee!==t.assignee_id&&!['completed','cancelled'].includes(t.state))await this.tasks().reassignWithClient(db,actor,t.task_id,assignee);
     if(t.task_kind==='warehouse_preshrink'&&warehouse&&t.state==='pending')await this.tasks().setConditionWithClient(db,actor,t.task_id,'handover_received',true,new Date().toISOString(),'预缩主办已到位');
     if(t.task_kind==='bulk_pattern'&&input.deliverPattern&&t.state==='pending'){
