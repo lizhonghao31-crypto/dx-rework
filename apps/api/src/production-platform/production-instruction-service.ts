@@ -49,6 +49,9 @@ export class ProductionInstructionService {
     const dateRequests = (await db.query(`SELECT r.request_id AS "requestId",r.old_date::text AS "oldDate",r.new_date::text AS date,r.reason,
       CASE WHEN d.request_id IS NULL THEN '待批准' WHEN d.approved THEN '已批准' ELSE '已驳回' END AS status
       FROM digital_instruction_date_requests r LEFT JOIN digital_instruction_date_decisions d USING(request_id) WHERE r.production_order_id=$1 ORDER BY r.requested_at DESC`, [id])).rows;
+    dateRequests.push(...(await db.query(`SELECT r.request_id AS "requestId",true AS legacy,r.previous_date::text AS "oldDate",r.requested_date::text AS date,r.reason,
+      CASE WHEN d.request_id IS NULL THEN '待批准' WHEN d.decision='approved' THEN '已批准' ELSE '已驳回' END AS status
+      FROM digital_production_delivery_requests r LEFT JOIN digital_production_delivery_decisions d USING(request_id) WHERE r.production_order_id=$1 ORDER BY r.created_at DESC`,[id])).rows);
     return { order: version ? row.order_snapshot : order, document: seeded.document, version: row?.version ?? 0,
       publishedVersion: version ?? row?.published_version ?? null, sourceRound: seeded.sourceRound,
       versions: (await db.query("SELECT version FROM digital_instruction_versions WHERE production_order_id=$1 ORDER BY version DESC", [id])).rows.map(r => r.version),
@@ -133,12 +136,24 @@ export class ProductionInstructionService {
   async decideDate(actor:TrustedActorContext,id:string,requestId:string,approved:boolean,key:string){
     return this.command(actor,id,"date-decision",key,{requestId,approved},async(db,order)=>{
       const row=(await db.query("SELECT *,new_date::text AS date FROM digital_instruction_date_requests WHERE request_id=$1 AND production_order_id=$2",[requestId,id])).rows[0]??digitalNotFound();
+      if(!isRootActor(actor) && row.requested_by===actor.actorId)digitalForbidden();
       if((await db.query("SELECT 1 FROM digital_instruction_date_decisions WHERE request_id=$1",[requestId])).rowCount)fail("申请已处理");
       if(approved && order.version!==row.order_version)fail("母单已更新，请重新申请");
       await db.query("INSERT INTO digital_instruction_date_decisions(request_id,approved,decided_by) VALUES($1,$2,$3)",[requestId,approved,actor.actorId]);
       if(approved)await db.query("UPDATE digital_production_orders SET contract_delivery_date=$2,version=version+1 WHERE production_order_id=$1",[id,row.date]);
       await this.notice(db,order,null,approved?"客户交付期变更已批准":"客户交付期变更已驳回",`instruction-date-decision:${requestId}`);return this.read(actor,id,db);
     },true);
+  }
+  async legacyDateGuard(db: PoolClient, id: string) {
+    if (!(await db.query("SELECT to_regclass('digital_instruction_documents') AS relation")).rows[0]?.relation) return false;
+    const state=(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1",[id])).rows[0]?.state;
+    if(state && state!=="active")fail("母单已暂停或取消");
+    if(await this.cutStarted(db,id))fail("已经开裁，不能实质修改客户交付期");
+    return true;
+  }
+  async legacyDateNotice(db: PoolClient, actor: TrustedActorContext, id: string, title: string, key: string, directorsOnly=false) {
+    if (!(await db.query("SELECT to_regclass('digital_instruction_notices') AS relation")).rows[0]?.relation) return;
+    await this.notice(db,await this.identity().readWithClient(actor,id,db),null,title,key,directorsOnly);
   }
   async authorizeUpload(actor:TrustedActorContext,id:string){const current=await this.read(actor,id);if(!current.canEdit)digitalForbidden();}
   async canDownload(actor:TrustedActorContext,id:string,attachmentId:string){

@@ -46,5 +46,5 @@ export type InstructionSheet = {
   order: DigitalOrder; document: InstructionDocument; version: number; publishedVersion: number | null;
   versions: number[]; canEdit: boolean; cutStarted: boolean; merchandiserName: string | null;
   sourceRound: number | null; canApproveDate: boolean; printedBy: string;
-  dateRequests: Array<{ requestId: string; oldDate: string | null; date: string; reason: string; status: string }>;
+  dateRequests: Array<{ requestId: string; legacy?: boolean; oldDate: string | null; date: string; reason: string; status: string }>;
 };

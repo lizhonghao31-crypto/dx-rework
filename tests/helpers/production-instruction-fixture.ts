@@ -1,3 +1,4 @@
+import { DigitalProductionAccessService } from "../../apps/api/src/production-platform/access-service.js";
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { expect } from "vitest";
@@ -25,9 +26,18 @@ export async function exerciseInstructions(database:Pool,order:DigitalOrder,prim
  const request=await service.requestDate(primary,id,{orderVersion:order.version,date:"2026-11-25",reason:"TEST 客户要求"},randomUUID());
  expect(request.order.contractDeliveryDate).toBe("2026-11-20");const requestId=request.dateRequests[0]!.requestId;
  await expect(service.decideDate(primary,id,requestId,true,randomUUID())).rejects.toMatchObject({statusCode:403});
+ await expect(service.decideDate({...primary,actorRoles:[...primary.actorRoles,"production_management"]},id,requestId,true,randomUUID())).rejects.toMatchObject({statusCode:403});
  const decided=await service.decideDate(manager,id,requestId,true,randomUUID());expect(decided.order.contractDeliveryDate).toBe("2026-11-25");
  await expect(service.publish(primary,id,{expectedVersion:2,orderVersion:order.version},randomUUID())).rejects.toMatchObject({statusCode:409});
  expect((await service.read(primary,id,undefined,1)).order.contractDeliveryDate).toBe("2026-11-20");
+ const access=new DigitalProductionAccessService(database);
+ const legacy=await access.requestDelivery(primary,id,{expectedVersion:decided.order.version,deliveryDate:"2026-11-28",reason:"TEST旧入口统一通知"});
+ await access.decideDelivery(manager,legacy.requestId,"approved");
+ expect((await service.read(primary,id)).order.contractDeliveryDate).toBe("2026-11-28");
+ expect((await database.query("SELECT count(*)::int n FROM digital_production_notification_events WHERE source_key LIKE $1",[`legacy-instruction-date%:${legacy.requestId}`])).rows[0].n).toBe(2);
+ await database.query("INSERT INTO digital_production_resource_lifecycle(resource_kind,resource_id,state,changed_by) VALUES('order',$1,'paused',$2) ON CONFLICT(resource_kind,resource_id) DO UPDATE SET state='paused'",[id,primary.actorId]);
+ await expect(access.requestDelivery(primary,id,{expectedVersion:decided.order.version+1,deliveryDate:"2026-11-29",reason:"暂停不能改期"})).rejects.toMatchObject({statusCode:409});
+ await database.query("UPDATE digital_production_resource_lifecycle SET state='active' WHERE resource_kind='order' AND resource_id=$1",[id]);
  const other={...primary,actorId:randomUUID()};await expect(service.read(other,id)).rejects.toMatchObject({statusCode:404});
  expect((await database.query("SELECT count(*)::int n FROM digital_instruction_versions WHERE production_order_id=$1",[id])).rows[0].n).toBe(1);
 }
