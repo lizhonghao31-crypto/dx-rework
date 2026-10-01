@@ -504,7 +504,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
     void digitalRequest<BudgetSourcingPreparation>(`orders/${budgetOrderId}/budget/prepare-sourcing`, "POST", { expectedVersion: version }).then(prepared => {
       if (!live) return;
       setBudgetPreparation(prepared); setGender(prepared.gender); setStyleName(prepared.styleName);
-      setDaxingUnitPrice(prepared.daxingUnitPrice); setDeliveryDate(prepared.deliveryDate ?? "");
+      setDaxingUnitPrice(prepared.daxingUnitPrice);
       setLineItems(prepared.lineItems.map(line => ({ styleNo: line.styleNo, alternateStyleNo: line.alternateStyleNo, color: line.color, quantity: String(line.quantity) })));
       setImages(prepared.images.map(image => ({ ...image, previewUrl: attachmentUrl(image.attachmentId, "preview") })));
     }).catch(reason => { if (live) setMessage(reason.message); });
@@ -789,6 +789,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
           <StatusBadge tone="info">跟单提交</StatusBadge>
         </div>
         <div className="sourcing-form-grid">
+          {budgetPreparation?.contractDeliveryDate && <p>客户合同交付期：{budgetPreparation.contractDeliveryDate}</p>}
           <div className={`sourcing-order-classification${correction ? "" : " sourcing-order-classification--additional"}`}>
             <label><span>性别（必填）</span><select disabled={Boolean(budgetOrderId)} {...feedback.field("sourcing-create-gender")} required value={gender} onChange={(event) => { setGender(event.target.value as typeof gender); createKey.current = null; }}><option value="">请选择</option><option value="男装">男装</option><option value="女装">女装</option></select></label>
             <label><span>款式（必填）</span><input readOnly={Boolean(budgetOrderId)} {...feedback.field("sourcing-create-style")} required list="sourcing-style-options" value={styleName} maxLength={100} onChange={(event) => { setStyleName(event.target.value); createKey.current = null; }} placeholder="搜索或输入，如梭织短裤" /></label>
@@ -796,7 +797,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
             <datalist id="sourcing-style-options">{styleCatalog.map((style) => <option key={style.styleId} value={style.styleName} />)}</datalist>
           </div>
           <label><span>预计裁片发出日期（工厂发出，必填）</span><input type="date" required aria-required="true" value={estimatedCutPieceSendDate} {...feedback.field("sourcing-create-send-date")} onChange={(event) => { setEstimatedCutPieceSendDate(event.target.value); createKey.current = null; }} /></label>
-          <label><span>要求交货日期（到工厂，必填）</span><input type="date" required aria-required="true" value={deliveryDate} readOnly={Boolean(budgetPreparation?.deliveryDate)} {...feedback.field("sourcing-create-delivery-date")} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
+          <label><span>要求交货日期（到工厂，必填）</span><input type="date" required aria-required="true" value={deliveryDate} {...feedback.field("sourcing-create-delivery-date")} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
           <label><span>预算价（内部，必填）</span><input readOnly={!!correction || Boolean(budgetOrderId)} {...feedback.field("sourcing-create-budget")} value={activeCreateInput === "daxing" ? daxingUnitPrice : newSourcingPriceDisplay(daxingUnitPrice)} onFocus={() => setActiveCreateInput("daxing")} onBlur={() => setActiveCreateInput(null)} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="请输入预算价" aria-invalid={!isNewSourcingPrice(daxingUnitPrice)} /></label>
           <section className="sourcing-line-editor sourcing-form-wide" aria-label="订单款色明细">
             <div className="sourcing-line-editor__heading">

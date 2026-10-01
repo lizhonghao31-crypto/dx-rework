@@ -3099,10 +3099,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const prepared = await budget.prepareSourcing(merchandiserActor(), id, 1, attachments);
     expect(prepared.lineItems.map(line => line.quantity)).toEqual([137, 63]);
     expect(prepared.daxingUnitPrice).toBe("5.25");
+    expect(prepared.contractDeliveryDate).toBe("2026-11-20");
     expect(prepared.images[0]!.attachmentId).not.toBe(imageId);
     expect((await budget.prepareSourcing(merchandiserActor(), id, 1, attachments)).images).toEqual(prepared.images);
     const input = {
-      gender: prepared.gender, styleName: prepared.styleName, deliveryDate: prepared.deliveryDate!,
+      gender: prepared.gender, styleName: prepared.styleName, deliveryDate: "2026-11-10",
       estimatedCutPieceSendDate: "2026-10-20", daxingUnitPrice: prepared.daxingUnitPrice,
       attachmentIds: prepared.images.map(image => image.attachmentId),
       lineItems: prepared.lineItems.map(({ styleNo, alternateStyleNo, color, quantity }) => ({ styleNo, alternateStyleNo, color, quantity })),
@@ -3115,6 +3116,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const caseId = results[0]!.value.sourcingCaseId;
     expect(results[1]!.value.sourcingCaseId).toBe(caseId);
     expect(results[0]!.value.status).toBe("pending_ie_quote");
+    expect(results[0]!.value.deliveryDate).toBe("2026-11-10");
     expect((await database.query("SELECT workflow_generation FROM sourcing_cases WHERE sourcing_case_id=$1", [caseId])).rows[0].workflow_generation).toBe("digital_production_v1");
     expect((await database.query("SELECT count(*)::int AS n FROM digital_production_child_lines WHERE child_id=$1", [caseId])).rows[0].n).toBe(2);
     expect((await database.query("SELECT entity_type,entity_id FROM attachments WHERE attachment_id=$1", [imageId])).rows[0]).toEqual({ entity_type: "digital_budget", entity_id: id });

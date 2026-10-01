@@ -35,7 +35,6 @@ export async function validateBudgetSourcing(db: PoolClient, actor: TrustedActor
   const gender = ["男装", "男童"].includes(source.order.product_group) ? "男装" : "女装";
   const numericPrice = (value: string) => { const [whole, fraction = ""] = value.split("."); return BigInt(whole!) * 1_000_000n + BigInt(fraction.padEnd(6, "0")); };
   if (input.gender !== gender || input.styleName !== source.document.productCategory || numericPrice(input.daxingUnitPrice) !== numericPrice(source.document.outsourcingUnitPrice)) conflict("性别、款式和预算价须沿用已发布预算");
-  if (source.order.delivery && input.deliveryDate !== source.order.delivery) conflict("交期须沿用母单当前有效交期");
   if (input.lineItems.length !== source.lines.length) conflict("必须整款沿用全部款色");
   for (let i = 0; i < source.lines.length; i++) {
     const line = source.lines[i]!, entered = input.lineItems[i]!;
