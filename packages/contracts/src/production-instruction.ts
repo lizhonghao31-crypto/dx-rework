@@ -10,7 +10,7 @@ export const SEWING_REQUIREMENTS = [
 export const MATERIAL_COUNT_TERM = "大货面、辅料到贵公司，请在48小时之内清点数量，并确认收到的面、辅料是否正确，数量是否对数，如不正确，及时跟我司沟通，并及时补齐数量，如贵司不能及时清点数量，由贵司承担相应责任，感谢贵司的支持及配合！";
 export const InstructionDocumentSchema = z.object({
   styleName: short, category: short, season: short, fabricType: short, composition: text,
-  date: z.iso.date().nullable(), process: text, remarks: text, patternMaker: short,
+  date: z.iso.date().nullable(), process: text, secondaryCraft:z.enum(["沿用开发","无","印花","绣花","印绣花"]).default("沿用开发"), remarks: text, patternMaker: short,
   preshrink: z.enum(["待确认", "需要预缩", "无需预缩"]), shipSample: text,
   sewingRequirements: text, comments: text,
   fabrics: z.array(z.object({ id: z.string().uuid(), name: short, part: short, colors: z.record(z.string().uuid(), short), remarks: text }).strict()).max(200),
@@ -30,7 +30,7 @@ export const SaveInstructionSchema = z.object({ expectedVersion: z.number().int(
 export const PublishInstructionSchema = z.object({ expectedVersion: z.number().int().positive(), orderVersion: z.number().int().positive() }).strict();
 export const InstructionDateRequestSchema = z.object({ orderVersion: z.number().int().positive(), date: z.iso.date(), reason: text.min(1) }).strict();
 export function initialInstruction(): InstructionDocument {
-  return { styleName: "", category: "", season: "", fabricType: "", composition: "", date: null, process: "", remarks: "", patternMaker: "", preshrink: "待确认", shipSample: "", sewingRequirements: SEWING_REQUIREMENTS.join("\n"), comments: "", fabrics: [], accessories: [], images: [], unit: "inch", sizes: [], measurements: [] };
+  return { styleName: "", category: "", season: "", fabricType: "", composition: "", date: null, process: "", secondaryCraft:"沿用开发", remarks: "", patternMaker: "", preshrink: "待确认", shipSample: "", sewingRequirements: SEWING_REQUIREMENTS.join("\n"), comments: "", fabrics: [], accessories: [], images: [], unit: "inch", sizes: [], measurements: [] };
 }
 export function instructionErrors(doc: InstructionDocument, order: DigitalOrder): string[] {
   const errors: string[] = [];

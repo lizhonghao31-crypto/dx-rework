@@ -111,6 +111,10 @@
     "./production-instruction": {
       "types": "./src/production-instruction.ts",
       "import": "./dist/production-instruction.js"
+    },
+    "./factory-flow": {
+      "types": "./src/factory-flow.ts",
+      "default": "./dist/factory-flow.js"
     }
   },
   "scripts": {

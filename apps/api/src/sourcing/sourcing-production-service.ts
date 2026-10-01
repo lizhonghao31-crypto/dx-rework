@@ -1,3 +1,5 @@
+import { linkNewDigitalChild } from "../production-platform/child-link-repository.js";
+import { DigitalProductionAccessPolicy } from "../production-platform/access-policy.js";
 import { memberCanWriteModule } from "../access/member-module-policy.js";
 import { productionNotExcluded } from "./production-visibility.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -97,7 +99,7 @@ export class SourcingProductionService {
     const row = result.rows[0];
     return {
       item: row ? { productionOrderId: row.production_order_id, status: row.status, dispatchedAt: iso(row.dispatched_at) } : null,
-      canDispatch: !row && await memberCanWriteModule(this.database, actor.actorId, "sourcing") && canWrite(actor, source.created_by) && source.contract_status === "ready",
+      canDispatch: !row && (await this.database.query("SELECT to_jsonb(sourcing_cases)->>'workflow_generation' AS generation FROM sourcing_cases WHERE sourcing_case_id=$1",[sourcingCaseId])).rows[0]?.generation!=='digital_production_v1' && await memberCanWriteModule(this.database, actor.actorId, "sourcing") && canWrite(actor, source.created_by) && source.contract_status === "ready",
     };
   }
 
@@ -112,6 +114,9 @@ export class SourcingProductionService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+      const generation=(await client.query("SELECT to_jsonb(sourcing_cases)->>'workflow_generation' AS generation FROM sourcing_cases WHERE sourcing_case_id=$1",[sourcingCaseId])).rows[0]?.generation;
+      if(generation==='digital_production_v1')fail('新数字单由仓库完成整款实际发厂后自动接入生产');
       const source = await this.source(client, sourcingCaseId, true);
       if (!canWrite(actor, source.created_by)) fail("仅本订单跟单或 Root 可正式派单", 403);
       const scope = "sourcing.production.dispatch";
@@ -120,48 +125,8 @@ export class SourcingProductionService {
         requestHash: createHash("sha256").update(JSON.stringify({ sourcingCaseId, input: parsed.data })).digest("hex"),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
-        // A changed contract cannot start a second execution of the same case.
-        // Replays of the dispatched contract still return its immutable receipt.
-        const existing = await client.query<ProductionRow>(`${selectProduction}
-          WHERE production.sourcing_case_id=$1`, [sourcingCaseId]);
-        const dispatched = existing.rows[0];
-        if (dispatched) {
-          if (dispatched.sourcing_contract_document_id !== parsed.data.sourcingContractDocumentId) {
-            fail("本订单已正式派单，不能按新合同重复派单；生产转厂功能尚未开放");
-          }
-          return { statusCode: 200, response: toOrder(dispatched) };
-        }
-        if (!source.sourcing_approval_snapshot_id || source.contract_status !== "ready"
-          || source.sourcing_contract_document_id !== parsed.data.sourcingContractDocumentId) {
-          fail("请确认老板已批准、当前合同已生成，并刷新后重新确认派单");
-        }
-        const productionOrderId = randomUUID();
-        const eventId = await this.events.append(client, { ...actor, authorizationCapability: WRITE }, {
-          action: scope, entityType: "sourcing_production_order", entityId: productionOrderId,
-          after: { sourcingCaseId, contractDocumentId: parsed.data.sourcingContractDocumentId, status: "in_production" },
-          reason: "跟单确认供应商、数量、交期和合同后正式派单",
-        });
-        await client.query(`INSERT INTO sourcing_production_orders(
-          production_order_id,sourcing_case_id,sourcing_approval_snapshot_id,sourcing_decision_id,decision_version,
-          sourcing_contract_document_id,contract_number,contract_version,supplier_id,supplier_name_snapshot,
-          gender,style_name_snapshot,quantity,processes,delivery_date,first_style_no,dispatched_by,operation_event_id)
-          SELECT $1,snapshot.sourcing_case_id,snapshot.sourcing_approval_snapshot_id,snapshot.sourcing_decision_id,snapshot.decision_version,
-            document.sourcing_contract_document_id,document.contract_number,document.contract_version,
-            snapshot.supplier_id,snapshot.supplier_name_snapshot,snapshot.gender,snapshot.style_name_snapshot,
-            snapshot.quantity,snapshot.processes,snapshot.delivery_date,
-            (SELECT style_no FROM sourcing_approval_snapshot_lines WHERE sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id ORDER BY position LIMIT 1),$2,$3
-          FROM sourcing_approval_snapshots snapshot JOIN sourcing_contract_documents document USING(sourcing_approval_snapshot_id)
-          WHERE snapshot.sourcing_approval_snapshot_id=$4 AND document.sourcing_contract_document_id=$5`,
-        [productionOrderId, actor.actorId, eventId, source.sourcing_approval_snapshot_id, parsed.data.sourcingContractDocumentId]);
-        await client.query(`INSERT INTO sourcing_production_lines(production_order_id,position,style_no,alternate_style_no,color,quantity)
-          SELECT $1,position,style_no,alternate_style_no,color,quantity FROM sourcing_approval_snapshot_lines
-          WHERE sourcing_approval_snapshot_id=$2 ORDER BY position`, [productionOrderId, source.sourcing_approval_snapshot_id]);
-        await client.query(`INSERT INTO sourcing_production_transitions(
-          production_transition_id,production_order_id,sequence,status,business_date,actor_id,operation_event_id)
-          VALUES($1,$2,1,'in_production',(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::date,$3,$4)`,
-        [randomUUID(), productionOrderId, actor.actorId, eventId]);
-        const created = await client.query<ProductionRow>(`${selectProduction} WHERE production.production_order_id=$1`, [productionOrderId]);
-        return { statusCode: 201, response: toOrder(created.rows[0]!) };
+        return this.dispatchWithClient(client,actor,sourcingCaseId,source,parsed.data.sourcingContractDocumentId);
+
       });
       await client.query("COMMIT");
       return { value: outcome.response, reused: outcome.reused, statusCode: outcome.statusCode };
@@ -171,6 +136,61 @@ export class SourcingProductionService {
     } finally { client.release(); }
   }
 
+  private async dispatchWithClient(client:PoolClient,actor:TrustedActorContext,sourcingCaseId:string,source:Source,contractId:string,occurredAt?:string){
+    const scope="sourcing.production.dispatch";
+        // A changed contract cannot start a second execution of the same case.
+        // Replays of the dispatched contract still return its immutable receipt.
+        const existing = await client.query<ProductionRow>(`${selectProduction}
+          WHERE production.sourcing_case_id=$1`, [sourcingCaseId]);
+        const dispatched = existing.rows[0];
+        if (dispatched) {
+          if (dispatched.sourcing_contract_document_id !== contractId) {
+            fail("本订单已正式派单，不能按新合同重复派单；生产转厂功能尚未开放");
+          }
+          return { statusCode: 200, response: toOrder(dispatched) };
+        }
+        if (!source.sourcing_approval_snapshot_id || source.contract_status !== "ready"
+          || source.sourcing_contract_document_id !== contractId) {
+          fail("请确认老板已批准、当前合同已生成，并刷新后重新确认派单");
+        }
+        const productionOrderId = randomUUID();
+        const eventId = await this.events.append(client, { ...actor, authorizationCapability: WRITE }, {
+          action: scope, entityType: "sourcing_production_order", entityId: productionOrderId,
+          after: { sourcingCaseId, contractDocumentId: contractId, status: "in_production" },
+          reason: "跟单确认供应商、数量、交期和合同后正式派单",
+        });
+        await client.query(`INSERT INTO sourcing_production_orders(
+          production_order_id,sourcing_case_id,sourcing_approval_snapshot_id,sourcing_decision_id,decision_version,
+          sourcing_contract_document_id,contract_number,contract_version,supplier_id,supplier_name_snapshot,
+          gender,style_name_snapshot,quantity,processes,delivery_date,first_style_no,dispatched_by,operation_event_id,dispatched_at)
+          SELECT $1,snapshot.sourcing_case_id,snapshot.sourcing_approval_snapshot_id,snapshot.sourcing_decision_id,snapshot.decision_version,
+            document.sourcing_contract_document_id,document.contract_number,document.contract_version,
+            snapshot.supplier_id,snapshot.supplier_name_snapshot,snapshot.gender,snapshot.style_name_snapshot,
+            snapshot.quantity,snapshot.processes,snapshot.delivery_date,
+            (SELECT style_no FROM sourcing_approval_snapshot_lines WHERE sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id ORDER BY position LIMIT 1),$2,$3,coalesce($6::timestamptz,CURRENT_TIMESTAMP)
+          FROM sourcing_approval_snapshots snapshot JOIN sourcing_contract_documents document USING(sourcing_approval_snapshot_id)
+          WHERE snapshot.sourcing_approval_snapshot_id=$4 AND document.sourcing_contract_document_id=$5`,
+        [productionOrderId, actor.actorId, eventId, source.sourcing_approval_snapshot_id, contractId,occurredAt??null]);
+        await client.query(`INSERT INTO sourcing_production_lines(production_order_id,position,style_no,alternate_style_no,color,quantity)
+          SELECT $1,position,style_no,alternate_style_no,color,quantity FROM sourcing_approval_snapshot_lines
+          WHERE sourcing_approval_snapshot_id=$2 ORDER BY position`, [productionOrderId, source.sourcing_approval_snapshot_id]);
+        await client.query(`INSERT INTO sourcing_production_transitions(
+          production_transition_id,production_order_id,sequence,status,business_date,actor_id,operation_event_id)
+          VALUES($1,$2,1,'in_production',(coalesce($5::timestamptz,CURRENT_TIMESTAMP) AT TIME ZONE 'Asia/Shanghai')::date,$3,$4)`,
+        [randomUUID(), productionOrderId, actor.actorId, eventId,occurredAt??null]);
+        const created = await client.query<ProductionRow>(`${selectProduction} WHERE production.production_order_id=$1`, [productionOrderId]);
+        return { statusCode: 201, response: toOrder(created.rows[0]!) };
+  }
+  async dispatchDigitalWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,factId:string){
+    const fact=(await client.query(`SELECT f.*,l.child_id AS sourcing_case_id FROM digital_factory_facts f JOIN digital_factory_routes r USING(preparation_id) JOIN digital_production_child_links l ON l.production_order_id=r.production_order_id AND l.module='sourcing' WHERE f.fact_id=$1 AND r.production_order_id=$2 AND f.kind='仓库实际发厂' AND f.actor_id=$3`,[factId,orderId,actor.actorId])).rows[0];
+    if(!fact||!actor.actorRoles.includes(ROOT)&&(!actor.actorRoles.includes('warehouse_receiver')||!await new DigitalProductionAccessPolicy(client).activeRole(actor.actorId,'warehouse_receiver')))fail('发厂须匹配仓库实际登记事实',403);
+    const source=await this.source(client,fact.sourcing_case_id,true);
+    if(!source.sourcing_contract_document_id)fail('当前批准合同尚未就绪');
+    const result=await this.dispatchWithClient(client,actor,fact.sourcing_case_id,source,source.sourcing_contract_document_id!,iso(fact.occurred_at)!);
+    const lines=(await client.query("SELECT child_line_key,line_id FROM digital_production_child_lines WHERE module='sourcing' AND child_id=$1 ORDER BY child_line_key",[fact.sourcing_case_id])).rows;
+    await linkNewDigitalChild(client,{module:'production',childId:result.response.productionOrderId,productionOrderId:orderId,lines:lines.map(l=>({childLineKey:l.child_line_key,lineId:l.line_id}))});
+    return result.response;
+  }
   async get(actor: TrustedActorContext, productionOrderId: string): Promise<SourcingProductionOrder> {
     if (!canReadOrders(actor)) fail("无权查看生产订单", 403);
     const result = await this.database.query<ProductionRow>(`${selectProduction}

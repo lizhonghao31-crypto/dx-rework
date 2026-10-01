@@ -41,7 +41,7 @@ export class BulkPreparationService {
   if(g.reasons.length)return null;
   return (await db.query("SELECT * FROM digital_bulk_preparations WHERE production_order_id=$1 AND instruction_version=$2 AND source_round=$3",[id,g.instruction.version,g.source!.round_number])).rows[0]??null;
  }
- private async routeTasks(db:DB,preparationId:string){return (await db.query("SELECT t.*,a.task_kind,a.assignee_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.route_instance_id=$1 ORDER BY t.created_at,t.task_id",[preparationId])).rows;}
+ private async routeTasks(db:DB,preparationId:string){return (await db.query("SELECT t.*,a.task_kind,a.assignee_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.route_instance_id=$1 AND a.task_kind IN ('bulk_pattern','warehouse_preshrink','bulk_cutting','bulk_cutting_external') ORDER BY t.created_at,t.task_id",[preparationId])).rows;}
  private async fact(db:PoolClient,actor:TrustedActorContext,preparationId:string,kind:string,taskId:string|null){await db.query("INSERT INTO digital_bulk_preparation_facts(fact_id,preparation_id,kind,task_id,actor_id) VALUES($1,$2,$3,$4,$5) ON CONFLICT(preparation_id,kind) DO NOTHING",[randomUUID(),preparationId,kind,taskId,actor.actorId]);}
  private async validAssignee(db:DB,id:string|null|undefined,role:string){return id&&await new DigitalProductionAccessPolicy(db).activeRole(id,role)?id:null;}
  private async nextOccurrence(db:DB,id:string,kind:string){return Number((await db.query("SELECT coalesce(max(t.occurrence),0)+1 AS n FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind=$2",[id,kind])).rows[0].n);}

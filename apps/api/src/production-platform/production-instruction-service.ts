@@ -31,7 +31,7 @@ export class ProductionInstructionService {
     const row = order.sourceId ? await developmentDocumentRow(db, order.sourceId) : null;
     if (!row || row.status !== "published") return { document, sourceRound: null };
     const source = row.document as DevelopmentDocument;
-    document.unit = source.unit; document.process = [source.craft === "无" ? "" : source.craft, source.washing === "免洗" ? "" : source.washing].filter(Boolean).join("／");
+    document.secondaryCraft=source.craft; document.unit = source.unit; document.process = [source.craft === "无" ? "" : source.craft, source.washing === "免洗" ? "" : source.washing].filter(Boolean).join("／");
     document.comments = source.instructions;
     document.measurements = source.measurements.map(item => ({ id: randomUUID(), name: item.name, tolerance: "", method: "", values: document.sizes.map(size => item.values[source.sizes.indexOf(size)] ?? "") }));
     document.images = source.files.filter(file => file.kind === "款图" || file.kind === "局部图").map(file => ({ attachmentId: file.attachmentId, kind: file.kind === "款图" ? "款图" : "其它工艺", description: "" }));

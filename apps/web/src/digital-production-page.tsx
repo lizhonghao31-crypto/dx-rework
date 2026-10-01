@@ -1,3 +1,4 @@
+import {FactoryFlowPanel} from "./factory-flow-panel.js";
 import { BulkPreparationPanel } from "./bulk-preparation-panel.js";
 import { ProductionInstructionPanel } from "./production-instruction-panel.js";
 import { DigitalBudgetPanel } from "./digital-budget-panel.js";
@@ -25,6 +26,7 @@ const newLine = (): DigitalOrderInput["lines"][number] => ({ poNumber: null, for
 const emptyOrder = (): DigitalOrderInput => ({ customerCode: "", productGroup: "男装", designStyleNo: "", temporaryStyleNo: null,
   orderDate: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()), contractDeliveryDate: null, lines: [newLine()] });
 export function DigitalProductionPage() {
+  const [factoryOrder,setFactoryOrder]=useState<string|null>(()=>new URLSearchParams(window.location.search).get("factory"));
   const [bulkOrder,setBulkOrder]=useState<string|null>(()=>new URLSearchParams(window.location.search).get("bulk"));
   const [instructionOrder, setInstructionOrder] = useState<string|null>(() => new URLSearchParams(window.location.search).get("instruction"));
   const [budgetOrder, setBudgetOrder] = useState<DigitalOrder | null>(null);
@@ -77,6 +79,7 @@ export function DigitalProductionPage() {
   };
   const updateLine = (index: number, patch: Partial<DigitalOrderInput["lines"][number]>) => setForm(current => ({ ...current, lines: current.lines.map((line, i) => i === index ? { ...line, ...patch } : line) }));
   const start = (next: "source" | "order", source?: DigitalSource) => { setSelected(null); setSourceId(source?.sourceId ?? null); setForm({ ...emptyOrder(), designStyleNo: source?.designStyleNo ?? "", temporaryStyleNo: source?.temporaryStyleNo ?? null, customerCode: source?.customerCode ?? "", primaryMerchandiserId: options?.customers.find(customer => customer.code === source?.customerCode)?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(options?.customers ?? [], source?.customerCode) }); setMode(next); setError(""); };
+  if(factoryOrder)return <div className="pattern-orders digital-production"><FactoryFlowPanel orderId={factoryOrder} onClose={()=>{setFactoryOrder(null);const url=new URL(window.location.href);url.searchParams.delete("factory");window.history.replaceState(null,"",url);}}/></div>;
   if(bulkOrder)return <div className="pattern-orders digital-production"><BulkPreparationPanel orderId={bulkOrder} onClose={()=>{setBulkOrder(null);const url=new URL(window.location.href);url.searchParams.delete("bulk");window.history.replaceState(null,"",url);}}/></div>;
   if (instructionOrder) return <div className="pattern-orders digital-production"><ProductionInstructionPanel orderId={instructionOrder} initialVersion={Number(new URLSearchParams(window.location.search).get("instructionVersion"))||undefined} onClose={()=>{setInstructionOrder(null);const url=new URL(window.location.href);url.searchParams.delete("instruction");url.searchParams.delete("instructionVersion");window.history.replaceState(null,"",url);}} /></div>;
   if (budgetOrder) return <div className="pattern-orders digital-production"><DigitalBudgetPanel key={budgetOrder.productionOrderId} order={budgetOrder} onClose={() => { setBudgetOrder(null); const url = new URL(window.location.href); url.searchParams.delete("budget"); window.history.replaceState(null, "", url); }} /></div>;
@@ -117,7 +120,7 @@ export function DigitalProductionPage() {
     {options && access && mode === "list" && <DigitalAccessPanel options={access} customers={options.customers} order={selected} onChanged={async () => { if (selected) setSelected(await digitalRequest<DigitalOrder>(`orders/${selected.productionOrderId}`)); await reload(); }} />}
     {mode === "list" && selected && <Surface><h2>{selected.designStyleNo}</h2><p>{selected.customerCode} · {selected.productGroup} · {selected.status === "waiting_development" ? "待提交开发单 · 未设时限" : "已关联开发来源"}</p>
       {access && (access.manage || access.roles.includes("sample_designer") || access.roles.includes("order_merchandiser")) && <Button onClick={() => setBudgetOrder(selected)}>成本预算表</Button>}
-      <Button onClick={()=>setBulkOrder(selected.productionOrderId)}>产前准备</Button>
+      <Button onClick={()=>setBulkOrder(selected.productionOrderId)}>产前准备</Button><Button onClick={()=>setFactoryOrder(selected.productionOrderId)}>裁后工艺与发厂</Button>
       <Button onClick={() => setInstructionOrder(selected.productionOrderId)}>大货制单</Button>
       {selected.sourceId && <Button onClick={() => setDevelopmentSource(selected.sourceId)}>查看开发单</Button>}<p>客户下单：{selected.orderDate} · 合同交付：{selected.contractDeliveryDate ?? "待补"}</p>
       {selected.lines.map(line => <form key={`${line.lineId}:${selected.version}`} onSubmit={event => { event.preventDefault(); const data = new FormData(event.currentTarget); void run(`orders/${selected.productionOrderId}/lines/${line.lineId}/numbers`, { expectedVersion: selected.version, poNumber: data.get("poNumber") || null, formalStyleNo: data.get("formalStyleNo") || null }, "PATCH"); }}><fieldset disabled={busy || !(access?.manage || (access?.roles.includes("sample_designer") && selected.createdBy === access.actorId) || (access?.roles.includes("order_merchandiser") && selected.primaryMerchandiserId === access.actorId))}><legend>{line.color}</legend><p>{line.sizes.map(size => `${size.size}：${size.quantity.toLocaleString()}`).join(" / ")}</p><label>PO 号<input name="poNumber" maxLength={100} defaultValue={line.poNumber ?? ""} /></label><label>正式款号<input name="formalStyleNo" maxLength={100} defaultValue={line.formalStyleNo ?? ""} /></label><Button type="submit">保存编号</Button></fieldset></form>)}
