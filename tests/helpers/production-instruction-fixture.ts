@@ -1,0 +1,72 @@
+import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
+import { DigitalProductionAccessService } from "../../apps/api/src/production-platform/access-service.js";
+import { randomUUID } from "node:crypto";
+import type { Pool } from "pg";
+import { expect, vi } from "vitest";
+import { initialInstruction, InstructionDocumentSchema } from "@dx-rework/contracts/production-instruction";
+import type { DigitalOrder } from "@dx-rework/contracts/digital-production";
+import { ProductionInstructionService } from "../../apps/api/src/production-platform/production-instruction-service.js";
+import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
+export async function exerciseInstructions(database:Pool,order:DigitalOrder,primary:TrustedActorContext,designer:TrustedActorContext,manager:TrustedActorContext,budgetImageId:string){
+ const service=new ProductionInstructionService(database,true),id=order.productionOrderId;
+ const imageId=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-instruction.png','image/png',10,$3,$4,'ready',CURRENT_TIMESTAMP)",[imageId,`TEST/p10/${imageId}`,"a".repeat(64),primary.actorId]);
+ const doc=InstructionDocumentSchema.parse({...initialInstruction(),styleName:"TEST连衣裙",category:"连衣裙",date:"2026-10-01",preshrink:"无需预缩",sizes:["M"],measurements:[{id:randomUUID(),name:"袖长",tolerance:"±1/4",method:"平量",values:["6 1/8"]}],images:[{attachmentId:imageId,kind:"款图",description:"TEST款图"}]});
+ await expect(service.save(designer,id,{expectedVersion:0,orderVersion:order.version,document:doc},randomUUID())).rejects.toMatchObject({statusCode:403});
+ await expect(service.save(primary,id,{expectedVersion:0,orderVersion:order.version,document:{...doc,images:[{attachmentId:budgetImageId,kind:"款图",description:"不能偷读预算图"}]}},randomUUID())).rejects.toMatchObject({statusCode:403});
+ const key=randomUUID();const saved=await service.save(primary,id,{expectedVersion:0,orderVersion:order.version,document:doc},key);
+ expect((await service.save(primary,id,{expectedVersion:0,orderVersion:order.version,document:doc},key)).version).toBe(1);
+ const pk=randomUUID();const published=await Promise.all([service.publish(primary,id,{expectedVersion:1,orderVersion:order.version},pk),service.publish(primary,id,{expectedVersion:1,orderVersion:order.version},pk)]);
+ expect(published.map(x=>x.publishedVersion)).toEqual([1,1]);expect(await service.canDownload(designer,id,imageId)).toBe(true);
+ expect(await service.canDownload(primary,id,budgetImageId)).toBe(false);
+ expect((await service.read(primary,id,undefined,1)).document.measurements[0]?.values[0]).toBe("6 1/8");
+ const draftImage=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-draft.png','image/png',10,$3,$4,'ready',CURRENT_TIMESTAMP)",[draftImage,`TEST/p10/${draftImage}`,"b".repeat(64),primary.actorId]);
+ await service.save(primary,id,{expectedVersion:saved.version,orderVersion:order.version,document:{...doc,remarks:"新版未发布",images:[...doc.images,{attachmentId:draftImage,kind:"其它工艺",description:"未发布新图"}]}},randomUUID());
+ expect((await service.read(designer,id))).toMatchObject({version:1,isPublishedSnapshot:true,document:{remarks:""}});
+ expect(await service.canDownload(designer,id,draftImage)).toBe(false);
+ expect(await service.canDownload(primary,id,draftImage)).toBe(true);
+ expect((await service.read(primary,id)).isPublishedSnapshot).toBe(false);
+ expect((await service.read(primary,id)).publishedVersion).toBe(1);
+ expect((await service.read(primary,id,undefined,1)).document.remarks).toBe("");
+ await expect(database.query("UPDATE digital_instruction_versions SET document='{}' WHERE production_order_id=$1",[id])).rejects.toThrow("immutable");
+ expect((await database.query("SELECT count(*)::int n FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind LIKE 'bulk_%'",[id])).rows[0].n).toBe(0);
+ const request=await service.requestDate(primary,id,{orderVersion:order.version,date:"2026-11-25",reason:"TEST 客户要求"},randomUUID());
+ expect(request.order.contractDeliveryDate).toBe("2026-11-20");const requestId=request.dateRequests[0]!.requestId;
+ await expect(service.decideDate(primary,id,requestId,true,randomUUID())).rejects.toMatchObject({statusCode:403});
+ await expect(service.decideDate({...primary,actorRoles:[...primary.actorRoles,"production_management"]},id,requestId,true,randomUUID())).rejects.toMatchObject({statusCode:403});
+ const commonAccess=new DigitalProductionAccessService(database);expect((await commonAccess.deliveryRequests(manager,id)).some(r=>r.requestId===requestId)).toBe(true);
+ await commonAccess.decideDelivery(manager,requestId,"approved");
+ const decided=await service.read(manager,id);expect(decided.currentDeliveryDate).toBe("2026-11-25");
+ await expect(service.publish(primary,id,{expectedVersion:2,orderVersion:order.version},randomUUID())).rejects.toMatchObject({statusCode:409});
+ expect((await service.read(primary,id,undefined,1)).order.contractDeliveryDate).toBe("2026-11-20");
+ const access=new DigitalProductionAccessService(database);
+ const legacy=await access.requestDelivery(primary,id,{expectedVersion:decided.currentOrderVersion,deliveryDate:"2026-11-28",reason:"TEST旧入口统一通知"});
+ await access.decideDelivery(manager,legacy.requestId,"approved");
+ expect((await service.read(primary,id)).order.contractDeliveryDate).toBe("2026-11-28");
+ expect((await database.query("SELECT count(*)::int n FROM digital_production_notification_events WHERE source_key LIKE $1",[`legacy-instruction-date%:${legacy.requestId}`])).rows[0].n).toBe(2);
+ await database.query("INSERT INTO digital_production_resource_lifecycle(resource_kind,resource_id,state,changed_by) VALUES('order',$1,'paused',$2) ON CONFLICT(resource_kind,resource_id) DO UPDATE SET state='paused'",[id,primary.actorId]);
+ await expect(access.requestDelivery(primary,id,{expectedVersion:decided.currentOrderVersion+1,deliveryDate:"2026-11-29",reason:"暂停不能改期"})).rejects.toMatchObject({statusCode:409});
+ await database.query("UPDATE digital_production_resource_lifecycle SET state='active' WHERE resource_kind='order' AND resource_id=$1",[id]);
+ const pending=await service.requestDate(primary,id,{orderVersion:decided.currentOrderVersion+1,date:"2026-11-30",reason:"TEST开裁前申请"},randomUUID());
+ const pendingId=pending.dateRequests.find(r=>r.date==="2026-11-30")!.requestId;
+ const cutFact=vi.spyOn(service,"cutStarted").mockResolvedValue(true);
+ try {
+  await expect(service.decideDate(manager,id,pendingId,true,randomUUID())).rejects.toMatchObject({statusCode:409});
+  const rejected=await service.decideDate(manager,id,pendingId,false,randomUUID());expect(rejected.dateRequests.find(r=>r.requestId===pendingId)?.status).toBe("已驳回");expect(rejected.currentDeliveryDate).toBe("2026-11-28");
+ } finally {cutFact.mockRestore();}
+ const other={...primary,actorId:randomUUID()};await expect(service.read(other,id)).rejects.toMatchObject({statusCode:404});
+ expect((await database.query("SELECT count(*)::int n FROM digital_instruction_versions WHERE production_order_id=$1",[id])).rows[0].n).toBe(1);
+ const identity=new DigitalProductionIdentityService(database,true),live=await identity.read(primary,id);
+ const corrected=await identity.correctNumbers(primary,id,live.lines[0]!.lineId,{expectedVersion:live.version,poNumber:'TEST-P10-PO',formalStyleNo:'TEST-P10-FORMAL'},randomUUID());
+ const effective=await service.read(designer,id);
+ expect(effective.order.lines[0]).toMatchObject({poNumber:'TEST-P10-PO',formalStyleNo:'TEST-P10-FORMAL'});
+ const historical=(await database.query('SELECT order_snapshot FROM digital_instruction_versions WHERE production_order_id=$1 AND version=1',[id])).rows[0].order_snapshot;
+ expect(historical.lines[0].formalStyleNo).toBe(order.lines[0]!.formalStyleNo);
+ expect(effective.document).toEqual(doc);expect(effective.order.lines.map(line=>line.sizes)).toEqual(order.lines.map(line=>line.sizes));
+ let draftVersion=(await service.read(primary,id)).version;
+ for(const row of [{...doc.measurements[0]!,name:''},{...doc.measurements[0]!,values:['']},{...doc.measurements[0]!,name:'',values:['']}]){
+   const draft=await service.save(primary,id,{expectedVersion:draftVersion,orderVersion:corrected.version,document:{...doc,measurements:[row]}},randomUUID());draftVersion=draft.version;
+   await expect(service.publish(primary,id,{expectedVersion:draftVersion,orderVersion:corrected.version},randomUUID())).rejects.toMatchObject({statusCode:409});
+ }
+ expect((await service.read(designer,id)).version).toBe(1);
+
+}

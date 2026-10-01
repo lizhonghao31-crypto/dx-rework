@@ -1,3 +1,4 @@
+import { exerciseInstructions } from "../helpers/production-instruction-fixture.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import "./work-analysis-postgres.cases.js";
 import { readQuoteAnalysis } from "../../apps/api/src/sourcing/sourcing-analysis.js";
@@ -3137,5 +3138,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     } finally { await corruption.query("ROLLBACK"); corruption.release(); }
   });
 
+
+  it("P10 keeps technical versions, units, date approval and budget boundaries independent", async () => {
+    const fixture=await budgetFixture();
+    await fixture.budget.save(fixture.designer,fixture.order.productionOrderId,{expectedVersion:0,document:fixture.document},randomUUID());
+    await exerciseInstructions(database,fixture.order,merchandiserActor(),fixture.designer,managerActor("TEST P10"),fixture.imageId);
+  });
 
 });

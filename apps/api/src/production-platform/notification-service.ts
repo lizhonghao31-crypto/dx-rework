@@ -148,10 +148,16 @@ export class DigitalProductionNotificationService {
     }
     return result;
   }
-  private async render(database:Database,actor:TrustedActorContext,event:{development_source_id?:string|null;event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date},people:TrustedActorContext[]):Promise<DigitalNotification|null> {
+  private async render(database:Database,actor:TrustedActorContext,event:{instruction_order_id?:string|null;development_source_id?:string|null;event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date},people:TrustedActorContext[]):Promise<DigitalNotification|null> {
     if(!people.some(p=>p.actorId===actor.actorId))return null;
     let title:string,actionable:boolean,route:TodoRouteDescriptor;
-    if(event.development_source_id){
+    if(event.instruction_order_id){
+      if(!await new DigitalProductionAccessPolicy(database).allowed(actor,"order",event.instruction_order_id,"technical"))return null;
+      const notice=(await database.query("SELECT title,version FROM digital_instruction_notices WHERE event_id=$1",[event.event_id])).rows[0];
+      if(!notice)return null;
+      title=notice.title;actionable=false;
+      route={routeName:"digital_production_instruction",entityId:event.instruction_order_id,todoId:event.event_id,...(notice.version?{developmentRound:notice.version}:{})};
+    }else if(event.development_source_id){
       if(!await new DigitalProductionAccessPolicy(database).allowed(actor,"source",event.development_source_id,"technical"))return null;
       const notice=(await database.query("SELECT title,COALESCE((to_jsonb(d)->>'round_number')::integer,1) AS round_number FROM digital_development_notices d WHERE event_id=$1",[event.event_id])).rows[0];
       if(!notice)return null;
