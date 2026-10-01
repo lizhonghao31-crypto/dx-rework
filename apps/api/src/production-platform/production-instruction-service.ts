@@ -41,10 +41,13 @@ export class ProductionInstructionService {
   }
   async read(actor: TrustedActorContext, id: string, db: Database = this.database, version?: number): Promise<InstructionSheet> {
     const { order, editable } = await this.order(db, actor, id);
-    const row = (await db.query(version ? "SELECT * FROM digital_instruction_versions WHERE production_order_id=$1 AND version=$2" : "SELECT * FROM digital_instruction_documents WHERE production_order_id=$1", version ? [id, version] : [id])).rows[0];
-    if (version && !row) digitalNotFound();
-    const seeded = row ? { document: row.document, sourceRound: row.source_round } : await this.seed(db, order);
     const cutStarted = await this.cutStarted(db, id);
+    const draftAccess=editable&&!cutStarted;
+    const published=(await db.query("SELECT published_version FROM digital_instruction_documents WHERE production_order_id=$1",[id])).rows[0]?.published_version??null;
+    const selectedVersion=version??(!draftAccess?published:null);
+    const row = !draftAccess&&!selectedVersion?undefined:(await db.query(selectedVersion ? "SELECT * FROM digital_instruction_versions WHERE production_order_id=$1 AND version=$2" : "SELECT * FROM digital_instruction_documents WHERE production_order_id=$1", selectedVersion ? [id, selectedVersion] : [id])).rows[0];
+    if (version && !row) digitalNotFound();
+    const seeded = row ? { document: row.document, sourceRound: row.source_round } : draftAccess?await this.seed(db, order):{document:initialInstruction(),sourceRound:null};
     const name = order.primaryMerchandiserId ? (await db.query("SELECT display_name FROM app_users WHERE id=$1", [order.primaryMerchandiserId])).rows[0]?.display_name ?? null : null;
     const dateRequests = (await db.query(`SELECT r.request_id AS "requestId",r.old_date::text AS "oldDate",r.new_date::text AS date,r.reason,
       CASE WHEN d.request_id IS NULL THEN '待批准' WHEN d.approved THEN '已批准' ELSE '已驳回' END AS status
@@ -52,13 +55,13 @@ export class ProductionInstructionService {
     dateRequests.push(...(await db.query(`SELECT r.request_id AS "requestId",true AS legacy,r.previous_date::text AS "oldDate",r.requested_date::text AS date,r.reason,
       CASE WHEN d.request_id IS NULL THEN '待批准' WHEN d.decision='approved' THEN '已批准' ELSE '已驳回' END AS status
       FROM digital_production_delivery_requests r LEFT JOIN digital_production_delivery_decisions d USING(request_id) WHERE r.production_order_id=$1 ORDER BY r.created_at DESC`,[id])).rows);
-    return { order: version ? row.order_snapshot : order, document: seeded.document, version: row?.version ?? 0,
-      publishedVersion: version ?? row?.published_version ?? null, sourceRound: seeded.sourceRound,
+    return { order: selectedVersion ? row.order_snapshot : order, currentOrderVersion:order.version,currentDeliveryDate:order.contractDeliveryDate, document: seeded.document, version: row?.version ?? 0,
+      publishedVersion: selectedVersion ?? published, isPublishedSnapshot:Boolean(selectedVersion), sourceRound: seeded.sourceRound,
       versions: (await db.query("SELECT version FROM digital_instruction_versions WHERE production_order_id=$1 ORDER BY version DESC", [id])).rows.map(r => r.version),
-      canEdit: editable && !cutStarted && !version && (Boolean(row) || this.creationEnabled), cutStarted, merchandiserName: name,
+      canEdit: draftAccess && !version && (Boolean(row) || this.creationEnabled), cutStarted, merchandiserName: name,
       canApproveDate: isRootActor(actor) || actor.actorRoles.includes("production_management"), printedBy: (await db.query("SELECT display_name FROM app_users WHERE id=$1",[actor.actorId])).rows[0]?.display_name ?? "", dateRequests };
   }
-  private async command<T>(actor: TrustedActorContext, id: string, action: string, key: string, input: unknown, work: (db: PoolClient, order: DigitalOrder) => Promise<T>, leader = false): Promise<T> {
+  private async command<T>(actor: TrustedActorContext, id: string, action: string, key: string, input: unknown, work: (db: PoolClient, order: DigitalOrder) => Promise<T>, leader = false, rejectingDate = false): Promise<T> {
     if (!/^[A-Za-z0-9._:-]{1,128}$/.test(key)) fail("缺少有效操作标识");
     const db = await this.database.connect();
     try {
@@ -71,8 +74,8 @@ export class ProductionInstructionService {
       if (prior && prior.payload_hash !== hash) fail("操作标识已用于不同内容");
       if (prior) { await db.query("COMMIT"); return prior.response; }
       const state = (await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1", [id])).rows[0]?.state;
-      if (state && state !== "active") fail("母单已暂停或取消");
-      if (await this.cutStarted(db, id)) fail("已经开裁，不能实质修改制单；编号请从母单补齐");
+      if (!rejectingDate && state && state !== "active") fail("母单已暂停或取消");
+      if (!rejectingDate && await this.cutStarted(db, id)) fail("已经开裁，不能实质修改制单；编号请从母单补齐");
       const result = await work(db, order);
       await db.query("INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)", [actor.actorId, command, key, hash, JSON.stringify(result)]);
       await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'digital_instruction',$5,$6)", [randomUUID(), actor.requestId, actor.actorId, action, id, JSON.stringify({ action, version: (result as InstructionSheet).version })]);
@@ -142,7 +145,7 @@ export class ProductionInstructionService {
       await db.query("INSERT INTO digital_instruction_date_decisions(request_id,approved,decided_by) VALUES($1,$2,$3)",[requestId,approved,actor.actorId]);
       if(approved)await db.query("UPDATE digital_production_orders SET contract_delivery_date=$2,version=version+1 WHERE production_order_id=$1",[id,row.date]);
       await this.notice(db,order,null,approved?"客户交付期变更已批准":"客户交付期变更已驳回",`instruction-date-decision:${requestId}`);return this.read(actor,id,db);
-    },true);
+    },true,!approved);
   }
   async legacyDateGuard(db: PoolClient, id: string) {
     if (!(await db.query("SELECT to_regclass('digital_instruction_documents') AS relation")).rows[0]?.relation) return false;
@@ -158,7 +161,10 @@ export class ProductionInstructionService {
   async authorizeUpload(actor:TrustedActorContext,id:string){const current=await this.read(actor,id);if(!current.canEdit)digitalForbidden();}
   async canDownload(actor:TrustedActorContext,id:string,attachmentId:string){
     const current=await this.read(actor,id);
-    if((await this.database.query("SELECT 1 FROM digital_instruction_attachment_bindings WHERE production_order_id=$1 AND attachment_id=$2",[id,attachmentId])).rowCount)return true;
-    return current.document.images.some(image=>image.attachmentId===attachmentId);
+    if(current.canEdit){
+      if((await this.database.query("SELECT 1 FROM digital_instruction_attachment_bindings WHERE production_order_id=$1 AND attachment_id=$2",[id,attachmentId])).rowCount)return true;
+      return current.document.images.some(image=>image.attachmentId===attachmentId);
+    }
+    return Boolean((await this.database.query("SELECT 1 FROM digital_instruction_versions v CROSS JOIN LATERAL jsonb_array_elements(v.document->'images') image WHERE v.production_order_id=$1 AND image->>'attachmentId'=$2 LIMIT 1",[id,attachmentId])).rowCount);
   }
 }

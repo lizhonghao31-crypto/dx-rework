@@ -118,12 +118,21 @@ export class DigitalProductionAccessService {
   }
   async deliveryRequests(actor: TrustedActorContext, id: string) {
     await new DigitalProductionAccessPolicy(this.database).assert(actor, "order", id, "technical");
-    return (await this.database.query(`SELECT r.request_id AS "requestId",r.requested_date::text AS "deliveryDate",r.reason,d.decision
+    const rows=(await this.database.query(`SELECT r.request_id AS "requestId",r.requested_date::text AS "deliveryDate",r.reason,d.decision
       FROM digital_production_delivery_requests r LEFT JOIN digital_production_delivery_decisions d USING(request_id)
       WHERE r.production_order_id=$1 ORDER BY r.created_at DESC`, [id])).rows;
+    if((await this.database.query("SELECT to_regclass('digital_instruction_date_requests') AS relation")).rows[0]?.relation){
+      rows.push(...(await this.database.query(`SELECT r.request_id AS "requestId",r.new_date::text AS "deliveryDate",r.reason,CASE WHEN d.request_id IS NULL THEN NULL WHEN d.approved THEN 'approved' ELSE 'rejected' END AS decision
+        FROM digital_instruction_date_requests r LEFT JOIN digital_instruction_date_decisions d USING(request_id) WHERE r.production_order_id=$1 ORDER BY r.requested_at DESC`,[id])).rows);
+    }
+    return rows;
   }
   async decideDelivery(actor: TrustedActorContext, requestId: string, decision: "approved" | "rejected") {
     if (!isRootActor(actor) && !actor.actorRoles.includes("production_management")) digitalForbidden();
+    if((await this.database.query("SELECT to_regclass('digital_instruction_date_requests') AS relation")).rows[0]?.relation){
+      const instruction=(await this.database.query("SELECT production_order_id FROM digital_instruction_date_requests WHERE request_id=$1",[requestId])).rows[0];
+      if(instruction){await new ProductionInstructionService(this.database,true).decideDate(actor,instruction.production_order_id,requestId,decision==='approved',`existing-date-decision:${requestId}:${decision}`);return {decision};}
+    }
     return this.transaction(async client => {
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       const request = (await client.query("SELECT * FROM digital_production_delivery_requests WHERE request_id=$1 FOR UPDATE", [requestId])).rows[0] ?? digitalNotFound();
