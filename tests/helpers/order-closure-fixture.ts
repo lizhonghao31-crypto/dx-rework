@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {expect} from 'vitest';
+import {expect,vi} from 'vitest';
 import type {Pool} from 'pg';
 import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
 import type {SourcingService} from '../../apps/api/src/sourcing/sourcing-service.js';
@@ -48,7 +48,29 @@ export async function exerciseOrderClosure(db:Pool,sourcing:SourcingService,id:s
  for(const actor of [primary,warehouse,qc])await expect(closure.close(actor,id,{reason:'TEST无权结案',expectedRevision:sheet.revision},randomUUID())).rejects.toMatchObject({statusCode:403});
  await expect(closure.close(manager,id,{reason:'TEST过期资料',expectedRevision:stale.revision},randomUUID())).rejects.toMatchObject({statusCode:409});
  const before=JSON.stringify(sheet.lines),key=randomUUID(),input={reason:'TEST客户取消余量，保留原QC问题继续处理',expectedRevision:sheet.revision};
- const concurrent=await Promise.all([closure.close(manager,id,input,key),closure.close(manager,id,input,key)]);sheet=concurrent[0]!;expect(concurrent[1]!.closed).toEqual(sheet.closed);expect(sheet.stage).toBe('特殊结案');expect(JSON.stringify(sheet.lines)).toBe(before);expect(sheet.closed!.outstanding.some(x=>x.includes('未完成'))).toBe(true);expect(sheet.shipmentStatus).toBe('未知');expect(sheet.customerReceiptStatus).toBe('未知');expect((await closure.close(manager,id,input,key)).closed).toEqual(sheet.closed);
+ let concurrent:Awaited<ReturnType<typeof closure.close>>[];
+ if(process.env.TEST_DATABASE_URL==='postgres://in-memory-only'){
+  // PGlite serializes connections; the multi-connection barrier runs in real PG Gate.
+  concurrent=await Promise.all([closure.close(manager,id,input,key),closure.close(manager,id,input,key)]);
+ }else{
+  let resume!:()=>void,ready!:()=>void,paused=false;
+  const held=new Promise<void>(resolve=>{resume=resolve;}),snapshotReady=new Promise<void>(resolve=>{ready=resolve;});
+  const originalRead=closure.read.bind(closure),readSpy=vi.spyOn(closure,'read').mockImplementation(async(...args)=>{const value=await originalRead(...args);if(args[2]&&!paused){paused=true;ready();await held;}return value;});
+  const closing=closure.close(manager,id,input,key),repeated=closure.close(manager,id,input,key);
+  let correction:ReturnType<typeof receiving.correctReceipt>|undefined,newRework:ReturnType<typeof rework.createDraft>|undefined;
+  try{
+   await Promise.race([snapshotReady,closing.then(()=>{throw new Error('closure did not expose its snapshot boundary');})]);
+   const board=(await receiving.board('2000-01-01','2999-12-31',order.lines[0]!.formalStyleNo!)).rows[0]!;
+   correction=receiving.correctReceipt({...root,authorizationCapability:'receiving:correct'},created[0]!.repeat.receiptId,{expectedVersion:board.version,source:'jiashun',documentQuantity:50,actualQuantity:11,defectiveQuantity:0});
+   newRework=rework.createDraft({...qc,authorizationCapability:'rework:initiate',authorizationCapabilities:['rework:initiate']},{receivingBatchId:created[1]!.first.receivingBatchId,problemPart:'TEST并发',problemDescription:'TEST结案后新增原返工',reworkQuantity:1},randomUUID());
+   // Observe both real writers blocked on the native table barrier, not a timer guess.
+   await vi.waitFor(async()=>{const locks=(await db.query("SELECT DISTINCT relation::regclass::text relation FROM pg_locks WHERE NOT granted AND mode='RowExclusiveLock' AND relation IN ('receiving_receipt_corrections'::regclass,'rework_orders'::regclass)")).rows;expect(locks).toHaveLength(2);},{timeout:5000,interval:10});
+   resume();concurrent=[await closing,await repeated];expect(concurrent[0]!.closed!.outstanding).toEqual(sheet.outstanding);
+   await Promise.all([correction,newRework]);
+   const fresh=await closure.read(primary,id);expect(fresh.lines[0]!.actualQuantity).toBe(51);expect(fresh.lines[1]!.reworks).toHaveLength(1);expect(fresh.closed).toEqual(concurrent[0]!.closed);
+  }finally{resume();readSpy.mockRestore();await Promise.allSettled([closing,repeated,...(correction?[correction]:[]),...(newRework?[newRework]:[])]);}
+ }
+ sheet=concurrent[0]!;expect(concurrent[1]!.closed).toEqual(sheet.closed);expect(sheet.stage).toBe('特殊结案');expect(JSON.stringify(sheet.lines)).toBe(before);expect(sheet.closed!.outstanding.some(x=>x.includes('未完成'))).toBe(true);expect(sheet.shipmentStatus).toBe('未知');expect(sheet.customerReceiptStatus).toBe('未知');expect((await closure.close(manager,id,input,key)).closed).toEqual(sheet.closed);
  expect((await db.query('SELECT status FROM rework_orders WHERE rework_order_id=$1',[draft.value.reworkOrderId])).rows[0].status).toBe('draft');
  const flow=new FactoryFlowService(db),factory=await flow.read(primary,id);await expect(flow.followup(primary,id,{expectedRevision:factory.revision,kind:'工厂到料',occurredAt:null,note:'TEST结案后不得继续生产待办',trackingNumber:''},randomUUID())).rejects.toMatchObject({statusCode:409});
  const board=(await receiving.board('2000-01-01','2999-12-31',order.lines[0]!.formalStyleNo!)).rows[0]!;

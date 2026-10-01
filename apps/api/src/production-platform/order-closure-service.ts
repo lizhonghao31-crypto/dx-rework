@@ -44,8 +44,12 @@ export class OrderClosureService{
   if(!input.reason.trim()||input.reason.length>2000)fail('特殊结案必须填写具体原因');if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail('缺少有效操作标识');
   const db=await this.database.connect();try{await db.query('BEGIN');await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");if(!await this.canClose(db,actor))digitalForbidden();await new DigitalProductionAccessPolicy(db).assert(actor,'order',id,'technical');
    const command=`closure:${id}`,payloadHash=hash(input),prior=(await db.query('SELECT * FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',[actor.actorId,command,key])).rows[0];if(prior){if(prior.payload_hash!==payloadHash)fail('操作标识已用于不同内容');await db.query('COMMIT');return prior.response as OrderClosureSheet;}
-   const cuts=(await db.query("SELECT child_id FROM digital_production_child_links WHERE module='cutting' AND production_order_id=$1 ORDER BY child_id",[id])).rows;
-   for(const c of cuts)await db.query('SELECT pg_advisory_xact_lock(hashtext($1))',[`cutting:${c.child_id}`]);
+   // A rare, short finalization barrier: native writers use several unrelated locks.
+   // SHARE blocks every insert/update/delete (including new reworks and wage links)
+   // until the immutable snapshot commits, without changing native writer permissions.
+   // Acquire before the mother-order lock; do not also take native style/cutting
+   // locks, which writers may already hold while waiting to insert their facts.
+   await db.query('LOCK TABLE receiving_batches, receiving_receipts, receiving_receipt_corrections, receiving_packing_revisions, receiving_difference_resolutions, rework_orders, rework_wage_items IN SHARE MODE');
    await db.query('SELECT production_order_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE',[id]);
    const sheet=await this.read(actor,id,db);if(!sheet.canClose)fail('尚未进入原生产、已经结案或已正常完成，无需特殊结案');if(sheet.revision!==input.expectedRevision)fail('实绩或未清事项已变化，请刷新核对后再结案');
    const audit=randomUUID();await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'digital.order.special_close','digital_production_order',$4,$5)",[audit,actor.requestId,actor.actorId,id,JSON.stringify({reason:input.reason,outstanding:sheet.outstanding,revision:sheet.revision})]);

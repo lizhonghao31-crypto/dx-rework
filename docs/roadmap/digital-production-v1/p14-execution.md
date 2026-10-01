@@ -34,3 +34,9 @@
 - 正常装箱完成且没有未清事项时，不提供特殊结案；服务端对总监及 Root 的直接提交均拒绝，避免把正常完成永久改为特殊结案。
 - 跨裁单合并的数量串线疑虑经核对已有 0199 `receiving_receipts_cutting_link_no_update` 触发器阻止；新增实际 Root `correctBatch` 跨裁单调用回归，验证数据库拒绝后双方收货、装箱及母单状态保持不变。没有取消既有身份保护，也没有新增 Root 权限限制。
 - 首轮 Full Gate 暴露收货分析 `.cases.ts` 被直接当测试入口，已映射到导入它的 `receiving-postgres.test.ts`，保留原回归覆盖。
+
+## 最终并发边界修复
+
+第二轮 Review 发现原回货纠数、返工创建与结案使用不同 advisory lock，单独锁裁单不足以保证未清快照一致。结案现在在读取最终实绩前，对参与 revision 的七张原事实表取得 SHARE 锁：receiving_batches、receiving_receipts、receiving_receipt_corrections、receiving_packing_revisions、receiving_difference_resolutions、rework_orders、rework_wage_items。锁只覆盖结案服务端短事务，阻止并发插入/修改/删除；先于母单行锁取得，且不再混用原款号/裁单锁，避免等待原写入时形成锁顺序反转。代价是结案瞬间这些表的其他写入也短暂等待；原业务权限与结案后的更正、返工继续保留。
+
+真实 PostgreSQL 回归在最终快照读取后暂停结案，启动 Root 纠数与另一 PO 的原返工创建，通过 pg_locks 验证两者实际等待；释放结案后两者成功，母单读到新事实、不可变结案快照保持提交时原值。本地单连接 PGlite 不执行该多连接场景，证据以最终 Full Gate 为准。第二轮发现由当前助手修复，不发起第三轮 Review。
