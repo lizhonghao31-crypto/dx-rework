@@ -1,3 +1,4 @@
+import { exerciseBulkPreparation } from "../helpers/bulk-preparation-fixture.js";
 import { exerciseInstructions } from "../helpers/production-instruction-fixture.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import "./work-analysis-postgres.cases.js";
@@ -3143,6 +3144,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const fixture=await budgetFixture();
     await fixture.budget.save(fixture.designer,fixture.order.productionOrderId,{expectedVersion:0,document:fixture.document},randomUUID());
     await exerciseInstructions(database,fixture.order,merchandiserActor(),fixture.designer,managerActor("TEST P10"),fixture.imageId);
+  });
+
+  it.each(['none','pattern-first','preshrink-first','concurrent'] as const)("P11 releases exactly one whole-order cutting task with %s preparation",async mode=>{
+    await exerciseBulkPreparation(database,await budgetFixture(),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()},factoryId,craftId("净色车缝"),mode);
   });
 
 });

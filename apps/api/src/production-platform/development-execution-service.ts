@@ -1,3 +1,4 @@
+import { BulkPreparationService } from "./bulk-preparation-service.js";
 import {DevelopmentRoundService} from "./development-round-service.js";
 import {DevelopmentRouteService,type DevelopmentRouteAction} from "./development-route-service.js";
 import type {PatternRoomOrderService} from "../pattern-room/order-service.js";
@@ -147,6 +148,7 @@ export class DevelopmentExecutionService {
       const sheet=await this.forms().read(actor,sourceId,db);if(!sheet.canEdit)digitalForbidden();
       if(!(await db.query("SELECT 1 FROM digital_development_route_facts WHERE source_id=$1 AND route_version=$2 AND kind='最终设计确认'",[sourceId,input.routeVersion])).rowCount)fail("请先完成该轮样板的最终设计确认");
       const factId=randomUUID();await db.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,$3,'客户样板确认',$4,$5) ON CONFLICT DO NOTHING",[factId,sourceId,input.routeVersion,JSON.stringify(input),actor.actorId]);
+      await new BulkPreparationService(this.database).syncSource(db,actor,sourceId);
       return {sourceId,routeVersion:input.routeVersion,customerSampleConfirmed:true};
     });
   }

@@ -104,6 +104,10 @@
       "types": "./src/digital-development-execution.ts",
       "import": "./dist/digital-development-execution.js"
     },
+    "./bulk-preparation": {
+      "types": "./dist/bulk-preparation.d.ts",
+      "default": "./dist/bulk-preparation.js"
+    },
     "./production-instruction": {
       "types": "./src/production-instruction.ts",
       "import": "./dist/production-instruction.js"

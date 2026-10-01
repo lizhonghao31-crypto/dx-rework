@@ -131,6 +131,7 @@ export const CuttingOrderDetailSchema = CuttingOrderListItemSchema.extend({
   photos: z.array(CuttingPhotoSchema),
   record: CuttingRecordSchema.nullable(),
   canRecord: z.boolean(),
+  productionGate: z.object({orderId:z.string().uuid(),ready:z.boolean(),reason:z.string()}).optional(),
   canCorrect: z.boolean(),
 }).strict();
 

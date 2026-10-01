@@ -1,3 +1,4 @@
+import { BulkPreparationService } from "./bulk-preparation-service.js";
 import {isDeepStrictEqual} from "node:util";
 import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
@@ -74,6 +75,7 @@ export class DevelopmentRoundService {
   await new DigitalProductionTaskService(this.database).supersedeSourceTasksWithClient(db,actor,sourceId,input.basedOnRound,returnTaskId);
   await new DevelopmentRouteService(this.database).startRound(db,actor,sourceId,route[0]!,routeId,roundNumber,returnTaskId);
   await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_round_published','digital_development',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify({roundNumber,origin:input.origin,affectedNodes,route,inherited})]);
+  await new BulkPreparationService(this.database).syncSource(db,actor,sourceId);
   return {sourceId,roundNumber};
  }
 }

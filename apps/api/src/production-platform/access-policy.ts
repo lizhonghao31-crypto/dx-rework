@@ -50,6 +50,15 @@ export class DigitalProductionAccessPolicy {
     const owns = actor.actorRoles.includes("sample_designer") && row.created_by === actor.actorId;
     const primary = kind === "order" && actor.actorRoles.includes("order_merchandiser") && row.primary_merchandiser_id === actor.actorId;
     if (owns || primary) return true;
+    if(kind==="order"&&purpose==="technical"){
+      if(actor.actorRoles.includes("development_clerk")&&await this.activeRole(actor.actorId,"development_clerk")&&row.source_id)return true;
+      const available=(await this.database.query("SELECT to_regclass('digital_bulk_preparations') AS relation")).rows[0]?.relation;
+      const tasks=available?(await this.database.query("SELECT a.task_id,a.assignee_id,a.required_role FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id) JOIN digital_bulk_preparations p ON p.preparation_id=t.route_instance_id WHERE a.production_order_id=$1 AND a.task_kind IN ('bulk_pattern','warehouse_preshrink','bulk_cutting')",[id])).rows:[];
+      for(const task of tasks){
+        if(task.assignee_id===actor.actorId&&await this.activeRole(actor.actorId,task.required_role))return true;
+        if(await this.delegated(actor,"task",task.task_id,"technical")||await this.delegated(actor,"task",task.task_id,"execute")&&await this.activeRole(actor.actorId,task.required_role))return true;
+      }
+    }
     if (purpose === "budget" && !actor.actorRoles.some(role => ["sample_designer", "order_merchandiser"].includes(role))) return false;
     return this.delegated(actor, kind, id, purpose);
   }

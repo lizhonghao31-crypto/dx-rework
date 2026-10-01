@@ -1,3 +1,5 @@
+import { registerBulkPreparationRoutes } from "./bulk-preparation-routes.js";
+import type { BulkPreparationService } from "./bulk-preparation-service.js";
 import { registerInstructionRoutes } from "./production-instruction-routes.js";
 import type { ProductionInstructionService } from "./production-instruction-service.js";
 import { registerBudgetRoutes } from "./budget-routes.js";
@@ -27,6 +29,7 @@ import { assertIdentityActor, type DigitalProductionIdentityService } from "./id
 export type DigitalIdentityDependencies = {
   budgetService?: DigitalBudgetService;
   instructionService?: ProductionInstructionService;
+  bulkPreparationService?: BulkPreparationService;
   authenticate(token: string | undefined): Promise<AuthUser>; root?: RootAuthority;
   developmentQrBase?: string;
   developmentRounds?:DevelopmentRoundService;
@@ -44,6 +47,7 @@ const parse = <T>(schema: z.ZodType<T>, value: unknown): T => {
   return result.data;
 };
 export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies: DigitalIdentityDependencies): void {
+  if(dependencies.bulkPreparationService)registerBulkPreparationRoutes(app,dependencies,dependencies.bulkPreparationService);
   if (dependencies.instructionService && dependencies.developmentAttachments) registerInstructionRoutes(app,dependencies,dependencies.instructionService,dependencies.developmentAttachments);
   if (dependencies.budgetService && dependencies.developmentAttachments) registerBudgetRoutes(app, dependencies, dependencies.budgetService, dependencies.developmentAttachments);
   if(dependencies.developmentRounds)registerDevelopmentRoundRoutes(app,dependencies,dependencies.developmentRounds);

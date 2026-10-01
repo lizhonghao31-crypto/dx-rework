@@ -46,6 +46,6 @@ export function instructionErrors(doc: InstructionDocument, order: DigitalOrder)
 export type InstructionSheet = {
   order: DigitalOrder; currentOrderVersion: number; currentDeliveryDate: string | null; document: InstructionDocument; version: number; publishedVersion: number | null;
   versions: number[]; isPublishedSnapshot: boolean; canEdit: boolean; cutStarted: boolean; merchandiserName: string | null;
-  sourceRound: number | null; canApproveDate: boolean; printedBy: string;
+  sourceRound: number | null; latestSourceRound: number | null; canApproveDate: boolean; printedBy: string;
   dateRequests: Array<{ requestId: string; legacy?: boolean; oldDate: string | null; date: string; reason: string; status: string }>;
 };
