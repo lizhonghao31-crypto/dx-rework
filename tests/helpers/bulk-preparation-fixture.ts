@@ -18,7 +18,7 @@ import { ProductionInstructionService } from "../../apps/api/src/production-plat
 import { BulkPreparationService } from "../../apps/api/src/production-platform/bulk-preparation-service.js";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { CuttingService } from "../../apps/api/src/cutting/cutting-source-service.js";
-export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrder;designer:TrustedActorContext;document:BudgetDocument;budget:DigitalBudgetService},service:SourcingService,attachments:AttachmentService,actors:{primary:TrustedActorContext;manager:TrustedActorContext;owner:TrustedActorContext;ie:TrustedActorContext;root:TrustedActorContext},factoryId:string,craftId:string,mode:'none'|'pattern-first'|'preshrink-first'|'concurrent'){
+export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrder;designer:TrustedActorContext;document:BudgetDocument;budget:DigitalBudgetService},service:SourcingService,attachments:AttachmentService,actors:{primary:TrustedActorContext;manager:TrustedActorContext;owner:TrustedActorContext;ie:TrustedActorContext;root:TrustedActorContext},factoryId:string,craftId:string,mode:'none'|'pattern-first'|'preshrink-first'|'concurrent',options?:{cuttingProcess:'in_house'|'outsourced';stopAtReady:boolean}){
  const primary=actors.primary,designer=fixture.designer,id=fixture.order.productionOrderId,bulk=new BulkPreparationService(db),identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),instruction=new ProductionInstructionService(db,true),execution=new DevelopmentExecutionService(db,true),tasks=new DigitalProductionTaskService(db),cutting=new CuttingService(db);
  const people:Record<string,TrustedActorContext>={};
  for(const role of ['development_clerk','pattern_room_worker','warehouse_receiver','cutting_worker']){
@@ -44,7 +44,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  const prepared=await fixture.budget.prepareSourcing(primary,id,1,attachments);
  const created=await service.createCase(primary,{gender:prepared.gender,styleName:prepared.styleName,deliveryDate:'2026-11-10',estimatedCutPieceSendDate:'2026-10-20',daxingUnitPrice:prepared.daxingUnitPrice,attachmentIds:prepared.images.map(i=>i.attachmentId),lineItems:prepared.lineItems.map(({styleNo,alternateStyleNo,color,quantity})=>({styleNo,alternateStyleNo,color,quantity})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}},randomUUID());
  const caseId=created.value.sourcingCaseId,prices=[{position:1,unitPrice:'5.50'},{position:2,unitPrice:'5.50'}];
- await service.quoteIePrice(actors.ie,caseId,{linePrices:prices},randomUUID());await service.recordManagementDecision(actors.manager,caseId,{supplierId:factoryId,craftIds:[craftId],linePrices:prices},randomUUID());
+ await service.quoteIePrice(actors.ie,caseId,{linePrices:prices},randomUUID());await service.recordManagementDecision(actors.manager,caseId,{supplierId:factoryId,craftIds:[craftId],linePrices:prices,cuttingProcess:options?.cuttingProcess??'in_house'},randomUUID());
  if(mode==='none'){await execution.customerSample(designer,source.sourceId,{routeVersion:1,note:'TEST客户确认'},randomUUID());expect((await bulk.read(primary,id)).tasks).toHaveLength(0);}
  await service.decideOwner(actors.owner,caseId,{decision:'approved'},randomUUID());
  if(mode!=='none'){expect((await bulk.read(primary,id)).tasks).toHaveLength(0);await execution.customerSample(designer,source.sourceId,{routeVersion:1,note:'TEST客户确认'},randomUUID());}
@@ -67,14 +67,14 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  await expect(bulk.complete(clerk,id,{preparationId:sheet.preparationId!,kind:'纸样完成'},randomUUID())).rejects.toMatchObject({statusCode:404});
  const done=async(kind:'纸样完成'|'唛架完成'|'预缩完成')=>bulk.complete(kind==='预缩完成'?warehouse:worker,id,{preparationId:sheet.preparationId!,kind},randomUUID());
  if(mode==='preshrink-first')await done('预缩完成');
- await done('纸样完成');expect((await bulk.read(primary,id)).tasks.some(t=>t.taskKind==='bulk_cutting')).toBe(false);
+ await done('纸样完成');expect((await bulk.read(primary,id)).tasks.some(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toBe(false);
  if(mode==='concurrent')await Promise.all([done('唛架完成'),done('预缩完成')]);else await done('唛架完成');
- if(mode==='pattern-first'){expect((await bulk.read(primary,id)).tasks.some(t=>t.taskKind==='bulk_cutting')).toBe(false);await expect(bulk.complete(worker,id,{preparationId:sheet.preparationId!,kind:'预缩完成'},randomUUID())).rejects.toMatchObject({statusCode:404});await done('预缩完成');}
- {
+ if(mode==='pattern-first'){expect((await bulk.read(primary,id)).tasks.some(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toBe(false);await expect(bulk.complete(worker,id,{preparationId:sheet.preparationId!,kind:'预缩完成'},randomUUID())).rejects.toMatchObject({statusCode:404});await done('预缩完成');}
+ if(!(options?.cuttingProcess==='outsourced')){
   const before=await bulk.read(primary,id);await expect(bulk.dispatch(actors.root,id,{expectedVersion:before.dispatch.version,patternWorkerId:worker.actorId,warehouseWorkerId:warehouse.actorId,cuttingWorkerId:null,deliverPattern:false},randomUUID())).rejects.toMatchObject({statusCode:409});expect((await bulk.read(primary,id)).dispatch).toEqual(before.dispatch);
  }
- const complete=await bulk.read(primary,id);expect(complete.tasks.filter(t=>t.taskKind==='bulk_cutting')).toHaveLength(1);expect(complete.tasks.find(t=>t.taskKind==='bulk_cutting')).toMatchObject({state:'ready',slaHours:24});
- await Promise.all([done('唛架完成'),done('唛架完成')]);expect((await bulk.read(primary,id)).tasks.filter(t=>t.taskKind==='bulk_cutting')).toHaveLength(1);
+ const complete=await bulk.read(primary,id);expect(complete.tasks.filter(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toHaveLength(1);expect(complete.tasks.find(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toMatchObject({state:'ready',slaHours:options?.cuttingProcess==='outsourced'?null:24});
+ await Promise.all([done('唛架完成'),done('唛架完成')]);expect((await bulk.read(primary,id)).tasks.filter(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toHaveLength(1);
  if(mode==='concurrent'){
   const nextFactory=(await db.query("SELECT supplier_id FROM supplier_catalog_items WHERE supplier_code='FAC-02'")).rows[0].supplier_id;
   await service.requestFactoryChange(actors.manager,caseId,{supplierId:nextFactory,unitPrice:'5.50',changeReason:'TEST已批准后的有效同价转厂'},randomUUID());
@@ -84,6 +84,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  expect((await cutting.get(actors.root,cuttingId)).canRecord).toBe(true);
  expect((await db.query('SELECT 1 FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1',[caseId])).rowCount).toBe(0);
  expect((await db.query('SELECT sum(quantity)::int n FROM digital_production_po_sizes WHERE line_id IN (SELECT line_id FROM digital_production_po_lines WHERE production_order_id=$1)',[id])).rows[0].n).toBe(200);
+ if(options?.stopAtReady)return {id,caseId,cuttingId,people,sourceId:source.sourceId,preparationId:sheet.preparationId!,cutting,bulk,instruction};
  if(mode==='concurrent'){
   const recorder={...actors.root,authorizationCapability:'cutting:records:create'};
   await expect(cutting.record(recorder,cuttingId,{pieceCount:1,actualCutCount:137,attachmentIds:[]},randomUUID())).rejects.toMatchObject({statusCode:400});
@@ -97,7 +98,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  await new DigitalProductionAccessService(db).delegate(actors.root,{resourceKind:'task',resourceId:complete.tasks.find(t=>t.taskKind==='bulk_pattern')!.taskId,delegateId:people.cutting_worker!.actorId,purpose:'technical',expiresAt:new Date(Date.now()+3600000).toISOString()});
 
  order=await identity.read(primary,id);await instruction.save(primary,id,{expectedVersion:1,orderVersion:order.version,document:{...doc,comments:'TEST新技术要求'}},randomUUID());await instruction.publish(primary,id,{expectedVersion:2,orderVersion:order.version},randomUUID());
- const revised=await bulk.read(primary,id);expect(revised.preparationId).not.toBe(sheet.preparationId);expect(revised.tasks.some(t=>t.taskKind==='bulk_cutting')).toBe(false);expect(revised.facts.some(f=>f.kind==='纸样完成')).toBe(false);
+ const revised=await bulk.read(primary,id);expect(revised.preparationId).not.toBe(sheet.preparationId);expect(revised.tasks.some(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toBe(false);expect(revised.facts.some(f=>f.kind==='纸样完成')).toBe(false);
  await expect(bulk.read(people.cutting_worker!,id)).rejects.toMatchObject({statusCode:404});await expect(instruction.read(people.cutting_worker!,id)).rejects.toMatchObject({statusCode:404});expect((await instruction.read(worker,id)).canEdit).toBe(false);
  await expect(done('纸样完成')).rejects.toMatchObject({statusCode:409});expect((await cutting.get(actors.root,cuttingId)).canRecord).toBe(false);
  if(mode==='none'){
@@ -113,7 +114,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
   expect((await bulk.read(primary,id)).tasks).toHaveLength(0);
   await db.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,2,'最终设计确认','{}',$3)",[randomUUID(),source.sourceId,designer.actorId]);
   await execution.customerSample(designer,source.sourceId,{routeVersion:2,note:'TEST客户确认第二轮'},randomUUID());
-  const latest=await bulk.read(primary,id);expect(latest).toMatchObject({customerConfirmed:true,instructionValid:true,sourceRound:2,instructionVersion:3});expect(latest.tasks.some(t=>t.taskKind==='bulk_cutting')).toBe(false);
+  const latest=await bulk.read(primary,id);expect(latest).toMatchObject({customerConfirmed:true,instructionValid:true,sourceRound:2,instructionVersion:3});expect(latest.tasks.some(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toBe(false);
  }
 
 }

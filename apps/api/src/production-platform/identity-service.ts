@@ -1,3 +1,4 @@
+import type { SourcingService } from "../sourcing/sourcing-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import type { DigitalCustomer, DigitalOrder, DigitalOrderInput, DigitalSource, DigitalSourceInput, DigitalNumberCorrection } from "@dx-rework/contracts/digital-production";
@@ -29,7 +30,7 @@ const readScope = (kind: "order" | "source", alias: string) => {
     OR EXISTS(SELECT 1 FROM digital_production_delegations d WHERE d.${id}=${alias}.${id} AND d.delegate_id=$2 AND d.purpose='technical' AND d.revoked_at IS NULL AND d.expires_at>CURRENT_TIMESTAMP))`;
 };
 export class DigitalProductionIdentityService {
-  constructor(private readonly database: Pool, private readonly creationEnabled: boolean) {}
+  constructor(private readonly database: Pool, private readonly creationEnabled: boolean, private readonly sourcing?:SourcingService) {}
   private async visibleOrder(client: Pick<Pool, "query"> | PoolClient, actor: TrustedActorContext, id: string, lock = false) {
     await new DigitalProductionAccessPolicy(client).assert(actor, "order", id, "technical");
     const result = await client.query(`SELECT o.* FROM digital_production_orders o WHERE production_order_id=$1 ${lock ? "FOR UPDATE" : ""}`, [id]);
@@ -46,6 +47,7 @@ export class DigitalProductionIdentityService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      if(command.startsWith("numbers:"))await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify([actor.actorId, command, key])]);
       const hash = digest(payload);
       const prior = await client.query("SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3", [actor.actorId, command, key]);
@@ -173,19 +175,21 @@ export class DigitalProductionIdentityService {
     return { items: await Promise.all(rows.rows.map(row => this.readWith(this.database, actor, row.production_order_id))), page };
   }
   async correctNumbers(actor: TrustedActorContext, id: string, lineId: string, input: DigitalNumberCorrection, key: string): Promise<DigitalOrder> {
-    return this.command(actor, `numbers:${id}:${lineId}`, key, input, async client => {
+    const result=await this.command(actor, `numbers:${id}:${lineId}`, key, input, async client => {
       const order = await this.visibleOrder(client, actor, id, true);
       if (!isDigitalLeader(actor) && !(actor.actorRoles.includes("sample_designer") && order.created_by === actor.actorId) && !(actor.actorRoles.includes("order_merchandiser") && order.primary_merchandiser_id === actor.actorId)) digitalForbidden();
       if (order.version !== input.expectedVersion) fail("订单已更新，请刷新后重试");
       const line = await client.query("SELECT po_number,formal_style_no FROM digital_production_po_lines WHERE production_order_id=$1 AND line_id=$2", [id, lineId]);
       if (!line.rows[0]) fail("款色明细不存在", 404);
-      // Downstream documents are introduced in P09 onward. Never silently leave an already linked document stale.
-      const links = await client.query("SELECT 1 FROM digital_production_child_links WHERE production_order_id=$1 LIMIT 1", [id]);
-      if (links.rowCount) fail("关联单据的编号同步尚未接入，不能仅修改母单号码");
+      const links=await client.query("SELECT 1 FROM digital_production_child_links WHERE production_order_id=$1 LIMIT 1",[id]);
+      if(links.rowCount&&!this.sourcing)fail('关联单据编号同步服务尚未就绪');
       await client.query("UPDATE digital_production_po_lines SET po_number=$3,formal_style_no=$4 WHERE production_order_id=$1 AND line_id=$2", [id, lineId, input.poNumber, input.formalStyleNo]);
       await client.query("UPDATE digital_production_orders SET version=version+1 WHERE production_order_id=$1", [id]);
+      if(links.rowCount)await this.sourcing!.reviseDigitalNumbersWithClient(client,actor,id);
       await this.audit(client, actor, "digital_numbers_corrected", id, line.rows[0], { lineId, ...input });
       return this.readWith(client, actor, id);
     });
+    await this.sourcing?.generateDigitalNumberContracts(actor,id);
+    return result;
   }
 }
