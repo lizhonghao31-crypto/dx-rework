@@ -21,4 +21,13 @@ describe("personnel-only Acceptance CLI guards", () => {
     expect(() => workerPeopleConfiguration({ ...env, ACCEPTANCE_DATABASE_URL: "", DATABASE_URL: env.ACCEPTANCE_DATABASE_URL }, [])).toThrow("fallback is forbidden");
     expect(() => workerPeopleConfiguration({ ...env, DINGTALK_CORP_ID: "" }, [])).toThrow("DINGTALK_CORP_ID");
   });
+  it("keeps the check connection read-only even when URL options already exist", () => {
+    const configured = { ...env, ACCEPTANCE_DATABASE_URL: `${env.ACCEPTANCE_DATABASE_URL}?options=-c%20search_path%3Dpublic%20-c%20default_transaction_read_only%3Doff` };
+    const checked = workerPeopleConfiguration(configured, []);
+    expect(new URL(checked.connectionString).searchParams.get("options"))
+      .toBe("-c search_path=public -c default_transaction_read_only=off -c default_transaction_read_only=on");
+    const applied = workerPeopleConfiguration(configured, ["--apply"]);
+    expect(new URL(applied.connectionString).searchParams.get("options"))
+      .toBe("-c search_path=public -c default_transaction_read_only=off");
+  });
 });

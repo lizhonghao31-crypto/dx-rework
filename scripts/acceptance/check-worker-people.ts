@@ -5,7 +5,6 @@ import { assertAcceptanceDatabaseName } from "./database-guard.js";
 const config = workerPeopleConfiguration(process.env, process.argv.slice(2));
 const database = new pg.Pool({ connectionString: config.connectionString, max: 2,
   application_name: "dx-acceptance-worker-people-check",
-  ...(config.apply ? {} : { options: "-c default_transaction_read_only=on" }),
 });
 try {
   const connected = await database.query<{ name: string }>("SELECT current_database() AS name");

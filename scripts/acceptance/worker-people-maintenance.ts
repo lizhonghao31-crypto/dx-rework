@@ -25,7 +25,14 @@ export function workerPeopleConfiguration(env: NodeJS.ProcessEnv, args: string[]
   assertAcceptanceDatabaseUrl(connectionString);
   const corpId = env.DINGTALK_CORP_ID?.trim();
   if (!corpId) throw new Error("DINGTALK_CORP_ID is required");
-  return { connectionString, corpId, apply: modes[0] === "--apply", alias, expectedUserId };
+  const apply = modes[0] === "--apply";
+  const connection = new URL(connectionString);
+  if (!apply) {
+    // pg gives URL options precedence over Pool options. Preserve caller options,
+    // then force read-only last so a configured search_path cannot drop the guard.
+    connection.searchParams.set("options", `${connection.searchParams.get("options") ?? ""} -c default_transaction_read_only=on`.trim());
+  }
+  return { connectionString: connection.toString(), corpId, apply, alias, expectedUserId };
 }
 
 const workers = [
