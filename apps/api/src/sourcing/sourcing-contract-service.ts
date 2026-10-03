@@ -1,3 +1,4 @@
+import { SourcingContractContentService, loadContractContent, hydrateContractContentImages, canEditContractContent } from "./sourcing-contract-content.js";
 import { memberCanWriteModule } from "../access/member-module-policy.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -9,6 +10,7 @@ import type {
   SupplementSourcingContract,
 } from "@dx-rework/contracts";
 import { ApplicationError } from "../platform/errors.js";
+import { SourcingContractManagementService, canRefreshContractInformation } from "./sourcing-contract-management-service.js";
 import type { AttachmentService } from "../tools/attachments.js";
 import {
   IdempotencyService,
@@ -19,7 +21,6 @@ import {
   renderSourcingContractPdf,
   normalizeSourcingContractImage,
   sourcingContractFingerprint,
-  type ContractPdfSnapshot,
 } from "./sourcing-contract-pdf.js";
 
 const ROOT_ROLE = "root_superuser";
@@ -53,29 +54,26 @@ type ContractRow = Readonly<{
   party_a_address?: string;
   signing_place?: string;
   terms?: Record<string, string>;
+  returned?: boolean;
+  reconciled?: boolean;
+  display_contract_number?: string;
 }>;
 
 const iso = (value: Date | string): string => value instanceof Date
   ? value.toISOString() : new Date(value).toISOString();
 
-const shanghaiDate = (value: string): string => {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",year: "numeric",month: "2-digit",day: "2-digit",
-  }).formatToParts(new Date(value));
-  const pick = (name: string): string => parts.find((part) => part.type === name)?.value ?? "";
-  return `${pick("year")}-${pick("month")}-${pick("day")}`;
-};
-
 const requestHash = (scope: string, payload: unknown): string =>
   createHash("sha256").update(JSON.stringify({ scope,payload })).digest("hex");
 
 export class SourcingContractService {
+  readonly management: SourcingContractManagementService;
+  readonly content: SourcingContractContentService;
   constructor(
     private readonly database: Pool,
     private readonly attachments: AttachmentService,
     private readonly idempotency = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
-  ) {}
+  ) { this.management = new SourcingContractManagementService(database); this.content = new SourcingContractContentService(database,attachments); }
 
   async validateLineImages(client: Pick<PoolClient, "query">, actor: TrustedActorContext, attachmentIds: readonly string[]): Promise<void> {
     for (const attachmentId of new Set(attachmentIds)) {
@@ -159,8 +157,14 @@ export class SourcingContractService {
         WHERE NOT sourcing_contract_return_monitors.contract_return_monitor_enabled`,[approvalSnapshotId]);
     const metadata = (await client.query<{identity_version:number;template_version:number}>(`SELECT
       (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=snapshot.sourcing_case_id) AS identity_version,
-      (SELECT max(template_version) FROM sourcing_contract_template_versions WHERE effective_from<=CURRENT_TIMESTAMP) AS template_version
-      FROM sourcing_approval_snapshots snapshot WHERE sourcing_approval_snapshot_id=$1`,[approvalSnapshotId])).rows[0];
+      CASE WHEN previous.identity_version<(SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=snapshot.sourcing_case_id)
+        AND EXISTS(SELECT 1 FROM sourcing_contract_content_overrides WHERE sourcing_contract_document_id=previous.sourcing_contract_document_id)
+        THEN previous.template_version
+        ELSE (SELECT max(template_version) FROM sourcing_contract_template_versions WHERE effective_from<=CURRENT_TIMESTAMP) END AS template_version
+      FROM sourcing_approval_snapshots snapshot
+      LEFT JOIN LATERAL (SELECT sourcing_contract_document_id,identity_version,template_version FROM sourcing_contract_documents
+        WHERE sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id ORDER BY contract_version DESC LIMIT 1) previous ON true
+      WHERE snapshot.sourcing_approval_snapshot_id=$1`,[approvalSnapshotId])).rows[0];
     if (!metadata) throw new ApplicationError("INVALID_STATE_TRANSITION","合同批准快照不存在",409);
     const documentId = randomUUID();
     const inserted = await client.query<{ sourcing_contract_document_id: string }>(
@@ -215,7 +219,7 @@ export class SourcingContractService {
          WHERE sourcing_contract_document_id=previous.sourcing_contract_document_id)
          || '{}'::jsonb AS direct_values) direct ON true
        LEFT JOIN LATERAL (SELECT COALESCE(jsonb_object_agg(key,value),'{}'::jsonb) || COALESCE(direct.direct_values,'{}'::jsonb) AS values
-         FROM jsonb_each(previous.approval_snapshot) WHERE key=ANY(ARRAY['address','contractEntityName','partyBRepresentative','payeeName','bankAccount','bankName'])) supplements ON true
+         FROM jsonb_each(previous.approval_snapshot) WHERE key=ANY(ARRAY['supplierName','supplierCode','address','contractEntityName','partyBRepresentative','payeeName','bankAccount','bankName'])) supplements ON true
        CROSS JOIN LATERAL (
          SELECT template_version
          FROM sourcing_contract_template_versions
@@ -231,13 +235,21 @@ export class SourcingContractService {
          ],NULL)::text[] AS fields
        ) missing
        WHERE snapshot.sourcing_approval_snapshot_id=$3
-       ON CONFLICT(sourcing_approval_snapshot_id,identity_version,template_version) DO NOTHING
+       ON CONFLICT(sourcing_approval_snapshot_id,identity_version,template_version,information_revision) DO NOTHING
        RETURNING sourcing_contract_document_id`,
       [documentId,actor.actorId,approvalSnapshotId,metadata.identity_version,metadata.template_version],
     );
+    if (inserted.rows[0]) await client.query(`INSERT INTO sourcing_contract_content_overrides(sourcing_contract_document_id,content,operation_event_id)
+      SELECT d.sourcing_contract_document_id,sourcing_contract_content_for_style_revision(d.sourcing_contract_document_id),r.operation_event_id
+      FROM sourcing_contract_documents d JOIN sourcing_contract_documents previous ON previous.sourcing_contract_document_id=d.revision_of
+      JOIN sourcing_contract_content_overrides old_content ON old_content.sourcing_contract_document_id=d.revision_of
+      JOIN sourcing_style_revisions r ON r.sourcing_case_id=d.sourcing_case_id AND r.revision=d.identity_version AND r.changed_by=d.prepared_by
+      WHERE d.sourcing_contract_document_id=$1 AND d.identity_version>previous.identity_version
+        AND d.sourcing_approval_snapshot_id=previous.sourcing_approval_snapshot_id AND d.sourcing_decision_id=previous.sourcing_decision_id`,[documentId]);
     const existing = inserted.rows[0] ? null : await client.query<{ sourcing_contract_document_id: string }>(
       `SELECT sourcing_contract_document_id FROM sourcing_contract_documents
-       WHERE sourcing_approval_snapshot_id=$1 AND identity_version=$2 AND template_version=$3`,
+       WHERE sourcing_approval_snapshot_id=$1 AND identity_version=$2 AND template_version=$3
+       ORDER BY contract_version DESC LIMIT 1`,
       [approvalSnapshotId,metadata.identity_version,metadata.template_version],
     );
     const id = inserted.rows[0]?.sourcing_contract_document_id
@@ -252,7 +264,10 @@ export class SourcingContractService {
   ): Promise<SourcingContractStateResponse> {
     this.assertReader(actor);
     const result = await this.database.query<ContractRow>(
-      `SELECT document.*,source_case.created_by
+      `SELECT document.*,source_case.created_by,
+              EXISTS(SELECT 1 FROM sourcing_contract_return_submissions WHERE sourcing_case_id=document.sourcing_case_id) AS returned,
+              EXISTS(SELECT 1 FROM sourcing_finance_reconciliations WHERE sourcing_case_id=document.sourcing_case_id) AS reconciled,
+              (SELECT content->>'contractNumber' FROM sourcing_contract_content_overrides WHERE sourcing_contract_document_id=document.sourcing_contract_document_id) AS display_contract_number
        FROM sourcing_contract_documents document
        JOIN sourcing_cases source_case ON source_case.sourcing_case_id=document.sourcing_case_id
        WHERE document.sourcing_case_id=$1 AND source_case.deleted_at IS NULL
@@ -368,64 +383,9 @@ export class SourcingContractService {
     const row = claimed.rows[0];
     if (!row) return this.getCurrent(actor, sourcingCaseId);
     try {
-      const hydrated = await this.database.query<ContractRow>(
-        `SELECT document.*,source_case.created_by,template.party_a_name,template.party_a_address,
-                template.signing_place,template.terms
-         FROM sourcing_contract_documents document
-         JOIN sourcing_cases source_case ON source_case.sourcing_case_id=document.sourcing_case_id
-         JOIN sourcing_contract_template_versions template
-           ON template.template_version=document.template_version
-         WHERE document.sourcing_contract_document_id=$1`,
-        [row.sourcing_contract_document_id],
-      );
-      const source = hydrated.rows[0]!;
-      const supplementRows = await this.database.query<{ field_name: SourcingContractMissingField; field_value: string }>(
-        `SELECT field_name,field_value FROM sourcing_contract_supplements
-         WHERE sourcing_contract_document_id=$1 ORDER BY supplemented_at,field_name`,
-        [row.sourcing_contract_document_id],
-      );
-      const supplements = Object.fromEntries(supplementRows.rows.map((entry) => [entry.field_name,entry.field_value]));
-      const approval = source.approval_snapshot;
-      const value = (name: SourcingContractMissingField): string =>
-        supplements[name] ?? String(approval[name] ?? "");
-      const lines = Array.isArray(approval.lines) ? approval.lines as Array<Record<string, unknown>> : [];
-      const approvedAt = String(approval.approvedAt ?? source.prepared_at);
-      const images = new Map<string,{bytes:Buffer;sha256:string}>();
-      for (const line of lines) {
-        if (typeof line.imageAttachmentId !== "string" || images.has(line.imageAttachmentId)) continue;
-        const original = await this.attachments.readSourcingContractImage(source.sourcing_case_id,line.imageAttachmentId);
-        if (line.imageSha256 && line.imageSha256 !== original.sha256) throw new Error("合同款图与冻结快照不一致");
-        images.set(line.imageAttachmentId,{bytes:await normalizeSourcingContractImage(original.bytes),sha256:original.sha256});
-      }
-      const snapshot: ContractPdfSnapshot = {
-        contractNumber: source.contract_number,
-        contractDate: shanghaiDate(approvedAt),
-        partyAName: source.party_a_name!,
-        partyAAddress: source.party_a_address ?? "历史未维护",
-        templateVersion: Number(source.template_version),
-        gender: typeof approval.gender === "string" ? approval.gender : "历史未维护",
-        styleName: typeof approval.styleName === "string" ? approval.styleName : "历史未维护",
-        partyBName: value("contractEntityName") || String(approval.supplierName ?? ""),
-        partyBAddress: value("address"),
-        partyBRepresentative: value("partyBRepresentative"),
-        payeeName: value("payeeName"),
-        bankAccount: value("bankAccount"),
-        bankName: value("bankName"),
-        signingPlace: source.signing_place!,
-        estimatedCutPieceSendDate: String(approval.estimatedCutPieceSendDate ?? "未维护"),
-        deliveryDate: String(approval.deliveryDate ?? "未维护"),
-        processes: Array.isArray(approval.processes) ? approval.processes.map(String) : [],
-        lines: lines.map((line) => ({
-          position: Number(line.position),styleNo: String(line.styleNo ?? ""),
-          ...(typeof line.imageAttachmentId === "string" ? {imageAttachmentId:line.imageAttachmentId,imageSha256:images.get(line.imageAttachmentId)!.sha256,imageBytes:images.get(line.imageAttachmentId)!.bytes} : {}),
-          alternateStyleNo: line.alternateStyleNo ? String(line.alternateStyleNo) : null,
-          color: line.color ? String(line.color) : null,quantity: Number(line.quantity),
-          unitPrice: String(line.unitPrice),totalAmount: String(line.totalAmount),
-        })),
-        totalQuantity: Number(approval.quantity),
-        totalAmount: String(approval.totalAmount),
-        terms: source.terms!,
-      };
+      const source = row;
+      const snapshot = await hydrateContractContentImages(this.attachments,source.sourcing_case_id,
+        await loadContractContent(this.database,source.sourcing_contract_document_id));
       const fingerprint = sourcingContractFingerprint(snapshot);
       const pdf = await renderSourcingContractPdf(snapshot);
       const attachment = await this.attachments.storeGenerated(actor, {
@@ -471,7 +431,7 @@ export class SourcingContractService {
     return {
       sourcingContractDocumentId: row.sourcing_contract_document_id,
       sourcingApprovalSnapshotId: row.sourcing_approval_snapshot_id,
-      contractNumber: row.contract_number,
+      contractNumber: row.display_contract_number ?? row.contract_number,
       contractVersion: Number(row.contract_version),
       templateVersion: Number(row.template_version),
       status: row.status,
@@ -484,6 +444,9 @@ export class SourcingContractService {
       generatedAt: row.generated_at ? iso(row.generated_at) : null,
       canSupplement: await memberCanWriteModule(this.database, actor.actorId, "sourcing") && (actor.actorRoles.includes(ROOT_ROLE)
         || (actor.actorRoles.includes(MERCHANDISER_ROLE) && actor.actorId === row.created_by)),
+      canEditContent: row.status === "ready" && canEditContractContent(actor,row.reconciled !== false),
+      canRefreshInformation: row.status !== "generating" && canRefreshContractInformation(actor,row.created_by,row.returned === true)
+        && (actor.actorRoles.includes(ROOT_ROLE) || await memberCanWriteModule(this.database,actor.actorId,"sourcing")),
     };
   }
 }

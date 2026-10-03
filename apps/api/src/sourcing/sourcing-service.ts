@@ -508,7 +508,7 @@ export class SourcingService {
          to_char(source_case.estimated_cut_piece_send_date,'YYYY-MM-DD')
            AS estimated_cut_piece_send_date,
          lines_row.line_items,
-         to_char(source_case.delivery_date,'YYYY-MM-DD') AS delivery_date,
+         to_char(sourcing_effective_delivery_date(case_view.sourcing_case_id,source_case.delivery_date${history ? ', $2::timestamptz' : ''}),'YYYY-MM-DD') AS delivery_date,
          case_view.process_description,case_view.process_items,
          COALESCE(decision_row.crafts,crafts_row.crafts) AS crafts,
          case_view.status,case_view.version,case_view.created_by,
@@ -737,7 +737,7 @@ export class SourcingService {
          to_char(source_case.estimated_cut_piece_send_date,'YYYY-MM-DD')
            AS estimated_cut_piece_send_date,
          lines_row.line_items,
-         to_char(case_view.delivery_date,'YYYY-MM-DD') AS delivery_date,
+         to_char(sourcing_effective_delivery_date(case_view.sourcing_case_id,case_view.delivery_date),'YYYY-MM-DD') AS delivery_date,
          case_view.process_description,case_view.process_items,
          COALESCE(decision_row.crafts,crafts_row.crafts) AS crafts,
          case_view.status,case_view.version,case_view.created_by,
@@ -1246,7 +1246,7 @@ export class SourcingService {
     const ids = evidence.rows[0]?.ids;
     const attachments = await this.listAttachments(actor, sourcingCaseId, true);
     const contract = node === "finance" ? await this.database.query<{ reference: string }>(
-      `SELECT document.contract_number AS reference FROM sourcing_finance_reconciliations reconciliation
+      `SELECT sourcing_contract_display_number(document.sourcing_contract_document_id,document.contract_number) AS reference FROM sourcing_finance_reconciliations reconciliation
        JOIN sourcing_contract_documents document ON document.sourcing_contract_document_id=reconciliation.sourcing_contract_document_id
        WHERE reconciliation.sourcing_reconciliation_id=$1 AND reconciliation.sourcing_case_id=$2`,
       [entry.entryId, sourcingCaseId]) : null;
@@ -1346,7 +1346,7 @@ export class SourcingService {
                   WHEN 'pending_supplement' THEN '合同待补充资料'
                   ELSE '合同PDF待生成' END,
                 NULL::numeric,NULL::numeric,NULL::text,NULL::text,
-                contract.contract_number,
+                sourcing_contract_display_number(contract.sourcing_contract_document_id,contract.contract_number),
                 (contract.prepared_at AT TIME ZONE 'Asia/Shanghai')::date,
                 NULL::integer,'{}'::text[],NULL::text,NULL::text
          FROM sourcing_contract_documents contract WHERE contract.sourcing_case_id=$1
@@ -1443,7 +1443,7 @@ export class SourcingService {
         || (actor.authorizationCapabilities ?? []).includes(READ_CAPABILITY);
     }
     if (binding.entityType === "sourcing_contract_document"
-      && binding.mimeType === "application/pdf") {
+      && ["application/pdf","image/jpeg","image/png","image/webp"].includes(binding.mimeType)) {
       return actor.actorRoles.includes(ROOT_ROLE)
         || (
           (actor.authorizationCapabilities ?? []).includes(READ_CAPABILITY)

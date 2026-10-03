@@ -1,3 +1,5 @@
+import {assertAppliedMigrationHistory,assertMigrationSequence} from './migration-history-policy.mjs';
+export {assertAppliedMigrationHistory} from './migration-history-policy.mjs';
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -69,26 +71,8 @@ export async function discoverValidatedMigrations() {
       .map((drift) => `${drift.version}: expectedVersion=${drift.expectedVersion} expectedChecksum=${drift.expectedChecksum} actualChecksum=${drift.actualChecksum}`)
       .join("\n")}`);
   }
+  assertMigrationSequence(migrations);
   return migrations;
-}
-
-export function assertAppliedMigrationHistory(applied, expected) {
-  if (applied.length > expected.length) {
-    const removed = applied[expected.length];
-    throw new Error(`Applied migration is absent from Head manifest: ${removed?.version ?? "unknown"}`);
-  }
-
-  for (const [index, actual] of applied.entries()) {
-    const target = expected[index];
-    if (!target || actual.version !== target.version) {
-      throw new Error(
-        `Applied migration history diverged at position ${index + 1}: actual=${actual.version}, expected=${target?.version ?? "missing"}`,
-      );
-    }
-    if (actual.checksum !== target.checksum) {
-      throw new Error(`Migration checksum drift detected: ${actual.version}`);
-    }
-  }
 }
 
 export async function applyMigrations(databaseUrl) {
