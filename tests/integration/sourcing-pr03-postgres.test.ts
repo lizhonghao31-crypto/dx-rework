@@ -1,3 +1,4 @@
+import { OrderClosureService } from "../../apps/api/src/production-platform/order-closure-service.js";
 import {ProductionClosureService} from "../../apps/api/src/sourcing/production-closure-service.js";
 import {DigitalProductionAccessService} from "../../apps/api/src/production-platform/access-service.js";
 import {exerciseOrderClosure} from "../helpers/order-closure-fixture.js";
@@ -3184,6 +3185,25 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const final=await bulk.read(primary,id);expect(final.cutting.lines[0]).toMatchObject({orderQuantity:137,actualCutCount:103,pieceCount:4,corrected:true});
     expect(final.tasks.find(t=>t.taskId===before.taskId)).toMatchObject({state:'completed',enteredAt:before.enteredAt,dueAt:before.dueAt});
     expect((await database.query('SELECT 1 FROM digital_bulk_cutting_completions WHERE production_order_id=$1',[id])).rowCount).toBe(1);
+  });
+
+  it("P14 reads empty receipt/packing facts before cutting for authorized users", async () => {
+    const { order, designer } = await budgetFixture();
+    const closure = new OrderClosureService(database);
+    for (const actor of [designer, managerActor(), merchandiserActor()]) {
+      const sheet = await closure.read(actor, order.productionOrderId);
+      expect(sheet).toMatchObject({ stage: "等待回货与装箱", productionId: null, canClose: false, closed: null });
+      expect(sheet.lines).toHaveLength(2);
+      expect(sheet.lines.map(line => line.orderedQuantity)).toEqual([137, 63]);
+      for (const line of sheet.lines) expect(line).toMatchObject({
+        cuttingId: null, receivingBatchId: null, actualQuantity: 0, documentQuantity: 0,
+        defectiveQuantity: 0, receiptCount: 0, packingQuantity: null, receipts: [], reworks: [],
+      });
+      expect(sheet.outstanding).toContain("TEST-PO1 黑：尚无原收货事实");
+      expect(sheet.outstanding).toContain("TEST-PO2 白：尚无原装箱事实");
+    }
+    await expect(closure.read({ ...designer, actorId: randomUUID() }, order.productionOrderId))
+      .rejects.toMatchObject({ statusCode: 404 });
   });
 
   it.each(['无','印花'] as const)('P13/P14 whole-order %s flow links native receiving and preserves closure facts',async secondaryCraft=>{
