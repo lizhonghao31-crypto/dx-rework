@@ -215,7 +215,13 @@
     "execute": [
       "guard_production_order_root_immutable"
     ],
-    "sequences": []
+    "sequences": [
+      {
+        "name": "digital_production_event_intents_notification_sequence_seq",
+        "table": "digital_production_event_intents",
+        "column": "notification_sequence"
+      }
+    ]
   },
   "0222_digital_development_documents": {
     "checksum": "d8f21da27b906eb9619ce651fb70cffd43dbc2be88c32bab4c5190855a248feb",
@@ -246,7 +252,13 @@
       "guard_digital_development_publication",
       "guard_production_order_root_immutable"
     ],
-    "sequences": []
+    "sequences": [
+      {
+        "name": "digital_development_material_events_sequence_seq",
+        "table": "digital_development_material_events",
+        "column": "sequence"
+      }
+    ]
   },
   "0223_digital_development_execution": {
     "checksum": "ee3427ba4cce450d3cffc464ddd5701fd651604a450a88e64087de5be54b14b7",
@@ -305,7 +317,13 @@
     "execute": [
       "guard_production_order_root_immutable"
     ],
-    "sequences": []
+    "sequences": [
+      {
+        "name": "digital_development_route_facts_sequence_seq",
+        "table": "digital_development_route_facts",
+        "column": "sequence"
+      }
+    ]
   },
   "0225_digital_development_rounds": {
     "checksum": "299ac4b17ef8a618a4b740b8ffcc30d377b4c51ca6b1880dbe1e19d49514a6f3",

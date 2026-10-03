@@ -167,6 +167,31 @@ DX_REWORK_RESTORE_DRILL=true DX_REWORK_RESTORE_CONFIRM=RESTORE_TO_ISOLATED_DRILL
   assert.equal((await restoredDb.query('SELECT document FROM digital_budget_documents WHERE production_order_id=$1',[order.productionOrderId])).rows[0].document.cm,'8.3');
  }finally{await restoredDb.end();}
  report('USAGE-only backup failure reproduced; SELECT-only backup and official isolated restore passed, history and business data retained');
+ // Also cover every reviewed migration, including IDENTITY columns added to
+ // existing tables by 0221 (and the CREATE-then-ALTER form in 0222).
+ await appDb.end();appDb=null;await db.end();db=null;
+ await admin.query(`DROP DATABASE ${database}`);await admin.query(`CREATE DATABASE ${database} OWNER ${owner}`);
+ db=new pg.Client({connectionString:url('postgres',database)});await db.connect();await db.query(`SET ROLE ${owner}`);
+ await db.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');
+ for(const row of historical.slice(0,217)) {
+  const migration=catalog.find(x=>x.version===row.version);
+  await db.query('BEGIN');await db.query(migration.sql);await db.query('INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)',[row.version,row.checksum]);await db.query('COMMIT');
+ }
+ await db.query(`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO ${app}; GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO ${app}`);
+ await db.query('RESET ROLE');
+ const earlyBefore=(await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows;
+ const earlyApply=await generate();execute(earlyApply,'early-prefix-217');
+ const earlyAfter=(await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows;
+ assert.equal(earlyAfter.length,236);for(const old of earlyBefore)assert.deepEqual(earlyAfter.find(x=>x.version===old.version),old);
+ for(const check of Object.values(requirements))for(const seq of check.sequences) {
+  assert.equal((await db.query('SELECT pg_get_serial_sequence($1,$2) AS name',['public.'+seq.table,seq.column])).rows[0].name,'public.'+seq.name);
+  assert.deepEqual((await db.query(`SELECT has_sequence_privilege('${app}',$1,'SELECT') AS read,has_sequence_privilege('${app}',$1,'USAGE') AS use`,['public.'+seq.name])).rows[0],{read:true,use:false});
+ }
+ assert.equal((await db.query('SELECT count(*)::int n FROM pg_default_acl')).rows[0].n,0);
+ execute(earlyApply,'early-prefix-repeat');
+ assert.deepEqual((await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows,earlyAfter);
+ assert.match(backup(),/"status":"pass"/);
+ report('217 prefix upgraded through every inventory entry; six identity sequences verified, including ALTER-existing-table; low-privilege backup and repeat passed');
  passed=true;
 }finally {
  await appDb?.end();await db?.end();await admin?.end();

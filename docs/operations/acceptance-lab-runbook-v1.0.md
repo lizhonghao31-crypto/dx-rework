@@ -91,7 +91,7 @@ TODO_TIMING_ENABLED=false
 
 `acceptance-migration-requirements.json` 是与原 SQL checksum 绑定的本批迁移权限清单。预检在真实维护角色下、只读事务内检查 public CREATE、涉及旧表/函数的所有者能力、外键 REFERENCES 和数据写权限，并一次输出所有对象的 owner、ACL、应用有效权限以及维护/应用角色继承关系，再统一决定是否拒绝。不修改任何授权，不要求自定义 default ACL。未知待执行迁移或清单 checksum 不符时先补审核清单，不能跳过。迁移前在同一 advisory lock 下再次预检；迁移仍逐项提交，原文件名、checksum、applied_at 不得更改。
 
-在每个待执行迁移的事务内，先记录已有关系OID，执行原始SQL后按catalog核对实际新增表和序列与清单完全一致；遗漏或多出对象即回滚该项。仅对该项实际新建且清单明确列出的表授予应用 SELECT/INSERT/UPDATE/DELETE，对其明确绑定的IDENTITY序列授予备份所需SELECT，然后记录原迁移checksum并提交。不会对已执行迁移重新授权、改变现有对象owner、设置默认授权或扩大角色成员关系。IDENTITY自动编号不要求应用具备序列USAGE；现有应用连接执行的pg_dump却需要序列SELECT，不能用USAGE替代。
+在每个待执行迁移的事务内，先记录已有关系OID，执行原始SQL后按catalog核对实际新增表和序列与清单完全一致；遗漏或多出对象即回滚该项。仅对该项实际新建且清单明确列出的表授予应用 SELECT/INSERT/UPDATE/DELETE，对本项实际新建且明确绑定表/列的IDENTITY序列（包括ALTER既有表新增IDENTITY）授予备份所需SELECT，然后记录原迁移checksum并提交。不会对已执行迁移重新授权、改变现有对象owner、设置默认授权或扩大角色成员关系。IDENTITY自动编号不要求应用具备序列USAGE；现有应用连接执行的pg_dump却需要序列SELECT，不能用USAGE替代。
 
 正式只读诊断入口为 `dx-acceptance diagnose <40位候选SHA>`。它使用已安装工具，复用现有认证fetch/archive，在本机产生临时证据并取得运维锁；数据库只读，无候选构建、备份、PM2操作或迁移。权限不满足时完整报告仍输出并返回失败。成功只表示该时刻维护前置条件通过，不表示已部署或业务已验收。
 
@@ -124,7 +124,7 @@ TODO_TIMING_ENABLED=false
 
 首次停机发生在旧衍生脚本停止Acceptance之后、OID类型检查失败之时，尚未执行迁移；随后owner失败延长停机。PG的OID直接放入JSON会输出字符串，正式工具已用bigint序列化。现场自定义default ACL为空并不是这些历史报错的原因，也不能证明应用过去无权限。旧脚本已有多处本地改动，不能用原始PR615源码替代现场实现；生产工作树SHA不是运行版本，PM2 dump也不是实时状态。
 
-Full Gate新增独立、仅回环端口的PostgreSQL16容器实验：225历史、多个app-owned对象、无default ACL、应用不继承维护角色；Python3.6.15运行正式SQL生成器，通过真实psql执行，检查完整诊断、显式fixture修复、清单漏项回滚、部分提交失败及重试到236/0233。应用低权限连接执行真实母单/预算服务的创建、保存、读取、幂等及冲突检查；真实IDENTITY插入不需USAGE；复现USAGE-only的pg_dump失败并验证SELECT-only修复后的正式备份和隔离恢复。原225记录含applied_at和业务哨兵必须保留，default ACL保持为空。
+Full Gate新增独立、仅回环端口的PostgreSQL16容器实验：225历史、多个app-owned对象、无default ACL、应用不继承维护角色；Python3.6.15运行正式SQL生成器，通过真实psql执行，检查完整诊断、显式fixture修复、清单漏项回滚、部分提交失败及重试到236/0233。应用低权限连接执行真实母单/预算服务的创建、保存、读取、幂等及冲突检查；真实IDENTITY插入不需USAGE；复现USAGE-only的pg_dump失败并验证SELECT-only修复后的正式备份和隔离恢复。原225记录含applied_at和业务哨兵必须保留，default ACL保持为空。另从共同217项前缀执行全部清单迁移，覆盖六条IDENTITY序列，包含ALTER既有表的新增序列，并验证应用账号备份及重复执行。
 
 该模型使用冻结Git历史及显式fixture权限，不是现场数据库/ACL完整克隆。它未运行ECS的PM2、Nginx、公网或真实附件恢复，不代表全部岗位业务验收。既有对象owner的精准处置仍须基于完整诊断，不能预先假定只有一张表。
 

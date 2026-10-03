@@ -108,7 +108,7 @@ def generate(source, identity, node, history_file, mode='apply', tool_root=None)
         if not isinstance(check.get('sequences'), list):
             raise ValueError('Sequence inventory is required, including an explicit empty list')
         for seq in check['sequences']:
-            if set(seq) != {'name', 'table', 'column'} or any(not isinstance(x, str) or not re.fullmatch(r'[a-z][a-z0-9_]*', x) for x in seq.values()) or seq['table'] not in check['creates']:
+            if set(seq) != {'name', 'table', 'column'} or any(not isinstance(x, str) or not re.fullmatch(r'[a-z][a-z0-9_]*', x) for x in seq.values()) or seq['table'] not in check['creates'] + check['tables']:
                 raise ValueError('Invalid sequence permission inventory')
     seen = set()
     for row in entries:
