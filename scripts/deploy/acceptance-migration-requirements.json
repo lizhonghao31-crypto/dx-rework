@@ -1,0 +1,502 @@
+{
+  "0218_contract_template_information_refresh": {
+    "checksum": "7c121772680f272520fbf8dc9247499657dc3e09e3eab154007549ea38769de3",
+    "tables": [
+      "sourcing_contract_documents",
+      "sourcing_contract_return_submissions",
+      "sourcing_contract_template_versions"
+    ],
+    "functions": [],
+    "references": [
+      "operation_events",
+      "sourcing_contract_documents"
+    ],
+    "insert": [
+      "sourcing_contract_template_versions"
+    ],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "guard_sourcing_contract_information_refresh",
+      "guard_sourcing_contract_return_document",
+      "guard_sourcing_template_creation"
+    ]
+  },
+  "0218_digital_production_identity": {
+    "checksum": "f8b0d57fea1690f35a73d1f96660f9418f3984f708a89ffa5ee0c8625bbff1e0",
+    "tables": [
+      "digital_production_child_lines",
+      "digital_production_child_links",
+      "digital_production_commands",
+      "digital_production_orders",
+      "digital_production_po_lines",
+      "digital_production_sources"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "cutting_orders",
+      "digital_production_child_links",
+      "digital_production_customers",
+      "digital_production_orders",
+      "digital_production_po_lines",
+      "digital_production_sources",
+      "pattern_room_orders",
+      "production_order_roots",
+      "receiving_receipts",
+      "rework_orders",
+      "sourcing_cases",
+      "sourcing_production_orders"
+    ],
+    "insert": [
+      "digital_production_customers"
+    ],
+    "update": [],
+    "creates": [
+      "digital_production_child_lines",
+      "digital_production_child_links",
+      "digital_production_commands",
+      "digital_production_customers",
+      "digital_production_orders",
+      "digital_production_po_lines",
+      "digital_production_po_sizes",
+      "digital_production_sources"
+    ],
+    "execute": [
+      "guard_digital_child_sourcing",
+      "guard_digital_order_identity",
+      "guard_production_order_root_immutable"
+    ]
+  },
+  "0219_digital_production_access": {
+    "checksum": "c658d487c51af50a685a74ee2e171c2f1f36d9441e53cda73d6b0e5cad194274",
+    "tables": [
+      "business_roles",
+      "capability_catalog",
+      "digital_production_customers",
+      "digital_production_delegations",
+      "digital_production_delivery_decisions",
+      "digital_production_delivery_requests",
+      "digital_production_task_access",
+      "role_capabilities"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "business_roles",
+      "digital_production_delivery_requests",
+      "digital_production_orders",
+      "digital_production_sources",
+      "digital_production_task_access"
+    ],
+    "insert": [
+      "business_roles",
+      "role_capabilities"
+    ],
+    "update": [
+      "business_roles",
+      "capability_catalog"
+    ],
+    "creates": [
+      "digital_production_delegations",
+      "digital_production_delivery_decisions",
+      "digital_production_delivery_requests",
+      "digital_production_task_access"
+    ],
+    "execute": [
+      "digital_delegation_revoke_only",
+      "digital_task_access_identity_guard",
+      "guard_production_order_root_immutable"
+    ]
+  },
+  "0219_root_contract_content_edit": {
+    "checksum": "9b8a33ddc5b7b321138626edd1a93063260aa1c558ba5aaf0e79810cdc77b9b1",
+    "tables": [
+      "sourcing_contract_content_overrides"
+    ],
+    "functions": [],
+    "references": [
+      "operation_events",
+      "sourcing_contract_documents"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "sourcing_contract_content_overrides"
+    ],
+    "execute": [
+      "guard_sourcing_contract_content_creation",
+      "reject_operation_event_mutation"
+    ]
+  },
+  "0220_contract_display_consistency": {
+    "checksum": "0d9a6181b62b739a33f2e418adcddcd2ee6bf968b562ff7f82b16216e1e449d3",
+    "tables": [],
+    "functions": [],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": []
+  },
+  "0220_digital_production_tasks": {
+    "checksum": "33c2091888b53ae3e386c448b9c10651fac59fbd047003894faa67c86db45f0c",
+    "tables": [
+      "digital_production_deadline_policies",
+      "digital_production_deadline_revisions",
+      "digital_production_event_intents",
+      "digital_production_task_access",
+      "digital_production_task_events",
+      "digital_production_tasks"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "digital_production_deadline_policies",
+      "digital_production_orders",
+      "digital_production_sources",
+      "digital_production_task_access",
+      "digital_production_task_events",
+      "digital_production_tasks",
+      "production_order_node_clocks"
+    ],
+    "insert": [
+      "digital_production_deadline_policies"
+    ],
+    "update": [],
+    "creates": [
+      "digital_production_deadline_policies",
+      "digital_production_deadline_revisions",
+      "digital_production_event_intents",
+      "digital_production_resource_lifecycle",
+      "digital_production_task_conditions",
+      "digital_production_task_dependencies",
+      "digital_production_task_events",
+      "digital_production_tasks"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ]
+  },
+  "0221_digital_production_notifications": {
+    "checksum": "f97b46f3e3bd86bf764e7a2d8d2f523c2d0ef07a207c35d7bed62c9f222d1bda",
+    "tables": [
+      "digital_production_event_intents",
+      "digital_production_notification_events",
+      "digital_production_notification_receipts"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "digital_production_deadline_revisions",
+      "digital_production_event_intents",
+      "digital_production_notification_events",
+      "digital_production_tasks"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_production_notification_events",
+      "digital_production_notification_projection",
+      "digital_production_notification_receipts"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ]
+  },
+  "0222_digital_development_documents": {
+    "checksum": "d8f21da27b906eb9619ce651fb70cffd43dbc2be88c32bab4c5190855a248feb",
+    "tables": [
+      "digital_development_attachment_bindings",
+      "digital_development_documents",
+      "digital_development_material_events",
+      "digital_production_notification_events"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "attachments",
+      "digital_development_documents",
+      "digital_production_notification_events",
+      "digital_production_sources",
+      "digital_production_tasks"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_development_attachment_bindings",
+      "digital_development_documents",
+      "digital_development_material_events",
+      "digital_development_notices"
+    ],
+    "execute": [
+      "guard_digital_development_publication",
+      "guard_production_order_root_immutable"
+    ]
+  },
+  "0223_digital_development_execution": {
+    "checksum": "ee3427ba4cce450d3cffc464ddd5701fd651604a450a88e64087de5be54b14b7",
+    "tables": [
+      "digital_development_execution_facts",
+      "digital_development_upload_purposes"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "attachments",
+      "digital_production_sources",
+      "digital_production_tasks"
+    ],
+    "insert": [
+      "digital_production_deadline_policies"
+    ],
+    "update": [],
+    "creates": [
+      "digital_development_dispatch",
+      "digital_development_execution_facts",
+      "digital_development_upload_purposes"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ]
+  },
+  "0224_digital_development_route": {
+    "checksum": "5f57dc1202b50b172f2db8347647dfcda4c8c76c9ed17b634cf11a2799871244",
+    "tables": [
+      "digital_development_pattern_links",
+      "digital_development_route_facts"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "digital_production_sources",
+      "digital_production_tasks",
+      "pattern_room_orders"
+    ],
+    "insert": [
+      "digital_production_deadline_policies"
+    ],
+    "update": [],
+    "creates": [
+      "digital_development_pattern_links",
+      "digital_development_route_facts"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ]
+  },
+  "0225_digital_development_rounds": {
+    "checksum": "299ac4b17ef8a618a4b740b8ffcc30d377b4c51ca6b1880dbe1e19d49514a6f3",
+    "tables": [
+      "digital_development_material_events",
+      "digital_development_notices",
+      "digital_development_rounds"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "digital_production_sources",
+      "digital_production_tasks"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_development_round_drafts",
+      "digital_development_rounds"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ]
+  },
+  "0226_digital_production_budgets": {
+    "checksum": "83432181bd2ee6d48ce44abb854edc554d4a0213a4a2b95301243226b35bd144",
+    "tables": [
+      "digital_budget_attachment_bindings",
+      "digital_budget_versions",
+      "sourcing_cases"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "attachments",
+      "digital_budget_versions",
+      "digital_production_orders",
+      "digital_production_tasks"
+    ],
+    "insert": [
+      "digital_production_deadline_policies"
+    ],
+    "update": [],
+    "creates": [
+      "digital_budget_attachment_bindings",
+      "digital_budget_documents",
+      "digital_budget_image_copies",
+      "digital_budget_preparations",
+      "digital_budget_versions"
+    ],
+    "execute": [
+      "guard_budget_sourcing_generation",
+      "guard_production_order_root_immutable"
+    ]
+  },
+  "0227_digital_production_instructions": {
+    "checksum": "bd40ce060768ee0449d9178113e4673002cdee6bf7c8ffd58cdca354ce0ca685",
+    "tables": [
+      "digital_instruction_attachment_bindings",
+      "digital_instruction_date_decisions",
+      "digital_instruction_date_requests",
+      "digital_instruction_versions",
+      "digital_production_notification_events"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "attachments",
+      "digital_instruction_date_requests",
+      "digital_production_notification_events",
+      "digital_production_orders"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_instruction_attachment_bindings",
+      "digital_instruction_date_decisions",
+      "digital_instruction_date_requests",
+      "digital_instruction_documents",
+      "digital_instruction_notices",
+      "digital_instruction_versions"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ]
+  },
+  "0228_digital_bulk_preparation": {
+    "checksum": "c50f93ea731b5e9e2b8cab781ad870bb53a1bef8271b913720d63d6efb5e7bb6",
+    "tables": [
+      "digital_bulk_preparation_facts",
+      "digital_bulk_preparations"
+    ],
+    "functions": [
+      "guard_cutting_record_creation"
+    ],
+    "references": [
+      "app_users",
+      "digital_bulk_preparations",
+      "digital_instruction_versions",
+      "digital_production_orders",
+      "digital_production_sources",
+      "digital_production_tasks",
+      "sourcing_approval_snapshots"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_bulk_dispatch",
+      "digital_bulk_preparation_facts",
+      "digital_bulk_preparations"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ]
+  },
+  "0229_digital_bulk_cutting": {
+    "checksum": "be60e800d1c513da9ae9e25463eba2a92d9ca69b86489f847269743d0e1672bb",
+    "tables": [
+      "digital_bulk_cutting_completions"
+    ],
+    "functions": [
+      "guard_cutting_record_creation",
+      "guard_sourcing_style_revision"
+    ],
+    "references": [
+      "app_users",
+      "digital_bulk_preparations",
+      "digital_production_orders",
+      "digital_production_tasks"
+    ],
+    "insert": [
+      "digital_production_deadline_policies"
+    ],
+    "update": [],
+    "creates": [
+      "digital_bulk_cutting_completions"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ]
+  },
+  "0230_digital_factory_flow": {
+    "checksum": "1d1fe7d53d4f84f8d0fc28b3b4bd309928f99e2df3e589f749ce5948e3b4ed18",
+    "tables": [
+      "digital_factory_facts",
+      "digital_factory_qc",
+      "digital_factory_routes"
+    ],
+    "functions": [
+      "guard_sourcing_production_creation"
+    ],
+    "references": [
+      "app_users",
+      "digital_bulk_cutting_completions",
+      "digital_factory_facts",
+      "digital_factory_routes",
+      "digital_production_orders",
+      "digital_production_po_lines"
+    ],
+    "insert": [
+      "digital_production_deadline_policies"
+    ],
+    "update": [],
+    "creates": [
+      "digital_factory_facts",
+      "digital_factory_qc",
+      "digital_factory_routes"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ]
+  },
+  "0231_digital_order_closure": {
+    "checksum": "b1698097af226f2c0a2a52fe5463f54365dde375fe45e40f4b11677b778ba782",
+    "tables": [
+      "digital_order_closures"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "audit_events",
+      "digital_production_orders"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_order_closures"
+    ],
+    "execute": [
+      "guard_digital_special_closure",
+      "guard_production_order_root_immutable"
+    ]
+  },
+  "0232_reconcile_contract_and_digital_histories": {
+    "checksum": "e80fa66d9ae060a43430a8bed70513ecac17ae6daed729e307921fcae66b56c3",
+    "tables": [],
+    "functions": [],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": []
+  },
+  "0233_manual_contract_template_provenance": {
+    "checksum": "0e32998f7fabaf770e7a0eaaa7e9ef44063f3c5f0089f9a9672f1201407d7194",
+    "tables": [],
+    "functions": [
+      "guard_sourcing_contract_information_refresh"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": []
+  }
+}
