@@ -51,6 +51,7 @@ const isMigration = (path) =>
 const isDeployment = (path) =>
   path.startsWith("scripts/deploy/")
   || path === "scripts/dx-acceptance.sh"
+  || path === "scripts/ci/acceptance-maintenance-drill.mjs"
   || path === "scripts/backup-postgres.sh"
   || path === "scripts/restore-postgres.sh"
   || path.startsWith("infra/")

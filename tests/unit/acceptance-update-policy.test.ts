@@ -28,7 +28,7 @@ describe('fixed Acceptance update policy',()=>{
     expect(()=>assertVersion({...expected,schemaVersion:'0231_digital_order_closure'},expected)).toThrow();
   });
   it('rejects invalid command arguments before reading server configuration',()=>{
-    for(const args of [['unexpected'],['update','main'],['update','a'.repeat(40),'extra']])expect(spawnSync('bash',['scripts/dx-acceptance.sh',...args],{encoding:'utf8'}).status).toBe(64);
+    for(const args of [['unexpected'],['update','main'],['update','a'.repeat(40),'extra'],['diagnose','main'],['diagnose','a'.repeat(40),'extra']])expect(spawnSync('bash',['scripts/dx-acceptance.sh',...args],{encoding:'utf8'}).status).toBe(64);
   });
   it('rejects a shared workspace scope before touching its contents',()=>{
     const candidate=mkdtempSync(join(tmpdir(),'acceptance-deps-'));

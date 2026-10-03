@@ -6,10 +6,10 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 tool_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 command="${1:-help}"
 case "$command" in
-  install|update) ;;
-  *) echo 'Usage: dx-acceptance update [40-character SHA] | install'; exit 64 ;;
+  install|update|diagnose) ;;
+  *) echo 'Usage: dx-acceptance update [40-character SHA] | diagnose [40-character SHA] | install'; exit 64 ;;
 esac
-if [[ "$command" == update ]]; then
+if [[ "$command" == update || "$command" == diagnose ]]; then
   [[ $# -le 2 ]] || exit 64
   [[ -z "${2:-}" || "$2" =~ ^[0-9a-f]{40}$ ]] || exit 64
 fi
@@ -62,6 +62,18 @@ chmod 0755 "$snapshot"
 trap 'rc=$?; if ((rc)); then echo "Acceptance update failed; evidence=$snapshot; no production deployment was performed." >&2; else rm -rf -- "$snapshot"; fi' EXIT
 git_source archive "$sha" | tar -x -C "$snapshot"
 printf 'Tool: %s\n' "$(cat "$tool_root/TOOL_SHA")"
+if [[ "$command" == diagnose ]]; then
+  # Read-only database inspection, no candidate build, backup, PM2 or migration.
+  [[ -f "$root/locks/release.lock" && ! -L "$root/locks/release.lock" ]]
+  exec 9>"$root/locks/release.lock"
+  flock -n 9 || { echo 'Acceptance release lock is held.' >&2; exit 1; }
+  install -o dxacceptance -g dxacceptance -m 0600 /dev/null "$snapshot/acceptance-identity.json"
+  runuser -u dxacceptance -- env -i HOME=/home/dxacceptance USER=dxacceptance PATH="$PATH" \
+    bash "$tool_root/scripts/deploy/inspect-acceptance-identity.sh" "$snapshot" "$tool_root"
+  bash "$tool_root/scripts/deploy/run-acceptance-maintenance.sh" "$snapshot" preflight
+  echo "ACCEPTANCE_DIAGNOSTICS_FINISHED sha=$sha"
+  exit 0
+fi
 previous="$(python3 - "$root/current/release-manifest.json" "$root/frontend/current/release-manifest.json" <<'PY'
 import json,sys
 api,web=[json.load(open(p)) for p in sys.argv[1:]]

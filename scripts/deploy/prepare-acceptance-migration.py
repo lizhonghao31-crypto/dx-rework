@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PR615 transaction runner with checksum-bound, read-only permission preflight."""
+"""Read-only permission diagnostics and checksum-bound transactional object grants."""
 import hashlib
 import json
 import re
@@ -8,31 +8,80 @@ import sys
 from pathlib import Path
 
 
-def permission_sql(entries, requirements):
-    statements = ["DO $$ BEGIN IF NOT has_schema_privilege(current_user,'public','CREATE') THEN RAISE EXCEPTION 'Acceptance owner cannot create in public'; END IF; END $$;"]
+def permission_query(entries, requirements):
+    """One read-only result set: report every pending requirement before rejecting."""
+    rows = []
+    app = "'dx_rework_acceptance_app'"
+    def add(version, kind, name, required, ok, owner="NULL::text", acl="NULL::text", access="'{}'::jsonb", tail=""):
+        pending = "true" if version is None else "NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version='{}')".format(version)
+        rows.append("SELECT jsonb_build_object('migration',{},'kind','{}','object','{}','required','{}','owner',{},'acl',{},'application',{}) AS report, coalesce(({}),false) AS ok {} WHERE {}".format(
+            "NULL" if version is None else "'{}'".format(version), kind, name, required, owner, acl, access, ok, tail, pending))
+    add(None, 'schema', 'public', 'CREATE', "has_schema_privilege(current_user,'public','CREATE')")
+    future_tables = {}
+    for row in entries:
+        check = requirements.get(row['version'], {})
+        if check.get('checksum') == row['checksum']:
+            for name in check['creates']:
+                future_tables[name] = row['version']
     for row in entries:
         version = row['version']
-        # Already-applied historical migrations do not need a deployment inventory.
         checks = requirements.get(version)
-        statements += [f"SELECT NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version='{version}') AS pending \\gset", "\\if :pending"]
         if checks is None or checks['checksum'] != row['checksum']:
-            statements += ["DO $$ BEGIN RAISE EXCEPTION 'Pending migration has no reviewed permission inventory'; END $$;", "\\endif"]
+            add(version, 'inventory', version, 'CHECKSUM_BOUND_INVENTORY', 'false')
             continue
-        if checks['creates']:
-            for kind, privilege in [('r', 'SELECT'), ('r', 'INSERT'), ('r', 'UPDATE'), ('r', 'DELETE'), ('S', 'USAGE')]:
-                statements.append(f"DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_default_acl d CROSS JOIN LATERAL aclexplode(d.defaclacl) a WHERE d.defaclrole=(SELECT oid FROM pg_roles WHERE rolname=current_user) AND d.defaclnamespace IN (0,(SELECT oid FROM pg_namespace WHERE nspname='public')) AND d.defaclobjtype='{kind}' AND a.privilege_type='{privilege}' AND (a.grantee=0 OR pg_has_role('dx_rework_acceptance_app',a.grantee,'USAGE'))) THEN RAISE EXCEPTION 'Missing application default {kind} {privilege}; no automatic grant'; END IF; END $$;")
-        tables = checks['tables'] + ['schema_migrations']
-        for name in sorted(set(tables)):
-            statements.append(f"DO $$ BEGIN IF to_regclass('public.{name}') IS NOT NULL AND NOT pg_has_role(current_user,(SELECT relowner FROM pg_class WHERE oid=to_regclass('public.{name}')),'USAGE') THEN RAISE EXCEPTION 'Migration owner required: {name}'; END IF; END $$;")
-        for name in checks.get('execute', []):
-            statements.append(f"DO $$ BEGIN IF EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='{name}' AND NOT has_function_privilege(current_user,p.oid,'EXECUTE')) THEN RAISE EXCEPTION 'Migration EXECUTE required: {name}'; END IF; END $$;")
-        for name in checks['functions']:
-            statements.append(f"DO $$ BEGIN IF EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='{name}' AND NOT pg_has_role(current_user,p.proowner,'USAGE')) THEN RAISE EXCEPTION 'Migration function owner required: {name}'; END IF; END $$;")
+        def table(name, required):
+            future = "NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version='{}')".format(future_tables[name]) if name in future_tables else 'false'
+            allowed = "pg_has_role(current_user,c.relowner,'USAGE')" if required == 'OWNER' else "has_table_privilege(current_user,c.oid,'{}')".format(required)
+            access = "jsonb_build_object(" + ','.join("'{0}',CASE WHEN c.oid IS NULL THEN NULL ELSE has_table_privilege({1},c.oid,'{0}') END".format(priv, app) for priv in ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) + ")"
+            add(version, 'table', name, required, "CASE WHEN c.oid IS NULL THEN {} ELSE {} END".format(future, allowed),
+                'pg_get_userbyid(c.relowner)', 'c.relacl::text', access,
+                "FROM (SELECT to_regclass('public.{}') AS oid) x LEFT JOIN pg_class c ON c.oid=x.oid".format(name))
+        for name in sorted(set(checks['tables'] + ['schema_migrations'])):
+            table(name, 'OWNER')
         for key, privilege in [('references', 'REFERENCES'), ('insert', 'INSERT'), ('update', 'UPDATE')]:
             for name in checks[key]:
-                statements.append(f"DO $$ BEGIN IF to_regclass('public.{name}') IS NOT NULL AND NOT has_table_privilege(current_user,to_regclass('public.{name}'),'{privilege}') THEN RAISE EXCEPTION 'Migration {privilege} required: {name}'; END IF; END $$;")
-        statements.append('\\endif')
-    return statements
+                table(name, privilege)
+        for key, required in [('functions', 'OWNER'), ('execute', 'EXECUTE')]:
+            for name in checks[key]:
+                allowed = "pg_has_role(current_user,p.proowner,'USAGE')" if required == 'OWNER' else "has_function_privilege(current_user,p.oid,'EXECUTE')"
+                add(version, 'function', name, required, 'coalesce(f.allowed,true)', 'f.owners', 'f.acls', "coalesce(f.application,'{}'::jsonb)",
+                    "FROM (SELECT bool_and({}) allowed, string_agg(pg_get_userbyid(p.proowner),',') owners, string_agg(p.proacl::text,',') acls, jsonb_object_agg(p.oid::regprocedure::text,has_function_privilege({},p.oid,'EXECUTE')) application FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname='{}') f".format(allowed, app, name))
+        for name in checks['creates']:
+            add(version, 'new_table', name, 'ABSENT_BEFORE_MIGRATION', "to_regclass('public.{}') IS NULL".format(name))
+        for seq in checks['sequences']:
+            add(version, 'new_sequence', seq['name'], 'ABSENT_BEFORE_MIGRATION', "to_regclass('public.{}') IS NULL".format(seq['name']))
+    return '\nUNION ALL\n'.join(rows)
+
+
+def permission_sql(entries, requirements):
+    query = permission_query(entries, requirements)
+    return [
+        "SELECT json_build_object('maintenance_role',current_user,'application_role','dx_rework_acceptance_app','application_inherits_maintenance',pg_has_role('dx_rework_acceptance_app',current_user,'USAGE'),'maintenance_inherits_application',pg_has_role(current_user,'dx_rework_acceptance_app','USAGE'),'memberships',(SELECT coalesce(json_agg(json_build_object('member',pg_get_userbyid(m.member),'role',pg_get_userbyid(m.roleid),'inherit',m.inherit_option,'set',m.set_option)),'[]'::json) FROM pg_auth_members m WHERE m.member IN ('dx_rework_acceptance'::regrole,'dx_rework_acceptance_app'::regrole)));",
+        "WITH diagnostics AS (" + query + ") SELECT coalesce(jsonb_agg(report || jsonb_build_object('ok',ok)),'[]'::jsonb)::text AS permission_report, bool_and(ok) AS permissions_ok FROM diagnostics \\gset",
+        "SELECT :'permission_report'::jsonb AS acceptance_permissions;",
+        "\\if :permissions_ok", "\\else",
+        "DO $$ BEGIN RAISE EXCEPTION 'Acceptance permissions blocked; inspect the complete acceptance_permissions report above'; END $$;",
+        "\\endif",
+    ]
+
+
+def grant_sql(checks):
+    """Grant only the reviewed relations actually created by this transaction."""
+    def array(names):
+        return 'ARRAY[' + ','.join("'{}'".format(x) for x in sorted(names)) + ']::text[]'
+    def actual(kinds):
+        return "ARRAY(SELECT c.relname::text FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ({}) AND NOT c.oid::bigint=ANY(ARRAY(SELECT jsonb_array_elements_text(current_setting('dx_acceptance.before_relations')::jsonb)::bigint)) ORDER BY c.relname)".format(kinds)
+    result = ["DO $$ BEGIN IF " + actual("'r','p'") + " IS DISTINCT FROM " + array(checks['creates']) + " OR " + actual("'S'") + " IS DISTINCT FROM " + array([x['name'] for x in checks['sequences']]) + " THEN RAISE EXCEPTION 'Created relations differ from checksum-bound grant inventory'; END IF; END $$;"]
+    for name in checks['creates']:
+        result.append("DO $$ BEGIN IF (SELECT relowner FROM pg_class WHERE oid='public.{}'::regclass)<>current_user::regrole THEN RAISE EXCEPTION 'New relation is not owned by the migration role'; END IF; END $$;".format(name))
+        result.append("GRANT SELECT,INSERT,UPDATE,DELETE ON TABLE public.{} TO dx_rework_acceptance_app;".format(name))
+        allowed = ' AND '.join("has_table_privilege('dx_rework_acceptance_app','public.{}','{}')".format(name, privilege) for privilege in ['SELECT', 'INSERT', 'UPDATE', 'DELETE'])
+        result.append("DO $$ BEGIN IF NOT ({}) THEN RAISE EXCEPTION 'New table application grant failed'; END IF; END $$;".format(allowed))
+    for seq in checks['sequences']:
+        result.append("DO $$ BEGIN IF pg_get_serial_sequence('public.{table}','{column}')::regclass IS DISTINCT FROM 'public.{name}'::regclass THEN RAISE EXCEPTION 'Sequence dependency differs from grant inventory'; END IF; END $$;".format(**seq))
+        result.append("GRANT SELECT ON SEQUENCE public.{} TO dx_rework_acceptance_app;".format(seq['name']))
+        result.append("DO $$ BEGIN IF NOT has_sequence_privilege('dx_rework_acceptance_app','public.{}','SELECT') THEN RAISE EXCEPTION 'New sequence backup grant failed'; END IF; END $$;".format(seq['name']))
+    return result
 
 
 def generate(source, identity, node, history_file, mode='apply', tool_root=None):
@@ -52,6 +101,15 @@ def generate(source, identity, node, history_file, mode='apply', tool_root=None)
     if not entries:
         raise ValueError('Empty migration manifest')
     requirements = json.loads((tool_root / 'scripts/deploy/acceptance-migration-requirements.json').read_text())
+    for check in requirements.values():
+        for key in ['tables', 'functions', 'references', 'insert', 'update', 'creates', 'execute']:
+            if not isinstance(check.get(key), list) or any(not isinstance(x, str) or not re.fullmatch(r'[a-z][a-z0-9_]*', x) for x in check[key]):
+                raise ValueError('Invalid permission inventory identifiers')
+        if not isinstance(check.get('sequences'), list):
+            raise ValueError('Sequence inventory is required, including an explicit empty list')
+        for seq in check['sequences']:
+            if set(seq) != {'name', 'table', 'column'} or any(not isinstance(x, str) or not re.fullmatch(r'[a-z][a-z0-9_]*', x) for x in seq.values()) or seq['table'] not in check['creates']:
+                raise ValueError('Invalid sequence permission inventory')
     seen = set()
     for row in entries:
         version, checksum = row['version'], row['checksum']
@@ -81,7 +139,13 @@ def generate(source, identity, node, history_file, mode='apply', tool_root=None)
             version, checksum = row['version'], row['checksum']
             file = source / 'apps/api/migrations' / (version + '.sql')
             sql.extend([f"SELECT NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version='{version}') AS pending \\gset",
-                        "\\if :pending", "BEGIN;", "\\ir " + shlex.quote(str(file)),
+                        "\\if :pending", "BEGIN;",
+                        "SELECT set_config('dx_acceptance.before_relations',(SELECT coalesce(jsonb_agg(c.oid::bigint),'[]'::jsonb)::text FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p','S')),true);",
+                        "\\ir " + shlex.quote(str(file))])
+            checks = requirements.get(version)
+            if checks is not None and checks['checksum'] == checksum:
+                sql.extend(grant_sql(checks))
+            sql.extend([
                         f"INSERT INTO schema_migrations(version,checksum) VALUES('{version}','{checksum}');",
                         "COMMIT;", "\\endif"])
         sql.extend([export, "\\! " + command + " current", "\\if :SHELL_ERROR", "SELECT 1/0;", "\\endif"])
