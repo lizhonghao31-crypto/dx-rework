@@ -13,7 +13,7 @@ describe("sample PostgreSQL gate coverage", () => {
     expect(result.dbRequired).toBe(true);
     expect(result.businessChainSensitive).toBe(true);
     if (path.startsWith("tests/integration/")) {
-      expect(result.mappedPostgresTests).toContain(path);
+      expect(result.mappedPostgresTests).toEqual(["tests/integration/sample-read-postgres.test.ts"]);
     }
   });
 

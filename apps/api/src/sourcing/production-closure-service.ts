@@ -133,7 +133,8 @@ export class ProductionClosureService {
   await client.query("INSERT INTO sourcing_production_receipt_links(receipt_id,production_order_id,operation_event_id) VALUES($1,$2,$3)",[input.receiptId,input.productionOrderId,input.operationEventId]);
  }
  private async receipts(ids:string[]):Promise<ProductionReceivingSummary[]> {
-  const result=await this.database.query<{production_order_id:string;first_style_no:string;supplier_name_snapshot:string;contract_number:string;shipped_on:string;recorded_quantity:number}>(`SELECT shipment.*,sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,shipment.shipped_on::text,production.supplier_name_snapshot,production.contract_number
+  const result=await this.database.query<{production_order_id:string;first_style_no:string;supplier_name_snapshot:string;contract_number:string;shipped_on:string;recorded_quantity:number}>(`SELECT shipment.*,sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,shipment.shipped_on::text,production.supplier_name_snapshot,
+   sourcing_contract_display_number(production.sourcing_contract_document_id,production.contract_number) AS contract_number
    FROM sourcing_production_shipments shipment JOIN sourcing_production_orders production USING(production_order_id) WHERE production_order_id=ANY($1::uuid[])`,[ids]);
   const receipts=await this.database.query<{production_order_id:string;receipt_id:string;receiving_batch_id:string;actual_quantity:number;received_at:Date;archived:boolean}>(`SELECT link.production_order_id,receipt.receipt_id,receipt.receiving_batch_id,
    COALESCE(correction.actual_quantity,receipt.actual_quantity)::integer AS actual_quantity,receipt.received_at,batch.deleted_at IS NOT NULL AS archived
