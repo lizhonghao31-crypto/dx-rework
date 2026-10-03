@@ -18,13 +18,15 @@ QA 发现任务主办已经保存，但重开开发单时三个预派下拉框�
 
 原因：先 setState 挂载非受控 select，其 defaultValue 对应的人员 option 尚未
 到达；稍后增加 option 不会重新应用 defaultValue。
-修复仅在候选人员就绪后发布执行面板状态，使首次挂载及版本变更重挂载时即有
-匹配选项。沿用原表单 key、非受控输入、请求及权限，不自动提交或改派。
-候选读取失败时显示原错误，不展示一组容易被误认为已清空的预派框。
+修复独立发布执行事实，仅让预派表单等待匹配当前来源/dispatch版本的候选人员。
+同一dispatch版本刷新保留已挂载的非受控输入，版本变化时才等待新选项后挂载。
+旧请求（含旧候选请求）的结果/错误不得覆盖新请求；effect清理使旧请求失效。
+候选失败显示错误、隐藏尚未就绪的预派框，但原打板链接、任务事实及面料报告继续可用。
+沿用原表单key、请求及权限，不自动提交或改派。
 
 ## 本地验证
 
-Node 22.22.2 / npm 10.9.9：定向 ESLint、web typecheck/build、物料刷新单测通过。
+Node 22.22.2 / npm 10.9.9：定向 ESLint、web typecheck/build、物料刷新/候选失败隔离/旧执行响应/旧候选响应4项单测通过。
 `scripts/acceptance/development-dispatch-prefill-regression.mjs` 对本地 Vite 运行真实
 App，所有 API 均由隔离合成响应替代，仅模拟预派 PUT；拒绝其他写请求。
 覆盖延迟候选后全部正确回显、只改纸样仍保留裁板/车板、保存及重开、候选读取失败
@@ -40,3 +42,8 @@ node scripts/acceptance/development-dispatch-prefill-regression.mjs
 可独立合并；最终组合仍应在线复测。Full Gate 证据见对应 PR 当前 Head。
 代码尚未上线，不宣称 Acceptance 原记录已复测通过。
 PR607 seed 是否现场执行仍待证据，本修复不补线上档案、不绕过原单分配与车板工资门禁。
+
+## 一次Codex Review跟进
+
+初次Head Full Gate通过后，仅发起一次GitHub Codex Review。两项有效P2
+（候选失败阻断无关控件、旧异步响应覆盖）已修复并补定向回归；新Head重跑Full Gate。

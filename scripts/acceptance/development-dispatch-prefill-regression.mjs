@@ -35,7 +35,7 @@ try {
       else if (path.endsWith('/development')) body = {sourceId: id, designStyleNo: '隔离回显', status: 'published', roundNumber: 1, version: 1, document: null, materialEvents: []};
       else if (path.endsWith('/development/rounds')) body = {rounds: [], draft: null};
       else if (path.endsWith('/execution')) body = {sheet: {canEdit: false, document: {materials: []}}, dispatch,
-        tasks: [], facts: [], routeFacts: [], canDispatch: true};
+        tasks: [], facts: [], routeFacts: [], canDispatch: true, canReportFabric: true, patternOrder: {orderId: id}};
       else if (path === 'digital-production/access/candidates') {
         await new Promise(resolve => setTimeout(resolve, 700));
         if (candidatesFail) return route.fulfill({status: 503, json: {error: {message: '隔离候选人员读取失败'}}});
@@ -55,7 +55,7 @@ try {
   assert.equal(writes.length, 0);
   await page.locator('select[name=pattern]').selectOption(replacement);
   await page.getByRole('button', {name: '保存预派', exact: true}).click();
-  await page.waitForFunction(() => !document.querySelector('select[name=pattern]').disabled && !document.querySelector('select[name=pattern]').closest('fieldset').disabled);
+  await page.waitForFunction(() => { const select = document.querySelector('select[name=pattern]'); return select && !select.disabled && !select.closest('fieldset').disabled; });
   await ready();
   assert.deepEqual(writes, [{expectedVersion: 1, patternWorkerId: replacement, cuttingWorkerId: worker, sewingWorkerId: worker}]);
   await page.reload(); await ready();
@@ -64,6 +64,8 @@ try {
   await page.reload();
   await page.getByRole('alert').filter({hasText: '隔离候选人员读取失败'}).waitFor();
   assert.equal(await page.locator('select[name=pattern]').count(), 0);
+  await page.getByRole('link', {name: '查看打板执行与主管派工'}).waitFor();
+  await page.getByText('面料检测报告', {exact: true}).waitFor();
   candidatesFail = false;
   await page.reload(); await ready();
   assert.deepEqual(errors, []);
