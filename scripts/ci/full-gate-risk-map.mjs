@@ -40,6 +40,7 @@ const isMigration = (path) =>
   || [
     "scripts/seed-base-migrations.sh",
     "scripts/migrate.mjs",
+    "scripts/migration-lib.mjs",
     "scripts/migration-integration-check.mjs",
     "scripts/migration-history-policy.mjs",
     "scripts/migration-branches.json",
