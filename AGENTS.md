@@ -100,6 +100,7 @@ GitHub Actions 是验收层，不是开发 scratchpad。
 
 ## 8. Codex Review
 
+- 业务负责人长期要求（2026-10-03）：凡需要 Review 的 PR，统一在 GitHub PR 上使用 **Codex Review**；本地、子代理或其它独立审查不能替代。此规则不表示所有 PR 都必须 Review，是否需要仍按下述风险与授权判断。
 - Codex Review 只针对最终 intended Head；代码已经冻结且所需 Gate 全绿后才进入 Review。
 - 是否需要 Review按当前任务风险和业务负责人授权执行；权限、财务、migration、核心状态机、P0/P1 默认应 Review。
 - 默认每 PR 最多一次；只有 Review 发现真实 P0/P1 后发生实质修复，或业务负责人明确授权，才进行第二次。

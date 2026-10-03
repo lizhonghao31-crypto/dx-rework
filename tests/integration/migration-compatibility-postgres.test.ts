@@ -11,12 +11,12 @@ type Entry={version:string;checksum:string};
 const url=process.env.TEST_DATABASE_URL;
 const suite=url?describe:describe.skip;
 suite('main and digital historical PostgreSQL upgrades',()=>{
- it.each(['main','acceptance-prefix','a3','empty','interrupted-main'] as const)('upgrades %s preserving identities, checksums, timestamps and business rows',async lane=>{
+ it.each(['main','main-219-derived','acceptance-prefix','a3','empty','interrupted-main'] as const)('upgrades %s preserving identities, checksums, timestamps and business rows',async lane=>{
   await assertTestDatabaseTarget(url!);
   const catalog=await discoverValidatedMigrations();
   const main:Entry[]=JSON.parse(await readFile('tests/fixtures/migration-histories/main-99db5239.json','utf8')).migrations;
   const digital:Entry[]=JSON.parse(await readFile('tests/fixtures/migration-histories/digital-da6590cc.json','utf8')).migrations;
-  const history=lane==='main'||lane==='interrupted-main'?main:lane==='a3'?digital:lane==='acceptance-prefix'?digital.slice(0,225):[];
+  const history=lane==='main-219-derived'?main.slice(0,219):lane==='main'||lane==='interrupted-main'?main:lane==='a3'?digital:lane==='acceptance-prefix'?digital.slice(0,225):[];
   const schema=ownedPostgresSchema('migration_compat');
   const admin=new pg.Client({connectionString:url});await admin.connect();
   const scoped=new URL(url!);scoped.searchParams.set('options',`-c search_path=${schema}`);

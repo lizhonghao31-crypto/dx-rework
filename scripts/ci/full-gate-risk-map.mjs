@@ -50,6 +50,7 @@ const isMigration = (path) =>
 
 const isDeployment = (path) =>
   path.startsWith("scripts/deploy/")
+  || path === "scripts/dx-acceptance.sh"
   || path === "scripts/backup-postgres.sh"
   || path === "scripts/restore-postgres.sh"
   || path.startsWith("infra/")
@@ -113,6 +114,7 @@ export const classifyFullGatePaths = (inputPaths) => {
       deploymentSensitive = true;
       domains.add("deployment");
       mappedTests.add("tests/integration/migration-compatibility-postgres.test.ts");
+      mappedTests.add("tests/integration/acceptance-maintenance-postgres.test.ts");
     }
     if (isBackendOrContract(path)) {
       // Unknown backend/contract paths fail closed into the real PostgreSQL chain.
