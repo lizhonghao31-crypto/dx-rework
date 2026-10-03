@@ -77,6 +77,22 @@ TODO_TIMING_ENABLED=false
 
 ## 4. 每一批Acceptance固定流程
 
+### 固定更新命令（2026-10-03）
+
+业务负责人要求固定为 `dx-acceptance update`，替代每批生成和修改 `/tmp/update-acceptance-*.sh`。首次由 root 从已合并的集成分支安装 `scripts/dx-acceptance.sh` 到 `/usr/local/bin/dx-acceptance`；后续只执行：
+
+```bash
+dx-acceptance update
+```
+
+默认取 `release/digital-production-v1` 最新已合并 SHA；需要固定已核准候选时使用 `dx-acceptance update <40位SHA>`，该 SHA 必须在集成分支历史中。仍须遵守候选合并前 Gate/Review 纪律。
+
+命令复用生产源码仓库的既有 Git 认证，只 fetch/archive，不 checkout 或构建生产源码。先以生产运行用户只读导出迁移历史，不向 Acceptance worker 传入生产连接凭据；以 `dxacceptance` 构建候选，并按实际 diff 决定前端重建或复用。仅 lockfile 相同且依赖检查通过时复制现有依赖，缺失或不一致则在候选中 `npm ci`；所有 workspace 链接修正到候选目录。
+
+更新器核验两个现场迁移历史、Acceptance 运行参数及实际数据库名。在停止 Acceptance 后，存在 pending migration 才备份。数据库维护复用本机 postgres 认证入口和运行连接的实际端口，核验数据库 OID、名称及所有者后，将会话身份降为固定所有者 `dx_rework_acceptance` 执行迁移；运行账号不需要 DDL 权限。备份 SHA256 和清单已验证，且同候选、同数据库、同迁移历史、服务持续停止时才可复用失败重试的备份；服务启动后撤销这一复用资格。迁移部分失败时保持 Acceptance 停止，不自动切回不兼容旧代码，再执行同一固定命令可继续向前迁移。
+
+候选直接安装到既有 generation 目录，更新指针及 `dx-rework-acceptance-api`。技术验证覆盖本机/公网 ready、精确 SHA/schema、公网 HTML 与静态资源内容、生产 3201 ready。已是同 SHA 且 schema current 时仅验证，不重复备份或重启。证据位于 `logs/update-<SHA>-<时间>-<PID>`。常规更新不修改 Nginx、角色/HBA/密钥或生产服务；附件 location 沿用已完成的 606 配置。
+
 只允许五阶段。没有新事实时不得插入额外“环境建设”。
 
 ### A. 锁定候选
