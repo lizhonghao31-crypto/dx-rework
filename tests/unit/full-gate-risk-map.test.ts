@@ -95,6 +95,7 @@ describe("Full Gate sensitive path mapping", () => {
     expect(deployment.deploymentSensitive).toBe(true);
     expect(deployment.dbRequired).toBe(true);
     expect(classifyFullGatePaths(["scripts/dx-acceptance.sh"]).deploymentSensitive).toBe(true);
+    expect(classifyFullGatePaths(["scripts/ci/acceptance-maintenance-drill.mjs"]).deploymentSensitive).toBe(true);
     expect(deployment.mappedPostgresTests).toContain("tests/integration/migration-compatibility-postgres.test.ts");
     for (const path of ["scripts/migration-lib.mjs", "scripts/migration-history-policy.mjs", "scripts/migration-branches.json", "scripts/check-migration-export.mjs"]) {
       const result = classifyFullGatePaths([path]);

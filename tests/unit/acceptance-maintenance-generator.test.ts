@@ -14,9 +14,13 @@ assert "current_setting('port')::integer<>5544" in sql
 assert 'SELECT 1/0;' in sql and '\\\\quit 1' not in sql
 assert 'oid::bigint' in sql
 assert 'BEGIN READ ONLY;' in sql
-assert 'Migration owner required: sourcing_contract_return_submissions' in sql
+assert 'sourcing_contract_return_submissions' in sql and 'acceptance_permissions' in sql
 assert 'has_table_privilege' in sql
-assert 'Missing application default' in sql
+assert 'Missing application default' not in sql
+assert 'ALTER DEFAULT PRIVILEGES' not in sql
+assert 'GRANT SELECT ON SEQUENCE public.digital_factory_qc_sequence_seq' in sql
+assert 'GRANT USAGE' not in sql
+assert 'Created relations differ from checksum-bound grant inventory' in sql
 assert sql.count('BEGIN;') == len(json.load(open('apps/api/src/platform/migration-manifest.json'))['migrations'])
 for change in ({'database':'production'},{'address':'192.0.2.1'},{'port':True},{'oid':True},{'oid':4294967296},{'port':0}):
     try: m.generate(pathlib.Path.cwd(),dict(identity,**change),'/usr/bin/node','/tmp/history.json')
@@ -24,7 +28,8 @@ for change in ({'database':'production'},{'address':'192.0.2.1'},{'port':True},{
     else: raise AssertionError(change)
 pre=m.generate(pathlib.Path.cwd(),identity,'/usr/bin/node','/tmp/history.json','preflight')
 assert '\\\\ir ' not in pre and 'BEGIN;' not in pre
-assert 'Migration owner required: sourcing_contract_return_submissions' in pre
+assert 'sourcing_contract_return_submissions' in pre
+assert 'GRANT SELECT' not in pre and 'ALTER TABLE' not in pre
 print('verified')
 `], { encoding: 'utf8' });
     expect(result.trim()).toBe('verified');

@@ -21,8 +21,6 @@ suite('Acceptance maintenance permissions on isolated PostgreSQL',()=>{
    await admin.query(`CREATE SCHEMA ${schema}`);
    await admin.query(`GRANT USAGE,CREATE ON SCHEMA ${schema} TO dx_rework_acceptance,dx_rework_acceptance_app`);
    await client.connect();
-   await client.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA ${schema} GRANT SELECT,INSERT,UPDATE,DELETE ON TABLES TO dx_rework_acceptance_app`);
-   await client.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA ${schema} GRANT USAGE ON SEQUENCES TO dx_rework_acceptance_app`);
    await client.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');
    for(const row of digital){
     const m=catalog.find(x=>x.version===row.version)!;
@@ -33,19 +31,23 @@ suite('Acceptance maintenance permissions on isolated PostgreSQL',()=>{
    const before=(await client.query('SELECT * FROM schema_migrations ORDER BY version')).rows;
    await admin.query(`ALTER TABLE ${schema}.sourcing_contract_return_submissions OWNER TO dx_rework_acceptance_app`);
    const pending=catalog.filter(x=>!digital.some(r=>r.version===x.version)).map(({version,checksum})=>({version,checksum}));
-   const statements=JSON.parse(execFileSync('python3',['-B','-c',`
+   const diagnosticQuery=JSON.parse(execFileSync('python3',['-B','-c',`
 import importlib.util,json,sys
 s=importlib.util.spec_from_file_location('maintenance','scripts/deploy/prepare-acceptance-migration.py')
 m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
 r=json.load(open('scripts/deploy/acceptance-migration-requirements.json'))
-print(json.dumps([x for x in m.permission_sql(json.loads(sys.argv[1]),r) if x.startswith('DO ')]))
-`,JSON.stringify(pending)],{encoding:'utf8'})) as string[];
+print(json.dumps(m.permission_query(json.loads(sys.argv[1]),r)))
+`,JSON.stringify(pending)],{encoding:'utf8'})) as string;
    const preflight=async()=>{
     await client.query('BEGIN READ ONLY');
-    try{for(const sql of statements)await client.query(sql.replaceAll('public',schema));}
+    try {
+     const rows=(await client.query(diagnosticQuery.replaceAll('public',schema))).rows;
+     const failed=rows.filter(row=>!row.ok);
+     if(failed.length)throw Error(JSON.stringify(failed));
+    }
     finally{await client.query('ROLLBACK');}
    };
-   await expect(preflight()).rejects.toThrow('Migration owner required: sourcing_contract_return_submissions');
+   await expect(preflight()).rejects.toThrow('sourcing_contract_return_submissions');
    expect((await client.query('SELECT * FROM schema_migrations ORDER BY version')).rows).toEqual(before);
    expect((await client.query("SELECT 1 FROM information_schema.columns WHERE table_schema=$1 AND table_name='sourcing_contract_documents' AND column_name='information_revision'",[schema])).rows).toEqual([]);
    // Deliberately explicit, single object only. Never called by the updater.
@@ -54,11 +56,8 @@ print(json.dumps([x for x in m.permission_sql(json.loads(sys.argv[1]),r) if x.st
    await admin.query(`GRANT SELECT,INSERT,UPDATE,DELETE ON ${schema}.sourcing_contract_return_submissions TO dx_rework_acceptance_app`);
    await admin.query('COMMIT');
    await expect(preflight()).resolves.toBeUndefined();
-   await client.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA ${schema} REVOKE USAGE ON SEQUENCES FROM dx_rework_acceptance_app`);
-   await expect(preflight()).rejects.toThrow('Missing application default S USAGE');
-   await client.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA ${schema} GRANT USAGE ON SEQUENCES TO dx_rework_acceptance_app`);
    await admin.query(`ALTER FUNCTION ${schema}.guard_cutting_record_creation() OWNER TO dx_rework_acceptance_app`);
-   await expect(preflight()).rejects.toThrow('Migration function owner required: guard_cutting_record_creation');
+   await expect(preflight()).rejects.toThrow('guard_cutting_record_creation');
    await admin.query(`ALTER FUNCTION ${schema}.guard_cutting_record_creation() OWNER TO dx_rework_acceptance`);
    const upgraded=await applyMigrations(target.toString());
    expect(upgraded.currentVersion).toBe('0233_manual_contract_template_provenance');

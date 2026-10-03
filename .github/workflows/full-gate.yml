@@ -212,6 +212,10 @@ jobs:
           DATABASE_URL="$target_url" node scripts/deploy/verify-database-readiness.mjs apps/api/src/platform/migration-manifest.json
           psql "$admin_url" -v ON_ERROR_STOP=1 -c "DROP DATABASE $target_name"
 
+      - name: Acceptance low-privilege migration and backup recovery
+        if: env.DEPLOYMENT_SENSITIVE == 'true'
+        run: node scripts/ci/acceptance-maintenance-drill.mjs
+
       - name: PR-17 exact-head acceptance and lifecycle
         if: env.DEPLOYMENT_SENSITIVE == 'true'
         shell: bash
