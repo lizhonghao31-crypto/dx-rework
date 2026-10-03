@@ -3479,21 +3479,26 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await contractService.generateIfReady(rootActor(),id,manual);
     expect((await contractService.getCurrent(rootActor(),id)).item?.templateVersion).toBe(original.templateVersion);
     expect((await contractService.content.get(rootActor(),id)).content).toEqual(input.content);
-    // Even a matching audit event must not let a manual edit falsely advance provenance.
-    const row=(await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[manual])).rows[0];
+    // Reject forged manual documents at INSERT, even without any content-override row.
+    const rejectManualInsert=async(actor:TrustedActorContext,sourceId:string,claimedVersion:number)=>{
+    const row=(await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[sourceId])).rows[0];
     const client=await database.connect();
     try {
       await client.query("BEGIN");
       const forged=randomUUID();
       const supplierValues=Object.fromEntries(Object.entries(row.approval_snapshot).filter(([k])=>["supplierName","supplierCode","address","contractEntityName","partyBRepresentative","payeeName","bankAccount","bankName"].includes(k)));
-      const event=await new OperationEventRepository().append(client,rootActor(),{action:"sourcing.contract.information.refresh",entityType:"sourcing_contract_document",entityId:forged,
-        before:{documentId:manual},after:{mode:"manual_content",content:input.content,supplierValues,templateVersion:template.templateVersion+1},reason:"TEST reject forged template advancement"});
+      const event=await new OperationEventRepository().append(client,actor,{action:"sourcing.contract.information.refresh",entityType:"sourcing_contract_document",entityId:forged,
+        before:{documentId:sourceId},after:{mode:"manual_content",content:input.content,supplierValues,templateVersion:claimedVersion},reason:"TEST reject forged template advancement"});
       await expect(client.query(`INSERT INTO sourcing_contract_documents(sourcing_contract_document_id,sourcing_case_id,sourcing_approval_snapshot_id,sourcing_decision_id,
         contract_version,contract_number,template_version,approval_snapshot,missing_fields,status,prepared_by,identity_version,revision_of,information_revision,information_refresh_event_id)
         SELECT $1,sourcing_case_id,sourcing_approval_snapshot_id,sourcing_decision_id,contract_version+1,$2,$3,approval_snapshot,'{}','generation_pending',$4,
           identity_version,sourcing_contract_document_id,information_revision+1,$5 FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$6`,
-        [forged,'TEST-'+forged,template.templateVersion+1,rootActor().actorId,event,manual])).rejects.toMatchObject({code:"42501"});
+        [forged,'TEST-'+forged,claimedVersion,actor.actorId,event,sourceId])).rejects.toMatchObject({code:"42501"});
     } finally {await client.query("ROLLBACK");client.release();}
+    };
+    await rejectManualInsert(rootActor(),manual,template.templateVersion+1);
+    await rejectManualInsert(managerActor(),manual,original.templateVersion);
+    await rejectManualInsert(contractActor(),manual,original.templateVersion);
     const refresh=await contractService.management.previewInformation(contractActor(),id);
     expect(refresh.changes).toEqual(expect.arrayContaining([expect.objectContaining({field:"templateVersion"}),
       expect.objectContaining({field:"payment",after:"等待明确同步的新付款条款"})]));
@@ -3501,6 +3506,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await contractService.generateIfReady(contractActor(),id,refreshed);
     expect((await contractService.getCurrent(rootActor(),id)).item?.templateVersion).toBe(template.templateVersion+1);
     expect((await contractService.content.get(rootActor(),id)).content).toMatchObject({deliveryDate:"2026-12-03",terms:{payment:"等待明确同步的新付款条款"}});
+    await service.recordFinanceReconciliation(financeActor(),id,{result:"match"},randomUUID());
+    await rejectManualInsert(rootActor(),refreshed,template.templateVersion+1);
   });
 
   it("preserves the previous dashboard risk when only the contract delivery date changes",async()=>{

@@ -28,6 +28,9 @@ BEGIN
     OR NEW.information_revision<>previous.information_revision+1 OR NEW.contract_version<>previous.contract_version+1
     OR NEW.sourcing_approval_snapshot_id<>previous.sourcing_approval_snapshot_id
     OR NEW.sourcing_decision_id<>previous.sourcing_decision_id OR NEW.identity_version<>previous.identity_version
+    OR (event.after_state->>'mode'='manual_content' AND (
+      NOT event.actor_roles @> ARRAY['root_superuser']::text[]
+      OR EXISTS(SELECT 1 FROM sourcing_finance_reconciliations WHERE sourcing_case_id=NEW.sourcing_case_id)))
     OR NEW.template_version IS DISTINCT FROM (CASE WHEN event.after_state->>'mode'='manual_content'
       THEN previous.template_version
       ELSE (SELECT max(template_version) FROM sourcing_contract_template_versions WHERE effective_from<=CURRENT_TIMESTAMP) END)
