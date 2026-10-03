@@ -1,21 +1,39 @@
+/* This named region is separate from the Shell's navigation aside. */
 .digital-notification-toast {
   position: fixed;
-  right: max(20px, env(safe-area-inset-right));
-  bottom: max(24px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
   z-index: 70;
-  width: min(340px, calc(100vw - 32px));
+  box-sizing: border-box;
+  width: min(300px, calc(100vw - 32px));
   max-height: 40dvh;
   overflow: auto;
-  padding: 16px;
+  overflow-wrap: anywhere;
+  padding: 12px;
   border: 1px solid var(--dx-form-control-border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--dx-v2-color-surface);
-  box-shadow: 0 4px 20px rgb(0 0 0 / 12%);
+  color: var(--dx-v2-color-text);
+  font-size: 13px;
+  line-height: 1.45;
+  box-shadow: var(--ui-surface-shadow, 0 2px 8px rgb(75 90 105 / 8%));
 }
-.digital-notification-toast p { margin: 0 0 12px; }
-.digital-notification-toast > div { display: flex; justify-content: flex-end; gap: 8px; }
-.digital-notification-hint { font-size: 12px; }
+.digital-notification-toast p { margin: 0 0 8px; flex-shrink: 0; }
+.digital-notification-toast p:first-child { min-height: 0; flex-shrink: 1; overflow: auto; color: var(--dx-v2-color-text); font-weight: 600; }
+.digital-notification-toast > div { display: flex; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.digital-notification-toast .dx-button { padding-inline: 12px; box-shadow: none; }
+.digital-notification-hint { font-size: 12px; color: var(--dx-v2-color-text-secondary); }
 @media (max-width: 800px) {
-  .digital-notification-toast { top: max(72px, env(safe-area-inset-top)); bottom: auto; right: 16px; }
+  /* Keep the bottom navigation and submission area free; hide during text entry. */
+  .digital-notification-toast {
+    top: max(72px, env(safe-area-inset-top));
+    bottom: auto;
+    right: max(12px, env(safe-area-inset-right));
+    width: min(300px, calc(100vw - 24px));
+    max-height: 30dvh;
+  }
+  .digital-notification-toast .dx-button { min-height: 44px; }
   body:has(input:focus, textarea:focus, select:focus) .digital-notification-toast { visibility: hidden; }
 }

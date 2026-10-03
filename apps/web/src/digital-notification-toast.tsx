@@ -42,5 +42,5 @@ export function DigitalNotificationToast({userId}:{userId:string}) {
     }catch{setError("确认未成功，请重试");}finally{setBusy(false);}
   };
   if(!notice)return null;
-  return <aside className="digital-notification-toast" aria-live="polite" aria-label="站内提醒"><p>{notice.title}</p><p className="digital-notification-hint">{notice.actionable?"确认提醒后，待办仍会保留。":"此消息仅供知悉。"}</p>{error&&<p role="alert">{error}</p>}<div><Button disabled={busy} onClick={()=>void dismiss(false)}>我知道了</Button><Button disabled={busy} onClick={()=>void dismiss(true)}>{notice.actionable?"去处理":"查看"}</Button></div></aside>;
+  return <section className="digital-notification-toast" aria-live="polite" aria-label="站内提醒"><p>{notice.title}</p><p className="digital-notification-hint">{notice.actionable?"确认提醒后，待办仍会保留。":"此消息仅供知悉。"}</p>{error&&<p role="alert">{error}</p>}<div><Button disabled={busy} onClick={()=>void dismiss(false)}>我知道了</Button><Button disabled={busy} onClick={()=>void dismiss(true)}>{notice.actionable?"去处理":"查看"}</Button></div></section>;
 }
