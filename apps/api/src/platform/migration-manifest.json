@@ -939,6 +939,10 @@
     {
       "version": "0232_reconcile_contract_and_digital_histories",
       "checksum": "e80fa66d9ae060a43430a8bed70513ecac17ae6daed729e307921fcae66b56c3"
+    },
+    {
+      "version": "0233_manual_contract_template_provenance",
+      "checksum": "fd9a186de1e8b2398d5c8bf18adc1a8bd30d3a18c5669b3cfb2d3e98c4cfbb9b"
     }
   ]
 }

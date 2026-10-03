@@ -19,7 +19,9 @@ export async function loadContractContent(db:Queryable,documentId:string):Promis
     LEFT JOIN sourcing_contract_content_overrides o USING(sourcing_contract_document_id)
     WHERE d.sourcing_contract_document_id=$1`,[documentId])).rows[0];
   if (!row) throw new ApplicationError("NOT_FOUND","合同不存在",404);
-  if (row.content) return {...ContractContentSchema.parse(row.content),templateVersion:Number(row.template_version)};
+  // Overrides use the full-content PDF layout, including edits to legacy templates.
+  // The document's stored template_version remains its actual template provenance.
+  if (row.content) return {...ContractContentSchema.parse(row.content),templateVersion:Math.max(4,Number(row.template_version))};
   const supplements = (await db.query("SELECT field_name,field_value FROM sourcing_contract_supplements WHERE sourcing_contract_document_id=$1",[documentId])).rows;
   const approval = row.approval_snapshot as Record<string,unknown>;
   const values = {...approval,...Object.fromEntries(supplements.map(x=>[x.field_name,x.field_value]))};
@@ -112,8 +114,7 @@ export class SourcingContractContentService {
         if (row.sourcing_contract_document_id!==input.sourcingContractDocumentId || row.snapshot_fingerprint!==input.informationFingerprint)
           throw new ApplicationError("INVALID_STATE_TRANSITION","合同已更新，请重新打开后修改",409);
         await client.query("SELECT sourcing_case_id FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1 FOR UPDATE",[caseId]);
-        await client.query("LOCK TABLE sourcing_contract_template_versions IN SHARE MODE");
-        const templateVersion=Number((await client.query("SELECT max(template_version) AS version FROM sourcing_contract_template_versions WHERE effective_from<=CURRENT_TIMESTAMP")).rows[0].version);
+        const templateVersion=Number(row.template_version);
         const id=randomUUID();
         const content=await this.images(client,actor,caseId,input.content);
         const supplements=(await client.query("SELECT field_name,field_value FROM sourcing_contract_supplements WHERE sourcing_contract_document_id=$1",[row.sourcing_contract_document_id])).rows;

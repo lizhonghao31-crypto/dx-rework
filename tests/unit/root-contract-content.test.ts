@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { ContractContentSchema, SaveContractContentSchema, type ContractContent } from "@dx-rework/contracts";
-import { canEditContractContent, SourcingContractContentService } from "../../apps/api/src/sourcing/sourcing-contract-content.js";
+import { canEditContractContent, loadContractContent, SourcingContractContentService } from "../../apps/api/src/sourcing/sourcing-contract-content.js";
 import { renderSourcingContractPdf } from "../../apps/api/src/sourcing/sourcing-contract-pdf.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
@@ -13,6 +13,10 @@ const content:ContractContent={contractTitle:"人工合同标题",partyARepresen
   terms:{processingResponsibility:"双方另行约定加工责任。",qualityRequirements:"人工质量要求",delayPenalty:"人工延期约定",logistics:"人工运输约定",reasonableLoss:"人工损耗约定",
     defectRate:"人工次品约定",payment:"人工付款约定",effectiveness:"人工生效约定",validity:"人工有效期"}};
 describe("Root contract content",()=>{
+  it("renders explicit legacy-template overrides with the complete manual content layout",async()=>{
+    const query=vi.fn(async()=>({rows:[{template_version:3,content}]}));
+    expect(await loadContractContent({query} as never,"document")).toEqual({...content,templateVersion:4});
+  });
   it.each(["order_merchandiser","production_management","owner_group","system_admin","factory_payables"])("denies %s before accessing data",async role=>{
     const service=new SourcingContractContentService({} as never,{} as never);
     expect(canEditContractContent(actor(role),false)).toBe(false);
