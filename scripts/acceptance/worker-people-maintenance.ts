@@ -11,6 +11,9 @@ export function workerPeopleConfiguration(env: NodeJS.ProcessEnv, args: string[]
   const ids = args.filter(arg => arg.startsWith("--expected-user-id="));
   const alias = aliases[0]?.slice("--alias=".length);
   const expectedUserId = ids[0]?.slice("--expected-user-id=".length);
+  if (modes.includes("--apply") && (!alias || !expectedUserId)) {
+    throw new Error("Apply requires both --alias and --expected-user-id for one explicitly selected account");
+  }
   if (modes.length > 1 || aliases.length > 1 || ids.length > 1
     || modes.length + aliases.length + ids.length !== args.length
     || (aliases.length && !workers.some(worker => worker.alias === alias))
@@ -86,6 +89,9 @@ async function inspect(database: Pool, corpId: string, selection: Selection) {
 
 /** Internal service; the CLI must validate configured and connected Acceptance database names first. */
 export async function maintainAcceptanceWorkerPeople(database: Pool, corpId: string, apply = false, selection: Selection = {}) {
+  if (apply && (!selection.alias || !selection.expectedUserId)) {
+    throw new Error("Apply requires both alias and expected user ID for one explicitly selected account");
+  }
   const before = await inspect(database, corpId, selection);
   if (apply) {
     const access = new AccessMasterDataService(database, corpId);

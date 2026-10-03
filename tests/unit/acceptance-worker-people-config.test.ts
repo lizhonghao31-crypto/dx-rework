@@ -4,12 +4,16 @@ import { workerPeopleConfiguration } from "../../scripts/acceptance/worker-peopl
 describe("personnel-only Acceptance CLI guards", () => {
   const env = { NODE_ENV: "test", ACCEPTANCE_LAB_ENABLED: "true", DINGTALK_CORP_ID: "corp-acceptance",
     ACCEPTANCE_DATABASE_URL: "postgres://localhost/dx_acceptance" };
+  const selection = ["--alias=pattern-room-worker", "--expected-user-id=1494c445-fe65-4c24-95cc-72620360adb6"];
   it("defaults to read-only and requires explicit apply", () => {
     expect(workerPeopleConfiguration(env, []).apply).toBe(false);
     expect(workerPeopleConfiguration(env, ["--check"]).apply).toBe(false);
-    expect(workerPeopleConfiguration(env, ["--apply"]).apply).toBe(true);
+    expect(workerPeopleConfiguration(env, ["--apply", ...selection]).apply).toBe(true);
+    expect(() => workerPeopleConfiguration(env, ["--apply"])).toThrow("Apply requires both");
+    expect(() => workerPeopleConfiguration(env, ["--apply", selection[0]!])).toThrow("Apply requires both");
+    expect(() => workerPeopleConfiguration(env, ["--apply", selection[1]!])).toThrow("Apply requires both");
     expect(() => workerPeopleConfiguration(env, ["--force"])).toThrow("Usage");
-    expect(() => workerPeopleConfiguration(env, ["--check", "--apply"])).toThrow("Usage");
+    expect(() => workerPeopleConfiguration(env, ["--check", "--apply", ...selection])).toThrow("Usage");
     expect(workerPeopleConfiguration(env, ["--alias=pattern-room-worker", "--expected-user-id=1494c445-fe65-4c24-95cc-72620360adb6"]).apply).toBe(false);
     expect(() => workerPeopleConfiguration(env, ["--alias=root"])).toThrow("Usage");
     expect(() => workerPeopleConfiguration(env, ["--expected-user-id=1494c445-fe65-4c24-95cc-72620360adb6"])).toThrow("Usage");
@@ -26,7 +30,7 @@ describe("personnel-only Acceptance CLI guards", () => {
     const checked = workerPeopleConfiguration(configured, []);
     expect(new URL(checked.connectionString).searchParams.get("options"))
       .toBe("-c search_path=public -c default_transaction_read_only=off -c default_transaction_read_only=on");
-    const applied = workerPeopleConfiguration(configured, ["--apply"]);
+    const applied = workerPeopleConfiguration(configured, ["--apply", ...selection]);
     expect(new URL(applied.connectionString).searchParams.get("options"))
       .toBe("-c search_path=public -c default_transaction_read_only=off");
   });

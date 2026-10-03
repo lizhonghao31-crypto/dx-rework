@@ -52,9 +52,11 @@ const databaseUrl = process.env.TEST_DATABASE_URL;
     expect(missing.workers.map(worker => worker.status)).toEqual(["missing", "missing", "missing"]);
     expect((await database.query("SELECT 1 FROM business_people")).rowCount).toBe(0);
     expect(await snapshot()).toEqual(before);
-    // Fail on the last identity before creating any of the earlier missing people.
+    await expect(maintainAcceptanceWorkerPeople(database, corpId, true)).rejects.toThrow("Apply requires both");
+    await expect(maintainAcceptanceWorkerPeople(database, corpId, true, { alias: "pattern-room-worker" })).rejects.toThrow("Apply requires both");
+    const selection = { alias: "pattern-room-worker", expectedUserId: workerIds[2] };
     await database.query("UPDATE identity_mappings SET active=false WHERE user_id=$1", [workerIds[2]]);
-    await expect(maintainAcceptanceWorkerPeople(database, corpId, true)).rejects.toThrow("inactive");
+    await expect(maintainAcceptanceWorkerPeople(database, corpId, true, selection)).rejects.toThrow("inactive");
     expect((await database.query("SELECT 1 FROM business_people")).rowCount).toBe(0);
     await database.query("UPDATE identity_mappings SET active=true WHERE user_id=$1", [workerIds[2]]);
     await expect(maintainAcceptanceWorkerPeople(database, corpId, true, {
@@ -67,12 +69,15 @@ const databaseUrl = process.env.TEST_DATABASE_URL;
     expect(selected.workers).toHaveLength(1);
     expect(selected.ready).toBe(true);
     expect((await database.query("SELECT 1 FROM business_people")).rowCount).toBe(1);
-    const applied = await maintainAcceptanceWorkerPeople(database, corpId, true);
-    expect(applied.ready).toBe(true);
-    expect(applied.workers.every(worker => Boolean(worker.personId))).toBe(true);
+    // Other standard workers require their own explicit, identity-pinned operation.
+    for (const [index, alias] of ["worker-a", "worker-b"].entries()) {
+      expect((await maintainAcceptanceWorkerPeople(database, corpId, true, {
+        alias, expectedUserId: workerIds[index],
+      })).ready).toBe(true);
+    }
     expect((await database.query("SELECT 1 FROM business_people WHERE person_type='internal' AND active AND app_user_id=ANY($1::uuid[])", [workerIds])).rowCount).toBe(3);
     expect(await snapshot()).toEqual(before);
-    expect(await maintainAcceptanceWorkerPeople(database, corpId, true)).toEqual(applied);
+    expect(await maintainAcceptanceWorkerPeople(database, corpId, true, selection)).toEqual(selected);
     expect((await maintainAcceptanceWorkerPeople(database, corpId)).ready).toBe(true);
     expect((await database.query("SELECT 1 FROM business_people")).rowCount).toBe(3);
   });

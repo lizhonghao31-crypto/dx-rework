@@ -32,10 +32,10 @@ active/employed/last_verified_at；必要时补标准角色，初始化新库 Ro
   以及已初始化且有效的 UAT Root。绝不 bootstrap、启用账号或授予角色。
 - 检查既有标准身份、有效组织身份、标准有效角色、额外角色/委派、人员冲突。
   任一检查失败即停止；停用/冲突不会被自动修复。
-- `--apply` 才通过 PR607 原有 helper 和审计服务创建缺失的 active/internal 人员，
-  绑定真实 app_user_id；已有正确档案不写入。只选择明确 alias 时只处理该人。
+- `--apply` 必须同时提供明确 alias 和 expected-user-id，仅通过 PR607 原有 helper
+  和审计服务创建该账号缺失的 active/internal 人员；已有正确档案不写入。
 - 不改旧 TEST 订单、原打板状态、数字任务、工资、账号或角色。不是业务派工替代品。
-- 各人员创建独立事务；多人员执行中断可只读复查后幂等重试，不宣称全批次原子性。
+- 一次 apply 只能处理一个明确账号；创建使用原服务事务，中断后可只读复查并幂等重试。
 
 ## 未来由用户执行的最小操作
 
@@ -68,7 +68,8 @@ NODE_ENV=test ACCEPTANCE_LAB_ENABLED=true npx --no-install tsx \
 
 随后重跑同一 `--check`，确认 ready=true，唯一 personId 对应上述 appUserId。
 如果检查为冲突/停用/缺角色/不同账号ID，不执行全量 seed 或直接 SQL 绕过。
-本次最小解锁不需要补 worker-a/worker-b；不带 alias 可只读检查三人，apply范围要另行明确。
+本次最小解锁不需要补 worker-a/worker-b；不带 alias 可只读检查三人，但裸 apply
+或没有 expected-user-id 的 apply 均拒绝。其他人员若未来另获授权，也必须逐人明确指定账号。
 
 业务继续由技术主管正常分配原打板；数字预派不会自动替代原打板派工。
 旧 NONE 原打板 `4eb799a7-c8de-4985-adaf-72742bc1e342`、新 TEST 原打板
@@ -79,8 +80,8 @@ P14 两张原订单读取需包含 #622 的代码部署后另行现场复测。
 ## 本地验证和边界
 
 使用独立 loopback PostgreSQL 13.23、全 schema 与合成 UAT 身份，真实服务/审计触发器：
-检查不写入；最后一人身份停用时零建档；expected-user-id 错误时零建档；指定板房师傅
-仅建一人；随后全量补三人及重复执行幂等；用户/身份/角色全行快照保持一致。
+检查不写入；无明确单人目标、身份停用或 expected-user-id 错误时零建档；指定板房师傅
+仅建一人；其他标准工人也逐人显式建档验证，重复执行幂等；用户/身份/角色全行快照保持一致。
 CLI 配置测试覆盖默认只读、明确 apply、错误参数、生产模式/数据库拒绝、禁止连接回退。
 回归加入既有 business-chain 测试列表，不改变 Gate/部署策略。
 
