@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
+import { initialInstruction } from '@dx-rework/contracts/production-instruction';
 
 // Offline UI regression: every API response is synthetic; no database or live session.
 const base = new URL(process.env.DIGITAL_QUERY_TEST_URL || 'http://127.0.0.1:3200');
@@ -15,10 +16,18 @@ try {
   const page = await browser.newPage();
   page.setDefaultTimeout(10_000);
   const errors = [];
+  let editable = false;
+  let releaseWrite;
+  let writingStarted = false;
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => { sessionStorage.setItem('dx-rework:platform-module', 'rework'); });
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname.split('/api/')[1];
+    if (editable && route.request().method() === 'PUT' && /\/(instruction|development)$/.test(path)) {
+      writingStarted = true;
+      await new Promise(resolve => { releaseWrite = resolve; });
+      return route.fulfill({status: 503, json: {error: {message: '隔离保存失败，保留输入'}}});
+    }
     assert.equal(route.request().method(), 'GET', `Unexpected write: ${path}`);
     let data;
     if (path === 'auth/me') data = {status: 'authorized', user: {id: source, displayName: '离线板房师傅', capabilities: [], businessRoles: ['pattern_room_worker']}};
@@ -30,6 +39,14 @@ try {
     else if (path === 'digital-production/orders' || path === 'digital-production/sources') data = {items: []};
     else if (path === `digital-production/orders/${order}/bulk-preparation`) data = {
       dispatch: {}, reasons: [], tasks: [], facts: [], cutting: {lines: []}, instructionVersion: 3,
+    };
+    else if (editable && path === `digital-production/sources/${source}/development`) data = {
+      sourceId: source, designStyleNo: '隔离开发单', developmentType: '头版', designerName: '隔离设计师',
+      status: 'draft', version: 1, document: null, canEdit: true, materialEvents: [],
+    };
+    else if (editable && path === `digital-production/orders/${order}/instruction`) data = {
+      order: {productionOrderId: order, designStyleNo: '隔离制单', version: 1, lines: []}, document: initialInstruction(),
+      version: 1, versions: [], canEdit: true, dateRequests: [], printedBy: '隔离跟单',
     };
     else return route.fulfill({status: 403, json: {error: {message: `隔离详情 ${path}${new URL(route.request().url()).search}`}}});
     await route.fulfill({json: data});
@@ -66,6 +83,57 @@ try {
   assert.equal(new URL(page.url()).search, '');
   await page.goto(url(`?development=${source}&round=2`)); await detail(`sources/${source}/development?round=2`);
   await page.goto(url(`?instruction=${order}&instructionVersion=3`)); await detail(`orders/${order}/instruction?version=3`);
+  // Review regression: dirty editors must survive Back, same-page links, and cancelled Return.
+  editable = true;
+  await page.goto(url(''));
+  await list();
+  await clickRoute(`?development=${source}`);
+  await page.getByLabel('样板尺码', {exact: true}).fill('保留我的修改');
+  await page.evaluate(() => history.back());
+  await page.getByRole('dialog').getByRole('button', {name: '取消', exact: true}).click();
+  await page.waitForURL(url(`?development=${source}`));
+  assert.equal(await page.getByLabel('样板尺码', {exact: true}).inputValue(), '保留我的修改');
+  await clickRoute(`?task=${taskId}`);
+  await page.getByRole('dialog').getByRole('button', {name: '取消', exact: true}).click();
+  assert.equal(await page.getByLabel('样板尺码', {exact: true}).inputValue(), '保留我的修改');
+  await page.getByRole('button', {name: '返回', exact: true}).click();
+  await page.getByRole('dialog').getByRole('button', {name: '取消', exact: true}).click();
+  assert.equal(await page.getByLabel('样板尺码', {exact: true}).inputValue(), '保留我的修改');
+  await page.getByRole('button', {name: '保存草稿', exact: true}).click();
+  await page.waitForFunction(() => document.querySelector('.development-controls button').disabled);
+  assert(writingStarted);
+  await clickRoute(`?task=${taskId}`);
+  assert.equal(new URL(page.url()).search, `?development=${source}`);
+  releaseWrite();
+  await detail('隔离保存失败');
+  await page.getByRole('button', {name: '返回', exact: true}).click();
+  await page.getByRole('dialog').getByRole('button', {name: '确认', exact: true}).click();
+  await list(); // One confirmation only; no duplicate from Return plus shared guard.
+
+  // Freeze the autosave clock: navigation before its 1200ms timer must retain the draft.
+  await page.clock.install({time: new Date("2026-10-03T00:00:00Z")});
+  await page.clock.pauseAt(new Date("2026-10-03T00:00:01Z"));
+  await clickRoute(`?instruction=${order}`);
+  await page.getByRole('textbox', {name: '款名', exact: true}).fill('未保存制单');
+  await page.evaluate(() => history.back());
+  await page.getByRole('dialog').getByRole('button', {name: '取消', exact: true}).click();
+  await page.waitForURL(url(`?instruction=${order}`));
+  assert.equal(await page.getByRole('textbox', {name: '款名', exact: true}).inputValue(), '未保存制单');
+  await clickRoute(`?task=${taskId}`);
+  // Autosave starting while the confirmation is open must also block confirmed departure.
+  writingStarted = false;
+  await page.clock.runFor(1500);
+  await page.waitForFunction(() => document.querySelector('.instruction-controls button').disabled);
+  assert(writingStarted);
+  await page.getByRole('dialog').getByRole('button', {name: '确认', exact: true}).click();
+  assert.equal(new URL(page.url()).search, `?instruction=${order}`);
+  releaseWrite();
+  await detail('隔离保存失败');
+  assert.equal(await page.getByRole('textbox', {name: '款名', exact: true}).inputValue(), '未保存制单');
+  await page.getByRole('button', {name: '返回', exact: true}).click();
+  await page.getByRole('dialog').getByRole('button', {name: '确认', exact: true}).click();
+  await page.clock.runFor(200);
+  await list();
   assert.deepEqual(errors, []);
-  console.log('PASS: actual task/development and bulk/instruction links, direct URLs, Back/Forward, different IDs/versions, close/reopen; offline responses only.');
+  console.log('PASS: actual task/development and bulk/instruction links, direct URLs, Back/Forward, different IDs/versions, close/reopen, dirty cancellation and in-flight write guards; offline responses only.');
 } finally { await browser.close(); }
