@@ -224,6 +224,7 @@ if (hasDatabase) {
     "tests/integration/sample-disposal-postgres.test.ts",
     "tests/integration/sample-import-postgres.test.ts",
     "tests/integration/acceptance-role-session-postgres.test.ts",
+    "tests/integration/acceptance-worker-people-postgres.test.ts",
   );
   process.stdout.write(
     "BUSINESS_CHAIN_GATE_START: sourcing PR03 + receiving + N01 v2 + process-worker preassignment + current-schema N01-N11 + two fresh Root single-account HTTP passes + isolated acceptance role sessions/control switching + browser/root/storage regressions\n",
