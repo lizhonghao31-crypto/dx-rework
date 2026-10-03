@@ -1,3 +1,4 @@
+import { navigateInternalPage } from "./internal-navigation.js";
 import {OrderClosurePanel} from "./order-closure-panel.js";
 import {FactoryFlowPanel} from "./factory-flow-panel.js";
 import { BulkPreparationPanel } from "./bulk-preparation-panel.js";
@@ -81,12 +82,18 @@ export function DigitalProductionPage() {
   };
   const updateLine = (index: number, patch: Partial<DigitalOrderInput["lines"][number]>) => setForm(current => ({ ...current, lines: current.lines.map((line, i) => i === index ? { ...line, ...patch } : line) }));
   const start = (next: "source" | "order", source?: DigitalSource) => { setSelected(null); setSourceId(source?.sourceId ?? null); setForm({ ...emptyOrder(), designStyleNo: source?.designStyleNo ?? "", temporaryStyleNo: source?.temporaryStyleNo ?? null, customerCode: source?.customerCode ?? "", primaryMerchandiserId: options?.customers.find(customer => customer.code === source?.customerCode)?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(options?.customers ?? [], source?.customerCode) }); setMode(next); setError(""); };
-  if(closureOrder)return <div className="pattern-orders digital-production"><OrderClosurePanel orderId={closureOrder} onClose={()=>{setClosureOrder(null);const url=new URL(window.location.href);url.searchParams.delete("closure");window.history.replaceState(null,"",url);}}/></div>;
-  if(factoryOrder)return <div className="pattern-orders digital-production"><FactoryFlowPanel orderId={factoryOrder} onClose={()=>{setFactoryOrder(null);const url=new URL(window.location.href);url.searchParams.delete("factory");window.history.replaceState(null,"",url);}}/></div>;
-  if(bulkOrder)return <div className="pattern-orders digital-production"><BulkPreparationPanel orderId={bulkOrder} onClose={()=>{setBulkOrder(null);const url=new URL(window.location.href);url.searchParams.delete("bulk");window.history.replaceState(null,"",url);}}/></div>;
-  if (instructionOrder) return <div className="pattern-orders digital-production"><ProductionInstructionPanel orderId={instructionOrder} initialVersion={Number(new URLSearchParams(window.location.search).get("instructionVersion"))||undefined} onClose={()=>{setInstructionOrder(null);const url=new URL(window.location.href);url.searchParams.delete("instruction");url.searchParams.delete("instructionVersion");window.history.replaceState(null,"",url);}} /></div>;
-  if (budgetOrder) return <div className="pattern-orders digital-production"><DigitalBudgetPanel key={budgetOrder.productionOrderId} order={budgetOrder} onClose={() => { setBudgetOrder(null); const url = new URL(window.location.href); url.searchParams.delete("budget"); window.history.replaceState(null, "", url); }} /></div>;
-  if (developmentSource) return <div className="pattern-orders digital-production"><DigitalDevelopmentPanel key={developmentSource} sourceId={developmentSource} initialRound={Number(new URLSearchParams(window.location.search).get("round"))||undefined} onClose={() => { setDevelopmentSource(null); const url = new URL(window.location.href); url.searchParams.delete("development"); url.searchParams.delete("round"); window.history.replaceState(null, "", url); }} /></div>;
+  const closeDetail = (parameters: string[], clear: () => void) => {
+    const url = new URL(window.location.href);
+    for (const parameter of parameters) url.searchParams.delete(parameter);
+    // Keep the shared router's location and history position in sync with closing.
+    void navigateInternalPage(url.href, { replace: true }).then(left => { if (left) clear(); });
+  };
+  if(closureOrder)return <div className="pattern-orders digital-production"><OrderClosurePanel orderId={closureOrder} onClose={()=>closeDetail(["closure"],()=>setClosureOrder(null))}/></div>;
+  if(factoryOrder)return <div className="pattern-orders digital-production"><FactoryFlowPanel orderId={factoryOrder} onClose={()=>closeDetail(["factory"],()=>setFactoryOrder(null))}/></div>;
+  if(bulkOrder)return <div className="pattern-orders digital-production"><BulkPreparationPanel orderId={bulkOrder} onClose={()=>closeDetail(["bulk"],()=>setBulkOrder(null))}/></div>;
+  if (instructionOrder) return <div className="pattern-orders digital-production"><ProductionInstructionPanel orderId={instructionOrder} initialVersion={Number(new URLSearchParams(window.location.search).get("instructionVersion"))||undefined} onClose={()=>closeDetail(["instruction", "instructionVersion"],()=>setInstructionOrder(null))} /></div>;
+  if (budgetOrder) return <div className="pattern-orders digital-production"><DigitalBudgetPanel key={budgetOrder.productionOrderId} order={budgetOrder} onClose={()=>closeDetail(["budget"],()=>setBudgetOrder(null))} /></div>;
+  if (developmentSource) return <div className="pattern-orders digital-production"><DigitalDevelopmentPanel key={developmentSource} sourceId={developmentSource} initialRound={Number(new URLSearchParams(window.location.search).get("round"))||undefined} onClose={()=>closeDetail(["development", "round"],()=>setDevelopmentSource(null))} /></div>;
   return <div className="pattern-orders digital-production"><Header title="数字生产订单" badge="订单源头" badgePlacement="subtitle" />
     {error && <p role="alert">{error}</p>}
     {access && <DigitalTasksPanel options={access} />}

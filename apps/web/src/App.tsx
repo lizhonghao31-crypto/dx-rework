@@ -272,7 +272,7 @@ export function App() {
   const sourcingOrderMatch = path.match(/^\/ui\/sourcing\/orders\/([0-9a-f-]{36})$/i);
   const cuttingOrderMatch = path.match(/^\/ui\/cutting\/orders\/([0-9a-f-]{36})$/i);
   let page;
-  if (path === "/ui/digital-production") page = <Shell active="订单打板"><DigitalProductionPage /></Shell>;
+  if (path === "/ui/digital-production") page = <Shell active="订单打板"><DigitalProductionPage key={search} /></Shell>;
   else if (path === "/ui/home") page = <HomeLanding />;
   else if (path === "/ui/sourcing" || path === "/ui/sourcing/pending") page = <SourcingWorkspacePage view="pending" />;
   else if (path === "/ui/samples/handoff") page = <SampleHandoffPage />;
