@@ -54,3 +54,50 @@ describe('Acceptance controller failure routing',()=>{
   expect(mayRecoverOldRuntime('online',before,{migrations:[{version:'one',checksum:'drift'},before.migrations[1]]})).toBe(false);
  });
 });
+
+describe('same candidate recovery after activation failure',()=>{
+ it('uses the real planner to resume a halted current candidate without migrations, then becomes a healthy no-op',()=>{
+  const result=spawnSync('bash',['-c',`
+set -euo pipefail
+source scripts/deploy/acceptance-update-flow.sh
+status=online
+active=old
+schema_current=false
+fail_activation=true
+worker() {
+ echo "worker:$1"
+ case "$1" in
+  prepare)
+   action="$("$NODE_BIN" scripts/deploy/acceptance-update-policy.mjs next-action "$active" candidate "$schema_current" "$status")"
+   case "$action" in verify) return 10;; activate) return 11;; esac;;
+  stop|halt) status=stopped;;
+  activate)
+   active=candidate
+   if [[ "$fail_activation" == true ]]; then return 1; fi
+   status=online;;
+ esac
+ return 0
+}
+maintenance() { echo "maintenance:$1"; if [[ "$1" == apply ]]; then schema_current=true; fi; }
+rc=0
+acceptance_update_flow || rc=$?
+[[ "$rc" == 1 && "$status" == stopped && "$active" == candidate ]]
+echo RETRY
+fail_activation=false
+acceptance_update_flow
+[[ "$status" == online ]]
+echo HEALTHY
+acceptance_update_flow
+`],{env:{...process.env,NODE_BIN:process.execPath},encoding:'utf8'});
+  expect(result.status,result.stderr).toBe(0);
+  const retry=result.stdout.split('RETRY\n')[1]!.split('HEALTHY\n');
+  expect(retry[0]!.trim().split('\n')).toEqual(['worker:prepare','worker:activate']);
+  expect(retry[1]!.trim()).toBe('worker:prepare');
+ });
+ it('does not resume activation if schema is incomplete or the active SHA differs',()=>{
+  for(const [active,current] of [['candidate','false'],['old','true']]) {
+   const r=spawnSync(process.execPath,['scripts/deploy/acceptance-update-policy.mjs','next-action',active!,'candidate',current!,'stopped'],{encoding:'utf8'});
+   expect(r.status).toBe(0);expect(r.stdout).toBe('update');
+  }
+ });
+});

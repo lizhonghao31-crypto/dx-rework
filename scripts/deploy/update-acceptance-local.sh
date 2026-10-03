@@ -187,13 +187,6 @@ export_history() {
 export_history
 node_exec scripts/deploy/database-state.mjs verify-prefix "$manifest"
 target_version="$(manifest_field "$candidate/api/release-manifest.json" schemaVersion)"
-if [[ "$(readlink -f "$DX_ROOT/current")" == "$DX_ROOT/releases/$sha" ]] && \
-  node_exec scripts/deploy/database-state.mjs verify-current "$manifest" >/dev/null; then
-  node_exec "$tool_root/scripts/deploy/verify-acceptance-update.mjs" "$candidate"
-  echo "Already current: $sha"
-  exit 10
-fi
-bash scripts/deploy/install-release.sh "$sha" "$candidate"
 status="$(pm2 jlist | node_exec -e 'let s="";process.stdin.on("data",x=>s+=x).on("end",()=>{const p=JSON.parse(s).find(x=>x.name==="dx-rework-acceptance-api");if(!p)process.exit(1);process.stdout.write(p.pm2_env.status)})')"
 [[ "$status" == online || "$status" == stopped ]] || die 'Acceptance is neither online nor explicitly stopped'
 printf '%s\n' "$status" > "$evidence/initial-status"
@@ -209,4 +202,20 @@ node_exec "$candidate/api/scripts/deploy/database-state.mjs" export-history > "$
 pg_exec psql "$DATABASE_URL" -XqAt -v ON_ERROR_STOP=1 -c "SELECT json_build_object('database',current_database(),'port',current_setting('port')::integer,'oid',(SELECT oid::bigint FROM pg_database WHERE datname=current_database()),'address',inet_server_addr())" > "$source_dir/acceptance-identity.json"
 printf '%s\n' "$evidence" > "$source_dir/worker-evidence"
 echo prepared > "$evidence/phase"
+schema_current=false
+if node_exec scripts/deploy/database-state.mjs verify-current "$manifest" >/dev/null; then schema_current=true; fi
+next_action="$(node_exec "$policy" next-action "$previous" "$sha" "$schema_current" "$status")"
+if [[ "$next_action" == verify ]]; then
+  node_exec "$tool_root/scripts/deploy/verify-acceptance-update.mjs" "$candidate"
+  echo "Already current and healthy: $sha"
+  exit 10
+fi
+if [[ "$next_action" == activate ]]; then
+  # A failed activation already committed the schema and selected this generation.
+  # Resume only this verified candidate, without another backup or migration.
+  assert_active_release "$sha"
+  echo activation-retry > "$evidence/phase"
+  exit 11
+fi
+bash scripts/deploy/install-release.sh "$sha" "$candidate"
 echo 'Candidate prepared; API has not been stopped. Owner-role preflight is next.'

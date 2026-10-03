@@ -17,12 +17,24 @@ export function assertVersion(actual,expected) {
   if(actual.gitSha!==expected.gitSha || actual.schemaVersion!==expected.schemaVersion) throw Error('Running version does not match the candidate');
 }
 
+export function currentCandidateAction(activeSha,candidateSha,schemaCurrent,status) {
+  if(activeSha!==candidateSha||!schemaCurrent)return 'update';
+  if(status==='stopped')return 'activate';
+  if(status==='online')return 'verify';
+  throw Error('Candidate runtime is neither online nor explicitly stopped');
+}
+
 export function mayRecoverOldRuntime(status,before,after) {
   if(status!=='online'||!Array.isArray(before?.migrations)||!before.migrations.length||!Array.isArray(after?.migrations))return false;
   return JSON.stringify(before.migrations)===JSON.stringify(after.migrations);
 }
 
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) {
+  if(process.argv[2]==='next-action') {
+    const [active,candidate,current,status]=process.argv.slice(3);
+    process.stdout.write(currentCandidateAction(active,candidate,current==='true',status));
+    process.exit(0);
+  }
   if(process.argv[2]==='recover') {
     const [status,before,after]=process.argv.slice(3);
     if(!mayRecoverOldRuntime(status,JSON.parse(readFileSync(before,'utf8')),JSON.parse(readFileSync(after,'utf8'))))throw Error('No safe automatic old-runtime recovery');
