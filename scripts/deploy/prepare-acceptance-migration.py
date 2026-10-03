@@ -56,7 +56,10 @@ def permission_query(entries, requirements):
 def permission_sql(entries, requirements):
     query = permission_query(entries, requirements)
     return [
-        "SELECT json_build_object('maintenance_role',current_user,'application_role','dx_rework_acceptance_app','application_inherits_maintenance',pg_has_role('dx_rework_acceptance_app',current_user,'USAGE'),'maintenance_inherits_application',pg_has_role(current_user,'dx_rework_acceptance_app','USAGE'),'memberships',(SELECT coalesce(json_agg(json_build_object('member',pg_get_userbyid(m.member),'role',pg_get_userbyid(m.roleid),'inherit',m.inherit_option,'set',m.set_option)),'[]'::json) FROM pg_auth_members m WHERE m.member IN ('dx_rework_acceptance'::regrole,'dx_rework_acceptance_app'::regrole)));",
+        # PG16 added per-membership options. Read row JSON so earlier servers do
+        # not resolve absent columns; not_applicable is distinct from false.
+        # Effective authorization still comes from pg_has_role, never these labels.
+        "SELECT json_build_object('server_version_num',current_setting('server_version_num')::integer,'maintenance_role',current_user,'application_role','dx_rework_acceptance_app','application_inherits_maintenance',pg_has_role('dx_rework_acceptance_app',current_user,'USAGE'),'maintenance_inherits_application',pg_has_role(current_user,'dx_rework_acceptance_app','USAGE'),'memberships',(SELECT coalesce(json_agg(json_build_object('member',r.rolname,'role',pg_get_userbyid(m.roleid),'member_rolinherit',r.rolinherit,'inherit',coalesce(to_jsonb(m)->'inherit_option','\"not_applicable\"'::jsonb),'set',coalesce(to_jsonb(m)->'set_option','\"not_applicable\"'::jsonb))),'[]'::json) FROM pg_catalog.pg_auth_members m JOIN pg_catalog.pg_roles r ON r.oid=m.member WHERE m.member IN ('dx_rework_acceptance'::regrole,'dx_rework_acceptance_app'::regrole)));",
         "WITH diagnostics AS (" + query + ") SELECT coalesce(jsonb_agg(report || jsonb_build_object('ok',ok)),'[]'::jsonb)::text AS permission_report, bool_and(ok) AS permissions_ok FROM diagnostics \\gset",
         "SELECT :'permission_report'::jsonb AS acceptance_permissions;",
         "\\if :permissions_ok", "\\else",

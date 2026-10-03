@@ -16,6 +16,8 @@ assert 'oid::bigint' in sql
 assert 'BEGIN READ ONLY;' in sql
 assert 'sourcing_contract_return_submissions' in sql and 'acceptance_permissions' in sql
 assert 'has_table_privilege' in sql
+assert 'm.inherit_option' not in sql and 'm.set_option' not in sql
+assert 'not_applicable' in sql and 'member_rolinherit' in sql and 'server_version_num' in sql
 assert 'Missing application default' not in sql
 assert 'ALTER DEFAULT PRIVILEGES' not in sql
 assert 'GRANT SELECT ON SEQUENCE public.digital_factory_qc_sequence_seq' in sql

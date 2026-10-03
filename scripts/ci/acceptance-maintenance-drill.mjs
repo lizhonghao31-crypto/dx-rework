@@ -15,6 +15,8 @@ import {DigitalProductionIdentityService} from '../../apps/api/dist/production-p
 import {DigitalBudgetService} from '../../apps/api/dist/production-platform/budget-service.js';
 
 const repo=resolve(fileURLToPath(new URL('../..',import.meta.url)));
+const pgMajor=process.argv[2]??'16';
+assert.ok(process.argv.length<=3&&['15','16'].includes(pgMajor),'Usage: acceptance-maintenance-drill.mjs [15|16]');
 const scratch=mkdtempSync(join(tmpdir(),'dx-acceptance-drill-'));
 const container=`dx-acceptance-drill-${randomUUID()}`;
 const password=randomUUID();
@@ -26,7 +28,7 @@ const requirements=JSON.parse(readFileSync(join(repo,'scripts/deploy/acceptance-
 const pythonImage='python:3.6.15-slim';
 let admin, db, appDb, started=false, passed=false;
 const docker=(args,options={})=>execFileSync('docker',args,{encoding:'utf8',stdio:['pipe','pipe','pipe'],maxBuffer:20*1024*1024,...options});
-const report=message=>process.stdout.write(`ACCEPTANCE_DRILL ${message}\n`);
+const report=message=>process.stdout.write(`ACCEPTANCE_DRILL PG${pgMajor} ${message}\n`);
 function execute(file,label,ok=true) {
  const result=spawnSync('docker',['exec',container,'psql','-XqAt','-U','postgres','-d',database,'-f',file],{encoding:'utf8',maxBuffer:20*1024*1024});
  writeFileSync(join(scratch,`${label}.log`),result.stdout+result.stderr);
@@ -43,7 +45,7 @@ async function generate(mode='apply',tool=repo) {
  return file;
 }
 try {
- docker(['run','--rm','-d','--name',container,'--label','dx-rework.test=acceptance-maintenance-v1','-e',`POSTGRES_PASSWORD=${password}`,'-p','127.0.0.1::5432','-v',`${repo}:${repo}:ro`,'-v',`${scratch}:${scratch}`,'-v',`${realpathSync(process.execPath)}:/usr/local/bin/node:ro`,'postgres:16-bookworm']);started=true;
+ docker(['run','--rm','-d','--name',container,'--label','dx-rework.test=acceptance-maintenance-v1','-e',`POSTGRES_PASSWORD=${password}`,'-p','127.0.0.1::5432','-v',`${repo}:${repo}:ro`,'-v',`${scratch}:${scratch}`,'-v',`${realpathSync(process.execPath)}:/usr/local/bin/node:ro`,`postgres:${pgMajor}-bookworm`]);started=true;
  const info=JSON.parse(docker(['inspect',container]))[0];
  assert.equal(info.Config.Labels['dx-rework.test'],'acceptance-maintenance-v1');
  const binding=info.NetworkSettings.Ports['5432/tcp'][0];assert.equal(binding.HostIp,'127.0.0.1');
@@ -56,6 +58,9 @@ try {
  const url=(role,name)=>`postgresql://${role}:${password}@127.0.0.1:${binding.HostPort}/${name}`;
  admin=new pg.Client({connectionString:url('postgres','postgres')});await admin.connect();
  for(const role of [owner,app])await admin.query(`CREATE ROLE ${role} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD '${password}'`);
+ // A real non-inheriting membership distinguishes absent PG15 options from
+ // PG16 false/true options without granting either runtime role extra access.
+ await admin.query(`CREATE ROLE diagnostic_probe NOLOGIN; ALTER ROLE ${app} NOINHERIT; GRANT diagnostic_probe TO ${app}`);
  await admin.query(`CREATE DATABASE ${database} OWNER ${owner}`);
  db=new pg.Client({connectionString:url('postgres',database)});await db.connect();await db.query(`SET ROLE ${owner}`);
  await db.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');
@@ -76,12 +81,21 @@ try {
  assert.equal((await db.query(`SELECT pg_has_role('${app}','${owner}','USAGE') allowed`)).rows[0].allowed,false);
  const preflight=await generate('preflight');
  const rejected=execute(preflight,'mixed-owners',false);
+ const roles=rejected.stdout.split('\n').filter(x=>x.startsWith('{')).map(x=>JSON.parse(x)).find(x=>x.maintenance_role);
+ assert.ok(roles,'Role diagnostics must precede permission rejection');
+ assert.equal(Math.floor(roles.server_version_num/10000),Number(pgMajor));
+ assert.equal(roles.application_inherits_maintenance,false);assert.equal(roles.maintenance_inherits_application,false);
+ assert.deepEqual(roles.memberships,[{member:app,role:'diagnostic_probe',member_rolinherit:false,inherit:pgMajor==='15'?'not_applicable':false,set:pgMajor==='15'?'not_applicable':true}]);
+ assert.equal((await db.query(`SELECT pg_has_role('${app}','diagnostic_probe','USAGE') allowed`)).rows[0].allowed,false);
  const diagnostics=rejected.stdout.split('\n').filter(x=>x.startsWith('[{')).map(x=>JSON.parse(x)).find(x=>x[0]?.kind);
  assert.ok(diagnostics);
  for(const object of ['sourcing_contract_return_submissions','digital_production_notification_events','guard_cutting_record_creation'])assert.ok(diagnostics.some(x=>x.object===object&&!x.ok),`Missing simultaneous finding ${object}`);
  assert.deepEqual((await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows,before);
  assert.equal((await db.query("SELECT to_regclass('digital_budget_documents') AS relation")).rows[0].relation,null);
  report('225 history; three mixed-owner findings returned together; read-only rejection preserved history');
+ // End the membership-report fixture before exercising the original runtime
+ // and restore fixtures (PG15 NOINHERIT also affects pg_database_owner).
+ await admin.query(`REVOKE diagnostic_probe FROM ${app}; ALTER ROLE ${app} INHERIT; DROP ROLE diagnostic_probe`);
  // Explicit fixture repair, never an automatic updater operation.
  await db.query(`BEGIN; ALTER TABLE sourcing_contract_return_submissions OWNER TO ${owner}; GRANT SELECT,INSERT,UPDATE,DELETE ON sourcing_contract_return_submissions TO ${app}; ALTER TABLE digital_production_notification_events OWNER TO ${owner}; GRANT SELECT,INSERT,UPDATE,DELETE ON digital_production_notification_events TO ${app}; ALTER FUNCTION guard_cutting_record_creation() OWNER TO ${owner}; COMMIT;`);
  execute(preflight,'no-default-acl-preflight');
@@ -135,7 +149,7 @@ try {
  const runtime=join(scratch,'runtime');mkdirSync(join(runtime,'shared'),{recursive:true});
  const internalUrl=(name)=>`postgresql://${app}:${password}@127.0.0.1:5432/${name}`;
  writeFileSync(join(runtime,'shared/.env'),`DATABASE_URL=${internalUrl(database)}\nAPP_BASE_PATH=/acceptance/\nROOT_DINGTALK_USER_ID=uat-root\nACCEPTANCE_LAB_ENABLED=true\nDIGITAL_PRODUCTION_ENABLED=true\nDIGITAL_PRODUCTION_CREATION_ENABLED=true\nTODO_RUNTIME_ENABLED=false\nTODO_DELIVERY_ENABLED=false\nTODO_TIMING_ENABLED=false\n`,{mode:0o600});
- writeFileSync(join(runtime,'shared/deploy.env'),'DX_REWORK_NODE_BIN=/usr/local/bin/node\nDX_REWORK_PG_BIN_DIR=/usr/lib/postgresql/16/bin\n',{mode:0o600});
+ writeFileSync(join(runtime,'shared/deploy.env'),`DX_REWORK_NODE_BIN=/usr/local/bin/node\nDX_REWORK_PG_BIN_DIR=/usr/lib/postgresql/${pgMajor}/bin\n`,{mode:0o600});
  // The scripts run as container root; fixture configuration must have that
  // owner even when the host runner is an unprivileged UID.
  docker(['exec',container,'chown','0:0',join(runtime,'shared/.env'),join(runtime,'shared/deploy.env')]);

@@ -214,7 +214,9 @@ jobs:
 
       - name: Acceptance low-privilege migration and backup recovery
         if: env.DEPLOYMENT_SENSITIVE == 'true'
-        run: node scripts/ci/acceptance-maintenance-drill.mjs
+        run: |
+          node scripts/ci/acceptance-maintenance-drill.mjs 15
+          node scripts/ci/acceptance-maintenance-drill.mjs 16
 
       - name: PR-17 exact-head acceptance and lifecycle
         if: env.DEPLOYMENT_SENSITIVE == 'true'
