@@ -40,3 +40,7 @@ main当前package-release.sh未复制migration-history-policy.mjs、migration-br
 main包失败的实际命令为Node22运行 `node -e "import('/tmp/dx-security-packages/main-candidate/api/scripts/migration-lib.mjs')"`，首个ERR_MODULE_NOT_FOUND指向打包的scripts/migration-history-policy.mjs。最小diff只需在scripts/deploy/package-release.sh现有cp列表中加入scripts/migration-history-policy.mjs、scripts/migration-branches.json、scripts/migration-main-extensions.json这三条既有路径；本任务未修改。
 
 f842e11b组合：lint/typecheck/build通过，安全及A4前端11个suite125项通过；真实PG13.23认证/access/生命周期/全业务链及A4改动的三个digital suite共7个suite81项通过。34个A4文件与27个安全文件集合无交集。用户随后明确授权独立补main打包三依赖清单，该部署小PR另跑FullGate/唯一Review；不扩展SQL或analytics范围。
+
+## 唯一Review末项修复
+
+PR639在123f460d首次Review发现P2：登录的目录容量不足可能在一次性凭据消耗后才返回busy。已与main同步最小修复：在state/code消耗前预留目录容量，protected查询不能挤占未知身份预留；转换为目录read和提前失败释放都受同步计数/finally保护。protected单身份waiters仍32，public独立16，总等待者最多48，无身份结果TTL缓存。两项回归在原准确服务Head复现2失败/36通过，修正后38认证测试通过；最终新Head重新Gate及包闭包，不请求第二次Review。
