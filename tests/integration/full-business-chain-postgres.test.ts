@@ -1,3 +1,5 @@
+import { PatternOrderReader } from "../../apps/api/src/pattern-room/order-reader.js";
+import { exceptions as readReportingExceptions } from "../../apps/api/src/reporting/management-reporting-exceptions.js";
 import {exerciseDevelopmentRoute} from "../helpers/digital-development-route-fixture.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
@@ -2164,6 +2166,21 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
 
 
+  });
+
+  it("reads pattern people filters and exception labels on the current schema without widening worker scope", async () => {
+    const reader = new PatternOrderReader(database, true);
+    const supervisor = patternActor(ids.patternSupervisor, ["pattern_room_supervisor"]);
+    const filters = await reader.peopleFilters(supervisor);
+    expect(filters.creators.length).toBeGreaterThan(0);
+    expect(filters.workers.length).toBeGreaterThan(0);
+    expect(filters.creators.every(person => Boolean(person.id && person.name))).toBe(true);
+    expect(filters.workers.every(person => Boolean(person.id && person.name))).toBe(true);
+    await expect(reader.peopleFilters(patternActor(ids.worker, ["pattern_room_worker"])))
+      .rejects.toMatchObject({ statusCode: 403 });
+    expect(await readReportingExceptions(5, database, {
+      from: "2020-01-01", to: "2099-12-31", q: `TEST-NO-EXCEPTION-${randomUUID()}`, status: "overdue_todo",
+    })).toEqual([]);
   });
 
   const financeWages = (id = ids.financeDirector, roles = ["finance_director"]) => actor(id, roles, "wage:view", "wage:export", "wage:settlement_mark");

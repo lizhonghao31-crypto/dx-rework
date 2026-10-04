@@ -34,7 +34,7 @@ export async function exceptions(
          ON todo.entity_type='responsibility_determination' AND determination.determination_id::text=todo.entity_id
      ), exceptions AS (
        SELECT 'overdue_todo'::text exception_type,todo.todo_id::text entity_id,
-         mapped.rework_order_id,('待办逾期：'||todo.category)::text label,
+         mapped.rework_order_id,('待办逾期：'||todo.category)::text AS label,
          todo.due_at occurred_at,
          CASE WHEN mapped.rework_order_id IS NULL THEN '/ui/tasks' ELSE '/ui/tasks/'||mapped.rework_order_id::text END deep_link
        FROM rework_todos todo JOIN todo_order mapped USING(todo_id)
