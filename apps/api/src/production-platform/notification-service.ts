@@ -151,16 +151,19 @@ export class DigitalProductionNotificationService {
   private async render(database:Database,actor:TrustedActorContext,event:{instruction_order_id?:string|null;development_source_id?:string|null;event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date},people:TrustedActorContext[]):Promise<DigitalNotification|null> {
     if(!people.some(p=>p.actorId===actor.actorId))return null;
     let title:string,actionable:boolean,route:TodoRouteDescriptor;
+    let contextTarget:{kind:"source"|"order";id:string}|null=null;
     if(event.instruction_order_id){
       if(!await new DigitalProductionAccessPolicy(database).allowed(actor,"order",event.instruction_order_id,"technical"))return null;
       const notice=(await database.query("SELECT title,version FROM digital_instruction_notices WHERE event_id=$1",[event.event_id])).rows[0];
       if(!notice)return null;
+      contextTarget={kind:"order",id:event.instruction_order_id};
       title=notice.title;actionable=false;
       route={routeName:"digital_production_instruction",entityId:event.instruction_order_id,todoId:event.event_id,...(notice.version?{developmentRound:notice.version}:{})};
     }else if(event.development_source_id){
       if(!await new DigitalProductionAccessPolicy(database).allowed(actor,"source",event.development_source_id,"technical"))return null;
       const notice=(await database.query("SELECT title,COALESCE((to_jsonb(d)->>'round_number')::integer,1) AS round_number FROM digital_development_notices d WHERE event_id=$1",[event.event_id])).rows[0];
       if(!notice)return null;
+      contextTarget={kind:"source",id:event.development_source_id};
       title=notice.title;actionable=false;
       route={routeName:"digital_development",entityId:event.development_source_id,todoId:event.event_id,developmentRound:notice.round_number};
     }else if(event.task_id){
@@ -174,6 +177,7 @@ export class DigitalProductionNotificationService {
       if(!(await this.recipients(database,task,event.event_kind,people)).some(p=>p.actorId===actor.actorId))return null;
       actionable=event.event_kind!=="completed"&&(missing||await new DigitalProductionAccessPolicy(database).allowed(actor,"task",task.task_id,"execute"));
       title=`${task.label} · ${missing?"待分配主办":labels[event.event_kind]??"事项更新"}`;
+      contextTarget=task.production_order_id?{kind:"order",id:task.production_order_id}:task.source_id?{kind:"source",id:task.source_id}:null;
       route={routeName:"digital_production_task",entityId:task.task_id,todoId:task.task_id};
     }else{
       const row=(await database.query("SELECT * FROM rework_todos WHERE todo_id=$1 AND recipient_user_id=$2 AND status IN ('pending','blocked_recipient')",[event.todo_id,actor.actorId])).rows[0];
@@ -184,9 +188,18 @@ export class DigitalProductionNotificationService {
       if(row.required_role&&!await new DigitalProductionAccessPolicy(database).activeRole(actor.actorId,row.required_role))return null;
       if(row.required_capability&&!(actor.authorizationCapabilities??[]).includes(row.required_capability))return null;
       actionable=row.todo_type!=="information";title=actionable?(event.event_kind==="overdue"?"订单待办已超时":"你有新的订单待办"):"订单事项已更新";
+      contextTarget=parent;
       route=row.route_descriptor;
     }
-    return {eventId:event.event_id,title,actionable,route,createdAt:iso(event.created_at)};
+    let context:DigitalNotification["context"];
+    if(contextTarget&&await new DigitalProductionAccessPolicy(database).allowed(actor,contextTarget.kind,contextTarget.id,"technical")){
+      const resource=(await database.query(contextTarget.kind==='order'?"SELECT design_style_no,production_order_id FROM digital_production_orders WHERE production_order_id=$1":"SELECT design_style_no,NULL::uuid AS production_order_id FROM digital_production_sources WHERE source_id=$1",[contextTarget.id])).rows[0];
+      if(resource){
+        const lines=resource.production_order_id?(await database.query("SELECT po_number,color FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position",[resource.production_order_id])).rows:[];
+        context={styleNo:resource.design_style_no??null,orderId:resource.production_order_id??null,colors:[...new Set<string>(lines.map(l=>l.color))],poNumbers:[...new Set<string>(lines.map(l=>l.po_number).filter(Boolean))]};
+      }
+    }
+    return {eventId:event.event_id,title,actionable,route,createdAt:iso(event.created_at),...(context?{context}:{})};
   }
   // Atomic claim per recipient is the incremental cursor: refreshes and competing
   // tabs consume only unseen events. Acknowledgement is a separate receipt field.

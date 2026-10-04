@@ -1,3 +1,4 @@
+import { DigitalCockpitQuery } from "../../apps/api/src/production-platform/cockpit-query.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -66,6 +67,39 @@ run("P03 task lifecycle PostgreSQL", () => {
     await app.ready();
   });
   afterAll(async () => { await app.close(); await database.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end(); });
+  it("P15 scopes cockpit sources, preserves task deadlines and audits priority without changing clocks",async()=>{
+    const source=await service.createSource(actor(),DigitalSourceCreateSchema.parse({developmentType:"头版",designStyleNo:"TEST-P15-COCKPIT",customerCode:"PD"}),randomUUID());
+    const resource={kind:"source" as const,id:source.sourceId};
+    const task=await create(resource,"budget");
+    const cockpit=new DigitalCockpitQuery(database);
+    const query={page:1,search:"TEST-P15-COCKPIT",stage:"development" as const};
+    expect((await cockpit.list(actor(other),query)).total).toBe(0);
+    const result=await cockpit.list(actor(),query);
+    expect(result).toMatchObject({total:1,actorName:"TEST P01",canManagePolicies:false});
+    expect(result.items[0]!.tasks[0]).toMatchObject({taskId:task.taskId,slaHours:null,priority:"normal"});
+    const before=await tasks.read(boss,task.taskId);
+    await expect(tasks.prioritize(actor(),task.taskId,"urgent",randomUUID())).rejects.toMatchObject({statusCode:403});
+    const key=randomUUID();await tasks.prioritize(boss,task.taskId,"urgent",key);await tasks.prioritize(boss,task.taskId,"urgent",key);
+    const after=await tasks.read(boss,task.taskId);expect(after).toMatchObject({priority:"urgent",enteredAt:before.enteredAt,dueAt:before.dueAt});
+    expect((await tasks.history(boss,task.taskId)).events.filter(e=>e.kind==='priority_changed')).toHaveLength(1);
+    await condition(task.taskId,"business_recorded");await tasks.complete(boss,task.taskId,{note:""},randomUUID());
+    await expect(tasks.prioritize(boss,task.taskId,"normal",randomUUID())).rejects.toMatchObject({statusCode:409});
+  });
+  it("P15 SQL scope paginates only authorized sources and revokes delegation without changing totals",async()=>{
+    const search="TEST-P15-PAGE";
+    const sources=[];
+    for(let n=0;n<21;n++)sources.push(await service.createSource(actor(),DigitalSourceCreateSchema.parse({developmentType:"头版",designStyleNo:`${search}-${n}`,customerCode:"PD"}),randomUUID()));
+    const cockpit=new DigitalCockpitQuery(database),query={page:1,search,stage:"development" as const};
+    const first=await cockpit.list(actor(),query),second=await cockpit.list(actor(),{...query,page:2});
+    expect(first.total).toBe(21);expect(first.items).toHaveLength(20);expect(second.items).toHaveLength(1);expect(second.total).toBe(21);
+    expect(new Set([...first.items,...second.items].map(row=>row.id)).size).toBe(21);
+    expect(first.summary).toEqual(second.summary);expect((await cockpit.list(actor(other),query)).total).toBe(0);
+    const access=new DigitalProductionAccessService(database);
+    const grant=await access.delegate(boss,{resourceKind:"source",resourceId:sources[0]!.sourceId,delegateId:other,purpose:"technical",expiresAt:new Date(Date.now()+3600000).toISOString()});
+    expect((await cockpit.list(actor(other),query)).total).toBe(1);
+    await access.revoke(boss,grant.delegationId);
+    expect((await cockpit.list(actor(other),query)).total).toBe(0);
+  });
   it("keeps no-SLA tasks usable without creating a legacy clock and denies cross-order access", async()=>{
     const resource=await order();const {taskId}=await create(resource);
     expect(await tasks.read(actor(),taskId)).toMatchObject({state:"ready",dueAt:null,slaHours:null,canExecute:true});

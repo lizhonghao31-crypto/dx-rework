@@ -1,0 +1,96 @@
+import { OrderClosureService } from "./order-closure-service.js";
+import { bulkCockpitProgress } from "./cockpit-progress.js";
+import type { Pool } from "pg";
+import type { CockpitResult, CockpitRow, CockpitStage } from "@dx-rework/contracts/digital-production-cockpit";
+import type { TrustedActorContext } from "../tools/repositories.js";
+import { DigitalProductionAccessPolicy, isDigitalLeader, isDigitalTechnicalManager } from "./access-policy.js";
+import { assertIdentityActor, digitalDateText } from "./identity-service.js";
+import { DigitalProductionTaskService } from "./task-service.js";
+
+/** Read-only projection. Resource authorization is identical to original-page access. */
+export class DigitalCockpitQuery {
+  constructor(private readonly database: Pool) {}
+  async list(actor: TrustedActorContext, input: { page: number; search: string; stage: CockpitStage; workload?: "all"|"unassigned"|"blocked"|"urgent" }): Promise<CockpitResult> {
+    assertIdentityActor(actor);
+    const db = this.database;
+    const policy = new DigitalProductionAccessPolicy(db);
+    // Match resource policy in one SQL scope; never authorize the full history row by row.
+    const activeRole = (role: string) => `EXISTS(SELECT 1 FROM app_users au JOIN user_role_assignments ar ON ar.user_id=au.id JOIN business_roles br ON br.role_code=ar.role_code AND br.enabled WHERE au.id=$4 AND au.enabled AND coalesce((to_jsonb(au)->>'manual_access_disabled')::boolean,false)=false AND ar.role_code=${role} AND ar.revoked_at IS NULL AND EXISTS(SELECT 1 FROM identity_mappings ai WHERE ai.user_id=au.id AND ai.active AND ai.employed))`;
+    const delegated = (column:string,id:string,purpose:string) => `EXISTS(SELECT 1 FROM digital_production_delegations dg JOIN app_users du ON du.id=dg.delegate_id WHERE dg.${column}=${id} AND dg.delegate_id=$4 AND dg.purpose IN (${purpose}) AND dg.revoked_at IS NULL AND dg.expires_at>CURRENT_TIMESTAMP AND du.enabled AND coalesce((to_jsonb(du)->>'manual_access_disabled')::boolean,false)=false AND EXISTS(SELECT 1 FROM identity_mappings di WHERE di.user_id=du.id AND di.active AND di.employed))`;
+    const clerk = `('development_clerk'=ANY($5::text[]) AND ${activeRole("'development_clerk'")})`;
+    let bulkTasks='false';
+    if(input.stage==='bulk'&&(await db.query("SELECT to_regclass('digital_bulk_preparations') AS relation")).rows[0]?.relation) bulkTasks=`EXISTS(SELECT 1 FROM digital_production_task_access ba JOIN digital_production_tasks bt USING(task_id) JOIN digital_bulk_preparations bp ON bp.preparation_id=bt.route_instance_id AND bp.production_order_id=ba.production_order_id JOIN digital_instruction_documents bi ON bi.production_order_id=bp.production_order_id AND bi.published_version=bp.instruction_version WHERE ba.production_order_id=o.production_order_id AND bt.state<>'cancelled' AND bp.source_round=coalesce((SELECT max(round_number) FROM digital_development_rounds WHERE source_id=bp.source_id),1) AND ba.task_kind IN ('bulk_pattern','warehouse_preshrink','bulk_cutting','bulk_cutting_external','process_logistics','bulk_qc','warehouse_dispatch','factory_material_count','bulk_ship_sample') AND ((ba.assignee_id=$4 AND ${activeRole('ba.required_role')}) OR ${delegated('task_id','ba.task_id',"'technical'")} OR (${delegated('task_id','ba.task_id',"'execute'")} AND ${activeRole('ba.required_role')})))`;
+    const scope=input.stage==='development'
+      ? `($6 OR $7 OR ('sample_designer'=ANY($5::text[]) AND s.created_by=$4) OR ('order_merchandiser'=ANY($5::text[]) AND ${activeRole("'order_merchandiser'")} AND EXISTS(SELECT 1 FROM digital_production_orders mo WHERE mo.source_id=s.source_id AND mo.primary_merchandiser_id=$4)) OR ${delegated('source_id','s.source_id',"'technical'")} OR (${clerk} AND EXISTS(SELECT 1 FROM digital_production_task_access ca WHERE ca.source_id=s.source_id AND ca.task_kind LIKE 'development_%')))`
+      : `($6 OR $7 OR ('sample_designer'=ANY($5::text[]) AND o.created_by=$4) OR ('order_merchandiser'=ANY($5::text[]) AND o.primary_merchandiser_id=$4) OR (${clerk} AND o.source_id IS NOT NULL) OR ${bulkTasks} OR ${delegated('production_order_id','o.production_order_id',"'technical'")})`;
+    const column = input.stage === "development" ? "source_id" : "production_order_id";
+    const visibleColumn=input.stage==='development'?'sourceId':'orderId';
+    const result=(await db.query(`WITH visible AS (
+SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
+      coalesce(o.production_order_id,s.source_id) AS id,coalesce(o.design_style_no,s.design_style_no) AS "styleNo",
+      coalesce(o.customer_code,s.customer_code,'未指定客户') AS customer,coalesce(o.product_group,'未指定品类') AS category,
+      u.display_name AS designer,m.display_name AS merchandiser,o.contract_delivery_date AS "deliveryDate",coalesce(o.created_at,s.created_at) AS "createdAt"
+      FROM digital_production_sources s FULL JOIN digital_production_orders o ON o.source_id=s.source_id
+      JOIN app_users u ON u.id=coalesce(o.created_by,s.created_by) LEFT JOIN app_users m ON m.id=o.primary_merchandiser_id
+      WHERE ($1='development' AND s.source_id IS NOT NULL OR $1='bulk' AND o.production_order_id IS NOT NULL)
+      AND ($2='' OR strpos(lower(coalesce(o.design_style_no,s.design_style_no)),lower($2))>0
+        OR strpos(lower(coalesce(o.customer_code,s.customer_code,'')),lower($2))>0
+        OR EXISTS(SELECT 1 FROM digital_production_po_lines l WHERE l.production_order_id=o.production_order_id AND strpos(lower(coalesce(l.po_number,'')),lower($2))>0))
+      AND ($3='all' OR EXISTS(SELECT 1 FROM digital_production_task_access qa JOIN digital_production_tasks qt USING(task_id)
+        WHERE (($1='development' AND qa.source_id=s.source_id) OR ($1='bulk' AND qa.production_order_id=o.production_order_id))
+        AND qt.state NOT IN ('completed','cancelled') AND (($3='unassigned' AND qa.assignee_id IS NULL) OR ($3='blocked' AND qt.state='blocked')
+        OR ($3='urgent' AND (SELECT e.payload->>'priority' FROM digital_production_task_events e WHERE e.task_id=qt.task_id AND e.event_kind='priority_changed' ORDER BY e.recorded_at DESC,e.event_id DESC LIMIT 1)='urgent'))))
+      AND ${scope}
+    ), totals AS (SELECT count(*)::int AS total FROM visible), page AS (
+      SELECT * FROM visible ORDER BY "createdAt" DESC,id DESC LIMIT 20 OFFSET $8
+    ), summary AS (
+      SELECT count(DISTINCT a.${column}) FILTER(WHERE t.state NOT IN ('completed','cancelled'))::int AS active,
+      count(DISTINCT a.${column}) FILTER(WHERE t.state='blocked')::int AS blocked,
+      count(DISTINCT a.${column}) FILTER(WHERE t.state IN ('ready','blocked') AND r.due_at<=CURRENT_TIMESTAMP)::int AS overdue,
+      count(DISTINCT a.${column}) FILTER(WHERE t.state IN ('ready','blocked') AND r.warning_at<=CURRENT_TIMESTAMP AND r.due_at>CURRENT_TIMESTAMP)::int AS "dueSoon",
+      count(DISTINCT a.${column}) FILTER(WHERE t.state IN ('ready','blocked') AND t.entered_at IS NULL)::int AS unknown
+      FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
+      LEFT JOIN LATERAL(SELECT due_at,warning_at FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1) r ON true
+      WHERE EXISTS(SELECT 1 FROM visible v WHERE v."${visibleColumn}"=a.${column})
+    ) SELECT totals.total,row_to_json(summary) AS summary,coalesce((SELECT json_agg(page) FROM page),'[]'::json) AS items FROM totals CROSS JOIN summary`,[input.stage,input.search,input.workload??"all",actor.actorId,actor.actorRoles,isDigitalLeader(actor),isDigitalTechnicalManager(actor),(input.page-1)*20])).rows[0];
+    const summary=result.summary;
+    const service = new DigitalProductionTaskService(db);
+    const items: CockpitRow[] = [];
+    for (const row of result.items) {
+      const resourceId = input.stage === "development" ? row.sourceId : row.orderId;
+      const taskIds = (await db.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+        WHERE a.${column}=$1 ORDER BY t.route_version DESC,t.created_at,t.task_id`,[resourceId])).rows;
+      const tasks = [];
+      for (const task of taskIds) if (await policy.allowed(actor,"task",task.task_id,"technical")) tasks.push(await service.read(actor,task.task_id));
+      // P03 owns the declared development-route denominator, including not-yet-created nodes.
+      const latest = tasks[0];
+      let progress = input.stage === "development" && latest && latest.routeProgress.applicable > 0 ? latest.routeProgress : null;
+      if (input.stage === "development") {
+        const hasDocuments=(await db.query("SELECT to_regclass('digital_development_documents') AS relation")).rows[0]?.relation;
+        if (!hasDocuments || !(await db.query("SELECT 1 FROM digital_development_documents WHERE source_id=$1 AND status='published'",[row.sourceId])).rowCount) progress=null;
+      }
+      if (input.stage === "bulk") {
+        const preparation = (await db.query(`SELECT p.*,v.document,decision.cutting_process,src.document AS source_document FROM digital_bulk_preparations p
+          JOIN digital_instruction_versions v ON v.production_order_id=p.production_order_id AND v.version=p.instruction_version
+          JOIN digital_instruction_documents d ON d.production_order_id=p.production_order_id AND d.published_version=p.instruction_version
+          JOIN digital_development_current_documents src ON src.source_id=p.source_id
+          JOIN sourcing_approval_snapshots a ON a.sourcing_approval_snapshot_id=p.approval_snapshot_id
+          JOIN sourcing_decisions decision ON decision.sourcing_decision_id=a.sourcing_decision_id
+          WHERE p.production_order_id=$1 AND p.source_round=coalesce((SELECT max(round_number) FROM digital_development_rounds WHERE source_id=p.source_id),1)
+          ORDER BY p.created_at DESC LIMIT 1`,[row.orderId])).rows[0];
+        if (preparation) {
+          const routeIds = new Set((await db.query("SELECT task_id FROM digital_production_tasks WHERE route_instance_id=$1",[preparation.preparation_id])).rows.map(t=>t.task_id));
+          const closure = await new OrderClosureService(db).read(actor,row.orderId);
+          progress = bulkCockpitProgress({preshrink:preparation.preshrink,secondaryCraft:preparation.document.secondaryCraft==='沿用开发'?preparation.source_document.craft:preparation.document.secondaryCraft,externalCutting:preparation.cutting_process==='outsourced',
+            tasks:tasks.filter(t=>routeIds.has(t.taskId)),specialClosed:Boolean(closure.closed),packed:closure.stage==='本期装箱完成',
+            received:closure.lines.length>0&&closure.lines.every(l=>l.receiptCount>0&&l.actualQuantity>=l.orderedQuantity&&(l.actualQuantity===l.documentQuantity||Boolean(l.receivingResolution)))});
+        }
+      }
+      const lines = row.orderId && await policy.allowed(actor,"order",row.orderId,"technical") ? (await db.query(`SELECT l.line_id AS id,l.po_number AS po,l.color,coalesce(sum(s.quantity),0)::int AS quantity
+        FROM digital_production_po_lines l LEFT JOIN digital_production_po_sizes s USING(line_id) WHERE l.production_order_id=$1 GROUP BY l.line_id ORDER BY l.position`,[row.orderId])).rows : [];
+      items.push({...row,deliveryDate:digitalDateText(row.deliveryDate),createdAt:new Date(row.createdAt).toISOString(),tasks,progress,lines});
+    }
+    const actorName = (await db.query("SELECT display_name FROM app_users WHERE id=$1",[actor.actorId])).rows[0]?.display_name ?? "当前用户";
+    return {actorId:actor.actorId,actorName,canViewTodos:Boolean(actor.authorizationCapabilities?.includes("todo:view")),canManagePolicies:isDigitalLeader(actor),page:input.page,total:result.total,summary,items};
+  }
+}

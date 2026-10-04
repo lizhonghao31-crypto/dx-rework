@@ -359,7 +359,8 @@ export class DigitalProductionTaskService {
       }
     }
     const handover = await db.query("SELECT 1 FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='handover_received'", [id]);
-    return { taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: currentPolicy.label as string,
+    const priority = (await db.query("SELECT payload->>'priority' AS priority FROM digital_production_task_events WHERE task_id=$1 AND event_kind='priority_changed' ORDER BY recorded_at DESC,event_id DESC LIMIT 1",[id])).rows[0]?.priority === "urgent" ? "urgent" as const : "normal" as const;
+    return { priority, taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: currentPolicy.label as string,
       routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage, canControl, canCorrect: isDigitalLeader(actor) || isDigitalTechnicalManager(actor),
       assigneeId: task.assignee_id as string | null, state: task.state as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
       enteredAt: iso(task.entered_at), recordedAt: iso(task.created_at)!, completedAt: iso(task.completed_at), paused,
@@ -386,6 +387,17 @@ export class DigitalProductionTaskService {
     else await new DigitalProductionAccessPolicy(client).assert(actor,"source",sourceId,"technical");
     const pending=(await client.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.route_version<=$2 AND t.state IN ('pending','ready','blocked') FOR UPDATE OF t",[sourceId,throughRound])).rows;
     for(const row of pending){await client.query("UPDATE digital_production_tasks SET state='cancelled',blocked_reason='已由新修改轮次接续，保留原记录' WHERE task_id=$1",[row.task_id]);await this.event(client,actor,row.task_id,{kind:"source",id:sourceId},"cancelled",new Date().toISOString(),"现场登记",{reason:"new_development_round"});}
+  }
+  async prioritize(actor: TrustedActorContext, id: string, priority: "normal" | "urgent", key: string) {
+    return this.transaction(async client => {
+      const current = await this.read(actor, id, client);
+      if (!current.canManage) digitalForbidden();
+      if (["completed", "cancelled"].includes(current.state)) fail("已结束任务不可调整优先级");
+      return this.command(client, actor, `priority:${id}`, key, { priority }, async () => {
+        await this.event(client, actor, id, this.resource(await this.task(client,id,true)), "priority_changed", new Date().toISOString(), "现场登记", { before: current.priority, priority });
+        return { taskId: id, priority };
+      });
+    });
   }
   async list(actor: TrustedActorContext, page: number) {
     const global = isDigitalLeader(actor) || isDigitalTechnicalManager(actor);

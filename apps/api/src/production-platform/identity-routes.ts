@@ -1,3 +1,5 @@
+import type { DigitalCockpitQuery } from "./cockpit-query.js";
+import { z as cockpitZ } from "zod";
 import {registerOrderClosureRoutes} from "./order-closure-routes.js";
 import type {OrderClosureService} from "./order-closure-service.js";
 import {registerFactoryFlowRoutes} from "./factory-flow-routes.js";
@@ -31,6 +33,7 @@ import { ApplicationError } from "../platform/errors.js";
 import { assertIdentityActor, type DigitalProductionIdentityService } from "./identity-service.js";
 
 export type DigitalIdentityDependencies = {
+  cockpit?: DigitalCockpitQuery;
   budgetService?: DigitalBudgetService;
   instructionService?: ProductionInstructionService;
   bulkPreparationService?: BulkPreparationService;
@@ -75,6 +78,7 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
   app.addHook("onSend", async (request, reply) => {
     if (request.routeOptions.url?.startsWith("/digital-production/")) reply.header("cache-control", "no-store");
   });
+  if (dependencies.cockpit) app.get("/digital-production/cockpit", async request => dependencies.cockpit!.list(await actor(request), parse(cockpitZ.object({ page: cockpitZ.coerce.number().int().min(1).max(100000).default(1), search: cockpitZ.string().trim().max(100).default(""), stage: cockpitZ.enum(["development", "bulk"]).default("development"), workload: cockpitZ.enum(["all","unassigned","blocked","urgent"]).default("all") }).strict(), request.query)));
   app.get("/digital-production/options", async request => {
     const trusted = await actor(request);
     return { creationEnabled: dependencies.creationEnabled, customers: await dependencies.service.customers(trusted) };

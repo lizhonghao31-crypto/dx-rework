@@ -11,7 +11,7 @@ await mkdir(evidence, {recursive: true});
 const actor = '11111111-1111-4111-8111-111111111111';
 const eventId = index => `22222222-2222-4222-8222-${String(index).padStart(12, '0')}`;
 const notice = (index, title, actionable = true) => ({eventId: eventId(index), title, actionable,
-  route: {routeName: 'digital_development', entityId: actor, todoId: eventId(index)}, createdAt: '2026-10-03T00:00:00Z'});
+  route: {routeName: 'digital_development', entityId: actor, todoId: eventId(index)}, createdAt: '2026-10-03T00:00:00Z', ...(index===1?{context:{styleNo:'TEST-A4-实款',orderId:actor,colors:['黑','白'],poNumbers:['TEST-PO-1','TEST-PO-2']}}:{})});
 const queue = [notice(1, '隔离履约单 · 开发车缝：已超时')];
 let current = null, claims = 0, reads = 0, ackFails = false, releaseAck;
 const acknowledgements = [];
@@ -59,15 +59,14 @@ try {
     await page.setViewportSize({width, height});
     const box = await toast.boundingBox();
     assert(box && box.width <= 300 && box.x >= 0 && box.x + box.width <= width);
-    assert(box.height <= 160, 'Short message must remain compact');
+    assert(box.height <= height*(width>800?0.4:0.3)+1, 'Context stays inside the existing height cap');
     assert.equal(await toast.evaluate(el => getComputedStyle(el).position), 'fixed');
     assert.equal(await toast.evaluate(el => el.scrollWidth <= el.clientWidth), true);
     if (width > 800) {
-      assert(Math.abs(width - box.x - box.width - 16) <= 1);
-      assert(Math.abs(height - box.y - box.height - 16) <= 1);
+      assert(Math.abs(width - box.x - box.width) <= 1);
+      assert(Math.abs(height - box.y - box.height) <= 1);
       assert.equal(await page.locator('.app-shell > aside').evaluate(el => getComputedStyle(el).position), 'sticky');
     } else {
-      assert(Math.abs(box.y - 72) <= 1);
       const nav = await page.locator('.mobile-primary-navigation').boundingBox();
       assert(nav && box.y + box.height < nav.y, 'Notification must leave mobile bottom controls free');
       assert(await toast.getByRole('button', {name: '我知道了'}).evaluate(el => el.getBoundingClientRect().height >= 44));

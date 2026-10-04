@@ -3,8 +3,8 @@
   position: fixed;
   display: flex;
   flex-direction: column;
-  right: max(16px, env(safe-area-inset-right));
-  bottom: calc(max(16px, env(safe-area-inset-bottom)) + var(--digital-notification-lift, 0px));
+  right: env(safe-area-inset-right, 0px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--digital-notification-lift, 0px));
   z-index: 70;
   box-sizing: border-box;
   width: min(300px, calc(100vw - 32px));
@@ -12,28 +12,35 @@
   overflow: auto;
   overflow-wrap: anywhere;
   padding: 12px;
-  border: 1px solid var(--dx-form-control-border);
+  border: 1px solid #849bad;
   border-radius: 10px;
-  background: var(--dx-v2-color-surface);
-  color: var(--dx-v2-color-text);
+  background: #ccd9e4;
+  color: #172c40;
   font-size: 13px;
   line-height: 1.45;
   box-shadow: var(--ui-surface-shadow, 0 2px 8px rgb(75 90 105 / 8%));
 }
 .digital-notification-toast p { margin: 0 0 8px; flex-shrink: 0; }
-.digital-notification-toast p:first-child { min-height: 0; flex-shrink: 1; overflow: auto; color: var(--dx-v2-color-text); font-weight: 600; }
-.digital-notification-toast > div { display: flex; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.digital-notification-toast p:first-child { min-height: 0; flex-shrink: 1; overflow: auto; color: #172c40; font-weight: 600; }
+.digital-notification-toast > div:not(.digital-notification-content) { display: flex; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .digital-notification-toast .dx-button { padding-inline: 12px; box-shadow: none; }
-.digital-notification-hint { font-size: 12px; color: var(--dx-v2-color-text-secondary); }
+.digital-notification-hint { font-size: 12px; color: #344c61; }
 @media (max-width: 800px) {
-  /* Keep the bottom navigation and submission area free; hide during text entry. */
+  /* Use the same measured action avoidance on mobile; hide during text entry. */
   .digital-notification-toast {
-    top: max(72px, env(safe-area-inset-top));
-    bottom: auto;
-    right: max(12px, env(safe-area-inset-right));
     width: min(300px, calc(100vw - 24px));
     max-height: 30dvh;
   }
   .digital-notification-toast .dx-button { min-height: 44px; }
   body:has(input:focus, textarea:focus, select:focus) .digital-notification-toast { visibility: hidden; }
 }
+
+.digital-notification-content { min-height:0; overflow:auto; flex:1 1 auto; }
+.digital-notification-content dl { display:grid; grid-template-columns:auto minmax(0,1fr); gap:3px 8px; margin:0 0 8px; }
+.digital-notification-content dt { font-weight:600; }
+.digital-notification-content dd { margin:0; overflow-wrap:anywhere; }
+.digital-notification-content { max-height: 100px; }
+.digital-notification-content dl,
+.digital-notification-content dt,
+.digital-notification-content dd { font-size:12px; line-height:1.4; }
+.digital-notification-content dd { font-weight:400; }

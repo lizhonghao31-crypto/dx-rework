@@ -16,10 +16,9 @@ export function DigitalNotificationToast({userId}:{userId:string}) {
     let frame=0;
     const measure=()=>{
       frame=0;
-      if(window.matchMedia("(max-width: 800px)").matches){element.style.removeProperty("--digital-notification-lift");return;}
       const rect=element.getBoundingClientRect();
       const prior=Number.parseFloat(element.style.getPropertyValue("--digital-notification-lift"))||0;
-      const actions=Array.from(document.querySelectorAll<HTMLButtonElement>("button.dx-button--primary:not(:disabled), .mobile-actions button:not(:disabled), .responsibility-actions button:not(:disabled), .process-worker-actions button:not(:disabled)"))
+      const actions=Array.from(document.querySelectorAll<HTMLElement>("button.dx-button--primary:not(:disabled), .mobile-actions button:not(:disabled), .responsibility-actions button:not(:disabled), .process-worker-actions button:not(:disabled), .mobile-primary-navigation"))
         .filter(button=>!element.contains(button)&&getComputedStyle(button).visibility!=="hidden")
         .map(button=>button.getBoundingClientRect())
         .filter(box=>box.width>0&&box.height>0&&box.bottom>72&&box.top<window.innerHeight&&box.right>0&&box.left<window.innerWidth);
@@ -66,5 +65,5 @@ export function DigitalNotificationToast({userId}:{userId:string}) {
     }catch{setError("确认未成功，请重试");}finally{setBusy(false);}
   };
   if(!notice)return null;
-  return <section ref={region} className="digital-notification-toast" aria-live="polite" aria-label="站内提醒"><p>{notice.title}</p><p className="digital-notification-hint">{notice.actionable?"确认提醒后，待办仍会保留。":"此消息仅供知悉。"}</p>{error&&<p role="alert">{error}</p>}<div><Button disabled={busy} onClick={()=>void dismiss(false)}>我知道了</Button><Button disabled={busy} onClick={()=>void dismiss(true)}>{notice.actionable?"去处理":"查看"}</Button></div></section>;
+  return <section ref={region} className="digital-notification-toast" aria-live="polite" aria-label="站内提醒"><div className="digital-notification-content"><p>{notice.title}</p>{notice.context&&<dl>{notice.context.styleNo&&<><dt>款号</dt><dd>{notice.context.styleNo}</dd></>}{notice.context.colors.length>0&&<><dt>颜色</dt><dd>{notice.context.colors.join(' / ')}</dd></>}{notice.context.poNumbers.length>0&&<><dt>PO</dt><dd>{notice.context.poNumbers.join(' / ')}</dd></>}{notice.context.orderId&&<><dt>母单编号</dt><dd>{notice.context.orderId}</dd></>}</dl>}</div><p className="digital-notification-hint">{notice.actionable?"确认提醒后，待办仍会保留。":"此消息仅供知悉。"}</p>{error&&<p role="alert">{error}</p>}<div><Button disabled={busy} onClick={()=>void dismiss(false)}>我知道了</Button><Button disabled={busy} onClick={()=>void dismiss(true)}>{notice.actionable?"去处理":"查看"}</Button></div></section>;
 }
