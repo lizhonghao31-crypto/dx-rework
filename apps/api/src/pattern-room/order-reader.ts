@@ -32,8 +32,8 @@ export class PatternOrderReader {
   async peopleFilters(actor: TrustedActorContext) {
     return this.read(actor, async (client, effective) => {
       if (!canReadAllPatternOrders(effective)) throw new ApplicationError("FORBIDDEN", "当前账号不能筛选其他人员", 403);
-      const creators = await client.query<{ id: string; name: string }>("SELECT person.id,person.display_name name FROM app_users person WHERE EXISTS(SELECT 1 FROM pattern_room_orders orders WHERE orders.created_by=person.id AND orders.deleted_at IS NULL) ORDER BY name,id");
-      const workers = await client.query<{ id: string; name: string }>("SELECT person.person_id id,person.display_name name FROM business_people person WHERE EXISTS(SELECT 1 FROM pattern_room_segments segment JOIN pattern_room_rounds round ON round.round_id=segment.round_id JOIN pattern_room_orders orders ON orders.order_id=round.order_id WHERE segment.person_id=person.person_id AND orders.deleted_at IS NULL) ORDER BY name,id");
+      const creators = await client.query<{ id: string; name: string }>("SELECT person.id,person.display_name AS name FROM app_users person WHERE EXISTS(SELECT 1 FROM pattern_room_orders orders WHERE orders.created_by=person.id AND orders.deleted_at IS NULL) ORDER BY name,id");
+      const workers = await client.query<{ id: string; name: string }>("SELECT person.person_id id,person.display_name AS name FROM business_people person WHERE EXISTS(SELECT 1 FROM pattern_room_segments segment JOIN pattern_room_rounds round ON round.round_id=segment.round_id JOIN pattern_room_orders orders ON orders.order_id=round.order_id WHERE segment.person_id=person.person_id AND orders.deleted_at IS NULL) ORDER BY name,id");
       return { creators: creators.rows, workers: workers.rows };
     });
   }

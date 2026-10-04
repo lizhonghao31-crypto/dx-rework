@@ -378,14 +378,14 @@ export class PatternRoomOrderService {
       const segmentId = randomUUID();
       if (order.kind === "pattern") {
         if (parsed.amount === undefined || parsed.hours !== undefined) throw new ApplicationError("VALIDATION_ERROR", "请明确原工人应得部分金额，无实际制作填0", 400);
-        const allocation = (await client.query<{ valid: boolean; remaining: string }>("SELECT $1::numeric<=$2::numeric valid,($2::numeric-$1::numeric)::text remaining", [parsed.amount, segment.amount])).rows[0]!;
+        const allocation = (await client.query<{ valid: boolean; remaining: string }>("SELECT $1::numeric<=$2::numeric AS valid,($2::numeric-$1::numeric)::text remaining", [parsed.amount, segment.amount])).rows[0]!;
         if (!allocation.valid) throw new ApplicationError("VALIDATION_ERROR", "原工人部分金额不能超过当前段剩余金额", 400);
         await client.query("UPDATE pattern_room_segments SET amount=$2,ended_at=CURRENT_TIMESTAMP WHERE segment_id=$1", [segment.segment_id, parsed.amount]);
         await client.query(`INSERT INTO pattern_room_segments(segment_id,round_id,segment_index,person_id,worker_user_id,worker_name,person_type,amount)
           VALUES($1,$2,$3,$4,$5,$6,'internal',$7)`, [segmentId, round.round_id, segment.segment_index + 1, person.person_id, person.app_user_id, person.display_name, allocation.remaining]);
       } else {
         if (parsed.hours === undefined || parsed.amount !== undefined) throw new ApplicationError("VALIDATION_ERROR", "请明确原工人已做工时，无实际制作填0", 400);
-        const total = (await client.query<{ valid: boolean }>("SELECT COALESCE(sum(actual_hours),0)+$3::numeric<=999999.9 valid FROM pattern_room_segments WHERE round_id=$1 AND segment_id<>$2", [round.round_id, segment.segment_id, parsed.hours])).rows[0]!.valid;
+        const total = (await client.query<{ valid: boolean }>("SELECT COALESCE(sum(actual_hours),0)+$3::numeric<=999999.9 AS valid FROM pattern_room_segments WHERE round_id=$1 AND segment_id<>$2", [round.round_id, segment.segment_id, parsed.hours])).rows[0]!.valid;
         if (!total) throw new ApplicationError("VALIDATION_ERROR", "各执行段累计工时不能超过999,999.9小时", 400);
         await client.query("UPDATE pattern_room_segments SET actual_hours=$2,amount=$2::numeric*$3::numeric,ended_at=CURRENT_TIMESTAMP WHERE segment_id=$1", [segment.segment_id, parsed.hours, round.unit_price]);
         await client.query(`INSERT INTO pattern_room_segments(segment_id,round_id,segment_index,person_id,worker_user_id,worker_name,person_type,amount)
@@ -414,7 +414,7 @@ export class PatternRoomOrderService {
         if (!segment || segment.segment_id !== parsed.segmentId) throw new ApplicationError("CONFLICT", "当前执行段已变化，请刷新后再取消", 409);
         if (order.kind === "pattern") {
           if (parsed.amount === undefined || parsed.hours !== undefined) throw new ApplicationError("VALIDATION_ERROR", "请明确当前工人的取消部分金额，无费用填0", 400);
-          const valid = (await client.query<{ valid: boolean }>("SELECT $1::numeric<=$2::numeric valid", [parsed.amount, segment.amount])).rows[0]!.valid;
+          const valid = (await client.query<{ valid: boolean }>("SELECT $1::numeric<=$2::numeric AS valid", [parsed.amount, segment.amount])).rows[0]!.valid;
           if (!valid || segment.wage_eligible_at !== null) throw new ApplicationError("CONFLICT", "取消费用不能超过本段余额或覆盖已计薪事实", 409);
           await client.query("UPDATE pattern_room_segments SET amount=$2,ended_at=COALESCE(ended_at,CURRENT_TIMESTAMP) WHERE segment_id=$1", [segment.segment_id, parsed.amount]);
         } else {

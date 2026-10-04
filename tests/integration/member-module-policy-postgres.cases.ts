@@ -186,7 +186,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
       expect(await permission(extraOwner, ["production_management"])).toBe(true);
       expect(await permission(extraOwner, ["owner_group"])).toBe(false);
       expect((await database.query<{ owner: boolean; production: boolean }>(
-        "SELECT todo_user_has_direct_role($1,'owner_group',$2) owner,todo_user_has_direct_role($1,'production_management',$2) production", [extraOwner, capability],
+        "SELECT todo_user_has_direct_role($1,'owner_group',$2) AS owner,todo_user_has_direct_role($1,'production_management',$2) production", [extraOwner, capability],
       )).rows[0]).toEqual({ owner: false, production: true });
       expect((await effectiveMemberAuthorization(database, extraOwner, [capability])).capabilities).toEqual([capability]);
       await expect(tx(client => events.append(client, actor(extraOwner, capability), {
