@@ -10,15 +10,15 @@ const row=(key,designer)=>({id:key,sourceId:key,orderId:key,styleNo:`TEST-${desi
 const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium'});
 try{const page=await browser.newPage();let saves=0;
 await page.route('**/api/**',async route=>{const path=new URL(route.request().url()).pathname.split('/api/')[1];let body={};
-if(path==='auth/me')body={status:'authorized',user:{id,displayName:'TEST真实主管',businessRoles:['pattern_room_supervisor'],capabilities:[]}};
-else if(path==='digital-production/cockpit')body={actorId:id,actorName:'TEST真实主管',canViewTodos:false,canManagePolicies:true,total:2,page:1,summary:{active:2,blocked:0,overdue:0,dueSoon:0,unknown:0},items:[row(id,'设计甲'),row(other,'设计乙')]};
+if(path==='auth/me')body={status:'authorized',user:{id,displayName:'TEST合成主管',businessRoles:['pattern_room_supervisor'],capabilities:[]}};
+else if(path==='digital-production/cockpit')body={actorId:id,actorName:'TEST合成主管',canViewTodos:false,canManagePolicies:true,total:2,page:1,summary:{active:2,blocked:0,overdue:0,dueSoon:0,unknown:0},items:[row(id,'设计甲'),row(other,'设计乙')]};
 else if(path==='digital-production/deadline-policies')body=[{nodeKey:'development_sewing',label:'开发车板',slaHours:24,warningRatio:0.8,version:1,changedAt:'2026-10-04T00:00:00Z',changedBy:'TEST老板',note:''}];
 else if(path==='digital-production/deadline-policies/development_sewing'){assert.equal(route.request().method(),'PUT');saves++;body={};}
 else assert.equal(route.request().method(),'GET');
 await route.fulfill({json:body});});
 await page.goto(new URL('/ui/digital-cockpit',base).href);await page.getByRole('heading',{name:'生产管理座舱'}).waitFor();
-await page.getByRole('button',{name:'TEST-设计乙',exact:true}).click();assert(await page.getByText('TEST真实主管',{exact:true}).isVisible());
-await page.getByText('展开 PO 与款色',{exact:true}).click();assert(await page.getByText('TEST-PO-2 · 白 · 50 件',{exact:true}).isVisible());
+await page.getByRole('button',{name:'TEST-设计乙',exact:true}).click();assert((await page.locator('.production-command-welcome').innerText()).includes('TEST合成主管'));
+await page.getByRole('button',{name:'单据与PO',exact:true}).click();assert(await page.getByText('TEST-PO-2 · 白 · 50 件',{exact:true}).isVisible());
 for(const [width,height] of [[1536,960],[390,844]]){await page.setViewportSize({width,height});await page.getByRole('button',{name:'TEST-设计乙',exact:true}).waitFor();await page.screenshot({path:`${output}/${width}x${height}.png`,fullPage:true});await page.getByRole('button',{name:'工序时效设定',exact:true}).click();const dialog=page.getByRole('dialog',{name:'工序时效设定'});await dialog.waitFor();const box=await dialog.boundingBox();assert(box.x>=0&&box.y>=0&&box.x+box.width<=width&&box.y+box.height<=height);await dialog.getByRole('button',{name:'应用到未完成任务'}).click();await dialog.getByRole('button',{name:'关闭',exact:true}).click();}
 assert.equal(saves,2);console.log('PASS: actual cockpit component, stable login identity, two PO expansion, no-SLA display, desktop/mobile screenshots and reachable policy save; synthetic API fixture, no Acceptance claim.');
 }finally{await browser.close();}

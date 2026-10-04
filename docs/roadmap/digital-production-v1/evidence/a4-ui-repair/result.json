@@ -1,0 +1,67 @@
+{
+  "provenance": "local real API/PG13, standard UAT sessions and TEST fixtures; not deployed Acceptance",
+  "result": [
+    {
+      "alias": "root",
+      "width": 1536,
+      "actor": "[UAT] Root",
+      "canManage": true,
+      "path": "home → cockpit → actual order/PO/history → analysis → original work → cockpit → my-tasks",
+      "api": "real local server, no route interception"
+    },
+    {
+      "alias": "root",
+      "width": 390,
+      "actor": "[UAT] Root",
+      "canManage": true,
+      "path": "home → cockpit → actual order/PO/history → analysis → original work → cockpit → my-tasks",
+      "api": "real local server, no route interception"
+    },
+    {
+      "alias": "production-management",
+      "width": 1536,
+      "actor": "[UAT] 供应链总监",
+      "canManage": true,
+      "path": "home → cockpit → actual order/PO/history → analysis → original work → cockpit → my-tasks",
+      "api": "real local server, no route interception"
+    },
+    {
+      "alias": "production-management",
+      "width": 390,
+      "actor": "[UAT] 供应链总监",
+      "canManage": true,
+      "path": "home → cockpit → actual order/PO/history → analysis → original work → cockpit → my-tasks",
+      "api": "real local server, no route interception"
+    },
+    {
+      "alias": "pattern-room-supervisor",
+      "width": 1536,
+      "actor": "[UAT] 技术主管",
+      "canManage": false,
+      "path": "home → cockpit → actual order/PO/history → analysis → original work → cockpit → my-tasks",
+      "api": "real local server, no route interception"
+    },
+    {
+      "alias": "pattern-room-supervisor",
+      "width": 390,
+      "actor": "[UAT] 技术主管",
+      "canManage": false,
+      "path": "home → cockpit → actual order/PO/history → analysis → original work → cockpit → my-tasks",
+      "api": "real local server, no route interception"
+    },
+    {
+      "alias": "worker-a",
+      "width": 1536,
+      "actor": "[UAT] 工人甲",
+      "deniedStatus": 403,
+      "path": "home → no digital entry; direct route/API denied"
+    },
+    {
+      "alias": "worker-a",
+      "width": 390,
+      "actor": "[UAT] 工人甲",
+      "deniedStatus": 403,
+      "path": "home → no digital entry; direct route/API denied"
+    }
+  ]
+}

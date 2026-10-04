@@ -19,6 +19,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const moduleCopy = {
+  digital: {title: "生产管理座舱", description: "数字开发与大货进度、原单办理和板房数据沙盘"},
   pattern_room: { title: "订单打板", description: "打板与杂事请求、板房价格管控" },
   finance: { title: "财务中心", description: "工资查询、导出与发放标记" },
   samples: { title: "样衣管理", description: "查看在管样衣、待确认事项、处置与库存金额" },

@@ -16,8 +16,10 @@ import { createWebUrls } from "../url-contract.js";
 import { hasPageAccess, verifySession, type AuthorizedUser } from "./auth.js";
 import type { Task } from "./types.js";
 import "./shell-navigation.css";
+import "./production-command-center-view.css";
+import "./digital-workspace.css";
 import { canAccessSupplierMaintenance } from "./supplier-onboarding-model.js";
-import { canAccessSourcing, canAccessSupplierCenter, canAccessProduction, canAccessProductionReporting, canAccessSamples } from "./platform-modules.js";
+import { canAccessDigitalProduction, canAccessSourcing, canAccessSupplierCenter, canAccessProduction, canAccessProductionReporting, canAccessSamples } from "./platform-modules.js";
 import { installTodoIndicatorRefresh } from "./todo-indicator-refresh.js";
 import { formatTodoBadgeCount } from "./todo-new-indicator.js";
 
@@ -175,9 +177,10 @@ function DesktopNavigation({
   );
 }
 
-const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "返工单看板", "外发定价&选厂", "订单开裁", "供应商中心"] as const;
+const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "生产管理座舱", "订单回货", "返工单看板", "外发定价&选厂", "订单开裁", "供应商中心"] as const;
 
 const MOBILE_NAVIGATION_META: Record<string, Readonly<{ label: string; glyph: string }>> = {
+  "生产管理座舱": { label: "数字生产", glyph: "数" },
   "我的待办": { label: "待办", glyph: "待" },
   "订单回货": { label: "收货", glyph: "收" },
   "返工单看板": { label: "返工", glyph: "返" },
@@ -275,10 +278,12 @@ export function Shell({
   active,
   children,
   mobileNavigation = "primary",
+  appearance = "standard",
 }: {
   active: string;
   children: ReactNode;
   mobileNavigation?: "primary" | "transaction";
+  appearance?: "standard" | "digital";
 }) {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const [canManageEmployeeAccess, setCanManageEmployeeAccess] = useState(false);
@@ -408,6 +413,11 @@ export function Shell({
       href: "/ui/my-tasks",
     });
   }
+  if (currentUser && canAccessDigitalProduction(currentUser)) globalNavigation.push(
+    {name:"生产管理座舱",description:"查看数字开发与大货双进度",href:"/ui/digital-cockpit"},
+    {name:"开发与大货办理",description:"原单办理、人员调度与历史",href:"/ui/digital-production"},
+    {name:"板房数据沙盘",description:"同源分析与改进记录",href:"/ui/digital-analysis"},
+  );
   if (currentUser && canAccessProduction(currentUser)) {
     globalNavigation.push({
       name: "实时生产看板",
@@ -571,7 +581,7 @@ export function Shell({
       : activeEntry?.name ?? active;
 
   return (
-    <div className="app-shell ui-polish">
+    <div className={`app-shell ui-polish${appearance === "digital" ? " digital-workspace production-command-shell" : ""}`}>
       {pullDistance > 0 ? (
         <div
           className="mobile-pull-refresh"
@@ -582,7 +592,7 @@ export function Shell({
         </div>
       ) : null}
       <aside>
-        <h2>达兴 · 数字助手</h2>
+        {appearance === "digital" ? <a className="production-command-brand" href={basePath+"/ui/home"}><strong>DX</strong><span>达兴服装<small>数字生产平台</small></span></a> : <h2>达兴 · 数字助手</h2>}
         <DesktopNavigation
           globalNavigation={globalNavigation}
           groups={desktopNavigationGroups}
@@ -611,7 +621,7 @@ export function Shell({
         />
       ) : null}
 
-      <main>{children}</main>
+      <main>{appearance === "digital" && <header className="production-command-topbar"><a className="digital-workspace-home" href={basePath+"/ui/home"}>业务首页</a><div className="production-command-userbar">{todoAccess&&<a href={basePath+"/ui/my-tasks"}>我的待办<TodoCountBadge count={pendingTodoCount}/></a>}<span className="production-command-avatar">{currentUser?.displayName.slice(0,1)??"…"}</span><span><strong>{currentUser?.displayName??"读取身份中"}</strong><small>{roleText}</small></span></div></header>}{children}</main>
       {currentUser?.capabilities.includes("todo:view") && <DigitalNotificationToast key={currentUser.id} userId={currentUser.id} />}
     </div>
   );

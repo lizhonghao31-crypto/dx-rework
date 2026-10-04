@@ -1,3 +1,5 @@
+import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
+import { DigitalCockpitQuery } from "../../apps/api/src/production-platform/cockpit-query.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -60,13 +62,25 @@ run("P05 development forms PostgreSQL", () => {
     await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$4,'test.png','image/png',100,$2,$3,'ready',CURRENT_TIMESTAMP)`,[id,"a".repeat(64),designer,`test/${id}`]);
     return {...doc,quantity:1,sampleSize:"M",orderDate:"2026-09-30",files:[{attachmentId:id,kind:"款图" as const}]};
   };
+  it("projects authorized style images and the declared development flow without inventing tasks",async()=>{
+    const id=await source(),document=await ready();
+    await development.save(actor(),id,{expectedVersion:0,document},randomUUID());
+    await development.publish(actor(),id,1,randomUUID());
+    const query=new DigitalCockpitQuery(database),input={stage:"development" as const,page:1,search:""};
+    const row=(await query.list(actor(),input)).items.find(item=>item.sourceId===id)!;
+    expect(row.category).toBe("上衣");expect(row.styleImageId).toBe(document.files[0]!.attachmentId);
+    expect(row.flow).toHaveLength(7);expect(row.flow![0]).toMatchObject({key:"development_materials",state:"ready"});
+    expect(row.flow!.slice(1).every(node=>node.state==="uncreated"&&node.taskId===null)).toBe(true);
+    expect(row.flow!.some(node=>/printing|embroidery|washing/.test(node.key))).toBe(false);
+    expect((await query.list(actor(other),input)).items.some(item=>item.sourceId===id)).toBe(false);
+  });
   it("saves incomplete drafts, rejects publishing them, and rejects other designers",async()=>{
     const id=await source();const saved=await development.save(actor(),id,{expectedVersion:0,document:draft()},randomUUID());
     expect(saved.version).toBe(1);expect(saved.status).toBe("draft");
     await expect(development.publish(actor(),id,1,randomUUID())).rejects.toMatchObject({statusCode:400});
     await expect(development.read(actor(other),id)).rejects.toMatchObject({statusCode:404});
     await expect(development.save(actor(other),id,{expectedVersion:1,document:draft()},randomUUID())).rejects.toMatchObject({statusCode:403});
-    expect((await database.query("SELECT count(*)::int AS n FROM digital_production_tasks")).rows[0].n).toBe(0);
+    expect((await database.query("SELECT count(*)::int AS n FROM digital_production_task_access WHERE source_id=$1",[id])).rows[0].n).toBe(0);
   });
   it("publishes once under concurrent retries, freezes original form, and creates a real 4h clerk task",async()=>{
     const id=await source(),document=await ready();await development.save(actor(),id,{expectedVersion:0,document},randomUUID());
@@ -101,4 +115,22 @@ run("P05 development forms PostgreSQL", () => {
     await expect(development.save(actor(),second,{expectedVersion:0,document},randomUUID())).rejects.toMatchObject({statusCode:403});
     await expect(development.save(actor(),first,{expectedVersion:0,document:{...document,sampleSize:"L"}},key)).rejects.toMatchObject({statusCode:409});
   });
+  it("uses the latest published round image and route while preserving the original document",async()=>{
+    await database.query(await readFile(new URL("../../apps/api/migrations/0225_digital_development_rounds.sql",import.meta.url),"utf8"));
+    const id=await source(),original=await ready();
+    await development.save(actor(),id,{expectedVersion:0,document:original},randomUUID());await development.publish(actor(),id,1,randomUUID());
+    const updated=await ready(),routeId=randomUUID(),client=await database.connect();
+    try {
+      await client.query("BEGIN");await development.bindFiles(client,actor(),id,updated);
+      await client.query(`INSERT INTO digital_development_rounds(source_id,round_number,based_on_round,document_version,document,origin,customer_comment,internal_problem,explanation,categories,affected_nodes,output_kind,route_nodes,inherited,route_id,created_by)
+        VALUES($1,2,1,3,$2,'客户新增要求','TEST 新款图','','TEST',ARRAY['款图'],ARRAY['纸样'],'整件样板',ARRAY['development_materials','development_pattern'],'{}',$3,$4)`,[id,JSON.stringify(updated),routeId,designer]);
+      await new DigitalProductionTaskService(database).createWithClient(client,actor(root,['root_superuser']),{resource:{kind:'source',id},kind:'development_materials',routeId,routeVersion:2,occurrence:2,assigneeId:null});
+      await client.query("COMMIT");
+    } catch(error){await client.query("ROLLBACK");throw error;} finally {client.release();}
+    const row=(await new DigitalCockpitQuery(database).list(actor(),{page:1,search:'',stage:'development'})).items.find(item=>item.sourceId===id)!;
+    expect(row.styleImageId).toBe(updated.files[0]!.attachmentId);expect(row.styleImageId).not.toBe(original.files[0]!.attachmentId);
+    expect(row.flow?.map(node=>node.key)).toEqual(['development_materials','development_pattern']);
+    expect((await development.read(actor(),id,database,1)).document!.files[0]!.attachmentId).toBe(original.files[0]!.attachmentId);
+  });
+
 });

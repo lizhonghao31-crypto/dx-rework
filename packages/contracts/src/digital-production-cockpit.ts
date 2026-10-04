@@ -3,6 +3,8 @@ export type CockpitStage = "development" | "bulk";
 export type CockpitRow = {
   id: string; orderId: string | null; sourceId: string | null; styleNo: string;
   customer: string; category: string; designer: string; merchandiser: string | null;
+  flow?: {key:string;label:string;state:DigitalTask["state"]|"uncreated";taskId:string|null}[];
+  styleImageId?: string | null;
   deliveryDate: string | null; createdAt: string;
   tasks: DigitalTask[];
   progress: { completed: number; applicable: number } | null;
