@@ -27,7 +27,6 @@ export function DigitalCockpitPage(){
  const writing=useRef(false),pending=useRef<{payload:string;key:string}|null>(null);
  useEffect(()=>{let live=true;setData(null);const timer=window.setTimeout(()=>{void digitalRequest<CockpitResult>(`cockpit?page=${page}&stage=${stage}&workload=${workload}&search=${encodeURIComponent(search)}`).then(value=>{if(live){setData(value);setError('');}}).catch(e=>{if(live)setError(e.message);});},150);return()=>{live=false;window.clearTimeout(timer);};},[page,stage,workload,search,refresh]);
  useEffect(()=>{if(!data?.canViewTodos)return;return installTodoIndicatorRefresh(async()=>{window.dispatchEvent(new Event("dx-rework:todo-refresh"));});},[data?.actorId,data?.canViewTodos]);
- useEffect(()=>{const timer=window.setInterval(()=>setRefresh(x=>x+1),60000);return()=>window.clearInterval(timer);},[]);
  const selected=data?.items.find(row=>row.id===selectedId)??data?.items[0];
  const now=new Date();
  const openPolicies=async()=>{try{setPolicies(await digitalRequest<DigitalDeadlinePolicy[]>('deadline-policies'));}catch(e){setError(e instanceof Error?e.message:'读取失败');}};
