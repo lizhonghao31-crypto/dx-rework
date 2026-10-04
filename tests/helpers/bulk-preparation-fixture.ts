@@ -56,7 +56,9 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
   const rejected=await new DigitalJourneyQuery(db).read(actors.root,id),owner=rejected.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='sourcing_owner');
   expect(owner).toMatchObject({state:'blocked',actualAt:null,completionResult:null,risks:['blocked']});
   expect(owner?.records[0]?.url).toContain('node=owner');expect((await bulk.read(primary,id)).ownerApproved).toBe(false);
-  expect(rejected.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='sourcing_director')?.state).toBe('pending');
+  const director=rejected.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='sourcing_director');
+  expect(director).toMatchObject({state:'pending',actualAt:null,owner:null,operator:null});
+  expect(director?.records[0]?.url).toContain('node=management');
   await service.recordManagementDecision(actors.manager,caseId,{supplierId:factoryId,craftIds:[craftId],linePrices:prices,decisionReason:'TEST按原拒绝意见重新确认',cuttingProcess:options?.cuttingProcess??'in_house'},randomUUID());
  }
  await service.decideOwner(actors.owner,caseId,{decision:'approved'},randomUUID());

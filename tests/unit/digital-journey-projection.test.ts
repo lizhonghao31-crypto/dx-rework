@@ -25,6 +25,13 @@ describe("V2 Journey shared query semantics",()=>{
     expect(orders[1]?.stages.find(stage=>stage.key==="development")?.state).toBe("completed");
     expect(orders[1]?.stages.find(stage=>stage.key==="development")?.nodes).toHaveLength(2);
   });
+  it("explains node filters with the matching current nodes even when they have no risk",()=>{
+    const order=item("one",[node("bulk_marker",{stage:"preparation",state:"pending"}),node("cutting_gate",{stage:"preparation",state:"blocked",risks:["blocked"]}),node("factory_arrival",{stage:"production",state:"pending",risks:["overdue"]}),node("bulk_marker",{current:false,stage:"preparation",state:"pending"})]);
+    const matched=selectJourneys([order],JourneyFilterSchema.parse({stage:"preparation",node:"bulk_marker",state:"pending"}),at);
+    expect(matched.items[0]?.hitReasons).toEqual([{nodeId:"bulk_marker",nodeKey:"bulk_marker",stage:"preparation",risks:[]}]);
+    const blocked=selectJourneys([order],JourneyFilterSchema.parse({stage:"preparation",state:"blocked",kpi:"blocked"}),at);
+    expect(blocked.items[0]?.hitReasons.map(reason=>reason.nodeKey)).toEqual(["cutting_gate"]);
+  });
   it("preserves the business denominator and requires whole-order packing/closure",()=>{
     const a=item("one",[node("partial-po",{state:"completed",stage:"receiving"}),node("packing",{state:"active",stage:"receiving"})]);
     const b=item("two",[node("packing",{state:"completed",stage:"receiving"}),node("pending-old",{state:"pending"})]);
