@@ -16,7 +16,7 @@ import {DigitalBudgetService} from '../../apps/api/dist/production-platform/budg
 
 const repo=resolve(fileURLToPath(new URL('../..',import.meta.url)));
 const pgMajor=process.argv[2]??'16';
-assert.ok(process.argv.length<=3&&['15','16'].includes(pgMajor),'Usage: acceptance-maintenance-drill.mjs [15|16]');
+assert.ok(process.argv.length<=3&&['13','15','16'].includes(pgMajor),'Usage: acceptance-maintenance-drill.mjs [13|15|16]');
 const scratch=mkdtempSync(join(tmpdir(),'dx-acceptance-drill-'));
 const container=`dx-acceptance-drill-${randomUUID()}`;
 const password=randomUUID();
@@ -45,7 +45,7 @@ async function generate(mode='apply',tool=repo) {
  return file;
 }
 try {
- docker(['run','--rm','-d','--name',container,'--label','dx-rework.test=acceptance-maintenance-v1','-e',`POSTGRES_PASSWORD=${password}`,'-p','127.0.0.1::5432','-v',`${repo}:${repo}:ro`,'-v',`${scratch}:${scratch}`,'-v',`${realpathSync(process.execPath)}:/usr/local/bin/node:ro`,`postgres:${pgMajor}-bookworm`]);started=true;
+ docker(['run','--rm','-d','--name',container,'--label','dx-rework.test=acceptance-maintenance-v1','-e',`POSTGRES_PASSWORD=${password}`,'-p','127.0.0.1::5432','-v',`${repo}:${repo}:ro`,'-v',`${scratch}:${scratch}`,'-v',`${realpathSync(process.execPath)}:/usr/local/bin/node:ro`,pgMajor==='13'?'postgres:13.23':`postgres:${pgMajor}-bookworm`]);started=true;
  const info=JSON.parse(docker(['inspect',container]))[0];
  assert.equal(info.Config.Labels['dx-rework.test'],'acceptance-maintenance-v1');
  const binding=info.NetworkSettings.Ports['5432/tcp'][0];assert.equal(binding.HostIp,'127.0.0.1');
@@ -85,7 +85,7 @@ try {
  assert.ok(roles,'Role diagnostics must precede permission rejection');
  assert.equal(Math.floor(roles.server_version_num/10000),Number(pgMajor));
  assert.equal(roles.application_inherits_maintenance,false);assert.equal(roles.maintenance_inherits_application,false);
- assert.deepEqual(roles.memberships,[{member:app,role:'diagnostic_probe',member_rolinherit:false,inherit:pgMajor==='15'?'not_applicable':false,set:pgMajor==='15'?'not_applicable':true}]);
+ assert.deepEqual(roles.memberships,[{member:app,role:'diagnostic_probe',member_rolinherit:false,inherit:Number(pgMajor)<16?'not_applicable':false,set:Number(pgMajor)<16?'not_applicable':true}]);
  assert.equal((await db.query(`SELECT pg_has_role('${app}','diagnostic_probe','USAGE') allowed`)).rows[0].allowed,false);
  const diagnostics=rejected.stdout.split('\n').filter(x=>x.startsWith('[{')).map(x=>JSON.parse(x)).find(x=>x[0]?.kind);
  assert.ok(diagnostics);
@@ -106,28 +106,28 @@ try {
  // the DDL and grants of that transaction, not silently miss a new table.
  const altered=structuredClone(requirements);altered['0226_digital_production_budgets'].creates=altered['0226_digital_production_budgets'].creates.filter(x=>x!=='digital_budget_image_copies');
  const alteredTool=join(scratch,'altered-tool');mkdirSync(join(alteredTool,'scripts/deploy'),{recursive:true});
- for(const file of ['scripts/migration-history-policy.mjs','scripts/migration-branches.json','scripts/deploy/acceptance-update-policy.mjs'])writeFileSync(join(alteredTool,file),readFileSync(join(repo,file)));
+ for(const file of ['scripts/migration-history-policy.mjs','scripts/migration-branches.json','scripts/migration-main-extensions.json','scripts/deploy/acceptance-update-policy.mjs'])writeFileSync(join(alteredTool,file),readFileSync(join(repo,file)));
  writeFileSync(join(alteredTool,'scripts/deploy/acceptance-migration-requirements.json'),JSON.stringify(altered));
  const missing=execute(await generate('apply',alteredTool),'inventory-omission',false);
  assert.match(missing.stderr,/Created relations differ/);
  assert.equal((await db.query("SELECT to_regclass('digital_budget_documents') AS relation")).rows[0].relation,null);
- assert.equal((await db.query('SELECT count(*)::int n FROM schema_migrations')).rows[0].n,228);
+ assert.equal((await db.query('SELECT count(*)::int n FROM schema_migrations')).rows[0].n,catalog.filter(x=>x.version<'0226_digital_budget_documents').length);
  await db.end();db=null;await admin.query(`DROP DATABASE ${database}`);await admin.query(`CREATE DATABASE ${database} TEMPLATE dx_rework_drill_baseline OWNER ${owner}`);
  db=new pg.Client({connectionString:url('postgres',database)});await db.connect();
  const oldRelations=(await db.query("SELECT c.relname,c.relowner,c.relacl FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p','S') ORDER BY c.relname")).rows;
  const apply=await generate();
  await db.query("CREATE FUNCTION test_interrupt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.version='0227_digital_production_instructions' THEN RAISE EXCEPTION 'TEST intentional interruption'; END IF; RETURN NEW; END $$; CREATE TRIGGER test_interrupt BEFORE INSERT ON schema_migrations FOR EACH ROW EXECUTE FUNCTION test_interrupt()");
  const partial=execute(apply,'partial-commit',false);assert.match(partial.stderr,/TEST intentional interruption/);
- assert.equal((await db.query('SELECT count(*)::int n FROM schema_migrations')).rows[0].n,229);
+ assert.equal((await db.query('SELECT count(*)::int n FROM schema_migrations')).rows[0].n,catalog.filter(x=>x.version<'0227_digital_production_instructions').length);
  assert.equal((await db.query("SELECT to_regclass('digital_instruction_documents') AS relation")).rows[0].relation,null);
  await db.query('DROP TRIGGER test_interrupt ON schema_migrations; DROP FUNCTION test_interrupt()');
  execute(apply,'retry');const after=(await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows;
- assert.equal(after.length,236);for(const old of before)assert.deepEqual(after.find(x=>x.version===old.version),old);
+ assert.equal(after.length,manifest.migrations.length);for(const old of before)assert.deepEqual(after.find(x=>x.version===old.version),old);
  execute(apply,'same-schema-repeat');assert.deepEqual((await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows,after);
  assert.equal((await db.query('SELECT count(*)::int n FROM pg_default_acl')).rows[0].n,0);
  for(const old of oldRelations)assert.deepEqual((await db.query('SELECT relname,relowner,relacl FROM pg_class WHERE oid=to_regclass($1)',['public.'+old.relname])).rows[0],old,'Existing ownership/ACL must not be rewritten');
  for(const check of Object.values(requirements))for(const seq of check.sequences)assert.equal((await db.query('SELECT pg_get_serial_sequence($1,$2) AS name',['public.'+seq.table,seq.column])).rows[0].name,'public.'+seq.name);
- report('catalog omission rolled back; partial commit 229 then retry to 236/0233; repeat preserved all timestamps; no default ACL');
+ report('catalog omission rolled back; partial commit before 0227 then retry to current catalog/0233; repeat preserved all timestamps; no default ACL');
  appDb=new pg.Pool({connectionString:url(app,database)});
  const tables=[...new Set(catalog.filter(x=>!historical.some(r=>r.version===x.version)).flatMap(x=>requirements[x.version].creates))];
  for(const table of tables)await appDb.query(`SELECT * FROM ${table} LIMIT 0`);
@@ -153,7 +153,7 @@ try {
  // The scripts run as container root; fixture configuration must have that
  // owner even when the host runner is an unprivileged UID.
  docker(['exec',container,'chown','0:0',join(runtime,'shared/.env'),join(runtime,'shared/deploy.env')]);
- const envArgs=['-e',`DX_REWORK_ROOT=${runtime}`,'-e',`GIT_SHA=${execFileSync('git',['rev-parse','HEAD'],{cwd:repo,encoding:'utf8'}).trim()}`,'-e',`CURRENT_DATABASE_STATE=${JSON.stringify({count:236,version:target.version,checksum:target.checksum})}`,'-e',`TARGET_SCHEMA_VERSION=${target.version}`,'-e',`TARGET_SCHEMA_CHECKSUM=${target.checksum}`];
+ const envArgs=['-e',`DX_REWORK_ROOT=${runtime}`,'-e',`GIT_SHA=${execFileSync('git',['rev-parse','HEAD'],{cwd:repo,encoding:'utf8'}).trim()}`,'-e',`CURRENT_DATABASE_STATE=${JSON.stringify({count:manifest.migrations.length,version:target.version,checksum:target.checksum})}`,'-e',`TARGET_SCHEMA_VERSION=${target.version}`,'-e',`TARGET_SCHEMA_CHECKSUM=${target.checksum}`];
  const backup=()=>docker(['exec',...envArgs,container,'bash',join(repo,'scripts/backup-postgres.sh')]);
  // Reproduce the previous fix's USAGE-only backup regression, then restore the
  // actual reviewed grant. This fixture-only revoke is never part of deployment.
@@ -196,7 +196,7 @@ DX_REWORK_RESTORE_DRILL=true DX_REWORK_RESTORE_CONFIRM=RESTORE_TO_ISOLATED_DRILL
  const earlyBefore=(await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows;
  const earlyApply=await generate();execute(earlyApply,'early-prefix-217');
  const earlyAfter=(await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows;
- assert.equal(earlyAfter.length,236);for(const old of earlyBefore)assert.deepEqual(earlyAfter.find(x=>x.version===old.version),old);
+ assert.equal(earlyAfter.length,manifest.migrations.length);for(const old of earlyBefore)assert.deepEqual(earlyAfter.find(x=>x.version===old.version),old);
  for(const check of Object.values(requirements))for(const seq of check.sequences) {
   assert.equal((await db.query('SELECT pg_get_serial_sequence($1,$2) AS name',['public.'+seq.table,seq.column])).rows[0].name,'public.'+seq.name);
   assert.deepEqual((await db.query(`SELECT has_sequence_privilege('${app}',$1,'SELECT') AS read,has_sequence_privilege('${app}',$1,'USAGE') AS use`,['public.'+seq.name])).rows[0],{read:true,use:false});
