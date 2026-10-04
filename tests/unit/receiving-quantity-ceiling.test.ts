@@ -2,9 +2,13 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
-import { ensureWithinSourceReceivingActualQuantity } from "../../apps/api/src/rework/receiving-quantity-ceiling.js";
+import { ensureWithinSourceReceivingActualQuantity, sourceReceivingQuantityCeilingError } from "../../apps/api/src/rework/receiving-quantity-ceiling.js";
 
 describe("receiving-linked rework quantity ceiling", () => {
+  it("maps only the known receiving ceiling constraint without masking other database failures", () => {
+    expect(sourceReceivingQuantityCeilingError({code:"23514",message:"rework quantity exceeds source receiving actual quantity ceiling 100"})).toMatchObject({code:"VALIDATION_ERROR",statusCode:400,message:"确认数量不能超过本次实收数量 100 件，请刷新报数后重试"});
+    for(const cause of [null, new Error("unexpected"), {code:"23514",message:"another constraint"}, {code:"23505",message:"rework quantity exceeds source receiving actual quantity ceiling 100"}]) expect(sourceReceivingQuantityCeilingError(cause)).toBeNull();
+  });
   it("rejects quantities above the exact source receiving actual quantity", async () => {
     const database = {
       query: async () => ({ rows: [{ quantity: "100" }] }),

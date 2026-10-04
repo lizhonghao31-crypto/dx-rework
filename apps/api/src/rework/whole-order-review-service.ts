@@ -17,7 +17,7 @@ import type { Pool, PoolClient } from "pg";
 
 import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
-import { ensureWithinSourceReceivingActualQuantity } from "./receiving-quantity-ceiling.js";
+import { ensureWithinSourceReceivingActualQuantity, sourceReceivingQuantityCeilingError } from "./receiving-quantity-ceiling.js";
 import {
   IdempotencyService,
   MessageOutboxRepository,
@@ -141,6 +141,10 @@ export class WholeOrderReviewService {
         originalUnitPrice: numberValue(plan.unit_price!),
         proposedUnitPrice: submittedPrices.find((price) => price.configurationItemId === plan.configuration_item_id)!.unitPrice,
       }));
+      await ensureWithinSourceReceivingActualQuantity(client, reworkOrderId, plans.flatMap((plan) => [
+        { label: `工序“${plan.process_name}”有效报数合计 ${numberValue(plan.completed_quantity)} 件`, quantity: numberValue(plan.completed_quantity) },
+        { label: `工序“${plan.process_name}”整查报数合计 ${numberValue(plan.tail_checked_quantity)} 件`, quantity: numberValue(plan.tail_checked_quantity) },
+      ]));
       await this.assertTailReconciliation(client, reworkOrderId, order.tail_inspection_required);
       const finalQuantities = plans.map((plan) => ({
         configurationItemId: plan.configuration_item_id,
@@ -1641,7 +1645,7 @@ export class WholeOrderReviewService {
       return { value: result.response, reused: result.reused };
     } catch (cause) {
       await client.query("ROLLBACK");
-      throw cause;
+      throw sourceReceivingQuantityCeilingError(cause) ?? cause;
     } finally {
       client.release();
     }
