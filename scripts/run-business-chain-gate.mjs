@@ -13,7 +13,7 @@ const { Pool } = pg;
 const DEFAULT_ECS_ENV_FILE = "/opt/dx-rework/shared/.env";
 const runtimeEnvFile = process.env.DX_REWORK_ENV_FILE || DEFAULT_ECS_ENV_FILE;
 const hasSharedRuntimeEnv = existsSync(runtimeEnvFile);
-const ISOLATED_GATE_SCHEMA = /^(?:full_chain|root_http_[12]|receiving|rework_v2|sourcing|sample|acceptance_roles|own_tail|pattern_backfill)_[0-9a-f]{32}$/;
+const ISOLATED_GATE_SCHEMA = /^(?:full_chain|root_http_[12]|receiving|rework_v2|sourcing|sample|acceptance_roles|acceptance_people|own_tail|pattern_backfill)_[0-9a-f]{32}$/;
 const RUNTIME_ENV_KEYS = new Set([
   "OSS_REGION",
   "OSS_ENDPOINT",
@@ -224,6 +224,7 @@ if (hasDatabase) {
     "tests/integration/sample-disposal-postgres.test.ts",
     "tests/integration/sample-import-postgres.test.ts",
     "tests/integration/acceptance-role-session-postgres.test.ts",
+    "tests/integration/acceptance-worker-people-postgres.test.ts",
   );
   process.stdout.write(
     "BUSINESS_CHAIN_GATE_START: sourcing PR03 + receiving + N01 v2 + process-worker preassignment + current-schema N01-N11 + two fresh Root single-account HTTP passes + isolated acceptance role sessions/control switching + browser/root/storage regressions\n",

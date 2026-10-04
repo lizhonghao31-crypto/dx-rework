@@ -36,6 +36,16 @@ describe("business-chain isolated schema cleanup",()=>{
     expect(source).toContain("BUSINESS_CHAIN_GATE_INTERRUPTED");
   });
 
+  it("registers personnel test schemas without admitting arbitrary schema names", async () => {
+    const source = await readFile(new URL("../../scripts/run-business-chain-gate.mjs", import.meta.url), "utf8");
+    const expression = source.match(/const ISOLATED_GATE_SCHEMA = \/(.+)\/;/)?.[1];
+    expect(expression).toBeDefined();
+    const allowed = new RegExp(expression!);
+    expect(allowed.test(`acceptance_people_${"1234abcd".repeat(4)}`)).toBe(true);
+    expect(allowed.test(`unrelated_${"1234abcd".repeat(4)}`)).toBe(false);
+    expect(allowed.test("acceptance_people_public")).toBe(false);
+  });
+
   it("prevents test entrypoints from inheriting generic DATABASE_URL",async()=>{
     const [a,b,c,d]=await Promise.all([
       readFile(new URL("../../vitest.config.ts",import.meta.url),"utf8"),
