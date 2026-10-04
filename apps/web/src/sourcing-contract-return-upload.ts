@@ -4,11 +4,11 @@ export type ContractReturnUpload = {
   key: string;
 };
 
-export function contractReturnFileError(files: readonly Pick<File, "type" | "size">[]): string | null {
-  return files.length < 1 || files.length > 2
+export function contractReturnFileError(files: readonly Pick<File, "type" | "size">[], existingCount = 0, existingBytes = 0): string | null {
+  return files.length < 1 || files.length + existingCount > 2
     || files.some(file => !["application/pdf", "image/jpeg", "image/png"].includes(file.type))
-    || files.reduce((size, file) => size + file.size, 0) > 20 * 1024 * 1024
-    ? "请选择 1 至 2 个 PDF/JPG/PNG 文件，合计不超过 20 MB" : null;
+    || existingBytes + files.reduce((size, file) => size + file.size, 0) > 20 * 1024 * 1024
+    ? "回签文件累计最多 2 个 PDF/JPG/PNG，合计不超过 20 MB" : null;
 }
 
 // Keep ready uploads during a partial failure. Submit the business event only after all files are ready.

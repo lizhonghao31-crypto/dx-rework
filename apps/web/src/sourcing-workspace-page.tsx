@@ -1362,7 +1362,7 @@ function OrderDetailPage({
   const uploadContractReturn = async (files:FileList|null):Promise<void> => {
     if (!files?.length || contractUploadGuard.current || !contractReturn?.canUpload) return;
     const chosen=Array.from(files);
-    const error=contractReturnFileError(chosen);
+    const error=contractReturnFileError(chosen,contractReturn.uploadedFileCount ?? contractReturn.attachments.length,contractReturn.uploadedTotalBytes ?? contractReturn.attachments.reduce((total,file)=>total+file.sizeBytes,0));
     if (error) {setContractReturnError(error);return;}
     setContractPendingSubmission(null);
     contractPendingUpload.current={files:chosen,attachmentIds:[],key:createClientRequestId()};
@@ -1867,8 +1867,9 @@ function OrderDetailPage({
                       onClick={()=>contractFileInput.current?.click()}>
                       {contractUploading?"正在上传…":contractReturn.attachments.length?"补传回签合同":"上传回签合同"}
                     </button>
-                    <span>一次选择 1 至 2 个 PDF/JPG/PNG，合计不超过 20 MB</span>
+                    <span>可一次传两个，也可分次追加；累计最多 2 个 PDF/JPG/PNG，合计不超过 20 MB</span>
                   </> : null}
+                  {(contractReturn.uploadedFileCount ?? contractReturn.attachments.length)>=2 ? <span>已达累计文件上限，已保存附件及历史记录保留</span> : null}
                   {contractReturn.attachments.length ? <div className="sourcing-contract-return-links" aria-label="回签附件，可左右滑动查看更多">
                     {contractReturn.attachments.map((file,index)=>
                       <a className="dx-button dx-button--secondary" key={file.attachmentId}
