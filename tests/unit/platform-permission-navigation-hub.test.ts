@@ -143,7 +143,7 @@ describe("platform permission and desktop navigation hub", () => {
     expect(components).toContain("currentUser && canAccessSourcing(currentUser)");
     expect(components).toContain("mobileSourcingNavigation");
     expect(components).toContain('name: "外发定价&选厂"');
-    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "返工单看板", "外发定价&选厂", "订单开裁", "供应商中心"]');
+    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "生产管理座舱", "订单回货", "返工单看板", "外发定价&选厂", "订单开裁", "供应商中心"]');
     expect(components).not.toContain('name: "发起返工"');
     expect(components).toContain("currentUser && canAccessSupplierCenter(currentUser)");
     expect(components).toContain('name: "供应商目录"');

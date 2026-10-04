@@ -1,3 +1,4 @@
+import { DigitalCockpitQuery } from "../../apps/api/src/production-platform/cockpit-query.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -94,11 +95,19 @@ run("P06 development execution PostgreSQL", () => {
     await execution.check(clerk(),id,{taskId,result:"缺项退回",note:"主布实物未到",items:checks(materialId,false)},randomUUID());
     const supply=(await execution.read(actor(),id)).tasks.find(t=>t.taskKind==="development_material_supply")!;
     expect(supply.routeProgress.completed).toBe(0);
+    const cockpit=new DigitalCockpitQuery(database),input={page:1,search:'',stage:'development' as const};
+    const returned=(await cockpit.list(boss(),input)).items.find(row=>row.sourceId===id)!;
+    expect(returned.flow?.find(node=>node.key==='development_materials')).toMatchObject({state:'uncreated',taskId:null});
+
     await expect(execution.resubmit(actor(),id,supply.taskId,randomUUID())).rejects.toMatchObject({statusCode:409});
     await development.materialEvent(actor(),id,materialId,{expectedMaterialRevision:0,expectedVersion:version,action:"到货",expectedDate:null,note:"主料实物已到"},randomUUID());
     await execution.resubmit(actor(),id,supply.taskId,randomUUID());
     const recheck=(await execution.read(clerk(),id)).tasks.find(t=>t.taskKind==="development_material_recheck")!;
     expect(recheck).toMatchObject({state:"ready",slaHours:null,dueAt:null});
+    const row=(await cockpit.list(boss(),input)).items.find(item=>item.sourceId===id)!;
+    expect(row.flow?.find(node=>node.key==='development_materials')).toMatchObject({state:'ready',taskId:recheck.taskId});
+    expect(row.tasks.find(task=>task.taskId===taskId)?.state).toBe('completed');
+
     expect((await tasks.read(clerk(),taskId)).slaHours).toBe(4);
     await execution.check(clerk(),id,{taskId:recheck.taskId,result:"通过",note:"缺项已补",items:checks(materialId)},randomUUID());
   });

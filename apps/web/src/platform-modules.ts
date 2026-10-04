@@ -7,7 +7,7 @@ import { landingTarget } from "./landing-target.js";
 export const PLATFORM_MODULE_QUERY = "platform_module";
 
 export type PlatformModule = Readonly<{
-  id: "rework" | "sourcing" | "cutting" | "suppliers" | "production" | "samples" | "finance" | "pattern_room";
+  id: "digital" | "rework" | "sourcing" | "cutting" | "suppliers" | "production" | "samples" | "finance" | "pattern_room";
   href: string;
 }>;
 
@@ -37,6 +37,11 @@ export function canAccessProduction(user: AuthorizedUser): boolean {
     || (user.businessRoles?.some(role => ["finance_director", "finance_read"].includes(role)) === true && user.capabilities.includes("sourcing:view"));
 }
 
+export const DIGITAL_PRODUCTION_ROLES = ["sample_designer", "order_merchandiser", "production_management", "owner_group", "pattern_room_supervisor", "development_clerk", "pattern_room_tail_inspector", "pattern_room_worker", "quality_control", "embroidery_washing_merchandiser", "warehouse_receiver", "cutting_worker"] as const;
+export function canAccessDigitalProduction(user: AuthorizedUser): boolean {
+  return user.isRoot === true || user.businessRoles?.some(role => DIGITAL_PRODUCTION_ROLES.some(allowed => allowed === role)) === true;
+}
+
 export function accessiblePlatformModules(user: AuthorizedUser): readonly PlatformModule[] {
   const modules: PlatformModule[] = [];
   const reworkHref = landingTarget(user);
@@ -48,6 +53,7 @@ export function accessiblePlatformModules(user: AuthorizedUser): readonly Platfo
   if (canAccessPatternRoom(user)) modules.push({ id: "pattern_room", href: "ui/pattern-room" });
   if (canAccessFinance(user)) modules.push({ id: "finance", href: "ui/finance" });
   if (reworkHref && reworkHref !== "ui/wages" && reworkHref !== "ui/finance") modules.push({ id: "rework", href: reworkHref });
+  if (canAccessDigitalProduction(user)) modules.push({ id: "digital", href: "ui/digital-cockpit" });
   return modules;
 }
 
@@ -71,7 +77,7 @@ export function shouldRedirectLegacyLandingToPlatformHome(
 }
 
 export function platformLandingTarget(user: AuthorizedUser): string | null {
-  const modules = accessiblePlatformModules(user);
+  const modules = accessiblePlatformModules(user).filter(module => module.id !== "digital");
   if (modules.length >= 2) return user.isRoot || user.capabilities.includes("todo:view") ? "ui/my-tasks" : modules[0]?.href ?? null;
-  return modules[0]?.href ?? null;
+  return modules[0]?.href ?? (canAccessDigitalProduction(user) ? "ui/digital-cockpit" : null);
 }

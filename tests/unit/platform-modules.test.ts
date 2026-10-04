@@ -6,6 +6,7 @@ import { landingTarget } from "../../apps/web/src/landing-target.js";
 import {
   accessiblePlatformModules,
   canAccessSourcing,
+  canAccessDigitalProduction,
   PLATFORM_MODULE_QUERY,
   platformLandingTarget,
   platformModuleHref,
@@ -40,10 +41,18 @@ describe("thin platform module routing", () => {
     expect(platformLandingTarget(user(["production_management"], ["todo:view", "sourcing:view"]))).toBe("ui/my-tasks");
   });
 
+  it("exposes digital navigation only to existing authorized roles", () => {
+    expect(canAccessDigitalProduction(user([], [], true))).toBe(true);
+    expect(canAccessDigitalProduction(user(["production_management"], []))).toBe(true);
+    expect(canAccessDigitalProduction(user(["pattern_room_supervisor"], []))).toBe(true);
+    expect(canAccessDigitalProduction(user(["worker"], ["todo:view"]))).toBe(false);
+    expect(canAccessDigitalProduction(user(["finance"], []))).toBe(false);
+  });
+
   it("derives the rework card href from the established landing function", () => {
     const dual = user(["order_merchandiser"], ["todo:view", "sourcing:view"]);
     const modules = accessiblePlatformModules(dual);
-    expect(modules.map((module) => module.id)).toEqual(["sourcing", "production", "rework"]);
+    expect(modules.map((module) => module.id)).toEqual(["sourcing", "production", "rework", "digital"]);
     expect(modules.find((module) => module.id === "rework")?.href)
       .toBe(landingTarget(dual));
   });

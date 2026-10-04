@@ -7,7 +7,7 @@ describe("mobile primary navigation", () => {
   it("derives the visible mobile entry list from the existing authorized navigation", async () => {
     const components = await read("apps/web/src/components.tsx");
 
-    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "订单回货", "返工单看板", "外发定价&选厂", "订单开裁", "供应商中心"]');
+    expect(components).toContain('const MOBILE_PRIMARY_NAVIGATION_NAMES = ["我的待办", "生产管理座舱", "订单回货", "返工单看板", "外发定价&选厂", "订单开裁", "供应商中心"]');
     expect(components).not.toContain('name: "发起返工"');
     expect(components).toContain('"订单开裁": { label: "开裁", glyph: "裁" }');
     expect(components).toContain('"供应商中心": { label: "供应商", glyph: "供" }');
