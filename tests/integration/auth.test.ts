@@ -141,3 +141,57 @@ it("returns a retryable busy callback without consuming its valid QR state", asy
   } finally { release(); await Promise.all(pending); }
   expect((await app.inject(callback)).headers.location).toBe("/rework/");
 });
+
+it("reserves directory capacity before consuming QR or mobile login credentials", async () => {
+  let blocked = false; let started = 0; let ready!: () => void; let release!: () => void;
+  const readsStarted = new Promise<void>(resolve => { ready = resolve; });
+  const held = new Promise<void>(resolve => { release = resolve; });
+  const identity = async (code: string) => ({ userId: code, unionId: `union-${code}` });
+  const provider: DingTalkProvider = {
+    exchangeMobileCode: identity, exchangeQrCode: identity,
+    buildQrAuthorizationUrl: state => `https://login.example/?state=${state}`,
+    getOrganizationMember: async candidate => {
+      if (blocked) { started += 1; if (started === 32) ready(); await held; }
+      return member({ userId: candidate.userId, unionId: candidate.unionId });
+    },
+  };
+  const store = new MemoryStore(); const auth = new AuthService(provider, store, "corp-a", 60_000, config.sessionSecret);
+  const tokens: string[] = [];
+  for (let index = 0; index < 32; index += 1) tokens.push((await auth.loginMobile(`employee-${index}`)).token);
+  const app = buildApp({ config, auth, checkDatabase: async () => undefined, getAppliedSchemaHistory: async () => null }); apps.push(app);
+  const start = await app.inject({ method: "POST", url: "/auth/qr/start" });
+  const callback = { method: "GET" as const, url: `/auth/qr/callback?authCode=reserved-qr&state=${start.json().frame.state}`, headers: { cookie: start.headers["set-cookie"]!.split(";")[0] } };
+  blocked = true; const pending = Promise.all(tokens.map(token => auth.authenticate(token))); await readsStarted;
+  try {
+    expect((await app.inject(callback)).statusCode).toBe(429);
+    await expect(auth.loginMobile("reserved-mobile")).rejects.toMatchObject({ code: "AUTH_BUSY" });
+    expect(store.codes.size).toBe(32);
+    expect([...store.states.values()].every(state => state.usedAt === null)).toBe(true);
+  } finally { release(); await pending; }
+  expect((await app.inject(callback)).headers.location).toBe("/rework/");
+  await expect(auth.loginMobile("reserved-mobile")).resolves.toHaveProperty("token");
+});
+
+it("admits a reserved login even when its shared directory read has 32 protected waiters", async () => {
+  let block = false; let ready!: () => void; let release!: () => void;
+  const started = new Promise<void>(resolve => { ready = resolve; });
+  const held = new Promise<void>(resolve => { release = resolve; });
+  class BlockingProvider extends FakeProvider {
+    override async exchangeMobileCode(code: string) { return { ...await super.exchangeMobileCode(code), corpId: "corp-a" }; }
+    override async getOrganizationMember() { if (block) { ready(); await held; } return super.getOrganizationMember(); }
+  }
+  const provider = new BlockingProvider(member()); const store = new MemoryStore();
+  const auth = new AuthService(provider, store, "corp-a", 60_000, config.sessionSecret);
+  const login = await auth.loginMobile("seed"); block = true;
+  const pending = Promise.all(Array.from({ length: 32 }, () => auth.authenticate(login.token))); await started;
+  const newcomer = auth.loginMobile("role-user");
+  const outcomes = Promise.allSettled([pending, newcomer]);
+  await new Promise<void>(resolve => setTimeout(resolve, 0)); release();
+  expect((await outcomes).every(result => result.status === "fulfilled")).toBe(true);
+});
+
+it("releases anonymous directory reservations when QR validation fails before exchange", async () => {
+  const auth = new AuthService(new FakeProvider(member()), new MemoryStore(), "corp-a", 60_000, config.sessionSecret);
+  for (let index = 0; index < 40; index += 1) await expect(auth.loginQr(`bad-${index}`, "missing", "wrong")).rejects.toMatchObject({ code: "INVALID_QR_STATE" });
+  await expect(auth.loginMobile("after-invalid-qr")).resolves.toHaveProperty("token");
+});
