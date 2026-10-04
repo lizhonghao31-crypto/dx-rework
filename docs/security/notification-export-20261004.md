@@ -9,3 +9,6 @@
 定向helper和真实provider假HTTP测试24项通过；完整suite1859通过、318跳过；lint/typecheck/workspace build通过。provider测试明确检查恶意链接/heading/HTML不进入Markdown且按钮URL保持。全部fetch是本地stub，无真实钉钉通知。没有收费API或线上数据。最终Head FullGate、随后一次GitHub Codex Review另行记录，不以本地测试冒充。
 
 无migration、无依赖升级/lockfile变化、无部署配置变化。main221、release237保留原历史；release provider/csv共享代码可最小cherry-pick，A4 UI不进入main。固定183309工具无需升级，候选仍须通过既有update preflight/包闭包。未自动合并/部署/关闭scan findings。
+
+
+一次Codex Review指出P2：公式guard使导出再导入重命名已有资料。已核实真实master-data CSV入口。现在导出对原始leading apostrophe也追加一层，导入按同一文本约定只移除一层guard，保留原始apostrophe和危险前缀业务名称。外部CSV使用此约定时，欲保留literal leading apostrophe需双写；正常不带guard的原始CSV不变。补充供应商/工序名称及原始apostrophe round-trip回归；修复后重新Gate，不请求第二次Review。
