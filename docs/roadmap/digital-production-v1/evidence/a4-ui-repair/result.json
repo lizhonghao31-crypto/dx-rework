@@ -6,6 +6,7 @@
       "width": 1536,
       "actor": "[UAT] Root",
       "canManage": true,
+      "assignedOnly": false,
       "path": "home → cockpit → actual order/PO/history → analysis → original work → cockpit → my-tasks",
       "api": "real local server, no route interception"
     },
@@ -14,6 +15,7 @@
       "width": 390,
       "actor": "[UAT] Root",
       "canManage": true,
+      "assignedOnly": false,
       "path": "home → cockpit → actual order/PO/history → analysis → original work → cockpit → my-tasks",
       "api": "real local server, no route interception"
     },
@@ -22,6 +24,7 @@
       "width": 1536,
       "actor": "[UAT] 供应链总监",
       "canManage": true,
+      "assignedOnly": false,
       "path": "home → cockpit → actual order/PO/history → analysis → original work → cockpit → my-tasks",
       "api": "real local server, no route interception"
     },
@@ -30,6 +33,7 @@
       "width": 390,
       "actor": "[UAT] 供应链总监",
       "canManage": true,
+      "assignedOnly": false,
       "path": "home → cockpit → actual order/PO/history → analysis → original work → cockpit → my-tasks",
       "api": "real local server, no route interception"
     },
@@ -38,6 +42,7 @@
       "width": 1536,
       "actor": "[UAT] 技术主管",
       "canManage": false,
+      "assignedOnly": false,
       "path": "home → cockpit → actual order/PO/history → analysis → original work → cockpit → my-tasks",
       "api": "real local server, no route interception"
     },
@@ -46,6 +51,25 @@
       "width": 390,
       "actor": "[UAT] 技术主管",
       "canManage": false,
+      "assignedOnly": false,
+      "path": "home → cockpit → actual order/PO/history → analysis → original work → cockpit → my-tasks",
+      "api": "real local server, no route interception"
+    },
+    {
+      "alias": "pattern-room-worker",
+      "width": 1536,
+      "actor": "[UAT] 板房师傅",
+      "canManage": false,
+      "assignedOnly": true,
+      "path": "home → cockpit → actual order/PO/history → analysis → original work → cockpit → my-tasks",
+      "api": "real local server, no route interception"
+    },
+    {
+      "alias": "pattern-room-worker",
+      "width": 390,
+      "actor": "[UAT] 板房师傅",
+      "canManage": false,
+      "assignedOnly": true,
       "path": "home → cockpit → actual order/PO/history → analysis → original work → cockpit → my-tasks",
       "api": "real local server, no route interception"
     },

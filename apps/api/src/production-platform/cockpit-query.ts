@@ -22,8 +22,10 @@ export class DigitalCockpitQuery {
     const clerk = `('development_clerk'=ANY($5::text[]) AND ${activeRole("'development_clerk'")})`;
     let bulkTasks='false';
     if(input.stage==='bulk'&&(await db.query("SELECT to_regclass('digital_bulk_preparations') AS relation")).rows[0]?.relation) bulkTasks=`EXISTS(SELECT 1 FROM digital_production_task_access ba JOIN digital_production_tasks bt USING(task_id) JOIN digital_bulk_preparations bp ON bp.preparation_id=bt.route_instance_id AND bp.production_order_id=ba.production_order_id JOIN digital_instruction_documents bi ON bi.production_order_id=bp.production_order_id AND bi.published_version=bp.instruction_version WHERE ba.production_order_id=o.production_order_id AND bt.state<>'cancelled' AND bp.source_round=coalesce((SELECT max(round_number) FROM digital_development_rounds WHERE source_id=bp.source_id),1) AND ba.task_kind IN ('bulk_pattern','warehouse_preshrink','bulk_cutting','bulk_cutting_external','process_logistics','bulk_qc','warehouse_dispatch','factory_material_count','bulk_ship_sample') AND ((ba.assignee_id=$4 AND ${activeRole('ba.required_role')}) OR ${delegated('task_id','ba.task_id',"'technical'")} OR (${delegated('task_id','ba.task_id',"'execute'")} AND ${activeRole('ba.required_role')})))`;
+    // Task assignment/delegation gives resource visibility, not blanket access to its other tasks.
+    const developmentTasks=`EXISTS(SELECT 1 FROM digital_production_task_access da JOIN digital_production_tasks dt USING(task_id) WHERE da.source_id=s.source_id AND da.task_kind LIKE 'development_%' AND ((da.assignee_id=$4 AND ${activeRole('da.required_role')}) OR ${delegated('task_id','da.task_id',"'technical','execute'")}))`;
     const scope=input.stage==='development'
-      ? `($6 OR $7 OR ('sample_designer'=ANY($5::text[]) AND s.created_by=$4) OR ('order_merchandiser'=ANY($5::text[]) AND ${activeRole("'order_merchandiser'")} AND EXISTS(SELECT 1 FROM digital_production_orders mo WHERE mo.source_id=s.source_id AND mo.primary_merchandiser_id=$4)) OR ${delegated('source_id','s.source_id',"'technical'")} OR (${clerk} AND EXISTS(SELECT 1 FROM digital_production_task_access ca WHERE ca.source_id=s.source_id AND ca.task_kind LIKE 'development_%')))`
+      ? `($6 OR $7 OR ('sample_designer'=ANY($5::text[]) AND s.created_by=$4) OR ('order_merchandiser'=ANY($5::text[]) AND ${activeRole("'order_merchandiser'")} AND EXISTS(SELECT 1 FROM digital_production_orders mo WHERE mo.source_id=s.source_id AND mo.primary_merchandiser_id=$4)) OR ${delegated('source_id','s.source_id',"'technical'")} OR ${developmentTasks} OR (${clerk} AND EXISTS(SELECT 1 FROM digital_production_task_access ca WHERE ca.source_id=s.source_id AND ca.task_kind LIKE 'development_%')))`
       : `($6 OR $7 OR ('sample_designer'=ANY($5::text[]) AND o.created_by=$4) OR ('order_merchandiser'=ANY($5::text[]) AND o.primary_merchandiser_id=$4) OR (${clerk} AND o.source_id IS NOT NULL) OR ${bulkTasks} OR ${delegated('production_order_id','o.production_order_id',"'technical'")})`;
     const column = input.stage === "development" ? "source_id" : "production_order_id";
     const visibleColumn=input.stage==='development'?'sourceId':'orderId';
@@ -68,7 +70,7 @@ SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
     const labels = hasDocuments ? (await db.query("SELECT DISTINCT ON(node_key) node_key,label FROM digital_production_deadline_policies ORDER BY node_key,version DESC")).rows : [];
     for (const row of result.items) {
       const resourceId = input.stage === "development" ? row.sourceId : row.orderId;
-      const taskIds = (await db.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+      const taskIds = (await db.query(`SELECT t.task_id,EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') AS returned FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
         WHERE a.${column}=$1 ORDER BY t.route_version DESC,t.created_at,t.task_id`,[resourceId])).rows;
       const tasks: Awaited<ReturnType<DigitalProductionTaskService["read"]>>[] = [];
       for (const task of taskIds) if (await policy.allowed(actor,"task",task.task_id,"technical")) tasks.push(await service.read(actor,task.task_id));
@@ -97,15 +99,17 @@ SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
       }
       const lines = row.orderId && await policy.allowed(actor,"order",row.orderId,"technical") ? (await db.query(`SELECT l.line_id AS id,l.po_number AS po,l.color,coalesce(sum(s.quantity),0)::int AS quantity
         FROM digital_production_po_lines l LEFT JOIN digital_production_po_sizes s USING(line_id) WHERE l.production_order_id=$1 GROUP BY l.line_id ORDER BY l.position`,[row.orderId])).rows : [];
-      let flow:CockpitRow["flow"]=tasks.filter(task=>task.routeVersion===(latest?.routeVersion??1)).map(task=>({key:task.taskKind,label:task.label,state:task.state,taskId:task.taskId}));
+      const effectiveTasks=tasks.filter(task=>!taskIds.find(item=>item.task_id===task.taskId)?.returned);
+      let flow:CockpitRow["flow"]=effectiveTasks.filter(task=>task.routeVersion===(latest?.routeVersion??1)).map(task=>({key:task.taskKind,label:task.label,state:task.state,taskId:task.taskId}));
       let styleImageId:string|null=null;
-      if(hasDocuments&&row.sourceId&&await policy.allowed(actor,"source",row.sourceId,"technical")) {
+      const fullSourceAccess=Boolean(row.sourceId&&await policy.allowed(actor,"source",row.sourceId,"technical"));
+      if(hasDocuments&&row.sourceId&&(fullSourceAccess||tasks.some(task=>task.sourceId===row.sourceId))) {
         const sheet=sheets.find(item=>item.source_id===row.sourceId);
         const document=sheet?.document;
         if(input.stage==='development'&&sheet?.status==='published') {
           const declared:string[]=(latest?.routeVersion??1)===1?['development_materials',...developmentRoute(document)]:rounds.find(round=>round.source_id===row.sourceId&&round.round_number===latest!.routeVersion)?.route_nodes??[];
           const nodes=declared.filter(node=>!['development_material_supply','development_craft_dispatch','development_sewing_transfer','development_washing_dispatch'].includes(node));
-          flow=nodes.map(key=>{const match=tasks.find(task=>task.routeVersion===(latest?.routeVersion??1)&&(task.taskKind===key||(key==='development_materials'&&task.taskKind==='development_material_recheck')));return {key,label:labels.find(item=>item.node_key===key)?.label??key,state:match?.state??'uncreated',taskId:match?.taskId??null};});
+          flow=nodes.map(key=>{const match=effectiveTasks.filter(task=>task.routeVersion===(latest?.routeVersion??1)&&(task.taskKind===key||(key==='development_materials'&&task.taskKind==='development_material_recheck'))).sort((a,b)=>b.occurrence-a.occurrence)[0];return {key,label:labels.find(item=>item.node_key===key)?.label??key,state:match?.state??(fullSourceAccess?'uncreated':'unavailable'),taskId:match?.taskId??null};});
         }
         if(document?.template)row.category=document.template;
         const image=document?.files?.find((file:{kind:string})=>file.kind==='款图');

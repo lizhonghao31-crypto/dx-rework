@@ -9,9 +9,9 @@ const env=JSON.parse(await readFile(process.env.A4_UI_ENV_FILE,'utf8'));
 const database=new URL(env.DATABASE_URL);assert(['localhost','127.0.0.1'].includes(database.hostname));assert.equal(database.pathname,'/dx_a4_ui_acceptance');assert.equal(env.ACCEPTANCE_LAB_ENABLED,'true');
 const output=process.env.A4_UI_EVIDENCE_DIR??'/tmp/dx-a4-ui-real-evidence';await mkdir(output,{recursive:true});
 const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH??'/usr/bin/chromium'});
-const result=[];let activePage,authorizedImageUrl;
+const result=[];let activePage,authorizedImageUrl,unassignedSourceId;
 try{
- for(const [alias,canManage] of [['root',true],['production-management',true],['pattern-room-supervisor',false],['worker-a',false]]){
+ for(const [alias,canManage] of [['root',true],['production-management',true],['pattern-room-supervisor',false],['pattern-room-worker',false],['worker-a',false]]){
   for(const [width,height] of [[1536,960],[390,844]]){
    const context=await browser.newContext({viewport:{width,height}}),page=await context.newPage(),errors=[];
    activePage=page;console.log(`START ${alias} ${width}`);
@@ -30,17 +30,23 @@ try{
     result.push({alias,width,actor:actor.displayName,deniedStatus:denied.status(),path:'home → no digital entry; direct route/API denied'});await context.close();continue;
    }
    await clickNav(/生产管理座舱|^数字生产$/);await page.getByRole('heading',{name:'生产管理座舱',exact:true}).waitFor();
-   await page.getByRole('button',{name:'TEST-A4-UI-8',exact:true}).waitFor();
+   const isAssignedWorker=alias==='pattern-room-worker';
+   await page.getByRole('button',{name:isAssignedWorker?'TEST-A4-UI-WORKER':'TEST-A4-UI-8',exact:true}).waitFor();
+   const snapshot=await context.request.get(new URL('/api/digital-production/cockpit',base).href);assert.equal(snapshot.status(),200);const live=await snapshot.json();
+   if(alias==='root')unassignedSourceId=live.items.find(row=>row.styleNo==='TEST-A4-UI-7').sourceId;
+   if(isAssignedWorker){assert.deepEqual(live.items.map(row=>row.styleNo),['TEST-A4-UI-WORKER']);assert(live.items[0].tasks.every(task=>task.assigneeId===actor.id));assert.equal(live.canManagePolicies,false);const deniedSource=await context.request.get(new URL(`/api/digital-production/sources/${unassignedSourceId}/development`,base).href);assert([403,404].includes(deniedSource.status()),'unassigned source denied');}
+
    assert.equal(await page.locator('.production-command-summary article').count(),5);
-   const image=page.getByRole('img',{name:'TEST-A4-UI-IMAGE 款图'}).first();await image.waitFor();await page.waitForFunction(()=>{const node=document.querySelector('img[alt="TEST-A4-UI-IMAGE 款图"]');return node?.complete&&node.naturalWidth>0;});authorizedImageUrl=await image.getAttribute('src');
+   const image=page.getByRole('img',{name:`${isAssignedWorker?'TEST-A4-UI-WORKER':'TEST-A4-UI-IMAGE'} 款图`}).first();await image.waitFor();await image.evaluate(node=>node.decode());if(!isAssignedWorker)authorizedImageUrl=await image.getAttribute('src');
    if(width<800)assert.equal(await page.locator('.production-command-summary').evaluate(node=>getComputedStyle(node).gridTemplateColumns.split(' ').length),2,'mobile two-column cards');
    assert.equal(await page.getByRole('button',{name:'工序时效设定',exact:true}).count(),canManage?1:0);
    assert((await page.locator('.production-command-welcome').innerText()).includes(actor.displayName));
-   await page.getByRole('button',{name:'TEST-A4-UI-2',exact:true}).click();await page.getByRole('heading',{name:'TEST-A4-UI-2',exact:true}).waitFor();
+   if(!isAssignedWorker){await page.getByRole('button',{name:'TEST-A4-UI-2',exact:true}).click();await page.getByRole('heading',{name:'TEST-A4-UI-2',exact:true}).waitFor();
    assert((await page.locator('.production-command-risk-list').innerText()).includes('TEST资料待核对'));
    await page.getByRole('button',{name:'单据与PO',exact:true}).click();await page.getByText('TEST-PO-B · 白 · 50 件',{exact:true}).waitFor();
    await page.getByRole('button',{name:'节点历史',exact:true}).click();assert(await page.getByText('历史只读，具体权限仍由原业务页核验。',{exact:true}).isVisible());
-   await page.getByRole('button',{name:'生产进度',exact:true}).click();
+   await page.getByRole('button',{name:'生产进度',exact:true}).click();}
+
    if(width<800){const boxes=await page.locator('.production-command-timeline-item').evaluateAll(nodes=>nodes.map(node=>({y:node.getBoundingClientRect().y,x:node.getBoundingClientRect().x})));assert.equal(boxes.length,7);assert(boxes.every((box,index)=>index===0||(box.y>boxes[index-1].y&&Math.abs(box.x-boxes[0].x)<1)),'mobile vertical route');assert(await page.locator('.production-command-current-node dd').nth(1).evaluate(node=>node.getBoundingClientRect().width>=150),'readable node dates');}
 
    if(canManage){await page.getByRole('button',{name:'工序时效设定',exact:true}).click();await page.getByRole('dialog',{name:'工序时效设定'}).waitFor();await page.getByRole('button',{name:'关闭',exact:true}).click();}
@@ -49,7 +55,7 @@ try{
    await clickNav(/板房数据沙盘/);await page.getByRole('heading',{name:'板房数据沙盘',exact:true}).waitFor();await page.getByText(/digital-production-p16-v1/).first().waitFor();assert.equal(await page.locator('.digital-workspace').count(),1);await provenance();await page.screenshot({path:`${output}/${alias}-${width}-analysis.png`,fullPage:true});
    await clickNav(/开发与大货办理/);await page.getByRole('heading',{name:/数字生产/}).first().waitFor();assert.equal(await page.locator('.digital-workspace').count(),1);
    await clickNav(/生产管理座舱|^数字生产$/);await page.getByRole('heading',{name:'生产管理座舱',exact:true}).waitFor();await page.getByRole('link',{name:/查看我的实际待办/}).click();await page.waitForURL(url=>url.pathname==='/ui/my-tasks');assert.equal(await page.locator('a[href$="/ui/todos"]').count(),0);
-   assert.deepEqual(errors,[]);result.push({alias,width,actor:actor.displayName,canManage,path:'home → cockpit → actual order/PO/history → analysis → original work → cockpit → my-tasks',api:'real local server, no route interception'});await context.close();
+   assert.deepEqual(errors,[]);result.push({alias,width,actor:actor.displayName,canManage,assignedOnly:isAssignedWorker,path:'home → cockpit → actual order/PO/history → analysis → original work → cockpit → my-tasks',api:'real local server, no route interception'});await context.close();
   }
  }
  await writeFile(`${output}/result.json`,JSON.stringify({provenance:'local real API/PG13, standard UAT sessions and TEST fixtures; not deployed Acceptance',result},null,2));console.log(JSON.stringify({passed:true,scenarios:result.length,output}));

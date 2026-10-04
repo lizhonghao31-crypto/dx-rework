@@ -100,6 +100,26 @@ run("P03 task lifecycle PostgreSQL", () => {
     await access.revoke(boss,grant.delegationId);
     expect((await cockpit.list(actor(other),query)).total).toBe(0);
   });
+  it("P15 shows only assigned or delegated development sources and keeps other tasks private",async()=>{
+    const search='TEST-P15-ASSIGNED',workerId=randomUUID(),hiddenWorkerId=randomUUID();
+    for(const id of [workerId,hiddenWorkerId])await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST assigned worker',true)",[id]);
+    const first=await service.createSource(actor(),DigitalSourceCreateSchema.parse({developmentType:'头版',designStyleNo:search+'-A',customerCode:'PD'}),randomUUID());
+    const second=await service.createSource(actor(),DigitalSourceCreateSchema.parse({developmentType:'头版',designStyleNo:search+'-B',customerCode:'PD'}),randomUUID());
+    await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'pattern_room_worker'),($2,'pattern_room_worker')",[workerId,hiddenWorkerId]);
+    const assigned=await create({kind:'source',id:first.sourceId},'development_pattern',{assigneeId:workerId});
+    const hidden=await create({kind:'source',id:first.sourceId},'development_cutting',{assigneeId:hiddenWorkerId});
+    const unrelated=await create({kind:'source',id:second.sourceId},'development_pattern',{assigneeId:hiddenWorkerId});
+    const worker=actor(workerId,['pattern_room_worker']),cockpit=new DigitalCockpitQuery(database),input={page:1,search,stage:'development' as const};
+    const visible=await cockpit.list(worker,input);expect(visible.total).toBe(1);expect(visible.items[0]!.sourceId).toBe(first.sourceId);
+    expect(visible.items[0]!.tasks.map(task=>task.taskId)).toEqual([assigned.taskId]);expect(visible.items[0]!.tasks.some(task=>task.taskId===hidden.taskId)).toBe(false);
+    expect(visible.summary.active).toBe(1);
+    await database.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND role_code='pattern_room_worker'",[workerId]);
+    expect((await cockpit.list(worker,input)).total).toBe(0);
+    await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'sample_designer')",[workerId]);
+    const access=new DigitalProductionAccessService(database),grant=await access.delegate(boss,{resourceKind:'task',resourceId:unrelated.taskId,delegateId:workerId,purpose:'technical',expiresAt:new Date(Date.now()+3600000).toISOString()});
+    expect((await cockpit.list(worker,input)).items.map(row=>row.sourceId)).toEqual([second.sourceId]);
+    await access.revoke(boss,grant.delegationId);expect((await cockpit.list(worker,input)).total).toBe(0);
+  });
   it("keeps no-SLA tasks usable without creating a legacy clock and denies cross-order access", async()=>{
     const resource=await order();const {taskId}=await create(resource);
     expect(await tasks.read(actor(),taskId)).toMatchObject({state:"ready",dueAt:null,slaHours:null,canExecute:true});
