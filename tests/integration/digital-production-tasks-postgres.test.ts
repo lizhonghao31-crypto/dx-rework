@@ -85,6 +85,21 @@ run("P03 task lifecycle PostgreSQL", () => {
     await condition(task.taskId,"business_recorded");await tasks.complete(boss,task.taskId,{note:""},randomUUID());
     await expect(tasks.prioritize(boss,task.taskId,"normal",randomUUID())).rejects.toMatchObject({statusCode:409});
   });
+  it("P15 SQL scope paginates only authorized sources and revokes delegation without changing totals",async()=>{
+    const search="TEST-P15-PAGE";
+    const sources=[];
+    for(let n=0;n<21;n++)sources.push(await service.createSource(actor(),DigitalSourceCreateSchema.parse({developmentType:"头版",designStyleNo:`${search}-${n}`,customerCode:"PD"}),randomUUID()));
+    const cockpit=new DigitalCockpitQuery(database),query={page:1,search,stage:"development" as const};
+    const first=await cockpit.list(actor(),query),second=await cockpit.list(actor(),{...query,page:2});
+    expect(first.total).toBe(21);expect(first.items).toHaveLength(20);expect(second.items).toHaveLength(1);expect(second.total).toBe(21);
+    expect(new Set([...first.items,...second.items].map(row=>row.id)).size).toBe(21);
+    expect(first.summary).toEqual(second.summary);expect((await cockpit.list(actor(other),query)).total).toBe(0);
+    const access=new DigitalProductionAccessService(database);
+    const grant=await access.delegate(boss,{resourceKind:"source",resourceId:sources[0]!.sourceId,delegateId:other,purpose:"technical",expiresAt:new Date(Date.now()+3600000).toISOString()});
+    expect((await cockpit.list(actor(other),query)).total).toBe(1);
+    await access.revoke(boss,grant.delegationId);
+    expect((await cockpit.list(actor(other),query)).total).toBe(0);
+  });
   it("keeps no-SLA tasks usable without creating a legacy clock and denies cross-order access", async()=>{
     const resource=await order();const {taskId}=await create(resource);
     expect(await tasks.read(actor(),taskId)).toMatchObject({state:"ready",dueAt:null,slaHours:null,canExecute:true});

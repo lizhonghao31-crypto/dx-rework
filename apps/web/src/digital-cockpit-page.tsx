@@ -15,6 +15,7 @@ const taskUrl=(task:DigitalTask)=>`${urls.pageUrl("ui/digital-production")}?task
 export function taskTimeProgress(task:DigitalTask,now:Date) {
   if(task.state==='pending')return {label:'条件未齐，未计时',percent:null};
   if(task.state==='cancelled')return {label:'已取消',percent:null};
+  if(!task.enteredAt)return {label:'时间待确认',percent:null};
   const timing=digitalTaskTiming({...task,terminal:task.state==='completed'},now);
   const label={unlimited:'仅记录滞留',unknown:'时间待确认',normal:'办理中',attention:'临期',overdue:'已超时',completed_on_time:'按期完成',completed_overdue:'超时完成'}[timing.state];
   const end=task.state==='completed'?task.completedAt:now.toISOString();

@@ -3171,6 +3171,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query('SELECT 1 FROM digital_bulk_cutting_completions WHERE production_order_id=$1',[id])).rowCount).toBe(0);
     const cockpit=new DigitalCockpitQuery(database),cockpitInput={stage:'bulk' as const,page:1,search:fixture.order.designStyleNo};
     const partialProgress=(await cockpit.list(primary,cockpitInput)).items.find(row=>row.orderId===id)!;
+    expect((await cockpit.list(recorder,cockpitInput)).items.some(row=>row.orderId===id)).toBe(true);
+    const outsider={...fixture.designer,actorId:randomUUID()};
+    expect((await cockpit.list(outsider,cockpitInput)).total).toBe(0);
     expect(partialProgress.lines).toHaveLength(2);expect(partialProgress.progress).toEqual({applicable:7,completed:1});
     const before=(await bulk.read(primary,id)).tasks.find(t=>t.taskKind.startsWith('bulk_cutting'))!;
     const identity=new DigitalProductionIdentityService(database,true,service),current=await identity.read(primary,id);

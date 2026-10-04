@@ -32,3 +32,7 @@
 所有截图是当前代码在本机真实组件配合合成 API 的布局证据，不是 Acceptance 业务证据。禁止本轮部署。后续获准部署精确候选后执行：真实非 root 角色接力/调度拒绝、SLA 在途覆盖/完成冻结与审计、两 PO 实绩对账、现场通知权限/跳转及 PC/手机同 SHA 截图。
 
 本机布局截图：[PC座舱](evidence/a4-p15/cockpit-desktop.png)、[手机座舱](evidence/a4-p15/cockpit-mobile.png)、[PC通知](evidence/a4-p15/notification-desktop.png)、[手机通知](evidence/a4-p15/notification-mobile.png)。均为合成 API，禁止作为线上业务通过证据。
+
+## 一次 GitHub Codex Review 修复
+
+Head 5066a446 的 Full Gate 通过后请求一次 Review，返回两项 P2：未知进入时间且无 SLA 的标签、分页前全历史逐条权限查询。已分别修复为“时间待确认”及 SQL 内授权范围/分页/总数/同范围汇总；保留原角色、有效大货任务、代理及撤销条件。新增 21 条来源分页与授权代理撤销回归、未知时间单测，并验证两 PO 内外裁模式的真实任务主办与陌生人范围。Review 不再重复请求；修复 Head 重新 Full Gate。
