@@ -7,7 +7,7 @@ import type { AuthService } from "../../apps/api/src/auth/service.js";
 const apps: ReturnType<typeof Fastify>[] = [];
 afterEach(async () => Promise.all(apps.splice(0).map(app => app.close())));
 
-const create = (available: boolean) => {
+const create = (available: boolean, secureCookie = false) => {
   const auth = {
     acceptanceControlAvailable: vi.fn(() => available),
     beginAcceptanceControl: vi.fn(() => "control-token"),
@@ -24,7 +24,7 @@ const create = (available: boolean) => {
   } as unknown as AuthService;
   const app = Fastify({ logger: false }); apps.push(app);
   registerAuthRoutes(app, auth, {
-    secureCookie: false, ttlSeconds: 3600, appBasePath: "/", corpId: "corp-test",
+    secureCookie, ttlSeconds: 3600, appBasePath: "/", corpId: "corp-test",
     mobileClientId: "mobile", webClientId: "web", qrRedirectUri: "https://example.test/callback",
   });
   return { app, auth: auth as unknown as {
@@ -67,4 +67,15 @@ describe("acceptance control routes", () => {
     ]));
     expect(auth.endAcceptanceControl).toHaveBeenCalledWith("control-token", "business-token");
   });
+});
+
+it("sets and clears both Acceptance cookies with Secure in HTTPS mode", async () => {
+  const { app } = create(true, true);
+  const start = await app.inject({ method: "POST", url: "/acceptance/control/start", payload: { code: "one-time" } });
+  expect(start.headers["set-cookie"]).toContain("; Secure");
+  const switched = await app.inject({ method: "POST", url: "/acceptance/control/switch", headers: { cookie: "dx_acceptance_control=control-token" }, payload: { alias: "worker-a" } });
+  expect(switched.headers["set-cookie"]).toContain("; Secure");
+  const ended = await app.inject({ method: "POST", url: "/acceptance/control/end", headers: { cookie: "dx_acceptance_control=control-token; dx_rework_session=business-token" } });
+  expect(ended.headers["set-cookie"]).toEqual(expect.arrayContaining([expect.stringContaining("dx_acceptance_control=;"), expect.stringContaining("dx_rework_session=;")]));
+  for (const cookie of ended.headers["set-cookie"] as unknown as string[]) expect(cookie).toContain("; Secure");
 });

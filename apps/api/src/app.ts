@@ -171,7 +171,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
 
   if (dependencies.auth) {
     registerAuthRoutes(app, dependencies.auth, {
-      secureCookie: config.nodeEnv === "production",
+      secureCookie: config.sessionCookieSecure,
       ttlSeconds: config.sessionTtlSeconds,
       appBasePath: config.appBasePath,
       corpId: config.dingtalk.corpId,
