@@ -1,3 +1,4 @@
+import { validateXlsxResourceBudget } from "./xlsx-resource-budget.js";
 import { useEffect, useRef, useState } from "react";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { SupplierBatchPreviewSchema, type SupplierBatchRow, type SupplierBatchValue } from "@dx-rework/contracts";
@@ -47,8 +48,10 @@ export function SupplierBatchPanel({ onClose, onChanged }: { onClose: () => void
     if (!/\.xlsx$/i.test(file.name) || file.size > 2 * 1024 * 1024) { setError("请选择一个不超过 2 MB 的 .xlsx 文件"); return; }
     lock.current = true; setBusy(true); setError(""); replace([]); setFilename(file.name); setExecuted(false);
     try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      await validateXlsxResourceBudget(bytes);
       const { readSheet } = await import("read-excel-file/browser");
-      const cells = await readSheet(file, "供应商录入");
+      const cells = await readSheet(new Blob([bytes]), "供应商录入");
       const parsed = SupplierBatchPreviewSchema.safeParse({ rows: cells });
       if (!parsed.success) throw new Error("文件须包含表头和最多 200 行资料、15 列；请检查是否误填了日期或超长内容");
       const plans = await request<SupplierBatchRow[]>("master-data/suppliers/import/preview", parsed.data);

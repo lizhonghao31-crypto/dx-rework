@@ -173,7 +173,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
 
   if (dependencies.auth) {
     registerAuthRoutes(app, dependencies.auth, {
-      secureCookie: config.nodeEnv === "production",
+      secureCookie: config.sessionCookieSecure,
       ttlSeconds: config.sessionTtlSeconds,
       appBasePath: config.appBasePath,
       corpId: config.dingtalk.corpId,
@@ -287,7 +287,8 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
       ? error.statusCode
       : null;
     const frameworkClientError = !known && !denied && frameworkStatusCode !== null;
-    const statusCode = known ? error.statusCode : denied ? 401 : frameworkStatusCode ?? 500;
+    const statusCode = known ? error.statusCode : denied ? error.code === "AUTH_BUSY" ? 429 : 401 : frameworkStatusCode ?? 500;
+    if (denied && error.code === "AUTH_BUSY") reply.header("retry-after", "1");
     if (statusCode >= 500) {
       request.log.error({ err: error }, "request failed");
     }

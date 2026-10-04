@@ -140,3 +140,17 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ ...validEnvironment, APP_BASE_PATH: appBasePath })).toThrow(ConfigurationError);
   });
 });
+
+
+describe("session cookie transport", () => {
+  it("requires Secure for HTTPS even in Acceptance test mode", () => {
+    expect(loadConfig(validEnvironment).sessionCookieSecure).toBe(true);
+    expect(loadConfig({ ...validEnvironment, ACCEPTANCE_LAB_ENABLED: "true", ACCEPTANCE_LAB_SECRET: "acceptance-lab-secret-with-more-than-32-characters", ROOT_DINGTALK_USER_ID: "uat-root" }).sessionCookieSecure).toBe(true);
+    expect(() => loadConfig({ ...validEnvironment, SESSION_COOKIE_SECURE: "false" })).toThrow(/require Secure/);
+  });
+  it("supports local HTTP without Secure and explicit Secure for a TLS frontend", () => {
+    const local = { ...validEnvironment, DINGTALK_QR_REDIRECT_URI: "http://127.0.0.1:3201/auth/qr/callback" };
+    expect(loadConfig(local).sessionCookieSecure).toBe(false);
+    expect(loadConfig({ ...local, SESSION_COOKIE_SECURE: "true" }).sessionCookieSecure).toBe(true);
+  });
+});
