@@ -1,3 +1,4 @@
+import {DigitalJourneyQuery} from "../../apps/api/src/production-platform/journey-query.js";
 import {DigitalProductionAccessService} from "../../apps/api/src/production-platform/access-service.js";
 import { DevelopmentRoundService } from "../../apps/api/src/production-platform/development-round-service.js";
 import { randomUUID } from "node:crypto";
@@ -50,6 +51,14 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  const caseId=created.value.sourcingCaseId,prices=[{position:1,unitPrice:'5.50'},{position:2,unitPrice:'5.50'}];
  await service.quoteIePrice(actors.ie,caseId,{linePrices:prices},randomUUID());await service.recordManagementDecision(actors.manager,caseId,{supplierId:factoryId,craftIds:[craftId],linePrices:prices,cuttingProcess:options?.cuttingProcess??'in_house'},randomUUID());
  if(mode==='none'){await execution.customerSample(designer,source.sourceId,{routeVersion:1,note:'TEST客户确认'},randomUUID());expect((await bulk.read(primary,id)).tasks).toHaveLength(0);}
+ if(mode==='none'){
+  await service.decideOwner(actors.owner,caseId,{decision:'rejected'},randomUUID());
+  const rejected=await new DigitalJourneyQuery(db).read(actors.root,id),owner=rejected.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='sourcing_owner');
+  expect(owner).toMatchObject({state:'blocked',actualAt:null,completionResult:null,risks:['blocked']});
+  expect(owner?.records[0]?.url).toContain('node=owner');expect((await bulk.read(primary,id)).ownerApproved).toBe(false);
+  expect(rejected.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='sourcing_director')?.state).toBe('pending');
+  await service.recordManagementDecision(actors.manager,caseId,{supplierId:factoryId,craftIds:[craftId],linePrices:prices,decisionReason:'TEST按原拒绝意见重新确认',cuttingProcess:options?.cuttingProcess??'in_house'},randomUUID());
+ }
  await service.decideOwner(actors.owner,caseId,{decision:'approved'},randomUUID());
  if(mode!=='none'){expect((await bulk.read(primary,id)).tasks).toHaveLength(0);await execution.customerSample(designer,source.sourceId,{routeVersion:1,note:'TEST客户确认'},randomUUID());}
  let sheet=await bulk.read(primary,id);expect(sheet.tasks.find(t=>t.taskKind==='bulk_pattern')).toMatchObject({state:'pending',enteredAt:null,dueAt:null});

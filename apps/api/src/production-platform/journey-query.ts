@@ -245,7 +245,7 @@ export class DigitalJourneyQuery {
       const sourcing=children.find(child=>child.module==="sourcing");
       if(sourcing&&!sourcingAllowed)for(const key of ["sourcing_ie","sourcing_director","sourcing_owner"])replace(key,emptyNode(key,"unavailable"));
       if(sourcing&&sourcingAllowed) {
-        const fields=(await db.query("SELECT additional_merchandiser_user_id,style_name_snapshot,erp_order_no FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL",[sourcing.child_id])).rows[0];styleName=fields?.style_name_snapshot??null;if(fields?.erp_order_no)orderNumbers.push(fields.erp_order_no);
+        const fields=(await db.query("SELECT source.additional_merchandiser_user_id,source.style_name_snapshot,source.erp_order_no,current.status FROM sourcing_cases source JOIN current_sourcing_cases current USING(sourcing_case_id) WHERE source.sourcing_case_id=$1 AND source.deleted_at IS NULL",[sourcing.child_id])).rows[0];styleName=fields?.style_name_snapshot??null;if(fields?.erp_order_no)orderNumbers.push(fields.erp_order_no);
         if(fields?.additional_merchandiser_user_id)merchandisers.push({id:fields.additional_merchandiser_user_id,name:(await db.query("SELECT display_name FROM app_users WHERE id=$1",[fields.additional_merchandiser_user_id])).rows[0]?.display_name??null});
         setFact("sourcing_preparation","completed",[record("sourcing",sourcing.child_id,`/ui/sourcing/orders/${sourcing.child_id}`)]);
         const target=record("sourcing",sourcing.child_id,`/ui/sourcing/orders/${sourcing.child_id}`,gates.approval?.decision_version??null);
@@ -254,9 +254,14 @@ export class DigitalJourneyQuery {
           WHERE q.sourcing_case_id=$1 AND ($2::uuid IS NULL OR q.sourcing_ie_quote_id=(SELECT source_ie_quote_id FROM sourcing_decisions WHERE sourcing_decision_id=$2)) ORDER BY quote_version DESC LIMIT 1`,[sourcing.child_id,decision??null])).rows[0];
         setFact("sourcing_ie",ie?"completed":"pending",[{...target,version:ie?.quote_version??null,url:ie?`${target.url}?view=node-history&node=ie_quote&entryId=${ie.sourcing_ie_quote_id}`:target.url}],iso(ie?.quoted_at),ie?{id:ie.quoted_by,name:null}:null);
         const management=(await db.query("SELECT sourcing_decision_id,decision_version,decided_at,decided_by FROM sourcing_decisions WHERE sourcing_case_id=$1 AND ($2::uuid IS NULL OR sourcing_decision_id=$2) ORDER BY decision_version DESC LIMIT 1",[sourcing.child_id,decision??null])).rows[0];
-        setFact("sourcing_director",management?"completed":"pending",[{...target,version:management?.decision_version??null,url:management?`${target.url}?view=node-history&node=management&entryId=${management.sourcing_decision_id}`:target.url}],iso(management?.decided_at),management?{id:management.decided_by,name:null}:null);
-        const ownerDecision=decision?(await db.query("SELECT decision,decided_at,decided_by FROM sourcing_owner_decisions WHERE sourcing_decision_id=$1",[decision])).rows[0]:null;
-        setFact("sourcing_owner",bulk.ownerApproved?"completed":"pending",[target],bulk.ownerApproved?iso(ownerDecision?.decided_at):null,ownerDecision?{id:ownerDecision.decided_by,name:null}:null);
+        setFact("sourcing_director",management&&fields?.status!=="pending_management_decision"?"completed":"pending",[{...target,version:management?.decision_version??null,url:management?`${target.url}?view=node-history&node=management&entryId=${management.sourcing_decision_id}`:target.url}],fields?.status==="pending_management_decision"?null:iso(management?.decided_at),management?{id:management.decided_by,name:null}:null);
+        const ownerDecision=management?(await db.query("SELECT sourcing_owner_decision_id,decision,decision_reason,decided_at,decided_by FROM sourcing_owner_decisions WHERE sourcing_decision_id=$1",[management.sourcing_decision_id])).rows[0]:null;
+        const ownerRecord={...target,version:management?.decision_version??null,url:ownerDecision?`${target.url}?view=node-history&node=owner&entryId=${ownerDecision.sourcing_owner_decision_id}`:target.url};
+        const ownerNode=setFact("sourcing_owner",bulk.ownerApproved?"completed":ownerDecision?.decision==="rejected"?"blocked":"pending",[ownerRecord],bulk.ownerApproved?iso(ownerDecision?.decided_at):null,ownerDecision?{id:ownerDecision.decided_by,name:null}:null);
+        if(ownerDecision?.decision==="rejected") {
+          ownerNode.operator=ownerNode.owner;ownerNode.risks.push("blocked");
+          ownerNode.blockers.push({key:"original_owner_rejected",label:ownerDecision.decision_reason,ownerId:null,record:ownerRecord});
+        }
       }
       const closure=await new OrderClosureService(this.database).read(actor,oid,db);
       const closureRecord=record("closure",oid,`/ui/digital-production?closure=${oid}`);
