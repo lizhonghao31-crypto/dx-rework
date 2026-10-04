@@ -60,3 +60,20 @@ describe("stored file content validation", () => {
     )).rejects.toBeInstanceOf(InvalidStoredFileError);
   });
 });
+
+it("accepts a 48 MP phone JPEG but rejects oversized JPEG decoder surfaces", async () => {
+  const photo = Buffer.from(jpeg); photo.writeUInt16BE(6000, 7); photo.writeUInt16BE(8000, 9);
+  await expect(validateStoredFileContent(photo, "image/jpeg")).resolves.toBeUndefined();
+  photo.writeUInt16BE(65535, 7); photo.writeUInt16BE(65535, 9);
+  await expect(validateStoredFileContent(photo, "image/jpeg")).rejects.toBeInstanceOf(InvalidStoredFileError);
+});
+it("rejects oversized VP8, VP8L and VP8X dimensions before decoding", async () => {
+  const oversized = Buffer.from(webp); oversized.writeUInt16LE(16383, 26); oversized.writeUInt16LE(16383, 28);
+  await expect(validateStoredFileContent(oversized, "image/webp")).rejects.toBeInstanceOf(InvalidStoredFileError);
+  const chunk = (type: string, data: Buffer) => { const header = Buffer.alloc(8); header.write(type); header.writeUInt32LE(data.length, 4); return Buffer.concat([header, data, ...(data.length % 2 ? [Buffer.from([0])] : [])]); };
+  const riff = (chunks: Buffer[]) => { const body = Buffer.concat([Buffer.from("WEBP"), ...chunks]); const header = Buffer.alloc(8); header.write("RIFF"); header.writeUInt32LE(body.length, 4); return Buffer.concat([header, body]); };
+  const lossless = Buffer.alloc(5); lossless[0] = 0x2f; lossless.writeUInt32LE((16383 | (16383 << 14)) >>> 0, 1);
+  await expect(validateStoredFileContent(riff([chunk("VP8L", lossless)]), "image/webp")).rejects.toBeInstanceOf(InvalidStoredFileError);
+  const extended = Buffer.alloc(10); extended.writeUIntLE(65535, 4, 3); extended.writeUIntLE(65535, 7, 3);
+  await expect(validateStoredFileContent(riff([chunk("VP8X", extended), webp.subarray(12)]), "image/webp")).rejects.toBeInstanceOf(InvalidStoredFileError);
+});

@@ -1,6 +1,14 @@
 import { Readable } from "node:stream";
 import { createInflate } from "node:zlib";
 
+// Covers ordinary phone photos up to 64 MP, while bounding decoder surfaces.
+export const MAX_IMAGE_PIXELS = 64_000_000;
+export const MAX_IMAGE_DIMENSION = 16_384;
+const validateDimensions = (width: number, height: number): void => {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0
+    || width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION || width * height > MAX_IMAGE_PIXELS) invalid();
+};
+
 const MAX_PNG_DECODED_BYTES = 128 * 1024 * 1024;
 
 export class InvalidStoredFileError extends Error {
@@ -71,6 +79,7 @@ const validateJpeg = (bytes: Buffer): void => {
       if (segmentLength < 8
         || bytes.readUInt16BE(offset + 3) === 0
         || bytes.readUInt16BE(offset + 5) === 0) invalid();
+      validateDimensions(bytes.readUInt16BE(offset + 5), bytes.readUInt16BE(offset + 3));
       hasFrame = true;
     }
     if (marker === 0xda) {
@@ -190,6 +199,7 @@ const validatePng = async (bytes: Buffer): Promise<void> => {
         || bytes[dataStart + 10] !== 0
         || bytes[dataStart + 11] !== 0
         || (interlace !== 0 && interlace !== 1)) invalid();
+      validateDimensions(width, height);
       bitsPerPixel = channels * bitDepth;
       hasHeader = true;
     } else if (type === "PLTE") {
@@ -241,11 +251,13 @@ const validateWebp = (bytes: Buffer): void => {
         || bytes[dataStart + 5] !== 0x2a
         || (bytes.readUInt16LE(dataStart + 6) & 0x3fff) === 0
         || (bytes.readUInt16LE(dataStart + 8) & 0x3fff) === 0) invalid();
+      validateDimensions(bytes.readUInt16LE(dataStart + 6) & 0x3fff, bytes.readUInt16LE(dataStart + 8) & 0x3fff);
       imageChunks += 1;
     } else if (type === "VP8L") {
       if (dataLength < 5 || bytes[dataStart] !== 0x2f) invalid();
       const dimensions = uint32le(bytes, dataStart + 1);
       if ((dimensions >>> 29) !== 0) invalid();
+      validateDimensions((dimensions & 0x3fff) + 1, ((dimensions >>> 14) & 0x3fff) + 1);
       imageChunks += 1;
     } else if (type === "VP8X") {
       if (dataLength !== 10
@@ -253,6 +265,7 @@ const validateWebp = (bytes: Buffer): void => {
         || bytes[dataStart + 1] !== 0
         || bytes[dataStart + 2] !== 0
         || bytes[dataStart + 3] !== 0) invalid();
+      validateDimensions(bytes.readUIntLE(dataStart + 4, 3) + 1, bytes.readUIntLE(dataStart + 7, 3) + 1);
     }
     offset = paddedEnd;
   }
