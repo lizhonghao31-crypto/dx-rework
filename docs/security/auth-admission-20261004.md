@@ -23,3 +23,9 @@ repository: lizhonghao31-crypto/dx-rework；base branch: main；base SHA: 9fcc05
 ## 运行边界
 
 预算是单进程的；多实例数量乘以预算，不承诺跨实例分布式限流。未在线压测、未调用真实钉钉或收费API。没有关闭扫描 findings。最终 release 接入应仅 cherry-pick本安全提交，不能把 main/release 整支互合；共享源码相同部分可直接适配，迁移历史保持原样。部署次序由组合兼容证据决定，不自动合并/部署。
+
+## 准确Head Gate阻断与最小测试修复
+
+首次Head fb23754e的FullGate37191793458在PG16的mapped access失败3项/通过8项：两项fixture未应用0059临时身份DDL，缺business_people.temporary_code；一项仍断言旧nextCursor，而当前service输出page/totalCount。冻结base9fcc05c4在同一PG13本地逐项重现完全相同3项（日志dx-main-pg-baseline）；与PG13 bare alias的另外13项故障分开记录。
+
+仅接入release已有access测试fixture修正（一个测试文件23增/12删），补齐真实历史DDL片段和0098、按现有page API断言、使用真实事件created_at列。不搬入来源commit0761178e的manifest或任何业务源码。独立diagnostic tree基于准确fb23754e加此一个文件，在真实隔离PG16上access/生命周期/session/全链路49项通过；受本机并行测试压力出现的一次5秒timeout已定位，使用独立60秒测试预算完成本地诊断，不改CI gate/test timeout。本修复不涉及main旧analytics alias；最终新Head仍必须跑原FullGate，再请求唯一一次Codex Review。
