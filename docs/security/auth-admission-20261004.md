@@ -33,3 +33,7 @@ repository: lizhonghao31-crypto/dx-rework；base branch: main；base SHA: 9fcc05
 ## 唯一一次Review的修复
 
 4fef105a通过FullGate后首次Codex Review发现P1：同IP已拒绝请求仍消耗全局预算；P2：legacy callback吞掉AUTH_BUSY而返回denied。两项均用新增回归在准确被审Head复现（2失败/33通过），随后修正为仅IP准入成功才增加全局计数，callback把AUTH_BUSY交给统一429/Retry-After处理，保留未消耗的QR state供重试。修正后35项认证测试通过；最终新Head重新FullGate，不请求第二次Review。
+
+## Acceptance接入唯一Review的容量预留修复
+
+PR639唯一Review发现P2：目录32个inflight满时，原login在消耗QR state/code后才遇到AUTH_BUSY，重试失效。同样问题同步修正main：login在任何凭据消耗前预留目录容量，protected新目录查询计入未知身份预留；得知identity后同步把预留转换为目录read，不缓存结果。共享read允许预留login加入，protected waiters仍32上限，public login仍16上限，单身份总waiters最多48；finally释放未转换预留，提供商失败/超时仍清理inflight。原Head新增两回归准确复现，两失败/36通过；修正及非法QR预留回收共38认证测试通过。两个PR新Head重新FullGate，各不发第二次Review。
