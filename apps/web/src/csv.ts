@@ -2,7 +2,18 @@ import { createWebUrls } from "../url-contract.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
-const escapeCell = (value: string): string => {
+const needsSpreadsheetTextGuard = (value: string): boolean => {
+  // Numeric business values are data, not formulas. Everything else with a
+  // formula prefix (including whitespace/control bypasses) is literal text.
+  const numeric = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value);
+  const prefix = [...value].find(character => character.trim().length > 0 && character.charCodeAt(0) > 31 && character.charCodeAt(0) !== 127);
+  return !numeric && ((prefix !== undefined && "=+-@".includes(prefix)) || /^[\t\r\n]/.test(value));
+};
+
+export const escapeCell = (value: string): string => {
+  // Double original apostrophes so importing the spreadsheet text convention
+  // can remove exactly one guard without renaming an existing business value.
+  if (value.startsWith("'") || needsSpreadsheetTextGuard(value)) value = `'${value}`;
   if (!/[",\r\n]/.test(value)) return value;
   return `"${value.replaceAll('"', '""')}"`;
 };
@@ -59,7 +70,10 @@ export function parseCsv(text: string): string[][] {
   let quoted = false;
 
   const pushCell = () => {
-    row.push(cell);
+    const literal = cell.startsWith("''") || (cell.startsWith("'") && needsSpreadsheetTextGuard(cell.slice(1)))
+      ? cell.slice(1)
+      : cell;
+    row.push(literal);
     cell = "";
   };
   const pushRow = () => {

@@ -396,3 +396,21 @@ describe("DingTalk todo provider boundary", () => {
     expect(String(failure)).not.toContain("sensitive-token");
   });
 });
+
+it("renders injected style text literally while preserving the server detail button", async () => {
+  const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const http: typeof fetch = async (input, init = {}) => {
+    const url = String(input); calls.push({ url, body: init.body ? JSON.parse(String(init.body)) : {} });
+    if (url.includes("gettoken")) return json({ errcode: 0, access_token: "fixture", expires_in: 7200 });
+    if (url.includes("asyncsend_v2")) return json({ errcode: 0, task_id: 1 });
+    if (url.includes("/sources/")) return json({}, 404);
+    return json({ id: "fixture-task", requestId: "fixture-request" });
+  };
+  const provider = new OfficialDingTalkTodoProvider({ appKey: "fixture", appSecret: "fixture", agentId: "123", nodeEnv: "production" }, http);
+  await provider.createTodo({ ...createInput, subject: "款号:\n# [伪造](https://evil.invalid)", description: "款号：![图](https://evil.invalid)\n<script>" });
+  const message = calls.find(call => call.url.includes("asyncsend_v2"))!.body as { msg: { action_card: { markdown: string; single_url: string } } };
+  expect(message.msg.action_card.single_url).toBe(createInput.deepLink);
+  expect(message.msg.action_card.markdown).not.toContain("[伪造](https://evil.invalid)");
+  expect(message.msg.action_card.markdown).not.toContain("<script>");
+  expect(message.msg.action_card.markdown).not.toContain("\n# ");
+});

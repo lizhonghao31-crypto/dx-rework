@@ -1,3 +1,4 @@
+import { escapeDingTalkMarkdownText } from "./markdown-text.js";
 import { createHash } from "node:crypto";
 
 import type { TodoRouteDescriptor } from "@dx-rework/contracts";
@@ -364,7 +365,7 @@ export class OfficialDingTalkTodoProvider implements DingTalkTodoProvider {
             msgtype: "action_card",
             action_card: {
               title: input.subject,
-              markdown: `### ${input.subject}\n\n${input.description.replace(/\n/g, "\n\n")}`,
+              markdown: `### ${escapeDingTalkMarkdownText(input.subject).replaceAll("\n", " ")}\n\n${escapeDingTalkMarkdownText(input.description).replace(/\n/g, "\n\n")}`,
               single_title: "查看详情",
               single_url: input.deepLink,
             },
