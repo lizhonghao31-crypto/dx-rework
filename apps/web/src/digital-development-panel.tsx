@@ -1,3 +1,4 @@
+import { useDigitalDetailNavigationGuard } from "./use-digital-detail-navigation-guard.js";
 import {DevelopmentRevisionFields,type RevisionFields} from "./development-revision-fields.js";
 import type {DevelopmentRevision} from "@dx-rework/contracts/digital-development-rounds";
 import { DevelopmentExecutionPanel } from "./digital-development-execution-panel.js";
@@ -25,6 +26,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound}:{sourceI
   const [revision,setRevision]=useState<RevisionFields|null>(null),[draftVersion,setDraftVersion]=useState(0),[rounds,setRounds]=useState<Rounds>({rounds:[],draft:null}),[selectedRound,setSelectedRound]=useState<number|undefined>(initialRound);
   const [fileKind,setFileKind]=useState<DevelopmentDocument["files"][number]["kind"]>("款图");
   const writing=useRef(false),operation=useRef<{payload:string;key:string}|null>(null);
+  useDigitalDetailNavigationGuard(dirty, busy, writing, "有未保存修改，确定离开？");
   const base=`sources/${sourceId}/development`;
   useEffect(()=>{let live=true;void digitalRequest<DevelopmentSheet>(`${base}${selectedRound?`?round=${selectedRound}`:""}`).then(value=>{if(live){setSheet(value);setDocument(value.document??initial());setDirty(false);if(value.status==="published")void digitalRequest<Rounds>(`${base}/rounds`).then(data=>{if(live)setRounds(data);}).catch(reason=>{if(live)setError(reason.message);});}}).catch(reason=>{if(live)setError(reason.message);});return()=>{live=false;};},[sourceId,selectedRound]);
   const edit=(patch:Partial<DevelopmentDocument>)=>{setDocument(current=>({...current,...patch}));setDirty(true);};
@@ -66,7 +68,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound}:{sourceI
   const imageUrl=(id:string)=>urls.apiUrl(`digital-production/${base}/attachments/${id}`);
   const changeMaterial=(index:number,patch:Partial<DevelopmentMaterial>)=>edit({materials:document.materials.map((item,i)=>i===index?{...item,...patch}:item)});
   return <Surface><section className="development-editor">
-    <div className="pattern-actions development-controls"><Button disabled={busy} onClick={async()=>{if(!dirty||await confirmInApp("有未保存修改，确定离开？"))onClose();}}>返回</Button>
+    <div className="pattern-actions development-controls"><Button disabled={busy} onClick={onClose}>返回</Button>
       <Button disabled={!sheet?.document||dirty||busy} onClick={()=>window.print()}>打印 / 保存 PDF</Button>
       <span>{revision?`第${revision.basedOnRound+1}轮复版草稿`:sheet?.status==="published"?"已发布":"草稿"}{(revision?draftVersion:sheet?.version)?` · 版本 ${revision?draftVersion:sheet?.version}`:""}</span></div>
     {sheet?.status==="published"&&<div className="development-controls"><label>查看轮次<select disabled={busy||Boolean(revision)} value={sheet.roundNumber??1} onChange={async event=>{const round=Number(event.target.value);if(!dirty||await confirmInApp("有未保存修改，确定切换轮次？")){setSelectedRound(round);const url=new URL(window.location.href);url.searchParams.set("round",String(round));window.history.replaceState(null,"",url);}}}><option value={1}>第1轮 · 原始开发</option>{rounds.rounds.map(round=><option key={round.roundNumber} value={round.roundNumber}>第{round.roundNumber}轮 · {round.origin}</option>)}</select></label>{sheet.canRevise&&!revision&&<Button disabled={busy} onClick={beginRevision}>{rounds.draft?"继续复版草稿":"发起实际修改 / 复版"}</Button>}
