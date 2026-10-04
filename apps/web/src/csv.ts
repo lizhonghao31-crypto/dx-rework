@@ -2,7 +2,12 @@ import { createWebUrls } from "../url-contract.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
-const escapeCell = (value: string): string => {
+export const escapeCell = (value: string): string => {
+  // Numeric business values are data, not formulas. Everything else with a
+  // formula prefix (including whitespace/control bypasses) is literal text.
+  const numeric = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value);
+  const prefix = [...value].find(character => character.trim().length > 0 && character.charCodeAt(0) > 31 && character.charCodeAt(0) !== 127);
+  if (!numeric && ((prefix !== undefined && "=+-@".includes(prefix)) || /^[\t\r\n]/.test(value))) value = `'${value}`;
   if (!/[",\r\n]/.test(value)) return value;
   return `"${value.replaceAll('"', '""')}"`;
 };
