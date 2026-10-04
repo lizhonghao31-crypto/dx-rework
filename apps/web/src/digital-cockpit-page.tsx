@@ -9,7 +9,7 @@ import "./digital-cockpit.css";
 const date=(value:string|null)=>value?new Date(value).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai",hour12:false}):"待确认";
 export {taskTimeProgress} from "./digital-cockpit-model.js";
 export function DigitalCockpitPage(){
- const [data,setData]=useState<CockpitResult|null>(null),[error,setError]=useState(''),[stage,setStage]=useState<CockpitStage>('development'),[workload,setWorkload]=useState('all'),[search,setSearch]=useState(''),[page,setPage]=useState(1),[selectedId,setSelectedId]=useState(''),[refresh,setRefresh]=useState(0);
+ const [data,setData]=useState<CockpitResult|null>(null),[error,setError]=useState(''),[stage,setStage]=useState<CockpitStage>(()=>new URLSearchParams(window.location.search).get('stage')==='bulk'?'bulk':'development'),[workload,setWorkload]=useState('all'),[search,setSearch]=useState(''),[page,setPage]=useState(1),[selectedId,setSelectedId]=useState(''),[refresh,setRefresh]=useState(0);
  const [policies,setPolicies]=useState<DigitalDeadlinePolicy[]|null>(null),[busy,setBusy]=useState(false);
  const writing=useRef(false),pending=useRef<{payload:string;key:string}|null>(null);
  useEffect(()=>{let live=true;setData(null);const timer=window.setTimeout(()=>{void digitalRequest<CockpitResult>(`cockpit?page=${page}&stage=${stage}&workload=${workload}&search=${encodeURIComponent(search)}`).then(value=>{if(live){setData(value);setError('');}}).catch(e=>{if(live)setError(e.message);});},150);return()=>{live=false;window.clearTimeout(timer);};},[page,stage,workload,search,refresh]);
