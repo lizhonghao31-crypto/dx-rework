@@ -105,3 +105,39 @@ it("caps QR creation globally across client addresses", async () => {
   expect((await app.inject({ method: "POST", url: "/auth/qr/start", remoteAddress: "203.0.113.1" })).statusCode).toBe(429);
   expect(store.states.size).toBe(200);
 });
+
+it("does not let IP-rejected traffic consume other clients' global login budget", async () => {
+  const { app, store } = create(member());
+  for (let index = 0; index < 210; index += 1) {
+    const response = await app.inject({ method: "POST", url: "/auth/qr/start", remoteAddress: "198.51.100.1" });
+    expect(response.statusCode).toBe(index < 10 ? 200 : 429);
+  }
+  expect((await app.inject({ method: "POST", url: "/auth/qr/start", remoteAddress: "198.51.100.2" })).statusCode).toBe(200);
+  expect(store.states.size).toBe(11);
+});
+
+it("returns a retryable busy callback without consuming its valid QR state", async () => {
+  let release!: () => void;
+  const blocked = new Promise<void>(resolve => { release = resolve; });
+  class BlockingStore extends MemoryStore {
+    block = false;
+    override async cleanupExpiredAuthArtifacts(now: Date) { if (this.block) await blocked; return super.cleanupExpiredAuthArtifacts(now); }
+  }
+  const store = new BlockingStore();
+  const auth = new AuthService(new FakeProvider(member()), store, "corp-a", 60_000, config.sessionSecret);
+  const app = buildApp({ config, auth, checkDatabase: async () => undefined, getAppliedSchemaHistory: async () => null });
+  apps.push(app);
+  const start = await app.inject({ method: "POST", url: "/auth/qr/start" });
+  const state = start.json().frame.state;
+  const callback = { method: "GET" as const, url: `/auth/qr/callback?authCode=retry&state=${state}`, headers: { cookie: start.headers["set-cookie"]!.split(";")[0] } };
+  store.block = true;
+  const pending = Array.from({ length: 16 }, () => auth.beginQr());
+  try {
+    const busy = await app.inject(callback);
+    expect(busy.statusCode).toBe(429);
+    expect(busy.headers["retry-after"]).toBe("1");
+    expect(busy.headers.location).toBeUndefined();
+    expect(busy.headers["set-cookie"]).toBeUndefined();
+  } finally { release(); await Promise.all(pending); }
+  expect((await app.inject(callback)).headers.location).toBe("/rework/");
+});
