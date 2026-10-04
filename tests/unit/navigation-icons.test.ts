@@ -9,7 +9,7 @@ describe("approved navigation icons", () => {
     const source = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
     expect(source).toContain('iconRoute={mode === "pending" ? "/ui/sourcing/pending" : "/ui/sourcing/history"}');
     expect(source).toContain('<Header iconRoute="/ui/sourcing/pending" title="订单详情"');
-    expect(source).toMatch(/<Header\s+iconRoute="\/ui\/sourcing\/pending"\s+title=\{item.styleNo\}/);
+    expect(source).toMatch(/<Header\s+iconRoute="\/ui\/sourcing\/pending"\s+title=\{display.styleNo\}/);
     expect(navigationIconForRoute("/ui/sourcing/pending")).toBe("FileText");
   });
   it("ignores query and hash without guessing unknown or similarly named routes", () => {

@@ -13,6 +13,9 @@ import {
   calculateSourcingTotalExact,
   SourcingNewUnitPriceSchema,
   MAX_SOURCING_ATTACHMENTS,
+  MAX_SOURCING_PROCESSES,
+  SourcingContractDisplaySchema,
+  ContractContentSchema,
   ReviseSourcingStylesSchema,
   SOURCING_IMAGE_SUPPLEMENT_ROLES,
 } from "@dx-rework/contracts";
@@ -660,6 +663,31 @@ export class SourcingService {
     const row = result.rows[0];
     if (!row) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
     const item = mapCase(history ? { ...row,contract_return_monitor_enabled:false } : row, actor);
+    if (!history && item.decision) {
+      const currentContract = (await client.query<{ sourcing_contract_document_id: string; contract_version: number; sourcing_decision_id: string; content: unknown }>(
+        `SELECT d.sourcing_contract_document_id,d.contract_version,d.sourcing_decision_id,o.content
+         FROM sourcing_contract_documents d
+         LEFT JOIN sourcing_contract_content_overrides o USING(sourcing_contract_document_id)
+         WHERE d.sourcing_case_id=$1
+         ORDER BY d.contract_version DESC LIMIT 1`, [sourcingCaseId])).rows[0];
+      // An older supplier/decision's contract is never projected over a new transfer.
+      if (currentContract) {
+        const parsed = ContractContentSchema.safeParse(currentContract.content);
+        if (currentContract.sourcing_decision_id === item.decision.sourcingDecisionId && parsed.success) {
+          const c = parsed.data;
+          const positions = new Set(c.lines.map(line => line.position));
+          item.contractDisplay = SourcingContractDisplaySchema.parse({
+            sourcingContractDocumentId: currentContract.sourcing_contract_document_id,
+            contractVersion: Number(currentContract.contract_version), contractNumber: c.contractNumber,
+            gender: c.gender, styleName: c.styleName, partyBName: c.partyBName,
+            estimatedCutPieceSendDate: c.estimatedCutPieceSendDate, deliveryDate: c.deliveryDate,
+            processes: c.processes, lines: c.lines, totalQuantity: c.totalQuantity, totalAmount: c.totalAmount,
+            linesMatchOrder: positions.size === c.lines.length && c.lines.length === item.lineItems.length
+              && item.lineItems.every(line => positions.has(line.position)),
+          });
+        }
+      }
+    }
     if (history) {
       item.styleNo = item.lineItems[0]?.styleNo ?? item.styleNo;
       // Current lifecycle/version are not a historical state; never present them as such.
@@ -1511,6 +1539,8 @@ export class SourcingService {
       requires_owner_approval: boolean;
       requested_by: string;
       requested_at: Date | string;
+      proposed_processes: string[];
+      changes_crafts: boolean;
       management_decision: "approved" | "rejected" | null;
       owner_decision: "approved" | "rejected" | null;
       effective: boolean;
@@ -1521,6 +1551,9 @@ export class SourcingService {
               change.proposed_quantity,change.proposed_total_amount,
               change.change_reason,change.requires_owner_approval,
               change.requested_by,change.requested_at,
+              proposal.after_state ? 'crafts' AS changes_crafts,
+              ARRAY(SELECT craft->>'craftName' FROM jsonb_array_elements(
+                COALESCE(proposal.after_state->'crafts',basis.crafts,'[]'::jsonb)) craft) AS proposed_processes,
               management_review.decision AS management_decision,
               owner_review.decision AS owner_decision,
               EXISTS(
@@ -1528,6 +1561,8 @@ export class SourcingService {
                 WHERE effective.source_change_request_id=change.factory_change_request_id
               ) AS effective
        FROM sourcing_factory_change_requests change
+       JOIN operation_events proposal ON proposal.event_id=change.operation_event_id
+       JOIN sourcing_decisions basis ON basis.sourcing_decision_id=change.from_decision_id
        LEFT JOIN sourcing_factory_change_decisions management_review
          ON management_review.factory_change_request_id=change.factory_change_request_id
         AND management_review.decision_role='production_management'
@@ -1556,6 +1591,8 @@ export class SourcingService {
         initiatorRole: row.initiator_role,
         proposedSupplierId: row.proposed_supplier_id,
         proposedSupplierName: row.proposed_supplier_name_snapshot,
+        proposedProcesses: row.proposed_processes,
+        changesCrafts: row.changes_crafts,
         proposedUnitPrice: row.proposed_unit_price,
         proposedQuantity: Number(row.proposed_quantity),
         proposedTotalAmount: row.proposed_total_amount,
@@ -3071,7 +3108,11 @@ export class SourcingService {
          unit_price,quantity,total_amount,decision_reason,decided_by,
          operation_event_id,request_id,crafts,cutting_process,cutting_process_other
       ) VALUES($1,$2,$3,'factory_change',NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,
-        (SELECT crafts FROM sourcing_decisions WHERE sourcing_decision_id=$4),
+        (SELECT COALESCE(proposal.after_state->'crafts',basis.crafts)
+         FROM sourcing_factory_change_requests request_row
+         JOIN operation_events proposal ON proposal.event_id=request_row.operation_event_id
+         JOIN sourcing_decisions basis ON basis.sourcing_decision_id=request_row.from_decision_id
+         WHERE request_row.factory_change_request_id=$5),
         (SELECT cutting_process FROM sourcing_decisions WHERE sourcing_decision_id=$4),
         (SELECT cutting_process_other FROM sourcing_decisions WHERE sourcing_decision_id=$4))`,
       [
@@ -3262,6 +3303,10 @@ export class SourcingService {
     if (!UUID_PATTERN.test(input.supplierId)) fail("加工厂标识无效");
     const unitPrice = normalizeSourcingUnitPrice(input.unitPrice);
     const changeReason = normalizeText(input.changeReason, "换厂原因", 500);
+    const craftIds = input.craftIds;
+    if (craftIds && (!craftIds.length || craftIds.length > MAX_SOURCING_PROCESSES
+      || new Set(craftIds).size !== craftIds.length || craftIds.some(id => !UUID_PATTERN.test(id))))
+      fail("请选择工艺及承包范围，最多20项且不能重复");
     const scope = `sourcing.factory-change.request.${initiatorRole}`;
     const client = await this.database.connect();
     try {
@@ -3271,7 +3316,7 @@ export class SourcingService {
         actorKey: actor.actorId,
         key: idempotencyKey,
         requestHash: requestHash(scope, {
-          sourcingCaseId, supplierId: input.supplierId, unitPrice, changeReason,
+          sourcingCaseId, supplierId: input.supplierId, unitPrice, changeReason, ...(craftIds ? { craftIds } : {}),
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
@@ -3357,6 +3402,21 @@ export class SourcingService {
           [input.supplierId],
         );
         const selected = factory.rows[0] ?? fail("请选择当前有效的加工厂");
+        const baseContractDocumentId = craftIds ? (await client.query<{id:string}>(
+          "SELECT sourcing_contract_document_id AS id FROM sourcing_contract_documents WHERE sourcing_case_id=$1 ORDER BY contract_version DESC LIMIT 1",
+          [sourcingCaseId])).rows[0]?.id ?? null : null;
+        const selectedCrafts = craftIds ? (await client.query<{
+          position: number; craft_id: string; craft_code: string; craft_version: number; craft_name: string;
+        }>(`SELECT requested.position::integer AS position,catalog.craft_id,catalog.craft_code,
+                  catalog.version AS craft_version,catalog.craft_name
+             FROM unnest($1::uuid[]) WITH ORDINALITY requested(craft_id,position)
+             JOIN current_craft_catalog catalog ON catalog.craft_id=requested.craft_id AND catalog.active
+             ORDER BY requested.position`, [craftIds])).rows.map(craft => ({
+               position: craft.position, craftId: craft.craft_id, craftCode: craft.craft_code,
+               craftVersion: craft.craft_version, craftName: craft.craft_name,
+             })) : undefined;
+        if (selectedCrafts && selectedCrafts.length !== craftIds!.length)
+          fail("所选工艺已停用或不存在，请重新选择",409,"CONFLICT");
         const quantity = Number(source.order_quantity);
         const caseLines = await client.query<{ position: number; quantity: number | string }>(
           `SELECT position,quantity FROM current_sourcing_case_lines
@@ -3393,6 +3453,7 @@ export class SourcingService {
             supplierName: selected.supplier_name,
             unitPrice, quantity, totalAmount, requiresOwnerApproval,
             effective: immediate,
+            ...(selectedCrafts ? { crafts: selectedCrafts, baseContractDocumentId } : {}),
           },
           reason: changeReason,
         });
@@ -3647,6 +3708,13 @@ export class SourcingService {
           input.decision === "approved" ? "转厂审批已通过" : "转厂申请已驳回",
         );
         if (willEffect) {
+          const basis = (await client.query<{after_state:Record<string,unknown>;id:string|null}>(
+            `SELECT event.after_state,(SELECT sourcing_contract_document_id::text FROM sourcing_contract_documents
+              WHERE sourcing_case_id=$2 ORDER BY contract_version DESC LIMIT 1) AS id
+             FROM sourcing_factory_change_requests request_row JOIN operation_events event ON event.event_id=request_row.operation_event_id
+             WHERE request_row.factory_change_request_id=$1`,[factoryChangeRequestId,sourcingCaseId])).rows[0]!;
+          if ('baseContractDocumentId' in basis.after_state && basis.after_state.baseContractDocumentId !== basis.id)
+            fail("合同版本已经变化，请驳回后重新发起转厂",409,"CONFLICT");
           await this.applyFactoryChange(client, actor, source, eventId, verificationReason);
         } else if (input.decision === "approved") {
           await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
