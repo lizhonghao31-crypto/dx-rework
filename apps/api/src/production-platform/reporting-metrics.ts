@@ -24,7 +24,14 @@ export function taskAnalysis(task:AnalysisTask,asOf:string){
  const intervals:[number,number][]=[];let blocked:number|null=null,unknownWaiting=0;
  // P03's current task columns are the authoritative corrected projection, not event timestamp ordering.
  const effectiveEvents=task.events.filter(e=>!e.correctsId).map(event=>event.kind==='ready'?{...event,at:task.enteredAt,quality:task.enteredQuality}:event.kind==='completed'?{...event,at:task.completedAt,quality:task.completedQuality}:event);
+ const readyRecordedAt=Math.min(...effectiveEvents.filter(e=>e.kind==='ready').map(e=>Date.parse(e.recordedAt)).filter(Number.isFinite));
+ let conditionBlocked=false;
  for(const event of effectiveEvents){
+  // P03 condition writes carry missing/unverified occurrence times. Retain their
+  // historical wait as unknown after activation, even after conditions recover.
+  // Several unmet prerequisites in the same blocked episode must not add waits.
+  if(event.kind==='condition'&&event.payload.satisfied===false&&Date.parse(event.recordedAt)>=readyRecordedAt&&!conditionBlocked){unknownWaiting++;conditionBlocked=true;}
+  if(['unblocked','completed','cancelled','cancel'].includes(event.kind))conditionBlocked=false;
   if(event.kind==='blocked'){
    if(event.at&&Number.isFinite(Date.parse(event.at))&&trusted(event.quality)){if(blocked===null)blocked=Date.parse(event.at);}else unknownWaiting++;
   }else if(['unblocked','completed','cancelled','cancel'].includes(event.kind)&&blocked!==null){

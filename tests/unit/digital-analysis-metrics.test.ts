@@ -24,6 +24,12 @@ describe('P16 auditable truth set',()=>{
   expect(before.waitingSeconds).toBe(14400);expect(later.waitingSeconds).toBe(before.waitingSeconds);expect(before.events).toHaveLength(3);
   expect(summarizeAnalysis([before],at(0),at(24)).correctedTasks).toBe(1);
  });
+ it('retains condition-driven waiting as unknown after restoration without double-counting simultaneous prerequisites',()=>{
+  const condition=(h:number,key:string,satisfied:boolean):AnalysisEvent=>({...event('condition',h),quality:'补报未核实',payload:{condition:key,satisfied}});
+  const events=[condition(-1,'materials_ready',false),event('ready',0),condition(1,'materials_ready',false),condition(2,'handover_received',false),condition(3,'materials_ready',true),condition(3,'handover_received',true),event('unblocked',3),event('completed',4)];
+  const row=taskAnalysis(task({events}),at(12));expect(row.waitingSeconds).toBe(0);expect(row.unknownWaiting).toBe(1);expect(row.pendingConditions).toEqual([]);
+  expect(taskAnalysis(task({events:[...events.slice(0,-1),condition(3.5,'materials_ready',false),event('completed',4)]}),at(12)).unknownWaiting).toBe(2);
+ });
  it('does not turn inverted or invalid times into zero-hour precise work',()=>{
   for(const extra of [{enteredAt:at(5),completedAt:at(4)},{enteredAt:'invalid',completedAt:at(4)},{dueAt:'invalid'}]){
    const row=taskAnalysis(task(extra),at(12));expect(row.slaIncluded).toBe(false);if(extra.enteredAt)expect(row.handlingSeconds).toBeNull();
