@@ -44,6 +44,32 @@ const isAcceptanceControllableProvider = (provider: DingTalkProvider): provider 
 };
 
 export class AuthService {
+  private publicRequests = 0;
+  private protectedRequests = 0;
+  private readonly memberRequests = new Map<string, { promise: Promise<OrganizationMember | null>; waiters: number }>();
+
+  private async publicAdmission<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.publicRequests >= 16) throw new AuthDeniedError("AUTH_BUSY", "登录服务繁忙，请稍后重试");
+    this.publicRequests += 1;
+    try { return await operation(); } finally { this.publicRequests -= 1; }
+  }
+
+  // Share only a currently running directory read, never a settled membership result.
+  private async organizationMember(identity: DingTalkIdentity): Promise<OrganizationMember | null> {
+    const key = JSON.stringify([this.corpId, identity.corpId, identity.userId, identity.unionId]);
+    let current = this.memberRequests.get(key);
+    if (!current) {
+      if (this.memberRequests.size >= 32) throw new AuthDeniedError("AUTH_BUSY", "身份校验繁忙，请稍后重试");
+      const promise = this.provider.getOrganizationMember(identity, this.corpId);
+      current = { promise, waiters: 0 };
+      this.memberRequests.set(key, current);
+      void promise.finally(() => { if (this.memberRequests.get(key) === current) this.memberRequests.delete(key); }).catch(() => undefined);
+    }
+    if (current.waiters >= 32) throw new AuthDeniedError("AUTH_BUSY", "身份校验繁忙，请稍后重试");
+    current.waiters += 1;
+    try { return await current.promise; } finally { current.waiters -= 1; }
+  }
+
   constructor(
     private readonly provider: DingTalkProvider,
     private readonly store: AuthStore,
@@ -110,30 +136,46 @@ export class AuthService {
   }
 
   async beginQr(): Promise<{ authorizationUrl: string; state: string; bindingToken: string }> {
-    await this.store.cleanupExpiredAuthArtifacts(this.now());
-    const state = randomBytes(32).toString("base64url");
-    const bindingToken = randomBytes(32).toString("base64url");
-    await this.store.createQrState({ stateHash: hash(state), bindingHash: this.hashBinding(bindingToken), expiresAt: new Date(this.now().getTime() + 5 * 60_000), usedAt: null });
-    return { authorizationUrl: this.provider.buildQrAuthorizationUrl(state), state, bindingToken };
+    return this.publicAdmission(async () => {
+      await this.store.cleanupExpiredAuthArtifacts(this.now());
+      const state = randomBytes(32).toString("base64url");
+      const bindingToken = randomBytes(32).toString("base64url");
+      await this.store.createQrState({ stateHash: hash(state), bindingHash: this.hashBinding(bindingToken), expiresAt: new Date(this.now().getTime() + 5 * 60_000), usedAt: null });
+      return { authorizationUrl: this.provider.buildQrAuthorizationUrl(state), state, bindingToken };
+    });
   }
 
   async loginMobile(code: string): Promise<{ token: string; user: AuthUser }> {
-    await this.store.cleanupExpiredAuthArtifacts(this.now());
-    return this.completeCode(code, () => this.provider.exchangeMobileCode(code));
+    return this.publicAdmission(async () => {
+      await this.store.cleanupExpiredAuthArtifacts(this.now());
+      return this.completeCode(code, () => this.provider.exchangeMobileCode(code));
+    });
   }
 
   async loginQr(code: string, state: string, bindingToken: string | undefined): Promise<{ token: string; user: AuthUser }> {
-    const presentedHash = this.hashBinding(bindingToken ?? "");
-    if (!(await this.store.consumeQrState(hash(state), presentedHash, this.now()))) throw new AuthDeniedError("INVALID_QR_STATE", "扫码请求无效、已过期或已使用");
-    return this.completeCode(code, () => this.provider.exchangeQrCode(code));
+    return this.publicAdmission(async () => {
+      const presentedHash = this.hashBinding(bindingToken ?? "");
+      if (!(await this.store.consumeQrState(hash(state), presentedHash, this.now()))) throw new AuthDeniedError("INVALID_QR_STATE", "扫码请求无效、已过期或已使用");
+      return this.completeCode(code, () => this.provider.exchangeQrCode(code));
+    });
   }
 
   async authenticate(token: string | undefined): Promise<AuthUser> {
-    if (!token) throw new AuthDeniedError("AUTH_REQUIRED", "请先通过钉钉登录");
-    const record = await this.store.findSession(this.hashSession(token), this.now());
-    if (!record) throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
-    if (!record.identity.active || !record.identity.employed) throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
-    return this.revalidate(record.user.id, record.identity);
+    if (this.protectedRequests >= 64) throw new AuthDeniedError("AUTH_BUSY", "身份校验繁忙，请稍后重试");
+    this.protectedRequests += 1;
+    try {
+      if (!token) throw new AuthDeniedError("AUTH_REQUIRED", "请先通过钉钉登录");
+      const record = await this.store.findSession(this.hashSession(token), this.now());
+      if (!record) throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
+      if (!record.identity.active || !record.identity.employed) {
+        await this.store.deactivateIdentity(record.user.id, this.now());
+        throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
+      }
+      await this.revalidate(record.user.id, record.identity);
+      const current = await this.store.findSession(this.hashSession(token), this.now());
+      if (!current) throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
+      return current.user;
+    } finally { this.protectedRequests -= 1; }
   }
 
   async logout(token: string | undefined): Promise<void> {
@@ -145,7 +187,7 @@ export class AuthService {
       throw new AuthDeniedError("CODE_REPLAYED", "临时登录凭证无效或已使用");
     }
     const identity = await exchange();
-    const member = await this.provider.getOrganizationMember(identity, this.corpId);
+    const member = await this.organizationMember(identity);
     if (!member || !stableEqual(member.corpId, this.corpId)) throw new AuthDeniedError("NOT_ORGANIZATION_MEMBER", "仅限本公司组织成员使用");
     const user = await this.store.upsertIdentity(member);
     if (!member.employed) throw new AuthDeniedError("NOT_EMPLOYED", "账号不属于在职人员");
@@ -166,17 +208,16 @@ export class AuthService {
   private hashBinding(token: string): string { return createHmac("sha256", this.sessionSecret).update(`qr-binding:${token}`).digest("hex"); }
 
   private async revalidate(userId: string, identity: SessionIdentity): Promise<AuthUser> {
-    const member = await this.provider.getOrganizationMember(identity, this.corpId);
+    const member = await this.organizationMember(identity);
     if (!member || !stableEqual(member.corpId, this.corpId)) {
       await this.store.deactivateIdentity(userId, this.now());
       throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
     }
-    const user = await this.store.upsertIdentity(member);
     if (!member.active || !member.employed) {
       await this.store.deactivateIdentity(userId, this.now());
       throw new AuthDeniedError("SESSION_INVALID", "登录已失效，请重新登录");
     }
-    return user;
+    return this.store.upsertIdentity(member);
   }
 }
 

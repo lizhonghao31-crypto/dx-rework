@@ -28,9 +28,13 @@ export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, opti
   const setQrBinding = (bindingToken: string) => `${QR_COOKIE}=${bindingToken}; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=300${secureCookie ? "; Secure" : ""}`;
   const clearQrBinding = `${QR_COOKIE}=; Path=${cookiePath}; HttpOnly; SameSite=Lax; Max-Age=0${secureCookie ? "; Secure" : ""}`;
   const loginAttempts = new Map<string, { count: number; resetsAt: number }>();
+  let globalAttempts = { count: 0, resetsAt: 0 };
   const limitPublicLogin = async (request: FastifyRequest, reply: FastifyReply) => {
     const now = Date.now();
-    const key = `${request.ip}:${request.routeOptions.url}`;
+    if (globalAttempts.resetsAt <= now) globalAttempts = { count: 0, resetsAt: now + PUBLIC_LOGIN_WINDOW_MS };
+    if (globalAttempts.count >= 200) return reply.header("retry-after", Math.max(1, Math.ceil((globalAttempts.resetsAt - now) / 1000))).code(429).send({ error: { code: "RATE_LIMITED", message: "登录请求过于频繁，请稍后重试", requestId: request.id } });
+    globalAttempts.count += 1;
+    const key = request.ip;
     const current = loginAttempts.get(key);
     if (!current || current.resetsAt <= now) {
       if (!current && loginAttempts.size >= PUBLIC_LOGIN_TRACKER_CAPACITY) {
@@ -60,7 +64,7 @@ export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, opti
     const result = await auth.loginMobile(request.body?.code ?? "");
     return reply.header("set-cookie", setSession(result.token)).send({ user: result.user, status: result.user.capabilities.length ? "authorized" : "no_role" });
   });
-  app.post("/auth/qr/start", async (_request, reply) => {
+  app.post("/auth/qr/start", { preHandler: limitPublicLogin }, async (_request, reply) => {
     const result = await auth.beginQr();
     return reply.header("set-cookie", setQrBinding(result.bindingToken)).send({
       authorizationUrl: result.authorizationUrl,
@@ -85,7 +89,7 @@ export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, opti
       .send({ user: result.user, status: result.user.capabilities.length ? "authorized" : "no_role" });
   });
   app.get("/auth/client-config", async () => ({ corpId: options.corpId, mobileClientId: options.mobileClientId }));
-  app.get<{ Querystring: { authCode?: string; code?: string; state?: string } }>("/auth/qr/callback", async (request, reply) => {
+  app.get<{ Querystring: { authCode?: string; code?: string; state?: string } }>("/auth/qr/callback", { preHandler: limitPublicLogin }, async (request, reply) => {
     try {
       const result = await auth.loginQr(request.query.authCode ?? request.query.code ?? "", request.query.state ?? "", cookieToken(request, QR_COOKIE));
       return reply.header("set-cookie", [clearQrBinding, setSession(result.token)]).code(303).header("location", options.appBasePath).send();

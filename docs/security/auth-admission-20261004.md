@@ -1,0 +1,25 @@
+# 认证准入与会话撤销（批准风险 1、2、3）
+
+## 冻结预检
+
+repository: lizhonghao31-crypto/dx-rework；base branch: main；base SHA: 9fcc05c49dd7f236e2aad183b7e638780e9d63fc；working branch: security/auth-admission；gate class: FULL。
+
+范围仅 auth/service/routes/postgres-store、app 错误状态、认证与原生命周期测试。禁止修改管理员角色/权限（4、11）、识别费用（9）、migration/manifest、A4 UI、线上配置或数据。repo 及 /workspace 的 .agents 未提供 skills 文件；已读 AGENTS、施工流程、Actions policy、平台权限 Golden Source。远端 release 冻结 dee990729f46e334450b34693bcb72027b07140f。main 221、release 237 条历史在真实隔离 PG13.23 回放成功；本 PR 不新增迁移。
+
+## 已核实与改动
+
+- 1：QR start 和 legacy callback 原无 preHandler；原限流按 IP+路由计数，可跨入口放大。四个公开登录入口统一每 IP 10/分钟、全实例 200/分钟。服务在任何 DB/OAuth 工作前最多准入16个公共请求。保留既有 loopback proxy 信任边界、一次性 code/state 和 browser binding；错误浏览器仍不消耗 challenge。容量拒绝返回429与 Retry-After。
+- 2：只合并同一稳定身份当前正在进行的目录读取，完成后立即删除，没有 TTL 身份缓存。每实例最多32个不同身份读、同读32个等待者、64个 protected 工作；失败释放准入，下一顺序请求重新 live 校验。Official provider 原有每次HTTP五秒 AbortSignal 继续有效，不引入失效后后台仍占资源的 Promise.race。授权 upsert 不缓存，返回前重新核验 session 和最新授权，撤销/登出并发不能返回旧结果。
+- 3：缺失/停用/离职时 deactivateIdentity 同一事务撤销该用户全部未撤销 session；directory upsert 遇到 inactive/unemployed 也撤销，即使 Root app access 仍保留。正常复职新登录可用，旧 token 不复活。未改业务角色或 Root 能力。
+
+## 隔离证据
+
+- 冻结 main 对候选认证 oracle：4失败/28通过；其中放大/并发/旧请求撤销缺口被检出（阻塞假 store 测试在旧代码上超时）。
+- 冻结 main 对真实 PG session oracle：3失败；候选同一 oracle：3通过，涵盖身份缺失、停用、离职后恢复、新登录及 Root access 保留。
+- 定向认证/扫码/provider：40通过；完整无DB suite：1851通过、321跳过（跳过项不声称数据库验证）。lint/typecheck/workspace build通过。
+- 原 employee-access 生命周期 fixture 把当前manifest最后一项误认0089；复用 release 已有的精确0089选择、history table、正确事件列及 Root actor fixture，保留业务断言。此 suite 和 session suite 在 PG13通过。
+- 当前 main 的 mapped access/full-business-chain 在 PG13尚有16个既有失败（过期fixture缺 temporary_code、游标断言、PG13 bare alias等），未扩展修复业务SQL；需单独解决后才能声称完整兼容/可合并。Gate/Review必须读取最终 Head，不能用此文档代替。
+
+## 运行边界
+
+预算是单进程的；多实例数量乘以预算，不承诺跨实例分布式限流。未在线压测、未调用真实钉钉或收费API。没有关闭扫描 findings。最终 release 接入应仅 cherry-pick本安全提交，不能把 main/release 整支互合；共享源码相同部分可直接适配，迁移历史保持原样。部署次序由组合兼容证据决定，不自动合并/部署。

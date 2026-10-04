@@ -20,7 +20,7 @@ class MemoryStore implements AuthStore {
   async upsertIdentity(member: OrganizationMember) { const key = `${member.corpId}:${member.unionId}`; const existing = this.users.get(key); const user = existing ?? { id: `internal-${member.userId}`, displayName: member.displayName, capabilities: member.userId === "role-user" ? ["rework:read"] : [] }; this.users.set(key, user); this.identities.set(user.id, { ...member, lastVerifiedAt: new Date() }); return user; }
   async createSession(value: SessionRecord) { this.sessions.set(value.tokenHash, value); }
   async findSession(value: string, now: Date) { const session = this.sessions.get(value); if (!session || session.revokedAt || session.expiresAt <= now) return null; const user = [...this.users.values()].find((item) => item.id === session.userId); const identity = this.identities.get(session.userId); return user && identity ? { ...session, user, identity: { userId: identity.userId, unionId: identity.unionId, corpId: identity.corpId, active: identity.active, employed: identity.employed, lastVerifiedAt: identity.lastVerifiedAt } } : null; }
-  async deactivateIdentity(userId: string, verifiedAt: Date) { const identity = this.identities.get(userId); if (identity) this.identities.set(userId, { ...identity, active: false, employed: false, lastVerifiedAt: verifiedAt }); }
+  async deactivateIdentity(userId: string, verifiedAt: Date) { for (const [key, session] of this.sessions) if (session.userId === userId && !session.revokedAt) this.sessions.set(key, { ...session, revokedAt: verifiedAt }); const identity = this.identities.get(userId); if (identity) this.identities.set(userId, { ...identity, active: false, employed: false, lastVerifiedAt: verifiedAt }); }
   async revokeSession(value: string, now: Date) { const session = this.sessions.get(value); if (session) this.sessions.set(value, { ...session, revokedAt: now }); }
 }
 
@@ -57,7 +57,51 @@ describe("DingTalk organization admission", () => {
   it("rejects cross-origin browser logout before the session can be revoked", async () => { const { app } = create(member()); const login = await app.inject({ method: "POST", url: "/auth/mobile", payload: { code: "csrf-logout" } }); const cookie = login.headers["set-cookie"]!.split(";")[0]; const rejected = await app.inject({ method: "POST", url: "/auth/logout", headers: { cookie, origin: "https://staging-api.dxerp.org.cn", "sec-fetch-site": "same-site" } }); expect(rejected.statusCode).toBe(403); expect(rejected.json().error.code).toBe("CROSS_SITE_REQUEST_REJECTED"); expect((await app.inject({ method: "GET", url: "/auth/me", headers: { cookie } })).statusCode).toBe(200); });
   it.each([[null], [member({ employed: false })], [member({ active: false })]] as const)("invalidates a session on the next protected request when membership is missing, departed, or disabled", async (current) => { const store = new MemoryStore(); const provider = new FakeProvider(member()); const auth = new AuthService(provider, store, "corp-a", 60_000, config.sessionSecret); const login = await auth.loginMobile("active"); provider.member = current; await expect(auth.authenticate(login.token)).rejects.toMatchObject({ code: "SESSION_INVALID" }); expect(provider.organizationQueries).toBe(2); expect(store.identities.get(login.user.id)).toMatchObject({ active: false, employed: false }); });
   it("revalidates every sequential protected request", async () => { const store = new MemoryStore(); const provider = new FakeProvider(member()); const auth = new AuthService(provider, store, "corp-a", 60_000, config.sessionSecret); const login = await auth.loginMobile("continuous"); await auth.authenticate(login.token); await auth.authenticate(login.token); expect(provider.organizationQueries).toBe(3); });
-  it("revalidates each concurrent protected request independently", async () => { const store = new MemoryStore(); const provider = new FakeProvider(member()); const auth = new AuthService(provider, store, "corp-a", 60_000, config.sessionSecret); const login = await auth.loginMobile("concurrent"); await expect(Promise.all([auth.authenticate(login.token), auth.authenticate(login.token), auth.authenticate(login.token)])).resolves.toHaveLength(3); expect(provider.organizationQueries).toBe(4); });
-  it("rejects a later disabled check while an earlier active check is still finishing", async () => { let reached!: () => void; let release!: () => void; const activeUpsertReached = new Promise<void>((resolve) => { reached = resolve; }); const releaseActiveUpsert = new Promise<void>((resolve) => { release = resolve; }); class BlockingStore extends MemoryStore { upserts = 0; override async upsertIdentity(candidate: OrganizationMember) { this.upserts += 1; if (this.upserts === 2) { reached(); await releaseActiveUpsert; } return super.upsertIdentity(candidate); } } const store = new BlockingStore(); const provider = new FakeProvider(member()); const auth = new AuthService(provider, store, "corp-a", 60_000, config.sessionSecret); const login = await auth.loginMobile("race"); const earlier = auth.authenticate(login.token); await activeUpsertReached; provider.member = member({ active: false, employed: false }); await expect(auth.authenticate(login.token)).rejects.toMatchObject({ code: "SESSION_INVALID" }); expect(provider.organizationQueries).toBe(3); release(); await expect(earlier).resolves.toMatchObject({ id: login.user.id }); });
+  it("coalesces concurrent directory reads without caching sequential reads", async () => { const store = new MemoryStore(); const provider = new FakeProvider(member()); const auth = new AuthService(provider, store, "corp-a", 60_000, config.sessionSecret); const login = await auth.loginMobile("concurrent"); await expect(Promise.all([auth.authenticate(login.token), auth.authenticate(login.token), auth.authenticate(login.token)])).resolves.toHaveLength(3); expect(provider.organizationQueries).toBe(2); });
+  it("rejects a later disabled check while an earlier active check is still finishing", async () => { let reached!: () => void; let release!: () => void; const activeUpsertReached = new Promise<void>((resolve) => { reached = resolve; }); const releaseActiveUpsert = new Promise<void>((resolve) => { release = resolve; }); class BlockingStore extends MemoryStore { upserts = 0; override async upsertIdentity(candidate: OrganizationMember) { this.upserts += 1; if (this.upserts === 2) { reached(); await releaseActiveUpsert; } return super.upsertIdentity(candidate); } } const store = new BlockingStore(); const provider = new FakeProvider(member()); const auth = new AuthService(provider, store, "corp-a", 60_000, config.sessionSecret); const login = await auth.loginMobile("race"); const earlier = auth.authenticate(login.token); await activeUpsertReached; provider.member = member({ active: false, employed: false }); await expect(auth.authenticate(login.token)).rejects.toMatchObject({ code: "SESSION_INVALID" }); expect(provider.organizationQueries).toBe(3); release(); await expect(earlier).rejects.toMatchObject({ code: "SESSION_INVALID" }); });
   it("fails closed on a provider error without marking the employee departed", async () => { const store = new MemoryStore(); const provider = new FakeProvider(member()); const auth = new AuthService(provider, store, "corp-a", 3_600_000, config.sessionSecret); const login = await auth.loginMobile("error"); provider.organizationError = new Error("temporary upstream error"); await expect(auth.authenticate(login.token)).rejects.toThrow("temporary upstream error"); expect(store.identities.get(login.user.id)).toMatchObject({ active: true, employed: true }); });
+});
+
+describe("security admission regressions", () => {
+  it.each([null, member({ active: false }), member({ employed: false })])("never revives old sessions after membership restoration", async (inactive) => {
+    const store = new MemoryStore(); const provider = new FakeProvider(member());
+    const auth = new AuthService(provider, store, "corp-a", 60_000, config.sessionSecret);
+    const old = await auth.loginMobile("old"); const sibling = await auth.loginMobile("sibling");
+    provider.member = inactive;
+    await expect(auth.authenticate(old.token)).rejects.toMatchObject({ code: "SESSION_INVALID" });
+    provider.member = member(); const fresh = await auth.loginMobile("fresh");
+    await expect(auth.authenticate(old.token)).rejects.toMatchObject({ code: "SESSION_INVALID" });
+    await expect(auth.authenticate(sibling.token)).rejects.toMatchObject({ code: "SESSION_INVALID" });
+    await expect(auth.authenticate(fresh.token)).resolves.toMatchObject({ id: old.user.id });
+  });
+  it("shares an IP budget across QR start and legacy callback before database work", async () => {
+    const { app, store } = create(member());
+    for (let index = 0; index < 10; index += 1) expect((await app.inject({ method: "POST", url: "/auth/qr/start" })).statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/auth/qr/callback?code=x&state=x" })).statusCode).toBe(429);
+    expect((await app.inject({ method: "POST", url: "/auth/mobile", payload: { code: "blocked" } })).statusCode).toBe(429);
+    expect(store.codes.size).toBe(0); expect(store.states.size).toBe(10);
+  });
+  it("bounds public work and releases slots after failures", async () => {
+    let release!: () => void; const blocked = new Promise<void>(resolve => { release = resolve; });
+    class BlockingStore extends MemoryStore { override async cleanupExpiredAuthArtifacts(now: Date) { await blocked; return super.cleanupExpiredAuthArtifacts(now); } }
+    const auth = new AuthService(new FakeProvider(member()), new BlockingStore(), "corp-a", 60_000, config.sessionSecret);
+    const pending = Array.from({ length: 16 }, () => auth.beginQr());
+    await expect(auth.beginQr()).rejects.toMatchObject({ code: "AUTH_BUSY" });
+    release(); await Promise.all(pending); await expect(auth.beginQr()).resolves.toHaveProperty("state");
+  });
+  it("releases a failed shared directory read and retries without a stale cache", async () => {
+    const store = new MemoryStore(); const provider = new FakeProvider(member());
+    const auth = new AuthService(provider, store, "corp-a", 60_000, config.sessionSecret);
+    const login = await auth.loginMobile("failure-retry"); provider.organizationError = new Error("upstream timeout");
+    const outcomes = await Promise.allSettled(Array.from({ length: 8 }, () => auth.authenticate(login.token)));
+    expect(outcomes.every(value => value.status === "rejected")).toBe(true);
+    provider.organizationError = null; await expect(auth.authenticate(login.token)).resolves.toHaveProperty("id");
+  });
+});
+
+it("caps QR creation globally across client addresses", async () => {
+  const { app, store } = create(member());
+  for (let index = 0; index < 200; index += 1) expect((await app.inject({ method: "POST", url: "/auth/qr/start", remoteAddress: `198.51.${Math.floor(index / 250)}.${index % 250 + 1}` })).statusCode).toBe(200);
+  expect((await app.inject({ method: "POST", url: "/auth/qr/start", remoteAddress: "203.0.113.1" })).statusCode).toBe(429);
+  expect(store.states.size).toBe(200);
 });
