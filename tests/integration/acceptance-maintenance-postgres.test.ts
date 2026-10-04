@@ -63,7 +63,7 @@ print(json.dumps(m.permission_query(json.loads(sys.argv[1]),r)))
    expect(upgraded.currentVersion).toBe('0233_manual_contract_template_provenance');
    expect((await applyMigrations(target.toString())).applied).toEqual([]);
    const after=(await client.query('SELECT * FROM schema_migrations ORDER BY version')).rows;
-   expect(after).toHaveLength(236);
+   expect(after).toHaveLength(catalog.length);
    for(const row of before)expect(after.find(x=>x.version===row.version)).toEqual(row);
    expect((await client.query("SELECT has_table_privilege('dx_rework_acceptance_app','sourcing_contract_return_submissions','INSERT') AS allowed")).rows[0].allowed).toBe(true);
   }finally{await client.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();}

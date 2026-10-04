@@ -1,5 +1,7 @@
 import {randomUUID} from 'node:crypto';
-import {readFile} from 'node:fs/promises';
+import {mkdtemp,mkdir,readFile,writeFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import pg from 'pg';
 import {describe,it,expect} from 'vitest';
@@ -11,12 +13,14 @@ type Entry={version:string;checksum:string};
 const url=process.env.TEST_DATABASE_URL;
 const suite=url?describe:describe.skip;
 suite('main and digital historical PostgreSQL upgrades',()=>{
- it.each(['main','main-219-derived','acceptance-prefix','a3','empty','interrupted-main'] as const)('upgrades %s preserving identities, checksums, timestamps and business rows',async lane=>{
+ it.each(['main','main-219-derived','acceptance-prefix','a3','empty','interrupted-main','main-221','acceptance-236','integrated-237'] as const)('upgrades %s preserving identities, checksums, timestamps and business rows',async lane=>{
   await assertTestDatabaseTarget(url!);
   const catalog=await discoverValidatedMigrations();
   const main:Entry[]=JSON.parse(await readFile('tests/fixtures/migration-histories/main-99db5239.json','utf8')).migrations;
   const digital:Entry[]=JSON.parse(await readFile('tests/fixtures/migration-histories/digital-da6590cc.json','utf8')).migrations;
-  const history=lane==='main-219-derived'?main.slice(0,219):lane==='main'||lane==='interrupted-main'?main:lane==='a3'?digital:lane==='acceptance-prefix'?digital.slice(0,225):[];
+  const main221:Entry[]=JSON.parse(await readFile('tests/fixtures/migration-histories/main-9fcc05c4.json','utf8')).migrations;
+  const acceptance236:Entry[]=JSON.parse(await readFile('tests/fixtures/migration-histories/release-e9d687a3.json','utf8')).migrations;
+  const history=lane==='main-221'?main221:lane==='acceptance-236'?acceptance236:lane==='integrated-237'?catalog:lane==='main-219-derived'?main.slice(0,219):lane==='main'||lane==='interrupted-main'?main:lane==='a3'?digital:lane==='acceptance-prefix'?digital.slice(0,225):[];
   const schema=ownedPostgresSchema('migration_compat');
   const admin=new pg.Client({connectionString:url});await admin.connect();
   const scoped=new URL(url!);scoped.searchParams.set('options',`-c search_path=${schema}`);
@@ -30,6 +34,31 @@ suite('main and digital historical PostgreSQL upgrades',()=>{
     await client.query('INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)',[entry.version,entry.checksum]);await client.query('COMMIT');
    }
    const before=(await client.query('SELECT version,checksum,applied_at FROM schema_migrations ORDER BY version')).rows;
+   if(['main-221','acceptance-236','integrated-237'].includes(lane)){
+    // Execute the exact [1/5] read-only fragment selected by the installed
+    // 209b008 worker, with its immutable policy files. No root wrapper, PM2,
+    // backup, production connection or update phase is invoked here.
+    const scratch=await mkdtemp(join(tmpdir(),'dx-main221-preflight-'));
+    try{
+     const old='209b00854c217c9fd2e5a6bbc0f5096c0016df0a';
+     await mkdir(join(scratch,'scripts/deploy'),{recursive:true});
+     for(const path of ['scripts/migration-history-policy.mjs','scripts/migration-branches.json','scripts/deploy/acceptance-update-policy.mjs'])
+      await writeFile(join(scratch,path),execFileSync('git',['show',`${old}:${path}`]));
+     const worker=execFileSync('git',['show',`${old}:scripts/deploy/update-acceptance-local.sh`],{encoding:'utf8'});
+     const fragment=worker.slice(worker.indexOf("echo '[1/5]"),worker.indexOf("echo '[2/5]"));
+     expect(fragment).toContain('node_exec "$policy" "$source_dir/production-history.json" "$manifest" production');
+     const exported={database:'dx_rework_production',migrations:before.map(r=>({version:r.version,checksum:r.checksum}))};
+     await writeFile(join(scratch,'production-history.json'),JSON.stringify(exported));
+     const entry=(policy:string,manifest:string)=>execFileSync('bash',['-c','set -euo pipefail; policy="$1"; source_dir="$2"; manifest="$3"; node_bin="$4"; node_exec(){ "$node_bin" "$@"; }; '+fragment,'preflight',policy,scratch,manifest,process.execPath],{encoding:'utf8',stdio:['pipe','pipe','pipe']});
+     // Old tool cannot approve the new 0221 pair even if the candidate is fixed.
+     expect(()=>entry(join(scratch,'scripts/deploy/acceptance-update-policy.mjs'),join(process.cwd(),'apps/api/src/platform/migration-manifest.json'))).toThrow('sequence gap');
+     if(lane==='main-221'){
+      expect(()=>entry(join(scratch,'scripts/deploy/acceptance-update-policy.mjs'),join(process.cwd(),'tests/fixtures/migration-histories/release-e9d687a3.json'))).toThrow('absent from Head manifest: 0221_sourcing_factory_change_crafts');
+     }
+     expect(JSON.parse(entry(join(process.cwd(),'scripts/deploy/acceptance-update-policy.mjs'),join(process.cwd(),'apps/api/src/platform/migration-manifest.json')).trim().split('\n').at(-1)!)).toMatchObject({status:'compatible',applied:history.length});
+     expect((await client.query('SELECT version,checksum,applied_at FROM schema_migrations ORDER BY version')).rows).toEqual(before);
+    }finally{await rm(scratch,{recursive:true,force:true});}
+   }
    const sentinel=randomUUID();
    if(history.length)await client.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST migration retained business identity',true)",[sentinel]);
    const env={...process.env,DATABASE_URL:scoped.toString()};

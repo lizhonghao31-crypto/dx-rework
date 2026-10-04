@@ -1,0 +1,948 @@
+{
+  "migrations": [
+    {
+      "version": "0001_platform_foundation",
+      "checksum": "c9f69f74ef47ef8b1bc54db28a6b91c81614949a1e9ee40b8a91212b1fb0b9fe"
+    },
+    {
+      "version": "0002_dingtalk_identity_access",
+      "checksum": "155fd00415e4a15c0579beb7d9cf0e6dc0d6fd46696e6fab0bd1aa94f256ad9f"
+    },
+    {
+      "version": "0003_identity_union_continuity",
+      "checksum": "44def9af2f392049de30b77206ec41f40b238991979724498cf24655c23a5b68"
+    },
+    {
+      "version": "0004_public_tools_foundation",
+      "checksum": "d1bd3c09355e3737f3587583f8d2a9d0c78d73c8099b6d785dc1d887efbeb600"
+    },
+    {
+      "version": "0005_access_master_data",
+      "checksum": "13a8fff97ce6fd21ca5da835a4378576a5d28b8e4148b8115c9ac1cf97a51d47"
+    },
+    {
+      "version": "0006_rework_initiation",
+      "checksum": "290c5dfba0f67c0c1d3c20cd2cc3d6dd4b086bbec6c499e7f01fbaaeff5e4fd6"
+    },
+    {
+      "version": "0007_process_configuration_ie_review",
+      "checksum": "174955cd25c251347ef8336c6051890e21ced81f68d3a620beccd3bc19c60747"
+    },
+    {
+      "version": "0008_worker_assignment_reporting",
+      "checksum": "e57037cad35d8f7e09c473a16a3779bfd6623bedbf2ac2a079fc2c486cacad1c"
+    },
+    {
+      "version": "0009_whole_order_review_quantity_adjustment",
+      "checksum": "01f542e7ec7610620ea72f51f67a2afc07d56435aa8aa60a992fd10b838dc575"
+    },
+    {
+      "version": "0010_responsibility_determination_amount_engine",
+      "checksum": "c1883196817a777fb61e941f61e3385d4665ea101f4a3a0d29887cdd10ccab4e"
+    },
+    {
+      "version": "0011_responsibility_authorization_handler_closure",
+      "checksum": "dfc909a56dedae61531c26bc3269123d983a1a9f99a02fedeeda2babffa2ed13"
+    },
+    {
+      "version": "0012_responsibility_direct_delegation",
+      "checksum": "5e40152c10bab23cac1f2c1a07679f1f1a4ffededd07983dc9517dfcc808ecf0"
+    },
+    {
+      "version": "0013_responsibility_review_closure",
+      "checksum": "b5703c4525791a3c1784af468576ba82882badbf186df55ea860dfcdf335c794"
+    },
+    {
+      "version": "0014_responsibility_source_share_coverage",
+      "checksum": "78ab96bde7e029cfc1683839e6efd9ccb5de9a5601f98e615c6bd0373720afa4"
+    },
+    {
+      "version": "0015_own_factory_responsibility_approval",
+      "checksum": "4904e7efd14a4e7a68212f67aff06881dc4c7e20144f61940c00c7f66fca1d49"
+    },
+    {
+      "version": "0016_responsibility_amount_contract_restore",
+      "checksum": "0afc92367fda071fbeb83bfd59bb3c497c21d464de0c240ca1d0d81f47196925"
+    },
+    {
+      "version": "0017_external_responsibility_deduction",
+      "checksum": "11320eebff234300d7243897fbcab90144dd2c61cb450b957def3a0394887e97"
+    },
+    {
+      "version": "0018_external_responsibility_review_closure",
+      "checksum": "ccaf2c0f99451a27502db18a270ddaa94c7e997228ad85f5b602608cb016b010"
+    },
+    {
+      "version": "0019_external_revision_seed_ordering",
+      "checksum": "199c2fc265628ed0cf40bb86ecd25ec823f081f06f880d15e84eb6e9bdf19ecc"
+    },
+    {
+      "version": "0020_external_responsibility_codex_closure",
+      "checksum": "7df9f581820a1fe5c96db916c9bc2856445fd81d081e9abcbea95ca9ad35c831"
+    },
+    {
+      "version": "0021_external_processing_factory_override_closure",
+      "checksum": "51921f323676d9276098b9e3b5dc7fea71319ea057c4ed52d44bceca62d3a695"
+    },
+    {
+      "version": "0022_wage_reconciliation_month_close",
+      "checksum": "4c2063864df0ee1791a8eecb59fdef2857fccd5c2dfb2dde3a5ea60a0671d1af"
+    },
+    {
+      "version": "0023_wage_materialization_closure",
+      "checksum": "a4cad0d4d5387b438cb3cd0f933103805bb467d7656f2960860319caf1b80ddb"
+    },
+    {
+      "version": "0024_wage_adjustment_attachment_closure",
+      "checksum": "73672ecd1d44f46ffd58e3409d80eb0b7315d48e4c3753a2f950e5d88b1fe852"
+    },
+    {
+      "version": "0025_wage_completion_month_backfill_access",
+      "checksum": "0a52386e46a6ffa650398f490c8ba84d092084bb5c6bf2c6c1c62caf6de4e261"
+    },
+    {
+      "version": "0026_todo_notification_foundation",
+      "checksum": "9b69f0246e4644349f41636940bb268bf2057f70ded563227b0c2d14e47a3297"
+    },
+    {
+      "version": "0027_todo_routing_lifecycle_closure",
+      "checksum": "c0ba02504429e9fe1db70887785c7b330f5ac245c7a6dd0c5fad2f7c33422b29"
+    },
+    {
+      "version": "0028_dingtalk_todo_external_bindings",
+      "checksum": "3daf7ab0bf74bdff1540ef819ad270f721d77ff83e867f9757791f66c45587a9"
+    },
+    {
+      "version": "0029_management_dashboard_reporting",
+      "checksum": "63cab12ef8256ee7715ef3e7228e1f2ad81dc0209ce5784327183257ce3afc27"
+    },
+    {
+      "version": "0030_admin_audit_query_foundation",
+      "checksum": "ab2edd636589220c34b928ff7fe0a05be91f213ac777f175bf5ff70f660bfc02"
+    },
+    {
+      "version": "0031_administrator_console_foundation",
+      "checksum": "a5ce466bc4d2c61761580c1b480911622735d17974c6db912dd4bf1403813d6d"
+    },
+    {
+      "version": "0032_erp_integration_contract",
+      "checksum": "3535f8dac5e887d72ebb41dc514b17fe365fa367fa0fa2abe3ba186f65145f0a"
+    },
+    {
+      "version": "0033_employee_access_management",
+      "checksum": "bb87700794a244c80d90afd87faf514375916d7085b1bd999d26416cef5ffe1d"
+    },
+    {
+      "version": "0034_owner_business_master_data",
+      "checksum": "a5e1b644fc2254159a5bbc8944ea947eaceda11ae1d909ef9d0e9f6f0af9739b"
+    },
+    {
+      "version": "0035_role_management_policy_closure",
+      "checksum": "44d052f64826ab5a039d822ca1dda9de6363f4d12850b7501278d0f9764a9934"
+    },
+    {
+      "version": "0036_permission_authority_closure",
+      "checksum": "53a91eee979ae876313254c395733b747245713aae1c9cea09b1401169ffefe5"
+    },
+    {
+      "version": "0037_system_admin_role_description",
+      "checksum": "853b2e3b4c562228ee3b08aa01947f684482fb3bd748196f7f725324113c1e7a"
+    },
+    {
+      "version": "0038_worker_person_materialization",
+      "checksum": "272674f7e034aab2f8d3a62eff53e95abae627ddf9f0f887c905ab173b97652d"
+    },
+    {
+      "version": "0039_practical_quantity_amount_precision",
+      "checksum": "79a95c31cfaec56d3371e26f8be839e3e8b912a1ade3bd7c1ab3c83906787dd3"
+    },
+    {
+      "version": "0040_root_identity_separation_bypass",
+      "checksum": "213c43110d67caaebc9227e7492567e9146c459b934f2281c95e47df74b2ca15"
+    },
+    {
+      "version": "0041_root_wage_decider_constraint",
+      "checksum": "d7e3c954e21e8a07dc4c4d2ea7a54247a58357577b8bba0964443d807ade77a4"
+    },
+    {
+      "version": "0042_external_processing_factory_auto_route",
+      "checksum": "bbbaa9ce36f09c11486f9c742b505d2cc1b10bb6330a849b1eaf20829d6e9aac"
+    },
+    {
+      "version": "0043_external_direct_payables",
+      "checksum": "2044da29575d700b9930d9d759fb317c03eb50648c4c791628baa04b6afeeb87"
+    },
+    {
+      "version": "0044_uat_initiation_context",
+      "checksum": "3a16b7a7d980609efd4bd706b775714868c13efbaf43019caaf4d9d295542de0"
+    },
+    {
+      "version": "0045_responsibility_settled_wage_base",
+      "checksum": "8153c0182b0c6cb91e47ea102807e4930bc8d2f34faad1f453b27991123d155d"
+    },
+    {
+      "version": "0046_external_temporary_supplier_scope",
+      "checksum": "06529ad63fbd65d28dcce2fb2ee8f05421f207c0cd9226611cc1380a76a20b92"
+    },
+    {
+      "version": "0047_responsibility_rounding_reconciliation",
+      "checksum": "262f566e631ddc96205454ba9feece52fc2c755a3ece48413719e32fc77f1ba3"
+    },
+    {
+      "version": "0048_uat_systemic_closure",
+      "checksum": "7f19f5b51e71738156c427ca1f1eaf9ef5ee486ed93fd972d42289da945fe422"
+    },
+    {
+      "version": "0049_post_creation_order_image_binding",
+      "checksum": "52d86a97415a332413e372c9efa7b06a937f9577507ad85784ff037bca4ef3af"
+    },
+    {
+      "version": "0050_root_self_system_admin",
+      "checksum": "395b8021cabdff349c6454239c6b76e3937b87a68a5ddb8fb6936f2cca4fefc0"
+    },
+    {
+      "version": "0051_owner_self_confirmation_root_todo",
+      "checksum": "fabcf86eadf4e828943d62fd693b8c89f0de44f61ec1441f5f31546e9748bcfa"
+    },
+    {
+      "version": "0052_ie_review_todo_completion_repair",
+      "checksum": "6396f8ccc88719dabb7e1cea9c8d9ea5d39f9115582a479ff018f1a0e118ae52"
+    },
+    {
+      "version": "0053_root_rework_order_logical_deletion",
+      "checksum": "6c672c1b7c3a29bc34e842045656d050bd56096cd47fb28d10735e08cf07460f"
+    },
+    {
+      "version": "0054_n07_n11_responsibility_settlement",
+      "checksum": "f90e0f08f3a919bc6bb14f0d0b95972da8016470988f6e4774570af8817e8892"
+    },
+    {
+      "version": "0055_responsibility_party_multiplier_guard",
+      "checksum": "6b4370595352269b946384140f95fdb6da47ffee035b04f4a94d8144b370a8c9"
+    },
+    {
+      "version": "0056_n01_digital_inspection_report",
+      "checksum": "c08c98555dab425a7a091f6f0274dc4530bb2872e5fd536a2c84c77abbff8b66"
+    },
+    {
+      "version": "0057_n01_submission_constraint_alignment",
+      "checksum": "b61fb1ec4d07a036c84de0afa06b3c4f08df6959943bbd1c4c22a243a7ba3eb6"
+    },
+    {
+      "version": "0058_phase1_n02_plan_without_price",
+      "checksum": "bec64fc7ca6001c5e526ecbcba9f2824f6405e7ee29422e36e0d1d19c25190aa"
+    },
+    {
+      "version": "0059_phase1_assignment_and_final_reporting",
+      "checksum": "7959f001001cd7b52b65bb2b35c5d6eb1f36502dd3c53583aaa5e1040cf420f2"
+    },
+    {
+      "version": "0060_phase1_tail_pricing_ie_review",
+      "checksum": "64429f61766d2cc399b42477f9dbe804e8e69e86257031472079952912aa6301"
+    },
+    {
+      "version": "0061_phase1_owner_multiplier_snapshot",
+      "checksum": "f4ab81e2dd6379cfb15affd76ab7f842fb86bfd06189f05cea86ee7a06c1a584"
+    },
+    {
+      "version": "0062_phase1_tail_pricing_wage_materialization",
+      "checksum": "33311b1e0d03b9767b5e1b54ff1f33ac71437b3044a25e29303733bd0e928280"
+    },
+    {
+      "version": "0063_root_actor_role_snapshot_canonicalization",
+      "checksum": "b02f42efccc5eca7ea0c657db08e33015885bf0d6087d92938977a1bd5a62413"
+    },
+    {
+      "version": "0064_root_external_responsibility_bypass",
+      "checksum": "231ca253c1864033b583b86fe1e3e1a086c2b5e7d9b5bd5ea2ba7caccda0277d"
+    },
+    {
+      "version": "0065_ie_pricing_before_assignment",
+      "checksum": "6c5144229f1c0b456890026fbd7f2280aaba11d4a9401c60a2b0a919d5d07f3a"
+    },
+    {
+      "version": "0066_tail_inspection_foundation",
+      "checksum": "b4afae50eec8cbda14746a269fb24cd7ce1766ef2df338453e038a7b3beb7930"
+    },
+    {
+      "version": "0067_tail_inspection_parallel_flow",
+      "checksum": "4f696007e3e433053fd69195bc103fc1f248477dc1b9def2113c917cf9fb8f31"
+    },
+    {
+      "version": "0068_n01_image_and_wage_integrity",
+      "checksum": "1b7012c166a08c946628e86b96245ea57d21c2cf84b0271c40a1c6b9b09a9a25"
+    },
+    {
+      "version": "0069_rework_image_submission_uuid_cast",
+      "checksum": "59dc48dc708261940935791d8a97704d705273ebf358ff0700b234a25b96ff55"
+    },
+    {
+      "version": "0070_root_tail_inspection_reporting",
+      "checksum": "5d81290dc3aa946b4a19672b2f0e9c89675e56ea812bc80470343fd37a55ef69"
+    },
+    {
+      "version": "0071_n04_assignment_workforce_ux",
+      "checksum": "e7a3ebaa3a745e17cb6a58f46fc20459d99f00bb939b64a17d7b2b343fe3d6a7"
+    },
+    {
+      "version": "0072_tail_inspection_rejection",
+      "checksum": "238984ca539ab697871b35836825d3cf9c62b7f5b86883aadef67326ab58573f"
+    },
+    {
+      "version": "0073_wage_direct_month_close_guard",
+      "checksum": "c6e4ebc9c7eb4ee15b0da9b02a186a42a5e29e3d53528cd50df5815081819189"
+    },
+    {
+      "version": "0074_wage_review_adjustment_retirement",
+      "checksum": "37c93954349fad851bfe2b813c2113271b5e8c355d4abc7223488d990167bbfc"
+    },
+    {
+      "version": "0075_root_delete_wage_cleanup",
+      "checksum": "fe00dc2ae908fb56b620ec88d5a01c5b232f416212a720c7ea9f6792515f7018"
+    },
+    {
+      "version": "0076_receiving_fact_layer",
+      "checksum": "cc01d08c793638f6290df825f126e554ffd1c485fa79739f9920a251b4142f79"
+    },
+    {
+      "version": "0077_rework_v2_n01_supply_context",
+      "checksum": "bda0d654533c6c6020a1d725206a13116f44f817636842dc60117ea82ede621d"
+    },
+    {
+      "version": "0078_rework_v2_process_worker_preassignment",
+      "checksum": "2927c98cb9e28f76d3a3e4e9cab6293c7876a7ea77daf45f22b94d65727c7ec3"
+    },
+    {
+      "version": "0079_rework_v2_unified_execution",
+      "checksum": "59385d69f030de279de4b8006f08b40e5da7cdb81fd2008be7012d1ace387a57"
+    },
+    {
+      "version": "0080_rework_v2_final_quantity_ie_review",
+      "checksum": "2240e68a516d1483863e3ba40eba2ed70ea6e03670ccb88a70858e50cd97fd53"
+    },
+    {
+      "version": "0081_rework_v2_responsibility_2",
+      "checksum": "ffcde287569ff070663e7e450d75b9bfdfdeb4cbeec21b658652b2efef297a08"
+    },
+    {
+      "version": "0082_rework_v2_finance_closure",
+      "checksum": "2984978017ded345f72bb8f9e3264040c86b203e6f52603069454abad8db03f0"
+    },
+    {
+      "version": "0083_rework_v2_temporary_worker_private_profile",
+      "checksum": "e43b9e06605ab8e97f6354c1cef6dcf85b6c1b0e1ea288af7d1e934dc5c6cf43"
+    },
+    {
+      "version": "0084_rework_v2_process_default_worker_roster",
+      "checksum": "c9ac3d43bfb76ce0f6d1d9aefb34228b496726b0953a32763a87865869b2fbac"
+    },
+    {
+      "version": "0085_n04_tail_work_report_audit_guard",
+      "checksum": "64b00da8cc95d70efa161ed93980d92032e12c075f974f1c93894d140eab07c7"
+    },
+    {
+      "version": "0086_receiving_rework_evidence_link",
+      "checksum": "f6013e54007f441f2c42c6fdd4ec1f0cdbd9db7236b42b7bdb67106677252649"
+    },
+    {
+      "version": "0087_effective_work_report_quantity",
+      "checksum": "3044161405547f7fcf4bc212a2407a96015025cc51fd37072ff212c33c0da4ba"
+    },
+    {
+      "version": "0088_root_receiving_correction",
+      "checksum": "76faf84dadb0d04723f1af8cd0db52992d9b4143171fec27b5d662f134dd28c4"
+    },
+    {
+      "version": "0089_employee_access_role_lifecycle",
+      "checksum": "dfcbdccb2104e3e151d42da939d76c3e4f4f2d459daad2b93514a0c5508e3281"
+    },
+    {
+      "version": "0090_dingtalk_todo_creator_identity",
+      "checksum": "dfed325d2f12e3e62b346e0bbff4d4caaf64dc32bfc67b3ea2fe497480b7d7e3"
+    },
+    {
+      "version": "0091_role_entry_todo_reliability",
+      "checksum": "79d4670a3848183498ac57fdc6a4b8d485e9591291521eaa2504e1a49c6bf03c"
+    },
+    {
+      "version": "0092_temporary_worker_profile_update",
+      "checksum": "f2e7858399d4a0e7770ad384759294af2309946542c44b6cbc6271bfeeff19c5"
+    },
+    {
+      "version": "0093_tail_inspection_worker_role",
+      "checksum": "549e69774c6624a3d0fcaacab567df0df3eec2c2a185ec9e9815ab7ba0da093b"
+    },
+    {
+      "version": "0094_tail_assignment_parity",
+      "checksum": "2c5828661ca5351bbd817ec322deadd2b57f083570509909178862d0b5c80104"
+    },
+    {
+      "version": "0095_receiving_defective_quantity",
+      "checksum": "b6dc6a36a0ad5d0f55ebfc7f9eb49adb27cfb5db20fb97f049b3575d4800fe7c"
+    },
+    {
+      "version": "0096_sourcing_view_capability",
+      "checksum": "d184272fa0ab595394d15426842462e0e33e354270477436c79ee6c9916392e6"
+    },
+    {
+      "version": "0097_sourcing_foundation",
+      "checksum": "3bc1ae83529791e2dcc7679aad50006a5ac0d5c26893e4f623e7abf4aecb2e5e"
+    },
+    {
+      "version": "0098_tail_default_worker_roster",
+      "checksum": "af2f2c38396edc74d213d3a57385c86c3013739c6cefaacf7c8e0e4145a89864"
+    },
+    {
+      "version": "0099_optional_tail_inspection",
+      "checksum": "2074fc010a2de62804ac222042806d3861cbe53ed90a62945c5e90d25c4a8e7d"
+    },
+    {
+      "version": "0100_optional_tail_final_quantity_guard",
+      "checksum": "da9d8950149dfc3837c340e82b647e2947e93a44cd2c77d753c4dfd74ea64dc8"
+    },
+    {
+      "version": "0101_optional_tail_n06_guard",
+      "checksum": "1ccc243d4e85e88edd2a158bf05e196caeddc80e5e59d82decafcc32b032dc50"
+    },
+    {
+      "version": "0102_sourcing_ie_view_grant",
+      "checksum": "346e35b2f0c5c0fcb17a32e16468060421ff3e71d3fe42d2193df6d3fb409fb3"
+    },
+    {
+      "version": "0103_role_based_rework_image_supplement",
+      "checksum": "6aec184b234d9bcf50d4a9a4e650758784f76d3d945a19806bcd5255138aada0"
+    },
+    {
+      "version": "0104_in_progress_workforce_adjustment",
+      "checksum": "050c7694060fdc17cddc4bcb4eb24af2bdaada407c77eae7d51c307bdcc081b3"
+    },
+    {
+      "version": "0105_existing_order_tail_inspection_waiver",
+      "checksum": "6557ff08c2ccbebaaf4a560041e7ce7aed394e9aeb041f51712742ec1cc77374"
+    },
+    {
+      "version": "0106_sourcing_todo_route",
+      "checksum": "2e526b391b7baf539550c928c08aee71f7d083b38c60d5568ca628711f6adffd"
+    },
+    {
+      "version": "0107_sourcing_contract_factory_change_todos",
+      "checksum": "b6f9437c71c52d93f241edde5643a940e3eca9a2696e2bafd7fd3f9a87a183b6"
+    },
+    {
+      "version": "0108_sourcing_finance_closure",
+      "checksum": "503f10311aae21ec28c1a1cbe70b446ec30790072689487df412b3154b68914c"
+    },
+    {
+      "version": "0109_n04_explicit_execution_completion",
+      "checksum": "6f4bd82b699fff0c40da55e269ba5e78b34c4e075d9d315a4e8a5e0486a478b0"
+    },
+    {
+      "version": "0110_whole_inspection_quantity_ceiling",
+      "checksum": "02019355c5cf957b39398589bb901e804625ab53f88a669ae04671a84e2687d4"
+    },
+    {
+      "version": "0111_receiving_delivery_note_total",
+      "checksum": "35dab59aca687ddcf48bd36b0cc92a1473fdf8f88371edb69f4e90629857b9f1"
+    },
+    {
+      "version": "0112_receiving_root_merge_image_replacement",
+      "checksum": "832881378537f145a626d2c7d2b667cc76fdfc3d7d3e64c9493a56fe25dae248"
+    },
+    {
+      "version": "0113_tail_inspection_cost_bearer",
+      "checksum": "4d7c5b95b207bb86e3e7b401560c1da4999c80a0b943f56901c7f87ab5395846"
+    },
+    {
+      "version": "0114_ho20544223_tail_responsibility_repair",
+      "checksum": "7fe2a88f0c3035179ce23252297150c7374c7d012db37386429b4b24bfa37a9f"
+    },
+    {
+      "version": "0115_receiving_style_identity_canonicalization",
+      "checksum": "c663266784042c7ce0bffbcab7048ba49a28fe6766b6b2ff3f134ac918a0935d"
+    },
+    {
+      "version": "0116_tail_defective_quantity_ledger",
+      "checksum": "f3c64fc764f3af6add0fe5c27e2455a4aea90a37426318d6834b3348eda0131d"
+    },
+    {
+      "version": "0117_related_merchandiser_rework_access",
+      "checksum": "75bb5ab9744d3bcd56fa3b0e6df11beaaca9c80c765cb1a95378587184c080cb"
+    },
+    {
+      "version": "0118_ie_precount_ledger",
+      "checksum": "29a9c21baab5adc75be5b661e310f732028d746817e21f69f24e494e73d917a3"
+    },
+    {
+      "version": "0119_tail_inspection_cost_bearer_provenance",
+      "checksum": "026f3c812b4258ef118c9d87059a1dd4b6a97cdb0c6b2293962a06a4e7facef4"
+    },
+    {
+      "version": "0120_sourcing_order_facts",
+      "checksum": "382c99bc1c667d04dd8a58f2679c9b2e716cda0aad60cea41ef4adc3d301fa6a"
+    },
+    {
+      "version": "0121_sourcing_remove_contract_stage",
+      "checksum": "43b3c7e4f49e45d9cf7651fa60e0503a0db132c2cd8589e3cc2dcfcaa98e2b27"
+    },
+    {
+      "version": "0122_sourcing_case_logical_deletion",
+      "checksum": "ad61973df35a87fb0cb7d023d4cff7694f0c881a272b5dc0f5246aa441be51cb"
+    },
+    {
+      "version": "0123_sourcing_explicit_role_todos",
+      "checksum": "b2569ca04144265edae55058796ef49f25410972e3786768d9c808e06751aec2"
+    },
+    {
+      "version": "0124_sourcing_ordered_processes",
+      "checksum": "b19a8cbf1c62a272b14d164005a4d417e096aa87ed3720b464094309fd94c2c0"
+    },
+    {
+      "version": "0125_sourcing_image_supplement",
+      "checksum": "4bae4b9c495f49717680939d2e556274b0a73bdf117f6c1e75ab5efe7e9a7e71"
+    },
+    {
+      "version": "0126_sourcing_finance_readonly_reconciliation",
+      "checksum": "2af072f84f42c7482cd939d3b6b96e7f86eca63b2d12f5100906d6eb7d705441"
+    },
+    {
+      "version": "0127_sourcing_factory_change_role_metadata",
+      "checksum": "b3d505e010d1932d22036f8091b27924645965c48917680d64aba9f8c76adf6a"
+    },
+    {
+      "version": "0128_sourcing_factory_change_workflow",
+      "checksum": "da31247c93785043465251fb3af80ec69ece25dfa7e84cf9845d7a1776c580f6"
+    },
+    {
+      "version": "0129_n05_price_ie_reapproval",
+      "checksum": "82d50207d812f66eb892f015409d13ae8ef3279aefcfe6a48ea1ea34ac94986e"
+    },
+    {
+      "version": "0130_root_receiving_correction_after_rework",
+      "checksum": "bf4b495d72e00b02f066f53ca22f974d8796be91c52ffe222de5dd0a5c0b02de"
+    },
+    {
+      "version": "0131_responsibility_todo_explicit_assignees",
+      "checksum": "271ed948d69cd1753f3a74c41879dff70fb6c4c400276827cde349245de0732b"
+    },
+    {
+      "version": "0132_receiving_merge_into_rework_target",
+      "checksum": "6d8876d9c0be2b2c50eb47cd8ef3d3059dc47b70f8b448e3019bc9b78ff5b7b9"
+    },
+    {
+      "version": "0133_sourcing_craft_catalog",
+      "checksum": "a3560809a38adf1cdff11b24a150b6640af352c3068ce8a5afaeb5670930ebbc"
+    },
+    {
+      "version": "0134_versioned_craft_catalog",
+      "checksum": "25f2b3dba7791e1b322d0e9f03d7597d4ff6cc07a04bbdd4bee821551a14f246"
+    },
+    {
+      "version": "0135_sourcing_case_craft_snapshots",
+      "checksum": "d9ff6a7686813a324caab6a5b219a6f28a42c64f5530ee8566dcaf769072bdb1"
+    },
+    {
+      "version": "0136_tail_defective_quantity_integrity",
+      "checksum": "7e8c898ebcf65a6842abede836c5f3f2f5c12d37877134737c09d0d7dc3cfdf7"
+    },
+    {
+      "version": "0137_receiving_source_classification",
+      "checksum": "a41b309ba9c43a0acbe74ce7b3dd2a221d23b1cb1b47b43cdb28d1823d8b0c3b"
+    },
+    {
+      "version": "0138_receiving_receipt_corrections",
+      "checksum": "9cfe64fb614728ed6d6953b3a8f2233f1a65bf0f6ec955f25ef29f6ce69d5f0c"
+    },
+    {
+      "version": "0139_receiving_packing_difference_resolution",
+      "checksum": "dda7d1278ac1fed989d0177d44934f458f38e77898990a8282892854c83ed68b"
+    },
+    {
+      "version": "0140_receiving_packing_difference_direction",
+      "checksum": "708fe59c1fac00334708fe5132679c57f37737b50fa7169c59494616043c9dec"
+    },
+    {
+      "version": "0141_rework_receiving_quantity_ceiling",
+      "checksum": "939d22fa93017263987df72411fe5595db9b4bf1a3bee33e43e9088dd5d8a234"
+    },
+    {
+      "version": "0142_merchandiser_responsibility_deduction_access",
+      "checksum": "9ac93460c82727ed6723d2adbf30d8e37390e5885ca5b7794afb30fd041fca0b"
+    },
+    {
+      "version": "0143_sourcing_supplier_profile_foundation",
+      "checksum": "cb980b93147a2f3837ae865e247b8c8e76552b33267e1e01be5a57117059eaf5"
+    },
+    {
+      "version": "0144_sourcing_multi_style_pricing",
+      "checksum": "887f52302b779c48ec40e32db2bc2210b3ca8ca478699b57ac33459659659679"
+    },
+    {
+      "version": "0145_sourcing_line_review_approval_snapshot",
+      "checksum": "c098dd6dcd8f737d28ae34d01c01a1bedb04871b939404184672d3aa8da0123c"
+    },
+    {
+      "version": "0146_sourcing_contract_pdf_finance",
+      "checksum": "4d7f7cd4d7a1846c62e4553dd66efbd9de919744709ded0d5081a98d0a7b684c"
+    },
+    {
+      "version": "0147_sourcing_contract_input_correction",
+      "checksum": "258112ffc7ca331654d67384a15145e23b6d41746554618d981f5425f61b12ae"
+    },
+    {
+      "version": "0148_sourcing_formal_dispatch",
+      "checksum": "bce22e6d7ed48bdd9938b46ccf8afac0858a1c06ad5dd868c7692fcdf9ce5f55"
+    },
+    {
+      "version": "0149_sourcing_production_reporting",
+      "checksum": "88d244e537b4392e46471e111fe9f817557bd6f006b36cb431a0be5a2bbe0a96"
+    },
+    {
+      "version": "0150_sourcing_production_progress_snapshot",
+      "checksum": "7cb7d39f991bc9a63234d4c200f40fb43500407aa1715ddfd424eba9419b9f48"
+    },
+    {
+      "version": "0151_sourcing_production_closure",
+      "checksum": "c1560d856d4d76184e3c195c21b8182ee83eb7899d8aa6daca9856e2942e781e"
+    },
+    {
+      "version": "0152_sample_domain_foundation",
+      "checksum": "41315323d135fa0851d46fa04c13d47b2344df10bba99eed49bcd78ecd8aa6ef"
+    },
+    {
+      "version": "0153_sample_read_indexes_snapshots",
+      "checksum": "80f539ba6017d3042a9670e208c55b60e8363d24eb8045138ded34a45c4dece0"
+    },
+    {
+      "version": "0154_sample_write_control",
+      "checksum": "d640118b136a2258ee521e7402c0940cac35bbcc2f3c7f26e4ed13c9d9cf27df"
+    },
+    {
+      "version": "0155_sample_financial_audit",
+      "checksum": "d04ead3b0693135c9ca86de29d2facca12982bdcd729806f186c2d78b2e05fe1"
+    },
+    {
+      "version": "0156_sample_handoff_todos",
+      "checksum": "6cc5b46518107c43ac45c98e858e72b0c6ca0e613c9fa9d7c37a7ef63fc4d159"
+    },
+    {
+      "version": "0157_sample_disposal_import",
+      "checksum": "aa1f002c0ed3b007d3622c6860394a7203e881c7269cf94fe6b7971a56a77ebe"
+    },
+    {
+      "version": "0158_sample_role_finance_maintenance",
+      "checksum": "d66049d5b0151ad52271930043e11c697818850d65f4038b20f5103fd4f5918c"
+    },
+    {
+      "version": "0159_sourcing_production_exclusions",
+      "checksum": "8423176da9aa6a3af57b9555b0abb5b1f48e0f307e11eba946301d69114bc2e2"
+    },
+    {
+      "version": "0160_sample_analysis",
+      "checksum": "f574da58dda54300223a37c3d1b825087d661b0d19b6e711874b37a53e7d6593"
+    },
+    {
+      "version": "0161_work_operation_diagnostics",
+      "checksum": "09e94daf7f227901e1a87340e66c79e68f0ce7384227480f1d4ca19002265a6a"
+    },
+    {
+      "version": "0162_finance_director_sample_read",
+      "checksum": "fbdf0faedd1852a8f2a1727577781b2b1914c0473902b71813c0892e64a1346b"
+    },
+    {
+      "version": "0163_wage_month_close_accountant_export",
+      "checksum": "6da345017a939e3be992b0dff2201ab76c9bbc425181be65d60c43431b8b7fe2"
+    },
+    {
+      "version": "0164_global_export_allowlist",
+      "checksum": "ab9d1d07a297d5821473ce8550066350eb0707b492f11e650f7b9b83876562f3"
+    },
+    {
+      "version": "0165_own_tail_responsibility_history",
+      "checksum": "0c1d96d6734f342c8a5d0fc2e422dcb81ade20913bb5cbb672091533226e1f3f"
+    },
+    {
+      "version": "0166_permission_role_field_closure",
+      "checksum": "c7ff5ec6b10b1147d6d2671bba900585fd965a2a215fa294df5fc3596d8a1eea"
+    },
+    {
+      "version": "0167_final_acceptance_permission_closure",
+      "checksum": "12141083ee0559bb2a86f215c02a69cfd64036fa0fbe22e00aa172400ed22489"
+    },
+    {
+      "version": "0168_final_acceptance_supplier_catalog_closure",
+      "checksum": "49010b86acdea3ac128789258c6880c13cae5d978891296c5b3a06fac3f9d587"
+    },
+    {
+      "version": "0169_receiving_difference_evidence",
+      "checksum": "4a599023bbccb85d5876640b8940973f6c51883ec645d31299d47f35791dc590"
+    },
+    {
+      "version": "0170_order_responsibility_revision",
+      "checksum": "ef9de9d9d2b3a985604afa3471ab6540287eac3df4032b5ebd86b4a1f1f37197"
+    },
+    {
+      "version": "0171_wage_settlement_marks",
+      "checksum": "ae5f32aac05b8f80f1d3a8ef425e24015b46c95937979fa9d8b8b96bb8b6db9a"
+    },
+    {
+      "version": "0172_quality_rework_basic_read",
+      "checksum": "5f1253d2967fceb96626c0dc40677aaaf09c4226c196a2af757cab70d0ac6ad7"
+    },
+    {
+      "version": "0173_finance_rework_node_read",
+      "checksum": "8fd70862d63b6431d3b49c82408abe8b53af859569264058f530aed3dabe8d58"
+    },
+    {
+      "version": "0174_finance_wage_access",
+      "checksum": "d8a8bdd3bff5ddcf04794bcaeb8bf6095358f5552864cb254c97dbaae62d8979"
+    },
+    {
+      "version": "0175_pattern_room_prices",
+      "checksum": "d90bd6e6ea87b31df8fe7a473b9af7ab7fcc2c14085b09c8d06de490075e072a"
+    },
+    {
+      "version": "0176_pattern_room_first_pattern",
+      "checksum": "f851657b3d2199c5839c7243ac4b2b6c7b797a8f4cc4ac94d46a24e7ebc69990"
+    },
+    {
+      "version": "0177_pattern_room_misc_hours",
+      "checksum": "b3896a2753beb7751161fa5f6c1f626cae532989bb5906491dc80d777c57eb9e"
+    },
+    {
+      "version": "0178_pattern_room_rework_transfer_cancel",
+      "checksum": "b1580568ef97727ac9e33d54935125123d3e6487a83706e7dd3ea86aa3015dd0"
+    },
+    {
+      "version": "0179_pattern_room_unified_wages",
+      "checksum": "a7e5b0707cce2fc8e7b797235fd32c0db3ccd99298755d35cb6701015842368f"
+    },
+    {
+      "version": "0180_supplier_maintenance_authority",
+      "checksum": "6cfb31e21d10a969b704f9c088a0c3bb6d1566a1c82b7a885599414cb96c1890"
+    },
+    {
+      "version": "0181_supplier_onboarding",
+      "checksum": "b4989faf6eb53228bf9371d0df56b47192470278b0f75d65592429f827f564f6"
+    },
+    {
+      "version": "0182_finance_read_evidence",
+      "checksum": "a999938df1f5040ae490ded3dc6a9f01827ca29e237eefcb9b65822d7f4f7a47"
+    },
+    {
+      "version": "0183_atomic_over_deduction_special",
+      "checksum": "2721f00d756c9512012a5df5d7e9a4009410d41369ee3cee0f463e272a413a01"
+    },
+    {
+      "version": "0184_business_module_owner_members",
+      "checksum": "02586813428a7e03d85d65998bb3932aa4310c7410eb31bbdb1ae17d465199b4"
+    },
+    {
+      "version": "0185_approved_deduction_proposals",
+      "checksum": "b574e6dd2649363748f2bdcba93eed6f628b0566cf2d5e4732b429d0a58e27af"
+    },
+    {
+      "version": "0186_finance_rework_order_queries",
+      "checksum": "38afe674f479b4e76e39414f86d0a7fffcf6198b2c9934acac672dc7b7f4f08e"
+    },
+    {
+      "version": "0187_finance_pattern_order_reads",
+      "checksum": "dd7fb1a5c151c107bd20766800ed9b0291ac54d5947f3c662e091fd03f1a572f"
+    },
+    {
+      "version": "0188_pattern_room_worker_role",
+      "checksum": "c70a1ae77fbffa61e3ea1dbed4d63f1a1605fdfdd83fd3f9ba5a7f946ea3ad60"
+    },
+    {
+      "version": "0189_pattern_room_order_logical_deletion",
+      "checksum": "4459959e7f2c8239e8fe84c8321afac4ef5ffa1bbfc2579a668bdfe7f8b241a7"
+    },
+    {
+      "version": "0190_receiving_difference_authority",
+      "checksum": "667132fcf1844b96474d82d9efa935bc403e176bbe22390315ddfc0476e13dc1"
+    },
+    {
+      "version": "0191_supplier_contract_signing_name_optional",
+      "checksum": "2111be3f0d72dd534d13f55c918039db2309e7669e5677b36d27355a544b5110"
+    },
+    {
+      "version": "0192_sourcing_ie_first_quote_cutting",
+      "checksum": "c928039e6bbec55a3ff8c20cacabc38519d04be18dc259aee781cd40f2122145"
+    },
+    {
+      "version": "0193_sourcing_style_contract_revisions",
+      "checksum": "4ae4810989b6abe25bb73ac575fb4c69c68b5616e448a8ce50756ee28a587b51"
+    },
+    {
+      "version": "0194_sourcing_line_images_contract_template",
+      "checksum": "d98478e077a96a581cffbcbdf19ac6d6998e156edfeaf73a69653be78e2581f6"
+    },
+    {
+      "version": "0195_sourcing_style_revision_ready_contract",
+      "checksum": "eaeeed1855668366942c794d40eb4eb16f4d3df4f1133848427b30a9ba045ec9"
+    },
+    {
+      "version": "0196_sourcing_style_duplicate_guards",
+      "checksum": "dd2cf7e6cb650f8154c362bfb7eaeff4a7e5848ad59f62bb342b36c1aebce3e7"
+    },
+    {
+      "version": "0197_cutting_source_foundation",
+      "checksum": "6354085dff65fd4851ce7428cfe3589587f16f994d23d6bdf4835d521fdafdfe"
+    },
+    {
+      "version": "0198_cutting_actual_records",
+      "checksum": "c09245850bd291466dacf5f6cc5e13072ba79b82a109bce5a7f0ef277240d6e9"
+    },
+    {
+      "version": "0199_receiving_cutting_link",
+      "checksum": "3e9398c8e2c2497be39dc7afee123b16eed5d3fbf2f9d96b77cead00b1b34c34"
+    },
+    {
+      "version": "0200_cutting_historical_approved_backfill",
+      "checksum": "2dc0c1750674619ef97aeb263098e2c6072e219786aafdbe04f1d35044e89df6"
+    },
+    {
+      "version": "0201_cutting_sheet_required_upload",
+      "checksum": "6b4b180f0ad1e6db4ec1f9b59f01b9af89e9e45993f0204360d123bd6a2f87dd"
+    },
+    {
+      "version": "0202_todo_terminal_delivery_closure",
+      "checksum": "4ba7d554c68eac3c849760fc6f8f1ce47c8efb4922bca8700b7197d330c7052c"
+    },
+    {
+      "version": "0203_wage_adjustment_restore_compatibility",
+      "checksum": "34a3cde24a384075fd5f7ed095e575997ff6656dabb42f662e838cbfa1c6e998"
+    },
+    {
+      "version": "0204_operation_diagnostic_latency",
+      "checksum": "ad9416ef8c7c3150d6cb05e4ed0cd95a61ad3f5a11c5bcde3df2f15ca08bcab0"
+    },
+    {
+      "version": "0205_sourcing_budget_price_corrections",
+      "checksum": "5fbd5b88f1fc3c9b1f8bf980abccead62e17f56e9a99548a0ac0ff9d81c895e1"
+    },
+    {
+      "version": "0206_sourcing_merchandiser_corrections",
+      "checksum": "0df17ea261502a303d095e5584f879aad18c5eb6137ea72e9242e791a5ed90ef"
+    },
+    {
+      "version": "0207_sourcing_contract_return_monitor",
+      "checksum": "baa970efb51b15f7543b683a35cf88d8212f9ec42e5bb31e28cf788ba322ba7e"
+    },
+    {
+      "version": "0208_sourcing_contract_return_uploads",
+      "checksum": "b8c1f410d5f1f6a9f495d491c82397d054744f602572852a29742fea07f928a2"
+    },
+    {
+      "version": "0209_sourcing_contract_return_today_backfill",
+      "checksum": "64d38eec1f26da3766c5b8f2988da9368b751c2e52e969dc2f8df4fa6b9f5d7a"
+    },
+    {
+      "version": "0210_sourcing_contract_return_all_existing",
+      "checksum": "792c94d8f929959c4b4276f1c52a102b0fc3b45550b1a6e60d9d0afe75d97855"
+    },
+    {
+      "version": "0211_sourcing_contract_return_todos",
+      "checksum": "e93250348e66f7708fdd1b44a02ffaeea14a8c7146e7bca7b13504cf874994d5"
+    },
+    {
+      "version": "0212_sourcing_contract_return_historic_deadlines",
+      "checksum": "5cf2a38157d38cd970f4e9268d9c203e4016c8aa4d6a5d3f2552af97a244422b"
+    },
+    {
+      "version": "0213_rework_kind_source_link",
+      "checksum": "b4628901a0f89edd9f70819ae7365bf41f116c26beddfebe11ee2d304aa7f411"
+    },
+    {
+      "version": "0214_inhouse_finishing_lifecycle",
+      "checksum": "2408425c134365b454584bc40407a35035eedf1dfda329396cfdaedd16984215"
+    },
+    {
+      "version": "0215_sourcing_additional_merchandiser",
+      "checksum": "c1e561c3ab67bc29e368a44d7d8fe2824942daed0b0c7f1fb042c5d15c81192e"
+    },
+    {
+      "version": "0216_digital_production_order_roots",
+      "checksum": "7bfc6827d8b989a53433737d0d78d1ba27b961623c2654effaed683e1e3e11e6"
+    },
+    {
+      "version": "0217_digital_production_node_clocks",
+      "checksum": "491537fec56b3d2cbcdd3bc3f10d6a4539324757a648d82c70317e04106a73f8"
+    },
+    {
+      "version": "0218_contract_template_information_refresh",
+      "checksum": "7c121772680f272520fbf8dc9247499657dc3e09e3eab154007549ea38769de3"
+    },
+    {
+      "version": "0218_digital_production_identity",
+      "checksum": "f8b0d57fea1690f35a73d1f96660f9418f3984f708a89ffa5ee0c8625bbff1e0"
+    },
+    {
+      "version": "0219_digital_production_access",
+      "checksum": "c658d487c51af50a685a74ee2e171c2f1f36d9441e53cda73d6b0e5cad194274"
+    },
+    {
+      "version": "0219_root_contract_content_edit",
+      "checksum": "9b8a33ddc5b7b321138626edd1a93063260aa1c558ba5aaf0e79810cdc77b9b1"
+    },
+    {
+      "version": "0220_contract_display_consistency",
+      "checksum": "0d9a6181b62b739a33f2e418adcddcd2ee6bf968b562ff7f82b16216e1e449d3"
+    },
+    {
+      "version": "0220_digital_production_tasks",
+      "checksum": "33c2091888b53ae3e386c448b9c10651fac59fbd047003894faa67c86db45f0c"
+    },
+    {
+      "version": "0221_digital_production_notifications",
+      "checksum": "f97b46f3e3bd86bf764e7a2d8d2f523c2d0ef07a207c35d7bed62c9f222d1bda"
+    },
+    {
+      "version": "0222_digital_development_documents",
+      "checksum": "d8f21da27b906eb9619ce651fb70cffd43dbc2be88c32bab4c5190855a248feb"
+    },
+    {
+      "version": "0223_digital_development_execution",
+      "checksum": "ee3427ba4cce450d3cffc464ddd5701fd651604a450a88e64087de5be54b14b7"
+    },
+    {
+      "version": "0224_digital_development_route",
+      "checksum": "5f57dc1202b50b172f2db8347647dfcda4c8c76c9ed17b634cf11a2799871244"
+    },
+    {
+      "version": "0225_digital_development_rounds",
+      "checksum": "299ac4b17ef8a618a4b740b8ffcc30d377b4c51ca6b1880dbe1e19d49514a6f3"
+    },
+    {
+      "version": "0226_digital_production_budgets",
+      "checksum": "83432181bd2ee6d48ce44abb854edc554d4a0213a4a2b95301243226b35bd144"
+    },
+    {
+      "version": "0227_digital_production_instructions",
+      "checksum": "bd40ce060768ee0449d9178113e4673002cdee6bf7c8ffd58cdca354ce0ca685"
+    },
+    {
+      "version": "0228_digital_bulk_preparation",
+      "checksum": "c50f93ea731b5e9e2b8cab781ad870bb53a1bef8271b913720d63d6efb5e7bb6"
+    },
+    {
+      "version": "0229_digital_bulk_cutting",
+      "checksum": "be60e800d1c513da9ae9e25463eba2a92d9ca69b86489f847269743d0e1672bb"
+    },
+    {
+      "version": "0230_digital_factory_flow",
+      "checksum": "1d1fe7d53d4f84f8d0fc28b3b4bd309928f99e2df3e589f749ce5948e3b4ed18"
+    },
+    {
+      "version": "0231_digital_order_closure",
+      "checksum": "b1698097af226f2c0a2a52fe5463f54365dde375fe45e40f4b11677b778ba782"
+    },
+    {
+      "version": "0232_reconcile_contract_and_digital_histories",
+      "checksum": "e80fa66d9ae060a43430a8bed70513ecac17ae6daed729e307921fcae66b56c3"
+    },
+    {
+      "version": "0233_manual_contract_template_provenance",
+      "checksum": "0e32998f7fabaf770e7a0eaaa7e9ef44063f3c5f0089f9a9672f1201407d7194"
+    }
+  ]
+}

@@ -553,5 +553,20 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0221_sourcing_factory_change_crafts": {
+    "checksum": "0c4b9492ab5d6ac9ba813854dc048aadbfb71784ddd9a62b3a49346d7b2f9438",
+    "tables": [
+      "sourcing_factory_change_requests"
+    ],
+    "functions": [
+      "guard_sourcing_decision_crafts"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

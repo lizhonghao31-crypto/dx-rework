@@ -1,8 +1,10 @@
 import branches from './migration-branches.json' with { type: 'json' };
+import mainExtensions from './migration-main-extensions.json' with { type: 'json' };
 
 const commonCount = 217;
 const known = [...branches.main, ...branches.digital];
-const knownByVersion = new Map(known.map(row => [row.version, row.checksum]));
+const approved = [...known,...mainExtensions];
+const knownByVersion = new Map(approved.map(row => [row.version, row.checksum]));
 
 function assertPrefix(applied, expected) {
   if (applied.length > expected.length) {
@@ -17,7 +19,7 @@ function assertPrefix(applied, expected) {
   }
 }
 
-// Only the two frozen, reviewed 2026-09 histories may have independent prefixes.
+// Only the frozen 2026-09 histories and explicitly checksummed main extension may have independent prefixes.
 // No historical row is renamed, deleted, re-checksummed, or marked applied for free.
 export function assertAppliedMigrationHistory(applied, expected) {
   const target = new Map(expected.map(row => [row.version, row.checksum]));
@@ -35,7 +37,7 @@ export function assertAppliedMigrationHistory(applied, expected) {
   assertPrefix(commonApplied, common);
   if (applied.length === commonApplied.length) return;
   if (commonApplied.length !== commonCount) throw new Error('Branch migrations require the complete shared history');
-  for (const lane of Object.values(branches)) {
+  for (const lane of [[...branches.main,...mainExtensions],branches.digital]) {
     const versions = new Set(lane.map(row => row.version));
     assertPrefix(applied.filter(row => versions.has(row.version)), lane);
   }
@@ -66,7 +68,7 @@ export function assertMigrationSequence(migrations) {
       throw new Error(`Frozen branch migration checksum drift: ${row.version}`);
     }
     if (prefix === next) next += 1;
-    else if (!(prefix === next - 1 && prefix >= 218 && prefix <= 220
+    else if (!(prefix === next - 1 && prefix >= 218 && prefix <= 221
       && knownByVersion.get(row.version) === row.checksum && counts.get(prefix) === 1)) {
       throw new Error(`Migration sequence gap or unapproved duplicate: expected ${String(next).padStart(4, '0')}, found ${row.version}`);
     }
@@ -74,7 +76,7 @@ export function assertMigrationSequence(migrations) {
   }
   // A duplicate prefix is valid only for the exact pair of frozen migrations.
   for (const [prefix, count] of counts) if (count > 1) {
-    const pair = known.filter(row => Number(row.version.slice(0, 4)) === prefix);
+    const pair = approved.filter(row => Number(row.version.slice(0, 4)) === prefix);
     if (pair.length !== count || !pair.every(row => seen.has(row.version))) {
       throw new Error(`Unapproved migration prefix collision: ${prefix}`);
     }
