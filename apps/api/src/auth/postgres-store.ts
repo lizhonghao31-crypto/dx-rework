@@ -158,7 +158,7 @@ export class PostgresAuthStore implements AuthStore {
        RETURNING app_user.enabled`,
       [userId, isRootIdentity],
     );
-    if (accessState.rows[0]?.enabled !== true) {
+    if (accessState.rows[0]?.enabled !== true || !member.active || !member.employed) {
       await client.query(
         "UPDATE auth_sessions SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND revoked_at IS NULL",
         [userId],
@@ -234,6 +234,7 @@ export class PostgresAuthStore implements AuthStore {
          WHERE user_id=$1 AND provider='dingtalk' AND corp_id=$3`,
         [userId, verifiedAt, this.corporationId],
       );
+      await client.query("UPDATE auth_sessions SET revoked_at=$2 WHERE user_id=$1 AND revoked_at IS NULL", [userId, verifiedAt]);
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");

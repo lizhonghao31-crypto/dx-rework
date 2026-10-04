@@ -101,6 +101,12 @@ runWithPostgres("role permissions and versioned master data", () => {
     ]) {
       const sql = await readFile(new URL(`../../apps/api/migrations/${migration}`, import.meta.url), "utf8");
       await database.query(sql);
+      if (migration === "0005_access_master_data.sql") {
+        // This access-only fixture omits rework tables, but the current people service
+        // requires the real temporary-identity DDL introduced at the start of 0059.
+        const identityMigration = await readFile(new URL("../../apps/api/migrations/0059_phase1_assignment_and_final_reporting.sql", import.meta.url), "utf8");
+        await database.query(identityMigration.split("ALTER TABLE rework_work_reports")[0]!);
+      }
     }
     await database.query(
       `CREATE TABLE owner_bootstrap_consumptions (
@@ -114,6 +120,10 @@ runWithPostgres("role permissions and versioned master data", () => {
     ));
     await database.query(await readFile(
       new URL("../../apps/api/migrations/0092_temporary_worker_profile_update.sql", import.meta.url),
+      "utf8",
+    ));
+    await database.query(await readFile(
+      new URL("../../apps/api/migrations/0098_tail_default_worker_roster.sql", import.meta.url),
       "utf8",
     ));
     await database.query(await readFile(
@@ -820,7 +830,7 @@ runWithPostgres("role permissions and versioned master data", () => {
       `SELECT authorization_capability
        FROM operation_events
        WHERE entity_type='supplier_catalog' AND entity_id=$1
-       ORDER BY occurred_at DESC LIMIT 1`,
+       ORDER BY created_at DESC,event_id DESC LIMIT 1`,
       [supplier.supplierId],
     )).rows[0]?.authorization_capability).toBe("supplier_profile:write");
     expect(await service.listSupplierHistory(supplier.supplierId, true)).toEqual([
@@ -940,7 +950,7 @@ runWithPostgres("role permissions and versioned master data", () => {
   });
 
 
-  it("pages and searches the process catalog with a query-bound stable cursor", async () => {
+  it("pages and searches the process catalog with explicit page metadata", async () => {
     await Promise.all(Array.from({ length: 17 }, (_, index) => service.createProcess(masterDataActor, {
       processCode: `PAGE_PROCESS_${String(index + 1).padStart(2, "0")}`,
       processName: `分页工序${String(index + 1).padStart(2, "0")}`,
@@ -958,38 +968,39 @@ runWithPostgres("role permissions and versioned master data", () => {
 
     const firstPage = await service.listProcessPage({ query: "分页工序" });
     expect(firstPage.items).toHaveLength(15);
-    expect(firstPage.nextCursor).toEqual(expect.any(String));
+    expect(firstPage).toMatchObject({ page: 1, pageSize: 15, totalCount: 17, totalPages: 2 });
     const secondPage = await service.listProcessPage({
       query: "分页工序",
-      cursor: firstPage.nextCursor!,
+      page: 2,
     });
     expect(secondPage.items).toHaveLength(2);
-    expect(secondPage.nextCursor).toBeNull();
+    expect(secondPage).toMatchObject({ page: 2, totalCount: 17, totalPages: 2 });
     expect(new Set([...firstPage.items, ...secondPage.items].map((item) => item.processId)).size).toBe(17);
 
     expect((await service.listProcessPage({ query: "%" })).items).toEqual([
       expect.objectContaining({ processCode: "PERCENT_PROCESS", processName: "百分比%工序" }),
     ]);
     await expect(service.listProcessPage({
-      query: "另一个搜索",
-      cursor: firstPage.nextCursor!,
+      query: "分页工序",
+      page: 0,
     })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
 
-    const longQuery = "长".repeat(100);
+    const longQuery = "长".repeat(98);
     await Promise.all(Array.from({ length: 16 }, (_, index) => service.createProcess(masterDataActor, {
       processCode: `LONG_PROCESS_${String(index + 1).padStart(2, "0")}`,
       processName: `${longQuery}${String(index + 1).padStart(2, "0")}`,
       pricingUnit: "piece",
       active: true,
-      changeReason: "验证多字节搜索游标",
+      changeReason: "验证多字节搜索分页",
     })));
+    await expect(service.listProcessPage({ query: "长".repeat(101) })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect((await service.listProcessPage({ query: `${longQuery}01` })).items).toHaveLength(1);
     const longFirstPage = await service.listProcessPage({ query: longQuery });
     expect(longFirstPage.items).toHaveLength(15);
-    expect(longFirstPage.nextCursor).toEqual(expect.any(String));
-    expect(longFirstPage.nextCursor!.length).toBeLessThanOrEqual(4096);
+    expect(longFirstPage).toMatchObject({ page: 1, totalCount: 16, totalPages: 2 });
     expect((await service.listProcessPage({
       query: longQuery,
-      cursor: longFirstPage.nextCursor!,
+      page: 2,
     })).items).toHaveLength(1);
   });
 
