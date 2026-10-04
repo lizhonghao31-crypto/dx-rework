@@ -291,7 +291,7 @@ export const SourcingContractStateResponseSchema = z.object({
 }).strict();
 
 export const SourcingContractReturnUploadSchema = z.object({
-  attachmentIds: z.array(IdSchema).min(1).max(10).refine(ids=>new Set(ids).size===ids.length),
+  attachmentIds: z.array(IdSchema).min(1).max(2).refine(ids=>new Set(ids).size===ids.length),
 }).strict();
 export const SourcingContractReturnResponseSchema = z.object({
   contractReturnMonitoring: z.boolean(),

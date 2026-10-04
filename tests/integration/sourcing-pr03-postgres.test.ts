@@ -2943,6 +2943,48 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       else process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT=previous;
     }
   });
+  it("atomically returns two PDFs, preserves single-file history and guards readiness, limits and signed downloads", async () => {
+    const created=await service.createCase(merchandiserActor(),{gender:"男装",styleName:"双文件回传",estimatedCutPieceSendDate:"2026-10-01",deliveryDate:"2026-10-20",
+      lineItems:[{styleNo:"RETURN-TWO",color:"黑",quantity:20}],daxingUnitPrice:"8"},randomUUID());
+    const id=created.value.sourcingCaseId;
+    await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
+    await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
+    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    const document=(await contractService.getCurrent(readerActor(),id)).item!;
+    const pdfs=[randomUUID(),randomUUID(),randomUUID()];
+    for (const [index,file] of pdfs.entries()) await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,$3,'application/pdf',128,$4,$5,$6,CASE WHEN $6='ready' THEN CURRENT_TIMESTAMP ELSE NULL END)`,
+      [file,`two-returns/${file}`,`回签${index+1}.pdf`,"a".repeat(64),rootActor().actorId,index===1?"pending":"ready"]);
+    const root=rootActor();
+    await expect(contractReturns.submit(root,id,[],randomUUID())).rejects.toMatchObject({statusCode:400});
+    await expect(contractReturns.submit(root,id,pdfs,randomUUID())).rejects.toMatchObject({statusCode:400});
+    await expect(contractReturns.submit(root,id,[pdfs[0]!,pdfs[0]!],randomUUID())).rejects.toMatchObject({statusCode:400});
+    await expect(contractReturns.submit(root,id,pdfs.slice(0,2),randomUUID())).rejects.toMatchObject({statusCode:400});
+    expect((await contractReturns.get({...root,authorizationCapability:"sourcing:view"},id)).contractReturnedAt).toBeNull();
+    expect((await database.query("SELECT entity_type FROM attachments WHERE attachment_id=$1",[pdfs[0]])).rows[0].entity_type).toBeNull();
+    await database.query("UPDATE attachments SET status='ready',ready_at=CURRENT_TIMESTAMP WHERE attachment_id=$1",[pdfs[1]]);
+    const key=randomUUID();
+    const returned=await contractReturns.submit(root,id,pdfs.slice(0,2),key);
+    expect(returned.attachments.map(file=>file.attachmentId)).toEqual(pdfs.slice(0,2));
+    expect(returned.signedContractDocumentId).toBe(document.sourcingContractDocumentId);
+    expect(returned.history).toEqual([]);
+    const retried=await contractReturns.submit(root,id,pdfs.slice(0,2),key);
+    expect(retried.contractReturnedAt).toBe(returned.contractReturnedAt);
+    expect((await database.query("SELECT count(*)::int AS n FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[id])).rows[0].n).toBe(1);
+    expect((await database.query("SELECT count(*)::int AS n FROM operation_events WHERE entity_id=$1 AND action='sourcing.contract_return.upload'",[id])).rows[0].n).toBe(1);
+    const reader={...readerActor(),authorizationCapabilities:["sourcing:view","supplier_contract_data:read"]};
+    for (const file of pdfs.slice(0,2)) {
+      for (const mode of ["inline","attachment"] as const) {
+        await expect(attachments.createDownloadIntent(reader,file,async binding=>service.canDownloadBoundAttachment(reader,binding),mode)).resolves.toHaveProperty("downloadUrl");
+        await expect(attachments.createDownloadIntent(readerActor(),file,async binding=>service.canDownloadBoundAttachment(readerActor(),binding),mode)).rejects.toMatchObject({statusCode:403});
+      }
+    }
+    const single=await contractReturns.submit(root,id,[pdfs[2]!],randomUUID());
+    expect(single.contractReturnedAt).toBe(returned.contractReturnedAt);
+    expect(single.attachments.map(file=>file.attachmentId)).toEqual([pdfs[2]]);
+    expect(single.history[0]?.attachments).toEqual(returned.attachments);
+    expect(single.history[0]?.signedContractDocumentId).toBe(document.sourcingContractDocumentId);
+  });
   it("adds one actionable merchandiser todo on approval and completes it on first return", async () => {
     await ensureReturnTodoRecipient();
     const todoService=new TodoService(database);

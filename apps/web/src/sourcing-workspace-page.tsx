@@ -1,3 +1,4 @@
+import { contractReturnFileError, finishContractReturnUpload, type ContractReturnUpload } from "./sourcing-contract-return-upload.js";
 import { sourcingCurrentDisplay } from "./sourcing-current-display.js";
 import { SourcingReturnDialog } from "./sourcing-return-dialog.js";
 import { isMerchandiserOnly } from "./sourcing-role-visibility.js";
@@ -1143,7 +1144,13 @@ function OrderDetailPage({
   const contractUploadGuard=useRef(false);
   const contractFileInput=useRef<HTMLInputElement | null>(null);
   const [contractReturnError,setContractReturnError] = useState("");
+  const contractPendingUpload = useRef<ContractReturnUpload | null>(null);
   const [contractPendingSubmission,setContractPendingSubmission] = useState<{attachmentIds:string[];key:string}|null>(null);
+  useEffect(()=>{
+    contractPendingUpload.current=null;
+    setContractPendingSubmission(null);
+    setContractReturnError("");
+  },[sourcingCaseId]);
   const [dispatchState, setDispatchState] = useState<SourcingDispatchState>({ item: null, canDispatch: false });
   const [contractSupplement, setContractSupplement] = useState<ContractSupplementDraft>({});
   const [factoryChangeDraft, setFactoryChangeDraft] = useState<FactoryChangeDraft>({ supplierId: "", unitPrice: "", changeReason: "" });
@@ -1317,23 +1324,17 @@ function OrderDetailPage({
       method:"POST",headers:{"idempotency-key":submission.key},body:JSON.stringify({attachmentIds:submission.attachmentIds}),
     });
     setContractReturn(result);
+    contractPendingUpload.current=null;
     setContractPendingSubmission(null);
     setContractReturnError("");
     setItem(await request(`sourcing/cases/${sourcingCaseId}`,SourcingCaseSummarySchema));
   };
-  const uploadContractReturn = async (files:FileList|null):Promise<void> => {
-    if (!files?.length || contractUploadGuard.current || !contractReturn?.canUpload) return;
-    const chosen=Array.from(files);
-    if (chosen.length>10 || chosen.some(file=>!["application/pdf","image/jpeg","image/png"].includes(file.type))
-      || (chosen.some(file=>file.type==="application/pdf") && chosen.length!==1)
-      || chosen.reduce((size,file)=>size+file.size,0)>20*1024*1024) {
-      setContractReturnError("请选择单份 PDF 或最多 10 张 JPG/PNG，合计不超过 20 MB");
-      return;
-    }
+  const continueContractReturnUpload = async ():Promise<void> => {
+    const pending=contractPendingUpload.current;
+    if (!pending || contractUploadGuard.current) return;
     contractUploadGuard.current=true;setContractUploading(true);setContractReturnError("");
     try {
-      const attachmentIds:string[]=[];
-      for (const file of chosen) {
+      const submission=await finishContractReturnUpload(pending,async file=>{
         const intent=await request("tools/attachments/upload-intents",UploadIntentResponseSchema,{
           method:"POST",body:JSON.stringify({
             filename:file.name,mimeType:file.type,sizeBytes:file.size,sha256:await sha256Hex(file),
@@ -1343,16 +1344,29 @@ function OrderDetailPage({
         for (const [name,value] of Object.entries(intent.uploadFields)) upload.append(name,value);
         upload.append("file",file);
         const response=await fetch(intent.uploadUrl,{method:"POST",body:upload});
-        if (!response.ok) throw new Error(`${file.name} 上传失败，请重试`);
+        if (!response.ok) throw new Error(`${file.name} 上传失败`);
         const ready=await request(`tools/attachments/${intent.attachmentId}/finalize`,AttachmentResponseSchema,{method:"POST"});
-        if (ready.status!=="ready") throw new Error(`${file.name} 尚未完成校验，请重试`);
-        attachmentIds.push(ready.attachmentId);
-      }
-      const submission={attachmentIds,key:createClientRequestId()};
+        if (ready.status!=="ready") throw new Error(`${file.name} 尚未完成校验`);
+        return ready.attachmentId;
+      });
+      contractPendingUpload.current=null;
       setContractPendingSubmission(submission);
       await saveContractReturn(submission);
-    } catch(error) {setContractReturnError(error instanceof Error?error.message:"回签合同上传失败");}
-    finally {contractUploadGuard.current=false;setContractUploading(false);}
+    } catch(error) {
+      const message=error instanceof Error?error.message:"回签合同上传失败";
+      setContractReturnError(contractPendingUpload.current
+        ? `${message}。已完成 ${pending.attachmentIds.length}/${pending.files.length} 个文件，尚未保存回签记录，请重试上传。`
+        : message);
+    } finally {contractUploadGuard.current=false;setContractUploading(false);}
+  };
+  const uploadContractReturn = async (files:FileList|null):Promise<void> => {
+    if (!files?.length || contractUploadGuard.current || !contractReturn?.canUpload) return;
+    const chosen=Array.from(files);
+    const error=contractReturnFileError(chosen);
+    if (error) {setContractReturnError(error);return;}
+    setContractPendingSubmission(null);
+    contractPendingUpload.current={files:chosen,attachmentIds:[],key:createClientRequestId()};
+    await continueContractReturnUpload();
   };
   const retryContractReturn=async():Promise<void>=>{
     if (!contractPendingSubmission || contractUploadGuard.current) return;
@@ -1853,14 +1867,17 @@ function OrderDetailPage({
                       onClick={()=>contractFileInput.current?.click()}>
                       {contractUploading?"正在上传…":contractReturn.attachments.length?"补传回签合同":"上传回签合同"}
                     </button>
+                    <span>一次选择 1 至 2 个 PDF/JPG/PNG，合计不超过 20 MB</span>
                   </> : null}
                   {contractReturn.attachments.length ? <div className="sourcing-contract-return-links" aria-label="回签附件，可左右滑动查看更多">
                     {contractReturn.attachments.map((file,index)=>
                       <a className="dx-button dx-button--secondary" key={file.attachmentId}
-                        href={attachmentUrl(file.attachmentId,"preview")} target="_blank" rel="noreferrer">
-                        {index===0?(contractReturn.signedContractVersion ? `查看 V${contractReturn.signedContractVersion} 回签合同` : "查看历史回签（版本未记录）"):`查看第 ${index+1} 张`}
+                        href={attachmentUrl(file.attachmentId,"preview")} target="_blank" rel="noreferrer" title={file.filename}>
+                        {index===0?(contractReturn.signedContractVersion ? `查看 V${contractReturn.signedContractVersion} 回签合同` : "查看历史回签（版本未记录）"):`查看第 ${index+1} 个文件`}
                       </a>)}
                   </div> : null}
+                  {contractPendingUpload.current && contractReturnError ? <button className="dx-button dx-button--secondary" type="button"
+                    disabled={contractUploading} onClick={()=>void continueContractReturnUpload()}>重试上传</button> : null}
                   {contractPendingSubmission && contractReturnError ? <button className="dx-button dx-button--secondary" type="button"
                     disabled={contractUploading} onClick={()=>void retryContractReturn()}>重试保存</button> : null}
                 </div>
@@ -1870,8 +1887,8 @@ function OrderDetailPage({
                     <span>第 {version.revision} 次 · {version.signedContractVersion ? `合同 V${version.signedContractVersion} · ${version.signedContractNumber}` : "合同版本未记录"} · {version.uploadedByName} · {formatDateTime(version.submittedAt)}</span>
                     <div className="sourcing-contract-return-links">
                       {version.attachments.map((file,index)=><a className="dx-button dx-button--secondary" key={file.attachmentId}
-                        href={attachmentUrl(file.attachmentId,"preview")} target="_blank" rel="noreferrer">
-                        {index===0?"查看回签合同":`查看第 ${index+1} 张`}
+                        href={attachmentUrl(file.attachmentId,"preview")} target="_blank" rel="noreferrer" title={file.filename}>
+                        {index===0?"查看回签合同":`查看第 ${index+1} 个文件`}
                       </a>)}
                     </div>
                   </div>)}
