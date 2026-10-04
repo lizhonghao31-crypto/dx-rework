@@ -4,7 +4,7 @@
   display: flex;
   flex-direction: column;
   right: max(16px, env(safe-area-inset-right));
-  bottom: max(16px, env(safe-area-inset-bottom));
+  bottom: calc(max(16px, env(safe-area-inset-bottom)) + var(--digital-notification-lift, 0px));
   z-index: 70;
   box-sizing: border-box;
   width: min(300px, calc(100vw - 32px));

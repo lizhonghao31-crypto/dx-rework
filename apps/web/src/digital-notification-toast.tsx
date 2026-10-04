@@ -3,11 +3,35 @@ import { Button } from "@dx-rework/ui";
 import { DigitalNotificationClaimSchema, type DigitalNotification } from "@dx-rework/contracts/digital-production-notifications";
 import { createWebUrls } from "../url-contract.js";
 import { todoRouteHref } from "./todo-route-link.js";
+import { notificationActionLift } from "./digital-notification-position.js";
 import "./digital-notification-toast.css";
 const {apiUrl}=createWebUrls(import.meta.env.BASE_URL);
 export function DigitalNotificationToast({userId}:{userId:string}) {
   const [notice,setNotice]=useState<DigitalNotification|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState("");
   const current=useRef<DigitalNotification|null>(null),running=useRef(false),unavailable=useRef(false);
+  const region=useRef<HTMLElement|null>(null);
+  useEffect(()=>{
+    const element=region.current;
+    if(!element||!notice)return;
+    let frame=0;
+    const measure=()=>{
+      frame=0;
+      if(window.matchMedia("(max-width: 800px)").matches){element.style.removeProperty("--digital-notification-lift");return;}
+      const rect=element.getBoundingClientRect();
+      const prior=Number.parseFloat(element.style.getPropertyValue("--digital-notification-lift"))||0;
+      const actions=Array.from(document.querySelectorAll<HTMLButtonElement>("button.dx-button--primary:not(:disabled), .mobile-actions button:not(:disabled), .responsibility-actions button:not(:disabled), .process-worker-actions button:not(:disabled)"))
+        .filter(button=>!element.contains(button)&&getComputedStyle(button).visibility!=="hidden")
+        .map(button=>button.getBoundingClientRect())
+        .filter(box=>box.width>0&&box.height>0&&box.bottom>72&&box.top<window.innerHeight&&box.right>0&&box.left<window.innerWidth);
+      const lift=notificationActionLift({left:rect.left,right:rect.right,top:rect.top+prior,bottom:rect.bottom+prior},actions);
+      element.style.setProperty("--digital-notification-lift",`${lift}px`);
+    };
+    const schedule=()=>{if(!frame)frame=requestAnimationFrame(measure);};
+    const resize=new ResizeObserver(schedule);resize.observe(element);resize.observe(document.body);
+    const changes=new MutationObserver(schedule);changes.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:["class","disabled"]});
+    window.addEventListener("scroll",schedule,true);window.addEventListener("resize",schedule);schedule();
+    return()=>{resize.disconnect();changes.disconnect();window.removeEventListener("scroll",schedule,true);window.removeEventListener("resize",schedule);cancelAnimationFrame(frame);};
+  },[notice?.eventId]);
   useEffect(()=>{
     const controller=new AbortController();current.current=null;setNotice(null);unavailable.current=false;
     const refresh=async()=>{
@@ -42,5 +66,5 @@ export function DigitalNotificationToast({userId}:{userId:string}) {
     }catch{setError("确认未成功，请重试");}finally{setBusy(false);}
   };
   if(!notice)return null;
-  return <section className="digital-notification-toast" aria-live="polite" aria-label="站内提醒"><p>{notice.title}</p><p className="digital-notification-hint">{notice.actionable?"确认提醒后，待办仍会保留。":"此消息仅供知悉。"}</p>{error&&<p role="alert">{error}</p>}<div><Button disabled={busy} onClick={()=>void dismiss(false)}>我知道了</Button><Button disabled={busy} onClick={()=>void dismiss(true)}>{notice.actionable?"去处理":"查看"}</Button></div></section>;
+  return <section ref={region} className="digital-notification-toast" aria-live="polite" aria-label="站内提醒"><p>{notice.title}</p><p className="digital-notification-hint">{notice.actionable?"确认提醒后，待办仍会保留。":"此消息仅供知悉。"}</p>{error&&<p role="alert">{error}</p>}<div><Button disabled={busy} onClick={()=>void dismiss(false)}>我知道了</Button><Button disabled={busy} onClick={()=>void dismiss(true)}>{notice.actionable?"去处理":"查看"}</Button></div></section>;
 }

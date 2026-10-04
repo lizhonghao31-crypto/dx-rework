@@ -1,4 +1,5 @@
 import { PatternOrderReader } from "../../apps/api/src/pattern-room/order-reader.js";
+import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
 import { exceptions as readReportingExceptions } from "../../apps/api/src/reporting/management-reporting-exceptions.js";
 import {exerciseDevelopmentRoute} from "../helpers/digital-development-route-fixture.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
@@ -166,6 +167,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     tailInspector: randomUUID(),
     ie: randomUUID(),
     worker: randomUUID(),
+    quantityWorker: randomUUID(),
     merchandiser: randomUUID(),
     production: randomUUID(),
     factoryPayables: randomUUID(),
@@ -185,6 +187,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   };
 
   let workerPersonId = "";
+  let quantityWorkerPersonId = "";
   let otherPatternPersonId = "";
   let tailPersonId = "";
   let factorySupplierId = "";
@@ -308,6 +311,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       [ids.tailInspector, "尾查", "tail_inspector"],
       [ids.ie, "IE", "ie_reviewer"],
       [ids.worker, "工人", "worker"],
+      [ids.quantityWorker, "计量乙", "worker"],
       [ids.merchandiser, "订单跟单", "order_merchandiser"],
       [ids.production, "生产管理", "production_management"],
       [ids.factoryPayables, "加工厂应付", "factory_payables"],
@@ -358,6 +362,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       aliases: [],
       reason: "全链验收工人档案",
     })).personId;
+    quantityWorkerPersonId = (await access.createPerson(ownerMasterData(), {personType:"internal",appUserId:ids.quantityWorker,displayName:"计量乙",aliases:[],reason:"隔离多人工序数量验收"})).personId;
     otherPatternPersonId = (await access.createPerson(ownerMasterData(), { personType: "internal", appUserId: ids.otherPatternWorker, displayName: "另一板房工人", aliases: [], reason: "隔离验收换人" })).personId;
     tailPersonId = (await access.createPerson(ownerMasterData(), {
       personType: "internal",
@@ -3124,6 +3129,53 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       await Promise.allSettled([deletion, marking]);
       await markingPool.end();
     }
+  });
+
+  it("N05 rejects effective multi-worker totals above receipt quantity before persisting confirmation and keeps correction history", async () => {
+    const imageId=randomUUID(),receiptImageId=randomUUID();
+    for(const [attachmentId,userId] of [[imageId,ids.qc],[receiptImageId,ids.receivingWarehouse]]) {
+      await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'quantity-ceiling.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)",[attachmentId,`test/${attachmentId}`,"f".repeat(64),userId]);
+    }
+    const receiving=new ReceivingService(database,undefined,undefined,undefined,{allowLegacyStyleInput:true});
+    const receipt=await receiving.create(actor(ids.receivingWarehouse,["warehouse_receiver"],"receiving:create"),{styleNo:"TEST-N05-QUANTITY-CEILING",documentQuantity:100,actualQuantity:100,attachmentIds:[receiptImageId]},randomUUID());
+    const draft=await initiation.createDraft(qc(),{receivingBatchId:receipt.value.receivingBatchId,styleNo:"TEST-N05-QUANTITY-CEILING",orderQuantity:100,orderNo:"TEST-N05-CEILING",merchandiserUserId:ids.merchandiser,processingFactory:{type:"supplier",supplierId:factorySupplierId},tailInspectionRequired:false,inspectionReport:n01CoreInspectionReport("数量上限隔离测试"),problemPart:"袖口",problemDescription:"多人工序有效数量",reworkQuantity:5,attachmentIds:[imageId]},randomUUID());
+    const submitted=await initiation.submit(qc(),draft.value.reworkOrderId,{expectedVersion:draft.value.version},randomUUID());
+    const orderId=submitted.value.reworkOrderId;
+    const saved=await configuration.saveDraft(tailConfigure(),orderId,SaveProcessConfigurationSchema.parse({expectedOrderVersion:submitted.value.version,items:[{source:"catalog",processId:publicProcessId,executionKind:"worker",plannedQuantity:5,pricingUnit:"piece",unitPrice:0.1}]}),randomUUID());
+    const item=saved.value.configuration!.items[0]!;
+    await workerPlan.save(tailAssign(),orderId,{expectedOrderVersion:saved.value.orderVersion,configurationId:saved.value.configuration!.configurationId,expectedConfigurationVersion:saved.value.configuration!.configurationVersion,assignments:[{configurationItemId:item.configurationItemId,memberIds:[workerPersonId,quantityWorkerPersonId]}]},randomUUID());
+    const queued=await configuration.submit(tailConfigure(),orderId,{expectedOrderVersion:saved.value.orderVersion,expectedConfigurationVersion:saved.value.configuration!.configurationVersion},randomUUID());
+    const approved=await configuration.review(ie(),orderId,{expectedOrderVersion:queued.value.orderVersion,expectedConfigurationVersion:queued.value.configuration!.configurationVersion,decision:"approved"},randomUUID());
+    await workerPlan.activateAfterIeApproval(orderId,approved.value.configuration!.configurationVersion,randomUUID());
+    let listed=await work.list(tailAssign(),orderId);
+    const reports=[];
+    for(const [personId,userId,quantity] of [[workerPersonId,ids.worker,3],[quantityWorkerPersonId,ids.quantityWorker,2]] as const) {
+      const task=listed.tasks.find(task=>task.members.some(member=>member.personId===personId))!;
+      const report=await work.submitReport(actor(userId,["worker"],"work:report"),task.workTaskId,{expectedOrderVersion:listed.orderVersion,actualQuantity:quantity,completedAt:new Date().toISOString()},randomUUID());
+      reports.push(report.value.workReportId);listed=await work.list(tailAssign(),orderId);
+    }
+    if(listed.reworkStatus==="in_progress") await work.completeExecution(tailAssign(),orderId,{expectedOrderVersion:listed.orderVersion},randomUUID());
+    let view=await wholeOrder.get(tailAudit(),orderId);
+    expect(view).toMatchObject({reworkStatus:"pending_order_review",processes:[expect.objectContaining({completedQuantity:5,originalCompletedQuantity:5})]});
+    // Both individual quantities remain within 100; only the per-process total is excessive.
+    await wholeOrder.correctReportQuantity(tailAudit(),reports[0]!,{expectedOrderVersion:view.orderVersion,effectiveQuantity:99,reason:"隔离复现甲99加乙2"},randomUUID());
+    view=await wholeOrder.get(tailAudit(),orderId);
+    expect(view.processes[0]).toMatchObject({completedQuantity:101,originalCompletedQuantity:5});
+    const input={expectedOrderVersion:view.orderVersion,finalQuantities:[{configurationItemId:item.configurationItemId,finalConfirmedQuantity:101}],temporaryCoefficients:[]};
+    await expect(wholeOrder.approve(worker(),orderId,input,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(wholeOrder.approve(tailAudit(),orderId,input,randomUUID())).rejects.toMatchObject({code:"VALIDATION_ERROR",statusCode:400,message:`工序“${item.processName}”有效报数合计 101 件不能超过本次实收数量 100 件`});
+    expect((await wholeOrder.get(tailAudit(),orderId))).toMatchObject({reworkStatus:"pending_order_review",orderVersion:view.orderVersion});
+    expect((await database.query("SELECT count(*)::int AS count FROM rework_tail_completion_confirmations WHERE rework_order_id=$1",[orderId])).rows[0]).toEqual({count:0});
+    expect((await database.query("SELECT status,version FROM rework_orders WHERE rework_order_id=$1",[orderId])).rows[0]).toEqual({status:"pending_order_review",version:view.orderVersion});
+    // Restore the exact legal boundary using an appended correction, not an overwritten report.
+    await wholeOrder.correctReportQuantity(tailAudit(),reports[0]!,{expectedOrderVersion:view.orderVersion,effectiveQuantity:98,reason:"隔离恢复合计100边界"},randomUUID());
+    view=await wholeOrder.get(tailAudit(),orderId);
+    expect(view.processes[0]).toMatchObject({completedQuantity:100,originalCompletedQuantity:5});
+    expect((await database.query("SELECT actual_quantity::int AS quantity FROM rework_work_reports WHERE work_report_id=ANY($1::uuid[]) ORDER BY actual_quantity",[reports])).rows).toEqual([{quantity:2},{quantity:3}]);
+    expect((await database.query("SELECT effective_quantity::int AS quantity FROM rework_work_report_quantity_revisions WHERE work_report_id=$1 ORDER BY revision_version",[reports[0]])).rows).toEqual([{quantity:99},{quantity:98}]);
+    const confirmed=await wholeOrder.approve(tailAudit(),orderId,{...input,expectedOrderVersion:view.orderVersion,finalQuantities:[{configurationItemId:item.configurationItemId,finalConfirmedQuantity:100}]},randomUUID());
+    expect(confirmed.value.reworkStatus).toBe("pending_final_quantity_ie_review");
+    expect((await database.query("SELECT worker_reported_quantity::int AS worker,final_confirmed_quantity::int AS final FROM rework_tail_completion_quantities q JOIN rework_tail_completion_confirmations c USING(confirmation_id) WHERE c.rework_order_id=$1",[orderId])).rows).toEqual([{worker:100,final:100}]);
   });
 
   it("P07 development routes preserve original pattern wages and final confirmation",async()=>{

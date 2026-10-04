@@ -5,6 +5,14 @@ import { ApplicationError } from "../platform/errors.js";
 type QueryClient = Pick<Pool, "query"> | Pick<PoolClient, "query">;
 type QuantityFact = Readonly<{ label: string; quantity: number }>;
 
+export const sourceReceivingQuantityCeilingError = (cause: unknown): ApplicationError | null => {
+  if (!cause || typeof cause !== "object") return null;
+  const failure = cause as { code?: unknown; message?: unknown };
+  if (failure.code !== "23514" || typeof failure.message !== "string") return null;
+  const match = /^rework quantity exceeds source receiving actual quantity ceiling (\d+(?:\.\d+)?)$/.exec(failure.message);
+  return match ? new ApplicationError("VALIDATION_ERROR", `确认数量不能超过本次实收数量 ${Number(match[1])} 件，请刷新报数后重试`, 400) : null;
+};
+
 export const sourceReceivingActualQuantity = async (
   client: QueryClient,
   reworkOrderId: string,
