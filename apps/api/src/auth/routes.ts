@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 import { registerAcceptanceControlRoutes } from "./acceptance-control-routes.js";
-import type { AuthService } from "./service.js";
+import { AuthDeniedError, type AuthService } from "./service.js";
 
 const COOKIE = "dx_rework_session";
 const QR_COOKIE = "dx_rework_qr_binding";
@@ -33,7 +33,6 @@ export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, opti
     const now = Date.now();
     if (globalAttempts.resetsAt <= now) globalAttempts = { count: 0, resetsAt: now + PUBLIC_LOGIN_WINDOW_MS };
     if (globalAttempts.count >= 200) return reply.header("retry-after", Math.max(1, Math.ceil((globalAttempts.resetsAt - now) / 1000))).code(429).send({ error: { code: "RATE_LIMITED", message: "登录请求过于频繁，请稍后重试", requestId: request.id } });
-    globalAttempts.count += 1;
     const key = request.ip;
     const current = loginAttempts.get(key);
     if (!current || current.resetsAt <= now) {
@@ -44,12 +43,14 @@ export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, opti
         if (loginAttempts.size >= PUBLIC_LOGIN_TRACKER_CAPACITY) loginAttempts.delete(loginAttempts.keys().next().value!);
       }
       loginAttempts.set(key, { count: 1, resetsAt: now + PUBLIC_LOGIN_WINDOW_MS });
+      globalAttempts.count += 1;
       return;
     }
     if (current.count >= PUBLIC_LOGIN_LIMIT) {
       return reply.header("retry-after", Math.max(1, Math.ceil((current.resetsAt - now) / 1000))).code(429).send({ error: { code: "RATE_LIMITED", message: "登录请求过于频繁，请稍后重试", requestId: request.id } });
     }
     current.count += 1;
+    globalAttempts.count += 1;
   };
 
   if (auth.acceptanceControlAvailable()) {
@@ -93,7 +94,8 @@ export function registerAuthRoutes(app: FastifyInstance, auth: AuthService, opti
     try {
       const result = await auth.loginQr(request.query.authCode ?? request.query.code ?? "", request.query.state ?? "", cookieToken(request, QR_COOKIE));
       return reply.header("set-cookie", [clearQrBinding, setSession(result.token)]).code(303).header("location", options.appBasePath).send();
-    } catch {
+    } catch (error) {
+      if (error instanceof AuthDeniedError && error.code === "AUTH_BUSY") throw error;
       request.log.warn({ requestId: request.id }, "QR callback denied");
       return reply.code(303).header("location", `${options.appBasePath}auth/denied`).send();
     }
