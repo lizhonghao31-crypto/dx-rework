@@ -14,6 +14,10 @@ describe("contract return two-file upload", () => {
     expect(contractReturnFileError([pdf(), new File(["png"], "附件.png", { type: "image/png" })])).toBeNull();
     expect(contractReturnFileError([{ type: "text/plain", size: 1 }])).toBeTruthy();
     expect(contractReturnFileError([{ type: "application/pdf", size: 20 * 1024 * 1024 }, { type: "application/pdf", size: 1 }])).toBeTruthy();
+    expect(contractReturnFileError([pdf()], 1, 100)).toBeNull();
+    expect(contractReturnFileError([pdf(), pdf()], 1)).toBeTruthy();
+    expect(contractReturnFileError([pdf()], 2)).toBeTruthy();
+    expect(contractReturnFileError([pdf()], 1, 20 * 1024 * 1024)).toBeTruthy();
   });
   it("retains the first ready file, retries only the failed file and returns one stable submission", async () => {
     const pending = { files: [pdf(), pdf()], attachmentIds: [] as string[], key: "stable-key" };

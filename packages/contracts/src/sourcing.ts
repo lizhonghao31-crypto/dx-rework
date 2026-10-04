@@ -302,6 +302,8 @@ export const SourcingContractReturnResponseSchema = z.object({
   contractReturnOverdueHours: z.number().int().nonnegative().nullable(),
   uploadedByName: z.string().nullable(),
   canUpload: z.boolean(),
+  uploadedFileCount: z.number().int().nonnegative().optional(),
+  uploadedTotalBytes: z.number().int().nonnegative().optional(),
   currentContractReturned: z.boolean().default(false),
   currentContractDocumentId: IdSchema.nullable().default(null),
   signedContractDocumentId: IdSchema.nullable().default(null),
@@ -311,7 +313,7 @@ export const SourcingContractReturnResponseSchema = z.object({
     attachmentId: IdSchema,filename: z.string(),
     mimeType: z.enum(["application/pdf","image/jpeg","image/png"]),
     sizeBytes: z.number().int().positive(),
-  }).strict()).max(10),
+  }).strict()),
   history: z.array(z.object({
     revision: z.number().int().positive(),
     submittedAt: z.string().datetime(),
