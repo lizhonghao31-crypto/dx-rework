@@ -1,3 +1,5 @@
+import type { DigitalJourneyQuery } from "./journey-query.js";
+import { JourneyFilterSchema } from "@dx-rework/contracts/digital-production-journey";
 import { registerDigitalAnalysisRoutes } from "./reporting-routes.js";
 import type { DigitalAnalysisQuery } from "./reporting-query.js";
 import type { DigitalCockpitQuery } from "./cockpit-query.js";
@@ -37,6 +39,7 @@ import { assertIdentityActor, type DigitalProductionIdentityService } from "./id
 export type DigitalIdentityDependencies = {
   analysis?: DigitalAnalysisQuery;
   cockpit?: DigitalCockpitQuery;
+  journeys?: DigitalJourneyQuery;
   budgetService?: DigitalBudgetService;
   instructionService?: ProductionInstructionService;
   bulkPreparationService?: BulkPreparationService;
@@ -82,6 +85,14 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
   app.addHook("onSend", async (request, reply) => {
     if (request.routeOptions.url?.startsWith("/digital-production/")) reply.header("cache-control", "no-store");
   });
+  if (dependencies.journeys) {
+    app.get("/digital-production/journeys", async request => dependencies.journeys!.list(await actor(request), parse(JourneyFilterSchema, request.query)));
+    app.get("/digital-production/journeys/export", async request => dependencies.journeys!.export(await actor(request), parse(JourneyFilterSchema, request.query)));
+    app.get("/digital-production/journeys/:id", async request => {
+      const query = parse(cockpitZ.object({ round: cockpitZ.coerce.number().int().positive().max(10000).optional() }).strict(), request.query);
+      return dependencies.journeys!.read(await actor(request), id(request, "id"), query.round);
+    });
+  }
   if (dependencies.cockpit) app.get("/digital-production/cockpit", async request => dependencies.cockpit!.list(await actor(request), parse(cockpitZ.object({ page: cockpitZ.coerce.number().int().min(1).max(100000).default(1), search: cockpitZ.string().trim().max(100).default(""), stage: cockpitZ.enum(["development", "bulk"]).default("development"), workload: cockpitZ.enum(["all","unassigned","blocked","urgent"]).default("all") }).strict(), request.query)));
   app.get("/digital-production/options", async request => {
     const trusted = await actor(request);

@@ -17,12 +17,12 @@ const initial = (): BudgetDocument => ({ fabricType: "", productCategory: "", mo
     ...[...Array<string>(6).fill("通用物料"), ...Array<string>(3).fill("拉链"), ...Array<string>(3).fill("扣类"), ...Array<string>(3).fill("橡筋类"), ...Array<string>(3).fill("装饰牌标"), ...Array<string>(4).fill("花边/织带"), ...Array<string>(3).fill("其它")].map(category => newRow("辅料", category)),
     ...Array.from({ length: 4 }, () => newRow("外发工序"))] });
 const columns = { category: "类型", name: "物料或工序", specification: "规格", unit: "单位", supplier: "供应方", consumption: "单件用量", unitPrice: "单价不含税" } as const;
-export function DigitalBudgetPanel({ order, onClose }: { order: DigitalOrder; onClose: () => void }) {
+export function DigitalBudgetPanel({ order, onClose, initialVersion }: { order: DigitalOrder; onClose: () => void; initialVersion?: number | undefined }) {
   const [sheet, setSheet] = useState<BudgetSheet | null>(null), [doc, setDoc] = useState<BudgetDocument>(initial);
   const [busy, setBusy] = useState(false), [dirty, setDirty] = useState(false), [error, setError] = useState("");
   const writing = useRef(false), operation = useRef<{ payload: string; key: string } | null>(null);
   const base = `orders/${order.productionOrderId}/budget`;
-  useEffect(() => { let live = true; void digitalRequest<BudgetSheet>(base).then(value => { if (live) { setSheet(value); setDoc(value.document ?? initial()); } }).catch(reason => { if (live) setError(reason.message); }); return () => { live = false; }; }, [base]);
+  useEffect(() => { let live = true; void digitalRequest<BudgetSheet>(`${base}${initialVersion?`?version=${initialVersion}`:""}`).then(value => { if (live) { setSheet(value); setDoc(value.document ?? initial()); } }).catch(reason => { if (live) setError(reason.message); }); return () => { live = false; }; }, [base,initialVersion]);
   const edit = (patch: Partial<BudgetDocument>) => { setDoc(current => ({ ...current, ...patch })); setDirty(true); };
   const changeRow = (rowId: string, patch: Partial<BudgetRow>) => edit({ rows: doc.rows.map(row => row.rowId === rowId ? { ...row, ...patch } : row) });
   const run = async (publish: boolean) => {
@@ -60,7 +60,7 @@ export function DigitalBudgetPanel({ order, onClose }: { order: DigitalOrder; on
   return <Surface><section className="budget-editor">
     <div className="pattern-actions budget-controls"><Button disabled={busy} onClick={async () => { if (!dirty || await confirmInApp("有未保存修改，确定离开？")) onClose(); }}>返回</Button><Button disabled={!sheet?.document || dirty || busy} onClick={() => window.print()}>打印 / 保存 PDF</Button><span>{sheet?.status === "published" ? "已发布" : "草稿"}{sheet?.version ? ` · 版本 ${sheet.version}` : ""}</span></div>
     {error && <p role="alert">{error}</p>}
-    {sheet?.canSubmitSourcing && !dirty && <a className="dx-button dx-button--secondary budget-controls" href={`${urls.pageUrl("ui/sourcing/create")}?budget=${order.productionOrderId}&budgetVersion=${sheet.version}`}>核实并发起外发</a>}
+    {sheet?.canSubmitSourcing && initialVersion===undefined && !dirty && <a className="dx-button dx-button--secondary budget-controls" href={`${urls.pageUrl("ui/sourcing/create")}?budget=${order.productionOrderId}&budgetVersion=${sheet.version}`}>核实并发起外发</a>}
     {sheet?.sourcingCaseId && <a className="dx-button dx-button--secondary budget-controls" href={urls.pageUrl(`ui/sourcing/orders/${sheet.sourcingCaseId}`)}>查看外发订单</a>}
     {sheet && <form onSubmit={event => { event.preventDefault(); void run(false); }}><fieldset disabled={!sheet.canEdit || busy}>
       <header><h2>广州市达兴制衣有限公司</h2><h3>成本预算表</h3></header>
