@@ -81,6 +81,8 @@ run("P04 in-app notifications PostgreSQL", () => {
     const claims=await Promise.all([notifications.claim(actor()),notifications.claim(actor())]);
     const notice=claims.flatMap(r=>r.notification?[r.notification]:[]);
     expect(notice).toHaveLength(1);expect(notice[0]?.route.entityId).toBe(taskId);
+    expect(notice[0]?.context).toMatchObject({orderId:resource.id,colors:["黑"],poNumbers:[]});
+    expect(notice[0]?.context?.styleNo).toBe(input().designStyleNo);
     await notifications.acknowledge(actor(),notice[0]!.eventId);
     expect((await notifications.claim(actor())).notification).toBeNull();
     expect(await tasks.read(actor(),taskId)).toEqual(before);

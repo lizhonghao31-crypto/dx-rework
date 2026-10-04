@@ -95,6 +95,7 @@ export function DigitalProductionPage() {
   if (budgetOrder) return <div className="pattern-orders digital-production"><DigitalBudgetPanel key={budgetOrder.productionOrderId} order={budgetOrder} onClose={()=>closeDetail(["budget"],()=>setBudgetOrder(null))} /></div>;
   if (developmentSource) return <div className="pattern-orders digital-production"><DigitalDevelopmentPanel key={developmentSource} sourceId={developmentSource} initialRound={Number(new URLSearchParams(window.location.search).get("round"))||undefined} onClose={()=>closeDetail(["development", "round"],()=>setDevelopmentSource(null))} /></div>;
   return <div className="pattern-orders digital-production"><Header title="数字生产订单" badge="订单源头" badgePlacement="subtitle" />
+    <a href={urls.pageUrl("ui/digital-cockpit")}>生产管理座舱</a>
     {error && <p role="alert">{error}</p>}
     {access && <DigitalTasksPanel options={access} />}
     {options && <><Surface><div className="pattern-actions"><Button onClick={() => { setMode("list"); setSelected(null); }}>订单列表</Button>

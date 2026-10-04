@@ -45,7 +45,7 @@ try {
   await page.setViewportSize({width,height});await ready();
   const b=await button.boundingBox(),t=await toast.boundingBox();
   assert(t&&t.width<=300&&t.x>=0&&t.y>=0&&t.x+t.width<=width&&t.y+t.height<=height);
-  if(width>800){assert(Math.abs(width-t.x-t.width-16)<=1);assert(t.y+t.height<=b.y-7);}
+  assert(Math.abs(width-t.x-t.width)<=1);assert(t.y+t.height<=b.y-7);
   assert.equal(acknowledgements,0);assert.equal(claims,initialClaims);
   await page.screenshot({path:resolve(evidence,`${width}x${height}.png`)});
   console.log(JSON.stringify({width,height,button:b,toast:t}));
@@ -60,7 +60,7 @@ try {
  await page.screenshot({path:resolve(evidence,'long-message.png')});
  // Returning to a page position with no intersecting actions restores the default corner.
  await page.evaluate(()=>window.scrollTo(0,0));
- await page.waitForFunction(()=>{const r=document.querySelector('.digital-notification-toast').getBoundingClientRect();return Math.abs(innerHeight-r.bottom-16)<=1;});
+ await page.waitForFunction(()=>{const r=document.querySelector('.digital-notification-toast').getBoundingClientRect();return Math.abs(innerHeight-r.bottom)<=1;});
  await page.evaluate(()=>{for(let i=0;i<20;i++)window.dispatchEvent(new Event('dx-rework:todo-refresh'));});
  assert.equal(acknowledgements,0);assert.equal(claims,initialClaims);
  await ready();

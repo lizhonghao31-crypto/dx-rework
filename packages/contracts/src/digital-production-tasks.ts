@@ -9,7 +9,7 @@ export const DigitalTimeCorrectionSchema = z.object({ eventId: z.string().uuid()
 export type DigitalTaskState = z.infer<typeof DigitalTaskStateSchema>;
 export type DigitalTimeQuality = z.infer<typeof DigitalTimeQualitySchema>;
 export type DigitalTask = {
-  taskId: string; orderId: string | null; sourceId: string | null; taskKind: string; label: string;
+  priority?: "normal" | "urgent"; taskId: string; orderId: string | null; sourceId: string | null; taskKind: string; label: string;
   assigneeId: string | null; state: DigitalTaskState; routeVersion: number; occurrence: number;
   enteredAt: string | null; recordedAt: string; completedAt: string | null; paused: boolean;
   dueAt: string | null; warningAt: string | null; slaHours: number | null; policyVersion: number;

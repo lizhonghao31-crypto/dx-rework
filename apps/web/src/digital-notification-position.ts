@@ -1,6 +1,6 @@
 export type NotificationBox = Readonly<{ left: number; right: number; top: number; bottom: number }>;
 
-// Only lift a desktop notification when it overlaps a visible business action.
+// Only lift a notification when it overlaps a visible business action.
 // Work from the default corner position, so repeated measurements never drift.
 export function notificationActionLift(base: NotificationBox, actions: readonly NotificationBox[]): number {
   let lift = 0;

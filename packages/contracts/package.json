@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./digital-production-cockpit": { "types": "./src/digital-production-cockpit.ts", "import": "./dist/digital-production-cockpit.js" },
     "./digital-budget": {
       "types": "./src/digital-budget.ts",
       "import": "./dist/digital-budget.js"
