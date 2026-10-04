@@ -70,7 +70,7 @@ export async function exerciseOrderClosure(db:Pool,sourcing:SourcingService,id:s
    const fresh=await closure.read(primary,id);expect(fresh.lines[0]!.actualQuantity).toBe(51);expect(fresh.lines[1]!.reworks).toHaveLength(1);expect(fresh.closed).toEqual(concurrent[0]!.closed);
   }finally{resume();readSpy.mockRestore();await Promise.allSettled([closing,repeated,...(correction?[correction]:[]),...(newRework?[newRework]:[])]);}
  }
- sheet=concurrent[0]!;expect(concurrent[1]!.closed).toEqual(sheet.closed);expect(sheet.stage).toBe('特殊结案');expect(JSON.stringify(sheet.lines)).toBe(before);expect(sheet.closed!.outstanding.some(x=>x.includes('未完成'))).toBe(true);expect(sheet.shipmentStatus).toBe('未知');expect(sheet.customerReceiptStatus).toBe('未知');expect((await closure.close(manager,id,input,key)).closed).toEqual(sheet.closed);
+ sheet=concurrent[0]!;expect(concurrent[1]!.closed).toEqual(sheet.closed);expect(sheet.stage).toBe('特殊结案');expect(sheet.lines).toEqual(JSON.parse(before));expect(sheet.closed!.outstanding.some(x=>x.includes('未完成'))).toBe(true);expect(sheet.shipmentStatus).toBe('未知');expect(sheet.customerReceiptStatus).toBe('未知');expect((await closure.close(manager,id,input,key)).closed).toEqual(sheet.closed);
  expect((await db.query('SELECT status FROM rework_orders WHERE rework_order_id=$1',[draft.value.reworkOrderId])).rows[0].status).toBe('draft');
  const flow=new FactoryFlowService(db),factory=await flow.read(primary,id);await expect(flow.followup(primary,id,{expectedRevision:factory.revision,kind:'工厂到料',occurredAt:null,note:'TEST结案后不得继续生产待办',trackingNumber:''},randomUUID())).rejects.toMatchObject({statusCode:409});
  const board=(await receiving.board('2000-01-01','2999-12-31',order.lines[0]!.formalStyleNo!)).rows[0]!;

@@ -1,3 +1,7 @@
+import Fastify from "fastify";
+import { registerDigitalAnalysisRoutes } from "../../apps/api/src/production-platform/reporting-routes.js";
+import { DigitalAnalysisFilterSchema } from "@dx-rework/contracts/digital-production-analysis";
+import { DigitalAnalysisQuery } from "../../apps/api/src/production-platform/reporting-query.js";
 import { DigitalCockpitQuery } from "../../apps/api/src/production-platform/cockpit-query.js";
 import { OrderClosureService } from "../../apps/api/src/production-platform/order-closure-service.js";
 import {ProductionClosureService} from "../../apps/api/src/sourcing/production-closure-service.js";
@@ -3075,6 +3079,51 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     return { order, designer, document, imageId, budget };
   };
 
+  it('P16 keeps a source-backed analysis and improvement loop inside scope and original export rights',async()=>{
+    const fixture=await budgetFixture(),primary=merchandiserActor(),root=rootActor();
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true}))!;
+    const analysis=new DigitalAnalysisQuery(database),filters=DigitalAnalysisFilterSchema.parse({from:'2020-01-01',to:'2030-12-31',customer:'PD',designer:fixture.designer.actorId,category:'上衣'});
+    const result=await analysis.list(fixture.designer,filters);
+    expect(result.total).toBeGreaterThan(0);expect(result.summary.newStyles).toBe(1);expect(result.rows.every(row=>row.styleNo===fixture.order.designStyleNo)).toBe(true);
+    expect(result.canExport).toBe(false);expect(result.canRecord).toBe(false);
+    await expect(analysis.export(fixture.designer,filters)).rejects.toMatchObject({statusCode:403});
+    const stranger=await budgetFixture();expect((await analysis.list(stranger.designer,filters)).total).toBe(0);
+    const worker=ready.people.pattern_room_worker!,workerResult=await analysis.list(worker,filters);
+    expect(workerResult.rows.every(row=>row.assigneeId===worker.actorId||row.orderId===ready.id)).toBe(true);
+    const taskId=result.rows.find(row=>row.state==='ready')!.taskId;
+    const taskService=new DigitalProductionTaskService(database);await taskService.feedback(root,taskId,'TEST交接资料待核实',true,randomUUID());
+    expect((await analysis.list(root,filters)).rows.find(row=>row.taskId===taskId)?.events.some(event=>event.kind==='blocked')).toBe(true);
+    const note={filters,taskIds:[taskId],conclusion:'TEST发现交接条件滞留，已回看原任务，无法推断净工时',action:'TEST主管核对交接登记并记录下一次观察；不修改工资或真实权限',observeAt:new Date(Date.now()+86400000).toISOString()};
+    await expect(analysis.record(fixture.designer,note,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(analysis.record(root,{...note,taskIds:[randomUUID()]},randomUUID())).rejects.toMatchObject({statusCode:404});
+    const key=randomUUID(),saved=await analysis.record(root,note,key);expect(await analysis.record(root,note,key)).toEqual(saved);
+    await expect(analysis.record(root,{...note,conclusion:'TEST不同结论'},key)).rejects.toMatchObject({statusCode:409});
+    const followup=await analysis.list(root,filters);expect(followup.notes.find(item=>item.id===saved.id)).toMatchObject({conclusion:note.conclusion,action:note.action,taskIds:[taskId],ruleVersion:'digital-production-p16-v1'});
+    await taskService.feedback(root,taskId,'TEST回看原单后交接资料已核实',false,randomUUID());
+    const observed=(await analysis.list(root,filters)).rows.find(row=>row.taskId===taskId)!;expect(observed.state).toBe('ready');expect(observed.events.some(event=>event.kind==='unblocked')).toBe(true);expect(observed.waitingSeconds).toBeGreaterThanOrEqual(0);
+    const conditionTask=observed.taskId,connection=await database.connect();
+    try{
+      const condition=(await connection.query("SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1 LIMIT 1",[conditionTask])).rows[0].condition_key;
+      await connection.query('BEGIN');await taskService.setConditionWithClient(connection,root,conditionTask,condition,false,null,'TEST前置失效发生时间未知');await connection.query('COMMIT');
+      expect((await analysis.list(root,filters)).rows.find(row=>row.taskId===conditionTask)).toMatchObject({state:'blocked',unknownWaiting:1});
+      await connection.query('BEGIN');await taskService.setConditionWithClient(connection,root,conditionTask,condition,true,new Date().toISOString(),'TEST前置恢复');await taskService.refreshBusinessConditionsWithClient(connection,root,conditionTask);await connection.query('COMMIT');
+      const restored=(await analysis.list(root,filters)).rows.find(row=>row.taskId===conditionTask)!;
+      expect(restored.state).toBe('ready');expect(restored.unknownWaiting).toBe(1);expect(restored.pendingConditions).toEqual([]);
+    }finally{await connection.query('ROLLBACK');connection.release();}
+    const workbook=await analysis.export(root,filters);expect(workbook.subarray(0,2).toString()).toBe('PK');
+    expect((await database.query("SELECT count(*)::int AS n FROM audit_events WHERE action='digital.analysis.recorded' AND id=$1",[saved.id])).rows[0].n).toBe(1);
+    expect(JSON.stringify(result)).not.toMatch(/salePrice|unitPrice|budget_amount|wageAmount/);
+    const app=Fastify();app.setErrorHandler((error,_request,reply)=>{const problem=error as {statusCode?:number;message:string};reply.code(problem.statusCode??500).send({error:problem.message});});
+    registerDigitalAnalysisRoutes(app,{service:new DigitalProductionIdentityService(database,true),creationEnabled:true,authenticate:async()=>({id:fixture.designer.actorId,displayName:'TEST设计师',businessRoles:['sample_designer'],capabilities:[]})},analysis);
+    try{
+      const query=new URLSearchParams(Object.entries(filters).map(([key,value])=>[key,String(value)])).toString();
+      expect((await app.inject({method:'GET',url:`/digital-production/analysis?${query}`})).statusCode).toBe(200);
+      expect((await app.inject({method:'GET',url:`/digital-production/analysis/export?${query}`})).statusCode).toBe(403);
+      expect((await app.inject({method:'POST',url:'/digital-production/analysis/notes',payload:note,headers:{'idempotency-key':randomUUID()}})).statusCode).toBe(403);
+      expect((await app.inject({method:'GET',url:'/digital-production/analysis?from=bad&to=bad'})).statusCode).toBe(400);
+    }finally{await app.close();}
+
+  });
   it("P09 preserves published budgets, rejects technical readers and stale or unauthorized writes", async () => {
     const { order, designer, document, imageId, budget } = await budgetFixture(), id = order.productionOrderId;
     const key = randomUUID();

@@ -1,3 +1,4 @@
+import { DigitalAnalysisPage } from "./digital-analysis-page.js";
 import { DigitalCockpitPage } from "./digital-cockpit-page.js";
 import { DigitalProductionPage } from "./digital-production-page.js";
 import { PatternOrderCreatePage } from "./pattern-order-create-page.js";
@@ -273,7 +274,8 @@ export function App() {
   const sourcingOrderMatch = path.match(/^\/ui\/sourcing\/orders\/([0-9a-f-]{36})$/i);
   const cuttingOrderMatch = path.match(/^\/ui\/cutting\/orders\/([0-9a-f-]{36})$/i);
   let page;
-  if (path === "/ui/digital-cockpit") page = <DigitalCockpitPage />;
+  if (path === "/ui/digital-analysis") page = <Shell active="订单打板"><DigitalAnalysisPage /></Shell>;
+  else if (path === "/ui/digital-cockpit") page = <DigitalCockpitPage />;
   else if (path === "/ui/digital-production") page = <Shell active="订单打板"><DigitalProductionPage key={search} /></Shell>;
   else if (path === "/ui/home") page = <HomeLanding />;
   else if (path === "/ui/sourcing" || path === "/ui/sourcing/pending") page = <SourcingWorkspacePage view="pending" />;
@@ -348,7 +350,7 @@ export function App() {
 
   const owner = { requiredRole: "owner_group" } as const;
 
-  if (path === "/ui/digital-production" || path === "/ui/digital-cockpit") return <AuthGate requiredAnyOf={["sample_designer", "order_merchandiser", "production_management", "owner_group", "pattern_room_supervisor", "development_clerk", "pattern_room_tail_inspector", "pattern_room_worker", "quality_control", "embroidery_washing_merchandiser", "warehouse_receiver", "cutting_worker"].map(requiredRole => ({ requiredRole }))}>{page}</AuthGate>;
+  if (path === "/ui/digital-production" || path === "/ui/digital-cockpit" || path === "/ui/digital-analysis") return <AuthGate requiredAnyOf={["sample_designer", "order_merchandiser", "production_management", "owner_group", "pattern_room_supervisor", "development_clerk", "pattern_room_tail_inspector", "pattern_room_worker", "quality_control", "embroidery_washing_merchandiser", "warehouse_receiver", "cutting_worker"].map(requiredRole => ({ requiredRole }))}>{page}</AuthGate>;
   if (path === "/ui/home") return <AuthGate>{page}</AuthGate>;
   if (path.startsWith("/ui/samples")) {
     if (path === "/ui/samples/handoff") return <AuthGate requiredRole="sample_administrative" requiredCapability="sample:view_basic">{page}</AuthGate>;
