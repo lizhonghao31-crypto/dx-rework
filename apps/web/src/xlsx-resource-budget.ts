@@ -44,7 +44,7 @@ export async function validateXlsxResourceBudget(bytes: Uint8Array): Promise<voi
   let total = 0;
   for (const entry of entries) {
     const compressed = bytes.slice(entry.start, entry.start + entry.size);
-    let stream: ReadableStream<Uint8Array> = new Blob([compressed]).stream();
+    let stream: ReadableStream<Uint8Array<ArrayBuffer>> = new Blob([compressed]).stream();
     if (entry.method === 8) {
       try { stream = stream.pipeThrough(new DecompressionStream("deflate-raw")); } catch { reject(); }
     }
