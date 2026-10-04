@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ContractContentSchema } from "./contract-management.js";
 import { duplicateSourcingLineMessage } from "./sourcing-style-identity.js";
 
 const IdSchema = z.string().uuid();
@@ -290,7 +291,7 @@ export const SourcingContractStateResponseSchema = z.object({
 }).strict();
 
 export const SourcingContractReturnUploadSchema = z.object({
-  attachmentIds: z.array(IdSchema).min(1).max(10).refine(ids=>new Set(ids).size===ids.length),
+  attachmentIds: z.array(IdSchema).min(1).max(2).refine(ids=>new Set(ids).size===ids.length),
 }).strict();
 export const SourcingContractReturnResponseSchema = z.object({
   contractReturnMonitoring: z.boolean(),
@@ -334,6 +335,7 @@ export const RecordSourcingContractSchema = z.object({
 }).strict();
 
 export const RequestSourcingFactoryChangeSchema = z.object({
+  craftIds: z.array(IdSchema).min(1).max(MAX_SOURCING_PROCESSES).refine(ids => new Set(ids).size === ids.length, "工艺不能重复").optional(),
   supplierId: IdSchema,
   unitPrice: MoneyInputSchema,
   changeReason: z.string().trim().min(1, "换厂原因不能为空").max(500),
@@ -350,6 +352,8 @@ export const SourcingFactoryChangeStateSchema = z.object({
   initiatorRole: z.enum(["order_merchandiser", "production_management", "owner_group"]),
   proposedSupplierId: IdSchema,
   proposedSupplierName: z.string(),
+  proposedProcesses: z.array(z.string()).max(MAX_SOURCING_PROCESSES).optional(),
+  changesCrafts: z.boolean().optional(),
   proposedUnitPrice: z.string(),
   proposedQuantity: z.number().int().positive(),
   proposedTotalAmount: z.string(),
@@ -505,7 +509,15 @@ export const SourcingCaseLineSchema = z.object({
   legacy: z.boolean(),
 }).strict();
 
+export const SourcingContractDisplaySchema = ContractContentSchema.pick({
+  contractNumber: true, gender: true, styleName: true, partyBName: true,
+  estimatedCutPieceSendDate: true, deliveryDate: true, processes: true,
+  lines: true, totalQuantity: true, totalAmount: true,
+}).extend({ sourcingContractDocumentId: IdSchema, contractVersion: z.number().int().positive(),
+  linesMatchOrder: z.boolean() }).strict();
+
 export const SourcingCaseSummarySchema = z.object({
+  contractDisplay: SourcingContractDisplaySchema.optional(),
   identityRevision: z.number().int().nonnegative().optional(),
   gender: z.enum(["男装", "女装"]).nullable().default(null),
   styleName: z.string().nullable().default(null),

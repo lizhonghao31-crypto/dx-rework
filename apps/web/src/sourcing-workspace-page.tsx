@@ -1,3 +1,5 @@
+import { contractReturnFileError, finishContractReturnUpload, type ContractReturnUpload } from "./sourcing-contract-return-upload.js";
+import { sourcingCurrentDisplay } from "./sourcing-current-display.js";
 import { SourcingReturnDialog } from "./sourcing-return-dialog.js";
 import { isMerchandiserOnly } from "./sourcing-role-visibility.js";
 import { sourcingContractReturnBadgeLabel, sourcingContractReturnLabel } from "./sourcing-contract-return-presentation.js";
@@ -144,7 +146,7 @@ type LinePriceDraft = Readonly<{ position: number; unitPrice: string }>;
 type QuoteDraft = Readonly<{ linePrices: readonly LinePriceDraft[]; quoteReason: string }>;
 type DecisionDraft = Readonly<{ supplierId: string; linePrices: readonly LinePriceDraft[]; decisionReason: string; cuttingProcess: "" | "in_house" | "outsourced" | "other"; cuttingProcessOther: string }>;
 type FinanceReviewDraft = Readonly<{ differenceFields: readonly string[]; differenceReason: string }>;
-type FactoryChangeDraft = Readonly<{ supplierId: string; unitPrice: string; changeReason: string }>;
+type FactoryChangeDraft = Readonly<{ supplierId: string; unitPrice: string; changeReason: string; craftIds?: readonly string[] | undefined }>;
 type ContractSupplementDraft = Readonly<Partial<Record<SourcingContractMissingField, string>>>;
 
 class SourcingRequestError extends SubmissionRequestError {}
@@ -1142,7 +1144,13 @@ function OrderDetailPage({
   const contractUploadGuard=useRef(false);
   const contractFileInput=useRef<HTMLInputElement | null>(null);
   const [contractReturnError,setContractReturnError] = useState("");
+  const contractPendingUpload = useRef<ContractReturnUpload | null>(null);
   const [contractPendingSubmission,setContractPendingSubmission] = useState<{attachmentIds:string[];key:string}|null>(null);
+  useEffect(()=>{
+    contractPendingUpload.current=null;
+    setContractPendingSubmission(null);
+    setContractReturnError("");
+  },[sourcingCaseId]);
   const [dispatchState, setDispatchState] = useState<SourcingDispatchState>({ item: null, canDispatch: false });
   const [contractSupplement, setContractSupplement] = useState<ContractSupplementDraft>({});
   const [factoryChangeDraft, setFactoryChangeDraft] = useState<FactoryChangeDraft>({ supplierId: "", unitPrice: "", changeReason: "" });
@@ -1220,6 +1228,7 @@ function OrderDetailPage({
         supplierId: current.supplierId,
         unitPrice: current.unitPrice || detail.decision?.unitPrice || "",
         changeReason: current.changeReason,
+        ...(current.craftIds ? { craftIds: current.craftIds } : {}),
       }));
       setQuote((current) => ({
         quoteReason: current.quoteReason,
@@ -1268,7 +1277,8 @@ function OrderDetailPage({
     && !item.approvalSnapshot
     && ["pending_ie_quote", "pending_management_decision", "pending_owner_approval"].includes(item.status);
   useEffect(() => {
-    if (!canManage) return;
+    if (!canManage && !canAct(user,"order_merchandiser","sourcing:factory_change:request")
+      && !canAct(user,"owner_group","sourcing:owner:approve")) return;
     let mounted = true;
     const timer = window.setTimeout(() => {
       const query = activeCraftQuery.trim();
@@ -1281,7 +1291,7 @@ function OrderDetailPage({
       mounted = false;
       window.clearTimeout(timer);
     };
-  }, [activeCraftQuery, canManage]);
+  }, [activeCraftQuery, canManage, user]);
 
   const updateProcess = (index: number, value: string): void => {
     setProcesses((current) => current.map((process, currentIndex) => (
@@ -1314,23 +1324,17 @@ function OrderDetailPage({
       method:"POST",headers:{"idempotency-key":submission.key},body:JSON.stringify({attachmentIds:submission.attachmentIds}),
     });
     setContractReturn(result);
+    contractPendingUpload.current=null;
     setContractPendingSubmission(null);
     setContractReturnError("");
     setItem(await request(`sourcing/cases/${sourcingCaseId}`,SourcingCaseSummarySchema));
   };
-  const uploadContractReturn = async (files:FileList|null):Promise<void> => {
-    if (!files?.length || contractUploadGuard.current || !contractReturn?.canUpload) return;
-    const chosen=Array.from(files);
-    if (chosen.length>10 || chosen.some(file=>!["application/pdf","image/jpeg","image/png"].includes(file.type))
-      || (chosen.some(file=>file.type==="application/pdf") && chosen.length!==1)
-      || chosen.reduce((size,file)=>size+file.size,0)>20*1024*1024) {
-      setContractReturnError("请选择单份 PDF 或最多 10 张 JPG/PNG，合计不超过 20 MB");
-      return;
-    }
+  const continueContractReturnUpload = async ():Promise<void> => {
+    const pending=contractPendingUpload.current;
+    if (!pending || contractUploadGuard.current) return;
     contractUploadGuard.current=true;setContractUploading(true);setContractReturnError("");
     try {
-      const attachmentIds:string[]=[];
-      for (const file of chosen) {
+      const submission=await finishContractReturnUpload(pending,async file=>{
         const intent=await request("tools/attachments/upload-intents",UploadIntentResponseSchema,{
           method:"POST",body:JSON.stringify({
             filename:file.name,mimeType:file.type,sizeBytes:file.size,sha256:await sha256Hex(file),
@@ -1340,16 +1344,29 @@ function OrderDetailPage({
         for (const [name,value] of Object.entries(intent.uploadFields)) upload.append(name,value);
         upload.append("file",file);
         const response=await fetch(intent.uploadUrl,{method:"POST",body:upload});
-        if (!response.ok) throw new Error(`${file.name} 上传失败，请重试`);
+        if (!response.ok) throw new Error(`${file.name} 上传失败`);
         const ready=await request(`tools/attachments/${intent.attachmentId}/finalize`,AttachmentResponseSchema,{method:"POST"});
-        if (ready.status!=="ready") throw new Error(`${file.name} 尚未完成校验，请重试`);
-        attachmentIds.push(ready.attachmentId);
-      }
-      const submission={attachmentIds,key:createClientRequestId()};
+        if (ready.status!=="ready") throw new Error(`${file.name} 尚未完成校验`);
+        return ready.attachmentId;
+      });
+      contractPendingUpload.current=null;
       setContractPendingSubmission(submission);
       await saveContractReturn(submission);
-    } catch(error) {setContractReturnError(error instanceof Error?error.message:"回签合同上传失败");}
-    finally {contractUploadGuard.current=false;setContractUploading(false);}
+    } catch(error) {
+      const message=error instanceof Error?error.message:"回签合同上传失败";
+      setContractReturnError(contractPendingUpload.current
+        ? `${message}。已完成 ${pending.attachmentIds.length}/${pending.files.length} 个文件，尚未保存回签记录，请重试上传。`
+        : message);
+    } finally {contractUploadGuard.current=false;setContractUploading(false);}
+  };
+  const uploadContractReturn = async (files:FileList|null):Promise<void> => {
+    if (!files?.length || contractUploadGuard.current || !contractReturn?.canUpload) return;
+    const chosen=Array.from(files);
+    const error=contractReturnFileError(chosen);
+    if (error) {setContractReturnError(error);return;}
+    setContractPendingSubmission(null);
+    contractPendingUpload.current={files:chosen,attachmentIds:[],key:createClientRequestId()};
+    await continueContractReturnUpload();
   };
   const retryContractReturn=async():Promise<void>=>{
     if (!contractPendingSubmission || contractUploadGuard.current) return;
@@ -1578,10 +1595,11 @@ function OrderDetailPage({
   const selectedState: SourcingWorkflowNodeState = item.status === "closed" || selectedIndex < step
     ? "completed"
     : selectedIndex === step ? "current" : "future";
-  const ownerTotalDelta = item.ieQuote && item.decision
-    ? subtractFixedPoint(item.decision.totalAmount, item.ieQuote.totalAmount, 2)
+  const display = sourcingCurrentDisplay(item);
+  const ownerTotalDelta = item.ieQuote && display.totalAmount
+    ? subtractFixedPoint(display.totalAmount, item.ieQuote.totalAmount, 2)
     : null;
-  const ownerCraftSummary = <span className="sourcing-owner-craft-summary">承包内容包括 <strong>{item.processes.length ? item.processes.join("、") : "未填写"}</strong>；裁床工序为 <strong>{item.decision?.cuttingProcess === "in_house" ? "本厂裁" : item.decision?.cuttingProcess === "outsourced" ? "外厂裁" : item.decision?.cuttingProcess === "other" ? `其它：${item.decision.cuttingProcessOther ?? "未填写"}` : "未填写"}</strong>。</span>;
+  const ownerCraftSummary = <span className="sourcing-owner-craft-summary">承包内容包括 <strong>{display.processes.length ? display.processes.join("、") : "未填写"}</strong>；裁床工序为 <strong>{item.decision?.cuttingProcess === "in_house" ? "本厂裁" : item.decision?.cuttingProcess === "outsourced" ? "外厂裁" : item.decision?.cuttingProcess === "other" ? `其它：${item.decision.cuttingProcessOther ?? "未填写"}` : "未填写"}</strong>。</span>;
   const latestFinance = [...timeline].reverse()
     .find((entry) => entry.kind === "finance_reconciliation");
   const transferNodeRole = canOwnerTransfer ? "owner_group"
@@ -1642,8 +1660,8 @@ function OrderDetailPage({
       /> : null}
       <Header
         iconRoute="/ui/sourcing/pending"
-        title={item.styleNo}
-        subtitle={`${item.gender ?? "历史未维护"} · ${item.styleName ?? "历史未维护"}`}
+        title={display.styleNo}
+        subtitle={`${display.gender ?? "历史未维护"} · ${display.styleName ?? "历史未维护"}`}
         badge={STATUS_LABELS[item.status]}
         badgePlacement="subtitle"
         action={todoBackPath ? "返回我的待办" : "返回订单列表"}
@@ -1660,13 +1678,13 @@ function OrderDetailPage({
       <div className="sourcing-detail-layout">
         <KeyFacts className="sourcing-key-facts" aria-label="外发定价选厂订单核心信息">
           <div><dt>跟单</dt><dd>{item.merchandiserName ?? "历史未维护"}</dd></div>
-          <div className="sourcing-key-facts__factory"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
-          <div><dt>总数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
-          <div><dt>生产总额</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.totalAmount) : "—"}</dd></div>
+          <div className="sourcing-key-facts__factory"><dt>加工厂</dt><dd>{display.supplierName ?? "待选厂"}</dd></div>
+          <div><dt>总数量</dt><dd>{formatBusinessDecimal(display.quantity)} 件</dd></div>
+          <div><dt>生产总额</dt><dd>{display.totalAmount ? formatBusinessCurrency(display.totalAmount) : "—"}</dd></div>
           <div><dt>IE 总额</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.totalAmount) : "—"}</dd></div>
           <div><dt>较 IE 总额变化</dt><dd className={ownerTotalDelta?.startsWith("-") ? "sourcing-price-lower" : undefined}>{ownerTotalDelta ?? "—"}</dd></div>
-          <div className="sourcing-key-facts__date"><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
-          <div className="sourcing-key-facts__date"><dt>要求交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
+          <div className="sourcing-key-facts__date"><dt>预计裁片发出</dt><dd>{display.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
+          <div className="sourcing-key-facts__date"><dt>要求交货日期</dt><dd>{display.deliveryDate ?? "—"}</dd></div>
         </KeyFacts>
         <div className="sourcing-supporting-overview">
           <section className="sourcing-photo-section" aria-label="订单图片">
@@ -1677,9 +1695,14 @@ function OrderDetailPage({
               currentAttachmentCount={attachments.length}
               onUploaded={load}
             /> : null}
-              <StatusBadge tone="info">{formatBusinessDecimal(attachments.length)} 张</StatusBadge>
+              <StatusBadge tone="info">{formatBusinessDecimal(item.contractDisplay?.linesMatchOrder && canReadContractData ? item.contractDisplay.lines.filter(line => line.imageAttachmentId).length : attachments.length)} 张</StatusBadge>
             </div>
-            {attachments.length > 0 ? <ImageStrip aria-label="订单照片，可横向滚动">
+            {item.contractDisplay?.linesMatchOrder && canReadContractData ? <ImageStrip aria-label="当前合同款图，可横向滚动">
+              {item.contractDisplay.lines.filter(line => line.imageAttachmentId).map(line => <a className="sourcing-photo" key={line.position} href={attachmentUrl(line.imageAttachmentId!,"preview")} target="_blank" rel="noreferrer">
+                <img src={attachmentUrl(line.imageAttachmentId!,"preview")} alt={`${line.styleNo || "未维护款号"}款图`} loading="lazy" />
+                <span className="sourcing-photo__filename">{line.styleNo || "未维护款号"}</span>
+              </a>)}
+            </ImageStrip> : attachments.length > 0 ? <ImageStrip aria-label="订单照片，可横向滚动">
               {attachments.map((attachment) => <button className="sourcing-photo" type="button" key={attachment.attachmentId} onClick={() => setSelectedImage(attachment)}>
                 <img src={attachmentUrl(attachment.attachmentId, "preview")} alt={attachment.filename} loading="lazy" />
                 <span className="sourcing-photo__filename">{attachment.filename}</span>
@@ -1717,13 +1740,13 @@ function OrderDetailPage({
         </div>
 
         {item.decision ? <DecisionSummary title={selectedNode === "owner" ? "审批摘要" : "选厂摘要"}>
-          <p className="sourcing-owner-decision__lead">生产管理建议由 <strong>{item.decision.supplierName}</strong> 承接 <strong>{formatBusinessDecimal(item.orderQuantity)} 件</strong>，生产总额 <strong>{formatBusinessCurrency(item.decision.totalAmount)}</strong>，相对 IE 总额变化 <strong>{ownerTotalDelta ?? "—"}</strong>。</p>
+          <p className="sourcing-owner-decision__lead">{item.contractDisplay ? "当前合同由" : "生产管理建议由"} <strong>{display.supplierName}</strong> 承接 <strong>{formatBusinessDecimal(display.quantity)} 件</strong>，生产总额 <strong>{formatBusinessCurrency(display.totalAmount!)}</strong>，相对 IE 总额变化 <strong>{ownerTotalDelta ?? "—"}</strong>。</p>
           <p>{ownerCraftSummary}</p>
           {item.decision.decisionReason ? <p>生产管理说明：{item.decision.decisionReason}</p> : null}
           {selectedNode === "owner" && selectedState === "current" ? <p>请核对价格、加工厂及交期，确认后审批。</p> : null}
         </DecisionSummary> : null}
-        <ResponsiveFactsTable caption="款式明细" mobileLayout="compact" rows={item.lineItems} rowKey={line => line.position}
-          totals={{ style: "合计", quantity: `${formatBusinessDecimal(item.orderQuantity)} 件`, amount: item.decision ? formatBusinessCurrency(item.decision.totalAmount) : "—" }}
+        <ResponsiveFactsTable caption="款式明细" mobileLayout="compact" rows={display.lines} rowKey={line => line.position}
+          totals={{ style: "合计", quantity: `${formatBusinessDecimal(display.quantity)} 件`, amount: display.totalAmount ? formatBusinessCurrency(display.totalAmount) : "—" }}
           columns={[
             {
               key: "style", label: "款号", mobileHeading: true,
@@ -1749,9 +1772,10 @@ function OrderDetailPage({
                 onClick={() => { budgetCorrectionKey.current = null; setBudgetCorrectionError(""); setBudgetCorrectionOpen(true); }}>更正</button> : null}
             </span> : "历史未维护" }] : []),
             { key: "ie", label: "IE 单价", render: line => { const price = sourcingLinePricing(item.ieQuote, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
-            { key: "production", label: "生产单价", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
-            { key: "amount", label: "本款金额", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price?.totalAmount ? formatBusinessCurrency(price.totalAmount) : "—"; } },
+            { key: "production", label: "生产单价", render: line => { const price = display.prices.find(price => price.position === line.position); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
+            { key: "amount", label: "本款金额", render: line => { const price = display.prices.find(price => price.position === line.position); return price?.totalAmount ? formatBusinessCurrency(price.totalAmount) : "—"; } },
           ]} />
+        {item.contractDisplay && !item.contractDisplay.linesMatchOrder ? <p role="status">合同款色对应关系不明确，款式明细保留订单记录，请由 Root 核对合同。</p> : null}
         {item.decision?.sourceType === "factory_change" && item.lineItems.length > 1 && item.lineItems.some(line => !item.decision?.linePrices.some(price => price.position === line.position)) ? <p className="sourcing-price-note">转厂后按统一生产单价执行，部分款式缺少逐款金额记录，生产总额见合计。</p> : null}
 
         <section id="node-workspace" className="sourcing-node-workspace" aria-label="节点办理区">
@@ -1821,7 +1845,7 @@ function OrderDetailPage({
 
           {item.approvalSnapshot ? <Surface className="rework-detail-node-preview sourcing-contract-bar">
             <div className="sourcing-contract-bar__heading">
-              <div><h2>系统合同</h2><p>合同仅使用老板批准快照；主档后续修改不会追改本版本。</p></div>
+              <div><h2>系统合同</h2><p>{item.contractDisplay ? "当前合同按本单修改内容生成，原批准记录保留。" : "合同仅使用老板批准快照；主档后续修改不会追改本版本。"}</p></div>
               {contract ? <StatusBadge tone={contract.status === "ready" ? "success" : contract.status === "generation_failed" ? "danger" : "info"}>{contract.status === "ready" ? "PDF 已生成" : contract.status === "pending_supplement" ? "待补资料" : contract.status === "generation_failed" ? "生成失败" : "生成中"}</StatusBadge> : null}
             </div>
             {contract ? <>
@@ -1843,14 +1867,17 @@ function OrderDetailPage({
                       onClick={()=>contractFileInput.current?.click()}>
                       {contractUploading?"正在上传…":contractReturn.attachments.length?"补传回签合同":"上传回签合同"}
                     </button>
+                    <span>一次选择 1 至 2 个 PDF/JPG/PNG，合计不超过 20 MB</span>
                   </> : null}
                   {contractReturn.attachments.length ? <div className="sourcing-contract-return-links" aria-label="回签附件，可左右滑动查看更多">
                     {contractReturn.attachments.map((file,index)=>
                       <a className="dx-button dx-button--secondary" key={file.attachmentId}
-                        href={attachmentUrl(file.attachmentId,"preview")} target="_blank" rel="noreferrer">
-                        {index===0?(contractReturn.signedContractVersion ? `查看 V${contractReturn.signedContractVersion} 回签合同` : "查看历史回签（版本未记录）"):`查看第 ${index+1} 张`}
+                        href={attachmentUrl(file.attachmentId,"preview")} target="_blank" rel="noreferrer" title={file.filename}>
+                        {index===0?(contractReturn.signedContractVersion ? `查看 V${contractReturn.signedContractVersion} 回签合同` : "查看历史回签（版本未记录）"):`查看第 ${index+1} 个文件`}
                       </a>)}
                   </div> : null}
+                  {contractPendingUpload.current && contractReturnError ? <button className="dx-button dx-button--secondary" type="button"
+                    disabled={contractUploading} onClick={()=>void continueContractReturnUpload()}>重试上传</button> : null}
                   {contractPendingSubmission && contractReturnError ? <button className="dx-button dx-button--secondary" type="button"
                     disabled={contractUploading} onClick={()=>void retryContractReturn()}>重试保存</button> : null}
                 </div>
@@ -1860,8 +1887,8 @@ function OrderDetailPage({
                     <span>第 {version.revision} 次 · {version.signedContractVersion ? `合同 V${version.signedContractVersion} · ${version.signedContractNumber}` : "合同版本未记录"} · {version.uploadedByName} · {formatDateTime(version.submittedAt)}</span>
                     <div className="sourcing-contract-return-links">
                       {version.attachments.map((file,index)=><a className="dx-button dx-button--secondary" key={file.attachmentId}
-                        href={attachmentUrl(file.attachmentId,"preview")} target="_blank" rel="noreferrer">
-                        {index===0?"查看回签合同":`查看第 ${index+1} 张`}
+                        href={attachmentUrl(file.attachmentId,"preview")} target="_blank" rel="noreferrer" title={file.filename}>
+                        {index===0?"查看回签合同":`查看第 ${index+1} 个文件`}
                       </a>)}
                     </div>
                   </div>)}
@@ -1973,6 +2000,7 @@ function OrderDetailPage({
             {!item.decision ? <button className="dx-button dx-button--primary" type="button" disabled title="生产管理首次提交加工厂和单价后开放">订单转厂</button> : factoryChange?.status === "pending_management" ? <>
               <h2>订单转厂</h2>
               <p><strong>{factoryChange.proposedSupplierName}</strong> · {formatBusinessCurrency(factoryChange.proposedUnitPrice)}/件 · {formatBusinessCurrency(factoryChange.proposedTotalAmount)}。跟单申请，等待生产管理审批。</p>
+              {factoryChange.proposedProcesses?.length ? <p>申请工艺：{factoryChange.proposedProcesses.join("、")}</p> : null}
               {canReviewManagementTransfer ? <div className="sourcing-factory-change__review">
                 <label><span>审批说明</span><input maxLength={500} value={factoryChangeReviewReason} onChange={(event) => { setFactoryChangeReviewReason(event.target.value); actionKey.current = null; }} /></label>
                 <div><button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/decision`, { decision: "approved", verificationReason: factoryChangeReviewReason.trim() }, factoryChange.requiresOwnerApproval ? "生产管理已通过，转老板审批" : "转厂已生效", true)}>批准转厂</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/decision`, { decision: "rejected", verificationReason: factoryChangeReviewReason.trim() }, "转厂申请已驳回", true)}>驳回</button></div>
@@ -1980,6 +2008,7 @@ function OrderDetailPage({
             </> : factoryChange?.status === "pending_owner" ? <>
               <h2>订单转厂</h2>
               <p><strong>{factoryChange.proposedSupplierName}</strong> · {formatBusinessCurrency(factoryChange.proposedUnitPrice)}/件，超过当前单价，等待老板批准。</p>
+              {factoryChange.proposedProcesses?.length ? <p>申请工艺：{factoryChange.proposedProcesses.join("、")}</p> : null}
               {canOwner ? <div className="sourcing-factory-change__review">
                 <label><span>审批说明</span><input maxLength={500} value={factoryChangeReviewReason} onChange={(event) => { setFactoryChangeReviewReason(event.target.value); actionKey.current = null; }} /></label>
                 <div><button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/owner-decision`, { decision: "approved", verificationReason: factoryChangeReviewReason.trim() }, "老板已批准，转厂生效", true)}>批准转厂</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/owner-decision`, { decision: "rejected", verificationReason: factoryChangeReviewReason.trim() }, "老板已驳回转厂", true)}>驳回</button></div>
@@ -1993,8 +2022,19 @@ function OrderDetailPage({
                 <label><span>新加工单价</span><input inputMode="decimal" value={activeBusinessInput === "factory-change-unit-price" && factoryChangeUnitPriceEdited ? factoryChangeDraft.unitPrice : businessInputValue(factoryChangeDraft.unitPrice)} onFocus={() => setActiveBusinessInput("factory-change-unit-price")} onBlur={() => setActiveBusinessInput(null)} onChange={(event) => { setFactoryChangeUnitPriceEdited(true); setFactoryChangeDraft({ ...factoryChangeDraft, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} /></label>
                 <label><span>新总额</span><input readOnly value={businessInputValue(totalPreview(factoryChangeDraft.unitPrice, item.orderQuantity))} /></label>
                 <p className="sourcing-factory-change__delta">相对当前单价：<strong>{transferPriceDelta ?? "—"}</strong></p>
+                <label className="sourcing-form-wide sourcing-transfer-craft-toggle"><input type="checkbox" checked={factoryChangeDraft.craftIds !== undefined} onChange={event => {
+                  setFactoryChangeDraft(current => ({ ...current, craftIds: event.target.checked ? (item.crafts?.map(craft => craft.craftId) ?? []) : undefined })); actionKey.current = null;
+                }} /><span>修改工艺</span></label>
+                {factoryChangeDraft.craftIds ? <section className="sourcing-process-editor sourcing-form-wide" aria-label="转厂工艺及承包范围">
+                  <div className="sourcing-process-editor__heading"><strong>新工艺及承包范围（必填）</strong><button type="button" disabled={factoryChangeDraft.craftIds.length >= MAX_SOURCING_PROCESSES} onClick={() => {setFactoryChangeDraft(current => ({...current,craftIds:[...(current.craftIds ?? []),""]})); actionKey.current=null;}}>＋ 新增工艺</button></div>
+                  <div className="sourcing-process-editor__list">{factoryChangeDraft.craftIds.map((id,index) => <div className="sourcing-process-row" key={index}>
+                    <b>{String(index+1).padStart(2,"0")}</b><label><span className="visually-hidden">第 {index+1} 项转厂工艺</span><select value={id} onChange={event => {setFactoryChangeDraft(current => ({...current,craftIds:current.craftIds?.map((value,i)=>i===index?event.target.value:value)}));actionKey.current=null;}}><option value="">请选择工艺</option>{craftCatalog.map(craft => <option value={craft.craftId} key={craft.craftId}>{craft.craftName}</option>)}</select></label>
+                    <button type="button" aria-label={`删除第 ${index+1} 项转厂工艺`} onClick={() => {setFactoryChangeDraft(current => ({...current,craftIds:current.craftIds?.filter((_,i)=>i!==index)}));actionKey.current=null;}}>删除</button>
+                  </div>)}</div>
+                  {!factoryChangeDraft.craftIds.length ? <button type="button" onClick={() => {setFactoryChangeDraft(current => ({...current,craftIds:[""]}));actionKey.current=null;}}>选择工艺</button> : null}
+                </section> : null}
                 <label className="sourcing-form-wide"><span>转厂原因</span><input maxLength={500} value={factoryChangeDraft.changeReason} onChange={(event) => { setFactoryChangeDraft({ ...factoryChangeDraft, changeReason: event.target.value }); actionKey.current = null; }} /></label>
-                <button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeDraft.supplierId || !factoryChangeDraft.unitPrice || !factoryChangeDraft.changeReason.trim()} onClick={() => void submit(transferRequestPath, { supplierId: factoryChangeDraft.supplierId, unitPrice: factoryChangeDraft.unitPrice, changeReason: factoryChangeDraft.changeReason.trim() }, transferNodeRole === "owner_group" ? "老板发起的转厂已直接生效" : transferNodeRole === "production_management" && (transferPriceDelta?.startsWith("+") !== true) ? "转厂已生效" : "转厂申请已提交", true)}>提交转厂</button>
+                <button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeDraft.supplierId || !factoryChangeDraft.unitPrice || !factoryChangeDraft.changeReason.trim() || Boolean(factoryChangeDraft.craftIds && (!factoryChangeDraft.craftIds.length || factoryChangeDraft.craftIds.some(id => !id) || new Set(factoryChangeDraft.craftIds).size !== factoryChangeDraft.craftIds.length))} onClick={() => void submit(transferRequestPath, { supplierId: factoryChangeDraft.supplierId, unitPrice: factoryChangeDraft.unitPrice, changeReason: factoryChangeDraft.changeReason.trim(), ...(factoryChangeDraft.craftIds ? { craftIds: factoryChangeDraft.craftIds } : {}) }, transferNodeRole === "owner_group" ? "老板发起的转厂已直接生效" : transferNodeRole === "production_management" && (transferPriceDelta?.startsWith("+") !== true) ? "转厂已生效" : "转厂申请已提交", true)}>提交转厂</button>
               </div>
             </div> : null}
             </> : <p>当前账号可查看转厂记录，但不能在本节点发起。</p>}

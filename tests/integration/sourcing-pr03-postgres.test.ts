@@ -4,7 +4,7 @@ import { readQuoteAnalysis } from "../../apps/api/src/sourcing/sourcing-analysis
 import { ProductionDashboardService } from "../../apps/api/src/sourcing/production-dashboard-service.js";
 import { ProductionReportingService } from "../../apps/api/src/sourcing/production-reporting-service.js";
 import { createHash, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import sharp from "sharp";
 
 import pg from "pg";
@@ -2943,6 +2943,48 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       else process.env.CONTRACT_RETURN_MONITOR_ENABLED_AT=previous;
     }
   });
+  it("atomically returns two PDFs, preserves single-file history and guards readiness, limits and signed downloads", async () => {
+    const created=await service.createCase(merchandiserActor(),{gender:"男装",styleName:"双文件回传",estimatedCutPieceSendDate:"2026-10-01",deliveryDate:"2026-10-20",
+      lineItems:[{styleNo:"RETURN-TWO",color:"黑",quantity:20}],daxingUnitPrice:"8"},randomUUID());
+    const id=created.value.sourcingCaseId;
+    await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
+    await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
+    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    const document=(await contractService.getCurrent(readerActor(),id)).item!;
+    const pdfs=[randomUUID(),randomUUID(),randomUUID()];
+    for (const [index,file] of pdfs.entries()) await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,$3,'application/pdf',128,$4,$5,$6,CASE WHEN $6='ready' THEN CURRENT_TIMESTAMP ELSE NULL END)`,
+      [file,`two-returns/${file}`,`回签${index+1}.pdf`,"a".repeat(64),rootActor().actorId,index===1?"pending":"ready"]);
+    const root=rootActor();
+    await expect(contractReturns.submit(root,id,[],randomUUID())).rejects.toMatchObject({statusCode:400});
+    await expect(contractReturns.submit(root,id,pdfs,randomUUID())).rejects.toMatchObject({statusCode:400});
+    await expect(contractReturns.submit(root,id,[pdfs[0]!,pdfs[0]!],randomUUID())).rejects.toMatchObject({statusCode:400});
+    await expect(contractReturns.submit(root,id,pdfs.slice(0,2),randomUUID())).rejects.toMatchObject({statusCode:400});
+    expect((await contractReturns.get({...root,authorizationCapability:"sourcing:view"},id)).contractReturnedAt).toBeNull();
+    expect((await database.query("SELECT entity_type FROM attachments WHERE attachment_id=$1",[pdfs[0]])).rows[0].entity_type).toBeNull();
+    await database.query("UPDATE attachments SET status='ready',ready_at=CURRENT_TIMESTAMP WHERE attachment_id=$1",[pdfs[1]]);
+    const key=randomUUID();
+    const returned=await contractReturns.submit(root,id,pdfs.slice(0,2),key);
+    expect(returned.attachments.map(file=>file.attachmentId)).toEqual(pdfs.slice(0,2));
+    expect(returned.signedContractDocumentId).toBe(document.sourcingContractDocumentId);
+    expect(returned.history).toEqual([]);
+    const retried=await contractReturns.submit(root,id,pdfs.slice(0,2),key);
+    expect(retried.contractReturnedAt).toBe(returned.contractReturnedAt);
+    expect((await database.query("SELECT count(*)::int AS n FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[id])).rows[0].n).toBe(1);
+    expect((await database.query("SELECT count(*)::int AS n FROM operation_events WHERE entity_id=$1 AND action='sourcing.contract_return.upload'",[id])).rows[0].n).toBe(1);
+    const reader={...readerActor(),authorizationCapabilities:["sourcing:view","supplier_contract_data:read"]};
+    for (const file of pdfs.slice(0,2)) {
+      for (const mode of ["inline","attachment"] as const) {
+        await expect(attachments.createDownloadIntent(reader,file,async binding=>service.canDownloadBoundAttachment(reader,binding),mode)).resolves.toHaveProperty("downloadUrl");
+        await expect(attachments.createDownloadIntent(readerActor(),file,async binding=>service.canDownloadBoundAttachment(readerActor(),binding),mode)).rejects.toMatchObject({statusCode:403});
+      }
+    }
+    const single=await contractReturns.submit(root,id,[pdfs[2]!],randomUUID());
+    expect(single.contractReturnedAt).toBe(returned.contractReturnedAt);
+    expect(single.attachments.map(file=>file.attachmentId)).toEqual([pdfs[2]]);
+    expect(single.history[0]?.attachments).toEqual(returned.attachments);
+    expect(single.history[0]?.signedContractDocumentId).toBe(document.sourcingContractDocumentId);
+  });
   it("adds one actionable merchandiser todo on approval and completes it on first return", async () => {
     await ensureReturnTodoRecipient();
     const todoService=new TodoService(database);
@@ -3175,6 +3217,17 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const updated=(await contractService.getCurrent(rootActor(),id)).item!;
     expect(updated).toMatchObject({contractVersion:original.contractVersion+1,contractNumber:"本单人工编号",status:"ready",canEditContent:true});
     expect(updated.pdfAttachmentId).not.toBe(original.pdfAttachmentId);
+    const currentDisplay=(await service.getCase(readerActor(),id)).contractDisplay;
+    expect(currentDisplay).toMatchObject({sourcingContractDocumentId:doc,contractNumber:"本单人工编号",partyBName:"本单人工乙方",totalQuantity:33,totalAmount:"412.50",deliveryDate:"2026-11-11",linesMatchOrder:true});
+    expect(currentDisplay?.lines[0]).toMatchObject({quantity:33,unitPrice:"12.50",imageAttachmentId:intent.attachmentId});
+    if (process.env.SOURCING_UI_FIXTURE_FILE) await writeFile(process.env.SOURCING_UI_FIXTURE_FILE,JSON.stringify({
+      id,detail:await service.getCase(rootReader,id),attachments:await service.listAttachments(rootReader,id),
+      timeline:await service.listTimeline(rootReader,id),factoryChange:await service.getCurrentFactoryChange(rootReader,id),
+      contract:await contractService.getCurrent(rootReader,id),dispatch:await production.state(rootReader,id),
+      contractReturn:await contractReturns.get(rootReader,id),factories:await service.listFactories(rootReader),
+      crafts:await craftService.listCrafts(),image:bytes.toString("base64"),
+    }));
+    expect((await service.nodeHistory(readerActor(),id,"management")).item.contractDisplay).toBeUndefined();
     expect((await contractService.content.get(rootActor(),id)).content).toEqual(input.content);
     expect((await database.query("SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[doc])).rows[0].approval_snapshot).toEqual(originalRow.approval_snapshot);
     expect((await database.query("SELECT * FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1",[original.sourcingApprovalSnapshotId])).rows[0]).toEqual(approval);
@@ -3311,6 +3364,76 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       expect((await contractService.getCurrent(rootActor(),id)).item?.sourcingContractDocumentId).toBe(edit.value);
     }
     await expect(contractService.content.get(rootActor(),id)).rejects.toMatchObject({statusCode:403});
+  });
+
+  it("freezes transfer craft proposals on existing orders through the unchanged approval chain", async () => {
+    const open = async (label: string) => {
+      const id=(await service.createCase(merchandiserActor(),{gender:"男装",styleName:label,
+        estimatedCutPieceSendDate:"2026-10-01",deliveryDate:"2026-10-20",
+        lineItems:[{styleNo:"CRAFT-TRANSFER-"+label,color:"黑",quantity:100}],daxingUnitPrice:"8",attachmentIds:[]},randomUUID())).value.sourcingCaseId;
+      await service.quoteIePrice(ieActor(),id,{unitPrice:"10"},randomUUID());
+      await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],unitPrice:"10"},randomUUID());
+      return id;
+    };
+    const id=await open("EXISTING");
+    const old=(await database.query("SELECT * FROM sourcing_decisions WHERE sourcing_case_id=$1",[id])).rows[0];
+    const request={supplierId:replacementFactoryId,unitPrice:"9",craftIds:[craftId("整烫"),craftId("净色车缝")],changeReason:"既有单修改承包工艺"};
+    const key=randomUUID();
+    await service.requestFactoryChange(factoryChangeActor(),id,request,key);
+    await service.requestFactoryChange(factoryChangeActor(),id,request,key);
+    expect((await database.query("SELECT * FROM sourcing_factory_change_requests WHERE sourcing_case_id=$1",[id])).rowCount).toBe(1);
+    expect((await service.getCase(readerActor(),id)).processes).toEqual(["净色车缝"]);
+    const pending=(await service.getCurrentFactoryChange(readerActor(),id)).item!;
+    expect(pending).toMatchObject({status:"pending_management",changesCrafts:true,proposedProcesses:["整烫","净色车缝"]});
+    await expect(service.requestFactoryChange(managerActor(),id,request,randomUUID())).rejects.toMatchObject({code:"CONFLICT"});
+    await expect(service.decideFactoryChange({...ownerActor(),authorizationCapability:"sourcing:owner:approve"},id,pending.factoryChangeRequestId,{decision:"approved",verificationReason:"不可提前审批"},randomUUID())).rejects.toMatchObject({code:"INVALID_STATE_TRANSITION"});
+    await expect(service.decideFactoryChange(financeActor(),id,pending.factoryChangeRequestId,{decision:"approved",verificationReason:"越权"},randomUUID())).rejects.toMatchObject({code:"FORBIDDEN"});
+    await expect(service.decideFactoryChange({...managerActor(),actorRoles:[],authorizationCapability:"sourcing:factory_change:verify"},id,pending.factoryChangeRequestId,{decision:"approved",verificationReason:"角色已撤销"},randomUUID())).rejects.toMatchObject({code:"FORBIDDEN"});
+    const review={decision:"approved" as const,verificationReason:"确认工艺与价格"};
+    const reviewKey=randomUUID();
+    await service.decideFactoryChange({...managerActor(),authorizationCapability:"sourcing:factory_change:verify"},id,pending.factoryChangeRequestId,review,reviewKey);
+    await service.decideFactoryChange({...managerActor(),authorizationCapability:"sourcing:factory_change:verify"},id,pending.factoryChangeRequestId,review,reviewKey);
+    const effective=await service.getCase(readerActor(),id);
+    expect(effective.processes).toEqual(["整烫","净色车缝"]);
+    expect((await database.query("SELECT * FROM sourcing_decisions WHERE sourcing_decision_id=$1",[old.sourcing_decision_id])).rows[0]).toEqual(old);
+    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    expect((await service.getCase(readerActor(),id)).approvalSnapshot?.processes).toEqual(["整烫","净色车缝"]);
+    expect((await contractService.content.get(rootActor(),id)).content.processes).toEqual(["整烫","净色车缝"]);
+    const catalogActor={...rootActor(),authorizationCapability:"master_data:manage"};
+    const [frozenCraft]=await craftService.ensureCrafts(catalogActor,{craftNames:["冻结工艺甲"]});
+    const frozenId=await open("CATALOG");
+    await service.requestFactoryChange(managerActor(),frozenId,{...request,unitPrice:"11",craftIds:[frozenCraft!.craftId]},randomUUID());
+    const frozen=(await service.getCurrentFactoryChange(readerActor(),frozenId)).item!;
+    await craftService.reviseCraft(catalogActor,frozenCraft!.craftId,{craftName:"冻结工艺乙",active:false,changeReason:"申请后停用目录"});
+    expect((await service.getCurrentFactoryChange(readerActor(),frozenId)).item?.proposedProcesses).toEqual(["冻结工艺甲"]);
+    await service.decideFactoryChange(ownerActor(),frozenId,frozen.factoryChangeRequestId,review,randomUUID());
+    expect((await service.getCase(readerActor(),frozenId)).processes).toEqual(["冻结工艺甲"]);
+    const inactiveId=await open("INACTIVE");
+    await expect(service.requestFactoryChange(ownerActor(),inactiveId,{...request,craftIds:[frozenCraft!.craftId]},randomUUID())).rejects.toMatchObject({code:"CONFLICT"});
+    const rejectedId=await open("REJECTED");
+    await service.requestFactoryChange(managerActor(),rejectedId,{...request,unitPrice:"11"},randomUUID());
+    const rejected=(await service.getCurrentFactoryChange(readerActor(),rejectedId)).item!;
+    expect(rejected.status).toBe("pending_owner");
+    await service.decideFactoryChange(ownerActor(),rejectedId,rejected.factoryChangeRequestId,{decision:"rejected",verificationReason:"保留原工艺"},randomUUID());
+    expect((await service.getCase(readerActor(),rejectedId)).processes).toEqual(["净色车缝"]);
+    const directId=await open("OWNER");
+    await service.requestFactoryChange(ownerActor(),directId,{...request,unitPrice:"12"},randomUUID());
+    expect((await service.getCurrentFactoryChange(readerActor(),directId)).item?.status).toBe("effective");
+    expect((await service.getCase(readerActor(),directId)).processes).toEqual(["整烫","净色车缝"]);
+    const legacyId=await open("LEGACY");
+    await service.requestFactoryChange(managerActor(),legacyId,{supplierId:replacementFactoryId,unitPrice:"9",changeReason:"旧客户端继承工艺"},randomUUID());
+    expect((await service.getCase(readerActor(),legacyId)).processes).toEqual(["净色车缝"]);
+    await expect(service.requestFactoryChange(ownerActor(),legacyId,{...request,supplierId:factoryId,craftIds:[randomUUID()]},randomUUID())).rejects.toMatchObject({code:"CONFLICT"});
+    const staleId=await open("CONTRACT-BASIS");
+    await service.decideOwner(ownerActor(),staleId,{decision:"approved"},randomUUID());
+    await service.requestFactoryChange(managerActor(),staleId,{...request,unitPrice:"11"},randomUUID());
+    const stale=(await service.getCurrentFactoryChange(readerActor(),staleId)).item!;
+    const contract=await contractService.content.get(rootActor(),staleId);
+    await contractService.content.save(rootActor(),staleId,{...contract,content:{...contract.content,deliveryDate:"2026-11-01",lines:[...contract.content.lines,...contract.content.lines]}},randomUUID());
+    await expect(service.decideFactoryChange(ownerActor(),staleId,stale.factoryChangeRequestId,review,randomUUID())).rejects.toMatchObject({code:"CONFLICT"});
+    expect((await service.getCase(readerActor(),staleId)).processes).toEqual(["净色车缝"]);
+    expect((await service.getCase(readerActor(),staleId)).contractDisplay?.linesMatchOrder).toBe(false);
+    await service.decideFactoryChange(ownerActor(),staleId,stale.factoryChangeRequestId,{decision:"rejected",verificationReason:"合同变化重新申请"},randomUUID());
   });
 
 });
