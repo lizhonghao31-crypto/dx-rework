@@ -12,6 +12,10 @@ const PostgreSqlUrlSchema = z.string().min(1).refine(
   { message: "must be a valid PostgreSQL URL" },
 );
 
+const usesHttpsRedirect = (value: string): boolean => {
+  try { return new URL(value).protocol === "https:"; } catch { return false; }
+};
+
 const BooleanTextSchema = z.enum(["true", "false"]).default("false");
 
 const EnvironmentSchema = z
@@ -33,6 +37,7 @@ const EnvironmentSchema = z
     DINGTALK_QR_REDIRECT_URI: z.string().url(),
     APP_BASE_PATH: z.string().regex(/^\/(?!\/)[^?#\\]*$/).refine((value) => !value.includes("//"), "must not contain empty path segments").default("/"),
     SESSION_SECRET: z.string().min(32),
+    SESSION_COOKIE_SECURE: z.enum(["true", "false"]).optional(),
     SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(86400).default(28800),
     ROOT_DINGTALK_USER_ID: z.string().trim().min(1).max(200).optional(),
     OWNER_BOOTSTRAP_DINGTALK_USER_ID: z.string().trim().min(1).max(200).optional(),
@@ -73,6 +78,9 @@ const EnvironmentSchema = z
       });
     }
 
+    if (environment.SESSION_COOKIE_SECURE === "false" && (environment.NODE_ENV === "production" || usesHttpsRedirect(environment.DINGTALK_QR_REDIRECT_URI))) {
+      context.addIssue({ code: "custom", path: ["SESSION_COOKIE_SECURE"], message: "HTTPS and production require Secure session cookies" });
+    }
     const acceptanceEnabled = environment.ACCEPTANCE_LAB_ENABLED === "true";
     if (acceptanceEnabled && environment.NODE_ENV !== "test") {
       context.addIssue({
@@ -161,6 +169,7 @@ export type AppConfig = Readonly<{
   appBasePath: string;
   sessionSecret: string;
   sessionTtlSeconds: number;
+  sessionCookieSecure: boolean;
   rootDingtalkUserId: string | undefined;
   ownerBootstrap: Readonly<{
     enabled: boolean;
@@ -204,6 +213,9 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     appBasePath: result.data.APP_BASE_PATH.endsWith("/") ? result.data.APP_BASE_PATH : `${result.data.APP_BASE_PATH}/`,
     sessionSecret: result.data.SESSION_SECRET,
     sessionTtlSeconds: result.data.SESSION_TTL_SECONDS,
+    sessionCookieSecure: result.data.SESSION_COOKIE_SECURE === "true"
+      || result.data.NODE_ENV === "production"
+      || usesHttpsRedirect(result.data.DINGTALK_QR_REDIRECT_URI),
     rootDingtalkUserId: result.data.ROOT_DINGTALK_USER_ID,
     ownerBootstrap: {
       enabled: Boolean(result.data.OWNER_BOOTSTRAP_DINGTALK_USER_ID && result.data.OWNER_BOOTSTRAP_SECRET),
