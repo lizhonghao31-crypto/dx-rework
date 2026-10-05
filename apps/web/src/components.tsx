@@ -552,7 +552,7 @@ export function Shell({
   // Keep the mature creation capability, but place the source entry under creation.
   const creationNavigation = [...designerNavigation, ...patternRoomNavigation.filter(entry => entry.activeKey === "pattern-room-create")];
   const developmentNavigation: NavigationEntry[] = [
-    ...(digital ? [{ name: "板房管理台", description: "开发任务与人员调度", href: "/ui/digital-cockpit?stage=development&workspace=pattern", activeKey: "digital-pattern" }] : []),
+    ...(digital ? [{ name: "板房管理台", description: "开发任务与人员调度", href: "/ui/digital-pattern-room", activeKey: "digital-pattern" }] : []),
     ...patternRoomNavigation.filter(entry => entry.activeKey === "pattern-room-orders"),
     ...(digital ? [{ name: "板房数据沙盘", description: "同源分析与改进记录", href: "/ui/digital-analysis" }] : []),
     ...patternRoomNavigation.filter(entry => entry.href === "/ui/pattern-room/prices"),

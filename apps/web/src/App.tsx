@@ -2,6 +2,9 @@ import { ProductionWorkspace } from "@dx-rework/ui/production";
 import { DigitalAnalysisPage } from "./digital-analysis-page.js";
 import { DigitalCockpitPage } from "./digital-cockpit-page.js";
 import { DigitalProductionPage } from "./digital-production-page.js";
+import { DigitalDesignerWorkspace } from "./digital-designer-workspace.js";
+import { DigitalPatternWorkspace } from "./digital-pattern-workspace.js";
+import { DevelopmentWorkspaceReturn } from "./development-workspace-return.js";
 import { PatternOrderCreatePage } from "./pattern-order-create-page.js";
 import { CuttingDetailPage, CuttingListPage } from "./cutting-page.js";
 import { cuttingPageRequirements } from "./cutting-access.js";
@@ -277,8 +280,9 @@ export function App() {
   const cuttingOrderMatch = path.match(/^\/ui\/cutting\/orders\/([0-9a-f-]{36})$/i);
   let page;
   if (path === "/ui/digital-analysis") page = <Shell active="板房数据沙盘" appearance="digital"><ProductionWorkspace><DigitalAnalysisPage /></ProductionWorkspace></Shell>;
-  else if (path === "/ui/digital-cockpit") page = <Shell active="生产管理座舱" appearance="digital"><ProductionWorkspace><DigitalCockpitPage key={search} /></ProductionWorkspace></Shell>;
-  else if (path === "/ui/digital-production") page = <Shell active="开发与大货办理" appearance="digital"><ProductionWorkspace><DigitalProductionPage key={search} /></ProductionWorkspace></Shell>;
+  else if (path === "/ui/digital-cockpit") page = <Shell active="生产管理座舱" appearance="digital"><ProductionWorkspace>{new URLSearchParams(search).get("workspace") === "pattern" ? <DigitalPatternWorkspace key={search}/> : <DigitalCockpitPage key={search} />}</ProductionWorkspace></Shell>;
+  else if (path === "/ui/digital-production") page = <Shell active="开发与大货办理" appearance="digital"><ProductionWorkspace>{new URLSearchParams(search).get("workspace") === "designer" ? <DigitalDesignerWorkspace key={search}/> : <><DevelopmentWorkspaceReturn/><DigitalProductionPage key={search} /></>}</ProductionWorkspace></Shell>;
+  else if (path === "/ui/digital-pattern-room") page = <Shell active="digital-pattern" appearance="digital"><ProductionWorkspace><DigitalPatternWorkspace key={search}/></ProductionWorkspace></Shell>;
   else if (path === "/ui/home") page = <HomeLanding />;
   else if (path === "/ui/sourcing" || path === "/ui/sourcing/pending") page = <SourcingWorkspacePage view="pending" />;
   else if (path === "/ui/samples/handoff") page = <SampleHandoffPage />;
@@ -352,7 +356,7 @@ export function App() {
 
   const owner = { requiredRole: "owner_group" } as const;
 
-  if (path === "/ui/digital-production" || path === "/ui/digital-cockpit" || path === "/ui/digital-analysis") return <AuthGate requiredAnyOf={DIGITAL_PRODUCTION_ROLES.map(requiredRole => ({ requiredRole }))}>{page}</AuthGate>;
+  if (path === "/ui/digital-production" || path === "/ui/digital-cockpit" || path === "/ui/digital-analysis" || path === "/ui/digital-pattern-room") return <AuthGate requiredAnyOf={DIGITAL_PRODUCTION_ROLES.map(requiredRole => ({ requiredRole }))}>{page}</AuthGate>;
   if (path === "/ui/home") return <AuthGate>{page}</AuthGate>;
   if (path.startsWith("/ui/samples")) {
     if (path === "/ui/samples/handoff") return <AuthGate requiredRole="sample_administrative" requiredCapability="sample:view_basic">{page}</AuthGate>;

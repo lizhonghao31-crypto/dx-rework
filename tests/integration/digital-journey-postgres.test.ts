@@ -11,6 +11,8 @@ import { DigitalOrderCreateSchema } from "@dx-rework/contracts/digital-productio
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { DigitalJourneyQuery } from "../../apps/api/src/production-platform/journey-query.js";
+import { DevelopmentWorkspaceQuery } from "../../apps/api/src/production-platform/development-workspace-query.js";
+import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "@dx-rework/contracts/digital-development-workspace";
 import { registerDigitalIdentityRoutes } from "../../apps/api/src/production-platform/identity-routes.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
@@ -150,5 +152,17 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect((await app.inject({url:"/digital-production/journeys?unexpected=yes",headers})).statusCode).toBe(400);
     expect((await app.inject({url:`/digital-production/journeys/${order.productionOrderId}`,headers:{cookie:`dx_rework_session=${stranger}`}})).statusCode).toBe(404);
     expect((await app.inject({url:"/digital-production/journeys"})).statusCode).toBe(401);
+  });
+  it("projects designer business views and pattern scope through original facts and no-store HTTP",async()=>{
+    const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:input("WORKSPACE").designStyleNo,temporaryStyleNo:input("WORKSPACE").temporaryStyleNo,customerCode:"PD"},randomUUID());
+    const workspaces=new DevelopmentWorkspaceQuery(journeys);
+    expect((await workspaces.designer(actor(),DevelopmentWorkspaceFilterSchema.parse({search:"TEST-J-WORKSPACE"}))).counts.draft).toBe(1);
+    await identity.createOrder(actor(),input("WORKSPACE"),randomUUID(),source.sourceId);
+    expect((await workspaces.designer(actor(),DevelopmentWorkspaceFilterSchema.parse({search:"TEST-J-WORKSPACE",view:"ordered"}))).total).toBe(1);
+    expect((await workspaces.designer(actor(stranger),DevelopmentWorkspaceFilterSchema.parse({search:"TEST-J-WORKSPACE"}))).total).toBe(0);
+    await expect(workspaces.designer(actor(worker,["pattern_room_worker"]),DevelopmentWorkspaceFilterSchema.parse({}))).rejects.toMatchObject({statusCode:403});
+    expect((await workspaces.pattern(actor(stranger),PatternWorkspaceFilterSchema.parse({search:"TEST-J-WORKSPACE"}))).total).toBe(0);
+    const allowed=await app.inject({method:"GET",url:"/digital-production/workspaces/designer?search=TEST-J-WORKSPACE&view=ordered",headers:{cookie:`dx_rework_session=${designer}`}});
+    expect(allowed.statusCode).toBe(200);expect(allowed.json().total).toBe(1);expect(allowed.headers["cache-control"]).toBe("no-store");
   });
 });
