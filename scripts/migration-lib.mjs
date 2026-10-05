@@ -76,11 +76,16 @@ export async function discoverValidatedMigrations() {
 }
 
 export async function applyMigrations(databaseUrl) {
-  const pool = new Pool({ connectionString: databaseUrl, max: 2 });
+  const pool = new Pool({ connectionString: databaseUrl, max: 2, connectionTimeoutMillis: 5_000, query_timeout: 65_000 });
   const client = await pool.connect();
   const applied = [];
+  let locked = false;
   try {
-    await client.query("SELECT pg_advisory_lock(hashtext('dx-rework-schema-migrations'))");
+    await client.query("SET lock_timeout = '2s'");
+    await client.query("SET statement_timeout = '60s'");
+    const lock = await client.query("SELECT pg_try_advisory_lock(hashtext('dx-rework-schema-migrations')) AS locked");
+    locked = lock.rows[0]?.locked === true;
+    if (!locked) throw new Error('MIGRATION_LOCK_BUSY: no migration was started');
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         version text PRIMARY KEY,
@@ -128,7 +133,7 @@ export async function applyMigrations(databaseUrl) {
     return { applied, currentVersion: current.rows[0]?.version ?? null };
   } finally {
     try {
-      await client.query("SELECT pg_advisory_unlock(hashtext('dx-rework-schema-migrations'))");
+      if (locked) await client.query("SELECT pg_advisory_unlock(hashtext('dx-rework-schema-migrations'))");
     } finally {
       client.release();
       await pool.end();

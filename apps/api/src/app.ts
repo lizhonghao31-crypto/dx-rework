@@ -220,6 +220,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
   if (dependencies.adminConsole) registerAdminConsoleRoutes(app, dependencies.adminConsole);
 
   app.get<{ Reply: ReadyHealthResponse }>("/health/ready", async (_request, reply) => {
+    if (process.env.DX_REWORK_BACKGROUND_LOCK) reply.header('X-Dx-Release-Protocol', '2');
     try {
       await dependencies.checkDatabase();
       const schemaHistory = await dependencies.getAppliedSchemaHistory();

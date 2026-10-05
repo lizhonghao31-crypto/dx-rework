@@ -86,8 +86,8 @@ export class SourcingContractService {
     }
   }
 
-  async resumePendingContracts(batchSize = 50): Promise<void> {
-    for (;;) {
+  async resumePendingContracts(batchSize = 50, signal?: AbortSignal): Promise<void> {
+    while (!signal?.aborted) {
       const pending = await this.database.query<{
         sourcing_contract_document_id: string;
         sourcing_case_id: string;

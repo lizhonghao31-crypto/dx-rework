@@ -67,7 +67,7 @@ describe("PR-17 deployment fail-closed contract", () => {
     }
   });
 
-  it("forbids broad process control, global Nginx reload, unsafe SSH and foreign writes", () => {
+  it("forbids broad process control, unscoped Nginx reload, unsafe SSH and foreign writes", () => {
     const files = execFileSync("bash", ["-c", "find scripts/deploy -type f -name '*.sh' -print"], {
       cwd: root,
       encoding: "utf8",
@@ -76,8 +76,17 @@ describe("PR-17 deployment fail-closed contract", () => {
       .split("\n");
     const body = files.map((file) => readFileSync(join(root, file), "utf8")).join("\n");
     expect(body).not.toMatch(
-      /pm2\s+(kill|delete all|restart all)|nginx\s+-s\s+reload|StrictHostKeyChecking=no|rm\s+-rf\s+\/opt\/daxing/,
+      /pm2\s+(kill|delete all|restart all)|StrictHostKeyChecking=no|rm\s+-rf\s+\/opt\/daxing/,
     );
+    // Only the installed root release controllers may reload nginx after
+    // replacing the approved dedicated vhost and validating nginx -t.
+    const controllers = new Set([
+      "scripts/deploy/update-main-online.sh",
+      "scripts/deploy/update-main-maintenance.sh",
+    ]);
+    for (const file of files.filter((file) => !controllers.has(file))) {
+      expect(readFileSync(join(root, file), "utf8"), file).not.toMatch(/nginx\s+-s\s+reload/);
+    }
     expect(body).not.toContain("eval ");
   });
 });
