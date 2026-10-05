@@ -10,11 +10,14 @@ const extension:Entry[]=JSON.parse(readFileSync('scripts/migration-main-extensio
 const branches:{main:Entry[];digital:Entry[]}=JSON.parse(readFileSync('scripts/migration-branches.json','utf8'));
 const sorted=(rows:Entry[])=>[...rows].sort((a,b)=>a.version.localeCompare(b.version));
 describe('reuse exact main extension beside the released digital 0221 identity',()=>{
- it('accepts actual main221, Acceptance236 and integrated237 histories',()=>{
-  expect([main.length,release.length,integrated.length]).toEqual([221,236,237]);
-  for(const history of [main,release,integrated])expect(()=>assertAppliedMigrationHistory(history,integrated)).not.toThrow();
+ it('accepts actual main221, Acceptance236 and integrated238 histories',()=>{
+  expect([main.length,release.length,integrated.length]).toEqual([221,236,238]);
+  const main222=sorted([...main,extension[1]!]);
+  const priorAcceptance=integrated.filter(row=>row.version!==extension[1]!.version);
+  for(const history of [main,main222,release,priorAcceptance,integrated])expect(()=>assertAppliedMigrationHistory(history,integrated)).not.toThrow();
   expect(()=>assertMigrationSequence(integrated)).not.toThrow();
   expect(integrated.filter(r=>r.version.startsWith('0221_'))).toHaveLength(2);
+  expect(integrated.filter(r=>r.version.startsWith('0222_'))).toHaveLength(2);
  });
  it('keeps resumable prefixes without admitting lane holes or a third 0221',()=>{
   const common=main.slice(0,217),lane=[...branches.main,...extension];
