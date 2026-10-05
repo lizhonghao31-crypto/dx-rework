@@ -4,6 +4,8 @@
 
 基线：main b7d400e623da6381302bf70509ee7fe81b6ac3e8；集成 release/digital-production-v1 842f43b8c0b588be6a96508a349db7ebc1019339；开工时无开放PR。不合并main。Gate FULL。
 
+施工期间release合入已批准的PR645，最终顺接3684699fb8fa9e8e317f26ec2d65a2603dfeee7a，保留238条迁移及双0222身份；本PR不修改该兼容修复。一次Codex Review的分页与外发历史返回P2已集中修复，另修正尚无开发单时误带不存在轮次的链接。最终HEAD的Gate/视觉回归另行记录，不把初次Review SHA当最终HEAD。
+
 | 正文区域 | 正式消费者 / 数据与行为 |
 |---|---|
 | 正式入口 | /ui/digital-cockpit → DigitalCockpitPage → DigitalJourneyCockpit，保持单个原Shell |
@@ -21,4 +23,4 @@
 
 最终SHA截图、FULL及一次Codex Review以交付证据为准。原生返工返回适配使用独立原TEST历史，不宣称已收到货的数字整链UI全部执行。移动专项按用户决定暂缓；完整角色接力UAT与线上Acceptance未跑。
 
-已知未完成：其它未启动节点独立计划登记规则；A4板房同母单技术读取可见其它任务元数据；仓库todo:view/我的待办入口缺失。本PR不改变这些结论。PR04仅待本PR提交后进入；PR05–07未授权。
+已知未完成：其它未启动节点独立计划登记规则；A4板房同母单技术读取可见其它任务元数据；仓库todo:view/我的待办入口缺失。本PR不改变这些结论。PR04在本阶段连续施工；PR05–07未授权。

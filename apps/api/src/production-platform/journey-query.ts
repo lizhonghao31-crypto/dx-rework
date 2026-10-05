@@ -19,7 +19,7 @@ type Candidate = { source: {source_id:string;created_by:string;design_style_no:s
   order: {production_order_id:string;source_id:string|null;created_by:string;primary_merchandiser_id:string|null;design_style_no:string;temporary_style_no:string|null;customer_code:string;product_group:string;contract_delivery_date:string|null;created_at:string}|null };
 const record = (domain:string,id:string,url:string|null,version:number|null=null):JourneyRecord => ({domain,id,url,version,lineId:null,mode:"read"});
 const taskUrl = (id:string) => `/ui/digital-production?task=${encodeURIComponent(id)}`;
-const developmentUrl = (id:string,round:number) => `/ui/digital-production?development=${id}&round=${round}`;
+const developmentUrl = (id:string,round?:number) => `/ui/digital-production?development=${id}${round === undefined ? "" : `&round=${round}`}`;
 const emptyNode = (key:string,state:JourneyState,round:number|null=null):JourneyNode => {
   const definition=journeyDefinition(key)!;
   return {key,instanceId:`${key}:${round??0}`,label:definition.label,stage:definition.stage,state,round,occurrence:null,current:true,unavailableReason:state==="unavailable"?"permission":null,owner:null,operator:null,assignmentHistory:[],expectedAt:null,expectedPrecision:state==="unavailable"?"unavailable":"missing",expectedKind:state==="unavailable"?"unavailable":"unset",actualAt:null,actualQuality:state==="unavailable"?"unavailable":"missing",enteredAt:null,sla:state==="unavailable"?"unavailable":state==="not_applicable"?"not_set":"not_started",completionResult:state==="completed"?"unknown":null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:definition.count&&!["not_applicable","unavailable","inherited"].includes(state)};
@@ -141,8 +141,8 @@ export class DigitalJourneyQuery {
     const creator=source?.created_by??order!.created_by;
     const designer=(await db.query("SELECT display_name FROM app_users WHERE id=$1",[creator])).rows[0]?.display_name??null;
     if(sourceAccess&&sid) {
-      setFact("product_development","completed",[record("development",sid,developmentUrl(sid,round??1),currentDocument?.version??currentDocument?.document_version??null)],iso(source!.created_at),{id:creator,name:designer});
-      setFact("development_publish",currentDocument?(document?.status==="published"||round&&round>1?"completed":"active"):"uncreated",[record("development",sid,developmentUrl(sid,round??1),currentDocument?.version??currentDocument?.document_version??null)],iso(currentDocument?.published_at),{id:creator,name:designer}).operator=currentDocument?.published_by?{id:currentDocument.published_by,name:null}:null;
+      setFact("product_development","completed",[record("development",sid,developmentUrl(sid,currentDocument?round??1:undefined),currentDocument?.version??currentDocument?.document_version??null)],iso(source!.created_at),{id:creator,name:designer});
+      setFact("development_publish",currentDocument?(document?.status==="published"||round&&round>1?"completed":"active"):"uncreated",[record("development",sid,developmentUrl(sid,currentDocument?round??1:undefined),currentDocument?.version??currentDocument?.document_version??null)],iso(currentDocument?.published_at),{id:creator,name:designer}).operator=currentDocument?.published_by?{id:currentDocument.published_by,name:null}:null;
       for(const [key,reference] of Object.entries(inherited) as Array<[string,{taskId:string;roundNumber:number}]>) {
         if(!journeyDefinition(key))continue;
         const value=emptyNode(key,"inherited",round);value.inheritedFrom={taskId:reference.taskId,round:reference.roundNumber};
@@ -260,7 +260,7 @@ export class DigitalJourneyQuery {
       const bulk=await new BulkPreparationService(this.database).read(actor,oid,db);
       const gates=await new BulkPreparationService(this.database).gates(db,oid);
       const bulkUrl=`/ui/digital-production?bulk=${oid}`;
-      setFact("customer_sample",bulk.customerConfirmed?"completed":"pending",sid?[record("development",sid,developmentUrl(sid,bulk.sourceRound??round??1),bulk.sourceRound)]:[]);
+      setFact("customer_sample",bulk.customerConfirmed?"completed":"pending",sid?[record("development",sid,developmentUrl(sid,gates.source?bulk.sourceRound??round??1:currentDocument?round??1:undefined),bulk.sourceRound)]:[]);
       setFact("production_instruction",bulk.instructionValid?"completed":"pending",instruction?[record("instruction",oid,`/ui/digital-production?instruction=${oid}&instructionVersion=${instruction.version}`,instruction.version)]:[],iso(instruction?.published_at),instruction?.published_by?{id:instruction.published_by,name:null}:null);
       const gate=setFact("cutting_gate",bulk.reasons.length?"pending":bulk.tasks.some(task=>["bulk_cutting","bulk_cutting_external"].includes(task.taskKind))?"completed":"pending",[record("preparation",oid,bulkUrl,bulk.instructionVersion)]);
       gate.blockers=bulk.reasons.map((label,index)=>({key:`domain_gate_${index}`,label,ownerId:null,record:gate.records[0]!}));

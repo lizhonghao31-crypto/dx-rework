@@ -29,7 +29,7 @@ function CockpitFilters({ context, data, onChange }: { context: CockpitContext; 
   const [draft, setDraft] = useState(context);
   useEffect(() => setDraft(context), [context]);
   const field = (key: keyof CockpitContext, value: string) => setDraft(current => ({ ...current, [key]: key === "search" ? value : value || undefined }));
-  return <FilterBar className="journey-filters" onSubmit={event => { event.preventDefault(); onChange(draft); }}>
+  return <FilterBar className="journey-filters" onSubmit={event => { event.preventDefault(); onChange({ ...draft, page: 1 }); }}>
     <label className="journey-search">综合搜索<input maxLength={100} aria-label="综合搜索" placeholder="款号、款名、客户、PO、跟单" value={draft.search} onChange={event => field("search", event.target.value)} /></label>
     <label>客户<select aria-label="客户" value={draft.customer ?? ""} onChange={event => field("customer", event.target.value)}><option value="">全部客户</option>{data?.facets?.customers.map(value => <option key={value}>{value}</option>)}</select></label>
     <label>跟单<select aria-label="跟单" value={draft.merchandiserId ?? ""} onChange={event => field("merchandiserId", event.target.value)}><option value="">主 / 第二跟单</option>{data?.facets?.merchandisers.map(person => <option value={person.id} key={person.id}>{person.name ?? person.id}</option>)}</select></label>

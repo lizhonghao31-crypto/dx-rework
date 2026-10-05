@@ -130,11 +130,20 @@ try {
   data = await kpiCheck(root, "search=TEST-PR03-PAGE&page=2");
   assert.equal(data.total, 21);
   assert.equal(await root.locator(".journey-orders tbody tr").count(), 1);
+  // Changed filters from a later page must query page one, even when the match has one page.
+  await root.getByLabel("综合搜索", { exact: true }).fill("TEST-V2-PLAN");
+  await root.locator(".journey-filters").getByRole("button", { name: "查询", exact: true }).click();
+  await ready(root); assert.equal(new URL(root.url()).searchParams.get("page"), "1");
+  assert.equal(await root.locator(".journey-orders tbody tr").count(), 1);
+  scenarios.push({ scenario: "changed filters from page two reset pagination to page one", status: "pass" });
+  await visit(root, "?search=TEST-PR03-PAGE&page=2");
   const pageContext = new URL(root.url()).search;
   await root.locator(".journey-order-select").click();
   await root.getByRole("button", { name: "展开全部小流程", exact: true }).click();
   const original = root.locator(".journey-node-table").getByRole("link", { name: "查看原记录", exact: true }).first();
   await original.click();
+  await root.getByText("款式设计与制作说明单", { exact: true }).waitFor();
+  assert.equal(new URL(root.url()).searchParams.get("round"), null);
   await root.getByRole("link", { name: "返回生产管理座舱", exact: true }).click();
   await ready(root);
   assert.equal(new URL(root.url()).searchParams.get("page"), "2");
@@ -165,6 +174,18 @@ try {
   await ready(root);
   assert.equal(new URL(root.url()).searchParams.get("selected"), fixture.sourceId);
   scenarios.push({ scenario: "standalone original TEST native readonly entry / current node / cockpit return adapter", status: "pass" });
+  // Actual API 404 history still uses the normal history-to-current navigation adapter.
+  const sourcing = new URL("/ui/sourcing/orders/" + randomUUID(), origin);
+  sourcing.searchParams.set("node", "ie_quote"); sourcing.searchParams.set("view", "node-history");
+  sourcing.searchParams.set("returnTo", journeyReturnUrl(context));
+  await root.goto(sourcing.href);
+  await root.getByRole("link", { name: "返回当前节点", exact: true }).waitFor();
+  const currentHref = await root.getByRole("link", { name: "返回当前节点", exact: true }).getAttribute("href");
+  assert.equal(new URL(currentHref, origin).searchParams.get("returnTo"), journeyReturnUrl(context));
+  await root.getByRole("link", { name: "返回当前节点", exact: true }).click();
+  await root.getByRole("link", { name: "返回生产管理座舱", exact: true }).click(); await ready(root);
+  assert.equal(new URL(root.url()).searchParams.get("selected"), fixture.sourceId);
+  scenarios.push({ scenario: "original unavailable sourcing history to current preserves validated cockpit return; API 404 path, not a completed sourcing-history UAT", status: "pass" });
   const worker = await session("pattern-room-worker");
   await visit(worker, "?search=TEST-V2-PLAN");
   assert.equal(await worker.getByRole("button", { name: "工序时效设定", exact: true }).count(), 0);

@@ -51,6 +51,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   it("joins a source and confirmed two-PO order once, resolves either ID, and rejects other identities",async()=>{
     const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:input().designStyleNo,temporaryStyleNo:input().temporaryStyleNo,customerCode:"PD"},randomUUID());
     expect((await journeys.read(actor(),source.sourceId)).orderId).toBeNull();
+    expect((await journeys.read(actor(),source.sourceId)).stages.flatMap(stage=>stage.nodes).find(node=>node.key==="product_development")?.records[0]?.url).toBe(`/ui/digital-production?development=${source.sourceId}`);
     const order=await identity.createOrder(actor(),input(),randomUUID(),source.sourceId);
     const item=await journeys.read(actor(),source.sourceId);
     expect(item.id).toBe(source.sourceId);expect(item.orderId).toBe(order.productionOrderId);
