@@ -3,6 +3,7 @@ import { registerDigitalAnalysisRoutes } from "../../apps/api/src/production-pla
 import { DigitalAnalysisFilterSchema } from "@dx-rework/contracts/digital-production-analysis";
 import { DigitalAnalysisQuery } from "../../apps/api/src/production-platform/reporting-query.js";
 import { DigitalCockpitQuery } from "../../apps/api/src/production-platform/cockpit-query.js";
+import { DigitalJourneyQuery } from "../../apps/api/src/production-platform/journey-query.js";
 import { OrderClosureService } from "../../apps/api/src/production-platform/order-closure-service.js";
 import {ProductionClosureService} from "../../apps/api/src/sourcing/production-closure-service.js";
 import {DigitalProductionAccessService} from "../../apps/api/src/production-platform/access-service.js";
@@ -3203,6 +3204,24 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
 
   it.each(['none','pattern-first','preshrink-first','concurrent'] as const)("P11 releases exactly one whole-order cutting task with %s preparation",async mode=>{
     await exerciseBulkPreparation(database,await budgetFixture(),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()},factoryId,craftId("净色车缝"),mode);
+  });
+
+  it("V2 hides deleted native sourcing decisions and dead record links from Journey",async()=>{
+    const fixture=await budgetFixture(),root=rootActor();
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId("净色车缝"),'pattern-first',{cuttingProcess:'in_house',stopAtReady:true}))!;
+    const query=new DigitalJourneyQuery(database),before=await query.read(root,ready.id);
+    expect(before.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='sourcing_owner')?.state).toBe('completed');
+    expect(before.links.some(link=>link.domain==='sourcing'&&link.id===ready.caseId)).toBe(true);
+    await service.deleteByRoot(root,ready.caseId,randomUUID());
+    await expect(service.getCase({...root,authorizationCapability:'sourcing:view'},ready.caseId)).rejects.toMatchObject({statusCode:404});
+    const after=await query.read(root,ready.id),nodes=after.stages.flatMap(stage=>stage.nodes).filter(node=>['sourcing_preparation','sourcing_ie','sourcing_director','sourcing_owner'].includes(node.key));
+    expect(nodes).toHaveLength(4);
+    for(const node of nodes.filter(node=>node.key!=='sourcing_preparation'))expect(node).toMatchObject({state:'uncreated',owner:null,operator:null,actualAt:null,records:[]});
+    // Original digital preparation task evidence survives; deleted native approvals do not.
+    expect(nodes.find(node=>node.key==='sourcing_preparation')?.records.every(record=>record.domain==='task')).toBe(true);
+    expect(after.links.some(link=>link.domain==='sourcing')).toBe(false);
+    expect(JSON.stringify(after)).not.toContain(ready.caseId);
+    expect((await ready.bulk.read(root,ready.id)).ownerApproved).toBe(false);
   });
 
   it.each(['in_house','outsourced'] as const)('P12 aggregates all original PO cutting facts and syncs numbers without restarting %s',async mode=>{

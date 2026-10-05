@@ -1,3 +1,4 @@
+import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {randomUUID} from 'node:crypto';
 import {expect,vi} from 'vitest';
 import type {Pool} from 'pg';
@@ -27,11 +28,18 @@ export async function exerciseOrderClosure(db:Pool,sourcing:SourcingService,id:s
   const repeat=await receiving.createRepeated(receiver,{cuttingOrderId:cuts[i],receivingBatchId:first.value.receivingBatchId,source:'jiashun',actualQuantity:10,defectiveQuantity:0},randomUUID());created.push({first:first.value,repeat:repeat.value});
   const board=(await receiving.board('2000-01-01','2999-12-31',order.lines[i]!.formalStyleNo!)).rows[0]!;
   const current=await closure.read(primary,id);expect(current.lines[i]).toMatchObject({actualQuantity:board.cumulativeActualQuantity,receiptCount:2});
+  const journey=await new DigitalJourneyQuery(db).read(root,id),nodes=journey.stages.flatMap(stage=>stage.nodes);
+  expect(journey.lines.map(line=>line.id)).toEqual(order.lines.map(line=>line.lineId));
+  if(i===0)expect(nodes.find(node=>node.key==='receipts')?.state).toBe('active');
+  expect(journey.links.some(link=>link.domain==='receiving'&&link.id===first.value.receiptId&&link.lineId===order.lines[i]!.lineId)).toBe(true);
   expect((await db.query("SELECT count(*)::int n FROM digital_production_child_lines WHERE module='receiving' AND production_order_id=$1 AND line_id=$2",[id,order.lines[i]!.lineId])).rows[0].n).toBe(2);
   await receiving.recordPacking({...root,authorizationCapability:'receiving:packing_manage'}, {receivingBatchId:board.receivingBatchId,expectedVersion:board.version,expectedPackingRevisionId:null,packingQuantity:qty},randomUUID());
  }
  if(!special){
   const complete=await closure.read(manager,id);expect(complete.stage).toBe('本期装箱完成');
+  const journey=await new DigitalJourneyQuery(db).read(root,id),nodes=journey.stages.flatMap(stage=>stage.nodes);
+  expect(nodes.find(node=>node.key==='receipts')?.state).toBe('completed');expect(nodes.find(node=>node.key==='packing')?.state).toBe('completed');
+  expect(journey.progress.bulk?.completed).toBe(journey.progress.bulk?.applicable);
   expect(complete.canClose).toBe(false);expect((await closure.read(root,id)).canClose).toBe(false);
   for(const actor of [manager,root])await expect(closure.close(actor,id,{reason:'TEST正常完成不得特殊结案',expectedRevision:complete.revision},randomUUID())).rejects.toMatchObject({statusCode:409});
   expect((await db.query('SELECT count(*)::int n FROM digital_order_closures WHERE production_order_id=$1',[id])).rows[0].n).toBe(0);

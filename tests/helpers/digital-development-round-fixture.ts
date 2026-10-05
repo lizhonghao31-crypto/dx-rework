@@ -1,3 +1,4 @@
+import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import {expect} from 'vitest';
@@ -41,6 +42,12 @@ export async function exerciseDevelopmentRounds(db:Pool,execution:DevelopmentExe
  const newTail=(await versionTasks(4)).find(task=>task.taskKind==='development_tail_check')!;
  expect(newTail.taskId).not.toBe(oldTail.taskId);expect(newTail).toMatchObject({state:'ready',slaHours:4});
  for(const kind of ['development_tail_check','development_confirmation','development_shipping'])await act(4,kind);
+ const journeys=new DigitalJourneyQuery(db),currentJourney=await journeys.read(root,sourceId),historical=await journeys.read(root,sourceId,1);
+ expect(currentJourney.selectedRound).toBe(4);expect(historical.selectedRound).toBe(1);
+ const nodes=currentJourney.stages.flatMap(stage=>stage.nodes);
+ expect(nodes.some(node=>node.round===1&&!node.current)).toBe(true);
+ expect(nodes.find(node=>node.key==='development_pattern'&&node.current)).toMatchObject({state:'inherited',inheritedFrom:{round:1}});
+ expect(nodes.filter(node=>node.key==='development_sewing'&&node.current)).toHaveLength(1);
  expect(await wages()).toBe(before);
  await expect(db.query("UPDATE digital_development_rounds SET customer_comment='覆盖' WHERE source_id=$1 AND round_number=2",[sourceId])).rejects.toThrow();
 }
