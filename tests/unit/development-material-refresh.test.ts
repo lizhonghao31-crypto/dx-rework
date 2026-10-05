@@ -1,26 +1,29 @@
 import type * as ReactModule from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const harness = vi.hoisted(() => ({ dependencies: undefined as unknown[] | undefined, effects: [] as (() => void)[], states: [] as unknown[], refs: [] as {current: unknown}[], refIndex: 0, cleanup: undefined as (() => void) | undefined }));
+const harness = vi.hoisted(() => ({ dependencies: [] as (unknown[] | undefined)[], effects: [] as (() => void)[], states: [] as unknown[], refs: [] as {current: unknown}[], refIndex: 0, effectIndex: 0, cleanups: [] as ((() => void) | undefined)[] }));
 vi.mock("react", async original => ({
   ...await original<typeof ReactModule>(),
   useState: (initial: unknown) => [initial, (value: unknown) => harness.states.push(value)],
   useRef: (value: unknown) => harness.refs[harness.refIndex++] ??= { current: value },
   useEffect: (effect: () => void | (() => void), dependencies: unknown[]) => {
-    if (!harness.dependencies || dependencies.some((value, index) => value !== harness.dependencies?.[index])) harness.effects.push(() => { harness.cleanup?.(); harness.cleanup = effect() || undefined; });
-    harness.dependencies = dependencies;
+    const effectIndex = harness.effectIndex++;
+    const previous = harness.dependencies[effectIndex];
+    if (!previous || dependencies.some((value, index) => value !== previous[index])) harness.effects.push(() => { harness.cleanups[effectIndex]?.(); harness.cleanups[effectIndex] = effect() || undefined; });
+    harness.dependencies[effectIndex] = dependencies;
   },
 }));
 vi.mock("../../apps/web/src/digital-production-api.js", () => ({ digitalRequest: vi.fn() }));
 import { digitalRequest } from "../../apps/web/src/digital-production-api.js";
 import { DevelopmentExecutionPanel } from "../../apps/web/src/digital-development-execution-panel.js";
 
-beforeEach(() => { harness.dependencies = undefined; harness.effects = []; harness.states = []; harness.refs = []; harness.refIndex = 0; harness.cleanup = undefined; vi.mocked(digitalRequest).mockReset(); });
+beforeEach(() => { harness.dependencies = []; harness.effects = []; harness.states = []; harness.refs = []; harness.refIndex = 0; harness.effectIndex = 0; harness.cleanups = []; vi.mocked(digitalRequest).mockReset(); });
 describe("material events refresh current execution conditions", () => {
   it("reloads after substitution without remounting and does not reload for unchanged events", async () => {
     vi.mocked(digitalRequest).mockResolvedValueOnce({ sheet: { canEdit: false }, tasks: [{ state: "pending" }] })
       .mockResolvedValueOnce({ sheet: { canEdit: false }, tasks: [{ state: "ready" }] });
     const render = async (materialRevision: number) => {
       harness.refIndex = 0;
+      harness.effectIndex = 0;
       DevelopmentExecutionPanel({ sourceId: "test-source", materialRevision });
       harness.effects.splice(0).forEach(effect => effect());
       await Promise.resolve(); await Promise.resolve();
@@ -36,6 +39,7 @@ describe("material events refresh current execution conditions", () => {
 
 const renderRevision = async (materialRevision: number) => {
   harness.refIndex = 0;
+  harness.effectIndex = 0;
   DevelopmentExecutionPanel({ sourceId: "test-source", materialRevision });
   harness.effects.splice(0).forEach(effect => effect());
   await Promise.resolve(); await Promise.resolve();
