@@ -905,6 +905,10 @@
       "checksum": "d8f21da27b906eb9619ce651fb70cffd43dbc2be88c32bab4c5190855a248feb"
     },
     {
+      "version": "0222_sourcing_cutting_approved_line_identity",
+      "checksum": "b0bc27988643de5583e8aeb0901bf3879bdd8babe46fca9c40b9368fc3c3555a"
+    },
+    {
       "version": "0223_digital_development_execution",
       "checksum": "ee3427ba4cce450d3cffc464ddd5701fd651604a450a88e64087de5be54b14b7"
     },

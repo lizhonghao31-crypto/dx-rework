@@ -568,5 +568,21 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0222_sourcing_cutting_approved_line_identity": {
+    "checksum": "b0bc27988643de5583e8aeb0901bf3879bdd8babe46fca9c40b9368fc3c3555a",
+    "tables": [
+      "cutting_orders",
+      "sourcing_approval_snapshots"
+    ],
+    "functions": [],
+    "references": [
+      "sourcing_approval_snapshots"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

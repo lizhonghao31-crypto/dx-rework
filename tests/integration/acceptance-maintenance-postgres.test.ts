@@ -56,6 +56,13 @@ print(json.dumps(m.permission_query(json.loads(sys.argv[1]),r)))
    await admin.query(`GRANT SELECT,INSERT,UPDATE,DELETE ON ${schema}.sourcing_contract_return_submissions TO dx_rework_acceptance_app`);
    await admin.query('COMMIT');
    await expect(preflight()).resolves.toBeUndefined();
+   for(const table of ['cutting_orders','sourcing_approval_snapshots']){
+    await admin.query(`ALTER TABLE ${schema}.${table} OWNER TO dx_rework_acceptance_app`);
+    await expect(preflight()).rejects.toThrow(table);
+    expect((await client.query('SELECT * FROM schema_migrations ORDER BY version')).rows).toEqual(before);
+    await admin.query(`ALTER TABLE ${schema}.${table} OWNER TO dx_rework_acceptance`);
+   }
+   await expect(preflight()).resolves.toBeUndefined();
    await admin.query(`ALTER FUNCTION ${schema}.guard_cutting_record_creation() OWNER TO dx_rework_acceptance_app`);
    await expect(preflight()).rejects.toThrow('guard_cutting_record_creation');
    await admin.query(`ALTER FUNCTION ${schema}.guard_cutting_record_creation() OWNER TO dx_rework_acceptance`);
