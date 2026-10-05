@@ -21,6 +21,7 @@ import "./digital-workspace.css";
 import "./unified-shell.css";
 import "@dx-rework/ui/production.css";
 import { digitalWorkspaceActive } from "./digital-workspace-navigation.js";
+import { cockpitReturnPath } from "./digital-journey-cockpit-model.js";
 import { canAccessSupplierMaintenance } from "./supplier-onboarding-model.js";
 import { canAccessDigitalProduction, canAccessSourcing, canAccessSupplierCenter, canAccessProduction, canAccessProductionReporting, canAccessSamples } from "./platform-modules.js";
 import { installTodoIndicatorRefresh } from "./todo-indicator-refresh.js";
@@ -649,7 +650,7 @@ export function Shell({
         />
       ) : null}
 
-      <main>{children}</main>
+      <main>{cockpitReturnPath(window.location.search) && <a className="dx-button dx-button--secondary journey-return-link" href={basePath+cockpitReturnPath(window.location.search)}>返回生产管理座舱</a>}{children}</main>
       {currentUser?.capabilities.includes("todo:view") && <DigitalNotificationToast key={currentUser.id} userId={currentUser.id} />}
     </div>
   );

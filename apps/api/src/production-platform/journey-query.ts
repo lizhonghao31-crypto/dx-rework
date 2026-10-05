@@ -64,7 +64,12 @@ export class DigitalJourneyQuery {
     return this.snapshot(async(db,asOf)=>{
       const items:OrderJourney[]=[];
       for(const row of await this.candidates(db,actor)) { const item=await this.project(db,actor,row,asOf);if(item)items.push(item); }
-      return selectJourneys(items,filter,asOf,!exportAll);
+      const facets = {
+        customers: [...new Set(items.map(item=>item.customer).filter((value):value is string=>Boolean(value)))].sort(),
+        categories: [...new Set(items.map(item=>item.category).filter((value):value is string=>Boolean(value)))].sort(),
+        merchandisers: [...new Map(items.flatMap(item=>item.merchandisers).map(person=>[person.id,person])).values()],
+      };
+      return {...selectJourneys(items,filter,asOf,!exportAll),canManagePolicies:isDigitalLeader(actor),facets};
     });
   }
   async export(actor:TrustedActorContext,filter:JourneyFilter) {

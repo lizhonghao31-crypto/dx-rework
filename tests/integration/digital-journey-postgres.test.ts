@@ -61,6 +61,11 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect((await journeys.list(actor(),JourneyFilterSchema.parse({search:"TEST-J-0001"}))).total).toBe(1);
     await expect(journeys.read(actor(stranger),order.productionOrderId)).rejects.toMatchObject({statusCode:404});
     expect((await journeys.list(actor(stranger),JourneyFilterSchema.parse({search:"TEST-J-0001"}))).total).toBe(0);
+    const allowedFacets=await journeys.list(actor(),JourneyFilterSchema.parse({search:"no-result"}));
+    expect(allowedFacets.facets.customers).toContain("PD");
+    expect(allowedFacets.canManagePolicies).toBe(false);
+    expect((await journeys.list(actor(stranger),JourneyFilterSchema.parse({}))).facets.customers).not.toContain("PD");
+    expect((await journeys.list(actor(root,["root_superuser"]),JourneyFilterSchema.parse({}))).canManagePolicies).toBe(true);
   });
   it("projects original per-material plan revisions without inventing node SLA or arrival times",async()=>{
     const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-MATERIAL-PLAN",temporaryStyleNo:null,customerCode:"PD"},randomUUID());

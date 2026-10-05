@@ -1,0 +1,96 @@
+import { JourneyReturnContextSchema, journeyReturnUrl, type JourneyNode, type JourneyState, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
+
+export type CockpitContext = ReturnType<typeof JourneyReturnContextSchema.parse>;
+export const journeyStateLabels: Record<JourneyState, string> = { uncreated: "未启动", pending: "待前置", active: "进行中", blocked: "受阻", completed: "已完成", cancelled: "已取消", not_applicable: "不适用", unavailable: "无可见事实", inherited: "沿用前轮" };
+export const journeyRiskLabels = { overdue: "已逾期", due_soon: "即将到期", blocked: "受阻", unknown: "时间待核实" };
+export function cockpitContext(search: string): CockpitContext {
+  const params = new URLSearchParams(search);
+  const input = Object.fromEntries([...params].filter(([key]) => key in JourneyReturnContextSchema.shape && params.get(key) !== ""));
+  // Retired workspace links remain usable without treating "bulk" as a Journey stage.
+  if (input.stage === "bulk") input.stage = "preparation";
+  const parsed = JourneyReturnContextSchema.safeParse(input);
+  return parsed.success ? parsed.data : JourneyReturnContextSchema.parse({});
+}
+export function cockpitQuery(context: CockpitContext): string {
+  return new URLSearchParams(Object.entries(context).filter(([key, value]) => !["selected", "expanded", "focus", "round"].includes(key) && value !== undefined && value !== "").map(([key, value]) => [key, String(value)])).toString();
+}
+export function cockpitReturnPath(search: string): string | null {
+  const candidate = new URLSearchParams(search).get("returnTo");
+  if (!candidate || candidate.includes("\\") || !candidate.startsWith("/ui/digital-cockpit?")) return null;
+  const params = new URLSearchParams(candidate.slice(candidate.indexOf("?")));
+  const parsed = JourneyReturnContextSchema.safeParse(Object.fromEntries(params));
+  return parsed.success ? journeyReturnUrl(parsed.data) : null;
+}
+export function journeyRecordHref(url: string, context: CockpitContext): string {
+  if (!url.startsWith("/ui/") || url.includes("\\")) return "";
+  const parsed = new URL(url, "https://local.invalid");
+  parsed.searchParams.set("returnTo", journeyReturnUrl(context));
+  return parsed.pathname + parsed.search + parsed.hash;
+}
+export function journeyTime(value: string | null, precision: JourneyNode["expectedPrecision"] = "instant", missing = "未登记"): string {
+  if (!value) return missing;
+  if (precision === "date") return value;
+  const at = new Date(value);
+  return Number.isFinite(at.getTime()) ? at.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }) : missing;
+}
+export function lateDuration(seconds: number | null): string {
+  if (seconds === null) return "已逾期";
+  if (seconds >= 86400) return "逾期 " + Number((seconds / 86400).toFixed(1)) + " 天";
+  return "逾期 " + Number((seconds / 3600).toFixed(1)) + " 小时";
+}
+export function nodeOverdue(node: JourneyNode, asOf?: string): string {
+  if (node.expectedPrecision === "date" && node.expectedAt && asOf) {
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(asOf));
+    const days = (Date.parse(today) - Date.parse(node.expectedAt)) / 86400000;
+    if (days > 0) return "原计划逾期 " + days + " 天";
+  }
+  return lateDuration(node.overdueSeconds);
+}
+export function nodeStatus(node: JourneyNode, asOf?: string): string {
+  if (node.state === "completed") {
+    if (node.completionResult === "early") return "提前完成";
+    if (node.completionResult === "on_time") return "按时完成";
+    if (node.completionResult === "late") return lateDuration(node.overdueSeconds);
+    return node.actualQuality === "unverified" ? "已完成 · 时间未核实" : "已完成 · 完成时效未知";
+  }
+  if (node.state === "unavailable") return node.unavailableReason === "permission" ? "无权限查看" : "尚无原事实";
+  if (node.state === "inherited") return "沿用第 " + node.inheritedFrom?.round + " 轮";
+  return node.risks.includes("overdue") ? journeyStateLabels[node.state] + " · " + nodeOverdue(node, asOf) : journeyStateLabels[node.state];
+}
+export function stageTimes(stage: OrderJourney["stages"][number]) {
+  if (stage.state === "not_applicable") return { expected: "不适用", actual: "不适用" };
+  if (stage.state === "unavailable") return { expected: "无可见时间", actual: "无可见时间" };
+  const nodes = stage.nodes.filter(node => node.current && !["not_applicable", "cancelled", "inherited", "unavailable"].includes(node.state));
+  // Partial targets cannot imply an agreed target for the whole phase.
+  const samePrecision = new Set(nodes.map(node => node.expectedPrecision)).size === 1;
+  const latestExpected = nodes.map(node => node.expectedAt ?? "").sort().at(-1) ?? null;
+  const latestActual = nodes.map(node => node.actualAt ?? "").sort().at(-1) ?? null;
+  const expected = nodes.length && samePrecision && nodes.every(node => node.expectedAt) ? journeyTime(latestExpected, nodes[0]!.expectedPrecision) : "未完整登记 · 见小流程";
+  const actual = nodes.length && nodes.every(node => node.state === "completed" && node.actualAt && node.actualQuality === "verified") ? journeyTime(latestActual) : "未完成或尚无核实时间";
+  return { expected, actual };
+}
+export function stageStatus(stage: OrderJourney["stages"][number], asOf?: string): string {
+  if (stage.state !== "completed") {
+    const overdue = stage.nodes.filter(node => node.current && node.risks.includes("overdue")).sort((a,b)=>(b.overdueSeconds??0)-(a.overdueSeconds??0))[0];
+    return journeyStateLabels[stage.state] + (overdue ? " · " + nodeOverdue(overdue, asOf) : "");
+  }
+  const nodes = stage.nodes.filter(node => node.current && node.state === "completed");
+  const late = nodes.filter(node => node.completionResult === "late");
+  if (late.length) return lateDuration(Math.max(...late.map(node => node.overdueSeconds ?? 0)));
+  if (!nodes.length || nodes.some(node => !node.completionResult || node.completionResult === "unknown")) return "已完成 · 时效未知";
+  return nodes.every(node => node.completionResult === "early") ? "提前完成" : "按时完成";
+}
+export function orderStatus(order: OrderJourney): string {
+  const nodes = order.stages.flatMap(stage => stage.nodes).filter(node => node.current);
+  if (nodes.some(node => ["packing", "special_closure"].includes(node.key) && node.state === "completed")) return "整单已完成";
+  if (nodes.some(node => node.state === "blocked")) return "受阻";
+  if (nodes.some(node => ["active", "pending"].includes(node.state))) return "进行中";
+  return "未启动";
+}
+export function matchingNodes(order: OrderJourney, kpi: CockpitContext["kpi"]): JourneyNode[] {
+  const nodes = order.stages.flatMap(stage => stage.nodes);
+  const ids = new Set(order.hitReasons.map(reason => reason.nodeId));
+  const matched = nodes.filter(node => node.current && ids.has(node.instanceId));
+  if (matched.length) return matched;
+  return nodes.filter(node => node.current && (["overdue", "due_soon", "blocked"].includes(kpi) ? node.risks.includes(kpi as "overdue" | "due_soon" | "blocked") : node.state === "active" || node.state === "blocked"));
+}

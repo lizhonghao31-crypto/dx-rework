@@ -1,4 +1,5 @@
 import { navigateInternalPage } from "./internal-navigation.js";
+import { cockpitReturnPath } from "./digital-journey-cockpit-model.js";
 import {OrderClosurePanel} from "./order-closure-panel.js";
 import {FactoryFlowPanel} from "./factory-flow-panel.js";
 import { BulkPreparationPanel } from "./bulk-preparation-panel.js";
@@ -83,6 +84,8 @@ export function DigitalProductionPage() {
   const updateLine = (index: number, patch: Partial<DigitalOrderInput["lines"][number]>) => setForm(current => ({ ...current, lines: current.lines.map((line, i) => i === index ? { ...line, ...patch } : line) }));
   const start = (next: "source" | "order", source?: DigitalSource) => { setSelected(null); setSourceId(source?.sourceId ?? null); setForm({ ...emptyOrder(), designStyleNo: source?.designStyleNo ?? "", temporaryStyleNo: source?.temporaryStyleNo ?? null, customerCode: source?.customerCode ?? "", primaryMerchandiserId: options?.customers.find(customer => customer.code === source?.customerCode)?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(options?.customers ?? [], source?.customerCode) }); setMode(next); setError(""); };
   const closeDetail = (parameters: string[], clear: () => void) => {
+    const cockpit = cockpitReturnPath(window.location.search);
+    if (cockpit) { void navigateInternalPage(urls.pageUrl(cockpit)); return; }
     const url = new URL(window.location.href);
     for (const parameter of parameters) url.searchParams.delete(parameter);
     // Keep the shared router's location and history position in sync with closing.
