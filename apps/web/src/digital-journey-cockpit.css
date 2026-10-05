@@ -62,3 +62,4 @@
 .journey-current-records a{padding:3px 6px;font-size:10px}
 .journey-current-context p{margin-bottom:5px}
 @media(min-width:801px) and (max-width:1350px){.journey-golden .journey-flow-panel:not(.is-collapsed){height:218px}.journey-golden .journey-flow-panel:not(.is-collapsed) .dx-production-stage{height:136px}.journey-flow .dx-production-stage dl>div{grid-template-columns:48px minmax(0,1fr)}.journey-golden .journey-flow-panel.is-collapsed .dx-production-stage{height:78px}.journey-golden .journey-flow-panel.is-collapsed{height:148px}.digital-journey-cockpit .journey-node-table th{font-size:9px}.digital-journey-cockpit .journey-node-table td:not([colspan]){font-size:10px}.journey-flow-panel .journey-section-title>.journey-text-action{font-size:10px}.journey-flow-legend{gap:7px}}
+.digital-journey-cockpit .journey-node-table td:not([colspan]){height:21px;max-height:21px}
