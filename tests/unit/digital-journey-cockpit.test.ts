@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { JOURNEY_STAGES, JourneyReturnContextSchema, type JourneyNode, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
-import { cockpitContext, cockpitQuery, cockpitReturnPath, journeyRecordHref, journeyTime, nodeStatus, orderStatus, stageTimes } from "../../apps/web/src/digital-journey-cockpit-model.js";
+import { cockpitContext, cockpitQuery, cockpitReturnPath, journeyRecordHref, journeyTime, nodeStatus, orderStatus, stageTimes, journeyDocumentGroups } from "../../apps/web/src/digital-journey-cockpit-model.js";
 import { DigitalJourneyCockpit } from "../../apps/web/src/digital-journey-cockpit.js";
 const id = "19b5331b-c76f-4b9a-8773-849e24a35ad1";
 const node = (key: string, patch: Partial<JourneyNode> = {}): JourneyNode => ({ key, instanceId: key, label: key, stage: "development", state: "active", round: 1, occurrence: 1, current: true, owner: { id, name: "真实负责人" }, operator: null, assignmentHistory: [], expectedAt: null, expectedKind: "unset", expectedPrecision: "missing", actualAt: null, actualQuality: "missing", enteredAt: null, sla: "not_started", completionResult: null, overdueSeconds: null, risks: [], blockers: [], records: [], inheritedFrom: null, countsInProgress: true, unavailableReason: null, ...patch });
@@ -23,6 +23,14 @@ describe("formal Journey cockpit", () => {
     expect(cockpitReturnPath("?returnTo=" + encodeURIComponent("/ui/digital-cockpit?foreign=1"))).toBeNull();
     expect(cockpitContext("?stage=bulk&workspace=preparation").stage).toBe("preparation");
   });
+  it("preserves an explicitly collapsed workflow through original-record return and reload", () => {
+    const context = JourneyReturnContextSchema.parse({search: "TEST-COCKPIT", selected: id, page: 2, expanded: "", flow: "collapsed"});
+    const record = new URL(journeyRecordHref("/ui/digital-production?task=" + id, context), "https://local.invalid");
+    const back = new URL(cockpitReturnPath(record.search)!, "https://local.invalid");
+    expect(back.searchParams.has("expanded")).toBe(true);
+    expect(cockpitContext(back.search)).toEqual(context);
+    expect(cockpitContext("?selected=" + id).expanded).toBeUndefined();
+  });
   it("preserves date-only plans and does not invent a phase target from partial registration", () => {
     expect(journeyTime("2026-10-03", "date")).toBe("2026-10-03");
     expect(nodeStatus(node("原物料", { expectedAt: "2026-10-03", expectedPrecision: "date", state: "pending", risks: ["overdue"] }), "2026-10-04T16:30:00Z")).toContain("原计划逾期 2 天");
@@ -36,15 +44,40 @@ describe("formal Journey cockpit", () => {
     expect(orderStatus(order([node("pattern", { state: "completed" })]))).not.toBe("整单已完成");
     expect(orderStatus(order([node("packing", { state: "completed", stage: "receiving" })]))).toBe("整单已完成");
   });
-  it("renders all seven phases, simultaneous work, six clickable KPIs and original record links in the formal consumer", () => {
+  it("opens a selected order without the unrelated overview and retains simultaneous original work", () => {
     const first = node("并行纸样", { records: [{ domain: "task", id, url: "/ui/digital-production?task=" + id, mode: "handle", version: 1, lineId: null }] });
     const second = node("并行预缩", { instanceId: "parallel-preshrink", stage: "preparation" });
     const item = order([first, second]);
+    item.progress.bulk = { completed: 4, applicable: 9 };
     const html = renderToStaticMarkup(createElement(DigitalJourneyCockpit, { data: { ruleVersion: "journey-v2.0", asOf: "2026-10-05T00:00:00Z", page: 1, pageSize: 20, total: 1, summary: { all: 1, active: 1, dueSoon: 0, overdue: 0, blocked: 0, completed: 0 }, items: [item] }, detail: item, context: JourneyReturnContextSchema.parse({ selected: id, expanded: "development,preparation" }), error: "", detailError: "", detailLoading: false, onChange: () => undefined, actions: null }));
     for (const stage of JOURNEY_STAGES) expect(html).toContain(stage.label);
     for (const label of ["并行纸样", "并行预缩", "预计完成时间", "实际完成时间", "相关单据", "操作记录", "进入原办理"]) expect(html).toContain(label);
-    expect((html.match(/class="dx-production-kpi/g) ?? []).length).toBe(6);
+    expect(html).not.toContain('aria-label="订单列表"');
+    expect(html).toContain("生产管理总览");
     expect(html).toContain("returnTo=");
     expect(html).not.toContain("交货完成");
+    expect(html).toContain("开发节点完成");
+    expect(html).toContain("大货节点完成");
+    expect(html).toContain("0 / 2");
+    expect(html).toContain("4 / 9");
+    expect(html).not.toContain("已交货");
+    const tabs = html.match(/<nav class="journey-business-tabs"[\s\S]*?<\/nav>/)?.[0];
+    expect(tabs).toContain("订单总览");
+    expect(tabs).not.toContain("开发表样");
+    expect(tabs).not.toContain("财务对账");
+    expect(tabs).not.toContain("disabled");
+  });
+  it("retains different historical destinations while grouping identical record references once", () => {
+    const record = {domain: "development", id, url: "/ui/digital-production?development=" + id + "&round=1", mode: "read" as const, version: 1, lineId: null};
+    const item = order([node("发布", {round: 1, records: [record, record]}), node("复版", {instanceId: "round-2", round: 2, records: [{...record, url: record.url.replace("round=1", "round=2"), version: 2}]})]);
+    item.links = [record];
+    const groups = journeyDocumentGroups(item);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.entries.map(entry => entry.record.version)).toEqual([1, 2]);
+    expect(groups[0]!.entries.map(entry => entry.label)).toEqual(["发布 · 第 1 轮 · v1", "复版 · 第 2 轮 · v2"]);
+  });
+  it("does not label complete mixed-precision targets as missing or invent a phase date", () => {
+    const stage = order([node("日期计划", {expectedAt: "2026-10-03", expectedPrecision: "date"}), node("办理时限", {expectedAt: "2026-10-03T08:30:00Z", expectedPrecision: "instant"})]).stages[1]!;
+    expect(stageTimes(stage).expected).toBe("见各节点目标");
   });
 });

@@ -14,7 +14,7 @@ export {taskTimeProgress} from "./digital-cockpit-model.js";
 export function DigitalCockpitPage(){
  const [data,setData]=useState<JourneyResult|null>(null),[error,setError]=useState(''),[context,setContext]=useState<CockpitContext>(()=>cockpitContext(window.location.search)),[refresh,setRefresh]=useState(0);
  const [detail,setDetail]=useState<OrderJourney|null>(null),[detailError,setDetailError]=useState(''),[detailLoading,setDetailLoading]=useState(false);
- const query=cockpitQuery(context),selectedId=context.selected??data?.items[0]?.id??'';
+ const query=cockpitQuery(context),selectedId=context.selected??'';
  const viewContext=useMemo(()=>({...context,selected:selectedId||undefined}),[context,selectedId]);
  const changeContext=(patch:Partial<CockpitContext>,preserveSelection=false)=>{
   const parsed=JourneyReturnContextSchema.safeParse({...context,...patch,page:preserveSelection?context.page:patch.page??1,...(!preserveSelection?{selected:undefined,expanded:undefined,focus:undefined,round:undefined}:{})});

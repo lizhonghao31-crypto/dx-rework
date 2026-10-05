@@ -105,6 +105,10 @@ export function DigitalProductionPage() {
   if (instructionOrder) return <div className="pattern-orders digital-production"><ProductionInstructionPanel orderId={instructionOrder} initialVersion={Number(new URLSearchParams(window.location.search).get("instructionVersion"))||undefined} onClose={()=>closeDetail(["instruction", "instructionVersion"],()=>setInstructionOrder(null))} /></div>;
   if (budgetOrder) return <div className="pattern-orders digital-production"><DigitalBudgetPanel key={budgetOrder.productionOrderId} order={budgetOrder} initialVersion={Number(new URLSearchParams(window.location.search).get("budgetVersion"))||undefined} onClose={()=>closeDetail(["budget", "budgetVersion"],()=>setBudgetOrder(null))} /></div>;
   if (developmentSource) return <div className="pattern-orders digital-production"><DigitalDevelopmentPanel key={developmentSource} sourceId={developmentSource} initialRound={Number(new URLSearchParams(window.location.search).get("round"))||undefined} onClose={()=>closeDetail(["development", "round"],()=>setDevelopmentSource(null))} /></div>;
+  // The cockpit already chose an exact task. Reuse its existing detail consumer
+  // without prepending the unrelated task and order lists to this deep link.
+  const cockpitTask = new URLSearchParams(window.location.search).get("task");
+  if (cockpitReturnPath(window.location.search) && cockpitTask && /^[0-9a-f-]{36}$/i.test(cockpitTask)) return <div className="pattern-orders digital-production" aria-label="座舱原任务详情">{error && <p role="alert">{error}</p>}{access ? <DigitalTasksPanel options={access} taskId={cockpitTask} compact/> : !error && <p role="status">正在读取原任务…</p>}</div>;
   return <div className="pattern-orders digital-production"><PageHeader title="数字生产订单" description="订单源头" />
     <a href={urls.pageUrl("ui/digital-cockpit")}>生产管理座舱</a>
     {error && <p role="alert">{error}</p>}
