@@ -1,7 +1,16 @@
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('Acceptance owner maintenance generator', () => {
+  it('has exact permission inventories for every migration beyond shared history', () => {
+    const manifest=JSON.parse(readFileSync('apps/api/src/platform/migration-manifest.json','utf8')).migrations as {version:string;checksum:string}[];
+    const inventory=JSON.parse(readFileSync('scripts/deploy/acceptance-migration-requirements.json','utf8'));
+    for(const entry of manifest.filter(row=>Number(row.version.slice(0,4))>217))expect(inventory[entry.version]?.checksum,entry.version).toBe(entry.checksum);
+    expect(inventory['0222_sourcing_cutting_approved_line_identity']).toMatchObject({
+      tables:['cutting_orders','sourcing_approval_snapshots'],references:['sourcing_approval_snapshots'],creates:[],sequences:[],insert:[],update:[]
+    });
+  });
   it('pins the local live identity, drops privilege and checks history under the migration lock', () => {
     const result = execFileSync('python3', ['-B','-c', `
 import importlib.util,json,pathlib

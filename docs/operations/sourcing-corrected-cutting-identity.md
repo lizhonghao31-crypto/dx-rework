@@ -11,3 +11,9 @@
 隔离 PG13.23 回归包含新增/减少/重排纠错明细、旧约束 23503 复现、失败事务完整回滚、失败 key 正常重试及成功 key 幂等、裁床及生产数量映射、跨订单/不存在的审批行拒绝、历史创建与裁床记录保持不变。未对线上订单或数据库执行操作。
 
 本次隔离 PG13.23 完整迁移重放：main 221→222（1 条）、Acceptance 237→238（1 条）、main 222→Acceptance 238（16 条）、空库→main 222、空库→Acceptance 238 均成功；每条路径第二次运行均应用 0 条。旧安装工具对 238 条目标报 `Migration sequence gap or unapproved duplicate`，更新后的 policy 与完整 JSON 输入支持目标并继续拒绝 checksum drift、缺失迁移和未知第三身份。所有数据均为隔离测试模型。
+
+工具获取与安装必须使用独立远端完整对象仓库：在新临时目录执行 `git init`、为固定 GitHub 远端设置 origin、正常 `git fetch` release 分支（不带 depth/filter、不从 `/opt/dx-rework/source` 本地 clone），再检查不是 shallow、无 promisor/partialclonefilter 配置且 `git fsck --full` 成功。本次隔离环境已验证该路径的 fetch、完整性检查和 archive。线上认证使用现有 dxrework 身份，认证与具体合并 SHA 必须在发布交接时核实，不宣称本地验证等于 ECS 已执行。
+
+等 #645 实际合并后，以核实的 release 合并 SHA 创建干净 detached checkout，复用已有 `bash scripts/dx-acceptance.sh install` 一次安装完整工具；该入口只写不可变工具版本和原子替换 launcher，不迁移业务数据库或重启业务。核实 launcher/TOOL_SHA 和新权限清单后，才允许后续正式发布 main 的实际合并 SHA。以后此修复对应的 Acceptance 更新复用 `dx-acceptance update <实际候选SHA>`，不必每次重装工具。禁止将 PR Head 冒充合并后的部署 SHA；本次未执行安装、合并或部署。
+
+Acceptance 初次 Review 的 P1（0222 缺少 checksum 绑定权限清单）已补齐：两个 ALTER 表要求 OWNER，外键目标要求 REFERENCES，新增表/序列及数据写授权均为空。PG13.23 低权限回归验证任一表由应用角色所有时预检拒绝且迁移历史不变，修复测试对象所有者后升级成功并幂等。另加完整待执行清单 checksum 覆盖测试，避免新迁移遗漏库存。
