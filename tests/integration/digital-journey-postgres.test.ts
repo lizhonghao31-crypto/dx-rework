@@ -1,5 +1,6 @@
 import { DevelopmentDocumentSchema } from "@dx-rework/contracts/digital-development";
 import { DigitalDevelopmentService } from "../../apps/api/src/production-platform/development-service.js";
+import { DevelopmentExecutionService } from "../../apps/api/src/production-platform/development-execution-service.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -76,8 +77,16 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect((await node()).records[0]?.url).toContain(`#material-${materialId}`);
     const before=(await db.query("SELECT count(*)::int n FROM digital_production_deadline_revisions")).rows[0].n;
     await node();expect((await db.query("SELECT count(*)::int n FROM digital_production_deadline_revisions")).rows[0].n).toBe(before);
+    const execution=new DevelopmentExecutionService(db,true),rootActor=actor(root,["root_superuser"]);
+    await execution.check(rootActor,source.sourceId,{taskId:published.taskId!,result:"缺项退回",note:"TEST 物料补齐接续",items:[]},randomUUID());
+    const supply=(await execution.read(rootActor,source.sourceId)).tasks.find(task=>task.taskKind==="development_material_supply")!;
+    const taskNode=()=>journeys.read(actor(),source.sourceId).then(value=>value.stages.flatMap(stage=>stage.nodes).find(item=>item.instanceId===supply.taskId));
+    expect(await taskNode()).toMatchObject({key:"development_material_supply",state:"active",current:true,owner:{id:designer},expectedAt:supply.dueAt,enteredAt:supply.enteredAt});
+    expect((await taskNode())?.records).toContainEqual(expect.objectContaining({domain:"task",id:supply.taskId,url:`/ui/digital-production?task=${supply.taskId}`}));
     await forms.materialEvent(actor(),source.sourceId,materialId,{expectedVersion:published.version,expectedMaterialRevision:1,action:"到货",expectedDate:null,note:"TEST 原到货记录"},randomUUID());
     expect(await node()).toMatchObject({state:"completed",actualAt:null,completionResult:"unknown"});
+    await execution.resubmit(actor(),source.sourceId,supply.taskId,randomUUID());
+    expect(await taskNode()).toMatchObject({state:"completed",actualQuality:"verified",operator:{id:designer}});
     await expect(journeys.read(actor(stranger),source.sourceId)).rejects.toMatchObject({statusCode:404});
   });
   it("preserves the direct-order origin when development is attached later",async()=>{
@@ -90,13 +99,14 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect((await journeys.read(actor(),source.sourceId)).id).toBe(order.productionOrderId);
   });
   it("does not correlate equal style suffixes and only searches authorized formal/PO rows",async()=>{
-    const a=await identity.createOrder(actor(),input("SHARED-1234"),randomUUID());
-    const b=await identity.createOrder(actor(stranger),{...input("SHARED-1234"),designStyleNo:"OTHER-1234"},randomUUID());
+    const a=await identity.createOrder(actor(),input("SHARED-STYLESUFFIX-1234"),randomUUID());
+    const b=await identity.createOrder(actor(stranger),{...input("SHARED-STYLESUFFIX-1234"),designStyleNo:"OTHER-STYLESUFFIX-1234"},randomUUID());
     const item=await journeys.read(actor(),a.productionOrderId);
     expect(item.lines.map(line=>line.id)).toEqual(a.lines.map(line=>line.lineId));
     expect(item.lines.some(line=>b.lines.some(other=>other.lineId===line.id))).toBe(false);
-    expect((await journeys.list(actor(),JourneyFilterSchema.parse({search:"OTHER-1234"}))).total).toBe(0);
-    expect((await journeys.list(actor(root,["root_superuser"]),JourneyFilterSchema.parse({search:"1234"}))).total).toBe(2);
+    expect((await journeys.list(actor(),JourneyFilterSchema.parse({search:"OTHER-STYLESUFFIX-1234"}))).total).toBe(0);
+    // UUID substring search is supported; isolate the style fixture from random ID matches.
+    expect((await journeys.list(actor(root,["root_superuser"]),JourneyFilterSchema.parse({search:"STYLESUFFIX-1234"}))).total).toBe(2);
   });
   it("keeps own-task metadata isolated from sibling tasks and does not start pending SLA",async()=>{
     const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-WORKER",temporaryStyleNo:null,customerCode:"PD"},randomUUID());

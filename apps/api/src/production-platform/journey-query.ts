@@ -192,7 +192,8 @@ export class DigitalJourneyQuery {
         "SELECT material_id,action,expected_date::text FROM digital_development_material_events WHERE source_id=$1 AND route_version<=$2 ORDER BY sequence", [sid, round ?? 1])).rows;
       const today = new Intl.DateTimeFormat("en-CA", {timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(asOf));
       const materials = (currentDocument.document as DevelopmentDocument).materials.filter(material => material.requiredThisRound);
-      if (!materials.length) replace("development_material_supply", emptyNode("development_material_supply", "not_applicable", round));
+      const supplyPlaceholder = baseNodes.findIndex(value => value.key === "development_material_supply" && value.instanceId === `development_material_supply:${value.round ?? 0}`);
+      if (!materials.length && supplyPlaceholder >= 0) baseNodes[supplyPlaceholder] = emptyNode("development_material_supply", "not_applicable", round);
       materials.forEach((material, index) => {
         const events = materialEvents.filter(event => event.material_id === material.materialId);
         const arrived = material.available || events.some(event => ["到货", "确认代用"].includes(event.action));
@@ -207,7 +208,9 @@ export class DigitalJourneyQuery {
         node.records = [record("development_material", material.materialId, `${developmentUrl(sid, round ?? 1)}#material-${material.materialId}`, currentDocument.version ?? currentDocument.document_version ?? null)];
         if (!arrived && plannedDate && plannedDate < today) node.risks.push("overdue");
         // Event registration time is not the actual arrival time.
-        if (index === 0) replace("development_material_supply", node); else baseNodes.push(node);
+        const placeholder = index === 0 ? supplyPlaceholder : -1;
+        // A real supply task retains its lifecycle, owner and original handling URL.
+        if (placeholder >= 0) baseNodes.splice(placeholder, 1, node); else baseNodes.push(node);
       });
     }
     if(baseNodes.some(node=>node.key==="development_material_recheck"&&node.current&&node.state!=="not_applicable")) {
