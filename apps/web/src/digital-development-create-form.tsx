@@ -25,6 +25,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const [form, setForm] = useState(() => initialDevelopmentOrder(customers, source));
   const [developmentType, setDevelopmentType] = useState<"头版" | "开发板">("头版");
   const [createdSource, setCreatedSource] = useState<string | null>(source?.sourceId ?? null);
+  const [fixedCustomer, setFixedCustomer] = useState<string | null>(source?.customer ?? null);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const writing = useRef(false), sourceKey = useRef<{payload: string; key: string} | null>(null), orderKey = useRef<{payload: string; key: string} | null>(null);
   const initial = useRef(JSON.stringify(form)), dirty = useRef(false), completed = useRef(false);
@@ -53,7 +54,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         const payload = JSON.stringify(sourceInput);
         if (sourceKey.current?.payload !== payload) sourceKey.current = {payload, key: createClientRequestId()};
         const next = await digitalRequest<DigitalSource>("sources", "POST", sourceInput, sourceKey.current.key);
-        id = next.sourceId; setCreatedSource(id);
+        id = next.sourceId; setCreatedSource(id); setFixedCustomer(next.customerCode);
       }
       let orderId: string | null = null;
       if (orderInput) {
@@ -77,7 +78,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       {intent !== "confirm_order" && <label>开发类型<select aria-label="开发类型" disabled={Boolean(createdSource)} value={developmentType} onChange={event => setDevelopmentType(event.target.value as "头版" | "开发板")}><option>头版</option><option>开发板</option></select></label>}
       <label>设计款号<input required maxLength={100} value={form.designStyleNo} readOnly={Boolean(createdSource)} onChange={event => setForm({...form, designStyleNo: event.target.value})}/></label>
       <label>代用款号<input maxLength={100} value={form.temporaryStyleNo ?? ""} readOnly={Boolean(createdSource)} onChange={event => setForm({...form, temporaryStyleNo: event.target.value || null})}/></label>
-      <label>客户<select aria-label="客户" required={withOrder} disabled={Boolean(createdSource && form.customerCode)} value={form.customerCode} onChange={event => {const customer = customers.find(customer => customer.code === event.target.value); setForm({...form, customerCode: event.target.value, primaryMerchandiserId: customer?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(customers, event.target.value)});}}><option value="">通用开发 / 请选择</option>{customers.map(customer => <option key={customer.code} value={customer.code}>{customer.code} · {customer.name}</option>)}</select></label>
+      <label>客户<select aria-label="客户" required={withOrder} disabled={Boolean(createdSource && fixedCustomer)} value={form.customerCode} onChange={event => {const customer = customers.find(customer => customer.code === event.target.value); setForm({...form, customerCode: event.target.value, primaryMerchandiserId: customer?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(customers, event.target.value)});}}><option value="">通用开发 / 请选择</option>{customers.map(customer => <option key={customer.code} value={customer.code}>{customer.code} · {customer.name}</option>)}</select></label>
     </div>
     {withOrder && <><h3>订购信息</h3><p>默认主跟单：{customers.find(customer => customer.code === form.customerCode)?.defaultMerchandiserName ?? "未配置，待主管指派"}</p>
       <div className="development-create-grid"><label>产品分组<select aria-label="产品分组" value={form.productGroup} onChange={event => setForm({...form, productGroup: event.target.value as DigitalOrderInput["productGroup"]})}>{(customers.find(customer => customer.code === form.customerCode)?.productGroups ?? [form.productGroup]).map(group => <option key={group}>{group}</option>)}</select></label>
