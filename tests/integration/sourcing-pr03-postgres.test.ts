@@ -2715,6 +2715,76 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await service.nodeHistory(readerActor(), id, "ie_quote")).attachments.map(image => image.attachmentId)).toEqual([initialImage]);
   });
 
+  it.each(["expand", "reduce-reorder"] as const)("approves %s corrected lines against immutable approval identity, preserving creation and dispatch", async (mode) => {
+    const image=await readyCuttingSheet(merchandiserId);
+    const prefix=`CUT-CORRECTION-${mode}`;
+    const originalLines=mode==='expand' ? [{styleNo:`${prefix}-ORIGINAL`,color:"原色",quantity:100}]
+      : [1,2,3,4].map(n=>({styleNo:`${prefix}-${n}`,color:`原色${n}`,quantity:100}));
+    const original={gender:"男装" as const,styleName:"裁床纠错批准回归",estimatedCutPieceSendDate:"2026-10-01",deliveryDate:"2026-10-20",
+      lineItems:originalLines,daxingUnitPrice:"8",attachmentIds:[image]};
+    const created=await service.createCase(merchandiserActor(),original,randomUUID());
+    const id=created.value.sourcingCaseId;
+    const before=await database.query("SELECT * FROM sourcing_case_lines WHERE sourcing_case_id=$1 ORDER BY position",[id]);
+    const returned=await service.returnToMerchandiser(ownerActor(),id,{expectedVersion:created.value.version,reason:"核实款色后纠错"},randomUUID());
+    const correctedLines=mode==='expand' ? [200,200,400,200].map((quantity,index)=>({styleNo:`${prefix}-${index+1}`,color:["暗红","白","黑","蓝"][index]!,quantity}))
+      : [{...originalLines[3]!,quantity:150,color:"新蓝"},{...originalLines[0]!,quantity:250,color:"新白"}];
+    await service.correctCase(merchandiserActor(),id,{gender:original.gender,styleName:original.styleName,
+      estimatedCutPieceSendDate:original.estimatedCutPieceSendDate,deliveryDate:original.deliveryDate,lineItems:correctedLines,attachmentIds:[image],
+      expectedVersion:returned.value.version,reason:"按核实明细重新报价"},randomUUID());
+    const prices=correctedLines.map((_line,index)=>({position:index+1,unitPrice:"12.8"}));
+    await service.quoteIePrice(ieActor(),id,{linePrices:prices.map(line=>({...line,unitPrice:"14"}))},randomUUID());
+    await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:prices},randomUUID());
+    const key=randomUUID();
+    if(mode==='expand') {
+      // Reproduce the shipped pre-0222 FK shape only in this owned synthetic schema.
+      const historicalCutting=(await database.query("SELECT * FROM cutting_orders ORDER BY cutting_order_id")).rows;
+      await database.query(`ALTER TABLE cutting_orders ADD CONSTRAINT cutting_orders_sourcing_case_id_sourcing_line_position_fkey
+        FOREIGN KEY(sourcing_case_id,sourcing_line_position) REFERENCES sourcing_case_lines(sourcing_case_id,position) NOT VALID`);
+      await database.query("ALTER TABLE cutting_orders DROP CONSTRAINT cutting_orders_approval_case_identity_fkey");
+      await database.query("ALTER TABLE sourcing_approval_snapshots DROP CONSTRAINT sourcing_approval_snapshots_case_identity");
+      try {
+        await expect(service.decideOwner(ownerActor(),id,{decision:"approved"},key)).rejects.toMatchObject({code:"23503",constraint:"cutting_orders_sourcing_case_id_sourcing_line_position_fkey"});
+        expect((await service.getCase(readerActor(),id)).status).toBe("pending_owner_approval");
+        for(const table of ['sourcing_owner_decisions','sourcing_approval_snapshots','cutting_orders'])
+          expect((await database.query(`SELECT count(*)::int AS n FROM ${table} WHERE sourcing_case_id=$1`,[id])).rows[0].n).toBe(0);
+        expect((await database.query("SELECT count(*)::int AS n FROM operation_events WHERE entity_id=$1 AND action='sourcing.owner.approve'",[id])).rows[0].n).toBe(0);
+      } finally {
+        await database.query(await readFile(new URL('../../apps/api/migrations/0222_sourcing_cutting_approved_line_identity.sql',import.meta.url),'utf8'));
+      }
+      expect((await database.query("SELECT * FROM cutting_orders ORDER BY cutting_order_id")).rows).toEqual(historicalCutting);
+      const fks=(await database.query("SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='cutting_orders'::regclass AND contype='f'")).rows.map(row=>row.definition);
+      expect(fks).toHaveLength(4);
+      expect(fks).toContain('FOREIGN KEY (sourcing_case_id, approval_snapshot_id) REFERENCES sourcing_approval_snapshots(sourcing_case_id, sourcing_approval_snapshot_id)');
+      expect(fks).toContain('FOREIGN KEY (approval_snapshot_id, sourcing_line_position) REFERENCES sourcing_approval_snapshot_lines(sourcing_approval_snapshot_id, "position")');
+    }
+    let approved:Awaited<ReturnType<SourcingService['decideOwner']>>;
+    try {approved=await service.decideOwner(ownerActor(),id,{decision:"approved"},key);}
+    catch(error) {
+      expect((await service.getCase(readerActor(),id)).status).toBe("pending_owner_approval");
+      for(const table of ['sourcing_owner_decisions','sourcing_approval_snapshots','cutting_orders'])
+        expect((await database.query(`SELECT count(*)::int AS n FROM ${table} WHERE sourcing_case_id=$1`,[id])).rows[0].n).toBe(0);
+      expect((await database.query("SELECT count(*)::int AS n FROM operation_events WHERE entity_id=$1 AND action='sourcing.owner.approve'",[id])).rows[0].n).toBe(0);
+      throw error;
+    }
+    expect((await database.query("SELECT * FROM sourcing_case_lines WHERE sourcing_case_id=$1 ORDER BY position",[id])).rows).toEqual(before.rows);
+    expect(approved.value.approvalSnapshot?.quantity).toBe(correctedLines.reduce((sum,line)=>sum+line.quantity,0));
+    const retry=await service.decideOwner(ownerActor(),id,{decision:"approved"},key);
+    expect(retry.reused).toBe(true);
+    const cuttingRows=(await database.query("SELECT cutting_order_id,sourcing_line_position,approval_snapshot_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position",[id])).rows;
+    expect(cuttingRows.map(line=>line.sourcing_line_position)).toEqual(prices.map(line=>line.position));
+    expect((await cutting.listSources(cuttingOwnerActor())).items.filter(row=>row.sourcingCaseId===id)).toHaveLength(correctedLines.length);
+    const contract=(await contractService.getCurrent(readerActor(),id)).item!;
+    expect(contract.status).toBe("ready");
+    const dispatch=await production.dispatch(contractActor(),id,{sourcingContractDocumentId:contract.sourcingContractDocumentId,confirmed:true},randomUUID());
+    expect(dispatch.value.lines.map(line=>({styleNo:line.styleNo,quantity:line.quantity}))).toEqual(correctedLines.map(line=>({styleNo:line.styleNo,quantity:line.quantity})));
+    expect((await database.query("SELECT cutting_order_id,sourcing_line_position,approval_snapshot_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position",[id])).rows).toEqual(cuttingRows);
+    const other=await service.createCase(merchandiserActor(),{...original,attachmentIds:[],lineItems:[{styleNo:`${prefix}-OTHER`,color:"黑",quantity:1}]},randomUUID());
+    await expect(database.query("INSERT INTO cutting_orders(cutting_order_id,sourcing_case_id,sourcing_line_position,approval_snapshot_id) VALUES($1,$2,1,$3)",
+      [randomUUID(),other.value.sourcingCaseId,cuttingRows[0].approval_snapshot_id])).rejects.toMatchObject({code:"55000"});
+    await expect(database.query("INSERT INTO cutting_orders(cutting_order_id,sourcing_case_id,sourcing_line_position,approval_snapshot_id) VALUES($1,$2,20,$3)",
+      [randomUUID(),id,cuttingRows[0].approval_snapshot_id])).rejects.toMatchObject({code:"55000"});
+  });
+
   it("returns an unapproved order for versioned correction and reapproval", async () => {
     const image = await readyCuttingSheet(merchandiserId);
     const replacementImage = await readyCuttingSheet(merchandiserId);
