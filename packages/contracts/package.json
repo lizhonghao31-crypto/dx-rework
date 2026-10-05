@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./digital-development-workspace": { "types": "./src/digital-development-workspace.ts", "import": "./dist/digital-development-workspace.js" },
     "./digital-production-journey": { "types": "./src/digital-production-journey.ts", "import": "./dist/digital-production-journey.js" },
     "./digital-production-analysis": { "types": "./src/digital-production-analysis.ts", "import": "./dist/digital-production-analysis.js" },
     "./digital-production-cockpit": { "types": "./src/digital-production-cockpit.ts", "import": "./dist/digital-production-cockpit.js" },

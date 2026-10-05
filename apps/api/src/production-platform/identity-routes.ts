@@ -1,4 +1,6 @@
 import type { DigitalJourneyQuery } from "./journey-query.js";
+import { DevelopmentWorkspaceQuery } from "./development-workspace-query.js";
+import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "@dx-rework/contracts/digital-development-workspace";
 import { JourneyFilterSchema } from "@dx-rework/contracts/digital-production-journey";
 import { registerDigitalAnalysisRoutes } from "./reporting-routes.js";
 import type { DigitalAnalysisQuery } from "./reporting-query.js";
@@ -86,6 +88,9 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
     if (request.routeOptions.url?.startsWith("/digital-production/")) reply.header("cache-control", "no-store");
   });
   if (dependencies.journeys) {
+    const workspaces = new DevelopmentWorkspaceQuery(dependencies.journeys);
+    app.get("/digital-production/workspaces/designer", async request => workspaces.designer(await actor(request), parse(DevelopmentWorkspaceFilterSchema, request.query)));
+    app.get("/digital-production/workspaces/pattern", async request => workspaces.pattern(await actor(request), parse(PatternWorkspaceFilterSchema, request.query)));
     app.get("/digital-production/journeys", async request => dependencies.journeys!.list(await actor(request), parse(JourneyFilterSchema, request.query)));
     app.get("/digital-production/journeys/export", async request => dependencies.journeys!.export(await actor(request), parse(JourneyFilterSchema, request.query)));
     app.get("/digital-production/journeys/:id", async request => {

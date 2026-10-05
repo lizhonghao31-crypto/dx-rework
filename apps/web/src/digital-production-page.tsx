@@ -5,6 +5,7 @@ import { BulkPreparationPanel } from "./bulk-preparation-panel.js";
 import { ProductionInstructionPanel } from "./production-instruction-panel.js";
 import { DigitalBudgetPanel } from "./digital-budget-panel.js";
 import { DigitalDevelopmentPanel } from "./digital-development-panel.js";
+import { developmentWorkspaceReturnUrl } from "./development-workspace-return.js";
 import { DigitalTasksPanel } from "./digital-production-tasks-panel.js";
 import { digitalRequest } from "./digital-production-api.js";
 import { DigitalAccessPanel, type DigitalAccessOptions } from "./digital-production-access-panel.js";
@@ -45,6 +46,11 @@ export function DigitalProductionPage() {
   const [orders, setOrders] = useState<DigitalOrder[]>([]);
   const [sources, setSources] = useState<DigitalSource[]>([]);
   const [selected, setSelected] = useState<DigitalOrder | null>(null);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("order"); let live = true;
+    if (id) void digitalRequest<DigitalOrder>(`orders/${id}`).then(order => {if (live) setSelected(order);}).catch(reason => {if (live) setError(reason.message);});
+    return () => {live = false;};
+  }, []);
   const [mode, setMode] = useState<"list" | "source" | "order">("list");
   const [sourceId, setSourceId] = useState<string | null>(null);
   const [developmentType, setDevelopmentType] = useState<"头版" | "开发板">("头版");
@@ -84,6 +90,8 @@ export function DigitalProductionPage() {
   const start = (next: "source" | "order", source?: DigitalSource) => { setSelected(null); setSourceId(source?.sourceId ?? null); setForm({ ...emptyOrder(), designStyleNo: source?.designStyleNo ?? "", temporaryStyleNo: source?.temporaryStyleNo ?? null, customerCode: source?.customerCode ?? "", primaryMerchandiserId: options?.customers.find(customer => customer.code === source?.customerCode)?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(options?.customers ?? [], source?.customerCode) }); setMode(next); setError(""); };
   const closeDetail = (parameters: string[], clear: () => void) => {
     const url = new URL(window.location.href);
+    const target = developmentWorkspaceReturnUrl(new URLSearchParams(window.location.search).get("returnTo"));
+    if (target) {void navigateInternalPage(target, {replace: true}).then(left => {if (left) clear();}); return;}
     for (const parameter of parameters) url.searchParams.delete(parameter);
     // Keep the shared router's location and history position in sync with closing.
     void navigateInternalPage(url.href, { replace: true }).then(left => { if (left) clear(); });
