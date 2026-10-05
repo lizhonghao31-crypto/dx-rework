@@ -30,3 +30,25 @@ button.dx-production-kpi { cursor: pointer; }
 .dx-production-ui .dx-production-table td { padding: 10px 12px; border-bottom: 1px solid var(--production-border); text-align: left; }
 .dx-production-ui .dx-production-pagination { color: var(--production-muted); }
 @media(max-width:800px) { .dx-production-ui { padding: 12px; } .dx-production-header { align-items: start; flex-wrap: wrap; } .dx-production-pagination { flex-wrap: wrap; } }
+
+/* V2 Golden opt-in: only new workspaces that explicitly adopt this class. */
+.dx-production-refined {font-size:13px;line-height:1.45;color:var(--production-text)}
+.dx-production-refined .dx-button {box-shadow:none;border:1px solid var(--production-border);border-radius:5px;min-height:32px;padding:5px 10px;font-size:12px;font-weight:500}
+.dx-production-refined .dx-button--secondary {background:#fff;color:var(--production-text)}
+.dx-production-refined .dx-button--primary {background:var(--production-primary);border-color:var(--production-primary);color:#fff}
+.dx-production-refined .dx-badge {min-height:20px;border-radius:4px;padding:2px 6px;white-space:normal}
+.dx-production-refined .dx-production-panel {padding:12px;box-shadow:none;border-radius:6px;background:#fff}
+.dx-production-refined .dx-production-panel h2 {font-size:15px;line-height:1.3;margin:0 0 8px;padding-left:7px}
+.dx-production-refined .dx-production-header {margin:0;min-height:48px}
+.dx-production-refined .dx-production-header h1 {font-size:26px}
+.dx-production-refined .dx-production-header p {font-size:12px;margin-top:4px}
+.dx-production-refined .dx-production-kpi {padding:12px 16px;gap:3px;box-shadow:none}
+.dx-production-refined .dx-production-kpi strong {font-size:25px;line-height:1.2}
+.dx-production-refined .dx-production-kpi span {font-size:12px}
+.dx-production-refined .dx-production-filters {padding:12px;gap:10px;font-size:12px}
+.dx-production-refined input,.dx-production-refined select {min-height:32px;border:1px solid #c9d8ea;border-radius:5px;padding:5px 8px;background:#fff;color:var(--production-text);font:inherit}
+.dx-production-refined .dx-production-table th,.dx-production-refined .dx-production-table td {padding:7px 8px}
+.dx-production-refined .dx-production-table th {font-size:11px;font-weight:500;background:#f3f7fd}
+.dx-production-refined a {color:var(--production-primary);text-decoration:none}
+.dx-production-refined a:hover {text-decoration:underline}
+.dx-production-refined .dx-production-pagination {padding:10px 0 0;font-size:12px}

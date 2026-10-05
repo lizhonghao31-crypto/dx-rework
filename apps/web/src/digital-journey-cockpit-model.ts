@@ -1,18 +1,18 @@
-import { JourneyReturnContextSchema, journeyReturnUrl, type JourneyNode, type JourneyState, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
+import { JourneyReturnContextSchema, journeyReturnUrl, type JourneyNode, type JourneyRecord, type JourneyState, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 
 export type CockpitContext = ReturnType<typeof JourneyReturnContextSchema.parse>;
 export const journeyStateLabels: Record<JourneyState, string> = { uncreated: "未启动", pending: "待前置", active: "进行中", blocked: "受阻", completed: "已完成", cancelled: "已取消", not_applicable: "不适用", unavailable: "无可见事实", inherited: "沿用前轮" };
 export const journeyRiskLabels = { overdue: "已逾期", due_soon: "即将到期", blocked: "受阻", unknown: "时间待核实" };
 export function cockpitContext(search: string): CockpitContext {
   const params = new URLSearchParams(search);
-  const input = Object.fromEntries([...params].filter(([key]) => key in JourneyReturnContextSchema.shape && params.get(key) !== ""));
+  const input = Object.fromEntries([...params].filter(([key]) => key in JourneyReturnContextSchema.shape && (params.get(key) !== "" || key === "expanded" || key === "row")));
   // Retired workspace links remain usable without treating "bulk" as a Journey stage.
   if (input.stage === "bulk") input.stage = "preparation";
   const parsed = JourneyReturnContextSchema.safeParse(input);
   return parsed.success ? parsed.data : JourneyReturnContextSchema.parse({});
 }
 export function cockpitQuery(context: CockpitContext): string {
-  return new URLSearchParams(Object.entries(context).filter(([key, value]) => !["selected", "expanded", "focus", "round"].includes(key) && value !== undefined && value !== "").map(([key, value]) => [key, String(value)])).toString();
+  return new URLSearchParams(Object.entries(context).filter(([key, value]) => !["selected", "expanded", "focus", "row", "round", "flow"].includes(key) && value !== undefined && value !== "").map(([key, value]) => [key, String(value)])).toString();
 }
 export function cockpitReturnPath(search: string): string | null {
   const candidate = new URLSearchParams(search).get("returnTo");
@@ -65,8 +65,8 @@ export function stageTimes(stage: OrderJourney["stages"][number]) {
   const samePrecision = new Set(nodes.map(node => node.expectedPrecision)).size === 1;
   const latestExpected = nodes.map(node => node.expectedAt ?? "").sort().at(-1) ?? null;
   const latestActual = nodes.map(node => node.actualAt ?? "").sort().at(-1) ?? null;
-  const expected = nodes.length && samePrecision && nodes.every(node => node.expectedAt) ? journeyTime(latestExpected, nodes[0]!.expectedPrecision) : "未完整登记 · 见小流程";
-  const actual = nodes.length && nodes.every(node => node.state === "completed" && node.actualAt && node.actualQuality === "verified") ? journeyTime(latestActual) : "未完成或尚无核实时间";
+  const expected = nodes.length && nodes.every(node => node.expectedAt) ? samePrecision ? journeyTime(latestExpected, nodes[0]!.expectedPrecision) : "见各节点目标" : "未完整登记";
+  const actual = nodes.length && nodes.every(node => node.state === "completed" && node.actualAt && node.actualQuality === "verified") ? journeyTime(latestActual) : nodes.some(node => node.state !== "completed") ? "未完成" : "完成时间待核实";
   return { expected, actual };
 }
 export function stageStatus(stage: OrderJourney["stages"][number], asOf?: string): string {
@@ -93,4 +93,22 @@ export function matchingNodes(order: OrderJourney, kpi: CockpitContext["kpi"]): 
   const matched = nodes.filter(node => node.current && ids.has(node.instanceId));
   if (matched.length) return matched;
   return nodes.filter(node => node.current && (["overdue", "due_soon", "blocked"].includes(kpi) ? node.risks.includes(kpi as "overdue" | "due_soon" | "blocked") : node.state === "active" || node.state === "blocked"));
+}
+
+
+/** Deduplicate the same exact destination, retaining historical versions and PO lines. */
+export function journeyDocumentGroups(order: OrderJourney) {
+  const entries = new Map<string, { key: string; record: JourneyRecord; label: string }>();
+  for (const { record, node } of [
+    ...order.stages.flatMap(stage => stage.nodes.flatMap(node => node.records.map(record => ({ record, node })))),
+    ...order.links.map(record => ({ record, node: null })),
+  ]) {
+    const key = [record.domain, record.id, record.url, record.version, record.lineId].join(":");
+    if (entries.has(key)) continue;
+    const label = [node?.subject || node?.label || "订单档案", node?.round ? `第 ${node.round} 轮` : null, node?.occurrence && node.occurrence > 1 ? `第 ${node.occurrence} 次` : null, record.version ? `v${record.version}` : null, record.lineId ? `明细 ${record.lineId.slice(-8)}` : null].filter(Boolean).join(" · ");
+    entries.set(key, {key, record, label});
+  }
+  const groups = new Map<string, Array<{ key: string; record: JourneyRecord; label: string }>>();
+  for (const entry of entries.values()) groups.set(entry.record.domain, [...(groups.get(entry.record.domain) ?? []), entry]);
+  return [...groups].map(([domain, entries]) => ({domain, entries}));
 }

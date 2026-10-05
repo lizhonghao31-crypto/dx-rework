@@ -77,10 +77,12 @@ export type JourneyResult = { ruleVersion: "journey-v2.0"; asOf: string; page: n
   summary: {all:number;active:number;dueSoon:number;overdue:number;blocked:number;completed:number}; items: OrderJourney[] };
 
 /** Stable, local-only return context. Consumers restore these values after domain handling. */
-export const JourneyReturnContextSchema = JourneyFilterSchema.safeExtend({ selected: z.string().uuid().optional(), expanded: z.string().max(100).optional(), focus: z.string().max(100).optional(), round: z.coerce.number().int().positive().max(10000).optional() });
+export const JourneyReturnContextSchema = JourneyFilterSchema.safeExtend({ selected: z.string().uuid().optional(), flow: z.enum(["collapsed", "expanded"]).optional(), expanded: z.string().max(100).optional(), focus: z.string().max(100).optional(), row: z.string().max(100).optional(), round: z.coerce.number().int().positive().max(10000).optional() });
 export function journeyReturnUrl(context: z.input<typeof JourneyReturnContextSchema>): string {
   const value = JourneyReturnContextSchema.parse(context);
   const params = new URLSearchParams();
-  for (const [key, item] of Object.entries(value)) if (item !== undefined && item !== "") params.set(key, String(item));
+  // Preserve an explicit all-phases selection separately from an absent
+  // preference. The flow field independently retains collapsed time details.
+  for (const [key, item] of Object.entries(value)) if (item !== undefined && (item !== "" || key === "expanded" || key === "row")) params.set(key, String(item));
   return `/ui/digital-cockpit?${params}`;
 }
