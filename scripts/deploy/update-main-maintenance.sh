@@ -50,11 +50,11 @@ public_verify() {
 }
 previous_phase="$(cat "$state/phase")"
 case "$previous_phase" in
-  switched|switching|rolling-back) die 'online transition is unfinished; resume dx-rework-update main first' ;;
+  prepared|switched|switching|rolling-back) die 'online transition is unfinished; resume dx-rework-update main first' ;;
 esac
 resume=false
 case "$previous_phase" in
-  maintenance-draining|maintenance-stopped|maintenance-backed-up|maintenance-migrating|maintenance-migrated|maintenance-activating) resume=true ;;
+  maintenance-prepared|maintenance-draining|maintenance-drained|maintenance-stopped|maintenance-backed-up|maintenance-migrating|maintenance-migrated|maintenance-activating) resume=true ;;
 esac
 if [[ "$resume" == true ]]; then receipt="$state/previous-active.json"; else receipt="$state/active.json"; fi
 readarray -t active < <(node -e 'const s=require(process.argv[1]);console.log(s.sha);console.log(s.port)' "$receipt")
@@ -83,14 +83,15 @@ if [[ "$resume" != true ]]; then
   cp "$state/active.json" "$state/previous-active.json"
   cp -L "$config" "$state/previous-active-nginx.conf"
   node "$tool/scripts/deploy/render-main-maintenance.mjs" "$state/nginx-template.conf" "$state/maintenance.conf"
-  phase maintenance-draining
+  node "$tool/scripts/deploy/nginx-workers.mjs" > "$state/maintenance-workers.json"
+  phase maintenance-prepared
 else
   candidate_sha="$(cat "$state/candidate-sha")"
   require_sha "$candidate_sha"
 fi
 
-if [[ "$(cat "$state/phase")" == maintenance-draining ]]; then
-  node "$tool/scripts/deploy/nginx-workers.mjs" > "$state/maintenance-workers.json"
+if [[ "$(cat "$state/phase")" == maintenance-prepared ]]; then
+  [[ -f "$state/maintenance-workers.json" ]] || die 'original maintenance drain receipt is missing; service retained'
   link_config "$state/maintenance.conf"
   if ! nginx -t || ! nginx -s reload; then
     link_config "$state/previous-active-nginx.conf"
@@ -98,6 +99,9 @@ if [[ "$(cat "$state/phase")" == maintenance-draining ]]; then
     phase maintenance-reverted
     die 'maintenance routing was rejected; old runtime retained'
   fi
+  phase maintenance-draining
+fi
+if [[ "$(cat "$state/phase")" == maintenance-draining ]]; then
   if ! node "$tool/scripts/deploy/drain-nginx-workers.mjs" "$state/maintenance-workers.json"; then
     link_config "$state/previous-active-nginx.conf"
     nginx -t && nginx -s reload || die 'request drain timed out; routing recovery needs inspection'
@@ -105,6 +109,10 @@ if [[ "$(cat "$state/phase")" == maintenance-draining ]]; then
     phase maintenance-reverted
     die 'request drain timed out; unchanged old runtime retained and routing restored'
   fi
+  phase maintenance-drained
+fi
+if [[ "$(cat "$state/phase")" == maintenance-drained ]]; then
+  # The receipt and drained phase survive a crash during/after this idempotent stop.
   worker stop-main-runtime.sh "$active_sha" "$active_port"
   phase maintenance-stopped
 fi

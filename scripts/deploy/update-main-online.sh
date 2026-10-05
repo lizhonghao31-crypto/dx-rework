@@ -59,36 +59,22 @@ phase() {
   mv -Tf "$state/phase.tmp" "$state/phase"
 }
 
+current_phase="$(cat "$state/phase")"
+resume=false
+case "$current_phase" in prepared|switching|switched|rolling-back) resume=true ;; esac
 receipt="$state/active.json"
-if [[ -f "$state/phase" && ( "$(cat "$state/phase")" == switched || "$(cat "$state/phase")" == switching || "$(cat "$state/phase")" == rolling-back ) ]]; then
-  receipt="$state/previous-active.json"
-fi
+if [[ "$resume" == true ]]; then receipt="$state/previous-active.json"; fi
 readarray -t active < <(node -e 'const s=require(process.argv[1]);console.log(s.sha);console.log(s.port)' "$receipt")
-active_sha="${active[0]}"
-active_port="${active[1]}"
+active_sha="${active[0]}"; active_port="${active[1]}"
 require_sha "$active_sha"
 [[ "$active_port" == 3201 || "$active_port" == 3203 ]]
 
-# A drain interrupted by timeout or process death is resumed before fetching or
-# starting another candidate. The old process remains alive throughout drain.
-if [[ -f "$state/phase" && ( "$(cat "$state/phase")" == switched || "$(cat "$state/phase")" == switching || "$(cat "$state/phase")" == rolling-back ) ]]; then
+# Finish the frozen candidate before fetching a newer main. All identifying
+# receipts are persisted before a candidate process can occupy the other port.
+if [[ "$resume" == true ]]; then
   candidate_sha="$(cat "$state/candidate-sha")"; candidate_port="$(cat "$state/candidate-port")"
   require_sha "$candidate_sha"
   [[ "$candidate_port" == 3201 || "$candidate_port" == 3203 ]]
-  if [[ "$(cat "$state/phase")" == switching ]]; then
-    link_config "$state/$candidate_sha.conf"
-    if ! nginx -t || ! nginx -s reload; then
-      node "$tool/scripts/deploy/nginx-workers.mjs" > "$state/rejected-workers.json"
-      link_config "$(cat "$state/previous-config")"
-      nginx -t && nginx -s reload || die 'interrupted switch routing recovery remains pending; both slots retained'
-      public_verify "$active_sha" || die 'previous public generation verification remains pending; both slots retained'
-      node "$tool/scripts/deploy/drain-nginx-workers.mjs" "$state/rejected-workers.json"
-      worker start-online-slot.sh stop "$candidate_sha" "$candidate_port"
-      phase reverted
-      die 'interrupted switch rejected; previous routing restored and verified'
-    fi
-    phase switched
-  fi
 else
   verify "$active_port" "$active_sha" || die 'BOOTSTRAP_REQUIRED: active runtime must support background lease and unchanged full schema'
   snapshot="$(mktemp -d /tmp/dx-main-update.XXXXXX)"
@@ -103,29 +89,34 @@ else
     exit 0
   fi
   if [[ "$active_port" == 3201 ]]; then candidate_port=3203; else candidate_port=3201; fi
-  worker start-online-slot.sh start "$candidate_sha" "$candidate_port"
-  if ! warm "$candidate_port" "$candidate_sha"; then
-    worker start-online-slot.sh stop "$candidate_sha" "$candidate_port"
-    die 'candidate failed warmup; old generation remains active'
-  fi
-  node "$tool/scripts/deploy/render-online-nginx.mjs" "$state/nginx-template.conf" "$state/$candidate_sha.conf" "$DX_ROOT/frontend/releases/$candidate_sha" "$candidate_port"
   printf '%s\n' "$candidate_sha" > "$state/candidate-sha"
   printf '%s\n' "$candidate_port" > "$state/candidate-port"
   readlink -f "$config" > "$state/previous-config"
-  node "$tool/scripts/deploy/nginx-workers.mjs" > "$state/old-workers.json"
   cp "$state/active.json" "$state/previous-active.json"
   phase prepared
+fi
+if [[ "$(cat "$state/phase")" == prepared ]]; then
+  worker start-online-slot.sh start "$candidate_sha" "$candidate_port"
+  if ! warm "$candidate_port" "$candidate_sha"; then
+    worker start-online-slot.sh stop "$candidate_sha" "$candidate_port"
+    phase reverted
+    die 'candidate failed warmup; old generation remains active'
+  fi
+  node "$tool/scripts/deploy/render-online-nginx.mjs" "$state/nginx-template.conf" "$state/$candidate_sha.conf" "$DX_ROOT/frontend/releases/$candidate_sha" "$candidate_port"
+  node "$tool/scripts/deploy/nginx-workers.mjs" > "$state/old-workers.json"
   phase switching
+fi
+if [[ "$(cat "$state/phase")" == switching ]]; then
   link_config "$state/$candidate_sha.conf"
   if ! nginx -t || ! nginx -s reload; then
     node "$tool/scripts/deploy/nginx-workers.mjs" > "$state/rejected-workers.json"
     link_config "$(cat "$state/previous-config")"
-    nginx -t && nginx -s reload
+    nginx -t && nginx -s reload || die 'switch routing recovery remains pending; both slots retained'
     public_verify "$active_sha" || die 'previous public generation verification remains pending; both slots retained'
     node "$tool/scripts/deploy/drain-nginx-workers.mjs" "$state/rejected-workers.json"
     worker start-online-slot.sh stop "$candidate_sha" "$candidate_port"
     phase reverted
-    die 'nginx rejected candidate; previous config restored'
+    die 'nginx rejected candidate; previous config restored and verified'
   fi
   phase switched
 fi
