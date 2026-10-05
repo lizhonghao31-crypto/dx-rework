@@ -51,6 +51,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   it("joins a source and confirmed two-PO order once, resolves either ID, and rejects other identities",async()=>{
     const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:input().designStyleNo,temporaryStyleNo:input().temporaryStyleNo,customerCode:"PD"},randomUUID());
     expect((await journeys.read(actor(),source.sourceId)).orderId).toBeNull();
+    expect((await journeys.read(actor(),source.sourceId)).stages.flatMap(stage=>stage.nodes).find(node=>node.key==="product_development")?.records[0]?.url).toBe(`/ui/digital-production?development=${source.sourceId}`);
     const order=await identity.createOrder(actor(),input(),randomUUID(),source.sourceId);
     const item=await journeys.read(actor(),source.sourceId);
     expect(item.id).toBe(source.sourceId);expect(item.orderId).toBe(order.productionOrderId);
@@ -61,6 +62,11 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect((await journeys.list(actor(),JourneyFilterSchema.parse({search:"TEST-J-0001"}))).total).toBe(1);
     await expect(journeys.read(actor(stranger),order.productionOrderId)).rejects.toMatchObject({statusCode:404});
     expect((await journeys.list(actor(stranger),JourneyFilterSchema.parse({search:"TEST-J-0001"}))).total).toBe(0);
+    const allowedFacets=await journeys.list(actor(),JourneyFilterSchema.parse({search:"no-result"}));
+    expect(allowedFacets.facets.customers).toContain("PD");
+    expect(allowedFacets.canManagePolicies).toBe(false);
+    expect((await journeys.list(actor(stranger),JourneyFilterSchema.parse({}))).facets.customers).not.toContain("PD");
+    expect((await journeys.list(actor(root,["root_superuser"]),JourneyFilterSchema.parse({}))).canManagePolicies).toBe(true);
   });
   it("projects original per-material plan revisions without inventing node SLA or arrival times",async()=>{
     const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-MATERIAL-PLAN",temporaryStyleNo:null,customerCode:"PD"},randomUUID());

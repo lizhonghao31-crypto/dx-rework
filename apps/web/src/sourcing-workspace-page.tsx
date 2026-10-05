@@ -7,6 +7,7 @@ import { ContractInformationRefresh } from "./contract-information-refresh.js";
 import { sourcingDatesValid, SOURCING_DATE_ORDER_ERROR } from "@dx-rework/contracts";
 import { moduleCanWrite } from "./member-module-policy.js";
 import { todoReturnPath } from "./todo-query-state.js";
+import { cockpitReturnPath } from "./digital-journey-cockpit-model.js";
 import {WorkAnalysisPanel} from "./work-analysis-panel.js";
 import { isNewSourcingPrice, newSourcingPriceDisplay, historicalSourcingPrice, sourcingPriceSummary, sourcingLinePricing, sourcingDeleteConfirmation, sourcingDecisionNeedsReason } from "./sourcing-price-presentation.js";
 import { createSourcingPriceInput } from "./sourcing-price-input.js";
@@ -457,7 +458,7 @@ export function SourcingWorkspacePage({
       {view === "detail" && sourcingCaseId
         ? (new URLSearchParams(window.location.search).get("view") === "node-history" && sourcingWorkflowNodeFromSearch()
           && !(sourcingWorkflowNodeFromSearch()==="finance" && isMerchandiserOnly(user?.businessRoles,user?.isRoot))
-          ? <SourcingNodeHistoryPage sourcingCaseId={sourcingCaseId} node={sourcingWorkflowNodeFromSearch()!} returnTo={todoReturnPath(window.location.search) ?? sourcingReturnPath(window.location.search)} />
+          ? <SourcingNodeHistoryPage sourcingCaseId={sourcingCaseId} node={sourcingWorkflowNodeFromSearch()!} returnTo={todoReturnPath(window.location.search) ?? sourcingReturnPath(window.location.search) ?? cockpitReturnPath(window.location.search)} />
           : <OrderDetailPage sourcingCaseId={sourcingCaseId} user={user} />)
         : null}
       </div>
@@ -1624,7 +1625,7 @@ function OrderDetailPage({
   const selectedFactory = factories.find((factory) => factory.supplierId === decision.supplierId);
   const todoBackPath = todoReturnPath(window.location.search);
   const listBackPath = sourcingReturnPath(window.location.search);
-  const detailReturnPath = todoBackPath ?? listBackPath;
+  const detailReturnPath = todoBackPath ?? listBackPath ?? cockpitReturnPath(window.location.search);
   const contractMissingLabels: Readonly<Record<string, string>> = {
     address: "地址",
     contractEntityName: "合同主体",
@@ -2041,4 +2042,3 @@ function OrderDetailPage({
     </div>
   );
 }
-

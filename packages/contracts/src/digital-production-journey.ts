@@ -72,11 +72,12 @@ export type OrderJourney = {
   progress: { development: {applicable:number;completed:number} | null; bulk: {applicable:number;completed:number} | null };
   hitReasons: Array<{nodeId:string;nodeKey:string;stage:JourneyStageKey;risks:JourneyNode["risks"]}>;
 };
-export type JourneyResult = { ruleVersion: "journey-v2.0"; asOf: string; page: number; pageSize: 20; total: number;
+export type JourneyResult = { ruleVersion: "journey-v2.0"; asOf: string; page: number; pageSize: 20; total: number; canManagePolicies?: boolean;
+  facets?: { customers: string[]; categories: string[]; merchandisers: Array<{id:string;name:string|null}> };
   summary: {all:number;active:number;dueSoon:number;overdue:number;blocked:number;completed:number}; items: OrderJourney[] };
 
 /** Stable, local-only return context. Consumers restore these values after domain handling. */
-export const JourneyReturnContextSchema = JourneyFilterSchema.safeExtend({ selected: z.string().uuid().optional(), expanded: z.string().max(100).optional() });
+export const JourneyReturnContextSchema = JourneyFilterSchema.safeExtend({ selected: z.string().uuid().optional(), expanded: z.string().max(100).optional(), focus: z.string().max(100).optional(), round: z.coerce.number().int().positive().max(10000).optional() });
 export function journeyReturnUrl(context: z.input<typeof JourneyReturnContextSchema>): string {
   const value = JourneyReturnContextSchema.parse(context);
   const params = new URLSearchParams();
