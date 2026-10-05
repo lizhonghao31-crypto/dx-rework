@@ -9,13 +9,13 @@ const node = (key: string, patch: Partial<JourneyNode> = {}): JourneyNode => ({ 
 const order = (nodes: JourneyNode[]): OrderJourney => ({ id, sourceId: id, orderId: id, designStyleNo: "TEST-COCKPIT", temporaryStyleNo: null, customer: "TEST-PD", category: "上衣", designer: "测试设计师", styleName: null, merchandisers: [], orderNumbers: [], createdAt: "2026-10-01T00:00:00Z", deliveryDate: null, selectedRound: 1, adoptedRound: null, sourceVersion: 1, instructionVersion: null, lines: [], links: [], stages: JOURNEY_STAGES.map(stage => ({ ...stage, state: "active", nodes: nodes.filter(item => item.stage === stage.key) })), progress: { development: { completed: 0, applicable: 2 }, bulk: null }, hitReasons: [] });
 describe("formal Journey cockpit", () => {
   it("round-trips filters, selection, exact round, expansion and focused node through original URLs", () => {
-    const context = JourneyReturnContextSchema.parse({ search: "中文 PO", customer: "TEST-PD", kpi: "overdue", page: 2, selected: id, expanded: "development,preparation", focus: id, round: 2 });
+    const context = JourneyReturnContextSchema.parse({ search: "中文 PO", customer: "TEST-PD", kpi: "overdue", page: 2, selected: id, expanded: "development,preparation", focus: id, row: "historical-row", round: 2 });
     const href = journeyRecordHref("/ui/digital-production?development=" + id + "&round=2#material-" + id, context);
     const target = new URL(href, "https://local.invalid");
     expect(target.hash).toBe("#material-" + id);
     expect(target.searchParams.get("round")).toBe("2");
     expect(cockpitContext(new URL(cockpitReturnPath(target.search)!, "https://local.invalid").search)).toEqual(context);
-    expect(cockpitQuery(context)).not.toMatch(/selected|expanded|focus|round/);
+    expect(cockpitQuery(context)).not.toMatch(/selected|expanded|focus|row|round|flow/);
   });
   it("rejects external or malformed return contexts and keeps the retired bulk link usable", () => {
     expect(cockpitReturnPath("?returnTo=https%3A%2F%2Fexternal.invalid")).toBeNull();
@@ -24,7 +24,7 @@ describe("formal Journey cockpit", () => {
     expect(cockpitContext("?stage=bulk&workspace=preparation").stage).toBe("preparation");
   });
   it("preserves an explicitly collapsed workflow through original-record return and reload", () => {
-    const context = JourneyReturnContextSchema.parse({search: "TEST-COCKPIT", selected: id, page: 2, expanded: "", flow: "collapsed"});
+    const context = JourneyReturnContextSchema.parse({search: "TEST-COCKPIT", selected: id, page: 2, expanded: "", flow: "collapsed", row: ""});
     const record = new URL(journeyRecordHref("/ui/digital-production?task=" + id, context), "https://local.invalid");
     const back = new URL(cockpitReturnPath(record.search)!, "https://local.invalid");
     expect(back.searchParams.has("expanded")).toBe(true);
@@ -47,7 +47,8 @@ describe("formal Journey cockpit", () => {
   it("opens a selected order without the unrelated overview and retains simultaneous original work", () => {
     const first = node("并行纸样", { records: [{ domain: "task", id, url: "/ui/digital-production?task=" + id, mode: "handle", version: 1, lineId: null }] });
     const second = node("并行预缩", { instanceId: "parallel-preshrink", stage: "preparation" });
-    const item = order([first, second]);
+    const denied = node("权限隔离节点", {state: "unavailable", unavailableReason: "permission", owner: null});
+    const item = order([first, second, denied]);
     item.progress.bulk = { completed: 4, applicable: 9 };
     const html = renderToStaticMarkup(createElement(DigitalJourneyCockpit, { data: { ruleVersion: "journey-v2.0", asOf: "2026-10-05T00:00:00Z", page: 1, pageSize: 20, total: 1, summary: { all: 1, active: 1, dueSoon: 0, overdue: 0, blocked: 0, completed: 0 }, items: [item] }, detail: item, context: JourneyReturnContextSchema.parse({ selected: id, expanded: "development,preparation" }), error: "", detailError: "", detailLoading: false, onChange: () => undefined, actions: null }));
     for (const stage of JOURNEY_STAGES) expect(html).toContain(stage.label);
@@ -56,6 +57,7 @@ describe("formal Journey cockpit", () => {
     expect(html).toContain("生产管理总览");
     expect(html).toContain("returnTo=");
     expect(html).not.toContain("交货完成");
+    expect(html).toMatch(/权限隔离节点[\s\S]*无权限查看[\s\S]*无权限查看/);
     expect(html).toContain("开发节点完成");
     expect(html).toContain("大货节点完成");
     expect(html).toContain("0 / 2");

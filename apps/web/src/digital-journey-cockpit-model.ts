@@ -5,14 +5,14 @@ export const journeyStateLabels: Record<JourneyState, string> = { uncreated: "�
 export const journeyRiskLabels = { overdue: "已逾期", due_soon: "即将到期", blocked: "受阻", unknown: "时间待核实" };
 export function cockpitContext(search: string): CockpitContext {
   const params = new URLSearchParams(search);
-  const input = Object.fromEntries([...params].filter(([key]) => key in JourneyReturnContextSchema.shape && (params.get(key) !== "" || key === "expanded")));
+  const input = Object.fromEntries([...params].filter(([key]) => key in JourneyReturnContextSchema.shape && (params.get(key) !== "" || key === "expanded" || key === "row")));
   // Retired workspace links remain usable without treating "bulk" as a Journey stage.
   if (input.stage === "bulk") input.stage = "preparation";
   const parsed = JourneyReturnContextSchema.safeParse(input);
   return parsed.success ? parsed.data : JourneyReturnContextSchema.parse({});
 }
 export function cockpitQuery(context: CockpitContext): string {
-  return new URLSearchParams(Object.entries(context).filter(([key, value]) => !["selected", "expanded", "focus", "round", "flow"].includes(key) && value !== undefined && value !== "").map(([key, value]) => [key, String(value)])).toString();
+  return new URLSearchParams(Object.entries(context).filter(([key, value]) => !["selected", "expanded", "focus", "row", "round", "flow"].includes(key) && value !== undefined && value !== "").map(([key, value]) => [key, String(value)])).toString();
 }
 export function cockpitReturnPath(search: string): string | null {
   const candidate = new URLSearchParams(search).get("returnTo");

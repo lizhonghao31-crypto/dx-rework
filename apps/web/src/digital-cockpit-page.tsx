@@ -17,7 +17,7 @@ export function DigitalCockpitPage(){
  const query=cockpitQuery(context),selectedId=context.selected??'';
  const viewContext=useMemo(()=>({...context,selected:selectedId||undefined}),[context,selectedId]);
  const changeContext=(patch:Partial<CockpitContext>,preserveSelection=false)=>{
-  const parsed=JourneyReturnContextSchema.safeParse({...context,...patch,page:preserveSelection?context.page:patch.page??1,...(!preserveSelection?{selected:undefined,expanded:undefined,focus:undefined,round:undefined}:{})});
+  const parsed=JourneyReturnContextSchema.safeParse({...context,...patch,page:patch.page??(preserveSelection?context.page:1),...(!preserveSelection?{selected:undefined,expanded:undefined,focus:undefined,row:undefined,round:undefined}:{})});
   if(!parsed.success){setError(parsed.error.issues.map(issue=>issue.message).join('；'));return;}
   setError('');setContext(parsed.data);
   // Filter state changes only the query, preserving the shared router's history position.
