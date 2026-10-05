@@ -1,4 +1,5 @@
 import { SupplierOnboardingService } from "./access/supplier-onboarding-service.js";
+import { BackgroundLease } from "./platform/background-lease.js";
 import { PatternRoomPriceService } from "./pattern-room/price-service.js";
 import { PatternRoomOrderService } from "./pattern-room/order-service.js";
 import { CuttingService } from "./cutting/cutting-source-service.js";
@@ -148,7 +149,6 @@ const cuttingService = new CuttingService(database);
 const receivingService = new ReceivingService(database,undefined,undefined,productionClosure,{allowLegacyStyleInput:true});
 const sourcingProductionService = new SourcingProductionService(database);
 const sourcingContractService = new SourcingContractService(database, attachments);
-await sourcingContractService.resumePendingContracts();
 const sourcingService = new SourcingService(
   database,undefined,undefined,todoProjection,sourcingContractService,
 );
@@ -443,6 +443,9 @@ const todoRuntime = new TodoRuntimeLifecycle(database, {
 
 const ATTACHMENT_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 let attachmentCleanupTimer: ReturnType<typeof setInterval> | undefined;
+let attachmentCleanup: Promise<void> | undefined;
+let contractResume: Promise<void> | undefined;
+const backgroundAbort = new AbortController();
 const runAttachmentCleanup = async (): Promise<void> => {
   try {
     const result = await attachments.cleanupExpiredUnbound();
@@ -459,30 +462,55 @@ async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   app.log.info({ signal }, "graceful shutdown started");
+  const requestsDrained = app.close();
+  backgroundAbort.abort();
   if (attachmentCleanupTimer) clearInterval(attachmentCleanupTimer);
   await runtimeOperationalMonitor.stop();
   await todoRuntime.stop();
-  await app.close();
+  await attachmentCleanup;
+  await contractResume;
+  await requestsDrained;
+  backgroundLease?.close();
   await database.end();
 }
 
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
 process.once("SIGINT", () => void shutdown("SIGINT"));
 
-try {
-  await app.listen({ host: config.host, port: config.port });
+const startBackground = (): void => {
+  contractResume = sourcingContractService.resumePendingContracts(50, backgroundAbort.signal).catch(error => {
+    app.log.warn({ err: error }, "pending contract resume failed");
+  });
   runtimeOperationalMonitor.start();
   todoRuntime.start();
-  void runAttachmentCleanup();
-  attachmentCleanupTimer = setInterval(
-    () => void runAttachmentCleanup(),
-    ATTACHMENT_CLEANUP_INTERVAL_MS,
-  );
+  const cleanup = (): void => {
+    if (attachmentCleanup || shuttingDown) return;
+    attachmentCleanup = runAttachmentCleanup().finally(() => { attachmentCleanup = undefined; });
+  };
+  cleanup();
+  attachmentCleanupTimer = setInterval(cleanup, ATTACHMENT_CLEANUP_INTERVAL_MS);
   attachmentCleanupTimer.unref();
+};
+const backgroundLease = process.env.DX_REWORK_BACKGROUND_LOCK
+  ? new BackgroundLease(process.env.DX_REWORK_BACKGROUND_LOCK, startBackground, error => {
+      app.log.fatal({ err: error }, "background lease failed");
+      void shutdown("background lease failure");
+    })
+  : undefined;
+
+try {
+  await app.listen({ host: config.host, port: config.port });
+  if (backgroundLease) backgroundLease.acquire();
+  else startBackground();
 } catch (error: unknown) {
   app.log.fatal({ err: error }, "API startup failed");
+  backgroundAbort.abort();
   await runtimeOperationalMonitor.stop();
   await todoRuntime.stop();
+  await attachmentCleanup;
+  await contractResume;
+  await app.close();
+  backgroundLease?.close();
   await database.end();
   process.exitCode = 1;
 }

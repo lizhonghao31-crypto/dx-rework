@@ -1,0 +1,10 @@
+[
+  {
+    "version":"0222_sourcing_cutting_approved_line_identity",
+    "checksum":"b0bc27988643de5583e8aeb0901bf3879bdd8babe46fca9c40b9368fc3c3555a",
+    "strategy":"quiesce-backup-transactional-ddl",
+    "tables":["cutting_orders","sourcing_approval_snapshots","sourcing_case_lines"],
+    "onlineCompatible":false,
+    "rollback":"restart-previous-only-if-entire-history-unchanged"
+  }
+]

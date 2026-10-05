@@ -25,6 +25,20 @@ require_sha() {
   [[ "${1:-}" =~ ^[0-9a-f]{40}$ ]] || die 'invalid 40-character lowercase Git SHA'
 }
 
+# Root controllers execute only an approved binary in root-controlled directories.
+assert_root_node() {
+  local executable="$1" path="$1" mode
+  [[ "$executable" == /* && "$(realpath "$executable")" == "$executable" && -f "$executable" && -x "$executable" ]] || die 'unsafe root Node path'
+  while :; do
+    [[ ! -L "$path" && "$(stat -c %u "$path")" == 0 ]] || die 'Node path is not root controlled'
+    mode="$(stat -c %a "$path")"
+    (( (8#$mode & 022) == 0 )) || die 'Node path is writable by another account'
+    [[ "$path" != / ]] || break
+    path="$(dirname "$path")"
+  done
+  [[ "$("$executable" -p 'process.versions.node.split(".")[0]')" == 22 ]] || die 'approved root Node 22 required'
+}
+
 reject_unsafe_value() {
   local value="${1-}"
   [[ -n "$value" && "$value" != *$'\n'* && "$value" != *$'\r'* && "$value" != *'..'* && "$value" != *'*'* && "$value" != *'?'* && "$value" != *'['* && ! "$value" =~ [[:cntrl:]] ]] ||

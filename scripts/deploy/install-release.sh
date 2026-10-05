@@ -2,7 +2,7 @@
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 
-[[ $# == 2 ]] || die 'usage: install-release.sh SHA BUNDLE_DIR'
+[[ $# == 2 || ( $# == 3 && "$3" == register-only ) ]] || die 'usage: install-release.sh SHA BUNDLE_DIR [register-only]'
 sha="$1"
 source_dir="$(realpath "$2")"
 require_sha "$sha"
@@ -28,5 +28,5 @@ install_one() {
 install_one "$source_dir/api" "$api"
 install_one "$source_dir/frontend" "$web"
 ensure_generation "$sha" >/dev/null
-ensure_active_aliases
+if [[ "${3:-}" != register-only ]]; then ensure_active_aliases; fi
 safe_log pass "installed immutable release generation $sha"

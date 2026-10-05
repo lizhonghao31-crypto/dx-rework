@@ -15,7 +15,8 @@ cp -a apps/web/dist/. "$stage/frontend/"
 node - "$stage" "$sha" "$build_time" <<'JS'
 const fs=require('fs'),cp=require('child_process'),path=require('path'); const [root,gitSha,buildTime]=process.argv.slice(2);
 const migrations=JSON.parse(fs.readFileSync('apps/api/src/platform/migration-manifest.json','utf8')).migrations; const last=migrations.at(-1); if(!last)throw Error('empty migration manifest');
-const common={gitSha,buildTime,nodeVersion:process.version,npmVersion:cp.execFileSync('npm',['--version'],{encoding:'utf8'}).trim(),schemaVersion:last.version,schemaChecksum:last.checksum,expectedSchemaVersion:last.version,expectedSchemaChecksum:last.checksum,appBasePath:process.env.APP_BASE_PATH||'/',viteBasePath:process.env.VITE_BASE_PATH||'/'};
+const releaseProtocol=fs.existsSync('scripts/deploy/release-protocol.json')?JSON.parse(fs.readFileSync('scripts/deploy/release-protocol.json','utf8')).version:1;
+const common={gitSha,buildTime,releaseProtocol,nodeVersion:process.version,npmVersion:cp.execFileSync('npm',['--version'],{encoding:'utf8'}).trim(),schemaVersion:last.version,schemaChecksum:last.checksum,expectedSchemaVersion:last.version,expectedSchemaChecksum:last.checksum,appBasePath:process.env.APP_BASE_PATH||'/',viteBasePath:process.env.VITE_BASE_PATH||'/'};
 for(const [dir,kind] of [['api','api'],['frontend','frontend']])fs.writeFileSync(path.join(root,dir,'release-manifest.json'),JSON.stringify({...common,kind},null,2)+'\n');
 fs.writeFileSync(path.join(root,'release-manifest.json'),JSON.stringify({...common,kind:'bundle'},null,2)+'\n');
 JS
