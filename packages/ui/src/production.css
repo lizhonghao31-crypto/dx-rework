@@ -1,0 +1,20 @@
+.dx-production-ui { --production-primary: #0065ff; --production-text: #132653; --production-border: #e0edfc; --production-muted: #6680a7; color: var(--production-text); background: #f3f9ff; padding: 20px 24px; }
+.dx-production-ui * { box-sizing: border-box; }
+.dx-production-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 16px; }
+.dx-production-header h1 { margin: 0; font-size: 28px; }
+.dx-production-header p { margin: 6px 0 0; color: var(--production-muted); }
+.dx-production-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 16px; border: 1px solid var(--production-border); border-radius: 6px; background: #fff; }
+.dx-production-kpi { display: grid; gap: 6px; min-width: 0; padding: 16px 20px; text-align: left; border: 1px solid var(--production-border); border-radius: 6px; background: #fff; color: var(--production-text); font: inherit; }
+button.dx-production-kpi { cursor: pointer; }
+.dx-production-kpi strong { font-size: 28px; font-variant-numeric: tabular-nums; }
+.dx-production-kpi small { color: var(--production-muted); }
+.dx-production-kpi[aria-pressed=true] { border-color: var(--production-primary); }
+.dx-production-kpi.is-danger strong { color: #ff313a; }
+.dx-production-panel, .dx-production-stage { padding: 14px; border: 1px solid var(--production-border); border-radius: 6px; background: #fff; min-width: 0; }
+.dx-production-panel h2, .dx-production-stage h2 { margin: 0 0 12px; padding-left: 9px; border-left: 3px solid var(--production-primary); font-size: 17px; }
+.dx-production-stage dl > div { display: flex; gap: 10px; margin-top: 8px; font-size: 12px; }
+.dx-production-stage dt { color: var(--production-muted); }
+.dx-production-stage dd { margin: 0; }
+.dx-production-pagination { display: flex; align-items: center; justify-content: end; gap: 12px; padding: 12px 0; }
+.dx-production-ui :focus-visible { outline: 3px solid #66a5ff; outline-offset: 2px; }
+@media(max-width:800px) { .dx-production-ui { padding: 12px; } .dx-production-header { align-items: start; flex-wrap: wrap; } .dx-production-pagination { flex-wrap: wrap; } }

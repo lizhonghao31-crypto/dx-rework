@@ -326,11 +326,11 @@ export function ProductionCommandCenterLiveView(props:LiveProps){
  const risks=selected?.tasks.filter(node=>!['completed','cancelled'].includes(node.state)&&(node.blockedReason||['overdue','attention','unknown'].includes(liveRisk(node,now))))??[];
  return <div className="production-command-main" data-digital-template="live">
   <section className="production-command-overview-row">
-   <div className="production-command-welcome"><h1>你好，{data?.actorName??'正在读取身份'}！</h1><p>{now.toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'long',day:'numeric',weekday:'long'})}</p><h2>生产管理座舱</h2></div>
+   <div className="production-command-welcome"><h1>生产管理座舱</h1><p>{now.toLocaleDateString('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'long',day:'numeric',weekday:'long'})}</p></div>
    <div className="production-command-summary" aria-label="当前授权筛选范围摘要">
     {[['当前范围',data?.total,'授权订单 / 来源'],['办理中',summary?.active,'有未完成节点'],['即将到期',summary?.dueSoon,'按节点预警阈值'],['已超时',summary?.overdue,'未完成且期限已过'],['受阻订单',summary?.blocked,'需核对原单原因']].map(([label,value,note])=><article key={label}><span>{label}</span><strong>{value??'—'}</strong><small>{note}</small></article>)}
    </div>
-   <aside className="production-command-today-alerts"><h2>▲ 今日待处理</h2><ul><li><span>当前范围超时</span><strong>{summary?.overdue??'—'}</strong></li><li><span>临期（按节点阈值）</span><strong>{summary?.dueSoon??'—'}</strong></li><li><span>阻断待核对</span><strong>{summary?.blocked??'—'}</strong></li><li><span>进入时间待确认</span><strong>{summary?.unknown??'—'}</strong></li></ul>{data?.canViewTodos&&<a href={liveUrls.pageUrl('ui/my-tasks')}>查看我的实际待办 ›</a>}</aside>
+   <aside className="production-command-today-alerts"><h2>▲ 今日待处理</h2><ul><li><span>当前范围超时</span><strong>{summary?.overdue??'—'}</strong></li><li><span>临期（按节点阈值）</span><strong>{summary?.dueSoon??'—'}</strong></li><li><span>阻断待核对</span><strong>{summary?.blocked??'—'}</strong></li><li><span>进入时间待确认</span><strong>{summary?.unknown??'—'}</strong></li></ul></aside>
   </section>
   {props.error&&<p role="alert">{props.error}</p>}
   <section className="production-command-card production-command-orders-card">

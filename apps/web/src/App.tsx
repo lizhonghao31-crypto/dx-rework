@@ -276,7 +276,7 @@ export function App() {
   const cuttingOrderMatch = path.match(/^\/ui\/cutting\/orders\/([0-9a-f-]{36})$/i);
   let page;
   if (path === "/ui/digital-analysis") page = <Shell active="板房数据沙盘" appearance="digital"><DigitalAnalysisPage /></Shell>;
-  else if (path === "/ui/digital-cockpit") page = <Shell active="生产管理座舱" appearance="digital"><DigitalCockpitPage /></Shell>;
+  else if (path === "/ui/digital-cockpit") page = <Shell active="生产管理座舱" appearance="digital"><DigitalCockpitPage key={search} /></Shell>;
   else if (path === "/ui/digital-production") page = <Shell active="开发与大货办理" appearance="digital"><DigitalProductionPage key={search} /></Shell>;
   else if (path === "/ui/home") page = <HomeLanding />;
   else if (path === "/ui/sourcing" || path === "/ui/sourcing/pending") page = <SourcingWorkspacePage view="pending" />;

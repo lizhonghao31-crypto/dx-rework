@@ -18,6 +18,9 @@ import type { Task } from "./types.js";
 import "./shell-navigation.css";
 import "./production-command-center-view.css";
 import "./digital-workspace.css";
+import "./unified-shell.css";
+import "@dx-rework/ui/production.css";
+import { digitalWorkspaceActive } from "./digital-workspace-navigation.js";
 import { canAccessSupplierMaintenance } from "./supplier-onboarding-model.js";
 import { canAccessDigitalProduction, canAccessSourcing, canAccessSupplierCenter, canAccessProduction, canAccessProductionReporting, canAccessSamples } from "./platform-modules.js";
 import { installTodoIndicatorRefresh } from "./todo-indicator-refresh.js";
@@ -34,6 +37,7 @@ type NavigationEntry = Readonly<{
   description: string;
   href: string;
   activeKey?: string;
+  label?: string;
 }>;
 
 type NavigationGroup = Readonly<{
@@ -122,10 +126,11 @@ function PrimaryNavigation({
         <div className="primary-navigation__entry" key={entry.name}>
           <a
             href={`${basePath}${entry.href}`}
+            aria-current={active === (entry.activeKey ?? entry.name) ? "page" : undefined}
           >
             <NavigationItem icon={<NavigationIcon route={entry.href} size={iconSize} />} active={active === (entry.activeKey ?? entry.name)}>
               <span className="primary-navigation__copy">
-                <strong>{entry.name}</strong>
+                <strong>{entry.label ?? entry.name}</strong>
                 <small title={entry.description}>{entry.description}</small>
                 {entry.name === "我的待办"
                   ? <TodoCountBadge count={pendingTodoCount} />
@@ -207,7 +212,7 @@ function MobileNavigationLink({
   pendingTodoCount: number;
 }) {
   const meta = MOBILE_NAVIGATION_META[entry.name] ?? { label: entry.name, glyph: "目" };
-  const isActive = active === entry.name;
+  const isActive = active === (entry.activeKey ?? entry.name);
   return (
     <a
       href={basePath + entry.href}
@@ -242,7 +247,7 @@ function MobilePrimaryNavigation({
     ...mobileCandidates.slice(4),
     ...navigation.filter((entry) => !isMobilePrimaryNavigation(entry)),
   ];
-  const moreIsActive = moreNavigation.some((entry) => entry.name === active) || financeGroup.entries.some(entry => entry.name === active);
+  const moreIsActive = moreNavigation.some((entry) => (entry.activeKey ?? entry.name) === active) || financeGroup.entries.some(entry => entry.name === active);
 
   return (
     <nav className="mobile-primary-navigation" aria-label="移动端主导航">
@@ -415,8 +420,6 @@ export function Shell({
   }
   if (currentUser && canAccessDigitalProduction(currentUser)) globalNavigation.push(
     {name:"生产管理座舱",description:"查看数字开发与大货双进度",href:"/ui/digital-cockpit"},
-    {name:"开发与大货办理",description:"原单办理、人员调度与历史",href:"/ui/digital-production"},
-    {name:"板房数据沙盘",description:"同源分析与改进记录",href:"/ui/digital-analysis"},
   );
   if (currentUser && canAccessProduction(currentUser)) {
     globalNavigation.push({
@@ -427,6 +430,7 @@ export function Shell({
   }
   globalNavigation.push({
     name: "订单回货",
+    label: "订单回货看板",
     description: "查看每日收货与数量差异",
     href: "/ui/orders",
   });
@@ -538,7 +542,20 @@ export function Shell({
           : []),
       ]
     : [];
+  const digital = currentUser && canAccessDigitalProduction(currentUser);
+  const designerNavigation: NavigationEntry[] = digital && (isRoot || (hasRole("sample_designer") && hasCapability("pattern_room:orders:create"))) ? [{ name: "设计师创建订单", description: "产品开发与订购资料", href: "/ui/digital-production?workspace=designer", activeKey: "digital-designer" }] : [];
+  const developmentNavigation: NavigationEntry[] = [
+    ...(digital ? [{ name: "板房管理台", description: "开发任务与人员调度", href: "/ui/digital-cockpit?stage=development&workspace=pattern", activeKey: "digital-pattern" }] : []),
+    ...patternRoomNavigation,
+    ...(digital ? [{ name: "板房数据沙盘", description: "同源分析与改进记录", href: "/ui/digital-analysis" }] : []),
+  ];
+  const preparationNavigation: NavigationEntry[] = digital ? [{ name: "大货产前准备", description: "产前订单与原单办理", href: "/ui/digital-cockpit?stage=bulk&workspace=preparation", activeKey: "digital-preparation" }] : [];
+  const factoryNavigation: NavigationEntry[] = digital ? [{ name: "裁后工艺与发厂", description: "工艺、QC与实际发厂", href: "/ui/digital-cockpit?stage=bulk&workspace=factory", activeKey: "digital-factory" }] : [];
   const navigation: NavigationEntry[] = [
+    ...designerNavigation,
+    ...developmentNavigation.filter(entry => !patternRoomNavigation.includes(entry)),
+    ...preparationNavigation,
+    ...factoryNavigation,
     ...globalNavigation,
     ...reworkNavigation,
     ...mobileSourcingNavigation,
@@ -549,9 +566,13 @@ export function Shell({
     ...platformNavigation,
   ];
   const desktopNavigationGroups: NavigationGroup[] = [
-    { name: "订单打板", description: "打板与杂事", entries: patternRoomNavigation },
+    { name: "设计师创建订单", description: "产品开发源头", entries: designerNavigation },
+    { name: "产品开发打板", description: "开发、打板与分析", entries: developmentNavigation },
+    { name: "大货产前准备", description: "生产前置汇合", entries: preparationNavigation },
     { name: "外发定价&选厂", description: "询价、审批与执行", entries: sourcingNavigation },
     { name: "订单开裁", description: "裁床实裁", entries: cuttingNavigation },
+    { name: "裁后工艺与发厂", description: "裁后办理", entries: factoryNavigation },
+    { name: "生产填报", description: "原生产业务", entries: productionNavigation.filter(entry => entry.name !== "实时看板") },
     {
       name: "订单返工",
       description: "订单返工业务",
@@ -571,17 +592,18 @@ export function Shell({
     },
   ];
 
+  const navigationActive = digitalWorkspaceActive(active, window.location.search);
   const roleLabels = currentUser?.businessRoles?.map(roleLabel) ?? [];
   const roleText = roleLabels.length ? roleLabels.join(" · ") : "已登录";
   const activeEntry = navigation.find((entry) => entry.name === active);
-  const mobileActive = patternRoomNavigation.some(entry => (entry.activeKey ?? entry.name) === active) ? "订单打板" : productionNavigation.some(entry => entry.name === active) ? "实时生产看板" : cuttingNavigation.some((entry) => (entry.activeKey ?? entry.name) === active) ? "订单开裁" : sourcingNavigation.some((entry) => entry.name === active)
+  const mobileActive = navigationActive !== active ? navigationActive : patternRoomNavigation.some(entry => (entry.activeKey ?? entry.name) === active) ? "订单打板" : productionNavigation.some(entry => entry.name === active) ? "实时生产看板" : cuttingNavigation.some((entry) => (entry.activeKey ?? entry.name) === active) ? "订单开裁" : sourcingNavigation.some((entry) => entry.name === active)
     ? "外发定价&选厂"
     : supplierNavigation.some((entry) => entry.name === active)
       ? "供应商中心"
       : activeEntry?.name ?? active;
 
   return (
-    <div className={`app-shell ui-polish${appearance === "digital" ? " digital-workspace production-command-shell" : ""}`}>
+    <div className={`app-shell ui-polish unified-shell${appearance === "digital" ? " digital-workspace production-command-shell" : ""}`}>
       {pullDistance > 0 ? (
         <div
           className="mobile-pull-refresh"
@@ -592,11 +614,11 @@ export function Shell({
         </div>
       ) : null}
       <aside>
-        {appearance === "digital" ? <a className="production-command-brand" href={basePath+"/ui/home"}><strong>DX</strong><span>达兴服装<small>数字生产平台</small></span></a> : <h2>达兴 · 数字助手</h2>}
+        <a className="production-command-brand" href={basePath+(todoAccess?"/ui/my-tasks":digital?"/ui/digital-cockpit":globalNavigation[0]?.href??"/ui/orders")}><strong>DX</strong><span>达兴服装<small>数字生产平台</small></span></a>
         <DesktopNavigation
           globalNavigation={globalNavigation}
           groups={desktopNavigationGroups}
-          active={active}
+          active={navigationActive}
           basePath={basePath}
           pendingTodoCount={pendingTodoCount}
         />
@@ -621,7 +643,7 @@ export function Shell({
         />
       ) : null}
 
-      <main>{appearance === "digital" && <header className="production-command-topbar"><a className="digital-workspace-home" href={basePath+"/ui/home"}>业务首页</a><div className="production-command-userbar">{todoAccess&&<a href={basePath+"/ui/my-tasks"}>我的待办<TodoCountBadge count={pendingTodoCount}/></a>}<span className="production-command-avatar">{currentUser?.displayName.slice(0,1)??"…"}</span><span><strong>{currentUser?.displayName??"读取身份中"}</strong><small>{roleText}</small></span></div></header>}{children}</main>
+      <main>{children}</main>
       {currentUser?.capabilities.includes("todo:view") && <DigitalNotificationToast key={currentUser.id} userId={currentUser.id} />}
     </div>
   );

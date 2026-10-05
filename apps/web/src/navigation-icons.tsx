@@ -36,7 +36,7 @@ export const NAVIGATION_ROUTE_ICONS: Readonly<Record<string, IconName>> = {
 };
 
 export const NAVIGATION_GROUP_ICONS: Readonly<Record<string, IconName>> = {
-  "订单打板": "Shirt", "样衣管理": "Shirt", "订单返工": "Wrench", "外发定价&选厂": "FileText", "订单开裁": "ClipboardCheck",
+  "设计师创建订单": "FilePlus2", "产品开发打板": "Shirt", "大货产前准备": "ClipboardCheck", "裁后工艺与发厂": "Factory", "生产填报": "ClipboardPen", "订单打板": "Shirt", "样衣管理": "Shirt", "订单返工": "Wrench", "外发定价&选厂": "FileText", "订单开裁": "ClipboardCheck",
   "供应商中心": "Factory", "财务中心": "Wallet", "平台管理": "Settings", "更多": "Ellipsis", "实时生产看板": "Activity",
 };
 
