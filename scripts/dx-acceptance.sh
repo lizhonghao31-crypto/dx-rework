@@ -16,6 +16,8 @@ fi
 [[ "$(id -u)" == 0 ]] || { echo 'Run this command as root.' >&2; exit 1; }
 if [[ "$command" == install ]]; then
   [[ $# == 1 ]] || exit 64
+  exec 8>/run/lock/dx-acceptance-update.lock
+  flock -n 8 || { echo 'Another Acceptance tool installation or update is running.' >&2; exit 1; }
   # Install an immutable, complete tool revision, independently of the app SHA.
   owner="$(stat -c %U "$tool_root")"
   tool_sha="$(runuser -u "$owner" -- git -C "$tool_root" rev-parse HEAD)"
@@ -23,18 +25,29 @@ if [[ "$command" == install ]]; then
   [[ -z "$(runuser -u "$owner" -- git -C "$tool_root" status --porcelain)" ]]
   tools=/opt/dx-rework-acceptance-tools
   install -d -o root -g root -m 0755 "$tools"
-  [[ ! -e "$tools/$tool_sha" ]]
   staging="$(mktemp -d "$tools/.install.XXXXXX")"
+  trap '[[ -z "${staging:-}" ]] || rm -rf -- "$staging"' EXIT
   runuser -u "$owner" -- git -C "$tool_root" archive "$tool_sha" | tar -x -C "$staging"
   printf '%s\n' "$tool_sha" > "$staging/TOOL_SHA"
   chown -R root:root "$staging"
   chmod -R go-w "$staging"
   chmod 0755 "$staging"
-  mv "$staging" "$tools/$tool_sha"
+  if [[ -e "$tools/$tool_sha" ]]; then
+    [[ -d "$tools/$tool_sha" && ! -L "$tools/$tool_sha" ]]
+    diff -qr "$staging" "$tools/$tool_sha" >/dev/null || { echo 'Existing tool revision is incomplete or changed; entry was not replaced.' >&2; exit 1; }
+    rm -rf -- "$staging"
+  else
+    mv "$staging" "$tools/$tool_sha"
+  fi
+  staging=''
   launcher="$(mktemp /usr/local/bin/.dx-acceptance.XXXXXX)"
   printf '#!/usr/bin/env bash\nexec bash %q "$@"\n' "$tools/$tool_sha/scripts/dx-acceptance.sh" > "$launcher"
   chmod 0755 "$launcher"
   mv -Tf "$launcher" /usr/local/bin/dx-acceptance
+  launcher="$(mktemp /usr/local/bin/.dx-rework-update.XXXXXX)"
+  printf '#!/usr/bin/env bash\nexec bash %q "$@"\n' "$tools/$tool_sha/scripts/dx-update.sh" > "$launcher"
+  chmod 0755 "$launcher"
+  mv -Tf "$launcher" /usr/local/bin/dx-rework-update
   echo 'Installed. Run: dx-acceptance update'
   exit 0
 fi
@@ -59,8 +72,37 @@ sha="${requested:-$(git_source rev-parse refs/remotes/origin/release/digital-pro
 git_source merge-base --is-ancestor "$sha" refs/remotes/origin/release/digital-production-v1
 snapshot="$(mktemp -d /tmp/dx-acceptance-source.XXXXXX)"
 chmod 0755 "$snapshot"
-trap 'rc=$?; if ((rc)); then echo "Acceptance update failed; evidence=$snapshot; no production deployment was performed." >&2; else rm -rf -- "$snapshot"; fi' EXIT
-git_source archive "$sha" | tar -x -C "$snapshot"
+trap 'rc=$?; if [[ -n "${staging:-}" && "$staging" == /opt/dx-rework-acceptance-tools/.refresh.* ]]; then rm -rf -- "$staging"; fi; if ((rc)); then echo "Acceptance update failed; evidence=$snapshot; no production deployment was performed." >&2; else rm -rf -- "$snapshot"; fi' EXIT
+bash "$tool_root/scripts/deploy/fetch-update-source.sh" "$sha" "$snapshot"
+if [[ "$command" == update && "$sha" != "$(cat "$tool_root/TOOL_SHA")" ]]; then
+  python3 "$tool_root/scripts/deploy/verify-tool-refresh.py" "$tool_root" "$snapshot"
+  # Only the immutable installed validator authorizes this data refresh.
+  # A different executable policy fails before build, backup or service stop.
+  tools=/opt/dx-rework-acceptance-tools
+  target="$tools/$sha"
+  if [[ ! -e "$target" ]]; then
+    staging="$(mktemp -d "$tools/.refresh.XXXXXX")"
+    cp -a "$snapshot/." "$staging/"
+    printf '%s\n' "$sha" > "$staging/TOOL_SHA"
+    chown -R root:root "$staging"
+    chmod -R go-w "$staging"
+    chmod 0755 "$staging"
+    python3 "$tool_root/scripts/deploy/verify-tool-refresh.py" "$tool_root" "$staging"
+    mv -T "$staging" "$target"
+    staging=''
+  fi
+  [[ -d "$target" && ! -L "$target" && "$(stat -c %U "$target")" == root ]]
+  [[ "$(cat "$target/TOOL_SHA")" == "$sha" ]]
+  python3 "$tool_root/scripts/deploy/verify-tool-refresh.py" "$tool_root" "$target"
+  cmp "$snapshot/apps/api/src/platform/migration-manifest.json" "$target/apps/api/src/platform/migration-manifest.json"
+  cmp "$snapshot/scripts/migration-main-extensions.json" "$target/scripts/migration-main-extensions.json"
+  launcher="$(mktemp /usr/local/bin/.dx-acceptance.XXXXXX)"
+  printf '#!/usr/bin/env bash\nexec bash %q "$@"\n' "$target/scripts/dx-acceptance.sh" > "$launcher"
+  chmod 0755 "$launcher"
+  mv -Tf "$launcher" /usr/local/bin/dx-acceptance
+  tool_root="$target"
+  echo "ACCEPTANCE_TOOL_REFRESH_OK sha=$sha"
+fi
 printf 'Tool: %s\n' "$(cat "$tool_root/TOOL_SHA")"
 if [[ "$command" == diagnose ]]; then
   # Read-only database inspection, no candidate build, backup, PM2 or migration.
