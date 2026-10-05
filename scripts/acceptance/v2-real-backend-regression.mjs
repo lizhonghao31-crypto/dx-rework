@@ -45,6 +45,8 @@ async function visit(page, origin, path) {
     const main = document.querySelector(".app-shell > main");
     return main && !main.querySelector('[aria-busy="true"]') && !/正在加载|加载中|读取中|正在读取/.test(main.innerText);
   });
+  // The original readonly panel initializes its price inputs in a later effect.
+  if (path === fixture.reviewUrl) await page.locator(".quantity-review-heading").getByText("全部可确认", { exact: true }).waitFor();
 }
 async function shot(page, name) { await page.screenshot({ path: `${out}/${name}.png`, fullPage: true }); }
 async function common(page, expectedKpi) {
