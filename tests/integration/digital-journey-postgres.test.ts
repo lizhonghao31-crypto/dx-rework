@@ -1,3 +1,5 @@
+import { DevelopmentDocumentSchema } from "@dx-rework/contracts/digital-development";
+import { DigitalDevelopmentService } from "../../apps/api/src/production-platform/development-service.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -58,6 +60,25 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect((await journeys.list(actor(),JourneyFilterSchema.parse({search:"TEST-J-0001"}))).total).toBe(1);
     await expect(journeys.read(actor(stranger),order.productionOrderId)).rejects.toMatchObject({statusCode:404});
     expect((await journeys.list(actor(stranger),JourneyFilterSchema.parse({search:"TEST-J-0001"}))).total).toBe(0);
+  });
+  it("projects original per-material plan revisions without inventing node SLA or arrival times",async()=>{
+    const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-MATERIAL-PLAN",temporaryStyleNo:null,customerCode:"PD"},randomUUID());
+    const fileId=randomUUID(),materialId=randomUUID();
+    await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-plan.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[fileId,`TEST/plan/${fileId}`,"a".repeat(64),designer]);
+    const document=DevelopmentDocumentSchema.parse({template:"上衣",quantity:1,sampleSize:"M",orderDate:"2026-10-01",returnDate:null,unit:"cm",sizes:["M"],measurements:[{name:"胸围",values:["50"]}],interlining:"",placketInterlining:"",sewingThread:"",buttonholeThread:"",stitchDensity:"",washingIroning:"",packaging:"",formalSizes:"",casualSizes:"",mainLabel:false,mainLabelMethod:"",sizeLabel:false,careLabel:false,instructions:"",craft:"无",washing:"免洗",materials:[{materialId,category:"辅料",label:"TEST 拉链",supplier:"",name:"拉链",width:"",weight:"",composition:"",consumption:"",color:"黑",specification:"",quantity:"1",requiredThisRound:true,available:false,expectedDate:"2026-10-08"}],files:[{attachmentId:fileId,kind:"款图"}]});
+    const forms=new DigitalDevelopmentService(db,true);
+    const saved=await forms.save(actor(),source.sourceId,{expectedVersion:0,document},randomUUID());
+    const published=await forms.publish(actor(),source.sourceId,saved.version,randomUUID());
+    const node=()=>journeys.read(actor(),source.sourceId).then(value=>value.stages.flatMap(stage=>stage.nodes).find(item=>item.instanceId===`material:${materialId}:1`)!);
+    expect(await node()).toMatchObject({state:"pending",expectedAt:"2026-10-08",expectedKind:"plan",expectedPrecision:"date",enteredAt:null,sla:"not_set",actualAt:null,actualQuality:"missing",countsInProgress:false});
+    await forms.materialEvent(actor(),source.sourceId,materialId,{expectedVersion:published.version,expectedMaterialRevision:0,action:"修改预计日期",expectedDate:"2026-10-09",note:"TEST 原计划修订"},randomUUID());
+    expect((await node()).expectedAt).toBe("2026-10-09");
+    expect((await node()).records[0]?.url).toContain(`#material-${materialId}`);
+    const before=(await db.query("SELECT count(*)::int n FROM digital_production_deadline_revisions")).rows[0].n;
+    await node();expect((await db.query("SELECT count(*)::int n FROM digital_production_deadline_revisions")).rows[0].n).toBe(before);
+    await forms.materialEvent(actor(),source.sourceId,materialId,{expectedVersion:published.version,expectedMaterialRevision:1,action:"到货",expectedDate:null,note:"TEST 原到货记录"},randomUUID());
+    expect(await node()).toMatchObject({state:"completed",actualAt:null,completionResult:"unknown"});
+    await expect(journeys.read(actor(stranger),source.sourceId)).rejects.toMatchObject({statusCode:404});
   });
   it("preserves the direct-order origin when development is attached later",async()=>{
     const request=input("ORDER-FIRST"),order=await identity.createOrder(actor(),request,randomUUID());

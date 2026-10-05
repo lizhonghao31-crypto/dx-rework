@@ -38,6 +38,7 @@ type NavigationEntry = Readonly<{
   href: string;
   activeKey?: string;
   label?: string;
+  children?: readonly NavigationEntry[];
 }>;
 
 type NavigationGroup = Readonly<{
@@ -138,6 +139,7 @@ function PrimaryNavigation({
               </span>
             </NavigationItem>
           </a>
+          {entry.children?.length ? <div className="primary-navigation__children"><PrimaryNavigation navigation={entry.children} active={active} basePath={basePath} /></div> : null}
         </div>
       ))}
     </nav>
@@ -246,6 +248,7 @@ function MobilePrimaryNavigation({
   const moreNavigation = [
     ...mobileCandidates.slice(4),
     ...navigation.filter((entry) => !isMobilePrimaryNavigation(entry)),
+    ...primaryNavigation.flatMap((entry) => entry.children ?? []),
   ];
   const moreIsActive = moreNavigation.some((entry) => (entry.activeKey ?? entry.name) === active) || financeGroup.entries.some(entry => entry.name === active);
 
@@ -426,6 +429,7 @@ export function Shell({
       name: "实时生产看板",
       description: "查看生产订单与进度",
       href: "/ui/production-dashboard",
+      ...(canAccessProductionReporting(currentUser) ? { children: [{ name: "生产数据填报", description: "按负责范围登记生产、完成与发货", href: "/ui/production-reporting" }] } : {}),
     });
   }
   globalNavigation.push({
@@ -544,15 +548,18 @@ export function Shell({
     : [];
   const digital = currentUser && canAccessDigitalProduction(currentUser);
   const designerNavigation: NavigationEntry[] = digital && (isRoot || (hasRole("sample_designer") && hasCapability("pattern_room:orders:create"))) ? [{ name: "设计师创建订单", description: "产品开发与订购资料", href: "/ui/digital-production?workspace=designer", activeKey: "digital-designer" }] : [];
+  // Keep the mature creation capability, but place the source entry under creation.
+  const creationNavigation = [...designerNavigation, ...patternRoomNavigation.filter(entry => entry.activeKey === "pattern-room-create")];
   const developmentNavigation: NavigationEntry[] = [
     ...(digital ? [{ name: "板房管理台", description: "开发任务与人员调度", href: "/ui/digital-cockpit?stage=development&workspace=pattern", activeKey: "digital-pattern" }] : []),
-    ...patternRoomNavigation,
+    ...patternRoomNavigation.filter(entry => entry.activeKey === "pattern-room-orders"),
     ...(digital ? [{ name: "板房数据沙盘", description: "同源分析与改进记录", href: "/ui/digital-analysis" }] : []),
+    ...patternRoomNavigation.filter(entry => entry.href === "/ui/pattern-room/prices"),
   ];
   const preparationNavigation: NavigationEntry[] = digital ? [{ name: "大货产前准备", description: "产前订单与原单办理", href: "/ui/digital-cockpit?stage=bulk&workspace=preparation", activeKey: "digital-preparation" }] : [];
   const factoryNavigation: NavigationEntry[] = digital ? [{ name: "裁后工艺与发厂", description: "工艺、QC与实际发厂", href: "/ui/digital-cockpit?stage=bulk&workspace=factory", activeKey: "digital-factory" }] : [];
   const navigation: NavigationEntry[] = [
-    ...designerNavigation,
+    ...creationNavigation,
     ...developmentNavigation.filter(entry => !patternRoomNavigation.includes(entry)),
     ...preparationNavigation,
     ...factoryNavigation,
@@ -566,13 +573,12 @@ export function Shell({
     ...platformNavigation,
   ];
   const desktopNavigationGroups: NavigationGroup[] = [
-    { name: "设计师创建订单", description: "产品开发源头", entries: designerNavigation },
+    { name: "设计师创建订单", description: "产品开发源头", entries: creationNavigation },
     { name: "产品开发打板", description: "开发、打板与分析", entries: developmentNavigation },
     { name: "大货产前准备", description: "生产前置汇合", entries: preparationNavigation },
     { name: "外发定价&选厂", description: "询价、审批与执行", entries: sourcingNavigation },
     { name: "订单开裁", description: "裁床实裁", entries: cuttingNavigation },
     { name: "裁后工艺与发厂", description: "裁后办理", entries: factoryNavigation },
-    { name: "生产填报", description: "原生产业务", entries: productionNavigation.filter(entry => entry.name !== "实时看板") },
     {
       name: "订单返工",
       description: "订单返工业务",
@@ -596,7 +602,7 @@ export function Shell({
   const roleLabels = currentUser?.businessRoles?.map(roleLabel) ?? [];
   const roleText = roleLabels.length ? roleLabels.join(" · ") : "已登录";
   const activeEntry = navigation.find((entry) => entry.name === active);
-  const mobileActive = navigationActive !== active ? navigationActive : patternRoomNavigation.some(entry => (entry.activeKey ?? entry.name) === active) ? "订单打板" : productionNavigation.some(entry => entry.name === active) ? "实时生产看板" : cuttingNavigation.some((entry) => (entry.activeKey ?? entry.name) === active) ? "订单开裁" : sourcingNavigation.some((entry) => entry.name === active)
+  const mobileActive = navigationActive !== active ? navigationActive : patternRoomNavigation.some(entry => entry.activeKey !== "pattern-room-create" && (entry.activeKey ?? entry.name) === active) ? "订单打板" : productionNavigation.some(entry => entry.name !== "生产数据填报" && entry.name === active) ? "实时生产看板" : cuttingNavigation.some((entry) => (entry.activeKey ?? entry.name) === active) ? "订单开裁" : sourcingNavigation.some((entry) => entry.name === active)
     ? "外发定价&选厂"
     : supplierNavigation.some((entry) => entry.name === active)
       ? "供应商中心"

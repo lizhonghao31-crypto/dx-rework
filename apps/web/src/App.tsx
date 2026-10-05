@@ -1,3 +1,4 @@
+import { ProductionWorkspace } from "@dx-rework/ui/production";
 import { DigitalAnalysisPage } from "./digital-analysis-page.js";
 import { DigitalCockpitPage } from "./digital-cockpit-page.js";
 import { DigitalProductionPage } from "./digital-production-page.js";
@@ -275,9 +276,9 @@ export function App() {
   const sourcingOrderMatch = path.match(/^\/ui\/sourcing\/orders\/([0-9a-f-]{36})$/i);
   const cuttingOrderMatch = path.match(/^\/ui\/cutting\/orders\/([0-9a-f-]{36})$/i);
   let page;
-  if (path === "/ui/digital-analysis") page = <Shell active="板房数据沙盘" appearance="digital"><DigitalAnalysisPage /></Shell>;
-  else if (path === "/ui/digital-cockpit") page = <Shell active="生产管理座舱" appearance="digital"><DigitalCockpitPage key={search} /></Shell>;
-  else if (path === "/ui/digital-production") page = <Shell active="开发与大货办理" appearance="digital"><DigitalProductionPage key={search} /></Shell>;
+  if (path === "/ui/digital-analysis") page = <Shell active="板房数据沙盘" appearance="digital"><ProductionWorkspace><DigitalAnalysisPage /></ProductionWorkspace></Shell>;
+  else if (path === "/ui/digital-cockpit") page = <Shell active="生产管理座舱" appearance="digital"><ProductionWorkspace><DigitalCockpitPage key={search} /></ProductionWorkspace></Shell>;
+  else if (path === "/ui/digital-production") page = <Shell active="开发与大货办理" appearance="digital"><ProductionWorkspace><DigitalProductionPage key={search} /></ProductionWorkspace></Shell>;
   else if (path === "/ui/home") page = <HomeLanding />;
   else if (path === "/ui/sourcing" || path === "/ui/sourcing/pending") page = <SourcingWorkspacePage view="pending" />;
   else if (path === "/ui/samples/handoff") page = <SampleHandoffPage />;

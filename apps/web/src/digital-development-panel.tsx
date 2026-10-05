@@ -22,6 +22,12 @@ type RoundHistory={roundNumber:number;origin:string;customerComment:string;inter
 type Rounds={rounds:RoundHistory[];draft:{version:number;payload:DevelopmentRevision}|null};
 export function DigitalDevelopmentPanel({sourceId,onClose,initialRound}:{sourceId:string;onClose:()=>void;initialRound?:number|undefined}) {
   const [sheet,setSheet]=useState<DevelopmentSheet|null>(null),[document,setDocument]=useState<DevelopmentDocument>(initial);
+  useEffect(() => {
+    if (!sheet) return;
+    const anchor = window.location.hash.slice(1);
+    if (!/^material-[0-9a-f-]{36}$/.test(anchor)) return;
+    window.document.getElementById(anchor)?.scrollIntoView({ block: "center" });
+  }, [sheet]);
   const [error,setError]=useState(""),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false);
   const [revision,setRevision]=useState<RevisionFields|null>(null),[draftVersion,setDraftVersion]=useState(0),[rounds,setRounds]=useState<Rounds>({rounds:[],draft:null}),[selectedRound,setSelectedRound]=useState<number|undefined>(initialRound);
   const [fileKind,setFileKind]=useState<DevelopmentDocument["files"][number]["kind"]>("款图");
@@ -112,7 +118,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound}:{sourceI
       {!readonly&&<div className="pattern-actions"><Button type="submit" disabled={busy}>保存草稿</Button><Button type="button" disabled={busy||dirty||(revision?!draftVersion:!sheet.version)} onClick={()=>{if(revision)void revisionAction(true);else void run(`${base}/publish`,{expectedVersion:sheet.version});}}>{revision?"正式发布本轮修改":"发布开发单"}</Button></div>}</div>
     </form>
     {sheet.status==="published"&&!revision&&(sheet.roundNumber??1)===(sheet.latestRoundNumber??1)&&<DevelopmentExecutionPanel key={sheet.roundNumber??1} sourceId={sourceId} materialRevision={sheet.materialEvents.length}/>}
-    {sheet.status==="published"&&!revision&&<section className="development-controls"><h3>本轮物料记录</h3>{document.materials.filter(item=>item.requiredThisRound).map(item=><div key={item.materialId}><h4>{item.label||item.name}</h4><p>{item.available?"发布时已有实物":"发布时未到"} · 原预计：{item.expectedDate??"未定"}</p>{sheet.materialEvents.filter(event=>event.materialId===item.materialId).map(event=><p key={event.eventId}>{event.action} · {event.expectedDate??""} · {event.note} · {new Date(event.createdAt).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai"})}</p>)}
+    {sheet.status==="published"&&!revision&&<section className="development-controls"><h3>本轮物料记录</h3>{document.materials.filter(item=>item.requiredThisRound).map(item=><div key={item.materialId} id={`material-${item.materialId}`}><h4>{item.label||item.name}</h4><p>{item.available?"发布时已有实物":"发布时未到"} · 原预计：{item.expectedDate??"未定"}</p>{sheet.materialEvents.filter(event=>event.materialId===item.materialId).map(event=><p key={event.eventId}>{event.action} · {event.expectedDate??""} · {event.note} · {new Date(event.createdAt).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai"})}</p>)}
       {sheet.canEdit&&<form onSubmit={event=>{event.preventDefault();const form=new FormData(event.currentTarget);void run(`${base}/materials/${item.materialId}/events`,{expectedMaterialRevision:sheet.materialEvents.filter(event=>event.materialId===item.materialId).length,expectedVersion:sheet.version,action:form.get("action"),expectedDate:form.get("date")||null,note:form.get("note")});}}><fieldset disabled={busy}><label>操作<select name="action"><option>到货</option><option>修改预计日期</option>{item.category==="辅料"&&<option>确认代用</option>}</select></label><label>预计日期<input type="date" name="date"/></label><label>说明<input name="note" maxLength={1000}/></label><Button type="submit">确认记录</Button></fieldset></form>}</div>)}</section>}
     </>}
   </section></Surface>;

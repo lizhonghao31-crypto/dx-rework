@@ -1,3 +1,4 @@
+import { journeyReworkHistoryUrl } from "../../apps/api/src/production-platform/journey-rework-record.js";
 import { PatternOrderReader } from "../../apps/api/src/pattern-room/order-reader.js";
 import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
 import { exceptions as readReportingExceptions } from "../../apps/api/src/reporting/management-reporting-exceptions.js";
@@ -1575,6 +1576,26 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       expect(historical.versions.some(entry => entry.id === historical.entry.id)).toBe(true);
       if (node !== "initiation") expect(historical.sections.some(section => section.rows.length > 0)).toBe(true);
     }
+
+
+    const originalReview=(await database.query("SELECT order_review_id FROM rework_order_reviews WHERE rework_order_id=$1",[submitted.value.reworkOrderId])).rows[0];
+    const originalDetermination=(await database.query("SELECT determination_id,operation_event_id FROM rework_responsibility_determinations WHERE rework_order_id=$1 ORDER BY determination_version DESC LIMIT 1",[submitted.value.reworkOrderId])).rows[0];
+    const historyClient=await database.connect();
+    try {
+      const reviewUrl=await journeyReworkHistoryUrl(historyClient,historyActor,submitted.value.reworkOrderId,["whole_order_review","final_quantity_ie_review"],originalReview.order_review_id);
+      const responsibilityUrl=await journeyReworkHistoryUrl(historyClient,historyActor,submitted.value.reworkOrderId,"responsibility",originalDetermination.determination_id,originalDetermination.operation_event_id);
+      for(const [url,recordId] of [[reviewUrl,originalReview.order_review_id],[responsibilityUrl,originalDetermination.determination_id]]) {
+        expect(url).not.toBeNull();
+        const params=new URL(url!,"http://localhost").searchParams;
+        const entryId=params.get("entryId")!;
+        expect(entryId).not.toBe(recordId);
+        const exact=await businessDetail.history(historyActor,submitted.value.reworkOrderId,FinanceNodeKeySchema.parse(params.get("node")),entryId);
+        expect(exact.entry.id).toBe(entryId);
+      }
+      expect(await journeyReworkHistoryUrl(historyClient,actor(ids.worker,["worker"],"work:report"),submitted.value.reworkOrderId,"responsibility",originalDetermination.determination_id,originalDetermination.operation_event_id)).toBeNull();
+      expect(await journeyReworkHistoryUrl(historyClient,historyActor,randomUUID(),"responsibility",originalDetermination.determination_id,originalDetermination.operation_event_id)).toBeNull();
+      expect(await journeyReworkHistoryUrl(historyClient,historyActor,submitted.value.reworkOrderId,["whole_order_review","final_quantity_ie_review"],randomUUID())).toBeNull();
+    } finally {historyClient.release();}
 
 
     const externalCases = await database.query<{

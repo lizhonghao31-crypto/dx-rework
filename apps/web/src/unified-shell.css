@@ -20,6 +20,7 @@
 .unified-shell > aside .desktop-navigation__group > summary strong { font-size: 14px; letter-spacing: 0; }
 .unified-shell > aside .app-shell__identity { flex: 0 0 auto; margin-top: 10px; padding: 10px 12px 0; color: #dce8f7; }
 .unified-shell > aside .todo-count-badge { top: 8px; left: auto; right: 7px; }
+.unified-shell > aside .primary-navigation__children { margin-left: 18px; border-left: 1px solid #48627e; }
 @media (max-width: 800px) {
   .app-shell.unified-shell { display: block; }
   .app-shell.unified-shell > aside { display: none; }
