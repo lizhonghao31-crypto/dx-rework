@@ -1,5 +1,7 @@
 # V2 PR02：统一订单 Journey 与查询底座
 
+> 首次 PR 的历史记录。641/642 合并后补齐以 [stage01-repair-acceptance.md](stage01-repair-acceptance.md) 为当前验收边界。补丁新增原物料逐条计划日期（保留日期精度、修订、采用轮次及精确物料锚点），修正原返工复核/责任历史为 operation event ID。其余未启动节点的计划登记规则仍待明确，不能称为计划全覆盖。
+
 ## 基线与范围
 
 权威材料为业务负责人直接上传的《系统重构与UI重构施工计划 V2.0》全文（37页、5张内嵌参考图）。正文决定业务内容。第一阶段仅 PR01–02；本 PR 独立基于 `release/digital-production-v1@5f91af8f2169e85d194e23b65ec3a4409f31f513`，与 PR01 公共壳可组合。当前 main 为 `b7d400e623da6381302bf70509ee7fe81b6ac3e8`，迁移历史存在已记录分歧；本 PR 无 migration，不合并 main、不调整历史迁移、不部署。
@@ -44,7 +46,7 @@
 
 原 resource policy 决定档案范围；当前任务主办仅获得自己的任务元数据，原 task/业务处理权限继续检查。新接口不放大已知 A4 同母单任务元数据缺陷；旧接口未在本 PR 修改。外发、预算、生产、返工原入口继续按对应权限/范围决定是否提供 URL，预算金额和责任金额不进入 Journey。
 
-完成主办、实际操作者、原改派审计分别返回。预期时间只复用原有效 SLA deadline；未进入保持 `not_started`，未设 SLA 为 `not_set`，未生成为 `uncreated`，待前置为 `pending`。实际时间只读原完成事实，补报未核实单独标识。缺实际时间或缺目标时完成结果为 unknown；不用登记时间、当前时间补造。无权限用 `unavailableReason=permission`；原域未记录独立事项事实用 `fact_not_recorded`。
+完成主办、实际操作者、原改派审计分别返回。预期时间复用原有效 SLA deadline，首阶段补丁另复用原物料预计到货与修订日期，`expectedKind=plan`、`expectedPrecision=date`；物料未启动独立 SLA。任务未进入保持 `not_started`，未设 SLA 为 `not_set`，未生成为 `uncreated`，待前置为 `pending`。实际时间只读原完成事实，补报未核实单独标识。缺实际时间或缺目标时完成结果为 unknown；不用登记时间、当前时间补造。无权限用 `unavailableReason=permission`；原域未记录独立事项事实用 `fact_not_recorded`。
 
 以下原数据限制需在阶段确认时说明：未生成节点尚无独立计划日期；唛架完成仅有登记时间，原生产完成仅有自然日；部分质检/责任事项没有独立精确完成时间。PR02保留空值和对应状态，未替业务负责人制定默认计划、SLA或推导责任人。部分旧关联模块没有支持准确子记录的 UI 路由时 URL 为 null，保留真实 ID；不替换成模块首页。
 

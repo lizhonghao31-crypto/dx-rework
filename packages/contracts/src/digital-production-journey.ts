@@ -49,6 +49,9 @@ export type JourneyNode = {
   operator: { id: string; name: string | null } | null;
   assignmentHistory: Array<{ at: string; actorId: string; from: string | null; to: string | null }>;
   expectedAt: string | null; expectedKind: "sla" | "plan" | "unset" | "unavailable";
+  /** Plan dates retain their original date-only precision; no midnight is invented. */
+  expectedPrecision: "instant" | "date" | "missing" | "unavailable";
+  subject?: string;
   actualAt: string | null; actualQuality: "verified" | "unverified" | "missing" | "unavailable";
   enteredAt: string | null; sla: "running" | "finished" | "not_started" | "not_set" | "unavailable";
   completionResult: "early" | "on_time" | "late" | "unknown" | null; overdueSeconds: number | null;

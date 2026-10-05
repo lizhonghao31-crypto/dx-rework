@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import type { DigitalCustomer, DigitalOrder, DigitalOrderInput, DigitalSource } from "@dx-rework/contracts/digital-production";
 import { createWebUrls } from "../url-contract.js";
-import { Header } from "./components.js";
+import { FilterBar, PageHeader } from "@dx-rework/ui/production";
 import "./pattern-room.css";
 import "./digital-production.css";
 
@@ -94,13 +94,13 @@ export function DigitalProductionPage() {
   if (instructionOrder) return <div className="pattern-orders digital-production"><ProductionInstructionPanel orderId={instructionOrder} initialVersion={Number(new URLSearchParams(window.location.search).get("instructionVersion"))||undefined} onClose={()=>closeDetail(["instruction", "instructionVersion"],()=>setInstructionOrder(null))} /></div>;
   if (budgetOrder) return <div className="pattern-orders digital-production"><DigitalBudgetPanel key={budgetOrder.productionOrderId} order={budgetOrder} initialVersion={Number(new URLSearchParams(window.location.search).get("budgetVersion"))||undefined} onClose={()=>closeDetail(["budget", "budgetVersion"],()=>setBudgetOrder(null))} /></div>;
   if (developmentSource) return <div className="pattern-orders digital-production"><DigitalDevelopmentPanel key={developmentSource} sourceId={developmentSource} initialRound={Number(new URLSearchParams(window.location.search).get("round"))||undefined} onClose={()=>closeDetail(["development", "round"],()=>setDevelopmentSource(null))} /></div>;
-  return <div className="pattern-orders digital-production"><Header title="数字生产订单" badge="订单源头" badgePlacement="subtitle" />
+  return <div className="pattern-orders digital-production"><PageHeader title="数字生产订单" description="订单源头" />
     <a href={urls.pageUrl("ui/digital-cockpit")}>生产管理座舱</a>
     {error && <p role="alert">{error}</p>}
     {access && <DigitalTasksPanel options={access} />}
-    {options && <><Surface><div className="pattern-actions"><Button onClick={() => { setMode("list"); setSelected(null); }}>订单列表</Button>
+    {options && <><Surface><FilterBar as="div" className="pattern-actions"><Button onClick={() => { setMode("list"); setSelected(null); }}>订单列表</Button>
       {options.creationEnabled && access?.create && <><Button onClick={() => start("order")}>直接下单</Button><Button onClick={() => start("source")}>新增开发来源</Button></>}
-    </div></Surface>
+    </FilterBar></Surface>
     {mode !== "list" && <Surface><form onSubmit={event => { event.preventDefault(); void run(mode === "source" ? "sources" : sourceId ? `sources/${sourceId}/confirm` : "orders", mode === "source" ? { developmentType, designStyleNo: form.designStyleNo, temporaryStyleNo: form.temporaryStyleNo, customerCode: form.customerCode || null } : form); }}>
       <h2>{mode === "source" ? "新增开发来源" : sourceId ? "确认下单" : "直接下单"}</h2><fieldset disabled={busy}>
       {mode === "source" && <label>开发类型<select value={developmentType} onChange={event => setDevelopmentType(event.target.value as "头版" | "开发板")}><option>头版</option><option>开发板</option></select></label>}

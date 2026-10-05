@@ -12,6 +12,7 @@ import { JOURNEY_NODES, journeyDefinition } from "./journey-catalog.js";
 import { journeyCompletion, journeyStages, selectJourneys } from "./journey-projection.js";
 import { canReadProductionReporting, productionVisibility, productionVisibilityArgs } from "../sourcing/production-reporting-service.js";
 import type { DevelopmentDocument } from "@dx-rework/contracts/digital-development";
+import { journeyReworkHistoryUrl } from "./journey-rework-record.js";
 
 const iso = (value: Date|string|null|undefined) => value == null ? null : new Date(value).toISOString();
 type Candidate = { source: {source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
@@ -21,7 +22,7 @@ const taskUrl = (id:string) => `/ui/digital-production?task=${encodeURIComponent
 const developmentUrl = (id:string,round:number) => `/ui/digital-production?development=${id}&round=${round}`;
 const emptyNode = (key:string,state:JourneyState,round:number|null=null):JourneyNode => {
   const definition=journeyDefinition(key)!;
-  return {key,instanceId:`${key}:${round??0}`,label:definition.label,stage:definition.stage,state,round,occurrence:null,current:true,unavailableReason:state==="unavailable"?"permission":null,owner:null,operator:null,assignmentHistory:[],expectedAt:null,expectedKind:state==="unavailable"?"unavailable":"unset",actualAt:null,actualQuality:state==="unavailable"?"unavailable":"missing",enteredAt:null,sla:state==="unavailable"?"unavailable":state==="not_applicable"?"not_set":"not_started",completionResult:state==="completed"?"unknown":null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:definition.count&&!["not_applicable","unavailable","inherited"].includes(state)};
+  return {key,instanceId:`${key}:${round??0}`,label:definition.label,stage:definition.stage,state,round,occurrence:null,current:true,unavailableReason:state==="unavailable"?"permission":null,owner:null,operator:null,assignmentHistory:[],expectedAt:null,expectedPrecision:state==="unavailable"?"unavailable":"missing",expectedKind:state==="unavailable"?"unavailable":"unset",actualAt:null,actualQuality:state==="unavailable"?"unavailable":"missing",enteredAt:null,sla:state==="unavailable"?"unavailable":state==="not_applicable"?"not_set":"not_started",completionResult:state==="completed"?"unknown":null,overdueSeconds:null,risks:[],blockers:[],records:[],inheritedFrom:null,countsInProgress:definition.count&&!["not_applicable","unavailable","inherited"].includes(state)};
 };
 
 /** Additive query API. No writes, new lifecycle, quantities or wage materialization. */
@@ -153,7 +154,7 @@ export class DigitalJourneyQuery {
       const task=await taskService.read(actor,raw.task_id,db);taskDtos.push(task);
       const state:JourneyState=task.paused&&!["completed","cancelled"].includes(task.state)?"blocked":task.state==="ready"?"active":task.state;
       const node=emptyNode(definition.key,state,task.routeVersion);node.instanceId=task.taskId;node.occurrence=task.occurrence;
-      node.expectedAt=task.dueAt;node.expectedKind=task.dueAt?"sla":"unset";node.enteredAt=task.enteredAt;
+      node.expectedAt=task.dueAt;node.expectedPrecision=task.dueAt?"instant":"missing";node.expectedKind=task.dueAt?"sla":"unset";node.enteredAt=task.enteredAt;
       node.sla=task.slaHours===null?"not_set":["completed","cancelled"].includes(state)?"finished":task.enteredAt?"running":"not_started";
       node.current=raw.source_id?task.routeVersion===round&&!raw.returned:raw.task_kind==="sourcing_preparation"?task.state!=="cancelled":raw.route_instance_id===currentPrep;
       node.actualAt=task.completedAt;node.actualQuality=raw.completed_quality==="现场登记"||raw.completed_quality==="已核实"?"verified":raw.completed_quality==="补报未核实"?"unverified":"missing";
@@ -183,6 +184,34 @@ export class DigitalJourneyQuery {
       node.countsInProgress=definition.count&&!raw.returned;
       const defaultNode=baseNodes.find(value=>value.key===definition.key);
       if(node.current&&defaultNode&&defaultNode.instanceId===`${definition.key}:${defaultNode.round??0}`)replace(definition.key,node);else baseNodes.push(node);
+    }
+    // Each original material carries its own plan. Never infer a whole-flow target
+    // from delivery dates, creation time or an SLA that has not started.
+    if (sid && sourceAccess && currentDocument?.document) {
+      const materialEvents = (await db.query<{material_id:string;action:string;expected_date:string|null}>(
+        "SELECT material_id,action,expected_date::text FROM digital_development_material_events WHERE source_id=$1 AND route_version<=$2 ORDER BY sequence", [sid, round ?? 1])).rows;
+      const today = new Intl.DateTimeFormat("en-CA", {timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(asOf));
+      const materials = (currentDocument.document as DevelopmentDocument).materials.filter(material => material.requiredThisRound);
+      const supplyPlaceholder = baseNodes.findIndex(value => value.key === "development_material_supply" && value.instanceId === `development_material_supply:${value.round ?? 0}`);
+      if (!materials.length && supplyPlaceholder >= 0) baseNodes[supplyPlaceholder] = emptyNode("development_material_supply", "not_applicable", round);
+      materials.forEach((material, index) => {
+        const events = materialEvents.filter(event => event.material_id === material.materialId);
+        const arrived = material.available || events.some(event => ["到货", "确认代用"].includes(event.action));
+        const plannedDate = events.filter(event => event.action === "修改预计日期").at(-1)?.expected_date ?? material.expectedDate;
+        const node = emptyNode("development_material_supply", arrived ? "completed" : currentDocument.status === "published" || (round ?? 1) > 1 ? "pending" : "uncreated", round);
+        node.instanceId = `material:${material.materialId}:${round ?? 1}`;
+        node.subject = material.label || material.name;
+        node.expectedAt = plannedDate;
+        node.expectedKind = plannedDate ? "plan" : "unset";
+        node.expectedPrecision = plannedDate ? "date" : "missing";
+        node.sla = "not_set";
+        node.records = [record("development_material", material.materialId, `${developmentUrl(sid, round ?? 1)}#material-${material.materialId}`, currentDocument.version ?? currentDocument.document_version ?? null)];
+        if (!arrived && plannedDate && plannedDate < today) node.risks.push("overdue");
+        // Event registration time is not the actual arrival time.
+        const placeholder = index === 0 ? supplyPlaceholder : -1;
+        // A real supply task retains its lifecycle, owner and original handling URL.
+        if (placeholder >= 0) baseNodes.splice(placeholder, 1, node); else baseNodes.push(node);
+      });
     }
     if(baseNodes.some(node=>node.key==="development_material_recheck"&&node.current&&node.state!=="not_applicable")) {
       const replaced=baseNodes.findIndex(node=>node.key==="development_materials"&&node.instanceId===`development_materials:${round??0}`);
@@ -279,20 +308,20 @@ export class DigitalJourneyQuery {
       for(const key of ["receiving_inspection","rework_review","responsibility"]) {const node=emptyNode(key,"unavailable");node.unavailableReason="fact_not_recorded";replace(key,node);}
       if(closure.canOpenRework)for(const line of closure.lines)for(const rework of line.reworks) {
         const url=`/ui/tasks/${rework.reworkId}`;
-        const append=(key:string,state:JourneyState,id:string,actualAt:string|null,ownerId:string|null)=>{
+        const append=(key:string,state:JourneyState,id:string,actualAt:string|null,ownerId:string|null,recordUrl:string|null)=>{
           const node=emptyNode(key,state);node.instanceId=id;node.actualAt=actualAt;node.actualQuality=actualAt?"verified":"missing";
-          node.owner=ownerId?{id:ownerId,name:null}:null;node.operator=state==="completed"&&actualAt?node.owner:null;node.records=[{...record("rework",rework.reworkId,url),lineId:line.lineId}];
+          node.owner=ownerId?{id:ownerId,name:null}:null;node.operator=state==="completed"&&actualAt?node.owner:null;node.records=[{...record("rework",rework.reworkId,recordUrl),lineId:line.lineId}];
           const placeholder=baseNodes.find(value=>value.key===key&&value.instanceId===`${key}:0`);
           if(placeholder)replace(key,node);else baseNodes.push(node);
         };
-        const report=(await db.query("SELECT tail_inspection_report_id,submitted_by,submitted_at FROM rework_tail_inspection_reports WHERE rework_order_id=$1 AND status='submitted' ORDER BY submitted_at DESC,tail_inspection_report_id DESC LIMIT 1",[rework.reworkId])).rows[0];
-        if(report)append("receiving_inspection","completed",report.tail_inspection_report_id,iso(report.submitted_at),report.submitted_by);
+        const report=(await db.query("SELECT tail_inspection_report_id,submitted_by,submitted_at,operation_event_id FROM rework_tail_inspection_reports WHERE rework_order_id=$1 AND status='submitted' ORDER BY submitted_at DESC,tail_inspection_report_id DESC LIMIT 1",[rework.reworkId])).rows[0];
+        if(report)append("receiving_inspection","completed",report.tail_inspection_report_id,iso(report.submitted_at),report.submitted_by,await journeyReworkHistoryUrl(db,actor,rework.reworkId,"work_reporting",report.tail_inspection_report_id,report.operation_event_id));
         const reviewed=(await db.query("SELECT order_review_id,reviewed_by,reviewed_at FROM rework_order_reviews WHERE rework_order_id=$1",[rework.reworkId])).rows[0];
-        if(reviewed)append("rework_review","completed",reviewed.order_review_id,iso(reviewed.reviewed_at),reviewed.reviewed_by);
-        else if(rework.status==='pending_order_review')append("rework_review","pending",`review:${rework.reworkId}`,null,null);
-        const determination=(await db.query("SELECT determination_id,stage,handler_user_id FROM rework_responsibility_determinations WHERE rework_order_id=$1 ORDER BY determination_version DESC LIMIT 1",[rework.reworkId])).rows[0];
+        if(reviewed)append("rework_review","completed",reviewed.order_review_id,iso(reviewed.reviewed_at),reviewed.reviewed_by,await journeyReworkHistoryUrl(db,actor,rework.reworkId,["whole_order_review","final_quantity_ie_review"],reviewed.order_review_id));
+        else if(rework.status==='pending_order_review')append("rework_review","pending",`review:${rework.reworkId}`,null,null,`${url}?node=whole_order_review`);
+        const determination=(await db.query("SELECT determination_id,stage,handler_user_id,operation_event_id FROM rework_responsibility_determinations WHERE rework_order_id=$1 ORDER BY determination_version DESC LIMIT 1",[rework.reworkId])).rows[0];
         // A finalized determination does not finish its responsibility handling or settle wages.
-        if(determination)append("responsibility",rework.status==='completed'?"completed":rework.status==='cancelled'?"cancelled":"active",determination.determination_id,null,determination.handler_user_id);
+        if(determination)append("responsibility",rework.status==='completed'?"completed":rework.status==='cancelled'?"cancelled":"active",determination.determination_id,null,determination.handler_user_id,await journeyReworkHistoryUrl(db,actor,rework.reworkId,"responsibility",determination.determination_id,determination.operation_event_id));
       }
       const factoryFacts=currentPrep?(await db.query("SELECT * FROM digital_factory_facts WHERE preparation_id=$1 ORDER BY sequence",[currentPrep])).rows:[];
       const arrival=factoryFacts.find(fact=>fact.kind==="工厂到料");
