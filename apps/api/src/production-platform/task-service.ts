@@ -344,7 +344,9 @@ export class DigitalProductionTaskService {
     const currentPolicy = effective ?? await this.policy(db, task.task_kind);
     const resource = this.resource(task);
     const paused = (await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2", [resource.kind, resource.id])).rows[0]?.state === "paused";
-    const parent = (await db.query(resource.kind === "order" ? "SELECT created_by,primary_merchandiser_id FROM digital_production_orders WHERE production_order_id=$1" : "SELECT created_by FROM digital_production_sources WHERE source_id=$1", [resource.id])).rows[0];
+    const parent = (await db.query(resource.kind === "order" ? "SELECT created_by,primary_merchandiser_id,design_style_no,customer_code FROM digital_production_orders WHERE production_order_id=$1" : "SELECT created_by,design_style_no,customer_code FROM digital_production_sources WHERE source_id=$1", [resource.id])).rows[0];
+    const identity = await policy.allowed(actor, resource.kind, resource.id, "technical")
+      ? { designStyleNo: parent.design_style_no as string, customerCode: parent.customer_code as string | null } : null;
     const canManage = isDigitalLeader(actor) || ((task.task_kind.startsWith("development_") || task.task_kind === "bulk_pattern") && (isDigitalTechnicalManager(actor) || actor.actorRoles.includes("development_clerk")));
     const canControl = isDigitalLeader(actor) || (resource.kind === "order" ? actor.actorRoles.includes("order_merchandiser") && parent.primary_merchandiser_id === actor.actorId : actor.actorRoles.includes("sample_designer") && parent.created_by === actor.actorId);
     const assignee = task.assignee_id ? (await db.query("SELECT display_name FROM app_users WHERE id=$1", [task.assignee_id])).rows[0]?.display_name ?? null : null;
@@ -360,7 +362,7 @@ export class DigitalProductionTaskService {
     }
     const handover = await db.query("SELECT 1 FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='handover_received'", [id]);
     const priority = (await db.query("SELECT payload->>'priority' AS priority FROM digital_production_task_events WHERE task_id=$1 AND event_kind='priority_changed' ORDER BY recorded_at DESC,event_id DESC LIMIT 1",[id])).rows[0]?.priority === "urgent" ? "urgent" as const : "normal" as const;
-    return { priority, taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: currentPolicy.label as string,
+    return { identity, priority, taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: currentPolicy.label as string,
       routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage, canControl, canCorrect: isDigitalLeader(actor) || isDigitalTechnicalManager(actor),
       assigneeId: task.assignee_id as string | null, state: task.state as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
       enteredAt: iso(task.entered_at), recordedAt: iso(task.created_at)!, completedAt: iso(task.completed_at), paused,

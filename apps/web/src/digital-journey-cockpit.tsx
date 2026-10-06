@@ -9,7 +9,11 @@ import "./digital-journey-cockpit.css";
 const urls = createWebUrls(import.meta.env.BASE_URL);
 const tone = (state: string): Tone => state === "blocked" || state === "overdue" ? "danger" : state === "completed" || state === "inherited" ? "success" : state === "active" || state === "due_soon" ? "info" : "neutral";
 const nodeTone = (node: JourneyNode): Tone => node.risks.includes("overdue") || node.completionResult === "late" ? "danger" : tone(node.state);
-const who = (person: JourneyNode["owner"]) => person?.name ?? person?.id ?? "未指派";
+const who = (person: JourneyNode["owner"]) => person?.name ?? (person?.id ? "姓名未登记" : "未指派");
+function StageTime({value}: {value: string}) {
+  const parts = /^(\d{4}\/\d{1,2}\/\d{1,2}) (\d{1,2}:\d{2}:\d{2})$/.exec(value);
+  return parts ? <span className="journey-stage-time" title={value}><span>{parts[1]}</span><span>{parts[2]}</span></span> : <span>{value}</span>;
+}
 const quantity = (order: OrderJourney) => !order.orderId ? "未下单" : order.lines.length ? order.lines.reduce((sum, line) => sum + line.orderedQuantity, 0).toLocaleString() : "无可见订购量";
 const kpis = [
   { key: "all", label: "全部订单", field: "all", detail: "当前授权范围", tone: "info" },
@@ -21,7 +25,7 @@ const kpis = [
 ] as const;
 
 function RecordLink({ record, context, children }: { record: JourneyRecord; context: CockpitContext; children?: ReactNode }) {
-  const href = record.url ? journeyRecordHref(record.url, context) : "";
+  const href = record.url ? journeyRecordHref(record.url, context, record.mode) : "";
   return href ? <a href={urls.pageUrl(href)}>{children ?? (record.mode === "handle" ? "进入原办理" : "查看原记录")}</a> : <span className="journey-muted">原记录不可用</span>;
 }
 function CockpitFilters({ context, data, onChange }: { context: CockpitContext; data: JourneyResult | null; onChange: (patch: Partial<CockpitContext>) => void }) {
@@ -63,7 +67,7 @@ function NodeRows({ nodes, context, asOf, onChange }: { nodes: JourneyNode[]; co
           <p>{node.expectedKind === "plan" ? "原计划目标，办理计时尚未启动" : node.sla === "running" ? "按原办理时限计时" : node.sla === "finished" ? "原办理计时已结束" : node.sla === "not_started" ? "尚未进入办理计时" : "尚无办理时限"}</p>
           {node.blockers.length > 0 && <ul>{node.blockers.map((blocker, index) => <li key={blocker.key + index}>{blocker.label}{blocker.record?.url && <> · <RecordLink record={blocker.record} context={context}>查看前置记录</RecordLink></>}</li>)}</ul>}
           {node.inheritedFrom && <p>沿用第 {node.inheritedFrom.round} 轮 · 原任务 {node.inheritedFrom.taskId}</p>}
-          {node.assignmentHistory.length > 0 && <details><summary>改派历史 ({node.assignmentHistory.length})</summary>{node.assignmentHistory.map((item, index) => <p key={item.at + index}>{journeyTime(item.at)} · {item.from ?? "未指派"} → {item.to ?? "未指派"} · 操作人 {item.actorId}</p>)}</details>}
+          {node.assignmentHistory.length > 0 && <details><summary>改派历史 ({node.assignmentHistory.length})</summary>{node.assignmentHistory.map((item, index) => <p key={item.at + index}>{journeyTime(item.at)} · <span title={item.from ?? undefined}>{item.fromName ?? (item.from ? "姓名未登记" : "未指派")}</span> → <span title={item.to ?? undefined}>{item.toName ?? (item.to ? "姓名未登记" : "未指派")}</span> · 操作人 <span title={item.actorId}>{item.actorName ?? "姓名未登记"}</span></p>)}</details>}
         </div><div className="journey-node-records">{node.records.map((record, index) => <RecordLink key={record.domain + record.id + index} record={record} context={context}>{recordLabel(record)}{record.version ? ` · v${record.version}` : ""}{record.lineId ? ` · 明细 ${record.lineId.slice(-8)}` : ""} · {record.mode === "handle" ? "办理" : "查看"}</RecordLink>)}</div>
       </div></td></tr>}</Fragment>;
     })}</tbody></NodeTable>;
@@ -102,7 +106,7 @@ function JourneyDetail({ order, context, onChange, asOf, actions }: { order: Ord
   const activities = nodes.flatMap(node => [
     ...(node.enteredAt ? [{ key: node.instanceId + ":entered:" + node.enteredAt, at: node.enteredAt, label: node.label + "进入办理", person: who(node.owner), node }] : []),
     ...(node.actualAt ? [{ key: node.instanceId + ":done:" + node.actualAt, at: node.actualAt, label: node.label + (node.actualQuality === "unverified" ? "补报完成（待核实）" : "完成"), person: who(node.operator ?? node.owner), node }] : []),
-    ...node.assignmentHistory.map((item, index) => ({ key: node.instanceId + ":assignment:" + item.at + index, at: item.at, label: node.label + "改派", person: item.actorId, node })),
+    ...node.assignmentHistory.map((item, index) => ({ key: node.instanceId + ":assignment:" + item.at + index, at: item.at, label: node.label + "改派", person: item.actorName ?? "姓名未登记", node })),
   ]).sort((a, b) => b.at.localeCompare(a.at));
   const filterNodes = expanded.length ? nodes.filter(node => expanded.includes(node.stage)) : nodes;
   const filters = [{key:"all",label:"全部节点"},{key:"completed",label:"已完成"},{key:"active",label:"进行中"},{key:"not_started",label:"未开始"},{key:"overdue",label:"逾期"}];
@@ -116,8 +120,8 @@ function JourneyDetail({ order, context, onChange, asOf, actions }: { order: Ord
     {label:"订单总数",value:quantity(order),detail:"原订购数量",icon:"▦",color:"blue"},
     {label:"开发节点完成",value:order.progress.development ? `${order.progress.development.completed} / ${order.progress.development.applicable}` : "—",detail:order.progress.development ? "已完成 / 适用节点" : "尚无可见适用路线",icon:"▣",color:"green"},
     {label:"大货节点完成",value:order.progress.bulk ? `${order.progress.bulk.completed} / ${order.progress.bulk.applicable}` : "—",detail:order.progress.bulk ? "已完成 / 适用节点" : "尚无可见适用路线",icon:"◷",color:"blue"},
-    {label:"计划交货日期",value:order.deliveryDate ?? "未登记",detail:"原订单交期",icon:"▤",color:"purple"},
-    {label:"订单状态",value:orderStatus(order),detail:"原业务节点状态",icon:"▣",color:"green"},
+    {label:"计划交货日期",value:order.deliveryDate ?? "未登记",detail:"原订单交期",icon:"▤",color:"purple",text:true},
+    {label:"订单状态",value:orderStatus(order),detail:"原业务节点状态",icon:"▣",color:"green",text:true},
     {label:"风险预警",value:`${risks.length} 项`,detail:"查看详情 ›",icon:"⚠",color:"red"},
   ];
   return <section className="journey-detail journey-golden" id="journey-detail-top" aria-label="订单全景详情">
@@ -126,10 +130,10 @@ function JourneyDetail({ order, context, onChange, asOf, actions }: { order: Ord
     <div className="journey-order-heading"><div><h1>{order.designStyleNo}<StatusBadge tone={tone(orderStatus(order) === "受阻" ? "blocked" : orderStatus(order) === "整单已完成" ? "completed" : "active")}>{orderStatus(order)}</StatusBadge><span className="journey-order-kind">{order.orderId ? "大货订单" : "产品开发"}</span></h1><p>{order.styleName ?? "款名未登记"}<span>客户：{order.customer ?? "未登记"}</span><span>跟单：{order.merchandisers.map(person=>person.name??person.id).join(" / ")||"未指派"}</span><span>下单总数：{quantity(order)}</span><span>交货日期：{order.deliveryDate??"未登记"}</span></p></div>{order.sourceId && rounds.length > 1 && <label>开发轮次<select aria-label="开发轮次" value={context.round ?? order.selectedRound ?? rounds[0]} onChange={event => onChange({ round: Number(event.target.value), expanded: "development", focus: undefined, row: undefined })}>{rounds.map(round => <option key={round} value={round}>第 {round} 轮{round === order.adoptedRound ? " · 大货采用" : ""}</option>)}</select></label>}</div>
     <section className="journey-order-summary"><nav className="journey-business-tabs" aria-label="订单业务页签">{["订单总览",...Object.keys(tabDomains).filter(label=>records.some(entry=>tabDomains[label]?.includes(entry.record.domain)&&Boolean(journeyRecordHref(entry.record.url??"",context))))].map(label=>{return <button key={label} className={businessTab===label?"is-selected":undefined} title={label} onClick={()=>setBusinessTab(label)}>{label}</button>;})}</nav>
       {businessTab!=="订单总览" && <div className="journey-tab-records" aria-label={businessTab+"原记录"}>{tabRecords.map(entry=><RecordLink key={entry.key} record={entry.record} context={context}>{entry.label}</RecordLink>)}</div>}
-      <div className="journey-order-metrics" aria-label="订单指标">{metrics.map(metric=><article key={metric.label} className={"journey-metric is-"+metric.color}><span className="journey-metric-icon" aria-hidden="true">{metric.icon}</span><div><span>{metric.label}</span><strong>{metric.value}</strong>{metric.color==="red"?<button className="journey-text-action" onClick={()=>document.getElementById("journey-risks")?.focus()}>{metric.detail}</button>:<small>{metric.detail}</small>}</div></article>)}</div>
+      <div className="journey-order-metrics" aria-label="订单指标">{metrics.map(metric=><article key={metric.label} className={"journey-metric is-"+metric.color+(metric.text?" is-text":"")}><span className="journey-metric-icon" aria-hidden="true">{metric.icon}</span><div><span>{metric.label}</span><strong>{metric.value}</strong>{metric.color==="red"?<button className="journey-text-action" onClick={()=>document.getElementById("journey-risks")?.focus()}>{metric.detail}</button>:<small>{metric.detail}</small>}</div></article>)}</div>
     </section>
     <section className={"dx-production-panel journey-flow-panel" + (flowCollapsed ? " is-collapsed" : "")} aria-label="订单全流程"><div className="journey-section-title"><h2>订单全流程总览</h2><div className="journey-flow-legend"><span className="is-completed">● 已完成</span><span className="is-active">● 进行中</span><span>● 未开始</span><span className="journey-overdue">● 逾期</span></div><button className="journey-text-action" aria-expanded={!flowCollapsed} onClick={()=>onChange({flow:flowCollapsed?"expanded":"collapsed"})}>{flowCollapsed?"展开流程时间 ⌄":"收起流程时间 ⌃"}</button></div>
-      <div className="journey-flow">{order.stages.map((stage,index)=>{const times=stageTimes(stage);return <div className={expanded.includes(stage.key)?"journey-stage-wrap is-expanded":"journey-stage-wrap"} key={stage.key}><span className={"journey-stage-number is-"+stage.state} aria-hidden="true">{stage.state==="completed"?"✓":index+1}</span><FlowStageCard title={`${index+1}. ${stage.label}`} status={stageStatus(stage,asOf)} tone={stage.nodes.some(node=>node.current&&node.risks.includes("overdue"))?"danger":tone(stage.state)} expectedAt={times.expected} actualAt={times.actual}><button className="journey-stage-toggle" aria-label={stage.label+"节点明细"} aria-pressed={expanded.includes(stage.key)} onClick={()=>{setNodeFilter("all");onChange({expanded:expanded.includes(stage.key)?"":stage.key,focus:undefined,row:undefined});}}><span className="journey-visually-hidden">查看节点明细</span></button></FlowStageCard></div>;})}</div>
+      <div className="journey-flow">{order.stages.map((stage,index)=>{const times=stageTimes(stage);return <div className={expanded.includes(stage.key)?"journey-stage-wrap is-expanded":"journey-stage-wrap"} key={stage.key}><span className={"journey-stage-number is-"+stage.state} aria-hidden="true">{stage.state==="completed"?"✓":index+1}</span><FlowStageCard title={`${index+1}. ${stage.label}`} status={stageStatus(stage,asOf)} tone={stage.nodes.some(node=>node.current&&node.risks.includes("overdue"))?"danger":tone(stage.state)} expectedAt={<StageTime value={times.expected}/>} actualAt={<StageTime value={times.actual}/>}><button className="journey-stage-toggle" aria-label={stage.label+"节点明细"} aria-pressed={expanded.includes(stage.key)} onClick={()=>{setNodeFilter("all");onChange({expanded:expanded.includes(stage.key)?"":stage.key,focus:undefined,row:undefined});}}><span className="journey-visually-hidden">查看节点明细</span></button></FlowStageCard></div>;})}</div>
     </section>
     <div className="journey-three-columns">
       <section className="dx-production-panel journey-current-panel" aria-label="当前节点详情"><div className="journey-section-title"><h2>当前节点详情：{selectedNode?.label??"暂无在办节点"}</h2>{selectedNode&&<StatusBadge tone={nodeTone(selectedNode)}>{nodeStatus(selectedNode,asOf)}</StatusBadge>}</div>

@@ -7,6 +7,7 @@ import { ProductionInstructionPanel } from "./production-instruction-panel.js";
 import { DigitalBudgetPanel } from "./digital-budget-panel.js";
 import { DigitalDevelopmentPanel } from "./digital-development-panel.js";
 import { developmentWorkspaceReturnUrl } from "./development-workspace-return.js";
+import { digitalTaskView } from "./digital-task-view.js";
 import { DigitalTasksPanel } from "./digital-production-tasks-panel.js";
 import { digitalRequest } from "./digital-production-api.js";
 import { DigitalAccessPanel, type DigitalAccessOptions } from "./digital-production-access-panel.js";
@@ -108,11 +109,11 @@ export function DigitalProductionPage() {
   // The cockpit already chose an exact task. Reuse its existing detail consumer
   // without prepending the unrelated task and order lists to this deep link.
   const cockpitTask = new URLSearchParams(window.location.search).get("task");
-  if (cockpitReturnPath(window.location.search) && cockpitTask && /^[0-9a-f-]{36}$/i.test(cockpitTask)) return <div className="pattern-orders digital-production" aria-label="座舱原任务详情">{error && <p role="alert">{error}</p>}{access ? <DigitalTasksPanel options={access} taskId={cockpitTask} compact/> : !error && <p role="status">正在读取原任务…</p>}</div>;
+  if (cockpitReturnPath(window.location.search) && cockpitTask && /^[0-9a-f-]{36}$/i.test(cockpitTask)) return <div className="pattern-orders digital-production" aria-label="座舱原任务详情">{error && <p role="alert">{error}</p>}{access ? <DigitalTasksPanel options={access} taskId={cockpitTask} compact view={digitalTaskView(window.location.search)}/> : !error && <p role="status">正在读取原任务…</p>}</div>;
   return <div className="pattern-orders digital-production"><PageHeader title="数字生产订单" description="订单源头" />
     <a href={urls.pageUrl("ui/digital-cockpit")}>生产管理座舱</a>
     {error && <p role="alert">{error}</p>}
-    {access && <DigitalTasksPanel options={access} />}
+    {access && <DigitalTasksPanel options={access} view={digitalTaskView(window.location.search)} />}
     {options && <><Surface><FilterBar as="div" className="pattern-actions"><Button onClick={() => { setMode("list"); setSelected(null); }}>订单列表</Button>
       {options.creationEnabled && access?.create && <><Button onClick={() => start("order")}>直接下单</Button><Button onClick={() => start("source")}>新增开发来源</Button></>}
     </FilterBar></Surface>
