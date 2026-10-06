@@ -2,6 +2,7 @@ export const BUSINESS_TIME_ZONE = "Asia/Shanghai";
 
 const VALUE_LABELS: Readonly<Record<string, string>> = {
   order_rework: "订单返工", pattern_room: "订单打板", first_pattern: "首次打板", pattern_rework: "打板返工", misc: "杂事",
+  qc_rework: "QC返工", inhouse_finishing: "本厂做尾",
   pattern_handoff: "样板交接", pattern_cancel_fees: "取消费用确认", misc_complete: "杂事完工及工时核定", misc_stop: "杂事停止及工时核定",
   settled: "已结算", unsettled: "未结算", pattern_segment: "执行段",
   draft: "草稿",
