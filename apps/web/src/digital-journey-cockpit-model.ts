@@ -18,14 +18,26 @@ export function cockpitReturnPath(search: string): string | null {
   const candidate = new URLSearchParams(search).get("returnTo");
   if (!candidate || candidate.includes("\\") || !candidate.startsWith("/ui/digital-cockpit?")) return null;
   const params = new URLSearchParams(candidate.slice(candidate.indexOf("?")));
+  if (candidate.includes("#") || [...params.keys()].length !== new Set(params.keys()).size) return null;
+  const workspace = params.get("workspace");
+  if (workspace !== null && !["preparation", "factory"].includes(workspace)) return null;
+  params.delete("workspace");
   const parsed = JourneyReturnContextSchema.safeParse(Object.fromEntries(params));
-  return parsed.success ? journeyReturnUrl(parsed.data) : null;
+  return parsed.success ? journeyReturnUrl(parsed.data) + (workspace ? `&workspace=${workspace}` : "") : null;
 }
 export function journeyRecordHref(url: string, context: CockpitContext, mode?: JourneyRecord["mode"]): string {
   if (!url.startsWith("/ui/") || url.includes("\\")) return "";
   const parsed = new URL(url, "https://local.invalid");
   if (mode && parsed.pathname === "/ui/digital-production" && parsed.searchParams.has("task")) parsed.searchParams.set("taskView", mode);
   parsed.searchParams.set("returnTo", journeyReturnUrl(context));
+  return parsed.pathname + parsed.search + parsed.hash;
+}
+/** Original panels retain the new workbench only when entered with a validated local context. */
+export function productionWorkspaceDomainHref(url: string, search: string): string {
+  const returnTo = cockpitReturnPath(search);
+  if (!returnTo || !new URL(returnTo, "https://local.invalid").searchParams.has("workspace")) return url;
+  const parsed = new URL(url, "https://local.invalid");
+  parsed.searchParams.set("returnTo", returnTo);
   return parsed.pathname + parsed.search + parsed.hash;
 }
 export function journeyTime(value: string | null, precision: JourneyNode["expectedPrecision"] = "instant", missing = "未登记"): string {
