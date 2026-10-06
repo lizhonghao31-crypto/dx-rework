@@ -2,16 +2,28 @@ import {z} from 'zod';
 export const DigitalAnalysisFilterSchema=z.object({
  from:z.iso.date(),to:z.iso.date(),customer:z.string().trim().max(100).default(''),category:z.string().trim().max(100).default(''),
  role:z.string().trim().max(100).default(''),designer:z.string().uuid().optional(),page:z.coerce.number().int().min(1).max(100000).default(1),
+ assigneeId:z.string().uuid().optional(),
+ scope:z.enum(['created','published','completed','snapshot','revisions']).optional(),
+ metric:z.enum(['all','shipping','active','pending','unassigned','blocked','overdue','sla','late','measurable','materials','handover','other_wait','missing','unverified','waiting','unknown_wait']).optional(),
+ cycle:z.enum(['under_day','one_three','three_seven','over_week']).optional(),
+ node:z.string().trim().max(100).optional(),origin:z.enum(['客户新增要求','未达原要求','内部发现']).optional(),
 }).strict().refine(value=>value.to>=value.from,'结束日期不能早于开始日期');
 export const DigitalAnalysisNoteSchema=z.object({filters:DigitalAnalysisFilterSchema,conclusion:z.string().trim().min(1).max(2000),action:z.string().trim().min(1).max(2000),observeAt:z.iso.datetime({offset:true}),taskIds:z.array(z.string().uuid()).min(1).max(50)}).strict();
 export type DigitalAnalysisFilters=z.infer<typeof DigitalAnalysisFilterSchema>;
 export type DigitalAnalysisNote=z.infer<typeof DigitalAnalysisNoteSchema>;
 export type DigitalAnalysisEvent={id:string;kind:string;at:string|null;recordedAt:string;quality:string;actorId:string;actorName?:string;correctsId:string|null;payload:Record<string,unknown>};
-export type DigitalAnalysisRow={taskId:string;sourceId:string|null;orderId:string|null;styleNo:string;customer:string;category:string;requiredRole:string;assigneeId:string|null;assigneeName:string|null;nodeKey:string;label:string;round:number;state:string;createdAt:string;enteredAt:string|null;completedAt:string|null;enteredQuality:string;completedQuality:string;dueAt:string|null;policyVersion:number|null;assignmentHistory:{at:string;actorName:string;beforeName:string|null;afterName:string|null}[];delegations:{name:string;from:string;expiresAt:string;revokedAt:string|null}[];events:DigitalAnalysisEvent[];pendingConditions:string[];handlingSeconds:number|null;slaIncluded:boolean;onTime:boolean|null;exclusion:string|null;waitingSeconds:number;unknownWaiting:number;missingTime:boolean;unverifiedTime:boolean;registrationDelaySeconds:number|null};
+export type DigitalAnalysisRow={taskId:string;sourceId:string|null;orderId:string|null;styleNo:string;customer:string;category:string;requiredRole:string;assigneeId:string|null;assigneeName:string|null;nodeKey:string;label:string;round:number;state:string;createdAt:string;enteredAt:string|null;completedAt:string|null;enteredQuality:string;completedQuality:string;dueAt:string|null;policyVersion:number|null;sourcePublishedAt?:string|null;assignmentHistory:{at:string;actorName:string;beforeName:string|null;afterName:string|null}[];delegations:{name:string;from:string;expiresAt:string;revokedAt:string|null}[];events:DigitalAnalysisEvent[];pendingConditions:string[];handlingSeconds:number|null;slaIncluded:boolean;onTime:boolean|null;exclusion:string|null;waitingSeconds:number;unknownWaiting:number;missingTime:boolean;unverifiedTime:boolean;registrationDelaySeconds:number|null};
+export type DigitalAnalysisOverview={
+ period:{newStyles:number;shippedRounds:number;completed:number;slaDenominator:number;onTime:number;measurable:number;missingTime:number;unverifiedTime:number;handlingSeconds:number;waitingSeconds:number;unknownWaiting:number;cycleBuckets:Array<{key:'under_day'|'one_three'|'three_seven'|'over_week';label:string;count:number}>};
+ snapshot:{active:number;pending:number;unassigned:number;blocked:number;overdue:number;materialPending:number;handoverPending:number;otherBlocked:number};
+ nodes:Array<{key:string;label:string;overdue:number;completed:number;slaDenominator:number;onTime:number}>;
+};
 export type DigitalAnalysisResult={
  ruleVersion:string;asOf:string;filters:DigitalAnalysisFilters;canExport:boolean;canRecord:boolean;page:number;total:number;
  summary:{newStyles:number;materialPending:number;handoverPending:number;tasks:number;cancelled:number;completed:number;slaDenominator:number;onTime:number;measurable:number;handlingSeconds:number;waitingSeconds:number;unknownWaiting:number;missingTime:number;unverifiedTime:number;correctedTasks:number};
- rounds:{sourceId:string;round:number;origin:string;categories:string[];publishedAt:string}[];
+ rounds:{sourceId:string;round:number;origin:string;categories:string[];publishedAt:string;affectedNodes?:string[];customerComment?:string;internalProblem?:string;explanation?:string}[];
  rows:DigitalAnalysisRow[];
- notes:{id:string;author:string;createdAt:string;conclusion:string;action:string;observeAt:string;filters:DigitalAnalysisFilters;taskIds:string[];ruleVersion:string}[];
+ overview?:DigitalAnalysisOverview;
+ people?:Array<{id:string;name:string|null}>;
+ notes:{id:string;author:string;createdAt:string;conclusion:string;action:string;observeAt:string;filters:DigitalAnalysisFilters;taskIds:string[];ruleVersion:string;asOf?:string}[];
 };
