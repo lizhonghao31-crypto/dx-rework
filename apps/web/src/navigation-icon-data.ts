@@ -1,5 +1,11 @@
 // Selected Lucide geometry; see navigation-icons.LICENSE. No runtime dependency.
+// Search, Scissors, Clock, TriangleAlert and CirclePause use authored basic SVG primitives in the same stroke style.
 export const NAVIGATION_ICON_DATA = {
+  "Clock": [["circle", {cx:"12",cy:"12",r:"9"}],["path", {d:"M12 7v5l3 2"}]],
+  "TriangleAlert": [["polygon", {points:"12 3 22 21 2 21"}],["path", {d:"M12 9v4m0 4h.01"}]],
+  "CirclePause": [["circle", {cx:"12",cy:"12",r:"9"}],["path", {d:"M9 8v8m6-8v8"}]],
+  Search: [["circle",{cx:"11",cy:"11",r:"7"}],["path",{d:"m16 16 5 5"}]],
+  Scissors: [["circle",{cx:"6",cy:"6",r:"3"}],["circle",{cx:"6",cy:"18",r:"3"}],["path",{d:"m8.5 8.5 12 12 M8.5 15.5 20.5 3.5"}]],
   "ClipboardCheck": [
     [
       "rect",
