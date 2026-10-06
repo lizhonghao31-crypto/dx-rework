@@ -33,6 +33,9 @@ type WorkTaskRow = Readonly<{
   process_name: string; execution_kind: "worker" | "tail_inspection"; pricing_unit: "piece" | "hour"; planned_quantity: string; unit_price: string | null;
 }>;
 type PersonRow = Readonly<{ person_id: string; person_type: "internal" | "temporary"; display_name: string; app_user_id: string | null }>;
+type ReturnedReportRow = Readonly<{
+  work_report_id: string; work_task_id: string; rework_order_id: string; configuration_item_id: string;
+}>;
 type OrderRow = Readonly<{
   rework_order_id: string; rework_no: string | null; status: string; version: number;
   style_no: string | null; order_no: string | null; merchandiser_user_id: string | null;
@@ -612,37 +615,29 @@ export class WorkReportingService {
       );
       if (existing.rows[0]) error("该人员已完成上数；如需返工请由尾部主管退回", 409, "CONFLICT");
       const groupAmount = 0;
+      const returnedReports = await this.resolveReturnedReports(client, [{ task, resubmitsWorkReportId: input.resubmitsWorkReportId }]);
+      const resubmitsWorkReportId = returnedReports.get(workTaskId) ?? null;
       const completedOrder = await this.readyForWholeOrderReview(client, task.rework_order_id, [task.work_task_id]);
-      if (input.resubmitsWorkReportId) {
-        const rejected = await client.query<{ work_report_id: string }>(
-          `SELECT report.work_report_id FROM rework_work_reports report
-           JOIN rework_work_report_rejections rejection ON rejection.work_report_id=report.work_report_id
-           WHERE report.work_report_id=$1 AND report.work_task_id=$2 AND report.rework_order_id=$3
-             AND report.configuration_item_id=$4 FOR SHARE`,
-          [input.resubmitsWorkReportId, workTaskId, task.rework_order_id, task.configuration_item_id],
-        );
-        if (!rejected.rows[0]) error("只能重新提交当前任务中已驳回的历史上数", 409, "CONFLICT");
-      }
       const reportId = randomUUID();
       const shares = members.map(() => 0);
       const event = {
         action: "rework.work_report.submit", entityType: "rework_order", entityId: task.rework_order_id,
         before: { submittedQuantity: 0, plannedQuantity: numberValue(task.planned_quantity) },
-        after: { ...this.orderAuditState(order, completedOrder ? "pending_order_review" : order.status, completedOrder ? order.version + 1 : order.version), workReportId: reportId, workTaskId, actualQuantity: input.actualQuantity, groupAmount, memberIds: members.map((member) => member.person_id), resubmitsWorkReportId: input.resubmitsWorkReportId ?? null },
+        after: { ...this.orderAuditState(order, completedOrder ? "pending_order_review" : order.status, completedOrder ? order.version + 1 : order.version), workReportId: reportId, workTaskId, actualQuantity: input.actualQuantity, groupAmount, memberIds: members.map((member) => member.person_id), resubmitsWorkReportId },
         ...(input.remark ? { reason: input.remark } : {}),
       };
       const eventId = await this.events.append(client, reportingActor, event);
       await this.context(client, eventId, actor.requestId);
       const reportInsert = await client.query<{ completed_at: Date }>(
         "INSERT INTO rework_work_reports(work_report_id,work_task_id,rework_order_id,configuration_item_id,actual_quantity,completed_at,remark,group_amount,submitted_by,resubmits_work_report_id) VALUES($1,$2,$3,$4,$5,CURRENT_TIMESTAMP,$6,$7,$8,$9) RETURNING completed_at",
-        [reportId, workTaskId, task.rework_order_id, task.configuration_item_id, input.actualQuantity, input.remark ?? null, groupAmount, actor.actorId, input.resubmitsWorkReportId ?? null],
+        [reportId, workTaskId, task.rework_order_id, task.configuration_item_id, input.actualQuantity, input.remark ?? null, groupAmount, actor.actorId, resubmitsWorkReportId],
       );
       const completedAt = reportInsert.rows[0]?.completed_at ?? error("完工时间记录失败", 500, "INTERNAL_ERROR");
-      if (input.resubmitsWorkReportId) {
+      if (resubmitsWorkReportId) {
         await this.todos?.completeOpenByDedupeKey(
           client,
           reportingActor,
-          `work-report-return:${input.resubmitsWorkReportId}`,
+          `work-report-return:${resubmitsWorkReportId}`,
           "Returned work report was corrected and resubmitted",
         );
       }
@@ -744,47 +739,23 @@ export class WorkReportingService {
           membersByTask.set(member.work_task_id, members);
         }
 
-        const existingResult = await client.query<{ work_report_id: string; work_task_id: string }>(
-          `SELECT report.work_report_id,report.work_task_id
+        const existingResult = await client.query<ReturnedReportRow & { report_rejection_id: string | null }>(
+          `SELECT report.work_report_id,report.work_task_id,report.rework_order_id,
+                  report.configuration_item_id,rejection.report_rejection_id
            FROM rework_work_reports report
+           LEFT JOIN rework_work_report_rejections rejection ON rejection.work_report_id=report.work_report_id
            WHERE report.work_task_id=ANY($1::uuid[]) AND report.status='submitted'
-             AND NOT EXISTS (
-               SELECT 1 FROM rework_work_report_rejections rejection
-               WHERE rejection.work_report_id=report.work_report_id
+             AND (
+               rejection.report_rejection_id IS NULL OR NOT EXISTS (
+                 SELECT 1 FROM rework_work_reports successor
+                 WHERE successor.resubmits_work_report_id=report.work_report_id
+               )
              )
            ORDER BY report.work_report_id
            FOR UPDATE OF report`,
           [taskIds],
         );
-        const submittedTaskIds = new Set(existingResult.rows.map((report) => report.work_task_id));
-
-        const resubmissionIds = input.reports.flatMap((report) => (
-          report.resubmitsWorkReportId ? [report.resubmitsWorkReportId] : []
-        ));
-        const rejectedResult = resubmissionIds.length === 0
-          ? { rows: [] as Array<{
-            work_report_id: string;
-            work_task_id: string;
-            rework_order_id: string;
-            configuration_item_id: string;
-          }> }
-          : await client.query<{
-            work_report_id: string;
-            work_task_id: string;
-            rework_order_id: string;
-            configuration_item_id: string;
-          }>(
-            `SELECT report.work_report_id,report.work_task_id,
-                    report.rework_order_id,report.configuration_item_id
-             FROM rework_work_reports report
-             JOIN rework_work_report_rejections rejection
-               ON rejection.work_report_id=report.work_report_id
-             WHERE report.work_report_id=ANY($1::uuid[])
-             ORDER BY report.work_report_id
-             FOR SHARE OF report`,
-            [resubmissionIds],
-          );
-        const rejectedById = new Map(rejectedResult.rows.map((report) => [report.work_report_id, report]));
+        const submittedTaskIds = new Set(existingResult.rows.filter(report => report.report_rejection_id === null).map(report => report.work_task_id));
 
         const prepared: Array<{
           input: CreateWorkReportsBatch["reports"][number];
@@ -794,6 +765,7 @@ export class WorkReportingService {
           reportingActor: TrustedActorContext;
           reportId: string;
           shares: number[];
+          resubmitsWorkReportId: string | null;
         }> = [];
         for (const { input: reportInput, task } of lockedTasks) {
           const members = membersByTask.get(task.work_task_id) ?? [];
@@ -806,15 +778,6 @@ export class WorkReportingService {
           if (submittedTaskIds.has(task.work_task_id)) {
             error("该人员已完成上数；如需返工请由尾部主管退回", 409, "CONFLICT");
           }
-          if (reportInput.resubmitsWorkReportId) {
-            const rejected = rejectedById.get(reportInput.resubmitsWorkReportId);
-            if (
-              !rejected
-              || rejected.work_task_id !== task.work_task_id
-              || rejected.rework_order_id !== reworkOrderId
-              || rejected.configuration_item_id !== task.configuration_item_id
-            ) error("只能重新提交当前任务中已驳回的历史上数", 409, "CONFLICT");
-          }
           prepared.push({
             input: reportInput,
             task,
@@ -823,8 +786,14 @@ export class WorkReportingService {
             reportingActor: { ...actor, authorizationCapability: reportingCapability! },
             reportId: randomUUID(),
             shares: members.map(() => 0),
+            resubmitsWorkReportId: null,
           });
         }
+
+        const returnedReports = await this.resolveReturnedReports(client, prepared.map(item => ({
+          task: item.task, resubmitsWorkReportId: item.input.resubmitsWorkReportId,
+        })), existingResult.rows.filter(report => report.report_rejection_id !== null));
+        for (const item of prepared) item.resubmitsWorkReportId = returnedReports.get(item.task.work_task_id) ?? null;
 
         const completedOrder = await this.readyForWholeOrderReview(
           client,
@@ -855,7 +824,7 @@ export class WorkReportingService {
                 actualQuantity: item.input.actualQuantity,
                 groupAmount,
                 memberIds: item.members.map((member) => member.person_id),
-                resubmitsWorkReportId: item.input.resubmitsWorkReportId ?? null,
+                resubmitsWorkReportId: item.resubmitsWorkReportId,
               },
               ...(item.input.remark ? { reason: item.input.remark } : {}),
             },
@@ -900,7 +869,7 @@ export class WorkReportingService {
               remark: item.input.remark ?? null,
               group_amount: 0,
               submitted_by: actor.actorId,
-              resubmits_work_report_id: item.input.resubmitsWorkReportId ?? null,
+              resubmits_work_report_id: item.resubmitsWorkReportId,
             })))],
           );
           if (inserted.rows.length !== group.length) {
@@ -925,11 +894,11 @@ export class WorkReportingService {
         }
 
         for (const item of audited) {
-          if (item.input.resubmitsWorkReportId) {
+          if (item.resubmitsWorkReportId) {
             await this.todos?.completeOpenByDedupeKey(
               client,
               item.reportingActor,
-              `work-report-return:${item.input.resubmitsWorkReportId}`,
+              `work-report-return:${item.resubmitsWorkReportId}`,
               "Returned work report was corrected and resubmitted",
             );
           }
@@ -1093,6 +1062,45 @@ export class WorkReportingService {
   private async task(client: PoolClient, id: string, locked: boolean): Promise<WorkTaskRow> {
     const result = await client.query<WorkTaskRow>(`SELECT task.work_task_id,task.rework_order_id,task.configuration_item_id,task.task_version,task.assignment_mode,task.status,item.process_name,item.execution_kind,item.pricing_unit,COALESCE((SELECT adjustment.requested_planned_quantity FROM rework_process_quantity_adjustments adjustment WHERE adjustment.configuration_item_id=item.configuration_item_id AND adjustment.status='effective' ORDER BY adjustment.adjustment_version DESC LIMIT 1),item.planned_quantity) AS planned_quantity,item.unit_price FROM rework_work_tasks task JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id WHERE task.work_task_id=$1${locked ? " FOR UPDATE OF task" : ""}`, [id]);
     return result.rows[0] ?? error("返工任务不存在", 404, "NOT_FOUND");
+  }
+
+  private async resolveReturnedReports(
+    client: PoolClient,
+    requests: readonly { task: WorkTaskRow; resubmitsWorkReportId: string | undefined }[],
+    rejectedReports?: readonly ReturnedReportRow[],
+  ): Promise<Map<string, string | null>> {
+    // Task/order locks are already held. Rejection and resubmission links are immutable;
+    // a consumed predecessor must stay consumed even if its successor is returned again.
+    const rows = rejectedReports ?? (await client.query<ReturnedReportRow>(
+      `SELECT report.work_report_id,report.work_task_id,report.rework_order_id,report.configuration_item_id
+       FROM rework_work_reports report
+       JOIN rework_work_report_rejections rejection ON rejection.work_report_id=report.work_report_id
+       WHERE report.work_task_id=ANY($1::uuid[]) AND report.status='submitted'
+         AND NOT EXISTS (
+           SELECT 1 FROM rework_work_reports successor
+           WHERE successor.resubmits_work_report_id=report.work_report_id
+         )
+       ORDER BY report.work_task_id,report.work_report_id`,
+      [requests.map(({ task }) => task.work_task_id)],
+    )).rows;
+    const byTask = new Map<string, ReturnedReportRow[]>();
+    for (const report of rows) {
+      const candidates = byTask.get(report.work_task_id) ?? [];
+      candidates.push(report);
+      byTask.set(report.work_task_id, candidates);
+    }
+    const resolved = new Map<string, string | null>();
+    for (const { task, resubmitsWorkReportId } of requests) {
+      const candidates = byTask.get(task.work_task_id) ?? [];
+      if (candidates.length > 1) error("当前任务存在多条未关联的退回上数，无法确定重报来源，请联系主管核查", 409, "CONFLICT");
+      const report = candidates[0];
+      if (
+        (report && (report.rework_order_id !== task.rework_order_id || report.configuration_item_id !== task.configuration_item_id))
+        || (resubmitsWorkReportId && report?.work_report_id !== resubmitsWorkReportId)
+      ) error("只能重新提交当前任务中尚未重报的已驳回历史上数", 409, "CONFLICT");
+      resolved.set(task.work_task_id, report?.work_report_id ?? null);
+    }
+    return resolved;
   }
 
   private async readyForWholeOrderReview(client: PoolClient, reworkOrderId: string, submittedWorkTaskIds: readonly string[], allowReportedTaskRecovery = false): Promise<boolean> {
