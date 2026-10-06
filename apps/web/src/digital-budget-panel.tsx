@@ -12,6 +12,7 @@ import { DocumentAddRow, DocumentAnchors, DocumentErrors, DocumentField, Documen
 import { budgetColumns as columns, budgetFieldLabels, budgetIssues } from "./digital-budget-validation.js";
 import { DigitalBudgetPrint } from "./digital-budget-print.js";
 import { NavigationIcon } from "./navigation-icons.js";
+import { useDigitalDetailNavigationGuard } from "./use-digital-detail-navigation-guard.js";
 import "./digital-budget.css";
 
 const urls = createWebUrls(import.meta.env.BASE_URL);
@@ -32,7 +33,7 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion }: { order: 
   const install = (value:BudgetSheet) => { const next=value.document??initial(); templateDefaults.current=new Map(value.document?[]:next.rows.map(row=>[row.rowId,row.category]));setActivated(new Set());setSheet(value);setDoc(next);setDirty(false);setValidationMode(null); };
   const base = `orders/${order.productionOrderId}/budget`;
   useEffect(() => { let live = true; void digitalRequest<BudgetSheet>(`${base}${initialVersion?`?version=${initialVersion}`:""}`).then(value => { if (live) { install(value); } }).catch(reason => { if (live) setError(reason.message); }); return () => { live = false; }; }, [base,initialVersion]);
-  useEffect(()=>{const warn=(event:BeforeUnloadEvent)=>{if(dirty||writing.current){event.preventDefault();event.returnValue="";}};window.addEventListener("beforeunload",warn);return()=>window.removeEventListener("beforeunload",warn);},[dirty]);
+  useDigitalDetailNavigationGuard(dirty,busy,writing,"有未保存修改，确定离开？");
 
   useEffect(()=>{const element=root.current?.querySelector<HTMLElement>(".budget-document-summary");if(!element)return;const measure=()=>{const toolbar=root.current?.querySelector(".dx-doc-toolbar");setSummaryFits(element.getBoundingClientRect().height+(toolbar?.getBoundingClientRect().height??0)+32<=window.innerHeight);};const observer=new ResizeObserver(measure);observer.observe(element);window.addEventListener("resize",measure);measure();return()=>{observer.disconnect();window.removeEventListener("resize",measure);};},[Boolean(sheet)]);
   const edit = (patch: Partial<BudgetDocument>) => { setDoc(current => ({ ...current, ...patch })); setDirty(true); };
@@ -92,7 +93,7 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion }: { order: 
   const reload=async()=>{if(writing.current||dirty&&!await confirmInApp("重新载入将丢弃未保存修改，确定继续？"))return;setBusy(true);try{install(await digitalRequest<BudgetSheet>(`${base}${initialVersion?`?version=${initialVersion}`:""}`));setError("");}catch(reason){setError(reason instanceof Error?reason.message:"读取失败");}finally{setBusy(false);}};
   return <><Surface><section ref={root} className="budget-editor dx-doc-budget">
     <DocumentToolbar title="成本预算表" status={busy?"保存中":error&&dirty?"保存失败，修改未保存":dirty?"未保存修改":`${initialVersion?"历史版本":sheet?.status==="published"?"已发布 · 当前有效版本":sheet?.version?"已保存":"草稿"}${sheet?.version?` · 版本 ${sheet.version}`:""}`}>
-      <Button disabled={busy} onClick={async()=>{if(!dirty||await confirmInApp("有未保存修改，确定离开？"))onClose();}}>返回</Button>
+      <Button disabled={busy} onClick={onClose}>返回</Button>
       {sheet?.canEdit&&sheet.status==="published"&&sheet.document&&initialVersion===undefined&&<Button disabled={busy} onClick={()=>void copyPublished()}>另存为新草稿</Button>}
       {!readonly&&<><Button disabled={busy} onClick={()=>void run(false)}>保存预算</Button><Button variant="primary" disabled={busy} onClick={()=>void run(true)}>发布预算</Button></>}
       <Button disabled={!sheet?.document||dirty||busy} onClick={()=>window.print()}>打印 / 保存 PDF</Button>
