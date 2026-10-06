@@ -31,7 +31,15 @@ export class DigitalAnalysisQuery{
     LEFT JOIN LATERAL(SELECT due_at,policy_version FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1)r ON true
     WHERE ($1='' OR coalesce(o.customer_code,s.customer_code)=$1)
       AND ($2='' OR d.document->>'template'=$2) AND ($3='' OR a.required_role=$3) AND ($4::uuid IS NULL OR s.created_by=$4)
-    ORDER BY t.created_at DESC,t.task_id DESC`,[filters.customer,filters.category,filters.role,filters.designer??null])).rows;
+      AND (($7::text IS NULL AND t.created_at>=$5 AND t.created_at<$6) OR ($7::text IS NOT NULL AND (
+        t.state NOT IN ('completed','cancelled')
+        OR (t.state='completed' AND t.completed_at>=$5 AND t.completed_at<$6)
+        OR (d.published_at>=$5 AND d.published_at<$6)
+        OR ($7='created' AND t.created_at>=$5 AND t.created_at<$6)
+        OR EXISTS(SELECT 1 FROM digital_development_rounds period_round WHERE period_round.source_id=s.source_id
+          AND period_round.round_number=t.route_version AND period_round.published_at>=$5 AND period_round.published_at<$6)
+      )))
+    ORDER BY t.created_at DESC,t.task_id DESC`,[filters.customer,filters.category,filters.role,filters.designer??null,window.from,window.to,filters.scope??null])).rows;
   const policy=new DigitalProductionAccessPolicy(db),authorized=[];
   for(const row of candidates)if(await policy.allowed(actor,'task',row.taskId,'technical'))authorized.push(row);
   const ids=authorized.map(row=>row.taskId);
@@ -46,7 +54,10 @@ export class DigitalAnalysisQuery{
   const attributedRows=rows.map(row=>({...row,assignmentHistory:assignments.filter(a=>a.taskId===row.taskId).map(a=>({...a,at:iso(a.at)!})),delegations:delegations.filter(d=>d.taskId===row.taskId).map(d=>({...d,from:iso(d.from)!,expiresAt:iso(d.expiresAt)!,revokedAt:iso(d.revokedAt)}))}));
   const people=[...new Map(attributedRows.filter(row=>row.assigneeId).map(row=>[row.assigneeId!,{id:row.assigneeId!,name:row.assigneeName}])).values()];
   const scopedRows=filters.assigneeId?attributedRows.filter(row=>row.assigneeId===filters.assigneeId):attributedRows;
-  const sourceIds:string[]=[];for(const sourceId of new Set(scopedRows.map(row=>row.sourceId).filter((id):id is string=>Boolean(id))))if(await policy.allowed(actor,'source',sourceId,'technical'))sourceIds.push(sourceId);
+  // Original development reads allow source access through an already-visible source task.
+  // Order-associated tasks still require the original direct source permission.
+  const readableTaskSources=new Set((await db.query('SELECT DISTINCT source_id FROM digital_production_task_access WHERE task_id=ANY($1::uuid[]) AND source_id IS NOT NULL',[scopedRows.map(row=>row.taskId)])).rows.map(row=>row.source_id as string));
+  const sourceIds:string[]=[];for(const sourceId of new Set(scopedRows.map(row=>row.sourceId).filter((id):id is string=>Boolean(id))))if(readableTaskSources.has(sourceId)||await policy.allowed(actor,'source',sourceId,'technical'))sourceIds.push(sourceId);
   const rawRounds=(await db.query(`SELECT source_id AS "sourceId",round_number AS round,origin,categories,affected_nodes AS "affectedNodes",customer_comment AS "customerComment",internal_problem AS "internalProblem",explanation,published_at AS "publishedAt" FROM digital_development_rounds
     WHERE source_id=ANY($1::uuid[]) AND published_at>=$2 AND published_at<$3 ORDER BY published_at,source_id,round_number`,[sourceIds,window.from,window.to])).rows;
   const rounds=rawRounds.map(row=>({...row,publishedAt:iso(row.publishedAt)!}));

@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import pg from 'pg';
-import {describe,it,expect,beforeAll,afterAll} from 'vitest';
+import {describe,it,expect,beforeAll,afterAll,vi} from 'vitest';
 import {DigitalAnalysisFilterSchema} from '@dx-rework/contracts/digital-production-analysis';
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
 import {DigitalProductionIdentityService} from '../../apps/api/src/production-platform/identity-service.js';
@@ -9,6 +9,8 @@ import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/
 import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
 import {DevelopmentRevisionSchema} from '@dx-rework/contracts/digital-development-rounds';
 import {DigitalAnalysisQuery} from '../../apps/api/src/production-platform/reporting-query.js';
+import {DigitalProductionAccessPolicy} from '../../apps/api/src/production-platform/access-policy.js';
+import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {ownedPostgresSchema} from '../helpers/owned-postgres-schema.js';
 import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
 const url=process.env.TEST_DATABASE_URL;
@@ -39,5 +41,20 @@ const url=process.env.TEST_DATABASE_URL;
   await rounds.publish(actor(),sourceId,{expectedDraftVersion:saved.draftVersion,basedOnRound:1},randomUUID());const after=await analysis.list(boss,filters),fact=after.rounds.find(item=>item.sourceId===sourceId&&item.round===2);
   expect(fact).toMatchObject({origin:'客户新增要求',affectedNodes:['工艺'],categories:['工艺'],customerComment:revision.customerComment,explanation:revision.explanation});expect(after.rows.length).toBeGreaterThan(0);expect(after.rows.every(row=>row.sourceId===sourceId&&row.round===2)).toBe(true);expect(after.overview?.period.newStyles).toBe(1);
   expect((await analysis.list(boss,{...filters,origin:'内部发现'})).rows).toHaveLength(0);
+ });
+ it('preserves original task-derived source reads while denying an unassigned worker',async()=>{
+  const worker=randomUUID(),other=randomUUID();
+  for(const id of [worker,other]){await db.query('INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)',[id,'TEST PR06 worker']);await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2::uuid,'dingtalk','TEST',$2::text,$2::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id]);await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'pattern_room_worker',$3,'TEST PR06')",[randomUUID(),id,root]);}
+  const client=await db.connect();let assigned:string;try{await client.query('BEGIN');assigned=(await new DigitalProductionTaskService(db).createWithClient(client,boss,{resource:{kind:'source',id:sourceId},kind:'development_pattern',routeId:randomUUID(),routeVersion:2,occurrence:2,assigneeId:worker})).taskId;await client.query('COMMIT');}finally{client.release();}
+  const owner=actor(worker,['pattern_room_worker']),foreign=actor(other,['pattern_room_worker']),filters=DigitalAnalysisFilterSchema.parse({from:'2020-01-01',to:'2080-01-01',scope:'revisions',origin:'客户新增要求'});
+  expect(await new DigitalProductionAccessPolicy(db).allowed(owner,'source',sourceId,'technical')).toBe(false);expect((await forms.read(owner,sourceId,db,2)).roundNumber).toBe(2);
+  const visible=await analysis.list(owner,filters);expect(visible.rows.map(row=>row.taskId)).toContain(assigned!);expect(visible.rounds).toContainEqual(expect.objectContaining({sourceId,round:2,origin:'客户新增要求'}));
+  expect((await analysis.list(foreign,filters)).rounds).toHaveLength(0);await expect(forms.read(foreign,sourceId)).rejects.toMatchObject({statusCode:404});await expect(analysis.export(owner,filters)).rejects.toMatchObject({statusCode:403});
+ });
+ it('excludes unrelated archived tasks before per-task authorization while retaining old live backlog',async()=>{
+  const old=await identity.createSource(actor(),{developmentType:'头版',designStyleNo:'TEST-PR06-ARCHIVE',temporaryStyleNo:null,customerCode:'PD'},randomUUID()),document=(await forms.read(actor(),sourceId)).document!;
+  // An isolated imported-history fixture; attachment binding and publishing are not replayed.
+  const client=await db.connect();let archived:string;try{await client.query('BEGIN');archived=(await new DigitalProductionTaskService(db).createWithClient(client,boss,{resource:{kind:'source',id:old.sourceId},kind:'development_pattern',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:null})).taskId;await client.query("INSERT INTO digital_development_documents(source_id,version,status,document,updated_by,published_at,task_id) VALUES($1,1,'published',$2,$3,'2000-01-01T00:00:00Z',$4)",[old.sourceId,JSON.stringify(document),designer,archived]);await client.query("UPDATE digital_production_tasks SET state='cancelled',created_at='2000-01-01T00:00:00Z' WHERE task_id=$1",[archived]);await client.query('COMMIT');}finally{client.release();}
+  const allowed=vi.spyOn(DigitalProductionAccessPolicy.prototype,'allowed');try{const result=await analysis.list(boss,DigitalAnalysisFilterSchema.parse({from:'2090-01-01',to:'2090-01-02',scope:'snapshot'}));expect(result.rows.length).toBeGreaterThan(0);expect(result.rows.every(row=>row.createdAt<'2090-01-01')).toBe(true);expect(allowed.mock.calls.some(call=>call[1]==='task'&&call[2]===archived!)).toBe(false);expect(result.rows.some(row=>row.taskId===archived!)).toBe(false);}finally{allowed.mockRestore();}
  });
 });
