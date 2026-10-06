@@ -19,7 +19,7 @@ try{
  const candidate=await login(origin),previous=await login(baseline);
  for(const path of ['/ui/pattern-room/orders','/ui/sourcing/pending','/ui/cutting',fixture.reviewUrl,...JSON.parse(process.env.V2_LEGACY_EXTRA_PATHS||'[]')]){
   for(const [page,url] of [[candidate,origin],[previous,baseline]]){
-   await page.goto(url+path);await page.locator('.current-user').waitFor();
+   await page.goto(url+path);await page.locator('.current-user').waitFor();await page.waitForLoadState('networkidle');
    await page.waitForFunction(()=>{const main=document.querySelector('.app-shell > main');return main&&!/正在加载|加载中|读取中|正在读取/.test(main.innerText);});
    if(path===fixture.reviewUrl)await page.getByText('全部可确认',{exact:true}).waitFor();
    if(path==='/ui/pattern-room/orders')await page.getByText('全部创建人',{exact:true}).waitFor({state:'attached'});
