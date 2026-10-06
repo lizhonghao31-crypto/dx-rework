@@ -809,6 +809,11 @@ export function WorkReportingForm({
           IE 核准单价：{formatBusinessCurrency(task.unitPrice)} / {task.pricingUnit === "piece" ? "件" : "小时"}
         </small> : null}
         <p>{task.remainingQuantity === 0 ? `已上报 ${formatBusinessDecimal(task.submittedQuantity)} 件` : workReportingWritable ? "按实际完成件数报数" : "该节点已结束"}</p>
+        {task.returnedReport ? <div role="status">
+          <StatusBadge tone="warning">报数已退回</StatusBadge>
+          <p>退回原因：{task.returnedReport.reason}</p>
+          <p>原上报数量：{formatBusinessDecimal(task.returnedReport.originalQuantity)} 件，请核对后重新上报。</p>
+        </div> : null}
         {selfReportableTaskIds.has(task.workTaskId) ? <div className="mobile-actions work-reporting-actions">
           <Button variant="primary" onClick={() => openReporting([task])} disabled={busy}>
             {task.executionKind === "tail_inspection" ? "整查完成&报数" : "我已完工&上数"}
