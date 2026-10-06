@@ -95,11 +95,13 @@ export function ExternalResponsibilityPanel({
   focusCaseId,
   readOnly: requestedReadOnly = false,
   embedded = false,
+  onOrderChanged,
 }: {
   reworkOrderId: string | null;
   focusCaseId?: string;
   readOnly?: boolean;
   embedded?: boolean;
+  onOrderChanged?: () => Promise<void>;
 }) {
   const [state, setState] = useState<State>({ kind: "loading" });
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -205,8 +207,11 @@ export function ExternalResponsibilityPanel({
   };
 
   const refresh = async (success: string): Promise<void> => {
-    await load();
     setMessage(success);
+    let refreshed = true;
+    try { await load(); } catch { refreshed = false; }
+    try { await onOrderChanged?.(); } catch { refreshed = false; }
+    if (!refreshed) setMessage(`${success} 页面状态刷新失败，请刷新页面核对最新状态。`);
   };
 
   const createTemporarySupplier = async (
@@ -328,6 +333,9 @@ export function ExternalResponsibilityPanel({
       },
     );
     if (closed.status !== "closed") throw new Error("扣款已足额，但自动结案未完成");
+    setState((current) => current.kind === "ready" && current.value
+      ? { ...current, value: { ...current.value, cases: current.value.cases.map((entry) => entry.caseId === closed.caseId ? closed : entry) } }
+      : current);
   };
 
   const recordDeduction = async (caseItem: ExternalResponsibilityCaseResponse): Promise<void> => {
@@ -364,6 +372,9 @@ export function ExternalResponsibilityPanel({
           attachmentIds: files,
         },
       );
+      setState((current) => current.kind === "ready" && current.value
+        ? { ...current, value: { ...current.value, cases: current.value.cases.map((entry) => entry.caseId === recorded.caseId ? recorded : entry) } }
+        : current);
       setAmount((current) => ({ ...current, [caseItem.caseId]: "" }));
       setAttachments((current) => ({ ...current, [caseItem.caseId]: [] }));
       if (recorded.remainingAmount === "0.00" && recorded.canClose) {

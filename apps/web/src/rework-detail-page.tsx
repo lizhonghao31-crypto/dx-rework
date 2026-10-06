@@ -712,7 +712,7 @@ function CurrentReworkDetailPage({
       return <>
         <OrderCompletionAndSettlementSummary detail={detail} />
         {financeNodeReader&&<FinanceNodePanel orderId={detail.reworkOrderId} node="settlement_followup" onlyWages />}
-        {canSeeExternal ? <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} readOnly={!moduleWritable} embedded {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} /> : null}
+        {canSeeExternal ? <ExternalResponsibilityPanel reworkOrderId={detail.reworkOrderId} readOnly={!moduleWritable} embedded onOrderChanged={syncAfterNodeAction} {...(focusedExternalCaseId ? { focusCaseId: focusedExternalCaseId } : {})} /> : null}
       </>;
     }
     return renderNodePreview();
