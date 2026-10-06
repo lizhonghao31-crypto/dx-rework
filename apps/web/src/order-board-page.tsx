@@ -13,6 +13,7 @@ import {
   sha256Hex,
 } from "./attachment-upload.js";
 import { verifySession } from "./auth.js";
+import { shanghaiBusinessDate } from "./business-date.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { ReceivingDialog } from "./receiving-dialog.js";
 import { ImageViewer } from "./image-viewer.js";
@@ -112,15 +113,10 @@ type BoardResult = Readonly<{
   totalPages: number;
 }>;
 
-const localDate = (): string => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
+const localDate = (): string => shanghaiBusinessDate();
 
 const dateTime = (value: string): string => new Intl.DateTimeFormat("zh-CN", {
+  timeZone: "Asia/Shanghai",
   month: "2-digit",
   day: "2-digit",
   hour: "2-digit",
@@ -129,6 +125,7 @@ const dateTime = (value: string): string => new Intl.DateTimeFormat("zh-CN", {
 }).format(new Date(value));
 
 const historyDateTime = (value: string): string => new Intl.DateTimeFormat("zh-CN", {
+  timeZone: "Asia/Shanghai",
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
