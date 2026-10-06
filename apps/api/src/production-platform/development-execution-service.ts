@@ -83,11 +83,11 @@ export class DevelopmentExecutionService {
         if(task.route_version===1){
         const pattern=await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:input.taskId,kind:"development_pattern",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:task.route_version,assigneeId:dispatch.pattern_worker_id});
         await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:input.taskId,kind:"development_cutting",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:task.route_version,assigneeId:dispatch.cutting_worker_id,predecessors:[pattern.taskId]});
-        const now=new Date().toISOString();await this.tasks().setConditionWithClient(db,actor,pattern.taskId,"materials_ready",true,now);await this.tasks().setConditionWithClient(db,actor,pattern.taskId,"handover_received",true,now,"核配通过并交纸样");
+        await this.tasks().setConditionWithClient(db,actor,pattern.taskId,"materials_ready",true,undefined);await this.tasks().setConditionWithClient(db,actor,pattern.taskId,"handover_received",true,undefined,"核配通过并交纸样");
         }
       }
       await this.fact(db,actor,sourceId,input.taskId,input.result==="通过"?"核配通过":"缺项退回",input);
-      const now=new Date().toISOString();await this.tasks().setConditionWithClient(db,actor,input.taskId,"business_recorded",true,now,input.note);await this.tasks().completeWithClient(db,actor,input.taskId,{note:input.note},`check:${key}`);
+      await this.tasks().setConditionWithClient(db,actor,input.taskId,"business_recorded",true,undefined,input.note);await this.tasks().completeWithClient(db,actor,input.taskId,{note:input.note},`check:${key}`);
       if(input.result==="通过"&&task.route_version>1)await new DevelopmentRouteService(this.database,this.patternOrders).advance(db,actor,sourceId,input.taskId);
       if(input.result==="缺项退回"){
         await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload) VALUES($1,$2,'source',$3,'material_returned',$4,CURRENT_TIMESTAMP,'现场登记',$5)",[randomUUID(),input.taskId,sourceId,actor.actorId,JSON.stringify({note:input.note})]);
@@ -103,7 +103,7 @@ export class DevelopmentExecutionService {
       const sheet=await this.forms().read(actor,sourceId,db);if(missingMainMaterials(sheet.document!,sheet.materialEvents).length)fail("请先记录主配料实物到货");
       const clerk=(await db.query("SELECT a.assignee_id FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id) WHERE a.source_id=$1 AND a.task_kind IN ('development_materials','development_material_recheck') ORDER BY t.created_at DESC LIMIT 1",[sourceId])).rows[0]?.assignee_id;
       const next=await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:taskId,kind:"development_material_recheck",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:Number((await db.query("SELECT GREATEST(COALESCE(max(t.occurrence),0)+1,$2::integer) AS n FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_material_recheck'",[sourceId,task.occurrence+1])).rows[0].n),assigneeId:clerk&&await new DigitalProductionAccessPolicy(db).activeRole(clerk,"development_clerk")?clerk:null});
-      await this.fact(db,actor,sourceId,taskId,"补料复核",{nextTaskId:next.taskId});await this.tasks().setConditionWithClient(db,actor,taskId,"business_recorded",true,new Date().toISOString());await this.tasks().completeWithClient(db,actor,taskId,{note:"补料后提交复核"},`resubmit:${key}`);return next;
+      await this.fact(db,actor,sourceId,taskId,"补料复核",{nextTaskId:next.taskId});await this.tasks().setConditionWithClient(db,actor,taskId,"business_recorded",true,undefined);await this.tasks().completeWithClient(db,actor,taskId,{note:"补料后提交复核"},`resubmit:${key}`);return next;
     });
   }
   async complete(actor:TrustedActorContext,sourceId:string,input:DevelopmentWork,key:string){
@@ -115,10 +115,10 @@ export class DevelopmentExecutionService {
       await this.assertUploadPurpose(db,sourceId,input.attachmentIds,"工艺开发板");
       if(input.attachmentIds.length)await this.forms().bindFiles(db,actor,sourceId,{...sheet.document!,files:input.attachmentIds.map(attachmentId=>({attachmentId,kind:"工艺开发板"}))});
       await this.fact(db,actor,sourceId,input.taskId,task.task_kind==="development_pattern"?"纸样完成":"裁板完成",input);
-      const now=new Date().toISOString();await this.tasks().setConditionWithClient(db,actor,input.taskId,"business_recorded",true,now,input.note);await this.tasks().completeWithClient(db,actor,input.taskId,{note:input.note},`work:${key}`);
+      await this.tasks().setConditionWithClient(db,actor,input.taskId,"business_recorded",true,undefined,input.note);await this.tasks().completeWithClient(db,actor,input.taskId,{note:input.note},`work:${key}`);
       if(task.task_kind==="development_pattern"&&task.route_version===1){
         const next=(await db.query("SELECT d.task_id FROM digital_production_task_dependencies d JOIN digital_production_task_access a USING(task_id) WHERE d.predecessor_id=$1 AND a.task_kind='development_cutting'",[input.taskId])).rows[0];
-        if(next)await this.tasks().setConditionWithClient(db,actor,next.task_id,"handover_received",true,now,"纸样完成并交裁板");
+        if(next)await this.tasks().setConditionWithClient(db,actor,next.task_id,"handover_received",true,undefined,"纸样完成并交裁板");
       }
       if(task.task_kind==="development_cutting"||(task.task_kind==="development_pattern"&&task.route_version>1))await new DevelopmentRouteService(this.database,this.patternOrders).advance(db,actor,sourceId,input.taskId);
       return {taskId:input.taskId,state:"completed"};
@@ -129,7 +129,7 @@ export class DevelopmentExecutionService {
       await new DigitalProductionAccessPolicy(db).assert(actor,"task",taskId,"execute");
       const task=await this.task(db,sourceId,taskId);if(task.task_kind!=="development_washing_dispatch"||task.state!=="ready")fail("当前不是待送洗任务");
       await db.query("INSERT INTO digital_development_route_facts(fact_id,source_id,task_id,route_version,kind,payload,actor_id) VALUES($1,$2,$3,$4,'洗水送出',$5,$6)",[randomUUID(),sourceId,taskId,task.route_version,JSON.stringify({note}),actor.actorId]);
-      await this.tasks().setConditionWithClient(db,actor,taskId,"business_recorded",true,new Date().toISOString(),note);
+      await this.tasks().setConditionWithClient(db,actor,taskId,"business_recorded",true,undefined,note);
       await this.tasks().completeWithClient(db,actor,taskId,{note},`send-washing:${key}`);
       await new DevelopmentRouteService(this.database,this.patternOrders).advance(db,actor,sourceId,taskId);
       return {taskId,state:"ready"};

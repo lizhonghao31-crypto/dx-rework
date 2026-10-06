@@ -33,11 +33,10 @@ export class DevelopmentRouteService {
  async startRound(db:PoolClient,actor:TrustedActorContext,sourceId:string,kind:DigitalTaskKind,routeId:string,roundNumber:number,authorizingTaskId?:string,predecessorId?:string,nextAssigneeId:string|null=null){
    const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,roundNumber),service=new DigitalProductionTaskService(this.database);
    const next=await service.createWithClient(db,actor,{resource:{kind:'source',id:sourceId},...(authorizingTaskId?{authorizingTaskId}:{}),kind,routeId,routeVersion:roundNumber,occurrence:roundNumber,assigneeId:await this.recipient(db,sourceId,kind,nextAssigneeId),predecessors:predecessorId?[predecessorId]:[]});
-   const now=new Date().toISOString();
-   if(['development_pattern','development_cutting','development_sewing','development_washing'].includes(kind))await service.setConditionWithClient(db,actor,next.taskId,'handover_received',true,now,'本轮已交出');
-   if(kind==='development_pattern'&&(Boolean((await db.query("SELECT 1 FROM digital_development_execution_facts f JOIN digital_production_tasks t ON t.task_id=f.task_id WHERE f.source_id=$1 AND t.route_version=$2 AND f.kind='核配通过'",[sourceId,roundNumber])).rowCount)||sheet.document!.materials.filter(item=>item.requiredThisRound&&item.category!=='辅料').every(item=>item.available||sheet.materialEvents.some(event=>event.materialId===item.materialId&&event.action==='到货'))))await service.setConditionWithClient(db,actor,next.taskId,'materials_ready',true,now,'本轮主配料已齐');
-   if(kind==='development_sewing'&&!missingSewingMaterials(sheet.document!,sheet.materialEvents).length)await service.setConditionWithClient(db,actor,next.taskId,'materials_ready',true,now,'本轮物料齐备');
-   if(kind==='development_tail_check')await service.setConditionWithClient(db,actor,next.taskId,'washing_finished',true,now,sheet.document!.washing==='免洗'?'本轮免洗':'本轮洗水已完成或引用前轮完成证据');
+   if(['development_pattern','development_cutting','development_sewing','development_washing'].includes(kind))await service.setConditionWithClient(db,actor,next.taskId,'handover_received',true,undefined,'本轮已交出');
+   if(kind==='development_pattern'&&(Boolean((await db.query("SELECT 1 FROM digital_development_execution_facts f JOIN digital_production_tasks t ON t.task_id=f.task_id WHERE f.source_id=$1 AND t.route_version=$2 AND f.kind='核配通过'",[sourceId,roundNumber])).rowCount)||sheet.document!.materials.filter(item=>item.requiredThisRound&&item.category!=='辅料').every(item=>item.available||sheet.materialEvents.some(event=>event.materialId===item.materialId&&event.action==='到货'))))await service.setConditionWithClient(db,actor,next.taskId,'materials_ready',true,undefined,'本轮主配料已齐');
+   if(kind==='development_sewing'&&!missingSewingMaterials(sheet.document!,sheet.materialEvents).length)await service.setConditionWithClient(db,actor,next.taskId,'materials_ready',true,undefined,'本轮物料齐备');
+   if(kind==='development_tail_check')await service.setConditionWithClient(db,actor,next.taskId,'washing_finished',true,undefined,sheet.document!.washing==='免洗'?'本轮免洗':'本轮洗水已完成或引用前轮完成证据');
    return next;
  }
  async advance(db:PoolClient,actor:TrustedActorContext,sourceId:string,taskId:string,nextAssigneeId:string|null=null){
@@ -52,7 +51,7 @@ export class DevelopmentRouteService {
    const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db);
    if(missingSewingMaterials(sheet.document!,sheet.materialEvents).length)return;
    const tasks=(await db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_sewing' AND t.state='pending' AND t.route_version=$2",[sourceId,sheet.roundNumber??1])).rows;
-   for(const task of tasks)await new DigitalProductionTaskService(this.database).setConditionWithClient(db,actor,task.task_id,'materials_ready',true,new Date().toISOString(),'设计师确认本轮物料齐备');
+   for(const task of tasks)await new DigitalProductionTaskService(this.database).setConditionWithClient(db,actor,task.task_id,'materials_ready',true,undefined,'设计师确认本轮物料齐备');
  }
  async complete(db:PoolClient,actor:TrustedActorContext,sourceId:string,input:DevelopmentRouteAction,key:string){
    await new DigitalProductionAccessPolicy(db).assert(actor,'task',input.taskId,'execute');
@@ -86,8 +85,8 @@ export class DevelopmentRouteService {
        else if(native.status!=='completed')fail('请先完成原打板执行再最终确认');
      }
    }
-   const service=new DigitalProductionTaskService(this.database),now=new Date().toISOString();
-   await service.setConditionWithClient(db,actor,input.taskId,'business_recorded',true,now,input.note);
+   const service=new DigitalProductionTaskService(this.database);
+   await service.setConditionWithClient(db,actor,input.taskId,'business_recorded',true,undefined,input.note);
    await service.completeWithClient(db,actor,input.taskId,{note:input.note},`route:${key}`);
    if(input.result!=='退回')await this.advance(db,actor,sourceId,input.taskId,input.nextAssigneeId);
    return {taskId:input.taskId,result:input.result};

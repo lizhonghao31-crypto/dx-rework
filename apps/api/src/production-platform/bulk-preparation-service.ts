@@ -63,8 +63,8 @@ export class BulkPreparationService {
    for(const kind of ['bulk_pattern',...(document.preshrink==='需要预缩'?['warehouse_preshrink']:[])] as Array<'bulk_pattern'|'warehouse_preshrink'>){
     const assignee=await this.validAssignee(db,kind==='bulk_pattern'?dispatch?.pattern_worker_id:dispatch?.warehouse_worker_id,kind==='bulk_pattern'?'pattern_room_worker':'warehouse_receiver');
     const task=await this.tasks().createWithClient(db,actor,{resource:{kind:'order',id},kind,routeId:pid,routeVersion:g.instruction.version,occurrence:await this.nextOccurrence(db,id,kind),assigneeId:assignee,conditions:['handover_received']});
-    await this.tasks().setConditionWithClient(db,actor,task.taskId,'owner_approved',true,new Date().toISOString(),'客户样板、原批准与制单已齐');
-    if(kind==='warehouse_preshrink'&&assignee)await this.tasks().setConditionWithClient(db,actor,task.taskId,'handover_received',true,new Date().toISOString(),'整批预缩已可办理');
+    await this.tasks().setConditionWithClient(db,actor,task.taskId,'owner_approved',true,undefined,'客户样板、原批准与制单已齐');
+    if(kind==='warehouse_preshrink'&&assignee)await this.tasks().setConditionWithClient(db,actor,task.taskId,'handover_received',true,undefined,'整批预缩已可办理');
    }
    if(document.preshrink==='无需预缩')await this.fact(db,actor,pid,'无需预缩',null);
   }
@@ -74,7 +74,7 @@ export class BulkPreparationService {
    const dispatch=(await db.query("SELECT * FROM digital_bulk_dispatch WHERE production_order_id=$1",[id])).rows[0];
    const external=g.approval.cutting_process==='outsourced',kind=external?'bulk_cutting_external':'bulk_cutting';
    const task=await this.tasks().createWithClient(db,actor,{resource:{kind:'order',id},kind,routeId:prep.preparation_id,routeVersion:prep.instruction_version,occurrence:await this.nextOccurrence(db,id,kind),assigneeId:await this.validAssignee(db,external?g.order.primary_merchandiser_id:dispatch?.cutting_worker_id,external?'order_merchandiser':'cutting_worker')});
-   for(const condition of ['owner_approved','pattern_ready','preshrink_ready'] as const)await this.tasks().setConditionWithClient(db,actor,task.taskId,condition,true,new Date().toISOString(),'全部PO前置汇合');
+   for(const condition of ['owner_approved','pattern_ready','preshrink_ready'] as const)await this.tasks().setConditionWithClient(db,actor,task.taskId,condition,true,undefined,'全部PO前置汇合');
   }
  }
  async syncSource(db:PoolClient,actor:TrustedActorContext,sourceId:string){
@@ -121,9 +121,9 @@ export class BulkPreparationService {
     const assignee=t.task_kind==='bulk_pattern'?input.patternWorkerId:t.task_kind==='warehouse_preshrink'?warehouse:cutting;
     if(!assignee&&t.assignee_id&&!['completed','cancelled'].includes(t.state))fail('已生成任务不能清空主办，请直接改派到在职对应岗位');
     if(assignee&&assignee!==t.assignee_id&&!['completed','cancelled'].includes(t.state))await this.tasks().reassignWithClient(db,actor,t.task_id,assignee);
-    if(t.task_kind==='warehouse_preshrink'&&warehouse&&t.state==='pending')await this.tasks().setConditionWithClient(db,actor,t.task_id,'handover_received',true,new Date().toISOString(),'预缩主办已到位');
+    if(t.task_kind==='warehouse_preshrink'&&warehouse&&t.state==='pending')await this.tasks().setConditionWithClient(db,actor,t.task_id,'handover_received',true,undefined,'预缩主办已到位');
     if(t.task_kind==='bulk_pattern'&&input.deliverPattern&&t.state==='pending'){
-     await this.fact(db,actor,prep.preparation_id,'纸样派交',t.task_id);await this.tasks().setConditionWithClient(db,actor,t.task_id,'handover_received',true,new Date().toISOString(),'文员已派交大货纸样唛架');
+     await this.fact(db,actor,prep.preparation_id,'纸样派交',t.task_id);await this.tasks().setConditionWithClient(db,actor,t.task_id,'handover_received',true,undefined,'文员已派交大货纸样唛架');
     }
    }
   });
@@ -137,7 +137,7 @@ export class BulkPreparationService {
   await this.fact(db,actor,prep.preparation_id,input.kind,task.task_id);
   const facts=(await db.query('SELECT kind FROM digital_bulk_preparation_facts WHERE preparation_id=$1',[prep.preparation_id])).rows.map(r=>r.kind);
   if(input.kind==='预缩完成'||facts.includes('纸样完成')&&facts.includes('唛架完成')){
-   await this.tasks().setConditionWithClient(db,actor,task.task_id,'business_recorded',true,new Date().toISOString(),'产前完成事实已齐');
+   await this.tasks().setConditionWithClient(db,actor,task.task_id,'business_recorded',true,undefined,'产前完成事实已齐');
    await this.tasks().completeWithClient(db,actor,task.task_id,{note:input.kind},`bulk-complete:${prep.preparation_id}:${task.task_kind}`);
   }
   await this.sync(db,actor,id);

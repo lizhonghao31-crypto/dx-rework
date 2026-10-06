@@ -108,4 +108,23 @@ const url=process.env.TEST_DATABASE_URL;
   const recheck=await execution.resubmit(creator,fresh.sourceId,supply.taskId,randomUUID());
   expect(await tasks.read(clerk,recheck.taskId)).toMatchObject({state:'ready',taskKind:'development_material_recheck'});
  });
+ it('FIX-02: non-Root live material check, block, resume and paper completion stay measurable without resetting the deadline',async()=>{
+  const person=async(role:string)=>{const id=randomUUID();await db.query('INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)',[id,'TEST FIX02 '+role]);await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2::uuid,'dingtalk','TEST',$2::text,$2::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id]);await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$4,'TEST FIX02')",[randomUUID(),id,role,root]);return actor(id,[role]);};
+  const creator=await person('sample_designer'),clerk=await person('development_clerk'),worker=await person('pattern_room_worker');
+  const fresh=await identity.createSource(creator,{developmentType:'头版',designStyleNo:'TEST-FIX02-LIVE-PAPER',temporaryStyleNo:null,customerCode:'PD'},randomUUID()),file=randomUUID(),main=randomUUID();
+  await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[file,`TEST/${file}`,'a'.repeat(64),creator.actorId]);
+  const document={...(await forms.read(boss,sourceId)).document!,craft:'无' as const,washing:'免洗' as const,materials:[{materialId:main,category:'主布' as const,label:'主布A',supplier:'',name:'TEST',width:'',weight:'',composition:'',consumption:'',color:'蓝',specification:'',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:file,kind:'款图' as const}]};
+  const saved=await forms.save(creator,fresh.sourceId,{expectedVersion:0,document},randomUUID()),published=await forms.publish(creator,fresh.sourceId,saved.version,randomUUID()),tasks=new DigitalProductionTaskService(db),execution=new DevelopmentExecutionService(db,true);
+  await tasks.reassign(boss,published.taskId!,clerk.actorId,randomUUID());await execution.dispatch(clerk,fresh.sourceId,{expectedVersion:0,patternWorkerId:worker.actorId,cuttingWorkerId:worker.actorId,sewingWorkerId:worker.actorId},randomUUID());
+  await execution.check(clerk,fresh.sourceId,{taskId:published.taskId!,result:'通过',items:[{materialId:main,physical:true,quantity:true,color:true,specification:true}],note:'TEST 现场核配通过'},randomUUID());
+  const paper=(await execution.read(worker,fresh.sourceId)).tasks.find(task=>task.taskKind==='development_pattern')!;
+  expect(paper).toMatchObject({state:'ready',timeQuality:'现场登记',slaHours:48});expect(Date.parse(paper.dueAt!)-Date.parse(paper.enteredAt!)).toBe(48*3600000);
+  await tasks.feedback(worker,paper.taskId,'TEST 现场阻断',true,randomUUID());await tasks.feedback(worker,paper.taskId,'TEST 已解决',false,randomUUID());
+  expect(await tasks.read(worker,paper.taskId)).toMatchObject({enteredAt:paper.enteredAt,dueAt:paper.dueAt});
+  await execution.complete(worker,fresh.sourceId,{taskId:paper.taskId,attachmentIds:[],note:'TEST 现场完成'},randomUUID());
+  const complete=await analysis.list(boss,DigitalAnalysisFilterSchema.parse({from:'2020-01-01',to:'2080-01-01',designer:creator.actorId,scope:'completed',node:'development_pattern'}));
+  expect(complete.total).toBe(1);expect(complete.rows[0]).toMatchObject({enteredQuality:'现场登记',completedQuality:'现场登记',slaIncluded:true,onTime:true,unverifiedTime:false});expect(complete.rows[0].handlingSeconds).toBeGreaterThan(0);expect(complete.rows[0].waitingSeconds).toBeGreaterThan(0);
+  expect((await execution.read(worker,fresh.sourceId)).tasks.find(task=>task.taskKind==='development_cutting')).toMatchObject({state:'ready',timeQuality:'现场登记'});
+ });
+
 });
