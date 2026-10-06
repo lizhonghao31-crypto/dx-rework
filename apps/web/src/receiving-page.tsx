@@ -13,6 +13,7 @@ import {
 } from "./attachment-upload.js";
 import { mapWithConcurrency } from "./concurrency.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
+import { hasExistingReceivingSource } from "./receiving-source.js";
 import "./receiving-page.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -255,11 +256,14 @@ export function ReceivingPage() {
     });
   };
 
-  const clearNormalDraft = () => {
-    setStyleNo("");
-    setCuttingOptions([]);
-    setCuttingOptionsQuery("");
-    setSelectedCutting(null);
+  const clearNormalDraft = (preserveCuttingSource = false) => {
+    // Keep the selected source only while redirecting to repeat receiving.
+    if (!preserveCuttingSource || !selectedCutting) {
+      setStyleNo("");
+      setCuttingOptions([]);
+      setCuttingOptionsQuery("");
+      setSelectedCutting(null);
+    }
     setDocumentQuantity("");
     setActualQuantity("");
     setDefectiveQuantity("0");
@@ -370,13 +374,13 @@ export function ReceivingPage() {
     if (!backfill && trimmedStyle.length >= 4) {
       try {
         const options = await requestJson<RepeatOptions>(`receiving/repeat-options?${new URLSearchParams({ q: trimmedStyle }).toString()}`, { method: "GET" });
-        if (options.orders.some((order) => order.styleNo.trim().toUpperCase() === trimmedStyle.toUpperCase())) {
+        if (hasExistingReceivingSource(options.orders, trimmedStyle, selectedCutting?.cuttingOrderId)) {
           setRepeat(true);
           setRepeatSource(null);
           setRepeatQuery("");
           setRepeatOrders([]);
           setSelectedRepeatOrder(null);
-          clearNormalDraft();
+          clearNormalDraft(true);
           setMessage("该款号已有收货记录，请到“多次收货”录入");
           submitting.current = false;
           setBusy(false);
@@ -444,7 +448,7 @@ export function ReceivingPage() {
         setRepeatQuery("");
         setRepeatOrders([]);
         setSelectedRepeatOrder(null);
-        clearNormalDraft();
+        clearNormalDraft(true);
       }
       setMessage(nextMessage);
     } finally {
