@@ -1,0 +1,51 @@
+/* Presentation shared only by the three authorized document roots. */
+@media screen {
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-print-value{display:none}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction){color:#1d2e49;background:#fff;font:14px/20px var(--font-family,system-ui,-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif);font-variant-numeric:tabular-nums;min-width:0;container-type:inline-size}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-toolbar{position:sticky;top:var(--shell-sticky-top,0px);z-index:30;display:flex;justify-content:space-between;gap:16px;align-items:center;background:#fff;padding:12px 0 16px;border-bottom:1px solid #dce5f0;margin-bottom:16px}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-toolbar>div{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) h1{font-size:22px;line-height:30px;margin:0}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-status{font-size:12px;line-height:18px;color:#64748b;border-radius:12px;padding:3px 9px;background:#f0f5fc}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-button{min-height:36px;padding:7px 12px;font-size:14px;line-height:20px;box-shadow:none}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-card{border:1px solid #dce5f0;border-radius:8px;background:#fff;padding:16px;box-shadow:0 2px 8px rgb(29 46 73 / 4%);min-width:0}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-section{scroll-margin-top:90px}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-card h2{font-size:16px;line-height:24px;margin:0 0 8px;display:flex;gap:12px;align-items:center}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-card h2 small{font-size:12px;line-height:18px;color:#64748b;font-weight:400}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-anchors{display:flex;overflow-x:auto;min-height:40px;border-bottom:1px solid #dce5f0;gap:0}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-anchors button{padding:8px 16px;border:0;border-bottom:2px solid transparent;background:transparent;white-space:nowrap;color:#64748b;font-size:14px;cursor:pointer}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-anchors button[aria-current]{border-bottom-color:#0066ff;color:#0066ff;font-weight:600}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field{display:block;min-width:0;position:relative}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field :is(input,textarea){width:100%;box-sizing:border-box;border:1px solid #dce5f0;border-radius:4px;min-height:36px;padding:7px 9px;background:#fff;color:#1d2e49;font:inherit;max-width:100%}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field textarea{min-height:72px;resize:vertical}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) :is(input,textarea,button):focus-visible{outline:2px solid #0066ff;outline-offset:2px}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-readonly{display:block;min-height:36px;padding:7px 0;box-sizing:border-box;overflow-wrap:anywhere;white-space:pre-wrap}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-errors{padding:12px 16px;border:1px solid #e5484d;border-radius:8px;margin:0 0 16px;background:#fff7f7;color:#a92830}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-errors button{background:transparent;border:0;color:inherit;text-align:left;text-decoration:underline;cursor:pointer;font:inherit}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field-error{display:block;color:#a92830;font-size:12px;line-height:18px;margin-top:4px}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) [aria-invalid=true]{border-color:#e5484d}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-add-row{color:#0066ff;background:#fff;border:0;padding-left:0}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-table-scroll{overflow-x:auto;max-width:100%}
+ @media(max-width:800px){
+  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-toolbar{align-items:flex-start;flex-direction:column;gap:8px}
+  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-toolbar .dx-doc-actions{width:100%}
+  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) :is(.dx-button,.dx-doc-anchors button){min-height:44px;font-size:16px}
+  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field :is(input,textarea){min-height:44px;font-size:16px}
+  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-readonly{font-size:16px;min-height:44px}
+ }
+}
+@media print {
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-print-value{display:inline;white-space:pre-wrap;overflow-wrap:anywhere}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field .dx-doc-readonly{display:none}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) :is(.dx-doc-toolbar,.dx-doc-anchors,.dx-doc-errors,.dx-doc-field-error){display:none!important}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-readonly{white-space:pre-wrap;overflow-wrap:anywhere}
+}
+
+@media screen{
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field:has(input[type=date]){position:relative}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field input[type=date]::-webkit-datetime-edit{color:transparent}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field input[type=date]:focus::-webkit-datetime-edit{color:#1d2e49}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-date-value{position:absolute;pointer-events:none;left:9px;top:8px;font-size:14px;line-height:20px;color:#1d2e49}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field:focus-within .dx-doc-date-value{visibility:hidden}
+ @media(max-width:800px){:is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-date-value{font-size:16px;top:12px}}
+}
+@media print{:is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-date-value{display:none}}
