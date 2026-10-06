@@ -429,7 +429,7 @@ export function Shell({
     globalNavigation.push({
       name: "实时生产看板",
       description: "查看生产订单与进度",
-      href: "/ui/production-dashboard",
+      href: "/ui/production-dashboard?workspace=display",
       ...(canAccessProductionReporting(currentUser) ? { children: [{ name: "生产数据填报", description: "按负责范围登记生产、完成与发货", href: "/ui/production-reporting" }] } : {}),
     });
   }
@@ -541,7 +541,7 @@ export function Shell({
     : [];
   const productionNavigation: NavigationEntry[] = currentUser && canAccessProduction(currentUser)
     ? [
-        { name: "实时看板", description: "查看生产双进度、交期与更新状态", href: "/ui/production-dashboard" },
+        { name: "实时看板", description: "查看生产双进度、交期与更新状态", href: "/ui/production-dashboard?workspace=display" },
         ...(canAccessProductionReporting(currentUser)
           ? [{ name: "生产数据填报", description: "按负责范围登记生产、完成与发货", href: "/ui/production-reporting" }]
           : []),
@@ -557,8 +557,8 @@ export function Shell({
     ...(digital ? [{ name: "板房数据沙盘", description: "同源分析与改进记录", href: "/ui/digital-analysis" }] : []),
     ...patternRoomNavigation.filter(entry => entry.href === "/ui/pattern-room/prices"),
   ];
-  const preparationNavigation: NavigationEntry[] = digital ? [{ name: "大货产前准备", description: "产前订单与原单办理", href: "/ui/digital-cockpit?stage=bulk&workspace=preparation", activeKey: "digital-preparation" }] : [];
-  const factoryNavigation: NavigationEntry[] = digital ? [{ name: "裁后工艺与发厂", description: "工艺、QC与实际发厂", href: "/ui/digital-cockpit?stage=bulk&workspace=factory", activeKey: "digital-factory" }] : [];
+  const preparationNavigation: NavigationEntry[] = digital ? [{ name: "大货产前准备", description: "产前订单与原单办理", href: "/ui/digital-cockpit?stage=preparation&workspace=preparation", activeKey: "digital-preparation" }] : [];
+  const factoryNavigation: NavigationEntry[] = digital ? [{ name: "裁后工艺与发厂", description: "工艺、QC与实际发厂", href: "/ui/digital-cockpit?stage=post_cutting&workspace=factory", activeKey: "digital-factory" }] : [];
   const navigation: NavigationEntry[] = [
     ...creationNavigation,
     ...developmentNavigation.filter(entry => !patternRoomNavigation.includes(entry)),
