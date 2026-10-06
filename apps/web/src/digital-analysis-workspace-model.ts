@@ -1,0 +1,8 @@
+import {DigitalAnalysisFilterSchema,type DigitalAnalysisFilters} from '@dx-rework/contracts/digital-production-analysis';
+export const ANALYSIS_VIEWS=[['output','产出与积压'],['timing','节点时效'],['waiting','等待与缺料'],['quality','复版与质量']] as const;
+export type AnalysisView=typeof ANALYSIS_VIEWS[number][0];
+export function initialAnalysisContext(search:string,today:string,from:string){const params=new URLSearchParams(search),view=params.get('view'),parsed=DigitalAnalysisFilterSchema.safeParse({from,to:today,...Object.fromEntries([...params].filter(([key])=>key in DigitalAnalysisFilterSchema.shape))});return {view:ANALYSIS_VIEWS.some(([key])=>key===view)?view as AnalysisView:'output' as AnalysisView,filters:parsed.success?{...parsed.data,scope:parsed.data.scope??'snapshot' as const}:DigitalAnalysisFilterSchema.parse({from,to:today,scope:'snapshot'})};}
+export const analysisScopeLabels:Record<NonNullable<DigitalAnalysisFilters['scope']>,string>={created:'任务创建日期',published:'来源首次发布日期',completed:'任务完成日期',snapshot:'当前积压快照（跨创建日期）',revisions:'复版发布日期'};
+export function analysisContextQuery(filters:DigitalAnalysisFilters,view:AnalysisView){return new URLSearchParams({view,...Object.fromEntries(Object.entries(filters).filter(([,value])=>value!==undefined).map(([key,value])=>[key,String(value)]))}).toString();}
+
+export const analysisMetricLabels:Record<string,string>={all:'全部',shipping:'本期寄样',active:'当前在办',pending:'当前待前置',unassigned:'当前待派',blocked:'当前受阻',overdue:'当前超时',sla:'可判定SLA',late:'本期SLA超时',measurable:'可信办理周期',materials:'当前缺料',handover:'当前待交接',other_wait:'其他当前阻断',missing:'本期时间缺失',unverified:'本期未核实',waiting:'本期已知等待',unknown_wait:'本期未知等待'};
