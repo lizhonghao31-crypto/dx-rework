@@ -141,15 +141,26 @@ export class DigitalProductionTaskService {
   }
   // Only omission denotes the server's live business action. Explicit dates remain backreports.
   async setConditionWithClient(client: PoolClient, actor: TrustedActorContext, id: string, condition: typeof DIGITAL_CONDITION_KEYS[number], satisfied: boolean, occurredAt: string | null | undefined = undefined, note = "") {
+    const at=occurredAt===undefined?new Date().toISOString():occurredAt;
+    const quality:TimeQuality=at===null?'缺失':occurredAt===undefined?'现场登记':'补报未核实';
+    return this.conditionFactWithClient(client,actor,id,condition,satisfied,at,quality,note);
+  }
+  // A fixed server adapter reads the inherited fact; no client can supply a trusted quality.
+  async inheritWashingConditionWithClient(client:PoolClient,actor:TrustedActorContext,id:string,inheritedTaskId:string,note:string){
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+    const task=await this.task(client,id,true),original=await this.task(client,inheritedTaskId);
+    if(task.task_kind!=='development_tail_check'||original.task_kind!=='development_washing'||original.state!=='completed'||!task.source_id||task.source_id!==original.source_id)fail('继承洗水完成证据不属于该开发单');
+    const at=iso(original.completed_at),quality:TimeQuality=at===null?'缺失':original.completed_quality;
+    return this.conditionFactWithClient(client,actor,id,'washing_finished',true,at,quality,note,{inheritedTaskId});
+  }
+  private async conditionFactWithClient(client:PoolClient,actor:TrustedActorContext,id:string,condition:typeof DIGITAL_CONDITION_KEYS[number],satisfied:boolean,at:string|null,quality:TimeQuality,note:string,provenance:Record<string,string>={}){
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
     const task = await this.task(client, id, true);
     if (["completed", "cancelled"].includes(task.state)) fail("已结束任务不能重写条件");
-    const at=occurredAt===undefined?new Date().toISOString():occurredAt;
-    const quality:TimeQuality=at===null?'缺失':occurredAt===undefined?'现场登记':'补报未核实';
     if (at !== null && (!Number.isFinite(new Date(at).getTime()) || new Date(at).getTime() > Date.now())) fail("条件发生时间无效");
     const updated = await client.query("UPDATE digital_production_task_conditions SET satisfied=$3,occurred_at=$4 WHERE task_id=$1 AND condition_key=$2 RETURNING task_id", [id, condition, satisfied, at]);
     if (!updated.rowCount) fail("任务不包含该前置条件");
-    await this.event(client, actor, id, this.resource(task), "condition", at, quality, { condition, satisfied, note });
+    await this.event(client, actor, id, this.resource(task), "condition", at, quality, { condition, satisfied, note,...provenance });
     if (!satisfied && task.state === "ready") await client.query("UPDATE digital_production_tasks SET state='blocked',blocked_reason='前置条件未满足' WHERE task_id=$1", [id]);
     return this.activate(client, actor, id, at, quality);
   }

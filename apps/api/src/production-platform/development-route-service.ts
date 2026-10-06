@@ -36,7 +36,11 @@ export class DevelopmentRouteService {
    if(['development_pattern','development_cutting','development_sewing','development_washing'].includes(kind))await service.setConditionWithClient(db,actor,next.taskId,'handover_received',true,undefined,'本轮已交出');
    if(kind==='development_pattern'&&(Boolean((await db.query("SELECT 1 FROM digital_development_execution_facts f JOIN digital_production_tasks t ON t.task_id=f.task_id WHERE f.source_id=$1 AND t.route_version=$2 AND f.kind='核配通过'",[sourceId,roundNumber])).rowCount)||sheet.document!.materials.filter(item=>item.requiredThisRound&&item.category!=='辅料').every(item=>item.available||sheet.materialEvents.some(event=>event.materialId===item.materialId&&event.action==='到货'))))await service.setConditionWithClient(db,actor,next.taskId,'materials_ready',true,undefined,'本轮主配料已齐');
    if(kind==='development_sewing'&&!missingSewingMaterials(sheet.document!,sheet.materialEvents).length)await service.setConditionWithClient(db,actor,next.taskId,'materials_ready',true,undefined,'本轮物料齐备');
-   if(kind==='development_tail_check')await service.setConditionWithClient(db,actor,next.taskId,'washing_finished',true,undefined,sheet.document!.washing==='免洗'?'本轮免洗':'本轮洗水已完成或引用前轮完成证据');
+   if(kind==='development_tail_check'){
+     const inherited=sheet.document!.washing!=='免洗'&&roundNumber>1?(await db.query('SELECT inherited FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,roundNumber])).rows[0]?.inherited?.development_washing:null;
+     if(inherited)await service.inheritWashingConditionWithClient(db,actor,next.taskId,inherited.taskId,'本轮引用前轮洗水完成证据');
+     else await service.setConditionWithClient(db,actor,next.taskId,'washing_finished',true,undefined,sheet.document!.washing==='免洗'?'本轮免洗':'本轮洗水已完成');
+   }
    return next;
  }
  async advance(db:PoolClient,actor:TrustedActorContext,sourceId:string,taskId:string,nextAssigneeId:string|null=null){
