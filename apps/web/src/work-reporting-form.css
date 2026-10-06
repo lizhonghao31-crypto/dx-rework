@@ -397,6 +397,12 @@
   border-bottom: 0;
 }
 
+.work-reporting-page .work-reporting-return-context {
+  grid-column: 1 / -1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .work-reporting-page .n04-progress-fact {
   display: grid;
   gap: 3px;
