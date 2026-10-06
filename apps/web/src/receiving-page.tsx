@@ -256,9 +256,9 @@ export function ReceivingPage() {
     });
   };
 
-  const clearNormalDraft = () => {
-    // Keep an explicitly selected source when returning from repeat receiving.
-    if (!selectedCutting) {
+  const clearNormalDraft = (preserveCuttingSource = false) => {
+    // Keep the selected source only while redirecting to repeat receiving.
+    if (!preserveCuttingSource || !selectedCutting) {
       setStyleNo("");
       setCuttingOptions([]);
       setCuttingOptionsQuery("");
@@ -380,7 +380,7 @@ export function ReceivingPage() {
           setRepeatQuery("");
           setRepeatOrders([]);
           setSelectedRepeatOrder(null);
-          clearNormalDraft();
+          clearNormalDraft(true);
           setMessage("该款号已有收货记录，请到“多次收货”录入");
           submitting.current = false;
           setBusy(false);
@@ -448,7 +448,7 @@ export function ReceivingPage() {
         setRepeatQuery("");
         setRepeatOrders([]);
         setSelectedRepeatOrder(null);
-        clearNormalDraft();
+        clearNormalDraft(true);
       }
       setMessage(nextMessage);
     } finally {
