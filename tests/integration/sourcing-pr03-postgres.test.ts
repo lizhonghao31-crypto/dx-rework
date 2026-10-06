@@ -1194,10 +1194,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     )).toBe(false);
     expect(todoProjection.completeOpenByDedupePrefix.mock.calls.map((call) => call[2]))
       .toEqual([
-        `sourcing:${created.value.sourcingCaseId}:ie_quote:1:`,
-        `sourcing:${created.value.sourcingCaseId}:management:1:`,
+        `sourcing:${created.value.sourcingCaseId}:ie_quote:`,
+        `sourcing:${created.value.sourcingCaseId}:management:`,
         `sourcing:${created.value.sourcingCaseId}:owner:1:`,
-        `sourcing:${created.value.sourcingCaseId}:management:2:`,
+        `sourcing:${created.value.sourcingCaseId}:management:`,
         `sourcing:${created.value.sourcingCaseId}:owner:2:`,
         `sourcing:${created.value.sourcingCaseId}:return:`,
         `sourcing:${created.value.sourcingCaseId}:finance:2:1:`,
@@ -3730,6 +3730,168 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       expect((await contractService.getCurrent(rootActor(),id)).item?.sourcingContractDocumentId).toBe(edit.value);
     }
     await expect(contractService.content.get(rootActor(),id)).rejects.toMatchObject({statusCode:403});
+  });
+
+  let cycleTodoRecipientsConfigured = false;
+  const cycleTodoServices = async () => {
+    if (!cycleTodoRecipientsConfigured) {
+      await ensureReturnTodoRecipient();
+      for (const [id, role] of [[ieId, "ie_reviewer"], [managerId, "production_management"],
+        [ownerId, "owner_group"], [financeId, "factory_payables"]]) {
+        if (id !== ownerId) await database.query(
+          `INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at)
+           VALUES($1,$2,'dingtalk','corp',$3,$4,true,true,CURRENT_TIMESTAMP) ON CONFLICT DO NOTHING`,
+          [randomUUID(), id, `ding-${id}`, `union-${id}`]);
+        await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
+        try {
+          await database.query(`INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason)
+            SELECT $1,$2,$3,$2,'isolated sourcing cycle regression' WHERE NOT EXISTS(
+              SELECT 1 FROM user_role_assignments WHERE user_id=$2 AND role_code=$3 AND revoked_at IS NULL)`, [randomUUID(), id, role]);
+        } finally { await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation"); }
+      }
+      cycleTodoRecipientsConfigured = true;
+    }
+    const projection = new TodoProjectionService(new TodoService(database));
+    return { projection, service: new SourcingService(database, undefined, undefined, projection, contractService) };
+  };
+  const cycleSnapshot = async (id: string) => ({
+    facts: (await database.query(`SELECT
+      (SELECT count(*)::int FROM sourcing_case_transitions WHERE sourcing_case_id=$1) transitions,
+      (SELECT count(*)::int FROM sourcing_ie_quotes WHERE sourcing_case_id=$1) quotes,
+      (SELECT count(*)::int FROM sourcing_decisions WHERE sourcing_case_id=$1) decisions,
+      (SELECT count(*)::int FROM sourcing_owner_decisions WHERE sourcing_case_id=$1) owners,
+      (SELECT count(*)::int FROM sourcing_case_corrections WHERE sourcing_case_id=$1) corrections,
+      (SELECT count(*)::int FROM sourcing_approval_snapshots WHERE sourcing_case_id=$1) approvals`, [id])).rows[0],
+    todos: (await database.query(`SELECT todo_id,category,dedupe_key,source_event_id,source_action,status,version,updated_at
+      FROM rework_todos WHERE entity_id=$1 ORDER BY todo_id`, [id])).rows,
+    deliveries: (await database.query(`SELECT a.* FROM todo_delivery_attempts a
+      JOIN rework_todos t USING(todo_id) WHERE t.entity_id=$1 ORDER BY a.delivery_attempt_id`, [id])).rows,
+  });
+
+  it("keeps real sourcing todos distinct across repeated owner rejection and merchandiser correction cycles", async () => {
+    const { projection, service: currentService } = await cycleTodoServices();
+    // Persist the pre-upgrade identities on the first pass through management.
+    const legacyProjection = {
+      ...todoProjection,
+      completeOpenByDedupePrefix: projection.completeOpenByDedupePrefix.bind(projection),
+      actionableForNamedRecipient: projection.actionableForNamedRecipient.bind(projection),
+      actionableForAllAssignedRole: async (...args: Parameters<TodoProjectionService["actionableForAllAssignedRole"]>) => {
+        const [client, actor, input] = args;
+        const event = (await client.query("SELECT before_state,after_state FROM operation_events WHERE event_id=$1", [input.sourceEventId])).rows[0];
+        const legacyVersion = input.sourceAction === "sourcing.ie_price.quote" ? event.after_state.quoteVersion
+          : input.sourceAction === "sourcing.owner.reject" ? Number(event.before_state.decisionVersion) + 1 : null;
+        return projection.actionableForAllAssignedRole(client, actor, legacyVersion === null ? input
+          : { ...input, dedupeKey: `sourcing:${input.entityId}:management:${legacyVersion}` });
+      },
+    };
+    const legacyService = new SourcingService(database, undefined, undefined, legacyProjection, contractService);
+    const image = await readyCuttingSheet(merchandiserId);
+    const original = { gender: "男装" as const, styleName: "真实待办循环", estimatedCutPieceSendDate: "2026-10-01",
+      deliveryDate: "2026-10-12", lineItems: [{ styleNo: "REAL-TODO-CYCLE", color: "蓝", quantity: 20 }],
+      daxingUnitPrice: "7", attachmentIds: [image] };
+    const createKey = randomUUID();
+    const created = await legacyService.createCase(merchandiserActor(), original, createKey);
+    const id = created.value.sourcingCaseId;
+    const createdSnapshot = await cycleSnapshot(id);
+    expect((await legacyService.createCase(merchandiserActor(), original, createKey)).reused).toBe(true);
+    expect(await cycleSnapshot(id)).toEqual(createdSnapshot);
+    const prices = { linePrices: [{ position: 1, unitPrice: "11" }] };
+    const management = { supplierId: factoryId, craftIds: [craftId("净色车缝")], linePrices: prices.linePrices };
+    const beforeDenied = await cycleSnapshot(id);
+    await expect(currentService.quoteIePrice(merchandiserActor(), id, prices, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    await expect(currentService.recordManagementDecision(ieActor(), id, management, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    await expect(currentService.decideOwner(managerActor(), id, { decision: "rejected" }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    await expect(currentService.returnToMerchandiser(merchandiserActor(), id, { expectedVersion: created.value.version, reason: "越权" }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    expect(await cycleSnapshot(id)).toEqual(beforeDenied);
+
+    type Write = (key: string) => Promise<Awaited<ReturnType<SourcingService["quoteIePrice"]>>>;
+    const replays: (() => ReturnType<Write>)[] = [];
+    const categories: Record<string, string> = { pending_ie_quote: "sourcing_ie_quote",
+      pending_management_decision: "sourcing_management_decision", pending_owner_approval: "sourcing_owner_approval",
+      pending_merchandiser_correction: "sourcing_merchandiser_correction" };
+    const run = async (write: Write) => {
+      const terminal = (await cycleSnapshot(id)).todos.filter(todo => ["completed", "cancelled"].includes(todo.status));
+      const key = randomUUID();
+      const result = await write(key);
+      expect(result.reused).toBe(false);
+      const snapshot = await cycleSnapshot(id);
+      expect((await write(key)).reused).toBe(true);
+      expect(await cycleSnapshot(id)).toEqual(snapshot);
+      const newKey = randomUUID();
+      await expect(write(newKey)).rejects.toMatchObject({ statusCode: 409 });
+      expect(await cycleSnapshot(id)).toEqual(snapshot);
+      expect((await database.query("SELECT count(*)::int count FROM idempotency_records WHERE idempotency_key=$1", [newKey])).rows[0].count).toBe(0);
+      const actionable = snapshot.todos.filter(todo => ["pending", "blocked_recipient"].includes(todo.status)
+        && Object.values(categories).includes(todo.category));
+      expect(actionable.map(todo => todo.category)).toEqual(categories[result.value.status] ? [categories[result.value.status]] : []);
+      for (const old of terminal) expect(snapshot.todos.find(todo => todo.todo_id === old.todo_id)).toEqual(old);
+      replays.push(() => write(key));
+      return result.value;
+    };
+    await run(key => legacyService.quoteIePrice(ieActor(), id, prices, key));
+    for (let round = 0; round < 2; round++) {
+      const actingService = round === 0 ? legacyService : currentService;
+      await run(key => actingService.recordManagementDecision(managerActor(), id, management, key));
+      await run(key => actingService.decideOwner(ownerActor(), id, { decision: "rejected" }, key));
+      const decided = await run(key => currentService.recordManagementDecision(managerActor(), id, management, key));
+      const returned = await run(key => currentService.returnToMerchandiser(ownerActor(), id,
+        { expectedVersion: decided.version, reason: "核实颜色" }, key));
+      const correction = { gender: original.gender, styleName: original.styleName, estimatedCutPieceSendDate: original.estimatedCutPieceSendDate,
+        deliveryDate: original.deliveryDate, lineItems: [{ ...original.lineItems[0]!, color: round === 0 ? "红" : "白" }],
+        attachmentIds: original.attachmentIds, expectedVersion: returned.version, reason: "颜色已核实" };
+      const beforeWrongRole = await cycleSnapshot(id);
+      await expect(currentService.correctCase(ieActor(), id, correction, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+      expect(await cycleSnapshot(id)).toEqual(beforeWrongRole);
+      await run(key => currentService.correctCase(merchandiserActor(), id, correction, key));
+      await run(key => currentService.quoteIePrice(ieActor(), id, prices, key));
+    }
+    await run(key => currentService.recordManagementDecision(managerActor(), id, management, key));
+    await run(key => currentService.decideOwner(ownerActor(), id, { decision: "approved" }, key));
+    const final = await cycleSnapshot(id);
+    expect(final.facts).toMatchObject({ quotes: 3, decisions: 5, owners: 3, corrections: 2, approvals: 1 });
+    expect(final.todos.find(todo => todo.dedupe_key === `sourcing:${id}:management:2:${managerId}`)?.status).toBe("completed");
+    const entries = final.todos.filter(todo => todo.dedupe_key.includes(":management:transition:"));
+    expect(entries).toHaveLength(3);
+    expect(new Set(entries.map(todo => todo.dedupe_key)).size).toBe(3);
+    for (const replay of replays) {
+      expect((await replay()).reused).toBe(true);
+      expect(await cycleSnapshot(id)).toEqual(final);
+    }
+    expect((await currentService.getCase(readerActor(), id)).status).toBe("pending_finance_reconciliation");
+  });
+
+  it("rolls back real sourcing todo completion and creation before retrying the same IE request", async () => {
+    const { projection, service: currentService } = await cycleTodoServices();
+    const created = await currentService.createCase(merchandiserActor(), { gender: "男装", styleName: "报价回滚",
+      estimatedCutPieceSendDate: "2026-10-01", deliveryDate: "2026-10-12",
+      lineItems: [{ styleNo: "REAL-TODO-ROLLBACK", color: "蓝", quantity: 20 }], daxingUnitPrice: "7" }, randomUUID());
+    const id = created.value.sourcingCaseId;
+    const before = await cycleSnapshot(id);
+    const failedProjection = {
+      ...todoProjection,
+      completeOpenByDedupePrefix: projection.completeOpenByDedupePrefix.bind(projection),
+      actionableForAllAssignedRole: async (...args: Parameters<TodoProjectionService["actionableForAllAssignedRole"]>) => {
+        await projection.actionableForAllAssignedRole(...args);
+        throw new Error("isolated failure after real todo creation");
+      },
+    };
+    const failingService = new SourcingService(database, undefined, undefined, failedProjection, contractService);
+    const key = randomUUID();
+    const prices = { linePrices: [{ position: 1, unitPrice: "11" }] };
+    await expect(failingService.quoteIePrice(ieActor(), id, prices, key)).rejects.toThrow("isolated failure after real todo creation");
+    expect(await cycleSnapshot(id)).toEqual(before);
+    expect((await database.query("SELECT count(*)::int count FROM idempotency_records WHERE idempotency_key=$1", [key])).rows[0].count).toBe(0);
+    const [first, retry] = await Promise.all([
+      currentService.quoteIePrice(ieActor(), id, prices, key),
+      currentService.quoteIePrice(ieActor(), id, prices, key),
+    ]);
+    expect([first.reused, retry.reused].sort()).toEqual([false, true]);
+    const after = await cycleSnapshot(id);
+    expect(after.facts).toMatchObject({ transitions: 2, quotes: 1 });
+    expect(after.todos.filter(todo => todo.status === "pending").map(todo => todo.category)).toEqual(["sourcing_management_decision"]);
+    expect(after.todos.find(todo => todo.category === "sourcing_ie_quote")?.status).toBe("completed");
+    await expect(currentService.quoteIePrice(ieActor(), id, prices, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    expect(await cycleSnapshot(id)).toEqual(after);
   });
 
 });
