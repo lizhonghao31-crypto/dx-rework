@@ -148,7 +148,7 @@ export class DigitalProductionNotificationService {
     }
     return result;
   }
-  private async render(database:Database,actor:TrustedActorContext,event:{instruction_order_id?:string|null;development_source_id?:string|null;event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date},people:TrustedActorContext[]):Promise<DigitalNotification|null> {
+  private async render(database:Database,actor:TrustedActorContext,event:{instruction_order_id?:string|null;development_source_id?:string|null;event_id:string;task_id:string|null;todo_id:string|null;event_kind:string;deadline_revision_id:string|null;created_at:Date},people:TrustedActorContext[],includeContext=true):Promise<DigitalNotification|null> {
     if(!people.some(p=>p.actorId===actor.actorId))return null;
     let title:string,actionable:boolean,route:TodoRouteDescriptor;
     let contextTarget:{kind:"source"|"order";id:string}|null=null;
@@ -192,7 +192,7 @@ export class DigitalProductionNotificationService {
       route=row.route_descriptor;
     }
     let context:DigitalNotification["context"];
-    if(contextTarget&&await new DigitalProductionAccessPolicy(database).allowed(actor,contextTarget.kind,contextTarget.id,"technical")){
+    if(includeContext&&contextTarget&&await new DigitalProductionAccessPolicy(database).allowed(actor,contextTarget.kind,contextTarget.id,"technical")){
       const resource=(await database.query(contextTarget.kind==='order'?"SELECT design_style_no,production_order_id FROM digital_production_orders WHERE production_order_id=$1":"SELECT design_style_no,NULL::uuid AS production_order_id FROM digital_production_sources WHERE source_id=$1",[contextTarget.id])).rows[0];
       if(resource){
         const lines=resource.production_order_id?(await database.query("SELECT po_number,color FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position",[resource.production_order_id])).rows:[];
@@ -203,8 +203,8 @@ export class DigitalProductionNotificationService {
   }
   // Atomic claim per recipient is the incremental cursor: refreshes and competing
   // tabs consume only unseen events. Acknowledgement is a separate receipt field.
-  async claim(actor:TrustedActorContext):Promise<{notification:DigitalNotification|null}> {
-    return this.transaction(async client=>{
+  async claim(actor:TrustedActorContext,includeRemaining=false):Promise<{notification:DigitalNotification|null;remainingCount?:number}> {
+    const result=await this.transaction(async client=>{
       const people=await this.people(client);
       const events=(await client.query(`SELECT e.* FROM digital_production_notification_receipts r JOIN digital_production_notification_events e USING(event_id)
         WHERE r.recipient_id=$1 AND r.shown_at IS NULL ORDER BY e.created_at,e.event_id LIMIT 100 FOR UPDATE OF r SKIP LOCKED`,[actor.actorId])).rows;
@@ -215,13 +215,22 @@ export class DigitalProductionNotificationService {
       }
       return {notification:null};
     });
+    // Counting uses the same validity and permissions after the claim lock is released.
+    return includeRemaining?{...result,remainingCount:await this.remaining(actor)}:result;
+  }
+  private async remaining(actor:TrustedActorContext){
+    const people=await this.people(this.database);
+    const events=(await this.database.query(`SELECT e.* FROM digital_production_notification_receipts r JOIN digital_production_notification_events e USING(event_id)
+      WHERE r.recipient_id=$1 AND r.shown_at IS NULL AND r.acknowledged_at IS NULL`,[actor.actorId])).rows;
+    let count=0;for(const event of events)if(await this.render(this.database,actor,event,people,false))count++;
+    return count;
   }
   async acknowledge(actor:TrustedActorContext,eventId:string) {
     await this.database.query("UPDATE digital_production_notification_receipts SET acknowledged_at=coalesce(acknowledged_at,CURRENT_TIMESTAMP) WHERE event_id=$1 AND recipient_id=$2 AND shown_at IS NOT NULL",[eventId,actor.actorId]);
     return {ok:true};
   }
-  async current(actor:TrustedActorContext,eventId:string) {
+  async current(actor:TrustedActorContext,eventId:string,includeRemaining=false) {
     const event=(await this.database.query(`SELECT e.* FROM digital_production_notification_events e JOIN digital_production_notification_receipts r USING(event_id) WHERE e.event_id=$1 AND r.recipient_id=$2 AND r.shown_at IS NOT NULL AND r.acknowledged_at IS NULL`,[eventId,actor.actorId])).rows[0];
-    return {notification:event?await this.render(this.database,actor,event,await this.people(this.database)):null};
+    return {notification:event?await this.render(this.database,actor,event,await this.people(this.database)):null,...(includeRemaining?{remainingCount:await this.remaining(actor)}:{})};
   }
 }
