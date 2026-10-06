@@ -137,7 +137,9 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     expect(notice.route.entityId).toBe(f.orderId);
     expect(notice.context).toEqual({styleNo:"TEST-OWN-PATTERN",orderId:null,colors:[],poNumbers:[]});
     expect((await f.notices.claim(f.people.manager)).notification?.context?.styleNo).toBe(f.source.designStyleNo);
-    expect(JSON.stringify(notice)).not.toMatch(/PRIVATE|999|budget|price|wage|customer/i);
+    expect(JSON.stringify(notice)).not.toMatch(/PRIVATE|budget|price|wage|customer/i);
+    // The numeric wage sentinel belongs to business context; random event/route UUIDs can contain 999.
+    expect(JSON.stringify(notice.context)).not.toContain("999");
     await f.notices.acknowledge(f.people.craft,notice.eventId);
     expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1",[own.todoId])).rows[0].status).toBe("pending");
     expect(await policy.allowed(f.people.craft,"source",f.source.sourceId,"technical")).toBe(false);
