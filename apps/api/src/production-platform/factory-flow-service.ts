@@ -45,15 +45,15 @@ export class FactoryFlowService{
     if(assignee&&!await new DigitalProductionAccessPolicy(db).activeRole(assignee,role))assignee=null;
     const task=await this.tasks().createWithClient(db,actor,{resource:{kind:'order',id},kind,routeId:completion.preparation_id,routeVersion:s.gate.instruction.version,occurrence:1,assigneeId:assignee,conditions:kind==='bulk_qc'?['handover_received']:[]});
     if(kind==='warehouse_dispatch'){
-     await this.tasks().setConditionWithClient(db,actor,task.taskId,'all_po_complete',true,new Date().toISOString(),'全部PO原实裁已齐');
-     if(craft==='无')await this.tasks().setConditionWithClient(db,actor,task.taskId,'qc_approved',true,new Date().toISOString(),'无印绣路线无需裁片工艺QC');
+     await this.tasks().setConditionWithClient(db,actor,task.taskId,'all_po_complete',true,undefined,'全部PO原实裁已齐');
+     if(craft==='无')await this.tasks().setConditionWithClient(db,actor,task.taskId,'qc_approved',true,undefined,'无印绣路线无需裁片工艺QC');
     }
    }
    s=await this.state(db,id);
   }
   if(s.dispatched)return;
   const warehouse=s.tasks.find(t=>t.task_kind==='warehouse_dispatch');
-  if(warehouse){await this.tasks().setConditionWithClient(db,actor,warehouse.task_id,'qc_approved',s.allQc,new Date().toISOString(),s.allQc?'整款工艺检查满足':'任一PO未通过，整款不得发厂');if(s.allQc)await this.tasks().refreshBusinessConditionsWithClient(db,actor,warehouse.task_id);}
+  if(warehouse){await this.tasks().setConditionWithClient(db,actor,warehouse.task_id,'qc_approved',s.allQc,undefined,s.allQc?'整款工艺检查满足':'任一PO未通过，整款不得发厂');if(s.allQc)await this.tasks().refreshBusinessConditionsWithClient(db,actor,warehouse.task_id);}
  }
  private async authorized(db:DB,actor:TrustedActorContext,s:Awaited<ReturnType<FactoryFlowService['state']>>,kind:string){
   const task=s.tasks.find(t=>t.task_kind===kind);if(!task)return false;

@@ -144,6 +144,26 @@ run("P03 task lifecycle PostgreSQL", () => {
     expect((await database.query("SELECT * FROM digital_production_task_events WHERE task_id=$1 AND event_kind='ready'",[taskId])).rows).toHaveLength(1);
     await expect(database.query("UPDATE production_order_node_clocks SET entered_at=CURRENT_TIMESTAMP WHERE node_instance_id=$1",[taskId])).rejects.toBeTruthy();
   });
+  it("classifies server conditions as live across a long transaction, while retaining manual prerequisite provenance",async()=>{
+    const resource=await order(),live=await create(resource,'development_pattern');
+    const client=await database.connect();
+    try{
+      await client.query('BEGIN');await client.query('SELECT pg_sleep(0.06)');
+      await tasks.setConditionWithClient(client,boss,live.taskId,'materials_ready',true,undefined);
+      await tasks.setConditionWithClient(client,boss,live.taskId,'handover_received',true,undefined);
+      await client.query('COMMIT');
+    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+    const ready=await tasks.read(boss,live.taskId);
+    expect(ready).toMatchObject({state:'ready',timeQuality:'现场登记',slaHours:48});
+    expect(Date.parse(ready.dueAt!)-Date.parse(ready.enteredAt!)).toBe(48*3600000);
+    const events=(await tasks.history(boss,live.taskId)).events.filter(event=>['condition','ready'].includes(event.kind));
+    expect(events.length).toBe(3);expect(events.every(event=>event.quality==='现场登记')).toBe(true);
+    // Timestamp ordering alone does not establish provenance; the 43ms case has a separate metrics regression.
+    const manual=await create(await order(),'development_pattern');
+    await condition(manual.taskId,'materials_ready',new Date(Date.now()-60000).toISOString());
+    const c=await database.connect();try{await c.query('BEGIN');await tasks.setConditionWithClient(c,boss,manual.taskId,'handover_received',true,undefined);await c.query('COMMIT');}finally{c.release();}
+    expect(await tasks.read(boss,manual.taskId)).toMatchObject({state:'ready',timeQuality:'补报未核实'});
+  });
   it("applies SLA revisions to unfinished tasks only, including paused and blocked, then removes SLA",async()=>{
     const r=await order();const t1=await create(r,"development_cutting");const t2=await create(await order(),"development_cutting");
     const at=new Date(Date.now()-5*3600000).toISOString();

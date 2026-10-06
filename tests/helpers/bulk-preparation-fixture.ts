@@ -76,7 +76,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  await expect(cutting.record(actors.root,cuttingId,{pieceCount:1,actualCutCount:137,attachmentIds:[]},randomUUID())).rejects.toMatchObject({statusCode:409});
  await expect(tasks.handover(worker,sheet.tasks.find(t=>t.taskKind==='bulk_pattern')!.taskId,{note:'不能自行绕过文员'},randomUUID())).rejects.toMatchObject({statusCode:409});
  await bulk.dispatch(clerk,id,{expectedVersion:1,patternWorkerId:worker.actorId,deliverPattern:true},randomUUID());
- sheet=await bulk.read(worker,id);expect(sheet.tasks.find(t=>t.taskKind==='bulk_pattern')).toMatchObject({state:'ready',slaHours:48});
+ sheet=await bulk.read(worker,id);if(mode!=='none')expect(sheet.tasks.find(t=>t.taskKind==='warehouse_preshrink')).toMatchObject({state:'ready',slaHours:36,timeQuality:'现场登记'});expect(sheet.tasks.find(t=>t.taskKind==='bulk_pattern')).toMatchObject({state:'ready',slaHours:48,timeQuality:'现场登记'});
  await expect(fixture.budget.read(worker,id)).rejects.toMatchObject({statusCode:404});
  expect((await instruction.read(worker,id)).canEdit).toBe(false);
  await expect(bulk.complete(clerk,id,{preparationId:sheet.preparationId!,kind:'纸样完成'},randomUUID())).rejects.toMatchObject({statusCode:404});
@@ -88,7 +88,10 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  if(!(options?.cuttingProcess==='outsourced')){
   const before=await bulk.read(primary,id);await expect(bulk.dispatch(actors.root,id,{expectedVersion:before.dispatch.version,patternWorkerId:worker.actorId,warehouseWorkerId:warehouse.actorId,cuttingWorkerId:null,deliverPattern:false},randomUUID())).rejects.toMatchObject({statusCode:409});expect((await bulk.read(primary,id)).dispatch).toEqual(before.dispatch);
  }
- const complete=await bulk.read(primary,id);expect(complete.tasks.filter(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toHaveLength(1);expect(complete.tasks.find(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toMatchObject({state:'ready',slaHours:options?.cuttingProcess==='outsourced'?null:24});
+ const complete=await bulk.read(primary,id);expect(complete.tasks.filter(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toHaveLength(1);expect(complete.tasks.find(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toMatchObject({state:'ready',slaHours:options?.cuttingProcess==='outsourced'?null:24,timeQuality:'现场登记'});
+ const completedIds=complete.tasks.filter(t=>['bulk_pattern','warehouse_preshrink'].includes(t.taskKind)&&t.state==='completed').map(t=>t.taskId);
+ const clocks=(await db.query('SELECT entered_quality,completed_quality,extract(epoch FROM completed_at-entered_at)::float8 AS seconds FROM digital_production_tasks WHERE task_id=ANY($1::uuid[])',[completedIds])).rows;
+ expect(clocks).toHaveLength(mode==='none'?1:2);for(const clock of clocks){expect(clock).toMatchObject({entered_quality:'现场登记',completed_quality:'现场登记'});expect(clock.seconds).toBeGreaterThan(0);}
  await Promise.all([done('唛架完成'),done('唛架完成')]);expect((await bulk.read(primary,id)).tasks.filter(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toHaveLength(1);
  if(mode==='concurrent'){
   const nextFactory=(await db.query("SELECT supplier_id FROM supplier_catalog_items WHERE supplier_code='FAC-02'")).rows[0].supplier_id;

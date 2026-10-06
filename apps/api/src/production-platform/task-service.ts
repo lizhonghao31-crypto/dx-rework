@@ -87,12 +87,17 @@ export class DigitalProductionTaskService {
     if (task.state !== "pending" || !await this.conditionsReady(client, id)) return false;
     const lifecycle = (await client.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2", [this.resource(task).kind, this.resource(task).id])).rows[0]?.state;
     if (lifecycle === "paused" || lifecycle === "cancelled") return false;
-    const facts = (await client.query(`SELECT count(*)::int AS count,bool_or(moment IS NULL) AS has_unknown,max(moment) AS latest_at FROM (
-      SELECT occurred_at AS moment FROM digital_production_task_conditions WHERE task_id=$1 AND stage='activation' AND satisfied
-      UNION ALL SELECT p.completed_at FROM digital_production_task_dependencies d JOIN digital_production_tasks p ON p.task_id=d.predecessor_id WHERE d.task_id=$1
+    const facts = (await client.query(`SELECT count(*)::int AS count,bool_or(moment IS NULL) AS has_unknown,max(moment) AS latest_at,
+      bool_or(coalesce(quality,'缺失') NOT IN ('现场登记','已核实')) AS has_unverified,bool_and(quality='已核实') AS all_verified FROM (
+      SELECT c.occurred_at AS moment,(SELECT e.time_quality FROM digital_production_task_events e
+        LEFT JOIN digital_production_event_intents i USING(event_id)
+        WHERE e.task_id=c.task_id AND e.event_kind='condition' AND e.payload->>'condition'=c.condition_key
+        ORDER BY (to_jsonb(i)->>'notification_sequence')::bigint DESC NULLS LAST,e.recorded_at DESC,e.event_id DESC LIMIT 1) AS quality
+      FROM digital_production_task_conditions c WHERE c.task_id=$1 AND c.stage='activation' AND c.satisfied
+      UNION ALL SELECT p.completed_at,p.completed_quality FROM digital_production_task_dependencies d JOIN digital_production_tasks p ON p.task_id=d.predecessor_id WHERE d.task_id=$1
       ) facts`, [id])).rows[0];
     if (facts.has_unknown) occurredAt = null;
-    else if (facts.count > 0) occurredAt = iso(facts.latest_at);
+    else if (facts.count > 0) {occurredAt = iso(facts.latest_at);quality=facts.has_unverified?'补报未核实':facts.all_verified?'已核实':'现场登记';}
     if (occurredAt === null) quality = "缺失";
     else if (quality === "缺失") quality = "补报未核实";
     const policy = await this.policy(client, task.task_kind);
@@ -134,16 +139,30 @@ export class DigitalProductionTaskService {
     await this.activate(client, actor, id, input.occurredAt === undefined ? new Date().toISOString() : input.occurredAt, input.occurredAt === null ? "缺失" : input.occurredAt === undefined ? "现场登记" : "补报未核实");
     return { taskId: id };
   }
-  async setConditionWithClient(client: PoolClient, actor: TrustedActorContext, id: string, condition: typeof DIGITAL_CONDITION_KEYS[number], satisfied: boolean, occurredAt: string | null, note = "") {
+  // Only omission denotes the server's live business action. Explicit dates remain backreports.
+  async setConditionWithClient(client: PoolClient, actor: TrustedActorContext, id: string, condition: typeof DIGITAL_CONDITION_KEYS[number], satisfied: boolean, occurredAt: string | null | undefined = undefined, note = "") {
+    const at=occurredAt===undefined?new Date().toISOString():occurredAt;
+    const quality:TimeQuality=at===null?'缺失':occurredAt===undefined?'现场登记':'补报未核实';
+    return this.conditionFactWithClient(client,actor,id,condition,satisfied,at,quality,note);
+  }
+  // A fixed server adapter reads the inherited fact; no client can supply a trusted quality.
+  async inheritWashingConditionWithClient(client:PoolClient,actor:TrustedActorContext,id:string,inheritedTaskId:string,note:string){
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+    const task=await this.task(client,id,true),original=await this.task(client,inheritedTaskId);
+    if(task.task_kind!=='development_tail_check'||original.task_kind!=='development_washing'||original.state!=='completed'||!task.source_id||task.source_id!==original.source_id)fail('继承洗水完成证据不属于该开发单');
+    const at=iso(original.completed_at),quality:TimeQuality=at===null?'缺失':original.completed_quality;
+    return this.conditionFactWithClient(client,actor,id,'washing_finished',true,at,quality,note,{inheritedTaskId});
+  }
+  private async conditionFactWithClient(client:PoolClient,actor:TrustedActorContext,id:string,condition:typeof DIGITAL_CONDITION_KEYS[number],satisfied:boolean,at:string|null,quality:TimeQuality,note:string,provenance:Record<string,string>={}){
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
     const task = await this.task(client, id, true);
     if (["completed", "cancelled"].includes(task.state)) fail("已结束任务不能重写条件");
-    if (occurredAt !== null && (!Number.isFinite(new Date(occurredAt).getTime()) || new Date(occurredAt).getTime() > Date.now())) fail("条件发生时间无效");
-    const updated = await client.query("UPDATE digital_production_task_conditions SET satisfied=$3,occurred_at=$4 WHERE task_id=$1 AND condition_key=$2 RETURNING task_id", [id, condition, satisfied, occurredAt]);
+    if (at !== null && (!Number.isFinite(new Date(at).getTime()) || new Date(at).getTime() > Date.now())) fail("条件发生时间无效");
+    const updated = await client.query("UPDATE digital_production_task_conditions SET satisfied=$3,occurred_at=$4 WHERE task_id=$1 AND condition_key=$2 RETURNING task_id", [id, condition, satisfied, at]);
     if (!updated.rowCount) fail("任务不包含该前置条件");
-    await this.event(client, actor, id, this.resource(task), "condition", occurredAt, occurredAt === null ? "缺失" : "补报未核实", { condition, satisfied, note });
+    await this.event(client, actor, id, this.resource(task), "condition", at, quality, { condition, satisfied, note,...provenance });
     if (!satisfied && task.state === "ready") await client.query("UPDATE digital_production_tasks SET state='blocked',blocked_reason='前置条件未满足' WHERE task_id=$1", [id]);
-    return this.activate(client, actor, id, occurredAt, occurredAt === null ? "缺失" : "补报未核实");
+    return this.activate(client, actor, id, at, quality);
   }
   async complete(actor: TrustedActorContext, id: string, input: { occurredAt?: string | null | undefined; note: string }, key: string) {
     return this.transaction(client => this.completeWithClient(client, actor, id, input, key));
@@ -189,7 +208,7 @@ export class DigitalProductionTaskService {
     await this.active(client,this.resource(task));
     if(task.state!=='ready'||!await this.conditionsReady(client,id))fail('整款开裁未就绪');
     const at=new Date().toISOString();
-    await this.setConditionWithClient(client,actor,id,'business_recorded',true,at,'所有PO原实裁记录已齐');
+    await this.setConditionWithClient(client,actor,id,'business_recorded',true,undefined,'所有PO原实裁记录已齐');
     const eventId=await this.event(client,actor,id,this.resource(task),'completed',at,'现场登记',{note:'全部PO原实裁登记完成'});
     await this.revision(client,actor,id,await this.policy(client,task.task_kind),iso(task.entered_at),'completion',eventId);
     await client.query("UPDATE digital_production_tasks SET state='completed',completed_at=$2,completed_quality='现场登记',terminal_recorded_at=CURRENT_TIMESTAMP WHERE task_id=$1",[id,at]);
@@ -206,7 +225,7 @@ export class DigitalProductionTaskService {
     for(const row of tasks){
       const task=await this.task(client,row.task_id,true);if(task.state==='completed')continue;
       await this.active(client,this.resource(task));if(task.state!=='ready'||!await this.conditionsReady(client,task.task_id))fail('发厂相关任务尚未就绪');
-      const at=new Date().toISOString();await this.setConditionWithClient(client,actor,task.task_id,'business_recorded',true,at,'QC事实及实际发厂已齐');
+      const at=new Date().toISOString();await this.setConditionWithClient(client,actor,task.task_id,'business_recorded',true,undefined,'QC事实及实际发厂已齐');
       const eventId=await this.event(client,actor,task.task_id,this.resource(task),'completed',at,'现场登记',{factId,note:'实际发厂收口，QC判定人仍由原检查事实保留'});
       await this.revision(client,actor,task.task_id,await this.policy(client,task.task_kind),iso(task.entered_at),'completion',eventId);
       await client.query("UPDATE digital_production_tasks SET state='completed',completed_at=$2,completed_quality='现场登记',terminal_recorded_at=CURRENT_TIMESTAMP WHERE task_id=$1",[task.task_id,at]);
@@ -227,8 +246,7 @@ export class DigitalProductionTaskService {
         const task = await this.task(client, id, true);
         if(["bulk_pattern","warehouse_preshrink"].includes(task.task_kind))fail("请在产前准备页面由授权岗位派交");
         if (["completed", "cancelled"].includes(task.state)) fail("已结束任务不能补交接");
-        const at = input.occurredAt === undefined ? new Date().toISOString() : input.occurredAt;
-        await this.setConditionWithClient(client, actor, id, "handover_received", true, at, input.note);
+        await this.setConditionWithClient(client, actor, id, "handover_received", true, input.occurredAt, input.note);
         return { taskId: id };
       });
     });

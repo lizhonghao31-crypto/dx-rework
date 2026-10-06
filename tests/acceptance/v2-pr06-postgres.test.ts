@@ -12,6 +12,7 @@ import {DigitalAnalysisQuery} from '../../apps/api/src/production-platform/repor
 import {DigitalProductionAccessPolicy} from '../../apps/api/src/production-platform/access-policy.js';
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
+import {developmentRoute} from '../../apps/api/src/production-platform/development-route.js';
 import {ownedPostgresSchema} from '../helpers/owned-postgres-schema.js';
 import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
 const url=process.env.TEST_DATABASE_URL;
@@ -108,4 +109,52 @@ const url=process.env.TEST_DATABASE_URL;
   const recheck=await execution.resubmit(creator,fresh.sourceId,supply.taskId,randomUUID());
   expect(await tasks.read(clerk,recheck.taskId)).toMatchObject({state:'ready',taskKind:'development_material_recheck'});
  });
+ it.each(['补报未核实','缺失','现场登记'] as const)('FIX-02: a revision retains inherited washing completion provenance %s',async quality=>{
+  const fresh=await identity.createSource(actor(),{developmentType:'头版',designStyleNo:'TEST-FIX02-INHERITED-'+quality,temporaryStyleNo:null,customerCode:'PD'},randomUUID()),file=randomUUID();
+  await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[file,`TEST/${file}`,'a'.repeat(64),designer]);
+  const document=DevelopmentDocumentSchema.parse({...(await forms.read(boss,sourceId)).document!,craft:'无',washing:'内洗',files:[{attachmentId:file,kind:'款图'}],materials:[{materialId:randomUUID(),category:'主布',label:'主布',supplier:'',name:'TEST',width:'',weight:'',composition:'',consumption:'',color:'蓝',specification:'',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}]});
+  const saved=await forms.save(actor(),fresh.sourceId,{expectedVersion:0,document},randomUUID()),published=await forms.publish(actor(),fresh.sourceId,saved.version,randomUUID()),tasks=new DigitalProductionTaskService(db),client=await db.connect();let washingId:string;
+  // Newly imported TEST history only: original tasks are completed through the task service.
+  // No existing business record or timestamp is updated by this fixture.
+  try{await client.query('BEGIN');for(const kind of ['development_materials' as const,...developmentRoute(document)]){
+   const id=kind==='development_materials'?published.taskId!:(await tasks.createWithClient(client,boss,{resource:{kind:'source',id:fresh.sourceId},kind,routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:null})).taskId;
+   if(kind==='development_washing')washingId=id;
+   const at=kind!=='development_washing'||quality==='现场登记'?undefined:quality==='缺失'?null:new Date(Date.now()-120000).toISOString();
+   const conditions=(await client.query('SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1',[id])).rows;
+   for(const condition of conditions)await tasks.setConditionWithClient(client,boss,id,condition.condition_key,true,at);
+   await tasks.completeWithClient(client,boss,id,{occurredAt:typeof at==='string'?new Date(Date.parse(at)+60000).toISOString():at,note:'TEST 原完成事实'},randomUUID());
+  }await client.query('COMMIT');}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+  const old=(await db.query('SELECT completed_at,completed_quality FROM digital_production_tasks WHERE task_id=$1',[washingId!])).rows[0],rounds=new DevelopmentRoundService(db,true),revision=DevelopmentRevisionSchema.parse({basedOnRound:1,document,origin:'客户新增要求',customerComment:'TEST 只重做纸样，沿用原洗水',internalProblem:'',explanation:'TEST 继承来源质量',categories:['版型'],affectedNodes:['纸样'],outputKind:'整件样板'});
+  const draft=await rounds.save(actor(),fresh.sourceId,{expectedDraftVersion:0,revision},randomUUID());await rounds.publish(actor(),fresh.sourceId,{expectedDraftVersion:draft.draftVersion,basedOnRound:1},randomUUID());
+  const round=(await rounds.read(actor(),fresh.sourceId)).rounds.find(item=>item.roundNumber===2);expect(round.inherited.development_washing.taskId).toBe(washingId!);expect(round.routeNodes).not.toContain('development_washing');
+  const execution=new DevelopmentExecutionService(db,true),paper=(await execution.read(boss,fresh.sourceId)).tasks.find(task=>task.routeVersion===2&&task.taskKind==='development_pattern')!;
+  await execution.complete(boss,fresh.sourceId,{taskId:paper.taskId,note:'TEST 新轮纸样完成',attachmentIds:[]},randomUUID());
+  const tail=(await execution.read(boss,fresh.sourceId)).tasks.find(task=>task.routeVersion===2&&task.taskKind==='development_tail_check')!;
+  expect(tail).toMatchObject({state:'ready',timeQuality:quality});const condition=(await tasks.history(boss,tail.taskId)).events.find(event=>event.kind==='condition'&&event.payload.condition==='washing_finished')!;
+  expect(condition).toMatchObject({quality,payload:{inheritedTaskId:washingId!}});
+  expect(condition.occurredAt?new Date(condition.occurredAt).toISOString():null).toBe(old.completed_at?new Date(old.completed_at).toISOString():null);
+  await execution.route(boss,fresh.sourceId,{taskId:tail.taskId,result:'通过',note:'TEST 新轮尾查',craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null},randomUUID());
+  const filters=DigitalAnalysisFilterSchema.parse({from:'2020-01-01',to:'2080-01-01',scope:'completed',node:'development_tail_check'}),row=(await analysis.list(actor(),filters)).rows.find(item=>item.taskId===tail.taskId)!;
+  expect(row.slaIncluded).toBe(quality==='现场登记');if(quality!=='现场登记')expect(row.handlingSeconds).toBeNull();
+  expect((await db.query('SELECT completed_at,completed_quality FROM digital_production_tasks WHERE task_id=$1',[washingId!])).rows[0]).toEqual(old);
+ });
+ it('FIX-02: non-Root live material check, block, resume and paper completion stay measurable without resetting the deadline',async()=>{
+  const person=async(role:string)=>{const id=randomUUID();await db.query('INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)',[id,'TEST FIX02 '+role]);await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2::uuid,'dingtalk','TEST',$2::text,$2::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id]);await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$4,'TEST FIX02')",[randomUUID(),id,role,root]);return actor(id,[role]);};
+  const creator=await person('sample_designer'),clerk=await person('development_clerk'),worker=await person('pattern_room_worker');
+  const fresh=await identity.createSource(creator,{developmentType:'头版',designStyleNo:'TEST-FIX02-LIVE-PAPER',temporaryStyleNo:null,customerCode:'PD'},randomUUID()),file=randomUUID(),main=randomUUID();
+  await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[file,`TEST/${file}`,'a'.repeat(64),creator.actorId]);
+  const document={...(await forms.read(boss,sourceId)).document!,craft:'无' as const,washing:'免洗' as const,materials:[{materialId:main,category:'主布' as const,label:'主布A',supplier:'',name:'TEST',width:'',weight:'',composition:'',consumption:'',color:'蓝',specification:'',quantity:'1',requiredThisRound:true,available:true,expectedDate:null}],files:[{attachmentId:file,kind:'款图' as const}]};
+  const saved=await forms.save(creator,fresh.sourceId,{expectedVersion:0,document},randomUUID()),published=await forms.publish(creator,fresh.sourceId,saved.version,randomUUID()),tasks=new DigitalProductionTaskService(db),execution=new DevelopmentExecutionService(db,true);
+  await tasks.reassign(boss,published.taskId!,clerk.actorId,randomUUID());await execution.dispatch(clerk,fresh.sourceId,{expectedVersion:0,patternWorkerId:worker.actorId,cuttingWorkerId:worker.actorId,sewingWorkerId:worker.actorId},randomUUID());
+  await execution.check(clerk,fresh.sourceId,{taskId:published.taskId!,result:'通过',items:[{materialId:main,physical:true,quantity:true,color:true,specification:true}],note:'TEST 现场核配通过'},randomUUID());
+  const paper=(await execution.read(worker,fresh.sourceId)).tasks.find(task=>task.taskKind==='development_pattern')!;
+  expect(paper).toMatchObject({state:'ready',timeQuality:'现场登记',slaHours:48});expect(Date.parse(paper.dueAt!)-Date.parse(paper.enteredAt!)).toBe(48*3600000);
+  await tasks.feedback(worker,paper.taskId,'TEST 现场阻断',true,randomUUID());await tasks.feedback(worker,paper.taskId,'TEST 已解决',false,randomUUID());
+  expect(await tasks.read(worker,paper.taskId)).toMatchObject({enteredAt:paper.enteredAt,dueAt:paper.dueAt});
+  await execution.complete(worker,fresh.sourceId,{taskId:paper.taskId,attachmentIds:[],note:'TEST 现场完成'},randomUUID());
+  const complete=await analysis.list(boss,DigitalAnalysisFilterSchema.parse({from:'2020-01-01',to:'2080-01-01',designer:creator.actorId,scope:'completed',node:'development_pattern'}));
+  expect(complete.total).toBe(1);expect(complete.rows[0]).toMatchObject({enteredQuality:'现场登记',completedQuality:'现场登记',slaIncluded:true,onTime:true,unverifiedTime:false});expect(complete.rows[0].handlingSeconds).toBeGreaterThan(0);expect(complete.rows[0].waitingSeconds).toBeGreaterThan(0);
+  expect((await execution.read(worker,fresh.sourceId)).tasks.find(task=>task.taskKind==='development_cutting')).toMatchObject({state:'ready',timeQuality:'现场登记'});
+ });
+
 });
