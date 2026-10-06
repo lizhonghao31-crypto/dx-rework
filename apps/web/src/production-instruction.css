@@ -50,6 +50,8 @@
 @media screen {
  .instruction-paper,.instruction-print-warning{display:none}
  .dx-doc-instruction .instruction-screen{min-width:0}
+ .dx-doc-instruction .instruction-screen .dx-doc-field :is(input,textarea){font-size:14px;line-height:20px}
+ @media(max-width:800px){.dx-doc-instruction .instruction-screen .dx-doc-field :is(input,textarea){font-size:16px}}
  .dx-doc-instruction .dx-doc-status{font-size:14px;line-height:20px}
  .dx-doc-instruction .instruction-summary{display:grid;grid-template-columns:120px minmax(0,1fr);gap:16px;align-items:center;margin:0 0 16px}
  .dx-doc-instruction .instruction-summary-image{width:120px;height:120px;display:grid;place-items:center;border-radius:6px;background:#f0f6ff;color:#64748b;overflow:hidden}
