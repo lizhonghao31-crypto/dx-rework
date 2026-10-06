@@ -46,7 +46,7 @@ export class DigitalAnalysisQuery{
   for(const row of candidates)if(await policy.allowed(actor,'task',row.taskId,'technical'))authorized.push(row);
   const ids=authorized.map(row=>row.taskId);
   const supplySources=[...new Set(authorized.filter(row=>row.nodeKey==='development_material_supply'&&!['completed','cancelled'].includes(row.state)).map(row=>row.sourceId))];
-  const supplyDocuments=supplySources.length?(await db.query('SELECT source_id,document FROM digital_development_documents WHERE source_id=ANY($1::uuid[])',[supplySources])).rows:[];
+  const supplyDocuments=supplySources.length?(await db.query('SELECT source_id,document FROM digital_development_current_documents WHERE source_id=ANY($1::uuid[])',[supplySources])).rows:[];
   const supplyEvents=supplySources.length?(await db.query('SELECT source_id,material_id AS "materialId",action FROM digital_development_material_events WHERE source_id=ANY($1::uuid[])',[supplySources])).rows:[];
   const missingSupplySources=new Set(supplyDocuments.filter(row=>missingMainMaterials(row.document as DevelopmentDocument,supplyEvents.filter(event=>event.source_id===row.source_id)).length).map(row=>row.source_id));
   const events=(await db.query(`SELECT event_id AS id,task_id AS "taskId",event_kind AS kind,occurred_at AS at,recorded_at AS "recordedAt",time_quality AS quality,actor_id AS "actorId",u.display_name AS "actorName",corrects_event_id AS "correctsId",payload
