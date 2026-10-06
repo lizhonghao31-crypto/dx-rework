@@ -1,4 +1,5 @@
 import { projectDevelopmentNotices } from "./development-notifications.js";
+import { patternOrderScopeSql } from "../pattern-room/order-authority.js";
 import { isRootActor } from "../access/business-authority.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -152,6 +153,8 @@ export class DigitalProductionNotificationService {
     if(!people.some(p=>p.actorId===actor.actorId))return null;
     let title:string,actionable:boolean,route:TodoRouteDescriptor;
     let contextTarget:{kind:"source"|"order";id:string}|null=null;
+    let ownDevelopmentTask:Task|null=null;
+    let ownPatternOrderId:string|null=null;
     if(event.instruction_order_id){
       if(!await new DigitalProductionAccessPolicy(database).allowed(actor,"order",event.instruction_order_id,"technical"))return null;
       const notice=(await database.query("SELECT title,version FROM digital_instruction_notices WHERE event_id=$1",[event.event_id])).rows[0];
@@ -176,6 +179,7 @@ export class DigitalProductionNotificationService {
       if(event.event_kind==="created"&&!missing)return null;
       if(!(await this.recipients(database,task,event.event_kind,people)).some(p=>p.actorId===actor.actorId))return null;
       actionable=event.event_kind!=="completed"&&(missing||await new DigitalProductionAccessPolicy(database).allowed(actor,"task",task.task_id,"execute"));
+      if(actionable&&!missing&&task.source_id&&task.task_kind.startsWith("development_"))ownDevelopmentTask=task;
       title=`${task.label} · ${missing?"待分配主办":labels[event.event_kind]??"事项更新"}`;
       contextTarget=task.production_order_id?{kind:"order",id:task.production_order_id}:task.source_id?{kind:"source",id:task.source_id}:null;
       route={routeName:"digital_production_task",entityId:task.task_id,todoId:task.task_id};
@@ -190,6 +194,7 @@ export class DigitalProductionNotificationService {
       actionable=row.todo_type!=="information";title=actionable?(event.event_kind==="overdue"?"订单待办已超时":"你有新的订单待办"):"订单事项已更新";
       contextTarget=parent;
       route=row.route_descriptor;
+      if(actionable&&route.routeName==="pattern_room_order"&&row.required_role==="pattern_room_worker")ownPatternOrderId=route.entityId;
     }
     let context:DigitalNotification["context"];
     if(includeContext&&contextTarget&&await new DigitalProductionAccessPolicy(database).allowed(actor,contextTarget.kind,contextTarget.id,"technical")){
@@ -198,6 +203,23 @@ export class DigitalProductionNotificationService {
         const lines=resource.production_order_id?(await database.query("SELECT po_number,color FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position",[resource.production_order_id])).rows:[];
         context={styleNo:resource.design_style_no??null,orderId:resource.production_order_id??null,colors:[...new Set<string>(lines.map(l=>l.color))],poNumbers:[...new Set<string>(lines.map(l=>l.po_number).filter(Boolean))]};
       }
+    }
+    // A valid own task can identify itself without granting source/order technical access.
+    // Project only its style; never use this fallback to enumerate parent PO lines or data.
+    if(includeContext&&!context&&ownDevelopmentTask){
+      const resource=(await database.query(`SELECT s.design_style_no FROM digital_production_task_access a
+        JOIN digital_production_tasks t USING(task_id) JOIN digital_production_sources s USING(source_id)
+        WHERE a.task_id=$1 AND a.source_id=$2 AND t.state IN ('ready','blocked')`,[ownDevelopmentTask.task_id,ownDevelopmentTask.source_id])).rows[0];
+      if(resource)context={styleNo:resource.design_style_no??null,orderId:null,colors:[],poNumbers:[]};
+    }
+    if(includeContext&&!context&&ownPatternOrderId&&contextTarget){
+      const resource=(await database.query(`SELECT orders.style_no FROM pattern_room_orders orders
+        WHERE ${patternOrderScopeSql} AND orders.order_id=$5 AND orders.status='in_progress'
+        AND todo_user_has_direct_role($1,'pattern_room_worker','pattern_room:orders:view')
+        AND NOT EXISTS(SELECT 1 FROM digital_production_resource_lifecycle
+          WHERE resource_kind=$6 AND resource_id=$7 AND state<>'active')`,
+      [actor.actorId,false,["pattern_room_worker"],true,ownPatternOrderId,contextTarget.kind,contextTarget.id])).rows[0];
+      if(resource)context={styleNo:resource.style_no,orderId:null,colors:[],poNumbers:[]};
     }
     return {eventId:event.event_id,title,actionable,route,createdAt:iso(event.created_at),...(context?{context}:{})};
   }
