@@ -1,3 +1,4 @@
+import { productionDisplayReturnUrl } from "./production-display-context.js";
 import { moduleCanWrite } from "./member-module-policy.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { useEffect, useRef, useState } from "react";
@@ -72,7 +73,7 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
     <a href={pageUrl("ui/production-dashboard")}><NavigationIcon route="/ui/production-dashboard" />实时看板</a>
     {error?<p role="alert" className="sourcing-delete-error">{error}</p>:null}
     {message?<p role="status">{message}</p>:null}
-    {productionOrderId?<a href={pageUrl("ui/production-reporting")}>返回生产订单</a>:null}
+    {productionOrderId?<a href={productionDisplayReturnUrl(new URLSearchParams(window.location.search).get("returnTo"))??pageUrl("ui/production-reporting")}>{productionDisplayReturnUrl(new URLSearchParams(window.location.search).get("returnTo"))?"返回实时生产展示":"返回生产订单"}</a>:null}
     <Button disabled={busy||loading} variant="secondary" onClick={()=>{void load();}}>刷新</Button>
     {loading?<p role="status">正在加载…</p>:null}
     {!productionOrderId?<>

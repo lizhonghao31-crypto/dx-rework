@@ -1,3 +1,4 @@
+import { productionDisplayReturnUrl,productionDisplayDomainHref } from "./production-display-context.js";
 import { todoReturnPath } from "./todo-query-state.js";
 import { ProductionExclusionControls } from "./production-exclusion-controls.js";
 import { NavigationIcon } from "./navigation-icons.js";
@@ -76,9 +77,10 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
     };frame=requestAnimationFrame(tick);return()=>cancelAnimationFrame(frame);
   },[moving,data?.asOf]);
   const asOf=data?.asOf??detail?.asOf;
+  const displayReturn=productionDisplayReturnUrl(new URLSearchParams(window.location.search).get('returnTo'));
   return <Shell active="实时看板"><div className="sourcing-workspace production-dashboard production-board">
     <Header iconRoute="/ui/production-dashboard" title="实时看板" subtitle="生产数量与工作日进度，按实际记录判断。" badge="实时生产看板"/>
-    <div className="production-dashboard__toolbar">{canOpenReporting?<a href={pageUrl("ui/production-reporting")}><NavigationIcon route="/ui/production-reporting" />生产数据填报</a>:null}{productionOrderId?<a href={pageUrl(todoReturnPath(window.location.search) ?? "ui/production-dashboard")}>{todoReturnPath(window.location.search) ? "返回我的待办" : "返回实时看板"}</a>:null}
+    <div className="production-dashboard__toolbar">{canOpenReporting?<a href={pageUrl("ui/production-reporting")}><NavigationIcon route="/ui/production-reporting" />生产数据填报</a>:null}{productionOrderId?<a href={todoReturnPath(window.location.search)?pageUrl(todoReturnPath(window.location.search)!):displayReturn??pageUrl("ui/production-dashboard")}>{todoReturnPath(window.location.search) ? "返回我的待办" : displayReturn?"返回实时生产展示":"返回实时看板"}</a>:null}
       <span>{asOf?<time dateTime={asOf} title={timestamp(asOf)}>数据截至 {timestamp(asOf)} · 读取于{relativeProductionTime(asOf,now)}前</time>:"正在读取数据"}</span>
       {canControlMotion?<Button variant="secondary" aria-pressed={paused} onClick={()=>{if(canControlMotion)setPaused(value=>!value);}}>{paused?"继续动效":"暂停动效"}</Button>:null}
       <Button variant="secondary" disabled={loading} onClick={()=>{void load(true);}}><span aria-hidden="true" className={loading?"production-dashboard__refreshing":""}>↻</span> {loading?"刷新中…":"刷新"}</Button>
@@ -140,7 +142,7 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
         <p>工艺：{detail.detail.order.processes.join("、")}</p>
         {detail.progress.frozen?<p>进度保留完成时事实；以下明细和历史保留后续修正。</p>:null}
         <div className="sourcing-order-list">{detail.detail.order.lines.map(line=><div key={line.position} className="production-dashboard__line"><strong>{line.position}. {line.styleNo} · {line.color??"未记录颜色"}</strong><span>{number(line.completedQuantity)} / {number(line.quantity)} 件</span></div>)}</div>
-        {detail.detail.canReport||detail.detail.canCorrect?<a href={pageUrl(`ui/production-reporting/${productionOrderId}`)}>进入生产填报与修正</a>:null}
+        {detail.detail.canReport||detail.detail.canCorrect?<a href={productionDisplayDomainHref(pageUrl(`ui/production-reporting/${productionOrderId}`),window.location.search)}>进入生产填报与修正</a>:null}
       </Surface>
       <Surface className="sourcing-list-card"><details><summary>生产上报与修正历史（{detail.detail.history.length} 条）</summary>
         {detail.detail.history.map(h=><div className="production-dashboard__line" key={h.reportId}><strong>{detail.detail.order.lines.find(l=>l.position===h.position)?.styleNo} · {h.businessDate} · {number(h.quantity)} 件</strong><span>{h.actorName} · {h.revision===1?"上报":"Root修正"} · {h.effective?"当前有效":"已被修正"} · {timestamp(h.createdAt)}</span>{h.reason?<span>原因：{h.reason}</span>:null}</div>)}
