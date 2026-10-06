@@ -63,10 +63,16 @@ export class DigitalAnalysisQuery{
   const attributedRows=rows.map(row=>({...row,assignmentHistory:assignments.filter(a=>a.taskId===row.taskId).map(a=>({...a,at:iso(a.at)!})),delegations:delegations.filter(d=>d.taskId===row.taskId).map(d=>({...d,from:iso(d.from)!,expiresAt:iso(d.expiresAt)!,revokedAt:iso(d.revokedAt)}))}));
   const people=[...new Map(attributedRows.filter(row=>row.assigneeId).map(row=>[row.assigneeId!,{id:row.assigneeId!,name:row.assigneeName}])).values()];
   const scopedRows=filters.assigneeId?attributedRows.filter(row=>row.assigneeId===filters.assigneeId):attributedRows;
-  // Original development reads allow source access through an already-visible source task.
-  // Order-associated tasks still require the original direct source permission.
-  const readableTaskSources=new Set((await db.query('SELECT DISTINCT source_id FROM digital_production_task_access WHERE task_id=ANY($1::uuid[]) AND source_id IS NOT NULL',[scopedRows.map(row=>row.taskId)])).rows.map(row=>row.source_id as string));
-  const sourceIds:string[]=[];for(const sourceId of new Set(scopedRows.map(row=>row.sourceId).filter((id):id is string=>Boolean(id))))if(readableTaskSources.has(sourceId)||await policy.allowed(actor,'source',sourceId,'technical'))sourceIds.push(sourceId);
+  // Match original development reads: any technically visible source task grants
+  // the read, including tasks outside the current analysis filters.
+  const candidateSources=[...new Set(scopedRows.map(row=>row.sourceId).filter((id):id is string=>Boolean(id)))];
+  const sourceTasks=(await db.query('SELECT task_id,source_id FROM digital_production_task_access WHERE source_id=ANY($1::uuid[])',[candidateSources])).rows;
+  const sourceIds:string[]=[];
+  for(const sourceId of candidateSources){
+    let readable=await policy.allowed(actor,'source',sourceId,'technical');
+    if(!readable)for(const task of sourceTasks)if(task.source_id===sourceId&&await policy.allowed(actor,'task',task.task_id,'technical')){readable=true;break;}
+    if(readable)sourceIds.push(sourceId);
+  }
   const rawRounds=(await db.query(`SELECT source_id AS "sourceId",round_number AS round,origin,categories,affected_nodes AS "affectedNodes",customer_comment AS "customerComment",internal_problem AS "internalProblem",explanation,published_at AS "publishedAt" FROM digital_development_rounds
     WHERE source_id=ANY($1::uuid[]) AND published_at>=$2 AND published_at<$3 ORDER BY published_at,source_id,round_number`,[sourceIds,window.from,window.to])).rows;
   const rounds=rawRounds.map(row=>({...row,publishedAt:iso(row.publishedAt)!}));

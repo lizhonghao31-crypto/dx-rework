@@ -3148,6 +3148,19 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const developmentTasks = all.rows.filter(row => row.orderId === null && row.sourceId === sourceId && row.round === 2);
     expect(developmentTasks.length).toBeGreaterThan(0);
     expect(developmentTasks.every(row => row.sourceRound === 2 && row.instructionVersion === null)).toBe(true);
+    // Source-task read authorization survives analysis date/role/assignee filters.
+    const sourceTask = developmentTasks[0]!;
+    const access = new DigitalProductionAccessService(database);
+    const delegation = await access.delegate(root, { resourceKind: 'task', resourceId: sourceTask.taskId,
+      delegateId: people.warehouse_receiver!.actorId, purpose: 'technical', expiresAt: new Date(Date.now() + 60000).toISOString() });
+    expect((await forms.read(people.warehouse_receiver!, sourceId, database, 2)).roundNumber).toBe(2);
+    const scoped = await analysis.list(people.warehouse_receiver!, { ...filters, assigneeId: people.warehouse_receiver!.actorId, role: 'warehouse_receiver' });
+    expect(scoped.rows.some(row => row.taskId === sourceTask.taskId)).toBe(false);
+    expect(scoped.rows.find(row => row.taskId === warehouseTask.taskId)?.canReadSourceRound).toBe(true);
+    await access.revoke(root, delegation.delegationId);
+    expect((await analysis.list(people.warehouse_receiver!, { ...filters, assigneeId: people.warehouse_receiver!.actorId, role: 'warehouse_receiver' })).rows.find(row => row.taskId === warehouseTask.taskId)?.canReadSourceRound).toBe(false);
+    await expect(forms.read(people.warehouse_receiver!, sourceId, database, 2)).rejects.toMatchObject({ statusCode: 404 });
+
     expect(all.rows.find(row => row.taskId === missingTaskId)).toMatchObject({ round: 5, sourceRound: null, instructionVersion: null });
     const revisions = await analysis.list(root, { ...filters, scope: 'revisions', origin: '客户新增要求' });
     expect(revisions.rows.some(row => row.taskId === warehouseTask.taskId)).toBe(true);
