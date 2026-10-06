@@ -9,6 +9,8 @@ import {ApplicationError} from '../platform/errors.js';
 import {buildWorkbook,type WorkbookCell} from '../reporting/xlsx-workbook.js';
 import {ANALYSIS_RULE_VERSION,taskAnalysis,summarizeAnalysis,type AnalysisTask} from './reporting-metrics.js';
 import {workspaceAnalysisRows,analysisWorkspaceOverview,WORKSPACE_ANALYSIS_RULE_VERSION} from './analysis-workspace-metrics.js';
+import {missingMainMaterials} from './development-route.js';
+import type {DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 const iso=(value:Date|string|null)=>value===null?null:new Date(value).toISOString();
 const range=(filters:DigitalAnalysisFilters)=>({from:new Date(`${filters.from}T00:00:00+08:00`).toISOString(),to:new Date(Date.parse(`${filters.to}T00:00:00+08:00`)+86400000).toISOString()});
 export class DigitalAnalysisQuery{
@@ -43,6 +45,10 @@ export class DigitalAnalysisQuery{
   const policy=new DigitalProductionAccessPolicy(db),authorized=[];
   for(const row of candidates)if(await policy.allowed(actor,'task',row.taskId,'technical'))authorized.push(row);
   const ids=authorized.map(row=>row.taskId);
+  const supplySources=[...new Set(authorized.filter(row=>row.nodeKey==='development_material_supply'&&!['completed','cancelled'].includes(row.state)).map(row=>row.sourceId))];
+  const supplyDocuments=supplySources.length?(await db.query('SELECT source_id,document FROM digital_development_documents WHERE source_id=ANY($1::uuid[])',[supplySources])).rows:[];
+  const supplyEvents=supplySources.length?(await db.query('SELECT source_id,material_id AS "materialId",action FROM digital_development_material_events WHERE source_id=ANY($1::uuid[])',[supplySources])).rows:[];
+  const missingSupplySources=new Set(supplyDocuments.filter(row=>missingMainMaterials(row.document as DevelopmentDocument,supplyEvents.filter(event=>event.source_id===row.source_id)).length).map(row=>row.source_id));
   const events=(await db.query(`SELECT event_id AS id,task_id AS "taskId",event_kind AS kind,occurred_at AS at,recorded_at AS "recordedAt",time_quality AS quality,actor_id AS "actorId",u.display_name AS "actorName",corrects_event_id AS "correctsId",payload
     FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id WHERE task_id=ANY($1::uuid[]) ORDER BY recorded_at,event_id`,[ids])).rows;
   const assignments=(await db.query(`SELECT a.entity_id AS "taskId",a.created_at AS at,u.display_name AS "actorName",previous_user.display_name AS "beforeName",next_user.display_name AS "afterName"
@@ -50,7 +56,7 @@ export class DigitalAnalysisQuery{
     WHERE a.action='digital_task_reassigned' AND a.entity_id=ANY($1::text[]) ORDER BY a.created_at,a.id`,[ids])).rows;
   const delegations=(await db.query(`SELECT d.task_id AS "taskId",u.display_name AS name,d.created_at AS "from",d.expires_at AS "expiresAt",d.revoked_at AS "revokedAt"
     FROM digital_production_delegations d JOIN app_users u ON u.id=d.delegate_id WHERE d.task_id=ANY($1::uuid[]) AND d.purpose='execute' ORDER BY d.created_at,d.delegation_id`,[ids])).rows;
-  const rows=authorized.map(row=>taskAnalysis({...row,createdAt:iso(row.createdAt)!,enteredAt:iso(row.enteredAt),completedAt:iso(row.completedAt),dueAt:iso(row.dueAt),sourceCreatedAt:iso(row.sourceCreatedAt),sourcePublishedAt:iso(row.sourcePublishedAt),events:events.filter(e=>e.taskId===row.taskId).map(e=>({...e,at:iso(e.at),recordedAt:iso(e.recordedAt)!}))} as AnalysisTask,asOf));
+  const rows=authorized.map(row=>taskAnalysis({...row,materialSupplyPending:row.nodeKey==='development_material_supply'&&missingSupplySources.has(row.sourceId),createdAt:iso(row.createdAt)!,enteredAt:iso(row.enteredAt),completedAt:iso(row.completedAt),dueAt:iso(row.dueAt),sourceCreatedAt:iso(row.sourceCreatedAt),sourcePublishedAt:iso(row.sourcePublishedAt),events:events.filter(e=>e.taskId===row.taskId).map(e=>({...e,at:iso(e.at),recordedAt:iso(e.recordedAt)!}))} as AnalysisTask,asOf));
   const attributedRows=rows.map(row=>({...row,assignmentHistory:assignments.filter(a=>a.taskId===row.taskId).map(a=>({...a,at:iso(a.at)!})),delegations:delegations.filter(d=>d.taskId===row.taskId).map(d=>({...d,from:iso(d.from)!,expiresAt:iso(d.expiresAt)!,revokedAt:iso(d.revokedAt)}))}));
   const people=[...new Map(attributedRows.filter(row=>row.assigneeId).map(row=>[row.assigneeId!,{id:row.assigneeId!,name:row.assigneeName}])).values()];
   const scopedRows=filters.assigneeId?attributedRows.filter(row=>row.assigneeId===filters.assigneeId):attributedRows;

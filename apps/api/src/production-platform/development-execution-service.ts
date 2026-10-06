@@ -11,6 +11,7 @@ import {ApplicationError} from "../platform/errors.js";
 import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound,isDigitalLeader,isDigitalTechnicalManager} from "./access-policy.js";
 import {DigitalDevelopmentService} from "./development-service.js";
 import {DigitalProductionTaskService} from "./task-service.js";
+import {missingMainMaterials} from "./development-route.js";
 const fail=(message:string):never=>{throw new ApplicationError("DEVELOPMENT_EXECUTION_CONFLICT",message,409);};
 export class DevelopmentExecutionService {
   constructor(private readonly database:Pool,private readonly enabled:boolean,private readonly patternOrders?:PatternRoomOrderService){}
@@ -99,7 +100,7 @@ export class DevelopmentExecutionService {
   async resubmit(actor:TrustedActorContext,sourceId:string,taskId:string,key:string){
     return this.command(actor,sourceId,"resubmit",key,{taskId},async db=>{
       await new DigitalProductionAccessPolicy(db).assert(actor,"task",taskId,"execute");const task=await this.task(db,sourceId,taskId);if(task.task_kind!=="development_material_supply"||task.state!=="ready")fail("当前不是补料事项");
-      const sheet=await this.forms().read(actor,sourceId,db);for(const material of sheet.document!.materials.filter(item=>item.requiredThisRound&&item.category!=="辅料"))if(!material.available&&!sheet.materialEvents.some(event=>event.materialId===material.materialId&&event.action==="到货"))fail("请先记录主配料实物到货");
+      const sheet=await this.forms().read(actor,sourceId,db);if(missingMainMaterials(sheet.document!,sheet.materialEvents).length)fail("请先记录主配料实物到货");
       const clerk=(await db.query("SELECT a.assignee_id FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id) WHERE a.source_id=$1 AND a.task_kind IN ('development_materials','development_material_recheck') ORDER BY t.created_at DESC LIMIT 1",[sourceId])).rows[0]?.assignee_id;
       const next=await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:taskId,kind:"development_material_recheck",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:Number((await db.query("SELECT GREATEST(COALESCE(max(t.occurrence),0)+1,$2::integer) AS n FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_material_recheck'",[sourceId,task.occurrence+1])).rows[0].n),assigneeId:clerk&&await new DigitalProductionAccessPolicy(db).activeRole(clerk,"development_clerk")?clerk:null});
       await this.fact(db,actor,sourceId,taskId,"补料复核",{nextTaskId:next.taskId});await this.tasks().setConditionWithClient(db,actor,taskId,"business_recorded",true,new Date().toISOString());await this.tasks().completeWithClient(db,actor,taskId,{note:"补料后提交复核"},`resubmit:${key}`);return next;

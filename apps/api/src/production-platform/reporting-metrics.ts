@@ -2,10 +2,11 @@ export type AnalysisTask = {
  taskId:string;sourceId:string|null;orderId:string|null;styleNo:string;customer:string;category:string;requiredRole:string;
  assigneeId:string|null;assigneeName:string|null;nodeKey:string;label:string;round:number;state:string;createdAt:string;
  enteredAt:string|null;completedAt:string|null;enteredQuality:string;completedQuality:string;dueAt:string|null;policyVersion:number|null;
- pendingConditions:string[]; sourceCreatedAt:string|null;sourcePublished:boolean;events:AnalysisEvent[];
+ pendingConditions:string[]; materialSupplyPending?:boolean;sourceCreatedAt:string|null;sourcePublished:boolean;events:AnalysisEvent[];
 };
 export type AnalysisEvent={id:string;kind:string;at:string|null;recordedAt:string;quality:string;actorId:string;actorName?:string;correctsId:string|null;payload:Record<string,unknown>};
-export const ANALYSIS_RULE_VERSION='digital-production-p16-v1';
+export const ANALYSIS_RULE_VERSION='digital-production-p16-v2';
+export const isMaterialWaiting=(row:Pick<AnalysisTask,'state'|'pendingConditions'|'materialSupplyPending'>)=>!['completed','cancelled'].includes(row.state)&&(row.pendingConditions.includes('materials_ready')||row.materialSupplyPending===true);
 const trusted=(quality:string)=>['现场登记','已核实'].includes(quality);
 export function intervalUnionSeconds(intervals:readonly [number,number][]) {
  const ordered=intervals.filter(([a,b])=>Number.isFinite(a)&&Number.isFinite(b)&&b>=a).sort((a,b)=>a[0]-b[0]);
@@ -50,7 +51,7 @@ export function summarizeAnalysis(rows:ReturnType<typeof taskAnalysis>[],from:st
  const sources=new Set(rows.filter(r=>r.sourceId&&r.sourcePublished&&r.sourceCreatedAt&&r.sourceCreatedAt>=from&&r.sourceCreatedAt<to).map(r=>r.sourceId));
  const periods=new Map<string,[number,number][]>();for(const row of rows){const key=row.sourceId??row.orderId??row.taskId;periods.set(key,[...(periods.get(key)??[]),...row.waitingIntervals]);}
  const measurable=rows.filter(r=>r.handlingSeconds!==null);
- return {newStyles:sources.size,materialPending:rows.filter(r=>r.pendingConditions.includes("materials_ready")).length,handoverPending:rows.filter(r=>r.pendingConditions.includes("handover_received")).length,tasks:rows.filter(r=>r.state!=='cancelled').length,cancelled:rows.filter(r=>r.state==='cancelled').length,completed:rows.filter(r=>r.state==='completed').length,slaDenominator:rows.filter(r=>r.slaIncluded).length,
+ return {newStyles:sources.size,materialPending:rows.filter(isMaterialWaiting).length,handoverPending:rows.filter(r=>r.pendingConditions.includes("handover_received")).length,tasks:rows.filter(r=>r.state!=='cancelled').length,cancelled:rows.filter(r=>r.state==='cancelled').length,completed:rows.filter(r=>r.state==='completed').length,slaDenominator:rows.filter(r=>r.slaIncluded).length,
   onTime:rows.filter(r=>r.onTime===true).length,measurable:measurable.length,handlingSeconds:measurable.reduce((n,r)=>n+r.handlingSeconds!,0),
   waitingSeconds:[...periods.values()].reduce((n,p)=>n+intervalUnionSeconds(p),0),unknownWaiting:rows.reduce((n,r)=>n+r.unknownWaiting,0),
   missingTime:rows.filter(r=>r.missingTime).length,unverifiedTime:rows.filter(r=>r.unverifiedTime).length,

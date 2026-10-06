@@ -1,7 +1,7 @@
 import type {DigitalAnalysisFilters,DigitalAnalysisOverview} from '@dx-rework/contracts/digital-production-analysis';
-import {summarizeAnalysis} from './reporting-metrics.js';
+import {summarizeAnalysis,isMaterialWaiting} from './reporting-metrics.js';
 import type {taskAnalysis} from './reporting-metrics.js';
-export const WORKSPACE_ANALYSIS_RULE_VERSION='digital-production-v2-analysis-1';
+export const WORKSPACE_ANALYSIS_RULE_VERSION='digital-production-v2-analysis-2';
 export type AnalysisWorkspaceRow=ReturnType<typeof taskAnalysis>&{sourcePublishedAt?:string|null};
 export type PublishedAnalysisRound={sourceId:string;round:number;origin:string;publishedAt:string};
 const inRange=(value:string|null|undefined,from:string,to:string)=>Boolean(value&&value>=from&&value<to);
@@ -28,7 +28,7 @@ export function workspaceAnalysisRows<Row extends AnalysisWorkspaceRow>(rows:Row
    case 'sla':return row.slaIncluded;
    case 'late':return row.slaIncluded&&row.onTime===false;
    case 'measurable':return row.handlingSeconds!==null;
-   case 'materials':return row.pendingConditions.includes('materials_ready');
+   case 'materials':return isMaterialWaiting(row);
    case 'handover':return row.pendingConditions.includes('handover_received');
    case 'other_wait':return row.state==='blocked'&&!row.pendingConditions.length;
    case 'waiting':return row.waitingSeconds>0;
@@ -45,5 +45,5 @@ export function analysisWorkspaceOverview(rows:AnalysisWorkspaceRow[],from:strin
  const shipping=new Set(completed.filter(row=>row.nodeKey==='development_shipping').map(row=>`${row.sourceId??row.orderId}:${row.round}`));
  const nodeKeys=[...new Set(rows.map(row=>row.nodeKey))];
  const bounds=[0,86400,3*86400,7*86400,Infinity],labels=['不足1天','1–3天','3–7天','7天及以上'];
- return {period:{newStyles:published.size,shippedRounds:shipping.size,completed:completed.length,slaDenominator:summary.slaDenominator,onTime:summary.onTime,measurable:summary.measurable,missingTime:summary.missingTime,unverifiedTime:summary.unverifiedTime,handlingSeconds:summary.handlingSeconds,waitingSeconds:summary.waitingSeconds,unknownWaiting:summary.unknownWaiting,cycleBuckets:labels.map((label,index)=>({key:(['under_day','one_three','three_seven','over_week'] as const)[index]!,label,count:completed.filter(row=>row.handlingSeconds!==null&&row.handlingSeconds>=bounds[index]!&&row.handlingSeconds<bounds[index+1]!).length}))},snapshot:{active:current.filter(row=>row.state==='ready').length,pending:current.filter(row=>row.state==='pending').length,unassigned:current.filter(row=>!row.assigneeId).length,blocked:current.filter(row=>row.state==='blocked').length,overdue:current.filter(row=>isAnalysisOverdue(row,asOf)).length,materialPending:current.filter(row=>row.pendingConditions.includes('materials_ready')).length,handoverPending:current.filter(row=>row.pendingConditions.includes('handover_received')).length,otherBlocked:current.filter(row=>row.state==='blocked'&&!row.pendingConditions.length).length},nodes:nodeKeys.map(key=>{const period=completed.filter(row=>row.nodeKey===key);return {key,label:rows.find(row=>row.nodeKey===key)!.label,overdue:current.filter(row=>row.nodeKey===key&&isAnalysisOverdue(row,asOf)).length,completed:period.length,slaDenominator:period.filter(row=>row.slaIncluded).length,onTime:period.filter(row=>row.onTime===true).length};})};
+ return {period:{newStyles:published.size,shippedRounds:shipping.size,completed:completed.length,slaDenominator:summary.slaDenominator,onTime:summary.onTime,measurable:summary.measurable,missingTime:summary.missingTime,unverifiedTime:summary.unverifiedTime,handlingSeconds:summary.handlingSeconds,waitingSeconds:summary.waitingSeconds,unknownWaiting:summary.unknownWaiting,cycleBuckets:labels.map((label,index)=>({key:(['under_day','one_three','three_seven','over_week'] as const)[index]!,label,count:completed.filter(row=>row.handlingSeconds!==null&&row.handlingSeconds>=bounds[index]!&&row.handlingSeconds<bounds[index+1]!).length}))},snapshot:{active:current.filter(row=>row.state==='ready').length,pending:current.filter(row=>row.state==='pending').length,unassigned:current.filter(row=>!row.assigneeId).length,blocked:current.filter(row=>row.state==='blocked').length,overdue:current.filter(row=>isAnalysisOverdue(row,asOf)).length,materialPending:current.filter(isMaterialWaiting).length,handoverPending:current.filter(row=>row.pendingConditions.includes('handover_received')).length,otherBlocked:current.filter(row=>row.state==='blocked'&&!row.pendingConditions.length).length},nodes:nodeKeys.map(key=>{const period=completed.filter(row=>row.nodeKey===key);return {key,label:rows.find(row=>row.nodeKey===key)!.label,overdue:current.filter(row=>row.nodeKey===key&&isAnalysisOverdue(row,asOf)).length,completed:period.length,slaDenominator:period.filter(row=>row.slaIncluded).length,onTime:period.filter(row=>row.onTime===true).length};})};
 }
