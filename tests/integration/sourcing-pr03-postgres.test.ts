@@ -3052,6 +3052,27 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(legacy.contractReturnedAt).toBe(first.contractReturnedAt);
     await expect(contractReturns.submit(rootActor(),id,[ids[concurrent.findIndex(result=>result.status==='rejected')+1]!],randomUUID())).rejects.toMatchObject({statusCode:409});
   });
+  it("presents an exactly 20 MB return as read-only without consuming another slot or resetting the clock", async () => {
+    const created=await service.createCase(merchandiserActor(),{gender:"男装",styleName:"回签容量边界",estimatedCutPieceSendDate:"2026-10-01",deliveryDate:"2026-10-20",
+      lineItems:[{styleNo:"RETURN-BYTE-LIMIT",color:"黑",quantity:20}],daxingUnitPrice:"8"},randomUUID());
+    const id=created.value.sourcingCaseId;
+    await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
+    await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"10"}]},randomUUID());
+    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    const file=randomUUID();
+    await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'20MB回签.pdf','application/pdf',$3,$4,$5,'ready',CURRENT_TIMESTAMP)`,[file,`return-bytes/${file}`,20*1024*1024,"a".repeat(64),merchandiserId]);
+    const returned=await contractReturns.submit(contractActor(),id,[file],randomUUID());
+    expect(returned).toMatchObject({canUpload:false,uploadedFileCount:1,uploadedTotalBytes:20*1024*1024});
+    const root={...rootActor(),authorizationCapability:"sourcing:view"};
+    expect(await contractReturns.get(root,id)).toMatchObject({canUpload:false,attachments:[{attachmentId:file}]});
+    const extra=await readyCuttingSheet(merchandiserId);
+    await expect(contractReturns.submit(rootActor(),id,[extra],randomUUID())).rejects.toMatchObject({statusCode:400});
+    await contractReturns.submit(contractActor(),id,[file],randomUUID());
+    expect((await contractReturns.get(root,id)).contractReturnedAt).toBe(returned.contractReturnedAt);
+    expect((await database.query("SELECT count(*)::int AS n FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[id])).rows[0].n).toBe(1);
+    expect((await database.query("SELECT entity_type FROM attachments WHERE attachment_id=$1",[extra])).rows[0].entity_type).toBeNull();
+  });
   it("allows the responsible and second merchandiser to append 1+1 without granting another merchandiser access", async () => {
     await ensureReturnTodoRecipient();
     const additionalId=randomUUID();

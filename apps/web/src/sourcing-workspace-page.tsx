@@ -1881,7 +1881,9 @@ function OrderDetailPage({
                     </button>
                     <span>可一次传两个，也可分次追加；累计最多 2 个 PDF/JPG/PNG，合计不超过 20 MB</span>
                   </> : null}
-                  {(contractReturn.uploadedFileCount ?? contractReturn.attachments.length)>=2 ? <span>已达累计文件上限，已保存附件及历史记录保留</span> : null}
+                  {(contractReturn.uploadedFileCount ?? contractReturn.attachments.length)>=2 ? <span>已达累计文件上限，已保存附件及历史记录保留</span>
+                    : (contractReturn.uploadedTotalBytes ?? contractReturn.attachments.reduce((total,file)=>total+file.sizeBytes,0))>=20*1024*1024
+                      ? <span>已达累计 20 MB 上限，已保存附件及历史记录保留</span> : null}
                   {contractReturn.attachments.length ? <div className="sourcing-contract-return-links" aria-label="回签附件，可左右滑动查看更多">
                     {contractReturn.attachments.map((file,index)=>
                       <a className="dx-button dx-button--secondary" key={file.attachmentId}

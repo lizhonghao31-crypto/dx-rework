@@ -131,7 +131,8 @@ export class SourcingContractReturnService {
       signedContractDocumentId:current?.signedContractDocumentId ?? null,
       signedContractVersion:current?.signedContractVersion ?? null,signedContractNumber:current?.signedContractNumber ?? null,
       canUpload: status.contractReturnMonitoring
-        && totals.count < 2 && await this.canUpload(actor,row.created_by,row.additional_merchandiser_user_id),
+        && totals.count < 2 && Number(totals.bytes) < MAX_UPLOAD_BYTES
+        && await this.canUpload(actor,row.created_by,row.additional_merchandiser_user_id),
       uploadedFileCount:totals.count,uploadedTotalBytes:Number(totals.bytes),
       attachments:currentFiles,history };
   }
