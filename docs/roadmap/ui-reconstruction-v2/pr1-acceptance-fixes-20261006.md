@@ -33,6 +33,12 @@
 - 已安装工具基线 42b2a947 原 verify-tool-refresh.py 对实际候选目录通过：238 条迁移。旧 acceptance-update-policy.mjs 校验安装版迁移历史与候选 compatible，pending=[]。Python 使用 -B，不在受保护目录生成 bytecode。
 - 受保护 scripts、infra、根 package/lock、迁移 SQL/manifest 相对 fde52 无差异。
 
+## Codex Review P1 修复
+
+- Review 对 caf31a06 指出：历史任务的开发单、工厂、大货、预算关联链接仍可进入原可写页面，丢失只读意图。采纳最小修复，四类关联办理链接仅在 handle 模式显示；read/correct 不进入其它办理页面。正常任务入口和明确的时间核实入口保留，未改旧模块内部权限或表单。
+- 新增 tests/acceptance/v2-pr1-related-links.mjs：真实本地登录，明确使用任务响应夹具，覆盖四类资源 × read/correct/handle 十二个 UI 契约场景；断言受限视图无关联链接、正常视图链接与返回上下文保留、只读无核实表单而明确核实视图保留表单。该矩阵不冒充真实业务 UAT。
+- 按最新授权，只修复、验证并推送本 P1；暂不合并、不开始后续模块、不触发第二次 Review。新 HEAD 由 PR 原 FULL 流水线验证，不复用旧 HEAD Gate 作为新 HEAD 证据。
+
 ## 证据边界
 
 GitHub Gate/Review、最终 HEAD、截图与合并 SHA 由最终 PR 评论补充，本文不预先宣称它们完成。未部署、未执行修复后线上复验、未执行完整岗位接力或移动端验收。旧 A4 板房任务元数据与仓库待办缺陷未在本 PR 修复；不宣称完整 UAT 通过。
