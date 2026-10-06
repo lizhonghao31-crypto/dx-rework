@@ -21,9 +21,10 @@ export function cockpitReturnPath(search: string): string | null {
   const parsed = JourneyReturnContextSchema.safeParse(Object.fromEntries(params));
   return parsed.success ? journeyReturnUrl(parsed.data) : null;
 }
-export function journeyRecordHref(url: string, context: CockpitContext): string {
+export function journeyRecordHref(url: string, context: CockpitContext, mode?: JourneyRecord["mode"]): string {
   if (!url.startsWith("/ui/") || url.includes("\\")) return "";
   const parsed = new URL(url, "https://local.invalid");
+  if (mode && parsed.pathname === "/ui/digital-production" && parsed.searchParams.has("task")) parsed.searchParams.set("taskView", mode);
   parsed.searchParams.set("returnTo", journeyReturnUrl(context));
   return parsed.pathname + parsed.search + parsed.hash;
 }

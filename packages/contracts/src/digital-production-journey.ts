@@ -47,7 +47,7 @@ export type JourneyNode = {
   round: number | null; occurrence: number | null; current: boolean;
   owner: { id: string; name: string | null } | null;
   operator: { id: string; name: string | null } | null;
-  assignmentHistory: Array<{ at: string; actorId: string; from: string | null; to: string | null }>;
+  assignmentHistory: Array<{ at: string; actorId: string; from: string | null; to: string | null; actorName?: string | null; fromName?: string | null; toName?: string | null }>;
   expectedAt: string | null; expectedKind: "sla" | "plan" | "unset" | "unavailable";
   /** Plan dates retain their original date-only precision; no midnight is invented. */
   expectedPrecision: "instant" | "date" | "missing" | "unavailable";

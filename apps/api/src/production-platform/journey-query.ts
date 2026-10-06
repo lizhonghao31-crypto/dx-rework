@@ -348,6 +348,19 @@ export class DigitalJourneyQuery {
       const node=baseNodes.find(node=>node.current&&node.key===linkedNode[link.domain]);
       if(node&&node.state!=="unavailable"&&!node.records.some(record=>record.domain===link.domain&&record.id===link.id&&record.lineId===link.lineId))node.records.push(link);
     }
+    // Resolve only people already referenced by authorized facts, never a staff directory.
+    const personIds = [...new Set(baseNodes.flatMap(node => [node.owner?.id, node.operator?.id,
+      ...node.assignmentHistory.flatMap(item => [item.actorId, item.from, item.to])]).filter((id): id is string => Boolean(id)))];
+    const names = new Map<string, string>((personIds.length ? (await db.query(
+      "SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])", [personIds])).rows : []).map(person => [person.id, person.display_name]));
+    for (const node of baseNodes) {
+      for (const person of [node.owner, node.operator]) if (person && !person.name) person.name = names.get(person.id) ?? null;
+      for (const item of node.assignmentHistory) {
+        item.actorName = names.get(item.actorId) ?? null;
+        item.fromName = item.from ? names.get(item.from) ?? null : null;
+        item.toName = item.to ? names.get(item.to) ?? null : null;
+      }
+    }
     // Mutated nodes remain in the shared base list; all seven stages are always returned.
     return {id:canonicalId,sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosenIdentity.design_style_no,temporaryStyleNo:chosenIdentity.temporary_style_no,customer:chosenIdentity.customer_code,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages:journeyStages(baseNodes),progress,hitReasons:[]};
   }

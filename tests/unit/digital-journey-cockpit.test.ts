@@ -4,10 +4,25 @@ import { describe, expect, it } from "vitest";
 import { JOURNEY_STAGES, JourneyReturnContextSchema, type JourneyNode, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 import { cockpitContext, cockpitQuery, cockpitReturnPath, journeyRecordHref, journeyTime, nodeStatus, orderStatus, stageTimes, journeyDocumentGroups } from "../../apps/web/src/digital-journey-cockpit-model.js";
 import { DigitalJourneyCockpit } from "../../apps/web/src/digital-journey-cockpit.js";
+import { canWriteDigitalTask, digitalTaskView } from "../../apps/web/src/digital-task-view.js";
+import type { DigitalTask } from "@dx-rework/contracts/digital-production-tasks";
 const id = "19b5331b-c76f-4b9a-8773-849e24a35ad1";
 const node = (key: string, patch: Partial<JourneyNode> = {}): JourneyNode => ({ key, instanceId: key, label: key, stage: "development", state: "active", round: 1, occurrence: 1, current: true, owner: { id, name: "真实负责人" }, operator: null, assignmentHistory: [], expectedAt: null, expectedKind: "unset", expectedPrecision: "missing", actualAt: null, actualQuality: "missing", enteredAt: null, sla: "not_started", completionResult: null, overdueSeconds: null, risks: [], blockers: [], records: [], inheritedFrom: null, countsInProgress: true, unavailableReason: null, ...patch });
 const order = (nodes: JourneyNode[]): OrderJourney => ({ id, sourceId: id, orderId: id, designStyleNo: "TEST-COCKPIT", temporaryStyleNo: null, customer: "TEST-PD", category: "上衣", designer: "测试设计师", styleName: null, merchandisers: [], orderNumbers: [], createdAt: "2026-10-01T00:00:00Z", deliveryDate: null, selectedRound: 1, adoptedRound: null, sourceVersion: 1, instructionVersion: null, lines: [], links: [], stages: JOURNEY_STAGES.map(stage => ({ ...stage, state: "active", nodes: nodes.filter(item => item.stage === stage.key) })), progress: { development: { completed: 0, applicable: 2 }, bulk: null }, hitReasons: [] });
 describe("formal Journey cockpit", () => {
+  it("preserves read intent on exact task links and blocks every write until explicit audit entry", () => {
+    const context = cockpitContext("?selected=" + id);
+    const url = new URL(journeyRecordHref("/ui/digital-production?task=" + id, context, "read"), "https://local.invalid");
+    expect(digitalTaskView(url.search)).toBe("read");
+    const task = {taskId: id, canCorrect: true} as DigitalTask;
+    for (const path of [`tasks/${id}/complete`, `tasks/${id}/time-corrections`, `lifecycle/source/${id}`]) expect(canWriteDigitalTask("read", task, path)).toBe(false);
+    expect(canWriteDigitalTask("correct", task, `tasks/${id}/time-corrections`)).toBe(true);
+    expect(canWriteDigitalTask("correct", {...task, canCorrect: false}, `tasks/${id}/time-corrections`)).toBe(false);
+    expect(canWriteDigitalTask("correct", task, `tasks/other/time-corrections`)).toBe(false);
+    expect(canWriteDigitalTask("correct", task, `tasks/${id}/complete`)).toBe(false);
+    expect(canWriteDigitalTask("handle", task, `tasks/${id}/complete`)).toBe(true);
+    expect(cockpitReturnPath(url.search)).toContain(id);
+  });
   it("round-trips filters, selection, exact round, expansion and focused node through original URLs", () => {
     const context = JourneyReturnContextSchema.parse({ search: "中文 PO", customer: "TEST-PD", kpi: "overdue", page: 2, selected: id, expanded: "development,preparation", focus: id, row: "historical-row", round: 2 });
     const href = journeyRecordHref("/ui/digital-production?development=" + id + "&round=2#material-" + id, context);
