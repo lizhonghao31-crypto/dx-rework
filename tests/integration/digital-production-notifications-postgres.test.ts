@@ -74,6 +74,24 @@ run("P04 in-app notifications PostgreSQL", () => {
   });
   afterAll(async () => { await app.close(); await database.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end(); });
   const drain=async(id=designer)=>{for(let i=0;i<100;i++){if(!(await notifications.claim(actor(id))).notification)return;}throw new Error("queue did not drain");};
+  it("counts only valid unseen reminders, excludes the current receipt and preserves business todos on acknowledge",async()=>{
+    await drain();const ids=[];
+    for(let i=0;i<3;i++)ids.push((await create(await order())).taskId);
+    const stale=(await create(await order())).taskId;await notifications.runOnce();await tasks.reassign(boss,stale,other,randomUUID());await notifications.runOnce();
+    const before=(await notifications.todos(actor())).filter(todo=>ids.includes(todo.todoId));expect(before).toHaveLength(3);
+    const first=await notifications.claim(actor(),true);expect(ids).toContain(first.notification!.route.entityId);expect(first.remainingCount).toBe(2);
+    expect((await notifications.current(actor(),first.notification!.eventId,true)).remainingCount).toBe(2);
+    expect(await notifications.current(actor(other),first.notification!.eventId)).toMatchObject({notification:null});
+    await notifications.acknowledge(actor(),first.notification!.eventId);await notifications.acknowledge(actor(),first.notification!.eventId);
+    expect((await notifications.todos(actor())).filter(todo=>ids.includes(todo.todoId))).toEqual(before);
+    const second=await notifications.claim(actor(),true);expect(second.notification!.eventId).not.toBe(first.notification!.eventId);expect(second.remainingCount).toBe(1);
+    await notifications.acknowledge(actor(),second.notification!.eventId);const third=await notifications.claim(actor(),true);expect(third.remainingCount).toBe(0);
+    await notifications.acknowledge(actor(),third.notification!.eventId);expect(await notifications.claim(actor(),true)).toEqual({notification:null,remainingCount:0});
+    expect((await notifications.todos(actor())).filter(todo=>ids.includes(todo.todoId))).toHaveLength(3);
+    await condition(ids[0]!,"business_recorded");await tasks.complete(boss,ids[0]!,{note:"TEST actual completion"},randomUUID());
+    expect((await notifications.todos(actor())).filter(todo=>ids.includes(todo.todoId))).toHaveLength(2);
+    await drain(other); // Consume this test's reassignment receipt before later foreign-user scenarios.
+  });
   it("atomically claims across tabs, persists across refresh, and acknowledgement never finishes a task or its SLA",async()=>{
     const resource=await order(),{taskId}=await create(resource);
     await notifications.runOnce();await notifications.runOnce();
@@ -124,7 +142,7 @@ run("P04 in-app notifications PostgreSQL", () => {
     await drain();const {taskId}=await create(await order());await notifications.runOnce();
     await database.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=$1",[designer]);
     expect(await notifications.todos(actor())).toEqual([]);
-    expect((await notifications.claim(actor())).notification).toBeNull();
+    expect(await notifications.claim(actor(),true)).toEqual({notification:null,remainingCount:0});
     expect((await notifications.todos(actor(other))).some(t=>t.todoId===taskId)).toBe(false);
     await database.query("UPDATE user_role_assignments SET revoked_at=NULL WHERE user_id=$1",[designer]);
   });
@@ -167,6 +185,9 @@ run("P04 in-app notifications PostgreSQL", () => {
     const response=await app.inject({method:"POST",url:"/digital-production/notifications/claim",headers:{cookie:`dx_rework_session=${designer}`}});
     expect(response.statusCode).toBe(200);expect(response.headers["cache-control"]).toBe("no-store");expect(response.headers["x-dx-rework-actor-id"]).toBe(designer);
     const eventId=response.json().notification.eventId;
+    expect(Object.keys(response.json())).toEqual(['notification']); // Old strict clients keep the original response shape.
+    const counted=await app.inject({method:'GET',url:`/digital-production/notifications/${eventId}?remaining=1`,headers:{cookie:`dx_rework_session=${designer}`}});
+    expect(counted.statusCode).toBe(200);expect(counted.json()).toMatchObject({notification:{eventId},remainingCount:0});
     await notifications.acknowledge(actor(other),eventId);
     expect((await database.query("SELECT acknowledged_at FROM digital_production_notification_receipts WHERE event_id=$1 AND recipient_id=$2",[eventId,designer])).rows[0].acknowledged_at).toBeNull();
   });

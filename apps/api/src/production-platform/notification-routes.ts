@@ -12,7 +12,7 @@ export function registerDigitalNotificationRoutes(app:FastifyInstance,dependenci
     return trusted;
   };
   const id=(request:FastifyRequest)=>{const result=z.string().uuid().safeParse((request.params as Record<string,unknown>).eventId);if(!result.success)throw new ApplicationError("VALIDATION_ERROR","提醒标识无效",400);return result.data;};
-  app.post("/digital-production/notifications/claim",async(request,reply)=>{const trusted=await actor(request);reply.header("x-dx-rework-actor-id",trusted.actorId);return service.claim(trusted);});
-  app.get("/digital-production/notifications/:eventId",async(request,reply)=>{const trusted=await actor(request);reply.header("x-dx-rework-actor-id",trusted.actorId);return service.current(trusted,id(request));});
+  app.post("/digital-production/notifications/claim",async(request,reply)=>{const trusted=await actor(request);reply.header("x-dx-rework-actor-id",trusted.actorId);return service.claim(trusted,(request.query as {remaining?:string}).remaining==="1");});
+  app.get("/digital-production/notifications/:eventId",async(request,reply)=>{const trusted=await actor(request);reply.header("x-dx-rework-actor-id",trusted.actorId);return service.current(trusted,id(request),(request.query as {remaining?:string}).remaining==="1");});
   app.post("/digital-production/notifications/:eventId/acknowledge",async request=>service.acknowledge(await actor(request),id(request)));
 }
