@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@dx-rework/ui";
 import { NavigationIcon } from "./navigation-icons.js";
 import "./document-editor.css";
@@ -15,11 +15,13 @@ export function DocumentErrors({ issues, error }: { issues: DocumentIssue[]; err
   if (!issues.length && !error) return null;
   return <div className="dx-doc-errors" role="alert"><strong>{error || "请核对以下内容"}</strong>{issues.length > 0 && <ul>{issues.map((issue, index) => <li key={`${issue.id}-${index}`}><button type="button" onClick={() => { const target = document.getElementById(issue.id); const details = target?.closest("details"); if (details) details.open = true; target?.scrollIntoView({ block: "center" }); target?.focus(); }}>{issue.label}：{issue.message}</button></li>)}</ul>}</div>;
 }
-export function DocumentField({ id, label, value, onValue, readonly, disabled, numeric, multiline, maxLength = 100, type = "text", column, issue, onBlur }: {
+export function DocumentField({ id, label, value, onValue, readonly, disabled, numeric, multiline, maxLength = 100, type = "text", column, issue, onBlur, savedValue, savedRevision }: {
   id: string; label: string; value: string; onValue?: (value: string) => void; readonly?: boolean; disabled?: boolean;
   numeric?: boolean; multiline?: boolean; maxLength?: number; type?: string; column?: string; issue?: string | undefined; onBlur?: (() => void) | undefined;
+  savedValue?: string; savedRevision?: number;
 }) {
   const entered = useRef(value);
+  useEffect(() => { if (savedRevision !== undefined && savedValue !== undefined) entered.current = savedValue; }, [savedRevision, savedValue]);
   const shared = { id, "aria-label": label, "aria-invalid": Boolean(issue), "aria-describedby": issue ? `${id}-error` : undefined, disabled, value, maxLength,
     onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onValue?.(event.target.value),
     onFocus: () => { entered.current = value; }, onBlur,

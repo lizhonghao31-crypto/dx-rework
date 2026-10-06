@@ -46,3 +46,86 @@
 @media print {
  .instruction-editor[data-status="draft"]::before {content:"草稿 · 未发布，不可用于生产";position:fixed;top:40%;left:12%;z-index:10;font-size:28pt;color:#b00;opacity:.65;transform:rotate(-20deg);}
 }
+
+@media screen {
+ .instruction-paper,.instruction-print-warning{display:none}
+ .dx-doc-instruction .instruction-screen{min-width:0}
+ .dx-doc-instruction .dx-doc-status{font-size:14px;line-height:20px}
+ .dx-doc-instruction .instruction-summary{display:grid;grid-template-columns:120px minmax(0,1fr);gap:16px;align-items:center;margin:0 0 16px}
+ .dx-doc-instruction .instruction-summary-image{width:120px;height:120px;display:grid;place-items:center;border-radius:6px;background:#f0f6ff;color:#64748b;overflow:hidden}
+ .dx-doc-instruction .instruction-summary-image img{display:block;width:120px;height:120px;object-fit:contain}
+ .dx-doc-instruction .instruction-summary-details{min-width:0}
+ .dx-doc-instruction .instruction-summary h2{font-size:20px;line-height:28px;margin:0 0 12px;overflow-wrap:anywhere}
+ .dx-doc-instruction dl{margin:0;display:grid;gap:8px}
+ .dx-doc-instruction dl>div{display:flex;gap:8px;min-width:0;align-items:baseline}
+ .dx-doc-instruction dt{color:#64748b;flex-shrink:0}
+ .dx-doc-instruction dd{margin:0;min-width:0;overflow-wrap:anywhere}
+ .dx-doc-instruction .instruction-summary-details dl{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+ .dx-doc-instruction .instruction-po-summary{grid-column:1/-1;min-width:0}
+ .dx-doc-instruction .instruction-po-summary h3{font-size:14px;line-height:20px;margin:0 0 8px}
+ .dx-doc-instruction .instruction-po-summary p{margin:0 0 8px;color:#64748b}
+ .dx-doc-instruction .instruction-po-summary>div{display:flex;justify-content:space-between;gap:12px;border-top:1px solid #edf2f8;padding:6px 0}
+ .dx-doc-instruction .instruction-po-summary>div>span{overflow-wrap:anywhere;min-width:0}
+ .dx-doc-instruction .instruction-po-summary>div>strong{white-space:nowrap;font-weight:500}
+ .dx-doc-instruction .instruction-po-summary button{background:none;border:0;color:#0066ff;cursor:pointer;font:inherit;padding:4px 0}
+ .dx-doc-instruction .instruction-tabs{display:flex;overflow-x:auto;border-bottom:1px solid #dce5f0;min-height:44px;margin-bottom:16px;gap:0}
+ .dx-doc-instruction .instruction-tabs button{flex:1 0 auto;min-height:44px;padding:10px 18px;border:0;border-bottom:2px solid transparent;background:white;font:inherit;color:#64748b;cursor:pointer;white-space:nowrap}
+ .dx-doc-instruction .instruction-tabs button[aria-selected=true]{color:#0066ff;border-bottom-color:#0066ff;font-weight:600}
+ .dx-doc-instruction .instruction-document-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
+ .dx-doc-instruction .instruction-document-main{min-width:0;margin:0}
+ .dx-doc-instruction .instruction-document-side{display:grid;gap:16px;min-width:0;align-content:start}
+ .dx-doc-instruction .instruction-document-main .dx-doc-section+.dx-doc-section{margin-top:16px}
+ .dx-doc-instruction .instruction-screen label{display:flex;flex-direction:column;gap:4px;margin:8px 0;color:#64748b;font-size:14px;font-weight:400;min-width:0}
+ .dx-doc-instruction .instruction-screen select,.dx-doc-instruction .instruction-date-request input,.dx-doc-instruction .instruction-date-request textarea{width:100%;max-width:100%;min-width:0;box-sizing:border-box;border:1px solid #dce5f0;border-radius:4px;min-height:36px;padding:7px 9px;background:white;color:#1d2e49;font:inherit}
+ .dx-doc-instruction .instruction-date-request textarea{min-height:80px;resize:vertical}
+ .dx-doc-instruction .instruction-screen select:focus-visible{outline:2px solid #0066ff;outline-offset:2px}
+ .dx-doc-instruction .instruction-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 16px}
+ .dx-doc-instruction .instruction-note,.dx-doc-instruction .instruction-empty{font-size:12px;line-height:18px;color:#64748b;white-space:pre-wrap;margin:8px 0}
+ .dx-doc-instruction .instruction-notice{border:1px solid #efd4a2;border-radius:8px;background:#fffaf0;color:#845811;padding:12px 16px;margin:0 0 16px}
+ .dx-doc-instruction table{border-collapse:separate;border-spacing:0;margin:4px 0;width:100%;font-size:14px;line-height:20px;color:#1d2e49}
+ .dx-doc-instruction th,.dx-doc-instruction td{box-sizing:border-box;border:0;border-right:1px solid #dce5f0;border-bottom:1px solid #dce5f0;padding:4px 6px;text-align:left;vertical-align:top;min-width:120px;background:white}
+ .dx-doc-instruction th{font-weight:600;min-height:36px;height:36px;background:#f5f8fc;vertical-align:middle;border-top:1px solid #dce5f0;position:sticky;top:0;z-index:2}
+ .dx-doc-instruction td{height:40px}
+ .dx-doc-instruction tr>:first-child{border-left:1px solid #dce5f0;position:sticky;left:0;z-index:1;min-width:160px;max-width:200px}
+ .dx-doc-instruction thead tr>:first-child{z-index:3}
+ .dx-doc-instruction th small{display:block;font-size:12px;font-weight:400;color:#64748b;white-space:normal;overflow-wrap:anywhere}
+ .dx-doc-instruction table .dx-doc-field input{height:30px;min-height:30px;padding:4px 6px;border-radius:3px;font-size:14px;line-height:20px}
+ .dx-doc-instruction table .dx-doc-field textarea{min-height:60px;padding:4px 6px}
+ .dx-doc-instruction table .dx-doc-readonly{min-height:30px;padding:4px 0}
+ .dx-doc-instruction .instruction-quantity-table td{height:38px;vertical-align:middle;overflow-wrap:anywhere}
+ .dx-doc-instruction .instruction-quantity-table tr>:nth-child(2){min-width:140px}
+ .dx-doc-instruction .instruction-quantity-table tr>:nth-child(3),.dx-doc-instruction .instruction-quantity-table tr>:nth-child(4){min-width:100px}
+ .dx-doc-instruction .instruction-quantity-table .instruction-number{min-width:72px;text-align:right;white-space:nowrap}
+ .dx-doc-instruction .instruction-quantity-table tr>:last-child{min-width:90px}
+ .dx-doc-instruction .instruction-fabric-table tr>:first-child{min-width:160px}
+ .dx-doc-instruction .instruction-fabric-table td:has(textarea),.dx-doc-instruction .instruction-accessory-table td:has(textarea){min-width:180px}
+ .dx-doc-instruction .instruction-measurement-table tr>:nth-child(2){min-width:90px}
+ .dx-doc-instruction .instruction-measurement-table tr>:nth-child(3){min-width:180px}
+ .dx-doc-instruction .instruction-measurement-table tr>:nth-child(n+4){min-width:80px}
+ .dx-doc-instruction .instruction-document-images{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+ .dx-doc-instruction .instruction-document-images figure{margin:0;min-width:0;border:1px solid #dce5f0;border-radius:6px;padding:12px}
+ .dx-doc-instruction .instruction-document-images h3{font-size:14px;margin:0 0 8px}
+ .dx-doc-instruction .instruction-document-images img,.dx-doc-instruction .instruction-image-pending{display:block;width:100%;height:220px;object-fit:contain;background:#f5f8fc}
+ .dx-doc-instruction .instruction-image-pending{display:grid;place-items:center;color:#64748b}
+ .dx-doc-instruction .instruction-upload{display:grid;grid-template-columns:minmax(0,150px) minmax(0,1fr);gap:8px 16px;align-items:start;margin-top:16px}
+ .dx-doc-instruction .instruction-upload>p{grid-column:1/-1}
+ .dx-doc-instruction .instruction-upload input{max-width:100%;min-height:36px;font:inherit}
+ .dx-doc-instruction .instruction-file-list{padding:0;list-style:none;margin:0 0 8px;max-height:240px;overflow:auto}
+ .dx-doc-instruction .instruction-file-list li{padding:6px 0;border-bottom:1px solid #edf2f8;overflow-wrap:anywhere}
+ .dx-doc-instruction .instruction-file-list a{color:#0066ff;text-decoration:none}
+ .dx-doc-instruction .instruction-date-history{padding-top:12px;margin-top:12px;border-top:1px solid #dce5f0;overflow-wrap:anywhere}
+ .dx-doc-instruction .instruction-date-history p{white-space:pre-wrap;margin:0 0 6px}
+ .dx-doc-instruction .instruction-date-actions{display:flex;gap:8px;margin-top:8px}
+ .dx-doc-instruction .instruction-related-tabs{display:flex;gap:8px;overflow:auto}
+ .dx-doc-instruction .instruction-related-tabs button{display:flex;flex:1 0 90px;flex-direction:column;gap:4px;align-items:flex-start;padding:10px;border:1px solid #dce5f0;border-radius:4px;background:white;color:#1d2e49;font:inherit;cursor:pointer}
+ .dx-doc-instruction .instruction-related-tabs small{color:#64748b;font-size:12px;font-weight:400}
+ @container(min-width:1120px){.dx-doc-instruction .instruction-document-layout{grid-template-columns:minmax(0,1fr) 340px}.dx-doc-instruction .instruction-summary{grid-template-columns:120px minmax(0,1fr) 260px}.dx-doc-instruction .instruction-po-summary{grid-column:auto;border-left:1px solid #dce5f0;padding-left:16px}}
+ @container(max-width:700px){.dx-doc-instruction .instruction-summary-details dl{grid-template-columns:repeat(2,minmax(0,1fr))}.dx-doc-instruction .instruction-document-images{grid-template-columns:minmax(0,1fr)}}
+ @container(max-width:500px){.dx-doc-instruction .instruction-summary{grid-template-columns:minmax(0,1fr)}.dx-doc-instruction .instruction-form-grid,.dx-doc-instruction .instruction-upload{grid-template-columns:minmax(0,1fr)}.dx-doc-instruction .instruction-summary-details dl{grid-template-columns:minmax(0,1fr)}}
+ @media(max-width:800px){.dx-doc-instruction .instruction-screen select,.dx-doc-instruction .instruction-date-request input,.dx-doc-instruction .instruction-date-request textarea,.dx-doc-instruction .instruction-tabs button{min-height:44px;font-size:16px}.dx-doc-instruction table .dx-doc-field input{height:44px;min-height:44px;font-size:16px}.dx-doc-instruction .instruction-upload input{min-height:44px;font-size:16px}}
+}
+@media print {
+ .dx-doc-instruction .instruction-screen{display:none!important}
+ .dx-doc-instruction .instruction-paper{display:block}
+ .dx-doc-instruction .instruction-print-warning{display:block;visibility:visible;color:black;background:white;font-size:14pt}
+}
