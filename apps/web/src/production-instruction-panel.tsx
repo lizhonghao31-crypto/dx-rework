@@ -6,7 +6,7 @@ import { digitalRequest } from "./digital-production-api.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { sha256Hex } from "./attachment-upload.js";
 import { useDigitalDetailNavigationGuard } from "./use-digital-detail-navigation-guard.js";
-import { confirmInApp } from "./system-dialog.js";
+import { alertInApp, confirmInApp } from "./system-dialog.js";
 import { DocumentToolbar, DocumentField, DocumentSection, DocumentAddRow } from "./document-editor.js";
 import { ProductionInstructionPrint } from "./production-instruction-print.js";
 import { instructionTabs, instructionLabels, instructionAccessoryLabels, instructionIssues, type InstructionTab } from "./production-instruction-validation.js";
@@ -38,7 +38,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose }:
     return () => window.cancelAnimationFrame(frame);
   }, [focusId, tab, doc]);
   useEffect(() => {
-    const beforePrint = () => { if (!sheet?.isPublishedSnapshot || dirty || busy) window.alert("请先保存当前修改，并打开已发布版本后打印。"); };
+    const beforePrint = () => { if (!sheet?.isPublishedSnapshot || dirty || busy) void alertInApp("请先保存当前修改，并打开已发布版本后打印。"); };
     window.addEventListener("beforeprint", beforePrint); return () => window.removeEventListener("beforeprint", beforePrint);
   }, [sheet, dirty, busy]);
   const change = (patch: Partial<InstructionDocument>) => { generation.current++; setDoc(current => current ? { ...current, ...patch } : current); setDirty(true); if (!saveBlocked) setError(""); };
