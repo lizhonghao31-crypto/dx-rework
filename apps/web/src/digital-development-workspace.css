@@ -119,7 +119,10 @@
 .pattern-golden .pattern-board-filters input{width:170px;min-height:30px;padding:3px 6px;font-size:12px}
 .pattern-golden .pattern-board-filters select{max-width:135px;min-width:0;min-height:30px;font-size:12px}
 .pattern-golden .pattern-board-filters>p{display:none}
-.pattern-golden .pattern-board-columns{grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.pattern-golden .pattern-board-columns{grid-template-columns:repeat(7,minmax(150px,1fr));gap:6px}
+.pattern-golden .pattern-board-scroll{overflow-x:auto;overflow-y:hidden}
+.pattern-golden .pattern-board-scroll:focus-visible{outline:2px solid #0873ee;outline-offset:2px}
+.pattern-golden .pattern-board-scroll-hint{display:none;margin:6px 0 0;color:#6680a7;font-size:12px}
 .pattern-golden .pattern-board-columns.is-filtered{grid-template-columns:minmax(0,1fr)}
 .pattern-golden .pattern-board-column{--lane-color:#0873ee;--lane-bg:#eaf4ff;padding:5px;background:#f5faff;border:1px solid #e0edfc;border-radius:5px;display:flex;flex-direction:column;height:303px}
 .pattern-golden .lane-pattern{--lane-color:#176bf0;--lane-bg:#e8f1ff}
@@ -172,6 +175,11 @@
 .dx-production-ui .pattern-golden .pattern-detail-operation>.dx-surface{box-shadow:none;background:#fff;border:0;border-radius:0;padding:0}
 .pattern-golden .pattern-detail-operation>.dx-surface>details>summary,.pattern-golden .pattern-detail-operation .digital-task-identity h2,.pattern-golden .pattern-detail-operation .digital-task-identity>p:first-of-type{display:none}
 .pattern-golden .pattern-detail-operation .digital-task-identity p{font-size:12px;color:#6680a7}
+@media(max-width:1600px){
+  .dx-production-ui .pattern-golden .pattern-task-list{height:auto;min-height:450px}
+  .pattern-golden .pattern-board-columns:not(.is-filtered){grid-template-columns:repeat(7,minmax(180px,1fr))}
+  .pattern-golden .pattern-board-scroll-hint{display:block}
+}
 @media(max-width:1350px){
   .dx-production-ui .development-golden .dx-production-filters{grid-template-columns:1.3fr 1fr 1fr 1fr auto}
   .development-golden .development-date-field{grid-column:1/4;grid-row:2}
