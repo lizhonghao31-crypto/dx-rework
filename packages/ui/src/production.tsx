@@ -12,8 +12,8 @@ export function PageHeader({ title, description, actions, className = "" }: { ti
 export function FilterBar({ as = "form", className = "", ...props }: ComponentProps<"form"> & { as?: "form" | "div" }) {
   return createElement(as, { ...props, className: `dx-production-filters ${className}` });
 }
-export function KpiCard({ label, value, detail, tone = "info", onClick, selected, className = "" }: { label: ReactNode; value: ReactNode; detail?: ReactNode; tone?: Tone; onClick?: () => void; selected?: boolean; className?: string }) {
-  const copy = <><span>{label}</span><strong>{value}</strong><small>{detail}</small></>;
+export function KpiCard({ label, value, detail, icon,tone = "info", onClick, selected, className = "" }: { label: ReactNode; value: ReactNode; detail?: ReactNode;icon?:ReactNode;tone?: Tone; onClick?: () => void; selected?: boolean; className?: string }) {
+  const copy = <>{icon&&<i className="dx-production-kpi-icon" aria-hidden="true">{icon}</i>}<span>{label}</span><strong>{value}</strong><small>{detail}</small></>;
   return onClick ? <button type="button" aria-pressed={selected} onClick={onClick} className={`dx-production-kpi is-${tone} ${className}`}>{copy}</button> : <article className={`dx-production-kpi is-${tone} ${className}`}>{copy}</article>;
 }
 /** Existing JSX tables can adopt the public frame without moving columns or controls. */

@@ -46,10 +46,10 @@ export function navigationIconForRoute(route: string): IconName | undefined {
   return NAVIGATION_ROUTE_ICONS[path];
 }
 
-export function NavigationIcon({ route, group, size = "secondary" }: {
-  route?: string; group?: string; size?: "primary" | "secondary" | "title";
+export function NavigationIcon({ route, group, name:explicitName, size = "secondary" }: {
+  route?: string; group?: string; name?:IconName;size?: "primary" | "secondary" | "title";
 }) {
-  const name = (route ? navigationIconForRoute(route) : undefined) ?? (group ? NAVIGATION_GROUP_ICONS[group] : undefined);
+  const name = explicitName??(route ? navigationIconForRoute(route) : undefined) ?? (group ? NAVIGATION_GROUP_ICONS[group] : undefined);
   if (!name) return null;
   return <svg className={`dx-navigation-icon dx-navigation-icon--${size}`} viewBox="0 0 24 24"
     fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"

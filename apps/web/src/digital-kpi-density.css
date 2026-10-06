@@ -1,0 +1,88 @@
+/* V2 workspace opt-in only; original mature editors keep their internal styles. */
+.dx-production-ui .dx-production-refined:is(.development-golden,.pattern-golden,.analysis-workspace,.production-display,.digital-journey-cockpit) .dx-production-kpi{
+ height:auto;min-height:76px;padding:9px 12px;gap:2px;align-content:center;overflow-wrap:anywhere;position:relative;
+}
+.dx-production-ui .dx-production-refined:is(.development-golden,.pattern-golden,.analysis-workspace,.production-display,.digital-journey-cockpit) .dx-production-kpi strong{font-size:23px;line-height:1.2;min-width:0}
+.dx-production-ui .dx-production-refined:is(.development-golden,.pattern-golden,.analysis-workspace,.production-display,.digital-journey-cockpit) .dx-production-kpi span,
+.dx-production-ui .dx-production-refined:is(.development-golden,.pattern-golden,.analysis-workspace,.production-display,.digital-journey-cockpit) .dx-production-kpi small{font-size:12px;line-height:1.4;white-space:normal}
+.dx-production-ui .dx-production-refined:is(.development-golden,.pattern-golden,.analysis-workspace,.production-display,.digital-journey-cockpit) .dx-production-kpi:has(.dx-production-kpi-icon){padding-left:12px;padding-right:10px}
+.dx-production-ui .dx-production-refined:is(.development-golden,.pattern-golden,.analysis-workspace,.production-display,.digital-journey-cockpit) .dx-production-kpi:has(.dx-production-kpi-icon)>span,
+.dx-production-ui .dx-production-refined:is(.development-golden,.pattern-golden,.analysis-workspace,.production-display,.digital-journey-cockpit) .dx-production-kpi:has(.dx-production-kpi-icon)>strong{padding-left:40px}
+.dx-production-ui .dx-production-refined:is(.development-golden,.pattern-golden,.analysis-workspace,.production-display,.digital-journey-cockpit) .dx-production-kpi-icon{position:absolute;left:10px;top:calc(50% - 16px);width:32px;height:32px;border-radius:50%;display:grid;place-items:center}
+.dx-production-ui .dx-production-refined:is(.analysis-workspace,.production-display,.digital-journey-cockpit) .dx-production-kpi-icon{background:#e8f4ff;color:#0065ff}
+.dx-production-ui .dx-production-refined:is(.development-golden,.pattern-golden,.analysis-workspace,.production-display,.digital-journey-cockpit) .dx-production-kpi-icon svg{width:20px;height:20px}
+.dx-production-ui .digital-journey-cockpit .journey-order-metrics{height:auto;padding:10px;gap:8px}
+.dx-production-ui .digital-journey-cockpit .journey-metric{min-height:74px;padding:8px;gap:8px;align-items:center}
+.dx-production-ui .digital-journey-cockpit .journey-metric-icon{width:32px;height:32px}
+.dx-production-ui .digital-journey-cockpit .journey-metric-icon svg{width:20px;height:20px}
+.dx-production-ui .digital-journey-cockpit .journey-metric strong{font-size:21px;line-height:1.3;white-space:normal;overflow-wrap:anywhere}
+.dx-production-ui .digital-journey-cockpit .journey-metric>div>span,.dx-production-ui .digital-journey-cockpit .journey-metric small,.dx-production-ui .digital-journey-cockpit .journey-metric .journey-text-action{font-size:12px;line-height:1.4}
+.dx-production-ui .digital-journey-cockpit .journey-metric.is-text strong{font-size:16px}
+.pattern-golden .pattern-board-column h3 i svg{width:100%;height:100%;max-width:18px;max-height:18px}
+.digital-journey-cockpit .journey-global-search>.dx-navigation-icon{width:20px;height:20px;flex-shrink:0;color:#718db9}
+.digital-journey-cockpit .journey-stage-number svg{width:20px;height:20px}
+.digital-journey-cockpit .journey-document>.dx-navigation-icon{width:12px;height:14px}
+.digital-journey-cockpit .journey-order-heading>div,.development-golden .development-selected-heading>div,.production-workspace-page .workspace-order-heading>div{min-width:0;overflow-wrap:anywhere}
+.production-display .display-detail-grid dd,.production-display .display-order-meta,.production-workspace-page .workspace-node-facts span{overflow-wrap:anywhere;min-width:0}
+@media(min-width:801px) and (max-width:1350px){
+ .dx-production-ui .digital-journey-cockpit .journey-metric{gap:5px;padding:7px 5px}
+ .dx-production-ui .digital-journey-cockpit .journey-metric-icon{width:26px;height:26px}
+ .dx-production-ui .digital-journey-cockpit .journey-metric strong{font-size:18px}
+ .dx-production-ui .digital-journey-cockpit .journey-metric.is-text strong{font-size:13px}
+ .dx-production-ui .pattern-golden.dx-production-refined .pattern-lane-kpi:has(.dx-production-kpi-icon){padding-left:9px;padding-right:6px}
+ .dx-production-ui .pattern-golden.dx-production-refined .pattern-lane-kpi:has(.dx-production-kpi-icon)>span,
+ .dx-production-ui .pattern-golden.dx-production-refined .pattern-lane-kpi:has(.dx-production-kpi-icon)>strong{padding-left:32px}
+ .dx-production-ui .pattern-golden.dx-production-refined .dx-production-kpi-icon{left:5px;width:27px;height:27px}
+}
+@media(max-width:800px){
+ .dx-production-ui .dx-production-refined:is(.development-golden,.pattern-golden,.analysis-workspace,.production-display,.digital-journey-cockpit,.production-workspace-page){font-size:16px;grid-template-columns:minmax(0,1fr);max-width:100%}
+ .digital-journey-cockpit .journey-detail{grid-template-columns:minmax(0,1fr);max-width:100%}
+ .dx-production-ui .digital-journey-cockpit .journey-global-search,.dx-production-ui .development-golden .development-global-search{margin:0;padding:6px 8px;height:auto;min-height:50px}
+ .development-golden .development-global-search input{flex:1;min-width:0;width:auto}
+ .dx-production-ui .dx-production-refined:is(.development-golden,.pattern-golden,.analysis-workspace,.production-display,.digital-journey-cockpit) .dx-production-kpi span,
+ .dx-production-ui .dx-production-refined:is(.development-golden,.pattern-golden,.analysis-workspace,.production-display,.digital-journey-cockpit) .dx-production-kpi small{font-size:16px}
+ .dx-production-ui .digital-journey-cockpit .journey-metric>div>span,.dx-production-ui .digital-journey-cockpit .journey-metric small,.dx-production-ui .digital-journey-cockpit .journey-metric .journey-text-action{font-size:16px}
+ .dx-production-ui .digital-journey-cockpit .journey-kpis,.dx-production-ui .development-golden .development-view-cards,.dx-production-ui .pattern-golden .pattern-group-cards,.dx-production-ui .analysis-workspace .analysis-kpis,.dx-production-ui .production-display .display-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .digital-journey-cockpit .journey-order-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .digital-journey-cockpit .journey-order-heading,.digital-journey-cockpit .journey-detail-toolbar,.production-workspace-page .workspace-order-heading{flex-wrap:wrap;height:auto}
+ .digital-journey-cockpit .journey-order-heading h1{font-size:23px;flex-wrap:wrap}
+ .digital-journey-cockpit .journey-business-tabs{overflow:auto;height:auto;min-height:44px}
+ .digital-journey-cockpit .journey-business-tabs button{flex-shrink:0;font-size:16px;min-height:44px}
+ .digital-journey-cockpit .journey-flow{grid-template-columns:repeat(7,minmax(150px,1fr));overflow-x:auto;padding-bottom:8px}
+ .dx-production-ui .digital-journey-cockpit .journey-flow-panel,.dx-production-ui .digital-journey-cockpit .journey-flow-panel.is-collapsed{height:auto}
+ .dx-production-ui .digital-journey-cockpit .journey-flow .dx-production-stage{height:auto;min-height:180px}
+ .dx-production-ui .digital-journey-cockpit .journey-flow-panel.is-collapsed .dx-production-stage{min-height:96px}
+ .dx-production-ui .digital-journey-cockpit .journey-flow .dx-production-stage dl>div{grid-template-columns:1fr;gap:2px}
+ .dx-production-ui .digital-journey-cockpit :is(p,small,dt,dd,li,button,td,th,.dx-badge){font-size:16px}
+ .dx-production-ui .digital-journey-cockpit .journey-flow .dx-production-stage h2{font-size:16px;white-space:normal}
+ .dx-production-ui .digital-journey-cockpit .journey-detail-actions .dx-button{min-height:44px;font-size:16px}
+ .digital-journey-cockpit .journey-three-columns{grid-template-columns:minmax(0,1fr);grid-template-rows:none}
+ .digital-journey-cockpit .journey-three-columns>*{grid-area:auto}
+ .digital-journey-cockpit .journey-current-body{grid-template-columns:1fr;height:auto;max-height:240px;font-size:16px}
+ .digital-journey-cockpit .journey-section-title{flex-wrap:wrap}
+ .digital-journey-cockpit .journey-flow-legend{flex-wrap:wrap;min-width:0;margin-left:0;gap:8px}
+ .digital-journey-cockpit .journey-node-tabs{overflow-x:auto;max-width:100%;min-width:0}
+ .digital-journey-cockpit .journey-node-tabs button{flex-shrink:0;min-height:44px}
+ .digital-journey-cockpit .journey-node-viewport,.digital-journey-cockpit .journey-orders-viewport{overflow:auto}
+ .digital-journey-cockpit .journey-orders .dx-production-table{min-width:800px}
+ .digital-journey-cockpit .journey-node-table{min-width:650px}
+ .dx-production-ui .digital-journey-cockpit .journey-node-table td:not([colspan]){height:auto;max-height:none;white-space:normal;overflow-wrap:anywhere}
+ .digital-journey-cockpit .journey-global-search input{max-width:none;flex:1;min-width:0;font-size:16px}
+ .digital-journey-cockpit .journey-filters label,.digital-journey-cockpit .journey-filters .journey-search{min-width:0;flex-basis:100%}
+ .digital-journey-cockpit .journey-more-filters{grid-template-columns:1fr}
+ .dx-production-ui .development-golden .development-detail-columns,.dx-production-ui .pattern-golden .pattern-detail-columns{grid-template-columns:1fr;height:auto;max-height:420px;overflow:auto}
+ .development-golden .development-selected-heading,.pattern-golden .pattern-detail-heading{flex-wrap:wrap}
+ .development-golden .development-table-scroll table{min-width:900px}
+ .dx-production-ui .dx-production-refined:is(.development-golden,.pattern-golden,.analysis-workspace,.production-display,.production-workspace-page) :is(input,select,textarea){font-size:16px;min-height:40px}
+ .dx-production-ui .dx-production-refined:is(.development-golden,.pattern-golden,.analysis-workspace,.production-display,.production-workspace-page) :is(.dx-production-table td,.dx-production-table th){font-size:16px!important}
+ .production-workspace-page .workspace-list-filters{flex-wrap:wrap}
+ .dx-production-ui .development-golden .development-tabs{overflow-x:auto;max-width:100%;min-width:0}
+ .dx-production-ui .development-golden .development-tabs button{flex-shrink:0;min-height:44px;font-size:16px}
+ .dx-production-ui .development-golden.dx-production-refined .dx-production-filters{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+ .dx-production-ui .development-golden.dx-production-refined .dx-production-filters>*{grid-column:auto;grid-row:auto}
+ .dx-production-ui .development-golden.dx-production-refined .dx-production-filters label{grid-column:1/-1;font-size:16px}
+ .dx-production-ui .development-golden.dx-production-refined .dx-production-filters :is(input,select,.dx-button){font-size:16px;min-height:44px;height:auto}
+ .dx-production-ui .development-golden .development-date-input>span{font-size:16px}
+ .production-workspace-page .workspace-lower{grid-template-columns:minmax(0,1fr)}
+ .production-workspace-page .workspace-lower>div{min-width:0}
+}

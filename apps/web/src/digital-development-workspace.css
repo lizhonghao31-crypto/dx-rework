@@ -43,10 +43,9 @@
 .development-golden .development-date-separator{color:#6680a7}
 .development-golden .development-view-cards{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:12px}
 .dx-production-ui .development-golden .development-kpi{height:100px;padding:14px 18px 12px 85px;position:relative;gap:4px}
-.development-golden .development-kpi:before{content:'▤';position:absolute;left:15px;top:20px;width:48px;height:48px;display:grid;place-items:center;background:#e4f4ff;color:#0072ff;border-radius:50%;font-size:26px}
-.development-golden .development-kpi-1:before{content:'◷'}
-.development-golden .development-kpi-2:before{content:'♙';color:#8b39ff;background:#f1e8ff}
-.development-golden .development-kpi-3:before{content:'▣';color:#ff8b00;background:#fff2e5}
+.development-golden .development-kpi .dx-production-kpi-icon{position:absolute;left:15px;top:20px;width:48px;height:48px;display:grid;place-items:center;background:#e4f4ff;color:#0072ff;border-radius:50%;font-size:26px}
+.development-golden .development-kpi-2 .dx-production-kpi-icon{color:#8b39ff;background:#f1e8ff}
+.development-golden .development-kpi-3 .dx-production-kpi-icon{color:#ff8b00;background:#fff2e5}
 .dx-production-ui .development-golden .development-kpi strong{font-size:25px;font-weight:650;line-height:1.2}
 .development-golden .development-list-viewport{height:270px;overflow:auto;overscroll-behavior:contain}
 .development-golden .dx-production-table{table-layout:fixed}
@@ -99,13 +98,12 @@
 .dx-production-ui .pattern-golden>.dx-production-header h1{font-size:30px}
 .pattern-golden .pattern-group-cards{grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
 .dx-production-ui .pattern-golden .pattern-lane-kpi{height:98px;padding:12px 8px 10px 66px;position:relative}
-.pattern-golden .pattern-lane-kpi:before{content:'▤';position:absolute;left:10px;top:22px;width:46px;height:46px;border-radius:50%;background:#e8f4ff;color:#0065ff;font-size:27px;display:grid;place-items:center}
-.pattern-golden .pattern-lane-kpi.lane-1:before{content:'♧'}
-.pattern-golden .pattern-lane-kpi.lane-2:before{content:'✂';color:#ff8500;background:#fff1e5}
-.pattern-golden .pattern-lane-kpi.lane-3:before{content:'⚙';color:#00ad9a;background:#ddfff8}
-.pattern-golden .pattern-lane-kpi.lane-4:before{content:'▣';color:#00b976;background:#ddffef}
-.pattern-golden .pattern-lane-kpi.lane-5:before{content:'⌕';color:#8444ff;background:#f2ebff}
-.pattern-golden .pattern-lane-kpi.lane-6:before{content:'▣';color:#bb3eff;background:#f8eaff}
+.pattern-golden .pattern-lane-kpi .dx-production-kpi-icon{position:absolute;left:10px;top:22px;width:46px;height:46px;border-radius:50%;background:#e8f4ff;color:#0065ff;font-size:27px;display:grid;place-items:center}
+.pattern-golden .pattern-lane-kpi.lane-2 .dx-production-kpi-icon{color:#ff8500;background:#fff1e5}
+.pattern-golden .pattern-lane-kpi.lane-3 .dx-production-kpi-icon{color:#00ad9a;background:#ddfff8}
+.pattern-golden .pattern-lane-kpi.lane-4 .dx-production-kpi-icon{color:#00b976;background:#ddffef}
+.pattern-golden .pattern-lane-kpi.lane-5 .dx-production-kpi-icon{color:#8444ff;background:#f2ebff}
+.pattern-golden .pattern-lane-kpi.lane-6 .dx-production-kpi-icon{color:#bb3eff;background:#f8eaff}
 .pattern-golden .pattern-lane-kpi span{font-size:13px;white-space:normal}
 .dx-production-ui .pattern-golden .pattern-lane-kpi strong{font-size:25px;color:#0065ff;line-height:1.2;font-weight:650}
 .pattern-golden .pattern-lane-kpi small{font-size:12px}
@@ -186,7 +184,7 @@
   .development-golden .development-filter-apply{grid-column:4;grid-row:2}
   .development-golden .development-create-action{grid-column:5;grid-row:2}
   .dx-production-ui .development-golden .development-kpi{padding-left:59px}
-  .development-golden .development-kpi:before{width:34px;height:34px;left:12px;font-size:22px}
+  .development-golden .development-kpi .dx-production-kpi-icon{width:34px;height:34px;left:12px;font-size:22px}
   .development-golden .development-row-select{gap:5px}
   .development-golden .development-style-image,.development-golden .development-style-placeholder{width:28px;height:34px}
   .development-golden .development-selected-heading .development-style-image,.development-golden .development-selected-heading .development-style-placeholder{width:62px;height:62px}
@@ -194,7 +192,7 @@
   .development-golden .development-detail-columns .development-fact-pairs{grid-template-columns:1fr}
   .pattern-golden .pattern-workspace-body{grid-template-columns:minmax(0,4fr) minmax(185px,1fr)}
   .dx-production-ui .pattern-golden .pattern-lane-kpi{padding-left:46px;padding-right:5px}
-  .pattern-golden .pattern-lane-kpi:before{left:6px;width:32px;height:32px;font-size:23px}
+  .pattern-golden .pattern-lane-kpi .dx-production-kpi-icon{left:6px;width:32px;height:32px;font-size:23px}
   .pattern-golden .pattern-lane-kpi span,.pattern-golden .pattern-lane-kpi small{font-size:12px}
   .pattern-golden .pattern-board-filters input{width:100px}
   .pattern-golden .pattern-board-filters select{max-width:105px}
