@@ -1,3 +1,4 @@
+import { shanghaiBusinessTime } from "./business-date.js";
 import { useEffect, useState } from 'react';
 import type { z } from 'zod';
 import { ProductionDashboardSchema, ProductionDashboardDetailSchema, type ProductionDashboard, type ProductionDashboardQuery } from '@dx-rework/contracts';
@@ -9,7 +10,7 @@ import { progressLabels,progressText,productionEventText,productionStatusLabels 
 import { ProductionProgressBars } from './production-dashboard-page.js';
 import './production-display-workspace.css';
 const urls=createWebUrls(import.meta.env.BASE_URL);
-const date=(value:string|null)=>value?new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'未登记';
+const date=(value:string|null)=>value?shanghaiBusinessTime(value):'未登记';
 function initialQuery():ProductionDashboardQuery {const params=new URLSearchParams(window.location.search);return {page:Math.max(1,Number(params.get('page'))||1),q:params.get('q')??'',supplierId:params.get('supplierId')||undefined,status:(params.get('status')||undefined) as ProductionDashboardQuery['status'],progressState:(params.get('progressState')||undefined) as ProductionDashboardQuery['progressState'],risk:(params.get('risk')||undefined) as ProductionDashboardQuery['risk']};}
 async function read<T>(path:string,schema:z.ZodType<T>):Promise<T>{const response=await fetch(urls.apiUrl('production-dashboard'+path),{credentials:'include',cache:'no-store'}),body=await response.json();if(!response.ok)throw new Error(body?.error?.message??'生产事实读取失败');return schema.parse(body);}
 export function ProductionDisplayWorkspace(){
