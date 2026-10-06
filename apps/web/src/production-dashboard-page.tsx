@@ -1,3 +1,4 @@
+import { shanghaiBusinessTime } from "./business-date.js";
 import { productionDisplayReturnUrl,productionDisplayDomainHref } from "./production-display-context.js";
 import { todoReturnPath } from "./todo-query-state.js";
 import { ProductionExclusionControls } from "./production-exclusion-controls.js";
@@ -19,7 +20,7 @@ import "./production-dashboard-page.css";
 import "./production-board.css";
 const {apiUrl,pageUrl}=createWebUrls(import.meta.env.BASE_URL);
 const number=(value:number)=>formatBusinessDecimal(value);
-const timestamp=(value:string)=>new Date(value).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai"});
+const timestamp=(value:string)=>shanghaiBusinessTime(value);
 async function request<T>(path:string,schema:z.ZodType<T>) {
   const response=await fetch(apiUrl(`production-dashboard${path}`),{credentials:"include",cache:"no-store",headers:{accept:"application/json"}});
   const body=await response.json();if(!response.ok)throw new Error(body?.error?.message??"看板加载失败，请重试");return schema.parse(body);

@@ -12,3 +12,8 @@ export function shanghaiBusinessDate(date = new Date()): string {
   if (!year || !month || !day) throw new Error("Unable to resolve Shanghai business date");
   return `${year}-${month}-${day}`;
 }
+
+/** Show the original instant consistently, independent of the browser's timezone. */
+export function shanghaiBusinessTime(value:string):string {
+  return `${new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false})}（北京时间）`;
+}

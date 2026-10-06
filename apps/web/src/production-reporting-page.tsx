@@ -1,3 +1,4 @@
+import { shanghaiBusinessTime } from "./business-date.js";
 import { productionDisplayReturnUrl } from "./production-display-context.js";
 import { moduleCanWrite } from "./member-module-policy.js";
 import { NavigationIcon } from "./navigation-icons.js";
@@ -111,10 +112,10 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
       </Surface>
       <Surface className="sourcing-list-card"><details><summary>生产历史（{detail.history.length} 条）</summary>
         {detail.history.map(h=><div className="production-reporting__history" key={h.reportId}><strong>{detail.order.lines.find(l=>l.position===h.position)?.styleNo} · {h.businessDate} · {formatBusinessDecimal(h.quantity)} 件</strong>
-          <p>{h.actorName} · {new Date(h.createdAt).toLocaleString("zh-CN")} · {h.revision===1?"原始上报":"Root修正"}{h.effective?" · 当前有效":" · 已被修正"}</p>{h.reason?<p>原因：{h.reason}</p>:null}
+          <p>{h.actorName} · {shanghaiBusinessTime(h.createdAt)} · {h.revision===1?"原始上报":"Root修正"}{h.effective?" · 当前有效":" · 已被修正"}</p>{h.reason?<p>原因：{h.reason}</p>:null}
           {detail.canCorrect&&h.effective?<Button variant="secondary" disabled={busy} onClick={()=>{setCorrecting(h);setCorrectionQuantity(String(h.quantity));setCorrectionDate(h.businessDate);setReason("");}}>Root 修正</Button>:null}
         </div>)}
-        {detail.transitions.map((t,i)=><p key={i}>{labels[t.status as keyof typeof labels]??t.status} · {t.businessDate} · {t.actorName} · 记录于 {new Date(t.createdAt).toLocaleString("zh-CN")}</p>)}
+        {detail.transitions.map((t,i)=><p key={i}>{labels[t.status as keyof typeof labels]??t.status} · {t.businessDate} · {t.actorName} · 记录于 {shanghaiBusinessTime(t.createdAt)}</p>)}
       </details></Surface>
       {detail.canCorrect&&correcting?<Surface className="sourcing-list-card"><h2>Root 修正原始上报</h2><p>原记录保留；以下数量替换该条记录的有效数量。</p>
         <form className="sourcing-form-grid" onSubmit={e=>{e.preventDefault();void write(`/${productionOrderId}/reports/${correcting.rootReportId}/corrections`,{expectedReportId:correcting.reportId,businessDate:correctionDate,quantity:Number(correctionQuantity),reason},"修正已保存，原记录保留");}}>
