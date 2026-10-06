@@ -13,6 +13,7 @@ import {
 } from "./attachment-upload.js";
 import { mapWithConcurrency } from "./concurrency.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
+import { hasExistingReceivingSource } from "./receiving-source.js";
 import "./receiving-page.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
@@ -256,10 +257,13 @@ export function ReceivingPage() {
   };
 
   const clearNormalDraft = () => {
-    setStyleNo("");
-    setCuttingOptions([]);
-    setCuttingOptionsQuery("");
-    setSelectedCutting(null);
+    // Keep an explicitly selected source when returning from repeat receiving.
+    if (!selectedCutting) {
+      setStyleNo("");
+      setCuttingOptions([]);
+      setCuttingOptionsQuery("");
+      setSelectedCutting(null);
+    }
     setDocumentQuantity("");
     setActualQuantity("");
     setDefectiveQuantity("0");
@@ -370,7 +374,7 @@ export function ReceivingPage() {
     if (!backfill && trimmedStyle.length >= 4) {
       try {
         const options = await requestJson<RepeatOptions>(`receiving/repeat-options?${new URLSearchParams({ q: trimmedStyle }).toString()}`, { method: "GET" });
-        if (options.orders.some((order) => order.styleNo.trim().toUpperCase() === trimmedStyle.toUpperCase())) {
+        if (hasExistingReceivingSource(options.orders, trimmedStyle, selectedCutting?.cuttingOrderId)) {
           setRepeat(true);
           setRepeatSource(null);
           setRepeatQuery("");

@@ -3196,6 +3196,49 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
 
 
+  it("receiving source regression keeps same-style PO receipts distinct and rejects cross-source repeats", async () => {
+    const fixture = await budgetFixture(), primary = merchandiserActor(), root = rootActor();
+    const ready = (await exerciseBulkPreparation(database, fixture, service, attachments,
+      { primary, manager: managerActor(), owner: ownerActor(), ie: ieActor(), root },
+      factoryId, craftId("净色车缝"), "none", { cuttingProcess: "in_house", stopAtReady: true }))!;
+    const identity = new DigitalProductionIdentityService(database, true, service);
+    const formal = `TEST-RECEIVING-SOURCE-${randomUUID().slice(0, 8)}`;
+    for (const [index, line] of fixture.order.lines.entries()) {
+      const current = await identity.read(root, ready.id);
+      await identity.correctNumbers(root, ready.id, line.lineId,
+        { expectedVersion: current.version, formalStyleNo: formal, poNumber: `TEST-PO-${index + 1}` }, randomUUID());
+    }
+    const ids = (await database.query("SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position", [ready.caseId])).rows.map(row => row.cutting_order_id);
+    expect(ids).toHaveLength(2);
+    const image = async () => {
+      const id = randomUUID();
+      await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-source.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)", [id, `TEST/receiving-source/${id}`, "c".repeat(64), root.actorId]);
+      return id;
+    };
+    for (const [index, id] of ids.entries()) await ready.cutting.record(
+      { ...root, authorizationCapability: "cutting:records:create" }, id,
+      { pieceCount: 1, actualCutCount: index === 0 ? 60 : 40, attachmentIds: [await image()] }, randomUUID());
+    const receiver = { ...root, authorizationCapability: "receiving:create" };
+    const blue = await receiving.create(receiver, { cuttingOrderId: ids[0], documentQuantity: 60, actualQuantity: 60, attachmentIds: [await image()] }, randomUUID());
+    // Concurrent red first receipts with different request keys must produce one receipt.
+    const redImage = await image();
+    const redInput = { cuttingOrderId: ids[1], documentQuantity: 40, actualQuantity: 40, attachmentIds: [redImage] };
+    const attempted = await Promise.allSettled([receiving.create(receiver, redInput, randomUUID()), receiving.create(receiver, redInput, randomUUID())]);
+    expect(attempted.filter(result => result.status === "fulfilled")).toHaveLength(1);
+    const rejected = attempted.find(result => result.status === "rejected") as PromiseRejectedResult;
+    expect(rejected.reason).toMatchObject({ code: "REPEAT_RECEIVING_REQUIRED" });
+    const red = (attempted.find(result => result.status === "fulfilled") as PromiseFulfilledResult<Awaited<ReturnType<typeof receiving.create>>>).value;
+    expect(red.value.receivingBatchId).not.toBe(blue.value.receivingBatchId);
+    await expect(receiving.createRepeated(receiver, { receivingBatchId: blue.value.receivingBatchId, cuttingOrderId: ids[1], source: "other_factory", documentQuantity: 40, actualQuantity: 40 }, randomUUID())).rejects.toMatchObject({ code: "CONFLICT" });
+    for (const [receipt, cuttingId] of [[blue.value, ids[0]], [red.value, ids[1]]] as const) {
+      const expectedLine = (await database.query("SELECT line_id FROM digital_production_child_lines WHERE module='cutting' AND child_id=$1", [cuttingId])).rows[0].line_id;
+      expect((await database.query("SELECT line_id FROM digital_production_child_lines WHERE module='receiving' AND child_id=$1", [receipt.receiptId])).rows.map(row => row.line_id)).toEqual([expectedLine]);
+    }
+    const rows = (await receiving.board(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()), undefined, formal)).rows;
+    expect(rows).toHaveLength(2);
+    expect(rows.map(row => [row.actualCutCount, row.actualQuantity]).sort()).toEqual([[40, 40], [60, 60]]);
+  });
+
   it("P10 keeps technical versions, units, date approval and budget boundaries independent", async () => {
     const fixture=await budgetFixture();
     await fixture.budget.save(fixture.designer,fixture.order.productionOrderId,{expectedVersion:0,document:fixture.document},randomUUID());
