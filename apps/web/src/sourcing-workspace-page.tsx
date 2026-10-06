@@ -1912,7 +1912,9 @@ function OrderDetailPage({
               <div className="sourcing-contract-bar__actions" aria-label="正式派单">
                 {dispatchState.item ? <StatusBadge tone="success">{dispatchState.item.status === "shipped" ? "已发货" : dispatchState.item.status === "production_completed" ? "生产完成" : "已派单 · 生产中"}</StatusBadge>
                   : (moduleWritable && dispatchState.canDispatch) ? <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void dispatchOrder()}>正式派单</button>
-                    : <span>{contract.status === "ready" ? "待本订单跟单派单" : "合同生成后可派单"}</span>}
+                    : <span>{dispatchState.dispatchMode === "warehouse_actual_dispatch"
+                      ? "数字单完成产前技术准备、实际开裁与裁后工艺后，由仓库完成整款实际发厂，自动生成生产单。"
+                      : contract.status === "ready" ? "待本订单跟单派单" : "合同生成后可派单"}</span>}
               </div>
               {contract.status === "pending_supplement" ? <div className="sourcing-form-grid">
                 <p className="sourcing-form-wide">缺少：{contract.missingFields.map((field) => contractMissingLabels[field] ?? field).join("、")}。补充值只进入本合同快照，不回写供应商主档。</p>

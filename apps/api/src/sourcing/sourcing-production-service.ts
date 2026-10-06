@@ -32,6 +32,7 @@ type Source = {
   sourcing_case_id: string; created_by: string;
   sourcing_approval_snapshot_id: string | null;
   sourcing_contract_document_id: string | null; contract_status: string | null;
+  workflow_generation: string | null;
 };
 export type ProductionRow = { production_order_id: string; dispatched_at: Date | string; status: SourcingProductionOrder["status"]; [key: string]: unknown };
 const iso = (date: Date | string): string => new Date(date).toISOString();
@@ -82,7 +83,8 @@ export class SourcingProductionService {
     // or factory change cannot leave this request with a pre-lock decision snapshot.
     if (lock) await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 FOR UPDATE", [sourcingCaseId]);
     const result = await client.query<Source>(`SELECT source_case.sourcing_case_id,source_case.created_by,
-      snapshot.sourcing_approval_snapshot_id,document.sourcing_contract_document_id,document.status AS contract_status
+      snapshot.sourcing_approval_snapshot_id,document.sourcing_contract_document_id,document.status AS contract_status,
+      to_jsonb(source_case)->>'workflow_generation' AS workflow_generation
       FROM sourcing_cases source_case
       LEFT JOIN LATERAL (SELECT sourcing_decision_id FROM sourcing_decisions
         WHERE sourcing_case_id=source_case.sourcing_case_id ORDER BY decision_version DESC LIMIT 1) decision ON true
@@ -99,9 +101,11 @@ export class SourcingProductionService {
     const result = await this.database.query<ProductionRow>(`${selectProduction}
       WHERE production.sourcing_case_id=$1`, [sourcingCaseId]);
     const row = result.rows[0];
+    const digital = source.workflow_generation === "digital_production_v1";
     return {
       item: row ? { productionOrderId: row.production_order_id, status: row.status, dispatchedAt: iso(row.dispatched_at) } : null,
-      canDispatch: !row && (await this.database.query("SELECT to_jsonb(sourcing_cases)->>'workflow_generation' AS generation FROM sourcing_cases WHERE sourcing_case_id=$1",[sourcingCaseId])).rows[0]?.generation!=='digital_production_v1' && await memberCanWriteModule(this.database, actor.actorId, "sourcing") && canWrite(actor, source.created_by) && source.contract_status === "ready",
+      canDispatch: !row && !digital && await memberCanWriteModule(this.database, actor.actorId, "sourcing") && canWrite(actor, source.created_by) && source.contract_status === "ready",
+      dispatchMode: digital ? "warehouse_actual_dispatch" : "merchandiser",
     };
   }
 
