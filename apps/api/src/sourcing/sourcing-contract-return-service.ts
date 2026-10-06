@@ -51,13 +51,13 @@ export class SourcingContractReturnService {
     }
   }
 
-  private async canUpload(actor: TrustedActorContext, creator: string, additional: string | null, alreadyReturned: boolean): Promise<boolean> {
+  private async canUpload(actor: TrustedActorContext, creator: string, additional: string | null): Promise<boolean> {
     if (actor.actorRoles.includes(ROOT)) return true;
     if (!(await memberCanWriteModule(this.database,actor.actorId,"sourcing"))) return false;
     const capabilities = actor.authorizationCapabilities ?? [];
     return actor.actorRoles.includes(OWNER) && capabilities.includes("sourcing:owner:approve")
       || actor.actorRoles.includes(MANAGEMENT) && capabilities.includes("sourcing:decision:record")
-      || !alreadyReturned && actor.actorRoles.includes(MERCHANDISER)
+      || actor.actorRoles.includes(MERCHANDISER)
         && (actor.actorId === creator || actor.actorId === additional) && capabilities.includes("sourcing:contract:record");
   }
 
@@ -116,14 +116,24 @@ export class SourcingContractReturnService {
       versions.get(file.revision)!.attachments.push(fileDto(file));
     }
     const [current,...history]=[...versions.values()];
+    const totals=(await this.database.query<{count:number;bytes:string}>(`SELECT count(*)::int AS count,COALESCE(sum(file.size_bytes),0)::text AS bytes
+      FROM sourcing_contract_return_submissions submission
+      JOIN sourcing_contract_return_attachments link ON link.submission_id=submission.submission_id
+      JOIN attachments file ON file.attachment_id=link.attachment_id
+      WHERE submission.sourcing_case_id=$1`,[sourcingCaseId])).rows[0] ?? {count:0,bytes:"0"};
+    // Display additions together only when they belong to the same recorded contract version.
+    const currentFiles=current ? [...versions.values()].filter(version=>version.signedContractDocumentId===current.signedContractDocumentId)
+      .reverse().flatMap(version=>version.attachments) : [];
+
     return { ...status,uploadedByName:status.contractReturnMonitoring ? row.uploader_name : null,
       currentContractReturned:row.current_contract_returned,
       currentContractDocumentId:row.current_contract_document_id,
       signedContractDocumentId:current?.signedContractDocumentId ?? null,
       signedContractVersion:current?.signedContractVersion ?? null,signedContractNumber:current?.signedContractNumber ?? null,
       canUpload: status.contractReturnMonitoring
-        && await this.canUpload(actor,row.created_by,row.additional_merchandiser_user_id,row.contract_returned_at !== null),
-      attachments:current?.attachments ?? [],history };
+        && totals.count < 2 && await this.canUpload(actor,row.created_by,row.additional_merchandiser_user_id),
+      uploadedFileCount:totals.count,uploadedTotalBytes:Number(totals.bytes),
+      attachments:currentFiles,history };
   }
 
   async submit(actor: TrustedActorContext,sourcingCaseId: string,attachmentIds: readonly string[],key: string) {
@@ -134,8 +144,8 @@ export class SourcingContractReturnService {
         || actor.authorizationCapability === "sourcing:owner:approve" && actor.actorRoles.includes(OWNER)
         || actor.authorizationCapability === "sourcing:decision:record" && actor.actorRoles.includes(MANAGEMENT)
       )) forbidden();
-    if (attachmentIds.length < 1 || attachmentIds.length > 10 || new Set(attachmentIds).size !== attachmentIds.length) {
-      throw new ApplicationError("VALIDATION_ERROR","请上传 1 至 10 个不重复的回签合同文件",400);
+    if (attachmentIds.length < 1 || attachmentIds.length > 2 || new Set(attachmentIds).size !== attachmentIds.length) {
+      throw new ApplicationError("VALIDATION_ERROR","请上传 1 至 2 个不重复的回签合同文件",400);
     }
     if (!/^[A-Za-z0-9._:-]{1,200}$/.test(key)) throw new ApplicationError("VALIDATION_ERROR","上传请求标识无效",400);
     const client=await this.database.connect();
@@ -157,7 +167,7 @@ export class SourcingContractReturnService {
       if (!monitor?.contract_return_monitor_enabled) {
         throw new ApplicationError("INVALID_STATE_TRANSITION","该订单尚未批准，暂不能回传合同",409);
       }
-      if (!(await this.canUpload(actor,monitor.created_by,monitor.additional_merchandiser_user_id,false))) forbidden();
+      if (!(await this.canUpload(actor,monitor.created_by,monitor.additional_merchandiser_user_id))) forbidden();
       const previous=await client.query<{submitted_by:string;attachment_ids:string[]}>(`SELECT submission.submitted_by,
         submission.attachment_ids
         FROM sourcing_contract_return_requests submission
@@ -170,36 +180,33 @@ export class SourcingContractReturnService {
         await client.query("COMMIT");
         return this.get({...actor,authorizationCapability:READ},sourcingCaseId);
       }
-      if (!(await this.canUpload(actor,monitor.created_by,monitor.additional_merchandiser_user_id,monitor.contract_returned_at !== null))) forbidden();
       const document=(await client.query<{sourcing_contract_document_id:string}>(`SELECT sourcing_contract_document_id
         FROM sourcing_contract_documents WHERE sourcing_case_id=$1 ORDER BY contract_version DESC LIMIT 1`,[sourcingCaseId])).rows[0];
       const documentId=document?.sourcing_contract_document_id ?? null;
-      const latest=await client.query<{submitted_by:string;attachment_ids:string[];sourcing_contract_document_id:string|null}>(`SELECT submission.submitted_by,
-        submission.sourcing_contract_document_id,
-        array_agg(link.attachment_id::text ORDER BY link.position) AS attachment_ids
+      const existing=await client.query<{attachment_id:string;size_bytes:string;submitted_by:string}>(`SELECT link.attachment_id::text,file.size_bytes,submission.submitted_by
         FROM sourcing_contract_return_submissions submission
         JOIN sourcing_contract_return_attachments link ON link.submission_id=submission.submission_id
-        WHERE submission.sourcing_case_id=$1
-          AND submission.revision=(SELECT max(revision) FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1)
-        GROUP BY submission.submission_id`,[sourcingCaseId]);
-      if (latest.rows[0]?.submitted_by===actor.actorId
-        && latest.rows[0].sourcing_contract_document_id===documentId
-        && JSON.stringify(latest.rows[0].attachment_ids)===JSON.stringify(attachmentIds)) {
-        await client.query(`INSERT INTO sourcing_contract_return_requests(
-          sourcing_case_id,request_id,submitted_by,attachment_ids
-        ) VALUES($1,$2,$3,$4::uuid[])`,[sourcingCaseId,key,actor.actorId,attachmentIds]);
+        JOIN attachments file ON file.attachment_id=link.attachment_id
+        WHERE submission.sourcing_case_id=$1`,[sourcingCaseId]);
+      // A fresh key may retry the very same already-bound files; it consumes no slot or revision.
+      if (attachmentIds.every(id=>existing.rows.some(file=>file.attachment_id===id && file.submitted_by===actor.actorId))) {
+        await client.query(`INSERT INTO sourcing_contract_return_requests(sourcing_case_id,request_id,submitted_by,attachment_ids)
+          VALUES($1,$2,$3,$4::uuid[])`,[sourcingCaseId,key,actor.actorId,attachmentIds]);
         await client.query("COMMIT");
         return this.get({...actor,authorizationCapability:READ},sourcingCaseId);
       }
+      if (existing.rows.length + attachmentIds.length > 2) {
+        throw new ApplicationError("INVALID_STATE_TRANSITION","本订单回签文件累计最多 2 个，已保存文件保留，不能再追加",409);
+      }
+      const existingBytes=existing.rows.reduce((total,file)=>total+Number(file.size_bytes),0);
       const files=await client.query<FileRow & { uploaded_by: string }>(`SELECT attachment_id,original_filename,mime_type,size_bytes,uploaded_by
         FROM attachments WHERE attachment_id=ANY($1::uuid[]) AND status='ready'
           AND entity_type IS NULL AND entity_id IS NULL FOR UPDATE`,[attachmentIds]);
       if (files.rows.length!==attachmentIds.length || files.rows.some(file=>file.uploaded_by!==actor.actorId
         || !MIME_TYPES.includes(file.mime_type as (typeof MIME_TYPES)[number])
         || Number(file.size_bytes)>MAX_UPLOAD_BYTES)
-        || files.rows.reduce((total,file)=>total+Number(file.size_bytes),0)>MAX_UPLOAD_BYTES
-        || (files.rows.some(file=>file.mime_type==="application/pdf") && files.rows.length!==1)) {
-        throw new ApplicationError("VALIDATION_ERROR","回签合同须为单份 PDF 或最多 10 张 JPG/PNG，合计不超过 20 MB，且文件必须属于当前上传人",400);
+        || existingBytes+files.rows.reduce((total,file)=>total+Number(file.size_bytes),0)>MAX_UPLOAD_BYTES) {
+        throw new ApplicationError("VALIDATION_ERROR","回签合同须为 1 至 2 个 PDF/JPG/PNG 文件，合计不超过 20 MB，且文件必须属于当前上传人",400);
       }
       const next=(await client.query<{revision:number}>(`SELECT COALESCE(max(revision),0)+1 AS revision
         FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1`,[sourcingCaseId])).rows[0]!.revision;
