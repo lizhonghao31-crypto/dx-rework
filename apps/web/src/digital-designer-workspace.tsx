@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Button, Surface } from "@dx-rework/ui";
-import { BusinessTable, FilterBar, KpiCard, PageHeader, Pagination } from "@dx-rework/ui/production";
+import { Button } from "@dx-rework/ui";
+import { BusinessTable, FilterBar, KpiCard, Pagination, StatusBadge } from "@dx-rework/ui/production";
 import { DEVELOPMENT_VIEWS, DevelopmentWorkspaceFilterSchema, type DevelopmentWorkspaceFilter, type DevelopmentWorkspaceItem, type DevelopmentWorkspaceResult } from "@dx-rework/contracts/digital-development-workspace";
 import type { DigitalCustomer } from "@dx-rework/contracts/digital-production";
+import type { DevelopmentSheet } from "@dx-rework/contracts/digital-development";
 import { digitalRequest } from "./digital-production-api.js";
 import { DigitalDevelopmentPanel } from "./digital-development-panel.js";
 import { DevelopmentCreateForm, type DevelopmentCreateIntent } from "./digital-development-create-form.js";
@@ -12,20 +13,30 @@ import { createWebUrls } from "../url-contract.js";
 import "./digital-development-workspace.css";
 
 const urls = createWebUrls(import.meta.env.BASE_URL);
+const date = (value: string | null | undefined) => !value ? "未登记" : /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : new Date(value).toLocaleDateString("sv-SE", {timeZone:"Asia/Shanghai"});
+const viewLabel = (item: DevelopmentWorkspaceItem) => DEVELOPMENT_VIEWS.find(view => view.key === item.view)?.label;
 function initialFilter(): DevelopmentWorkspaceFilter {
-  const parameters = new URLSearchParams(window.location.search);
-  const parsed = DevelopmentWorkspaceFilterSchema.safeParse(Object.fromEntries([...parameters].filter(([key]) => ["page", "search", "customer", "view"].includes(key))));
+  const parsed = DevelopmentWorkspaceFilterSchema.safeParse(Object.fromEntries([...new URLSearchParams(window.location.search)].filter(([key]) => ["page", "search", "customer", "view", "designer", "startDate", "endDate"].includes(key))));
   return parsed.success ? parsed.data : DevelopmentWorkspaceFilterSchema.parse({});
+}
+function StyleImage({sheet}: {sheet: DevelopmentSheet | undefined}) {
+  const [failed, setFailed] = useState(false);
+  const file = sheet?.document?.files.find(file => file.kind === "款图");
+  return file && !failed ? <img className="development-style-image" alt={`${sheet!.designStyleNo} 款图`} src={urls.apiUrl(`digital-production/sources/${sheet!.sourceId}/development/attachments/${file.attachmentId}`)} onError={() => setFailed(true)}/> : <span className="development-style-placeholder">{failed ? "款图不可用" : "暂无款图"}</span>;
 }
 export function DigitalDesignerWorkspace() {
   const [filter, setFilter] = useState(initialFilter), [result, setResult] = useState<DevelopmentWorkspaceResult | null>(null);
   const [options, setOptions] = useState<{creationEnabled: boolean; customers: DigitalCustomer[]} | null>(null), [access, setAccess] = useState<DigitalAccessOptions | null>(null);
   const [intent, setIntent] = useState<DevelopmentCreateIntent | null>(null), [confirm, setConfirm] = useState<DevelopmentWorkspaceItem | null>(null);
+  const [createMode, setCreateMode] = useState<"development" | "certain_order">("development");
   const [error, setError] = useState(""), [refresh, setRefresh] = useState(0);
-  const selected = new URLSearchParams(window.location.search).get("development");
+  const [sheets, setSheets] = useState<Record<string, DevelopmentSheet>>({}), [sheetErrors, setSheetErrors] = useState<Record<string, string>>({});
+  const [selectedId, setSelectedId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("selected"));
+  const [tab, setTab] = useState("基础资料"), [collapsed, setCollapsed] = useState(false), [search, setSearch] = useState(filter.search);
+  const editor = new URLSearchParams(window.location.search).get("development");
   const round = Number(new URLSearchParams(window.location.search).get("round")) || undefined;
-  const contextUrl = (parameters: Record<string, string> = {}) => {
-    const query = new URLSearchParams({workspace: "designer", ...Object.fromEntries(Object.entries(filter).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)])), ...parameters});
+  const contextUrl = (parameters: Record<string, string> = {}, next = filter, selected = selectedId) => {
+    const query = new URLSearchParams({workspace: "designer", ...Object.fromEntries(Object.entries(next).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)])), ...(selected ? {selected} : {}), ...parameters});
     return `${urls.pageUrl("ui/digital-production")}?${query}`;
   };
   useEffect(() => {
@@ -35,23 +46,53 @@ export function DigitalDesignerWorkspace() {
       .then(([data, nextOptions, nextAccess]) => {if (live) {setResult(data); setOptions(nextOptions); setAccess(nextAccess);}}).catch(reason => {if (live) {setResult(null); setError(reason.message);}});
     return () => {live = false;};
   }, [filter, refresh]);
+  useEffect(() => {
+    let live = true; setSheets({}); setSheetErrors({});
+    if (result) for (const item of result.items) if (item.journey.sourceId) {
+      const source = item.journey.sourceId;
+      void digitalRequest<DevelopmentSheet>(`sources/${source}/development${item.journey.sourceVersion && item.journey.selectedRound ? `?round=${item.journey.selectedRound}` : ""}`)
+        .then(sheet => {if (live) setSheets(current => ({...current, [item.journey.id]:sheet}));})
+        .catch(reason => {if (live) setSheetErrors(current => ({...current, [item.journey.id]:reason.message}));});
+    }
+    return () => {live = false;};
+  }, [result]);
   const update = (patch: Partial<DevelopmentWorkspaceFilter>) => {
-    const next = DevelopmentWorkspaceFilterSchema.parse({...filter, page: 1, ...patch}); setFilter(next); setResult(null);
-    const query = new URLSearchParams({workspace: "designer", ...Object.fromEntries(Object.entries(next).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]))});
-    window.history.replaceState(window.history.state, "", `${urls.pageUrl("ui/digital-production")}?${query}`);
+    const parsed = DevelopmentWorkspaceFilterSchema.safeParse({...filter, page: 1, ...patch});
+    if (!parsed.success) {setError(parsed.error.issues[0]?.message ?? "筛选条件无效"); return;}
+    const next = parsed.data;
+    setFilter(next); setResult(null); setSelectedId(null); setCollapsed(false);
+    window.history.replaceState(window.history.state, "", contextUrl({}, next, null));
   };
-  if (selected) return <div className="development-workspace pattern-orders digital-production"><DigitalDevelopmentPanel sourceId={selected} {...(round ? {initialRound: round} : {})} onClose={() => {void navigateInternalPage(contextUrl()).then(() => setRefresh(value => value + 1));}}/></div>;
-  return <div className="development-workspace pattern-orders digital-production">
-    <PageHeader title="设计师创建订单" description="产品开发与订购信息沿用同一档案" actions={options?.creationEnabled && access?.create && <div className="pattern-actions"><Button onClick={() => {setIntent("development"); setConfirm(null);}}>产品开发（无确定订单）</Button><Button onClick={() => {setIntent("certain_order"); setConfirm(null);}}>产品开发（有确定订单）</Button></div>}/>
-    {error && <p role="alert">{error}</p>}
-    {intent && options ? <DevelopmentCreateForm key={confirm?.journey.id ?? intent} intent={intent} {...(confirm ? {source: confirm.journey} : {})} customers={options.customers} onCancel={() => {setIntent(null); setConfirm(null); setRefresh(value => value + 1);}} onCreated={id => {void navigateInternalPage(contextUrl({development: id}));}}/> : <>
-      <div className="development-view-cards">{DEVELOPMENT_VIEWS.map(view => <KpiCard key={view.key} label={view.label} value={result?.counts[view.key] ?? "—"} detail="开发/订单档案" selected={filter.view === view.key} onClick={() => update({view: view.key})}/>)}</div>
-      <Surface><FilterBar as="div"><label>款号 / PO<input maxLength={100} value={filter.search} onChange={event => update({search: event.target.value})}/></label><label>客户<select value={filter.customer ?? ""} onChange={event => update({customer: event.target.value || undefined})}><option value="">全部客户</option>{result?.customers.map(customer => <option key={customer}>{customer}</option>)}</select></label><Button onClick={() => setRefresh(value => value + 1)}>刷新</Button></FilterBar>
-        <div className="development-table-scroll"><BusinessTable><thead><tr><th>款号 / 客户</th><th>业务视图</th><th>当前开发</th><th>订购信息</th><th>办理</th></tr></thead><tbody>{result?.items.map(item => <tr key={item.journey.id}><td><strong>{item.journey.designStyleNo}</strong><small>{item.journey.temporaryStyleNo ?? ""} · {item.journey.customer ?? "通用开发"}</small></td><td>{DEVELOPMENT_VIEWS.find(view => view.key === item.view)?.label}{item.journey.orderId && !item.journey.sourceId && <small>待完善开发资料</small>}</td><td>{item.journey.sourceVersion ? `第 ${item.journey.selectedRound ?? 1} 轮` : "待填写开发单"}<small>{item.journey.progress.development ? `本轮 ${item.journey.progress.development.completed} / ${item.journey.progress.development.applicable} 项` : "尚未发布开发路线"}</small>{item.journey.adoptedRound && <small>大货采用第 {item.journey.adoptedRound} 轮</small>}</td><td>{item.journey.lines.length ? `${item.journey.lines.length} 个款色 / PO` : "尚无确定订单"}<small>{item.journey.orderNumbers.join(" / ")}</small></td><td><div className="pattern-actions">{item.journey.sourceId && <a href={contextUrl({development: item.journey.sourceId, ...(item.journey.selectedRound && item.journey.sourceVersion ? {round: String(item.journey.selectedRound)} : {})})}>开发单 / 版本 / 打印</a>}{item.canConfirm && options?.creationEnabled && access?.create && <Button onClick={() => {setConfirm(item); setIntent("confirm_order");}}>客户确定订单</Button>}{item.journey.orderId && <a href={`${urls.pageUrl("ui/digital-production")}?order=${item.journey.orderId}&returnTo=${encodeURIComponent(contextUrl())}`}>查看订购信息</a>}</div></td></tr>)}</tbody></BusinessTable></div>
-        {result && !result.items.length && <p>当前视图暂无档案</p>}
-        {!result && !error && <p role="status">正在读取开发档案…</p>}
-        <Pagination page={filter.page} pageSize={20} total={result?.total ?? null} onPage={page => update({page})}/>
-      </Surface>
-    </>}
+  const select = (id: string) => {setSelectedId(id); setCollapsed(false); setTab("基础资料"); window.history.replaceState(window.history.state, "", contextUrl({}, filter, id));};
+  const selected = result?.items.find(item => item.journey.id === selectedId), sheet = selected ? sheets[selected.journey.id] : undefined;
+  const openUrl = (item: DevelopmentWorkspaceItem) => contextUrl({development:item.journey.sourceId!, ...(item.journey.selectedRound && item.journey.sourceVersion ? {round:String(item.journey.selectedRound)} : {})}, filter, item.journey.id);
+  if (editor) return <div className="development-workspace pattern-orders digital-production"><DigitalDevelopmentPanel sourceId={editor} {...(round ? {initialRound: round} : {})} onClose={() => {void navigateInternalPage(contextUrl()).then(() => setRefresh(value => value + 1));}}/></div>;
+  return <div className="development-workspace development-golden dx-production-refined">
+    <form className="development-global-search" onSubmit={event => {event.preventDefault(); update({search});}}><input aria-label="搜索开发档案" placeholder="搜索单号、客户、款号、PO…" value={search} onChange={event => setSearch(event.target.value)}/><Button type="submit">搜索</Button></form>
+    <div className="development-breadcrumb">产品开发 › <strong>设计师创建订单</strong></div>
+    <section className="dx-production-panel development-list-panel">
+      <nav className="development-tabs" aria-label="创建类型">{([['development','产品开发（无确定订单）'],['certain_order','产品开发（有确定订单）']] as const).map(([key,label]) => <button key={key} type="button" aria-pressed={createMode === key} onClick={() => setCreateMode(key)}>{label}</button>)}</nav>
+      <FilterBar as="div"><label className="development-search-field">款号 / PO<input value={search} maxLength={100} onChange={event => setSearch(event.target.value)} onKeyDown={event => {if (event.key === "Enter") update({search});}}/></label><label>客户<select value={filter.customer ?? ""} onChange={event => update({customer:event.target.value || undefined})}><option value="">全部客户</option>{result?.customers.map(customer => <option key={customer}>{customer}</option>)}</select></label><label>设计师<select value={filter.designer ?? ""} onChange={event => update({designer:event.target.value || undefined})}><option value="">全部设计师</option>{result?.designers?.map(designer => <option key={designer}>{designer}</option>)}</select></label><label>状态<select value={filter.view} onChange={event => update({view:event.target.value as DevelopmentWorkspaceFilter['view']})}>{DEVELOPMENT_VIEWS.map(view => <option key={view.key} value={view.key}>{view.label}</option>)}</select></label><label>创建日期<input aria-label="创建开始日期" type="date" value={filter.startDate ?? ""} onChange={event => update({startDate:event.target.value || undefined})}/></label><label>至<input aria-label="创建结束日期" type="date" value={filter.endDate ?? ""} onChange={event => update({endDate:event.target.value || undefined})}/></label><Button onClick={() => update({search})}>筛选</Button>{options?.creationEnabled && access?.create && <Button onClick={() => {setIntent(createMode); setConfirm(null);}}>新建开发单</Button>}</FilterBar>
+      {error && <p role="alert">{error}</p>}
+      {intent && options ? <DevelopmentCreateForm key={confirm?.journey.id ?? intent} intent={intent} {...(confirm ? {source: confirm.journey} : {})} customers={options.customers} onCancel={() => {setIntent(null); setConfirm(null); setRefresh(value => value + 1);}} onCreated={id => {void navigateInternalPage(contextUrl({development:id},filter,id));}}/> : <>
+      <div className="development-view-cards">{DEVELOPMENT_VIEWS.filter(view => view.key !== "all").map((view,index) => <KpiCard key={view.key} className={`development-kpi development-kpi-${index}`} label={view.label} value={result?.counts[view.key] ?? "—"} detail={['待完善资料','正在开发','等待订购确认','已记录订购信息'][index]} selected={filter.view === view.key} onClick={() => update({view:filter.view === view.key ? 'all' : view.key})}/>)}</div>
+      <div className="development-table-scroll development-list-viewport"><BusinessTable><thead><tr><th>序号</th><th>款图 / 款号</th><th>款名</th><th>客户</th><th>开发类型</th><th>当前轮次</th><th>状态</th><th>要求完成</th><th>创建日期</th><th>操作</th></tr></thead><tbody>{result?.items.map((item,index) => <tr key={item.journey.id} className={selectedId === item.journey.id ? 'is-selected' : ''}><td>{(filter.page-1)*20+index+1}</td><td><button className="development-row-select" aria-pressed={selectedId === item.journey.id} onClick={() => select(item.journey.id)}><StyleImage key={item.journey.id} sheet={sheets[item.journey.id]}/><strong>{item.journey.designStyleNo}</strong></button></td><td>{item.journey.styleName ?? "未登记"}</td><td>{item.journey.customer ?? "通用开发"}</td><td>{sheets[item.journey.id]?.developmentType ?? (sheetErrors[item.journey.id] ? "资料不可用" : item.journey.sourceId ? "读取中…" : "待完善")}</td><td>{item.journey.sourceVersion ? `第 ${item.journey.selectedRound ?? 1} 轮` : "待填写"}</td><td><StatusBadge tone={item.view === 'ordered' ? 'success' : item.view === 'draft' ? 'neutral' : 'info'}>{viewLabel(item)}</StatusBadge></td><td>{date(sheets[item.journey.id]?.document?.returnDate)}</td><td>{date(item.journey.createdAt)}</td><td><button className="development-text-action" onClick={() => select(item.journey.id)}>查看</button></td></tr>)}</tbody></BusinessTable>
+      {result && !result.items.length && <p className="development-empty">当前视图暂无档案</p>}{!result && !error && <p role="status">正在读取开发档案…</p>}</div>
+      <Pagination page={filter.page} pageSize={20} total={result?.total ?? null} onPage={page => update({page})}/>
+      </>}
+    </section>
+    {!intent && <section className="dx-production-panel development-selected" aria-label="选中开发档案">
+      {!selected ? <p className="development-empty">从上方列表选择档案，查看开发资料与订购信息。</p> : <>
+        <header className="development-selected-heading"><StyleImage key={selected.journey.id} sheet={sheet}/><div><h2>{selected.journey.designStyleNo} <StatusBadge tone="info">{viewLabel(selected)}</StatusBadge></h2><p>款名：{selected.journey.styleName ?? "未登记"} · 客户：{selected.journey.customer ?? "通用开发"} · 开发类型：{sheet?.developmentType ?? "未读取"} · 设计师：{selected.journey.designer ?? "未登记"} · 创建日期：{date(selected.journey.createdAt)}</p></div><button className="development-text-action" aria-expanded={!collapsed} onClick={() => setCollapsed(value => !value)}>{collapsed ? "展开" : "收起"}</button></header>
+        {!collapsed && <><nav className="development-tabs" aria-label="档案资料">{['基础资料','开发资料','订购信息','版本记录'].map(label => <button key={label} aria-pressed={tab === label} onClick={() => setTab(label)}>{label}</button>)}</nav>
+        {sheetErrors[selected.journey.id] && <p role="alert">开发资料读取失败：{sheetErrors[selected.journey.id]}</p>}
+        <div className={`development-detail-columns ${tab !== '基础资料' ? 'is-single' : ''}`}>
+          {tab === '基础资料' && <section><h3>基础资料</h3><dl><dt>款号</dt><dd>{selected.journey.designStyleNo}</dd><dt>客户</dt><dd>{selected.journey.customer ?? "通用开发"}</dd><dt>产品类别</dt><dd>{selected.journey.category ?? "未登记"}</dd><dt>设计师</dt><dd>{selected.journey.designer ?? "未登记"}</dd><dt>开发类型</dt><dd>{sheet?.developmentType ?? "未读取"}</dd><dt>制作说明</dt><dd>{sheet?.document?.instructions || "未登记"}</dd></dl></section>}
+          {['基础资料','开发资料'].includes(tab) && <section><h3>开发资料</h3><dl><dt>当前轮次</dt><dd>第 {selected.journey.selectedRound ?? 1} 轮</dd><dt>当前状态</dt><dd>{viewLabel(selected)}</dd><dt>要求完成</dt><dd>{date(sheet?.document?.returnDate)}</dd><dt>工艺 / 洗水</dt><dd>{sheet?.document ? `${sheet.document.craft} / ${sheet.document.washing}` : "未登记"}</dd><dt>面辅料</dt><dd>{sheet?.document?.materials.filter(item => item.requiredThisRound).map(item => `${item.category}：${item.name || item.label}`).join('；') || "未登记"}</dd></dl>{selected.journey.sourceId && <a href={openUrl(selected)}>打开完整开发单 / 附件 / 打印</a>}</section>}
+          {['基础资料','订购信息'].includes(tab) && <section><h3>订购信息</h3><dl><dt>确定订单</dt><dd>{selected.journey.orderId ? "有" : "无"}</dd><dt>订购数量</dt><dd>{selected.journey.orderId ? selected.journey.lines.reduce((total,line) => total+line.orderedQuantity,0).toLocaleString() : "尚无确定订单"}</dd><dt>PO / 颜色</dt><dd>{selected.journey.lines.map(line => `${line.po ?? '未补号'} / ${line.color}`).join('；') || "未登记"}</dd><dt>交货日期</dt><dd>{selected.journey.deliveryDate ?? "未登记"}</dd></dl>{selected.canConfirm && options?.creationEnabled && access?.create && <Button onClick={() => {setConfirm(selected); setIntent('confirm_order');}}>客户确定订单</Button>}{selected.journey.orderId && <a href={`${urls.pageUrl('ui/digital-production')}?order=${selected.journey.orderId}&returnTo=${encodeURIComponent(contextUrl())}`}>查看完整订购信息</a>}</section>}
+          {tab === '版本记录' && <section><h3>版本与采用轮次</h3><p>当前开发第 {selected.journey.selectedRound ?? 1} 轮 · {sheet?.version ? `版本 ${sheet.version}` : "资料尚未保存"}</p><p>{selected.journey.adoptedRound ? `大货采用第 ${selected.journey.adoptedRound} 轮` : "尚未登记大货采用轮次"}</p>{selected.journey.sourceId && <a href={openUrl(selected)}>查看完整版本历史 / 复版</a>}</section>}
+        </div></>}
+      </>}
+    </section>}
   </div>;
 }

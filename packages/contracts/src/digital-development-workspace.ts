@@ -11,13 +11,17 @@ export const DevelopmentWorkspaceFilterSchema = z.object({
   page: z.coerce.number().int().min(1).max(100000).default(1),
   search: z.string().trim().max(100).default(""), customer: z.string().trim().max(100).optional(),
   view: z.enum(DEVELOPMENT_VIEWS.map(item => item.key)).default("all"),
-}).strict();
+  designer: z.string().trim().max(100).optional(),
+  startDate: z.iso.date().optional(), endDate: z.iso.date().optional(),
+}).strict().superRefine((value, context) => {
+  if (value.startDate && value.endDate && value.startDate > value.endDate) context.addIssue({code:"custom", message:"开始日期不能晚于结束日期", path:["endDate"]});
+});
 export type DevelopmentWorkspaceFilter = z.infer<typeof DevelopmentWorkspaceFilterSchema>;
 export type DevelopmentWorkspaceItem = { journey: OrderJourney; view: DevelopmentView; canConfirm: boolean };
 export type DevelopmentWorkspaceResult = {
   asOf: string; page: number; pageSize: 20; total: number;
   counts: Record<DevelopmentWorkspaceFilter["view"], number>;
-  customers: string[]; items: DevelopmentWorkspaceItem[];
+  customers: string[]; designers?: string[]; items: DevelopmentWorkspaceItem[];
 };
 
 export const PATTERN_GROUPS = [
@@ -31,10 +35,21 @@ export const PATTERN_GROUPS = [
   { key: "check", label: "尾查与确认", nodes: ["development_tail_check", "development_confirmation"] },
   { key: "shipping", label: "寄样", nodes: ["development_shipping"] },
 ] as const;
+/** Visual lanes group original task kinds without changing workflow or counting rules. */
+export const PATTERN_LANES = [
+  {key:"materials", label:"核配与补料", groups:["materials"]},
+  {key:"pattern", label:"纸样", groups:["pattern"]},
+  {key:"cutting", label:"裁板", groups:["cutting"]},
+  {key:"craft", label:"工艺与洗水", groups:["craft", "washing"]},
+  {key:"sewing", label:"派工与车板", groups:["dispatch", "sewing"]},
+  {key:"check", label:"尾查与确认", groups:["check"]},
+  {key:"shipping", label:"寄样", groups:["shipping"]},
+] as const;
 export const PatternWorkspaceFilterSchema = z.object({
   page: z.coerce.number().int().min(1).max(100000).default(1),
   search: z.string().trim().max(100).default(""),
   group: z.enum(PATTERN_GROUPS.map(item => item.key)).optional(),
+  lane: z.enum(PATTERN_LANES.map(item => item.key)).optional(),
   owner: z.string().uuid().optional(),
   state: z.enum(["ongoing", "all", "pending", "active", "blocked", "completed"]).default("ongoing"),
   risk: z.enum(["overdue", "due_soon", "blocked", "unknown"]).optional(),
@@ -49,4 +64,5 @@ export type PatternWorkspaceResult = {
   asOf: string; page: number; pageSize: 20; total: number; archiveTotal: number;
   counts: Record<typeof PATTERN_GROUPS[number]["key"], number>;
   owners: Array<{id: string; name: string | null}>; items: PatternWorkspaceTask[];
+  risks?: PatternWorkspaceTask[];
 };

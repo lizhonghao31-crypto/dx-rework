@@ -9,8 +9,8 @@ export function developmentWorkspaceReturnUrl(value: string | null): string | nu
     const urls = createWebUrls(import.meta.env.BASE_URL), url = new URL(value, "https://local.invalid");
     if (url.hash || [...url.searchParams.keys()].length !== new Set(url.searchParams.keys()).size) return null;
     const query = Object.fromEntries(url.searchParams);
-    if (url.pathname === urls.pageUrl("ui/digital-pattern-room") && PatternWorkspaceFilterSchema.safeExtend({task: z.string().uuid().optional()}).safeParse(query).success) return url.pathname + url.search;
-    if (url.pathname === urls.pageUrl("ui/digital-production") && DevelopmentWorkspaceFilterSchema.safeExtend({workspace: z.literal("designer")}).safeParse(query).success) return url.pathname + url.search;
+    if (url.pathname === urls.pageUrl("ui/digital-pattern-room") && PatternWorkspaceFilterSchema.safeExtend({task: z.string().uuid().optional(), taskView: z.enum(["read","handle","correct"]).optional()}).safeParse(query).success) return url.pathname + url.search;
+    if (url.pathname === urls.pageUrl("ui/digital-production") && DevelopmentWorkspaceFilterSchema.safeExtend({workspace: z.literal("designer"), selected: z.string().uuid().optional()}).safeParse(query).success) return url.pathname + url.search;
   } catch { /* A malformed return target has no navigation effect. */ }
   return null;
 }

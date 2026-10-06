@@ -109,7 +109,7 @@ export function DigitalProductionPage() {
   // The cockpit already chose an exact task. Reuse its existing detail consumer
   // without prepending the unrelated task and order lists to this deep link.
   const cockpitTask = new URLSearchParams(window.location.search).get("task");
-  if (cockpitReturnPath(window.location.search) && cockpitTask && /^[0-9a-f-]{36}$/i.test(cockpitTask)) return <div className="pattern-orders digital-production" aria-label="座舱原任务详情">{error && <p role="alert">{error}</p>}{access ? <DigitalTasksPanel options={access} taskId={cockpitTask} compact view={digitalTaskView(window.location.search)}/> : !error && <p role="status">正在读取原任务…</p>}</div>;
+  if ((cockpitReturnPath(window.location.search) || developmentWorkspaceReturnUrl(new URLSearchParams(window.location.search).get("returnTo"))) && cockpitTask && /^[0-9a-f-]{36}$/i.test(cockpitTask)) return <div className="pattern-orders digital-production" aria-label="座舱原任务详情">{error && <p role="alert">{error}</p>}{access ? <DigitalTasksPanel options={access} taskId={cockpitTask} compact view={digitalTaskView(window.location.search)}/> : !error && <p role="status">正在读取原任务…</p>}</div>;
   return <div className="pattern-orders digital-production"><PageHeader title="数字生产订单" description="订单源头" />
     <a href={urls.pageUrl("ui/digital-cockpit")}>生产管理座舱</a>
     {error && <p role="alert">{error}</p>}
