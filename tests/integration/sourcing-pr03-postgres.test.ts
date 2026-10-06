@@ -3099,7 +3099,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(analysis.record(root,{...note,taskIds:[randomUUID()]},randomUUID())).rejects.toMatchObject({statusCode:404});
     const key=randomUUID(),saved=await analysis.record(root,note,key);expect(await analysis.record(root,note,key)).toEqual(saved);
     await expect(analysis.record(root,{...note,conclusion:'TEST不同结论'},key)).rejects.toMatchObject({statusCode:409});
-    const followup=await analysis.list(root,filters);expect(followup.notes.find(item=>item.id===saved.id)).toMatchObject({conclusion:note.conclusion,action:note.action,taskIds:[taskId],ruleVersion:'digital-production-p16-v1'});
+    const followup=await analysis.list(root,filters);expect(followup.notes.find(item=>item.id===saved.id)).toMatchObject({conclusion:note.conclusion,action:note.action,taskIds:[taskId],ruleVersion:'digital-production-p16-v2'});
     await taskService.feedback(root,taskId,'TEST回看原单后交接资料已核实',false,randomUUID());
     const observed=(await analysis.list(root,filters)).rows.find(row=>row.taskId===taskId)!;expect(observed.state).toBe('ready');expect(observed.events.some(event=>event.kind==='unblocked')).toBe(true);expect(observed.waitingSeconds).toBeGreaterThanOrEqual(0);
     const conditionTask=observed.taskId,connection=await database.connect();
@@ -3282,7 +3282,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       .rejects.toMatchObject({ statusCode: 404 });
   });
 
-  it.each(['无','印花'] as const)('P13/P14 whole-order %s flow links native receiving and preserves closure facts',async secondaryCraft=>{
+  describe.each(['无','印花'] as const)('P13/P14 whole-order %s flow links native receiving and preserves closure facts',secondaryCraft=>{
+    let continuation:{primary:ReturnType<typeof merchandiserActor>;root:ReturnType<typeof rootActor>;ready:NonNullable<Awaited<ReturnType<typeof exerciseBulkPreparation>>>;ids:string[];fixture:Awaited<ReturnType<typeof budgetFixture>>}|undefined;
+    it('keeps original cutting and QC gates before actual dispatch',async()=>{
     const fixture=await budgetFixture(),primary=merchandiserActor(),root=rootActor(),flow=new FactoryFlowService(database),tasks=new DigitalProductionTaskService(database);
     const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId("净色车缝"),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft}))!;
     const {id,caseId,people,cutting}=ready;
@@ -3315,7 +3317,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       state=await flow.qc(qc,id,{expectedRevision:state.revision,checks:[{lineId:state.lines[0]!.lineId,result:'合格',problem:'',treatment:'TEST复查已处理',attachmentIds:[]}],note:''},randomUUID());
       expect(state.tasks.find(t=>t.taskKind==='warehouse_dispatch')!.state).toBe('ready');
     }
-    state=await flow.read(warehouse,id);await expect(flow.dispatch(warehouse,id,{expectedRevision:state.revision,occurredAt:'2000-01-01T00:00:00Z',supplierId:factoryId,note:'TEST不允许早于实裁/QC'},randomUUID())).rejects.toMatchObject({statusCode:409});
+    continuation={primary,root,ready,ids,fixture};
+    });
+    it('dispatches through native services and preserves original receiving and closure facts',async()=>{
+    expect(continuation).toBeDefined();
+    const {primary,root,ready,ids,fixture}=continuation!;
+    const {id,caseId,people}=ready,flow=new FactoryFlowService(database);
+    const warehouse=people.warehouse_receiver!,qc=people.quality_control!;
+    let state=await flow.read(warehouse,id);await expect(flow.dispatch(warehouse,id,{expectedRevision:state.revision,occurredAt:'2000-01-01T00:00:00Z',supplierId:factoryId,note:'TEST不允许早于实裁/QC'},randomUUID())).rejects.toMatchObject({statusCode:409});
     if(secondaryCraft!=='无'){const beforeQc=new Date(Math.max(...state.checks.map(c=>new Date(c.checkedAt).getTime()))-1).toISOString();expect(new Date(beforeQc).getTime()).toBeGreaterThan(new Date(state.facts.filter(f=>f.kind==='工艺回仓').at(-1)!.occurredAt!).getTime());await expect(flow.dispatch(warehouse,id,{expectedRevision:state.revision,occurredAt:beforeQc,supplierId:factoryId,note:'TEST不能倒填至当前QC之前'},randomUUID())).rejects.toMatchObject({statusCode:409});}
     state=await flow.read(warehouse,id);const dispatchedAt=new Date().toISOString(),input={expectedRevision:state.revision,occurredAt:dispatchedAt,supplierId:factoryId,note:'TEST整款已实际发厂'},key=randomUUID();
     const dispatched=await flow.dispatch(warehouse,id,input,key);await flow.dispatch(warehouse,id,input,key);expect(dispatched.dispatched).toBe(true);expect(dispatched.productionId).toBeTruthy();
@@ -3349,6 +3358,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await access.assignMerchandiser(root,id,primary.actorId,assigned.version);
 
     await exerciseOrderClosure(database,service,id,ids,{root,primary,manager:managerActor(),warehouse,qc},secondaryCraft==='无');
+    });
   });
 
 
