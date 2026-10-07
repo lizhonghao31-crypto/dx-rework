@@ -25,6 +25,7 @@
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) [aria-invalid=true]{border-color:#e5484d}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-add-row{color:#0066ff;background:#fff;border:0;padding-left:0}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-table-scroll{overflow-x:auto;max-width:100%}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-table-viewport>table>thead{position:relative;z-index:4;transform:translateY(var(--dx-doc-header-offset,0px))}
  @media(max-width:800px){
   :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-toolbar{align-items:flex-start;flex-direction:column;gap:8px}
   :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-toolbar .dx-doc-actions{width:100%}
@@ -34,6 +35,8 @@
  }
 }
 @media print {
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-table-viewport{overflow:visible!important}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-table-viewport>table>thead{position:static;transform:none!important;z-index:auto}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-print-value{display:inline;white-space:pre-wrap;overflow-wrap:anywhere}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field .dx-doc-readonly{display:none}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) :is(.dx-doc-toolbar,.dx-doc-anchors,.dx-doc-errors,.dx-doc-field-error){display:none!important}
