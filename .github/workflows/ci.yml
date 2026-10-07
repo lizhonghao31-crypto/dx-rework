@@ -179,7 +179,7 @@ jobs:
 
       - name: Install web locked dependencies
         if: ${{ steps.classify.outputs.web_only == 'true' }}
-        run: npm ci --include-workspace-root --workspace @dx-rework/web --workspace @dx-rework/contracts --workspace @dx-rework/ui --no-audit --no-fund --prefer-offline
+        run: npm ci --include-workspace-root --workspace @dx-rework/web --workspace @dx-rework/contracts --workspace @dx-rework/domain --workspace @dx-rework/ui --no-audit --no-fund --prefer-offline
 
       - name: Lint changed web files
         if: ${{ steps.classify.outputs.web_only == 'true' }}
@@ -196,11 +196,11 @@ jobs:
 
       - name: Typecheck web workspaces
         if: ${{ steps.classify.outputs.web_only == 'true' }}
-        run: npm run typecheck --workspace @dx-rework/contracts --workspace @dx-rework/ui --workspace @dx-rework/web --if-present
+        run: npm run typecheck --workspace @dx-rework/contracts --workspace @dx-rework/domain --workspace @dx-rework/ui --workspace @dx-rework/web --if-present
 
       - name: Build web workspaces
         if: ${{ steps.classify.outputs.web_only == 'true' }}
-        run: npm run build --workspace @dx-rework/contracts --workspace @dx-rework/ui --workspace @dx-rework/web --if-present
+        run: npm run build --workspace @dx-rework/contracts --workspace @dx-rework/domain --workspace @dx-rework/ui --workspace @dx-rework/web --if-present
 
       - name: Run changed web unit tests
         if: ${{ steps.classify.outputs.web_only == 'true' }}
