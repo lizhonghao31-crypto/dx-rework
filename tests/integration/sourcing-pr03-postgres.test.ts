@@ -11,6 +11,10 @@ import {exerciseOrderClosure} from "../helpers/order-closure-fixture.js";
 import {FactoryFlowService} from "../../apps/api/src/production-platform/factory-flow-service.js";
 import { exerciseBulkPreparation } from "../helpers/bulk-preparation-fixture.js";
 import { exerciseInstructions } from "../helpers/production-instruction-fixture.js";
+import { DigitalDevelopmentService } from "../../apps/api/src/production-platform/development-service.js";
+import { DevelopmentRoundService } from "../../apps/api/src/production-platform/development-round-service.js";
+import { DevelopmentExecutionService } from "../../apps/api/src/production-platform/development-execution-service.js";
+import { unzipSync } from "fflate";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import "./work-analysis-postgres.cases.js";
 import { readQuoteAnalysis } from "../../apps/api/src/sourcing/sourcing-analysis.js";
@@ -3225,6 +3229,98 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const budget = new DigitalBudgetService(database, true);
     return { order, designer, document, imageId, budget };
   };
+
+  it('analysis separates frozen development rounds from preparation and factory instruction versions', async () => {
+    const fixture = await budgetFixture(), primary = merchandiserActor(), root = rootActor();
+    const ready = (await exerciseBulkPreparation(database, fixture, service, attachments,
+      { primary, manager: managerActor(), owner: ownerActor(), ie: ieActor(), root },
+      factoryId, craftId('净色车缝'), 'none', { cuttingProcess: 'in_house', stopAtReady: true }))!;
+    const { id, sourceId, instruction, bulk, people } = ready;
+    for (const version of [2, 3, 4]) {
+      const sheet = await instruction.read(primary, id);
+      await instruction.save(primary, id, { expectedVersion: sheet.version, orderVersion: sheet.order.version, document: { ...sheet.document!, comments: `TEST制单版本${version}` } }, randomUUID());
+      await instruction.publish(primary, id, { expectedVersion: version, orderVersion: sheet.order.version }, randomUUID());
+    }
+    const forms = new DigitalDevelopmentService(database, true), rounds = new DevelopmentRoundService(database, true);
+    const development = await forms.read(fixture.designer, sourceId);
+    const draft = await rounds.save(fixture.designer, sourceId, { expectedDraftVersion: 0, revision: {
+      basedOnRound: 1, document: { ...development.document!, instructions: 'TEST原开发第2轮' },
+      origin: '客户新增要求', customerComment: 'TEST第2轮确认', internalProblem: '', explanation: '',
+      categories: ['尺寸'], affectedNodes: ['纸样'], outputKind: '整件样板',
+    } }, randomUUID());
+    await rounds.publish(fixture.designer, sourceId, { expectedDraftVersion: draft.draftVersion, basedOnRound: 1 }, randomUUID());
+    await database.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,2,'最终设计确认','{}',$3)", [randomUUID(), sourceId, fixture.designer.actorId]);
+    await new DevelopmentExecutionService(database, true).customerSample(fixture.designer, sourceId, { routeVersion: 2, note: 'TEST第2轮客户确认' }, randomUUID());
+    const fourth = await instruction.read(primary, id);
+    await instruction.save(primary, id, { expectedVersion: fourth.version, orderVersion: fourth.order.version, document: { ...fourth.document!, comments: 'TEST制单v5采用开发第2轮' } }, randomUUID());
+    await instruction.publish(primary, id, { expectedVersion: 5, orderVersion: fourth.order.version }, randomUUID());
+    let prep = await bulk.read(primary, id);
+    await bulk.dispatch(people.development_clerk!, id, { expectedVersion: prep.dispatch.version, patternWorkerId: people.pattern_room_worker!.actorId, deliverPattern: true }, randomUUID());
+    prep = await bulk.read(primary, id);
+    for (const kind of ['纸样完成', '唛架完成'] as const) await bulk.complete(people.pattern_room_worker!, id, { preparationId: prep.preparationId!, kind }, randomUUID());
+    const cuttingIds = (await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position', [ready.caseId])).rows;
+    for (const { cutting_order_id: cuttingId } of cuttingIds) {
+      const image = randomUUID();
+      await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-analysis-cut.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)", [image, `TEST/analysis/${image}`, 'c'.repeat(64), root.actorId]);
+      await ready.cutting.record({ ...root, authorizationCapability: 'cutting:records:create' }, cuttingId, { pieceCount: 1, actualCutCount: 10, attachmentIds: [image] }, randomUUID());
+    }
+    const flow = await new FactoryFlowService(database).read(people.warehouse_receiver!, id);
+    const warehouseTask = flow.tasks.find(task => task.taskKind === 'warehouse_dispatch')!;
+    const filters = DigitalAnalysisFilterSchema.parse({ from: '2020-01-01', to: '2080-01-01', scope: 'snapshot' });
+    const analysis = new DigitalAnalysisQuery(database), result = await analysis.list(people.warehouse_receiver!, filters);
+    const row = result.rows.find(row => row.taskId === warehouseTask.taskId)!;
+    expect(row).toMatchObject({ sourceId, sourceRound: 2, instructionVersion: 5, round: 5 });
+    expect((await forms.read(root, sourceId, database, 2)).roundNumber).toBe(2);
+    await expect(forms.read(root, sourceId, database, 5)).rejects.toMatchObject({ statusCode: 404 });
+    await expect(forms.read(people.warehouse_receiver!, sourceId, database, 2)).rejects.toMatchObject({ statusCode: 404 });
+    expect(row.canReadSourceRound).toBe(false);
+
+    const client = await database.connect();
+    let missingTaskId: string;
+    try {
+      await client.query('BEGIN');
+      missingTaskId = (await new DigitalProductionTaskService(database).createWithClient(client, root, {
+        resource: { kind: 'order', id }, kind: 'production_sheet', routeId: randomUUID(), routeVersion: 5,
+        occurrence: 99, assigneeId: primary.actorId,
+      })).taskId;
+      await client.query('COMMIT');
+    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+
+    const taskSnapshot = (await database.query('SELECT task_id,route_version,route_instance_id,state,entered_at,completed_at FROM digital_production_tasks WHERE task_id IN (SELECT task_id FROM digital_production_task_access WHERE production_order_id=$1 OR source_id=$2) ORDER BY task_id', [id, sourceId])).rows;
+    const all = await analysis.list(root, { ...filters, scope: 'created' });
+    expect(all.rows.find(row => row.taskId === warehouseTask.taskId)?.canReadSourceRound).toBe(true);
+    const old = all.rows.find(row => row.orderId === id && row.round === 4)!;
+    expect(old).toMatchObject({ sourceRound: 1, instructionVersion: 4 });
+    const developmentTasks = all.rows.filter(row => row.orderId === null && row.sourceId === sourceId && row.round === 2);
+    expect(developmentTasks.length).toBeGreaterThan(0);
+    expect(developmentTasks.every(row => row.sourceRound === 2 && row.instructionVersion === null)).toBe(true);
+    // Source-task read authorization survives analysis date/role/assignee filters.
+    const sourceTask = developmentTasks[0]!;
+    const access = new DigitalProductionAccessService(database);
+    const delegation = await access.delegate(root, { resourceKind: 'task', resourceId: sourceTask.taskId,
+      delegateId: people.warehouse_receiver!.actorId, purpose: 'technical', expiresAt: new Date(Date.now() + 60000).toISOString() });
+    expect((await forms.read(people.warehouse_receiver!, sourceId, database, 2)).roundNumber).toBe(2);
+    const scoped = await analysis.list(people.warehouse_receiver!, { ...filters, assigneeId: people.warehouse_receiver!.actorId, role: 'warehouse_receiver' });
+    expect(scoped.rows.some(row => row.taskId === sourceTask.taskId)).toBe(false);
+    expect(scoped.rows.find(row => row.taskId === warehouseTask.taskId)?.canReadSourceRound).toBe(true);
+    await access.revoke(root, delegation.delegationId);
+    expect((await analysis.list(people.warehouse_receiver!, { ...filters, assigneeId: people.warehouse_receiver!.actorId, role: 'warehouse_receiver' })).rows.find(row => row.taskId === warehouseTask.taskId)?.canReadSourceRound).toBe(false);
+    await expect(forms.read(people.warehouse_receiver!, sourceId, database, 2)).rejects.toMatchObject({ statusCode: 404 });
+
+    expect(all.rows.find(row => row.taskId === missingTaskId)).toMatchObject({ round: 5, sourceRound: null, instructionVersion: null });
+    const revisions = await analysis.list(root, { ...filters, scope: 'revisions', origin: '客户新增要求' });
+    expect(revisions.rows.some(row => row.taskId === warehouseTask.taskId)).toBe(true);
+    expect(revisions.rows.some(row => row.taskId === old.taskId)).toBe(false);
+    expect(revisions.rows.some(row => row.taskId === missingTaskId)).toBe(false);
+    expect(revisions.rows.every(row => row.sourceRound === 2)).toBe(true);
+    const workbook = unzipSync(await analysis.export(root, { ...filters, scope: 'revisions', origin: '客户新增要求' }));
+    const xml = new TextDecoder().decode(workbook['xl/worksheets/sheet2.xml']);
+    expect(xml).toContain('开发轮次'); expect(xml).toContain('制单版本');
+    const warehouseXml = xml.match(/<row\b[^>]*>.*?<\/row>/g)!.find(value => value.includes(warehouseTask.taskId))!;
+    expect(warehouseXml).toMatch(/<c r="I\d+"[^>]*><v>2<\/v>/);
+    expect(warehouseXml).toMatch(/<c r="J\d+"[^>]*><v>5<\/v>/);
+    expect((await database.query('SELECT task_id,route_version,route_instance_id,state,entered_at,completed_at FROM digital_production_tasks WHERE task_id IN (SELECT task_id FROM digital_production_task_access WHERE production_order_id=$1 OR source_id=$2) ORDER BY task_id', [id, sourceId])).rows).toEqual(taskSnapshot);
+  });
 
   it('P16 keeps a source-backed analysis and improvement loop inside scope and original export rights',async()=>{
     const fixture=await budgetFixture(),primary=merchandiserActor(),root=rootActor();
