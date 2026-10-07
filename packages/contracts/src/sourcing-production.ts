@@ -13,6 +13,7 @@ export const SourcingDispatchSummarySchema = z.object({
 export const SourcingDispatchStateSchema = z.object({
   item: SourcingDispatchSummarySchema.nullable(),
   canDispatch: z.boolean(),
+  dispatchMode: z.enum(["merchandiser", "warehouse_actual_dispatch"]).optional(),
 }).strict();
 export const SourcingProductionOrderSchema = SourcingDispatchSummarySchema.extend({
   sourcingCaseId: z.string().uuid(),

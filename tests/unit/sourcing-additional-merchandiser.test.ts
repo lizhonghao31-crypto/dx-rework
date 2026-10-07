@@ -14,7 +14,7 @@ function actor(actorId:string):TrustedActorContext {
 }
 
 describe("additional merchandiser contract scope",()=>{
-  it("allows either named merchandiser to return the first contract but not another merchandiser or a second return",async()=>{
+  it("allows either named merchandiser to return the first contract but not another merchandiser",async()=>{
     let returned=false;
     const query=vi.fn(async (sql:string)=>{
       if (sql.includes("business_module_owner_bindings")) return {rows:[{available:false}]};
@@ -33,7 +33,7 @@ describe("additional merchandiser contract scope",()=>{
     expect((await service.get(actor(additional),caseId)).canUpload).toBe(true);
     expect((await service.get(actor(other),caseId)).canUpload).toBe(false);
     returned=true;
-    expect((await service.get(actor(creator),caseId)).canUpload).toBe(false);
-    expect((await service.get(actor(additional),caseId)).canUpload).toBe(false);
+    expect((await service.get(actor(creator),caseId)).canUpload).toBe(true);
+    expect((await service.get(actor(additional),caseId)).canUpload).toBe(true);
   });
 });

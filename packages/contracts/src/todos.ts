@@ -82,6 +82,8 @@ export const TodoResponseSchema = z.object({
   todoId: TodoIdSchema,
   todoType: TodoTypeSchema,
   category: z.string().min(1).max(120),
+  /** Digital node title, separate from its associated style identity. */
+  taskTitle: z.string().min(1).max(200).optional(),
   sourceEventId: TodoIdSchema,
   sourceAction: z.string().min(1).max(128),
   entityType: z.string().min(1).max(100),
@@ -95,7 +97,7 @@ export const TodoResponseSchema = z.object({
   reminderCount: z.number().int().min(0).max(2),
   status: TodoStatusSchema,
   blockedReason: z.string().nullable(),
-  /** Present when the action is attached to a rework or sourcing order. */
+  /** Minimal identity of the action's associated business resource. */
   orderContext: TodoOrderContextSchema.nullable(),
   unread: z.boolean().optional(),
   productionProgress: z.number().nonnegative().optional(),

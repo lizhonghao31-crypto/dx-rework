@@ -1,6 +1,7 @@
 export type AnalysisTask = {
  taskId:string;sourceId:string|null;orderId:string|null;styleNo:string;customer:string;category:string;requiredRole:string;
  assigneeId:string|null;assigneeName:string|null;nodeKey:string;label:string;round:number;state:string;createdAt:string;
+ sourceRound:number|null;instructionVersion:number|null;
  enteredAt:string|null;completedAt:string|null;enteredQuality:string;completedQuality:string;dueAt:string|null;policyVersion:number|null;
  pendingConditions:string[]; materialSupplyPending?:boolean;sourceCreatedAt:string|null;sourcePublished:boolean;events:AnalysisEvent[];
 };

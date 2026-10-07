@@ -18,15 +18,17 @@ export class DigitalAnalysisQuery{
  private exportAllowed(actor:TrustedActorContext){try{assertBusinessExportAllowed(actor.actorRoles,'report:export');return isDigitalLeader(actor)&&actor.actorRoles.includes('root_superuser')||Boolean(actor.authorizationCapabilities?.includes('report:view'));}catch{return false;}}
  private async snapshot(db:PoolClient,actor:TrustedActorContext,filters:DigitalAnalysisFilters){
   assertIdentityActor(actor);const window=range(filters),asOf=new Date().toISOString();
-  const candidates=(await db.query(`SELECT t.task_id AS "taskId",coalesce(a.source_id,o.source_id) AS "sourceId",a.production_order_id AS "orderId",
+  const candidates=(await db.query(`SELECT t.task_id AS "taskId",coalesce(a.source_id,bp.source_id,o.source_id) AS "sourceId",a.production_order_id AS "orderId",
     coalesce(o.design_style_no,s.design_style_no) AS "styleNo",coalesce(o.customer_code,s.customer_code,'') AS customer,coalesce(d.document->>'template','') AS category,
     a.required_role AS "requiredRole",a.assignee_id AS "assigneeId",u.display_name AS "assigneeName",t.node_key AS "nodeKey",p.label,t.route_version AS round,t.state,
+    CASE WHEN a.source_id IS NOT NULL THEN t.route_version ELSE bp.source_round END AS "sourceRound",bp.instruction_version AS "instructionVersion",
     t.created_at AS "createdAt",t.entered_at AS "enteredAt",t.completed_at AS "completedAt",t.entered_quality AS "enteredQuality",t.completed_quality AS "completedQuality",
     ARRAY(SELECT condition_key FROM digital_production_task_conditions WHERE task_id=t.task_id AND NOT satisfied AND condition_key IN ('materials_ready','handover_received')) AS "pendingConditions",
     r.due_at AS "dueAt",r.policy_version AS "policyVersion",s.created_at AS "sourceCreatedAt",d.published_at AS "sourcePublishedAt",coalesce(d.status='published',false) AS "sourcePublished"
     FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
     LEFT JOIN digital_production_orders o ON o.production_order_id=a.production_order_id
-    LEFT JOIN digital_production_sources s ON s.source_id=coalesce(a.source_id,o.source_id)
+    LEFT JOIN digital_bulk_preparations bp ON bp.preparation_id=t.route_instance_id AND bp.production_order_id=a.production_order_id
+    LEFT JOIN digital_production_sources s ON s.source_id=coalesce(a.source_id,bp.source_id,o.source_id)
     LEFT JOIN digital_development_documents d ON d.source_id=s.source_id
     LEFT JOIN app_users u ON u.id=a.assignee_id
     JOIN LATERAL(SELECT label FROM digital_production_deadline_policies WHERE node_key=t.node_key ORDER BY version DESC LIMIT 1)p ON true
@@ -39,7 +41,8 @@ export class DigitalAnalysisQuery{
         OR (d.published_at>=$5 AND d.published_at<$6)
         OR ($7='created' AND t.created_at>=$5 AND t.created_at<$6)
         OR EXISTS(SELECT 1 FROM digital_development_rounds period_round WHERE period_round.source_id=s.source_id
-          AND period_round.round_number=t.route_version AND period_round.published_at>=$5 AND period_round.published_at<$6)
+          AND period_round.round_number=CASE WHEN a.source_id IS NOT NULL THEN t.route_version ELSE bp.source_round END
+          AND period_round.published_at>=$5 AND period_round.published_at<$6)
       )))
     ORDER BY t.created_at DESC,t.task_id DESC`,[filters.customer,filters.category,filters.role,filters.designer??null,window.from,window.to,filters.scope??null])).rows;
   const policy=new DigitalProductionAccessPolicy(db),authorized=[];
@@ -60,14 +63,23 @@ export class DigitalAnalysisQuery{
   const attributedRows=rows.map(row=>({...row,assignmentHistory:assignments.filter(a=>a.taskId===row.taskId).map(a=>({...a,at:iso(a.at)!})),delegations:delegations.filter(d=>d.taskId===row.taskId).map(d=>({...d,from:iso(d.from)!,expiresAt:iso(d.expiresAt)!,revokedAt:iso(d.revokedAt)}))}));
   const people=[...new Map(attributedRows.filter(row=>row.assigneeId).map(row=>[row.assigneeId!,{id:row.assigneeId!,name:row.assigneeName}])).values()];
   const scopedRows=filters.assigneeId?attributedRows.filter(row=>row.assigneeId===filters.assigneeId):attributedRows;
-  // Original development reads allow source access through an already-visible source task.
-  // Order-associated tasks still require the original direct source permission.
-  const readableTaskSources=new Set((await db.query('SELECT DISTINCT source_id FROM digital_production_task_access WHERE task_id=ANY($1::uuid[]) AND source_id IS NOT NULL',[scopedRows.map(row=>row.taskId)])).rows.map(row=>row.source_id as string));
-  const sourceIds:string[]=[];for(const sourceId of new Set(scopedRows.map(row=>row.sourceId).filter((id):id is string=>Boolean(id))))if(readableTaskSources.has(sourceId)||await policy.allowed(actor,'source',sourceId,'technical'))sourceIds.push(sourceId);
+  // Match original development reads: any technically visible source task grants
+  // the read, including tasks outside the current analysis filters.
+  const candidateSources=[...new Set(scopedRows.map(row=>row.sourceId).filter((id):id is string=>Boolean(id)))];
+  const sourceTasks=(await db.query('SELECT task_id,source_id FROM digital_production_task_access WHERE source_id=ANY($1::uuid[])',[candidateSources])).rows;
+  const sourceIds:string[]=[];
+  for(const sourceId of candidateSources){
+    let readable=await policy.allowed(actor,'source',sourceId,'technical');
+    if(!readable)for(const task of sourceTasks)if(task.source_id===sourceId&&await policy.allowed(actor,'task',task.task_id,'technical')){readable=true;break;}
+    if(readable)sourceIds.push(sourceId);
+  }
   const rawRounds=(await db.query(`SELECT source_id AS "sourceId",round_number AS round,origin,categories,affected_nodes AS "affectedNodes",customer_comment AS "customerComment",internal_problem AS "internalProblem",explanation,published_at AS "publishedAt" FROM digital_development_rounds
     WHERE source_id=ANY($1::uuid[]) AND published_at>=$2 AND published_at<$3 ORDER BY published_at,source_id,round_number`,[sourceIds,window.from,window.to])).rows;
   const rounds=rawRounds.map(row=>({...row,publishedAt:iso(row.publishedAt)!}));
-  const selectedRows=workspaceAnalysisRows(scopedRows,rounds,filters,window.from,window.to,asOf);
+  const readableSources=new Set(sourceIds);
+  const selectedRows=workspaceAnalysisRows(scopedRows,rounds,filters,window.from,window.to,asOf).map(row=>({
+    ...row,canReadSourceRound:row.sourceRound!=null&&readableSources.has(row.sourceId??''),
+  }));
   // Shared analysis is readable only when every referenced original task remains visible.
   const rawNotes=(await db.query(`SELECT a.id,u.display_name AS author,a.created_at AS "createdAt",a.after_state AS note FROM audit_events a JOIN app_users u ON u.id=a.actor_id
     WHERE a.action='digital.analysis.recorded' AND (a.actor_id=$1 OR $2::boolean) ORDER BY a.created_at DESC,a.id DESC LIMIT 100`,[actor.actorId,isDigitalLeader(actor)||isDigitalTechnicalManager(actor)])).rows;
@@ -81,8 +93,8 @@ export class DigitalAnalysisQuery{
  async export(actor:TrustedActorContext,filters:DigitalAnalysisFilters){
   if(!this.exportAllowed(actor))digitalForbidden();
   const result=await this.read(db=>this.snapshot(db,actor,filters));
-  const rows:WorkbookCell[][]=[['任务','来源','母单','款号','客户','品类','岗位','当前主办','轮次','节点','状态','进入','完成','时间质量','期限','SLA版本','按期纳入','排除原因','办理秒数','已知等待秒数','等待缺失数'],
-    ...result.rows.map(r=>[r.taskId,r.sourceId??'',r.orderId??'',r.styleNo,r.customer,r.category,r.requiredRole,r.assigneeName??'',r.round,r.label,r.state,r.enteredAt??'',r.completedAt??'',`${r.enteredQuality}/${r.completedQuality}`,r.dueAt??'',r.policyVersion??'',r.slaIncluded?'是':'否',r.exclusion??'',r.handlingSeconds??'',r.waitingSeconds,r.unknownWaiting])];
+  const rows:WorkbookCell[][]=[['任务','来源','母单','款号','客户','品类','岗位','当前主办','开发轮次','制单版本','节点','状态','进入','完成','时间质量','期限','SLA版本','按期纳入','排除原因','办理秒数','已知等待秒数','等待缺失数'],
+    ...result.rows.map(r=>[r.taskId,r.sourceId??'',r.orderId??'',r.styleNo,r.customer,r.category,r.requiredRole,r.assigneeName??'',r.sourceRound??'',r.instructionVersion??'',r.label,r.state,r.enteredAt??'',r.completedAt??'',`${r.enteredQuality}/${r.completedQuality}`,r.dueAt??'',r.policyVersion??'',r.slaIncluded?'是':'否',r.exclusion??'',r.handlingSeconds??'',r.waitingSeconds,r.unknownWaiting])];
   const content=await buildWorkbook([{name:'范围与口径',rows:[['规则版本',result.ruleVersion],['生成时间',result.asOf],['统计窗口',filters.scope==='snapshot'?'当前积压快照（不按创建日期排除）':filters.scope==='completed'?'任务原完成日期（北京时间）':filters.scope==='published'?'来源首次原发布日期（北京时间）':filters.scope==='revisions'?'复版原发布日期（北京时间）':'任务创建日期（北京时间）'],['筛选',JSON.stringify(filters)],['说明','无SLA不入按期分母；未核实不计算精确周期；办理周期不是净工时；并行等待按每来源区间并集']]},{name:'节点明细',rows},{name:'办理及更正事实',rows:[['任务','事件','操作者','发生','登记','质量','更正原事件','原因'],...result.rows.flatMap(r=>r.events.map(e=>[r.taskId,e.kind,e.actorName??e.actorId,e.at??'',e.recordedAt,e.quality,e.correctsId??'',String(e.payload.reason??e.payload.note??'')]))]},{name:'主办接续及代理',rows:[['任务','类型','时间','原主办','接续/代理','记录人/结束'],...result.rows.flatMap(r=>[...r.assignmentHistory.map(a=>[r.taskId,'改派',a.at,a.beforeName??'',a.afterName??'',a.actorName]),...r.delegations.map(d=>[r.taskId,'代理',d.from,'',d.name,d.revokedAt??d.expiresAt])])]}]);
   await this.database.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1::uuid,$2,$3,'digital.analysis.exported','digital_analysis',$1::text,$4)",[randomUUID(),actor.requestId,actor.actorId,JSON.stringify({filters,ruleVersion:result.ruleVersion,rowCount:result.total})]);
   return content;

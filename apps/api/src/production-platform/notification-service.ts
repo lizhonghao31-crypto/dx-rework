@@ -1,4 +1,5 @@
 import { projectDevelopmentNotices } from "./development-notifications.js";
+import { patternOrderScopeSql } from "../pattern-room/order-authority.js";
 import { isRootActor } from "../access/business-authority.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -13,6 +14,7 @@ const iso = (value: Date | string) => new Date(value).toISOString();
 const ACTIVE = "t.state IN ('pending','ready','blocked') AND coalesce(l.state,'active')='active'";
 const TASKS = `SELECT t.*,a.assignee_id,a.required_role,a.task_kind,a.production_order_id,a.source_id,
   coalesce(o.created_by,s.created_by) AS designer_id,o.primary_merchandiser_id,
+  o.design_style_no AS order_style_no,s.design_style_no AS source_style_no,
   p.label,d.revision_id,d.warning_at,d.due_at,coalesce(l.state,'active') AS lifecycle
   FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
   LEFT JOIN digital_production_orders o USING(production_order_id)
@@ -20,7 +22,7 @@ const TASKS = `SELECT t.*,a.assignee_id,a.required_role,a.task_kind,a.production
   LEFT JOIN digital_production_resource_lifecycle l ON l.resource_kind=CASE WHEN a.production_order_id IS NULL THEN 'source' ELSE 'order' END AND l.resource_id=coalesce(a.production_order_id,a.source_id)
   JOIN LATERAL(SELECT label FROM digital_production_deadline_policies WHERE node_key=t.node_key ORDER BY version DESC LIMIT 1)p ON true
   LEFT JOIN LATERAL(SELECT * FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1)d ON true`;
-type Task = {task_id:string;state:string;assignee_id:string|null;required_role:string;task_kind:string;production_order_id:string|null;source_id:string|null;designer_id:string;primary_merchandiser_id:string|null;label:string;revision_id:string|null;warning_at:Date|null;due_at:Date|null;lifecycle:string;created_at:Date};
+type Task = {task_id:string;state:string;assignee_id:string|null;required_role:string;task_kind:string;production_order_id:string|null;source_id:string|null;order_style_no:string|null;source_style_no:string|null;designer_id:string;primary_merchandiser_id:string|null;label:string;revision_id:string|null;warning_at:Date|null;due_at:Date|null;lifecycle:string;created_at:Date};
 const labels: Record<string,string> = {ready:"待办理",reassigned:"已改派给你",unblocked:"已解除阻断",blocked:"办理遇到阻断",completed:"已完成",warning:"即将超时",overdue:"已超时",created:"待分配主办"};
 
 export class DigitalProductionNotificationService {
@@ -144,7 +146,12 @@ export class DigitalProductionNotificationService {
       const missing=!people.some(p=>p.actorId===task.assignee_id&&p.actorRoles.includes(task.required_role));
       if(task.state==="pending"&&!missing)continue;
       if(!(await this.recipients(this.database,task,"ready",people)).some(p=>p.actorId===actor.actorId))continue;
-      result.push({todoId:task.task_id,todoType:missing?"recipient_routing_exception":"business_action",category:missing?"digital_assignment":"digital_task",sourceEventId:task.task_id,sourceAction:"digital_task",entityType:"digital_task",entityId:task.task_id,recipientUserId:actor.actorId,requiredRole:task.required_role,requiredCapability:null,route:{routeName:"digital_production_task",entityId:task.task_id,todoId:task.task_id},policyKey:null,dueAt:task.due_at?iso(task.due_at):null,reminderCount:0,status:missing?"blocked_recipient":"pending",blockedReason:missing?"主办缺失或已失效，请重新分配":null,orderContext:{reworkNo:null,orderNo:null,styleNo:task.label,supplierName:null,status:task.state,updatedAt:iso(task.created_at)},unread:true,version:1,createdAt:iso(task.created_at),updatedAt:iso(task.created_at)});
+      // An effective personal action carries only its exact parent's style identity.
+      // Upstream assignment exceptions do not borrow the operator's business context.
+      const ownAction=!missing&&await new DigitalProductionAccessPolicy(this.database).allowed(actor,"task",task.task_id,"execute");
+      const styleNo=task.production_order_id?task.order_style_no:task.source_id?task.source_style_no:null;
+      const orderContext=ownAction&&styleNo?{reworkNo:null,orderNo:null,styleNo,supplierName:null,status:task.state,updatedAt:iso(task.created_at)}:null;
+      result.push({todoId:task.task_id,taskTitle:task.label,todoType:missing?"recipient_routing_exception":"business_action",category:missing?"digital_assignment":"digital_task",sourceEventId:task.task_id,sourceAction:"digital_task",entityType:"digital_task",entityId:task.task_id,recipientUserId:actor.actorId,requiredRole:task.required_role,requiredCapability:null,route:{routeName:"digital_production_task",entityId:task.task_id,todoId:task.task_id},policyKey:null,dueAt:task.due_at?iso(task.due_at):null,reminderCount:0,status:missing?"blocked_recipient":"pending",blockedReason:missing?"主办缺失或已失效，请重新分配":null,orderContext,unread:true,version:1,createdAt:iso(task.created_at),updatedAt:iso(task.created_at)});
     }
     return result;
   }
@@ -152,6 +159,8 @@ export class DigitalProductionNotificationService {
     if(!people.some(p=>p.actorId===actor.actorId))return null;
     let title:string,actionable:boolean,route:TodoRouteDescriptor;
     let contextTarget:{kind:"source"|"order";id:string}|null=null;
+    let ownDevelopmentTask:Task|null=null;
+    let ownPatternOrderId:string|null=null;
     if(event.instruction_order_id){
       if(!await new DigitalProductionAccessPolicy(database).allowed(actor,"order",event.instruction_order_id,"technical"))return null;
       const notice=(await database.query("SELECT title,version FROM digital_instruction_notices WHERE event_id=$1",[event.event_id])).rows[0];
@@ -176,6 +185,7 @@ export class DigitalProductionNotificationService {
       if(event.event_kind==="created"&&!missing)return null;
       if(!(await this.recipients(database,task,event.event_kind,people)).some(p=>p.actorId===actor.actorId))return null;
       actionable=event.event_kind!=="completed"&&(missing||await new DigitalProductionAccessPolicy(database).allowed(actor,"task",task.task_id,"execute"));
+      if(actionable&&!missing&&task.source_id&&task.task_kind.startsWith("development_"))ownDevelopmentTask=task;
       title=`${task.label} · ${missing?"待分配主办":labels[event.event_kind]??"事项更新"}`;
       contextTarget=task.production_order_id?{kind:"order",id:task.production_order_id}:task.source_id?{kind:"source",id:task.source_id}:null;
       route={routeName:"digital_production_task",entityId:task.task_id,todoId:task.task_id};
@@ -190,6 +200,7 @@ export class DigitalProductionNotificationService {
       actionable=row.todo_type!=="information";title=actionable?(event.event_kind==="overdue"?"订单待办已超时":"你有新的订单待办"):"订单事项已更新";
       contextTarget=parent;
       route=row.route_descriptor;
+      if(actionable&&route.routeName==="pattern_room_order"&&row.required_role==="pattern_room_worker")ownPatternOrderId=route.entityId;
     }
     let context:DigitalNotification["context"];
     if(includeContext&&contextTarget&&await new DigitalProductionAccessPolicy(database).allowed(actor,contextTarget.kind,contextTarget.id,"technical")){
@@ -198,6 +209,23 @@ export class DigitalProductionNotificationService {
         const lines=resource.production_order_id?(await database.query("SELECT po_number,color FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position",[resource.production_order_id])).rows:[];
         context={styleNo:resource.design_style_no??null,orderId:resource.production_order_id??null,colors:[...new Set<string>(lines.map(l=>l.color))],poNumbers:[...new Set<string>(lines.map(l=>l.po_number).filter(Boolean))]};
       }
+    }
+    // A valid own task can identify itself without granting source/order technical access.
+    // Project only its style; never use this fallback to enumerate parent PO lines or data.
+    if(includeContext&&!context&&ownDevelopmentTask){
+      const resource=(await database.query(`SELECT s.design_style_no FROM digital_production_task_access a
+        JOIN digital_production_tasks t USING(task_id) JOIN digital_production_sources s USING(source_id)
+        WHERE a.task_id=$1 AND a.source_id=$2 AND t.state IN ('ready','blocked')`,[ownDevelopmentTask.task_id,ownDevelopmentTask.source_id])).rows[0];
+      if(resource)context={styleNo:resource.design_style_no??null,orderId:null,colors:[],poNumbers:[]};
+    }
+    if(includeContext&&!context&&ownPatternOrderId&&contextTarget){
+      const resource=(await database.query(`SELECT orders.style_no FROM pattern_room_orders orders
+        WHERE ${patternOrderScopeSql} AND orders.order_id=$5 AND orders.status='in_progress'
+        AND todo_user_has_direct_role($1,'pattern_room_worker','pattern_room:orders:view')
+        AND NOT EXISTS(SELECT 1 FROM digital_production_resource_lifecycle
+          WHERE resource_kind=$6 AND resource_id=$7 AND state<>'active')`,
+      [actor.actorId,false,["pattern_room_worker"],true,ownPatternOrderId,contextTarget.kind,contextTarget.id])).rows[0];
+      if(resource)context={styleNo:resource.style_no,orderId:null,colors:[],poNumbers:[]};
     }
     return {eventId:event.event_id,title,actionable,route,createdAt:iso(event.created_at),...(context?{context}:{})};
   }

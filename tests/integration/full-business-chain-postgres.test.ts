@@ -1,3 +1,4 @@
+import { registerWorkReportingRoutes } from "../../apps/api/src/rework/work-reporting-routes.js";
 import { journeyReworkHistoryUrl } from "../../apps/api/src/production-platform/journey-rework-record.js";
 import { PatternOrderReader } from "../../apps/api/src/pattern-room/order-reader.js";
 import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
@@ -63,7 +64,7 @@ import { ReworkSupplyContextService } from "../../apps/api/src/rework/supply-con
 import { TailInspectionService } from "../../apps/api/src/rework/tail-inspection-service.js";
 import { ReworkV2SubmissionService } from "../../apps/api/src/rework/v2-submission-service.js";
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
-import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
+import { OperationEventRepository, type TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { TodoProjectionService } from "../../apps/api/src/todos/projection-service.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
 import { WageService } from "../../apps/api/src/wages/wage-service.js";
@@ -3152,6 +3153,125 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     }
   });
 
+  const ownReturnContextFixture = async (temporary = false) => {
+    const personA = temporary ? (await access.createPerson(ownerMasterData(), {personType:"temporary",displayName:"TEST退回临时工",aliases:[],reason:"隔离合法代报测试"})).personId : workerPersonId;
+    const reporterA = temporary ? tailAssign() : worker();
+    const imageId = randomUUID(), receiptImageId = randomUUID(), styleNo = `TEST-RETURN-${randomUUID()}`;
+    for (const [attachmentId, userId] of [[imageId, ids.qc], [receiptImageId, ids.receivingWarehouse]]) {
+      await database.query(
+        "INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'returned-report.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)",
+        [attachmentId, `test/${attachmentId}`, "f".repeat(64), userId],
+      );
+    }
+    const receipt = await new ReceivingService(database, undefined, undefined, undefined, { allowLegacyStyleInput: true }).create(
+      actor(ids.receivingWarehouse, ["warehouse_receiver"], "receiving:create"),
+      { styleNo, documentQuantity: 9, actualQuantity: 9, attachmentIds: [receiptImageId] }, randomUUID(),
+    );
+    const draft = await initiation.createDraft(qc(), {
+      receivingBatchId: receipt.value.receivingBatchId, styleNo, orderQuantity: 9,
+      merchandiserUserId: ids.merchandiser,
+      processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionRequired: false, inspectionReport: n01CoreInspectionReport("退回重报待办隔离测试"),
+      problemPart: "袖口", problemDescription: "仅关闭同任务退回待办", reworkQuantity: 9, attachmentIds: [imageId],
+    }, randomUUID());
+    const submitted = await initiation.submit(qc(), draft.value.reworkOrderId, { expectedVersion: draft.value.version }, randomUUID());
+    const orderId = submitted.value.reworkOrderId;
+    const saved = await configuration.saveDraft(tailConfigure(), orderId, SaveProcessConfigurationSchema.parse({
+      expectedOrderVersion: submitted.value.version,
+      items: [{ source: "catalog", processId: publicProcessId, executionKind: "worker", plannedQuantity: 9, pricingUnit: "piece", unitPrice: 1 }],
+    }), randomUUID());
+    const item = saved.value.configuration!.items[0]!;
+    await workerPlan.save(tailAssign(), orderId, {
+      expectedOrderVersion: saved.value.orderVersion, configurationId: saved.value.configuration!.configurationId,
+      expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
+      assignments: [{ configurationItemId: item.configurationItemId, memberIds: [personA, quantityWorkerPersonId] }],
+    }, randomUUID());
+    const queued = await configuration.submit(tailConfigure(), orderId, {
+      expectedOrderVersion: saved.value.orderVersion, expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
+    }, randomUUID());
+    const approved = await configuration.review(ie(), orderId, {
+      expectedOrderVersion: queued.value.orderVersion, expectedConfigurationVersion: queued.value.configuration!.configurationVersion, decision: "approved",
+    }, randomUUID());
+    await workerPlan.activateAfterIeApproval(orderId, approved.value.configuration!.configurationVersion, randomUUID());
+    let listed = await work.list(tailAssign(), orderId);
+    const taskA = listed.tasks.find(task => task.members.some(member => member.personId === personA))!;
+    const taskB = listed.tasks.find(task => task.members.some(member => member.personId === quantityWorkerPersonId))!;
+    const reportA = await work.submitReport(reporterA, taskA.workTaskId, {
+      expectedOrderVersion: listed.orderVersion, actualQuantity: 8, completedAt: new Date().toISOString(),
+    }, randomUUID());
+    listed = await work.list(tailAssign(), orderId);
+    const reportB = await work.submitReport(actor(ids.quantityWorker, ["worker"], "work:report"), taskB.workTaskId, {
+      expectedOrderVersion: listed.orderVersion, actualQuantity: 2, completedAt: new Date().toISOString(),
+    }, randomUUID());
+    listed = await work.list(tailAssign(), orderId);
+    if (listed.reworkStatus === "in_progress") await work.completeExecution(tailAssign(), orderId, { expectedOrderVersion: listed.orderVersion }, randomUUID());
+    expect((await database.query("SELECT resubmits_work_report_id FROM rework_work_reports WHERE work_report_id=ANY($1::uuid[])", [[reportA.value.workReportId, reportB.value.workReportId]])).rows).toEqual([
+      { resubmits_work_report_id: null }, { resubmits_work_report_id: null },
+    ]);
+    const review = await wholeOrder.get(tailAudit(), orderId);
+    const rejected = await wholeOrder.rejectReport(tailAudit(), reportA.value.workReportId, {
+      expectedOrderVersion: review.orderVersion, rejectedPersonId: personA, reason: "甲实际完成七件，退回重报",
+    }, randomUUID());
+    const todo = (await database.query<{ todo_id: string; status: string; recipient_user_id: string }>(
+      "SELECT todo_id,status,recipient_user_id FROM rework_todos WHERE dedupe_key=$1",
+      [`work-report-return:${reportA.value.workReportId}`],
+    )).rows[0]!;
+    expect(todo).toMatchObject({ status: "pending", recipient_user_id: temporary ? ids.tail : ids.worker });
+    return { personA, reporterA, orderId, styleNo, taskA, taskB, reportA: reportA.value.workReportId, reportB: reportB.value.workReportId, version: rejected.value.orderVersion, todo };
+  };
+
+  it("own returned-report context reads only the assigned person's reason and original quantity without writes", async () => {
+    const fixture=await ownReturnContextFixture();
+    const snapshot=async()=>Promise.all(["rework_work_reports","rework_work_report_rejections","rework_wage_items","rework_todos","operation_events"].map(async table=>(await database.query(`SELECT to_jsonb(t) row FROM ${table} t ORDER BY to_jsonb(t)::text`)).rows));
+    const before=await snapshot(),own=await work.list(worker(),fixture.orderId);
+    expect(own.tasks).toHaveLength(1);
+    expect(own.tasks[0]).toMatchObject({canSubmitReport:true,submittedQuantity:0,returnedReport:{reason:"甲实际完成七件，退回重报",originalQuantity:8}});
+    expect(Object.keys(own.tasks[0]!.returnedReport!).sort()).toEqual(["originalQuantity","reason"]);
+    expect(own.tasks[0]!.members.map(member=>member.personId)).toEqual([workerPersonId]);
+    const foreign=await work.list(actor(ids.quantityWorker,["worker"],"work:report"),fixture.orderId);
+    expect(foreign.tasks).toHaveLength(1);expect(foreign.tasks[0]!.workTaskId).toBe(fixture.taskB.workTaskId);
+    expect(foreign.tasks[0]).not.toHaveProperty("returnedReport");
+    const outsider=await work.list(actor(ids.otherPatternWorker,["worker"],"work:report"),fixture.orderId);
+    expect(outsider.tasks).toEqual([]);
+    // Ordinary managers retain their existing task view without a new worker-return history projection.
+    expect((await work.list(tailAssign(),fixture.orderId)).tasks.every(task=>!task.returnedReport)).toBe(true);
+    let current={id:ids.worker,businessRoles:["worker"],capabilities:["work:report"]};
+    const app=Fastify();registerWorkReportingRoutes(app,{service:work,authenticate:async()=>current});
+    try {
+      const path=`/rework-orders/${fixture.orderId}/work-tasks`;
+      expect((await app.inject({url:path})).json().tasks[0].returnedReport).toEqual({reason:"甲实际完成七件，退回重报",originalQuantity:8});
+      current={id:ids.quantityWorker,businessRoles:["worker"],capabilities:["work:report"]};
+      expect((await app.inject({url:path})).json().tasks[0]).not.toHaveProperty("returnedReport");
+      current={id:ids.qc,businessRoles:["quality_control"],capabilities:["rework:initiate"]};
+      expect((await app.inject({url:path})).statusCode).toBe(403);
+    } finally {await app.close();}
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("own returned-report context follows exact single and repeated batch resubmission without stale reasons", async () => {
+    const fixture=await ownReturnContextFixture();
+    const submitted=await work.submitReport(worker(),fixture.taskA.workTaskId,{expectedOrderVersion:fixture.version,actualQuantity:7,completedAt:new Date().toISOString(),resubmitsWorkReportId:fixture.reportA},randomUUID());
+    const after=await work.list(worker(),fixture.orderId);
+    expect(after.tasks[0]).not.toHaveProperty("returnedReport");expect(after.tasks[0]).toMatchObject({submittedQuantity:7,canSubmitReport:false});
+    const review=await wholeOrder.get(tailAudit(),fixture.orderId);
+    const returned=await wholeOrder.rejectReport(tailAudit(),submitted.value.workReportId,{expectedOrderVersion:review.orderVersion,rejectedPersonId:workerPersonId,reason:"第二次退回，核对七件"},randomUUID());
+    expect((await work.list(worker(),fixture.orderId)).tasks[0]!.returnedReport).toEqual({reason:"第二次退回，核对七件",originalQuantity:7});
+    await work.submitReportsBatch(worker(),fixture.orderId,{expectedOrderVersion:returned.value.orderVersion,reports:[{workTaskId:fixture.taskA.workTaskId,actualQuantity:7,completedAt:new Date().toISOString(),resubmitsWorkReportId:submitted.value.workReportId}]},randomUUID());
+    expect((await work.list(worker(),fixture.orderId)).tasks[0]).not.toHaveProperty("returnedReport");
+    expect((await database.query("SELECT actual_quantity::int quantity FROM rework_work_reports WHERE work_report_id=$1",[fixture.reportA])).rows).toEqual([{quantity:8}]);
+    expect((await database.query("SELECT count(*)::int count FROM rework_wage_items WHERE rework_order_id=$1",[fixture.orderId])).rows).toEqual([{count:0}]);
+    expect((await database.query("SELECT status FROM rework_todos WHERE dedupe_key=ANY($1::text[])",[[`work-report-return:${fixture.reportA}`,`work-report-return:${submitted.value.workReportId}`]])).rows).toEqual([{status:"completed"},{status:"completed"}]);
+  });
+
+  it.each([false,true])("own returned-report context preserves lawful %s temporary/Root proxy reads and resubmission", async temporary => {
+    const fixture=await ownReturnContextFixture(temporary);
+    const proxy=temporary?tailAssign():actor(ids.patternRoot,["root_superuser"],"work:report_for_worker");
+    expect((await work.list(proxy,fixture.orderId)).tasks.find(task=>task.workTaskId===fixture.taskA.workTaskId)!.returnedReport).toEqual({reason:"甲实际完成七件，退回重报",originalQuantity:8});
+    await expect(work.submitReport(actor(ids.quantityWorker,["worker"],"work:report"),fixture.taskA.workTaskId,{expectedOrderVersion:fixture.version,actualQuantity:7,completedAt:new Date().toISOString(),resubmitsWorkReportId:fixture.reportA},randomUUID())).rejects.toMatchObject({statusCode:403});
+    await work.submitReport(proxy,fixture.taskA.workTaskId,{expectedOrderVersion:fixture.version,actualQuantity:7,completedAt:new Date().toISOString(),resubmitsWorkReportId:fixture.reportA},randomUUID());
+    expect((await work.list(proxy,fixture.orderId)).tasks.find(task=>task.workTaskId===fixture.taskA.workTaskId)).not.toHaveProperty("returnedReport");
+  });
+
   it("N05 rejects effective multi-worker totals above receipt quantity before persisting confirmation and keeps correction history", async () => {
     const imageId=randomUUID(),receiptImageId=randomUUID();
     for(const [attachmentId,userId] of [[imageId,ids.qc],[receiptImageId,ids.receivingWarehouse]]) {
@@ -3202,5 +3322,241 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   it("P07 development routes preserve original pattern wages and final confirmation",async()=>{
     await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker);
   },30000);
+
+  const returnedReportFixture = async () => {
+    const imageId = randomUUID(), receiptImageId = randomUUID(), styleNo = `TEST-RETURN-${randomUUID()}`;
+    for (const [attachmentId, userId] of [[imageId, ids.qc], [receiptImageId, ids.receivingWarehouse]]) {
+      await database.query(
+        "INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'returned-report.webp','image/webp',10,$3,$4,'ready',CURRENT_TIMESTAMP)",
+        [attachmentId, `test/${attachmentId}`, "f".repeat(64), userId],
+      );
+    }
+    const receipt = await new ReceivingService(database, undefined, undefined, undefined, { allowLegacyStyleInput: true }).create(
+      actor(ids.receivingWarehouse, ["warehouse_receiver"], "receiving:create"),
+      { styleNo, documentQuantity: 9, actualQuantity: 9, attachmentIds: [receiptImageId] }, randomUUID(),
+    );
+    const draft = await initiation.createDraft(qc(), {
+      receivingBatchId: receipt.value.receivingBatchId, styleNo, orderQuantity: 9,
+      merchandiserUserId: ids.merchandiser,
+      processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionRequired: false, inspectionReport: n01CoreInspectionReport("退回重报待办隔离测试"),
+      problemPart: "袖口", problemDescription: "仅关闭同任务退回待办", reworkQuantity: 9, attachmentIds: [imageId],
+    }, randomUUID());
+    const submitted = await initiation.submit(qc(), draft.value.reworkOrderId, { expectedVersion: draft.value.version }, randomUUID());
+    const orderId = submitted.value.reworkOrderId;
+    const saved = await configuration.saveDraft(tailConfigure(), orderId, SaveProcessConfigurationSchema.parse({
+      expectedOrderVersion: submitted.value.version,
+      items: [{ source: "catalog", processId: publicProcessId, executionKind: "worker", plannedQuantity: 9, pricingUnit: "piece", unitPrice: 1 }],
+    }), randomUUID());
+    const item = saved.value.configuration!.items[0]!;
+    await workerPlan.save(tailAssign(), orderId, {
+      expectedOrderVersion: saved.value.orderVersion, configurationId: saved.value.configuration!.configurationId,
+      expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
+      assignments: [{ configurationItemId: item.configurationItemId, memberIds: [workerPersonId, quantityWorkerPersonId] }],
+    }, randomUUID());
+    const queued = await configuration.submit(tailConfigure(), orderId, {
+      expectedOrderVersion: saved.value.orderVersion, expectedConfigurationVersion: saved.value.configuration!.configurationVersion,
+    }, randomUUID());
+    const approved = await configuration.review(ie(), orderId, {
+      expectedOrderVersion: queued.value.orderVersion, expectedConfigurationVersion: queued.value.configuration!.configurationVersion, decision: "approved",
+    }, randomUUID());
+    await workerPlan.activateAfterIeApproval(orderId, approved.value.configuration!.configurationVersion, randomUUID());
+    let listed = await work.list(tailAssign(), orderId);
+    const taskA = listed.tasks.find(task => task.members.some(member => member.personId === workerPersonId))!;
+    const taskB = listed.tasks.find(task => task.members.some(member => member.personId === quantityWorkerPersonId))!;
+    const reportA = await work.submitReport(worker(), taskA.workTaskId, {
+      expectedOrderVersion: listed.orderVersion, actualQuantity: 8, completedAt: new Date().toISOString(),
+    }, randomUUID());
+    listed = await work.list(tailAssign(), orderId);
+    const reportB = await work.submitReport(actor(ids.quantityWorker, ["worker"], "work:report"), taskB.workTaskId, {
+      expectedOrderVersion: listed.orderVersion, actualQuantity: 2, completedAt: new Date().toISOString(),
+    }, randomUUID());
+    listed = await work.list(tailAssign(), orderId);
+    if (listed.reworkStatus === "in_progress") await work.completeExecution(tailAssign(), orderId, { expectedOrderVersion: listed.orderVersion }, randomUUID());
+    expect((await database.query("SELECT resubmits_work_report_id FROM rework_work_reports WHERE work_report_id=ANY($1::uuid[])", [[reportA.value.workReportId, reportB.value.workReportId]])).rows).toEqual([
+      { resubmits_work_report_id: null }, { resubmits_work_report_id: null },
+    ]);
+    const review = await wholeOrder.get(tailAudit(), orderId);
+    const rejected = await wholeOrder.rejectReport(tailAudit(), reportA.value.workReportId, {
+      expectedOrderVersion: review.orderVersion, rejectedPersonId: workerPersonId, reason: "甲实际完成七件，退回重报",
+    }, randomUUID());
+    const todo = (await database.query<{ todo_id: string; status: string; recipient_user_id: string }>(
+      "SELECT todo_id,status,recipient_user_id FROM rework_todos WHERE dedupe_key=$1",
+      [`work-report-return:${reportA.value.workReportId}`],
+    )).rows[0]!;
+    expect(todo).toMatchObject({ status: "pending", recipient_user_id: ids.worker });
+    return { orderId, styleNo, taskA, taskB, reportA: reportA.value.workReportId, reportB: reportB.value.workReportId, version: rejected.value.orderVersion, todo };
+  };
+
+  it("returned-report lifecycle closes a real worker todo when single submission omits the optional old report ID", async () => {
+    const fixture = await returnedReportFixture();
+    const input = { expectedOrderVersion: fixture.version, actualQuantity: 7, completedAt: new Date().toISOString() };
+    const key = randomUUID();
+    const submitted = await work.submitReport(worker(), fixture.taskA.workTaskId, input, key);
+    expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1", [fixture.todo.todo_id])).rows[0]).toEqual({ status: "completed" });
+    expect((await database.query("SELECT resubmits_work_report_id FROM rework_work_reports WHERE work_report_id=$1", [submitted.value.workReportId])).rows[0]).toEqual({ resubmits_work_report_id: fixture.reportA });
+    const replay = await work.submitReport(worker(), fixture.taskA.workTaskId, input, key);
+    expect(replay.reused).toBe(true);
+    expect(replay.value.workReportId).toBe(submitted.value.workReportId);
+    expect((await database.query("SELECT count(*)::int count FROM rework_work_reports WHERE work_task_id=$1", [fixture.taskA.workTaskId])).rows[0]).toEqual({ count: 2 });
+    expect((await database.query("SELECT actual_quantity::int quantity FROM rework_work_reports WHERE work_report_id=$1", [fixture.reportB])).rows[0]).toEqual({ quantity: 2 });
+    expect((await database.query("SELECT after_state->>'resubmitsWorkReportId' original FROM operation_events WHERE action='rework.work_report.submit' AND after_state->>'workReportId'=$1", [submitted.value.workReportId])).rows).toEqual([{ original: fixture.reportA }]);
+    const ownView = await work.list(worker(), fixture.orderId);
+    expect(ownView.tasks).toHaveLength(1);
+    expect(ownView.tasks[0]).toMatchObject({ canSubmitReport: false, submittedQuantity: 7 });
+    const pending = await todoService.listForActor(actor(ids.worker, ["worker"], "todo:view", "work:report"), { module: "rework", query: fixture.styleNo });
+    expect(pending.todos.some(todo => todo.todoId === fixture.todo.todo_id)).toBe(false);
+
+    expect((await database.query("SELECT count(*)::int count FROM rework_wage_items WHERE rework_order_id=$1", [fixture.orderId])).rows[0]).toEqual({ count: 0 });
+    const review = await wholeOrder.get(tailAudit(), fixture.orderId);
+    expect(review.processes[0]).toMatchObject({ completedQuantity: 9, originalCompletedQuantity: 9 });
+    await wholeOrder.approve(tailAudit(), fixture.orderId, {
+      expectedOrderVersion: review.orderVersion,
+      finalQuantities: review.processes.map(process => ({ configurationItemId: process.configurationItemId, finalConfirmedQuantity: process.completedQuantity })),
+      temporaryCoefficients: [],
+    }, randomUUID());
+    const ieView = await wholeOrder.get(ie(), fixture.orderId), ieKey = randomUUID();
+    const ieInput = { expectedOrderVersion: ieView.orderVersion, decision: "approved" as const };
+    await wholeOrder.reviewFinalQuantity(ie(), fixture.orderId, ieInput, ieKey);
+    const wageRows = (await database.query("SELECT work_report_id,person_id,payable_amount::text amount FROM rework_wage_items WHERE rework_order_id=$1 ORDER BY person_id", [fixture.orderId])).rows;
+    expect(wageRows).toHaveLength(2);
+    expect(wageRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ work_report_id: submitted.value.workReportId, person_id: workerPersonId, amount: "7.00" }),
+      expect.objectContaining({ work_report_id: fixture.reportB, person_id: quantityWorkerPersonId, amount: "2.00" }),
+    ]));
+    expect((await wholeOrder.reviewFinalQuantity(ie(), fixture.orderId, ieInput, ieKey)).reused).toBe(true);
+    expect((await database.query("SELECT work_report_id,person_id,payable_amount::text amount FROM rework_wage_items WHERE rework_order_id=$1 ORDER BY person_id", [fixture.orderId])).rows).toEqual(wageRows);
+  });
+
+  it("returned-report lifecycle resolves repeated batch resubmission and leaves another order's return todo pending", async () => {
+    const fixture = await returnedReportFixture(), unrelated = await returnedReportFixture();
+    const first = await work.submitReportsBatch(worker(), fixture.orderId, {
+      expectedOrderVersion: fixture.version,
+      reports: [{ workTaskId: fixture.taskA.workTaskId, actualQuantity: 7, completedAt: new Date().toISOString() }],
+    }, randomUUID());
+    const firstReportId = first.value.reports[0]!.workReportId;
+    const review = await wholeOrder.get(tailAudit(), fixture.orderId);
+    const again = await wholeOrder.rejectReport(tailAudit(), firstReportId, {
+      expectedOrderVersion: review.orderVersion, rejectedPersonId: workerPersonId, reason: "再次退回检查",
+    }, randomUUID());
+    const input = {
+      expectedOrderVersion: again.value.orderVersion,
+      reports: [{ workTaskId: fixture.taskA.workTaskId, actualQuantity: 7, completedAt: new Date().toISOString() }],
+    }, key = randomUUID();
+    await expect(work.submitReportsBatch(worker(), fixture.orderId, {
+      ...input, reports: [{ ...input.reports[0]!, resubmitsWorkReportId: fixture.reportA }],
+    }, randomUUID())).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+    const second = await work.submitReportsBatch(worker(), fixture.orderId, input, key);
+    const secondReportId = second.value.reports[0]!.workReportId;
+    expect((await database.query("SELECT work_report_id,resubmits_work_report_id FROM rework_work_reports WHERE work_task_id=$1 ORDER BY created_at", [fixture.taskA.workTaskId])).rows).toEqual([
+      { work_report_id: fixture.reportA, resubmits_work_report_id: null },
+      { work_report_id: firstReportId, resubmits_work_report_id: fixture.reportA },
+      { work_report_id: secondReportId, resubmits_work_report_id: firstReportId },
+    ]);
+    expect((await database.query("SELECT status FROM rework_todos WHERE dedupe_key=ANY($1::text[])", [[`work-report-return:${fixture.reportA}`, `work-report-return:${firstReportId}`]])).rows).toEqual([{ status: "completed" }, { status: "completed" }]);
+    expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1", [unrelated.todo.todo_id])).rows[0]).toEqual({ status: "pending" });
+    const replay = await work.submitReportsBatch(worker(), fixture.orderId, input, key);
+    expect(replay.reused).toBe(true);
+    expect(replay.value.reports[0]!.workReportId).toBe(secondReportId);
+    expect((await database.query("SELECT count(*)::int count FROM rework_work_report_member_shares WHERE work_report_id=$1", [secondReportId])).rows[0]).toEqual({ count: 1 });
+    expect((await database.query("SELECT after_state->>'resubmitsWorkReportId' original FROM operation_events WHERE action='rework.work_report.submit' AND after_state->>'workReportId'=$1", [secondReportId])).rows).toEqual([{ original: firstReportId }]);
+  });
+
+  it("returned-report lifecycle rejects wrong worker/report/task/order/todo IDs and invalid quantity without closing the todo", async () => {
+    const fixture = await returnedReportFixture(), input = {
+      expectedOrderVersion: fixture.version, actualQuantity: 7, completedAt: new Date().toISOString(),
+    };
+    for (const wrongId of [fixture.reportB, fixture.taskA.workTaskId, fixture.orderId, fixture.todo.todo_id]) {
+      await expect(work.submitReport(worker(), fixture.taskA.workTaskId, { ...input, resubmitsWorkReportId: wrongId }, randomUUID())).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+      await expect(work.submitReportsBatch(worker(), fixture.orderId, {
+        expectedOrderVersion: input.expectedOrderVersion, reports: [{ ...input, workTaskId: fixture.taskA.workTaskId, resubmitsWorkReportId: wrongId }],
+      }, randomUUID())).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+    }
+    const workerB = actor(ids.quantityWorker, ["worker"], "work:report");
+    await expect(work.submitReport(workerB, fixture.taskA.workTaskId, input, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    await expect(work.submitReportsBatch(workerB, fixture.orderId, {
+      expectedOrderVersion: input.expectedOrderVersion, reports: [{ ...input, workTaskId: fixture.taskA.workTaskId }],
+    }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    for (const actualQuantity of [10, 1.5]) {
+      await expect(work.submitReport(worker(), fixture.taskA.workTaskId, { ...input, actualQuantity }, randomUUID())).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+      await expect(work.submitReportsBatch(worker(), fixture.orderId, {
+        expectedOrderVersion: input.expectedOrderVersion, reports: [{ ...input, workTaskId: fixture.taskA.workTaskId, actualQuantity }],
+      }, randomUUID())).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    }
+    expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1", [fixture.todo.todo_id])).rows[0]).toEqual({ status: "pending" });
+    expect((await database.query("SELECT count(*)::int count FROM rework_work_reports WHERE work_task_id=$1", [fixture.taskA.workTaskId])).rows[0]).toEqual({ count: 1 });
+    expect((await work.list(tailAssign(), fixture.orderId)).orderVersion).toBe(fixture.version);
+    // A valid explicitly supplied old report remains backward compatible.
+    await work.submitReport(worker(), fixture.taskA.workTaskId, { ...input, resubmitsWorkReportId: fixture.reportA }, randomUUID());
+    expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1", [fixture.todo.todo_id])).rows[0]).toEqual({ status: "completed" });
+  });
+
+  it.each(["single", "batch"] as const)("returned-report lifecycle preserves lawful Root proxy resubmission through %s", async mode => {
+    const fixture = await returnedReportFixture(), root = actor(ids.patternRoot, ["root_superuser"], "work:report_for_worker");
+    const input = { expectedOrderVersion: fixture.version, actualQuantity: 7, completedAt: new Date().toISOString() };
+    const submitted = mode === "single"
+      ? (await work.submitReport(root, fixture.taskA.workTaskId, input, randomUUID())).value
+      : (await work.submitReportsBatch(root, fixture.orderId, { expectedOrderVersion: input.expectedOrderVersion, reports: [{ ...input, workTaskId: fixture.taskA.workTaskId }] }, randomUUID())).value.reports[0]!;
+    expect((await database.query("SELECT resubmits_work_report_id,submitted_by FROM rework_work_reports WHERE work_report_id=$1", [submitted.workReportId])).rows[0]).toEqual({ resubmits_work_report_id: fixture.reportA, submitted_by: ids.patternRoot });
+    expect((await database.query("SELECT status,recipient_user_id FROM rework_todos WHERE todo_id=$1", [fixture.todo.todo_id])).rows[0]).toEqual({ status: "completed", recipient_user_id: ids.worker });
+  });
+
+  it.each(["single", "batch"] as const)("returned-report lifecycle rolls back report, audit and real todo completion together on %s failure", async mode => {
+    const fixture = await returnedReportFixture(), failingProjection = new TodoProjectionService(todoService);
+    const complete = failingProjection.completeOpenByDedupeKey.bind(failingProjection);
+    failingProjection.completeOpenByDedupeKey = async (...args) => {
+      await complete(...args);
+      throw new Error("isolated failure after real todo completion");
+    };
+    const failingWork = new WorkReportingService(database, undefined, undefined, failingProjection);
+    const key = randomUUID(), input = { expectedOrderVersion: fixture.version, actualQuantity: 7, completedAt: new Date().toISOString() };
+    const submit = (service: WorkReportingService) => mode === "single"
+      ? service.submitReport(worker(), fixture.taskA.workTaskId, input, key)
+      : service.submitReportsBatch(worker(), fixture.orderId, { expectedOrderVersion: input.expectedOrderVersion, reports: [{ ...input, workTaskId: fixture.taskA.workTaskId }] }, key);
+    const before = (await database.query("SELECT event_id FROM operation_events WHERE entity_id=$1 ORDER BY event_id", [fixture.orderId])).rows;
+    await expect(submit(failingWork)).rejects.toThrow("isolated failure after real todo completion");
+    expect((await database.query("SELECT event_id FROM operation_events WHERE entity_id=$1 ORDER BY event_id", [fixture.orderId])).rows).toEqual(before);
+    expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1", [fixture.todo.todo_id])).rows[0]).toEqual({ status: "pending" });
+    expect((await database.query("SELECT count(*)::int count FROM rework_work_reports WHERE work_task_id=$1", [fixture.taskA.workTaskId])).rows[0]).toEqual({ count: 1 });
+    expect((await work.list(tailAssign(), fixture.orderId)).orderVersion).toBe(fixture.version);
+    expect((await submit(work)).reused).toBe(false);
+    expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1", [fixture.todo.todo_id])).rows[0]).toEqual({ status: "completed" });
+  });
+
+  it("returned-report lifecycle refuses ambiguous legacy unlinked returns without guessing or cleaning history", async () => {
+    const fixture = await returnedReportFixture(), legacyReportId = randomUUID(), reporter = worker();
+    // Reproduce a pre-fix resubmission in this owned schema only, retaining the
+    // same valid audit context and immutable records as the old service.
+    const client = await database.connect();
+    try {
+      await client.query("BEGIN");
+      const eventId = await new OperationEventRepository().append(client, reporter, {
+        action: "rework.work_report.submit", entityType: "rework_order", entityId: fixture.orderId,
+        after: { workReportId: legacyReportId, workTaskId: fixture.taskA.workTaskId, actualQuantity: 7, resubmitsWorkReportId: null },
+      });
+      await client.query("SELECT set_config('dx_rework.work_event_id',$1,true),set_config('dx_rework.work_request_id',$2,true),set_config('dx_rework.rework_event_id',$1,true),set_config('dx_rework.rework_request_id',$2,true)", [eventId, reporter.requestId]);
+      await client.query("INSERT INTO rework_work_reports(work_report_id,work_task_id,rework_order_id,configuration_item_id,actual_quantity,completed_at,group_amount,submitted_by) VALUES($1,$2,$3,$4,7,CURRENT_TIMESTAMP,0,$5)", [legacyReportId, fixture.taskA.workTaskId, fixture.orderId, fixture.taskA.configurationItemId, ids.worker]);
+      await client.query("INSERT INTO rework_work_report_member_shares(work_report_id,person_id,amount) VALUES($1,$2,0)", [legacyReportId, workerPersonId]);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally { client.release(); }
+    await work.completeExecution(tailAssign(), fixture.orderId, { expectedOrderVersion: fixture.version }, randomUUID());
+    const review = await wholeOrder.get(tailAudit(), fixture.orderId);
+    const again = await wholeOrder.rejectReport(tailAudit(), legacyReportId, {
+      expectedOrderVersion: review.orderVersion, rejectedPersonId: workerPersonId, reason: "隔离复现历史未关联重报再次退回",
+    }, randomUUID());
+    const input = { expectedOrderVersion: again.value.orderVersion, actualQuantity: 7, completedAt: new Date().toISOString() };
+    for (const resubmitsWorkReportId of [undefined, fixture.reportA, legacyReportId]) {
+      await expect(work.submitReport(worker(), fixture.taskA.workTaskId, { ...input, resubmitsWorkReportId }, randomUUID())).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409, message: expect.stringContaining("多条未关联") });
+      await expect(work.submitReportsBatch(worker(), fixture.orderId, {
+        expectedOrderVersion: input.expectedOrderVersion, reports: [{ ...input, workTaskId: fixture.taskA.workTaskId, resubmitsWorkReportId }],
+      }, randomUUID())).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+    }
+    expect((await database.query("SELECT status FROM rework_todos WHERE dedupe_key=ANY($1::text[])", [[`work-report-return:${fixture.reportA}`, `work-report-return:${legacyReportId}`]])).rows).toEqual([{ status: "pending" }, { status: "pending" }]);
+    expect((await database.query("SELECT count(*)::int count FROM rework_work_reports WHERE work_task_id=$1", [fixture.taskA.workTaskId])).rows[0]).toEqual({ count: 2 });
+    expect((await work.list(tailAssign(), fixture.orderId)).orderVersion).toBe(again.value.orderVersion);
+  });
 
 });

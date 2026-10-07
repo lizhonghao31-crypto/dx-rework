@@ -43,6 +43,53 @@ export function DocumentField({ id, label, value, onValue, readonly, disabled, n
 export function DocumentSection({ id, title, detail, children }: { id: string; title: string; detail?: string; children: ReactNode }) {
   return <section id={id} className="dx-doc-card dx-doc-section"><h2>{title}{detail && <small>{detail}</small>}</h2>{children}</section>;
 }
+export function DocumentTableScroll({ children, className = "" }: { children: ReactNode; className?: string }) {
+  const viewport = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const wrapper = viewport.current;
+    const table = wrapper?.querySelector<HTMLTableElement>(":scope > table");
+    const head = table?.tHead;
+    const toolbar = wrapper?.closest(".dx-doc-budget,.dx-doc-development,.dx-doc-instruction")?.querySelector<HTMLElement>(".dx-doc-toolbar");
+    if (!wrapper || !table || !head || !toolbar) return;
+    let frame = 0, offset = 0, disposed = false;
+    const printMedia = window.matchMedia("print");
+    let printing = printMedia.matches;
+    const reset = () => { offset = 0; head.style.removeProperty("--dx-doc-header-offset"); };
+    const update = () => {
+      frame = 0;
+      if (disposed || printing || !head.getClientRects().length) return;
+      const header = head.getBoundingClientRect();
+      const originalTop = header.top - offset;
+      const bottom = table.getBoundingClientRect().bottom;
+      offset = Math.min(Math.max(0, toolbar.getBoundingClientRect().bottom - originalTop), Math.max(0, bottom - originalTop - header.height));
+      head.style.setProperty("--dx-doc-header-offset", `${offset}px`);
+    };
+    const schedule = () => { if (!disposed && !printing && !frame) frame = window.requestAnimationFrame(update); };
+    const beforePrint = () => { printing = true; if (frame) window.cancelAnimationFrame(frame); frame = 0; reset(); };
+    const afterPrint = () => { printing = false; schedule(); };
+    const printChanged = () => { if (printMedia.matches) beforePrint(); else afterPrint(); };
+    const observer = new ResizeObserver(schedule);
+    for (const element of [wrapper, table, head, toolbar]) observer.observe(element);
+    document.addEventListener("scroll", schedule, { capture: true, passive: true });
+    window.addEventListener("resize", schedule);
+    window.addEventListener("beforeprint", beforePrint);
+    window.addEventListener("afterprint", afterPrint);
+    printMedia.addEventListener("change", printChanged);
+    schedule();
+    return () => {
+      disposed = true;
+      if (frame) window.cancelAnimationFrame(frame);
+      observer.disconnect();
+      document.removeEventListener("scroll", schedule, true);
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("beforeprint", beforePrint);
+      window.removeEventListener("afterprint", afterPrint);
+      printMedia.removeEventListener("change", printChanged);
+      reset();
+    };
+  }, []);
+  return <div ref={viewport} className={`dx-doc-table-scroll dx-doc-table-viewport ${className}`.trim()}>{children}</div>;
+}
 export function DocumentAddRow({ label, disabled, onClick }: { label: string; disabled?: boolean; onClick: () => void }) {
   return <Button className="dx-doc-add-row budget-controls" type="button" disabled={disabled} onClick={onClick}>＋ {label}</Button>;
 }

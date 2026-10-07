@@ -871,6 +871,10 @@ export const WorkTaskResponseSchema = z.object({
   members: z.array(z.object({ personId: IdSchema, displayName: z.string().min(1), personType: z.enum(["internal", "temporary"]) }).strict()),
   submittedQuantity: z.number().nonnegative(),
   remainingQuantity: z.number().nonnegative(),
+  returnedReport: z.object({
+    reason: z.string().min(1).max(500),
+    originalQuantity: z.number().positive(),
+  }).strict().optional(),
 });
 export const WorkReportResponseSchema = z.object({
   workReportId: IdSchema,

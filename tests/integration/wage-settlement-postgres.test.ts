@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { ManagementReportingService } from "../../apps/api/src/reporting/management-reporting-service.js";
+import { ReportExportService } from "../../apps/api/src/reporting/report-export-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
 const url=process.env.TEST_DATABASE_URL;
@@ -18,7 +19,7 @@ const url=process.env.TEST_DATABASE_URL;
  const insertLine=async (personId:string,type:string,completedAt:string,locked=false)=>{
   const id=randomUUID(),period=randomUUID(),order=randomUUID(),report=randomUUID();
   await db.query("INSERT INTO rework_wage_periods VALUES($1,'2026-09-01',$2)",[period,locked?"locked":"ready_to_lock"]);
-  await db.query("INSERT INTO rework_orders VALUES($1,'completed')",[order]);
+  await db.query("INSERT INTO rework_orders(rework_order_id,status) VALUES($1,'completed')",[order]);
   await db.query("INSERT INTO rework_work_reports VALUES($1,$2)",[report,completedAt]);
   await db.query(`INSERT INTO rework_wage_items VALUES($1,$2,$3,$4,$5,'同名工人',$6,'RW-test','S-test','车缝',1,'piece',1,'individual',1)`,[id,period,order,report,personId,type]);
   if(locked){const closure=randomUUID();await db.query("INSERT INTO rework_wage_month_closures VALUES($1,$2)",[closure,period]);
@@ -35,12 +36,14 @@ const url=process.env.TEST_DATABASE_URL;
    CREATE TRIGGER role_capabilities_no_insert BEFORE INSERT ON role_capabilities FOR EACH ROW EXECUTE FUNCTION immutable_catalog();
    CREATE TRIGGER role_capabilities_no_delete BEFORE DELETE ON role_capabilities FOR EACH ROW EXECUTE FUNCTION immutable_catalog();
    CREATE TABLE app_users(id uuid PRIMARY KEY,display_name text DEFAULT '财务标记人');
+   CREATE TABLE operation_events(event_id uuid,request_id text,actor_id uuid,actor_roles text[],authorization_capability text,
+    action text,entity_type text,entity_id text,before_state jsonb,after_state jsonb,reason text);
    CREATE TABLE test_grants(user_id uuid,capability text);
    CREATE FUNCTION access_authorized_actor_roles(target uuid,requested text) RETURNS text[] LANGUAGE plpgsql AS $$ BEGIN
     IF NOT EXISTS(SELECT 1 FROM test_grants WHERE user_id=target AND capability=requested) THEN RAISE EXCEPTION 'forbidden'; END IF;
     RETURN ARRAY['finance_director']; END $$;
    CREATE TABLE rework_wage_periods(period_id uuid PRIMARY KEY,period_month date,status text);
-   CREATE TABLE rework_orders(rework_order_id uuid PRIMARY KEY,status text);
+   CREATE TABLE rework_orders(rework_order_id uuid PRIMARY KEY,status text,rework_kind text DEFAULT 'qc_rework');
    CREATE TABLE rework_work_reports(work_report_id uuid PRIMARY KEY,completed_at timestamptz);
    CREATE TABLE rework_wage_items(wage_item_id uuid PRIMARY KEY,period_id uuid,rework_order_id uuid,work_report_id uuid,person_id uuid,
     person_name_snapshot text,person_type_snapshot text,rework_no_snapshot text,style_no_snapshot text,process_name_snapshot text,
@@ -110,5 +113,39 @@ const url=process.env.TEST_DATABASE_URL;
   await expect(service.markWageSettlement(actor(other,true),filters,pending.lineIds)).rejects.toThrow("forbidden");
   const grants=await db.query("SELECT role_code FROM role_capabilities WHERE capability='wage:settlement_mark' ORDER BY role_code");
   expect(grants.rows.map(r=>r.role_code)).toEqual(["finance_director","finance_read","wage_month_close_accountant"]);
+ });
+ it("displays source business kind in reads and XLSX without changing wage facts, totals, IDs or settlement selection",async()=>{
+  const qcId=await insertLine(person,"internal","2026-09-14T08:00:00Z");
+  const finishingId=await insertLine(person,"internal","2026-09-14T08:00:00Z");
+  const lockedId=await insertLine(sameName,"temporary","2026-09-14T08:00:00Z",true);
+  await db.query(`UPDATE rework_orders SET rework_kind='inhouse_finishing' WHERE rework_order_id IN
+   (SELECT rework_order_id FROM rework_wage_items WHERE wage_item_id=ANY($1::uuid[]))`,[[finishingId,lockedId]]);
+  const orphanId=randomUUID(),period=randomUUID(),closure=randomUUID();
+  await db.query("INSERT INTO rework_wage_periods VALUES($1,'2026-09-01','locked')",[period]);
+  await db.query("INSERT INTO rework_wage_month_closures VALUES($1,$2)",[closure,period]);
+  await db.query(`INSERT INTO rework_wage_month_close_lines VALUES($1,$2,NULL,'wage_item',$3,'历史同名工人','internal',
+    'RW-orphan','S-orphan','历史工序',2,'piece',2,'individual',4)`,[orphanId,closure,person]);
+  // The orphan's completion date remains null; display compatibility must not broaden the date selection.
+  const snapshot=async()=>Promise.all(["rework_orders","rework_wage_items","rework_wage_month_close_lines","rework_wage_settlement_marks"].map(async table=>(await db.query(`SELECT to_jsonb(t) row FROM ${table} t ORDER BY to_jsonb(t)::text`)).rows));
+  const before=await snapshot(),query={from:"2026-09-14",to:"2026-09-14",wageSource:"order_rework" as const,limit:500};
+  const report=await service.report(actor(),"wages",query);
+  expect(report.rows).toHaveLength(3);
+  expect(report.rows.find(row=>row.lineId===qcId)).toMatchObject({wageKind:"qc_rework",wageSource:"order_rework",assignmentMode:"individual",wageAmount:"1.00"});
+  for(const id of [finishingId,lockedId])expect(report.rows.find(row=>row.lineId===id)).toMatchObject({wageKind:"inhouse_finishing",wageSource:"order_rework",assignmentMode:"individual",wageAmount:"1.00"});
+  expect(report.rows.some(row=>row.lineId===orphanId)).toBe(false);
+  expect(report.totals).toEqual({wageAmount:"3.00",unsettledWageAmount:"3.00",settledWageAmount:"0.00"});
+  expect(report.wageSummary?.people.every(item=>item.sources.every(source=>source.kind==="order_rework"))).toBe(true);
+  const preview=await service.previewWageSettlement(actor(),query);
+  expect(preview.lineIds.sort()).toEqual([qcId,finishingId,lockedId].sort());
+  const exported=await new ReportExportService(service,db,"wage-kind-read-test").export(actor(),"wages",query);
+  const xml=exported.content.toString("utf8");expect(xml).toContain("QC返工");expect(xml).toContain("本厂做尾");
+  await expect(service.report({...actor(),actorRoles:["worker"]},"wages",query)).rejects.toMatchObject({statusCode:403});
+  expect(await snapshot()).toEqual(before);
+ });
+ it("retains the legacy business label when an original historical kind is unavailable",async()=>{
+  const id=await insertLine(person,"internal","2026-09-13T08:00:00Z",true);
+  await db.query("UPDATE rework_orders SET rework_kind=NULL WHERE rework_order_id=(SELECT rework_order_id FROM rework_wage_items WHERE wage_item_id=$1)",[id]);
+  const report=await service.report(actor(),"wages",{from:"2026-09-13",to:"2026-09-13",limit:500});
+  expect(report.rows).toHaveLength(1);expect(report.rows[0]).toMatchObject({lineId:id,wageKind:"order_rework",wageAmount:"1.00"});
  });
 });
