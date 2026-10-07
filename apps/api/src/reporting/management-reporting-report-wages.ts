@@ -13,6 +13,10 @@ export async function wageReport(source: Queryable, query: ReportQuery, range: R
     line_id,completed_date::text,marked_at::text,marked_by,marked_by_name,wage_source,wage_kind,source_order_id,
     round_id,round_index,segment_id,segment_index,task_name,source_amount::text,round_amount::text,actual_hours::text,
     released_at::text,release_basis,cancellation,
+    CASE WHEN wage_source='order_rework' THEN COALESCE((
+      SELECT source_order.rework_kind FROM rework_orders source_order
+      WHERE source_order.rework_order_id=filtered.source_order_id AND source_order.status<>'deleted'
+    ),wage_kind) ELSE wage_kind END display_wage_kind,
     CASE WHEN source_order_id IS NULL THEN 'missing'
       WHEN wage_source='order_rework' AND EXISTS(SELECT 1 FROM rework_orders source_order WHERE source_order.rework_order_id=filtered.source_order_id AND source_order.status<>'deleted') THEN 'available'
       WHEN wage_source='pattern_room' AND EXISTS(SELECT 1 FROM pattern_room_orders source_order
@@ -55,7 +59,7 @@ export async function wageReport(source: Queryable, query: ReportQuery, range: R
    assignmentMode:String(row.assignment_mode),wageAmount:money(String(row.wage_amount)),
    lineId:String(row.line_id),completedDate:String(row.completed_date),
    settlementStatus:row.marked_at === null ? "unsettled" : "settled",
-   wageSource:String(row.wage_source),wageKind:String(row.wage_kind),taskName:nullable(row.task_name),
+   wageSource:String(row.wage_source),wageKind:String(row.display_wage_kind ?? row.wage_kind),taskName:nullable(row.task_name),
    roundId:nullable(row.round_id),roundIndex:row.round_index as number|null,
    segmentId:nullable(row.segment_id),segmentIndex:row.segment_index as number|null,
    sourceAmount:nullable(row.source_amount),roundAmount:nullable(row.round_amount),actualHours:nullable(row.actual_hours),
