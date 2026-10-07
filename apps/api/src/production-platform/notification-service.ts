@@ -14,6 +14,7 @@ const iso = (value: Date | string) => new Date(value).toISOString();
 const ACTIVE = "t.state IN ('pending','ready','blocked') AND coalesce(l.state,'active')='active'";
 const TASKS = `SELECT t.*,a.assignee_id,a.required_role,a.task_kind,a.production_order_id,a.source_id,
   coalesce(o.created_by,s.created_by) AS designer_id,o.primary_merchandiser_id,
+  o.design_style_no AS order_style_no,s.design_style_no AS source_style_no,
   p.label,d.revision_id,d.warning_at,d.due_at,coalesce(l.state,'active') AS lifecycle
   FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
   LEFT JOIN digital_production_orders o USING(production_order_id)
@@ -21,7 +22,7 @@ const TASKS = `SELECT t.*,a.assignee_id,a.required_role,a.task_kind,a.production
   LEFT JOIN digital_production_resource_lifecycle l ON l.resource_kind=CASE WHEN a.production_order_id IS NULL THEN 'source' ELSE 'order' END AND l.resource_id=coalesce(a.production_order_id,a.source_id)
   JOIN LATERAL(SELECT label FROM digital_production_deadline_policies WHERE node_key=t.node_key ORDER BY version DESC LIMIT 1)p ON true
   LEFT JOIN LATERAL(SELECT * FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1)d ON true`;
-type Task = {task_id:string;state:string;assignee_id:string|null;required_role:string;task_kind:string;production_order_id:string|null;source_id:string|null;designer_id:string;primary_merchandiser_id:string|null;label:string;revision_id:string|null;warning_at:Date|null;due_at:Date|null;lifecycle:string;created_at:Date};
+type Task = {task_id:string;state:string;assignee_id:string|null;required_role:string;task_kind:string;production_order_id:string|null;source_id:string|null;order_style_no:string|null;source_style_no:string|null;designer_id:string;primary_merchandiser_id:string|null;label:string;revision_id:string|null;warning_at:Date|null;due_at:Date|null;lifecycle:string;created_at:Date};
 const labels: Record<string,string> = {ready:"待办理",reassigned:"已改派给你",unblocked:"已解除阻断",blocked:"办理遇到阻断",completed:"已完成",warning:"即将超时",overdue:"已超时",created:"待分配主办"};
 
 export class DigitalProductionNotificationService {
@@ -145,7 +146,12 @@ export class DigitalProductionNotificationService {
       const missing=!people.some(p=>p.actorId===task.assignee_id&&p.actorRoles.includes(task.required_role));
       if(task.state==="pending"&&!missing)continue;
       if(!(await this.recipients(this.database,task,"ready",people)).some(p=>p.actorId===actor.actorId))continue;
-      result.push({todoId:task.task_id,todoType:missing?"recipient_routing_exception":"business_action",category:missing?"digital_assignment":"digital_task",sourceEventId:task.task_id,sourceAction:"digital_task",entityType:"digital_task",entityId:task.task_id,recipientUserId:actor.actorId,requiredRole:task.required_role,requiredCapability:null,route:{routeName:"digital_production_task",entityId:task.task_id,todoId:task.task_id},policyKey:null,dueAt:task.due_at?iso(task.due_at):null,reminderCount:0,status:missing?"blocked_recipient":"pending",blockedReason:missing?"主办缺失或已失效，请重新分配":null,orderContext:{reworkNo:null,orderNo:null,styleNo:task.label,supplierName:null,status:task.state,updatedAt:iso(task.created_at)},unread:true,version:1,createdAt:iso(task.created_at),updatedAt:iso(task.created_at)});
+      // An effective personal action carries only its exact parent's style identity.
+      // Upstream assignment exceptions do not borrow the operator's business context.
+      const ownAction=!missing&&await new DigitalProductionAccessPolicy(this.database).allowed(actor,"task",task.task_id,"execute");
+      const styleNo=task.production_order_id?task.order_style_no:task.source_id?task.source_style_no:null;
+      const orderContext=ownAction&&styleNo?{reworkNo:null,orderNo:null,styleNo,supplierName:null,status:task.state,updatedAt:iso(task.created_at)}:null;
+      result.push({todoId:task.task_id,taskTitle:task.label,todoType:missing?"recipient_routing_exception":"business_action",category:missing?"digital_assignment":"digital_task",sourceEventId:task.task_id,sourceAction:"digital_task",entityType:"digital_task",entityId:task.task_id,recipientUserId:actor.actorId,requiredRole:task.required_role,requiredCapability:null,route:{routeName:"digital_production_task",entityId:task.task_id,todoId:task.task_id},policyKey:null,dueAt:task.due_at?iso(task.due_at):null,reminderCount:0,status:missing?"blocked_recipient":"pending",blockedReason:missing?"主办缺失或已失效，请重新分配":null,orderContext,unread:true,version:1,createdAt:iso(task.created_at),updatedAt:iso(task.created_at)});
     }
     return result;
   }
