@@ -1207,7 +1207,25 @@ export class WorkReportingService {
     const proxyTask = this.canProxyReport(actor, members);
     const manager = this.isSupervisor(actor) || this.isWorkforceAdjuster(actor) || isRootActor(actor);
     if (!manager && !ownWorker && !ownTailInspector && !proxyTask) error("当前用户无权读取该任务", 403, "FORBIDDEN");
-    const used = await client.query<{ quantity: string }>("SELECT COALESCE(sum(report.actual_quantity),0) AS quantity FROM rework_work_reports report WHERE report.work_task_id=$1 AND report.status='submitted' AND NOT EXISTS (SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)", [task.work_task_id]);
+    const returnScope = members.filter((person) => isRootActor(actor)
+      || ((ownWorker || ownTailInspector) && person.app_user_id === actor.actorId)
+      || (proxyTask && person.person_type === "temporary")).map((person) => person.person_id);
+    const used = await client.query<{ quantity: string; returned_report: WorkTaskResponse["returnedReport"] | null }>(
+      `WITH pending_return AS (
+        SELECT rejection.reason,report.actual_quantity
+        FROM rework_work_reports report
+        JOIN rework_work_report_rejections rejection ON rejection.work_report_id=report.work_report_id
+        WHERE report.work_task_id=$1 AND report.rework_order_id=$3 AND report.configuration_item_id=$4
+          AND report.status='submitted' AND rejection.rework_order_id=report.rework_order_id
+          AND cardinality($2::uuid[])>0
+          AND (rejection.rejected_person_id IS NULL OR rejection.rejected_person_id=ANY($2::uuid[]))
+          AND NOT EXISTS(SELECT 1 FROM rework_work_reports successor WHERE successor.resubmits_work_report_id=report.work_report_id)
+      ) SELECT COALESCE(sum(report.actual_quantity),0) AS quantity,
+        (SELECT CASE WHEN count(*)=1 THEN jsonb_agg(jsonb_build_object('reason',reason,'originalQuantity',actual_quantity))->0 END FROM pending_return) AS returned_report
+      FROM rework_work_reports report WHERE report.work_task_id=$1 AND report.status='submitted'
+        AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id)`,
+      [task.work_task_id,returnScope,task.rework_order_id,task.configuration_item_id],
+    );
     const submittedQuantity = numberValue(used.rows[0]?.quantity ?? "0");
     const personalView = (ownWorker || ownTailInspector) && !manager && !proxyTask;
     const visibleMembers = personalView ? members.filter((person) => person.app_user_id === actor.actorId) : members;
@@ -1218,6 +1236,7 @@ export class WorkReportingService {
       canSubmitReport: this.canSubmitReport(actor, task, members) && submittedQuantity === 0,
       members: visibleMembers.map(({ person_id, display_name, person_type }) => ({ personId: person_id, displayName: display_name, personType: person_type })),
       submittedQuantity, remainingQuantity: submittedQuantity > 0 ? 0 : numberValue(task.planned_quantity),
+      ...(submittedQuantity === 0 && used.rows[0]?.returned_report ? { returnedReport: used.rows[0].returned_report } : {}),
     };
   }
 
