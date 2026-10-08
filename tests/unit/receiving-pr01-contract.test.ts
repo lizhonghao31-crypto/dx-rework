@@ -17,7 +17,9 @@ describe("PR-01 receiving fact layer", () => {
     expect(page).toContain("exactMatches.length === 1");
     expect(page).not.toContain("没有可收货的已裁正式款号");
     expect(page).not.toContain("ProductionExpectedPicker");
-    expect(page).not.toContain("productionOrderId");
+    expect(page).not.toMatch(/<input[^>]*(?:name|aria-label)=["']productionOrderId["']/);
+    expect(page).toContain('FactoryReceiptSelector');
+    expect(page).toContain('cuttingOrderId={selectedCuttingId}');
     expect(page).toContain("送货单数量");
     expect(page).toContain("实际收货数量");
     expect(page).toContain("提交收货");

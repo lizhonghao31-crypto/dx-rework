@@ -1,3 +1,4 @@
+import {FactorySettlementPanel} from "./factory-settlement-panel.js";
 import { contractReturnFileError, finishContractReturnUpload, type ContractReturnUpload } from "./sourcing-contract-return-upload.js";
 import type { BudgetSourcingPreparation } from "@dx-rework/contracts/digital-budget";
 import { digitalRequest } from "./digital-production-api.js";
@@ -1157,6 +1158,7 @@ function OrderDetailPage({
   const returnReason = useRef("");
   const [budgetCorrectionError, setBudgetCorrectionError] = useState("");
   const [financeReview, setFinanceReview] = useState<FinanceReviewDraft>({ differenceFields: [], differenceReason: "" });
+  const[factoryRemainingLines,setFactoryRemainingLines]=useState<ReturnType<typeof SourcingFactoryChangeStateResponseSchema.parse>["remainingLines"]>();
   const [factoryChange, setFactoryChange] = useState<SourcingFactoryChangeState | null>(null);
   const [contract, setContract] = useState<SourcingContractDocument | null>(null);
   const [contractReturn,setContractReturn] = useState<SourcingContractReturnResponse | null>(null);
@@ -1241,7 +1243,7 @@ function OrderDetailPage({
       setProcesses((current) => current.some((value) => value.trim()) ? current : detail.processes.length ? [...detail.processes] : [""]);
       setAttachments(evidence.items);
       setTimeline(history.items);
-      setFactoryChange(currentFactoryChange.item);
+      setFactoryChange(currentFactoryChange.item);setFactoryRemainingLines(currentFactoryChange.remainingLines);
       setContract(currentContract.item);
       setContractReturn(currentContractReturn);
       setDispatchState(currentDispatch);
@@ -1614,12 +1616,15 @@ function OrderDetailPage({
   const selectedState: SourcingWorkflowNodeState = item.status === "closed" || selectedIndex < step
     ? "completed"
     : selectedIndex === step ? "current" : "future";
-  const ownerTotalDelta = item.ieQuote && item.decision
-    ? subtractFixedPoint(item.decision.totalAmount, item.ieQuote.totalAmount, 2)
-    : null;
+  const comparableIeTotal=item.ieQuote&&item.decision?.sourceType==='factory_change'
+    ?item.ieQuote.linePrices.length?linesTotalPreview(item.ieQuote.linePrices.filter(price=>item.decision!.linePrices.some(line=>line.position===price.position)),item.lineItems.map(line=>({...line,quantity:item.decision!.linePrices.find(price=>price.position===line.position)?.quantity??0}))):totalPreview(item.ieQuote.unitPrice,item.decision.quantity)
+    :item.ieQuote?.totalAmount;
+  const ownerTotalDelta=item.decision&&comparableIeTotal&&comparableIeTotal!=='—'?subtractFixedPoint(item.decision.totalAmount,comparableIeTotal,2):null;
+  const transferQuantity=factoryRemainingLines?.reduce((sum,line)=>sum+line.quantity,0)??item.orderQuantity;
+  const transferTotal=factoryRemainingLines?linesTotalPreview(factoryRemainingLines.filter(line=>line.quantity>0).map(line=>({position:line.position,unitPrice:factoryChangeDraft.unitPrice})),item.lineItems.map(line=>({...line,quantity:factoryRemainingLines.find(x=>x.position===line.position)?.quantity??0}))):totalPreview(factoryChangeDraft.unitPrice,item.orderQuantity);
   const ownerCraftSummary = <span className="sourcing-owner-craft-summary">承包内容包括 <strong>{item.processes.length ? item.processes.join("、") : "未填写"}</strong>；裁床工序为 <strong>{item.decision?.cuttingProcess === "in_house" ? "本厂裁" : item.decision?.cuttingProcess === "outsourced" ? "外厂裁" : item.decision?.cuttingProcess === "other" ? `其它：${item.decision.cuttingProcessOther ?? "未填写"}` : "未填写"}</strong>。</span>;
   const latestFinance = [...timeline].reverse()
-    .find((entry) => entry.kind === "finance_reconciliation");
+    .find((entry) => entry.kind === "finance_reconciliation" && !entry.factoryDecisionId);
   const transferNodeRole = canOwnerTransfer ? "owner_group"
     : canManagementTransfer ? "production_management"
       : canMerchandiserTransfer ? "order_merchandiser" : null;
@@ -1753,7 +1758,7 @@ function OrderDetailPage({
         </div>
 
         {item.decision ? <DecisionSummary title={selectedNode === "owner" ? "审批摘要" : "选厂摘要"}>
-          <p className="sourcing-owner-decision__lead">供应链总监建议由 <strong>{item.decision.supplierName}</strong> 承接 <strong>{formatBusinessDecimal(item.orderQuantity)} 件</strong>，生产总额 <strong>{formatBusinessCurrency(item.decision.totalAmount)}</strong>，相对 IE 总额变化 <strong>{ownerTotalDelta ?? "—"}</strong>。</p>
+          <p className="sourcing-owner-decision__lead">供应链总监建议由 <strong>{item.decision.supplierName}</strong> 承接 <strong>{formatBusinessDecimal(item.decision.quantity)} 件</strong>，生产总额 <strong>{formatBusinessCurrency(item.decision.totalAmount)}</strong>，相对 IE 总额变化{item.decision.sourceType==='factory_change'?'（按转入同份额）':''} <strong>{ownerTotalDelta ?? "—"}</strong>。</p>
           <p>{ownerCraftSummary}</p>
           {item.decision.decisionReason ? <p>供应链总监说明：{item.decision.decisionReason}</p> : null}
           {selectedNode === "owner" && selectedState === "current" ? <p>请核对价格、加工厂及交期，确认后审批。</p> : null}
@@ -1946,6 +1951,7 @@ function OrderDetailPage({
             </> : <p>批准事实正在准备合同，请刷新后查看。</p>}
           </Surface> : null}
 
+          {canFinance&&item.decision?<FactorySettlementPanel sourcingCaseId={item.sourcingCaseId} currentDecisionId={item.decision.sourcingDecisionId}/>:null}
           {!hideFinanceForMerchandiser && item.status === "pending_finance_reconciliation" && selectedNode === "finance" ? <Surface className="rework-detail-node-preview sourcing-finance-panel">
             <h2>05 · 财务核对</h2>
             <p>财务在付款、对账时核对系统信息；核对不影响跟单派单和生产。加工厂、单价、数量及总额只读。</p>
@@ -2035,10 +2041,12 @@ function OrderDetailPage({
               <div className="sourcing-form-grid">
                 <label><span>新加工厂</span><select value={factoryChangeDraft.supplierId} onChange={(event) => { setFactoryChangeDraft({ ...factoryChangeDraft, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择不同的加工厂</option>{factories.filter((factory) => factory.supplierId !== item.decision?.supplierId).map((factory) => <option value={factory.supplierId} key={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
                 <label><span>新加工单价</span><input inputMode="decimal" value={activeBusinessInput === "factory-change-unit-price" && factoryChangeUnitPriceEdited ? factoryChangeDraft.unitPrice : businessInputValue(factoryChangeDraft.unitPrice)} onFocus={() => setActiveBusinessInput("factory-change-unit-price")} onBlur={() => setActiveBusinessInput(null)} onChange={(event) => { setFactoryChangeUnitPriceEdited(true); setFactoryChangeDraft({ ...factoryChangeDraft, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} /></label>
-                <label><span>新总额</span><input readOnly value={businessInputValue(totalPreview(factoryChangeDraft.unitPrice, item.orderQuantity))} /></label>
+                <label><span>转入数量</span><input readOnly value={transferQuantity}/></label>
+                <label><span>新总额</span><input readOnly value={businessInputValue(transferTotal)} /></label>
+                <p>已报完成数保留旧厂，未完工余量按生效时最新报量转入新厂。</p>
                 <p className="sourcing-factory-change__delta">相对当前单价：<strong>{transferPriceDelta ?? "—"}</strong></p>
                 <label className="sourcing-form-wide"><span>转厂原因</span><input maxLength={500} value={factoryChangeDraft.changeReason} onChange={(event) => { setFactoryChangeDraft({ ...factoryChangeDraft, changeReason: event.target.value }); actionKey.current = null; }} /></label>
-                <button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeDraft.supplierId || !factoryChangeDraft.unitPrice || !factoryChangeDraft.changeReason.trim()} onClick={() => void submit(transferRequestPath, { supplierId: factoryChangeDraft.supplierId, unitPrice: factoryChangeDraft.unitPrice, changeReason: factoryChangeDraft.changeReason.trim() }, transferNodeRole === "owner_group" ? "老板发起的转厂已直接生效" : transferNodeRole === "production_management" && (transferPriceDelta?.startsWith("+") !== true) ? "转厂已生效" : "转厂申请已提交", true)}>提交转厂</button>
+                <button className="dx-button dx-button--primary" type="button" disabled={busy || transferQuantity===0 || !factoryChangeDraft.supplierId || !factoryChangeDraft.unitPrice || !factoryChangeDraft.changeReason.trim()} onClick={() => void submit(transferRequestPath, { supplierId: factoryChangeDraft.supplierId, unitPrice: factoryChangeDraft.unitPrice, changeReason: factoryChangeDraft.changeReason.trim() }, transferNodeRole === "owner_group" ? "老板发起的转厂已直接生效" : transferNodeRole === "production_management" && (transferPriceDelta?.startsWith("+") !== true) ? "转厂已生效" : "转厂申请已提交", true)}>提交转厂</button>
               </div>
             </div> : null}
             </> : <p>当前账号可查看转厂记录，但不能在本节点发起。</p>}

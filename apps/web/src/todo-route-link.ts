@@ -32,6 +32,7 @@ export const todoRouteHref = (route: TodoRouteDescriptor): string => {
       break;
     case "production_detail":
       target = `ui/production-dashboard/${route.entityId}`;
+      if (route.factoryDecisionId) query.set("factoryDecisionId", route.factoryDecisionId);
       break;
     case "process_configuration":
       target = "ui/process-configuration";

@@ -35,7 +35,7 @@ export function registerProductionReportingRoutes(app:FastifyInstance,dependenci
   });
   app.get("/production-reporting/scopes",async request=>ProductionScopeDirectorySchema.parse(await service.scopeDirectory(await actor(request))));
   app.post("/production-reporting/scopes",async request=>service.setScope(await actor(request),parse(ProductionScopeInputSchema,request.body),key(request)));
-  app.get<{Params:{id:string}}>("/production-reporting/:id",async request=>ProductionReportingDetailSchema.parse(await service.detail(await actor(request),parse(Id,request.params.id))));
+  app.get<{Params:{id:string}}>("/production-reporting/:id",async request=>{const query=parse(z.object({factoryDecisionId:Id.optional()}).strict(),request.query);return ProductionReportingDetailSchema.parse(await service.detail(await actor(request),parse(Id,request.params.id),undefined,query.factoryDecisionId??null));});
   app.post<{Params:{id:string}}>("/production-reporting/:id/reports",async request=>{
     const result=await service.report(await actor(request),parse(Id,request.params.id),parse(ProductionReportInputSchema,request.body),key(request));
     return ProductionReportingDetailSchema.parse(result.value);

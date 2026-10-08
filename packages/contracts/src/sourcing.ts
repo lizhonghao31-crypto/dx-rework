@@ -365,9 +365,11 @@ export const SourcingFactoryChangeStateSchema = z.object({
 
 export const SourcingFactoryChangeStateResponseSchema = z.object({
   item: SourcingFactoryChangeStateSchema.nullable(),
+  remainingLines:z.array(z.object({position:z.number().int().positive(),plannedQuantity:z.number().int().nonnegative(),completedQuantity:z.number().int().nonnegative(),quantity:z.number().int().nonnegative()}).strict()).optional(),
 }).strict();
 
 export const RecordSourcingFinanceReconciliationSchema = z.object({
+  factoryDecisionId:z.string().uuid().optional(),
   result: z.enum(["match", "difference"]),
   differenceFields: z.array(z.enum(["supplier", "unit_price", "quantity", "total_amount"])).max(4).optional(),
   differenceReason: z.string().trim().max(500).optional(),
@@ -583,6 +585,7 @@ export const SupplementSourcingImagesSchema = z.object({
 }).strict();
 
 export const SourcingTimelineEntrySchema = z.object({
+  factoryDecisionId: IdSchema.nullable().optional(),
   pdfAttachmentId: IdSchema.nullable().optional(),
   entryId: IdSchema,
   kind: z.enum([
@@ -689,3 +692,5 @@ export function cumulativeSourcingTiming(history: readonly {
   const start = createdAt ? Date.parse(createdAt) : Number.NaN;
   return {totalSeconds: Number.isFinite(start) && Number.isFinite(end) ? Math.max(0,(end-start)/1000) : 0,nodeSeconds};
 }
+
+export const FactorySettlementsSchema=z.object({items:z.array(z.object({decisionId:z.string().uuid(),supplierName:z.string(),quantity:z.number().int().positive(),totalAmount:z.string(),contractNumber:z.string(),pdfAttachmentId:z.string().uuid().nullable(),result:z.enum(['match','difference']).nullable()}).strict())}).strict();

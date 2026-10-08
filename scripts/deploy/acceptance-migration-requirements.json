@@ -610,5 +610,51 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0236_factory_remainder_executions": {
+    "checksum": "202f1392b72b22b5e011025c16b4a82d727260b8bcc27a989d768c1b241798c8",
+    "tables": [
+      "sourcing_production_reports",
+      "sourcing_production_transitions",
+      "sourcing_production_shipments",
+      "sourcing_production_progress_snapshots",
+      "sourcing_production_receipt_links",
+      "sourcing_finance_reconciliations",
+      "sourcing_case_transitions"
+    ],
+    "functions": [
+      "guard_sourcing_factory_change_request_insert",
+      "guard_sourcing_decision_insert",
+      "guard_sourcing_production_report",
+      "guard_sourcing_production_execution",
+      "guard_sourcing_production_transition",
+      "guard_sourcing_production_shipment",
+      "capture_sourcing_production_progress",
+      "guard_sourcing_production_progress_snapshot",
+      "guard_sourcing_production_receipt_link",
+      "guard_sourcing_reconciliation_insert",
+      "guard_sourcing_current_contract"
+    ],
+    "references": [
+      "sourcing_decisions",
+      "sourcing_production_orders",
+      "sourcing_production_factory_transfers",
+      "sourcing_production_shipments",
+      "sourcing_approval_snapshots",
+      "sourcing_approval_snapshot_lines",
+      "sourcing_contract_documents",
+      "sourcing_contract_content_overrides",
+      "sourcing_production_lines"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "sourcing_production_factory_transfers",
+      "sourcing_production_factory_transfer_lines"
+    ],
+    "execute": [
+      "reject_operation_event_mutation"
+    ],
+    "sequences": []
   }
 }

@@ -24,7 +24,7 @@ export function ProductionPilotControls(){
     }catch(e){setError(e instanceof Error?e.message:"设置失败");}finally{setBusy(false);}}}><option value="off">未启用</option><option value="on">已启用</option></select></label>)}</div></>:null}
  </Surface>;
 }
-export function ProductionExpectedPicker({value,onSelect,disabled=false}:{disabled?:boolean;value:string;onSelect:(shipment:ProductionReceivingSummary|null)=>void}){
+export function ProductionExpectedPicker({value,onSelect,disabled=false,cuttingOrderId}:{disabled?:boolean;value:string;cuttingOrderId?:string|undefined;onSelect:(shipment:ProductionReceivingSummary|null)=>void}){
  const [q,setQ]=useState(""),[page,setPage]=useState(1),[data,setData]=useState<z.infer<typeof ProductionExpectedReceiptsSchema>|null>(null),[error,setError]=useState(""),[open,setOpen]=useState(false);
  const [selected,setSelected]=useState<ProductionReceivingSummary|null>(null);
  useEffect(()=>{if(!open)return;const controller=new AbortController();const timer=setTimeout(()=>{void read(`expected-receipts?${new URLSearchParams({q,page:String(page)})}`,ProductionExpectedReceiptsSchema,controller.signal)
@@ -35,15 +35,23 @@ export function ProductionExpectedPicker({value,onSelect,disabled=false}:{disabl
   {open?<><p>仅预填首款款号。送货单数量和实际收货数量请按本次到货填写。</p>
    <label className="receiving-field">搜索款号或供应商<input disabled={disabled} maxLength={100} value={q} onChange={e=>{setQ(e.target.value);setPage(1);}}/></label>
    {error?<p role="alert">{error}</p>:null}
-   {data?.items.map(s=><div key={s.productionOrderId}><Button disabled={disabled} variant="secondary" onClick={()=>{setSelected(s);onSelect(s);setOpen(false);}}>{s.firstStyleNo} · {s.supplierName} · 合同 {s.contractNumber} · {s.shippedOn} · 预计 {s.expectedQuantity} 件 · 已关联 {s.receipts.filter(r=>!r.archived).length} 次收货</Button></div>)}
+   {data?.items.filter(s=>!cuttingOrderId||s.cuttingOrderIds?.includes(cuttingOrderId)).map(s=><div key={`${s.productionOrderId}:${s.factoryDecisionId??"original"}`}><Button disabled={disabled} variant="secondary" onClick={()=>{setSelected(s);onSelect(s);setOpen(false);}}>{s.firstStyleNo} · {s.supplierName} · 合同 {s.contractNumber} · {s.shippedOn} · 预计 {s.expectedQuantity} 件 · 已关联 {s.receipts.filter(r=>!r.archived).length} 次收货</Button></div>)}
    {data&&data.totalCount===0?<p>没有匹配的试点发货单。</p>:null}
    {data?<ListPagination page={page} totalPages={Math.max(1,Math.ceil(data.totalCount/15))} onPageChange={setPage} ariaLabel="预期回货分页"/>:null}</>:null}
  </Surface>;
 }
-export function ProductionReceiptSummary({productionOrderId,refreshKey}:{productionOrderId:string;refreshKey?:string|undefined}){
+export function FactoryReceiptSelector({cuttingOrderId,shipment,onSelect,disabled=false}:{cuttingOrderId:string;shipment:ProductionReceivingSummary|null;onSelect:(shipment:ProductionReceivingSummary|null)=>void;disabled?:boolean}){
+ const[page,setPage]=useState(1),[data,setData]=useState<z.infer<typeof ProductionExpectedReceiptsSchema>|null>(null),[error,setError]=useState('');
+ useEffect(()=>{const c=new AbortController();void read(`expected-receipts?${new URLSearchParams({cuttingOrderId,page:String(page)})}`,ProductionExpectedReceiptsSchema,c.signal).then(d=>{setData(d);setError('');}).catch(e=>{if(!c.signal.aborted)setError(e.message);});return()=>c.abort();},[cuttingOrderId,page]);
+ const key=(s:ProductionReceivingSummary)=>`${s.productionOrderId}:${s.factoryDecisionId??'original'}`;
+ if(error)return <p role="alert">本次到货加工厂读取失败：{error}</p>;
+ if(!data||!data.totalCount||(data.totalCount===1&&!data.items[0]?.factoryDecisionId))return null;
+ return <label className="receiving-field">本次到货加工厂<select aria-label="本次到货加工厂" disabled={disabled} value={shipment?key(shipment):''} onChange={e=>onSelect(data.items.find(s=>key(s)===e.target.value)??null)}><option value="">请选择本次发货厂</option>{data.items.map(s=><option key={key(s)} value={key(s)}>{s.supplierName} · 合同 {s.contractNumber} · 已发 {s.expectedQuantity} 件</option>)}</select>{data.totalCount>15?<ListPagination page={page} totalPages={Math.ceil(data.totalCount/15)} onPageChange={setPage} ariaLabel="本裁单发货厂分页"/>:null}</label>;
+}
+export function ProductionReceiptSummary({productionOrderId,refreshKey,factoryDecisionId}:{productionOrderId:string;factoryDecisionId?:string|null|undefined;refreshKey?:string|undefined}){
  const [data,setData]=useState<ProductionReceivingSummary|null>(null),[error,setError]=useState("");
- useEffect(()=>{const controller=new AbortController();void read(`orders/${productionOrderId}/receipts`,z.object({shipment:ProductionReceivingSummarySchema.nullable()}),controller.signal)
-  .then(result=>{setData(result.shipment);setError("");}).catch(e=>{if(!controller.signal.aborted)setError(e instanceof Error?e.message:"回货信息加载失败");});return()=>controller.abort();},[productionOrderId,refreshKey]);
+ useEffect(()=>{const controller=new AbortController();void read(`orders/${productionOrderId}/receipts${factoryDecisionId?"?"+new URLSearchParams({factoryDecisionId}):""}`,z.object({shipment:ProductionReceivingSummarySchema.nullable()}),controller.signal)
+  .then(result=>{setData(result.shipment);setError("");}).catch(e=>{if(!controller.signal.aborted)setError(e instanceof Error?e.message:"回货信息加载失败");});return()=>controller.abort();},[productionOrderId,refreshKey,factoryDecisionId]);
  if(error)return <p role="alert">{error}</p>;if(!data)return null;
  return <Surface className="sourcing-list-card"><h2>发货与实际回货</h2><p>{data.shippedOn} 已发货 · 首款 {data.firstStyleNo} · 预计 {data.expectedQuantity} 件</p>
   <p>发货不代表仓库已收货。以下为仓库关联的实收记录；批次汇总调整仍以订单回货页面为准。</p>

@@ -346,7 +346,7 @@ export class DigitalJourneyQuery {
       }
       const native=children.find(child=>child.module==="production");
       if(native&&links.some(link=>link.domain==="production"&&link.id===native.child_id)) {
-        const transition=(await db.query("SELECT status,business_date::text,actor_id FROM sourcing_production_transitions WHERE production_order_id=$1 ORDER BY sequence DESC LIMIT 1",[native.child_id])).rows[0];
+        const transition=(await db.query("SELECT sourcing_factory_order_status($1) AS status,business_date::text,actor_id FROM sourcing_production_transitions WHERE production_order_id=$1 ORDER BY created_at DESC,production_transition_id DESC LIMIT 1",[native.child_id])).rows[0];
         // A business date has day precision only, so it is not invented as an exact completion timestamp.
         const value=setFact("production_reporting",transition?.status==="production_completed"||transition?.status==="shipped"?"completed":"active",[record("production",native.child_id,`/ui/production-dashboard/${native.child_id}`)]);
         if(value.state==="completed")value.risks.push("unknown");

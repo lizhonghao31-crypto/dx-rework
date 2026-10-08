@@ -1,3 +1,5 @@
+import {factorySettlements,reconcileFactory} from "./factory-settlement-service.js";
+import {factoryTransferLines,transferProductionFactory} from "./factory-transfer-service.js";
 import { syncBulkSourcing } from "../production-platform/bulk-preparation-service.js";
 import { memberCanWriteModule } from "../access/member-module-policy.js";
 import { validateBudgetSourcing, bindBudgetSourcing } from "../production-platform/budget-sourcing-adapter.js";
@@ -646,7 +648,7 @@ export class SourcingService {
          SELECT approval.*
          FROM sourcing_approval_snapshots approval
          WHERE approval.sourcing_case_id=case_view.sourcing_case_id
-           ${history ? "AND approval.approved_at <= $2::timestamptz AND $3::text IN ('owner','finance')" : ""}
+           ${history ? "AND approval.approved_at <= $2::timestamptz AND $3::text IN ('owner','finance') AND ($3::text<>'finance' OR approval.sourcing_decision_id=decision_row.sourcing_decision_id)" : ""}
          ORDER BY approval.decision_version DESC LIMIT 1
        ) snapshot ON true
        LEFT JOIN LATERAL (
@@ -1289,6 +1291,7 @@ export class SourcingService {
       difference_fields: Array<"supplier" | "unit_price" | "quantity" | "total_amount">;
       result: "match" | "difference" | null;
       resolution: "close" | "reconcile_again" | null;
+      factory_decision_id: string | null;
     }>(
       `WITH timeline AS (
          SELECT source_case.sourcing_case_id AS entry_id,'created'::text AS kind,
@@ -1400,6 +1403,7 @@ export class SourcingService {
               timeline.supplier_name,timeline.decision,
               timeline.contract_reference,timeline.signed_on::text AS signed_on,
               timeline.quantity,timeline.difference_fields,timeline.result,timeline.resolution,
+              (SELECT factory_decision_id FROM sourcing_finance_reconciliations WHERE sourcing_reconciliation_id=timeline.entry_id AND timeline.kind='finance_reconciliation') AS factory_decision_id,
               (SELECT pdf_attachment_id FROM sourcing_contract_documents WHERE sourcing_contract_document_id=timeline.entry_id AND timeline.kind='contract') AS pdf_attachment_id
        FROM timeline
        LEFT JOIN app_users app_user ON app_user.id=timeline.actor_id
@@ -1410,6 +1414,7 @@ export class SourcingService {
     return {
       items: result.rows.map((row) => ({
         entryId: row.entry_id,
+        ...(row.factory_decision_id?{factoryDecisionId:row.factory_decision_id}:{}),
         pdfAttachmentId: row.pdf_attachment_id ?? null,
         kind: row.kind,
         version: Number(row.entry_version),
@@ -1504,6 +1509,8 @@ export class SourcingService {
   ): Promise<SourcingFactoryChangeStateResponse> {
     this.assertReader(actor);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
+    const source=await this.readCase(this.database,sourcingCaseId,actor);
+    const remainingLines=source.decision?(await this.database.query<{position:number;planned_quantity:number;completed_quantity:number;quantity:number}>("SELECT * FROM sourcing_factory_remaining_lines($1,$2) ORDER BY position",[sourcingCaseId,source.decision.sourcingDecisionId])).rows.map(line=>({position:line.position,plannedQuantity:line.planned_quantity,completedQuantity:line.completed_quantity,quantity:line.quantity})):undefined;
     const result = await this.database.query<{
       factory_change_request_id: string;
       from_decision_id: string;
@@ -1547,7 +1554,7 @@ export class SourcingService {
       [sourcingCaseId],
     );
     const row = result.rows[0];
-    if (!row) return { item: null };
+    if (!row) return { item: null,...(remainingLines?{remainingLines}:{}) };
     const status = row.effective
       ? "effective" as const
       : row.management_decision === "rejected" || row.owner_decision === "rejected"
@@ -1556,6 +1563,7 @@ export class SourcingService {
           ? "pending_management" as const
           : "pending_owner" as const;
     return {
+      ...(remainingLines?{remainingLines}:{}),
       item: {
         factoryChangeRequestId: row.factory_change_request_id,
         fromDecisionId: row.from_decision_id,
@@ -3133,15 +3141,10 @@ export class SourcingService {
       ],
     );
     await client.query(
-      `INSERT INTO sourcing_decision_lines(
-         sourcing_decision_id,sourcing_case_id,position,quantity,unit_price,total_amount
-       )
-       SELECT $1,line.sourcing_case_id,line.position,line.quantity,$2,
-              round($2::numeric*line.quantity,2)
-       FROM current_sourcing_case_lines line
-       WHERE line.sourcing_case_id=$3
-       ORDER BY line.position`,
-      [decisionId,source.proposed_unit_price,source.sourcing_case_id],
+      `INSERT INTO sourcing_decision_lines(sourcing_decision_id,sourcing_case_id,position,quantity,unit_price,total_amount)
+       SELECT $1,$3,line.position,line.quantity,$2,round($2::numeric*line.quantity,2)
+       FROM sourcing_factory_remaining_lines($3,$4) line WHERE line.quantity>0 ORDER BY line.position`,
+      [decisionId,source.proposed_unit_price,source.sourcing_case_id,source.sourcing_decision_id],
     );
     if (nextStatus === "pending_finance_reconciliation") {
       const snapshotId = randomUUID();
@@ -3187,8 +3190,9 @@ export class SourcingService {
          WHERE line.sourcing_decision_id=$3 ORDER BY line.position`,
         [snapshotId,source.sourcing_case_id,decisionId],
       );
-      await ensureCuttingOrdersForApproval(client, source.sourcing_case_id, snapshotId);
+      if(!(await client.query('SELECT 1 FROM sourcing_production_orders WHERE sourcing_case_id=$1',[source.sourcing_case_id])).rowCount)await ensureCuttingOrdersForApproval(client,source.sourcing_case_id,snapshotId);
       await this.contractService?.prepareForApproval(client, snapshotId, actor);
+      await transferProductionFactory(client,source.sourcing_case_id,source.sourcing_decision_id,decisionId,eventId);
     }
     if (nextStatus !== source.status) {
       await client.query(
@@ -3407,13 +3411,9 @@ export class SourcingService {
           [input.supplierId],
         );
         const selected = factory.rows[0] ?? fail("请选择当前有效的加工厂");
-        const quantity = Number(source.order_quantity);
-        const caseLines = await client.query<{ position: number; quantity: number | string }>(
-          `SELECT position,quantity FROM current_sourcing_case_lines
-           WHERE sourcing_case_id=$1 ORDER BY position`,
-          [sourcingCaseId],
-        );
-        const totalAmount = calculateSourcingLinesTotalExact(caseLines.rows.map((line) => ({
+        const remainingLines=await factoryTransferLines(client,sourcingCaseId,source.sourcing_decision_id!);
+        const quantity=remainingLines.reduce((sum,line)=>sum+line.quantity,0);
+        const totalAmount = calculateSourcingLinesTotalExact(remainingLines.filter(line=>line.quantity>0).map((line) => ({
           position: line.position,
           quantity: Number(line.quantity),
           unitPrice,
@@ -3654,6 +3654,9 @@ export class SourcingService {
         ) fail("该转厂申请当前不需要老板审批", 409, "INVALID_STATE_TRANSITION");
         const willEffect = input.decision === "approved"
           && (reviewerRole === "owner_group" || !source.requires_owner_approval);
+        const actualLines=willEffect?await factoryTransferLines(client,sourcingCaseId,source.from_decision_id):null;
+        if(actualLines){source.proposed_quantity=actualLines.reduce((sum,line)=>sum+line.quantity,0);
+          source.proposed_total_amount=calculateSourcingLinesTotalExact(actualLines.filter(line=>line.quantity>0).map(line=>({position:line.position,quantity:line.quantity,unitPrice:source.proposed_unit_price})));}
         const effectiveStatus = this.factoryChangeTargetStatus(source.status, actor);
         const action = willEffect
           ? "sourcing.factory_change.effective"
@@ -3760,6 +3763,12 @@ export class SourcingService {
     }
   }
 
+  async readFactorySettlements(actor:TrustedActorContext,sourcingCaseId:string){
+    this.assertActor(actor,FINANCE_RECONCILE_CAPABILITY,FINANCE_RECONCILE_ROLE);
+    if(!UUID_PATTERN.test(sourcingCaseId))fail("财务核对标识无效");
+    return {items:(await factorySettlements(this.database,sourcingCaseId)).map(s=>({decisionId:s.decision_id,supplierName:s.supplier_name,quantity:s.quantity,totalAmount:s.total_amount,contractNumber:s.contract_number,pdfAttachmentId:s.pdf_attachment_id,result:s.result}))};
+  }
+
   async recordFinanceReconciliation(
     actor: TrustedActorContext,
     sourcingCaseId: string,
@@ -3786,11 +3795,15 @@ export class SourcingService {
         actorKey: actor.actorId,
         key: idempotencyKey,
         requestHash: requestHash(scope, {
-          sourcingCaseId,result: input.result,differenceFields,suppliedReason,
+          sourcingCaseId,factoryDecisionId:input.factoryDecisionId??null,result: input.result,differenceFields,suppliedReason,
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
         await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 FOR UPDATE",[sourcingCaseId]);
+        if(input.factoryDecisionId){
+          await reconcileFactory(client,actor,sourcingCaseId,input as typeof input&{factoryDecisionId:string},this.events);
+          return {statusCode:201,response:await this.readCase(client,sourcingCaseId,actor)};
+        }
         const current = await client.query<{
           status: string;
           sequence: number | string;
@@ -4023,9 +4036,11 @@ export class SourcingService {
           sequence: number | string;
           decision_version: number | string;
           reconciliation_version: number | string;
+          next_reconciliation_version: number | string;
         }>(
           `SELECT transition_row.to_status AS status,transition_row.sequence,
-                  decision_row.decision_version,reconciliation_row.reconciliation_version
+                  decision_row.decision_version,reconciliation_row.reconciliation_version,
+                  (SELECT COALESCE(max(reconciliation_version),0)+1 FROM sourcing_finance_reconciliations WHERE sourcing_case_id=source_case.sourcing_case_id) AS next_reconciliation_version
            FROM sourcing_cases source_lock
            CROSS JOIN LATERAL sourcing_case_facts_at(source_lock.sourcing_case_id) source_case
            JOIN LATERAL (
@@ -4044,6 +4059,7 @@ export class SourcingService {
              FROM sourcing_finance_reconciliations reconciliation
              WHERE reconciliation.sourcing_case_id=source_case.sourcing_case_id
                AND reconciliation.result='difference'
+               AND reconciliation.factory_decision_id IS NULL
              ORDER BY reconciliation.reconciliation_version DESC LIMIT 1
            ) reconciliation_row ON true
            WHERE source_case.sourcing_case_id=$1
@@ -4084,7 +4100,7 @@ export class SourcingService {
           close ? "差异已确认闭环" : "已退回财务重核",
         );
         if (!close) {
-          const nextReconciliationVersion = Number(source.reconciliation_version)+1;
+          const nextReconciliationVersion = Number(source.next_reconciliation_version);
           await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
             category: "sourcing_finance_reconcile",
             sourceEventId: eventId,

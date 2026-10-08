@@ -5,9 +5,10 @@ export function progressText(progress:ProductionDashboardItem["progress"]) {
   return progress.progressState==="stale"?`${progress.daysWithoutUpdate}天没更新`:progressLabels[progress.progressState];
 }
 export function changedDashboardOrders(before:ProductionDashboardItem[],after:ProductionDashboardItem[]):string[] {
-  const prior=new Map(before.map(item=>[item.order.productionOrderId,JSON.stringify(item)]));
-  return after.filter(item=>prior.get(item.order.productionOrderId)!==JSON.stringify(item)).map(item=>item.order.productionOrderId);
+  const prior=new Map(before.map(item=>[productionDashboardKey(item.order),JSON.stringify(item)]));
+  return after.filter(item=>prior.get(productionDashboardKey(item.order))!==JSON.stringify(item)).map(item=>productionDashboardKey(item.order));
 }
+export const productionDashboardKey=(order:{productionOrderId:string;factoryDecisionId?:string|null|undefined})=>order.factoryDecisionId?`${order.productionOrderId}:${order.factoryDecisionId}`:order.productionOrderId;
 export const canMoveProductionEvents=(count:number,paused:boolean,hovered:boolean,focused:boolean,reduced:boolean)=>count>=3&&!paused&&!hovered&&!focused&&!reduced;
 export function productionEventText(event:ProductionDashboardEvent):string {
   if(event.kind==="progress_changed")return `刷新发现：${event.previousState?progressLabels[event.previousState]:""} → ${event.progressState==="stale"?`${event.daysWithoutUpdate}天没更新`:event.progressState?progressLabels[event.progressState]:""}`;

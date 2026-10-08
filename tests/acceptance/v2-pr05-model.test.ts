@@ -5,6 +5,11 @@ import {workspaceGroupStatus} from '../../apps/web/src/digital-production-worksp
 import type {JourneyNode} from '@dx-rework/contracts/digital-production-journey';
 const node=(state:JourneyNode['state'])=>({state} as JourneyNode);
 describe('V2 production workspace factual boundaries',()=>{
+ it('preserves the exact factory when returning from reporting and rejects invalid factory identifiers',()=>{
+  const target='/ui/production-dashboard?workspace=display&selected=11111111-1111-4111-8111-111111111111&factoryDecisionId=22222222-2222-4222-8222-222222222222';
+  expect(productionDisplayReturnUrl(target)).toBe(target);
+  expect(productionDisplayReturnUrl(target.replace('22222222-2222-4222-8222-222222222222','other'))).toBeNull();
+ });
  it('retains selected order, filters and intended workspace on original handling return',()=>{
   const target='/ui/digital-cockpit?page=2&search=TEST&stage=post_cutting&selected=11111111-1111-4111-8111-111111111111&workspace=factory';
   const result=cockpitReturnPath('?returnTo='+encodeURIComponent(target));expect(result).toContain('workspace=factory');expect(result).toContain('page=2');expect(result).toContain('selected=11111111-1111-4111-8111-111111111111');

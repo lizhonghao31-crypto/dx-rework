@@ -22,8 +22,14 @@ const idempotencyKey = (request: FastifyRequest): string => {
   return value;
 };
 
+const factorySelection=(body:Record<string,unknown>)=>({
+ ...(body.productionOrderId===undefined?{}:{productionOrderId:batchId(String(body.productionOrderId))}),
+ ...(body.factoryDecisionId===undefined?{}:{factoryDecisionId:body.factoryDecisionId===null?null:batchId(String(body.factoryDecisionId))}),
+});
 const createBody = (input: unknown): {
   cuttingOrderId?: string;
+  productionOrderId?:string;
+  factoryDecisionId?:string|null;
   styleNo?: string;
   documentQuantity: number;
   actualQuantity: number;
@@ -50,6 +56,7 @@ const createBody = (input: unknown): {
     throw new ApplicationError("VALIDATION_ERROR", "补录日期无效", 400);
   }
   return {
+    ...factorySelection(body),
     ...(hasCuttingOrder ? { cuttingOrderId: batchId(body.cuttingOrderId as string) } : {}),
     ...(hasStyleNo ? { styleNo: (body.styleNo as string).trim() } : {}),
     documentQuantity: Number(body.documentQuantity),
@@ -188,6 +195,8 @@ const batchId = (input: string): string => {
 
 const repeatBody = (input: unknown): {
   cuttingOrderId?: string;
+  productionOrderId?:string;
+  factoryDecisionId?:string|null;
   receivingBatchId: string;
   source: "jiashun" | "other_factory";
   documentQuantity?: number;
@@ -212,6 +221,7 @@ const repeatBody = (input: unknown): {
     throw new ApplicationError("VALIDATION_ERROR", "请填写本次送货单数量", 400);
   }
   return {
+    ...factorySelection(body),
     ...(typeof body.cuttingOrderId === "string"
       ? { cuttingOrderId: batchId(body.cuttingOrderId) }
       : {}),

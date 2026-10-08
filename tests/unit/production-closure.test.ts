@@ -6,12 +6,20 @@ import { calculateProductionProgress } from "@dx-rework/domain";
 import { ProductionClosureService,isProductionRiskRecipient,productionRiskKind } from "../../apps/api/src/sourcing/production-closure-service.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
 import { buildTodoDeepLink } from "../../apps/api/src/todos/deep-link.js";
+import { todoRouteHref } from "../../apps/web/src/todo-route-link.js";
 import { todoModuleIdsForUser } from "../../apps/web/src/platform-access.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 const user=randomUUID(),other=randomUUID();
 const actor=(roles:string[],capabilities=["sourcing:view","todo:view"],id=user):TrustedActorContext=>({actorId:id,actorRoles:roles,authorizationCapability:capabilities.includes("todo:view")?"todo:view":capabilities[0]??"",authorizationCapabilities:capabilities,requestId:randomUUID()});
 const todo=(n:number,unread=true)=>TodoResponseSchema.parse({todoId:randomUUID(),todoType:"business_action",category:"production_high_risk",sourceEventId:randomUUID(),sourceAction:"sourcing.production.dispatch",entityType:"production_order",entityId:randomUUID(),recipientUserId:user,requiredRole:null,requiredCapability:"sourcing:view",route:{routeName:"production_detail",entityId:randomUUID(),todoId:randomUUID()},policyKey:null,dueAt:null,reminderCount:0,status:"pending",blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:`STYLE-${n}`,supplierName:"试点厂",status:"high_risk",updatedAt:new Date().toISOString()},version:1,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),unread,productionProgress:10,daysWithoutUpdate:0});
 describe("production closure recipient and observation boundaries",()=>{
+ it("opens a transferred factory risk in its own detail while preserving original factory links",()=>{
+  const original=todo(1).route,factoryDecisionId=randomUUID(),transferred={...original,factoryDecisionId};
+  expect(buildTodoDeepLink('/pilot/',original)).toBe(`/pilot/ui/production-dashboard/${original.entityId}?todo=${original.todoId}`);
+  expect(buildTodoDeepLink('/pilot/',transferred)).toBe(`/pilot/ui/production-dashboard/${original.entityId}?todo=${original.todoId}&factoryDecisionId=${factoryDecisionId}`);
+  expect(todoRouteHref(transferred)).toContain(`/ui/production-dashboard/${original.entityId}?todo=${original.todoId}&factoryDecisionId=${factoryDecisionId}`);
+  expect(()=>TodoResponseSchema.parse({...todo(1),route:{...transferred,factoryDecisionId:'invalid'}})).toThrow();
+ });
  it.each(["owner_group","production_management"])("routes %s without requiring order ownership",role=>expect(isProductionRiskRecipient(actor([role]),other)).toBe(true));
  it("routes only the corresponding merchandiser; Root uses identity and roles form a union",()=>{
   expect(isProductionRiskRecipient(actor(["order_merchandiser"]),user)).toBe(true);

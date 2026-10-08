@@ -17,7 +17,7 @@ export function addProductionChase(items: ProductionDashboardItem[], days: Map<s
     const remaining = Math.max(0, order.quantity - progress.completedQuantity);
     const workdays = active && order.deliveryDate ? inclusiveWorkdays(today, order.deliveryDate) : null;
     const required = workdays && remaining > 0 ? Math.ceil(remaining / workdays) : null;
-    const recent = (days.get(order.productionOrderId) ?? []).filter(row => row.day >= shift(today, -6) && row.day <= today).sort((a,b) => b.day.localeCompare(a.day)).slice(0,3);
+    const recent = (days.get(order.factoryDecisionId?`${order.productionOrderId}:${order.factoryDecisionId}`:order.productionOrderId) ?? []).filter(row => row.day >= shift(today, -6) && row.day <= today).sort((a,b) => b.day.localeCompare(a.day)).slice(0,3);
     const average = recent.length === 3 ? recent.reduce((sum,row) => sum + row.quantity, 0) / 3 : null;
     const pressure = active && remaining > 0 && required !== null && average !== null && average < required;
     const concentration = suppliers.get(order.supplierId) ?? {open: 0, due: 0};
@@ -27,13 +27,13 @@ export function addProductionChase(items: ProductionDashboardItem[], days: Map<s
       supplierOpenCount: concentration.open, supplierDueThisWeekCount: concentration.due}};
   });
 }
-export async function readProductionDays(client: PoolClient, ids: string[], asOf: string): Promise<Map<string, ProductionDay[]>> {
+export async function readProductionDays(client: PoolClient, ids: string[], asOf: string,perFactory=false): Promise<Map<string, ProductionDay[]>> {
   const result = await client.query<{id: string; day: string; quantity: number}>(`WITH effective AS (
-    SELECT DISTINCT ON(root_report_id) production_order_id, business_date, quantity FROM sourcing_production_reports
+    SELECT DISTINCT ON(root_report_id) production_order_id,factory_decision_id, business_date, quantity FROM sourcing_production_reports
     WHERE production_order_id=ANY($1::uuid[]) AND created_at<=$2 ORDER BY root_report_id, revision DESC
-  ) SELECT production_order_id::text AS id, business_date::text AS day, sum(quantity)::int AS quantity FROM effective
+  ) SELECT production_order_id::text || CASE WHEN $3::boolean AND factory_decision_id IS NOT NULL THEN ':'||factory_decision_id::text ELSE '' END AS id, business_date::text AS day, sum(quantity)::int AS quantity FROM effective
     WHERE business_date BETWEEN ($2::timestamptz AT TIME ZONE 'Asia/Shanghai')::date-6 AND ($2::timestamptz AT TIME ZONE 'Asia/Shanghai')::date
-    GROUP BY production_order_id,business_date`, [ids, asOf]);
+    GROUP BY 1,2`, [ids, asOf,perFactory]);
   const days = new Map<string, ProductionDay[]>();
   for (const row of result.rows) { const values = days.get(row.id) ?? []; values.push({day:row.day,quantity:row.quantity}); days.set(row.id,values); }
   return days;

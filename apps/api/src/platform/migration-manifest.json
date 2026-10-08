@@ -959,6 +959,10 @@
     {
       "version": "0235_factory_change_contract_content",
       "checksum": "997e7ae755456834d6818d259cd8dd2f864c6404a8fb476da3e7a4dcd4e98573"
+    },
+    {
+      "version": "0236_factory_remainder_executions",
+      "checksum": "202f1392b72b22b5e011025c16b4a82d727260b8bcc27a989d768c1b241798c8"
     }
   ]
 }

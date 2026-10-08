@@ -61,6 +61,7 @@ export function buildTodoDeepLink(
       break;
     case "production_detail":
       path = `/ui/production-dashboard/${route.entityId}`;
+      if (route.factoryDecisionId) query.set("factoryDecisionId", route.factoryDecisionId);
       break;
     case "supplier_onboarding":
       path = `/ui/suppliers/requests/${route.entityId}`;

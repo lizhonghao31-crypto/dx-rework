@@ -17,6 +17,7 @@ export const SourcingDispatchStateSchema = z.object({
 }).strict();
 export const SourcingProductionOrderSchema = SourcingDispatchSummarySchema.extend({
   sourcingCaseId: z.string().uuid(),
+  factoryDecisionId: z.string().uuid().nullable().optional(),
   sourceCaseArchived: z.boolean(),
   decisionVersion: z.number().int().positive(),
   sourcingContractDocumentId: z.string().uuid(),
@@ -26,7 +27,7 @@ export const SourcingProductionOrderSchema = SourcingDispatchSummarySchema.exten
   supplierName: z.string(),
   gender: z.enum(["男装", "女装"]).nullable(),
   styleName: z.string().nullable(),
-  quantity: z.number().int().positive(),
+  quantity: z.number().int().nonnegative(),
   completedQuantity: z.number().int().nonnegative().default(0),
   processes: z.array(z.string()),
   deliveryDate: z.string().nullable(),
@@ -41,7 +42,7 @@ export const SourcingProductionOrderSchema = SourcingDispatchSummarySchema.exten
     styleNo: z.string(),
     alternateStyleNo: z.string().nullable(),
     color: z.string().nullable(),
-    quantity: z.number().int().positive(),
+    quantity: z.number().int().nonnegative(),
     completedQuantity: z.number().int().nonnegative().default(0),
   }).strict()).min(1).max(20),
 }).strict();

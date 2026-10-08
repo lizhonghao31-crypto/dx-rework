@@ -75,6 +75,11 @@ describe("SSP-08 complete-set selection and refresh",()=>{
     expect(changedDashboardOrders([first],[first,second])).toEqual([second.order.productionOrderId]);
     expect(changedDashboardOrders([first],[{...first,progress:{...first.progress,productionProgress:25}}])).toEqual([first.order.productionOrderId]);
   });
+  it("keeps refresh changes separate for factories sharing one production identity",()=>{
+    const old=item(1),incoming={...old,order:{...old.order,factoryDecisionId:randomUUID(),supplierName:"新厂"}};
+    expect(changedDashboardOrders([old,incoming],[old,incoming])).toEqual([]);
+    expect(changedDashboardOrders([old,incoming],[old,{...incoming,progress:{...incoming.progress,productionProgress:25}}])).toEqual([`${old.order.productionOrderId}:${incoming.order.factoryDecisionId}`]);
+  });
   it("stops motion for fewer than three events, user pause, hover, focus and reduced motion",()=>{
     expect(canMoveProductionEvents(3,false,false,false,false)).toBe(true);
     expect(canMoveProductionEvents(2,false,false,false,false)).toBe(false);
