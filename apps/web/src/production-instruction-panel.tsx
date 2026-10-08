@@ -100,6 +100,9 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose }:
     finally { writing.current = false; setBusy(false); }
   };
   if (!sheet || !doc) return <Surface>{error ? <p role="alert">{error}</p> : <p role="status">正在读取制单…</p>}<Button onClick={onClose}>返回</Button></Surface>;
+  if (!sheet.canEdit && !sheet.isPublishedSnapshot && sheet.publishedVersion === null) {
+    return <Surface className="dx-doc-instruction"><DocumentToolbar title="大货制单" status="尚未发布有效制单"><Button onClick={onClose}>返回</Button></DocumentToolbar><DocumentSection id="instruction-unpublished" title="尚未发布有效制单"><p>该母单尚无已发布的有效制单。请联系订单跟单发布后查看。</p></DocumentSection></Surface>;
+  }
   const order = sheet.order, readonly = !sheet.canEdit || sheet.cutStarted, inputDisabled = busy && !saving;
   const total = order.lines.reduce((n, line) => n + line.sizes.reduce((m, size) => m + size.quantity, 0), 0);
   const orderSizes = [...new Set(order.lines.flatMap(line => line.sizes.map(size => size.size)))];

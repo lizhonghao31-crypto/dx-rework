@@ -37,7 +37,7 @@ export function SupplierMaintenanceList({ suppliers, disabled, onSelect, canWrit
       <td><SupplierName supplier={supplier} /></td>
       <td data-label="类型">{SUPPLIER_TYPE_LABELS[supplier.supplierType]}</td>
       <td data-label="资料状态"><SupplierStatus supplier={supplier} /></td>
-      <td data-label="最近修改">{supplier.changedAt ? <time dateTime={supplier.changedAt}>{new Date(supplier.changedAt).toLocaleString("zh-CN")}</time> : "—"}</td>
+      <td data-label="最近修改">{supplier.changedAt ? <time dateTime={supplier.changedAt}>{new Date(supplier.changedAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</time> : "—"}</td>
       <td className="supplier-records__action"><Button disabled={disabled} aria-label={`${canWrite ? "维护" : "查看"} ${supplier.supplierName}`} onClick={() => onSelect(supplier.supplierId)}>{canWrite ? "维护资料" : "查看"}</Button></td>
     </tr>)}</tbody>
   </table>;
