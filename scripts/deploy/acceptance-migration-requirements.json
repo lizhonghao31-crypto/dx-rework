@@ -584,5 +584,18 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0234_receiving_packing_cutting_group": {
+    "checksum": "626a799a577829a078f9d1993c5141e1f988b936d7800e159d36da08516cd635",
+    "tables": [],
+    "functions": [
+      "guard_receiving_packing_revision_insert"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }
