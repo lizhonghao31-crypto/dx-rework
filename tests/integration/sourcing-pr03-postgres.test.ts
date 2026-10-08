@@ -3412,7 +3412,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const order = await identity.createOrder(designer, DigitalOrderCreateSchema.parse({
       customerCode: "PD", productGroup: "男装", designStyleNo: `TEST-P09-${randomUUID()}`,
       orderDate: "2026-09-30", contractDeliveryDate: "2026-11-20", primaryMerchandiserId: merchandiserId,
-      lines: [{ poNumber: "TEST-PO1", color: "黑", sizes: [{ size: "M", quantity: 137 }] }, { poNumber: "TEST-PO2", color: "白", sizes: [{ size: "M", quantity: 63 }] }],
+      lines: [{ poNumber: `TEST-PO1-${designerId}`, color: "黑", sizes: [{ size: "M", quantity: 137 }] }, { poNumber: `TEST-PO2-${designerId}`, color: "白", sizes: [{ size: "M", quantity: 63 }] }],
     }), randomUUID());
     const bytes = await sharp({ create: { width: 2, height: 2, channels: 3, background: "white" } }).png().toBuffer();
     const imageId = randomUUID(), objectKey = `tests/p09/${imageId}.png`, sha256 = createHash("sha256").update(bytes).digest("hex");
@@ -3632,7 +3632,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
 
 
-  it("receiving source regression keeps same-style PO receipts distinct and rejects cross-source repeats", async () => {
+  it("receiving source regression keeps distinct PO receipts mapped and rejects cross-source repeats", async () => {
     const fixture = await budgetFixture(), primary = merchandiserActor(), root = rootActor();
     const ready = (await exerciseBulkPreparation(database, fixture, service, attachments,
       { primary, manager: managerActor(), owner: ownerActor(), ie: ieActor(), root },
@@ -3642,7 +3642,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     for (const [index, line] of fixture.order.lines.entries()) {
       const current = await identity.read(root, ready.id);
       await identity.correctNumbers(root, ready.id, line.lineId,
-        { expectedVersion: current.version, formalStyleNo: formal, poNumber: `TEST-PO-${index + 1}` }, randomUUID());
+        { expectedVersion: current.version, formalPoNo: `${formal}-${index + 1}` }, randomUUID());
     }
     const ids = (await database.query("SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position", [ready.caseId])).rows.map(row => row.cutting_order_id);
     expect(ids).toHaveLength(2);
@@ -3725,7 +3725,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const before=(await bulk.read(primary,id)).tasks.find(t=>t.taskKind.startsWith('bulk_cutting'))!;
     const identity=new DigitalProductionIdentityService(database,true,service),current=await identity.read(primary,id);
     const formal=`TEST-P12-${randomUUID().slice(0,8)}`;
-    await identity.correctNumbers(primary,id,current.lines[0]!.lineId,{expectedVersion:current.version,formalStyleNo:formal,poNumber:'TEST-PO-P12'},randomUUID());
+    await identity.correctNumbers(primary,id,current.lines[0]!.lineId,{expectedVersion:current.version,formalPoNo:formal},randomUUID());
     expect((await cutting.get(root,ids[0])).formalStyleNo).toBe(formal);
     expect((await instruction.read(root,id,database,1)).order.lines[0]!.formalStyleNo).toBe(formal);
     expect((await database.query('SELECT max(identity_version)::int AS n FROM sourcing_contract_documents WHERE sourcing_case_id=$1',[caseId])).rows[0].n).toBe(1);
@@ -3754,8 +3754,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         cuttingId: null, receivingBatchId: null, actualQuantity: 0, documentQuantity: 0,
         defectiveQuantity: 0, receiptCount: 0, packingQuantity: null, receipts: [], reworks: [],
       });
-      expect(sheet.outstanding).toContain("TEST-PO1 黑：尚无原收货事实");
-      expect(sheet.outstanding).toContain("TEST-PO2 白：尚无原装箱事实");
+      expect(sheet.outstanding).toContain(`${order.lines[0]!.formalStyleNo} 黑：尚无原收货事实`);
+      expect(sheet.outstanding).toContain(`${order.lines[1]!.formalStyleNo} 白：尚无原装箱事实`);
     }
     await expect(closure.read({ ...designer, actorId: randomUUID() }, order.productionOrderId))
       .rejects.toMatchObject({ statusCode: 404 });

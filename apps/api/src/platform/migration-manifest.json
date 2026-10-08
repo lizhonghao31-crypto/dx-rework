@@ -913,6 +913,10 @@
       "checksum": "ee3427ba4cce450d3cffc464ddd5701fd651604a450a88e64087de5be54b14b7"
     },
     {
+      "version": "0223_sourcing_factory_change_craft_names",
+      "checksum": "a374629a47ed1c233816ad98083f6de924f0964eb7c3ef2dbca184dc1d8b44d0"
+    },
+    {
       "version": "0224_digital_development_route",
       "checksum": "5f57dc1202b50b172f2db8347647dfcda4c8c76c9ed17b634cf11a2799871244"
     },
@@ -963,6 +967,10 @@
     {
       "version": "0236_factory_remainder_executions",
       "checksum": "202f1392b72b22b5e011025c16b4a82d727260b8bcc27a989d768c1b241798c8"
+    },
+    {
+      "version": "0237_digital_po_identity_dates",
+      "checksum": "ec37ddecdd1d903f7fdd86f1c064d5186cfe15707462bcc7c2cca1099e2e43b2"
     }
   ]
 }

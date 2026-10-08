@@ -56,9 +56,9 @@ export async function exerciseInstructions(database:Pool,order:DigitalOrder,prim
  const other={...primary,actorId:randomUUID()};await expect(service.read(other,id)).rejects.toMatchObject({statusCode:404});
  expect((await database.query("SELECT count(*)::int n FROM digital_instruction_versions WHERE production_order_id=$1",[id])).rows[0].n).toBe(1);
  const identity=new DigitalProductionIdentityService(database,true),live=await identity.read(primary,id);
- const corrected=await identity.correctNumbers(primary,id,live.lines[0]!.lineId,{expectedVersion:live.version,poNumber:'TEST-P10-PO',formalStyleNo:'TEST-P10-FORMAL'},randomUUID());
+ const corrected=await identity.correctNumbers(primary,id,live.lines[0]!.lineId,{expectedVersion:live.version,formalPoNo:'TEST-P10-PO'},randomUUID());
  const effective=await service.read(designer,id);
- expect(effective.order.lines[0]).toMatchObject({poNumber:'TEST-P10-PO',formalStyleNo:'TEST-P10-FORMAL'});
+ expect(effective.order.lines[0]).toMatchObject({poNumber:'TEST-P10-PO',formalStyleNo:'TEST-P10-PO'});
  const historical=(await database.query('SELECT order_snapshot FROM digital_instruction_versions WHERE production_order_id=$1 AND version=1',[id])).rows[0].order_snapshot;
  expect(historical.lines[0].formalStyleNo).toBe(order.lines[0]!.formalStyleNo);
  expect(effective.document).toEqual(doc);expect(effective.order.lines.map(line=>line.sizes)).toEqual(order.lines.map(line=>line.sizes));
