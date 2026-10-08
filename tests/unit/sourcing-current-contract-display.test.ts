@@ -48,3 +48,19 @@ describe("current contract presentation without rewriting order or approval fact
       expect(RequestSourcingFactoryChangeSchema.safeParse({...input,craftIds}).success).toBe(false);
   });
 });
+
+describe("order transfer remembered craft names",()=>{
+  const input={supplierId:id,unitPrice:"9",changeReason:"转厂"};
+  it("trims multiple editable names while retaining legacy ids and inheritance",()=>{
+    expect(RequestSourcingFactoryChangeSchema.parse({...input,craftNames:["  Stitch  ","整烫"]}).craftNames).toEqual(["Stitch","整烫"]);
+    expect(RequestSourcingFactoryChangeSchema.safeParse({...input,craftNames:Array.from({length:20},(_,i)=>`工艺${i}`)}).success).toBe(true);
+    expect(RequestSourcingFactoryChangeSchema.safeParse({...input,craftNames:["x".repeat(100)]}).success).toBe(true);
+    expect(RequestSourcingFactoryChangeSchema.safeParse(input).success).toBe(true);
+    expect(RequestSourcingFactoryChangeSchema.safeParse({...input,craftIds:[id]}).success).toBe(true);
+  });
+  it("rejects empty, duplicate, oversized and ambiguous sources before transfer",()=>{
+    for(const craftNames of [[],[" "],[" Stitch ","stitch"],Array.from({length:21},(_,i)=>`工艺${i}`),["x".repeat(101)]])
+      expect(RequestSourcingFactoryChangeSchema.safeParse({...input,craftNames}).success).toBe(false);
+    expect(RequestSourcingFactoryChangeSchema.safeParse({...input,craftIds:[id],craftNames:["整烫"]}).success).toBe(false);
+  });
+});

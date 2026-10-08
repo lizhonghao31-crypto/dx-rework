@@ -338,10 +338,13 @@ export const RecordSourcingContractSchema = z.object({
 
 export const RequestSourcingFactoryChangeSchema = z.object({
   craftIds: z.array(IdSchema).min(1).max(MAX_SOURCING_PROCESSES).refine(ids => new Set(ids).size === ids.length, "工艺不能重复").optional(),
+  craftNames: z.array(z.string().trim().min(1, "工艺不能为空").max(100))
+    .min(1).max(MAX_SOURCING_PROCESSES)
+    .refine(names => new Set(names.map(name => name.toLowerCase())).size === names.length, "工艺不能重复").optional(),
   supplierId: IdSchema,
   unitPrice: MoneyInputSchema,
   changeReason: z.string().trim().min(1, "换厂原因不能为空").max(500),
-}).strict();
+}).strict().refine(input => !(input.craftIds && input.craftNames), "工艺编号和名称不能同时提交");
 
 export const DecideSourcingFactoryChangeSchema = z.object({
   decision: z.enum(["approved", "rejected"]),
