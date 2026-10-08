@@ -87,7 +87,7 @@ run("P03 task lifecycle PostgreSQL", () => {
     await condition(task.taskId,"business_recorded");await tasks.complete(boss,task.taskId,{note:""},randomUUID());
     await expect(tasks.prioritize(boss,task.taskId,"normal",randomUUID())).rejects.toMatchObject({statusCode:409});
   });
-  it("P15 SQL scope paginates only authorized sources and revokes delegation without changing totals",async()=>{
+  it("PR05 SQL scope preserves pagination and ignores historical source grants",async()=>{
     const search="TEST-P15-PAGE";
     const sources=[];
     for(let n=0;n<21;n++)sources.push(await service.createSource(actor(),DigitalSourceCreateSchema.parse({developmentType:"头版",designStyleNo:`${search}-${n}`,customerCode:"PD"}),randomUUID()));
@@ -97,12 +97,12 @@ run("P03 task lifecycle PostgreSQL", () => {
     expect(new Set([...first.items,...second.items].map(row=>row.id)).size).toBe(21);
     expect(first.summary).toEqual(second.summary);expect((await cockpit.list(actor(other),query)).total).toBe(0);
     const access=new DigitalProductionAccessService(database);
-    const grant=await access.delegate(boss,{resourceKind:"source",resourceId:sources[0]!.sourceId,delegateId:other,purpose:"technical",expiresAt:new Date(Date.now()+3600000).toISOString()});
-    expect((await cockpit.list(actor(other),query)).total).toBe(1);
-    await access.revoke(boss,grant.delegationId);
+    await expect(access.delegate(boss,{resourceKind:"source",resourceId:sources[0]!.sourceId,delegateId:other,purpose:"technical",expiresAt:new Date(Date.now()+3600000).toISOString()})).rejects.toMatchObject({statusCode:403});
+    await database.query("INSERT INTO digital_production_delegations(delegation_id,source_id,delegate_id,purpose,granted_by,expires_at) VALUES($1,$2,$3,'technical',$4,CURRENT_TIMESTAMP+interval '1 hour')",[randomUUID(),sources[0]!.sourceId,other,root]);
     expect((await cockpit.list(actor(other),query)).total).toBe(0);
+
   });
-  it("P15 shows only assigned or delegated development sources and keeps other tasks private",async()=>{
+  it("PR05 preserves legitimate assigned sources and denies historical task grants",async()=>{
     const search='TEST-P15-ASSIGNED',workerId=randomUUID(),hiddenWorkerId=randomUUID();
     for(const id of [workerId,hiddenWorkerId])await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST assigned worker',true)",[id]);
     const first=await service.createSource(actor(),DigitalSourceCreateSchema.parse({developmentType:'头版',designStyleNo:search+'-A',customerCode:'PD'}),randomUUID());
@@ -118,9 +118,9 @@ run("P03 task lifecycle PostgreSQL", () => {
     await database.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND role_code='pattern_room_worker'",[workerId]);
     expect((await cockpit.list(worker,input)).total).toBe(0);
     await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'sample_designer')",[workerId]);
-    const access=new DigitalProductionAccessService(database),grant=await access.delegate(boss,{resourceKind:'task',resourceId:unrelated.taskId,delegateId:workerId,purpose:'technical',expiresAt:new Date(Date.now()+3600000).toISOString()});
-    expect((await cockpit.list(worker,input)).items.map(row=>row.sourceId)).toEqual([second.sourceId]);
-    await access.revoke(boss,grant.delegationId);expect((await cockpit.list(worker,input)).total).toBe(0);
+    await database.query("INSERT INTO digital_production_delegations(delegation_id,task_id,delegate_id,purpose,granted_by,expires_at) VALUES($1,$2,$3,'technical',$4,CURRENT_TIMESTAMP+interval '1 hour')",[randomUUID(),unrelated.taskId,workerId,root]);
+    expect((await cockpit.list(worker,input)).total).toBe(0);
+
   });
   it("keeps no-SLA tasks usable without creating a legacy clock and denies cross-order access", async()=>{
     const resource=await order();const {taskId}=await create(resource);

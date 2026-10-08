@@ -1,3 +1,4 @@
+import {effectiveSourcingMerchandiser,lockDigitalSourcingHandover} from "./current-merchandiser.js";
 import { SourcingContractContentService, loadContractContent, hydrateContractContentImages, canEditContractContent } from "./sourcing-contract-content.js";
 import { memberCanWriteModule } from "../access/member-module-policy.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -310,6 +311,7 @@ export class SourcingContractService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      await lockDigitalSourcingHandover(client,sourcingCaseId);
       await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId]);
       await this.idempotency.execute(client, {
         scope,actorKey: actor.actorId,key: idempotencyKey,
@@ -326,7 +328,7 @@ export class SourcingContractService {
         );
         const row = current.rows[0];
         if (!row) throw new ApplicationError("NOT_FOUND", "合同准备记录不存在", 404);
-        if (!actor.actorRoles.includes(ROOT_ROLE) && row.created_by !== actor.actorId) {
+        if (!actor.actorRoles.includes(ROOT_ROLE) && await effectiveSourcingMerchandiser(client,sourcingCaseId,row.created_by) !== actor.actorId) {
           throw new ApplicationError("FORBIDDEN", "仅订单跟单或Root可补充合同缺项", 403);
         }
         if (row.status !== "pending_supplement") {
@@ -450,6 +452,7 @@ export class SourcingContractService {
   }
 
   private async dto(row: ContractRow, actor: TrustedActorContext): Promise<SourcingContractDocument> {
+    const currentMerchandiser=await effectiveSourcingMerchandiser(this.database,row.sourcing_case_id,row.created_by);
     return {
       sourcingContractDocumentId: row.sourcing_contract_document_id,
       sourcingApprovalSnapshotId: row.sourcing_approval_snapshot_id,
@@ -465,9 +468,9 @@ export class SourcingContractService {
       preparedAt: iso(row.prepared_at),
       generatedAt: row.generated_at ? iso(row.generated_at) : null,
       canSupplement: await memberCanWriteModule(this.database, actor.actorId, "sourcing") && (actor.actorRoles.includes(ROOT_ROLE)
-        || (actor.actorRoles.includes(MERCHANDISER_ROLE) && actor.actorId === row.created_by)),
+        || (actor.actorRoles.includes(MERCHANDISER_ROLE) && actor.actorId === currentMerchandiser)),
       canEditContent: row.status === "ready" && canEditContractContent(actor,row.reconciled !== false),
-      canRefreshInformation: row.status !== "generating" && canRefreshContractInformation(actor,row.created_by,row.returned === true)
+      canRefreshInformation: row.status !== "generating" && canRefreshContractInformation(actor,currentMerchandiser,row.returned === true)
         && (actor.actorRoles.includes(ROOT_ROLE) || await memberCanWriteModule(this.database,actor.actorId,"sourcing")),
     };
   }

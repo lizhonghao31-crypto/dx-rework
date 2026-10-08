@@ -14,7 +14,7 @@ describe("P09 budget HTTP field and attachment boundary", () => {
   const setup = async (role: string, userId: string) => {
     const mother = { production_order_id: orderId, created_by: designerId, primary_merchandiser_id: primaryId, designer_name: "TEST designer", merchandiser_name: "TEST primary" };
     const query = vi.fn(async (sql: string, values?: unknown[]) => {
-      const rows = /FROM digital_production_orders/.test(sql) && values?.[0] === orderId ? [mother] : [];
+      const rows = /FROM digital_production_orders/.test(sql) && values?.[0] === orderId ? [mother] : /FROM app_users u JOIN user_role_assignments/.test(sql) && values?.[0]===primaryId ? [{exists:true}] : [];
       return { rows, rowCount: rows.length };
     });
     const database = { query } as unknown as Pool;

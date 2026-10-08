@@ -11,19 +11,22 @@ export const digitalForbidden = (): never => { throw new ApplicationError("FORBI
 export const digitalNotFound = (): never => { throw new ApplicationError("NOT_FOUND", "资料不存在或不在授权范围", 404); };
 export class DigitalProductionAccessPolicy {
   constructor(private readonly database: Database) {}
+  // Hold current eligibility while a personnel write commits; deactivation/revocation must serialize.
+  async lockActiveRole(userId: string, role: string): Promise<boolean> {
+    const found=await this.database.query(`SELECT 1 FROM app_users u
+      JOIN user_role_assignments a ON a.user_id=u.id AND a.role_code=$2 AND a.revoked_at IS NULL
+      JOIN business_roles r ON r.role_code=a.role_code AND r.enabled
+      JOIN identity_mappings i ON i.user_id=u.id AND i.active AND i.employed
+      WHERE u.id=$1 AND u.enabled AND NOT coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)
+      FOR SHARE OF u,a,r,i`,[userId,role]);
+    return Boolean(found.rowCount);
+  }
   async activeRole(userId: string, role: string): Promise<boolean> {
     const found = await this.database.query(`SELECT 1 FROM app_users u JOIN user_role_assignments a ON a.user_id=u.id
       JOIN business_roles r ON r.role_code=a.role_code AND r.enabled
       WHERE u.id=$1 AND u.enabled AND coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)=false AND a.role_code=$2 AND a.revoked_at IS NULL
       AND EXISTS(SELECT 1 FROM identity_mappings i WHERE i.user_id=u.id AND i.active AND i.employed)`, [userId, role]);
     return Boolean(found.rowCount);
-  }
-  async delegated(actor: TrustedActorContext, kind: DigitalResourceKind, id: string, purpose: DigitalAccessPurpose): Promise<boolean> {
-    const column = { order: "production_order_id", source: "source_id", task: "task_id" }[kind];
-    const result = await this.database.query(`SELECT 1 FROM digital_production_delegations d JOIN app_users u ON u.id=d.delegate_id AND u.enabled AND coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)=false
-      WHERE d.${column}=$1 AND d.delegate_id=$2 AND d.purpose=$3 AND d.revoked_at IS NULL AND d.expires_at>CURRENT_TIMESTAMP
-      AND EXISTS(SELECT 1 FROM identity_mappings i WHERE i.user_id=u.id AND i.active AND i.employed)`, [id, actor.actorId, purpose]);
-    return Boolean(result.rowCount);
   }
   async allowed(actor: TrustedActorContext, kind: DigitalResourceKind, id: string, purpose: DigitalAccessPurpose): Promise<boolean> {
     if (kind === "task") {
@@ -32,9 +35,8 @@ export class DigitalProductionAccessPolicy {
       if (isRootActor(actor)) return true;
       if (purpose === "budget") return false;
       if (purpose === "execute") return await this.activeRole(actor.actorId, task.required_role)
-        && (task.assignee_id === actor.actorId || await this.delegated(actor, kind, id, "execute"));
+        && task.assignee_id === actor.actorId;
       return isDigitalLeader(actor) || isDigitalTechnicalManager(actor) || (actor.actorRoles.includes("development_clerk") && task.task_kind.startsWith("development_")) || (task.assignee_id === actor.actorId && await this.activeRole(actor.actorId, task.required_role))
-        || await this.delegated(actor, kind, id, "technical") || await this.delegated(actor, kind, id, "execute")
         || await this.allowed(actor, task.production_order_id ? "order" : "source", task.production_order_id ?? task.source_id, "technical");
     }
     if (purpose === "execute") return false;
@@ -49,18 +51,17 @@ export class DigitalProductionAccessPolicy {
     }
     const owns = actor.actorRoles.includes("sample_designer") && row.created_by === actor.actorId;
     const primary = kind === "order" && actor.actorRoles.includes("order_merchandiser") && row.primary_merchandiser_id === actor.actorId;
-    if (owns || primary) return true;
+    if (owns || primary && await this.activeRole(actor.actorId,"order_merchandiser")) return true;
     if(kind==="order"&&purpose==="technical"){
       if(actor.actorRoles.includes("development_clerk")&&await this.activeRole(actor.actorId,"development_clerk")&&row.source_id)return true;
       const available=(await this.database.query("SELECT to_regclass('digital_bulk_preparations') AS relation")).rows[0]?.relation;
       const tasks=available?(await this.database.query("SELECT a.task_id,a.assignee_id,a.required_role FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id) JOIN digital_bulk_preparations p ON p.preparation_id=t.route_instance_id AND p.production_order_id=a.production_order_id JOIN digital_instruction_documents effective ON effective.production_order_id=p.production_order_id AND effective.published_version=p.instruction_version WHERE a.production_order_id=$1 AND t.state<>'cancelled' AND p.source_round=COALESCE((SELECT max(round_number) FROM digital_development_rounds WHERE source_id=p.source_id),1) AND a.task_kind IN ('bulk_pattern','warehouse_preshrink','bulk_cutting','bulk_cutting_external','process_logistics','bulk_qc','warehouse_dispatch','factory_material_count','bulk_ship_sample')",[id])).rows:[];
       for(const task of tasks){
         if(task.assignee_id===actor.actorId&&await this.activeRole(actor.actorId,task.required_role))return true;
-        if(await this.delegated(actor,"task",task.task_id,"technical")||await this.delegated(actor,"task",task.task_id,"execute")&&await this.activeRole(actor.actorId,task.required_role))return true;
       }
     }
     if (purpose === "budget" && !actor.actorRoles.some(role => ["sample_designer", "order_merchandiser"].includes(role))) return false;
-    return this.delegated(actor, kind, id, purpose);
+    return false;
   }
   async assert(actor: TrustedActorContext, kind: DigitalResourceKind, id: string, purpose: DigitalAccessPurpose): Promise<void> {
     if (!await this.allowed(actor, kind, id, purpose)) digitalNotFound();

@@ -567,6 +567,34 @@ export class TodoService {
     return todoResponse(todo);
   }
 
+  /** Internal transaction adapter for the existing mother personnel command; no public transfer endpoint. */
+  async reassignDigitalSourcingWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,from:string|null,to:string,auditId:string):Promise<void>{
+    if(!from||from===to||!(await client.query("SELECT to_regclass('rework_todos') AS relation")).rows[0]?.relation)return;
+    const rows=(await client.query<TodoRow>(`SELECT t.* FROM rework_todos t
+      JOIN digital_production_child_links l ON l.module='sourcing' AND l.child_id::text=t.entity_id
+      JOIN sourcing_cases s ON s.sourcing_case_id=l.child_id AND to_jsonb(s)->>'workflow_generation'='digital_production_v1'
+      WHERE l.production_order_id=$1 AND t.recipient_user_id=$2 AND t.status IN ('pending','blocked_recipient')
+        AND t.todo_type='business_action' AND t.entity_type='sourcing_case' AND t.required_role='order_merchandiser'
+        AND t.category IN ('sourcing_contract_return','sourcing_merchandiser_correction')
+        AND t.dedupe_key ~ ('^sourcing:'||t.entity_id||':(return|correction):[0-9]+$')
+      ORDER BY t.todo_id FOR UPDATE OF t`,[orderId,from])).rows;
+    for(const todo of rows){
+      if(!todo.required_capability||!await this.isEligibleRecipient(client,to,"order_merchandiser",todo.required_capability,undefined,todo.delegation_scope_id??todo.entity_id))throw new ApplicationError("FORBIDDEN","新主跟单缺少原待办办理权限",403);
+      const eventId=await this.events.append(client,actor,{action:"todo.transfer",entityType:"rework_todo",entityId:todo.todo_id,
+        before:{recipientUserId:from,status:todo.status},after:{recipientUserId:to,status:"pending",digitalOrderId:orderId,handoverAuditId:auditId},reason:"母单主跟单交接，保留原待办与时钟"});
+      await this.setTodoContext(client,eventId,actor.requestId);
+      await client.query("UPDATE rework_todos SET recipient_user_id=$2,delegation_id=NULL,status='pending',blocked_at=NULL,blocked_reason=NULL WHERE todo_id=$1",[todo.todo_id,to]);
+      const transferred=await this.todoById(client,todo.todo_id);
+      if(todo.status==="blocked_recipient")await this.cancelPendingRoutingExceptionForTodo(client,actor,todo.todo_id,"母单已合法调整主跟单");
+      await this.enqueueDelivery(client,transferred,eventId,actor.requestId,"create");
+      if((await client.query("SELECT to_regclass('digital_production_notification_receipts') AS relation")).rows[0]?.relation)await client.query(`INSERT INTO digital_production_notification_receipts(event_id,recipient_id,source_event_id)
+        SELECT receipt.event_id,$2,receipt.source_event_id FROM digital_production_notification_receipts receipt
+        JOIN digital_production_notification_events event USING(event_id)
+        WHERE event.todo_id=$1 AND receipt.recipient_id=$3 AND event.event_kind IN ('ready','overdue')
+        ON CONFLICT DO NOTHING`,[todo.todo_id,to,from]);
+    }
+  }
+
   async transferRoutingException(
     actor: TrustedActorContext,
     input: TransferRoutingExceptionInput,

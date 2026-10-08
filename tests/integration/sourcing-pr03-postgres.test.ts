@@ -33,6 +33,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { DigitalBudgetService } from "../../apps/api/src/production-platform/budget-service.js";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
+import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
+import { DigitalProductionNotificationService } from "../../apps/api/src/production-platform/notification-service.js";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { digitalTodoOrder } from "../../apps/api/src/production-platform/notification-policy.js";
 import { DigitalOrderCreateSchema } from "@dx-rework/contracts/digital-production";
@@ -3500,16 +3502,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(developmentTasks.every(row => row.sourceRound === 2 && row.instructionVersion === null)).toBe(true);
     // Source-task read authorization survives analysis date/role/assignee filters.
     const sourceTask = developmentTasks[0]!;
-    const access = new DigitalProductionAccessService(database);
-    const delegation = await access.delegate(root, { resourceKind: 'task', resourceId: sourceTask.taskId,
-      delegateId: people.warehouse_receiver!.actorId, purpose: 'technical', expiresAt: new Date(Date.now() + 60000).toISOString() });
-    expect((await forms.read(people.warehouse_receiver!, sourceId, database, 2)).roundNumber).toBe(2);
+    // Stored historical digital grants are retained, but no longer grant source-round reading.
+    const historical=randomUUID();
+    await database.query("INSERT INTO digital_production_delegations(delegation_id,task_id,delegate_id,purpose,granted_by,expires_at) VALUES($1,$2,$3,'technical',$4,CURRENT_TIMESTAMP+interval '1 hour')",[historical,sourceTask.taskId,people.warehouse_receiver!.actorId,root.actorId]);
     const scoped = await analysis.list(people.warehouse_receiver!, { ...filters, assigneeId: people.warehouse_receiver!.actorId, role: 'warehouse_receiver' });
     expect(scoped.rows.some(row => row.taskId === sourceTask.taskId)).toBe(false);
-    expect(scoped.rows.find(row => row.taskId === warehouseTask.taskId)?.canReadSourceRound).toBe(true);
-    await access.revoke(root, delegation.delegationId);
-    expect((await analysis.list(people.warehouse_receiver!, { ...filters, assigneeId: people.warehouse_receiver!.actorId, role: 'warehouse_receiver' })).rows.find(row => row.taskId === warehouseTask.taskId)?.canReadSourceRound).toBe(false);
-    await expect(forms.read(people.warehouse_receiver!, sourceId, database, 2)).rejects.toMatchObject({ statusCode: 404 });
+    expect(scoped.rows.find(row => row.taskId === warehouseTask.taskId)?.canReadSourceRound).toBe(false);
+    await expect(forms.read(people.warehouse_receiver!, sourceId, database, 2)).rejects.toMatchObject({statusCode:404});
+    expect((await database.query("SELECT delegation_id FROM digital_production_delegations WHERE delegation_id=$1",[historical])).rows).toHaveLength(1);
 
     expect(all.rows.find(row => row.taskId === missingTaskId)).toMatchObject({ round: 5, sourceRound: null, instructionVersion: null });
     const revisions = await analysis.list(root, { ...filters, scope: 'revisions', origin: '客户新增要求' });
@@ -4459,6 +4459,110 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       FROM rework_todos WHERE entity_id=$1 ORDER BY todo_id`, [id])).rows,
     deliveries: (await database.query(`SELECT a.* FROM todo_delivery_attempts a
       JOIN rework_todos t USING(todo_id) WHERE t.entity_id=$1 ORDER BY a.delivery_attempt_id`, [id])).rows,
+  });
+
+  it("Mother PR05 hands over real digital correction and contract todos without rewriting history, secondary rights or task clocks", async () => {
+    const {service:currentService}=await cycleTodoServices(),fixture=await budgetFixture(true),id=fixture.order.productionOrderId;
+    const access=new DigitalProductionAccessService(database),identity=new DigitalProductionIdentityService(database,true),policy=new DigitalProductionAccessPolicy(database);
+    const second=randomUUID(),next=randomUUID(),third=randomUUID(),invalid=randomUUID();
+    for(const [user,name] of [[second,"TEST HANDOVER SECOND"],[next,"TEST HANDOVER NEXT"],[third,"TEST HANDOVER THIRD"],[invalid,"TEST HANDOVER DISABLED"]]){
+      await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,$3)",[user,name,user!==invalid]);
+      await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','corp',$2::uuid::text,$2::uuid::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),user]);
+      await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
+      try{await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'order_merchandiser',$3,'TEST personnel handover')",[randomUUID(),user,merchandiserId]);}
+      finally{await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation");}
+    }
+    const nextActor={...merchandiserActor(),actorId:next},nextContract={...contractActor(),actorId:next},secondActor={...merchandiserActor(),actorId:second};
+    const currentVersion=async()=>Number((await database.query("SELECT version FROM digital_production_orders WHERE production_order_id=$1",[id])).rows[0].version);
+    await fixture.budget.save(fixture.designer,id,{expectedVersion:0,document:fixture.document},randomUUID());
+    await fixture.budget.publish(fixture.designer,id,1,randomUUID());
+    const prepared=await fixture.budget.prepareSourcing(merchandiserActor(),id,1,attachments);
+    const input={gender:prepared.gender,styleName:prepared.styleName,deliveryDate:"2026-11-10",estimatedCutPieceSendDate:"2026-10-20",daxingUnitPrice:prepared.daxingUnitPrice,
+      additionalMerchandiserUserId:second,attachmentIds:prepared.images.map(image=>image.attachmentId),
+      lineItems:prepared.lineItems.map(line=>({lineId:line.lineId,styleNo:line.styleNo,alternateStyleNo:line.alternateStyleNo,color:line.color,quantity:line.quantity,factoryDeliveryDate:"2026-11-10"})),digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}};
+    const created=(await currentService.createCase(merchandiserActor(),input,randomUUID())).value,caseId=created.sourcingCaseId;
+    const returned=(await currentService.returnToMerchandiser(ownerActor(),caseId,{expectedVersion:created.version,reason:"TEST correction before handover"},randomUUID())).value;
+    const todoRows=async()=>(await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 ORDER BY todo_id",[caseId])).rows;
+    const beforeCorrection=await todoRows(),correction=beforeCorrection.find(row=>row.category==="sourcing_merchandiser_correction"&&row.todo_type==="business_action"&&row.status==="pending")!;
+    expect(correction.recipient_user_id).toBe(merchandiserId);
+    const notices=new DigitalProductionNotificationService(database);await notices.runOnce();
+    const receipts=async(recipient:string)=>(await database.query("SELECT r.* FROM digital_production_notification_receipts r JOIN digital_production_notification_events e USING(event_id) WHERE e.todo_id=$1 AND r.recipient_id=$2 ORDER BY r.event_id",[correction.todo_id,recipient])).rows;
+    const originalReceipts=await receipts(merchandiserId);expect(originalReceipts.length).toBeGreaterThan(0);
+    const unchangedTodo=(row:Record<string,unknown>)=>Object.fromEntries(Object.entries(row).filter(([key])=>!["recipient_user_id","status","blocked_at","blocked_reason","version","updated_at","delegation_id"].includes(key)));
+    // A forged native transfer cannot use the original routing guard without the mother transaction evidence.
+    const client=await database.connect();
+    try{
+      await client.query("BEGIN");const requestActor=rootActor();
+      const eventId=await new OperationEventRepository(database).append(client,requestActor,{action:"todo.transfer",entityType:"rework_todo",entityId:correction.todo_id,
+        before:{recipientUserId:merchandiserId,status:"pending"},after:{recipientUserId:next,status:"pending",digitalOrderId:id,handoverAuditId:randomUUID()},reason:"TEST rejected forged transfer"});
+      await client.query("SELECT set_config('dx_rework.todo_event_id',$1,true),set_config('dx_rework.todo_request_id',$2,true)",[eventId,requestActor.requestId]);
+      await expect(client.query("UPDATE rework_todos SET recipient_user_id=$2 WHERE todo_id=$1",[correction.todo_id,next])).rejects.toMatchObject({code:"55000"});
+    }finally{await client.query("ROLLBACK");client.release();}
+    expect(await todoRows()).toEqual(beforeCorrection);
+    const tasks=new DigitalProductionTaskService(database),taskIds:string[]=[];
+    const taskClient=await database.connect();
+    try{
+      await taskClient.query("BEGIN");
+      for(const kind of ["bulk_cutting_external","factory_material_count","bulk_ship_sample","bulk_cutting","bulk_qc","warehouse_dispatch"] as const){
+        const task=await tasks.createWithClient(taskClient,rootActor(),{resource:{kind:"order",id},kind,routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:["bulk_cutting_external","factory_material_count","bulk_ship_sample"].includes(kind)?merchandiserId:null});taskIds.push(task.taskId);
+      }
+      await taskClient.query("COMMIT");
+    }catch(error){await taskClient.query("ROLLBACK");throw error;}finally{taskClient.release();}
+    const taskFacts=async()=>(await database.query("SELECT t.*,a.assignee_id,a.task_kind FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 ORDER BY task_id",[id])).rows;
+    const priorTasks=await taskFacts(),priorRevisions=(await database.query("SELECT * FROM digital_production_deadline_revisions WHERE task_id=ANY($1::uuid[]) ORDER BY revision_id",[taskIds])).rows;
+    const beforeVersion=await currentVersion();
+    for(const actor of [fixture.designer,merchandiserActor(),secondActor,{...managerActor(),actorId:next}])await expect(access.assignMerchandiser(actor,id,next,beforeVersion)).rejects.toMatchObject({statusCode:403});
+    await expect(access.setCustomerDefault(ownerActor(),"PD",next)).rejects.toMatchObject({statusCode:403});
+    await expect(access.assignMerchandiser(rootActor(),id,invalid,beforeVersion)).rejects.toMatchObject({statusCode:409});
+    expect((await access.candidates(rootActor())).some(person=>person.id===invalid)).toBe(false);
+    expect(await currentVersion()).toBe(beforeVersion);expect(await todoRows()).toEqual(beforeCorrection);
+    await access.setCustomerDefault(managerActor(),"PD",next);
+    expect((await identity.read(rootActor(),id)).primaryMerchandiserId).toBe(merchandiserId);
+    const future=await identity.createOrder(fixture.designer,DigitalOrderCreateSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:`TEST-DEFAULT-${randomUUID()}`,orderDate:"2026-10-08",lines:[{color:"黑",sizes:[{size:"M",quantity:1}]}]}),randomUUID());
+    expect(future.primaryMerchandiserId).toBe(next);
+    await access.assignMerchandiser(ownerActor(),id,next,beforeVersion);
+    const moved=(await todoRows()).find(row=>row.todo_id===correction.todo_id)!;
+    expect(moved).toMatchObject({recipient_user_id:next,status:"pending",version:correction.version+1});expect(unchangedTodo(moved)).toEqual(unchangedTodo(correction));
+    expect(await receipts(merchandiserId)).toEqual(originalReceipts);
+    expect((await receipts(next)).map(row=>({event_id:row.event_id,source_event_id:row.source_event_id}))).toEqual(originalReceipts.map(row=>({event_id:row.event_id,source_event_id:row.source_event_id})));
+    const originalTodoService=new TodoService(database);
+    expect((await originalTodoService.listForActor({...nextActor,authorizationCapability:"todo:view",authorizationCapabilities:["todo:view"]},{module:"sourcing",query:created.lineItems[0]!.styleNo??undefined})).todos.some(todo=>todo.todoId===correction.todo_id)).toBe(true);
+    expect((await originalTodoService.listForActor({...merchandiserActor(),authorizationCapability:"todo:view",authorizationCapabilities:["todo:view"]},{module:"sourcing",query:created.lineItems[0]!.styleNo??undefined})).todos.some(todo=>todo.todoId===correction.todo_id)).toBe(false);
+    expect((await todoRows()).filter(row=>row.todo_id!==correction.todo_id)).toEqual(beforeCorrection.filter(row=>row.todo_id!==correction.todo_id));
+    for(const before of priorTasks){const after=(await taskFacts()).find(row=>row.task_id===before.task_id)!;
+      expect(after).toEqual({...before,assignee_id:["sourcing_preparation","bulk_cutting_external","factory_material_count","bulk_ship_sample"].includes(before.task_kind)&&!["completed","cancelled"].includes(before.state)?next:before.assignee_id});}
+    expect((await database.query("SELECT * FROM digital_production_deadline_revisions WHERE task_id=ANY($1::uuid[]) ORDER BY revision_id",[taskIds])).rows).toEqual(priorRevisions);
+    expect(await policy.allowed(merchandiserActor(),"order",id,"budget")).toBe(false);expect(await policy.allowed(nextActor,"order",id,"budget")).toBe(true);expect(await policy.allowed(secondActor,"order",id,"technical")).toBe(false);
+    const correctionInput={gender:input.gender,styleName:input.styleName,deliveryDate:input.deliveryDate,estimatedCutPieceSendDate:input.estimatedCutPieceSendDate,attachmentIds:input.attachmentIds,lineItems:input.lineItems,expectedVersion:returned.version,reason:"TEST new current primary correction"};
+    await expect(currentService.correctCase(merchandiserActor(),caseId,correctionInput,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await currentService.correctCase(nextActor,caseId,correctionInput,randomUUID());
+    const prices=prepared.lineItems.map((_,index)=>({position:index+1,unitPrice:"5.50"}));
+    await currentService.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());
+    await currentService.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:prices,cuttingProcess:"in_house"},randomUUID());
+    await currentService.decideOwner(ownerActor(),caseId,{decision:"approved"},randomUUID());
+    const approvedTodos=await todoRows(),returnTodo=approvedTodos.find(row=>row.category==="sourcing_contract_return"&&row.recipient_user_id===next)!;
+    expect(returnTodo.status).toBe("pending");
+    const sourceBefore=(await database.query("SELECT * FROM sourcing_cases WHERE sourcing_case_id=$1",[caseId])).rows[0];expect(sourceBefore.created_by).toBe(merchandiserId);
+    expect((await currentService.getCase({...nextActor,authorizationCapability:"sourcing:view"},caseId)).merchandiserName).toBe("TEST HANDOVER NEXT/TEST HANDOVER SECOND");
+    expect((await currentService.listCases({...nextActor,authorizationCapability:"sourcing:view"},"TEST HANDOVER NEXT")).items.some(item=>item.sourcingCaseId===caseId)).toBe(true);
+    expect((await contractService.getCurrent(nextContract,caseId)).item?.canRefreshInformation).toBe(true);
+    expect((await contractService.getCurrent(contractActor(),caseId)).item?.canRefreshInformation).toBe(false);
+    expect((await contractReturns.get({...contractActor(),authorizationCapability:"sourcing:view"},caseId)).canUpload).toBe(false);expect((await contractReturns.get({...contractActor(),actorId:second,authorizationCapability:"sourcing:view"},caseId)).canUpload).toBe(true);
+    const nextVersion=await currentVersion();await access.assignMerchandiser(managerActor(),id,third,nextVersion);
+    const thirdContract={...contractActor(),actorId:third};
+    expect((await todoRows()).find(row=>row.todo_id===returnTodo.todo_id)).toMatchObject({recipient_user_id:third,status:"pending",version:returnTodo.version+1});
+    expect(unchangedTodo((await todoRows()).find(row=>row.todo_id===returnTodo.todo_id)!)).toEqual(unchangedTodo(returnTodo));
+    expect((await todoRows()).filter(row=>row.todo_id!==returnTodo.todo_id)).toEqual(approvedTodos.filter(row=>row.todo_id!==returnTodo.todo_id));
+    expect((await database.query("SELECT * FROM sourcing_cases WHERE sourcing_case_id=$1",[caseId])).rows[0]).toEqual(sourceBefore);
+    const returnedFile=await readyCuttingSheet(third);await expect(contractReturns.submit(nextContract,caseId,[returnedFile],randomUUID())).rejects.toMatchObject({statusCode:403});
+    await contractReturns.submit(thirdContract,caseId,[returnedFile],randomUUID());
+    const signed=(await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[caseId])).rows,completedTodos=await todoRows();
+    const lastVersion=await currentVersion(),race=await Promise.allSettled([access.assignMerchandiser(rootActor(),id,next,lastVersion),access.assignMerchandiser(ownerActor(),id,merchandiserId,lastVersion)]);
+    expect(race.filter(item=>item.status==="fulfilled")).toHaveLength(1);expect(race.find(item=>item.status==="rejected")).toMatchObject({reason:{statusCode:409}});
+    expect(await todoRows()).toEqual(completedTodos);expect((await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[caseId])).rows).toEqual(signed);
+    const final=(await identity.read(rootActor(),id)).primaryMerchandiserId!;await new DigitalProductionNotificationService(database).runOnce();
+    expect((await taskFacts()).filter(row=>["bulk_cutting_external","factory_material_count","bulk_ship_sample"].includes(row.task_kind)).every(row=>row.assignee_id===final)).toBe(true);
+    await access.setCustomerDefault(rootActor(),"PD",merchandiserId);
   });
 
   it("keeps real sourcing todos distinct across repeated owner rejection and merchandiser correction cycles", async () => {

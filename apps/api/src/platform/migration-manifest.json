@@ -979,6 +979,10 @@
     {
       "version": "0239_sourcing_po_factory_dates",
       "checksum": "709cc28049ca610a56cc98c2a55e4791eb7b3f4f192da1599b76eae45e1ca93d"
+    },
+    {
+      "version": "0240_digital_merchandiser_handover",
+      "checksum": "885b341e5b1bcdc430a481aa386cf8e21272dd3047d7cbacba38f7397cdac93b"
     }
   ]
 }

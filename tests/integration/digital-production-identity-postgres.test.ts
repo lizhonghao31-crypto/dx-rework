@@ -67,8 +67,8 @@ run("digital production P01 identities", () => {
     for (const id of [designer, other]) await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'sample_designer')", [id]);
     app.setErrorHandler((error, _request, reply) => { const known = error as ApplicationError; reply.code(known.statusCode ?? 500).send({ error: { code: known.code, message: known.message } }); });
     registerDigitalIdentityRoutes(app, { service, accessService: new DigitalProductionAccessService(database), creationEnabled: true, authenticate: async token => {
-      if (token !== designer && token !== other) throw new ApplicationError("UNAUTHORIZED", "请登录", 401);
-      return { id: token, displayName: "TEST", businessRoles: ["sample_designer"], capabilities: ["pattern_room:orders:create"] };
+      if (token !== designer && token !== other && token !== root) throw new ApplicationError("UNAUTHORIZED", "请登录", 401);
+      return { id: token, displayName: "TEST", businessRoles: token===root?["root_superuser"]:["sample_designer"], capabilities: ["pattern_room:orders:create"] };
     } });
     await app.ready();
   });
@@ -245,9 +245,9 @@ run("digital production P01 identities", () => {
       {formalPoNo:"TEST-DATE-2",color:"白",customerWarehouseArrivalDate:"2026-12-12",sizes:[{size:"M",quantity:13}]},
       {formalPoNo:null,temporaryStyleNo:"TEST-ALT",color:"蓝",sizes:[{size:"M",quantity:17}]},
     ]}),randomUUID()),id=order.productionOrderId,p=actor(primary,["order_merchandiser"]),m=actor(director,["production_management"]);
-    await access.delegate(boss,{resourceKind:"order",resourceId:id,delegateId:secondary,purpose:"technical",expiresAt:new Date(Date.now()+86400000).toISOString()});
+    await database.query("INSERT INTO digital_production_delegations(delegation_id,production_order_id,delegate_id,purpose,granted_by,expires_at) VALUES($1,$2,$3,'technical',$4,CURRENT_TIMESTAMP+interval '1 day')",[randomUUID(),id,secondary,root]);
     const inputDate={orderVersion:order.version,reason:"TEST客户确认选中一条",changes:[{lineId:order.lines[1]!.lineId,expectedVersion:1,date:"2026-12-20"}]};
-    await expect(dates.request(actor(secondary,["order_merchandiser"]),id,inputDate,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(dates.request(actor(secondary,["order_merchandiser"]),id,inputDate,randomUUID())).rejects.toMatchObject({statusCode:404});
     await expect(dates.request(actor(owner,["owner_group"]),id,inputDate,randomUUID())).rejects.toMatchObject({statusCode:403});
     await expect(access.requestDelivery(p,id,{expectedVersion:order.version,deliveryDate:"2026-12-20",reason:"旧整单入口"})).rejects.toMatchObject({statusCode:409});
     const snap=()=>database.query("SELECT line_id,po_number,formal_style_no,temporary_style_no,color,delivery_date::text FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position",[id]);
@@ -267,7 +267,7 @@ run("digital production P01 identities", () => {
     await expect(database.query("UPDATE digital_po_customer_requests SET reason='forged' WHERE request_id=$1",[request.requestId])).rejects.toThrow("immutable");
     await expect(database.query("UPDATE digital_po_customer_request_lines SET new_date='2027-01-01' WHERE request_id=$1",[request.requestId])).rejects.toThrow("immutable");
     await database.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND role_code='order_merchandiser'",[primary]);
-    await expect(dates.request(p,id,{...inputDate,orderVersion:current.version},randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(dates.request(p,id,{...inputDate,orderVersion:current.version},randomUUID())).rejects.toMatchObject({statusCode:404});
     await database.query("UPDATE user_role_assignments SET revoked_at=NULL WHERE user_id=$1",[primary]);
     const stale=await dates.request(p,id,{orderVersion:current.version,reason:"TEST待处理旧版本",changes:[{lineId:current.lines[0]!.lineId,expectedVersion:1,date:"2026-12-25"},{lineId:current.lines[1]!.lineId,expectedVersion:2,date:"2026-12-27"}]},randomUUID());
     const legacyPanelRequest=(await access.deliveryRequests(m,id)).find(row=>row.requestId===stale.requestId)!;
@@ -356,17 +356,23 @@ run("digital production P01 identities", () => {
     await expect(service.createOrder(actor(), { ...input(), primaryMerchandiserId: alternate }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
     expect((await service.createOrder(actor(), { ...input(), primaryMerchandiserId: null }, randomUUID())).primaryMerchandiserId).toBeNull();
   });
-  it("P02 delegates only the specified resource, revokes immediately and separates QC from logistics", async () => {
+  it("PR05 retires historical digital grants while preserving ordinary QC task reassignment", async () => {
     const access = new DigitalProductionAccessService(database); const policy = new DigitalProductionAccessPolicy(database);
     const boss = actor(root, ["root_superuser"]); const order = await service.createOrder(actor(), input(), randomUUID());
     const expiresAt = new Date(Date.now() + 3600000).toISOString();
-    const grant = await access.delegate(boss, { resourceKind: "order", resourceId: order.productionOrderId, delegateId: other, purpose: "technical", expiresAt });
-    expect(await policy.allowed(actor(other), "order", order.productionOrderId, "technical")).toBe(true);
-    expect(await policy.allowed(actor(other), "order", order.productionOrderId, "budget")).toBe(false);
-    expect(await access.delegate(boss, { resourceKind: "order", resourceId: order.productionOrderId, delegateId: other, purpose: "technical", expiresAt })).toEqual(grant);
-    await access.revoke(boss, grant.delegationId);
+    const historical=randomUUID();
+    await database.query("INSERT INTO digital_production_delegations(delegation_id,production_order_id,delegate_id,purpose,granted_by,expires_at) VALUES($1,$2,$3,'technical',$4,$5)",[historical,order.productionOrderId,other,root,expiresAt]);
+    const history=(await database.query("SELECT * FROM digital_production_delegations WHERE delegation_id=$1",[historical])).rows[0];
     expect(await policy.allowed(actor(other), "order", order.productionOrderId, "technical")).toBe(false);
-    await expect(access.delegate(boss, { resourceKind: "order", resourceId: order.productionOrderId, delegateId: other, purpose: "technical", expiresAt: "2020-01-01T00:00:00Z" })).rejects.toMatchObject({ statusCode: 409 });
+    expect(await policy.allowed(actor(other), "order", order.productionOrderId, "budget")).toBe(false);
+    await expect(access.delegate(boss, { resourceKind: "order", resourceId: order.productionOrderId, delegateId: other, purpose: "technical", expiresAt })).rejects.toMatchObject({statusCode:403});
+    await expect(access.delegations(boss,"order",order.productionOrderId)).rejects.toMatchObject({statusCode:403});
+    await expect(access.revoke(boss,historical)).rejects.toMatchObject({statusCode:403});
+    const headers={cookie:`dx_rework_session=${root}`};
+    expect((await app.inject({method:"POST",url:"/digital-production/access/delegations",headers,payload:{resourceKind:"order",resourceId:order.productionOrderId,delegateId:other,purpose:"technical",expiresAt}})).statusCode).toBe(403);
+    expect((await app.inject({method:"GET",url:`/digital-production/access/delegations/order/${order.productionOrderId}`,headers})).statusCode).toBe(403);
+    expect((await app.inject({method:"POST",url:`/digital-production/access/delegations/${historical}/revoke`,headers})).statusCode).toBe(403);
+    expect((await database.query("SELECT * FROM digital_production_delegations WHERE delegation_id=$1",[historical])).rows[0]).toEqual(history);
     const qc = randomUUID(); const logistics = randomUUID(); const secondQc = randomUUID();
     for (const [id, role] of [[qc, "quality_control"], [logistics, "embroidery_washing_merchandiser"], [secondQc, "quality_control"]]) {
       await database.query("INSERT INTO app_users(id,display_name) VALUES($1,'TEST TASK')", [id]);
@@ -377,12 +383,11 @@ run("digital production P01 identities", () => {
     expect(await policy.allowed(actor(qc, ["quality_control"]), "task", taskId!, "execute")).toBe(true);
     expect(await policy.allowed(actor(qc, ["quality_control"]), "order", order.productionOrderId, "technical")).toBe(false);
     await expect(access.delegate(boss, { resourceKind: "task", resourceId: taskId!, delegateId: logistics, purpose: "execute", expiresAt })).rejects.toMatchObject({ statusCode: 403 });
-    const taskGrant = await access.delegate(boss, { resourceKind: "task", resourceId: taskId!, delegateId: secondQc, purpose: "execute", expiresAt });
-    expect(await policy.allowed(actor(secondQc, ["quality_control"]), "task", taskId!, "execute")).toBe(true);
+    await database.query("INSERT INTO digital_production_delegations(delegation_id,task_id,delegate_id,purpose,granted_by,expires_at) VALUES($1,$2,$3,'execute',$4,$5)",[randomUUID(),taskId!,secondQc,root,expiresAt]);
+    expect(await policy.allowed(actor(secondQc, ["quality_control"]), "task", taskId!, "execute")).toBe(false);
     expect(await policy.allowed(actor(secondQc, ["quality_control"]), "task", taskId!, "budget")).toBe(false);
     await database.query("UPDATE app_users SET enabled=false WHERE id=$1", [secondQc]);
     expect(await policy.allowed(actor(secondQc, ["quality_control"]), "task", taskId!, "execute")).toBe(false);
-    await access.revoke(boss, taskGrant.delegationId);
     await database.query("UPDATE app_users SET enabled=true WHERE id=$1", [secondQc]);
     const client2 = await database.connect();
     try {
@@ -394,6 +399,30 @@ run("digital production P01 identities", () => {
     expect(await policy.allowed(actor(secondQc, ["quality_control"]), "task", taskId!, "execute")).toBe(true);
   });
 
+  it("PR05 rejects revoked and concurrently disabled targets and validates current personnel actor roles",async()=>{
+    const access=new DigitalProductionAccessService(database),boss=actor(root,["root_superuser"]),target=randomUUID(),manager=randomUUID();
+    for(const [id,role] of [[target,"order_merchandiser"],[manager,"production_management"]]){
+      await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST CURRENT PERSONNEL',true)",[id]);
+      await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,$2)",[id,role]);
+    }
+    const order=await service.createOrder(actor(),input(),randomUUID());
+    await database.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=$1",[target]);
+    await expect(access.assignMerchandiser(boss,order.productionOrderId,target,order.version)).rejects.toMatchObject({statusCode:409});
+    await expect(access.setCustomerDefault(boss,"PD",target)).rejects.toMatchObject({statusCode:409});
+    await database.query("UPDATE user_role_assignments SET revoked_at=NULL WHERE user_id=$1",[target]);
+    const client=await database.connect();
+    try{
+      await client.query("BEGIN");await client.query("UPDATE app_users SET enabled=false WHERE id=$1",[target]);
+      const assigning=access.assignMerchandiser(boss,order.productionOrderId,target,order.version);
+      await client.query("COMMIT");await expect(assigning).rejects.toMatchObject({statusCode:409});
+    }finally{client.release();}
+    expect((await service.read(boss,order.productionOrderId)).version).toBe(order.version);
+    await database.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=$1",[manager]);
+    const staleManager=actor(manager,["production_management"]);
+    expect(await access.options(staleManager)).toMatchObject({manage:false,customers:false});
+    await expect(access.setCustomerDefault(staleManager,"PD",null)).rejects.toMatchObject({statusCode:403});
+    await expect(access.assignMerchandiser(staleManager,order.productionOrderId,target,order.version)).rejects.toMatchObject({statusCode:403});
+  });
   it("P02 expiry and revoked roles cannot authorize execution or budget access", async () => {
     const access = new DigitalProductionAccessService(database); const policy = new DigitalProductionAccessPolicy(database);
     const boss = actor(root, ["root_superuser"]); const order = await service.createOrder(actor(), input(), randomUUID());

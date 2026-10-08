@@ -741,5 +741,24 @@
       "guard_sourcing_contract_po_dates"
     ],
     "sequences": []
+  },
+  "0240_digital_merchandiser_handover": {
+    "checksum": "885b341e5b1bcdc430a481aa386cf8e21272dd3047d7cbacba38f7397cdac93b",
+    "tables": [],
+    "functions": [
+      "guard_rework_todos_update",
+      "project_todo_external_lifecycle",
+      "guard_sourcing_case_correction",
+      "guard_sourcing_style_revision"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "digital_merchandiser_todo_transfer",
+      "digital_sourcing_current_merchandiser"
+    ],
+    "sequences": []
   }
 }
