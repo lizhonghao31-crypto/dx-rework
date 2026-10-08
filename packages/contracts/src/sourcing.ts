@@ -585,6 +585,7 @@ export const SupplementSourcingImagesSchema = z.object({
 }).strict();
 
 export const SourcingTimelineEntrySchema = z.object({
+  factoryDecisionId: IdSchema.nullable().optional(),
   pdfAttachmentId: IdSchema.nullable().optional(),
   entryId: IdSchema,
   kind: z.enum([

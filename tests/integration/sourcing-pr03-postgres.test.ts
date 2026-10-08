@@ -2278,11 +2278,29 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(receiving.createRepeated(receiver,{cuttingOrderId:cut,receivingBatchId:oldReceipt.value.receivingBatchId,source:'jiashun',actualQuantity:1,defectiveQuantity:0},randomUUID())).rejects.toMatchObject({statusCode:409,message:'该裁剪单有多个工厂发货，请选择本次到货工厂'});
     expect((await database.query('SELECT count(*)::int AS count FROM receiving_receipts WHERE cutting_order_id=$1',[cut])).rows[0].count).toBe(receiptCount);
     const expected=await closure.expected(receiver,{q:serial});expect(expected.items.filter(i=>i.productionOrderId===id).map(i=>[i.factoryDecisionId,i.expectedQuantity])).toEqual(expect.arrayContaining([[null,12],[factoryDecisionId,18]]));
+    expect(await closure.expected(receiver,{cuttingOrderId:cut})).toMatchObject({totalCount:2,items:expect.arrayContaining([expect.objectContaining({factoryDecisionId:null,expectedQuantity:12}),expect.objectContaining({factoryDecisionId,expectedQuantity:18})])});
+    expect(await closure.expected(receiver,{cuttingOrderId:randomUUID()})).toMatchObject({totalCount:0,items:[]});
     const settlements=await service.readFactorySettlements(financeActor(),caseId);expect(settlements.items.map(i=>[i.decisionId,i.quantity,i.totalAmount])).toEqual([[oldDecisionId,12,'103.00'],[factoryDecisionId,18,'216.00']]);
     await expect(service.readFactorySettlements(newReporter,caseId)).rejects.toMatchObject({statusCode:403});
     const financeKey=randomUUID();await service.recordFinanceReconciliation(financeActor(),caseId,{factoryDecisionId:oldDecisionId,result:'match'},financeKey);
     expect((await service.recordFinanceReconciliation(financeActor(),caseId,{factoryDecisionId:oldDecisionId,result:'match'},financeKey)).reused).toBe(true);
     expect((await service.getCase(readerActor(),caseId)).status).toBe('pending_finance_reconciliation');
+    await service.recordFinanceReconciliation(financeActor(),caseId,{factoryDecisionId:oldDecisionId,result:'difference',differenceFields:['quantity'],differenceReason:'TEST旧厂差异不得驱动当前厂流程'},randomUUID());
+    await expect(database.query(`INSERT INTO sourcing_case_transitions(sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,business_action,transition_reason,actor_id,operation_event_id,request_id)
+      SELECT $2,$1,(SELECT max(sequence)+1 FROM sourcing_case_transitions WHERE sourcing_case_id=$1),'pending_finance_reconciliation','pending_exception_verification','finance_difference',event.reason,event.actor_id,event.event_id,event.request_id
+      FROM sourcing_finance_reconciliations reconciliation JOIN operation_events event ON event.event_id=reconciliation.operation_event_id
+      WHERE reconciliation.sourcing_case_id=$1 ORDER BY reconciliation.reconciliation_version DESC LIMIT 1`,[caseId,randomUUID()])).rejects.toMatchObject({code:'55000',message:'factory settlements cannot drive the current order workflow'});
+    await service.recordFinanceReconciliation(financeActor(),caseId,{result:'difference',differenceFields:['unit_price'],differenceReason:'TEST当前厂价格差异'},randomUUID());
+    const currentReconciliationVersion=(await database.query('SELECT reconciliation_version FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1 AND factory_decision_id IS NULL ORDER BY reconciliation_version DESC LIMIT 1',[caseId])).rows[0].reconciliation_version;
+    await service.recordFinanceReconciliation(financeActor(),caseId,{factoryDecisionId:oldDecisionId,result:'difference',differenceFields:['quantity'],differenceReason:'TEST旧厂独立数量差异'},randomUUID());
+    await service.decideException(exceptionVerifier(),caseId,{resolution:'reconcile_again',resolutionReason:'TEST只处理当前厂价格差异'},randomUUID());
+    const verification=(await database.query("SELECT before_state FROM operation_events WHERE entity_id=$1 AND action='sourcing.exception.reopen_reconciliation' ORDER BY created_at DESC LIMIT 1",[caseId])).rows[0];
+    expect(verification.before_state.reconciliationVersion).toBe(currentReconciliationVersion);
+    const financeHistory=(await service.listTimeline(readerActor(),caseId)).items.filter(entry=>entry.kind==='finance_reconciliation');
+    expect(financeHistory.findLast(entry=>!entry.factoryDecisionId)?.differenceFields).toEqual(['unit_price']);
+    const oldFinance=financeHistory.findLast(entry=>entry.factoryDecisionId===oldDecisionId)!;
+    expect(oldFinance).toMatchObject({quantity:12,differenceFields:['quantity']});
+    expect((await service.nodeHistory(readerActor(),caseId,'finance',oldFinance.entryId)).item.approvalSnapshot?.supplierId).toBe(factoryId);
     await service.recordFinanceReconciliation(financeActor(),caseId,{result:'match'},randomUUID());
     expect((await service.getCase(readerActor(),caseId)).status).toBe('closed');
     await service.recordFinanceReconciliation(financeActor(),caseId,{factoryDecisionId:oldDecisionId,result:'difference',differenceFields:['quantity'],differenceReason:'TEST旧厂独立差异保留'},randomUUID());

@@ -40,6 +40,14 @@ export function ProductionExpectedPicker({value,onSelect,disabled=false,cuttingO
    {data?<ListPagination page={page} totalPages={Math.max(1,Math.ceil(data.totalCount/15))} onPageChange={setPage} ariaLabel="预期回货分页"/>:null}</>:null}
  </Surface>;
 }
+export function FactoryReceiptSelector({cuttingOrderId,shipment,onSelect,disabled=false}:{cuttingOrderId:string;shipment:ProductionReceivingSummary|null;onSelect:(shipment:ProductionReceivingSummary|null)=>void;disabled?:boolean}){
+ const[page,setPage]=useState(1),[data,setData]=useState<z.infer<typeof ProductionExpectedReceiptsSchema>|null>(null),[error,setError]=useState('');
+ useEffect(()=>{const c=new AbortController();void read(`expected-receipts?${new URLSearchParams({cuttingOrderId,page:String(page)})}`,ProductionExpectedReceiptsSchema,c.signal).then(d=>{setData(d);setError('');}).catch(e=>{if(!c.signal.aborted)setError(e.message);});return()=>c.abort();},[cuttingOrderId,page]);
+ const key=(s:ProductionReceivingSummary)=>`${s.productionOrderId}:${s.factoryDecisionId??'original'}`;
+ if(error)return <p role="alert">本次到货加工厂读取失败：{error}</p>;
+ if(!data||!data.totalCount||(data.totalCount===1&&!data.items[0]?.factoryDecisionId))return null;
+ return <label className="receiving-field">本次到货加工厂<select aria-label="本次到货加工厂" disabled={disabled} value={shipment?key(shipment):''} onChange={e=>onSelect(data.items.find(s=>key(s)===e.target.value)??null)}><option value="">请选择本次发货厂</option>{data.items.map(s=><option key={key(s)} value={key(s)}>{s.supplierName} · 合同 {s.contractNumber} · 已发 {s.expectedQuantity} 件</option>)}</select>{data.totalCount>15?<ListPagination page={page} totalPages={Math.ceil(data.totalCount/15)} onPageChange={setPage} ariaLabel="本裁单发货厂分页"/>:null}</label>;
+}
 export function ProductionReceiptSummary({productionOrderId,refreshKey,factoryDecisionId}:{productionOrderId:string;factoryDecisionId?:string|null|undefined;refreshKey?:string|undefined}){
  const [data,setData]=useState<ProductionReceivingSummary|null>(null),[error,setError]=useState("");
  useEffect(()=>{const controller=new AbortController();void read(`orders/${productionOrderId}/receipts${factoryDecisionId?"?"+new URLSearchParams({factoryDecisionId}):""}`,z.object({shipment:ProductionReceivingSummarySchema.nullable()}),controller.signal)

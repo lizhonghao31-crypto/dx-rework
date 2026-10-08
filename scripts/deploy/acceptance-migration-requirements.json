@@ -612,14 +612,15 @@
     "sequences": []
   },
   "0236_factory_remainder_executions": {
-    "checksum": "07bdf1de5d5a02b1c791e242e1fd84111a92f9fa12eb7e486d983485539a9179",
+    "checksum": "202f1392b72b22b5e011025c16b4a82d727260b8bcc27a989d768c1b241798c8",
     "tables": [
       "sourcing_production_reports",
       "sourcing_production_transitions",
       "sourcing_production_shipments",
       "sourcing_production_progress_snapshots",
       "sourcing_production_receipt_links",
-      "sourcing_finance_reconciliations"
+      "sourcing_finance_reconciliations",
+      "sourcing_case_transitions"
     ],
     "functions": [
       "guard_sourcing_factory_change_request_insert",

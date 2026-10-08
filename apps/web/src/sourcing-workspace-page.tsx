@@ -1624,7 +1624,7 @@ function OrderDetailPage({
   const transferTotal=factoryRemainingLines?linesTotalPreview(factoryRemainingLines.filter(line=>line.quantity>0).map(line=>({position:line.position,unitPrice:factoryChangeDraft.unitPrice})),item.lineItems.map(line=>({...line,quantity:factoryRemainingLines.find(x=>x.position===line.position)?.quantity??0}))):totalPreview(factoryChangeDraft.unitPrice,item.orderQuantity);
   const ownerCraftSummary = <span className="sourcing-owner-craft-summary">承包内容包括 <strong>{item.processes.length ? item.processes.join("、") : "未填写"}</strong>；裁床工序为 <strong>{item.decision?.cuttingProcess === "in_house" ? "本厂裁" : item.decision?.cuttingProcess === "outsourced" ? "外厂裁" : item.decision?.cuttingProcess === "other" ? `其它：${item.decision.cuttingProcessOther ?? "未填写"}` : "未填写"}</strong>。</span>;
   const latestFinance = [...timeline].reverse()
-    .find((entry) => entry.kind === "finance_reconciliation");
+    .find((entry) => entry.kind === "finance_reconciliation" && !entry.factoryDecisionId);
   const transferNodeRole = canOwnerTransfer ? "owner_group"
     : canManagementTransfer ? "production_management"
       : canMerchandiserTransfer ? "order_merchandiser" : null;
@@ -1758,7 +1758,7 @@ function OrderDetailPage({
         </div>
 
         {item.decision ? <DecisionSummary title={selectedNode === "owner" ? "审批摘要" : "选厂摘要"}>
-          <p className="sourcing-owner-decision__lead">供应链总监建议由 <strong>{item.decision.supplierName}</strong> 承接 <strong>{formatBusinessDecimal(item.decision.quantity)} 件</strong>，生产总额 <strong>{formatBusinessCurrency(item.decision.totalAmount)}</strong>，相对 IE {item.decision.sourceType==='factory_change'?'同份额':''}总额变化 <strong>{ownerTotalDelta ?? "—"}</strong>。</p>
+          <p className="sourcing-owner-decision__lead">供应链总监建议由 <strong>{item.decision.supplierName}</strong> 承接 <strong>{formatBusinessDecimal(item.decision.quantity)} 件</strong>，生产总额 <strong>{formatBusinessCurrency(item.decision.totalAmount)}</strong>，相对 IE 总额变化{item.decision.sourceType==='factory_change'?'（按转入同份额）':''} <strong>{ownerTotalDelta ?? "—"}</strong>。</p>
           <p>{ownerCraftSummary}</p>
           {item.decision.decisionReason ? <p>供应链总监说明：{item.decision.decisionReason}</p> : null}
           {selectedNode === "owner" && selectedState === "current" ? <p>请核对价格、加工厂及交期，确认后审批。</p> : null}

@@ -111,7 +111,7 @@ export class ProductionDashboardService {
         for(const item of selected.filtered){const before=previous.get(executionKey(item.order.productionOrderId,item.order.factoryDecisionId)),after=item.progress;
           // This is an observed refresh change, not a fabricated historical event time.
           if(before&&item.order.status==="in_production"&&before.progressState!==after.progressState&&(before.attention||after.attention))events.push({
-            id:`progress:${item.order.productionOrderId}:${asOf}`,productionOrderId:item.order.productionOrderId,factoryDecisionId:item.order.factoryDecisionId??null,firstStyleNo:item.order.firstStyleNo,supplierName:item.order.supplierName,
+            id:`progress:${executionKey(item.order.productionOrderId,item.order.factoryDecisionId)}:${asOf}`,productionOrderId:item.order.productionOrderId,factoryDecisionId:item.order.factoryDecisionId??null,firstStyleNo:item.order.firstStyleNo,supplierName:item.order.supplierName,
             kind:"progress_changed",businessDate:shanghaiDay(asOf),recordedAt:asOf,quantity:after.completedQuantity,
             previousState:before.progressState,progressState:after.progressState,daysWithoutUpdate:after.daysWithoutUpdate});
         }

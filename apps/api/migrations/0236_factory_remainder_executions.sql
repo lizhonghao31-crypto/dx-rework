@@ -25,6 +25,18 @@ ALTER TABLE sourcing_finance_reconciliations ADD COLUMN factory_decision_id uuid
 ALTER TABLE sourcing_production_reports ALTER COLUMN created_at SET DEFAULT statement_timestamp();
 ALTER TABLE sourcing_production_transitions ALTER COLUMN created_at SET DEFAULT statement_timestamp();
 ALTER TABLE sourcing_production_shipments ALTER COLUMN created_at SET DEFAULT statement_timestamp();
+CREATE FUNCTION guard_sourcing_factory_finance_transition() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF EXISTS(SELECT 1 FROM sourcing_finance_reconciliations reconciliation
+   WHERE reconciliation.sourcing_case_id=NEW.sourcing_case_id AND reconciliation.factory_decision_id IS NOT NULL
+   AND (reconciliation.operation_event_id=NEW.operation_event_id OR
+     (NEW.business_action IN ('exception_closed','exception_reopened_for_reconciliation')
+      AND reconciliation.reconciliation_version=(SELECT (event.before_state->>'reconciliationVersion')::integer FROM operation_events event WHERE event_id=NEW.operation_event_id))))
+ THEN RAISE EXCEPTION 'factory settlements cannot drive the current order workflow' USING ERRCODE='55000'; END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER sourcing_factory_finance_transition_guard BEFORE INSERT ON sourcing_case_transitions
+ FOR EACH ROW EXECUTE FUNCTION guard_sourcing_factory_finance_transition();
 CREATE OR REPLACE VIEW effective_sourcing_production_reports AS
  SELECT DISTINCT ON(root_report_id) * FROM sourcing_production_reports ORDER BY root_report_id,revision DESC;
 DO $$ DECLARE constraint_name text; BEGIN

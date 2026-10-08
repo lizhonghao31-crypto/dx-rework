@@ -143,14 +143,17 @@ export class ProductionClosureService {
   return result.rows.map(r=>ProductionReceivingSummarySchema.parse({productionOrderId:r.production_order_id,factoryDecisionId:r.factory_decision_id,cuttingOrderIds:r.cutting_order_ids,firstStyleNo:r.first_style_no,contractNumber:r.contract_number,supplierName:r.supplier_name_snapshot,
    shippedOn:r.shipped_on,expectedQuantity:r.recorded_quantity,receipts:receipts.rows.filter(x=>x.production_order_id===r.production_order_id&&x.factory_decision_id===r.factory_decision_id).map(x=>({receiptId:x.receipt_id,receivingBatchId:x.receiving_batch_id,actualQuantity:x.actual_quantity,receivedAt:iso(x.received_at),archived:x.archived}))}));
  }
- async expected(actor:TrustedActorContext,input:{q?:string|undefined;page?:number|undefined}={}){
+ async expected(actor:TrustedActorContext,input:{q?:string|undefined;page?:number|undefined;cuttingOrderId?:string|undefined}={}){
   if(!this.warehouse(actor))fail("仅仓管可查看预期回货");
   const q=input.q?.trim()??"",page=input.page??1;if(q.length>100||!Number.isInteger(page)||page<1||page>100000)fail("回货筛选无效",400);
+  if(input.cuttingOrderId&&!z.string().uuid().safeParse(input.cuttingOrderId).success)fail("裁剪单编号无效",400);
   const where=`FROM sourcing_production_shipments shipment JOIN sourcing_production_factory_orders production ON production.production_order_id=shipment.production_order_id AND production.factory_decision_id IS NOT DISTINCT FROM shipment.factory_decision_id
    JOIN sourcing_production_pilots pilot USING(supplier_id) WHERE pilot.enabled=true AND ${productionNotExcluded}
-   AND ($1='' OR EXISTS(SELECT 1 FROM sourcing_style_aliases alias WHERE alias.sourcing_case_id=production.sourcing_case_id AND alias.position=1 AND strpos(upper(alias.style_no),upper($1))>0) OR strpos(upper(production.supplier_name_snapshot),upper($1))>0)`;
-  const count=await this.database.query<{count:string}>(`SELECT count(*) ${where}`,[q]);
-  const rows=await this.database.query<{production_order_id:string;factory_decision_id:string|null}>(`SELECT shipment.production_order_id,shipment.factory_decision_id ${where} ORDER BY shipment.shipped_on DESC,shipment.production_order_id LIMIT 15 OFFSET $2`,[q,(page-1)*15]);
+   AND ($1='' OR EXISTS(SELECT 1 FROM sourcing_style_aliases alias WHERE alias.sourcing_case_id=production.sourcing_case_id AND alias.position=1 AND strpos(upper(alias.style_no),upper($1))>0) OR strpos(upper(production.supplier_name_snapshot),upper($1))>0)
+   AND ($2::uuid IS NULL OR EXISTS(SELECT 1 FROM cutting_orders cutting JOIN sourcing_factory_execution_lines(production.production_order_id,production.sourcing_decision_id) allocation ON allocation.position=cutting.sourcing_line_position AND allocation.quantity>0
+     WHERE cutting.cutting_order_id=$2 AND cutting.sourcing_case_id=production.sourcing_case_id))`;
+  const count=await this.database.query<{count:string}>(`SELECT count(*) ${where}`,[q,input.cuttingOrderId??null]);
+  const rows=await this.database.query<{production_order_id:string;factory_decision_id:string|null}>(`SELECT shipment.production_order_id,shipment.factory_decision_id ${where} ORDER BY shipment.shipped_on DESC,shipment.production_order_id,shipment.factory_execution_key LIMIT 15 OFFSET $3`,[q,input.cuttingOrderId??null,(page-1)*15]);
   const summaries=await this.receipts(rows.rows.map(r=>r.production_order_id));const byId=new Map(summaries.map(s=>[s.productionOrderId+":"+(s.factoryDecisionId??"original"),s]));
   return ProductionExpectedReceiptsSchema.parse({items:rows.rows.map(r=>byId.get(r.production_order_id+":"+(r.factory_decision_id??"original"))),page,totalCount:Number(count.rows[0]?.count??0)});
  }

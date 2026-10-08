@@ -1,4 +1,4 @@
-import {ProductionExpectedPicker} from "./production-closure-ui.js";
+import {FactoryReceiptSelector} from "./production-closure-ui.js";
 import type {ProductionReceivingSummary} from "@dx-rework/contracts";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, Surface } from "@dx-rework/ui";
@@ -469,7 +469,7 @@ export function ReceivingPage() {
     <a className="dx-button dx-button--secondary receiving-order-link" href={pageUrl("/ui/orders?returnTo=%2Fui%2Freceiving")}>查看订货回货</a>
     <section className="receiving-hero">
       <div className="receiving-brand">达兴 · 仓库收货</div>
-      {open&&selectedCuttingId?<ProductionExpectedPicker key={`${selectedCuttingId}:${repeat}`} cuttingOrderId={selectedCuttingId} value={factoryShipment?.productionOrderId??""} disabled={busy} onSelect={s=>{setFactoryShipment(s);pendingKey.current=null;}}/>:null}
+      {open&&selectedCuttingId?<FactoryReceiptSelector key={`${selectedCuttingId}:${repeat}`} cuttingOrderId={selectedCuttingId} shipment={factoryShipment} disabled={busy} onSelect={s=>{setFactoryShipment(s);pendingKey.current=null;}}/>:null}
       {!open ? (
         <div className="receiving-entry-actions">
           <button className="receiving-start" type="button" onClick={() => { setRepeat(false); setRepeatSource(null); setBackfill(false); setOpen(true); setMessage(""); }}>

@@ -648,7 +648,7 @@ export class SourcingService {
          SELECT approval.*
          FROM sourcing_approval_snapshots approval
          WHERE approval.sourcing_case_id=case_view.sourcing_case_id
-           ${history ? "AND approval.approved_at <= $2::timestamptz AND $3::text IN ('owner','finance')" : ""}
+           ${history ? "AND approval.approved_at <= $2::timestamptz AND $3::text IN ('owner','finance') AND ($3::text<>'finance' OR approval.sourcing_decision_id=decision_row.sourcing_decision_id)" : ""}
          ORDER BY approval.decision_version DESC LIMIT 1
        ) snapshot ON true
        LEFT JOIN LATERAL (
@@ -1291,6 +1291,7 @@ export class SourcingService {
       difference_fields: Array<"supplier" | "unit_price" | "quantity" | "total_amount">;
       result: "match" | "difference" | null;
       resolution: "close" | "reconcile_again" | null;
+      factory_decision_id: string | null;
     }>(
       `WITH timeline AS (
          SELECT source_case.sourcing_case_id AS entry_id,'created'::text AS kind,
@@ -1402,6 +1403,7 @@ export class SourcingService {
               timeline.supplier_name,timeline.decision,
               timeline.contract_reference,timeline.signed_on::text AS signed_on,
               timeline.quantity,timeline.difference_fields,timeline.result,timeline.resolution,
+              (SELECT factory_decision_id FROM sourcing_finance_reconciliations WHERE sourcing_reconciliation_id=timeline.entry_id AND timeline.kind='finance_reconciliation') AS factory_decision_id,
               (SELECT pdf_attachment_id FROM sourcing_contract_documents WHERE sourcing_contract_document_id=timeline.entry_id AND timeline.kind='contract') AS pdf_attachment_id
        FROM timeline
        LEFT JOIN app_users app_user ON app_user.id=timeline.actor_id
@@ -1412,6 +1414,7 @@ export class SourcingService {
     return {
       items: result.rows.map((row) => ({
         entryId: row.entry_id,
+        ...(row.factory_decision_id?{factoryDecisionId:row.factory_decision_id}:{}),
         pdfAttachmentId: row.pdf_attachment_id ?? null,
         kind: row.kind,
         version: Number(row.entry_version),
@@ -4033,9 +4036,11 @@ export class SourcingService {
           sequence: number | string;
           decision_version: number | string;
           reconciliation_version: number | string;
+          next_reconciliation_version: number | string;
         }>(
           `SELECT transition_row.to_status AS status,transition_row.sequence,
-                  decision_row.decision_version,reconciliation_row.reconciliation_version
+                  decision_row.decision_version,reconciliation_row.reconciliation_version,
+                  (SELECT COALESCE(max(reconciliation_version),0)+1 FROM sourcing_finance_reconciliations WHERE sourcing_case_id=source_case.sourcing_case_id) AS next_reconciliation_version
            FROM sourcing_cases source_lock
            CROSS JOIN LATERAL sourcing_case_facts_at(source_lock.sourcing_case_id) source_case
            JOIN LATERAL (
@@ -4054,6 +4059,7 @@ export class SourcingService {
              FROM sourcing_finance_reconciliations reconciliation
              WHERE reconciliation.sourcing_case_id=source_case.sourcing_case_id
                AND reconciliation.result='difference'
+               AND reconciliation.factory_decision_id IS NULL
              ORDER BY reconciliation.reconciliation_version DESC LIMIT 1
            ) reconciliation_row ON true
            WHERE source_case.sourcing_case_id=$1
@@ -4094,7 +4100,7 @@ export class SourcingService {
           close ? "差异已确认闭环" : "已退回财务重核",
         );
         if (!close) {
-          const nextReconciliationVersion = Number(source.reconciliation_version)+1;
+          const nextReconciliationVersion = Number(source.next_reconciliation_version);
           await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
             category: "sourcing_finance_reconcile",
             sourceEventId: eventId,
