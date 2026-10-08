@@ -64,6 +64,8 @@
  .dx-doc-development .development-technical-table th:nth-child(1){width:150px}
  .dx-doc-development .development-technical-table th:nth-child(8){width:170px}
  .dx-doc-development .development-technical-table th:last-child{width:65px}
+ .dx-doc-development .development-technical-table tr>:first-child{position:sticky;left:0;z-index:1;background:#fff}
+ .dx-doc-development .development-technical-table thead tr>th:first-child{z-index:2;background:#f5f8fc}
  .dx-doc-development .development-material-details summary{cursor:pointer;color:#0066ff;font-size:12px;margin-top:4px}
  .dx-doc-development .development-material-details>div{display:flex;flex-direction:column;gap:8px;padding:8px 0}
  .dx-doc-development .development-size-table{width:max-content!important;min-width:100%;table-layout:fixed}
@@ -88,7 +90,6 @@
   .dx-doc-development.development-editor .dx-doc-card :is(input,select,textarea){font-size:16px;min-height:44px}
   .dx-doc-development.development-editor table .dx-doc-field input{height:44px;min-height:44px}
   .dx-doc-development.development-editor .development-flag input{width:20px;height:20px;min-height:20px}
-  .dx-doc-development .development-technical-table tr>td:first-child{position:sticky;left:0;background:#fff;z-index:1}
  }
 }
 @media print{.dx-doc-development :is(.development-heading,.dx-doc-card){display:none!important}}
