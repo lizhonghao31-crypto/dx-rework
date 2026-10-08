@@ -1,3 +1,5 @@
+import {ProductionExpectedPicker} from "./production-closure-ui.js";
+import type {ProductionReceivingSummary} from "@dx-rework/contracts";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
@@ -153,6 +155,7 @@ export function ReceivingPage() {
   const debouncedStyleNo = useDebouncedValue(styleNo, 180);
   const [cuttingOptions, setCuttingOptions] = useState<readonly CuttingOption[]>([]);
   const [cuttingOptionsQuery, setCuttingOptionsQuery] = useState("");
+  const [factoryShipment,setFactoryShipment]=useState<ProductionReceivingSummary|null>(null);
   const [selectedCutting, setSelectedCutting] = useState<CuttingOption | null>(null);
   const [cuttingSearching, setCuttingSearching] = useState(false);
   const [documentQuantity, setDocumentQuantity] = useState("");
@@ -162,6 +165,9 @@ export function ReceivingPage() {
   const [styleMenuOpen, setStyleMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const selectedCuttingId=repeat?selectedRepeatOrder?.cuttingOrderId:selectedCutting?.cuttingOrderId;
+  useEffect(()=>{setFactoryShipment(null);},[selectedCuttingId,open,repeat]);
+  const factoryInput=factoryShipment?{productionOrderId:factoryShipment.productionOrderId,factoryDecisionId:factoryShipment.factoryDecisionId??null}:{};
   const pendingKey = useRef<string | null>(null);
   const submitting = useRef(false);
   const uploadedIds = useRef(new Map<string, string>());
@@ -325,6 +331,7 @@ export function ReceivingPage() {
         method: "POST",
         headers: { "idempotency-key": key },
         body: JSON.stringify({
+          ...factoryInput,
           ...(selectedRepeatOrder.cuttingOrderId
             ? { cuttingOrderId: selectedRepeatOrder.cuttingOrderId }
             : {}),
@@ -413,6 +420,7 @@ export function ReceivingPage() {
         credentials: "include",
         headers: { "content-type": "application/json", "idempotency-key": key },
         body: JSON.stringify({
+          ...factoryInput,
           ...(selectedCutting
             ? { cuttingOrderId: selectedCutting.cuttingOrderId }
             : { styleNo: trimmedStyle }),
@@ -461,6 +469,7 @@ export function ReceivingPage() {
     <a className="dx-button dx-button--secondary receiving-order-link" href={pageUrl("/ui/orders?returnTo=%2Fui%2Freceiving")}>查看订货回货</a>
     <section className="receiving-hero">
       <div className="receiving-brand">达兴 · 仓库收货</div>
+      {open&&selectedCuttingId?<ProductionExpectedPicker key={`${selectedCuttingId}:${repeat}`} cuttingOrderId={selectedCuttingId} value={factoryShipment?.productionOrderId??""} disabled={busy} onSelect={s=>{setFactoryShipment(s);pendingKey.current=null;}}/>:null}
       {!open ? (
         <div className="receiving-entry-actions">
           <button className="receiving-start" type="button" onClick={() => { setRepeat(false); setRepeatSource(null); setBackfill(false); setOpen(true); setMessage(""); }}>

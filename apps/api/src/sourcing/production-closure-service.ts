@@ -27,7 +27,7 @@ export class ProductionClosureService {
  async pilots(actor:TrustedActorContext){
   if(!await this.rootActor(actor))fail("仅超级用户可设置生产试点");
   const result=await this.database.query<{supplier_id:string;supplier_name:string;enabled:boolean}>(`SELECT DISTINCT ON(production.supplier_id) production.supplier_id,
-   production.supplier_name_snapshot AS supplier_name,COALESCE(pilot.enabled,false) AS enabled FROM sourcing_production_orders production
+   production.supplier_name_snapshot AS supplier_name,COALESCE(pilot.enabled,false) AS enabled FROM sourcing_production_factory_orders production
    LEFT JOIN sourcing_production_pilots pilot USING(supplier_id) WHERE ${productionNotExcluded} ORDER BY production.supplier_id,production.dispatched_at DESC,production.production_order_id`);
   return ProductionPilotListSchema.parse({suppliers:result.rows.map(r=>({supplierId:r.supplier_id,supplierName:r.supplier_name,enabled:r.enabled}))});
  }
@@ -101,66 +101,66 @@ export class ProductionClosureService {
    SELECT alert_id,$2 FROM sourcing_production_alerts WHERE alert_id=$1 AND resolved_at IS NULL ON CONFLICT DO NOTHING`,[id,actor.actorId]);
   return {read:true};
  }
- async linkReceiptByCuttingOrder(client:PoolClient,actor:TrustedActorContext,input:{cuttingOrderId:string;receiptId:string;styleNo:string;operationEventId:string;receivedAt:string}) {
+ async linkReceiptByCuttingOrder(client:PoolClient,actor:TrustedActorContext,input:{cuttingOrderId:string;receiptId:string;styleNo:string;operationEventId:string;receivedAt:string;productionOrderId?:string;factoryDecisionId?:string|null}) {
   if(!this.warehouse(actor))fail("仅仓管可关联实际收货");
-  const matched=await client.query<{production_order_id:string;sourcing_line_position:number}>(`SELECT production.production_order_id,cutting.sourcing_line_position
-   FROM cutting_orders cutting
-   JOIN sourcing_production_orders production ON production.sourcing_case_id=cutting.sourcing_case_id
-   JOIN sourcing_production_shipments shipment USING(production_order_id)
+  const matched=await client.query<{production_order_id:string;factory_decision_id:string|null;sourcing_line_position:number}>(`SELECT production.production_order_id,production.factory_decision_id,cutting.sourcing_line_position
+   FROM cutting_orders cutting JOIN sourcing_production_factory_orders production ON production.sourcing_case_id=cutting.sourcing_case_id
+   JOIN sourcing_production_shipments shipment ON shipment.production_order_id=production.production_order_id AND shipment.factory_decision_id IS NOT DISTINCT FROM production.factory_decision_id
    JOIN sourcing_production_pilots pilot ON pilot.supplier_id=production.supplier_id AND pilot.enabled=true
-   WHERE cutting.cutting_order_id=$1
-     AND shipment.shipped_on <= ($2::timestamptz AT TIME ZONE 'Asia/Shanghai')::date
-     AND ${productionNotExcluded}
-   ORDER BY shipment.shipped_on DESC,production.production_order_id
-   LIMIT 1
-   FOR SHARE OF pilot`,[input.cuttingOrderId,input.receivedAt]);
-  const match=matched.rows[0];
-  if(!match)return null;
-  await this.linkReceipt(client,actor,{productionOrderId:match.production_order_id,receiptId:input.receiptId,styleNo:input.styleNo,
-   operationEventId:input.operationEventId,receivedAt:input.receivedAt,sourcePosition:match.sourcing_line_position});
+   WHERE cutting.cutting_order_id=$1 AND shipment.shipped_on<=($2::timestamptz AT TIME ZONE 'Asia/Shanghai')::date
+    AND ($3::uuid IS NULL OR production.production_order_id=$3) AND (NOT $4::boolean OR production.factory_decision_id IS NOT DISTINCT FROM $5::uuid)
+    AND EXISTS(SELECT 1 FROM sourcing_factory_execution_lines(production.production_order_id,production.sourcing_decision_id) allocation WHERE allocation.position=cutting.sourcing_line_position AND allocation.quantity>0)
+    AND ${productionNotExcluded} ORDER BY shipment.shipped_on DESC,production.production_order_id LIMIT 2 FOR SHARE OF pilot`,
+   [input.cuttingOrderId,input.receivedAt,input.productionOrderId??null,input.factoryDecisionId!==undefined,input.factoryDecisionId??null]);
+  if(matched.rows.length>1)fail("该裁剪单有多个工厂发货，请选择本次到货工厂",409);
+  const match=matched.rows[0];if(match?.factory_decision_id&&input.factoryDecisionId===undefined)fail("请明确选择本次到货加工厂",409);if(!match){if(input.productionOrderId||input.factoryDecisionId!==undefined)fail("所选工厂尚未发货或与该裁剪单不符",409);return null;}
+  await this.linkReceipt(client,actor,{productionOrderId:match.production_order_id,factoryDecisionId:match.factory_decision_id,receiptId:input.receiptId,styleNo:input.styleNo,operationEventId:input.operationEventId,receivedAt:input.receivedAt,sourcePosition:match.sourcing_line_position});
   return match.production_order_id;
  }
- async linkReceipt(client:PoolClient,actor:TrustedActorContext,input:{productionOrderId:string;receiptId:string;styleNo:string;operationEventId:string;receivedAt:string;sourcePosition?:number}){
+ async linkReceipt(client:PoolClient,actor:TrustedActorContext,input:{productionOrderId:string;factoryDecisionId?:string|null;receiptId:string;styleNo:string;operationEventId:string;receivedAt:string;sourcePosition?:number}){
   if(!this.warehouse(actor))fail("仅仓管可关联实际收货");
   if(!z.string().uuid().safeParse(input.productionOrderId).success)fail("生产订单编号无效",400);
-  const result=await client.query<{style_matches:boolean;shipped_on:string}>(`SELECT EXISTS(SELECT 1 FROM sourcing_style_aliases alias WHERE alias.sourcing_case_id=production.sourcing_case_id AND alias.position=COALESCE($3,1) AND upper(btrim(alias.style_no))=upper(btrim($2))) AS style_matches,shipment.shipped_on::text FROM sourcing_production_shipments shipment
-   JOIN sourcing_production_orders production USING(production_order_id) JOIN sourcing_production_pilots pilot USING(supplier_id)
-   WHERE shipment.production_order_id=$1 AND ${productionNotExcluded} AND pilot.enabled=true FOR SHARE OF pilot`,[input.productionOrderId,input.styleNo,input.sourcePosition??null]);
-  const shipment=result.rows[0];
-  if(!shipment)fail("该订单未发货或未启用试点",409);
+  const result=await client.query<{style_matches:boolean;shipped_on:string}>(`SELECT EXISTS(SELECT 1 FROM sourcing_style_aliases alias WHERE alias.sourcing_case_id=production.sourcing_case_id AND alias.position=COALESCE($3,1) AND upper(btrim(alias.style_no))=upper(btrim($2))) AS style_matches,shipment.shipped_on::text
+   FROM sourcing_production_shipments shipment JOIN sourcing_production_factory_orders production ON production.production_order_id=shipment.production_order_id AND production.factory_decision_id IS NOT DISTINCT FROM shipment.factory_decision_id
+   JOIN sourcing_production_pilots pilot USING(supplier_id) WHERE shipment.production_order_id=$1 AND shipment.factory_decision_id IS NOT DISTINCT FROM $4::uuid AND ${productionNotExcluded} AND pilot.enabled=true
+   AND EXISTS(SELECT 1 FROM sourcing_factory_execution_lines(production.production_order_id,production.sourcing_decision_id) allocation WHERE allocation.position=COALESCE($3,1) AND allocation.quantity>0) FOR SHARE OF pilot`,
+   [input.productionOrderId,input.styleNo,input.sourcePosition??null,input.factoryDecisionId??null]);
+  const shipment=result.rows[0];if(!shipment)fail("该工厂未发货或未启用试点",409);
   const day=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(input.receivedAt));
   if(!shipment.style_matches||day<shipment.shipped_on)fail("收货款号或日期与所选发货单不符",409);
-  await client.query("INSERT INTO sourcing_production_receipt_links(receipt_id,production_order_id,operation_event_id) VALUES($1,$2,$3)",[input.receiptId,input.productionOrderId,input.operationEventId]);
+  await client.query("INSERT INTO sourcing_production_receipt_links(receipt_id,production_order_id,operation_event_id,factory_decision_id) VALUES($1,$2,$3,$4)",[input.receiptId,input.productionOrderId,input.operationEventId,input.factoryDecisionId??null]);
  }
  private async receipts(ids:string[]):Promise<ProductionReceivingSummary[]> {
-  const result=await this.database.query<{production_order_id:string;first_style_no:string;supplier_name_snapshot:string;contract_number:string;shipped_on:string;recorded_quantity:number}>(`SELECT shipment.*,sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,shipment.shipped_on::text,production.supplier_name_snapshot,
-   sourcing_contract_display_number(production.sourcing_contract_document_id,production.contract_number) AS contract_number
-   FROM sourcing_production_shipments shipment JOIN sourcing_production_orders production USING(production_order_id) WHERE production_order_id=ANY($1::uuid[])`,[ids]);
-  const receipts=await this.database.query<{production_order_id:string;receipt_id:string;receiving_batch_id:string;actual_quantity:number;received_at:Date;archived:boolean}>(`SELECT link.production_order_id,receipt.receipt_id,receipt.receiving_batch_id,
+  const result=await this.database.query<{production_order_id:string;first_style_no:string;supplier_name_snapshot:string;contract_number:string;shipped_on:string;recorded_quantity:number;factory_decision_id:string|null;cutting_order_ids:string[]}>(`SELECT shipment.*,sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,shipment.shipped_on::text,production.supplier_name_snapshot,
+   sourcing_contract_display_number(production.sourcing_contract_document_id,production.contract_number) AS contract_number,
+   ARRAY(SELECT cutting.cutting_order_id FROM cutting_orders cutting JOIN sourcing_factory_execution_lines(production.production_order_id,production.sourcing_decision_id) allocation ON allocation.position=cutting.sourcing_line_position AND allocation.quantity>0 WHERE cutting.sourcing_case_id=production.sourcing_case_id) AS cutting_order_ids
+   FROM sourcing_production_shipments shipment JOIN sourcing_production_factory_orders production ON production.production_order_id=shipment.production_order_id AND production.factory_decision_id IS NOT DISTINCT FROM shipment.factory_decision_id WHERE shipment.production_order_id=ANY($1::uuid[])`,[ids]);
+  const receipts=await this.database.query<{production_order_id:string;receipt_id:string;receiving_batch_id:string;actual_quantity:number;received_at:Date;archived:boolean;factory_decision_id:string|null}>(`SELECT link.production_order_id,link.factory_decision_id,receipt.receipt_id,receipt.receiving_batch_id,
    COALESCE(correction.actual_quantity,receipt.actual_quantity)::integer AS actual_quantity,receipt.received_at,batch.deleted_at IS NOT NULL AS archived
    FROM sourcing_production_receipt_links link JOIN receiving_receipts receipt USING(receipt_id) JOIN receiving_batches batch USING(receiving_batch_id)
    LEFT JOIN LATERAL (SELECT actual_quantity FROM receiving_receipt_corrections WHERE receipt_id=receipt.receipt_id ORDER BY created_at DESC,correction_id DESC LIMIT 1) correction ON true
    WHERE link.production_order_id=ANY($1::uuid[]) ORDER BY receipt.received_at,receipt.receipt_id`,[ids]);
-  return result.rows.map(r=>ProductionReceivingSummarySchema.parse({productionOrderId:r.production_order_id,firstStyleNo:r.first_style_no,contractNumber:r.contract_number,supplierName:r.supplier_name_snapshot,
-   shippedOn:r.shipped_on,expectedQuantity:r.recorded_quantity,receipts:receipts.rows.filter(x=>x.production_order_id===r.production_order_id).map(x=>({receiptId:x.receipt_id,receivingBatchId:x.receiving_batch_id,actualQuantity:x.actual_quantity,receivedAt:iso(x.received_at),archived:x.archived}))}));
+  return result.rows.map(r=>ProductionReceivingSummarySchema.parse({productionOrderId:r.production_order_id,factoryDecisionId:r.factory_decision_id,cuttingOrderIds:r.cutting_order_ids,firstStyleNo:r.first_style_no,contractNumber:r.contract_number,supplierName:r.supplier_name_snapshot,
+   shippedOn:r.shipped_on,expectedQuantity:r.recorded_quantity,receipts:receipts.rows.filter(x=>x.production_order_id===r.production_order_id&&x.factory_decision_id===r.factory_decision_id).map(x=>({receiptId:x.receipt_id,receivingBatchId:x.receiving_batch_id,actualQuantity:x.actual_quantity,receivedAt:iso(x.received_at),archived:x.archived}))}));
  }
  async expected(actor:TrustedActorContext,input:{q?:string|undefined;page?:number|undefined}={}){
   if(!this.warehouse(actor))fail("仅仓管可查看预期回货");
   const q=input.q?.trim()??"",page=input.page??1;if(q.length>100||!Number.isInteger(page)||page<1||page>100000)fail("回货筛选无效",400);
-  const where=`FROM sourcing_production_shipments shipment JOIN sourcing_production_orders production USING(production_order_id)
+  const where=`FROM sourcing_production_shipments shipment JOIN sourcing_production_factory_orders production ON production.production_order_id=shipment.production_order_id AND production.factory_decision_id IS NOT DISTINCT FROM shipment.factory_decision_id
    JOIN sourcing_production_pilots pilot USING(supplier_id) WHERE pilot.enabled=true AND ${productionNotExcluded}
    AND ($1='' OR EXISTS(SELECT 1 FROM sourcing_style_aliases alias WHERE alias.sourcing_case_id=production.sourcing_case_id AND alias.position=1 AND strpos(upper(alias.style_no),upper($1))>0) OR strpos(upper(production.supplier_name_snapshot),upper($1))>0)`;
   const count=await this.database.query<{count:string}>(`SELECT count(*) ${where}`,[q]);
-  const rows=await this.database.query<{production_order_id:string}>(`SELECT shipment.production_order_id ${where} ORDER BY shipment.shipped_on DESC,shipment.production_order_id LIMIT 15 OFFSET $2`,[q,(page-1)*15]);
-  const summaries=await this.receipts(rows.rows.map(r=>r.production_order_id));const byId=new Map(summaries.map(s=>[s.productionOrderId,s]));
-  return ProductionExpectedReceiptsSchema.parse({items:rows.rows.map(r=>byId.get(r.production_order_id)),page,totalCount:Number(count.rows[0]?.count??0)});
+  const rows=await this.database.query<{production_order_id:string;factory_decision_id:string|null}>(`SELECT shipment.production_order_id,shipment.factory_decision_id ${where} ORDER BY shipment.shipped_on DESC,shipment.production_order_id LIMIT 15 OFFSET $2`,[q,(page-1)*15]);
+  const summaries=await this.receipts(rows.rows.map(r=>r.production_order_id));const byId=new Map(summaries.map(s=>[s.productionOrderId+":"+(s.factoryDecisionId??"original"),s]));
+  return ProductionExpectedReceiptsSchema.parse({items:rows.rows.map(r=>byId.get(r.production_order_id+":"+(r.factory_decision_id??"original"))),page,totalCount:Number(count.rows[0]?.count??0)});
  }
- async receiptSummary(actor:TrustedActorContext,id:string){
+ async receiptSummary(actor:TrustedActorContext,id:string,factoryDecisionId:string|null=null){
   if(!z.string().uuid().safeParse(id).success)fail("生产订单编号无效",400);
+  if(factoryDecisionId!==null&&!z.string().uuid().safeParse(factoryDecisionId).success)fail("分厂标识无效",400);
   if(!canReadProductionReporting(actor))fail("无权查看生产回货");
-  const visible=await this.database.query(`SELECT 1 FROM sourcing_production_orders production JOIN sourcing_cases source_case USING(sourcing_case_id)
-   WHERE ${productionVisibility} AND production.production_order_id=$5`,[...productionVisibilityArgs(actor),id]);
+  const visible=await this.database.query(`SELECT 1 FROM sourcing_production_factory_orders production JOIN sourcing_cases source_case USING(sourcing_case_id)
+   WHERE ${productionVisibility.replace("sourcing_production_reporter_allowed($3,production.production_order_id)","sourcing_production_factory_reporter_allowed($3,production.production_order_id,production.factory_decision_id)")} AND production.production_order_id=$5 AND production.factory_decision_id IS NOT DISTINCT FROM $6::uuid`,[...productionVisibilityArgs(actor),id,factoryDecisionId]);
   if(!visible.rows[0])fail("订单不存在或不在负责范围内",404);
-  return {shipment:(await this.receipts([id]))[0]??null};
+  return {shipment:(await this.receipts([id])).find(s=>s.factoryDecisionId===factoryDecisionId)??null};
  }
 }

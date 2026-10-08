@@ -51,9 +51,9 @@ export async function readProductionAnalysis(client: PoolClient, allVisibleOrder
   const timings = await client.query<Timing>(`SELECT production.production_order_id,completed.business_date::text AS completed_on,
     completed.created_at AS completed_at,shipment.shipped_on::text,shipment.created_at AS shipped_at,shipment.recorded_quantity::text AS shipped_quantity
     FROM sourcing_production_orders production
-    LEFT JOIN LATERAL (SELECT business_date,created_at FROM sourcing_production_transitions
-      WHERE production_order_id=production.production_order_id AND status='production_completed' ORDER BY sequence DESC LIMIT 1) completed ON true
-    LEFT JOIN sourcing_production_shipments shipment USING(production_order_id)
+    LEFT JOIN LATERAL (SELECT max(business_date) AS business_date,max(created_at) AS created_at FROM sourcing_production_transitions
+      WHERE production_order_id=production.production_order_id AND status='production_completed' AND sourcing_factory_order_status(production.production_order_id)<>'in_production') completed ON true
+    LEFT JOIN LATERAL (SELECT sum(recorded_quantity) AS recorded_quantity,max(shipped_on) AS shipped_on,max(created_at) AS created_at FROM sourcing_production_shipments WHERE production_order_id=production.production_order_id) shipment ON true
     WHERE production.production_order_id=ANY($1::uuid[])`,[ids]);
   const byTiming = new Map(timings.rows.map(row=>[row.production_order_id,row]));
   const alertRows = await client.query<Alert>(`SELECT alert.production_order_id,alert.alert_id,alert.kind,alert.opened_at,alert.resolved_at,

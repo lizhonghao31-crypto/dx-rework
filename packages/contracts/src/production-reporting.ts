@@ -4,13 +4,13 @@ const Id = z.string().uuid();
 const DateOnly = z.string().date();
 export const ProductionReportInputSchema = z.object({
   position: z.number().int().min(1).max(20), businessDate: DateOnly,
-  quantity: z.number().int().min(1).max(10000000),
+  quantity: z.number().int().min(1).max(10000000), factoryDecisionId: Id.nullable().optional(),
 }).strict();
 export const ProductionCorrectionInputSchema = z.object({
-  expectedReportId: Id, businessDate: DateOnly,
+  expectedReportId: Id, factoryDecisionId: Id.nullable().optional(), businessDate: DateOnly,
   quantity: z.number().int().min(0).max(10000000), reason: z.string().trim().min(1).max(500),
 }).strict();
-export const ProductionExecutionInputSchema = z.object({ businessDate: DateOnly, confirmed: z.literal(true) }).strict();
+export const ProductionExecutionInputSchema = z.object({ businessDate: DateOnly, confirmed: z.literal(true), factoryDecisionId: Id.nullable().optional() }).strict();
 export const ProductionScopeInputSchema = z.object({
   userId: Id, scopeType: z.enum(["supplier", "order"]), scopeId: Id, active: z.boolean(),
 }).strict();

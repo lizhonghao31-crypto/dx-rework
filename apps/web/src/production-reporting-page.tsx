@@ -26,6 +26,8 @@ async function request<T>(path:string,schema:z.ZodType<T>,init:RequestInit={}) {
   return schema.parse(body);
 }
 export function ProductionReportingPage({productionOrderId}:{productionOrderId?:string|undefined}) {
+  const factoryDecisionId=new URLSearchParams(window.location.search).get('factoryDecisionId');
+  const factoryQuery=factoryDecisionId?'?'+new URLSearchParams({factoryDecisionId}):'';
   const [user,setUser]=useState<AuthorizedUser|null>(null),[error,setError]=useState(""),[message,setMessage]=useState("");
   const [busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[page,setPage]=useState(1);
   const [q,setQ]=useState(""),[supplier,setSupplier]=useState(""),[status,setStatus]=useState("");
@@ -41,16 +43,16 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
   const load=async()=>{
     const current=++version.current;setLoading(true);setError("");
     try {
-      if(productionOrderId){const result=await request(`/${productionOrderId}`,ProductionReportingDetailSchema);if(current===version.current)setDetail(result);}
+      if(productionOrderId){const result=await request(`/${productionOrderId}${factoryQuery}`,ProductionReportingDetailSchema);if(current===version.current)setDetail(result);}
       else {const params=new URLSearchParams({page:String(page)});if(q.trim())params.set("q",q.trim());if(supplier)params.set("supplierId",supplier);if(status)params.set("status",status);
         const result=await request(`?${params}`,ProductionReportingListSchema);if(current===version.current)setList(result);}
     }catch(e){if(current===version.current)setError(e instanceof Error?e.message:"加载失败");}
     finally{if(current===version.current)setLoading(false);}
   };
-  useEffect(()=>{const timer=setTimeout(()=>{void load();},q?250:0);return()=>{clearTimeout(timer);version.current++;};},[productionOrderId,page,q,supplier,status]);
+  useEffect(()=>{const timer=setTimeout(()=>{void load();},q?250:0);return()=>{clearTimeout(timer);version.current++;};},[productionOrderId,factoryDecisionId,page,q,supplier,status]);
   const write=async(path:string,body:unknown,success:string)=>{
     if(mutation.current)return;mutation.current=true;setBusy(true);setError("");setMessage("");
-    const payload=JSON.stringify({path,body});if(retry.current?.payload!==payload)retry.current={payload,key:createClientRequestId()};
+    body={...(body as Record<string,unknown>),factoryDecisionId};const payload=JSON.stringify({path,body});if(retry.current?.payload!==payload)retry.current={payload,key:createClientRequestId()};
     try {const result=await request(path,ProductionReportingDetailSchema,{method:"POST",body:JSON.stringify(body),headers:{"idempotency-key":retry.current.key}});
       setDetail(result);retry.current=null;setMessage(success);setQuantities({});setCorrecting(null);
     }catch(e){setError(e instanceof Error?e.message:"保存失败");}finally{mutation.current=false;setBusy(false);}
@@ -83,7 +85,7 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
         <label>供应商<select value={supplier} onChange={e=>{setSupplier(e.target.value);setPage(1);}}><option value="">全部负责供应商</option>{list?.suppliers.map(s=><option key={`${s.supplierId}:${s.supplierName}`} value={s.supplierId}>{s.supplierName}</option>)}</select></label>
         <label>生产状态<select value={status} onChange={e=>{setStatus(e.target.value);setPage(1);}}><option value="">全部状态</option>{Object.entries(labels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
       </div><div className="sourcing-order-list">
-        {list?.items.map(order=><Surface className="sourcing-order-card" key={order.productionOrderId}><a className="sourcing-order-card__main" href={pageUrl(`ui/production-reporting/${order.productionOrderId}`)}>
+        {list?.items.map(order=><Surface className="sourcing-order-card" key={`${order.productionOrderId}:${order.factoryDecisionId??"original"}`}><a className="sourcing-order-card__main" href={pageUrl(`ui/production-reporting/${order.productionOrderId}${order.factoryDecisionId?"?"+new URLSearchParams({factoryDecisionId:order.factoryDecisionId}):""}`)}>
           <div className="sourcing-order-card__heading"><div><strong>{order.firstStyleNo}</strong><span>{order.supplierName}</span></div><StatusBadge tone={order.status==="in_production"?"info":"success"}>{labels[order.status]}</StatusBadge></div>
           <dl><div><dt>累计生产</dt><dd>{formatBusinessDecimal(order.completedQuantity)} / {formatBusinessDecimal(order.quantity)} 件</dd></div><div><dt>交货日期</dt><dd>{order.deliveryDate??"未记录"}</dd></div><div><dt>合同编号</dt><dd>{order.contractNumber}</dd></div></dl>
           {order.reportingState?<span>待首次上报</span>:null}{order.sourceCaseArchived?<span>原外发单已删除 · 生产记录保留</span>:null}

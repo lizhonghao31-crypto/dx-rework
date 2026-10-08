@@ -56,9 +56,26 @@ export const selectProduction = `SELECT production.production_order_id,productio
    FROM sourcing_production_lines line JOIN current_sourcing_case_lines identity ON identity.sourcing_case_id=production.sourcing_case_id AND identity.position=line.position WHERE line.production_order_id=production.production_order_id) AS lines
   FROM sourcing_production_orders production
   JOIN sourcing_cases source_case USING(sourcing_case_id)
-  JOIN LATERAL (SELECT status FROM sourcing_production_transitions
-    WHERE production_order_id=production.production_order_id ORDER BY sequence DESC LIMIT 1) transition ON true`;
+  JOIN LATERAL (SELECT sourcing_factory_order_status(production.production_order_id) AS status) transition ON true`;
+/** Each factory is an execution of the same order; no new production or actual quantity ledger. */
+export const selectFactoryProduction = `SELECT production.*,sourcing_contract_display_number(production.sourcing_contract_document_id,production.contract_number) AS contract_number,
+ source_case.deleted_at IS NOT NULL AS source_case_archived,transition.status,
+ sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,
+ production.delivery_date::text AS delivery_date,
+ (SELECT COALESCE(sum(completed_quantity),0)::integer FROM sourcing_factory_execution_lines(production.production_order_id,production.sourcing_decision_id)) AS completed_quantity,
+ (SELECT min(business_date)::text FROM effective_sourcing_production_reports report WHERE report.production_order_id=production.production_order_id
+  AND report.factory_decision_id IS NOT DISTINCT FROM production.factory_decision_id AND quantity>0) AS first_reported_on,
+ (SELECT jsonb_agg(jsonb_build_object('position',line.position,'styleNo',identity.style_no,'alternateStyleNo',identity.alternate_style_no,
+  'color',line.color,'quantity',allocation.quantity,'completedQuantity',allocation.completed_quantity) ORDER BY line.position)
+  FROM sourcing_production_lines line JOIN current_sourcing_case_lines identity ON identity.sourcing_case_id=production.sourcing_case_id AND identity.position=line.position
+  JOIN sourcing_factory_execution_lines(production.production_order_id,production.sourcing_decision_id) allocation ON allocation.position=line.position
+  WHERE line.production_order_id=production.production_order_id) AS lines
+ FROM sourcing_production_factory_orders production JOIN sourcing_cases source_case USING(sourcing_case_id)
+ JOIN LATERAL (SELECT status FROM sourcing_production_transitions transition WHERE transition.production_order_id=production.production_order_id
+  AND transition.factory_decision_id IS NOT DISTINCT FROM production.factory_decision_id ORDER BY sequence DESC LIMIT 1) transition ON true`;
+
 export const toOrder = (row: ProductionRow): SourcingProductionOrder => SourcingProductionOrderSchema.parse({
+  ...(row.factory_decision_id===undefined?{}:{factoryDecisionId:row.factory_decision_id}),
   productionOrderId: row.production_order_id, sourcingCaseId: row.sourcing_case_id, sourceCaseArchived: row.source_case_archived,
   decisionVersion: Number(row.decision_version), sourcingContractDocumentId: row.sourcing_contract_document_id,
   contractNumber: row.contract_number, contractVersion: Number(row.contract_version),
@@ -151,7 +168,7 @@ export class SourcingProductionService {
         const dispatched = existing.rows[0];
         if (dispatched) {
           if (dispatched.sourcing_contract_document_id !== contractId) {
-            fail("本订单已正式派单，不能按新合同重复派单；生产转厂功能尚未开放");
+            fail("本订单已正式派单，不能按新合同重复派单；余量转厂沿既有转厂流程执行");
           }
           return { statusCode: 200, response: toOrder(dispatched) };
         }

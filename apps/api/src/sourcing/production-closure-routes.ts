@@ -12,5 +12,5 @@ export function registerProductionClosureRoutes(app:FastifyInstance,dependencies
  app.put("/production-closure/pilots",async request=>dependencies.service.setPilot(await actor(request,"sourcing:view"),request.body));
  app.post<{Params:{id:string}}>("/production-closure/alerts/:id/read",async request=>dependencies.service.markRead(await actor(request,"todo:view"),request.params.id));
  app.get<{Querystring:{q?:string;page?:string}}>("/production-closure/expected-receipts",async request=>dependencies.service.expected(await actor(request,"receiving:create"),{q:request.query.q,page:request.query.page===undefined?1:Number(request.query.page)}));
- app.get<{Params:{id:string}}>("/production-closure/orders/:id/receipts",async request=>dependencies.service.receiptSummary(await actor(request,"production-reporting"),request.params.id));
+ app.get<{Params:{id:string};Querystring:{factoryDecisionId?:string}}>("/production-closure/orders/:id/receipts",async request=>dependencies.service.receiptSummary(await actor(request,"production-reporting"),request.params.id,request.query.factoryDecisionId??null));
 }

@@ -14,7 +14,7 @@ import { Header, Shell } from "./components.js";
 import { ListPagination } from "./list-pagination.js";
 import { createWebUrls } from "../url-contract.js";
 import { canAccessProductionReporting } from "./platform-modules.js";
-import { canControlProductionMotion, canMoveProductionEvents, canAnimateProductionProgress, relativeProductionTime, changedDashboardOrders, progressLabels, progressText, productionEventText, productionStatusLabels } from "./production-dashboard-model.js";
+import { canControlProductionMotion, canMoveProductionEvents, canAnimateProductionProgress, relativeProductionTime, changedDashboardOrders, productionDashboardKey, progressLabels, progressText, productionEventText, productionStatusLabels } from "./production-dashboard-model.js";
 import "./sourcing-workspace.css";
 import "./production-dashboard-page.css";
 import "./production-board.css";
@@ -37,6 +37,8 @@ export function ProductionProgressBars({item,motion=false}:{item:ProductionDashb
   </div>;
 }
 export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:string|undefined}) {
+  const factoryDecisionId=new URLSearchParams(window.location.search).get('factoryDecisionId');
+  const factoryQuery=factoryDecisionId?'?'+new URLSearchParams({factoryDecisionId}):'';
   const [data,setData]=useState<ProductionDashboard|null>(null),[detail,setDetail]=useState<z.infer<typeof ProductionDashboardDetailSchema>|null>(null);
   const [q,setQ]=useState(""),[supplier,setSupplier]=useState(""),[status,setStatus]=useState(""),[progressState,setProgressState]=useState("");
   const [risk,setRisk]=useState(""),[root,setRoot]=useState(false),[managementOpen,setManagementOpen]=useState(false),[deleting,setDeleting]=useState<string|null>(null);
@@ -49,7 +51,7 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
   const load=async(manual=false)=>{
     const version=++sequence.current;setLoading(true);setError("");
     try{
-      if(productionOrderId){const result=await request(`/${productionOrderId}`,ProductionDashboardDetailSchema);if(version===sequence.current){setDetail(result);
+      if(productionOrderId){const result=await request(`/${productionOrderId}${factoryQuery}`,ProductionDashboardDetailSchema);if(version===sequence.current){setDetail(result);
         const todo=new URLSearchParams(window.location.search).get("todo");
         if(todo){const response=await fetch(apiUrl(`production-closure/alerts/${encodeURIComponent(todo)}/read`),{method:"POST",credentials:"include"});
           if(!response.ok&&response.status!==404)throw new Error("生产待办已读状态保存失败，请刷新重试");
@@ -63,7 +65,7 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
     }catch(e){if(version===sequence.current)setError(e instanceof Error?e.message:"加载失败");}finally{if(version===sequence.current)setLoading(false);}
   };
   // Only initial load, explicit filter/page changes and the refresh button request data.
-  useEffect(()=>{const timer=setTimeout(()=>{void load();},q?250:0);return()=>{clearTimeout(timer);sequence.current++;};},[productionOrderId,page,q,supplier,status,progressState,risk]);
+  useEffect(()=>{const timer=setTimeout(()=>{void load();},q?250:0);return()=>{clearTimeout(timer);sequence.current++;};},[productionOrderId,factoryDecisionId,page,q,supplier,status,progressState,risk]);
   useEffect(()=>{if(!changed.length)return;const timer=setTimeout(()=>setChanged([]),1800);return()=>clearTimeout(timer);},[changed]);
   useEffect(()=>{const media=window.matchMedia("(prefers-reduced-motion: reduce)");const update=()=>setReduced(media.matches);update();media.addEventListener("change",update);return()=>media.removeEventListener("change",update);},[]);
   useEffect(()=>{const update=()=>{setVisible(!document.hidden);setNow(Date.now());};document.addEventListener("visibilitychange",update);const timer=setInterval(()=>{if(!document.hidden)setNow(Date.now());},60000);return()=>{document.removeEventListener("visibilitychange",update);clearInterval(timer);};},[]);
@@ -88,7 +90,7 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
       {root?<Button variant="secondary" aria-expanded={managementOpen} onClick={()=>setManagementOpen(value=>!value)}>管理⌄</Button>:null}
     </div>
     {root&&managementOpen?<div className="production-admin-tools"><ProductionExclusionControls onExcluded={()=>{setData(null);setDetail(null);last.current=null;void load();}}/>{!productionOrderId?<ProductionPilotControls/>:null}</div>:null}
-    {productionOrderId?<ProductionReceiptSummary productionOrderId={productionOrderId} refreshKey={detail?.asOf}/>:null}
+    {productionOrderId?<ProductionReceiptSummary factoryDecisionId={factoryDecisionId} productionOrderId={productionOrderId} refreshKey={detail?.asOf}/>:null}
     {error?<p role="alert" className="sourcing-delete-error">{error}</p>:null}
     {!data&&!detail&&loading?<p role="status">正在加载生产数据…</p>:null}
     {!productionOrderId?<>
@@ -102,7 +104,7 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
       {data?.events.length?<Surface className="sourcing-list-card"><div className="production-dashboard__toolbar"><strong>最近生产动态</strong>
         {touchReading?<Button variant="secondary" onClick={()=>setTouchReading(false)}>结束触摸阅读</Button>:null}</div>
         <div className="production-dashboard__events board-events" ref={belt} onTouchStart={()=>setTouchReading(true)} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} onFocusCapture={()=>setFocused(true)} onBlurCapture={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))setFocused(false);}}>
-          {data.events.map(event=><a className="production-dashboard__event board-event-link" key={event.id} href={pageUrl(`ui/production-dashboard/${event.productionOrderId}`)}>
+          {data.events.map(event=><a className="production-dashboard__event board-event-link" key={event.id} href={pageUrl(`ui/production-dashboard/${event.productionOrderId}${event.factoryDecisionId?"?"+new URLSearchParams({factoryDecisionId:event.factoryDecisionId}):""}`)}>
             <strong>{event.firstStyleNo} · {event.supplierName}</strong><span>{productionEventText(event)}{event.quantity===null?"":` ${number(event.quantity)} 件`}</span>
             <span>{event.kind==="progress_changed"?timestamp(event.recordedAt):event.businessDate}</span>
           </a>)}
@@ -116,12 +118,12 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
         <label>追单风险<select value={risk} onChange={e=>{setRisk(e.target.value);setPage(1);}}><option value="">全部</option><option value="attention">需关注</option><option value="stale">2天未更新</option><option value="due_pressure">本周交期承压</option></select></label>
         </div></div>
       </div><div className="board-table-head" aria-hidden="true"><span>订单 / 供应商</span><span>产量 / 交期</span><span>生产与时间进度</span><span>最近记录 / 关注原因</span><span>操作</span></div><div aria-busy={loading}>
-        {data?.items.map(item=><article className={`board-row${changed.includes(item.order.productionOrderId)?" production-dashboard__changed":""}`} key={item.order.productionOrderId}>
-          <div className="board-identity"><a href={pageUrl(`ui/production-dashboard/${item.order.productionOrderId}`)}><strong>{item.order.firstStyleNo}</strong></a><span>{item.order.supplierName}</span>{item.chase&&item.order.status==="in_production"?<small className="board-concentration" title="本公司当前权限可见的未完订单，不代表供应商全部产能">当前 {item.chase.supplierOpenCount} 张未完 · {item.chase.supplierDueThisWeekCount} 张本周到期</small>:null}<StatusBadge tone={item.order.status==="in_production"?"info":"success"}>{productionStatusLabels[item.order.status]}</StatusBadge></div>
+        {data?.items.map(item=><article className={`board-row${changed.includes(productionDashboardKey(item.order))?" production-dashboard__changed":""}`} key={`${item.order.productionOrderId}:${item.order.factoryDecisionId??"original"}`}>
+          <div className="board-identity"><a href={pageUrl(`ui/production-dashboard/${item.order.productionOrderId}${item.order.factoryDecisionId?"?"+new URLSearchParams({factoryDecisionId:item.order.factoryDecisionId}):""}`)}><strong>{item.order.firstStyleNo}</strong></a><span>{item.order.supplierName}</span>{item.chase&&item.order.status==="in_production"?<small className="board-concentration" title="本公司当前权限可见的未完订单，不代表供应商全部产能">当前 {item.chase.supplierOpenCount} 张未完 · {item.chase.supplierDueThisWeekCount} 张本周到期</small>:null}<StatusBadge tone={item.order.status==="in_production"?"info":"success"}>{productionStatusLabels[item.order.status]}</StatusBadge></div>
           <div className="board-quantity"><strong>{number(item.progress.completedQuantity)} <small>/ {number(item.order.quantity)} 件</small></strong><span>{item.progress.frozen?"完成时产量":"累计产量"}</span><span>交期 {item.order.deliveryDate??"未记录"}</span>{item.order.lines.length>1?<small>{item.order.lines.length} 个款色 · 详情逐项查看</small>:null}</div>
           <ProductionProgressBars item={item} motion={motion}/>
           <div className="board-update"><time title={item.progress.lastUpdatedAt?timestamp(item.progress.lastUpdatedAt):undefined}>{item.progress.lastUpdatedAt?`距上次记录 ${relativeProductionTime(item.progress.lastUpdatedAt,now)}`:"待首次上报"}</time><p className="board-reason" data-state={item.progress.progressState}>{progressText(item.progress)}</p>{item.order.sourceCaseArchived?<span>原外发单已删除 · 生产记录保留</span>:null}</div>
-          <div className="board-row-actions"><a className="board-detail-link" href={pageUrl(`ui/production-dashboard/${item.order.productionOrderId}`)}>详情</a>{root?<button className="board-delete" onClick={()=>setDeleting(item.order.productionOrderId)}>删除</button>:null}</div>
+          <div className="board-row-actions"><a className="board-detail-link" href={pageUrl(`ui/production-dashboard/${item.order.productionOrderId}${item.order.factoryDecisionId?"?"+new URLSearchParams({factoryDecisionId:item.order.factoryDecisionId}):""}`)}>详情</a>{root?<button className="board-delete" onClick={()=>setDeleting(item.order.productionOrderId)}>删除</button>:null}</div>
           {item.chase&&item.order.status==="in_production"?<div className="board-chase">
             <strong>剩余 {number(item.chase.remainingQuantity)} 件</strong>
             <span>{item.chase.remainingWorkdays===null?"交期未记录":`距交期 ${item.chase.remainingWorkdays} 个工作日`}</span>
@@ -143,7 +145,7 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
         <p>工艺：{detail.detail.order.processes.join("、")}</p>
         {detail.progress.frozen?<p>进度保留完成时事实；以下明细和历史保留后续修正。</p>:null}
         <div className="sourcing-order-list">{detail.detail.order.lines.map(line=><div key={line.position} className="production-dashboard__line"><strong>{line.position}. {line.styleNo} · {line.color??"未记录颜色"}</strong><span>{number(line.completedQuantity)} / {number(line.quantity)} 件</span></div>)}</div>
-        {detail.detail.canReport||detail.detail.canCorrect?<a href={productionDisplayDomainHref(pageUrl(`ui/production-reporting/${productionOrderId}`),window.location.search)}>进入生产填报与修正</a>:null}
+        {detail.detail.canReport||detail.detail.canCorrect?<a href={productionDisplayDomainHref(pageUrl(`ui/production-reporting/${productionOrderId}${factoryQuery}`),window.location.search)}>进入生产填报与修正</a>:null}
       </Surface>
       <Surface className="sourcing-list-card"><details><summary>生产上报与修正历史（{detail.detail.history.length} 条）</summary>
         {detail.detail.history.map(h=><div className="production-dashboard__line" key={h.reportId}><strong>{detail.detail.order.lines.find(l=>l.position===h.position)?.styleNo} · {h.businessDate} · {number(h.quantity)} 件</strong><span>{h.actorName} · {h.revision===1?"上报":"Root修正"} · {h.effective?"当前有效":"已被修正"} · {timestamp(h.createdAt)}</span>{h.reason?<span>原因：{h.reason}</span>:null}</div>)}

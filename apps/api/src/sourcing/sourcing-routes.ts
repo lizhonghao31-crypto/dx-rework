@@ -678,6 +678,8 @@ export function registerSourcingRoutes(
     },
   );
 
+  app.get<{Params:{sourcingCaseId:string}}>("/sourcing/cases/:sourcingCaseId/factory-settlements",async request=>dependencies.service.readFactorySettlements(await actionActor(request,"factory_payables","sourcing:finance:reconcile"),caseId(request.params.sourcingCaseId)));
+
   app.post<{ Params: { sourcingCaseId: string } }>(
     "/sourcing/cases/:sourcingCaseId/finance-reconciliations",
     async (request, reply) => {

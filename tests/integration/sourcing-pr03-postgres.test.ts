@@ -2195,7 +2195,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       await database.query(`INSERT INTO sourcing_production_transitions(production_transition_id,production_order_id,sequence,status,business_date,actor_id,operation_event_id)
         VALUES($1,$2,$3,$4,(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai')::date,$5,$6)`,
         [randomUUID(), order.productionOrderId, sequence, status, merchandiserId, eventId]);
-      expect((await production.get(readerActor(), order.productionOrderId)).status).toBe(status);
+      expect((await new ProductionReportingService(database).detail(readerActor(),order.productionOrderId)).order.status).toBe(status);
+      // Old-factory completion does not complete the newly transferred remainder.
+      expect((await production.get(readerActor(),order.productionOrderId)).status).toBe("in_production");
     }
   });
 
@@ -2213,6 +2215,111 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(production.dispatch({ ...rootActor(), actorRoles: ["root_superuser"] }, id, {
       sourcingContractDocumentId: contract.sourcingContractDocumentId, confirmed: true,
     }, randomUUID())).resolves.toMatchObject({ value: { status: "in_production" } });
+  });
+
+  it("retains style-color reported quantities at the old factory and transfers only unfinished quantities with independent shipments receipts and finance",async()=>{
+    const reporting=new ProductionReportingService(database),closure=new ProductionClosureService(database),dashboard=new ProductionDashboardService(database,reporting);
+    const businessDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const reporter=async(name:string,supplierId:string)=>{
+      const userId=randomUUID();await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)",[userId,name]);
+      await database.query('ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation');try{await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'production_reporter',$3,'TEST分厂夹具')",[randomUUID(),userId,merchandiserId]);}finally{await database.query('ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation');}
+      await reporting.setScope(rootActor(),{userId,scopeType:'supplier',scopeId:supplierId,active:true},randomUUID());
+      return {actorId:userId,actorRoles:['production_reporter'],authorizationCapability:'production-reporting',authorizationCapabilities:['production-reporting'],requestId:randomUUID()} as TrustedActorContext;
+    };
+    const oldReporter=await reporter('TEST旧厂驻厂',factoryId),newReporter=await reporter('TEST新厂驻厂',replacementFactoryId);
+    const serial=randomUUID().slice(0,8),created=await service.createCase(merchandiserActor(),{gender:'女装',styleName:'TEST分款色转厂',estimatedCutPieceSendDate:businessDate,deliveryDate:businessDate,
+      lineItems:[{styleNo:`TEST-TRANSFER-${serial}-A`,color:'蓝',quantity:20},{styleNo:`TEST-TRANSFER-${serial}-B`,color:'白',quantity:10}],daxingUnitPrice:'8'},randomUUID());
+    const caseId=created.value.sourcingCaseId,prices=[{position:1,unitPrice:'8'},{position:2,unitPrice:'9'}];
+    await service.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());
+    await service.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,linePrices:prices,craftIds:[craftId('净色车缝')]},randomUUID());
+    const approved=await service.decideOwner(ownerActor(),caseId,{decision:'approved'},randomUUID()),oldDecisionId=approved.value.decision!.sourcingDecisionId;
+    const contract=(await contractService.getCurrent(readerActor(),caseId)).item!,oldPdf=(await database.query('SELECT * FROM attachments WHERE attachment_id=$1',[contract.pdfAttachmentId])).rows[0];
+    const order=(await production.dispatch(rootActor(),caseId,{sourcingContractDocumentId:contract.sourcingContractDocumentId,confirmed:true},randomUUID())).value,id=order.productionOrderId;
+    const originalProduction=(await database.query('SELECT * FROM sourcing_production_orders WHERE production_order_id=$1',[id])).rows[0];
+    await reporting.report(oldReporter,id,{position:1,businessDate,quantity:3},randomUUID());await reporting.report(oldReporter,id,{position:2,businessDate,quantity:7},randomUUID());
+    const request=await service.requestFactoryChange(managerActor(),caseId,{supplierId:replacementFactoryId,unitPrice:'12',changeReason:'TEST余量按批准时实际报量转厂'},randomUUID());
+    expect(request.value.status).toBe('pending_finance_reconciliation');
+    const state=(await service.getCurrentFactoryChange(readerActor(),caseId)).item!;expect(state.status).toBe('pending_owner');
+    await reporting.report(oldReporter,id,{position:1,businessDate,quantity:2},randomUUID());
+    const changed=await service.decideFactoryChange(ownerActor(),caseId,state.factoryChangeRequestId,{decision:'approved',verificationReason:'TEST明确批准转入余量'},randomUUID());
+    const factoryDecisionId=changed.value.decision!.sourcingDecisionId;
+    const timing=(await database.query(`SELECT transfer.effective_at>=event.created_at AS after_audit,
+      transition.created_at=transfer.effective_at AS same_start,
+      (SELECT sum(quantity) FROM sourcing_factory_execution_lines($1,$2,transfer.effective_at-interval '1 microsecond'))::int AS prior_quantity,
+      (SELECT count(*) FROM sourcing_factory_execution_lines($1,$3,transfer.effective_at-interval '1 microsecond'))::int AS incoming_before
+      FROM sourcing_production_factory_transfers transfer JOIN operation_events event ON event.event_id=transfer.operation_event_id
+      JOIN sourcing_production_transitions transition ON transition.production_order_id=transfer.production_order_id AND transition.factory_decision_id=transfer.factory_decision_id AND transition.sequence=1
+      WHERE transfer.factory_decision_id=$3`,[id,oldDecisionId,factoryDecisionId])).rows[0];
+    expect(timing).toEqual({after_audit:true,same_start:true,prior_quantity:30,incoming_before:0});
+    expect(changed.value.decision).toMatchObject({quantity:18,totalAmount:'216.00',linePrices:[expect.objectContaining({position:1,quantity:15,totalAmount:'180.00'}),expect.objectContaining({position:2,quantity:3,totalAmount:'36.00'})]});
+    const content=(await contractService.content.get(rootActor(),caseId)).content;expect(content).toMatchObject({totalQuantity:18,totalAmount:'216.00'});
+    const oldDetail=await reporting.detail(oldReporter,id),newDetail=await reporting.detail(newReporter,id,undefined,factoryDecisionId);
+    expect(oldDetail.order).toMatchObject({supplierId:factoryId,quantity:12,completedQuantity:12,lines:[expect.objectContaining({position:1,quantity:5,completedQuantity:5}),expect.objectContaining({position:2,quantity:7,completedQuantity:7})]});
+    expect(newDetail.order).toMatchObject({supplierId:replacementFactoryId,quantity:18,completedQuantity:0,lines:[expect.objectContaining({position:1,quantity:15}),expect.objectContaining({position:2,quantity:3})]});
+    await expect(reporting.detail(oldReporter,id,undefined,factoryDecisionId)).rejects.toMatchObject({statusCode:404});await expect(reporting.detail(newReporter,id)).rejects.toMatchObject({statusCode:404});
+    await expect(reporting.report(oldReporter,id,{factoryDecisionId,position:1,businessDate,quantity:1},randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(reporting.report(newReporter,id,{position:1,businessDate,quantity:1},randomUUID())).rejects.toMatchObject({statusCode:403});
+    const key=randomUUID(),newInput={factoryDecisionId,position:1,businessDate,quantity:15};
+    const [first,retry]=await Promise.all([reporting.report(newReporter,id,newInput,key),reporting.report(newReporter,id,newInput,key)]);expect(first.value.order.completedQuantity).toBe(15);expect([first.reused,retry.reused].filter(Boolean)).toHaveLength(1);expect(retry.value).toEqual(first.value);
+    await reporting.report(newReporter,id,{factoryDecisionId,position:2,businessDate,quantity:3},randomUUID());
+    await reporting.execute(oldReporter,id,'complete',{businessDate,confirmed:true},randomUUID());await reporting.execute(oldReporter,id,'ship',{businessDate,confirmed:true},randomUUID());
+    expect((await production.get(readerActor(),id)).status).toBe('in_production');
+    await reporting.execute(newReporter,id,'complete',{factoryDecisionId,businessDate,confirmed:true},randomUUID());await reporting.execute(newReporter,id,'ship',{factoryDecisionId,businessDate,confirmed:true},randomUUID());
+    expect((await production.get(readerActor(),id)).status).toBe('shipped');
+    await closure.setPilot(rootActor(),{supplierId:factoryId,enabled:true});await closure.setPilot(rootActor(),{supplierId:replacementFactoryId,enabled:true});
+    const receiver={...rootActor(),authorizationCapability:'receiving:create'},receiving=new ReceivingService(database,undefined,undefined,closure);
+    const image=await readyCuttingSheet(receiver.actorId),cut=(await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 AND sourcing_line_position=1',[caseId])).rows[0].cutting_order_id;
+    await cutting.record({...rootActor(),authorizationCapability:'cutting:records:create'},cut,{pieceCount:1,actualCutCount:20,attachmentIds:[image]},randomUUID());
+    const oldReceipt=await receiving.create(receiver,{cuttingOrderId:cut,productionOrderId:id,factoryDecisionId:null,documentQuantity:5,actualQuantity:5,attachmentIds:[await readyCuttingSheet(receiver.actorId)]},randomUUID());
+    const newReceipt=await receiving.createRepeated(receiver,{cuttingOrderId:cut,receivingBatchId:oldReceipt.value.receivingBatchId,productionOrderId:id,factoryDecisionId,source:'other_factory',documentQuantity:15,actualQuantity:15,defectiveQuantity:0},randomUUID());
+    expect((await closure.receiptSummary(rootActor(),id)).shipment!.receipts.map(r=>r.receiptId)).toEqual([oldReceipt.value.receiptId]);
+    expect((await closure.receiptSummary(rootActor(),id,factoryDecisionId)).shipment!.receipts.map(r=>r.receiptId)).toEqual([newReceipt.value.receiptId]);
+    const receiptCount=(await database.query('SELECT count(*)::int AS count FROM receiving_receipts WHERE cutting_order_id=$1',[cut])).rows[0].count;
+    await expect(receiving.createRepeated(receiver,{cuttingOrderId:cut,receivingBatchId:oldReceipt.value.receivingBatchId,source:'jiashun',actualQuantity:1,defectiveQuantity:0},randomUUID())).rejects.toMatchObject({statusCode:409,message:'该裁剪单有多个工厂发货，请选择本次到货工厂'});
+    expect((await database.query('SELECT count(*)::int AS count FROM receiving_receipts WHERE cutting_order_id=$1',[cut])).rows[0].count).toBe(receiptCount);
+    const expected=await closure.expected(receiver,{q:serial});expect(expected.items.filter(i=>i.productionOrderId===id).map(i=>[i.factoryDecisionId,i.expectedQuantity])).toEqual(expect.arrayContaining([[null,12],[factoryDecisionId,18]]));
+    const settlements=await service.readFactorySettlements(financeActor(),caseId);expect(settlements.items.map(i=>[i.decisionId,i.quantity,i.totalAmount])).toEqual([[oldDecisionId,12,'103.00'],[factoryDecisionId,18,'216.00']]);
+    await expect(service.readFactorySettlements(newReporter,caseId)).rejects.toMatchObject({statusCode:403});
+    const financeKey=randomUUID();await service.recordFinanceReconciliation(financeActor(),caseId,{factoryDecisionId:oldDecisionId,result:'match'},financeKey);
+    expect((await service.recordFinanceReconciliation(financeActor(),caseId,{factoryDecisionId:oldDecisionId,result:'match'},financeKey)).reused).toBe(true);
+    expect((await service.getCase(readerActor(),caseId)).status).toBe('pending_finance_reconciliation');
+    await service.recordFinanceReconciliation(financeActor(),caseId,{result:'match'},randomUUID());
+    expect((await service.getCase(readerActor(),caseId)).status).toBe('closed');
+    await service.recordFinanceReconciliation(financeActor(),caseId,{factoryDecisionId:oldDecisionId,result:'difference',differenceFields:['quantity'],differenceReason:'TEST旧厂独立差异保留'},randomUUID());
+    expect((await service.getCase(readerActor(),caseId)).status).toBe('closed');
+    expect((await database.query('SELECT * FROM sourcing_production_orders WHERE production_order_id=$1',[id])).rows[0]).toEqual(originalProduction);
+    expect((await database.query('SELECT * FROM attachments WHERE attachment_id=$1',[contract.pdfAttachmentId])).rows[0]).toEqual(oldPdf);
+    const factoryRows=(await dashboard.list(rootActor(),{q:serial})).items;expect(factoryRows.map(i=>[i.order.factoryDecisionId,i.order.quantity,i.progress.completedQuantity])).toEqual(expect.arrayContaining([[null,12,12],[factoryDecisionId,18,18]]));
+    expect((await dashboard.detail(rootActor(),id)).detail.order.quantity).toBe(12);
+    expect((await dashboard.detail(rootActor(),id,factoryDecisionId)).detail.order.quantity).toBe(18);
+    await expect(service.requestFactoryChange(ownerActor(),caseId,{supplierId:factoryId,unitPrice:'8',changeReason:'TEST不能转走已经完工的零余量'},randomUUID())).rejects.toMatchObject({statusCode:409});
+    await expect(database.query("UPDATE sourcing_production_factory_transfer_lines SET transferred_quantity=1 WHERE factory_decision_id=$1",[factoryDecisionId])).rejects.toMatchObject({code:'55000',message:'operation_events is append-only'});
+  });
+
+  it("omits fully reported styles from incoming contracts and preserves each allocation through successive factory changes",async()=>{
+    const reporting=new ProductionReportingService(database),businessDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),serial=randomUUID().slice(0,8);
+    const source=(await service.createCase(merchandiserActor(),{gender:'女装',styleName:'TEST连续分款转厂',estimatedCutPieceSendDate:businessDate,deliveryDate:businessDate,lineItems:[{styleNo:`TEST-ZERO-${serial}-A`,color:'蓝',quantity:20},{styleNo:`TEST-ZERO-${serial}-B`,color:'白',quantity:10}],daxingUnitPrice:'8'},randomUUID())).value;
+    const caseId=source.sourcingCaseId,prices=[{position:1,unitPrice:'8'},{position:2,unitPrice:'9'}];await service.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());await service.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,linePrices:prices,craftIds:[craftId('净色车缝')]},randomUUID());await service.decideOwner(ownerActor(),caseId,{decision:'approved'},randomUUID());
+    const document=(await contractService.getCurrent(rootActor(),caseId)).item!,order=(await production.dispatch(rootActor(),caseId,{sourcingContractDocumentId:document.sourcingContractDocumentId,confirmed:true},randomUUID())).value,id=order.productionOrderId;
+    const cuts=(await database.query('SELECT * FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[caseId])).rows;
+    await reporting.report(rootActor(),id,{position:1,businessDate,quantity:20},randomUUID());
+    const first=(await service.requestFactoryChange(ownerActor(),caseId,{supplierId:replacementFactoryId,unitPrice:'9',changeReason:'TEST只转白色未完工余量'},randomUUID())).value;
+    const factoryDecisionId=first.decision!.sourcingDecisionId;expect(first.decision).toMatchObject({quantity:10,totalAmount:'90.00',linePrices:[expect.objectContaining({position:2,quantity:10})]});
+    const content=(await contractService.content.get(rootActor(),caseId)).content;expect(content).toMatchObject({totalQuantity:10,totalAmount:'90.00',lines:[expect.objectContaining({position:2,color:'白',quantity:10})]});
+    expect((await database.query('SELECT * FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[caseId])).rows).toEqual(cuts);
+    const incoming=(await reporting.detail(rootActor(),id,undefined,factoryDecisionId)).order;expect(incoming.lines).toMatchObject([{position:1,quantity:0,completedQuantity:0},{position:2,quantity:10,completedQuantity:0}]);
+    await expect(reporting.report(rootActor(),id,{factoryDecisionId,position:1,businessDate,quantity:1},randomUUID())).rejects.toMatchObject({statusCode:400});
+    const reported=(await reporting.report(rootActor(),id,{factoryDecisionId,position:2,businessDate,quantity:4},randomUUID())).value;
+    await expect(reporting.correct(rootActor(),id,reported.history[0]!.rootReportId,{expectedReportId:reported.history[0]!.reportId,businessDate,quantity:3,reason:'TEST不能跨厂修正'},randomUUID())).rejects.toMatchObject({statusCode:404});
+    const second=(await service.requestFactoryChange(ownerActor(),caseId,{supplierId:factoryId,unitPrice:'8',changeReason:'TEST白色余量再次转厂'},randomUUID())).value,newFactoryDecisionId=second.decision!.sourcingDecisionId;
+    expect(second.decision).toMatchObject({quantity:6,totalAmount:'48.00',linePrices:[expect.objectContaining({position:2,quantity:6})]});
+    expect((await reporting.detail(rootActor(),id)).order).toMatchObject({quantity:20,completedQuantity:20});
+    expect((await reporting.detail(rootActor(),id,undefined,factoryDecisionId)).order).toMatchObject({quantity:4,completedQuantity:4});
+    expect((await reporting.detail(rootActor(),id,undefined,newFactoryDecisionId)).order).toMatchObject({quantity:6,completedQuantity:0});
+    expect((await new ProductionDashboardService(database,reporting).list(rootActor(),{q:serial})).items.map(i=>i.order.quantity).sort((a,b)=>a-b)).toEqual([4,6,20]);
+    const original=(await database.query('SELECT sourcing_decision_id FROM sourcing_production_orders WHERE production_order_id=$1',[id])).rows[0].sourcing_decision_id;
+    expect((await service.readFactorySettlements(financeActor(),caseId)).items.map(i=>[i.decisionId,i.quantity,i.totalAmount])).toEqual([[original,20,'160.00'],[factoryDecisionId,4,'36.00'],[newFactoryDecisionId,6,'48.00']]);
+    expect((await database.query('SELECT count(*)::int AS count FROM sourcing_production_orders WHERE sourcing_case_id=$1',[caseId])).rows[0].count).toBe(1);
   });
 
   it("reports within assigned scope, corrects append-only, and completes then ships without finance", async () => {

@@ -24,9 +24,10 @@ export function registerProductionDashboardRoutes(app:FastifyInstance,dependenci
     if(!query.success)throw new ApplicationError("VALIDATION_ERROR","看板筛选信息无效",400);
     return dependencies.service.list(await actor(request),query.data);
   });
-  app.get<{Params:{id:string}}>("/production-dashboard/:id",async request=>{
+  app.get<{Params:{id:string};Querystring:{factoryDecisionId?:string}}>("/production-dashboard/:id",async request=>{
     const id=z.string().uuid().safeParse(request.params.id);
     if(!id.success)throw new ApplicationError("VALIDATION_ERROR","生产订单编号无效",400);
-    return dependencies.service.detail(await actor(request),id.data);
+    const query=z.object({factoryDecisionId:z.string().uuid().optional()}).strict().parse(request.query);
+    return dependencies.service.detail(await actor(request),id.data,query.factoryDecisionId??null);
   });
 }

@@ -23,7 +23,7 @@ export const ProductionDashboardQuerySchema = z.object({
   previousAsOf: z.string().datetime().optional(),
 }).strict();
 export const ProductionDashboardEventSchema = z.object({
-  id: z.string(), productionOrderId: z.string().uuid(), firstStyleNo: z.string(), supplierName: z.string(),
+  id: z.string(), productionOrderId: z.string().uuid(), factoryDecisionId:z.string().uuid().nullable().optional(), firstStyleNo: z.string(), supplierName: z.string(),
   kind: z.enum(["report", "correct", "complete", "ship", "progress_changed"]), businessDate: z.string().date(),
   recordedAt: z.string().datetime(), quantity: z.number().int().nonnegative().nullable(),
   previousState: ProductionProgressStateSchema.nullable(), progressState: ProductionProgressStateSchema.nullable(),

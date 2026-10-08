@@ -1,3 +1,5 @@
+import {factorySettlements,reconcileFactory} from "./factory-settlement-service.js";
+import {factoryTransferLines,transferProductionFactory} from "./factory-transfer-service.js";
 import { syncBulkSourcing } from "../production-platform/bulk-preparation-service.js";
 import { memberCanWriteModule } from "../access/member-module-policy.js";
 import { validateBudgetSourcing, bindBudgetSourcing } from "../production-platform/budget-sourcing-adapter.js";
@@ -1504,6 +1506,8 @@ export class SourcingService {
   ): Promise<SourcingFactoryChangeStateResponse> {
     this.assertReader(actor);
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
+    const source=await this.readCase(this.database,sourcingCaseId,actor);
+    const remainingLines=source.decision?(await this.database.query<{position:number;planned_quantity:number;completed_quantity:number;quantity:number}>("SELECT * FROM sourcing_factory_remaining_lines($1,$2) ORDER BY position",[sourcingCaseId,source.decision.sourcingDecisionId])).rows.map(line=>({position:line.position,plannedQuantity:line.planned_quantity,completedQuantity:line.completed_quantity,quantity:line.quantity})):undefined;
     const result = await this.database.query<{
       factory_change_request_id: string;
       from_decision_id: string;
@@ -1547,7 +1551,7 @@ export class SourcingService {
       [sourcingCaseId],
     );
     const row = result.rows[0];
-    if (!row) return { item: null };
+    if (!row) return { item: null,...(remainingLines?{remainingLines}:{}) };
     const status = row.effective
       ? "effective" as const
       : row.management_decision === "rejected" || row.owner_decision === "rejected"
@@ -1556,6 +1560,7 @@ export class SourcingService {
           ? "pending_management" as const
           : "pending_owner" as const;
     return {
+      ...(remainingLines?{remainingLines}:{}),
       item: {
         factoryChangeRequestId: row.factory_change_request_id,
         fromDecisionId: row.from_decision_id,
@@ -3133,15 +3138,10 @@ export class SourcingService {
       ],
     );
     await client.query(
-      `INSERT INTO sourcing_decision_lines(
-         sourcing_decision_id,sourcing_case_id,position,quantity,unit_price,total_amount
-       )
-       SELECT $1,line.sourcing_case_id,line.position,line.quantity,$2,
-              round($2::numeric*line.quantity,2)
-       FROM current_sourcing_case_lines line
-       WHERE line.sourcing_case_id=$3
-       ORDER BY line.position`,
-      [decisionId,source.proposed_unit_price,source.sourcing_case_id],
+      `INSERT INTO sourcing_decision_lines(sourcing_decision_id,sourcing_case_id,position,quantity,unit_price,total_amount)
+       SELECT $1,$3,line.position,line.quantity,$2,round($2::numeric*line.quantity,2)
+       FROM sourcing_factory_remaining_lines($3,$4) line WHERE line.quantity>0 ORDER BY line.position`,
+      [decisionId,source.proposed_unit_price,source.sourcing_case_id,source.sourcing_decision_id],
     );
     if (nextStatus === "pending_finance_reconciliation") {
       const snapshotId = randomUUID();
@@ -3187,8 +3187,9 @@ export class SourcingService {
          WHERE line.sourcing_decision_id=$3 ORDER BY line.position`,
         [snapshotId,source.sourcing_case_id,decisionId],
       );
-      await ensureCuttingOrdersForApproval(client, source.sourcing_case_id, snapshotId);
+      if(!(await client.query('SELECT 1 FROM sourcing_production_orders WHERE sourcing_case_id=$1',[source.sourcing_case_id])).rowCount)await ensureCuttingOrdersForApproval(client,source.sourcing_case_id,snapshotId);
       await this.contractService?.prepareForApproval(client, snapshotId, actor);
+      await transferProductionFactory(client,source.sourcing_case_id,source.sourcing_decision_id,decisionId,eventId);
     }
     if (nextStatus !== source.status) {
       await client.query(
@@ -3407,13 +3408,9 @@ export class SourcingService {
           [input.supplierId],
         );
         const selected = factory.rows[0] ?? fail("请选择当前有效的加工厂");
-        const quantity = Number(source.order_quantity);
-        const caseLines = await client.query<{ position: number; quantity: number | string }>(
-          `SELECT position,quantity FROM current_sourcing_case_lines
-           WHERE sourcing_case_id=$1 ORDER BY position`,
-          [sourcingCaseId],
-        );
-        const totalAmount = calculateSourcingLinesTotalExact(caseLines.rows.map((line) => ({
+        const remainingLines=await factoryTransferLines(client,sourcingCaseId,source.sourcing_decision_id!);
+        const quantity=remainingLines.reduce((sum,line)=>sum+line.quantity,0);
+        const totalAmount = calculateSourcingLinesTotalExact(remainingLines.filter(line=>line.quantity>0).map((line) => ({
           position: line.position,
           quantity: Number(line.quantity),
           unitPrice,
@@ -3654,6 +3651,9 @@ export class SourcingService {
         ) fail("该转厂申请当前不需要老板审批", 409, "INVALID_STATE_TRANSITION");
         const willEffect = input.decision === "approved"
           && (reviewerRole === "owner_group" || !source.requires_owner_approval);
+        const actualLines=willEffect?await factoryTransferLines(client,sourcingCaseId,source.from_decision_id):null;
+        if(actualLines){source.proposed_quantity=actualLines.reduce((sum,line)=>sum+line.quantity,0);
+          source.proposed_total_amount=calculateSourcingLinesTotalExact(actualLines.filter(line=>line.quantity>0).map(line=>({position:line.position,quantity:line.quantity,unitPrice:source.proposed_unit_price})));}
         const effectiveStatus = this.factoryChangeTargetStatus(source.status, actor);
         const action = willEffect
           ? "sourcing.factory_change.effective"
@@ -3760,6 +3760,12 @@ export class SourcingService {
     }
   }
 
+  async readFactorySettlements(actor:TrustedActorContext,sourcingCaseId:string){
+    this.assertActor(actor,FINANCE_RECONCILE_CAPABILITY,FINANCE_RECONCILE_ROLE);
+    if(!UUID_PATTERN.test(sourcingCaseId))fail("财务核对标识无效");
+    return {items:(await factorySettlements(this.database,sourcingCaseId)).map(s=>({decisionId:s.decision_id,supplierName:s.supplier_name,quantity:s.quantity,totalAmount:s.total_amount,contractNumber:s.contract_number,pdfAttachmentId:s.pdf_attachment_id,result:s.result}))};
+  }
+
   async recordFinanceReconciliation(
     actor: TrustedActorContext,
     sourcingCaseId: string,
@@ -3786,11 +3792,15 @@ export class SourcingService {
         actorKey: actor.actorId,
         key: idempotencyKey,
         requestHash: requestHash(scope, {
-          sourcingCaseId,result: input.result,differenceFields,suppliedReason,
+          sourcingCaseId,factoryDecisionId:input.factoryDecisionId??null,result: input.result,differenceFields,suppliedReason,
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
         await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 FOR UPDATE",[sourcingCaseId]);
+        if(input.factoryDecisionId){
+          await reconcileFactory(client,actor,sourcingCaseId,input as typeof input&{factoryDecisionId:string},this.events);
+          return {statusCode:201,response:await this.readCase(client,sourcingCaseId,actor)};
+        }
         const current = await client.query<{
           status: string;
           sequence: number | string;

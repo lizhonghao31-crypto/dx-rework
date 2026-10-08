@@ -50,6 +50,7 @@ type DifferenceResolution = Readonly<{
 type CreateRepeatedReceivingInput = Readonly<{
   cuttingOrderId?: string;
   productionOrderId?: string;
+  factoryDecisionId?: string|null;
   receivingBatchId: string;
   source: RepeatedReceivingSource;
   documentQuantity?: number;
@@ -60,6 +61,7 @@ type CreateRepeatedReceivingInput = Readonly<{
 type CreateReceivingInput = Readonly<{
   cuttingOrderId?: string;
   productionOrderId?: string;
+  factoryDecisionId?: string|null;
   styleNo?: string;
   documentQuantity: number;
   actualQuantity: number;
@@ -71,6 +73,7 @@ type CreateReceivingInput = Readonly<{
 type NormalizedCreateReceivingInput = Readonly<{
   cuttingOrderId?: string;
   productionOrderId?: string;
+  factoryDecisionId?: string|null;
   styleNo: string;
   documentQuantity: number;
   actualQuantity: number;
@@ -638,6 +641,7 @@ export class ReceivingService {
     const normalized = {
       ...(input.cuttingOrderId ? { cuttingOrderId: input.cuttingOrderId } : {}),
       ...(input.productionOrderId ? { productionOrderId: input.productionOrderId } : {}),
+      ...(input.factoryDecisionId!==undefined?{factoryDecisionId:normalizeOptionalUuid(input.factoryDecisionId,"分厂标识")}:{ }),
       ...(input.styleNo ? { styleNo: normalizeStyleNo(input.styleNo) } : {}),
       documentQuantity: validateQuantity(input.documentQuantity, "送货单数量", false),
       actualQuantity,
@@ -709,6 +713,7 @@ export class ReceivingService {
         requestHash: hash(scope, {
           ...(input.cuttingOrderId ? { cuttingOrderId: input.cuttingOrderId } : {}),
           ...(input.productionOrderId ? { productionOrderId: input.productionOrderId } : {}),
+      ...(input.factoryDecisionId!==undefined?{factoryDecisionId:normalizeOptionalUuid(input.factoryDecisionId,"分厂标识")}:{ }),
           receivingBatchId: input.receivingBatchId,
           source,
           ...(documentQuantity === undefined ? {} : { documentQuantity }),
@@ -757,6 +762,7 @@ export class ReceivingService {
           response: await this.createInTransaction(client, actor, {
             ...(cutting ? { cuttingOrderId: cutting.cuttingOrderId } : {}),
             ...(input.productionOrderId ? { productionOrderId: input.productionOrderId } : {}),
+      ...(input.factoryDecisionId!==undefined?{factoryDecisionId:normalizeOptionalUuid(input.factoryDecisionId,"分厂标识")}:{ }),
             styleNo: cutting?.styleNo ?? target.styleNo,
             documentQuantity: documentQuantity ?? target.documentQuantity,
             actualQuantity,
@@ -1717,6 +1723,7 @@ export class ReceivingService {
       after: {
         ...(input.cuttingOrderId ? { cuttingOrderId: input.cuttingOrderId } : {}),
         ...(input.productionOrderId ? { productionOrderId: input.productionOrderId } : {}),
+      ...(input.factoryDecisionId!==undefined?{factoryDecisionId:normalizeOptionalUuid(input.factoryDecisionId,"分厂标识")}:{ }),
         receiptId,
         receivingBatchId,
         styleNo: input.styleNo,
@@ -1804,11 +1811,11 @@ export class ReceivingService {
     await linkDigitalReceipt(client,receiptId,receivingBatchId);
     if (this.production && input.cuttingOrderId) {
       await this.production.linkReceiptByCuttingOrder(client,actor,{
-        cuttingOrderId:input.cuttingOrderId,receiptId,
+        cuttingOrderId:input.cuttingOrderId,receiptId,...(input.productionOrderId?{productionOrderId:input.productionOrderId}:{}),...(input.factoryDecisionId!==undefined?{factoryDecisionId:input.factoryDecisionId}:{}),
         styleNo:input.styleNo,operationEventId:eventId,receivedAt:row.received_at.toISOString(),
       });
     } else if (this.production && input.productionOrderId) {
-      await this.production.linkReceipt(client,actor,{productionOrderId:input.productionOrderId,receiptId,
+      await this.production.linkReceipt(client,actor,{productionOrderId:input.productionOrderId,receiptId,...(input.factoryDecisionId!==undefined?{factoryDecisionId:input.factoryDecisionId}:{}),
         styleNo:input.styleNo,operationEventId:eventId,receivedAt:row.received_at.toISOString()});
     }
     return {

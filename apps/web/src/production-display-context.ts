@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {ProductionDashboardQuerySchema} from '@dx-rework/contracts';
 import {createWebUrls} from '../url-contract.js';
-const schema=ProductionDashboardQuerySchema.extend({workspace:z.literal('display'),selected:z.string().uuid().optional()});
+const schema=ProductionDashboardQuerySchema.extend({workspace:z.literal('display'),selected:z.string().uuid().optional(),factoryDecisionId:z.string().uuid().optional()});
 /** Consume only the local display workspace and validated, unique query fields. */
 export function productionDisplayReturnUrl(value:string|null):string|null{
  if(!value||!value.startsWith('/')||value.startsWith('//')||value.includes('\\'))return null;
