@@ -42,13 +42,22 @@ runWithPostgres("versioned sourcing craft catalog", () => {
       new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url),
       "utf8",
     )) as Manifest;
-    for (const migration of manifest.migrations) {
-      const sql = await readFile(
-        new URL(`../../apps/api/migrations/${migration.version}.sql`, import.meta.url),
-        "utf8",
-      );
-      await database.query(sql);
-    }
+    await database.query(`CREATE TABLE schema_migrations (
+      version text PRIMARY KEY, checksum char(64) NOT NULL,
+      applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`);
+    const migrationClient = await database.connect();
+    try {
+      for (const migration of manifest.migrations) {
+        await migrationClient.query("BEGIN");
+        try {
+          const sql = await readFile(new URL(`../../apps/api/migrations/${migration.version}.sql`, import.meta.url), "utf8");
+          await migrationClient.query(sql);
+          await migrationClient.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)", [migration.version,migration.checksum]);
+          await migrationClient.query("COMMIT");
+        } catch (error) { await migrationClient.query("ROLLBACK"); throw error; }
+      }
+    } finally { migrationClient.release(); }
     await database.query(
       "INSERT INTO app_users(id,display_name,enabled) VALUES($1,'工艺管理员',true)",
       [actorId],
@@ -68,7 +77,7 @@ runWithPostgres("versioned sourcing craft catalog", () => {
     };
     const [first, second] = await Promise.all([
       sourcingService.createCase(sourcingActor("order-create-1"), input, "order-1"),
-      sourcingService.createCase(sourcingActor("order-create-2"), { ...input,styleName: "  梭织短裤  " }, "order-2"),
+      sourcingService.createCase(sourcingActor("order-create-2"), { ...input,styleName: "  梭织短裤  ",lineItems: [{...input.lineItems[0]!,styleNo:"CRAFT-002"}] }, "order-2"),
     ]);
     expect(first.value).toMatchObject({ gender: "男装",styleName: "梭织短裤",processes: [],crafts: [] });
     expect(second.value).toMatchObject({ gender: "男装",styleName: "梭织短裤",processes: [],crafts: [] });

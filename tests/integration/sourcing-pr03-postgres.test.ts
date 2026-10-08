@@ -3825,7 +3825,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
       const oldDecision=(await database.query("SELECT * FROM sourcing_decisions WHERE sourcing_case_id=$1 ORDER BY decision_version",[id])).rows;
       const oldContracts=(await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_case_id=$1 ORDER BY contract_version",[id])).rows;
-      const term=`Remember-${randomUUID()}`;
+      const term=`Remember-${randomUUID()}+线，包装/装箱`;
       const input={supplierId:replacementFactoryId,unitPrice:"9",craftNames:[`  ${term}  `,"净色车缝"],changeReason:"新厂实际承包工艺"};
       const key=randomUUID();
       const first=await service.requestFactoryChange(actor,id,input,key);
@@ -3841,6 +3841,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         await service.decideFactoryChange(factoryChangeVerifier(),id,pending.factoryChangeRequestId,{decision:"approved",verificationReason:"确认"},randomUUID());
       }
       expect((await service.getCase(readerActor(),id)).processes).toEqual([term,"净色车缝"]);
+      expect((await contractService.content.get(rootActor(),id)).content.processes).toEqual([term,"净色车缝"]);
       for(const row of oldDecision) expect((await database.query("SELECT * FROM sourcing_decisions WHERE sourcing_decision_id=$1",[row.sourcing_decision_id])).rows[0]).toEqual(row);
       for(const row of oldContracts) expect((await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[row.sourcing_contract_document_id])).rows[0]).toEqual(row);
       const another=await openNamedCraftTransfer();
@@ -3854,7 +3855,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const id=await openNamedCraftTransfer();
     const term=`Rollback-${randomUUID()}`;
     const input={supplierId:replacementFactoryId,unitPrice:"9",craftNames:[term],changeReason:"检查原事务"};
-    await expect(service.requestFactoryChange(financeActor(),id,input,randomUUID())).rejects.toMatchObject({code:"FORBIDDEN"});
+    for (const actor of [financeActor(), {...factoryChangeActor(),actorRoles:[]},
+      {...managerActor(),actorRoles:["warehouse_keeper"]}, {...ownerActor(),actorRoles:["order_merchandiser"]}])
+      await expect(service.requestFactoryChange(actor,id,input,randomUUID())).rejects.toMatchObject({code:"FORBIDDEN"});
     await expect(service.requestFactoryChange(factoryChangeActor(),randomUUID(),input,randomUUID())).rejects.toMatchObject({code:"NOT_FOUND"});
     await expect(service.requestFactoryChange(factoryChangeActor(),id,{...input,supplierId:factoryId},randomUUID())).rejects.toMatchObject({code:"VALIDATION_ERROR"});
     await expect(service.requestFactoryChange(factoryChangeActor(),id,{...input,craftNames:[term,term.toUpperCase()]},randomUUID())).rejects.toMatchObject({code:"VALIDATION_ERROR"});

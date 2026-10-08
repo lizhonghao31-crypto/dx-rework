@@ -146,7 +146,7 @@ type LinePriceDraft = Readonly<{ position: number; unitPrice: string }>;
 type QuoteDraft = Readonly<{ linePrices: readonly LinePriceDraft[]; quoteReason: string }>;
 type DecisionDraft = Readonly<{ supplierId: string; linePrices: readonly LinePriceDraft[]; decisionReason: string; cuttingProcess: "" | "in_house" | "outsourced" | "other"; cuttingProcessOther: string }>;
 type FinanceReviewDraft = Readonly<{ differenceFields: readonly string[]; differenceReason: string }>;
-type FactoryChangeDraft = Readonly<{ supplierId: string; unitPrice: string; changeReason: string; craftIds?: readonly string[] | undefined }>;
+type FactoryChangeDraft = Readonly<{ supplierId: string; unitPrice: string; changeReason: string; craftNames?: readonly string[] | undefined }>;
 type ContractSupplementDraft = Readonly<Partial<Record<SourcingContractMissingField, string>>>;
 
 class SourcingRequestError extends SubmissionRequestError {}
@@ -1228,7 +1228,7 @@ function OrderDetailPage({
         supplierId: current.supplierId,
         unitPrice: current.unitPrice || detail.decision?.unitPrice || "",
         changeReason: current.changeReason,
-        ...(current.craftIds ? { craftIds: current.craftIds } : {}),
+        ...(current.craftNames ? { craftNames: current.craftNames } : {}),
       }));
       setQuote((current) => ({
         quoteReason: current.quoteReason,
@@ -1487,6 +1487,7 @@ function OrderDetailPage({
           changeReason: "",
         });
         setFactoryChangeReviewReason("");
+        setActiveCraftQuery("");
       }
       await load();
     } catch (error) {
@@ -1618,6 +1619,11 @@ function OrderDetailPage({
   const transferPriceDelta = item.decision && factoryChangeDraft.unitPrice
     ? subtractFixedPoint(factoryChangeDraft.unitPrice, item.decision.unitPrice, 4)
     : null;
+  const transferCraftNames = factoryChangeDraft.craftNames?.map(name => name.trim());
+  const transferCraftError = !transferCraftNames ? ""
+    : !transferCraftNames.length || transferCraftNames.some(name => !name) ? "请填写每一项工艺，或删除空白行"
+      : new Set(transferCraftNames.map(name => name.toLowerCase())).size !== transferCraftNames.length ? "工艺不能重复，请修改或删除重复行"
+        : transferCraftNames.some(name => name.length > 100) ? "每项工艺最多100字" : "";
   const selectedFactory = factories.find((factory) => factory.supplierId === decision.supplierId);
   const todoBackPath = todoReturnPath(window.location.search);
   const listBackPath = sourcingReturnPath(window.location.search);
@@ -2023,19 +2029,21 @@ function OrderDetailPage({
                 <label><span>新加工单价</span><input inputMode="decimal" value={activeBusinessInput === "factory-change-unit-price" && factoryChangeUnitPriceEdited ? factoryChangeDraft.unitPrice : businessInputValue(factoryChangeDraft.unitPrice)} onFocus={() => setActiveBusinessInput("factory-change-unit-price")} onBlur={() => setActiveBusinessInput(null)} onChange={(event) => { setFactoryChangeUnitPriceEdited(true); setFactoryChangeDraft({ ...factoryChangeDraft, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} /></label>
                 <label><span>新总额</span><input readOnly value={businessInputValue(totalPreview(factoryChangeDraft.unitPrice, item.orderQuantity))} /></label>
                 <p className="sourcing-factory-change__delta">相对当前单价：<strong>{transferPriceDelta ?? "—"}</strong></p>
-                <label className="sourcing-form-wide sourcing-transfer-craft-toggle"><input type="checkbox" checked={factoryChangeDraft.craftIds !== undefined} onChange={event => {
-                  setFactoryChangeDraft(current => ({ ...current, craftIds: event.target.checked ? (item.crafts?.map(craft => craft.craftId) ?? []) : undefined })); actionKey.current = null;
+                <label className="sourcing-form-wide sourcing-transfer-craft-toggle"><input type="checkbox" checked={factoryChangeDraft.craftNames !== undefined} onChange={event => {
+                  setFactoryChangeDraft(current => ({ ...current, craftNames: event.target.checked ? (item.processes.length ? [...item.processes] : [""]) : undefined })); actionKey.current = null;
                 }} /><span>修改工艺</span></label>
-                {factoryChangeDraft.craftIds ? <section className="sourcing-process-editor sourcing-form-wide" aria-label="转厂工艺及承包范围">
-                  <div className="sourcing-process-editor__heading"><strong>新工艺及承包范围（必填）</strong><button type="button" disabled={factoryChangeDraft.craftIds.length >= MAX_SOURCING_PROCESSES} onClick={() => {setFactoryChangeDraft(current => ({...current,craftIds:[...(current.craftIds ?? []),""]})); actionKey.current=null;}}>＋ 新增工艺</button></div>
-                  <div className="sourcing-process-editor__list">{factoryChangeDraft.craftIds.map((id,index) => <div className="sourcing-process-row" key={index}>
-                    <b>{String(index+1).padStart(2,"0")}</b><label><span className="visually-hidden">第 {index+1} 项转厂工艺</span><select value={id} onChange={event => {setFactoryChangeDraft(current => ({...current,craftIds:current.craftIds?.map((value,i)=>i===index?event.target.value:value)}));actionKey.current=null;}}><option value="">请选择工艺</option>{craftCatalog.map(craft => <option value={craft.craftId} key={craft.craftId}>{craft.craftName}</option>)}</select></label>
-                    <button type="button" aria-label={`删除第 ${index+1} 项转厂工艺`} onClick={() => {setFactoryChangeDraft(current => ({...current,craftIds:current.craftIds?.filter((_,i)=>i!==index)}));actionKey.current=null;}}>删除</button>
+                {factoryChangeDraft.craftNames ? <section className="sourcing-process-editor sourcing-form-wide" aria-label="转厂工艺及承包范围">
+                  <div className="sourcing-process-editor__heading"><strong>新工艺及承包范围（必填）</strong><button type="button" disabled={factoryChangeDraft.craftNames.length >= MAX_SOURCING_PROCESSES} onClick={() => {setFactoryChangeDraft(current => ({...current,craftNames:[...(current.craftNames ?? []),""]})); actionKey.current=null;}}>＋ 新增工艺</button></div>
+                  <div className="sourcing-process-editor__list">{factoryChangeDraft.craftNames.map((name,index) => <div className="sourcing-process-row" key={index}>
+                    <b>{String(index+1).padStart(2,"0")}</b><label><span className="visually-hidden">第 {index+1} 项转厂工艺</span><input list="sourcing-transfer-craft-options" value={name} maxLength={100} aria-invalid={Boolean(transferCraftError)} aria-describedby={transferCraftError ? "sourcing-transfer-craft-error" : undefined} onFocus={() => setActiveCraftQuery(name)} onChange={event => {setFactoryChangeDraft(current => ({...current,craftNames:current.craftNames?.map((value,i)=>i===index?event.target.value:value)}));setActiveCraftQuery(event.target.value);actionKey.current=null;}} placeholder="选择已有工艺或输入新工艺" /></label>
+                    <button type="button" aria-label={`删除第 ${index+1} 项转厂工艺`} onClick={() => {setFactoryChangeDraft(current => ({...current,craftNames:current.craftNames?.filter((_,i)=>i!==index)}));actionKey.current=null;}}>删除</button>
                   </div>)}</div>
-                  {!factoryChangeDraft.craftIds.length ? <button type="button" onClick={() => {setFactoryChangeDraft(current => ({...current,craftIds:[""]}));actionKey.current=null;}}>选择工艺</button> : null}
+                  {!factoryChangeDraft.craftNames.length ? <button type="button" onClick={() => {setFactoryChangeDraft(current => ({...current,craftNames:[""]}));actionKey.current=null;}}>选择工艺</button> : null}
+                  <datalist id="sourcing-transfer-craft-options">{craftCatalog.map(craft => <option key={craft.craftId} value={craft.craftName}>{craft.craftCode}</option>)}</datalist>
+                  {transferCraftError ? <p id="sourcing-transfer-craft-error" role="status">{transferCraftError}</p> : null}
                 </section> : null}
                 <label className="sourcing-form-wide"><span>转厂原因</span><input maxLength={500} value={factoryChangeDraft.changeReason} onChange={(event) => { setFactoryChangeDraft({ ...factoryChangeDraft, changeReason: event.target.value }); actionKey.current = null; }} /></label>
-                <button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeDraft.supplierId || !factoryChangeDraft.unitPrice || !factoryChangeDraft.changeReason.trim() || Boolean(factoryChangeDraft.craftIds && (!factoryChangeDraft.craftIds.length || factoryChangeDraft.craftIds.some(id => !id) || new Set(factoryChangeDraft.craftIds).size !== factoryChangeDraft.craftIds.length))} onClick={() => void submit(transferRequestPath, { supplierId: factoryChangeDraft.supplierId, unitPrice: factoryChangeDraft.unitPrice, changeReason: factoryChangeDraft.changeReason.trim(), ...(factoryChangeDraft.craftIds ? { craftIds: factoryChangeDraft.craftIds } : {}) }, transferNodeRole === "owner_group" ? "老板发起的转厂已直接生效" : transferNodeRole === "production_management" && (transferPriceDelta?.startsWith("+") !== true) ? "转厂已生效" : "转厂申请已提交", true)}>提交转厂</button>
+                <button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeDraft.supplierId || !factoryChangeDraft.unitPrice || !factoryChangeDraft.changeReason.trim() || Boolean(transferCraftError)} onClick={() => void submit(transferRequestPath, { supplierId: factoryChangeDraft.supplierId, unitPrice: factoryChangeDraft.unitPrice, changeReason: factoryChangeDraft.changeReason.trim(), ...(factoryChangeDraft.craftNames ? { craftNames: factoryChangeDraft.craftNames.map(name => name.trim()) } : {}) }, transferNodeRole === "owner_group" ? "老板发起的转厂已直接生效" : transferNodeRole === "production_management" && (transferPriceDelta?.startsWith("+") !== true) ? "转厂已生效" : "转厂申请已提交", true)}>提交转厂</button>
               </div>
             </div> : null}
             </> : <p>当前账号可查看转厂记录，但不能在本节点发起。</p>}
