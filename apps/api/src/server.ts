@@ -61,6 +61,7 @@ import { OfficialDingTalkTodoProvider } from "./todos/provider.js";
 import { RootAwareTodoProjectionService } from "./todos/root-aware-projection-service.js";
 import { TodoRuntimeLifecycle } from "./todos/runtime-lifecycle.js";
 import { TodoService } from "./todos/service.js";
+import { SourcingTodoReconciliationService } from "./todos/sourcing-reconciliation-service.js";
 import { AliyunOssV4RestClient } from "./tools/aliyun-oss-v4-client.js";
 import { AttachmentService } from "./tools/attachments.js";
 import { ExportJobService } from "./tools/exports.js";
@@ -401,7 +402,8 @@ const app = buildApp({
     exportService: new WageExportService(database),
     root: rootAuthority,
   },
-  todos: { authenticate: (token) => auth.authenticate(token), service: todoService },
+  todos: { authenticate: (token) => auth.authenticate(token), service: todoService,root:rootAuthority,
+    sourcingReconciliation:new SourcingTodoReconciliationService(database,todoService) },
   reporting: {
     authenticate: (token) => auth.authenticate(token),
     service: reportingService,

@@ -2274,7 +2274,7 @@ export class SourcingService {
         await this.todoProjection?.completeOpenByDedupePrefix(
           client,
           actor,
-          `sourcing:${sourcingCaseId}:ie_quote:${quoteVersion}:`,
+          `sourcing:${sourcingCaseId}:ie_quote:`,
           "IE 报价已完成",
         );
         await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
@@ -2287,7 +2287,7 @@ export class SourcingService {
           requiredCapability: MANAGEMENT_DECISION_CAPABILITY,
           route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
           policyKey: "general",
-          dedupeKey: `sourcing:${sourcingCaseId}:management:${quoteVersion}`,
+          dedupeKey: `sourcing:${sourcingCaseId}:management:transition:${transitionSequence}`,
         });
         return { statusCode: 201, response: await this.readCase(client, sourcingCaseId, actor) };
       });
@@ -2570,7 +2570,7 @@ export class SourcingService {
         await this.todoProjection?.completeOpenByDedupePrefix(
           client,
           actor,
-          `sourcing:${sourcingCaseId}:management:${decisionVersion}:`,
+          `sourcing:${sourcingCaseId}:management:`,
           "生产管理已完成调价选厂",
         );
         await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
@@ -2859,7 +2859,7 @@ export class SourcingService {
             requiredCapability: MANAGEMENT_DECISION_CAPABILITY,
             route: { routeName: "sourcing_detail", entityId: sourcingCaseId },
             policyKey: "general",
-            dedupeKey: `sourcing:${sourcingCaseId}:management:${decisionVersion + 1}`,
+            dedupeKey: `sourcing:${sourcingCaseId}:management:transition:${Number(source.sequence) + 1}`,
           });
         } else if (!openFactoryChange?.rowCount) {
           await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
