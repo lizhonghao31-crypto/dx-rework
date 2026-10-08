@@ -3292,6 +3292,52 @@ export class SourcingService {
     }
   }
 
+  private async resolveTransferCraftNames(
+    client: PoolClient, actor: TrustedActorContext, sourcingCaseId: string,
+    factoryChangeRequestId: string, craftNames: readonly string[],
+  ): Promise<string[]> {
+    const normalized = await client.query<{ name: string }>(
+      "SELECT lower(btrim(name)) AS name FROM unnest($1::text[]) WITH ORDINALITY input(name,position) ORDER BY position",
+      [craftNames],
+    );
+    const names = normalized.rows.map(row => row.name);
+    if (new Set(names).size !== names.length) fail("工艺不能重复");
+    // Share the catalog's lock namespace and ordering, in this order transaction.
+    for (const name of [...names].sort())
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`dx_rework:craft:${name}`]);
+    const ids: string[] = [];
+    for (const craftName of craftNames) {
+      const current = await client.query<{ craft_id: string; craft_name: string; active: boolean }>(
+        "SELECT craft_id,craft_name,active FROM current_craft_catalog WHERE normalized_name=lower(btrim($1))", [craftName],
+      );
+      if (current.rows[0]) {
+        if (!current.rows[0].active) fail(`工艺“${current.rows[0].craft_name}”已停用`,409,"CONFLICT");
+        ids.push(current.rows[0].craft_id);
+        continue;
+      }
+      const archived = (await client.query<{ craft_id: string; craft_code: string }>(
+        "SELECT craft_id,craft_code FROM craft_catalog_items WHERE normalized_name=lower(btrim($1)) FOR SHARE", [craftName],
+      )).rows[0];
+      const craftId = archived?.craft_id ?? randomUUID();
+      const craftCode = archived?.craft_code ?? `CRAFT_${randomUUID().replaceAll("-", "").slice(0,24).toUpperCase()}`;
+      const reason = "订单转厂新增工艺";
+      const eventId = await this.events.append(client, actor, {
+        action: "master_data.craft.create", entityType: "craft_catalog", entityId: craftId,
+        after: { craftId,craftCode,version:1,craftName,active:true,sourcingCaseId,factoryChangeRequestId }, reason,
+      });
+      if (!archived) await client.query(
+        `INSERT INTO craft_catalog_items(craft_id,craft_code,craft_name,created_by,operation_event_id,request_id)
+         VALUES($1,$2,$3,$4,$5,$6)`, [craftId,craftCode,craftName,actor.actorId,eventId,actor.requestId],
+      );
+      await client.query(
+        `INSERT INTO craft_catalog_versions(craft_id,version,craft_name,active,change_reason,changed_by,operation_event_id,request_id)
+         VALUES($1,1,$2,true,$3,$4,$5,$6)`, [craftId,craftName,reason,actor.actorId,eventId,actor.requestId],
+      );
+      ids.push(craftId);
+    }
+    return ids;
+  }
+
   async requestFactoryChange(
     actor: TrustedActorContext,
     sourcingCaseId: string,
@@ -3304,6 +3350,10 @@ export class SourcingService {
     const unitPrice = normalizeSourcingUnitPrice(input.unitPrice);
     const changeReason = normalizeText(input.changeReason, "换厂原因", 500);
     const craftIds = input.craftIds;
+    const craftNames = input.craftNames?.map(name => normalizeText(name, "工艺", 100));
+    if (craftIds && craftNames) fail("工艺编号和名称不能同时提交");
+    if (craftNames && (!craftNames.length || craftNames.length > MAX_SOURCING_PROCESSES))
+      fail("工艺及承包范围必须填写1至20项");
     if (craftIds && (!craftIds.length || craftIds.length > MAX_SOURCING_PROCESSES
       || new Set(craftIds).size !== craftIds.length || craftIds.some(id => !UUID_PATTERN.test(id))))
       fail("请选择工艺及承包范围，最多20项且不能重复");
@@ -3316,7 +3366,7 @@ export class SourcingService {
         actorKey: actor.actorId,
         key: idempotencyKey,
         requestHash: requestHash(scope, {
-          sourcingCaseId, supplierId: input.supplierId, unitPrice, changeReason, ...(craftIds ? { craftIds } : {}),
+          sourcingCaseId, supplierId: input.supplierId, unitPrice, changeReason, ...(craftIds ? { craftIds } : {}), ...(craftNames ? { craftNames } : {}),
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
@@ -3402,20 +3452,24 @@ export class SourcingService {
           [input.supplierId],
         );
         const selected = factory.rows[0] ?? fail("请选择当前有效的加工厂");
-        const baseContractDocumentId = craftIds ? (await client.query<{id:string}>(
+        const factoryChangeRequestId = randomUUID();
+        const selectedCraftIds = craftNames
+          ? await this.resolveTransferCraftNames(client,actor,sourcingCaseId,factoryChangeRequestId,craftNames)
+          : craftIds;
+        const baseContractDocumentId = selectedCraftIds ? (await client.query<{id:string}>(
           "SELECT sourcing_contract_document_id AS id FROM sourcing_contract_documents WHERE sourcing_case_id=$1 ORDER BY contract_version DESC LIMIT 1",
           [sourcingCaseId])).rows[0]?.id ?? null : null;
-        const selectedCrafts = craftIds ? (await client.query<{
+        const selectedCrafts = selectedCraftIds ? (await client.query<{
           position: number; craft_id: string; craft_code: string; craft_version: number; craft_name: string;
         }>(`SELECT requested.position::integer AS position,catalog.craft_id,catalog.craft_code,
                   catalog.version AS craft_version,catalog.craft_name
              FROM unnest($1::uuid[]) WITH ORDINALITY requested(craft_id,position)
              JOIN current_craft_catalog catalog ON catalog.craft_id=requested.craft_id AND catalog.active
-             ORDER BY requested.position`, [craftIds])).rows.map(craft => ({
+             ORDER BY requested.position`, [selectedCraftIds])).rows.map(craft => ({
                position: craft.position, craftId: craft.craft_id, craftCode: craft.craft_code,
                craftVersion: craft.craft_version, craftName: craft.craft_name,
              })) : undefined;
-        if (selectedCrafts && selectedCrafts.length !== craftIds!.length)
+        if (selectedCrafts && selectedCrafts.length !== selectedCraftIds!.length)
           fail("所选工艺已停用或不存在，请重新选择",409,"CONFLICT");
         const quantity = Number(source.order_quantity);
         const caseLines = await client.query<{ position: number; quantity: number | string }>(
@@ -3432,7 +3486,6 @@ export class SourcingService {
         const immediate = initiatorRole === "owner_group"
           || (initiatorRole === "production_management" && !requiresOwnerApproval);
         const effectiveStatus = this.factoryChangeTargetStatus(source.status, actor);
-        const factoryChangeRequestId = randomUUID();
         const action = immediate ? "sourcing.factory_change.effective" : "sourcing.factory_change.request";
         const eventId = await this.events.append(client, actor, {
           action,
