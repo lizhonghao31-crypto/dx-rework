@@ -60,6 +60,12 @@ describe("legacy digital detail compatibility", () => {
     expect(digitalDetailClosePath(`?budget=${id}&returnTo=${encodeURIComponent(mother)}`, "/")).toBe(mother);
     expect(digitalDetailClosePath(`?order=${id}`, "/")).toBeNull();
   });
+  it("rejects ambiguous outer return targets and falls back to the remaining native detail", () => {
+    const returns = `returnTo=${encodeURIComponent("/ui/my-tasks?q=first&page=2")}&returnTo=${encodeURIComponent("/ui/my-tasks?q=second&page=3")}`;
+    expect(digitalDetailClosePath(`?task=${id}&${returns}`, "/")).toBeNull();
+    expect(digitalDetailClosePath(`?budget=${id}&order=${other}&${returns}`, "/acceptance/")).toBe(`/acceptance/ui/digital-production?order=${other}`);
+    expect(digitalDetailClosePath(`?task=${id}&returnTo=&returnTo=${encodeURIComponent("/ui/my-tasks")}`, "/")).toBeNull();
+  });
   it.each(["https://outside.test/", "//outside.test/ui/my-tasks", "/\\outside.test", "/ui/my-tasks#fragment", "/ui/my-tasks?page=2&page=3", "/ui/digital-production?order=bad", `/ui/digital-production?task=${id}&taskView=oops`, `/ui/digital-production?task=${id}&returnTo=${encodeURIComponent(`/ui/digital-production?task=${other}`)}`, `/ui/digital-production?order=${id}&returnTo=https%3A%2F%2Foutside.test`])("rejects unsafe or recursive return %s", value => {
     expect(digitalDetailReturnUrl(value, "/")).toBeNull();
   });

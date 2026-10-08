@@ -73,7 +73,8 @@ export function digitalDetailReturnUrl(value: string | null, base: string): stri
 }
 
 export function digitalDetailClosePath(search: string, base: string): string | null {
-  const query = new URLSearchParams(search), explicit = digitalDetailReturnUrl(query.get("returnTo"), base);
+  const query = new URLSearchParams(search);
+  const explicit = query.getAll("returnTo").length === 1 ? digitalDetailReturnUrl(query.get("returnTo"), base) : null;
   if (explicit) return explicit;
   const route = digitalDetailRoute(search);
   if (route.kind === "landing" || route.kind === "invalid") return null;
