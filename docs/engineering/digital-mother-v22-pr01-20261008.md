@@ -10,6 +10,8 @@
 
 新 SQL guard 为 prospective：历史冲突不会被迁移覆盖；读 DTO 对冲突返回 `formalPoNo=null, poIdentityConflict=true` 并保留两个旧值。`production_order_id/source_id/line_id/childlinks`、尺码、数量、历史创建时间和业务事实不重建。新的可选输入不向旧请求自动添加字段，旧幂等 payload hash 不变。
 
+既有已批准外发的 `reviseStyles` 同步写入 PO 两个兼容字段，避免只更新正式款号被一致性约束拒绝。沿用原权限、当前合同 PDF、修订与幂等门禁；真实业务链回归验证合法双行改号、重复重试和同母单重复 PO 整笔回滚，原审批金额、实裁身份、已发布制单、任务时钟和日期事实保持。
+
 ## 独立的当前有效日期
 
 每行分别存客户仓到货日、加工厂交货日、各自版本和来源；`digital_po_date_changes` 追加 old/new、版本、原因、审批/创建 audit、操作者和 requestId。当前值必须有同事务生效的匹配事实，事实不可 UPDATE、DELETE 或 TRUNCATE，不能留下已提交但尚未生效的变更。变更锁原母单及明确行，工厂变更先锁对应原外发单，与合同和财务写入一致。

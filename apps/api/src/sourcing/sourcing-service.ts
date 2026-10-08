@@ -1696,7 +1696,7 @@ export class SourcingService {
         if((await client.query("SELECT to_regclass('digital_production_child_lines') AS relation")).rows[0]?.relation){
           const link=(await client.query("SELECT l.production_order_id FROM digital_production_child_links l JOIN sourcing_cases s ON s.sourcing_case_id=l.child_id WHERE l.module='sourcing' AND l.child_id=$1 AND s.workflow_generation='digital_production_v1'",[sourcingCaseId])).rows[0];
           if(link){
-            for(const line of lines)await client.query("UPDATE digital_production_po_lines p SET formal_style_no=$3,temporary_style_no=$4 FROM digital_production_child_lines l WHERE l.module='sourcing' AND l.child_id=$1 AND l.child_line_key=$2 AND p.line_id=l.line_id",[sourcingCaseId,String(line.position),line.styleNo,line.alternateStyleNo]);
+            for(const line of lines)await client.query("UPDATE digital_production_po_lines p SET po_number=$3,formal_style_no=$3,temporary_style_no=$4 FROM digital_production_child_lines l WHERE l.module='sourcing' AND l.child_id=$1 AND l.child_line_key=$2 AND p.line_id=l.line_id",[sourcingCaseId,String(line.position),line.styleNo,line.alternateStyleNo]);
             await client.query('UPDATE digital_production_orders SET version=version+1 WHERE production_order_id=$1',[link.production_order_id]);
           }
         }

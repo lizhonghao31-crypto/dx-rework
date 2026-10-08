@@ -16,6 +16,7 @@ import { DevelopmentRoundService } from "../../apps/api/src/production-platform/
 import { DevelopmentExecutionService } from "../../apps/api/src/production-platform/development-execution-service.js";
 import { unzipSync } from "fflate";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { migrationExecutionSql } from "../../scripts/deploy/migration-execution-compatibility.mjs";
 import "./work-analysis-postgres.cases.js";
 import { readQuoteAnalysis } from "../../apps/api/src/sourcing/sourcing-analysis.js";
 import { ProductionDashboardService } from "../../apps/api/src/sourcing/production-dashboard-service.js";
@@ -253,6 +254,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     // Exercise the current production read contract against the complete schema.
     // The previous hand-picked schema stopped at 0150 and omitted exclusion dependencies.
     const manifest = JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json", import.meta.url), "utf8")) as { migrations: { version: string; checksum: string }[] };
+    const serverVersion=Number((await database.query("SHOW server_version_num")).rows[0].server_version_num);
     await database.query(`CREATE TABLE schema_migrations (
       version text PRIMARY KEY, checksum char(64) NOT NULL,
       applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -262,7 +264,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       for (const migration of manifest.migrations) {
         await migrationClient.query("BEGIN");
         try {
-          await migrationClient.query(await readFile(new URL(`../../apps/api/migrations/${migration.version}.sql`, import.meta.url), "utf8"));
+          const sql=await readFile(new URL(`../../apps/api/migrations/${migration.version}.sql`, import.meta.url), "utf8");
+          await migrationClient.query(migrationExecutionSql({...migration,sql},serverVersion));
           await migrationClient.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)", [migration.version, migration.checksum]);
           await migrationClient.query("COMMIT");
         } catch (error) { await migrationClient.query("ROLLBACK"); throw error; }
@@ -3673,6 +3676,37 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const rows = (await receiving.board(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()), undefined, formal)).rows;
     expect(rows).toHaveLength(2);
     expect(rows.map(row => [row.actualCutCount, row.actualQuantity]).sort()).toEqual([[40, 40], [60, 60]]);
+  });
+
+  it("synchronizes both digital PO aliases through the original approved sourcing revision without rewriting facts", async () => {
+    const fixture=await budgetFixture(),primary=merchandiserActor(),root=rootActor();
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,
+      {primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId("净色车缝"),"none",
+      {cuttingProcess:"in_house",stopAtReady:true}))!;
+    const identity=new DigitalProductionIdentityService(database,true),before=await identity.read(root,ready.id);
+    expect(before.lines.every(line=>line.poNumber&&line.poNumber===line.formalStyleNo)).toBe(true);
+    const sourceBefore=await service.getCase(readerActor(),ready.caseId);
+    const snapshot=async()=>({
+      tasks:(await database.query("SELECT t.* FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 ORDER BY t.task_id",[ready.id])).rows,
+      published:(await database.query("SELECT * FROM digital_instruction_versions WHERE production_order_id=$1 ORDER BY version",[ready.id])).rows,
+      cutting:(await database.query("SELECT * FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY cutting_order_id",[ready.caseId])).rows,
+      dates:(await database.query("SELECT * FROM digital_po_date_changes WHERE production_order_id=$1 ORDER BY change_id",[ready.id])).rows,
+    });
+    const factsBefore=await snapshot(),number=`TEST-PO-REVISION-${randomUUID()}`;
+    const changes=sourceBefore.lineItems.map(line=>({position:line.position,styleNo:`${number}-${line.position}`,alternateStyleNo:line.alternateStyleNo}));
+    const key=randomUUID(),input={expectedRevision:sourceBefore.identityRevision??0,lines:changes};
+    const revised=await service.reviseStyles(primary,ready.caseId,input,key);
+    expect((await service.reviseStyles(primary,ready.caseId,input,key)).reused).toBe(true);
+    const after=await identity.read(root,ready.id);
+    expect(after.version).toBe(before.version+1);
+    expect(after.lines.map(line=>[line.lineId,line.poNumber,line.formalStyleNo,line.sizes,line.customerWarehouseArrivalDate,line.factoryDeliveryDate]))
+      .toEqual(before.lines.map((line,index)=>[line.lineId,changes[index]!.styleNo,changes[index]!.styleNo,line.sizes,line.customerWarehouseArrivalDate,line.factoryDeliveryDate]));
+    expect(revised.value.approvalSnapshot).toEqual(sourceBefore.approvalSnapshot);
+    expect(await snapshot()).toEqual(factsBefore);
+    await expect(service.reviseStyles(primary,ready.caseId,{expectedRevision:revised.value.identityRevision!,lines:changes.map(line=>({...line,styleNo:`${number}-DUP`}))},randomUUID())).rejects.toMatchObject({code:"23505"});
+    expect(await identity.read(root,ready.id)).toEqual(after);
+    expect((await service.getCase(readerActor(),ready.caseId)).identityRevision).toBe(revised.value.identityRevision);
+    expect(await snapshot()).toEqual(factsBefore);
   });
 
   it("P10 keeps technical versions, units, date approval and budget boundaries independent", async () => {
