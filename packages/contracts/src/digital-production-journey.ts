@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { PoDeliveryDate,PoDeliveryRisk } from "./po-delivery-dates.js";
 
 export const JOURNEY_STAGES = [
   { key: "creation", label: "订单创建" },
@@ -67,6 +68,8 @@ export type OrderJourney = {
   orderNumbers: string[]; createdAt: string; deliveryDate: string | null; selectedRound: number | null; adoptedRound: number | null;
   sourceVersion: number | null; instructionVersion: number | null;
   lines: Array<{ id: string; po: string | null; color: string; formalStyleNo: string | null; temporaryStyleNo: string | null; orderedQuantity: number }>;
+  poDeliveryDates?:PoDeliveryDate[];
+  deliveryRisks?:PoDeliveryRisk[];
   links: JourneyRecord[];
   stages: Array<{key:JourneyStageKey;label:string;state:JourneyState;nodes:JourneyNode[]}>;
   progress: { development: {applicable:number;completed:number} | null; bulk: {applicable:number;completed:number} | null };

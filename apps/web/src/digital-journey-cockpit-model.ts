@@ -125,3 +125,9 @@ export function journeyDocumentGroups(order: OrderJourney) {
   for (const entry of entries.values()) groups.set(entry.record.domain, [...(groups.get(entry.record.domain) ?? []), entry]);
   return [...groups].map(([domain, entries]) => ({domain, entries}));
 }
+
+export function matchingPoDeliveryRisks(order:OrderJourney,context:CockpitContext) {
+  return (order.deliveryRisks??[]).filter(risk=>(!["overdue","due_soon","blocked"].includes(context.kpi)||risk.risk===context.kpi)
+    &&(!context.risk||risk.risk===context.risk)
+    &&order.stages.flatMap(stage=>stage.nodes).some(node=>node.current&&node.key===risk.nodeKey&&(!context.stage||node.stage===context.stage)&&(!context.node||node.key===context.node)&&(!context.state||node.state===context.state)));
+}

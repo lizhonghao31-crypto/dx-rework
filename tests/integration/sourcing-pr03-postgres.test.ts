@@ -3666,12 +3666,30 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     for(const actor of [contractActor(),managerActor(),financeActor()])await expect(contractService.content.save(actor,caseId,revised,randomUUID())).rejects.toMatchObject({statusCode:403});
     await expect(contractService.content.save(root,caseId,{...edit,content:{...edit.content,deliveryDate:"2026-11-15"}},randomUUID())).rejects.toMatchObject({statusCode:409});
     await expect(contractService.content.save(root,caseId,{...revised,poFactoryDates:revised.poFactoryDates.map((line,index)=>index===1?{...line,factoryDeliveryDate:"2026-11-21"}:line)},randomUUID())).rejects.toMatchObject({statusCode:409});
+    const journeyQuery=new DigitalJourneyQuery(database);
+    const beforeJourney=await journeyQuery.read(root,id);
+    const taskClocks=(await database.query("SELECT to_jsonb(t) AS task,(SELECT jsonb_agg(to_jsonb(r) ORDER BY r.revision_id) FROM digital_production_deadline_revisions r WHERE r.task_id=t.task_id) AS deadlines FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 ORDER BY task_id",[id])).rows;
     const key=randomUUID(),document=await contractService.content.save(root,caseId,revised,key);
     expect(await contractService.content.save(root,caseId,revised,key)).toBe(document);
     await contractService.generateIfReady(root,caseId,document);
     const current=await contractService.content.get(root,caseId);
     expect(current.content.lines.map(line=>line.deliveryDate)).toEqual(["2026-11-06","2026-11-09","2026-11-11"]);
     expect(current.content.terms.payment).toBe(revised.content.terms.payment);
+    const afterJourney=await journeyQuery.read(root,id);
+    expect(afterJourney.poDeliveryDates!.map(line=>line.factoryDeliveryDate)).toEqual(["2026-11-06","2026-11-09","2026-11-11"]);
+    expect(afterJourney.poDeliveryDates!.map(line=>[line.customerWarehouseArrivalDate,line.sampleTargetDate])).toEqual(Array(3).fill(["2026-11-20","2026-11-10"]));
+    expect(afterJourney.poDeliveryDates!.map(line=>line.lineId)).toEqual(prepared.lineItems.map(line=>line.lineId));
+    expect(afterJourney.progress).toEqual(beforeJourney.progress);
+    const listed=(await service.listCases({...root,authorizationCapability:"sourcing:view",authorizationCapabilities:["sourcing:view"]},corrected.lineItems[0]!.styleNo!)).items.find(row=>row.sourcingCaseId===caseId)!;
+    expect(listed.lineItems.map(line=>[line.lineId,line.customerWarehouseArrivalDate,line.factoryDeliveryDate]))
+      .toEqual(afterJourney.poDeliveryDates!.map(line=>[line.lineId,line.customerWarehouseArrivalDate,line.factoryDeliveryDate]));
+
+    const clocks=(value:typeof afterJourney)=>value.stages.flatMap(stage=>stage.nodes).map(node=>[node.instanceId,node.enteredAt,node.expectedAt,node.actualAt,node.sla,node.completionResult]);
+    expect(clocks(afterJourney)).toEqual(clocks(beforeJourney));
+    expect((await database.query("SELECT to_jsonb(t) AS task,(SELECT jsonb_agg(to_jsonb(r) ORDER BY r.revision_id) FROM digital_production_deadline_revisions r WHERE r.task_id=t.task_id) AS deadlines FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 ORDER BY task_id",[id])).rows).toEqual(taskClocks);
+    expect(JSON.stringify(afterJourney.poDeliveryDates)).not.toMatch(/unitPrice|salePrice|completedQuantity|productionQuantity/);
+    expect((await new DigitalCockpitQuery(database).list(root,{page:1,search:fixture.order.designStyleNo,stage:"bulk"})).items.find(row=>row.orderId===id)!.poDeliveryDates).toEqual(afterJourney.poDeliveryDates);
+
     expect((await database.query("SELECT customer_warehouse_arrival_date::text AS customer,factory_delivery_date::text AS factory FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position",[id])).rows)
       .toEqual(["2026-11-06","2026-11-09","2026-11-11"].map(factory=>({customer:"2026-11-20",factory})));
     expect((await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[original.sourcingContractDocumentId])).rows[0]).toEqual(originalRow);
@@ -3985,6 +4003,13 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const reporting=new ProductionReportingService(database),dashboard=new ProductionDashboardService(database,reporting);
     expect((await dashboard.detail(replacement,dispatched.productionId!)).detail.order.productionOrderId).toBe(dispatched.productionId);
     await expect(dashboard.detail(primary,dispatched.productionId!)).rejects.toMatchObject({statusCode:404});
+    const nativeOrder=await production.get(replacement,dispatched.productionId!);
+    const productionDates=(await dashboard.detail(replacement,dispatched.productionId!)).detail.order.poDeliveryDates!;
+    const journeyDates=(await new DigitalJourneyQuery(database).read(root,id)).poDeliveryDates!;
+    expect(productionDates.map(line=>[line.lineId,line.customerWarehouseArrivalDate,line.factoryDeliveryDate,line.sampleTargetDate]))
+      .toEqual(journeyDates.map(line=>[line.lineId,line.customerWarehouseArrivalDate,line.factoryDeliveryDate,line.sampleTargetDate]));
+    expect(nativeOrder.lines.map(line=>[line.quantity,line.completedQuantity])).toEqual([[137,0],[63,0]]);
+    expect(JSON.stringify(productionDates)).not.toMatch(/unitPrice|salePrice|completedQuantity|productionQuantity/);
     await reporting.report(root,dispatched.productionId!,{position:1,businessDate:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),quantity:1},randomUUID());
     const reminders=new ProductionClosureService(database,undefined,()=>new Date(Date.now()+4*86400000));await reminders.setPilot(root,{supplierId:factoryId,enabled:true});
     const todoActor=(actor:typeof primary)=>({...actor,authorizationCapabilities:[...(actor.authorizationCapabilities??[]),'todo:view']});

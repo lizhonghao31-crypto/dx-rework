@@ -10,6 +10,7 @@ import {
   type DispatchSourcingOrder,
   type SourcingDispatchState,
   type SourcingProductionOrder,
+  type PoDeliveryDate,
 } from "@dx-rework/contracts";
 import { ApplicationError } from "../platform/errors.js";
 import { IdempotencyService, OperationEventRepository, type TrustedActorContext } from "../tools/repositories.js";
@@ -36,8 +37,20 @@ type Source = {
 };
 export type ProductionRow = { production_order_id: string; dispatched_at: Date | string; status: SourcingProductionOrder["status"]; [key: string]: unknown };
 const iso = (date: Date | string): string => new Date(date).toISOString();
+// Correlated within the original authorized SELECT. Never serialize budget or price facts.
+const selectPoDeliveryDates=`CASE WHEN to_jsonb(source_case)->>'workflow_generation'='digital_production_v1' THEN
+ (SELECT jsonb_agg(jsonb_build_object('lineId',po.line_id,'position',mapped.child_line_key::integer,'poNumber',COALESCE(po.formal_style_no,po.po_number),'color',po.color,
+ 'customerWarehouseArrivalDate',to_jsonb(po)->>'customer_warehouse_arrival_date','factoryDeliveryDate',to_jsonb(po)->>'factory_delivery_date',
+ 'sampleTargetDate',((to_jsonb(po)->>'customer_warehouse_arrival_date')::date-10)::text) ORDER BY mapped.child_line_key::integer)
+ FROM digital_production_child_lines mapped JOIN digital_production_po_lines po ON po.production_order_id=mapped.production_order_id AND po.line_id=mapped.line_id
+ WHERE mapped.module='production' AND mapped.child_id=production.production_order_id) END AS po_delivery_dates`;
+const selectPoDeliveryClosed=`CASE WHEN to_jsonb(source_case)->>'workflow_generation'='digital_production_v1' THEN EXISTS(
+ SELECT 1 FROM digital_production_child_links link WHERE link.module='production' AND link.child_id=production.production_order_id
+ AND (EXISTS(SELECT 1 FROM digital_order_closures closure WHERE closure.production_order_id=link.production_order_id)
+ OR EXISTS(SELECT 1 FROM digital_production_resource_lifecycle lifecycle WHERE lifecycle.resource_kind='order' AND lifecycle.resource_id=link.production_order_id AND lifecycle.state='cancelled'))
+) END AS po_delivery_closed`;
 // Only explicit production fields are projected. Never serialize an approval row.
-export const selectProduction = `SELECT production.production_order_id,production.sourcing_case_id,
+export const selectProduction = `SELECT production.production_order_id,production.sourcing_case_id,${selectPoDeliveryDates},${selectPoDeliveryClosed},
   production.decision_version,production.sourcing_contract_document_id,
   sourcing_contract_display_number(production.sourcing_contract_document_id,production.contract_number) AS contract_number,
   production.contract_version,production.supplier_id,production.supplier_name_snapshot,
@@ -58,7 +71,7 @@ export const selectProduction = `SELECT production.production_order_id,productio
   JOIN sourcing_cases source_case USING(sourcing_case_id)
   JOIN LATERAL (SELECT sourcing_factory_order_status(production.production_order_id) AS status) transition ON true`;
 /** Each factory is an execution of the same order; no new production or actual quantity ledger. */
-export const selectFactoryProduction = `SELECT production.*,sourcing_contract_display_number(production.sourcing_contract_document_id,production.contract_number) AS contract_number,
+export const selectFactoryProduction = `SELECT production.*,${selectPoDeliveryDates},${selectPoDeliveryClosed},sourcing_contract_display_number(production.sourcing_contract_document_id,production.contract_number) AS contract_number,
  source_case.deleted_at IS NOT NULL AS source_case_archived,transition.status,
  sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,
  production.delivery_date::text AS delivery_date,
@@ -83,6 +96,8 @@ export const toOrder = (row: ProductionRow): SourcingProductionOrder => Sourcing
   gender: row.gender, styleName: row.style_name_snapshot, quantity: Number(row.quantity),
   completedQuantity: Number(row.completed_quantity ?? 0),
   processes: row.processes, deliveryDate: row.delivery_date, firstStyleNo: row.first_style_no,
+  ...(row.po_delivery_dates?{poDeliveryDates:row.po_delivery_dates as PoDeliveryDate[]}:{}),
+  ...(row.po_delivery_closed!==null&&row.po_delivery_closed!==undefined?{poDeliveryClosed:Boolean(row.po_delivery_closed)}:{}),
   dispatchedBy: row.dispatched_by, dispatchedAt: iso(row.dispatched_at), status: row.status,
   firstReportedOn: row.first_reported_on ?? null, reportingState: row.status === "in_production" && !row.first_reported_on ? "pending_first_report" : null, timeProgress: null, progressAlert: null,
   lines: row.lines,

@@ -672,7 +672,7 @@ export class SourcingService {
     if (row.workflow_generation === "digital_production_v1") {
       const lines = (await factoryPoLines(client,sourcingCaseId,history?.at ?? null))!;
       const proposals = await factoryProposals(client,sourcingCaseId,history?.at ?? null);
-      item.lineItems = item.lineItems.map(line => { const po=lines.find(po=>po.position===line.position); return po ? {...line,lineId:po.line_id,factoryDeliveryDate:po.factory,proposedFactoryDeliveryDate:proposals[line.position-1]?.factoryDeliveryDate ?? null}:line; });
+      item.lineItems = item.lineItems.map(line => { const po=lines.find(po=>po.position===line.position); return po ? {...line,lineId:po.line_id,...(history?{}:{customerWarehouseArrivalDate:po.customer}),factoryDeliveryDate:po.factory,proposedFactoryDeliveryDate:proposals[line.position-1]?.factoryDeliveryDate ?? null}:line; });
       if(item.approvalSnapshot) {
         const frozen = (await factoryPoLines(client,sourcingCaseId,null,item.approvalSnapshot.sourcingApprovalSnapshotId))!;
         item.approvalSnapshot.linePrices=item.approvalSnapshot.linePrices.map(line=>{const po=frozen.find(po=>po.position===line.position);return po?{...line,lineId:po.line_id,factoryDeliveryDate:po.factory}:line;});
@@ -735,6 +735,7 @@ export class SourcingService {
     const result = await this.database.query<SourcingCaseRow>(
       `SELECT
          count(*) OVER()::text AS total_count,
+         COALESCE(to_jsonb(additional_case)->>'workflow_generation','legacy') AS workflow_generation,
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
          (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=case_view.sourcing_case_id) AS identity_revision,
@@ -988,8 +989,16 @@ export class SourcingService {
     );
     const pageRows = result.rows;
     const totalCount = Number(pageRows[0]?.total_count ?? "0");
+    const items=pageRows.map(row=>mapCase(row,actor));
+    for(const [index,row] of pageRows.entries())if(row.workflow_generation==='digital_production_v1') {
+      const dates=(await factoryPoLines(this.database,row.sourcing_case_id))!;
+      items[index]!.lineItems=items[index]!.lineItems.map(line=>{
+        const po=dates.find(date=>date.position===line.position);
+        return po?{...line,lineId:po.line_id,customerWarehouseArrivalDate:po.customer,factoryDeliveryDate:po.factory}:line;
+      });
+    }
     return {
-      items: pageRows.map((row) => mapCase(row, actor)),
+      items,
       page,
       pageSize: SOURCING_LIST_PAGE_SIZE,
       totalCount,

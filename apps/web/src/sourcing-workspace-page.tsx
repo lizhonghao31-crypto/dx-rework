@@ -1,3 +1,5 @@
+import { PoDateSummary } from "./po-delivery-dates.js";
+import { type PoDeliveryDate } from "@dx-rework/contracts";
 import {FactorySettlementPanel} from "./factory-settlement-panel.js";
 import { contractReturnFileError, finishContractReturnUpload, type ContractReturnUpload } from "./sourcing-contract-return-upload.js";
 import type { BudgetSourcingPreparation } from "@dx-rework/contracts/digital-budget";
@@ -346,6 +348,11 @@ const detailHref = (
   );
 };
 
+function sourcingPoDates(item:Pick<SourcingCaseSummary,"lineItems">):PoDeliveryDate[]|undefined {
+  if(!item.lineItems.every(line=>Boolean(line.lineId)))return undefined;
+  return item.lineItems.map(line=>({lineId:line.lineId!,position:line.position,poNumber:line.styleNo,color:line.color??"未登记颜色",
+    customerWarehouseArrivalDate:line.customerWarehouseArrivalDate??null,factoryDeliveryDate:line.factoryDeliveryDate??null,sampleTargetDate:null}));
+}
 function SourcingOrderCard({
   item,
   returnTo,
@@ -400,7 +407,7 @@ function SourcingOrderCard({
         </div>
         <div className="sourcing-list-facts__dates">
           <div><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
-          <div><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
+          <div><dt>{sourcingPoDates(item)?"PO 双交期":"交货日期"}</dt><dd>{sourcingPoDates(item)?<PoDateSummary lines={sourcingPoDates(item)}/>:item.deliveryDate ?? "—"}</dd></div>
         </div>
       </dl>
       <small className="sourcing-order-card__activity">更新于 {formatDateTime(item.updatedAt)}</small>
@@ -1721,7 +1728,7 @@ function OrderDetailPage({
           <div><dt>IE 总额</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.totalAmount) : "—"}</dd></div>
           <div><dt>较 IE 总额变化</dt><dd className={ownerTotalDelta?.startsWith("-") ? "sourcing-price-lower" : undefined}>{ownerTotalDelta ?? "—"}</dd></div>
           <div className="sourcing-key-facts__date"><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
-          <div className="sourcing-key-facts__date"><dt>要求交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>
+          <div className="sourcing-key-facts__date"><dt>{sourcingPoDates(item)?"PO 双交期":"要求交货日期"}</dt><dd>{sourcingPoDates(item)?<PoDateSummary lines={sourcingPoDates(item)}/>:item.deliveryDate ?? "—"}</dd></div>
         </KeyFacts>
         <div className="sourcing-supporting-overview">
           <section className="sourcing-photo-section" aria-label="订单图片">
@@ -1803,7 +1810,7 @@ function OrderDetailPage({
               {canCorrectBudget && line.position === item.lineItems[0]?.position ? <button type="button" className="sourcing-budget-price-correct"
                 onClick={() => { budgetCorrectionKey.current = null; setBudgetCorrectionError(""); setBudgetCorrectionOpen(true); }}>更正</button> : null}
             </span> : "历史未维护" }] : []),
-            ...(item.lineItems.some(line=>line.lineId)?[{key:"factoryDate",label:"加工厂交货日",render:(line:SourcingCaseSummary["lineItems"][number])=><>{line.factoryDeliveryDate ?? "尚未生效"}{line.proposedFactoryDeliveryDate && line.proposedFactoryDeliveryDate!==line.factoryDeliveryDate?<small>{item.approvalSnapshot?"原申请日期：":"审批提议："}{line.proposedFactoryDeliveryDate}</small>:null}</>}]:[]),
+            ...(item.lineItems.some(line=>line.lineId)?[{key:"customerDate",label:"客户仓到货日",render:(line:SourcingCaseSummary["lineItems"][number])=>line.customerWarehouseArrivalDate ?? "未登记"},{key:"factoryDate",label:"加工厂交货日",render:(line:SourcingCaseSummary["lineItems"][number])=><>{line.factoryDeliveryDate ?? "尚未生效"}{line.proposedFactoryDeliveryDate && line.proposedFactoryDeliveryDate!==line.factoryDeliveryDate?<small>{item.approvalSnapshot?"原申请日期：":"审批提议："}{line.proposedFactoryDeliveryDate}</small>:null}</>}]:[]),
             { key: "ie", label: "IE 单价", render: line => { const price = sourcingLinePricing(item.ieQuote, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
             { key: "production", label: "生产单价", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
             { key: "amount", label: "本款金额", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price?.totalAmount ? formatBusinessCurrency(price.totalAmount) : "—"; } },
