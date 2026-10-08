@@ -6,5 +6,16 @@
     "tables":["cutting_orders","sourcing_approval_snapshots","sourcing_case_lines"],
     "onlineCompatible":false,
     "rollback":"restart-previous-only-if-entire-history-unchanged"
+  },
+  {
+    "version":"0223_sourcing_factory_change_craft_names",
+    "checksum":"a374629a47ed1c233816ad98083f6de924f0964eb7c3ef2dbca184dc1d8b44d0",
+    "strategy":"quiesce-backup-transactional-ddl",
+    "tables":["public.craft_catalog_versions"],
+    "schema":"public",
+    "functions":["public.guard_craft_catalog_version_creation()"],
+    "languages":["plpgsql"],
+    "onlineCompatible":false,
+    "rollback":"restart-previous-only-if-entire-history-unchanged"
   }
 ]
