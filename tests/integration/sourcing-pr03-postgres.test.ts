@@ -1,3 +1,4 @@
+import { ProductionInstructionService } from "../../apps/api/src/production-platform/production-instruction-service.js";
 import Fastify from "fastify";
 import { registerDigitalAnalysisRoutes } from "../../apps/api/src/production-platform/reporting-routes.js";
 import { DigitalAnalysisFilterSchema } from "@dx-rework/contracts/digital-production-analysis";
@@ -3415,7 +3416,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const order = await identity.createOrder(designer, DigitalOrderCreateSchema.parse({
       customerCode: "PD", productGroup: "男装", designStyleNo: `TEST-P09-${randomUUID()}`,
       orderDate: "2026-09-30", contractDeliveryDate: "2026-11-20", primaryMerchandiserId: merchandiserId,
-      lines: [{ poNumber: `TEST-PO1-${designerId}`, color: "黑", sizes: [{ size: "M", quantity: 137 }] }, { poNumber: `TEST-PO2-${designerId}`, color: "白", sizes: [{ size: "M", quantity: 63 }] }],
+      lines: [{ poNumber: `TEST-PO1-${designerId}`, color: "黑", customerWarehouseArrivalDate:"2026-11-20", sizes: [{ size: "M", quantity: 137 }] }, { poNumber: `TEST-PO2-${designerId}`, color: "白", customerWarehouseArrivalDate:"2026-11-20", sizes: [{ size: "M", quantity: 63 }] }],
     }), randomUUID());
     const bytes = await sharp({ create: { width: 2, height: 2, channels: 3, background: "white" } }).png().toBuffer();
     const imageId = randomUUID(), objectKey = `tests/p09/${imageId}.png`, sha256 = createHash("sha256").update(bytes).digest("hex");
@@ -3805,6 +3806,26 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     for(const cuttingId of ids){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-P13-cut.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/P13/${image}`,'c'.repeat(64),root.actorId]);await cutting.record({...root,authorizationCapability:'cutting:records:create'},cuttingId,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
     let state=await flow.read(primary,id);expect(state).toMatchObject({allCut:true,secondaryCraft,dispatched:false,sampleTargetDate:'2026-11-10'});
     expect(state.tasks.find(t=>t.taskKind==='factory_material_count')).toMatchObject({state:'pending',enteredAt:null,dueAt:null});
+    const instruction=new ProductionInstructionService(database,true),before=await instruction.read(primary,id);
+    expect(before.cutStarted).toBe(true);
+    const frozen=async()=>({
+      versions:(await database.query("SELECT * FROM digital_instruction_versions WHERE production_order_id=$1 ORDER BY version",[id])).rows,
+      tasks:(await database.query("SELECT t.* FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 ORDER BY t.task_id",[id])).rows,
+      contracts:(await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_case_id=$1 ORDER BY contract_version",[caseId])).rows,
+      sizes:(await database.query("SELECT s.* FROM digital_production_po_sizes s JOIN digital_production_po_lines l USING(line_id) WHERE l.production_order_id=$1 ORDER BY s.line_id,s.size",[id])).rows,
+      cutting:(await database.query("SELECT r.* FROM cutting_records r JOIN cutting_orders c USING(cutting_order_id) WHERE c.sourcing_case_id=$1 ORDER BY r.cutting_record_id",[caseId])).rows,
+    });
+    const originalFacts=await frozen(),target=before.customerPoDates![0]!;
+    const request=await instruction.requestDate(primary,id,{orderVersion:before.currentOrderVersion,reason:'TEST实裁后明确PO客户交期',changes:[{lineId:target.lineId,expectedVersion:target.version,date:'2026-11-25'}]},randomUUID());
+    const pending=request.dateRequests.find(row=>row.status==='待批准')!;
+    const approved=await instruction.decideDate(root,id,pending.requestId,true,randomUUID());
+    expect(approved.customerPoDates!.map(line=>line.date)).toEqual(['2026-11-25','2026-11-20']);
+    expect(await frozen()).toEqual(originalFacts);
+    await expect(instruction.save(primary,id,{expectedVersion:before.version,orderVersion:approved.currentOrderVersion,document:before.document},randomUUID())).rejects.toMatchObject({statusCode:409});
+    await expect(instruction.publish(primary,id,{expectedVersion:before.version,orderVersion:approved.currentOrderVersion},randomUUID())).rejects.toMatchObject({statusCode:409});
+    const dateTargets=await flow.read(primary,id);expect(dateTargets.sampleTargetDate).toBe('2026-11-10');
+    expect(dateTargets.lines.map(line=>line.sampleTargetDate)).toEqual(['2026-11-15','2026-11-10']);
+
     const original=(await contractService.getCurrent(root,caseId)).item!;expect(original.status).toBe('ready');
     await expect(production.dispatch(root,caseId,{sourcingContractDocumentId:original.sourcingContractDocumentId,confirmed:true},randomUUID())).rejects.toMatchObject({statusCode:409});
     const warehouse=people.warehouse_receiver!,logistics=people.embroidery_washing_merchandiser!,qc=people.quality_control!,tail=people.pattern_room_tail_inspector!;

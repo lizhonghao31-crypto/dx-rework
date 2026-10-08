@@ -10,4 +10,5 @@ export async function applyDigitalPoDateFixture(database: Pool): Promise<void> {
   await database.query(normalizer);
   await database.query("CREATE TABLE sourcing_finance_reconciliations(sourcing_case_id uuid REFERENCES sourcing_cases)");
   await database.query(await readFile(new URL("../../apps/api/migrations/0237_digital_po_identity_dates.sql", import.meta.url), "utf8"));
+  await database.query(await readFile(new URL("../../apps/api/migrations/0238_digital_po_customer_requests.sql", import.meta.url), "utf8"));
 }

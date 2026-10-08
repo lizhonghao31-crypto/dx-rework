@@ -28,7 +28,17 @@ export const InstructionDocumentSchema = z.object({
 export type InstructionDocument = z.infer<typeof InstructionDocumentSchema>;
 export const SaveInstructionSchema = z.object({ expectedVersion: z.number().int().nonnegative(), orderVersion: z.number().int().positive(), document: InstructionDocumentSchema }).strict();
 export const PublishInstructionSchema = z.object({ expectedVersion: z.number().int().positive(), orderVersion: z.number().int().positive() }).strict();
-export const InstructionDateRequestSchema = z.object({ orderVersion: z.number().int().positive(), date: z.iso.date(), reason: text.min(1) }).strict();
+export const InstructionDateRequestSchema = z.object({
+  orderVersion: z.number().int().positive(), reason: z.string().trim().min(1).max(500),
+  changes: z.array(z.object({lineId:z.string().uuid(),expectedVersion:z.number().int().nonnegative(),date:z.iso.date()}).strict()).min(1).max(50),
+}).strict().superRefine((value,ctx)=>{if(new Set(value.changes.map(change=>change.lineId)).size!==value.changes.length)ctx.addIssue({code:"custom",path:["changes"],message:"PO 不可重复"});});
+export type InstructionDateRequest = z.infer<typeof InstructionDateRequestSchema>;
+export type CustomerDateHistory = {
+  requestId:string; legacy?:boolean; source:"po"|"instruction"|"delivery"; oldDate:string|null; date:string;
+  reason:string; status:string; requestedBy:string; requestedAt:string; decidedBy:string|null; decidedAt:string|null;
+  changes:Array<{lineId:string;poNumber:string|null;color:string;oldDate:string|null;date:string;expectedVersion:number}>;
+  approvalBlockedReason:string|null;
+};
 export function initialInstruction(): InstructionDocument {
   return { styleName: "", category: "", season: "", fabricType: "", composition: "", date: null, process: "", secondaryCraft:"沿用开发", remarks: "", patternMaker: "", preshrink: "待确认", shipSample: "", sewingRequirements: SEWING_REQUIREMENTS.join("\n"), comments: "", fabrics: [], accessories: [], images: [], unit: "inch", sizes: [], measurements: [] };
 }
@@ -47,5 +57,7 @@ export type InstructionSheet = {
   order: DigitalOrder; currentOrderVersion: number; currentDeliveryDate: string | null; document: InstructionDocument; version: number; publishedVersion: number | null;
   versions: number[]; isPublishedSnapshot: boolean; canEdit: boolean; cutStarted: boolean; merchandiserName: string | null;
   sourceRound: number | null; latestSourceRound: number | null; canApproveDate: boolean; printedBy: string;
-  dateRequests: Array<{ requestId: string; legacy?: boolean; oldDate: string | null; date: string; reason: string; status: string }>;
+  canRequestDate?:boolean;
+  customerPoDates?:Array<{lineId:string;poNumber:string|null;color:string;date:string|null;registeredDate:string|null;version:number;source:string|null;factoryDate:string|null}>;
+  dateRequests: CustomerDateHistory[];
 };

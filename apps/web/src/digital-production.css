@@ -4,3 +4,7 @@
 .digital-production .pattern-actions { flex-wrap: wrap; }
 
 .digital-production .digital-task-history { max-width: 100%; overflow-x: auto; }
+.digital-production .digital-access-date-history .instruction-date-history { border-top: 1px solid #dce5f0; margin-top: 12px; padding-top: 12px; overflow-wrap: anywhere; }
+.digital-production .digital-access-date-history .instruction-date-history p { margin: 0 0 6px; }
+.digital-production .digital-access-date-history .instruction-date-history small { display: block; overflow-wrap: anywhere; }
+.digital-production .digital-access-date-history .instruction-date-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }

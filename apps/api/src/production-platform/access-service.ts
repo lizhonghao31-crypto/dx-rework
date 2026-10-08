@@ -1,5 +1,4 @@
-import { digitalDateText } from "./identity-service.js";
-import { ProductionInstructionService } from "./production-instruction-service.js";
+import { PoCustomerDateService } from "./po-customer-date-service.js";
 import { randomUUID } from "node:crypto";
 import { DigitalProductionTaskService } from "./task-service.js";
 import type { Pool, PoolClient } from "pg";
@@ -100,55 +99,24 @@ export class DigitalProductionAccessService {
     });
   }
   async requestDelivery(actor: TrustedActorContext, id: string, input: { deliveryDate: string; expectedVersion: number; reason: string }) {
-    return this.transaction(async client => {
-      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
-      const order = (await client.query("SELECT * FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE", [id])).rows[0] ?? digitalNotFound();
-      if (!isRootActor(actor) && (!actor.actorRoles.includes("order_merchandiser") || order.primary_merchandiser_id !== actor.actorId)) digitalForbidden();
-      if (order.version !== input.expectedVersion) conflict("订单已更新，请刷新");
-      const instructions=new ProductionInstructionService(this.database,true);
-      await instructions.legacyDateGuard(client,id);
-      if(input.deliveryDate < digitalDateText(order.order_date)!)conflict("客户交付期不能早于下单日期");
-      const requestId = randomUUID();
-      await client.query(`INSERT INTO digital_production_delivery_requests(request_id,production_order_id,expected_version,previous_date,requested_date,reason,requested_by)
-        VALUES($1,$2,$3,$4,$5,$6,$7)`, [requestId, id, input.expectedVersion, order.contract_delivery_date, input.deliveryDate, input.reason, actor.actorId]);
-      await this.audit(client, actor, "digital_delivery_requested", id, { deliveryDate: order.contract_delivery_date }, { requestId, ...input });
-      await instructions.legacyDateNotice(client,actor,id,"客户交付期变更待批准",`legacy-instruction-date:${requestId}`,true);
-      return { requestId };
-    });
+    await new DigitalProductionAccessPolicy(this.database).assert(actor,"order",id,"technical");
+    void input;
+    conflict("请从制单交期区域选择明确 PO 申请客户仓到货日变更");
   }
-  async deliveryRequests(actor: TrustedActorContext, id: string) {
-    await new DigitalProductionAccessPolicy(this.database).assert(actor, "order", id, "technical");
-    const rows=(await this.database.query(`SELECT r.request_id AS "requestId",r.requested_date::text AS "deliveryDate",r.reason,d.decision
-      FROM digital_production_delivery_requests r LEFT JOIN digital_production_delivery_decisions d USING(request_id)
-      WHERE r.production_order_id=$1 ORDER BY r.created_at DESC`, [id])).rows;
-    if((await this.database.query("SELECT to_regclass('digital_instruction_date_requests') AS relation")).rows[0]?.relation){
-      rows.push(...(await this.database.query(`SELECT r.request_id AS "requestId",r.new_date::text AS "deliveryDate",r.reason,CASE WHEN d.request_id IS NULL THEN NULL WHEN d.approved THEN 'approved' ELSE 'rejected' END AS decision
-        FROM digital_instruction_date_requests r LEFT JOIN digital_instruction_date_decisions d USING(request_id) WHERE r.production_order_id=$1 ORDER BY r.requested_at DESC`,[id])).rows);
-    }
-    return rows;
+  async deliveryRequests(actor:TrustedActorContext,id:string){
+    const dates=await new PoCustomerDateService(this.database).read(actor,id);
+    return dates.dateRequests.map(row=>({...row,deliveryDate:row.date,decision:row.status==="待批准"?null:row.status==="已批准"?"approved":"rejected"}));
   }
-  async decideDelivery(actor: TrustedActorContext, requestId: string, decision: "approved" | "rejected") {
-    if (!isRootActor(actor) && !actor.actorRoles.includes("production_management")) digitalForbidden();
-    if((await this.database.query("SELECT to_regclass('digital_instruction_date_requests') AS relation")).rows[0]?.relation){
-      const instruction=(await this.database.query("SELECT production_order_id FROM digital_instruction_date_requests WHERE request_id=$1",[requestId])).rows[0];
-      if(instruction){await new ProductionInstructionService(this.database,true).decideDate(actor,instruction.production_order_id,requestId,decision==='approved',`existing-date-decision:${requestId}:${decision}`);return {decision};}
+  async decideDelivery(actor:TrustedActorContext,requestId:string,decision:"approved"|"rejected"){
+    if(!isRootActor(actor)&&(!actor.actorRoles.includes("production_management")||!await new DigitalProductionAccessPolicy(this.database).activeRole(actor.actorId,"production_management")))digitalForbidden();
+    let orderId:string|null=null;
+    for(const table of ["digital_po_customer_requests","digital_instruction_date_requests","digital_production_delivery_requests"]){
+      if(!(await this.database.query("SELECT to_regclass($1) AS relation",[table])).rows[0]?.relation)continue;
+      orderId=(await this.database.query(`SELECT production_order_id FROM ${table} WHERE request_id=$1`,[requestId])).rows[0]?.production_order_id??null;
+      if(orderId)break;
     }
-    return this.transaction(async client => {
-      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
-      const request = (await client.query("SELECT * FROM digital_production_delivery_requests WHERE request_id=$1 FOR UPDATE", [requestId])).rows[0] ?? digitalNotFound();
-      if (!isRootActor(actor) && request.requested_by === actor.actorId) digitalForbidden();
-      const previous = (await client.query("SELECT decision FROM digital_production_delivery_decisions WHERE request_id=$1", [requestId])).rows[0];
-      if (previous) { if (previous.decision !== decision) conflict("该申请已处理"); return { decision }; }
-      const order = (await client.query("SELECT version FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE", [request.production_order_id])).rows[0]!;
-      if (decision === "approved") {
-        await new ProductionInstructionService(this.database,true).legacyDateGuard(client,request.production_order_id);
-        if (order.version !== request.expected_version) conflict("申请后订单已变更，请重新申请");
-        await client.query("UPDATE digital_production_orders SET contract_delivery_date=$2,version=version+1 WHERE production_order_id=$1", [request.production_order_id, request.requested_date]);
-      }
-      await client.query("INSERT INTO digital_production_delivery_decisions(request_id,decision,decided_by) VALUES($1,$2,$3)", [requestId, decision, actor.actorId]);
-      await this.audit(client, actor, "digital_delivery_decided", request.production_order_id, request, { decision });
-      await new ProductionInstructionService(this.database,true).legacyDateNotice(client,actor,request.production_order_id,decision === "approved"?"客户交付期变更已批准":"客户交付期变更已驳回",`legacy-instruction-date-decision:${requestId}`);
-      return { decision };
-    });
+    if(!orderId)digitalNotFound();
+    await new PoCustomerDateService(this.database).decide(actor,orderId!,requestId,decision==="approved",`existing-date-decision:${requestId}:${decision}`);
+    return {decision};
   }
 }

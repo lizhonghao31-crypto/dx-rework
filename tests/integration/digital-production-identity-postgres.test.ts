@@ -1,3 +1,4 @@
+import { PoCustomerDateService } from "../../apps/api/src/production-platform/po-customer-date-service.js";
 import { applyDigitalPoDateFixture } from "../helpers/digital-po-date-fixture.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -45,6 +46,8 @@ run("digital production P01 identities", () => {
       CREATE TABLE pattern_room_orders(order_id uuid PRIMARY KEY);`);
     await database.query(await readFile(new URL("../../apps/api/migrations/0218_digital_production_identity.sql", import.meta.url), "utf8"));
     await applyDigitalPoDateFixture(database);
+    const lifecycleSql=await readFile(new URL("../../apps/api/migrations/0220_digital_production_tasks.sql",import.meta.url),"utf8");
+    await database.query(lifecycleSql.match(/CREATE TABLE digital_production_resource_lifecycle[\s\S]*?\n\);/)![0]);
     await database.query(`CREATE TABLE business_roles(role_code text PRIMARY KEY,display_name text,description text,enabled boolean DEFAULT true,updated_at timestamptz);
       CREATE FUNCTION fixture_role_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;
       CREATE TRIGGER business_roles_no_update BEFORE UPDATE ON business_roles FOR EACH ROW EXECUTE FUNCTION fixture_role_guard();
@@ -229,6 +232,69 @@ run("digital production P01 identities", () => {
     const own = await app.inject({ method: "GET", url: `/digital-production/orders/${order.productionOrderId}`, headers: { cookie: `dx_rework_session=${designer}` } });
     expect(own.statusCode).toBe(200); expect(own.headers["cache-control"]).toBe("no-store");
   });
+  it("PR02 applies only selected PO promises, rejects spoofed/current-secondary roles and keeps legacy facts and stable quantities",async()=>{
+    const primary=randomUUID(),secondary=randomUUID(),director=randomUUID(),owner=randomUUID();
+    for(const [id,role] of [[primary,"order_merchandiser"],[secondary,"order_merchandiser"],[director,"production_management"],[owner,"owner_group"]]){
+      await database.query("INSERT INTO app_users(id,display_name) VALUES($1,'TEST PO dates')",[id]);
+      await database.query("INSERT INTO business_roles(role_code) VALUES($1) ON CONFLICT DO NOTHING",[role]);
+      await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,$2)",[id,role]);
+    }
+    const boss=actor(root,["root_superuser"]),dates=new PoCustomerDateService(database),access=new DigitalProductionAccessService(database);
+    const order=await service.createOrder(boss,DigitalOrderCreateSchema.parse({...input(),primaryMerchandiserId:primary,lines:[
+      {formalPoNo:"TEST-DATE-1",color:"黑",customerWarehouseArrivalDate:"2026-12-10",sizes:[{size:"M",quantity:11}]},
+      {formalPoNo:"TEST-DATE-2",color:"白",customerWarehouseArrivalDate:"2026-12-12",sizes:[{size:"M",quantity:13}]},
+      {formalPoNo:null,temporaryStyleNo:"TEST-ALT",color:"蓝",sizes:[{size:"M",quantity:17}]},
+    ]}),randomUUID()),id=order.productionOrderId,p=actor(primary,["order_merchandiser"]),m=actor(director,["production_management"]);
+    await access.delegate(boss,{resourceKind:"order",resourceId:id,delegateId:secondary,purpose:"technical",expiresAt:new Date(Date.now()+86400000).toISOString()});
+    const inputDate={orderVersion:order.version,reason:"TEST客户确认选中一条",changes:[{lineId:order.lines[1]!.lineId,expectedVersion:1,date:"2026-12-20"}]};
+    await expect(dates.request(actor(secondary,["order_merchandiser"]),id,inputDate,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(dates.request(actor(owner,["owner_group"]),id,inputDate,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(access.requestDelivery(p,id,{expectedVersion:order.version,deliveryDate:"2026-12-20",reason:"旧整单入口"})).rejects.toMatchObject({statusCode:409});
+    const snap=()=>database.query("SELECT line_id,po_number,formal_style_no,temporary_style_no,color,delivery_date::text FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position",[id]);
+    const prior=(await snap()).rows,key=randomUUID();
+    const [request,retry]=await Promise.all([dates.request(p,id,inputDate,key),dates.request(p,id,inputDate,key)]);expect(retry).toEqual(request);
+    await expect(dates.request(p,id,{...inputDate,reason:"different"},key)).rejects.toMatchObject({statusCode:409});
+    await expect(dates.decide(actor(owner,["owner_group"]),id,request.requestId,true,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(dates.decide(actor(secondary,["production_management"]),id,request.requestId,true,randomUUID())).rejects.toMatchObject({statusCode:403});
+    const decisionKey=randomUUID();await dates.decide(m,id,request.requestId,true,decisionKey);await dates.decide(m,id,request.requestId,true,decisionKey);
+    const current=await service.read(boss,id);expect(current.version).toBe(order.version+1);
+    expect(current.lines.map(line=>line.customerWarehouseArrivalDate)).toEqual(["2026-12-10","2026-12-20",null]);
+    expect(current.lines.map(line=>line.factoryDeliveryDate)).toEqual([null,null,null]);
+    expect(current.lines.map(line=>line.sizes)).toEqual(order.lines.map(line=>line.sizes));expect((await snap()).rows).toEqual(prior);
+    const history=await dates.read(p,id);expect(history.canRequestDate).toBe(true);expect(history.canApproveDate).toBe(false);
+    expect(history.dateRequests[0]).toMatchObject({source:"po",status:"已批准",requestedBy:"TEST PO dates",decidedBy:"TEST PO dates",changes:[{lineId:order.lines[1]!.lineId,date:"2026-12-20"}]});
+    expect((await database.query("SELECT count(*)::int n FROM digital_po_date_changes WHERE production_order_id=$1 AND source='approved_customer_change'",[id])).rows[0].n).toBe(1);
+    await expect(database.query("UPDATE digital_po_customer_requests SET reason='forged' WHERE request_id=$1",[request.requestId])).rejects.toThrow("immutable");
+    await expect(database.query("UPDATE digital_po_customer_request_lines SET new_date='2027-01-01' WHERE request_id=$1",[request.requestId])).rejects.toThrow("immutable");
+    await database.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND role_code='order_merchandiser'",[primary]);
+    await expect(dates.request(p,id,{...inputDate,orderVersion:current.version},randomUUID())).rejects.toMatchObject({statusCode:403});
+    await database.query("UPDATE user_role_assignments SET revoked_at=NULL WHERE user_id=$1",[primary]);
+    const stale=await dates.request(p,id,{orderVersion:current.version,reason:"TEST待处理旧版本",changes:[{lineId:current.lines[0]!.lineId,expectedVersion:1,date:"2026-12-25"},{lineId:current.lines[1]!.lineId,expectedVersion:2,date:"2026-12-27"}]},randomUUID());
+    const legacyPanelRequest=(await access.deliveryRequests(m,id)).find(row=>row.requestId===stale.requestId)!;
+    expect(legacyPanelRequest).toMatchObject({source:"po",approvalBlockedReason:null});
+    expect(legacyPanelRequest.changes).toEqual(expect.arrayContaining([{lineId:current.lines[0]!.lineId,poNumber:"TEST-DATE-1",color:"黑",oldDate:"2026-12-10",date:"2026-12-25",expectedVersion:1},{lineId:current.lines[1]!.lineId,poNumber:"TEST-DATE-2",color:"白",oldDate:"2026-12-20",date:"2026-12-27",expectedVersion:2}]));
+    await service.correctNumbers(boss,id,current.lines[0]!.lineId,{expectedVersion:current.version,formalPoNo:"TEST-DATE-1-REV"},randomUUID());
+    await expect(dates.decide(m,id,stale.requestId,true,randomUUID())).rejects.toMatchObject({statusCode:409});
+    expect((await dates.read(m,id)).dateRequests.find(row=>row.requestId===stale.requestId)?.approvalBlockedReason).toContain("母单已更新");
+    expect((await access.deliveryRequests(m,id)).find(row=>row.requestId===stale.requestId)?.approvalBlockedReason).toContain("母单已更新");
+    await dates.decide(m,id,stale.requestId,false,randomUUID());
+    const live=await service.read(boss,id),legacy=randomUUID();
+    await database.query("INSERT INTO digital_production_delivery_requests(request_id,production_order_id,expected_version,previous_date,requested_date,reason,requested_by) VALUES($1,$2,$3,'2026-12-10','2026-12-28','TEST历史分歧不得猜',$4)",[legacy,id,live.version,primary]);
+    await expect(access.decideDelivery(m,legacy,"approved")).rejects.toMatchObject({statusCode:409});await access.decideDelivery(m,legacy,"rejected");
+    const paused=await dates.request(p,id,{orderVersion:live.version,reason:"暂停待审批",changes:[{lineId:live.lines[0]!.lineId,expectedVersion:1,date:"2026-12-26"}]},randomUUID());
+    for(const state of ["paused","cancelled"]){
+      await database.query("INSERT INTO digital_production_resource_lifecycle(resource_kind,resource_id,state,changed_by) VALUES('order',$1,$2,$3) ON CONFLICT(resource_kind,resource_id) DO UPDATE SET state=EXCLUDED.state",[id,state,primary]);
+      await expect(dates.request(p,id,{orderVersion:live.version,reason:"停用新申请",changes:[{lineId:live.lines[0]!.lineId,expectedVersion:1,date:"2026-12-27"}]},randomUUID())).rejects.toMatchObject({statusCode:409});
+      await expect(dates.decide(m,id,paused.requestId,true,randomUUID())).rejects.toMatchObject({statusCode:409});
+      expect((await dates.read(p,id)).canRequestDate).toBe(false);
+    }
+    await dates.decide(m,id,paused.requestId,false,randomUUID());
+    await database.query("UPDATE digital_production_resource_lifecycle SET state='active' WHERE resource_kind='order' AND resource_id=$1",[id]);
+    await tx(async client=>{await approvedDate(client,id,live.lines[0]!.lineId,"factory","2026-12-09",0);});
+    await expect(dates.request(p,id,{orderVersion:live.version,reason:"不能早于工厂",changes:[{lineId:live.lines[0]!.lineId,expectedVersion:1,date:"2026-12-08"}]},randomUUID())).rejects.toMatchObject({statusCode:409});
+    await expect(dates.request(p,id,{orderVersion:live.version,reason:"不能串单",changes:[{lineId:randomUUID(),expectedVersion:0,date:"2026-12-20"}]},randomUUID())).rejects.toMatchObject({statusCode:409});
+    await expect(dates.request(p,id,{orderVersion:live.version,reason:"重复PO",changes:[inputDate.changes[0]!,inputDate.changes[0]!]},randomUUID())).rejects.toMatchObject({statusCode:400});
+  });
   it("P02 scopes primary merchandisers, defaults, leaders and technical readers without budget leakage", async () => {
     const primary = randomUUID(); const supervisor = randomUUID();
     for (const [id, role] of [[primary, "order_merchandiser"], [supervisor, "pattern_room_supervisor"]]) {
@@ -246,11 +312,11 @@ run("digital production P01 identities", () => {
     expect(await policy.allowed(actor(supervisor, ["pattern_room_supervisor"]), "order", order.productionOrderId, "technical")).toBe(true);
     expect(await policy.allowed(actor(supervisor, ["pattern_room_supervisor"]), "order", order.productionOrderId, "budget")).toBe(false);
     await expect(service.correctNumbers(actor(supervisor, ["pattern_room_supervisor"]), order.productionOrderId, order.lines[0]!.lineId, { expectedVersion: 1, poNumber: "NO", formalStyleNo: null }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
-    const request = await access.requestDelivery(actor(primary, ["order_merchandiser"]), order.productionOrderId, { expectedVersion: 1, deliveryDate: "2026-12-20", reason: "客户同意" });
+    const request = await new PoCustomerDateService(database).request(actor(primary,["order_merchandiser"]),order.productionOrderId,{orderVersion:1,reason:"客户同意",changes:order.lines.map(line=>({lineId:line.lineId,expectedVersion:line.customerDateVersion??0,date:"2026-12-20"}))},randomUUID());
     await expect(access.decideDelivery(actor(primary, ["order_merchandiser"]), request.requestId, "approved")).rejects.toMatchObject({ statusCode: 403 });
     expect((await service.read(boss, order.productionOrderId)).contractDeliveryDate).toBeNull();
     await access.decideDelivery(boss, request.requestId, "approved");
-    expect((await service.read(boss, order.productionOrderId)).contractDeliveryDate).toBe("2026-12-20");
+    expect((await service.read(boss, order.productionOrderId)).lines.map(line=>line.customerWarehouseArrivalDate)).toEqual(["2026-12-20","2026-12-20"]);
     expect(await access.decideDelivery(boss, request.requestId, "approved")).toEqual({ decision: "approved" });
     expect(await access.assignMerchandiser(boss, order.productionOrderId, primary, 2)).toEqual({ version: 3 });
     await expect(access.assignMerchandiser(boss, order.productionOrderId, primary, 2)).rejects.toMatchObject({ statusCode: 409 });
@@ -277,15 +343,15 @@ run("digital production P01 identities", () => {
     expect(order.primaryMerchandiserId).toBe(primary);
     expect((await service.createOrder(boss, { ...input(), primaryMerchandiserId: alternate }, randomUUID())).primaryMerchandiserId).toBe(alternate);
     const dual = actor(primary, ["order_merchandiser", "production_management"]);
-    const request = await access.requestDelivery(dual, order.productionOrderId, { expectedVersion: 1, deliveryDate: "2026-12-22", reason: "客户改期" });
+    const request = await new PoCustomerDateService(database).request(dual,order.productionOrderId,{orderVersion:1,reason:"客户改期",changes:order.lines.map(line=>({lineId:line.lineId,expectedVersion:line.customerDateVersion??0,date:"2026-12-22"}))},randomUUID());
     for (const decision of ["approved", "rejected"] as const) await expect(access.decideDelivery(dual, request.requestId, decision)).rejects.toMatchObject({ statusCode: 403 });
     expect((await service.read(boss, order.productionOrderId)).contractDeliveryDate).toBeNull();
-    expect((await database.query("SELECT * FROM digital_production_delivery_decisions WHERE request_id=$1", [request.requestId])).rows).toHaveLength(0);
+    expect((await database.query("SELECT * FROM digital_po_customer_decisions WHERE request_id=$1", [request.requestId])).rows).toHaveLength(0);
     expect(await access.decideDelivery(actor(director, ["production_management"]), request.requestId, "approved")).toEqual({ decision: "approved" });
     await expect(access.decideDelivery(dual, request.requestId, "approved")).rejects.toMatchObject({ statusCode: 403 });
-    const rootRequest = await access.requestDelivery(boss, order.productionOrderId, { expectedVersion: 2, deliveryDate: "2026-12-23", reason: "Root纠正" });
+    const rootRequest = await new PoCustomerDateService(database).request(boss,order.productionOrderId,{orderVersion:2,reason:"Root纠正",changes:order.lines.map(line=>({lineId:line.lineId,expectedVersion:(line.customerDateVersion??0)+1,date:"2026-12-23"}))},randomUUID());
     expect(await access.decideDelivery(boss, rootRequest.requestId, "approved")).toEqual({ decision: "approved" });
-    expect((await service.read(boss, order.productionOrderId)).contractDeliveryDate).toBe("2026-12-23");
+    expect((await service.read(boss, order.productionOrderId)).lines.map(line=>line.customerWarehouseArrivalDate)).toEqual(["2026-12-23","2026-12-23"]);
     await access.setCustomerDefault(boss, "PD", null);
     await expect(service.createOrder(actor(), { ...input(), primaryMerchandiserId: alternate }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
     expect((await service.createOrder(actor(), { ...input(), primaryMerchandiserId: null }, randomUUID())).primaryMerchandiserId).toBeNull();

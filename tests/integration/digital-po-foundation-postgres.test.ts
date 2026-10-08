@@ -18,7 +18,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     const client=await database.connect();
     try{
       const serverVersion=Number((await client.query("SHOW server_version_num")).rows[0].server_version_num);
-      const additions=["0223_sourcing_factory_change_craft_names","0237_digital_po_identity_dates"];
+      const additions=manifest.migrations.filter(row=>row.version==="0223_sourcing_factory_change_craft_names"||row.version>="0237").map(row=>row.version);
       const apply=async(row:{version:string;checksum:string})=>{
         const sql=await readFile(new URL(`../../apps/api/migrations/${row.version}.sql`,import.meta.url),"utf8");
         await client.query("BEGIN");try{await client.query(migrationExecutionSql({...row,sql},serverVersion));
@@ -41,7 +41,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   },120000);
   afterAll(async()=>{await database.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
   it("keeps prior hashes/timestamps, identities, legacy dates, quantities and conflicting formal aliases",async()=>{
-    expect((await database.query("SELECT version,checksum,applied_at::text FROM schema_migrations WHERE version NOT IN ('0223_sourcing_factory_change_craft_names','0237_digital_po_identity_dates') ORDER BY version")).rows).toEqual(history);
+    expect((await database.query("SELECT version,checksum,applied_at::text FROM schema_migrations WHERE version< '0237' AND version<>'0223_sourcing_factory_change_craft_names' ORDER BY version")).rows).toEqual(history);
     expect((await database.query("SELECT line_id,po_number,formal_style_no,delivery_date::text,customer_warehouse_arrival_date,factory_delivery_date,customer_date_version,factory_date_version FROM digital_production_po_lines WHERE line_id=$1",[line])).rows[0])
       .toMatchObject({line_id:line,po_number:"OLD-PO",formal_style_no:"OLD-FORMAL",delivery_date:"2026-12-10",customer_warehouse_arrival_date:null,factory_delivery_date:null,customer_date_version:0,factory_date_version:0});
     expect((await database.query("SELECT quantity FROM digital_production_po_sizes WHERE line_id=$1",[line])).rows[0].quantity).toBe(11);
@@ -93,7 +93,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
       for(const row of old)expect(updatedMain.find(item=>item.version===row.version)).toEqual(row);
       const scoped=new URL(url!);scoped.searchParams.set("options",`-c search_path=${mainSchema}`);
       const result=await applyMigrations(scoped.toString());
-      expect(result.currentVersion).toBe("0237_digital_po_identity_dates");
+      expect(result.currentVersion).toBe(manifest.migrations.at(-1)!.version);
       expect(result.applied).not.toContain("0223_sourcing_factory_change_craft_names");
       const release=await snapshot();
       expect(release).toHaveLength(manifest.migrations.length);

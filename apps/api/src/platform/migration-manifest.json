@@ -971,6 +971,10 @@
     {
       "version": "0237_digital_po_identity_dates",
       "checksum": "ec37ddecdd1d903f7fdd86f1c064d5186cfe15707462bcc7c2cca1099e2e43b2"
+    },
+    {
+      "version": "0238_digital_po_customer_requests",
+      "checksum": "536b93f7228d41103d39aa612aa9171a8387633dc4acbc46c3382a7aa1ae7b7f"
     }
   ]
 }
