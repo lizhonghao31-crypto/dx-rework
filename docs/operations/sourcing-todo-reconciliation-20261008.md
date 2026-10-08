@@ -19,3 +19,11 @@
 成功补偿追加 `sourcing.todo.reconcile` 证据审计和原平台 `todo.complete` 审计，使用既有终态投递通路。原待办及历史不删除；阻塞接收人的路由异常使用原机制收口；钉钉提供方终态由原 worker 完成。相同键、相同请求重试不增加审计、待办版本或投递；换请求内容复用相同键会拒绝。
 
 回退应用代码不会重新开启已合法办结的待办；需要调查时按 todoId、requestId、补偿证据和完成事件核对，不能回写业务审批或要求总监重做业务。
+# 门禁依赖修复
+
+本 PR 首次 FULL 在生产依赖审计处失败：锁定的 sharp 0.35.4 命中 GHSA-wq5f-xc86-pv6w。按上游修复版本仅将 sharp 及其原生二进制依赖锁定到 0.35.5；未降低审计级别或增加豁免。公告：https://github.com/advisories/GHSA-wq5f-xc86-pv6w 。本地生产依赖审计为 0 vulnerability；合同图片/PDF回归和最终 HEAD FULL 另列实际结果。
+
+两个依赖文件与 release 已合并、已审计的 #664（5eade148f9175b87d2cbb142e1b8564a20c35594）逐字节一致；没有增加其它依赖升级。修复后的本地 lint/types/API与web构建通过，全仓 1889 passed/327 skipped、PG16完整业务链 267 passed（含原合同图片生成与发货/收货回归）。OSS runtime 因本地未配置未执行。
+
+Acceptance 工具信任规则仍按原清单执行：当前 release #686 工具根 lock 与本 main 修复后的 lock 一致，因此这次补丁相对于该已审计工具没有新的依赖漂移。若现场仍安装 #664 之前的工具，原校验会正确返回 `TOOL_CODE_UPGRADE_REQUIRED: dependency contract changed`，须由部署负责人按既有入口先显式审核安装当前 release 工具，再进行常规更新。母单0237另涉及执行策略与权限清单变化，也必须显式审核安装对应最终工具；不能加入自动刷新例外。本次未执行安装或部署，未假定现场工具版本。
+
