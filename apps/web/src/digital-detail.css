@@ -1,0 +1,7 @@
+.digital-mother-readonly section{border-top:1px solid #dce4ed;padding-top:10px;margin-top:10px}
+.digital-mother-readonly h2{font-size:16px;margin:0 0 8px}
+.digital-mother-readonly dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0}
+.digital-mother-readonly dt{color:#626872;font-size:12px}
+.digital-mother-readonly dd{margin:4px 0 0;overflow-wrap:anywhere}
+@media(max-width:768px){.digital-mother-readonly dl{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:420px){.digital-mother-readonly dl{grid-template-columns:minmax(0,1fr)}}

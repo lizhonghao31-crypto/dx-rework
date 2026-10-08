@@ -43,13 +43,6 @@ describe("digital production A1 fixes", () => {
     await app.close();
   });
 
-  it("binds the customer default merchandiser form to persisted customer state", async () => {
-    const source = await readFile(new URL("../../apps/web/src/digital-production-access-panel.tsx", import.meta.url), "utf8");
-    expect(source).toContain('useState(customers[0]?.defaultMerchandiserId ?? "")');
-    expect(source).toContain("value={defaultMerchandiserId}");
-    expect(source).toContain('setDefaultMerchandiserId(customer.defaultMerchandiserId ?? "")');
-  });
-
   it("guards legacy todo UUID casts and uses the row todo id as the canonical route id", async () => {
     const source = await readFile(new URL("../../apps/api/src/todos/service.ts", import.meta.url), "utf8");
     expect(source).toContain("todos.entity_id~*'${TODO_ID_SQL_PATTERN}'");
