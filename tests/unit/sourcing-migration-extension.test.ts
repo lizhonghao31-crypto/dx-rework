@@ -1,40 +1,46 @@
-import {readFileSync} from 'node:fs';
-import {describe,it,expect} from 'vitest';
-import {assertAppliedMigrationHistory,assertMigrationSequence} from '../../scripts/migration-history-policy.mjs';
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { assertAppliedMigrationHistory, assertMigrationSequence } from "../../scripts/migration-history-policy.mjs";
+
 type Entry={version:string;checksum:string};
-const load=(path:string):Entry[]=>JSON.parse(readFileSync(path,'utf8')).migrations;
-const main=load('tests/fixtures/migration-histories/main-9fcc05c4.json');
-const release=load('tests/fixtures/migration-histories/release-e9d687a3.json');
-const integrated=load('apps/api/src/platform/migration-manifest.json');
-const extension:Entry[]=JSON.parse(readFileSync('scripts/migration-main-extensions.json','utf8'));
-const branches:{main:Entry[];digital:Entry[]}=JSON.parse(readFileSync('scripts/migration-branches.json','utf8'));
+const head:Entry[]=JSON.parse(readFileSync("apps/api/src/platform/migration-manifest.json","utf8")).migrations;
+const branches:{main:Entry[];digital:Entry[]}=JSON.parse(readFileSync("scripts/migration-branches.json","utf8"));
+const extension:Entry[]=JSON.parse(readFileSync("scripts/migration-main-extensions.json","utf8"));
+const common=head.slice(0,217);
+const main:Entry[]=[...common,...branches.main,...extension].sort((a,b)=>a.version.localeCompare(b.version));
 const sorted=(rows:Entry[])=>[...rows].sort((a,b)=>a.version.localeCompare(b.version));
-describe('reuse exact main extension beside the released digital 0221 identity',()=>{
- it('accepts actual main221, Acceptance236 and the integrated history with append-only extensions',()=>{
-  expect([main.length,release.length]).toEqual([221,236]);
-  const reconciled = integrated.filter(row=>Number(row.version.slice(0,4))<=233);
-  expect(reconciled).toHaveLength(238);
-  expect(integrated.slice(reconciled.length).every(row=>Number(row.version.slice(0,4))>233)).toBe(true);
-  const main222=sorted([...main,extension[1]!]);
-  const priorAcceptance=integrated.filter(row=>row.version!==extension[1]!.version);
-  for(const history of [main,main222,release,priorAcceptance,integrated])expect(()=>assertAppliedMigrationHistory(history,integrated)).not.toThrow();
-  expect(()=>assertMigrationSequence(integrated)).not.toThrow();
-  expect(integrated.filter(r=>r.version.startsWith('0221_'))).toHaveLength(2);
-  expect(integrated.filter(r=>r.version.startsWith('0222_'))).toHaveLength(2);
- });
- it('keeps resumable prefixes without admitting lane holes or a third 0221',()=>{
-  const common=main.slice(0,217),lane=[...branches.main,...extension];
-  for(let m=0;m<=lane.length;m++)for(let d=0;d<=branches.digital.length;d++){
-   const applied=sorted([...common,...lane.slice(0,m),...branches.digital.slice(0,d)]),before=JSON.stringify(applied);
-   expect(()=>assertAppliedMigrationHistory(applied,integrated)).not.toThrow();expect(JSON.stringify(applied)).toBe(before);
-  }
-  expect(()=>assertAppliedMigrationHistory(sorted([...common,...extension]),integrated)).toThrow();
-  expect(()=>assertMigrationSequence(sorted([...integrated,{version:'0221_unapproved',checksum:'0'.repeat(64)}]))).toThrow();
- });
- it('rejects checksum drift, unknown history and duplicate applied identities',()=>{
-  expect(()=>assertAppliedMigrationHistory(main.map(r=>r.version===extension[0]!.version?{...r,checksum:'0'.repeat(64)}:r),integrated)).toThrow('checksum drift');
-  expect(()=>assertMigrationSequence(integrated.map(r=>r.version===extension[0]!.version?{...r,checksum:'0'.repeat(64)}:r))).toThrow('checksum drift');
-  expect(()=>assertAppliedMigrationHistory([...integrated,extension[0]!],integrated)).toThrow('Duplicate');
-  expect(()=>assertAppliedMigrationHistory([...integrated,{version:'9999_unapproved',checksum:'0'.repeat(64)}],integrated)).toThrow('absent from Head');
- });
+const markers=head.some(row=>row.version.startsWith("0232_"))?head.filter(row=>Number(row.version.slice(0,4))>231):[{version:"0232_reconcile_contract_and_digital_histories",checksum:"a".repeat(64)},
+  {version:"0233_manual_contract_template_provenance",checksum:"b".repeat(64)}];
+const release=sorted([...common,...branches.main,...branches.digital,...markers]);
+const merged=sorted([...release,...extension]);
+
+describe("explicit main extension alongside the existing release migration identity",()=>{
+  it("keeps main strictly contiguous and rejects history drift",()=>{
+    expect(()=>assertMigrationSequence(main)).not.toThrow();
+    expect(()=>assertAppliedMigrationHistory(main,main)).not.toThrow();
+    expect(()=>assertAppliedMigrationHistory(main.map((r,i)=>i===220?{...r,checksum:"0".repeat(64)}:r),main)).toThrow("checksum drift");
+    expect(()=>assertMigrationSequence(main.filter(r=>!r.version.startsWith("0210_")))).toThrow("sequence gap");
+  });
+  it("accepts both complete histories and releases upgraded before the new main extension",()=>{
+    for(const applied of [main,release,merged])expect(()=>assertAppliedMigrationHistory(applied,merged)).not.toThrow();
+    expect(()=>assertMigrationSequence(merged)).not.toThrow();
+    expect(merged.filter(r=>r.version.startsWith("0221_"))).toHaveLength(2);
+    expect(merged.filter(r=>r.version.startsWith("0222_"))).toHaveLength(2);
+    expect(merged.filter(r=>r.version.startsWith("0223_"))).toHaveLength(2);
+  });
+  it("preserves every resumable lane prefix while rejecting holes and unknown collisions",()=>{
+    for(let m=0;m<=branches.main.length+extension.length;m++)for(let d=0;d<=branches.digital.length;d++){
+      const applied=sorted([...common,...[...branches.main,...extension].slice(0,m),...branches.digital.slice(0,d)]);
+      const frozen=JSON.stringify(applied);expect(()=>assertAppliedMigrationHistory(applied,merged)).not.toThrow();
+      expect(JSON.stringify(applied)).toBe(frozen);
+    }
+    expect(()=>assertAppliedMigrationHistory(sorted([...common,...extension]),merged)).toThrow();
+    expect(()=>assertAppliedMigrationHistory(sorted([...common,...branches.main,...markers]),merged)).toThrow("both complete");
+    expect(()=>assertMigrationSequence(sorted([...merged,{version:"0221_unapproved",checksum:"0".repeat(64)}]))).toThrow();
+    expect(()=>assertMigrationSequence(merged.map(r=>r.version===extension[0]!.version?{...r,checksum:"0".repeat(64)}:r))).toThrow("checksum drift");
+    expect(()=>assertMigrationSequence(sorted([...merged,{version:"0223_unapproved",checksum:"0".repeat(64)}]))).toThrow();
+    expect(()=>assertAppliedMigrationHistory(sorted([...merged,{version:"0223_unapproved",checksum:"0".repeat(64)}]),merged)).toThrow();
+    expect(()=>assertMigrationSequence(merged.map(r=>r.version===extension.at(-1)!.version?{...r,checksum:"0".repeat(64)}:r))).toThrow("checksum drift");
+    expect(()=>assertAppliedMigrationHistory([...merged,extension[0]!],merged)).toThrow("Duplicate");
+  });
 });

@@ -1,3 +1,4 @@
+import { applyDigitalPoDateFixture } from "../helpers/digital-po-date-fixture.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -13,6 +14,7 @@ import { DigitalProductionAccessService } from "../../apps/api/src/production-pl
 import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
 import { createDigitalTaskAccess, reassignDigitalTask } from "../../apps/api/src/production-platform/task-access-repository.js";
 import { ApplicationError } from "../../apps/api/src/platform/errors.js";
+import { DigitalPoDateRepository } from "../../apps/api/src/production-platform/po-date-repository.js";
 
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const run = databaseUrl ? describe : describe.skip;
@@ -42,6 +44,7 @@ run("digital production P01 identities", () => {
       CREATE TABLE rework_orders(rework_order_id uuid PRIMARY KEY);
       CREATE TABLE pattern_room_orders(order_id uuid PRIMARY KEY);`);
     await database.query(await readFile(new URL("../../apps/api/migrations/0218_digital_production_identity.sql", import.meta.url), "utf8"));
+    await applyDigitalPoDateFixture(database);
     await database.query(`CREATE TABLE business_roles(role_code text PRIMARY KEY,display_name text,description text,enabled boolean DEFAULT true,updated_at timestamptz);
       CREATE FUNCTION fixture_role_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;
       CREATE TRIGGER business_roles_no_update BEFORE UPDATE ON business_roles FOR EACH ROW EXECUTE FUNCTION fixture_role_guard();
@@ -67,6 +70,24 @@ run("digital production P01 identities", () => {
     await app.ready();
   });
   afterAll(async () => { await app.close(); await database.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end(); });
+  const tx = async <T,>(work:(client:pg.PoolClient)=>Promise<T>)=>{
+    const client = await database.connect();
+    try {await client.query("BEGIN");const result=await work(client);await client.query("COMMIT");return result;}
+    catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}
+  };
+  const approvedDate = async (client:pg.PoolClient,orderId:string,lineId:string,kind:"customer"|"factory",date:string,version:number,
+    currentActor=actor(root,["root_superuser"]),existingEventId?:string)=>{
+    const column=kind==="customer"?"customer_warehouse_arrival_date":"factory_delivery_date";
+    const oldDate=(await client.query(`SELECT ${column}::text AS date FROM digital_production_po_lines WHERE line_id=$1`,[lineId])).rows[0].date;
+    const eventId=existingEventId??randomUUID();
+    if(!existingEventId)await client.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state)
+      VALUES($1,$2,$3,$4,'digital_production',$5,$6)`,[eventId,currentActor.requestId,currentActor.actorId,
+      kind==="customer"?"digital_po_customer_dates_approved":"digital_po_factory_dates_approved",orderId,
+      {reason:"TEST explicit approved promise",dateChanges:[{lineId,dateKind:kind,oldDate,date,expectedVersion:version}]}]);
+    await new DigitalPoDateRepository(client).applyWithClient(currentActor,orderId,kind==="customer"?"approved_customer_change":"approved_factory_change",
+      [{lineId,date,expectedVersion:version}],eventId);
+    return eventId;
+  };
   it("starts with only the sixteen customer codes and no migrated orders", async () => {
     expect((await service.customers(actor())).length).toBe(16);
     expect((await service.customers(actor())).find(item => item.code === "PD")?.productGroups).toEqual(["男装", "女装"]);
@@ -136,7 +157,7 @@ run("digital production P01 identities", () => {
   it("number correction preserves root, PO identity, dates and quantities; rejects stale updates", async () => {
     const order = await service.createOrder(actor(), input(), randomUUID());
     const line = order.lines[0]!;
-    const changed = await service.correctNumbers(actor(), order.productionOrderId, line.lineId, { expectedVersion: 1, poNumber: "REAL-PO", formalStyleNo: "REAL-STYLE" }, randomUUID());
+    const changed = await service.correctNumbers(actor(), order.productionOrderId, line.lineId, { expectedVersion: 1, poNumber: "REAL-PO", formalStyleNo: "REAL-PO" }, randomUUID());
     expect(changed.productionOrderId).toBe(order.productionOrderId); expect(changed.lines[0]?.lineId).toBe(line.lineId);
     expect(changed.lines[0]?.sizes).toEqual(line.sizes); expect(changed.createdAt).toBe(order.createdAt);
     await expect(service.correctNumbers(actor(), order.productionOrderId, line.lineId, { expectedVersion: 1, poNumber: "STALE", formalStyleNo: null }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
@@ -322,4 +343,81 @@ run("digital production P01 identities", () => {
     expect(granted.statusCode).toBe(403);
   });
 
+
+  it("registers only explicit customer dates and one formal PO without changing quantities or stable identities",async()=>{
+    const request=DigitalOrderCreateSchema.parse({...input(),lines:[
+      {formalPoNo:" PO-A ",color:"A",customerWarehouseArrivalDate:"2026-12-10",sizes:[{size:"M",quantity:5}]},
+      {formalPoNo:"PO-B",color:"B",customerWarehouseArrivalDate:"2026-12-12",sizes:[{size:"L",quantity:7}]},
+      {formalPoNo:null,temporaryStyleNo:"TEMP-C",color:"C",sizes:[{size:"S",quantity:3}]},
+    ]});
+    const key=randomUUID();const order=await service.createOrder(actor(),request,key);
+    expect(order.lines.map(row=>row.formalPoNo)).toEqual(["PO-A","PO-B",null]);
+    expect(order.lines.map(row=>row.poNumber)).toEqual(order.lines.map(row=>row.formalStyleNo));
+    expect(order.lines.map(row=>row.customerWarehouseArrivalDate)).toEqual(["2026-12-10","2026-12-12",null]);
+    expect(order.lines.map(row=>row.factoryDeliveryDate)).toEqual([null,null,null]);
+    expect(order.lines.map(row=>row.customerDateVersion)).toEqual([1,1,0]);
+    expect(order.lines.map(row=>row.sizes)).toEqual(request.lines.map(row=>row.sizes));
+    expect((await service.createOrder(actor(),request,key)).lines.map(row=>row.lineId)).toEqual(order.lines.map(row=>row.lineId));
+    expect((await database.query("SELECT count(*)::int n FROM digital_po_date_changes WHERE production_order_id=$1",[order.productionOrderId])).rows[0].n).toBe(2);
+    await expect(service.correctNumbers(actor(),order.productionOrderId,order.lines[1]!.lineId,{expectedVersion:1,formalPoNo:" po-a ",poNumber:null,formalStyleNo:null},randomUUID())).rejects.toMatchObject({statusCode:400});
+    expect((await service.read(actor(),order.productionOrderId)).version).toBe(1);
+  });
+  it("keeps two independent versioned promises and exact approval replay; rejects a later factory or earlier customer",async()=>{
+    const order=await service.createOrder(actor(),input(),randomUUID());const a=order.lines[0]!;const b=order.lines[1]!;
+    const event=await tx(c=>approvedDate(c,order.productionOrderId,a.lineId,"factory","2026-10-09",0));
+    await tx(c=>approvedDate(c,order.productionOrderId,a.lineId,"factory","2026-10-09",0,actor(root,["root_superuser"]),event));
+    await tx(c=>approvedDate(c,order.productionOrderId,a.lineId,"customer","2026-10-11",1));
+    const after=await service.read(actor(),order.productionOrderId);
+    expect(after.lines[0]).toMatchObject({lineId:a.lineId,customerWarehouseArrivalDate:"2026-10-11",factoryDeliveryDate:"2026-10-09",customerDateVersion:2,factoryDateVersion:1});
+    expect(after.lines[1]).toEqual(b);expect(after.lines[0]!.sizes).toEqual(a.sizes);
+    const count=(await database.query("SELECT count(*)::int n FROM digital_po_date_changes WHERE production_order_id=$1",[order.productionOrderId])).rows[0].n;
+    await expect(tx(c=>approvedDate(c,order.productionOrderId,a.lineId,"factory","2026-10-12",1))).rejects.toMatchObject({statusCode:409});
+    await expect(tx(c=>approvedDate(c,order.productionOrderId,a.lineId,"customer","2026-10-08",2))).rejects.toMatchObject({statusCode:409});
+    await expect(tx(c=>approvedDate(c,order.productionOrderId,a.lineId,"factory","2026-10-08",0))).rejects.toMatchObject({statusCode:409});
+    expect((await database.query("SELECT count(*)::int n FROM digital_po_date_changes WHERE production_order_id=$1",[order.productionOrderId])).rows[0].n).toBe(count);
+    expect((await database.query("SELECT delivery_date::text date FROM digital_production_po_lines WHERE line_id=$1",[a.lineId])).rows[0].date).toBe("2026-10-10");
+  });
+  it("allows a live director but denies designers and owners; concurrent stale approvals never overwrite a newer PO date",async()=>{
+    const manager=randomUUID();await database.query("INSERT INTO app_users(id,display_name) VALUES($1,'TEST director')",[manager]);
+    await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'production_management')",[manager]);
+    const director=actor(manager,["production_management"]);
+    const order=await service.createOrder(actor(),input(),randomUUID());const line=order.lines[0]!;
+    for(const forbidden of [actor(),actor(other),actor(other,["owner_group"])])await expect(tx(c=>approvedDate(c,order.productionOrderId,line.lineId,"customer","2026-10-20",1,forbidden))).rejects.toMatchObject({statusCode:403});
+    const concurrent=await Promise.allSettled([tx(c=>approvedDate(c,order.productionOrderId,line.lineId,"customer","2026-10-20",1,director)),
+      tx(c=>approvedDate(c,order.productionOrderId,line.lineId,"customer","2026-10-21",1,director))]);
+    expect(concurrent.filter(row=>row.status==="fulfilled")).toHaveLength(1);
+    expect(concurrent.filter(row=>row.status==="rejected")).toHaveLength(1);
+    expect((await service.read(actor(),order.productionOrderId)).lines[0]!.customerDateVersion).toBe(2);
+    expect((await database.query("SELECT count(*)::int n FROM digital_po_date_changes WHERE line_id=$1",[line.lineId])).rows[0].n).toBe(2);
+  });
+  it("preserves the permanent factory finance lock even for Root without locking an independent customer promise",async()=>{
+    const order=await service.createOrder(actor(),input(),randomUUID());const line=order.lines[0]!;const child=randomUUID();
+    await database.query("INSERT INTO sourcing_cases VALUES($1)",[child]);
+    await tx(client=>linkNewDigitalChild(client,{module:"sourcing",childId:child,productionOrderId:order.productionOrderId,lines:[{childLineKey:"1",lineId:line.lineId}]}));
+    await tx(client=>approvedDate(client,order.productionOrderId,line.lineId,"factory","2026-10-09",0));
+    await database.query("INSERT INTO sourcing_finance_reconciliations VALUES($1)",[child]);
+    await expect(tx(client=>approvedDate(client,order.productionOrderId,line.lineId,"factory","2026-10-08",1))).rejects.toMatchObject({statusCode:409});
+    await tx(client=>approvedDate(client,order.productionOrderId,line.lineId,"customer","2026-10-11",1));
+    expect((await service.read(actor(),order.productionOrderId)).lines[0]).toMatchObject({factoryDeliveryDate:"2026-10-09",factoryDateVersion:1,customerWarehouseArrivalDate:"2026-10-11",customerDateVersion:2});
+  });
+  it("detects historical number conflicts without rewriting them and denies unaudited or orphan effective date writes",async()=>{
+    const order=await service.createOrder(actor(),input(),randomUUID());const line=order.lines[0]!;
+    // Only this owned fixture: represent a row that existed before the prospective trigger.
+    await database.query("ALTER TABLE digital_production_po_lines DISABLE TRIGGER digital_po_number_identity_guard");
+    try{await database.query("UPDATE digital_production_po_lines SET po_number='OLD-PO',formal_style_no='OLD-STYLE' WHERE line_id=$1",[line.lineId]);}
+    finally{await database.query("ALTER TABLE digital_production_po_lines ENABLE TRIGGER digital_po_number_identity_guard");}
+    const historical=await service.read(actor(),order.productionOrderId);
+    expect(historical.lines[0]).toMatchObject({lineId:line.lineId,poNumber:"OLD-PO",formalStyleNo:"OLD-STYLE",formalPoNo:null,poIdentityConflict:true});
+    await expect(database.query("UPDATE digital_production_po_lines SET customer_warehouse_arrival_date='2026-12-10',customer_date_version=2 WHERE line_id=$1",[line.lineId])).rejects.toMatchObject({code:"55000"});
+    await expect(database.query("UPDATE digital_po_date_changes SET new_date='2026-12-10' WHERE line_id=$1",[line.lineId])).rejects.toMatchObject({code:"55000"});
+    await expect(tx(async client=>{
+      const date="2026-12-10";const eventId=randomUUID();
+      await client.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state)
+        VALUES($1,'p01-test',$2,'digital_po_customer_dates_approved','digital_production',$3,$4)`,[eventId,root,order.productionOrderId,
+        {reason:"TEST orphan fact",dateChanges:[{lineId:line.lineId,dateKind:"customer",oldDate:"2026-10-10",date,expectedVersion:1}]}]);
+      await client.query(`INSERT INTO digital_po_date_changes(change_id,production_order_id,line_id,date_kind,old_date,new_date,version,source,approval_event_id,changed_by,request_id,reason)
+        VALUES($1,$2,$3,'customer','2026-10-10',$4,2,'approved_customer_change',$5,$6,'p01-test','TEST orphan')`,[randomUUID(),order.productionOrderId,line.lineId,date,eventId,root]);
+    })).rejects.toMatchObject({code:"55000"});
+    expect((await service.read(actor(),order.productionOrderId)).lines[0]).toEqual(historical.lines[0]);
+  });
 });

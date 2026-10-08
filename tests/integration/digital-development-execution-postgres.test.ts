@@ -1,3 +1,4 @@
+import { applyDigitalPoDateFixture } from "../helpers/digital-po-date-fixture.js";
 import { DigitalCockpitQuery } from "../../apps/api/src/production-platform/cockpit-query.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -33,6 +34,7 @@ run("P06 development execution PostgreSQL", () => {
       CREATE TABLE rework_orders(rework_order_id uuid PRIMARY KEY);
       CREATE TABLE pattern_room_orders(order_id uuid PRIMARY KEY);`);
     await database.query(await readFile(new URL("../../apps/api/migrations/0218_digital_production_identity.sql", import.meta.url), "utf8"));
+    await applyDigitalPoDateFixture(database);
     await database.query(`CREATE TABLE business_roles(role_code text PRIMARY KEY,display_name text,description text,enabled boolean DEFAULT true,updated_at timestamptz);
       CREATE FUNCTION fixture_role_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;
       CREATE TRIGGER business_roles_no_update BEFORE UPDATE ON business_roles FOR EACH ROW EXECUTE FUNCTION fixture_role_guard();

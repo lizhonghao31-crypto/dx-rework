@@ -1,6 +1,8 @@
 import type { SourcingService } from "../sourcing/sourcing-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
+import { digitalFormalPoNo, digitalPoKey } from "@dx-rework/contracts/digital-production";
+import { DigitalPoDateRepository } from "./po-date-repository.js";
 import type { DigitalCustomer, DigitalOrder, DigitalOrderInput, DigitalSource, DigitalSourceInput, DigitalNumberCorrection } from "@dx-rework/contracts/digital-production";
 import { isRootActor } from "../access/business-authority.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -68,8 +70,10 @@ export class DigitalProductionIdentityService {
   }
   private assertCreation() { if (!this.creationEnabled) fail("新建数字生产订单尚未开放", 403); }
   private async audit(client: PoolClient, actor: TrustedActorContext, action: string, id: string, before: unknown, after: unknown) {
+    const eventId = randomUUID();
     await client.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state)
-      VALUES($1,$2,$3,$4,'digital_production',$5,$6,$7)`, [randomUUID(), actor.requestId, actor.actorId, action, id, before ? JSON.stringify(before) : null, JSON.stringify(after)]);
+      VALUES($1,$2,$3,$4,'digital_production',$5,$6,$7)`, [eventId, actor.requestId, actor.actorId, action, id, before ? JSON.stringify(before) : null, JSON.stringify(after)]);
+    return eventId;
   }
   async customers(actor: TrustedActorContext): Promise<DigitalCustomer[]> {
     assertIdentityActor(actor);
@@ -105,6 +109,12 @@ export class DigitalProductionIdentityService {
     this.assertCreation();
     assertCreator(actor);
     if (new Set(input.lines.map(line => line.color.trim().toLowerCase())).size !== input.lines.length) fail("同一母单颜色不能重复", 400);
+    const poKeys = input.lines.map(line => digitalPoKey(digitalFormalPoNo(line))).filter(Boolean);
+    if (new Set(poKeys).size !== poKeys.length) fail("同一母单正式款号（PO）不能重复",400);
+    for (const line of input.lines) if (new Set([line.formalPoNo,line.formalStyleNo,line.poNumber].map(digitalPoKey).filter(Boolean)).size > 1)
+      fail("正式款号（PO）只能有一个有效值",400);
+    for (const line of input.lines) if (line.customerWarehouseArrivalDate!==undefined && line.deliveryDate!==null
+      && line.customerWarehouseArrivalDate!==line.deliveryDate) fail("客户仓到货日不能互相矛盾",400);
     return this.command(actor, sourceId ? `confirm-source:${sourceId}` : "direct-order", key, input, async client => {
       await this.customer(client, input.customerCode, input.productGroup);
       let createdBy = actor.actorId;
@@ -127,13 +137,16 @@ export class DigitalProductionIdentityService {
       const root = await new ProductionOrderRootRepository(client).create(createdBy);
       await client.query(`INSERT INTO digital_production_orders(production_order_id,source_id,customer_code,product_group,design_style_no,temporary_style_no,order_date,contract_delivery_date,created_by,creation_hash,primary_merchandiser_id)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [root.productionOrderId, sourceId, input.customerCode, input.productGroup, input.designStyleNo, input.temporaryStyleNo, input.orderDate, input.contractDeliveryDate, createdBy, digest(input), merchandiserId]);
+      const creationEventId = await this.audit(client, actor, "digital_order_created", root.productionOrderId, null, input);
       for (const [position, line] of input.lines.entries()) {
         const lineId = randomUUID();
         await client.query(`INSERT INTO digital_production_po_lines(line_id,production_order_id,position,po_number,formal_style_no,temporary_style_no,color,color_foreign,delivery_date)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [lineId, root.productionOrderId, position + 1, line.poNumber, line.formalStyleNo, line.temporaryStyleNo, line.color, line.colorForeign, line.deliveryDate]);
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [lineId, root.productionOrderId, position + 1, digitalFormalPoNo(line), digitalFormalPoNo(line), line.temporaryStyleNo, line.color, line.colorForeign, line.deliveryDate]);
+        const customerDate = line.customerWarehouseArrivalDate === undefined ? line.deliveryDate : line.customerWarehouseArrivalDate;
+        if (customerDate) await new DigitalPoDateRepository(client).applyWithClient(actor,root.productionOrderId,"initial_po",
+          [{lineId,date:customerDate,expectedVersion:0}],creationEventId);
         for (const size of line.sizes) await client.query("INSERT INTO digital_production_po_sizes(line_id,size,quantity) VALUES($1,$2,$3)", [lineId, size.size, size.quantity]);
       }
-      await this.audit(client, actor, "digital_order_created", root.productionOrderId, null, input);
       return this.readWith(client, actor, root.productionOrderId);
     });
   }
@@ -157,13 +170,21 @@ export class DigitalProductionIdentityService {
   private async readWith(client: Pick<Pool, "query"> | PoolClient, actor: TrustedActorContext, id: string): Promise<DigitalOrder> {
     const row = await this.visibleOrder(client, actor, id);
     const lines = await client.query(`SELECT l.line_id AS "lineId",l.po_number AS "poNumber",l.formal_style_no AS "formalStyleNo",l.temporary_style_no AS "temporaryStyleNo",
-      l.color,l.color_foreign AS "colorForeign",l.delivery_date::text AS "deliveryDate",
+      l.color,l.color_foreign AS "colorForeign",COALESCE(l.customer_warehouse_arrival_date,l.delivery_date)::text AS "deliveryDate",
+      l.customer_warehouse_arrival_date::text AS "customerWarehouseArrivalDate",l.factory_delivery_date::text AS "factoryDeliveryDate",
+      l.customer_date_version AS "customerDateVersion",l.factory_date_version AS "factoryDateVersion",
+      COALESCE(l.customer_date_source,'legacy_unregistered') AS "customerDateSource",
+      COALESCE(l.factory_date_source,'legacy_unregistered') AS "factoryDateSource",
       (SELECT jsonb_agg(jsonb_build_object('size',s.size,'quantity',s.quantity) ORDER BY s.size) FROM digital_production_po_sizes s WHERE s.line_id=l.line_id) AS sizes
       FROM digital_production_po_lines l WHERE production_order_id=$1 ORDER BY position`, [id]);
     return { productionOrderId: id, sourceId: row.source_id, customerCode: row.customer_code, productGroup: row.product_group,
       designStyleNo: row.design_style_no, temporaryStyleNo: row.temporary_style_no, orderDate: digitalDateText(row.order_date)!, contractDeliveryDate: digitalDateText(row.contract_delivery_date),
       createdBy: row.created_by, createdAt: new Date(row.created_at).toISOString(), status: row.source_id ? "development_linked" : "waiting_development",
-      version: row.version, primaryMerchandiserId: row.primary_merchandiser_id, workflowGeneration: "digital_production_v1", notificationPolicy: "IN_APP_ONLY", lines: lines.rows };
+      version: row.version, primaryMerchandiserId: row.primary_merchandiser_id, workflowGeneration: "digital_production_v1", notificationPolicy: "IN_APP_ONLY", lines: lines.rows.map(line => {
+        const values = [line.poNumber,line.formalStyleNo].map(digitalPoKey).filter(Boolean);
+        const poIdentityConflict = new Set(values).size > 1;
+        return {...line,formalPoNo:poIdentityConflict ? null : digitalFormalPoNo(line),poIdentityConflict};
+      }) };
   }
   async orders(actor: TrustedActorContext, page: number, search: string): Promise<{ items: DigitalOrder[]; page: number }> {
     assertIdentityActor(actor);
@@ -183,7 +204,14 @@ export class DigitalProductionIdentityService {
       if (!line.rows[0]) fail("款色明细不存在", 404);
       const links=await client.query("SELECT 1 FROM digital_production_child_links WHERE production_order_id=$1 LIMIT 1",[id]);
       if(links.rowCount&&!this.sourcing)fail('关联单据编号同步服务尚未就绪');
-      await client.query("UPDATE digital_production_po_lines SET po_number=$3,formal_style_no=$4 WHERE production_order_id=$1 AND line_id=$2", [id, lineId, input.poNumber, input.formalStyleNo]);
+      if (new Set([input.formalPoNo,input.poNumber,input.formalStyleNo].map(digitalPoKey).filter(Boolean)).size > 1)
+        fail("正式款号（PO）只能有一个有效值",400);
+      const duplicate = digitalFormalPoNo(input) ? await client.query(`SELECT 1 FROM digital_production_po_lines
+        WHERE production_order_id=$1 AND line_id<>$2 AND normalize_sourcing_style_key($3::text)
+          IN (normalize_sourcing_style_key(po_number),normalize_sourcing_style_key(formal_style_no)) LIMIT 1`,
+        [id,lineId,digitalFormalPoNo(input)]) : null;
+      if (duplicate?.rowCount) fail("同一母单正式款号（PO）不能重复",400);
+      await client.query("UPDATE digital_production_po_lines SET po_number=$3,formal_style_no=$4 WHERE production_order_id=$1 AND line_id=$2", [id, lineId, digitalFormalPoNo(input), digitalFormalPoNo(input)]);
       await client.query("UPDATE digital_production_orders SET version=version+1 WHERE production_order_id=$1", [id]);
       if(links.rowCount)await this.sourcing!.reviseDigitalNumbersWithClient(client,actor,id);
       await this.audit(client, actor, "digital_numbers_corrected", id, line.rows[0], { lineId, ...input });

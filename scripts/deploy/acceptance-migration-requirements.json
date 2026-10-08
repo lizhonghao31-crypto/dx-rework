@@ -223,6 +223,21 @@
       }
     ]
   },
+  "0221_sourcing_factory_change_crafts": {
+    "checksum": "0c4b9492ab5d6ac9ba813854dc048aadbfb71784ddd9a62b3a49346d7b2f9438",
+    "tables": [
+      "sourcing_factory_change_requests"
+    ],
+    "functions": [
+      "guard_sourcing_decision_crafts"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
+  },
   "0222_digital_development_documents": {
     "checksum": "d8f21da27b906eb9619ce651fb70cffd43dbc2be88c32bab4c5190855a248feb",
     "tables": [
@@ -260,6 +275,22 @@
       }
     ]
   },
+  "0222_sourcing_cutting_approved_line_identity": {
+    "checksum": "b0bc27988643de5583e8aeb0901bf3879bdd8babe46fca9c40b9368fc3c3555a",
+    "tables": [
+      "cutting_orders",
+      "sourcing_approval_snapshots"
+    ],
+    "functions": [],
+    "references": [
+      "sourcing_approval_snapshots"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
+  },
   "0223_digital_development_execution": {
     "checksum": "ee3427ba4cce450d3cffc464ddd5701fd651604a450a88e64087de5be54b14b7",
     "tables": [
@@ -292,6 +323,23 @@
         "column": "sequence"
       }
     ]
+  },
+  "0223_sourcing_factory_change_craft_names": {
+    "checksum": "a374629a47ed1c233816ad98083f6de924f0964eb7c3ef2dbca184dc1d8b44d0",
+    "tables": [
+      "craft_catalog_versions"
+    ],
+    "functions": [
+      "guard_craft_catalog_version_creation"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "guard_transfer_craft_creation_commit"
+    ],
+    "sequences": []
   },
   "0224_digital_development_route": {
     "checksum": "5f57dc1202b50b172f2db8347647dfcda4c8c76c9ed17b634cf11a2799871244",
@@ -554,37 +602,6 @@
     "execute": [],
     "sequences": []
   },
-  "0221_sourcing_factory_change_crafts": {
-    "checksum": "0c4b9492ab5d6ac9ba813854dc048aadbfb71784ddd9a62b3a49346d7b2f9438",
-    "tables": [
-      "sourcing_factory_change_requests"
-    ],
-    "functions": [
-      "guard_sourcing_decision_crafts"
-    ],
-    "references": [],
-    "insert": [],
-    "update": [],
-    "creates": [],
-    "execute": [],
-    "sequences": []
-  },
-  "0222_sourcing_cutting_approved_line_identity": {
-    "checksum": "b0bc27988643de5583e8aeb0901bf3879bdd8babe46fca9c40b9368fc3c3555a",
-    "tables": [
-      "cutting_orders",
-      "sourcing_approval_snapshots"
-    ],
-    "functions": [],
-    "references": [
-      "sourcing_approval_snapshots"
-    ],
-    "insert": [],
-    "update": [],
-    "creates": [],
-    "execute": [],
-    "sequences": []
-  },
   "0234_receiving_packing_cutting_group": {
     "checksum": "626a799a577829a078f9d1993c5141e1f988b936d7800e159d36da08516cd635",
     "tables": [],
@@ -654,6 +671,31 @@
     ],
     "execute": [
       "reject_operation_event_mutation"
+    ],
+    "sequences": []
+  },
+  "0237_digital_po_identity_dates": {
+    "checksum": "ec37ddecdd1d903f7fdd86f1c064d5186cfe15707462bcc7c2cca1099e2e43b2",
+    "tables": [
+      "digital_production_po_lines"
+    ],
+    "functions": [],
+    "references": [
+      "audit_events",
+      "app_users",
+      "digital_production_po_lines"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_po_date_changes"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable",
+      "guard_digital_po_number_identity",
+      "guard_digital_po_date_change",
+      "guard_digital_po_date_commit",
+      "guard_digital_po_date_effective"
     ],
     "sequences": []
   }

@@ -6,5 +6,9 @@
   {
     "version": "0222_sourcing_cutting_approved_line_identity",
     "checksum": "b0bc27988643de5583e8aeb0901bf3879bdd8babe46fca9c40b9368fc3c3555a"
+  },
+  {
+    "version": "0223_sourcing_factory_change_craft_names",
+    "checksum": "a374629a47ed1c233816ad98083f6de924f0964eb7c3ef2dbca184dc1d8b44d0"
   }
 ]
