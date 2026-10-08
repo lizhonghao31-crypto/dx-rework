@@ -3808,4 +3808,147 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     } finally { await app.close(); }
   });
 
+  const openNamedCraftTransfer = async () => {
+    const label=`NAME-${randomUUID()}`;
+    const id=(await service.createCase(merchandiserActor(),{gender:"男装",styleName:label,
+      estimatedCutPieceSendDate:"2026-10-01",deliveryDate:"2026-10-20",
+      lineItems:[{styleNo:label,color:"黑",quantity:100}],daxingUnitPrice:"8",attachmentIds:[]},randomUUID())).value.sourcingCaseId;
+    await service.quoteIePrice(ieActor(),id,{unitPrice:"10"},randomUUID());
+    await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],unitPrice:"10"},randomUUID());
+    return id;
+  };
+
+  it("remembers named transfer crafts in the successful order transaction for each original initiator", async () => {
+    const actors=[factoryChangeActor(),managerActor(),ownerActor(),{...rootActor(),authorizationCapability:"sourcing:decision:record"}];
+    for(const actor of actors) {
+      const id=await openNamedCraftTransfer();
+      await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+      const oldDecision=(await database.query("SELECT * FROM sourcing_decisions WHERE sourcing_case_id=$1 ORDER BY decision_version",[id])).rows;
+      const oldContracts=(await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_case_id=$1 ORDER BY contract_version",[id])).rows;
+      const term=`Remember-${randomUUID()}+线，包装/装箱`;
+      const input={supplierId:replacementFactoryId,unitPrice:"9",craftNames:[`  ${term}  `,"净色车缝"],changeReason:"新厂实际承包工艺"};
+      const key=randomUUID();
+      const first=await service.requestFactoryChange(actor,id,input,key);
+      const repeated=await service.requestFactoryChange({...actor,requestId:randomUUID()},id,input,key);
+      expect(first.reused).toBe(false);expect(repeated.reused).toBe(true);
+      const pending=(await service.getCurrentFactoryChange(readerActor(),id)).item!;
+      expect(pending.proposedProcesses).toEqual([term,"净色车缝"]);
+      const catalog=(await database.query("SELECT * FROM current_craft_catalog WHERE normalized_name=lower(btrim($1))",[term])).rows;
+      expect(catalog).toHaveLength(1);expect(catalog[0]).toMatchObject({version:1,craft_name:term,active:true});
+      expect((await database.query("SELECT * FROM sourcing_factory_change_requests WHERE sourcing_case_id=$1",[id])).rows).toHaveLength(1);
+      if(actor.authorizationCapability==="sourcing:factory_change:request") {
+        expect((await service.getCase(readerActor(),id)).processes).toEqual(["净色车缝"]);
+        await service.decideFactoryChange(factoryChangeVerifier(),id,pending.factoryChangeRequestId,{decision:"approved",verificationReason:"确认"},randomUUID());
+      }
+      expect((await service.getCase(readerActor(),id)).processes).toEqual([term,"净色车缝"]);
+      expect((await contractService.content.get(rootActor(),id)).content.processes).toEqual([term,"净色车缝"]);
+      for(const row of oldDecision) expect((await database.query("SELECT * FROM sourcing_decisions WHERE sourcing_decision_id=$1",[row.sourcing_decision_id])).rows[0]).toEqual(row);
+      for(const row of oldContracts) expect((await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[row.sourcing_contract_document_id])).rows[0]).toEqual(row);
+      const another=await openNamedCraftTransfer();
+      await service.requestFactoryChange(managerActor(),another,{...input,craftNames:[term.toUpperCase()]},randomUUID());
+      expect((await database.query("SELECT craft_id FROM current_craft_catalog WHERE normalized_name=lower($1)",[term])).rows).toEqual([{craft_id:catalog[0].craft_id}]);
+      expect((await service.getCase(readerActor(),another)).processes).toEqual([term]);
+    }
+  });
+
+  it("rolls back named transfer crafts on invalid orders, duplicates, inactive terms and failed commit", async () => {
+    const id=await openNamedCraftTransfer();
+    const term=`Rollback-${randomUUID()}`;
+    const input={supplierId:replacementFactoryId,unitPrice:"9",craftNames:[term],changeReason:"检查原事务"};
+    for (const actor of [financeActor(), {...factoryChangeActor(),actorRoles:[]},
+      {...managerActor(),actorRoles:["warehouse_keeper"]}, {...ownerActor(),actorRoles:["order_merchandiser"]}])
+      await expect(service.requestFactoryChange(actor,id,input,randomUUID())).rejects.toMatchObject({code:"FORBIDDEN"});
+    await expect(service.requestFactoryChange(factoryChangeActor(),randomUUID(),input,randomUUID())).rejects.toMatchObject({code:"NOT_FOUND"});
+    await expect(service.requestFactoryChange(factoryChangeActor(),id,{...input,supplierId:factoryId},randomUUID())).rejects.toMatchObject({code:"VALIDATION_ERROR"});
+    await expect(service.requestFactoryChange(factoryChangeActor(),id,{...input,craftNames:[term,term.toUpperCase()]},randomUUID())).rejects.toMatchObject({code:"VALIDATION_ERROR"});
+    await expect(service.requestFactoryChange(factoryChangeActor(),id,{...input,craftNames:[term,"整烫"],craftIds:[craftId("净色车缝")]},randomUUID())).rejects.toMatchObject({code:"VALIDATION_ERROR"});
+    const catalogActor={...rootActor(),authorizationCapability:"master_data:manage"};
+    const [inactive]=await craftService.ensureCrafts(catalogActor,{craftNames:[`Inactive-${randomUUID()}`]});
+    await craftService.reviseCraft(catalogActor,inactive!.craftId,{craftName:inactive!.craftName,active:false,changeReason:"停用"});
+    await expect(service.requestFactoryChange(factoryChangeActor(),id,{...input,craftNames:[term,inactive!.craftName]},randomUUID())).rejects.toMatchObject({code:"CONFLICT"});
+    expect((await database.query("SELECT * FROM craft_catalog_items WHERE normalized_name=lower($1)",[term])).rowCount).toBe(0);
+    expect((await database.query("SELECT active FROM current_craft_catalog WHERE craft_id=$1",[inactive!.craftId])).rows[0].active).toBe(false);
+    for(const actor of [factoryChangeActor(),ownerActor()])
+      await expect(craftService.ensureCrafts(actor,{craftNames:[term]})).rejects.toMatchObject({code:"CONFLICT"});
+    // Force a late failure after name resolution without weakening any business guard.
+    await database.query(`CREATE FUNCTION test_named_transfer_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture late transfer failure'; END $$;
+      CREATE TRIGGER test_named_transfer_failure BEFORE INSERT ON sourcing_factory_change_requests FOR EACH ROW EXECUTE FUNCTION test_named_transfer_failure()`);
+    try {await expect(service.requestFactoryChange(factoryChangeActor(),id,input,randomUUID())).rejects.toThrow("fixture late transfer failure");}
+    finally {await database.query("DROP TRIGGER test_named_transfer_failure ON sourcing_factory_change_requests; DROP FUNCTION test_named_transfer_failure()");}
+    expect((await database.query("SELECT * FROM craft_catalog_items WHERE normalized_name=lower($1)",[term])).rowCount).toBe(0);
+    expect((await database.query("SELECT * FROM sourcing_factory_change_requests WHERE sourcing_case_id=$1",[id])).rowCount).toBe(0);
+    const client=await database.connect();
+    try {
+      await client.query("BEGIN");
+      const fakeCraftId=randomUUID(),fakeRequestId=randomUUID();
+      const fakeCraftCode=`CRAFT_${randomUUID().replaceAll("-", "").slice(0,24).toUpperCase()}`;
+      const actor=factoryChangeActor();
+      const eventId=await new OperationEventRepository().append(client,actor,{action:"master_data.craft.create",entityType:"craft_catalog",entityId:fakeCraftId,
+        after:{craftId:fakeCraftId,craftCode:fakeCraftCode,version:1,craftName:term,active:true,sourcingCaseId:id,factoryChangeRequestId:fakeRequestId},reason:"伪造转厂"});
+      await client.query("INSERT INTO craft_catalog_items(craft_id,craft_code,craft_name,created_by,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6)",[fakeCraftId,fakeCraftCode,term,actor.actorId,eventId,actor.requestId]);
+      await client.query("INSERT INTO craft_catalog_versions(craft_id,version,craft_name,active,change_reason,changed_by,operation_event_id,request_id) VALUES($1,1,$2,true,'伪造转厂',$3,$4,$5)",[fakeCraftId,term,actor.actorId,eventId,actor.requestId]);
+      await expect(client.query("COMMIT")).rejects.toMatchObject({code:"55000"});
+    } finally {await client.query("ROLLBACK");client.release();}
+    expect((await database.query("SELECT * FROM craft_catalog_items WHERE normalized_name=lower($1)",[term])).rowCount).toBe(0);
+  });
+
+  it("serializes concurrent orders remembering the same term into one catalog identity", async () => {
+    const ids=await Promise.all([openNamedCraftTransfer(),openNamedCraftTransfer()]);
+    const term=`Concurrent-${randomUUID()}`;
+    await Promise.all(ids.map((id,i)=>service.requestFactoryChange(i?ownerActor():managerActor(),id,
+      {supplierId:replacementFactoryId,unitPrice:"9",craftNames:[i?term.toUpperCase():term],changeReason:"共享新词"},randomUUID())));
+    const catalog=(await database.query("SELECT craft_id,craft_name FROM current_craft_catalog WHERE normalized_name=lower($1)",[term])).rows;
+    expect(catalog).toHaveLength(1);
+    const snapshots=(await database.query("SELECT crafts FROM sourcing_decisions WHERE sourcing_case_id=ANY($1::uuid[]) AND decision_version=2",[ids])).rows;
+    expect(snapshots).toHaveLength(2);
+    for(const row of snapshots)expect(row.crafts[0]).toMatchObject({craftId:catalog[0].craft_id,craftName:catalog[0].craft_name,craftVersion:1});
+  });
+
+  it("reports renamed stable names explicitly and preserves their current versions and inactive state", async () => {
+    const catalogActor={...rootActor(),authorizationCapability:"master_data:manage"};
+    const original=`Previous-${randomUUID()}`, renamed=`Current-${randomUUID()}`, fresh=`NotSaved-${randomUUID()}`;
+    const [craft]=await craftService.ensureCrafts(catalogActor,{craftNames:[original]});
+    await craftService.reviseCraft(catalogActor,craft!.craftId,{craftName:renamed,active:true,changeReason:"目录更名"});
+    const id=await openNamedCraftTransfer();
+    const input={supplierId:replacementFactoryId,unitPrice:"9",craftNames:[fresh,`  ${original.toUpperCase()}  `],changeReason:"曾用名转厂"};
+    await expect(service.requestFactoryChange(managerActor(),id,input,randomUUID()))
+      .rejects.toMatchObject({code:"CONFLICT",message:expect.stringContaining(`请使用当前名称`)});
+    expect((await database.query("SELECT * FROM craft_catalog_items WHERE normalized_name=lower($1)",[fresh])).rowCount).toBe(0);
+    expect((await database.query("SELECT * FROM operation_events WHERE action='master_data.craft.create' AND after_state->>'craftName'=$1",[fresh])).rowCount).toBe(0);
+    expect((await database.query("SELECT * FROM sourcing_factory_change_requests WHERE sourcing_case_id=$1",[id])).rowCount).toBe(0);
+    expect((await database.query("SELECT version,craft_name,active FROM current_craft_catalog WHERE craft_id=$1",[craft!.craftId])).rows)
+      .toEqual([{version:2,craft_name:renamed,active:true}]);
+    await service.requestFactoryChange(managerActor(),id,{...input,craftNames:[renamed.toUpperCase()]},randomUUID());
+    expect((await database.query("SELECT crafts FROM sourcing_decisions WHERE sourcing_case_id=$1 AND decision_version=2",[id])).rows[0].crafts[0])
+      .toMatchObject({craftId:craft!.craftId,craftVersion:2,craftName:renamed});
+    await craftService.reviseCraft(catalogActor,craft!.craftId,{craftName:renamed,active:false,changeReason:"更名后停用"});
+    const inactiveId=await openNamedCraftTransfer();
+    await expect(service.requestFactoryChange(ownerActor(),inactiveId,input,randomUUID()))
+      .rejects.toMatchObject({code:"CONFLICT",message:expect.stringContaining("已停用")});
+    expect((await database.query("SELECT * FROM craft_catalog_items WHERE normalized_name=lower($1)",[fresh])).rowCount).toBe(0);
+    expect((await database.query("SELECT version,active FROM current_craft_catalog WHERE craft_id=$1",[craft!.craftId])).rows)
+      .toEqual([{version:3,active:false}]);
+  });
+
+  it("adds version one to a genuinely unversioned historical identity in the successful transfer", async () => {
+    const actor={...rootActor(),authorizationCapability:"master_data:manage"};
+    const term=`Legacy-${randomUUID()}`, legacyId=randomUUID(), legacyCode=`CRAFT_${randomUUID().replaceAll("-", "").slice(0,24).toUpperCase()}`;
+    const client=await database.connect();
+    try {
+      await client.query("BEGIN");
+      const event=await new OperationEventRepository().append(client,actor,{action:"master_data.craft.create",entityType:"craft_catalog",entityId:legacyId,
+        after:{craftId:legacyId,craftCode:legacyCode,craftName:term},reason:"旧迁移稳定身份夹具"});
+      await client.query("INSERT INTO craft_catalog_items(craft_id,craft_code,craft_name,created_by,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6)",
+        [legacyId,legacyCode,term,actor.actorId,event,actor.requestId]);
+      await client.query("COMMIT");
+    } catch(error) {await client.query("ROLLBACK");throw error;} finally {client.release();}
+    expect((await database.query("SELECT * FROM current_craft_catalog WHERE craft_id=$1",[legacyId])).rowCount).toBe(0);
+    const id=await openNamedCraftTransfer();
+    await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"9",craftNames:[term],changeReason:"历史身份记忆"},randomUUID());
+    expect((await database.query("SELECT craft_id,version,active FROM current_craft_catalog WHERE craft_id=$1",[legacyId])).rows)
+      .toEqual([{craft_id:legacyId,version:1,active:true}]);
+    expect((await database.query("SELECT crafts FROM sourcing_decisions WHERE sourcing_case_id=$1 AND decision_version=2",[id])).rows[0].crafts[0])
+      .toMatchObject({craftId:legacyId,craftCode:legacyCode,craftVersion:1,craftName:term});
+  });
+
 });
