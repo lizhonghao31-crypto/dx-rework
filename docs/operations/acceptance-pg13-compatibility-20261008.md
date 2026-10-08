@@ -14,7 +14,7 @@ PG15/16继续执行原SQL。已应用0236在相同checksum验证后跳过，不�
 
 ## 旧psql失败关闭
 
-旧psql没有:SHELL_ERROR。两次历史校验改为psql13支持的受控命令输出：先清空变量，只有校验器完成prefix/current检查后输出完整固定成功信号；SQL明确检查整个输出，失败、空值、缺失、其它输出均使ON_ERROR_STOP终止。前后校验仍在原psql连接和session advisory lock内；单项迁移事务、权限预检、备份与失败恢复条件不变。
+旧psql没有:SHELL_ERROR。两次历史校验改为psql13支持的受控命令输出：先清空变量，只有校验器完成prefix/current检查后输出完整固定成功信号；SQL明确检查整个输出，失败、空值、缺失、其它输出均使ON_ERROR_STOP终止。同时对命令非零退出进行受控失败标记，不能以成功输出掩盖失败退出码。生产及Acceptance历史导出使用同连接三个-c参数（BEGIN READ ONLY、SELECT、COMMIT），避免psql13仅返回多语句-c的最后结果而导出空文件。前后校验仍在原psql连接和session advisory lock内；单项迁移事务、权限预检、备份与失败恢复条件不变。
 
 ## 验证与现场边界
 

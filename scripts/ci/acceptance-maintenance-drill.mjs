@@ -79,6 +79,21 @@ try {
  const before=(await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows;
  assert.equal((await db.query('SELECT count(*)::int n FROM pg_default_acl')).rows[0].n,0);
  assert.equal((await db.query(`SELECT pg_has_role('${app}','${owner}','USAGE') allowed`)).rows[0].allowed,false);
+ // Execute the actual shell export fragments with the image's native psql.
+ // PG13 returns only COMMIT for a multi-statement -c, so exports must use
+ // separate -c arguments on the same read-only transaction/connection.
+ const productionExport=readFileSync(join(repo,'scripts/deploy/export-production-history.sh'),'utf8');
+ const readFragment=productionExport.slice(productionExport.indexOf('pg_exec psql'));
+ const acceptanceExport=readFileSync(join(repo,'scripts/deploy/update-acceptance-local.sh'),'utf8');
+ const fragmentStart=acceptanceExport.indexOf('  (umask 077; PGOPTIONS=');
+ const workerFragment=acceptanceExport.slice(fragmentStart,acceptanceExport.indexOf('  node_exec "$policy"',fragmentStart));
+ const exportEnv=`export DATABASE_URL=\"postgresql://${app}:${password}@127.0.0.1:5432/${database}\" PGOPTIONS='-c default_transaction_read_only=on'\nevidence=${scratch}\npg_exec(){ local tool=\"$1\"; shift; \"$tool\" \"$@\"; }\n`;
+ const exported=JSON.parse(docker(['exec','-i',container,'bash','-se'],{input:exportEnv+readFragment}));
+ assert.equal(exported.database,database);assert.equal(exported.migrations.length,historical.length);
+ docker(['exec','-i',container,'bash','-se'],{input:exportEnv+workerFragment});
+ const workerExported=JSON.parse(docker(['exec',container,'cat',join(scratch,'acceptance-history.json')]));
+ assert.deepEqual(workerExported,exported);
+ report('actual production/Acceptance read-only export fragments return complete JSON on native psql');
  const preflight=await generate('preflight');
  const rejected=execute(preflight,'mixed-owners',false);
  const roles=rejected.stdout.split('\n').filter(x=>x.startsWith('{')).map(x=>JSON.parse(x)).find(x=>x.maintenance_role);
