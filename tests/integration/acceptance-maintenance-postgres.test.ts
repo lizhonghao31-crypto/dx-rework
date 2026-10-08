@@ -67,7 +67,7 @@ print(json.dumps(m.permission_query(json.loads(sys.argv[1]),r)))
    await expect(preflight()).rejects.toThrow('guard_cutting_record_creation');
    await admin.query(`ALTER FUNCTION ${schema}.guard_cutting_record_creation() OWNER TO dx_rework_acceptance`);
    const upgraded=await applyMigrations(target.toString());
-   expect(upgraded.currentVersion).toBe('0233_manual_contract_template_provenance');
+   expect(upgraded.currentVersion).toBe(catalog.at(-1)!.version);
    expect((await applyMigrations(target.toString())).applied).toEqual([]);
    const after=(await client.query('SELECT * FROM schema_migrations ORDER BY version')).rows;
    expect(after).toHaveLength(catalog.length);
