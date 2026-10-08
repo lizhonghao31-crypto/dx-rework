@@ -9,7 +9,7 @@ import { registerInternalNavigationGuard } from "./internal-navigation.js";
 import { confirmInApp } from "./system-dialog.js";
 
 export type DevelopmentCreateIntent = "development" | "certain_order" | "confirm_order";
-const newLine = (): DigitalOrderInput["lines"][number] => ({poNumber: null, formalStyleNo: null, temporaryStyleNo: null, color: "", colorForeign: null, deliveryDate: null, sizes: [{size: "", quantity: 1}]});
+const newLine = (): DigitalOrderInput["lines"][number] => ({formalPoNo:null, customerWarehouseArrivalDate:null, poNumber: null, formalStyleNo: null, temporaryStyleNo: null, color: "", colorForeign: null, deliveryDate: null, sizes: [{size: "", quantity: 1}]});
 export function initialDevelopmentOrder(customers: DigitalCustomer[], source?: OrderJourney): DigitalOrderInput {
   return {customerCode: source?.customer ?? "", designStyleNo: source?.designStyleNo ?? "", temporaryStyleNo: source?.temporaryStyleNo ?? null,
     productGroup: initialDigitalProductGroup(customers, source?.customer ?? undefined),
@@ -83,14 +83,13 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     {withOrder && <><h3>订购信息</h3><p>默认主跟单：{customers.find(customer => customer.code === form.customerCode)?.defaultMerchandiserName ?? "未配置，待主管指派"}</p>
       <div className="development-create-grid"><label>产品分组<select aria-label="产品分组" value={form.productGroup} onChange={event => setForm({...form, productGroup: event.target.value as DigitalOrderInput["productGroup"]})}>{(customers.find(customer => customer.code === form.customerCode)?.productGroups ?? [form.productGroup]).map(group => <option key={group}>{group}</option>)}</select></label>
         <label>客户下单日期<input required type="date" value={form.orderDate} onChange={event => setForm({...form, orderDate: event.target.value})}/></label>
-        <label>客户合同交付日期<input type="date" value={form.contractDeliveryDate ?? ""} onChange={event => setForm({...form, contractDeliveryDate: event.target.value || null})}/></label></div>
+</div>
       {form.lines.map((value, index) => <fieldset key={index}><legend>款色 / PO {index + 1}</legend><div className="development-create-grid">
-        <label>PO 号<input maxLength={100} value={value.poNumber ?? ""} onChange={event => line(index, {poNumber: event.target.value || null})}/></label>
-        <label>正式款号<input maxLength={100} value={value.formalStyleNo ?? ""} onChange={event => line(index, {formalStyleNo: event.target.value || null})}/></label>
+        <label>正式款号 / PO<input maxLength={100} value={value.formalPoNo ?? ""} onChange={event => line(index, {formalPoNo: event.target.value || null})}/></label>
         <label>代用款号<input maxLength={100} value={value.temporaryStyleNo ?? ""} onChange={event => line(index, {temporaryStyleNo: event.target.value || null})}/></label>
         <label>颜色外文<input maxLength={100} value={value.colorForeign ?? ""} onChange={event => line(index, {colorForeign: event.target.value || null})}/></label>
         <label>颜色<input required maxLength={100} value={value.color} onChange={event => line(index, {color: event.target.value})}/></label>
-        <label>明细约定交期<input type="date" value={value.deliveryDate ?? ""} onChange={event => line(index, {deliveryDate: event.target.value || null})}/></label></div>
+        <label>客户仓到货日<input type="date" value={value.customerWarehouseArrivalDate ?? ""} onChange={event => line(index, {customerWarehouseArrivalDate: event.target.value || null})}/></label></div>
         {value.sizes.map((size, sizeIndex) => <div className="pattern-actions" key={sizeIndex}><label>尺码<input required maxLength={100} value={size.size} onChange={event => line(index, {sizes: value.sizes.map((item, i) => i === sizeIndex ? {...item, size: event.target.value} : item)})}/></label><label>数量<input required type="number" min={1} max={10000000} step={1} value={size.quantity} onChange={event => line(index, {sizes: value.sizes.map((item, i) => i === sizeIndex ? {...item, quantity: Number(event.target.value)} : item)})}/></label>{value.sizes.length > 1 && <Button type="button" onClick={() => line(index, {sizes: value.sizes.filter((_, i) => i !== sizeIndex)})}>删除尺码</Button>}</div>)}
         <div className="pattern-actions"><Button type="button" disabled={value.sizes.length >= 50} onClick={() => line(index, {sizes: [...value.sizes, {size: "", quantity: 1}]})}>添加尺码</Button>{form.lines.length > 1 && <Button type="button" onClick={() => setForm({...form, lines: form.lines.filter((_, i) => i !== index)})}>删除款色</Button>}</div>
       </fieldset>)}<Button type="button" disabled={form.lines.length >= 50} onClick={() => setForm({...form, lines: [...form.lines, newLine()]})}>添加款色 / PO</Button>

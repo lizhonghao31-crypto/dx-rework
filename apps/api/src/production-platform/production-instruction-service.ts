@@ -1,3 +1,6 @@
+import { instructionNotice } from "./instruction-notice.js";
+import { PoCustomerDateService } from "./po-customer-date-service.js";
+import type { InstructionDateRequest } from "@dx-rework/contracts/production-instruction";
 import { BulkPreparationService } from "./bulk-preparation-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -50,17 +53,12 @@ export class ProductionInstructionService {
     if (version && !row) digitalNotFound();
     const seeded = row ? { document: row.document, sourceRound: row.source_round } : draftAccess?await this.seed(db, order):{document:initialInstruction(),sourceRound:null};
     const name = order.primaryMerchandiserId ? (await db.query("SELECT display_name FROM app_users WHERE id=$1", [order.primaryMerchandiserId])).rows[0]?.display_name ?? null : null;
-    const dateRequests = (await db.query(`SELECT r.request_id AS "requestId",r.old_date::text AS "oldDate",r.new_date::text AS date,r.reason,
-      CASE WHEN d.request_id IS NULL THEN '待批准' WHEN d.approved THEN '已批准' ELSE '已驳回' END AS status
-      FROM digital_instruction_date_requests r LEFT JOIN digital_instruction_date_decisions d USING(request_id) WHERE r.production_order_id=$1 ORDER BY r.requested_at DESC`, [id])).rows;
-    dateRequests.push(...(await db.query(`SELECT r.request_id AS "requestId",true AS legacy,r.previous_date::text AS "oldDate",r.requested_date::text AS date,r.reason,
-      CASE WHEN d.request_id IS NULL THEN '待批准' WHEN d.decision='approved' THEN '已批准' ELSE '已驳回' END AS status
-      FROM digital_production_delivery_requests r LEFT JOIN digital_production_delivery_decisions d USING(request_id) WHERE r.production_order_id=$1 ORDER BY r.created_at DESC`,[id])).rows);
+    const dates = await new PoCustomerDateService(this.database).read(actor, id, db);
     return { order: selectedVersion ? {...row.order_snapshot,lines:(row.order_snapshot as DigitalOrder).lines.map(line=>{const current=order.lines.find(l=>l.lineId===line.lineId);return current?{...line,poNumber:current.poNumber,formalStyleNo:current.formalStyleNo,temporaryStyleNo:current.temporaryStyleNo}:line;})} : order, currentOrderVersion:order.version,currentDeliveryDate:order.contractDeliveryDate, document: seeded.document, version: row?.version ?? 0,
       publishedVersion: selectedVersion ?? published, isPublishedSnapshot:Boolean(selectedVersion), sourceRound: seeded.sourceRound, latestSourceRound: order.sourceId?(await developmentDocumentRow(db,order.sourceId))?.round_number??null:null,
       versions: (await db.query("SELECT version FROM digital_instruction_versions WHERE production_order_id=$1 ORDER BY version DESC", [id])).rows.map(r => r.version),
       canEdit: draftAccess && !version && (Boolean(row) || this.creationEnabled), cutStarted, merchandiserName: name,
-      canApproveDate: isRootActor(actor) || actor.actorRoles.includes("production_management"), printedBy: (await db.query("SELECT display_name FROM app_users WHERE id=$1",[actor.actorId])).rows[0]?.display_name ?? "", dateRequests };
+      ...dates, printedBy: (await db.query("SELECT display_name FROM app_users WHERE id=$1",[actor.actorId])).rows[0]?.display_name ?? "" };
   }
   private async command<T>(actor: TrustedActorContext, id: string, action: string, key: string, input: unknown, work: (db: PoolClient, order: DigitalOrder) => Promise<T>, leader = false, rejectingDate = false): Promise<T> {
     if (!/^[A-Za-z0-9._:-]{1,128}$/.test(key)) fail("缺少有效操作标识");
@@ -107,15 +105,6 @@ export class ProductionInstructionService {
       return this.read(actor,id,db);
     });
   }
-  private async notice(db: PoolClient, order: DigitalOrder, version: number | null, title: string, key: string, directorsOnly = false) {
-    const eventId = randomUUID();
-    await db.query("INSERT INTO digital_production_notification_events(event_id,source_key,instruction_order_id,event_kind) VALUES($1,$2,$3,'instruction_information')", [eventId,key,order.productionOrderId]);
-    await db.query("INSERT INTO digital_instruction_notices(event_id,version,title) VALUES($1,$2,$3)",[eventId,version,`${order.designStyleNo} · ${title}`]);
-    const people = (await db.query(`SELECT DISTINCT u.id FROM app_users u JOIN user_role_assignments a ON a.user_id=u.id AND a.revoked_at IS NULL JOIN business_roles r ON r.role_code=a.role_code AND r.enabled
-      WHERE u.enabled AND coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)=false AND EXISTS(SELECT 1 FROM identity_mappings i WHERE i.user_id=u.id AND i.active AND i.employed)
-      AND (a.role_code='production_management' OR ($2::boolean=false AND (a.role_code='owner_group' OR (a.role_code='sample_designer' AND u.id=$1))))`,[order.createdBy,directorsOnly])).rows;
-    for (const p of people) await db.query("INSERT INTO digital_production_notification_receipts(event_id,source_event_id,recipient_id) VALUES($1,$1,$2)",[eventId,p.id]);
-  }
   async publish(actor: TrustedActorContext,id:string,input:{expectedVersion:number;orderVersion:number},key:string) {
     return this.command(actor,id,"publish",key,input,async(db,order) => {
       const current=await this.read(actor,id,db);
@@ -126,29 +115,18 @@ export class ProductionInstructionService {
       await this.bindImages(db,actor,order,current.document);
       await db.query("INSERT INTO digital_instruction_versions(production_order_id,version,order_version,document,order_snapshot,source_round,published_by) VALUES($1,$2,$3,$4,$5,$6,$7)",[id,current.version,order.version,JSON.stringify(current.document),JSON.stringify(order),current.sourceRound,actor.actorId]);
       await db.query("UPDATE digital_instruction_documents SET published_version=version WHERE production_order_id=$1",[id]);
-      await this.notice(db,order,current.version,"大货制单已发布",`instruction:${id}:${current.version}`);
+      await instructionNotice(db,order,current.version,"大货制单已发布",`instruction:${id}:${current.version}`);
       await new BulkPreparationService(this.database).sync(db,actor,id);
       return this.read(actor,id,db);
     });
   }
-  async requestDate(actor:TrustedActorContext,id:string,input:{orderVersion:number;date:string;reason:string},key:string){
-    return this.command(actor,id,"date-request",key,input,async(db,order)=>{
-      if(order.version!==input.orderVersion)fail("母单已更新，请重新打开");
-      if(input.date<order.orderDate || input.date===order.contractDeliveryDate)fail("请填写晚于下单日期且不同于当前值的新客户交付期");
-      const requestId=randomUUID();await db.query("INSERT INTO digital_instruction_date_requests(request_id,production_order_id,order_version,old_date,new_date,reason,requested_by) VALUES($1,$2,$3,$4,$5,$6,$7)",[requestId,id,order.version,order.contractDeliveryDate,input.date,input.reason,actor.actorId]);
-      await this.notice(db,order,null,"客户交付期变更待批准",`instruction-date:${requestId}`,true);return this.read(actor,id,db);
-    });
+  async requestDate(actor:TrustedActorContext,id:string,input:InstructionDateRequest,key:string){
+    await new PoCustomerDateService(this.database).request(actor,id,input,key);
+    return this.read(actor,id);
   }
   async decideDate(actor:TrustedActorContext,id:string,requestId:string,approved:boolean,key:string){
-    return this.command(actor,id,"date-decision",key,{requestId,approved},async(db,order)=>{
-      const row=(await db.query("SELECT *,new_date::text AS date FROM digital_instruction_date_requests WHERE request_id=$1 AND production_order_id=$2",[requestId,id])).rows[0]??digitalNotFound();
-      if(!isRootActor(actor) && row.requested_by===actor.actorId)digitalForbidden();
-      if((await db.query("SELECT 1 FROM digital_instruction_date_decisions WHERE request_id=$1",[requestId])).rowCount)fail("申请已处理");
-      if(approved && order.version!==row.order_version)fail("母单已更新，请重新申请");
-      await db.query("INSERT INTO digital_instruction_date_decisions(request_id,approved,decided_by) VALUES($1,$2,$3)",[requestId,approved,actor.actorId]);
-      if(approved)await db.query("UPDATE digital_production_orders SET contract_delivery_date=$2,version=version+1 WHERE production_order_id=$1",[id,row.date]);
-      await this.notice(db,order,null,approved?"客户交付期变更已批准":"客户交付期变更已驳回",`instruction-date-decision:${requestId}`);return this.read(actor,id,db);
-    },true,!approved);
+    await new PoCustomerDateService(this.database).decide(actor,id,requestId,approved,key);
+    return this.read(actor,id);
   }
   async legacyDateGuard(db: PoolClient, id: string) {
     if (!(await db.query("SELECT to_regclass('digital_instruction_documents') AS relation")).rows[0]?.relation) return false;
@@ -159,7 +137,7 @@ export class ProductionInstructionService {
   }
   async legacyDateNotice(db: PoolClient, actor: TrustedActorContext, id: string, title: string, key: string, directorsOnly=false) {
     if (!(await db.query("SELECT to_regclass('digital_instruction_notices') AS relation")).rows[0]?.relation) return;
-    await this.notice(db,await this.identity().readWithClient(actor,id,db),null,title,key,directorsOnly);
+    await instructionNotice(db,await this.identity().readWithClient(actor,id,db),null,title,key,directorsOnly);
   }
   async authorizeUpload(actor:TrustedActorContext,id:string){const current=await this.read(actor,id);if(!current.canEdit)digitalForbidden();}
   async canDownload(actor:TrustedActorContext,id:string,attachmentId:string){

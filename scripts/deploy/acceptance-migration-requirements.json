@@ -698,5 +698,30 @@
       "guard_digital_po_date_effective"
     ],
     "sequences": []
+  },
+  "0238_digital_po_customer_requests": {
+    "checksum": "536b93f7228d41103d39aa612aa9171a8387633dc4acbc46c3382a7aa1ae7b7f",
+    "tables": [],
+    "functions": [],
+    "references": [
+      "digital_production_orders",
+      "app_users",
+      "audit_events",
+      "digital_production_po_lines"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_po_customer_requests",
+      "digital_po_customer_request_lines",
+      "digital_po_customer_decisions"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable",
+      "guard_digital_po_customer_request_commit",
+      "guard_digital_po_customer_line_insert",
+      "guard_digital_po_customer_decision_commit"
+    ],
+    "sequences": []
   }
 }

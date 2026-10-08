@@ -1,3 +1,4 @@
+import { PoCustomerDateService } from "../../apps/api/src/production-platform/po-customer-date-service.js";
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {randomUUID} from 'node:crypto';
 import {expect,vi} from 'vitest';
@@ -79,6 +80,10 @@ export async function exerciseOrderClosure(db:Pool,sourcing:SourcingService,id:s
   }finally{resume();readSpy.mockRestore();await Promise.allSettled([closing,repeated,...(correction?[correction]:[]),...(newRework?[newRework]:[])]);}
  }
  sheet=concurrent[0]!;expect(concurrent[1]!.closed).toEqual(sheet.closed);expect(sheet.stage).toBe('特殊结案');expect(sheet.lines).toEqual(JSON.parse(before));expect(sheet.closed!.outstanding.some(x=>x.includes('未完成'))).toBe(true);expect(sheet.shipmentStatus).toBe('未知');expect(sheet.customerReceiptStatus).toBe('未知');expect((await closure.close(manager,id,input,key)).closed).toEqual(sheet.closed);
+ const dates=new PoCustomerDateService(db),closedDates=await dates.read(primary,id);
+ expect(closedDates.canRequestDate).toBe(false);
+ const liveVersion=(await db.query("SELECT version FROM digital_production_orders WHERE production_order_id=$1",[id])).rows[0].version;
+ await expect(dates.request(primary,id,{orderVersion:liveVersion,reason:"TEST结案不可新增交期申请",changes:[{lineId:closedDates.customerPoDates[0]!.lineId,expectedVersion:closedDates.customerPoDates[0]!.version,date:"2026-12-30"}]},randomUUID())).rejects.toMatchObject({statusCode:409});
  const journey=await new DigitalJourneyQuery(db).read(primary,id);
  const nodes=journey.stages.flatMap(stage=>stage.nodes);
  expect(nodes.find(node=>node.key==='special_closure')).toMatchObject({state:'completed',operator:{id:manager.actorId,name:sheet.closed!.closedBy},actualAt:sheet.closed!.closedAt});

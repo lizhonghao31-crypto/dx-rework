@@ -129,3 +129,10 @@
  .dx-doc-instruction .instruction-paper{display:block}
  .dx-doc-instruction .instruction-print-warning{display:block;visibility:visible;color:black;background:white;font-size:14pt}
 }
+
+/* PO date approval list only: keep the selected PO visible while dates scroll. */
+.dx-doc-instruction .instruction-po-dates-scroll{overflow-x:auto;max-width:100%}
+.dx-doc-instruction .instruction-po-dates-table th{position:static;transform:none;min-width:105px}
+.dx-doc-instruction .instruction-po-dates-table tr>:first-child{position:sticky;left:0;min-width:145px;max-width:190px;overflow-wrap:anywhere}
+.dx-doc-instruction .instruction-po-dates-table input[type=checkbox]{width:16px;min-height:16px;vertical-align:middle;margin-right:4px}
+.dx-doc-instruction .instruction-date-history small{display:block;overflow-wrap:anywhere}
