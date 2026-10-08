@@ -87,7 +87,7 @@ try {
  const acceptanceExport=readFileSync(join(repo,'scripts/deploy/update-acceptance-local.sh'),'utf8');
  const fragmentStart=acceptanceExport.indexOf('  (umask 077; PGOPTIONS=');
  const workerFragment=acceptanceExport.slice(fragmentStart,acceptanceExport.indexOf('  node_exec "$policy"',fragmentStart));
- const exportEnv=`export DATABASE_URL=\"postgresql://${app}:${password}@127.0.0.1:5432/${database}\" PGOPTIONS='-c default_transaction_read_only=on'\nevidence=${scratch}\npg_exec(){ local tool=\"$1\"; shift; \"$tool\" \"$@\"; }\n`;
+ const exportEnv=`export DATABASE_URL="postgresql://${app}:${password}@127.0.0.1:5432/${database}" PGOPTIONS='-c default_transaction_read_only=on'\nevidence=${scratch}\npg_exec(){ local tool="$1"; shift; "$tool" "$@"; }\n`;
  const exported=JSON.parse(docker(['exec','-i',container,'bash','-se'],{input:exportEnv+readFragment}));
  assert.equal(exported.database,database);assert.equal(exported.migrations.length,historical.length);
  docker(['exec','-i',container,'bash','-se'],{input:exportEnv+workerFragment});
