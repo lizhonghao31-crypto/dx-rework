@@ -1,3 +1,6 @@
+import { DigitalProductionAccessService } from "../../apps/api/src/production-platform/access-service.js";
+import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
+import { DigitalOrderCreateSchema } from "@dx-rework/contracts/digital-production";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { RootAwareTodoProjectionService } from "../../apps/api/src/todos/root-aware-projection-service.js";
 import { CreateSupplierSchema } from "@dx-rework/contracts";
@@ -251,6 +254,34 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     await expect(closure.markRead(view(ids.wu_yunfeng),allowed[0]!.todoId)).rejects.toMatchObject({statusCode:404});
     expect((await production.get(actor(ids.wu_yunfeng,"sourcing:view"),id)).productionOrderId).toBe(id);
     expect((await database.query("SELECT 1 FROM sourcing_production_alerts WHERE alert_id=$1 AND resolved_at IS NULL",[allowed[0]!.todoId])).rowCount).toBe(1);
+  });
+
+  it("Mother PR05 rejects a native read-only primary without transferable todos and serializes direct role revocation",async()=>{
+    const access=new AccessMasterDataService(database,"corp"),personnel=new DigitalProductionAccessService(database),identity=new DigitalProductionIdentityService(database,true);
+    const root=actor(ids.li_junyue,"role:assign");
+    await binder.run(ids.li_junyue,ids,true);
+    await access.assignRole(root,{userId:ids.wu_yunfeng,roleCode:"order_merchandiser",reason:"TEST read-only role remains insufficient"});
+    const direct=await access.assignRole(root,{userId:ids.li_zhonghao,roleCode:"order_merchandiser",reason:"TEST writable primary"});
+    const order=await identity.createOrder(root,DigitalOrderCreateSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:`TEST-READONLY-PRIMARY-${randomUUID()}`,orderDate:"2026-10-08",lines:[{color:"黑",sizes:[{size:"M",quantity:1}]}]}),randomUUID());
+    expect((await database.query("SELECT count(*)::int n FROM rework_todos WHERE entity_id=$1",[order.productionOrderId])).rows[0].n).toBe(0);
+    const candidates=await personnel.candidates(root);
+    expect(candidates.find(row=>row.id===ids.wu_yunfeng)?.roles??[]).not.toContain("order_merchandiser");
+    expect(candidates.find(row=>row.id===ids.li_zhonghao)?.roles).toContain("order_merchandiser");
+    await expect(personnel.assignMerchandiser(root,order.productionOrderId,ids.wu_yunfeng,order.version)).rejects.toMatchObject({statusCode:409});
+    await expect(personnel.setCustomerDefault(root,"PD",ids.wu_yunfeng)).rejects.toMatchObject({statusCode:409});
+    expect(await identity.read(root,order.productionOrderId)).toEqual(order);
+    await personnel.assignMerchandiser(root,order.productionOrderId,ids.li_zhonghao,order.version);
+    const before=await identity.read(root,order.productionOrderId);expect(before.primaryMerchandiserId).toBe(ids.li_zhonghao);
+    const holder=await database.connect();let revoked:Promise<void>|undefined;
+    try{
+      await holder.query("BEGIN");expect((await holder.query("SELECT digital_sourcing_actor_can_write($1,ARRAY['order_merchandiser'],'sourcing:contract:record') allowed",[ids.li_zhonghao])).rows[0].allowed).toBe(true);
+      revoked=access.revokeRole(actor(ids.li_junyue,"access:admin"),direct.assignmentId,"TEST authenticated direct role revoked");
+      expect(await Promise.race([revoked.then(()=>true),new Promise<boolean>(resolve=>setTimeout(()=>resolve(false),30))])).toBe(false);
+      await holder.query("COMMIT");await revoked;
+      expect((await holder.query("SELECT digital_sourcing_actor_can_write($1,ARRAY['order_merchandiser'],'sourcing:contract:record') allowed",[ids.li_zhonghao])).rows[0].allowed).toBe(false);
+      expect((await holder.query("SELECT digital_sourcing_actor_can_write($1,ARRAY['order_merchandiser'],'sourcing:inquiry:create') allowed",[ids.wu_yunfeng])).rows[0].allowed).toBe(false);
+    }finally{await holder.query("ROLLBACK");holder.release();await revoked;}
+    expect(await identity.read(root,order.productionOrderId)).toEqual(before);
   });
 
 });

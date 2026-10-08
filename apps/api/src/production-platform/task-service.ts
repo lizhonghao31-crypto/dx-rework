@@ -424,9 +424,7 @@ export class DigitalProductionTaskService {
     const result = await this.database.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
       LEFT JOIN digital_production_orders o ON o.production_order_id=a.production_order_id LEFT JOIN digital_production_sources s ON s.source_id=a.source_id
       WHERE $1::boolean OR a.assignee_id=$2 OR ($3::boolean AND (o.created_by=$2 OR s.created_by=$2)) OR ($4::boolean AND o.primary_merchandiser_id=$2)
-      OR ($5::boolean AND a.task_kind LIKE 'development_%') OR EXISTS(SELECT 1 FROM digital_production_delegations d WHERE d.delegate_id=$2 AND d.revoked_at IS NULL AND d.expires_at>CURRENT_TIMESTAMP
-        AND (d.task_id=t.task_id OR (d.purpose='technical' AND (d.production_order_id=a.production_order_id OR d.source_id=a.source_id))))
-      ORDER BY t.created_at DESC,t.task_id DESC LIMIT 20 OFFSET $6`, [global, actor.actorId, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser"), actor.actorRoles.includes("development_clerk"), (page-1)*20]);
+      OR ($5::boolean AND a.task_kind LIKE 'development_%') ORDER BY t.created_at DESC,t.task_id DESC LIMIT 20 OFFSET $6`, [global, actor.actorId, actor.actorRoles.includes("sample_designer"), actor.actorRoles.includes("order_merchandiser"), actor.actorRoles.includes("development_clerk"), (page-1)*20]);
     const policy = new DigitalProductionAccessPolicy(this.database); const items = [];
     for (const row of result.rows) if (await policy.allowed(actor, "task", row.task_id, "technical")) items.push(await this.read(actor, row.task_id));
     return { items, page };

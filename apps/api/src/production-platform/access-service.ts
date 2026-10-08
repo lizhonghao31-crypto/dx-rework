@@ -1,6 +1,8 @@
+import { hasMemberModulePolicy, memberCanWriteModule } from "../access/member-module-policy.js";
 import { PoCustomerDateService } from "./po-customer-date-service.js";
 import { randomUUID } from "node:crypto";
 import { DigitalProductionTaskService } from "./task-service.js";
+import { TodoService } from "../todos/service.js";
 import type { Pool, PoolClient } from "pg";
 import type { z } from "zod";
 import type { DigitalDelegationSchema, DigitalResourceKind } from "@dx-rework/contracts/digital-production-access";
@@ -18,23 +20,57 @@ export class DigitalProductionAccessService {
     catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
   }
   private async audit(client: PoolClient, actor: TrustedActorContext, action: string, id: string, before: unknown, after: unknown) {
+    const auditId=randomUUID();
     await client.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state)
-      VALUES($1,$2,$3,$4,'digital_access',$5,$6,$7)`, [randomUUID(), actor.requestId, actor.actorId, action, id, JSON.stringify(before), JSON.stringify(after)]);
+      VALUES($1,$2,$3,$4,'digital_access',$5,$6,$7)`, [auditId, actor.requestId, actor.actorId, action, id, JSON.stringify(before), JSON.stringify(after)]);
+    return auditId;
+  }
+  async options(actor:TrustedActorContext){
+    const policy=new DigitalProductionAccessPolicy(this.database),root=isRootActor(actor);
+    const director=root||actor.actorRoles.includes("production_management")&&await policy.activeRole(actor.actorId,"production_management");
+    const manage=director||actor.actorRoles.includes("owner_group")&&await policy.activeRole(actor.actorId,"owner_group");
+    return {manage,customers:director,approveDelivery:director,create:root||actor.actorRoles.includes("sample_designer"),actorId:actor.actorId,roles:actor.actorRoles};
+  }
+  private async personnelActor(client:PoolClient,actor:TrustedActorContext,allowOwner:boolean){
+    if(isRootActor(actor))return;
+    const policy=new DigitalProductionAccessPolicy(client);
+    if(actor.actorRoles.includes("production_management")&&await policy.lockActiveRole(actor.actorId,"production_management"))return;
+    if(allowOwner&&actor.actorRoles.includes("owner_group")&&await policy.lockActiveRole(actor.actorId,"owner_group"))return;
+    digitalForbidden();
+  }
+  private async lockMemberPolicy(client:PoolClient){
+    // The original binding command holds this same key exclusively before users.
+    await client.query("SELECT pg_advisory_xact_lock_shared(hashtextextended('member-module-owner-bindings',0))");
+  }
+  private async eligibleMerchandiser(client:PoolClient,userId:string):Promise<boolean>{
+    if(!await new DigitalProductionAccessPolicy(client).lockActiveRole(userId,"order_merchandiser"))return false;
+    const required=["sourcing:view","sourcing:inquiry:create","sourcing:contract:record"];
+    const capabilities=(await client.query("SELECT capability FROM role_capabilities WHERE role_code='order_merchandiser' AND capability=ANY($1::text[]) FOR SHARE",[required])).rows;
+    if(!required.every(capability=>capabilities.some(row=>row.capability===capability))||!await memberCanWriteModule(client,userId,"sourcing"))return false;
+    if(!await hasMemberModulePolicy(client))return true;
+    await client.query("SELECT policy_key FROM access_security_policy WHERE policy_key='primary' FOR SHARE");
+    return (await client.query("SELECT bool_and(todo_user_has_direct_role($1,'order_merchandiser',capability)) AS eligible FROM unnest($2::text[]) required(capability)",[userId,required])).rows[0]?.eligible===true;
   }
   async candidates(actor: TrustedActorContext) {
     if (!isDigitalLeader(actor) && !isDigitalTechnicalManager(actor) && !actor.actorRoles.includes("sample_designer") && !actor.actorRoles.includes("development_clerk")) digitalForbidden();
     const roles = isDigitalLeader(actor) || isDigitalTechnicalManager(actor) ? null : actor.actorRoles.includes("development_clerk") ? ["development_clerk", "pattern_room_worker", "pattern_room_tail_inspector"] : ["order_merchandiser", "pattern_room_worker"];
+    const memberPolicy=await hasMemberModulePolicy(this.database) ? "AND member_module_can_write(u.id,'sourcing') AND todo_user_has_direct_role(u.id,'order_merchandiser','sourcing:contract:record')" : "";
     return (await this.database.query(`SELECT u.id,u.display_name AS "displayName",array_agg(DISTINCT a.role_code) AS roles
       FROM app_users u JOIN user_role_assignments a ON a.user_id=u.id AND a.revoked_at IS NULL
       JOIN business_roles r ON r.role_code=a.role_code AND r.enabled
       WHERE u.enabled AND coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)=false AND ($1::text[] IS NULL OR a.role_code=ANY($1))
       AND EXISTS(SELECT 1 FROM identity_mappings i WHERE i.user_id=u.id AND i.active AND i.employed)
+      AND (a.role_code<>'order_merchandiser' OR (NOT EXISTS(
+        SELECT 1 FROM unnest(ARRAY['sourcing:view','sourcing:inquiry:create','sourcing:contract:record']) required(capability)
+        WHERE NOT EXISTS(SELECT 1 FROM role_capabilities c WHERE c.role_code=a.role_code AND c.capability=required.capability)) ${memberPolicy}))
       GROUP BY u.id,u.display_name ORDER BY u.display_name,u.id`, [roles])).rows;
   }
   async setCustomerDefault(actor: TrustedActorContext, code: string, merchandiserId: string | null) {
     if (!isRootActor(actor) && !actor.actorRoles.includes("production_management")) digitalForbidden();
     return this.transaction(async client => {
-      if (merchandiserId && !await new DigitalProductionAccessPolicy(client).activeRole(merchandiserId, "order_merchandiser")) conflict("主跟单必须为在职有效订单跟单");
+      await this.lockMemberPolicy(client);
+      await this.personnelActor(client,actor,false);
+      if (merchandiserId && !await this.eligibleMerchandiser(client,merchandiserId)) conflict("主跟单必须为在职有效且可办理外发的订单跟单");
       const previous = (await client.query("SELECT default_merchandiser_id FROM digital_production_customers WHERE code=$1 FOR UPDATE", [code])).rows[0] ?? digitalNotFound();
       await client.query("UPDATE digital_production_customers SET default_merchandiser_id=$2 WHERE code=$1", [code, merchandiserId]);
       await this.audit(client, actor, "digital_customer_default_assigned", code, previous, { merchandiserId });
@@ -45,59 +81,25 @@ export class DigitalProductionAccessService {
     if (!isDigitalLeader(actor)) digitalForbidden();
     return this.transaction(async client => {
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
-      if (!await new DigitalProductionAccessPolicy(client).activeRole(merchandiserId, "order_merchandiser")) conflict("主跟单必须为在职有效订单跟单");
+      await this.lockMemberPolicy(client);
+      await this.personnelActor(client,actor,true);
+      if (!await this.eligibleMerchandiser(client,merchandiserId)) conflict("主跟单必须为在职有效且可办理外发的订单跟单");
+      await client.query("SELECT role_code FROM role_capabilities WHERE role_code='order_merchandiser' FOR SHARE");
       const before = (await client.query("SELECT primary_merchandiser_id,version FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE", [id])).rows[0] ?? digitalNotFound();
       if (before.version !== expectedVersion) conflict("订单已更新，请刷新");
+      await client.query(`SELECT s.sourcing_case_id FROM sourcing_cases s JOIN digital_production_child_links l ON l.child_id=s.sourcing_case_id
+        WHERE l.module='sourcing' AND l.production_order_id=$1 ORDER BY s.sourcing_case_id FOR UPDATE OF s`,[id]);
       await client.query("UPDATE digital_production_orders SET primary_merchandiser_id=$2,version=version+1 WHERE production_order_id=$1", [id, merchandiserId]);
       await new DigitalProductionTaskService(this.database).syncSourcingAssignee(client, actor, id, merchandiserId);
-      await this.audit(client, actor, "digital_primary_merchandiser_assigned", id, before, { merchandiserId });
+      const auditId=await this.audit(client, actor, "digital_primary_merchandiser_assigned", id, before, { merchandiserId,version:expectedVersion+1 });
+      await new TodoService(this.database).reassignDigitalSourcingWithClient(client,actor,id,before.primary_merchandiser_id,merchandiserId,auditId);
       return { version: expectedVersion + 1 };
     });
   }
-  async delegate(actor: TrustedActorContext, input: z.infer<typeof DigitalDelegationSchema>) {
-    if (!isDigitalLeader(actor) && (!isDigitalTechnicalManager(actor) || input.purpose === "budget")) digitalForbidden();
-    if (new Date(input.expiresAt).getTime() <= Date.now()) conflict("代理期限必须在将来");
-    return this.transaction(async client => {
-      const policy = new DigitalProductionAccessPolicy(client);
-      await policy.assert(actor, input.resourceKind, input.resourceId, "technical");
-      if (input.purpose === "budget") {
-        if (!await policy.activeRole(input.delegateId, "sample_designer") && !await policy.activeRole(input.delegateId, "order_merchandiser")) digitalForbidden();
-      } else if (input.resourceKind === "task" && input.purpose === "execute") {
-        const task = (await client.query("SELECT required_role FROM digital_production_task_access WHERE task_id=$1 FOR UPDATE", [input.resourceId])).rows[0] ?? digitalNotFound();
-        if (!await policy.activeRole(input.delegateId, task.required_role)) digitalForbidden();
-      } else {
-        const active = await client.query(`SELECT 1 FROM app_users u JOIN user_role_assignments a ON a.user_id=u.id AND a.revoked_at IS NULL
-          JOIN business_roles r ON r.role_code=a.role_code AND r.enabled WHERE u.id=$1 AND u.enabled AND coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)=false
-          AND EXISTS(SELECT 1 FROM identity_mappings i WHERE i.user_id=u.id AND i.active AND i.employed)`, [input.delegateId]);
-        if (!active.rowCount) digitalForbidden();
-      }
-      const column = { order: "production_order_id", source: "source_id", task: "task_id" }[input.resourceKind];
-      await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify([actor.actorId, input])]);
-      const existing = (await client.query(`SELECT delegation_id FROM digital_production_delegations WHERE ${column}=$1 AND delegate_id=$2 AND purpose=$3 AND granted_by=$4 AND expires_at=$5 AND revoked_at IS NULL`, [input.resourceId, input.delegateId, input.purpose, actor.actorId, input.expiresAt])).rows[0];
-      if (existing) return { delegationId: existing.delegation_id as string };
-      const id = randomUUID();
-      await client.query(`INSERT INTO digital_production_delegations(delegation_id,${column},delegate_id,purpose,granted_by,expires_at) VALUES($1,$2,$3,$4,$5,$6)`, [id, input.resourceId, input.delegateId, input.purpose, actor.actorId, input.expiresAt]);
-      await this.audit(client, actor, "digital_delegation_granted", id, null, input);
-      return { delegationId: id };
-    });
-  }
-  async delegations(actor: TrustedActorContext, kind: DigitalResourceKind, id: string) {
-    if (!isDigitalLeader(actor) && !isDigitalTechnicalManager(actor)) digitalForbidden();
-    await new DigitalProductionAccessPolicy(this.database).assert(actor, kind, id, "technical");
-    const column = { order: "production_order_id", source: "source_id", task: "task_id" }[kind];
-    return (await this.database.query(`SELECT delegation_id AS "delegationId",delegate_id AS "delegateId",purpose,expires_at AS "expiresAt",revoked_at AS "revokedAt" FROM digital_production_delegations WHERE ${column}=$1 ORDER BY created_at DESC`, [id])).rows;
-  }
-  async revoke(actor: TrustedActorContext, id: string) {
-    return this.transaction(async client => {
-      const row = (await client.query("SELECT * FROM digital_production_delegations WHERE delegation_id=$1 FOR UPDATE", [id])).rows[0] ?? digitalNotFound();
-      if (!isDigitalLeader(actor) && (!isDigitalTechnicalManager(actor) || row.purpose === "budget")) digitalForbidden();
-      if (!row.revoked_at) {
-        await client.query("UPDATE digital_production_delegations SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2 WHERE delegation_id=$1", [id, actor.actorId]);
-        await this.audit(client, actor, "digital_delegation_revoked", id, row, { revoked: true });
-      }
-      return { revoked: true };
-    });
-  }
+  // Retired compatibility calls never read, grant or revoke historical digital delegations.
+  async delegate(actor: TrustedActorContext, input: z.infer<typeof DigitalDelegationSchema>) { void actor; void input; return digitalForbidden(); }
+  async delegations(actor: TrustedActorContext, kind: DigitalResourceKind, id: string) { void actor; void kind; void id; return digitalForbidden(); }
+  async revoke(actor: TrustedActorContext, id: string) { void actor; void id; return digitalForbidden(); }
   async requestDelivery(actor: TrustedActorContext, id: string, input: { deliveryDate: string; expectedVersion: number; reason: string }) {
     await new DigitalProductionAccessPolicy(this.database).assert(actor,"order",id,"technical");
     void input;

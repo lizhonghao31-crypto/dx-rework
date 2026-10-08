@@ -1,5 +1,6 @@
+import {effectiveSourcingMerchandiser,lockDigitalSourcingHandover} from "./current-merchandiser.js";
 import { randomUUID } from "node:crypto";
-import type { Pool } from "pg";
+import type { Pool,PoolClient } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { OperationEventRepository } from "../tools/repositories.js";
 import { memberCanWriteModule } from "../access/member-module-policy.js";
@@ -51,9 +52,9 @@ export class SourcingContractReturnService {
     }
   }
 
-  private async canUpload(actor: TrustedActorContext, creator: string, additional: string | null): Promise<boolean> {
+  private async canUpload(actor: TrustedActorContext, creator: string|null, additional: string | null, database: Pick<Pool|PoolClient,"query"> = this.database): Promise<boolean> {
     if (actor.actorRoles.includes(ROOT)) return true;
-    if (!(await memberCanWriteModule(this.database,actor.actorId,"sourcing"))) return false;
+    if (!(await memberCanWriteModule(database,actor.actorId,"sourcing"))) return false;
     const capabilities = actor.authorizationCapabilities ?? [];
     return actor.actorRoles.includes(OWNER) && capabilities.includes("sourcing:owner:approve")
       || actor.actorRoles.includes(MANAGEMENT) && capabilities.includes("sourcing:decision:record")
@@ -132,7 +133,7 @@ export class SourcingContractReturnService {
       signedContractVersion:current?.signedContractVersion ?? null,signedContractNumber:current?.signedContractNumber ?? null,
       canUpload: status.contractReturnMonitoring
         && totals.count < 2 && Number(totals.bytes) < MAX_UPLOAD_BYTES
-        && await this.canUpload(actor,row.created_by,row.additional_merchandiser_user_id),
+        && await this.canUpload(actor,await effectiveSourcingMerchandiser(this.database,sourcingCaseId,row.created_by),row.additional_merchandiser_user_id),
       uploadedFileCount:totals.count,uploadedTotalBytes:Number(totals.bytes),
       attachments:currentFiles,history };
   }
@@ -152,6 +153,7 @@ export class SourcingContractReturnService {
     const client=await this.database.connect();
     try {
       await client.query("BEGIN");
+      await lockDigitalSourcingHandover(client,sourcingCaseId,actor);
       // Serialize version selection with refresh, style edits and approvals.
       await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId]);
       const locked=await client.query<MonitorRow>(`SELECT monitor.sourcing_case_id,source_case.created_by,
@@ -168,7 +170,7 @@ export class SourcingContractReturnService {
       if (!monitor?.contract_return_monitor_enabled) {
         throw new ApplicationError("INVALID_STATE_TRANSITION","该订单尚未批准，暂不能回传合同",409);
       }
-      if (!(await this.canUpload(actor,monitor.created_by,monitor.additional_merchandiser_user_id))) forbidden();
+      if (!(await this.canUpload(actor,await effectiveSourcingMerchandiser(client,sourcingCaseId,monitor.created_by),monitor.additional_merchandiser_user_id,client))) forbidden();
       const previous=await client.query<{submitted_by:string;attachment_ids:string[]}>(`SELECT submission.submitted_by,
         submission.attachment_ids
         FROM sourcing_contract_return_requests submission

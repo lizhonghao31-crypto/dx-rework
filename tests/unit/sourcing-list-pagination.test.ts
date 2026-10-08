@@ -61,24 +61,26 @@ const row = (index: number, totalCount = 16) => ({
 describe("sourcing list pagination", () => {
   it("returns true 15-row numbered pages and the total page count", async () => {
     const query = vi.fn()
+      .mockResolvedValueOnce({rows:[{relation:null}]})
       .mockResolvedValueOnce({ rows: Array.from({ length: 15 }, (_, index) => row(index + 1)) })
+      .mockResolvedValueOnce({rows:[{relation:null}]})
       .mockResolvedValueOnce({ rows: [row(16)] });
     const service = new SourcingService({ query } as unknown as Pool);
 
     const first = await service.listCases(actor, "", "pending", 1);
     expect(first.items).toHaveLength(15);
     expect(first).toMatchObject({ page: 1, pageSize: 15, totalCount: 16, totalPages: 2 });
-    expect(query.mock.calls[0]?.[0]).toContain("count(*) OVER()");
-    expect(query.mock.calls[0]?.[0]).toContain("LIMIT 15 OFFSET $7");
-    expect(query.mock.calls[0]?.[0]).toContain(
+    expect(query.mock.calls[1]?.[0]).toContain("count(*) OVER()");
+    expect(query.mock.calls[1]?.[0]).toContain("LIMIT 15 OFFSET $7");
+    expect(query.mock.calls[1]?.[0]).toContain(
       "ORDER BY case_view.created_at DESC,case_view.sourcing_case_id DESC",
     );
-    expect(query.mock.calls[0]?.[1]).toEqual(["", "pending", "all", "all", "", null, 0]);
+    expect(query.mock.calls[1]?.[1]).toEqual(["", "pending", "all", "all", "", null, 0]);
 
     const second = await service.listCases(actor, "", "pending", 2);
     expect(second.items).toHaveLength(1);
     expect(second).toMatchObject({ page: 2, pageSize: 15, totalCount: 16, totalPages: 2 });
-    expect(query.mock.calls[1]?.[1]).toEqual(["", "pending", "all", "all", "", null, 15]);
+    expect(query.mock.calls[3]?.[1]).toEqual(["", "pending", "all", "all", "", null, 15]);
   });
 
   it("rejects invalid page numbers before querying PostgreSQL", async () => {
@@ -94,15 +96,15 @@ describe("sourcing list pagination", () => {
 
   it("returns the order's first ready image and merchandiser in the existing paginated list", async () => {
     const firstImage = "00000000-0000-4000-8000-000000000099";
-    const query = vi.fn().mockResolvedValue({ rows: [{ ...row(1, 1), merchandiser_name: "原跟单/协同跟单", first_image_attachment_id: firstImage }] });
+    const query = vi.fn().mockResolvedValueOnce({rows:[{relation:null}]}).mockResolvedValue({ rows: [{ ...row(1, 1), merchandiser_name: "原跟单/协同跟单", first_image_attachment_id: firstImage }] });
     const service = new SourcingService({ query } as unknown as Pool);
 
     const result = await service.listCases(actor, "", "pending", 1);
     expect(result.items[0]).toMatchObject({ merchandiserName: "原跟单/协同跟单", firstImageAttachmentId: firstImage });
-    expect(query.mock.calls[0]?.[0]).toContain("concat_ws('/',creator_user.display_name,additional_user.display_name) AS merchandiser_name");
-    expect(query.mock.calls[0]?.[0]).toContain("LEFT JOIN app_users additional_user");
-    expect(query.mock.calls[0]?.[0]).toContain("image.entity_id=case_view.sourcing_case_id::text");
-    expect(query.mock.calls[0]?.[0]).toContain("image.status='ready'");
-    expect(query.mock.calls[0]?.[0]).toContain("ORDER BY image.created_at,image.attachment_id LIMIT 1");
+    expect(query.mock.calls[1]?.[0]).toContain("concat_ws('/',creator_user.display_name,additional_user.display_name) AS merchandiser_name");
+    expect(query.mock.calls[1]?.[0]).toContain("LEFT JOIN app_users additional_user");
+    expect(query.mock.calls[1]?.[0]).toContain("image.entity_id=case_view.sourcing_case_id::text");
+    expect(query.mock.calls[1]?.[0]).toContain("image.status='ready'");
+    expect(query.mock.calls[1]?.[0]).toContain("ORDER BY image.created_at,image.attachment_id LIMIT 1");
   });
 });

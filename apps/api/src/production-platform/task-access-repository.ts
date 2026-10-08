@@ -33,7 +33,6 @@ export async function reassignDigitalTask(client: PoolClient, actor: TrustedActo
   if (!isDigitalLeader(actor) && !(development && (isDigitalTechnicalManager(actor) || actor.actorRoles.includes("development_clerk")))) digitalForbidden();
   if (!await new DigitalProductionAccessPolicy(client).activeRole(assigneeId, task.required_role)) digitalForbidden();
   await client.query("UPDATE digital_production_task_access SET assignee_id=$2 WHERE task_id=$1", [taskId, assigneeId]);
-  await client.query("UPDATE digital_production_delegations SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2 WHERE task_id=$1 AND revoked_at IS NULL", [taskId, actor.actorId]);
   // Daily dispatch never changes wage attribution. Wage reassignment remains with its original service.
   await client.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state)
     VALUES($1,$2,$3,'digital_task_reassigned','digital_task',$4,$5,$6)`, [randomUUID(), actor.requestId, actor.actorId, taskId, JSON.stringify({ assigneeId: task.assignee_id }), JSON.stringify({ assigneeId })]);

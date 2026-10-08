@@ -5,8 +5,6 @@ import { businessActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { DigitalIdentityDependencies } from "./identity-routes.js";
 import type { DigitalProductionAccessService } from "./access-service.js";
-import { isDigitalLeader, isDigitalTechnicalManager } from "./access-policy.js";
-import { isRootActor } from "../access/business-authority.js";
 export function registerDigitalAccessRoutes(app: FastifyInstance, dependencies: DigitalIdentityDependencies, service: DigitalProductionAccessService) {
   const actor = async (request: FastifyRequest) => {
     const token = request.headers.cookie?.split(";").map(value => value.trim()).find(value => value.startsWith("dx_rework_session="))?.slice(18);
@@ -18,10 +16,7 @@ export function registerDigitalAccessRoutes(app: FastifyInstance, dependencies: 
   const param = (request: FastifyRequest, name: string) => parse(z.string().uuid(), (request.params as Record<string, unknown>)[name]);
   app.get("/digital-production/access/options", async request => {
     const trusted = await actor(request);
-    return { manage: isDigitalLeader(trusted), delegate: isDigitalLeader(trusted) || isDigitalTechnicalManager(trusted),
-      customers: isRootActor(trusted) || trusted.actorRoles.includes("production_management"),
-      approveDelivery: isRootActor(trusted) || trusted.actorRoles.includes("production_management"),
-      create: isRootActor(trusted) || trusted.actorRoles.includes("sample_designer"), actorId: trusted.actorId, roles: trusted.actorRoles };
+    return service.options(trusted);
   });
   app.get("/digital-production/access/candidates", async request => service.candidates(await actor(request)));
   app.put("/digital-production/customers/:code/default-merchandiser", async request => service.setCustomerDefault(await actor(request), parse(z.string().trim().min(1).max(100), (request.params as Record<string, unknown>).code), parse(DigitalCustomerAssignmentSchema, request.body).merchandiserId));

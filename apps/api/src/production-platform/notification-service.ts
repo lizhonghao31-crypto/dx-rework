@@ -61,7 +61,6 @@ export class DigitalProductionNotificationService {
     const technical=development||["bulk_pattern","bulk_cutting","bulk_cutting_external","process_logistics"].includes(task.task_kind);
     const missing=!assignee;
     const risk=["warning","overdue","blocked"].includes(kind);
-    const delegates = ["ready","reassigned","unblocked"].includes(kind) ? (await database.query("SELECT delegate_id FROM digital_production_delegations WHERE task_id=$1 AND purpose='execute' AND revoked_at IS NULL AND expires_at>CURRENT_TIMESTAMP",[task.task_id])).rows.map(row=>row.delegate_id as string) : [];
     const result:TrustedActorContext[]=[];
     for(const person of people){
       const designer=person.actorId===task.designer_id&&person.actorRoles.includes("sample_designer");
@@ -73,7 +72,6 @@ export class DigitalProductionNotificationService {
       else if(missing) receive=development ? tech||person.actorRoles.includes("development_clerk") : director||(technical&&tech);
       else {
         receive=person.actorId===assignee.actorId;
-        if(!receive&&delegates.includes(person.actorId)) receive=await policy.allowed(person,"task",task.task_id,"execute");
         if(risk) receive=receive||(development ? designer||(tech&&task.task_kind!=="development_washing") : primary||director||(technical&&tech));
       }
       if(receive&&await policy.allowed(person,"task",task.task_id,"technical")) result.push(person);

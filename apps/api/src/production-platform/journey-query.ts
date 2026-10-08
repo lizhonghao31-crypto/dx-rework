@@ -39,7 +39,7 @@ export class DigitalJourneyQuery {
   }
   private async candidates(db:PoolClient,actor:TrustedActorContext,id:string|null=null):Promise<Candidate[]> {
     const leader=isDigitalLeader(actor)||isDigitalTechnicalManager(actor);
-    // Only current live roles or active delegations can add resource scope. No style-string join.
+    // Only current live roles and legitimate task assignments add scope. No style-string join.
     return (await db.query(`WITH live_roles AS (
       SELECT a.role_code FROM user_role_assignments a JOIN app_users u ON u.id=a.user_id
       JOIN business_roles r ON r.role_code=a.role_code AND r.enabled
@@ -53,12 +53,7 @@ export class DigitalJourneyQuery {
       OR ('development_clerk' IN (SELECT role_code FROM live_roles) AND (o.source_id IS NOT NULL OR EXISTS(SELECT 1 FROM digital_production_task_access a WHERE a.source_id=s.source_id AND a.task_kind LIKE 'development_%')))
       OR EXISTS(SELECT 1 FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
         WHERE (a.source_id=s.source_id OR a.production_order_id=o.production_order_id) AND a.assignee_id=$1 AND a.required_role IN (SELECT role_code FROM live_roles))
-      OR EXISTS(SELECT 1 FROM digital_production_delegations d JOIN app_users u ON u.id=d.delegate_id
-        WHERE d.delegate_id=$1 AND d.purpose IN ('technical','execute') AND d.revoked_at IS NULL AND d.expires_at>CURRENT_TIMESTAMP
-        AND u.enabled AND NOT coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)
-        AND EXISTS(SELECT 1 FROM identity_mappings m WHERE m.user_id=u.id AND m.active AND m.employed)
-        AND (d.source_id=s.source_id OR d.production_order_id=o.production_order_id OR d.task_id IN
-          (SELECT a.task_id FROM digital_production_task_access a WHERE a.source_id=s.source_id OR a.production_order_id=o.production_order_id))))
+)
     ORDER BY coalesce(s.created_at,o.created_at) DESC,coalesce(s.source_id,o.production_order_id) DESC`,[actor.actorId,actor.actorRoles,leader,id])).rows;
   }
   async list(actor:TrustedActorContext,filter:JourneyFilter,exportAll=false) {
@@ -96,8 +91,7 @@ export class DigitalJourneyQuery {
     const fullOrder=orderAccess&&(isDigitalLeader(actor)||isDigitalTechnicalManager(actor)
       || actor.actorRoles.includes("sample_designer")&&order?.created_by===actor.actorId
       || actor.actorRoles.includes("order_merchandiser")&&order?.primary_merchandiser_id===actor.actorId
-      || actor.actorRoles.includes("development_clerk")
-      || Boolean(oid&&await policy.delegated(actor,"order",oid,"technical")));
+      || actor.actorRoles.includes("development_clerk"));
     const tasks=(await db.query(`SELECT a.task_id,a.task_kind,a.source_id,a.production_order_id,a.assignee_id,a.required_role,t.route_version,t.occurrence,t.completed_quality,t.route_instance_id,
       EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') AS returned
       FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
@@ -105,8 +99,7 @@ export class DigitalJourneyQuery {
     const visibleTasks: typeof tasks=[];
     for(const task of tasks) {
       const direct=task.assignee_id===actor.actorId&&await policy.activeRole(actor.actorId,task.required_role);
-      const delegated=await policy.delegated(actor,"task",task.task_id,"technical")||await policy.delegated(actor,"task",task.task_id,"execute")&&await policy.activeRole(actor.actorId,task.required_role);
-      if((task.source_id?sourceAccess:fullOrder)||direct||delegated)visibleTasks.push(task);
+      if((task.source_id?sourceAccess:fullOrder)||direct)visibleTasks.push(task);
     }
     if(!sourceAccess&&!orderAccess&&!visibleTasks.length)return null;
     if(selectedRound!==undefined&&!sourceAccess)digitalNotFound();

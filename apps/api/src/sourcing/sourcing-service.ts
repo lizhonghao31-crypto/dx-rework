@@ -1,3 +1,4 @@
+import {effectiveSourcingMerchandiser,lockDigitalSourcingHandover} from "./current-merchandiser.js";
 import { factoryPoLines, factoryProposals, syncFactoryPoNumbers, validateFactoryInputs, approveFactoryPoDates } from "../production-platform/po-factory-date-adapter.js";
 import {factorySettlements,reconcileFactory} from "./factory-settlement-service.js";
 import {factoryTransferLines,transferProductionFactory} from "./factory-transfer-service.js";
@@ -148,6 +149,7 @@ type SourcingCaseRow = Readonly<{
   status: string;
   version: number | string;
   created_by: string;
+  effective_created_by?: string|null;
   merchandiser_name?: string | null;
   first_image_attachment_id?: string | null;
   created_at: Date | string;
@@ -281,7 +283,7 @@ const toIso = (value: Date | string): string =>
 
 export const canViewSourcingDaxingPrice = (
   actor: Pick<TrustedActorContext, "actorId" | "actorRoles">,
-  createdBy: string,
+  createdBy: string|null,
 ): boolean => actor.actorRoles.includes(ROOT_ROLE)
   || (
     actor.actorRoles.includes(CASE_CREATE_ROLE)
@@ -320,7 +322,7 @@ const mapCase = (
   orderQuantity: Number(row.order_quantity),
   lineItems,
   ...contractReturnState(row, row.contract_return_as_of),
-  ...(canViewSourcingDaxingPrice(actor, row.created_by) && row.daxing_unit_price !== null
+  ...(canViewSourcingDaxingPrice(actor,row.effective_created_by===undefined?row.created_by:row.effective_created_by) && row.daxing_unit_price !== null
     ? { daxingUnitPrice: row.daxing_unit_price }
     : {}),
   estimatedCutPieceSendDate: row.estimated_cut_piece_send_date,
@@ -415,7 +417,7 @@ const mapCase = (
         supplierName: row.approval_supplier_name,
         quantity: Number(row.approval_quantity),
         totalAmount: row.approval_total_amount,
-        ...(canViewSourcingDaxingPrice(actor, row.created_by) && row.approval_daxing_unit_price
+        ...(canViewSourcingDaxingPrice(actor,row.effective_created_by===undefined?row.created_by:row.effective_created_by) && row.approval_daxing_unit_price
           ? { daxingUnitPrice: row.approval_daxing_unit_price }
           : {}),
         estimatedCutPieceSendDate: row.approval_estimated_cut_piece_send_date,
@@ -665,9 +667,14 @@ export class SourcingService {
        WHERE case_view.sourcing_case_id=$1`,
       history ? [sourcingCaseId, history.at, history.node, history.entryId] : [sourcingCaseId],
     );
-    const row = result.rows[0];
+    let row = result.rows[0];
     if (!row) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
     if (row.workflow_generation === "digital_production_v1") await resolveDigitalChild(client, "sourcing", sourcingCaseId, row.workflow_generation);
+    row={...row,effective_created_by:await effectiveSourcingMerchandiser(client,sourcingCaseId,row.created_by,row.workflow_generation)};
+    if(!history&&row.workflow_generation==="digital_production_v1")row={...row,merchandiser_name:(await client.query(`SELECT concat_ws('/',current_person.display_name,additional.display_name) AS name FROM sourcing_cases source
+      LEFT JOIN app_users current_person ON current_person.id=$2
+      LEFT JOIN app_users additional ON additional.id=nullif(to_jsonb(source)->>'additional_merchandiser_user_id','')::uuid
+      WHERE source.sourcing_case_id=$1`,[sourcingCaseId,row.effective_created_by])).rows[0]?.name??null};
     const item = mapCase(history ? { ...row,contract_return_monitor_enabled:false } : row, actor);
     if (row.workflow_generation === "digital_production_v1") {
       const lines = (await factoryPoLines(client,sourcingCaseId,history?.at ?? null))!;
@@ -732,6 +739,10 @@ export class SourcingService {
     if (contractReturn !== null && !["all","pending","returned_on_time","overdue_pending","returned_late","all_overdue"].includes(contractReturn)) fail("合同回签状态筛选无效");
     if (!Number.isInteger(page) || page < 1 || page > 100_000) fail("分页页码无效");
     const offset = (page - 1) * SOURCING_LIST_PAGE_SIZE;
+    const principalAvailable=Boolean((await this.database.query("SELECT to_regclass('digital_production_child_links') AS relation")).rows[0]?.relation);
+    const principalJoins=principalAvailable?`LEFT JOIN digital_production_child_links principal_link ON principal_link.module='sourcing' AND principal_link.child_id=case_view.sourcing_case_id
+      LEFT JOIN digital_production_orders principal_order ON principal_order.production_order_id=principal_link.production_order_id
+      LEFT JOIN app_users principal_user ON principal_user.id=principal_order.primary_merchandiser_id`:"";
     const result = await this.database.query<SourcingCaseRow>(
       `SELECT
          count(*) OVER()::text AS total_count,
@@ -740,7 +751,8 @@ export class SourcingService {
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
          (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=case_view.sourcing_case_id) AS identity_revision,
          source_case.gender,source_case.style_name_snapshot,
-         concat_ws('/',creator_user.display_name,additional_user.display_name) AS merchandiser_name,
+         ${principalAvailable?"CASE WHEN to_jsonb(additional_case)->>'workflow_generation'='digital_production_v1' THEN principal_order.primary_merchandiser_id ELSE case_view.created_by END AS effective_created_by,":""}
+         ${principalAvailable?"CASE WHEN to_jsonb(additional_case)->>'workflow_generation'='digital_production_v1' THEN concat_ws('/',principal_user.display_name,additional_user.display_name) ELSE concat_ws('/',creator_user.display_name,additional_user.display_name) END":"concat_ws('/',creator_user.display_name,additional_user.display_name)"} AS merchandiser_name,
          first_image.attachment_id AS first_image_attachment_id,
          COALESCE((
             SELECT correction.new_unit_price FROM sourcing_budget_price_corrections correction
@@ -806,6 +818,7 @@ export class SourcingService {
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
        JOIN sourcing_cases additional_case ON additional_case.sourcing_case_id=case_view.sourcing_case_id
        LEFT JOIN app_users additional_user ON additional_user.id=nullif(to_jsonb(additional_case)->>'additional_merchandiser_user_id','')::uuid
+       ${principalJoins}
        LEFT JOIN LATERAL (
          SELECT after_state->'attachmentIds' AS ids FROM operation_events
          WHERE entity_type='sourcing_case' AND entity_id=case_view.sourcing_case_id::text
@@ -914,6 +927,7 @@ export class SourcingService {
               )
           )
           OR creator_user.display_name ILIKE '%'||$1||'%'
+          ${principalAvailable?"OR principal_user.display_name ILIKE '%'||$1||'%'":""}
           OR additional_user.display_name ILIKE '%'||$1||'%'
           OR decision_row.supplier_name_snapshot ILIKE '%'||$1||'%'
           OR decision_row.supplier_code_snapshot ILIKE '%'||$1||'%'
@@ -1138,6 +1152,7 @@ export class SourcingService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      await lockDigitalSourcingHandover(client,sourcingCaseId,actor);
       const outcome = await this.idempotency.execute(client, {
         scope,
         actorKey: actor.actorId,
@@ -1156,7 +1171,7 @@ export class SourcingService {
         if (!source.rows[0]) fail("报价选厂询价不存在", 404, "NOT_FOUND");
         if (!actor.actorRoles.includes(ROOT_ROLE) && !actor.actorRoles.some(role=>role!==CASE_CREATE_ROLE && SOURCING_IMAGE_SUPPLEMENT_ROLES.includes(role as (typeof SOURCING_IMAGE_SUPPLEMENT_ROLES)[number]))
           && source.rows[0]!.additional_merchandiser_user_id === actor.actorId
-          && source.rows[0]!.created_by !== actor.actorId) fail("添加跟单仅可回传合同",403,"FORBIDDEN");
+          && await effectiveSourcingMerchandiser(client,sourcingCaseId,source.rows[0]!.created_by) !== actor.actorId) fail("添加跟单仅可回传合同",403,"FORBIDDEN");
 
         const existing = await client.query<{ attachment_id: string }>(
           `SELECT attachment_id
@@ -1685,9 +1700,10 @@ export class SourcingService {
     try {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+      await lockDigitalSourcingHandover(client,sourcingCaseId,actor,manager ? MANAGEMENT_DECISION_CAPABILITY : CASE_CREATE_CAPABILITY);
       const source = (await client.query<{created_by:string}>("SELECT created_by FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId])).rows[0];
       if (!source) fail("外发订单不存在",404,"NOT_FOUND");
-      if (!root && ((!manager && source!.created_by !== actor.actorId) || !await memberCanWriteModule(client,actor.actorId,"sourcing"))) fail("无权修改本订单款号",403,"FORBIDDEN");
+      if (!root && ((!manager && await effectiveSourcingMerchandiser(client,sourcingCaseId,source!.created_by) !== actor.actorId) || !await memberCanWriteModule(client,actor.actorId,"sourcing"))) fail("无权修改本订单款号",403,"FORBIDDEN");
       const result = await this.idempotency.execute(client,{scope,actorKey:actor.actorId,key,
         requestHash:requestHash(scope,{sourcingCaseId,input:{...parsed.data,confirmedDuplicateStyles:undefined}}),expiresAt:new Date(Date.now()+86400000)},async () => {
         const before = await this.readCase(client,sourcingCaseId,actor);
@@ -1749,11 +1765,12 @@ export class SourcingService {
     try {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+      await lockDigitalSourcingHandover(client,sourcingCaseId,actor);
       const root = actor.actorRoles.includes(ROOT_ROLE);
       const source = (await client.query<{created_by: string; additional_merchandiser_user_id: string | null}>(
         "SELECT created_by,nullif(to_jsonb(sourcing_cases)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE", [sourcingCaseId],
       )).rows[0] ?? fail("外发订单不存在",404,"NOT_FOUND");
-      if (!root && (!await memberCanWriteModule(client,actor.actorId,"sourcing") || correcting && source.created_by !== actor.actorId)) fail("无权修改本订单",403,"FORBIDDEN");
+      if (!root && (!await memberCanWriteModule(client,actor.actorId,"sourcing") || correcting && await effectiveSourcingMerchandiser(client,sourcingCaseId,source.created_by) !== actor.actorId)) fail("无权修改本订单",403,"FORBIDDEN");
       const result = await this.idempotency.execute(client, {scope,actorKey:actor.actorId,key,
         requestHash:requestHash(scope,{sourcingCaseId,input:{...input,confirmedDuplicateStyles:undefined}}),expiresAt:new Date(Date.now()+86400000)}, async () => {
         const before = await this.readCase(client,sourcingCaseId,actor);
@@ -1820,7 +1837,7 @@ export class SourcingService {
           dedupeKey:`sourcing:${sourcingCaseId}:${correcting?"ie_quote":"correction"}:${before.version+1}`};
         if (correcting) await this.todoProjection?.actionableForAllAssignedRole(client,actor,projection);
         else {
-          await this.todoProjection?.actionableForNamedRecipient?.(client,actor,{...projection,recipientUserId:source.created_by});
+          await this.todoProjection?.actionableForNamedRecipient?.(client,actor,{...projection,recipientUserId:await effectiveSourcingMerchandiser(client,sourcingCaseId,source.created_by)??fail("当前主跟单缺失",409,"CONFLICT")});
           if (source.additional_merchandiser_user_id) await this.todoProjection?.information(client,actor,{
             category:"sourcing_merchandiser_correction",sourceEventId:eventId,sourceAction:scope,
             entityType:"sourcing_case",entityId:sourcingCaseId,recipientUserId:source.additional_merchandiser_user_id,
@@ -2878,7 +2895,7 @@ export class SourcingService {
               sourceAction: "sourcing.owner.approve",
               entityType: "sourcing_case",
               entityId: sourcingCaseId,
-              recipientUserId: source.created_by,
+              recipientUserId: await effectiveSourcingMerchandiser(client,sourcingCaseId,source.created_by)??fail("当前主跟单缺失",409,"CONFLICT"),
               requiredRole: CONTRACT_ROLE,
               requiredCapability: CONTRACT_CAPABILITY,
               route: { routeName: "sourcing_detail", entityId: sourcingCaseId, tab: "contract_return" },
@@ -3311,7 +3328,7 @@ export class SourcingService {
             sourceAction: "sourcing.factory_change.effective",
             entityType: "sourcing_case",
             entityId: source.sourcing_case_id,
-            recipientUserId: pending.created_by,
+            recipientUserId: await effectiveSourcingMerchandiser(client,source.sourcing_case_id,pending.created_by)??fail("当前主跟单缺失",409,"CONFLICT"),
             requiredRole: CONTRACT_ROLE,
             requiredCapability: CONTRACT_CAPABILITY,
             route: { routeName: "sourcing_detail", entityId: source.sourcing_case_id, tab: "contract_return" },
@@ -3421,7 +3438,7 @@ export class SourcingService {
         const source = current.rows[0];
         if (!source) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
         if (initiatorRole === "order_merchandiser" && !actor.actorRoles.includes(ROOT_ROLE)
-          && source.additional_merchandiser_user_id === actor.actorId && source.created_by !== actor.actorId)
+          && source.additional_merchandiser_user_id === actor.actorId && await effectiveSourcingMerchandiser(client,sourcingCaseId,source.created_by) !== actor.actorId)
           fail("添加跟单仅可回传合同",403,"FORBIDDEN");
         if (!source.sourcing_decision_id || !source.decision_unit_price) {
           fail("供应链总监首次提交选厂信息后才可发起订单转厂", 409, "INVALID_STATE_TRANSITION");

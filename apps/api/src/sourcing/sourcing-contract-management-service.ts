@@ -1,3 +1,4 @@
+import {effectiveSourcingMerchandiser,lockDigitalSourcingHandover} from "./current-merchandiser.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import {
@@ -22,7 +23,7 @@ type CurrentContract = {
 };
 type Queryable = Pick<Pool | PoolClient, "query">;
 const fingerprint = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex");
-export const canRefreshContractInformation = (actor: TrustedActorContext, createdBy: string, returned: boolean): boolean => {
+export const canRefreshContractInformation = (actor: TrustedActorContext, createdBy: string|null, returned: boolean): boolean => {
   if (root(actor)) return true;
   if (returned) return false;
   const capabilities = actor.authorizationCapabilities ?? [actor.authorizationCapability];
@@ -103,7 +104,7 @@ export class SourcingContractManagementService {
       WHERE source.sourcing_case_id=$1 AND source.deleted_at IS NULL
       ORDER BY document.contract_version DESC LIMIT 1`,[caseId])).rows[0];
     if (!row) throw new ApplicationError("NOT_FOUND", "合同不存在", 404);
-    if (!canRefreshContractInformation(actor,row.created_by,row.returned)
+    if (!canRefreshContractInformation(actor,await effectiveSourcingMerchandiser(db,caseId,row.created_by),row.returned)
       || (!root(actor) && !await memberCanWriteModule(db,actor.actorId,"sourcing"))) {
       throw new ApplicationError("FORBIDDEN", row.returned ? "已回传合同仅Root可以更新" : "无权更新此合同的供应商资料",403);
     }
@@ -180,6 +181,7 @@ export class SourcingContractManagementService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      await lockDigitalSourcingHandover(client,caseId,actor,actor.actorRoles.includes("production_management") && (actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes("sourcing:decision:record") ? "sourcing:decision:record" : "sourcing:contract:record");
       // Same order lock as approval, style edits, dispatch and contract-return uploads.
       await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[caseId]);
       await client.query("SELECT sourcing_case_id FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1 FOR UPDATE",[caseId]);

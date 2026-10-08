@@ -27,9 +27,8 @@ const assertCreator = (actor: TrustedActorContext) => {
   if (!isRootActor(actor) && (!actor.actorRoles.includes("sample_designer") || !(actor.authorizationCapabilities ?? []).includes("pattern_room:orders:create"))) digitalForbidden();
 };
 const readScope = (kind: "order" | "source", alias: string) => {
-  const id = kind === "order" ? "production_order_id" : "source_id";
   return `($1::boolean OR ($5::boolean AND ${alias}.created_by=$2) ${kind === "order" ? `OR ($6::boolean AND ${alias}.primary_merchandiser_id=$2) OR ($7::boolean AND ${alias}.source_id IS NOT NULL)` : ""}
-    OR EXISTS(SELECT 1 FROM digital_production_delegations d WHERE d.${id}=${alias}.${id} AND d.delegate_id=$2 AND d.purpose='technical' AND d.revoked_at IS NULL AND d.expires_at>CURRENT_TIMESTAMP))`;
+    )`;
 };
 export class DigitalProductionIdentityService {
   constructor(private readonly database: Pool, private readonly creationEnabled: boolean, private readonly sourcing?:SourcingService) {}
@@ -130,10 +129,10 @@ export class DigitalProductionIdentityService {
         }
       }
       let merchandiserId = input.primaryMerchandiserId;
-      const defaultMerchandiserId = (await client.query("SELECT default_merchandiser_id FROM digital_production_customers WHERE code=$1", [input.customerCode])).rows[0]?.default_merchandiser_id ?? null;
+      const defaultMerchandiserId = (await client.query("SELECT default_merchandiser_id FROM digital_production_customers WHERE code=$1 FOR SHARE", [input.customerCode])).rows[0]?.default_merchandiser_id ?? null;
       if (!isDigitalLeader(actor) && merchandiserId !== undefined && merchandiserId !== defaultMerchandiserId) digitalForbidden();
       if (merchandiserId === undefined) merchandiserId = defaultMerchandiserId;
-      if (merchandiserId && !await new DigitalProductionAccessPolicy(client).activeRole(merchandiserId, "order_merchandiser")) fail("主跟单必须为在职有效订单跟单", 400);
+      if (merchandiserId && !await new DigitalProductionAccessPolicy(client).lockActiveRole(merchandiserId, "order_merchandiser")) fail("主跟单必须为在职有效订单跟单", 400);
       const root = await new ProductionOrderRootRepository(client).create(createdBy);
       await client.query(`INSERT INTO digital_production_orders(production_order_id,source_id,customer_code,product_group,design_style_no,temporary_style_no,order_date,contract_delivery_date,created_by,creation_hash,primary_merchandiser_id)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, [root.productionOrderId, sourceId, input.customerCode, input.productGroup, input.designStyleNo, input.temporaryStyleNo, input.orderDate, input.contractDeliveryDate, createdBy, digest(input), merchandiserId]);

@@ -16,3 +16,5 @@
  .digital-cockpit .production-command-current-node dl>div{grid-template-columns:70px minmax(0,1fr);gap:8px}
  .digital-cockpit .production-command-current-node dd{min-width:0;overflow-wrap:normal;word-break:normal}
 }
+
+.digital-personnel-dialog{max-width:36rem!important}.digital-personnel-dialog fieldset{display:grid;gap:1rem}.digital-personnel-dialog label{display:grid;gap:.4rem}.digital-personnel-dialog select{max-width:100%;min-width:0}.digital-personnel-dialog p{overflow-wrap:anywhere}

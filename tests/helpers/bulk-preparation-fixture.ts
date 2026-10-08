@@ -1,5 +1,4 @@
 import {DigitalJourneyQuery} from "../../apps/api/src/production-platform/journey-query.js";
-import {DigitalProductionAccessService} from "../../apps/api/src/production-platform/access-service.js";
 import { DevelopmentRoundService } from "../../apps/api/src/production-platform/development-round-service.js";
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
@@ -113,7 +112,6 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
   return;
  }
  // New technical release invalidates the old completed facts and the old pending cutting event.
- await new DigitalProductionAccessService(db).delegate(actors.root,{resourceKind:'task',resourceId:complete.tasks.find(t=>t.taskKind==='bulk_pattern')!.taskId,delegateId:people.cutting_worker!.actorId,purpose:'technical',expiresAt:new Date(Date.now()+3600000).toISOString()});
 
  order=await identity.read(primary,id);await instruction.save(primary,id,{expectedVersion:1,orderVersion:order.version,document:{...doc,comments:'TEST新技术要求'}},randomUUID());await instruction.publish(primary,id,{expectedVersion:2,orderVersion:order.version},randomUUID());
  const revised=await bulk.read(primary,id);expect(revised.preparationId).not.toBe(sheet.preparationId);expect(revised.tasks.some(t=>t.taskKind===(options?.cuttingProcess==='outsourced'?'bulk_cutting_external':'bulk_cutting'))).toBe(false);expect(revised.facts.some(f=>f.kind==='纸样完成')).toBe(false);

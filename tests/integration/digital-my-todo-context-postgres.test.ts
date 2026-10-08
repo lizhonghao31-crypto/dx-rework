@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import pg from "pg";
+import { migrationExecutionSql } from "../../scripts/deploy/migration-execution-compatibility.mjs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { TodoListResponseSchema } from "@dx-rework/contracts";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
@@ -30,7 +31,15 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     await admin.query(`CREATE SCHEMA ${schema}`);
     await db.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum text NOT NULL,applied_at timestamptz DEFAULT CURRENT_TIMESTAMP)");
     const directory = new URL("../../apps/api/migrations/", import.meta.url);
-    for (const file of (await readdir(directory)).filter(f => f.endsWith(".sql")).sort()) await db.query(await readFile(new URL(file, directory), "utf8"));
+    const manifest=JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json",import.meta.url),"utf8")) as {migrations:{version:string;checksum:string}[]};
+    const serverVersion=Number((await db.query("SHOW server_version_num")).rows[0].server_version_num);
+    for(const migration of manifest.migrations){
+      const sql=await readFile(new URL(`${migration.version}.sql`,directory),"utf8");
+      await tx(async client=>{
+        await client.query(migrationExecutionSql({...migration,sql},serverVersion));
+        await client.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[migration.version,migration.checksum]);
+      });
+    }
     // Identities exist only in this owned test schema. Runtime policies and delegation services are real.
     await tx(async c => {
       await c.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
@@ -68,7 +77,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     expect((await list(actors.peer!, style)).todos).toEqual([]);
     expect(JSON.stringify(found.todos)).not.toMatch(/PRIVATE COLOR|customerCode|price|wage|budget/);
   });
-  it("allows own and active exact execute delegate without giving source access or other-task identity", async () => {
+  it("PR05 ignores historical execute grants and preserves legitimate task handover", async () => {
     const f = await sourceTask(), unrelated = await sourceTask(ids.peer);
     expect(await policy.allowed(actors.clerk!, "source", f.sourceId, "technical")).toBe(false);
     const own = (await list(actors.clerk!, f.style)).todos;
@@ -76,16 +85,22 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     expect(own[0]!.orderContext?.styleNo).toBe(f.style);
     expect((await list(actors.clerk!, unrelated.style)).todos).toEqual([]);
     expect((await list(actors.peer!, f.style)).todos).toEqual([]);
-    const grant = await access.delegate(root, { resourceKind: "task", resourceId: f.taskId, delegateId: ids.peer, purpose: "execute", expiresAt: new Date(Date.now() + 60000).toISOString() });
-    expect((await list(actors.peer!, f.style)).todos.map(t => t.todoId)).toEqual([f.taskId]);
+    await expect(access.delegate(root,{resourceKind:"task",resourceId:f.taskId,delegateId:ids.peer,purpose:"execute",expiresAt:new Date(Date.now()+60000).toISOString()})).rejects.toMatchObject({statusCode:403});
+    await db.query("INSERT INTO digital_production_delegations(delegation_id,task_id,delegate_id,purpose,granted_by,expires_at) VALUES($1,$2,$3,'execute',$4,CURRENT_TIMESTAMP+interval '1 hour')",[randomUUID(),f.taskId,ids.peer,ids.root]);
+    expect((await list(actors.peer!,f.style)).todos).toEqual([]);
+    expect(await policy.allowed(actors.peer!,"task",f.taskId,"execute")).toBe(false);
     expect(await policy.allowed(actors.peer!, "source", f.sourceId, "technical")).toBe(false);
-    await access.revoke(root, grant.delegationId);
-    expect((await list(actors.peer!, f.style)).todos).toEqual([]);
-    await access.delegate(root, { resourceKind: "task", resourceId: f.taskId, delegateId: ids.tech, purpose: "technical", expiresAt: new Date(Date.now() + 60000).toISOString() });
+    await db.query("INSERT INTO digital_production_delegations(delegation_id,task_id,delegate_id,purpose,granted_by,expires_at) VALUES($1,$2,$3,'technical',$4,CURRENT_TIMESTAMP+interval '1 hour')",[randomUUID(),f.taskId,ids.tech,ids.root]);
     expect((await list(actors.tech!, f.style)).todos).toEqual([]);
     // Historical expired grant fixture; the immutable grant is never edited.
     await db.query("INSERT INTO digital_production_delegations(delegation_id,task_id,delegate_id,purpose,granted_by,created_at,expires_at) VALUES($1,$2,$3,'execute',$4,CURRENT_TIMESTAMP-interval '2 days',CURRENT_TIMESTAMP-interval '1 day')", [randomUUID(), f.taskId, ids.peer, ids.root]);
     expect((await list(actors.peer!, f.style)).todos).toEqual([]);
+    const before=await tasks.read(root,f.taskId);
+    await tasks.reassign(root,f.taskId,ids.peer,randomUUID());
+    expect((await list(actors.peer!,f.style)).todos.map(t=>t.todoId)).toEqual([f.taskId]);
+    expect((await list(actors.clerk!,f.style)).todos).toEqual([]);
+    expect(await tasks.read(root,f.taskId)).toMatchObject({enteredAt:before.enteredAt,dueAt:before.dueAt});
+    expect(await policy.allowed(actors.peer!,"source",f.sourceId,"technical")).toBe(false);
   });
   it("does not invent a style when the exact resource identity is unavailable", async () => {
     const f = await sourceTask();
