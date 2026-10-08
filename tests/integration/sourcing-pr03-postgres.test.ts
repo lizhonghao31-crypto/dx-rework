@@ -3904,4 +3904,51 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     for(const row of snapshots)expect(row.crafts[0]).toMatchObject({craftId:catalog[0].craft_id,craftName:catalog[0].craft_name,craftVersion:1});
   });
 
+  it("reports renamed stable names explicitly and preserves their current versions and inactive state", async () => {
+    const catalogActor={...rootActor(),authorizationCapability:"master_data:manage"};
+    const original=`Previous-${randomUUID()}`, renamed=`Current-${randomUUID()}`, fresh=`NotSaved-${randomUUID()}`;
+    const [craft]=await craftService.ensureCrafts(catalogActor,{craftNames:[original]});
+    await craftService.reviseCraft(catalogActor,craft!.craftId,{craftName:renamed,active:true,changeReason:"目录更名"});
+    const id=await openNamedCraftTransfer();
+    const input={supplierId:replacementFactoryId,unitPrice:"9",craftNames:[fresh,`  ${original.toUpperCase()}  `],changeReason:"曾用名转厂"};
+    await expect(service.requestFactoryChange(managerActor(),id,input,randomUUID()))
+      .rejects.toMatchObject({code:"CONFLICT",message:expect.stringContaining(`请使用当前名称`)});
+    expect((await database.query("SELECT * FROM craft_catalog_items WHERE normalized_name=lower($1)",[fresh])).rowCount).toBe(0);
+    expect((await database.query("SELECT * FROM operation_events WHERE action='master_data.craft.create' AND after_state->>'craftName'=$1",[fresh])).rowCount).toBe(0);
+    expect((await database.query("SELECT * FROM sourcing_factory_change_requests WHERE sourcing_case_id=$1",[id])).rowCount).toBe(0);
+    expect((await database.query("SELECT version,craft_name,active FROM current_craft_catalog WHERE craft_id=$1",[craft!.craftId])).rows)
+      .toEqual([{version:2,craft_name:renamed,active:true}]);
+    await service.requestFactoryChange(managerActor(),id,{...input,craftNames:[renamed.toUpperCase()]},randomUUID());
+    expect((await database.query("SELECT crafts FROM sourcing_decisions WHERE sourcing_case_id=$1 AND decision_version=2",[id])).rows[0].crafts[0])
+      .toMatchObject({craftId:craft!.craftId,craftVersion:2,craftName:renamed});
+    await craftService.reviseCraft(catalogActor,craft!.craftId,{craftName:renamed,active:false,changeReason:"更名后停用"});
+    const inactiveId=await openNamedCraftTransfer();
+    await expect(service.requestFactoryChange(ownerActor(),inactiveId,input,randomUUID()))
+      .rejects.toMatchObject({code:"CONFLICT",message:expect.stringContaining("已停用")});
+    expect((await database.query("SELECT * FROM craft_catalog_items WHERE normalized_name=lower($1)",[fresh])).rowCount).toBe(0);
+    expect((await database.query("SELECT version,active FROM current_craft_catalog WHERE craft_id=$1",[craft!.craftId])).rows)
+      .toEqual([{version:3,active:false}]);
+  });
+
+  it("adds version one to a genuinely unversioned historical identity in the successful transfer", async () => {
+    const actor={...rootActor(),authorizationCapability:"master_data:manage"};
+    const term=`Legacy-${randomUUID()}`, legacyId=randomUUID(), legacyCode=`CRAFT_${randomUUID().replaceAll("-", "").slice(0,24).toUpperCase()}`;
+    const client=await database.connect();
+    try {
+      await client.query("BEGIN");
+      const event=await new OperationEventRepository().append(client,actor,{action:"master_data.craft.create",entityType:"craft_catalog",entityId:legacyId,
+        after:{craftId:legacyId,craftCode:legacyCode,craftName:term},reason:"旧迁移稳定身份夹具"});
+      await client.query("INSERT INTO craft_catalog_items(craft_id,craft_code,craft_name,created_by,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6)",
+        [legacyId,legacyCode,term,actor.actorId,event,actor.requestId]);
+      await client.query("COMMIT");
+    } catch(error) {await client.query("ROLLBACK");throw error;} finally {client.release();}
+    expect((await database.query("SELECT * FROM current_craft_catalog WHERE craft_id=$1",[legacyId])).rowCount).toBe(0);
+    const id=await openNamedCraftTransfer();
+    await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"9",craftNames:[term],changeReason:"历史身份记忆"},randomUUID());
+    expect((await database.query("SELECT craft_id,version,active FROM current_craft_catalog WHERE craft_id=$1",[legacyId])).rows)
+      .toEqual([{craft_id:legacyId,version:1,active:true}]);
+    expect((await database.query("SELECT crafts FROM sourcing_decisions WHERE sourcing_case_id=$1 AND decision_version=2",[id])).rows[0].crafts[0])
+      .toMatchObject({craftId:legacyId,craftCode:legacyCode,craftVersion:1,craftName:term});
+  });
+
 });

@@ -3315,9 +3315,19 @@ export class SourcingService {
         ids.push(current.rows[0].craft_id);
         continue;
       }
-      const archived = (await client.query<{ craft_id: string; craft_code: string }>(
-        "SELECT craft_id,craft_code FROM craft_catalog_items WHERE normalized_name=lower(btrim($1)) FOR SHARE", [craftName],
+      const archived = (await client.query<{
+        craft_id: string; craft_code: string; current_version: number | null;
+        current_craft_name: string | null; current_active: boolean | null;
+      }>(`SELECT item.craft_id,item.craft_code,catalog.version AS current_version,
+                 catalog.craft_name AS current_craft_name,catalog.active AS current_active
+            FROM craft_catalog_items item
+            LEFT JOIN current_craft_catalog catalog ON catalog.craft_id=item.craft_id
+            WHERE item.normalized_name=lower(btrim($1)) FOR SHARE OF item`, [craftName],
       )).rows[0];
+      if (archived?.current_version) {
+        if (!archived.current_active) fail(`工艺“${craftName}”已更名为“${archived.current_craft_name}”且已停用`,409,"CONFLICT");
+        fail(`工艺“${craftName}”已更名为“${archived.current_craft_name}”，请使用当前名称`,409,"CONFLICT");
+      }
       const craftId = archived?.craft_id ?? randomUUID();
       const craftCode = archived?.craft_code ?? `CRAFT_${randomUUID().replaceAll("-", "").slice(0,24).toUpperCase()}`;
       const reason = "订单转厂新增工艺";
