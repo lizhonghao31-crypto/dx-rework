@@ -407,7 +407,7 @@ function SourcingOrderCard({
         </div>
         <div className="sourcing-list-facts__dates">
           <div><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
-          <div><dt>{sourcingPoDates(item)?"PO 双交期":"交货日期"}</dt><dd>{sourcingPoDates(item)?<PoDateSummary lines={sourcingPoDates(item)}/>:item.deliveryDate ?? "—"}</dd></div>
+          {sourcingPoDates(item)?<div><dt>PO 双交期</dt><dd><PoDateSummary lines={sourcingPoDates(item)}/></dd></div>:<div><dt>交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>}
         </div>
       </dl>
       <small className="sourcing-order-card__activity">更新于 {formatDateTime(item.updatedAt)}</small>
@@ -1728,7 +1728,7 @@ function OrderDetailPage({
           <div><dt>IE 总额</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.totalAmount) : "—"}</dd></div>
           <div><dt>较 IE 总额变化</dt><dd className={ownerTotalDelta?.startsWith("-") ? "sourcing-price-lower" : undefined}>{ownerTotalDelta ?? "—"}</dd></div>
           <div className="sourcing-key-facts__date"><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
-          <div className="sourcing-key-facts__date"><dt>{sourcingPoDates(item)?"PO 双交期":"要求交货日期"}</dt><dd>{sourcingPoDates(item)?<PoDateSummary lines={sourcingPoDates(item)}/>:item.deliveryDate ?? "—"}</dd></div>
+          {sourcingPoDates(item)?<div className="sourcing-key-facts__date"><dt>PO 双交期</dt><dd><PoDateSummary lines={sourcingPoDates(item)}/></dd></div>:<div className="sourcing-key-facts__date"><dt>要求交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>}
         </KeyFacts>
         <div className="sourcing-supporting-overview">
           <section className="sourcing-photo-section" aria-label="订单图片">
