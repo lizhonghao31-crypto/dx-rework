@@ -1,7 +1,19 @@
 import { useState } from "react";
 import { Button } from "@dx-rework/ui";
-import type { InstructionSheet } from "@dx-rework/contracts/production-instruction";
+import type { CustomerDateHistory, InstructionSheet } from "@dx-rework/contracts/production-instruction";
 import { DocumentSection } from "./document-editor.js";
+export function PoCustomerDateHistory({requests,canApprove,busy,onDecide}:{requests:readonly CustomerDateHistory[];canApprove:boolean;busy:boolean;onDecide:(requestId:string,approved:boolean)=>void}){
+  return <>{requests.map(request=>{
+    const blocked=request.approvalBlockedReason||(request.source==="po"&&!request.changes?.length?"申请缺少明确 PO，请刷新":null);
+    return <div className="instruction-date-history" key={request.requestId}>
+      <p>{request.source==="po"?"逐 PO 申请":"历史整单申请"} · {request.status}</p>
+      {request.changes?.length?request.changes.map(change=><p key={change.lineId}>{change.poNumber||"待补 PO"} / {change.color}：{change.oldDate||"未登记"} → {change.date}</p>):<p>{request.oldDate||"未登记"} → {request.date}</p>}
+      <p>{request.reason}</p><small>{request.requestedBy} · {request.requestedAt&&new Date(request.requestedAt).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai",hour12:false})}{request.decidedBy&&` · ${request.decidedBy} ${new Date(request.decidedAt!).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai",hour12:false})}`}</small>
+      {blocked&&<p role="status">{blocked}</p>}
+      {canApprove&&request.status==="待批准"&&<div className="instruction-date-actions"><Button type="button" disabled={busy||Boolean(blocked)} onClick={()=>onDecide(request.requestId,true)}>同意</Button><Button type="button" disabled={busy} onClick={()=>onDecide(request.requestId,false)}>驳回</Button></div>}
+    </div>;
+  })}</>;
+}
 export function PoCustomerDates({sheet,busy,dirty,historical,onAct}:{sheet:InstructionSheet;busy:boolean;dirty:boolean;historical:boolean;onAct:(path:string,method:string,body:unknown)=>Promise<boolean|undefined>}){
   const [selected,setSelected]=useState<string[]>([]),[date,setDate]=useState(""),[reason,setReason]=useState("");
   const lines=sheet.customerPoDates??[];
@@ -15,12 +27,6 @@ export function PoCustomerDates({sheet,busy,dirty,historical,onAct}:{sheet:Instr
       <Button type="button" disabled={busy||dirty||!selected.length||!date||!reason.trim()} onClick={()=>void onAct("/date-requests","POST",{orderVersion:sheet.currentOrderVersion,reason,changes:lines.filter(line=>selected.includes(line.lineId)).map(line=>({lineId:line.lineId,expectedVersion:line.version,date}))}).then(ok=>{if(ok){setSelected([]);setDate("");setReason("");}})}>申请所选 PO 变更</Button>
       {dirty&&<p>请先保存制单修改，再办理交期。</p>}
     </div>}
-    {sheet.dateRequests.map(request=><div className="instruction-date-history" key={request.requestId}>
-      <p>{request.source==="po"?"逐 PO 申请":"历史整单申请"} · {request.status}</p>
-      {request.changes?.length?request.changes.map(change=><p key={change.lineId}>{change.poNumber||"待补 PO"} / {change.color}：{change.oldDate||"未登记"} → {change.date}</p>):<p>{request.oldDate||"未登记"} → {request.date}</p>}
-      <p>{request.reason}</p><small>{request.requestedBy} · {request.requestedAt&&new Date(request.requestedAt).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai",hour12:false})}{request.decidedBy&&` · ${request.decidedBy} ${new Date(request.decidedAt!).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai",hour12:false})}`}</small>
-      {request.approvalBlockedReason&&<p>{request.approvalBlockedReason}</p>}
-      {!historical&&sheet.canApproveDate&&request.status==="待批准"&&<div className="instruction-date-actions"><Button type="button" disabled={busy||dirty||Boolean(request.approvalBlockedReason)} onClick={()=>void onAct(`/date-requests/${request.requestId}/decision`,"POST",{approved:true})}>同意</Button><Button type="button" disabled={busy||dirty} onClick={()=>void onAct(`/date-requests/${request.requestId}/decision`,"POST",{approved:false})}>驳回</Button></div>}
-    </div>)}
+    <PoCustomerDateHistory requests={sheet.dateRequests} canApprove={!historical&&sheet.canApproveDate} busy={busy||dirty} onDecide={(requestId,approved)=>void onAct(`/date-requests/${requestId}/decision`,"POST",{approved})}/>
   </DocumentSection>;
 }

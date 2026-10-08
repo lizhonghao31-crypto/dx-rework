@@ -52,10 +52,12 @@ export async function exerciseInstructions(database:Pool,order:DigitalOrder,prim
    const oldId=randomUUID();
    if(lane==="instruction")await database.query("INSERT INTO digital_instruction_date_requests(request_id,production_order_id,order_version,old_date,new_date,reason,requested_by) VALUES($1,$2,$3,'2026-11-20','2026-11-28','TEST旧制单申请',$4)",[oldId,oldOrder.productionOrderId,oldOrder.version,primary.actorId]);
    else await database.query("INSERT INTO digital_production_delivery_requests(request_id,production_order_id,expected_version,previous_date,requested_date,reason,requested_by) VALUES($1,$2,$3,'2026-11-20','2026-11-28','TEST旧访问申请',$4)",[oldId,oldOrder.productionOrderId,oldOrder.version,primary.actorId]);
+   expect((await access.deliveryRequests(manager,oldOrder.productionOrderId)).find(row=>row.requestId===oldId)).toMatchObject({source:lane,oldDate:"2026-11-20",date:"2026-11-28",status:"待批准",approvalBlockedReason:null,changes:[]});
    await access.decideDelivery(manager,oldId,"approved");await access.decideDelivery(manager,oldId,"approved");
    const oldSheet=await service.read(primary,oldOrder.productionOrderId);
    expect(oldSheet.customerPoDates!.map(line=>line.date)).toEqual(oldOrder.lines.map(()=>"2026-11-28"));
    expect(oldSheet.currentDeliveryDate).toBe("2026-11-20");expect(oldSheet.dateRequests[0]).toMatchObject({source:lane,status:"已批准"});
+   expect((await access.deliveryRequests(manager,oldOrder.productionOrderId)).find(row=>row.requestId===oldId)).toMatchObject({source:lane,status:"已批准",decision:"approved",changes:[]});
  }
  const legacy={requestId:randomUUID()};await database.query("INSERT INTO digital_production_delivery_requests(request_id,production_order_id,expected_version,previous_date,requested_date,reason,requested_by) VALUES($1,$2,$3,'2026-11-20','2026-11-28','TEST旧申请保留',$4)",[legacy.requestId,id,decided.currentOrderVersion,primary.actorId]);
  await expect(access.decideDelivery(manager,legacy.requestId,"approved")).rejects.toMatchObject({statusCode:409});await access.decideDelivery(manager,legacy.requestId,"rejected");

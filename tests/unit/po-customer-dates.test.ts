@@ -3,7 +3,7 @@ import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe,expect,it} from 'vitest';
 import {InstructionDateRequestSchema,initialInstruction,type InstructionSheet} from '@dx-rework/contracts/production-instruction';
-import {PoCustomerDates} from '../../apps/web/src/po-customer-dates.js';
+import {PoCustomerDates,PoCustomerDateHistory} from '../../apps/web/src/po-customer-dates.js';
 import {DevelopmentCreateForm} from '../../apps/web/src/digital-development-create-form.js';
 const lineId=randomUUID(),requestId=randomUUID();
 const sheet={order:{},currentOrderVersion:1,document:initialInstruction(),customerPoDates:[{lineId,poNumber:'TEST-PO',color:'黑',date:'2026-12-10',registeredDate:'2026-12-10',version:1,source:'initial_po',factoryDate:null}],dateRequests:[{requestId,source:'po',oldDate:'2026-12-10',date:'2026-12-20',reason:'TEST客户要求',status:'待批准',requestedBy:'TEST主跟单',requestedAt:'2026-10-08T01:00:00Z',decidedBy:null,decidedAt:null,changes:[{lineId,poNumber:'TEST-PO',color:'黑',oldDate:'2026-12-10',date:'2026-12-20',expectedVersion:1}],approvalBlockedReason:null}]} as InstructionSheet;
@@ -27,6 +27,21 @@ describe('explicit PO customer promises and UI authority',()=>{
    expect(reader).toContain('TEST-PO');expect(reader).toContain('TEST客户要求');expect(reader).not.toContain('申请所选 PO 变更');expect(reader).not.toContain('>同意<');
   }
   expect(html({canRequestDate:true,canApproveDate:true},true)).not.toContain('申请所选 PO 变更');
+ });
+ it('shows every immutable PO change and blocks conflicted approval in the shared new and legacy history',()=>{
+  const request={...sheet.dateRequests[0]!,changes:[...sheet.dateRequests[0]!.changes,{lineId:randomUUID(),poNumber:'TEST-OTHER-PO',color:'白',oldDate:'2026-12-12',date:'2026-12-28',expectedVersion:1}]};
+  const render=(approvalBlockedReason:string|null,canApprove=true,changes=request.changes)=>renderToStaticMarkup(createElement(PoCustomerDateHistory,{requests:[{...request,approvalBlockedReason,changes}],canApprove,busy:false,onDecide:()=>undefined}));
+  const allowed=render(null);
+  for(const value of ['TEST-PO','TEST-OTHER-PO','2026-12-10','2026-12-20','2026-12-12','2026-12-28','TEST主跟单'])expect(allowed).toContain(value);
+  expect(allowed).not.toMatch(/disabled=""[^>]*>同意/);
+  const blocked=render('申请后母单已更新');expect(blocked).toContain('申请后母单已更新');expect(blocked).toMatch(/disabled=""[^>]*>同意/);expect(blocked).not.toMatch(/disabled=""[^>]*>驳回/);
+  expect(render(null,false)).not.toContain('>同意<');expect(render(null,true,[])).toMatch(/disabled=""[^>]*>同意/);
+ });
+ it('retains the old whole-order request, actor and outcome without inventing PO scope',()=>{
+  const request={...sheet.dateRequests[0]!,source:'delivery' as const,changes:[],status:'已批准',decidedBy:'TEST总监',decidedAt:'2026-10-08T02:00:00Z'};
+  const markup=renderToStaticMarkup(createElement(PoCustomerDateHistory,{requests:[request],canApprove:true,busy:false,onDecide:()=>undefined}));
+  for(const value of ['历史整单申请','2026-12-10','2026-12-20','TEST主跟单','TEST总监','已批准'])expect(markup).toContain(value);
+  expect(markup).not.toContain('>同意<');expect(markup).not.toContain('TEST-PO');
  });
  it('shows only one formal PO field and customer promise in confirmed-order creation',()=>{
   const create=renderToStaticMarkup(createElement(DevelopmentCreateForm,{intent:'certain_order',customers:[],onCancel:()=>undefined,onCreated:()=>undefined}));

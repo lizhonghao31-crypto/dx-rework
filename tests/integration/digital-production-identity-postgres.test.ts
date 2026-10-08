@@ -269,10 +269,14 @@ run("digital production P01 identities", () => {
     await database.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=$1 AND role_code='order_merchandiser'",[primary]);
     await expect(dates.request(p,id,{...inputDate,orderVersion:current.version},randomUUID())).rejects.toMatchObject({statusCode:403});
     await database.query("UPDATE user_role_assignments SET revoked_at=NULL WHERE user_id=$1",[primary]);
-    const stale=await dates.request(p,id,{orderVersion:current.version,reason:"TEST待处理旧版本",changes:[{lineId:current.lines[0]!.lineId,expectedVersion:1,date:"2026-12-25"}]},randomUUID());
+    const stale=await dates.request(p,id,{orderVersion:current.version,reason:"TEST待处理旧版本",changes:[{lineId:current.lines[0]!.lineId,expectedVersion:1,date:"2026-12-25"},{lineId:current.lines[1]!.lineId,expectedVersion:2,date:"2026-12-27"}]},randomUUID());
+    const legacyPanelRequest=(await access.deliveryRequests(m,id)).find(row=>row.requestId===stale.requestId)!;
+    expect(legacyPanelRequest).toMatchObject({source:"po",approvalBlockedReason:null});
+    expect(legacyPanelRequest.changes).toEqual(expect.arrayContaining([{lineId:current.lines[0]!.lineId,poNumber:"TEST-DATE-1",color:"黑",oldDate:"2026-12-10",date:"2026-12-25",expectedVersion:1},{lineId:current.lines[1]!.lineId,poNumber:"TEST-DATE-2",color:"白",oldDate:"2026-12-20",date:"2026-12-27",expectedVersion:2}]));
     await service.correctNumbers(boss,id,current.lines[0]!.lineId,{expectedVersion:current.version,formalPoNo:"TEST-DATE-1-REV"},randomUUID());
     await expect(dates.decide(m,id,stale.requestId,true,randomUUID())).rejects.toMatchObject({statusCode:409});
     expect((await dates.read(m,id)).dateRequests.find(row=>row.requestId===stale.requestId)?.approvalBlockedReason).toContain("母单已更新");
+    expect((await access.deliveryRequests(m,id)).find(row=>row.requestId===stale.requestId)?.approvalBlockedReason).toContain("母单已更新");
     await dates.decide(m,id,stale.requestId,false,randomUUID());
     const live=await service.read(boss,id),legacy=randomUUID();
     await database.query("INSERT INTO digital_production_delivery_requests(request_id,production_order_id,expected_version,previous_date,requested_date,reason,requested_by) VALUES($1,$2,$3,'2026-12-10','2026-12-28','TEST历史分歧不得猜',$4)",[legacy,id,live.version,primary]);

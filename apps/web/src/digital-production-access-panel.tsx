@@ -2,11 +2,13 @@ import { createWebUrls } from "../url-contract.js";
 import { useEffect, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import type { DigitalCustomer, DigitalOrder } from "@dx-rework/contracts/digital-production";
+import type { CustomerDateHistory } from "@dx-rework/contracts/production-instruction";
+import { PoCustomerDateHistory } from "./po-customer-dates.js";
 import { digitalRequest } from "./digital-production-api.js";
 export type DigitalAccessOptions = { manage: boolean; delegate: boolean; customers: boolean; approveDelivery: boolean; create: boolean; actorId: string; roles: string[] };
 type Candidate = { id: string; displayName: string; roles: string[] };
 type Delegation = { delegationId: string; delegateId: string; purpose: string; expiresAt: string; revokedAt: string | null };
-type Delivery = { requestId: string; deliveryDate: string; reason: string; decision: string | null };
+type Delivery = CustomerDateHistory;
 export function DigitalAccessPanel({ options, customers, order, onChanged }: { options: DigitalAccessOptions; customers: DigitalCustomer[]; order: DigitalOrder | null; onChanged(): Promise<void> }) {
   const [people, setPeople] = useState<Candidate[]>([]);
   const [delegations, setDelegations] = useState<Delegation[]>([]);
@@ -46,7 +48,7 @@ export function DigitalAccessPanel({ options, customers, order, onChanged }: { o
       {options.delegate && <><form onSubmit={event => { event.preventDefault(); const data = new FormData(event.currentTarget); void save("access/delegations", { resourceKind: "order", resourceId: order.productionOrderId, delegateId: data.get("person"), purpose: data.get("purpose"), expiresAt: new Date(`${String(data.get("expires"))}:00+08:00`).toISOString() }); }}><fieldset disabled={busy}><legend>有限期订单代理</legend><label>人员<select name="person" required><option value="">请选择</option>{personOptions()}</select></label><label>资料范围<select name="purpose"><option value="technical">技术资料</option>{options.manage && <option value="budget">预算资料（仅设计师／跟单）</option>}</select></label><label>到期时间（北京时间）<input name="expires" type="datetime-local" required /></label><Button type="submit">授权</Button></fieldset></form>
         {delegations.map(item => <div className="pattern-actions" key={item.delegationId}><span>{people.find(person => person.id === item.delegateId)?.displayName ?? "代理人员"} · {item.purpose === "budget" ? "预算" : "技术资料"} · {new Date(item.expiresAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</span>{item.revokedAt ? <span>已撤销</span> : <Button disabled={busy} onClick={() => void save(`access/delegations/${item.delegationId}/revoke`, {})}>撤销</Button>}</div>)}</>}
       <p>客户交期按明确 PO 办理。<a href={`${createWebUrls(import.meta.env.BASE_URL).pageUrl("ui/digital-production")}?instruction=${order.productionOrderId}`}>进入大货制单交期区域</a></p>
-      {deliveries.map(item => <div className="pattern-actions" key={item.requestId}><span>{item.deliveryDate} · {item.reason} · {item.decision === "approved" ? "已批准" : item.decision === "rejected" ? "已驳回" : "待批准"}</span>{!item.decision && options.approveDelivery && <><Button disabled={busy} onClick={() => void save(`delivery-requests/${item.requestId}/decision`, { decision: "approved" })}>批准</Button><Button disabled={busy} onClick={() => void save(`delivery-requests/${item.requestId}/decision`, { decision: "rejected" })}>驳回</Button></>}</div>)}
+      <div className="digital-access-date-history"><PoCustomerDateHistory requests={deliveries} canApprove={options.approveDelivery} busy={busy} onDecide={(requestId,approved)=>void save(`delivery-requests/${requestId}/decision`,{decision:approved?"approved":"rejected"})}/></div>
     </>}
   </Surface>;
 }
