@@ -4016,6 +4016,22 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await reminders.todos(todoActor(replacement))).some(t=>t.entityId===dispatched.productionId)).toBe(true);expect((await reminders.todos(todoActor(primary))).some(t=>t.entityId===dispatched.productionId)).toBe(false);
     await access.assignMerchandiser(root,id,primary.actorId,assigned.version);
 
+    // Future read clock makes the registered earliest PO overdue without altering stored dates or clocks.
+    const futureDb=new Proxy(database,{get(target,key){if(key!=="connect")return Reflect.get(target,key);return async()=>{
+      const client=await target.connect();return new Proxy(client,{get(c,k){if(k!=="query")return Reflect.get(c,k);
+        return async(text:string,values?:unknown[])=>text==="SELECT CURRENT_TIMESTAMP AS as_of"?{rows:[{as_of:new Date("2027-01-15T00:00:00Z")}]}:c.query(text,values);}});};}});
+    const futureJourneys=new DigitalJourneyQuery(futureDb);
+    for(const viewer of [root,fixture.designer,warehouse])expect((await futureJourneys.read(viewer,id)).deliveryRisks!.some(risk=>risk.kind==='factory')).toBe(true);
+    await reporting.execute(root,dispatched.productionId!,"complete",{businessDate:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),confirmed:true},randomUUID());
+    expect((await database.query("SELECT sourcing_factory_order_status($1) AS status",[dispatched.productionId])).rows[0].status).toBe("production_completed");
+    for(const viewer of [root,fixture.designer,warehouse]){
+      const completed=await futureJourneys.read(viewer,id);
+      expect(completed.deliveryRisks!.filter(risk=>risk.kind==='factory')).toEqual([]);
+      if(viewer!==root){
+        expect(completed.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='production_reporting')).toMatchObject({state:'unavailable',records:[]});
+        expect(completed.links.some(link=>link.domain==='production')).toBe(false);
+      }
+    }
     await exerciseOrderClosure(database,service,id,ids,{root,primary,manager:managerActor(),warehouse,qc},secondaryCraft==='无');
     });
   });

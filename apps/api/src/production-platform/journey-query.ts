@@ -377,7 +377,12 @@ export class DigitalJourneyQuery {
     const finalClosed=baseNodes.some(node=>node.current&&['packing','special_closure'].includes(node.key)&&node.state==='completed');
     const terminal=orderAccess&&oid&&(await db.query("SELECT 1 WHERE EXISTS(SELECT 1 FROM digital_order_closures WHERE production_order_id=$1) OR EXISTS(SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1 AND state='cancelled')",[oid])).rowCount;
     const promiseDay=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(asOf));
-    const deliveryRisks=poDeliveryRisks(poDeliveryDates,promiseDay,{finished:finalClosed||Boolean(terminal),factoryFinished:baseNodes.some(node=>node.current&&node.key==='production_reporting'&&node.state==='completed'),sampleFinished:baseNodes.some(node=>node.current&&node.key==='bulk_ship_sample'&&node.state==='completed')});
+    // A hidden reporting node cannot stand in for the whole order's authoritative completion.
+    // Read only this boolean for an already authorized mother; retain all reporting visibility gates.
+    const factoryFinished=Boolean(orderAccess&&oid&&(await db.query(`SELECT coalesce(bool_and(sourcing_factory_order_status(p.production_order_id) IN ('production_completed','shipped')),false) AS finished
+      FROM digital_production_child_links l JOIN sourcing_production_orders p ON p.production_order_id=l.child_id
+      WHERE l.production_order_id=$1 AND l.module='production'`,[oid])).rows[0]?.finished);
+    const deliveryRisks=poDeliveryRisks(poDeliveryDates,promiseDay,{finished:finalClosed||Boolean(terminal),factoryFinished,sampleFinished:baseNodes.some(node=>node.current&&node.key==='bulk_ship_sample'&&node.state==='completed')});
     return {id:canonicalId,sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosenIdentity.design_style_no,temporaryStyleNo:chosenIdentity.temporary_style_no,customer:chosenIdentity.customer_code,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages:journeyStages(baseNodes),progress,hitReasons:[]};
   }
 }
