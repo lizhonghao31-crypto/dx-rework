@@ -181,7 +181,7 @@ export class SourcingContractManagementService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
-      await lockDigitalSourcingHandover(client,caseId);
+      await lockDigitalSourcingHandover(client,caseId,actor,actor.actorRoles.includes("production_management") && (actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes("sourcing:decision:record") ? "sourcing:decision:record" : "sourcing:contract:record");
       // Same order lock as approval, style edits, dispatch and contract-return uploads.
       await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[caseId]);
       await client.query("SELECT sourcing_case_id FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1 FOR UPDATE",[caseId]);

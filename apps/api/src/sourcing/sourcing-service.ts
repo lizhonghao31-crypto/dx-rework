@@ -1152,7 +1152,7 @@ export class SourcingService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
-      await lockDigitalSourcingHandover(client,sourcingCaseId);
+      await lockDigitalSourcingHandover(client,sourcingCaseId,actor);
       const outcome = await this.idempotency.execute(client, {
         scope,
         actorKey: actor.actorId,
@@ -1700,6 +1700,7 @@ export class SourcingService {
     try {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+      await lockDigitalSourcingHandover(client,sourcingCaseId,actor,manager ? MANAGEMENT_DECISION_CAPABILITY : CASE_CREATE_CAPABILITY);
       const source = (await client.query<{created_by:string}>("SELECT created_by FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId])).rows[0];
       if (!source) fail("外发订单不存在",404,"NOT_FOUND");
       if (!root && ((!manager && await effectiveSourcingMerchandiser(client,sourcingCaseId,source!.created_by) !== actor.actorId) || !await memberCanWriteModule(client,actor.actorId,"sourcing"))) fail("无权修改本订单款号",403,"FORBIDDEN");
@@ -1764,6 +1765,7 @@ export class SourcingService {
     try {
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+      await lockDigitalSourcingHandover(client,sourcingCaseId,actor);
       const root = actor.actorRoles.includes(ROOT_ROLE);
       const source = (await client.query<{created_by: string; additional_merchandiser_user_id: string | null}>(
         "SELECT created_by,nullif(to_jsonb(sourcing_cases)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE", [sourcingCaseId],

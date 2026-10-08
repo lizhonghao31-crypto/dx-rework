@@ -228,11 +228,35 @@ RETURNS uuid LANGUAGE sql STABLE AS $$
   WHERE source.sourcing_case_id=case_id;
 $$;
 
+-- Match the original native direct role/capability and member policy, while
+-- holding their live identity rows until the business transaction commits.
+CREATE FUNCTION digital_sourcing_actor_can_write(candidate uuid, roles text[], capability_code text)
+RETURNS boolean LANGUAGE plpgsql VOLATILE AS $$
+DECLARE eligible boolean;
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0));
+  PERFORM pg_advisory_xact_lock_shared(hashtextextended('member-module-owner-bindings',0));
+  PERFORM 1 FROM app_users u
+    JOIN user_role_assignments a ON a.user_id=u.id AND a.revoked_at IS NULL
+    JOIN business_roles r ON r.role_code=a.role_code AND r.enabled
+    JOIN role_capabilities c ON c.role_code=a.role_code AND c.capability=capability_code
+    JOIN identity_mappings i ON i.user_id=u.id AND i.provider='dingtalk' AND i.active AND i.employed
+    JOIN access_security_policy p ON p.policy_key='primary' AND p.dingtalk_corp_id=i.corp_id
+    WHERE u.id=candidate AND u.enabled AND NOT u.manual_access_disabled AND a.role_code=ANY(roles)
+    FOR SHARE OF u,a,r,c,i,p;
+  eligible:=FOUND;
+  RETURN eligible AND member_module_can_write(candidate,'sourcing') AND member_module_capability_allowed(candidate,capability_code);
+END $$;
+
 CREATE OR REPLACE FUNCTION guard_sourcing_case_correction() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE source sourcing_cases%ROWTYPE; e operation_events%ROWTYPE;
 BEGIN
- SELECT * INTO source FROM sourcing_cases WHERE sourcing_case_id=NEW.sourcing_case_id FOR UPDATE;
  SELECT * INTO e FROM operation_events WHERE event_id=NEW.operation_event_id;
+ IF NOT(e.actor_roles @> ARRAY['root_superuser']::text[]) AND EXISTS(
+   SELECT 1 FROM sourcing_cases WHERE sourcing_case_id=NEW.sourcing_case_id AND workflow_generation='digital_production_v1')
+   AND NOT digital_sourcing_actor_can_write(e.actor_id,ARRAY['order_merchandiser'],'sourcing:inquiry:create')
+ THEN RAISE EXCEPTION 'digital correction actor is no longer eligible' USING ERRCODE='55000'; END IF;
+ SELECT * INTO source FROM sourcing_cases WHERE sourcing_case_id=NEW.sourcing_case_id FOR UPDATE;
  IF source.deleted_at IS NOT NULL OR sourcing_current_status(NEW.sourcing_case_id)<>'pending_merchandiser_correction'
  OR EXISTS(SELECT 1 FROM sourcing_approval_snapshots WHERE sourcing_case_id=NEW.sourcing_case_id)
  OR NEW.correction_version<>(SELECT count(*)+1 FROM sourcing_case_corrections WHERE sourcing_case_id=NEW.sourcing_case_id)
@@ -256,8 +280,19 @@ END $$;
 CREATE OR REPLACE FUNCTION guard_sourcing_style_revision() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE source sourcing_cases%ROWTYPE; event operation_events%ROWTYPE; entry jsonb;
 BEGIN
-  SELECT * INTO source FROM sourcing_cases WHERE sourcing_case_id=NEW.sourcing_case_id FOR UPDATE;
   SELECT * INTO event FROM operation_events WHERE event_id=NEW.operation_event_id;
+  IF NOT(event.actor_roles @> ARRAY['root_superuser']::text[]) AND EXISTS(
+    SELECT 1 FROM sourcing_cases WHERE sourcing_case_id=NEW.sourcing_case_id AND workflow_generation='digital_production_v1')
+    AND NOT (CASE WHEN event.authorization_capability='digital_production:numbers:correct' THEN
+      -- This original internal audit label is not a granted capability. Check
+      -- the original allowed role's real capability, without creating a new one.
+      (('sample_designer'=ANY(event.actor_roles) AND digital_sourcing_actor_can_write(event.actor_id,ARRAY['sample_designer'],'pattern_room:orders:create'))
+       OR ('order_merchandiser'=ANY(event.actor_roles) AND digital_sourcing_actor_can_write(event.actor_id,ARRAY['order_merchandiser'],'sourcing:inquiry:create'))
+       OR ('production_management'=ANY(event.actor_roles) AND digital_sourcing_actor_can_write(event.actor_id,ARRAY['production_management'],'sourcing:decision:record'))
+       OR ('owner_group'=ANY(event.actor_roles) AND digital_sourcing_actor_can_write(event.actor_id,ARRAY['owner_group'],'sourcing:owner:approve')))
+      ELSE digital_sourcing_actor_can_write(event.actor_id,event.actor_roles,event.authorization_capability) END)
+  THEN RAISE EXCEPTION 'digital style actor is no longer eligible' USING ERRCODE='55000'; END IF;
+  SELECT * INTO source FROM sourcing_cases WHERE sourcing_case_id=NEW.sourcing_case_id FOR UPDATE;
   IF source.sourcing_case_id IS NULL OR source.deleted_at IS NOT NULL
     OR NEW.revision<>(SELECT COALESCE(max(revision),0)+1 FROM sourcing_style_revisions WHERE sourcing_case_id=NEW.sourcing_case_id)
     OR event.event_id IS NULL OR event.action<>'sourcing.styles.revise'

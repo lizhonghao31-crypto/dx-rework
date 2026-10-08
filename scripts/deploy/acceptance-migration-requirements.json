@@ -743,7 +743,7 @@
     "sequences": []
   },
   "0240_digital_merchandiser_handover": {
-    "checksum": "885b341e5b1bcdc430a481aa386cf8e21272dd3047d7cbacba38f7397cdac93b",
+    "checksum": "ee01893516d6946d5d5c9dfeb97cb5b0458502581b1657425afa881deb9e5d3a",
     "tables": [],
     "functions": [
       "guard_rework_todos_update",
@@ -757,7 +757,8 @@
     "creates": [],
     "execute": [
       "digital_merchandiser_todo_transfer",
-      "digital_sourcing_current_merchandiser"
+      "digital_sourcing_current_merchandiser",
+      "digital_sourcing_actor_can_write"
     ],
     "sequences": []
   }

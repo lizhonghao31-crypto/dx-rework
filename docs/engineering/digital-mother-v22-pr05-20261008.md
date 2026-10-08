@@ -13,3 +13,11 @@
 数字专属临时代理所有新增/列举/撤销 API 已退场为认证后拒绝；UI 移除入口。历史表及审计保留但不能产生技术、预算或任务执行权。平台通用授权与正常派工保持。旧综合首页撤除由 PR06 单独执行。
 
 验证包括 PG13 原权限/任务/Journey/我的待办回归，以及真实三 PO 外发纠正交接→原审批→合同待办交接→新跟单回签→并发交接。覆盖未授权、伪造 todo transfer、停用候选、第二跟单、原创建人与完成历史、时钟稳定；完整 sourcing/业务链、迁移维护和同 SHA 六宽度视觉证据另附 PR。浏览器使用隔离拦截数据，不代表真实 Acceptance UAT。
+
+## 唯一 Review 修复
+
+P1 4220803898：数字当前主跟单的原纠正、改款号、合同回传、补资料和更新信息事务在原 task lifecycle 锁后重核并持有活跃主组织身份、启用账号、直接角色与原 capability 行共享锁；复用原 member-module-owner-bindings 锁键，避免成员绑定与写入并发。0240 原纠正/改款号 guard 同样拒绝已经生成审计后才失效的身份，原状态、版本、数量、附件、审核及财务条件保留，Root 原特殊办理能力保留。旧外发 creator 模式不改。
+
+P2 4220803916：客户默认和单张母单交接在有无可交接 native todo 时都检查目标原 sourcing 写策略及 sourcing:view / sourcing:inquiry:create / sourcing:contract:record 直接能力与原 native 收件资格；候选只移除不合资格的 order_merchandiser 身份，其余岗位候选保持。无新权限、无新审批。真实只读成员绑定、无待办母单拒绝、允许正常交接、直接角色撤销与写锁序列化均有 PostgreSQL 回归。
+
+只修改本 PR 未合的新 0240 SQL 和相应 manifest/inventory；所有 0239 及以前的已应用 SQL、hash 原字节不变。原 e20 FULL 不能替代修复后 HEAD 的新 FULL。本 PR 不第二次请求 Review。

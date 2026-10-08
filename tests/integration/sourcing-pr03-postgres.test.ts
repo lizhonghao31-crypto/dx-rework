@@ -3410,7 +3410,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       .rows[0]?.count).toBe(1);
   });
   const budgetFixture = async (threePo=false) => {
-    await ensureReturnTodoRecipient();
+    await cycleTodoServices();
     const designerId = randomUUID();
     await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST P09 designer',true)", [designerId]);
     await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2::uuid,'dingtalk','corp',$2::text,$2::text,true,true,CURRENT_TIMESTAMP)", [randomUUID(), designerId]);
@@ -4535,6 +4535,32 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(await policy.allowed(merchandiserActor(),"order",id,"budget")).toBe(false);expect(await policy.allowed(nextActor,"order",id,"budget")).toBe(true);expect(await policy.allowed(secondActor,"order",id,"technical")).toBe(false);
     const correctionInput={gender:input.gender,styleName:input.styleName,deliveryDate:input.deliveryDate,estimatedCutPieceSendDate:input.estimatedCutPieceSendDate,attachmentIds:input.attachmentIds,lineItems:input.lineItems,expectedVersion:returned.version,reason:"TEST new current primary correction"};
     await expect(currentService.correctCase(merchandiserActor(),caseId,correctionInput,randomUUID())).rejects.toMatchObject({statusCode:403});
+    const correctionSnapshot=await cycleSnapshot(caseId);
+    // The authentication snapshot predates an identity disable. Hold the identity
+    // update uncommitted while the real write starts, then commit revocation.
+    const disabling=await database.connect();
+    try{
+      await disabling.query("BEGIN");await disabling.query("UPDATE identity_mappings SET active=false WHERE user_id=$1",[next]);
+      const staleWrite=currentService.correctCase(nextActor,caseId,correctionInput,randomUUID()).then(()=>({ok:true}),reason=>({reason}));
+      await disabling.query("COMMIT");expect(await staleWrite).toMatchObject({reason:{statusCode:403}});
+    }finally{disabling.release();}
+    expect(await cycleSnapshot(caseId)).toEqual(correctionSnapshot);
+    await database.query("UPDATE identity_mappings SET active=true WHERE user_id=$1",[next]);
+    // An already-created audit event cannot authorize a later native fact after
+    // eligibility changes inside that very transaction.
+    const staleFact=await database.connect();
+    try{
+      await staleFact.query("BEGIN");const requestActor={...nextActor,requestId:randomUUID()};
+      const eventId=await new OperationEventRepository().append(staleFact,requestActor,{action:"sourcing.case.correct",entityType:"sourcing_case",entityId:caseId,
+        after:{...correctionInput,status:"pending_ie_quote",orderQuantity:240,correctionVersion:1},reason:correctionInput.reason});
+      await staleFact.query("UPDATE identity_mappings SET active=false WHERE user_id=$1",[next]);
+      const styleId=(await staleFact.query("SELECT style_id FROM sourcing_style_catalog WHERE normalized_name=lower(btrim($1))",[input.styleName])).rows[0].style_id;
+      await expect(staleFact.query(`INSERT INTO sourcing_case_corrections(correction_id,sourcing_case_id,correction_version,gender,style_name_snapshot,
+        estimated_cut_piece_send_date,delivery_date,order_quantity,lines,attachment_ids,reason,corrected_by,operation_event_id,request_id,style_id)
+        VALUES($1,$2,1,$3,$4,$5,$6,240,$7::jsonb,$8,$9,$10,$11,$12,$13)`,[randomUUID(),caseId,input.gender,input.styleName,input.estimatedCutPieceSendDate,input.deliveryDate,
+        JSON.stringify(input.lineItems),input.attachmentIds,correctionInput.reason,next,eventId,requestActor.requestId,styleId])).rejects.toMatchObject({code:"55000",message:"digital correction actor is no longer eligible"});
+    }finally{await staleFact.query("ROLLBACK");staleFact.release();}
+    expect(await cycleSnapshot(caseId)).toEqual(correctionSnapshot);
     await currentService.correctCase(nextActor,caseId,correctionInput,randomUUID());
     const prices=prepared.lineItems.map((_,index)=>({position:index+1,unitPrice:"5.50"}));
     await currentService.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());
@@ -4548,6 +4574,13 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await contractService.getCurrent(nextContract,caseId)).item?.canRefreshInformation).toBe(true);
     expect((await contractService.getCurrent(contractActor(),caseId)).item?.canRefreshInformation).toBe(false);
     expect((await contractReturns.get({...contractActor(),authorizationCapability:"sourcing:view"},caseId)).canUpload).toBe(false);expect((await contractReturns.get({...contractActor(),actorId:second,authorizationCapability:"sourcing:view"},caseId)).canUpload).toBe(true);
+    const styleClient=await database.connect();
+    try{
+      await styleClient.query("BEGIN");const requestActor={...nextActor,requestId:randomUUID()},styles=created.lineItems.map(line=>({position:line.position,styleNo:line.styleNo,alternateStyleNo:line.alternateStyleNo}));
+      const eventId=await new OperationEventRepository().append(styleClient,requestActor,{action:"sourcing.styles.revise",entityType:"sourcing_case",entityId:caseId,after:{lines:styles},reason:"TEST stale identity cannot revise native styles"});
+      await styleClient.query("UPDATE identity_mappings SET active=false WHERE user_id=$1",[next]);
+      await expect(styleClient.query("INSERT INTO sourcing_style_revisions(sourcing_case_id,revision,lines,changed_by,operation_event_id,request_id) VALUES($1,1,$2::jsonb,$3,$4,$5)",[caseId,JSON.stringify(styles),next,eventId,requestActor.requestId])).rejects.toMatchObject({code:"55000",message:"digital style actor is no longer eligible"});
+    }finally{await styleClient.query("ROLLBACK");styleClient.release();}
     const nextVersion=await currentVersion();await access.assignMerchandiser(managerActor(),id,third,nextVersion);
     const thirdContract={...contractActor(),actorId:third};
     expect((await todoRows()).find(row=>row.todo_id===returnTodo.todo_id)).toMatchObject({recipient_user_id:third,status:"pending",version:returnTodo.version+1});
@@ -4555,13 +4588,29 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await todoRows()).filter(row=>row.todo_id!==returnTodo.todo_id)).toEqual(approvedTodos.filter(row=>row.todo_id!==returnTodo.todo_id));
     expect((await database.query("SELECT * FROM sourcing_cases WHERE sourcing_case_id=$1",[caseId])).rows[0]).toEqual(sourceBefore);
     const returnedFile=await readyCuttingSheet(third);await expect(contractReturns.submit(nextContract,caseId,[returnedFile],randomUUID())).rejects.toMatchObject({statusCode:403});
+    const contractSnapshot=await cycleSnapshot(caseId),disabledContract=await database.connect();
+    try{
+      await disabledContract.query("BEGIN");await disabledContract.query("UPDATE identity_mappings SET employed=false WHERE user_id=$1",[third]);
+      const staleReturn=contractReturns.submit(thirdContract,caseId,[returnedFile],randomUUID()).then(()=>({ok:true}),reason=>({reason}));
+      await disabledContract.query("COMMIT");expect(await staleReturn).toMatchObject({reason:{statusCode:403}});
+    }finally{disabledContract.release();}
+    expect(await cycleSnapshot(caseId)).toEqual(contractSnapshot);expect((await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[caseId])).rows).toEqual([]);
+    await database.query("UPDATE identity_mappings SET employed=true WHERE user_id=$1",[third]);
     await contractReturns.submit(thirdContract,caseId,[returnedFile],randomUUID());
     const signed=(await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[caseId])).rows,completedTodos=await todoRows();
+    // Settle genuine completed facts first. A completed task retains its original
+    // assignee even when the other concurrent personnel command wins the race.
+    await new DigitalProductionNotificationService(database).runOnce();const beforeFinalTasks=await taskFacts();
     const lastVersion=await currentVersion(),race=await Promise.allSettled([access.assignMerchandiser(rootActor(),id,next,lastVersion),access.assignMerchandiser(ownerActor(),id,merchandiserId,lastVersion)]);
     expect(race.filter(item=>item.status==="fulfilled")).toHaveLength(1);expect(race.find(item=>item.status==="rejected")).toMatchObject({reason:{statusCode:409}});
     expect(await todoRows()).toEqual(completedTodos);expect((await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[caseId])).rows).toEqual(signed);
     const final=(await identity.read(rootActor(),id)).primaryMerchandiserId!;await new DigitalProductionNotificationService(database).runOnce();
-    expect((await taskFacts()).filter(row=>["bulk_cutting_external","factory_material_count","bulk_ship_sample"].includes(row.task_kind)).every(row=>row.assignee_id===final)).toBe(true);
+    const afterFinalTasks=await taskFacts();
+    for(const prior of beforeFinalTasks){
+      const after=afterFinalTasks.find(row=>row.task_id===prior.task_id)!;
+      expect(after).toEqual({...prior,assignee_id:["sourcing_preparation","bulk_cutting_external","factory_material_count","bulk_ship_sample"].includes(prior.task_kind)&&!["completed","cancelled"].includes(prior.state)?final:prior.assignee_id});
+    }
+    expect(afterFinalTasks.filter(row=>["bulk_cutting_external","factory_material_count","bulk_ship_sample"].includes(row.task_kind)&&!["completed","cancelled"].includes(row.state)).every(row=>row.assignee_id===final)).toBe(true);
     await access.setCustomerDefault(rootActor(),"PD",merchandiserId);
   });
 

@@ -153,7 +153,7 @@ export class SourcingContractReturnService {
     const client=await this.database.connect();
     try {
       await client.query("BEGIN");
-      await lockDigitalSourcingHandover(client,sourcingCaseId);
+      await lockDigitalSourcingHandover(client,sourcingCaseId,actor);
       // Serialize version selection with refresh, style edits and approvals.
       await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId]);
       const locked=await client.query<MonitorRow>(`SELECT monitor.sourcing_case_id,source_case.created_by,

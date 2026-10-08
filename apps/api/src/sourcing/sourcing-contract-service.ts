@@ -311,7 +311,7 @@ export class SourcingContractService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
-      await lockDigitalSourcingHandover(client,sourcingCaseId);
+      await lockDigitalSourcingHandover(client,sourcingCaseId,actor);
       await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId]);
       await this.idempotency.execute(client, {
         scope,actorKey: actor.actorId,key: idempotencyKey,

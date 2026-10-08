@@ -59,6 +59,7 @@ run("digital production P01 identities", () => {
       CREATE TABLE user_role_assignments(user_id uuid,role_code text,revoked_at timestamptz);
       INSERT INTO business_roles(role_code) VALUES('sample_designer'),('order_merchandiser'),('pattern_room_supervisor'),('pattern_room_worker'),('production_management'),('quality_control'),('embroidery_washing_merchandiser'),('warehouse_receiver');`);
     await database.query(await readFile(new URL("../../apps/api/migrations/0219_digital_production_access.sql", import.meta.url), "utf8"));
+    await database.query("INSERT INTO role_capabilities(role_code,capability) VALUES('order_merchandiser','sourcing:view'),('order_merchandiser','sourcing:inquiry:create'),('order_merchandiser','sourcing:contract:record')");
     await database.query(`CREATE FUNCTION fixture_identity() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
       INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at)
       VALUES(NEW.id,NEW.id,'dingtalk','TEST',NEW.id::text,NEW.id::text,true,true,CURRENT_TIMESTAMP); RETURN NEW; END $$;
