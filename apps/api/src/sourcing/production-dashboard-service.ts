@@ -104,8 +104,7 @@ export class ProductionDashboardService {
       const selected=selectDashboardPage(items,input),selectedIds=selected.filtered.map(i=>i.order.productionOrderId);
       const suppliers=[...new Map(orders.map(o=>[o.supplierId,{supplierId:o.supplierId,supplierName:o.supplierName}])).values()]
         .sort((a,b)=>a.supplierName.localeCompare(b.supplierName));
-      const selectedKeys=new Set(selected.filtered.map(i=>executionKey(i.order.productionOrderId,i.order.factoryDecisionId)));
-      const events=(await this.events(client,selectedIds)).filter(e=>selectedKeys.has(executionKey(e.productionOrderId,e.factoryDecisionId)));
+      const events=await this.events(client,selected.filtered.map(item=>item.order));
       if(input.previousAsOf){
         const previous=await readFactoryProductionProgressFacts(client,selectedIds,input.previousAsOf);
         for(const item of selected.filtered){const before=previous.get(executionKey(item.order.productionOrderId,item.order.factoryDecisionId)),after=item.progress;
@@ -128,7 +127,8 @@ export class ProductionDashboardService {
       return ProductionDashboardDetailSchema.parse({asOf,detail,progress:facts.get(executionKey(id,factoryDecisionId))});
     });
   }
-  private async events(client:PoolClient,ids:string[]):Promise<ProductionDashboardEvent[]> {
+  private async events(client:PoolClient,orders:Pick<ProductionDashboardItem["order"],"productionOrderId"|"factoryDecisionId">[]):Promise<ProductionDashboardEvent[]> {
+    const ids=orders.map(order=>order.productionOrderId),factories=orders.map(order=>order.factoryDecisionId??null);
     const result=await client.query<{id:string;production_order_id:string;first_style_no:string;supplier_name_snapshot:string;kind:"report"|"correct"|"complete"|"ship";business_date:string;created_at:Date;quantity:number|null;factory_decision_id:string|null}>(`
       SELECT activity.*,sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,production.supplier_name_snapshot FROM (
         SELECT report.report_id::text AS id,report.production_order_id,report.factory_decision_id,CASE WHEN revision=1 THEN 'report' ELSE 'correct' END AS kind,
@@ -139,7 +139,9 @@ export class ProductionDashboardService {
         FROM sourcing_production_transitions transition JOIN operation_events event ON event.event_id=transition.operation_event_id
         LEFT JOIN sourcing_production_progress_snapshots snapshot ON snapshot.production_order_id=transition.production_order_id AND snapshot.factory_decision_id IS NOT DISTINCT FROM transition.factory_decision_id
         WHERE transition.production_order_id=ANY($1::uuid[]) AND status<>'in_production'
-      ) activity JOIN sourcing_production_factory_orders production ON production.production_order_id=activity.production_order_id AND production.factory_decision_id IS NOT DISTINCT FROM activity.factory_decision_id ORDER BY activity.created_at DESC,activity.id LIMIT 20`,[ids]);
+      ) activity JOIN unnest($1::uuid[],$2::uuid[]) selected(production_order_id,factory_decision_id)
+        ON selected.production_order_id=activity.production_order_id AND selected.factory_decision_id IS NOT DISTINCT FROM activity.factory_decision_id
+      JOIN sourcing_production_factory_orders production ON production.production_order_id=activity.production_order_id AND production.factory_decision_id IS NOT DISTINCT FROM activity.factory_decision_id ORDER BY activity.created_at DESC,activity.id LIMIT 20`,[ids,factories]);
     return result.rows.map(r=>({id:r.id,productionOrderId:r.production_order_id,factoryDecisionId:r.factory_decision_id,firstStyleNo:r.first_style_no,supplierName:r.supplier_name_snapshot,
       kind:r.kind,businessDate:r.business_date,recordedAt:iso(r.created_at),quantity:r.quantity,previousState:null,progressState:null,daysWithoutUpdate:null}));
   }

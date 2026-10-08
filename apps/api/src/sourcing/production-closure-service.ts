@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { z } from "zod";
 import { ProductionPilotInputSchema, ProductionPilotListSchema, ProductionExpectedReceiptsSchema, ProductionReceivingSummarySchema, TodoResponseSchema, type TodoResponse, type ProductionReceivingSummary } from "@dx-rework/contracts";
-import { readProductionProgressFacts } from "./production-dashboard-service.js";
+import { readFactoryProductionProgressFacts } from "./production-dashboard-service.js";
+import { productionProgressRank, type calculateProductionProgress } from "@dx-rework/domain";
 import { canReadProductionReporting, productionVisibility, productionVisibilityArgs } from "./production-reporting-service.js";
 import { isRootActor } from "../access/business-authority.js";
 import { memberCanReceiveFact } from "../access/member-module-policy.js";
@@ -13,6 +14,7 @@ import { OperationEventRepository, type TrustedActorContext } from "../tools/rep
 const caps=(actor:TrustedActorContext)=>actor.authorizationCapabilities??[actor.authorizationCapability];
 function fail(message:string,status=403):never {throw new ApplicationError(status===404?"NOT_FOUND":status===400?"VALIDATION_ERROR":status===409?"INVALID_STATE_TRANSITION":"FORBIDDEN",message,status);};
 const iso=(value:Date|string)=>new Date(value).toISOString();
+type PilotOrderRow={production_order_id:string;factory_decision_id:string|null;created_by:string;operation_event_id:string;first_style_no:string;supplier_name_snapshot:string;merchandiser_name:string|null};
 export function isProductionRiskRecipient(actor:TrustedActorContext,createdBy:string,root=false) {
  return root||isRootActor(actor)||(caps(actor).includes("sourcing:view")&&caps(actor).includes("todo:view")&&
   (actor.actorRoles.some(r=>r==="owner_group"||r==="production_management")||(actor.actorRoles.includes("order_merchandiser")&&actor.actorId===createdBy)));
@@ -48,7 +50,28 @@ export class ProductionClosureService {
    await client.query("COMMIT");return {supplierId,enabled};
   }catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}
  }
- private async project(client:PoolClient,ids:string[],facts:Awaited<ReturnType<typeof readProductionProgressFacts>>) {
+ private async pilotFacts(client:PoolClient,ids:string[]|null,asOf:string) {
+  const result=await client.query<PilotOrderRow>(`SELECT production.production_order_id,production.factory_decision_id,${productionMerchandiserId} AS created_by,
+   dispatch.operation_event_id,sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,production.supplier_name_snapshot,merchandiser.display_name AS merchandiser_name
+   FROM sourcing_production_factory_orders production JOIN sourcing_production_orders dispatch ON dispatch.production_order_id=production.production_order_id
+   JOIN sourcing_cases source_case ON source_case.sourcing_case_id=production.sourcing_case_id
+   LEFT JOIN app_users merchandiser ON merchandiser.id=${productionMerchandiserId}
+   JOIN sourcing_production_pilots pilot ON pilot.supplier_id=production.supplier_id AND pilot.enabled=true
+   WHERE ${productionNotExcluded} AND ($1::uuid[] IS NULL OR production.production_order_id=ANY($1))
+   ORDER BY production.production_order_id,production.dispatched_at,production.factory_decision_id NULLS FIRST`,[ids]);
+  const selectedIds=[...new Set(result.rows.map(order=>order.production_order_id))];
+  const executions=await readFactoryProductionProgressFacts(client,selectedIds,asOf);
+  const orders=new Map<string,PilotOrderRow>(),facts=new Map<string,ReturnType<typeof calculateProductionProgress>>();
+  // Preserve one order-level alert; only enabled actual factories contribute, with the existing risk priority.
+  for(const order of result.rows){
+   const key=order.factory_decision_id?`${order.production_order_id}:${order.factory_decision_id}`:order.production_order_id;
+   const current=executions.get(key),previous=facts.get(order.production_order_id);
+   if(!current||(previous&&productionProgressRank(previous.progressState)<=productionProgressRank(current.progressState)))continue;
+   orders.set(order.production_order_id,order);facts.set(order.production_order_id,current);
+  }
+  return {orders,facts,ids:selectedIds};
+ }
+ private async project(client:PoolClient,ids:string[],facts:Awaited<ReturnType<typeof readFactoryProductionProgressFacts>>) {
   for(const id of ids){const kind=productionRiskKind(facts.get(id)?.progressState??"");
    await client.query(`UPDATE sourcing_production_alerts SET resolved_at=clock_timestamp() WHERE production_order_id=$1 AND resolved_at IS NULL AND kind IS DISTINCT FROM $2`,[id,kind]);
    if(kind)await client.query(`INSERT INTO sourcing_production_alerts(alert_id,production_order_id,kind) VALUES($1,$2,$3)
@@ -58,10 +81,8 @@ export class ProductionClosureService {
  // Record report-driven recovery in the same transaction, even if nobody opens a todo between reports.
  async refreshOrder(client:PoolClient,id:string) {
   await client.query("SELECT pg_advisory_xact_lock(hashtext('production-closure'))");
-  const pilot=await client.query(`SELECT 1 FROM sourcing_production_orders production JOIN sourcing_production_pilots pilot USING(supplier_id)
-   WHERE production_order_id=$1 AND ${productionNotExcluded} AND pilot.enabled=true`,[id]);
   const at=await client.query<{as_of:Date}>("SELECT clock_timestamp() AS as_of");
-  const facts=await readProductionProgressFacts(client,pilot.rows[0]?[id]:[],at.rows[0]!.as_of.toISOString());
+  const {facts}=await this.pilotFacts(client,[id],at.rows[0]!.as_of.toISOString());
   await this.project(client,[id],facts);
  }
  // Refresh when the existing todo list/indicator is read. No new scheduler, push or escalation.
@@ -73,21 +94,16 @@ export class ProductionClosureService {
   const client=await this.database.connect();
   try{await client.query("BEGIN");await client.query("SELECT pg_advisory_xact_lock(hashtext('production-closure'))");
    const timestamp=await client.query<{as_of:Date}>("SELECT clock_timestamp() AS as_of"),asOf=(this.clock?.()??timestamp.rows[0]!.as_of).toISOString();
-   const orders=await client.query<{production_order_id:string;created_by:string;operation_event_id:string;first_style_no:string;supplier_name_snapshot:string;merchandiser_name:string|null}>(`SELECT production.production_order_id,${productionMerchandiserId} AS created_by,production.operation_event_id,sourcing_current_first_style(production.sourcing_case_id) AS first_style_no,production.supplier_name_snapshot,merchandiser.display_name merchandiser_name
-    FROM sourcing_production_orders production JOIN sourcing_cases source_case USING(sourcing_case_id)
-    LEFT JOIN app_users merchandiser ON merchandiser.id=${productionMerchandiserId}
-    JOIN sourcing_production_pilots pilot ON pilot.supplier_id=production.supplier_id AND pilot.enabled=true WHERE ${productionNotExcluded}`);
-   const facts=await readProductionProgressFacts(client,orders.rows.map(r=>r.production_order_id),asOf);
-   await this.project(client,orders.rows.map(o=>o.production_order_id),facts);
+   const {orders:byId,facts,ids}=await this.pilotFacts(client,null,asOf);
+   await this.project(client,ids,facts);
    const alerts=await client.query<{alert_id:string;production_order_id:string;kind:string;opened_at:Date;read_at:Date|null}>(`SELECT alert.*,reading.read_at FROM sourcing_production_alerts alert
     LEFT JOIN sourcing_production_alert_reads reading ON reading.alert_id=alert.alert_id AND reading.user_id=$1
     WHERE alert.resolved_at IS NULL ORDER BY CASE alert.kind WHEN 'stale' THEN 0 WHEN 'high_risk' THEN 1 ELSE 2 END,alert.opened_at,alert.alert_id`,[actor.actorId]);
-   const byId=new Map(orders.rows.map(o=>[o.production_order_id,o]));
    const result=alerts.rows.flatMap(a=>{const o=byId.get(a.production_order_id);if(!o||!isProductionRiskRecipient(actor,o.created_by,root))return [];
     const p=facts.get(o.production_order_id)!;
     return [TodoResponseSchema.parse({todoId:a.alert_id,todoType:"business_action",category:`production_${a.kind}`,sourceEventId:o.operation_event_id,
      sourceAction:"sourcing.production.dispatch",entityType:"production_order",entityId:o.production_order_id,recipientUserId:actor.actorId,
-     requiredRole:null,requiredCapability:"sourcing:view",route:{routeName:"production_detail",entityId:o.production_order_id,todoId:a.alert_id},policyKey:null,dueAt:null,reminderCount:0,
+     requiredRole:null,requiredCapability:"sourcing:view",route:{routeName:"production_detail",entityId:o.production_order_id,todoId:a.alert_id,...(o.factory_decision_id?{factoryDecisionId:o.factory_decision_id}:{})},policyKey:null,dueAt:null,reminderCount:0,
      status:"pending",blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:o.first_style_no,supplierName:o.supplier_name_snapshot,merchandiserName:o.merchandiser_name ?? null,status:a.kind,updatedAt:asOf},
      unread:a.read_at===null,productionProgress:p.productionProgress,daysWithoutUpdate:p.daysWithoutUpdate,
      version:1,createdAt:iso(a.opened_at),updatedAt:asOf})];});

@@ -2217,6 +2217,63 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     }, randomUUID())).resolves.toMatchObject({ value: { status: "in_production" } });
   });
 
+  const transferReviewFixture=async(suffix:string)=>{
+    const businessDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),serial=`TEST-REVIEW-${suffix}-${randomUUID().slice(0,8)}`;
+    const source=(await service.createCase(merchandiserActor(),{gender:'女装',styleName:'TEST转厂Review回归',estimatedCutPieceSendDate:businessDate,deliveryDate:businessDate,lineItems:[{styleNo:serial,color:'蓝',quantity:60}],daxingUnitPrice:'8'},randomUUID())).value;
+    const caseId=source.sourcingCaseId;
+    await service.quoteIePrice(ieActor(),caseId,{unitPrice:'8'},randomUUID());
+    await service.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,unitPrice:'8',craftIds:[craftId('净色车缝')]},randomUUID());
+    await service.decideOwner(ownerActor(),caseId,{decision:'approved'},randomUUID());
+    const contract=(await contractService.getCurrent(rootActor(),caseId)).item!;
+    const order=(await production.dispatch(rootActor(),caseId,{sourcingContractDocumentId:contract.sourcingContractDocumentId,confirmed:true},randomUUID())).value;
+    const reporting=new ProductionReportingService(database);
+    await reporting.report(rootActor(),order.productionOrderId,{position:1,businessDate,quantity:5},randomUUID());
+    const changed=(await service.requestFactoryChange(ownerActor(),caseId,{supplierId:replacementFactoryId,unitPrice:'9',changeReason:'TEST转厂动态和试点归属'},randomUUID())).value;
+    return {id:order.productionOrderId,factoryDecisionId:changed.decision!.sourcingDecisionId,businessDate,serial,reporting};
+  };
+
+  it("keeps selected factory activity visible when another factory has more than twenty newer events",async()=>{
+    const {id,factoryDecisionId,businessDate,serial,reporting}=await transferReviewFixture('EVENTS');
+    for(let i=0;i<22;i++)await reporting.report(rootActor(),id,{factoryDecisionId,position:1,businessDate,quantity:1},randomUUID());
+    const dashboard=new ProductionDashboardService(database,reporting);
+    const old=await dashboard.list(rootActor(),{q:serial,supplierId:factoryId});
+    expect(old.items).toHaveLength(1);
+    expect(old.events).toEqual([expect.objectContaining({productionOrderId:id,factoryDecisionId:null,quantity:5})]);
+    const incoming=await dashboard.list(rootActor(),{q:serial,supplierId:replacementFactoryId});
+    expect(incoming.events).toHaveLength(20);
+    expect(incoming.events.every(event=>event.factoryDecisionId===factoryDecisionId)).toBe(true);
+  });
+
+  it("uses the actual transferred factory pilot for report-driven alerts and order-level risk todos",async()=>{
+    const {id,factoryDecisionId,businessDate}=await transferReviewFixture('PILOT');
+    const closure=new ProductionClosureService(database),previous=(await closure.pilots(rootActor())).suppliers;
+    const reporting=new ProductionReportingService(database,undefined,undefined,closure);
+    try{
+      await closure.setPilot(rootActor(),{supplierId:factoryId,enabled:false});
+      await closure.setPilot(rootActor(),{supplierId:replacementFactoryId,enabled:true});
+      await reporting.report(rootActor(),id,{factoryDecisionId,position:1,businessDate,quantity:1},randomUUID());
+      expect((await database.query('SELECT kind FROM sourcing_production_alerts WHERE production_order_id=$1 AND resolved_at IS NULL',[id])).rows).toEqual([{kind:'high_risk'}]);
+      const active=(await closure.todos(rootActor())).filter(todo=>todo.entityId===id);
+      expect(active).toHaveLength(1);
+      expect(active[0]).toMatchObject({category:'production_high_risk',orderContext:{supplierName:'二号加工厂'},route:{factoryDecisionId}});
+      await closure.markRead(rootActor(),active[0]!.todoId);
+      expect((await closure.todos(rootActor())).find(todo=>todo.entityId===id)?.unread).toBe(false);
+      await closure.setPilot(rootActor(),{supplierId:factoryId,enabled:true});
+      await closure.setPilot(rootActor(),{supplierId:replacementFactoryId,enabled:false});
+      expect((await closure.todos(rootActor())).filter(todo=>todo.entityId===id)).toEqual([]);
+      await reporting.report(rootActor(),id,{factoryDecisionId,position:1,businessDate,quantity:1},randomUUID());
+      expect((await database.query('SELECT 1 FROM sourcing_production_alerts WHERE production_order_id=$1 AND resolved_at IS NULL',[id])).rows).toEqual([]);
+      await closure.setPilot(rootActor(),{supplierId:replacementFactoryId,enabled:true});
+      const reopened=(await closure.todos(rootActor())).filter(todo=>todo.entityId===id);
+      expect(reopened).toHaveLength(1);
+      expect(reopened[0]!.todoId).not.toBe(active[0]!.todoId);
+      expect(reopened[0]).toMatchObject({unread:true,route:{factoryDecisionId}});
+      expect((await database.query("SELECT count(*)::int AS count FROM message_outbox WHERE topic='todo.delivery'")).rows[0].count).toBe(0);
+    }finally{
+      for(const supplier of previous.filter(s=>s.supplierId===factoryId||s.supplierId===replacementFactoryId))await closure.setPilot(rootActor(),{supplierId:supplier.supplierId,enabled:supplier.enabled});
+    }
+  });
+
   it("retains style-color reported quantities at the old factory and transfers only unfinished quantities with independent shipments receipts and finance",async()=>{
     const reporting=new ProductionReportingService(database),closure=new ProductionClosureService(database),dashboard=new ProductionDashboardService(database,reporting);
     const businessDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
