@@ -10,8 +10,11 @@ const extension:Entry[]=JSON.parse(readFileSync('scripts/migration-main-extensio
 const branches:{main:Entry[];digital:Entry[]}=JSON.parse(readFileSync('scripts/migration-branches.json','utf8'));
 const sorted=(rows:Entry[])=>[...rows].sort((a,b)=>a.version.localeCompare(b.version));
 describe('reuse exact main extension beside the released digital 0221 identity',()=>{
- it('accepts actual main221, Acceptance236 and integrated238 histories',()=>{
-  expect([main.length,release.length,integrated.length]).toEqual([221,236,238]);
+ it('accepts actual main221, Acceptance236 and the integrated history with append-only extensions',()=>{
+  expect([main.length,release.length]).toEqual([221,236]);
+  const reconciled = integrated.filter(row=>Number(row.version.slice(0,4))<=233);
+  expect(reconciled).toHaveLength(238);
+  expect(integrated.slice(reconciled.length).every(row=>Number(row.version.slice(0,4))>233)).toBe(true);
   const main222=sorted([...main,extension[1]!]);
   const priorAcceptance=integrated.filter(row=>row.version!==extension[1]!.version);
   for(const history of [main,main222,release,priorAcceptance,integrated])expect(()=>assertAppliedMigrationHistory(history,integrated)).not.toThrow();

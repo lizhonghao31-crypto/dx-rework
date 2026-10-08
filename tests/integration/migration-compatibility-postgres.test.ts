@@ -74,7 +74,7 @@ suite('main and digital historical PostgreSQL upgrades',()=>{
     expect((await client.query("SELECT count(*)::int n FROM schema_migrations WHERE version='0218_digital_production_identity'")).rows[0].n).toBe(1);
     await client.query('DROP TRIGGER test_stop ON schema_migrations');
    }
-   const result=await applyMigrations(scoped.toString());expect(result.currentVersion).toBe('0233_manual_contract_template_provenance');
+   const result=await applyMigrations(scoped.toString());expect(result.currentVersion).toBe(catalog.at(-1)!.version);
    expect((await applyMigrations(scoped.toString())).applied).toEqual([]);
    const after=(await client.query('SELECT version,checksum,applied_at FROM schema_migrations ORDER BY version')).rows;
    expect(after.map(r=>({version:r.version,checksum:r.checksum}))).toEqual(catalog.map(({version,checksum})=>({version,checksum})));

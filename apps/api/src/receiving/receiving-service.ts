@@ -2304,6 +2304,10 @@ export class ReceivingService {
       return { value: outcome.response, reused: outcome.reused };
     } catch (error) {
       await client.query("ROLLBACK");
+      if ((error as { code?: string }).code === "42501") {
+        const correctionOnly = (error as { constraint?: string }).constraint === "receiving_packing_root_correction_only";
+        fail(correctionOnly ? "已录入的装箱数量只有Root可以修改" : "当前账号无权执行此订单回货操作", 403, "FORBIDDEN");
+      }
       throw error;
     } finally {
       client.release();

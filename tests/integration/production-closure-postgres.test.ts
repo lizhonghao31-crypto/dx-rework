@@ -88,9 +88,9 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   `INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
    VALUES($1,$2,'裁床单.png','image/png',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,
   [attachmentId,`cutting-sheet/${attachmentId}.png`,"d".repeat(64),uploadedBy]);return attachmentId;};
- const create=async(supplierId:string,suffix:string)=>{
+ const create=async(supplierId:string,suffix:string,firstQuantity=20)=>{
   const created=await sourcing.createCase(merch(),{gender:"女装",styleName:"试点上衣",estimatedCutPieceSendDate:today(),deliveryDate:today(),
-   lineItems:[{styleNo:`SSP09-${suffix}-A`,color:"蓝",quantity:20,externalUnitPrice:"8.0000"},{styleNo:`SSP09-${suffix}-B`,color:"白",quantity:10,externalUnitPrice:"9.0000"}],daxingUnitPrice:"777.1234"},randomUUID());
+   lineItems:[{styleNo:`SSP09-${suffix}-A`,color:"蓝",quantity:firstQuantity,externalUnitPrice:"8.0000"},{styleNo:`SSP09-${suffix}-B`,color:"白",quantity:10,externalUnitPrice:"9.0000"}],daxingUnitPrice:"777.1234"},randomUUID());
   const id=created.value.sourcingCaseId,prices=[{position:1,unitPrice:"8.0000"},{position:2,unitPrice:"9.0000"}];
   await sourcing.quoteIePrice(actor(user,["ie_reviewer"],["sourcing:price:quote","sourcing:view"]),id,{linePrices:prices},randomUUID());
   await sourcing.recordManagementDecision(actor(user,["production_management"],["sourcing:decision:record","sourcing:view"]),id,{supplierId,linePrices:prices,craftIds:[craftId]},randomUUID());
@@ -267,6 +267,47 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   expect(sharedRows.map(row=>row.actualCutCount).sort((a,b)=>(a??0)-(b??0))).toEqual([20,21]);
   expect(sharedRows.every(row=>row.cuttingRecordedBy==="SSP09跟单")).toBe(true);
   expect(sharedRows.every(row=>row.cuttingRecordedAt!==null)).toBe(true);
+ },60000);
+
+ it("packs red 40 and blue 60 independently for the same style and serializes first packing within each cutting group",async()=>{
+  const orders=[await create(factories[1]!,"PACK-RED",40),await create(factories[2]!,"PACK-BLUE",60)];
+  const styleNo="RETEST02-MULTI-PO-PACKING";
+  for(const [index,order] of orders.entries()) await sourcing.reviseStyles(root(),order.sourcingCaseId,{
+   expectedRevision:0,confirmedDuplicateStyles:index===0?[]:[styleNo],
+   lines:order.lines.map(line=>({position:line.position,styleNo:line.position===1?styleNo:line.styleNo,alternateStyleNo:line.alternateStyleNo})),
+  },randomUUID());
+  const cuts=(await strictReceiving.listCuttingOptions("PACKING")).filter(item=>item.styleNo===styleNo);
+  expect(cuts).toHaveLength(2);
+  const receipts=[];
+  for(const quantity of [40,60]) {
+   const cut=cuts.find(item=>item.actualCutCount===quantity)!;
+   receipts.push((await strictReceiving.create(receiver(),{cuttingOrderId:cut.cuttingOrderId,
+    documentQuantity:quantity,actualQuantity:quantity,attachmentIds:[await readyImage()]},randomUUID())).value);
+  }
+  const packer=()=>actor(warehouse,["warehouse_receiver"],["receiving:packing_manage"]);
+  const input=async(index:number)=>{
+   const row=(await strictReceiving.board(today(),today(),styleNo)).rows.find(item=>item.receivingBatchId===receipts[index]!.receivingBatchId)!;
+   return {receivingBatchId:row.receivingBatchId,expectedVersion:row.version,expectedPackingRevisionId:row.packingRevisionId,packingQuantity:index===0?40:60};
+  };
+  const redInput=await input(0),redKey=randomUUID(),redActor=packer();
+  const red=await strictReceiving.recordPacking(redActor,redInput,redKey);
+  expect((await strictReceiving.recordPacking(redActor,redInput,redKey))).toMatchObject({reused:true,value:red.value});
+  const blueInput=await input(1);
+  const attempts=await Promise.allSettled([
+   strictReceiving.recordPacking(packer(),blueInput,randomUUID()),
+   strictReceiving.recordPacking(packer(),blueInput,randomUUID()),
+  ]);
+  expect(attempts.filter(result=>result.status==="fulfilled")).toHaveLength(1);
+  const rejected=attempts.find(result=>result.status==="rejected") as PromiseRejectedResult;
+  expect(rejected.reason).toMatchObject({statusCode:403,code:"FORBIDDEN"});
+  const board=await strictReceiving.board(today(),today(),styleNo);
+  expect(board.rows.map(row=>row.packingQuantity).sort((a,b)=>(a??0)-(b??0))).toEqual([40,60]);
+  expect(board.rows.reduce((sum,row)=>sum+row.cumulativeActualQuantity,0)).toBe(100);
+  expect(board.rows.every(row=>row.packingDifferenceQuantity===0)).toBe(true);
+  await expect(strictReceiving.recordPacking(packer(),await input(0),randomUUID())).rejects.toMatchObject({statusCode:403});
+  const correction=await strictReceiving.recordPacking(root("receiving:packing_manage"),{...await input(1),packingQuantity:59},randomUUID());
+  expect(correction.value.packingQuantity).toBe(59);
+  expect((await strictReceiving.board(today(),today(),styleNo)).rows.find(row=>row.receivingBatchId===receipts[0]!.receivingBatchId)?.packingQuantity).toBe(40);
  },60000);
 
  it("keeps backfilled receipts before shipment unlinked instead of rolling them back",async()=>{
