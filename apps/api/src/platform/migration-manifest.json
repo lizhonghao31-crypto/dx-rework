@@ -975,6 +975,10 @@
     {
       "version": "0238_digital_po_customer_requests",
       "checksum": "536b93f7228d41103d39aa612aa9171a8387633dc4acbc46c3382a7aa1ae7b7f"
+    },
+    {
+      "version": "0239_sourcing_po_factory_dates",
+      "checksum": "709cc28049ca610a56cc98c2a55e4791eb7b3f4f192da1599b76eae45e1ca93d"
     }
   ]
 }

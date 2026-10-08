@@ -20,7 +20,7 @@ export async function readBudgetSourcing(db: Pick<PoolClient, "query">, actor: T
   const budget = (await db.query(`SELECT d.* FROM digital_budget_documents d JOIN digital_budget_preparations p USING(production_order_id)
     WHERE d.production_order_id=$1 AND d.status='published' AND d.version=p.budget_version`, [orderId])).rows[0] ?? conflict("请先发布当前预算");
   const document = budget.document as BudgetDocument;
-  const lines = (await db.query(`SELECT l.line_id,l.position,l.formal_style_no,l.temporary_style_no,l.color,
+  const lines = (await db.query(`SELECT l.line_id,l.position,l.formal_style_no,l.temporary_style_no,l.color,l.customer_warehouse_arrival_date::text AS customer,
     (SELECT sum(s.quantity)::integer FROM digital_production_po_sizes s WHERE s.line_id=l.line_id) AS quantity
     FROM digital_production_po_lines l WHERE l.production_order_id=$1 ORDER BY l.position`, [orderId])).rows;
   return { order, budgetVersion: budget.version as number, document, lines };
@@ -39,7 +39,8 @@ export async function validateBudgetSourcing(db: PoolClient, actor: TrustedActor
   for (let i = 0; i < source.lines.length; i++) {
     const line = source.lines[i]!, entered = input.lineItems[i]!;
     const alternate = line.temporary_style_no || source.order.temporary_style_no || source.order.design_style_no;
-    if ((entered.styleNo ?? "") !== (line.formal_style_no ?? "") || (entered.alternateStyleNo ?? "") !== alternate || entered.color !== line.color || entered.quantity !== line.quantity) conflict("款号、颜色和数量须沿用当前母单");
+    if (entered.lineId && entered.lineId !== line.line_id || (entered.alternateStyleNo ?? "") !== alternate || entered.color !== line.color || entered.quantity !== line.quantity) conflict("PO 身份、代用号、颜色和数量须沿用当前母单");
+    if (!entered.factoryDeliveryDate || entered.factoryDeliveryDate < input.estimatedCutPieceSendDate || line.customer && entered.factoryDeliveryDate > line.customer) conflict("请逐 PO 填写合法的加工厂交货日，不能早于裁片发出或晚于客户仓到货");
   }
   return source.lines.map((line, index) => ({ childLineKey: String(index + 1), lineId: line.line_id as string }));
 }

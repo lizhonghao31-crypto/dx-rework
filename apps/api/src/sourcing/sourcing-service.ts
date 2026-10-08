@@ -1,3 +1,4 @@
+import { factoryPoLines, factoryProposals, syncFactoryPoNumbers, validateFactoryInputs, approveFactoryPoDates } from "../production-platform/po-factory-date-adapter.js";
 import {factorySettlements,reconcileFactory} from "./factory-settlement-service.js";
 import {factoryTransferLines,transferProductionFactory} from "./factory-transfer-service.js";
 import { syncBulkSourcing } from "../production-platform/bulk-preparation-service.js";
@@ -668,6 +669,15 @@ export class SourcingService {
     if (!row) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
     if (row.workflow_generation === "digital_production_v1") await resolveDigitalChild(client, "sourcing", sourcingCaseId, row.workflow_generation);
     const item = mapCase(history ? { ...row,contract_return_monitor_enabled:false } : row, actor);
+    if (row.workflow_generation === "digital_production_v1") {
+      const lines = (await factoryPoLines(client,sourcingCaseId,history?.at ?? null))!;
+      const proposals = await factoryProposals(client,sourcingCaseId,history?.at ?? null);
+      item.lineItems = item.lineItems.map(line => { const po=lines.find(po=>po.position===line.position); return po ? {...line,lineId:po.line_id,factoryDeliveryDate:po.factory,proposedFactoryDeliveryDate:proposals[line.position-1]?.factoryDeliveryDate ?? null}:line; });
+      if(item.approvalSnapshot) {
+        const frozen = (await factoryPoLines(client,sourcingCaseId,null,item.approvalSnapshot.sourcingApprovalSnapshotId))!;
+        item.approvalSnapshot.linePrices=item.approvalSnapshot.linePrices.map(line=>{const po=frozen.find(po=>po.position===line.position);return po?{...line,lineId:po.line_id,factoryDeliveryDate:po.factory}:line;});
+      }
+    }
     if (history) {
       item.styleNo = item.lineItems[0]?.styleNo ?? item.styleNo;
       // Current lifecycle/version are not a historical state; never present them as such.
@@ -1729,6 +1739,7 @@ export class SourcingService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       const root = actor.actorRoles.includes(ROOT_ROLE);
       const source = (await client.query<{created_by: string; additional_merchandiser_user_id: string | null}>(
         "SELECT created_by,nullif(to_jsonb(sourcing_cases)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE", [sourcingCaseId],
@@ -1747,6 +1758,8 @@ export class SourcingService {
         let correctionVersion = 0;
         let correctionStyleId: string | null = null;
         if (facts) {
+          const poLines=await factoryPoLines(client,sourcingCaseId);
+          if(poLines)validateFactoryInputs(poLines,facts,true);
           await client.query("INSERT INTO sourcing_style_catalog(style_id,style_name,created_by) VALUES($1,$2,$3) ON CONFLICT(normalized_name) DO NOTHING",[randomUUID(),facts.styleName,actor.actorId]);
           correctionStyleId=(await client.query<{style_id:string}>("SELECT style_id FROM sourcing_style_catalog WHERE normalized_name=lower(btrim($1))",[facts.styleName])).rows[0]!.style_id;
           const confirmedDuplicateStyles = await this.checkStyleNumbers(client,facts.lineItems,facts.confirmedDuplicateStyles,sourcingCaseId,before.lineItems);
@@ -1786,6 +1799,7 @@ export class SourcingService {
           [randomUUID(),sourcingCaseId,correctionVersion,facts.gender,facts.styleName,facts.estimatedCutPieceSendDate,facts.deliveryDate,
             after.orderQuantity,JSON.stringify(facts.lineItems),facts.attachmentIds,input.reason,actor.actorId,eventId,actor.requestId,correctionStyleId]);
         }
+        if(facts)await syncFactoryPoNumbers(client,sourcingCaseId,facts);
         await client.query(`INSERT INTO sourcing_case_transitions(sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,
           business_action,transition_reason,actor_id,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [randomUUID(),sourcingCaseId,before.version+1,before.status,nextStatus,correcting?"correction_submitted":"returned_to_merchandiser",input.reason,actor.actorId,eventId,actor.requestId]);
@@ -1831,6 +1845,8 @@ export class SourcingService {
       quantity: normalizeQuantity(line.quantity),
       externalUnitPrice: null,
       imageAttachmentId: line.imageAttachmentId ?? null,
+      ...(line.lineId ? {lineId:line.lineId}:{}),
+      ...(line.factoryDeliveryDate ? {factoryDeliveryDate:line.factoryDeliveryDate}:{}),
     }));
     if (lineItems.some(line => !line.styleNo && !line.alternateStyleNo)) fail("正式款号与代用款号至少填写一个");
     let orderQuantity: number;
@@ -2017,6 +2033,7 @@ export class SourcingService {
           ],
         );
         await bindBudgetSourcing(client, this.database, actor, input, sourcingCaseId, digitalLines);
+        if(digitalLines) await syncFactoryPoNumbers(client,sourcingCaseId,input);
         await this.todoProjection?.actionableForAllAssignedRole(client, actor, {
           category: "sourcing_ie_quote",
           sourceEventId: eventId,
@@ -2790,6 +2807,7 @@ export class SourcingService {
              WHERE line.sourcing_decision_id=$3 ORDER BY line.position`,
             [snapshotId,sourcingCaseId,source.sourcing_decision_id],
           );
+          await approveFactoryPoDates(client,actor,sourcingCaseId,eventId,decisionReason,source.source_type === "factory_change");
           await ensureCuttingOrdersForApproval(client, sourcingCaseId, snapshotId);
           await this.contractService?.prepareForApproval(client, snapshotId, actor);
         }

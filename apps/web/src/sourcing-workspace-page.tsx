@@ -128,6 +128,9 @@ type UploadedImage = Readonly<{
   previewUrl: string;
 }>;
 type SourcingLineDraft = Readonly<{
+  lineId?: string;
+  factoryDeliveryDate?: string;
+  customerWarehouseArrivalDate?: string | null;
   styleNo: string;
   alternateStyleNo: string;
   color: string;
@@ -480,6 +483,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
   const [deliveryDate, setDeliveryDate] = useState(correction?.item.deliveryDate ?? "");
   const [lineItems, setLineItems] = useState<SourcingLineDraft[]>(correction ? correction.item.lineItems.map(line => ({
     styleNo:line.formalStyleNo === undefined ? line.styleNo : line.formalStyleNo ?? "", alternateStyleNo:line.alternateStyleNo ?? "",
+    ...(line.lineId?{lineId:line.lineId,factoryDeliveryDate:line.proposedFactoryDeliveryDate ?? line.factoryDeliveryDate ?? ""}:{}),
     color:line.color ?? "", quantity:String(line.quantity), ...(line.imageAttachmentId ? {imageAttachmentId:line.imageAttachmentId} : {}),
   })) : [{
     styleNo: "",
@@ -500,6 +504,14 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
   const previewUrls = useRef<string[]>([]);
   const restoredDraftUserId = useRef("");
   const canCreate = canAct(user, "order_merchandiser", "sourcing:inquiry:create");
+  const digitalPo = Boolean(budgetOrderId) || Boolean(correction?.item.lineItems.some(line=>line.lineId));
+  const effectiveDeliveryDate = digitalPo ? lineItems.map(line=>line.factoryDeliveryDate ?? "").filter(Boolean).sort()[0] ?? "" : deliveryDate;
+  const applyFactoryDefault = async () => {
+    if(!deliveryDate)return;
+    if(lineItems.some(line=>line.factoryDeliveryDate && line.factoryDeliveryDate!==deliveryDate)
+      && !await confirmInApp("应用默认日期将覆盖已经单独填写的 PO 工厂交期，确认继续吗？"))return;
+    setLineItems(current=>current.map(line=>({...line,factoryDeliveryDate:deliveryDate})));createKey.current=null;
+  };
   const duplicateLinesMessage = duplicateSourcingLineMessage(lineItems);
   useEffect(() => {
     if (!budgetOrderId || !canCreate) return;
@@ -509,7 +521,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
       if (!live) return;
       setBudgetPreparation(prepared); setGender(prepared.gender); setStyleName(prepared.styleName);
       setDaxingUnitPrice(prepared.daxingUnitPrice);
-      setLineItems(prepared.lineItems.map(line => ({ styleNo: line.styleNo, alternateStyleNo: line.alternateStyleNo, color: line.color, quantity: String(line.quantity) })));
+      setLineItems(prepared.lineItems.map(line => ({lineId:line.lineId, factoryDeliveryDate:"", customerWarehouseArrivalDate:line.customerWarehouseArrivalDate ?? null, styleNo: line.styleNo, alternateStyleNo: line.alternateStyleNo, color: line.color, quantity: String(line.quantity) })));
       setImages(prepared.images.map(image => ({ ...image, previewUrl: attachmentUrl(image.attachmentId, "preview") })));
     }).catch(reason => { if (live) setMessage(reason.message); });
     return () => { live = false; };
@@ -747,7 +759,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
     if (budgetOrderId && !budgetPreparation) return;
     if (!canCreate) { await alertInApp("当前账号没有创建订单权限", { title: "无权执行此操作" }); return; }
     const normalizedDaxingPrice = businessInputChange(daxingUnitPrice).trim();
-    const issues = validateSourcingCreate({ gender, styleName, estimatedCutPieceSendDate, deliveryDate,
+    const issues = validateSourcingCreate({ gender, styleName, estimatedCutPieceSendDate, deliveryDate:effectiveDeliveryDate, digitalPo,
       lineItems, daxingUnitPrice: normalizedDaxingPrice, imageCount: images.length, uploading, uploadFailed });
     const effectiveIssues = correction ? issues.filter(issue=>issue.fieldId!=="sourcing-create-budget") : issues;
     if (correction && !correctionReason.trim()) effectiveIssues.push({fieldId:"sourcing-correction-reason",message:"请填写修改说明"});
@@ -755,12 +767,13 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
     const normalizedLines = lineItems.map((line) => ({
       ...(line.styleNo.trim() ? { styleNo: line.styleNo.trim() } : {}),
       ...(line.alternateStyleNo.trim() ? { alternateStyleNo: line.alternateStyleNo.trim() } : {}),
+      ...(digitalPo?{lineId:line.lineId,factoryDeliveryDate:line.factoryDeliveryDate}:{}),
       color: line.color.trim(), quantity: Number(line.quantity),
       ...(line.imageAttachmentId ? { imageAttachmentId: line.imageAttachmentId } : {}),
     }));
     const requestKey = createKey.current ?? createClientRequestId();
     createKey.current = requestKey;
-    const body = JSON.stringify({ gender, styleName: styleName.trim(), estimatedCutPieceSendDate, deliveryDate,
+    const body = JSON.stringify({ gender, styleName: styleName.trim(), estimatedCutPieceSendDate, deliveryDate:effectiveDeliveryDate,
       lineItems: normalizedLines, ...(correction ? {expectedVersion:correction.item.version,reason:correctionReason.trim()} : {daxingUnitPrice: normalizedDaxingPrice,
         ...(additionalMerchandiserUserId ? {additionalMerchandiserUserId} : {})}),
       ...(budgetPreparation ? { digitalBudget: { productionOrderId: budgetPreparation.productionOrderId, budgetVersion: budgetPreparation.budgetVersion, orderVersion: budgetPreparation.orderVersion } } : {}),
@@ -778,7 +791,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
   };
 
   return (
-    <div className="sourcing-workspace sourcing-workspace--create">
+    <div className={`sourcing-workspace sourcing-workspace--create${digitalPo?" sourcing-workspace--create-digital-po":""}`}>
       <Header
         iconRoute="/ui/sourcing/create"
         title={correction ? "修改订单资料" : "创建订单"}
@@ -793,7 +806,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
           <StatusBadge tone="info">跟单提交</StatusBadge>
         </div>
         <div className="sourcing-form-grid">
-          {budgetPreparation?.contractDeliveryDate && <p>客户合同交付期：{budgetPreparation.contractDeliveryDate}</p>}
+          {budgetPreparation?.contractDeliveryDate && <p>历史整单参考日期：{budgetPreparation.contractDeliveryDate}</p>}
           <div className={`sourcing-order-classification${correction ? "" : " sourcing-order-classification--additional"}`}>
             <label><span>性别（必填）</span><select disabled={Boolean(budgetOrderId)} {...feedback.field("sourcing-create-gender")} required value={gender} onChange={(event) => { setGender(event.target.value as typeof gender); createKey.current = null; }}><option value="">请选择</option><option value="男装">男装</option><option value="女装">女装</option></select></label>
             <label><span>款式（必填）</span><input readOnly={Boolean(budgetOrderId)} {...feedback.field("sourcing-create-style")} required list="sourcing-style-options" value={styleName} maxLength={100} onChange={(event) => { setStyleName(event.target.value); createKey.current = null; }} placeholder="搜索或输入，如梭织短裤" /></label>
@@ -801,7 +814,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
             <datalist id="sourcing-style-options">{styleCatalog.map((style) => <option key={style.styleId} value={style.styleName} />)}</datalist>
           </div>
           <label><span>预计裁片发出日期（工厂发出，必填）</span><input type="date" required aria-required="true" value={estimatedCutPieceSendDate} {...feedback.field("sourcing-create-send-date")} onChange={(event) => { setEstimatedCutPieceSendDate(event.target.value); createKey.current = null; }} /></label>
-          <label><span>要求交货日期（到工厂，必填）</span><input type="date" required aria-required="true" value={deliveryDate} {...feedback.field("sourcing-create-delivery-date")} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} /></label>
+          <label><span>{digitalPo?"默认加工厂交货日（选填）":"要求交货日期（到工厂，必填）"}</span><input type="date" required={!digitalPo} aria-required={!digitalPo} value={deliveryDate} {...feedback.field("sourcing-create-delivery-date")} onChange={(event) => { setDeliveryDate(event.target.value); createKey.current = null; }} />{digitalPo?<button type="button" className="dx-button dx-button--secondary" disabled={!deliveryDate} onClick={()=>void applyFactoryDefault()}>应用到全部 PO</button>:null}</label>
           <label><span>预算价（内部，必填）</span><input readOnly={!!correction || Boolean(budgetOrderId)} {...feedback.field("sourcing-create-budget")} value={activeCreateInput === "daxing" ? daxingUnitPrice : newSourcingPriceDisplay(daxingUnitPrice)} onFocus={() => setActiveCreateInput("daxing")} onBlur={() => setActiveCreateInput(null)} inputMode="decimal" onChange={(event) => { setDaxingUnitPrice(businessInputChange(event.target.value)); createKey.current = null; }} placeholder="请输入预算价" aria-invalid={!isNewSourcingPrice(daxingUnitPrice)} /></label>
           <section className="sourcing-line-editor sourcing-form-wide" aria-label="订单款色明细">
             <div className="sourcing-line-editor__heading">
@@ -810,16 +823,17 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
               </div>
               <div className="sourcing-line-editor__actions">
                 <StatusBadge tone="info">合计 {formatBusinessDecimal(lineItems.reduce((sum, line) => sum + (Number(line.quantity) || 0), 0))} 件</StatusBadge>
-                <button className="dx-button dx-button--secondary" type="button" disabled={Boolean(budgetOrderId) || busy || uploading || lineItems.length >= MAX_SOURCING_LINE_ITEMS} onClick={addLineItem}>＋ 新增款色</button>
+                <button className="dx-button dx-button--secondary" type="button" disabled={digitalPo || busy || uploading || lineItems.length >= MAX_SOURCING_LINE_ITEMS} onClick={addLineItem}>＋ 新增款色</button>
               </div>
             </div>
             <div className="sourcing-line-editor__list">
               {lineItems.map((line, index) => <article className="sourcing-line-row" key={index}>
                 <b>{String(index + 1).padStart(2, "0")}</b>
-                <label><span>正式款号</span><input readOnly={Boolean(budgetOrderId)} {...feedback.field(`sourcing-create-style-${index}`)} value={line.styleNo} maxLength={100} onChange={(event) => updateLineItem(index, "styleNo", event.target.value)} placeholder="可后补" /></label>
-                <label><span>代用款号</span><input readOnly={Boolean(budgetOrderId)} value={line.alternateStyleNo} maxLength={100} onChange={(event) => updateLineItem(index, "alternateStyleNo", event.target.value)} placeholder="无正式款号时必填" /></label>
-                <label><span>颜色</span><input readOnly={Boolean(budgetOrderId)} {...feedback.field(`sourcing-create-color-${index}`)} value={line.color} maxLength={100} onChange={(event) => updateLineItem(index, "color", event.target.value)} placeholder="必填" /></label>
-                <label><span>数量</span><input readOnly={Boolean(budgetOrderId)} {...feedback.field(`sourcing-create-quantity-${index}`)} value={activeCreateInput === `quantity-${index}` ? line.quantity : businessInputValue(line.quantity)} onFocus={() => setActiveCreateInput(`quantity-${index}`)} onBlur={() => setActiveCreateInput(null)} inputMode="numeric" onChange={(event) => updateLineItem(index, "quantity", businessInputChange(event.target.value))} placeholder="整数" /></label>
+                <label><span>正式款号</span><input {...feedback.field(`sourcing-create-style-${index}`)} value={line.styleNo} maxLength={100} onChange={(event) => updateLineItem(index, "styleNo", event.target.value)} placeholder="可后补" /></label>
+                <label><span>代用款号</span><input readOnly={digitalPo} value={line.alternateStyleNo} maxLength={100} onChange={(event) => updateLineItem(index, "alternateStyleNo", event.target.value)} placeholder="无正式款号时必填" /></label>
+                <label><span>颜色</span><input readOnly={digitalPo} {...feedback.field(`sourcing-create-color-${index}`)} value={line.color} maxLength={100} onChange={(event) => updateLineItem(index, "color", event.target.value)} placeholder="必填" /></label>
+                <label><span>数量</span><input readOnly={digitalPo} {...feedback.field(`sourcing-create-quantity-${index}`)} value={activeCreateInput === `quantity-${index}` ? line.quantity : businessInputValue(line.quantity)} onFocus={() => setActiveCreateInput(`quantity-${index}`)} onBlur={() => setActiveCreateInput(null)} inputMode="numeric" onChange={(event) => updateLineItem(index, "quantity", businessInputChange(event.target.value))} placeholder="整数" /></label>
+                {digitalPo?<label><span>本 PO 加工厂交货日（必填）</span><input type="date" required value={line.factoryDeliveryDate ?? ""} {...feedback.field(`sourcing-create-factory-date-${index}`)} onChange={event=>updateLineItem(index,"factoryDeliveryDate",event.target.value)}/>{line.customerWarehouseArrivalDate?<small>客户仓到货：{line.customerWarehouseArrivalDate}</small>:null}</label>:null}
                 <div className="sourcing-line-photo">
                   {line.imageAttachmentId ? <img src={images.find((image) => image.attachmentId === line.imageAttachmentId)?.previewUrl} alt={`第 ${index + 1} 款图片`} /> : null}
                   <label className="rework-v2-upload">
@@ -831,7 +845,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
                     {images.map((image, imageIndex) => <option key={image.attachmentId} value={image.attachmentId}>{imageIndex + 1}. {image.filename}</option>)}
                   </select> : null}
                 </div>
-                <button className="dx-button dx-button--secondary" type="button" aria-label={`删除第 ${index + 1} 行款色`} disabled={Boolean(budgetOrderId) || busy || uploading || lineItems.length === 1} onClick={() => void removeLineItem(index)}>删除</button>
+                <button className="dx-button dx-button--secondary" type="button" aria-label={`删除第 ${index + 1} 行款色`} disabled={digitalPo || busy || uploading || lineItems.length === 1} onClick={() => void removeLineItem(index)}>删除</button>
               </article>)}
             </div>
           </section>
@@ -1789,6 +1803,7 @@ function OrderDetailPage({
               {canCorrectBudget && line.position === item.lineItems[0]?.position ? <button type="button" className="sourcing-budget-price-correct"
                 onClick={() => { budgetCorrectionKey.current = null; setBudgetCorrectionError(""); setBudgetCorrectionOpen(true); }}>更正</button> : null}
             </span> : "历史未维护" }] : []),
+            ...(item.lineItems.some(line=>line.lineId)?[{key:"factoryDate",label:"加工厂交货日",render:(line:SourcingCaseSummary["lineItems"][number])=><>{line.factoryDeliveryDate ?? "尚未生效"}{line.proposedFactoryDeliveryDate && line.proposedFactoryDeliveryDate!==line.factoryDeliveryDate?<small>{item.approvalSnapshot?"原申请日期：":"审批提议："}{line.proposedFactoryDeliveryDate}</small>:null}</>}]:[]),
             { key: "ie", label: "IE 单价", render: line => { const price = sourcingLinePricing(item.ieQuote, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
             { key: "production", label: "生产单价", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
             { key: "amount", label: "本款金额", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price?.totalAmount ? formatBusinessCurrency(price.totalAmount) : "—"; } },
