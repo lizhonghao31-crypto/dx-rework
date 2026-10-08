@@ -1,6 +1,7 @@
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { readProductionDays } from "../../apps/api/src/sourcing/production-chase.js";
 import {randomUUID} from "node:crypto";
+import {readFile} from "node:fs/promises";
 import pg from "pg";
 import {afterAll,beforeAll,describe,expect,it} from "vitest";
 import {ProductionAnalysisQuerySchema,type SourcingProductionOrder} from "@dx-rework/contracts";
@@ -25,20 +26,30 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
       CREATE TABLE receiving_receipt_corrections(correction_id uuid,receipt_id uuid,actual_quantity bigint,created_at timestamptz);
       CREATE TABLE sourcing_production_receipt_links(receipt_id uuid PRIMARY KEY,production_order_id uuid);
       CREATE TABLE sourcing_production_exclusions(production_order_id uuid PRIMARY KEY);
-      CREATE TABLE sourcing_production_orders(production_order_id uuid PRIMARY KEY);
-      CREATE TABLE sourcing_production_transitions(production_order_id uuid,status text,business_date date,created_at timestamptz,sequence int);
+      CREATE TABLE sourcing_production_orders(production_order_id uuid PRIMARY KEY,sourcing_decision_id uuid NOT NULL DEFAULT gen_random_uuid());
+      CREATE TABLE sourcing_production_lines(production_order_id uuid,position int,quantity int);
+      CREATE TABLE sourcing_production_factory_transfers(factory_decision_id uuid,production_order_id uuid,from_decision_id uuid,effective_at timestamptz);
+      CREATE TABLE sourcing_production_factory_transfer_lines(factory_decision_id uuid,position int,transferred_quantity int);
+      CREATE TABLE sourcing_production_transitions(production_order_id uuid,status text,business_date date,created_at timestamptz,sequence int,factory_decision_id uuid);
       CREATE TABLE sourcing_production_shipments(production_order_id uuid PRIMARY KEY,shipped_on date,created_at timestamptz,recorded_quantity int);
       CREATE TABLE sourcing_production_alerts(production_order_id uuid,alert_id uuid PRIMARY KEY,kind text,opened_at timestamptz,resolved_at timestamptz);
       CREATE TABLE sourcing_production_alert_reads(alert_id uuid,user_id uuid,read_at timestamptz);
-      CREATE TABLE sourcing_production_reports(production_order_id uuid,report_id uuid,created_at timestamptz,business_date date,root_report_id uuid,revision int DEFAULT 1,quantity int DEFAULT 0);
+      CREATE TABLE sourcing_production_reports(production_order_id uuid,report_id uuid,created_at timestamptz,business_date date,root_report_id uuid,revision int DEFAULT 1,quantity int DEFAULT 0,position int DEFAULT 1,factory_decision_id uuid);
       CREATE TABLE rework_orders(rework_order_id uuid,rework_no text,rework_quantity bigint,status text,source_receiving_batch_id uuid);`);
-    for(const order of orders)await database.query("INSERT INTO sourcing_production_orders VALUES($1)",[order.productionOrderId]);
+    // This read-only fact fixture uses the actual current migration functions, rather than stubbing factory completion.
+    const factoryMigration=await readFile(new URL('../../apps/api/migrations/0236_factory_remainder_executions.sql',import.meta.url),'utf8');
+    for(const name of ['sourcing_factory_execution_lines','sourcing_factory_order_status']){
+      const definition=factoryMigration.match(new RegExp(`CREATE FUNCTION ${name}\\([\\s\\S]*?\\$\\$;`))?.[0];
+      if(!definition)throw new Error(`Missing actual migration function ${name}`);
+      await database.query(definition);
+    }
+    for(const order of orders){await database.query("INSERT INTO sourcing_production_orders(production_order_id) VALUES($1)",[order.productionOrderId]);await database.query('INSERT INTO sourcing_production_lines VALUES($1,1,$2)',[order.productionOrderId,order.quantity]);}
     await database.query("INSERT INTO receiving_batches VALUES($1,NULL,-5),($2,NULL,0),($3,'2026-09-06',0)",[batch,shared,archived]);
     const second=randomUUID(),third=randomUUID(),fourth=randomUUID(),fifth=randomUUID();
     await database.query("INSERT INTO receiving_receipts VALUES($1,$2,'2026-09-04',70),($3,$2,'2026-09-05',30),($4,$5,'2026-09-04',10),($6,$5,'2026-09-05',10),($7,$8,'2026-09-03',5)",[receipt,batch,second,third,shared,fourth,fifth,archived]);
     for(const [r,o] of [[receipt,orders[0]!.productionOrderId],[second,orders[0]!.productionOrderId],[third,orders[2]!.productionOrderId],[fourth,orders[3]!.productionOrderId],[fifth,orders[0]!.productionOrderId]])await database.query("INSERT INTO sourcing_production_receipt_links VALUES($1,$2)",[r,o]);
     await database.query("INSERT INTO receiving_receipt_corrections VALUES($1,$2,65,'2026-09-06')",[correction,receipt]);
-    await database.query("INSERT INTO sourcing_production_transitions VALUES($1,'production_completed','2026-09-03','2026-09-03',2)",[orders[0]!.productionOrderId]);
+    await database.query("INSERT INTO sourcing_production_transitions(production_order_id,status,business_date,created_at,sequence) VALUES($1,'production_completed','2026-09-03','2026-09-03',2)",[orders[0]!.productionOrderId]);
     await database.query("INSERT INTO sourcing_production_shipments VALUES($1,'2026-09-04','2026-09-04',90)",[orders[0]!.productionOrderId]);
     await database.query("INSERT INTO sourcing_production_alerts VALUES($1,$2,'behind','2026-09-02',NULL)",[orders[0]!.productionOrderId,alert]);
     await database.query("INSERT INTO sourcing_production_alert_reads VALUES($1,$2,'2026-09-02')",[alert,actor.actorId]);

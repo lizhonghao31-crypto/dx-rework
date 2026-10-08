@@ -2264,8 +2264,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await reporting.report(newReporter,id,{factoryDecisionId,position:2,businessDate,quantity:3},randomUUID());
     await reporting.execute(oldReporter,id,'complete',{businessDate,confirmed:true},randomUUID());await reporting.execute(oldReporter,id,'ship',{businessDate,confirmed:true},randomUUID());
     expect((await production.get(readerActor(),id)).status).toBe('in_production');
+    const partialAnalysis=await dashboard.analysis(rootActor(),{q:serial});
+    expect(partialAnalysis.items).toHaveLength(1);
+    expect(partialAnalysis.items[0]).toMatchObject({order:{status:'in_production'},completedOn:null,shippedQuantity:'12'});
     await reporting.execute(newReporter,id,'complete',{factoryDecisionId,businessDate,confirmed:true},randomUUID());await reporting.execute(newReporter,id,'ship',{factoryDecisionId,businessDate,confirmed:true},randomUUID());
     expect((await production.get(readerActor(),id)).status).toBe('shipped');
+    const finishedAnalysis=await dashboard.analysis(rootActor(),{q:serial});
+    expect(finishedAnalysis.summary.totalCount).toBe(1);
+    expect(finishedAnalysis.items[0]?.shippedQuantity).toBe('30');
     await closure.setPilot(rootActor(),{supplierId:factoryId,enabled:true});await closure.setPilot(rootActor(),{supplierId:replacementFactoryId,enabled:true});
     const receiver={...rootActor(),authorizationCapability:'receiving:create'},receiving=new ReceivingService(database,undefined,undefined,closure);
     const image=await readyCuttingSheet(receiver.actorId),cut=(await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 AND sourcing_line_position=1',[caseId])).rows[0].cutting_order_id;
