@@ -1,3 +1,4 @@
+import { contractFactoryState, normalizeFactoryContract, editFactoryPoDates } from "../production-platform/po-factory-date-adapter.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { ContractContentSchema, type ContractContent, type ContractContentState, type SaveContractContent } from "@dx-rework/contracts";
@@ -38,6 +39,7 @@ export async function loadContractContent(db:Queryable,documentId:string):Promis
     estimatedCutPieceSendDate:String(approval.estimatedCutPieceSendDate ?? "未维护"),deliveryDate:String(approval.deliveryDate ?? "未维护"),
     processes:Array.isArray(approval.processes)?approval.processes.map(String):[],
     lines:lines.map(line=>({position:Number(line.position),styleNo:String(line.styleNo ?? ""),alternateStyleNo:line.alternateStyleNo?String(line.alternateStyleNo):null,
+      ...(typeof line.lineId==="string"?{lineId:line.lineId}:{}),...(typeof line.deliveryDate==="string"?{deliveryDate:line.deliveryDate}:{}),
       color:line.color?String(line.color):null,quantity:Number(line.quantity),unitPrice:String(line.unitPrice),totalAmount:String(line.totalAmount),
       ...(typeof line.imageAttachmentId==="string"?{imageAttachmentId:line.imageAttachmentId,...(typeof line.imageSha256==="string"?{imageSha256:line.imageSha256}:{})}:{})})),
     totalQuantity:Number(approval.quantity),totalAmount:String(approval.totalAmount),terms:row.terms,
@@ -74,7 +76,7 @@ export class SourcingContractContentService {
     const responsibility = templateVersion && templateVersion>=4 ? snapshot.terms.processingResponsibility : "乙方负责{{工艺}}，甲方提供样板及面/辅料。";
     const content = ContractContentSchema.parse({...snapshot,contractTitle:snapshot.contractTitle ?? "服装加工合同",partyARepresentative:snapshot.partyARepresentative ?? "",
       partyASigningDate:snapshot.partyASigningDate ?? "",partyBSigningDate:snapshot.partyBSigningDate ?? "",terms:{...snapshot.terms,processingResponsibility:responsibility ?? ""}});
-    return {sourcingContractDocumentId:row.sourcing_contract_document_id,informationFingerprint:row.snapshot_fingerprint,content};
+    return {sourcingContractDocumentId:row.sourcing_contract_document_id,informationFingerprint:row.snapshot_fingerprint,...await contractFactoryState(this.database,caseId,content,row.sourcing_contract_document_id)};
   }
   private async images(client:Queryable,actor:TrustedActorContext,caseId:string,content:ContractContent,bindTo?:string):Promise<ContractContent> {
     const hashes = new Map<string,string>();
@@ -106,6 +108,7 @@ export class SourcingContractContentService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       // Finance reconciliation takes this same lock. Whichever completes first is observed here.
       await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[caseId]);
       const result = await this.idempotency.execute<{documentId:string}>(client,{scope:"sourcing.contract.content.save",actorKey:actor.actorId,key,
@@ -116,12 +119,14 @@ export class SourcingContractContentService {
         await client.query("SELECT sourcing_case_id FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1 FOR UPDATE",[caseId]);
         const templateVersion=Number(row.template_version);
         const id=randomUUID();
-        const content=await this.images(client,actor,caseId,input.content);
+        const normalized=await normalizeFactoryContract(client,caseId,input);
+        const content=await this.images(client,actor,caseId,normalized.content);
         const supplements=(await client.query("SELECT field_name,field_value FROM sourcing_contract_supplements WHERE sourcing_contract_document_id=$1",[row.sourcing_contract_document_id])).rows;
         const approvalSnapshot={...row.approval_snapshot,...Object.fromEntries(supplements.map(x=>[x.field_name,x.field_value]))};
         const supplierValues=Object.fromEntries(Object.entries(approvalSnapshot).filter(([k])=>["supplierName","supplierCode","address","contractEntityName","partyBRepresentative","payeeName","bankAccount","bankName"].includes(k)));
         const eventId=await this.events.append(client,actor,{action:"sourcing.contract.information.refresh",entityType:"sourcing_contract_document",entityId:id,
           before:{documentId:row.sourcing_contract_document_id},after:{mode:"manual_content",content,supplierValues,templateVersion},reason:"Root修改本单合同内容"});
+        await editFactoryPoDates(client,actor,caseId,eventId,normalized.changes);
         await client.query(`INSERT INTO sourcing_contract_documents(sourcing_contract_document_id,sourcing_case_id,sourcing_approval_snapshot_id,sourcing_decision_id,
           contract_version,contract_number,template_version,approval_snapshot,missing_fields,status,prepared_by,identity_version,revision_of,information_revision,information_refresh_event_id)
           VALUES($1,$2,$3,$4,$5,'DX-WF-'||to_char(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Shanghai','YYYYMMDD')||'-'||lpad(nextval('sourcing_contract_number_seq')::text,6,'0'),
@@ -143,7 +148,8 @@ export class SourcingContractContentService {
       const row=await this.current(client,actor,caseId);
       if (row.sourcing_contract_document_id!==input.sourcingContractDocumentId || row.snapshot_fingerprint!==input.informationFingerprint)
         throw new ApplicationError("INVALID_STATE_TRANSITION","合同已更新，请重新打开后修改",409);
-      const content=await this.images(client,actor,caseId,input.content);
+      const normalized=await normalizeFactoryContract(client,caseId,input);
+      const content=await this.images(client,actor,caseId,normalized.content);
       const lines=[];
       for (const line of content.lines) {
         if (!line.imageAttachmentId) {lines.push(line);continue;}

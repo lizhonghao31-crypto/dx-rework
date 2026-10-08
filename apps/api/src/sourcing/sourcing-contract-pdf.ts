@@ -14,6 +14,8 @@ export const normalizeSourcingContractImage = async (bytes: Buffer): Promise<Buf
   .flatten({background:"#ffffff"}).jpeg({quality:80}).toBuffer();
 
 export type ContractPdfLine = Readonly<{
+  lineId?: string | undefined;
+  deliveryDate?: string | undefined;
   imageAttachmentId?: string | null | undefined;
   imageSha256?: string | undefined;
   imageBytes?: Buffer;
@@ -86,7 +88,7 @@ const contractTextLines = (snapshot: ContractPdfSnapshot): string[] => [
   "加工明细",
   ...snapshot.lines.flatMap((line) => [
     `${String(line.position).padStart(2, "0")}  款号 ${line.styleNo}${line.alternateStyleNo ? ` / 备用款号 ${line.alternateStyleNo}` : ""} / 颜色 ${line.color ?? "未维护"}`,
-    `数量 ${line.quantity} 件 / 单价 ¥${line.unitPrice} / 金额 ¥${line.totalAmount}`,
+    `数量 ${line.quantity} 件 / 单价 ¥${line.unitPrice} / 金额 ¥${line.totalAmount}${line.deliveryDate ? ` / 工厂交货日 ${line.deliveryDate}` : ""}`,
   ]),
   `合计：${snapshot.totalQuantity} 件    合同总额：¥${snapshot.totalAmount}`,
   `预计裁片发出：${snapshot.estimatedCutPieceSendDate}    要求交货：${snapshot.deliveryDate}`,
@@ -305,8 +307,8 @@ const renderStructuredContractPdf = async (
     const identity=`${line.styleNo}${line.alternateStyleNo && line.alternateStyleNo !== line.styleNo ? ` / ${line.alternateStyleNo}` : ""}`;
     const classification=`${line.color ?? "历史未维护"}\n${snapshot.gender ?? "历史未维护"}${snapshot.styleName ?? "历史未维护"}`;
     row(withPictures ? [identity,line.imageBytes ? "" : "未提供",classification,formatBusinessDecimal(line.quantity),
-      formatSourcingContractPrice(line.unitPrice),formatBusinessDecimal(line.totalAmount),snapshot.estimatedCutPieceSendDate,snapshot.deliveryDate]
-      : [identity,classification,snapshot.estimatedCutPieceSendDate,formatBusinessDecimal(line.quantity),formatSourcingContractPrice(line.unitPrice),formatBusinessDecimal(line.totalAmount),snapshot.deliveryDate],false,line.imageBytes);
+      formatSourcingContractPrice(line.unitPrice),formatBusinessDecimal(line.totalAmount),snapshot.estimatedCutPieceSendDate,line.deliveryDate ?? snapshot.deliveryDate]
+      : [identity,classification,snapshot.estimatedCutPieceSendDate,formatBusinessDecimal(line.quantity),formatSourcingContractPrice(line.unitPrice),formatBusinessDecimal(line.totalAmount),line.deliveryDate ?? snapshot.deliveryDate],false,line.imageBytes);
   }
   y += polished ? 7 : 5;
   text(`合计：${formatBusinessDecimal(snapshot.totalQuantity)} 件    金额：${formatBusinessDecimal(snapshot.totalAmount)} 元`, 9, "#111111", { after: polished ? 11 : 5 });

@@ -85,6 +85,8 @@ export const SOURCING_IMAGE_SUPPLEMENT_ROLES = [
 ] as const;
 
 export const SourcingCaseLineInputSchema = z.object({
+  lineId: IdSchema.optional(),
+  factoryDeliveryDate: BusinessDateSchema.optional(),
   imageAttachmentId: IdSchema.optional(),
   styleNo: ShortTextSchema.optional(),
   alternateStyleNo: ShortTextSchema.optional(),
@@ -478,6 +480,8 @@ export const SourcingApprovalSnapshotSchema = z.object({
   deliveryDate: BusinessDateSchema.nullable(),
   processes: z.array(z.string()),
   linePrices: z.array(z.object({
+    lineId: IdSchema.optional(),
+    factoryDeliveryDate: BusinessDateSchema.nullable().optional(),
     position: z.number().int().min(1).max(MAX_SOURCING_LINE_ITEMS),
     styleNo: z.string(),
     alternateStyleNo: z.string().nullable(),
@@ -499,6 +503,9 @@ export const SourcingCraftSnapshotSchema = z.object({
 }).strict();
 
 export const SourcingCaseLineSchema = z.object({
+  lineId: IdSchema.optional(),
+  proposedFactoryDeliveryDate: BusinessDateSchema.nullable().optional(),
+  factoryDeliveryDate: BusinessDateSchema.nullable().optional(),
   imageAttachmentId: IdSchema.nullable().optional(),
   formalStyleNo: z.string().nullable().optional(),
   position: z.number().int().min(1).max(MAX_SOURCING_LINE_ITEMS),

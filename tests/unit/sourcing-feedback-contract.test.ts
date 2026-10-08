@@ -5,7 +5,10 @@ describe("sourcing form feedback", () => {
   it("labels both dates as required while preserving date controls and field bindings", async () => {
     const source = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
     expect(source).toContain('预计裁片发出日期（工厂发出，必填）</span><input type="date" required aria-required="true" value={estimatedCutPieceSendDate}');
-    expect(source).toContain('要求交货日期（到工厂，必填）</span><input type="date" required aria-required="true" value={deliveryDate}');
+    expect(source).toContain('默认加工厂交货日（选填）');
+    expect(source).toContain('要求交货日期（到工厂，必填）');
+    expect(source).toContain('required={!digitalPo} aria-required={!digitalPo}');
+    expect(source).toContain('本 PO 加工厂交货日（必填）</span><input type="date" required');
     expect(source).toContain("validateSourcingCreate({ gender, styleName, estimatedCutPieceSendDate, deliveryDate");
   });
   it("clears the previous failure on retry and success, retaining failure blocking", async () => {

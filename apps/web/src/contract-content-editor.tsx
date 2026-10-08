@@ -76,10 +76,11 @@ export function ContractContentEditor({caseId,onClose,onUpdated}:{caseId:string;
   };
   return <dialog ref={dialog} className="system-dialog contract-supplier-dialog contract-content-editor" aria-label="修改合同内容"
     onCancel={event=>{event.preventDefault();if(!busy)onClose();}}>
-    <div className="system-dialog__copy"><h2>修改合同内容</h2><p>交货日期同步到订单当前交期，其他内容仅修改本单合同。保存后生成新版，旧合同、审批记录和回签保留；财务核对后不能修改。</p></div>
+    <div className="system-dialog__copy"><h2>修改合同内容</h2><p>{draft?.poFactoryDates?"逐 PO 工厂交期同步到对应订单，其他内容仅修改本单合同。":"交货日期同步到订单当前交期，其他内容仅修改本单合同。"}保存后生成新版，旧合同、审批记录和回签保留；财务核对后不能修改。</p></div>
     {draft?<fieldset className="contract-template-fields" disabled={busy}>
-      {Object.entries(fields).map(([name,label])=><label key={name}>{label}<input type={name==="deliveryDate"?"date":"text"} value={draft.content[name as keyof typeof fields] ?? ""}
+      {Object.entries(fields).map(([name,label])=><label key={name}>{label}<input type={name==="deliveryDate"?"date":"text"} readOnly={name==="deliveryDate" && !!draft.poFactoryDates} value={draft.content[name as keyof typeof fields] ?? ""}
         onChange={event=>update(content=>({...content,[name]:event.target.value}))}/></label>)}
+      {draft.poFactoryDates?.map(po=><label key={po.lineId}>PO {po.styleNo || `第 ${po.position} 项`} · {po.color} 加工厂交货日<input type="date" value={po.factoryDeliveryDate ?? ""} onChange={event=>{const date=event.target.value;setDraft(current=>current?{...current,poFactoryDates:current.poFactoryDates?.map(item=>item.lineId===po.lineId?{...item,factoryDeliveryDate:date||null}:item),content:{...current.content,lines:current.content.lines.map(line=>line.lineId===po.lineId?{...line,deliveryDate:date||undefined}:line)}}:current);key.current=createClientRequestId();setPreview(null);setError("");}}/>{po.customerWarehouseArrivalDate?<small>客户仓到货：{po.customerWarehouseArrivalDate}</small>:null}</label>)}
       <label>工艺（每行一项）<textarea value={draft.content.processes.join("\n")} onChange={event=>update(content=>({...content,processes:event.target.value.split("\n")}))}/></label>
       {draft.content.lines.map((line,index)=><fieldset key={index} className="contract-template-fields"><legend>第 {index+1} 行加工明细</legend>
         {Object.entries(lineFields).map(([name,label])=><label key={name}>{label}<input type={name==="quantity"?"number":"text"} value={line[name as keyof typeof lineFields] ?? ""}

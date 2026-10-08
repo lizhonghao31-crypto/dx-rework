@@ -2,10 +2,10 @@ import { sourcingDatesValid, SOURCING_DATE_ORDER_ERROR, calculateSourcingOrderQu
 import { isNewSourcingPrice, sourcingDecisionNeedsReason } from "./sourcing-price-presentation.js";
 import type { SubmissionIssue } from "./submission-validation.js";
 
-type Line = { styleNo: string; alternateStyleNo: string; color: string; quantity: string };
+type Line = { styleNo: string; alternateStyleNo: string; color: string; quantity: string; factoryDeliveryDate?: string; customerWarehouseArrivalDate?: string | null };
 type Price = { position: number; unitPrice: string };
 export function validateSourcingCreate(input: {
-  gender: string; styleName: string; estimatedCutPieceSendDate: string; deliveryDate: string;
+  gender: string; styleName: string; estimatedCutPieceSendDate: string; deliveryDate: string; digitalPo?: boolean;
   lineItems: readonly Line[]; daxingUnitPrice: string; imageCount: number; uploading: boolean; uploadFailed: boolean;
 }): SubmissionIssue[] {
   const issues: SubmissionIssue[] = [];
@@ -18,6 +18,9 @@ export function validateSourcingCreate(input: {
   if (!isNewSourcingPrice(input.daxingUnitPrice)) add("budget", "请填写大于0且最多2位有效小数的预算价");
   input.lineItems.forEach((line, index) => {
     if (!line.styleNo.trim() && !line.alternateStyleNo.trim()) add(`style-${index}`, `第 ${index + 1} 行须填写正式款号或代用款号`);
+    if(input.digitalPo && (!line.factoryDeliveryDate || !sourcingDatesValid(input.estimatedCutPieceSendDate,line.factoryDeliveryDate)
+      || line.customerWarehouseArrivalDate && line.factoryDeliveryDate>line.customerWarehouseArrivalDate))
+      add(`factory-date-${index}`,`第 ${index+1} 个 PO 请填写合法工厂交货日，不能早于裁片发出或晚于客户仓到货`);
     if (!line.color.trim()) add(`color-${index}`, `第 ${index + 1} 行请填写颜色`);
     if (!/^\d+$/.test(line.quantity) || Number(line.quantity) < 1 || Number(line.quantity) > 10_000_000) {
       add(`quantity-${index}`, `第 ${index + 1} 行数量必须是1至10000000之间的整数`);

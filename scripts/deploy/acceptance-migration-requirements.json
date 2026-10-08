@@ -723,5 +723,23 @@
       "guard_digital_po_customer_decision_commit"
     ],
     "sequences": []
+  },
+  "0239_sourcing_po_factory_dates": {
+    "checksum": "709cc28049ca610a56cc98c2a55e4791eb7b3f4f192da1599b76eae45e1ca93d",
+    "tables": [
+      "sourcing_contract_content_overrides"
+    ],
+    "functions": [
+      "sourcing_effective_delivery_date",
+      "sourcing_contract_content_for_factory_change"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "guard_sourcing_contract_po_dates"
+    ],
+    "sequences": []
   }
 }

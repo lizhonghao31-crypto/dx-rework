@@ -42,6 +42,23 @@ describe("corrected source contract PDF", () => {
     await document.cleanup();
   }, 20_000);
 
+  it("prints each of three PO factory dates on its own PDF row without changing prices or totals",async()=>{
+    const dates=["2026-09-16","2026-09-18","2026-09-21"];
+    const pdf=await renderSourcingContractPdf({...base,lines:dates.map((deliveryDate,index)=>({...base.lines[0]!,position:index+1,styleNo:`TEST-DATE-${index+1}`,quantity:589,unitPrice:"18.25",totalAmount:"10749.25",deliveryDate})),totalQuantity:1767,totalAmount:"32247.75"});
+    const document=await getDocument({data:new Uint8Array(pdf),useSystemFonts:false}).promise;
+    const items=[];
+    for(let page=1;page<=document.numPages;page++)for(const item of (await (await document.getPage(page)).getTextContent()).items)
+      if("str" in item)items.push({text:item.str,x:item.transform[4],y:item.transform[5],page});
+    for(const [index,date] of dates.entries()){
+      const style=items.find(item=>item.text.includes(`TEST-DATE-${index+1}`));
+      expect(style).toBeTruthy();
+      expect(items.some(item=>item.text.includes(date)&&item.page===style!.page&&Math.abs(item.y-style!.y)<24)).toBe(true);
+    }
+    const text=items.map(item=>item.text).join("").replace(/\s/g,"");
+    expect(text).toContain("32,247.75");expect(text).toContain("18.25");expect(text).toContain("10,749.25");
+    await document.cleanup();
+  });
+
   it("preserves a long ordered responsibility clause across pages", async () => {
     const processes = Array.from({ length: 20 }, (_, index) => `第${index + 1}项车缝用线及包装责任${"按确认样板执行".repeat(10)}`);
     const pdf = await renderSourcingContractPdf({...base,processes});

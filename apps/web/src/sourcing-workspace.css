@@ -1761,3 +1761,12 @@
   }
   .sourcing-order-card--overview .sourcing-order-card__activity { grid-area: 4 / 1; }
 }
+
+/* The added factory promise is confined to digital PO creation rows. */
+@media (min-width: 901px) {
+  .sourcing-workspace--create-digital-po .sourcing-line-row {
+    grid-template-columns: 28px repeat(2,minmax(0,1fr)) minmax(0,.7fr) minmax(0,.6fr) minmax(150px,1fr) minmax(90px,.7fr) auto;
+  }
+  .sourcing-workspace--create-digital-po .sourcing-line-row > button { white-space: nowrap; }
+  .sourcing-workspace--create-digital-po .sourcing-form-grid > p { grid-column: 1 / -1; margin: 0; }
+}

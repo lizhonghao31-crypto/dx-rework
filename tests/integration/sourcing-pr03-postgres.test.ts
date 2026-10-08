@@ -1,3 +1,4 @@
+import { PoCustomerDateService } from "../../apps/api/src/production-platform/po-customer-date-service.js";
 import { ProductionInstructionService } from "../../apps/api/src/production-platform/production-instruction-service.js";
 import Fastify from "fastify";
 import { registerDigitalAnalysisRoutes } from "../../apps/api/src/production-platform/reporting-routes.js";
@@ -121,6 +122,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     } finally {
       await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation");
     }
+    await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
+    try { await database.query(`INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason)
+      SELECT $1,$2,'owner_group',$2,'TEST current owner for PO approval' WHERE NOT EXISTS(
+        SELECT 1 FROM user_role_assignments WHERE user_id=$2 AND role_code='owner_group' AND revoked_at IS NULL)`,[randomUUID(),ownerId]);
+    } finally {await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation");}
     returnTodoRecipientConfigured = true;
   };
 
@@ -3401,7 +3407,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_contract_return'",[id]))
       .rows[0]?.count).toBe(1);
   });
-  const budgetFixture = async () => {
+  const budgetFixture = async (threePo=false) => {
     await ensureReturnTodoRecipient();
     const designerId = randomUUID();
     await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST P09 designer',true)", [designerId]);
@@ -3416,7 +3422,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const order = await identity.createOrder(designer, DigitalOrderCreateSchema.parse({
       customerCode: "PD", productGroup: "男装", designStyleNo: `TEST-P09-${randomUUID()}`,
       orderDate: "2026-09-30", contractDeliveryDate: "2026-11-20", primaryMerchandiserId: merchandiserId,
-      lines: [{ poNumber: `TEST-PO1-${designerId}`, color: "黑", customerWarehouseArrivalDate:"2026-11-20", sizes: [{ size: "M", quantity: 137 }] }, { poNumber: `TEST-PO2-${designerId}`, color: "白", customerWarehouseArrivalDate:"2026-11-20", sizes: [{ size: "M", quantity: 63 }] }],
+      lines: [{ poNumber: `TEST-PO1-${designerId}`, color: "黑", customerWarehouseArrivalDate:"2026-11-20", sizes: [{ size: "M", quantity: 137 }] }, { poNumber: `TEST-PO2-${designerId}`, color: "白", customerWarehouseArrivalDate:"2026-11-20", sizes: [{ size: "M", quantity: 63 }] }, ...(threePo?[{poNumber:`TEST-PO3-${designerId}`,color:"蓝",customerWarehouseArrivalDate:"2026-11-20",sizes:[{size:"M",quantity:40}]}]:[])],
     }), randomUUID());
     const bytes = await sharp({ create: { width: 2, height: 2, channels: 3, background: "white" } }).png().toBuffer();
     const imageId = randomUUID(), objectKey = `tests/p09/${imageId}.png`, sha256 = createHash("sha256").update(bytes).digest("hex");
@@ -3590,6 +3596,100 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query("SELECT count(*)::int AS n FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='sourcing_preparation'", [id])).rows[0].n).toBe(1);
   });
 
+  it("Mother PR03 freezes three PO factory promises and preserves original correction, contract, return and finance boundaries",async()=>{
+    const fixture=await budgetFixture(true),id=fixture.order.productionOrderId;
+    await fixture.budget.save(fixture.designer,id,{expectedVersion:0,document:fixture.document},randomUUID());
+    await fixture.budget.publish(fixture.designer,id,1,randomUUID());
+    const prepared=await fixture.budget.prepareSourcing(merchandiserActor(),id,1,attachments);
+    const dates=["2026-11-05","2026-11-08","2026-11-11"];
+    const input={gender:prepared.gender,styleName:prepared.styleName,deliveryDate:dates[0]!,estimatedCutPieceSendDate:"2026-10-20",daxingUnitPrice:prepared.daxingUnitPrice,
+      attachmentIds:prepared.images.map(image=>image.attachmentId),lineItems:prepared.lineItems.map((line,index)=>({lineId:line.lineId,alternateStyleNo:line.alternateStyleNo,color:line.color,quantity:line.quantity,factoryDeliveryDate:dates[index]!,styleNo:index===0?`TEST-VERIFY-${id}`:line.styleNo})),
+      digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}};
+    await expect(service.createCase(merchandiserActor(),{...input,lineItems:input.lineItems.map((line,index)=>index===1?{...line,factoryDeliveryDate:"2026-10-19"}:line)},randomUUID())).rejects.toMatchObject({statusCode:409});
+    await expect(service.createCase(merchandiserActor(),{...input,lineItems:input.lineItems.map((line,index)=>index===1?{...line,factoryDeliveryDate:"2026-11-21"}:line)},randomUUID())).rejects.toMatchObject({statusCode:409});
+    const beforeMissingIds=await fixture.budget.read(fixture.designer,id);
+    await expect(service.createCase(merchandiserActor(),{...input,lineItems:input.lineItems.map(line=>({...line,lineId:undefined}))},randomUUID())).rejects.toMatchObject({statusCode:409});
+    await expect(service.createCase(merchandiserActor(),{...input,lineItems:input.lineItems.map((line,index)=>({...line,lineId:input.lineItems[(index+1)%input.lineItems.length]!.lineId}))},randomUUID())).rejects.toMatchObject({statusCode:409});
+    expect(await fixture.budget.read(fixture.designer,id)).toEqual(beforeMissingIds);
+    const created=(await service.createCase(merchandiserActor(),input,randomUUID())).value,caseId=created.sourcingCaseId;
+    expect(created.lineItems.map(line=>line.factoryDeliveryDate)).toEqual([null,null,null]);
+    expect(created.lineItems.map(line=>line.proposedFactoryDeliveryDate)).toEqual(dates);
+    expect((await database.query("SELECT po_number,formal_style_no,line_id FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position",[id])).rows[0])
+      .toMatchObject({po_number:input.lineItems[0]!.styleNo,formal_style_no:input.lineItems[0]!.styleNo,line_id:prepared.lineItems[0]!.lineId});
+    const returned=(await service.returnToMerchandiser(ownerActor(),caseId,{expectedVersion:created.version,reason:"TEST原审批前核实编号和交期"},randomUUID())).value;
+    const corrected={gender:input.gender,styleName:input.styleName,deliveryDate:input.deliveryDate,estimatedCutPieceSendDate:input.estimatedCutPieceSendDate,attachmentIds:input.attachmentIds,expectedVersion:returned.version,reason:"TEST保留原款色数量只纠正编号和逐 PO 日期",lineItems:input.lineItems.map((line,index)=>index===0?{...line,styleNo:`TEST-CORRECT-${id}`,factoryDeliveryDate:"2026-11-06"}:line)};
+    await expect(service.correctCase(merchandiserActor(),caseId,{...corrected,lineItems:corrected.lineItems.map((line,index)=>index===0?{...line,color:"非法改色"}:line)},randomUUID())).rejects.toMatchObject({statusCode:409});
+    await expect(service.correctCase(merchandiserActor(),caseId,{...corrected,lineItems:corrected.lineItems.slice(1)},randomUUID())).rejects.toMatchObject({statusCode:409});
+    const beforeMissingCorrectionIds=await cycleSnapshot(caseId);
+    await expect(service.correctCase(merchandiserActor(),caseId,{...corrected,lineItems:corrected.lineItems.map(line=>({...line,lineId:undefined}))},randomUUID())).rejects.toMatchObject({statusCode:409});
+    await expect(service.correctCase(merchandiserActor(),caseId,{...corrected,lineItems:corrected.lineItems.map((line,index)=>({...line,lineId:corrected.lineItems[(index+1)%corrected.lineItems.length]!.lineId}))},randomUUID())).rejects.toMatchObject({statusCode:409});
+    expect(await cycleSnapshot(caseId)).toEqual(beforeMissingCorrectionIds);
+    const good=(await service.correctCase(merchandiserActor(),caseId,corrected,randomUUID())).value;
+    expect(good.status).toBe("pending_ie_quote");
+    expect((await database.query("SELECT po_number,formal_style_no FROM digital_production_po_lines WHERE line_id=$1",[prepared.lineItems[0]!.lineId])).rows[0])
+      .toEqual({po_number:corrected.lineItems[0]!.styleNo,formal_style_no:corrected.lineItems[0]!.styleNo});
+    const prices=prepared.lineItems.map((_,index)=>({position:index+1,unitPrice:"5.50"}));
+    await service.quoteIePrice(ieActor(),caseId,{linePrices:prices},randomUUID());
+    await service.recordManagementDecision(managerActor(),caseId,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:prices,cuttingProcess:"in_house"},randomUUID());
+    const customerDates=new PoCustomerDateService(database),root=rootActor();
+    const setCustomer=async(date:string)=>{
+      const current=(await database.query("SELECT version FROM digital_production_orders WHERE production_order_id=$1",[id])).rows[0];
+      const line=(await database.query("SELECT customer_date_version FROM digital_production_po_lines WHERE line_id=$1",[prepared.lineItems[0]!.lineId])).rows[0];
+      const request=await customerDates.request(root,id,{orderVersion:current.version,reason:"TEST真实逐PO客户日期命令",changes:[{lineId:prepared.lineItems[0]!.lineId,expectedVersion:line.customer_date_version,date}]},randomUUID());
+      await customerDates.decide(root,id,request.requestId,true,randomUUID());
+    };
+    await setCustomer("2026-10-25");
+    const ownerFacts=await cycleSnapshot(caseId);
+    await expect(service.decideOwner(ownerActor(),caseId,{decision:"approved"},randomUUID())).rejects.toMatchObject({statusCode:409});
+    expect(await cycleSnapshot(caseId)).toEqual(ownerFacts);
+    expect((await database.query("SELECT count(*)::int AS n FROM digital_po_date_changes WHERE production_order_id=$1 AND date_kind='factory'",[id])).rows[0].n).toBe(0);
+    await setCustomer("2026-11-20");
+    await expect(service.decideOwner({...ownerActor(),actorId:merchandiserId},caseId,{decision:"approved"},randomUUID())).rejects.toMatchObject({statusCode:403});
+    const approvalKey=randomUUID();
+    const approved=(await service.decideOwner(ownerActor(),caseId,{decision:"approved"},approvalKey)).value;
+    expect((await service.decideOwner(ownerActor(),caseId,{decision:"approved"},approvalKey)).reused).toBe(true);
+    expect(approved.lineItems.map(line=>line.factoryDeliveryDate)).toEqual(["2026-11-06","2026-11-08","2026-11-11"]);
+    expect(approved.approvalSnapshot!.linePrices.map(line=>line.factoryDeliveryDate)).toEqual(["2026-11-06","2026-11-08","2026-11-11"]);
+    const original=(await contractService.getCurrent(root,caseId)).item!;
+    expect(original.status).toBe("ready");
+    const originalRow=(await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[original.sourcingContractDocumentId])).rows[0];
+    expect(originalRow.approval_snapshot.lines.map((line:{deliveryDate:string})=>line.deliveryDate)).toEqual(["2026-11-06","2026-11-08","2026-11-11"]);
+    const approvalRow=(await database.query("SELECT * FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1",[original.sourcingApprovalSnapshotId])).rows[0];
+    const file=await readyCuttingSheet(merchandiserId);
+    await contractReturns.submit(contractActor(),caseId,[file],randomUUID());
+    const signatures=(await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1 ORDER BY submitted_at",[caseId])).rows;
+    const monitor=(await database.query("SELECT contract_generated_at,contract_return_due_at,contract_returned_at FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1",[caseId])).rows[0];
+    const edit=await contractService.content.get(root,caseId);
+    expect(edit.poFactoryDates).toHaveLength(3);
+    const revised={...edit,poFactoryDates:edit.poFactoryDates!.map((line,index)=>index===1?{...line,factoryDeliveryDate:"2026-11-09"}:line),
+      content:{...edit.content,terms:{...edit.content.terms,payment:"TEST保留原Root合同文字功能"},lines:edit.content.lines.map((line,index)=>index===1?{...line,deliveryDate:"2026-11-09"}:line)}};
+    for(const actor of [contractActor(),managerActor(),financeActor()])await expect(contractService.content.save(actor,caseId,revised,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(contractService.content.save(root,caseId,{...edit,content:{...edit.content,deliveryDate:"2026-11-15"}},randomUUID())).rejects.toMatchObject({statusCode:409});
+    await expect(contractService.content.save(root,caseId,{...revised,poFactoryDates:revised.poFactoryDates.map((line,index)=>index===1?{...line,factoryDeliveryDate:"2026-11-21"}:line)},randomUUID())).rejects.toMatchObject({statusCode:409});
+    const key=randomUUID(),document=await contractService.content.save(root,caseId,revised,key);
+    expect(await contractService.content.save(root,caseId,revised,key)).toBe(document);
+    await contractService.generateIfReady(root,caseId,document);
+    const current=await contractService.content.get(root,caseId);
+    expect(current.content.lines.map(line=>line.deliveryDate)).toEqual(["2026-11-06","2026-11-09","2026-11-11"]);
+    expect(current.content.terms.payment).toBe(revised.content.terms.payment);
+    expect((await database.query("SELECT customer_warehouse_arrival_date::text AS customer,factory_delivery_date::text AS factory FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position",[id])).rows)
+      .toEqual(["2026-11-06","2026-11-09","2026-11-11"].map(factory=>({customer:"2026-11-20",factory})));
+    expect((await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[original.sourcingContractDocumentId])).rows[0]).toEqual(originalRow);
+    expect((await database.query("SELECT * FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1",[original.sourcingApprovalSnapshotId])).rows[0]).toEqual(approvalRow);
+    expect((await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1 ORDER BY submitted_at",[caseId])).rows).toEqual(signatures);
+    expect((await database.query("SELECT contract_generated_at,contract_return_due_at,contract_returned_at FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1",[caseId])).rows[0]).toEqual(monitor);
+    const styled=(await service.reviseStyles(root,caseId,{expectedRevision:0,lines:good.lineItems.map(line=>({position:line.position,styleNo:`TEST-AFTER-APPROVAL-${id}-${line.position}`,alternateStyleNo:line.alternateStyleNo}))},randomUUID())).value;
+    expect(styled.lineItems.map(line=>line.factoryDeliveryDate)).toEqual(["2026-11-06","2026-11-09","2026-11-11"]);
+    expect(styled.approvalSnapshot!.linePrices.map(line=>line.factoryDeliveryDate)).toEqual(["2026-11-06","2026-11-08","2026-11-11"]);
+    expect((await contractService.content.get(root,caseId)).content.lines.map(line=>line.deliveryDate)).toEqual(["2026-11-06","2026-11-09","2026-11-11"]);
+    expect((await database.query("SELECT po_number=formal_style_no AS same,line_id FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position",[id])).rows).toEqual(prepared.lineItems.map(line=>({same:true,line_id:line.lineId})));
+    await contractReturns.submit(root,caseId,[await readyCuttingSheet(merchandiserId)],randomUUID());
+    await service.recordFinanceReconciliation(financeActor(),caseId,{result:"match"},randomUUID());
+    await expect(contractService.content.save(root,caseId,current,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(contractService.content.preview(root,caseId,current)).rejects.toMatchObject({statusCode:403});
+    expect((await database.query("SELECT quantity::int FROM sourcing_decision_lines WHERE sourcing_decision_id=$1 ORDER BY position",[approved.decision!.sourcingDecisionId])).rows.map(line=>line.quantity)).toEqual([137,63,40]);
+  });
+
   it("P09 carries all PO quantities and owned image copies into exactly one original sourcing case", async () => {
     const { order, designer, document, imageId, budget } = await budgetFixture(), id = order.productionOrderId;
     await budget.save(designer, id, { expectedVersion: 0, document }, randomUUID());
@@ -3604,7 +3704,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       gender: prepared.gender, styleName: prepared.styleName, deliveryDate: "2026-11-10",
       estimatedCutPieceSendDate: "2026-10-20", daxingUnitPrice: prepared.daxingUnitPrice,
       attachmentIds: prepared.images.map(image => image.attachmentId),
-      lineItems: prepared.lineItems.map(({ styleNo, alternateStyleNo, color, quantity }) => ({ styleNo, alternateStyleNo, color, quantity })),
+      lineItems: prepared.lineItems.map(({ lineId, styleNo, alternateStyleNo, color, quantity }) => ({ lineId, styleNo, alternateStyleNo, color, quantity, factoryDeliveryDate:"2026-11-10" })),
       digitalBudget: { productionOrderId: id, budgetVersion: prepared.budgetVersion, orderVersion: prepared.orderVersion },
     };
     await expect(service.createCase(merchandiserActor(), { ...input, lineItems: input.lineItems.slice(0, 1) }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });

@@ -195,7 +195,7 @@ export class SourcingContractService {
                 'quantity',snapshot.quantity::text,
                 'totalAmount',snapshot.total_amount::text,
                 'estimatedCutPieceSendDate',snapshot.estimated_cut_piece_send_date,
-                'deliveryDate',snapshot.delivery_date,
+                'deliveryDate',COALESCE((SELECT min(po.factory_delivery_date) FROM digital_production_child_lines child JOIN digital_production_po_lines po USING(production_order_id,line_id) WHERE child.module='sourcing' AND child.child_id=snapshot.sourcing_case_id),snapshot.delivery_date),
                 'processes',snapshot.processes,
                 'approvedAt',snapshot.approved_at,
                 'lines',COALESCE((
@@ -205,7 +205,10 @@ export class SourcingContractService {
                     'alternateStyleNo',identity.alternate_style_no,'color',line.color,
                     'quantity',line.quantity,'unitPrice',line.unit_price::text,
                     'totalAmount',line.total_amount::text
-                  ) ORDER BY line.position)
+                  ) || COALESCE((SELECT jsonb_build_object('lineId',po.line_id,'deliveryDate',po.factory_delivery_date::text)
+                    FROM digital_production_child_lines child JOIN digital_production_po_lines po USING(production_order_id,line_id)
+                    WHERE child.module='sourcing' AND child.child_id=snapshot.sourcing_case_id
+                      AND child.child_line_key=line.position::text AND po.factory_delivery_date IS NOT NULL),'{}'::jsonb) ORDER BY line.position)
                   FROM sourcing_approval_snapshot_lines line
                   JOIN current_sourcing_case_lines identity ON identity.sourcing_case_id=snapshot.sourcing_case_id AND identity.position=line.position
                   WHERE line.sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id
