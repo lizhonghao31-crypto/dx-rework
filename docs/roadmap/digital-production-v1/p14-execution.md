@@ -40,3 +40,7 @@
 第二轮 Review 发现原回货纠数、返工创建与结案使用不同 advisory lock，单独锁裁单不足以保证未清快照一致。结案现在在读取最终实绩前，对参与 revision 的七张原事实表取得 SHARE 锁：receiving_batches、receiving_receipts、receiving_receipt_corrections、receiving_packing_revisions、receiving_difference_resolutions、rework_orders、rework_wage_items。锁只覆盖结案服务端短事务，阻止并发插入/修改/删除；先于母单行锁取得，且不再混用原款号/裁单锁，避免等待原写入时形成锁顺序反转。代价是结案瞬间这些表的其他写入也短暂等待；原业务权限与结案后的更正、返工继续保留。
 
 真实 PostgreSQL 回归在最终快照读取后暂停结案，启动 Root 纠数与另一 PO 的原返工创建，通过 pg_locks 验证两者实际等待；释放结案后两者成功，母单读到新事实、不可变结案快照保持提交时原值。本地单连接 PGlite 不执行该多连接场景，证据以最终 Full Gate 为准。第二轮发现由当前助手修复，不发起第三轮 Review。
+
+## 2026-10-08 第二轮复测：特殊结案座舱（APPROVED）
+
+Journey 从不可变特殊结案事实展示真实操作者与登记时间，不把未分配的待办负责人代替实际操作者。已释放开裁任务且全部款色已有原实裁事实时，历史开裁汇合节点保持完成；当前特殊结案写入限制不倒灌为历史未开裁。没有真实实裁的结案不能补造开裁、回货或正常装箱完成。此修复仅改读取投影，现有特殊结案权限、写入门禁、原数量与未清事项快照保留。
