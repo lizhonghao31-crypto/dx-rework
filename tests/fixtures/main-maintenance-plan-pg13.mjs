@@ -100,6 +100,12 @@ try {
   const drift=join(scratch,'drift');cpSync(join(root,'apps/api/src/platform'),join(drift,'apps/api/src/platform'),{recursive:true});
   write(join(drift,`apps/api/migrations/${version}.sql`),readFileSync(`apps/api/migrations/${version}.sql`,'utf8')+'\n');
   await untouched(control('completed',{FIXTURE_SOURCE:drift}),'fingerprint drift');checks.push('SQL drift rejects before routing/stop');
+  await admin.query(`REVOKE TRIGGER ON public.craft_catalog_versions FROM PUBLIC,${quote(user)}`);
+  const triggerPermission=(await db.query("SELECT pg_has_role(current_user,relowner,'USAGE') owns,has_table_privilege(current_user,oid,'TRIGGER') allowed FROM pg_class WHERE oid='public.craft_catalog_versions'::regclass")).rows[0];
+  assert.equal(triggerPermission.owns,true);assert.equal(triggerPermission.allowed,false);
+  await assert.rejects(db.query('CREATE CONSTRAINT TRIGGER pg13_trigger_privilege_probe AFTER INSERT ON public.craft_catalog_versions FOR EACH ROW EXECUTE FUNCTION public.guard_craft_catalog_version_creation()'),{code:'42501'});
+  await untouched(control('completed'),'table public.craft_catalog_versions TRIGGER');
+  await admin.query(`GRANT TRIGGER ON public.craft_catalog_versions TO ${quote(user)}`);checks.push('revoked owner TRIGGER privilege refuses before routing/stop');
   const adminUser=(await admin.query('select current_user AS role_name')).rows[0].role_name;
   await admin.query(`ALTER FUNCTION public.guard_craft_catalog_version_creation() OWNER TO ${quote(adminUser)}`);
   await untouched(control('completed'),'function public.guard_craft_catalog_version_creation');

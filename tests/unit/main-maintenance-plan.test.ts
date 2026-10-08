@@ -30,6 +30,7 @@ function check(mode = "allowed", oldPlans = false, drift = false) {
           appendFileSync(process.env.PLAN_FIXTURE+'/queries.jsonl',JSON.stringify(sql)+'\\n');
           if(sql.includes('FROM schema_migrations')) return {rows:data.history};
           if(sql.includes('FROM pg_class')) return {rows:[{owns:data.mode!=='table'}]};
+          if(sql.includes('has_table_privilege')) return {rows:[{allowed:data.mode!=='trigger'}]};
           if(sql.includes('current_schema()')) return {rows:[{allowed:!['schema','shadow-schema'].includes(data.mode)}]};
           if(sql.includes('FROM pg_proc')) return {rows:data.mode==='missing-function'?[]:[{allowed:data.mode!=='function'}]};
           if(sql.includes('has_language_privilege')) return {rows:[{allowed:data.mode!=='language'}]};
@@ -64,6 +65,7 @@ describe("0223 main maintenance admission", () => {
     expect(plans.find((p: { version: string }) => p.version === version)).toMatchObject({
       checksum: "a374629a47ed1c233816ad98083f6de924f0964eb7c3ef2dbca184dc1d8b44d0",
       tables: ["public.craft_catalog_versions"], schema: "public",
+      triggerTables: ["public.craft_catalog_versions"],
       functions: ["public.guard_craft_catalog_version_creation()"], languages: ["plpgsql"],
       onlineCompatible: false,
     });
@@ -76,6 +78,7 @@ describe("0223 main maintenance admission", () => {
   });
   it.each([
     ["table", "public.craft_catalog_versions"],
+    ["trigger", "table public.craft_catalog_versions TRIGGER"],
     ["schema", "schema public USAGE/CREATE/current_schema"],
     ["shadow-schema", "schema public USAGE/CREATE/current_schema"],
     ["function", "function public.guard_craft_catalog_version_creation() owner"],

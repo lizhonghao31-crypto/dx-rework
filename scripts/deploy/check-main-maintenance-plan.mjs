@@ -22,6 +22,10 @@ try {
       const result = await client.query('SELECT pg_has_role(current_user,relowner,\'USAGE\') owns FROM pg_class WHERE oid=to_regclass($1)', [table]);
       if (result.rows[0]?.owns !== true) throw Error(`MIGRATION_PERMISSION_REQUIRED: ${table}; running service untouched`);
     }
+    for (const table of plan.triggerTables ?? []) {
+      const result = await client.query("SELECT has_table_privilege(current_user,$1,'TRIGGER') allowed", [table]);
+      if (result.rows[0]?.allowed !== true) throw Error(`MIGRATION_PERMISSION_REQUIRED: table ${table} TRIGGER; running service untouched`);
+    }
     if (plan.schema) {
       const result = await client.query("SELECT current_schema()=$1 AND has_schema_privilege(current_user,$1,'USAGE') AND has_schema_privilege(current_user,$1,'CREATE') allowed", [plan.schema]);
       if (result.rows[0]?.allowed !== true) throw Error(`MIGRATION_PERMISSION_REQUIRED: schema ${plan.schema} USAGE/CREATE/current_schema; running service untouched`);

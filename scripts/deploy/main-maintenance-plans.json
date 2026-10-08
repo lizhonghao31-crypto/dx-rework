@@ -12,6 +12,7 @@
     "checksum":"a374629a47ed1c233816ad98083f6de924f0964eb7c3ef2dbca184dc1d8b44d0",
     "strategy":"quiesce-backup-transactional-ddl",
     "tables":["public.craft_catalog_versions"],
+    "triggerTables":["public.craft_catalog_versions"],
     "schema":"public",
     "functions":["public.guard_craft_catalog_version_creation()"],
     "languages":["plpgsql"],

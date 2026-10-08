@@ -6,7 +6,7 @@ The installed controller must contain the exact approved maintenance plan. Onlin
 updates still admit identical complete migration histories only.
 
 Before traffic changes, the maintenance checker requires ownership of
-`public.craft_catalog_versions`, ownership or inherited ownership of
+`public.craft_catalog_versions` and its TRIGGER privilege, ownership or inherited ownership of
 `public.guard_craft_catalog_version_creation()`, `public` as the current schema
 with USAGE and CREATE, and plpgsql USAGE. These checks use a read-only transaction.
 The checker never grants permissions or changes an owner. A permission failure
@@ -55,7 +55,7 @@ NODE_ENV=test node tests/fixtures/main-maintenance-plan-pg13.mjs
 
 The fixture applies the real 0222 prefix and 0223 as the restricted role, exercises
 the real Bash maintenance controller with stub runtime probes, and checks missing
-plan, SQL drift, function/schema/language permissions, unchanged-history recovery,
+plan, SQL drift, table TRIGGER/function/schema/language permissions, unchanged-history recovery,
 post-commit maintenance, frozen-candidate retry and zero second migration apply.
 Its temporary ACL/owner changes are confined to the marked disposable test
 database; it does not prove real ECS installation or production HTTP readiness.
