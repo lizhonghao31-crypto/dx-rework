@@ -93,8 +93,9 @@ def history_validation_sql(command, mode):
     signal_command = command + ' ' + mode + ' --psql-signal'
     if any(char in signal_command for char in ('`', '\n', '\r')):
         raise ValueError('Invalid history validation command')
+    controlled = "if acceptance_history_result=$(" + signal_command + "); then printf '%s' \"$acceptance_history_result\"; else printf DX_ACCEPTANCE_HISTORY_FAILED; fi"
     return ["\\set acceptance_history_signal ''",
-            "\\set acceptance_history_signal `" + signal_command + "`",
+            "\\set acceptance_history_signal `" + controlled + "`",
             "SELECT 1 / CASE WHEN :'acceptance_history_signal'='DX_ACCEPTANCE_HISTORY_VALID' THEN 1 ELSE 0 END;"]
 
 

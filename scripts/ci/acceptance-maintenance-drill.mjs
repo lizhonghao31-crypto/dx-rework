@@ -104,9 +104,9 @@ try {
  execute(preflight,'no-default-acl-preflight');
  // Replace only the test's command output. Every missing/invalid signal must
  // terminate before DDL, even if the substituted program exits successfully.
- for(const [label,command] of [['empty','true'],['invalid',"printf WRONG"],['missing','/nonexistent/dx-validator'],['failed','false']]) {
+ for(const [label,command] of [['empty','true'],['invalid',"printf WRONG"],['missing','/nonexistent/dx-validator'],['failed','false'],['failed-success-output',"sh -c 'printf DX_ACCEPTANCE_HISTORY_VALID; exit 1'"]]) {
   const invalid=join(scratch,`signal-${label}.sql`);
-  writeFileSync(invalid,readFileSync(preflight,'utf8').replace(/\\set acceptance_history_signal `[^\n]+`/,`\\set acceptance_history_signal \`${command}\``));
+  writeFileSync(invalid,readFileSync(preflight,'utf8').replace(/\\set acceptance_history_signal `[^\n]+`/,`\\set acceptance_history_signal \`if acceptance_history_result=$(${command}); then printf '%s' "$acceptance_history_result"; else printf DX_ACCEPTANCE_HISTORY_FAILED; fi\``));
   execute(invalid,`signal-${label}`,false);
   assert.deepEqual((await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows,before);
  }

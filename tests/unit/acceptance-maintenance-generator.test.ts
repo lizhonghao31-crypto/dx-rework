@@ -20,6 +20,7 @@ identity={'database':'dx_rework_acceptance','port':5544,'oid':123,'address':'127
 sql=m.generate(pathlib.Path.cwd(),identity,'/usr/bin/node','/tmp/history.json')
 assert sql.index('SET SESSION AUTHORIZATION') < sql.index('pg_advisory_lock') < sql.index('\\\\set acceptance_history_signal')
 assert "current_setting('port')::integer<>5544" in sql
+assert 'if acceptance_history_result=$(' in sql and 'DX_ACCEPTANCE_HISTORY_FAILED' in sql
 assert 'DX_ACCEPTANCE_HISTORY_VALID' in sql and 'SHELL_ERROR' not in sql and '\\\\quit 1' not in sql
 assert 'oid::bigint' in sql
 assert 'BEGIN READ ONLY;' in sql
