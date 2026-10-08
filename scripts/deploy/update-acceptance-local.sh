@@ -179,9 +179,7 @@ evidence="$DX_ROOT/logs/update-$sha-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 mkdir -m 0700 "$evidence"
 cp "$source_dir/production-history.json" "$evidence/production-history.json"
 export_history() {
-  (umask 077; PGOPTIONS='-c default_transaction_read_only=on' pg_exec psql "$DATABASE_URL" -XqAt -v ON_ERROR_STOP=1 -c "BEGIN READ ONLY;
-  SELECT json_build_object('database',current_database(),'migrations',coalesce(json_agg(json_build_object('version',version,'checksum',btrim(checksum)) ORDER BY version),'[]'::json)) FROM schema_migrations;
-  COMMIT;" > "$evidence/acceptance-history.json")
+  (umask 077; PGOPTIONS='-c default_transaction_read_only=on' pg_exec psql "$DATABASE_URL" -XqAt -v ON_ERROR_STOP=1 -c "BEGIN READ ONLY" -c "SELECT json_build_object('database',current_database(),'migrations',coalesce(json_agg(json_build_object('version',version,'checksum',btrim(checksum)) ORDER BY version),'[]'::json)) FROM schema_migrations" -c COMMIT > "$evidence/acceptance-history.json")
   node_exec "$policy" "$evidence/acceptance-history.json" "$manifest" acceptance
 }
 export_history

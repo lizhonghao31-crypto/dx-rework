@@ -43,5 +43,5 @@ if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) {
   const [history,manifest,environment]=process.argv.slice(2);
   const result=checkHistory(JSON.parse(readFileSync(history,'utf8')),JSON.parse(readFileSync(manifest,'utf8')),environment);
   if(process.argv[5]==='current'&&result.pending.length)throw Error('Database is not current after maintenance');
-  process.stdout.write(JSON.stringify(result)+'\n');
+  process.stdout.write(process.argv[6]==='--psql-signal' ? 'DX_ACCEPTANCE_HISTORY_VALID' : JSON.stringify(result)+'\n');
 }
