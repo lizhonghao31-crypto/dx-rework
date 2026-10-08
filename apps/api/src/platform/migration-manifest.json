@@ -955,6 +955,10 @@
     {
       "version": "0234_receiving_packing_cutting_group",
       "checksum": "626a799a577829a078f9d1993c5141e1f988b936d7800e159d36da08516cd635"
+    },
+    {
+      "version": "0235_factory_change_contract_content",
+      "checksum": "997e7ae755456834d6818d259cd8dd2f864c6404a8fb476da3e7a4dcd4e98573"
     }
   ]
 }
