@@ -4,10 +4,10 @@ import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "
 import { createWebUrls } from "../url-contract.js";
 
 /** Allow only local read workspaces, with validated filters and selected task. */
-export function developmentWorkspaceReturnUrl(value: string | null): string | null {
+export function developmentWorkspaceReturnUrl(value: string | null, base: string = import.meta.env.BASE_URL): string | null {
   if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return null;
   try {
-    const urls = createWebUrls(import.meta.env.BASE_URL), url = new URL(value, "https://local.invalid");
+    const urls = createWebUrls(base), url = new URL(value, "https://local.invalid");
     if (url.origin !== "https://local.invalid" || url.hash || [...url.searchParams.keys()].length !== new Set(url.searchParams.keys()).size) return null;
     const query = Object.fromEntries(url.searchParams);
     if (url.pathname === urls.pageUrl('ui/digital-analysis') && DigitalAnalysisFilterSchema.safeExtend({view:z.enum(['output','timing','waiting','quality'])}).safeParse(query).success) return url.pathname + url.search;
