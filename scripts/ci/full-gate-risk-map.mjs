@@ -36,6 +36,7 @@ export const POSTGRES_CASE_SUITES = Object.freeze({
 
 const isMigration = (path) =>
   path.startsWith("apps/api/migrations/")
+  || path.startsWith("scripts/deploy/migration-execution-compatibility.")
   || path === "apps/api/src/platform/migration-manifest.json"
   || [
     "scripts/seed-base-migrations.sh",

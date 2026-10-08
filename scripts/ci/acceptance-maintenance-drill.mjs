@@ -10,7 +10,7 @@ import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {setTimeout} from 'node:timers/promises';
 import pg from 'pg';
-import {discoverValidatedMigrations} from '../migration-lib.mjs';
+import {discoverValidatedMigrations,applyMigrations} from '../migration-lib.mjs';
 import {DigitalProductionIdentityService} from '../../apps/api/dist/production-platform/identity-service.js';
 import {DigitalBudgetService} from '../../apps/api/dist/production-platform/budget-service.js';
 
@@ -98,7 +98,19 @@ try {
  await admin.query(`REVOKE diagnostic_probe FROM ${app}; ALTER ROLE ${app} INHERIT; DROP ROLE diagnostic_probe`);
  // Explicit fixture repair, never an automatic updater operation.
  await db.query(`BEGIN; ALTER TABLE sourcing_contract_return_submissions OWNER TO ${owner}; GRANT SELECT,INSERT,UPDATE,DELETE ON sourcing_contract_return_submissions TO ${app}; ALTER TABLE digital_production_notification_events OWNER TO ${owner}; GRANT SELECT,INSERT,UPDATE,DELETE ON digital_production_notification_events TO ${app}; ALTER FUNCTION guard_cutting_record_creation() OWNER TO ${owner}; COMMIT;`);
+ await db.query("SELECT pg_advisory_lock(hashtext('dx-rework-schema-migrations'))");
+ try { const locked=execute(preflight,'concurrent-maintenance',false);assert.match(locked.stderr,/lock timeout/); }
+ finally { await db.query("SELECT pg_advisory_unlock(hashtext('dx-rework-schema-migrations'))"); }
  execute(preflight,'no-default-acl-preflight');
+ // Replace only the test's command output. Every missing/invalid signal must
+ // terminate before DDL, even if the substituted program exits successfully.
+ for(const [label,command] of [['empty','true'],['invalid',"printf WRONG"],['missing','/nonexistent/dx-validator'],['failed','false']]) {
+  const invalid=join(scratch,`signal-${label}.sql`);
+  writeFileSync(invalid,readFileSync(preflight,'utf8').replace(/\\set acceptance_history_signal `[^\n]+`/,`\\set acceptance_history_signal \`${command}\``));
+  execute(invalid,`signal-${label}`,false);
+  assert.deepEqual((await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows,before);
+ }
+ report('old psql rejects failed, empty, missing and invalid validation signals without changing history');
  await db.end();db=null;
  await admin.query(`CREATE DATABASE dx_rework_drill_baseline TEMPLATE ${database}`);
  db=new pg.Client({connectionString:url('postgres',database)});await db.connect();
@@ -106,7 +118,7 @@ try {
  // the DDL and grants of that transaction, not silently miss a new table.
  const altered=structuredClone(requirements);altered['0226_digital_production_budgets'].creates=altered['0226_digital_production_budgets'].creates.filter(x=>x!=='digital_budget_image_copies');
  const alteredTool=join(scratch,'altered-tool');mkdirSync(join(alteredTool,'scripts/deploy'),{recursive:true});
- for(const file of ['scripts/migration-history-policy.mjs','scripts/migration-branches.json','scripts/migration-main-extensions.json','scripts/deploy/acceptance-update-policy.mjs'])writeFileSync(join(alteredTool,file),readFileSync(join(repo,file)));
+ for(const file of ['scripts/migration-history-policy.mjs','scripts/migration-branches.json','scripts/migration-main-extensions.json','scripts/deploy/acceptance-update-policy.mjs','scripts/deploy/migration-execution-compatibility.json'])writeFileSync(join(alteredTool,file),readFileSync(join(repo,file)));
  writeFileSync(join(alteredTool,'scripts/deploy/acceptance-migration-requirements.json'),JSON.stringify(altered));
  const missing=execute(await generate('apply',alteredTool),'inventory-omission',false);
  assert.match(missing.stderr,/Created relations differ/);
@@ -120,14 +132,46 @@ try {
  const partial=execute(apply,'partial-commit',false);assert.match(partial.stderr,/TEST intentional interruption/);
  assert.equal((await db.query('SELECT count(*)::int n FROM schema_migrations')).rows[0].n,catalog.filter(x=>x.version<'0227_digital_production_instructions').length);
  assert.equal((await db.query("SELECT to_regclass('digital_instruction_documents') AS relation")).rows[0].relation,null);
+ await db.query("CREATE OR REPLACE FUNCTION test_interrupt() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.version='0236_factory_remainder_executions' THEN RAISE EXCEPTION 'TEST intentional 0236 interruption'; END IF; RETURN NEW; END $$");
+ const failed236=execute(apply,'0236-rollback',false);assert.match(failed236.stderr,/TEST intentional 0236 interruption/);
+ assert.equal((await db.query("SELECT to_regclass('sourcing_production_factory_transfers') AS relation")).rows[0].relation,null);
+ assert.equal((await db.query("SELECT count(*)::int n FROM pg_constraint WHERE conrelid='sourcing_production_transitions'::regclass AND pg_get_constraintdef(oid)='UNIQUE (production_order_id, sequence)'" )).rows[0].n,1);
  await db.query('DROP TRIGGER test_interrupt ON schema_migrations; DROP FUNCTION test_interrupt()');
  execute(apply,'retry');const after=(await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows;
  assert.equal(after.length,manifest.migrations.length);for(const old of before)assert.deepEqual(after.find(x=>x.version===old.version),old);
+ const finalSignal=join(scratch,'final-signal-failure.sql');
+ const generated=readFileSync(apply,'utf8');const marker=generated.lastIndexOf('\\set acceptance_history_signal `');
+ writeFileSync(finalSignal,generated.slice(0,marker)+generated.slice(marker).replace(/\\set acceptance_history_signal `[^\n]+`/,'\\set acceptance_history_signal `true`'));
+ execute(finalSignal,'final-signal-failure',false);
+ assert.deepEqual((await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows,after);
  execute(apply,'same-schema-repeat');assert.deepEqual((await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows,after);
  assert.equal((await db.query('SELECT count(*)::int n FROM pg_default_acl')).rows[0].n,0);
  for(const old of oldRelations)assert.deepEqual((await db.query('SELECT relname,relowner,relacl FROM pg_class WHERE oid=to_regclass($1)',['public.'+old.relname])).rows[0],old,'Existing ownership/ACL must not be rewritten');
  for(const check of Object.values(requirements))for(const seq of check.sequences)assert.equal((await db.query('SELECT pg_get_serial_sequence($1,$2) AS name',['public.'+seq.table,seq.column])).rows[0].name,'public.'+seq.name);
- report('catalog omission rolled back; partial commit before 0227 then retry to current catalog/0233; repeat preserved all timestamps; no default ACL');
+ // Check the actual installed unique indexes without bypassing business guards:
+ // copy their catalog definitions to a dedicated fixture relation for races.
+ const notNull=(await db.query("SELECT attname,attnotnull FROM pg_attribute WHERE attrelid='sourcing_production_transitions'::regclass AND attname IN ('production_order_id','sequence') ORDER BY attname")).rows;
+ assert.deepEqual(notNull,[{attname:'production_order_id',attnotnull:true},{attname:'sequence',attnotnull:true}]);
+ const indexes=(await db.query("SELECT indexname,indexdef FROM pg_indexes WHERE schemaname='public' AND tablename='sourcing_production_transitions' AND indexname IN ('sourcing_production_factory_sequence','sourcing_production_original_factory_sequence','sourcing_production_transferred_factory_sequence') ORDER BY indexname")).rows;
+ assert.equal(indexes.length,Number(pgMajor)<15?2:1);
+ await db.query('CREATE TABLE test_factory_sequence(production_order_id uuid NOT NULL,factory_decision_id uuid,sequence integer NOT NULL)');
+ for(const index of indexes)await db.query(index.indexdef.replace(index.indexname,'test_'+index.indexname).replace('public.sourcing_production_transitions','public.test_factory_sequence'));
+ const parent=randomUUID(),other=randomUUID(),factory=randomUUID(),another=randomUUID();
+ const insert=(client,factoryId,orderId=parent)=>client.query('INSERT INTO test_factory_sequence VALUES($1,$2,1)',[orderId,factoryId]);
+ await insert(db,null);await assert.rejects(insert(db,null),e=>e.code==='23505');
+ await insert(db,factory);await assert.rejects(insert(db,factory),e=>e.code==='23505');
+ await insert(db,another);await insert(db,null,other);
+ for(const factoryId of [null,randomUUID()]) {
+  const racingParent=randomUUID();const concurrent=new pg.Client({connectionString:url('postgres',database)});await concurrent.connect();
+  try {
+   await db.query('BEGIN');await insert(db,factoryId,racingParent);
+   const rejected=assert.rejects(insert(concurrent,factoryId,racingParent),e=>e.code==='23505');
+   await db.query('COMMIT');await rejected;
+  }finally{await concurrent.end();}
+ }
+ await db.query('DROP TABLE test_factory_sequence');
+ report('actual uniqueness definitions reject duplicate NULL/actual factory sequences and concurrent duplicates; different factories/orders allowed');
+ report('catalog omission rolled back; partial commit before 0227 then retry to current catalog/0236; 0236 rollback restored original uniqueness; repeat preserved all timestamps; no default ACL');
  appDb=new pg.Pool({connectionString:url(app,database)});
  const tables=[...new Set(catalog.filter(x=>!historical.some(r=>r.version===x.version)).flatMap(x=>requirements[x.version].creates))];
  for(const table of tables)await appDb.query(`SELECT * FROM ${table} LIMIT 0`);
@@ -206,6 +250,19 @@ DX_REWORK_RESTORE_DRILL=true DX_REWORK_RESTORE_CONFIRM=RESTORE_TO_ISOLATED_DRILL
  assert.deepEqual((await db.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows,earlyAfter);
  assert.match(backup(),/"status":"pass"/);
  report('217 prefix upgraded through every inventory entry; six identity sequences verified, including ALTER-existing-table; low-privilege backup and repeat passed');
+ // The Node migrator must select the same audited execution variant, retain
+ // the original fingerprint and leave every already-applied row untouched.
+ const nodeDatabase='dx_rework_drill_node_migration';
+ await admin.query(`CREATE DATABASE ${nodeDatabase} OWNER ${owner}`);
+ const nodeResult=await applyMigrations(url(owner,nodeDatabase));assert.equal(nodeResult.currentVersion,target.version);
+ const native=new pg.Client({connectionString:url(owner,nodeDatabase)});await native.connect();
+ try {
+  const frozen=(await native.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows;
+  assert.equal(frozen.find(row=>row.version===target.version).checksum,target.checksum);
+  assert.deepEqual((await applyMigrations(url(owner,nodeDatabase))).applied,[]);
+  assert.deepEqual((await native.query('SELECT version,checksum,applied_at::text AS applied_at FROM schema_migrations ORDER BY version')).rows,frozen);
+ }finally{await native.end();}
+ report('native Node migrator fresh apply and repeat preserve original SQL fingerprint/applied_at');
  passed=true;
 }finally {
  await appDb?.end();await db?.end();await admin?.end();

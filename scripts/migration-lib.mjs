@@ -1,5 +1,6 @@
 import {assertAppliedMigrationHistory,assertMigrationSequence} from './migration-history-policy.mjs';
 export {assertAppliedMigrationHistory} from './migration-history-policy.mjs';
+import { migrationExecutionSql } from "./deploy/migration-execution-compatibility.mjs";
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -90,6 +91,7 @@ export async function applyMigrations(databaseUrl) {
     `);
 
     const migrations = await discoverValidatedMigrations();
+    const serverVersion = Number((await client.query("SHOW server_version_num")).rows[0].server_version_num);
     const storedHistory = await client.query(
       "SELECT version, checksum FROM schema_migrations ORDER BY version ASC",
     );
@@ -109,7 +111,7 @@ export async function applyMigrations(databaseUrl) {
 
       await client.query("BEGIN");
       try {
-        await client.query(migration.sql);
+        await client.query(migrationExecutionSql(migration, serverVersion));
         await client.query(
           "INSERT INTO schema_migrations (version, checksum) VALUES ($1, $2)",
           [migration.version, migration.checksum],

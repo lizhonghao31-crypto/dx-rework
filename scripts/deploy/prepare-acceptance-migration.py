@@ -87,6 +87,31 @@ def grant_sql(checks):
     return result
 
 
+def history_validation_sql(command, mode):
+    # Backtick substitution works in psql13. Reset first, then require the exact
+    # success signal from the validator; failure/empty/missing output is fatal.
+    signal_command = command + ' ' + mode + ' --psql-signal'
+    if any(char in signal_command for char in ('`', '\n', '\r')):
+        raise ValueError('Invalid history validation command')
+    return ["\\set acceptance_history_signal ''",
+            "\\set acceptance_history_signal `" + signal_command + "`",
+            "SELECT 1 / CASE WHEN :'acceptance_history_signal'='DX_ACCEPTANCE_HISTORY_VALID' THEN 1 ELSE 0 END;"]
+
+
+def compatibility_sql(source, tool_root, row):
+    policy = json.loads((tool_root / 'scripts/deploy/migration-execution-compatibility.json').read_text())
+    check = policy.get(row['version'])
+    if check is None:
+        return None
+    sql = (source / 'apps/api/migrations' / (row['version'] + '.sql')).read_text()
+    if check['checksum'] != row['checksum'] or sql.count(check['replace']) != 1:
+        raise ValueError('Frozen migration compatibility binding drift')
+    adapted = sql.replace(check['replace'], check['with'])
+    if hashlib.sha256(adapted.encode()).hexdigest() != check['executionChecksum']:
+        raise ValueError('Migration compatibility execution checksum drift')
+    return adapted
+
+
 def generate(source, identity, node, history_file, mode='apply', tool_root=None):
     source = Path(source).resolve()
     tool_root = Path(tool_root or Path(__file__).resolve().parents[2])
@@ -122,6 +147,7 @@ def generate(source, identity, node, history_file, mode='apply', tool_root=None)
         file = source / 'apps/api/migrations' / (version + '.sql')
         if hashlib.sha256(file.read_bytes()).hexdigest() != checksum:
             raise ValueError('Git SQL/manifest checksum drift: ' + version)
+        compatibility_sql(source, tool_root, row)
     policy = tool_root / 'scripts/deploy/acceptance-update-policy.mjs'
     command = ' '.join(shlex.quote(str(part)) for part in (node, policy, history_file, manifest, 'acceptance'))
     export = ("\\copy (SELECT json_build_object('database',current_database(),'migrations',coalesce("
@@ -134,8 +160,9 @@ def generate(source, identity, node, history_file, mode='apply', tool_root=None)
            f"(SELECT oid::bigint FROM pg_database WHERE datname=current_database())<>{oid} OR "
            "(SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=current_database())<>current_user "
            "THEN RAISE EXCEPTION 'Acceptance maintenance identity mismatch'; END IF; END $$;",
+           "DO $$ BEGIN IF current_setting('server_version_num')::integer<130000 THEN RAISE EXCEPTION 'PostgreSQL 13 or newer required'; END IF; END $$;",
            "SELECT pg_advisory_lock(hashtext('dx-rework-schema-migrations'));", "BEGIN READ ONLY;", export,
-           "\\! " + command, "\\if :SHELL_ERROR", "SELECT 1/0;", "\\endif"]
+           *history_validation_sql(command, 'prefix')]
     sql += permission_sql(entries, requirements) + ['COMMIT;']
     if mode == 'apply':
         for row in entries:
@@ -144,14 +171,21 @@ def generate(source, identity, node, history_file, mode='apply', tool_root=None)
             sql.extend([f"SELECT NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version='{version}') AS pending \\gset",
                         "\\if :pending", "BEGIN;",
                         "SELECT set_config('dx_acceptance.before_relations',(SELECT coalesce(jsonb_agg(c.oid::bigint),'[]'::jsonb)::text FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p','S')),true);",
-                        "\\ir " + shlex.quote(str(file))])
+                        ])
+            adapted = compatibility_sql(source, tool_root, row)
+            if adapted is None:
+                sql.append("\\ir " + shlex.quote(str(file)))
+            else:
+                sql.extend(["SELECT current_setting('server_version_num')::integer>=150000 AS native_migration_sql \\gset",
+                            "\\if :native_migration_sql", "\\ir " + shlex.quote(str(file)),
+                            "\\else", adapted, "\\endif"])
             checks = requirements.get(version)
             if checks is not None and checks['checksum'] == checksum:
                 sql.extend(grant_sql(checks))
             sql.extend([
                         f"INSERT INTO schema_migrations(version,checksum) VALUES('{version}','{checksum}');",
                         "COMMIT;", "\\endif"])
-        sql.extend([export, "\\! " + command + " current", "\\if :SHELL_ERROR", "SELECT 1/0;", "\\endif"])
+        sql.extend([export, *history_validation_sql(command, 'current')])
     sql.append("SELECT pg_advisory_unlock(hashtext('dx-rework-schema-migrations'));")
     return '\n'.join(sql) + '\n'
 
