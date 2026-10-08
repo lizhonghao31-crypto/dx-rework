@@ -1,5 +1,7 @@
 import { describe,expect,it } from "vitest";
 import { DigitalOrderCreateSchema,DigitalPoInputSchema,digitalPoKey } from "@dx-rework/contracts/digital-production";
+import { SourcingCaseLineInputSchema } from "@dx-rework/contracts";
+import { validateFactoryInputs } from "../../apps/api/src/production-platform/po-factory-date-adapter.js";
 const line = {color:"黑",sizes:[{size:"M",quantity:10}]};
 const order = {customerCode:"PD",productGroup:"男装",designStyleNo:"TEST-PO",orderDate:"2026-10-08"};
 describe("one formal PO and explicit customer promise contract",()=>{
@@ -19,5 +21,17 @@ describe("one formal PO and explicit customer promise contract",()=>{
     expect(legacy).not.toHaveProperty("formalPoNo");expect(legacy).not.toHaveProperty("customerWarehouseArrivalDate");
     expect(DigitalPoInputSchema.safeParse({...line,factoryDeliveryDate:"2026-12-01"}).success).toBe(false);
     expect(DigitalPoInputSchema.safeParse({...line,deliveryDate:"2026-12-01",customerWarehouseArrivalDate:"2026-12-02"}).success).toBe(false);
+  });
+});
+describe("digital sourcing stable identity with indistinguishable PO attributes",()=>{
+  it("requires exact IDs even when alternate number, color and quantity cannot distinguish rows, while legacy line input stays compatible",()=>{
+    const ids=["d7b33999-260c-420e-bfab-ff610624144a","398c8b0d-e825-4d70-8f0d-0dd728176ad0"];
+    const rows=ids.map((line_id,index)=>({line_id,position:index+1,color:"黑",quantity:10,customer:"2026-11-20"}));
+    const legacy={styleNo:"PO-A",alternateStyleNo:"SHARED-TEMP",color:"黑",quantity:10};
+    expect(SourcingCaseLineInputSchema.parse(legacy)).not.toHaveProperty("lineId");
+    const input={estimatedCutPieceSendDate:"2026-10-20",lineItems:ids.map((lineId,index)=>({...legacy,lineId,styleNo:index===0?"PO-A":"PO-B",factoryDeliveryDate:index===0?"2026-11-05":"2026-11-10"}))};
+    expect(()=>validateFactoryInputs(rows,input,true)).not.toThrow();
+    expect(()=>validateFactoryInputs(rows,{...input,lineItems:input.lineItems.map(row=>({...row,lineId:undefined}))},true)).toThrow("PO 身份");
+    expect(()=>validateFactoryInputs(rows,{...input,lineItems:input.lineItems.map((row,index)=>({...row,lineId:ids[1-index]}))},true)).toThrow("PO 身份");
   });
 });

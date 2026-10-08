@@ -3607,6 +3607,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       digitalBudget:{productionOrderId:id,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}};
     await expect(service.createCase(merchandiserActor(),{...input,lineItems:input.lineItems.map((line,index)=>index===1?{...line,factoryDeliveryDate:"2026-10-19"}:line)},randomUUID())).rejects.toMatchObject({statusCode:409});
     await expect(service.createCase(merchandiserActor(),{...input,lineItems:input.lineItems.map((line,index)=>index===1?{...line,factoryDeliveryDate:"2026-11-21"}:line)},randomUUID())).rejects.toMatchObject({statusCode:409});
+    const beforeMissingIds=await fixture.budget.read(fixture.designer,id);
+    await expect(service.createCase(merchandiserActor(),{...input,lineItems:input.lineItems.map(line=>({...line,lineId:undefined}))},randomUUID())).rejects.toMatchObject({statusCode:409});
+    await expect(service.createCase(merchandiserActor(),{...input,lineItems:input.lineItems.map((line,index)=>({...line,lineId:input.lineItems[(index+1)%input.lineItems.length]!.lineId}))},randomUUID())).rejects.toMatchObject({statusCode:409});
+    expect(await fixture.budget.read(fixture.designer,id)).toEqual(beforeMissingIds);
     const created=(await service.createCase(merchandiserActor(),input,randomUUID())).value,caseId=created.sourcingCaseId;
     expect(created.lineItems.map(line=>line.factoryDeliveryDate)).toEqual([null,null,null]);
     expect(created.lineItems.map(line=>line.proposedFactoryDeliveryDate)).toEqual(dates);
@@ -3616,6 +3620,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const corrected={gender:input.gender,styleName:input.styleName,deliveryDate:input.deliveryDate,estimatedCutPieceSendDate:input.estimatedCutPieceSendDate,attachmentIds:input.attachmentIds,expectedVersion:returned.version,reason:"TEST保留原款色数量只纠正编号和逐 PO 日期",lineItems:input.lineItems.map((line,index)=>index===0?{...line,styleNo:`TEST-CORRECT-${id}`,factoryDeliveryDate:"2026-11-06"}:line)};
     await expect(service.correctCase(merchandiserActor(),caseId,{...corrected,lineItems:corrected.lineItems.map((line,index)=>index===0?{...line,color:"非法改色"}:line)},randomUUID())).rejects.toMatchObject({statusCode:409});
     await expect(service.correctCase(merchandiserActor(),caseId,{...corrected,lineItems:corrected.lineItems.slice(1)},randomUUID())).rejects.toMatchObject({statusCode:409});
+    const beforeMissingCorrectionIds=await cycleSnapshot(caseId);
+    await expect(service.correctCase(merchandiserActor(),caseId,{...corrected,lineItems:corrected.lineItems.map(line=>({...line,lineId:undefined}))},randomUUID())).rejects.toMatchObject({statusCode:409});
+    await expect(service.correctCase(merchandiserActor(),caseId,{...corrected,lineItems:corrected.lineItems.map((line,index)=>({...line,lineId:corrected.lineItems[(index+1)%corrected.lineItems.length]!.lineId}))},randomUUID())).rejects.toMatchObject({statusCode:409});
+    expect(await cycleSnapshot(caseId)).toEqual(beforeMissingCorrectionIds);
     const good=(await service.correctCase(merchandiserActor(),caseId,corrected,randomUUID())).value;
     expect(good.status).toBe("pending_ie_quote");
     expect((await database.query("SELECT po_number,formal_style_no FROM digital_production_po_lines WHERE line_id=$1",[prepared.lineItems[0]!.lineId])).rows[0])

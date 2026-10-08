@@ -37,7 +37,7 @@ export function validateFactoryInputs(lines:readonly {line_id:string;color:strin
   if(lines.length!==input.lineItems.length)conflict("补号不能增加或删除 PO");
   for(const row of lines){
     const entered=input.lineItems[row.position-1];
-    if(!entered || entered.lineId && entered.lineId!==row.line_id || entered.color!==row.color || entered.quantity!==Number(row.quantity))
+    if(!entered || entered.lineId!==row.line_id || entered.color!==row.color || entered.quantity!==Number(row.quantity))
       conflict("补号不能改变原 PO 身份、颜色或数量");
     if(!entered.factoryDeliveryDate || !z.iso.date().safeParse(entered.factoryDeliveryDate).success
       || entered.factoryDeliveryDate<input.estimatedCutPieceSendDate || row.customer && entered.factoryDeliveryDate>row.customer)

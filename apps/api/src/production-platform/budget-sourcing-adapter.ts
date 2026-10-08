@@ -39,7 +39,7 @@ export async function validateBudgetSourcing(db: PoolClient, actor: TrustedActor
   for (let i = 0; i < source.lines.length; i++) {
     const line = source.lines[i]!, entered = input.lineItems[i]!;
     const alternate = line.temporary_style_no || source.order.temporary_style_no || source.order.design_style_no;
-    if (entered.lineId && entered.lineId !== line.line_id || (entered.alternateStyleNo ?? "") !== alternate || entered.color !== line.color || entered.quantity !== line.quantity) conflict("PO 身份、代用号、颜色和数量须沿用当前母单");
+    if (entered.lineId !== line.line_id || (entered.alternateStyleNo ?? "") !== alternate || entered.color !== line.color || entered.quantity !== line.quantity) conflict("PO 身份、代用号、颜色和数量须沿用当前母单");
     if (!entered.factoryDeliveryDate || entered.factoryDeliveryDate < input.estimatedCutPieceSendDate || line.customer && entered.factoryDeliveryDate > line.customer) conflict("请逐 PO 填写合法的加工厂交货日，不能早于裁片发出或晚于客户仓到货");
   }
   return source.lines.map((line, index) => ({ childLineKey: String(index + 1), lineId: line.line_id as string }));
