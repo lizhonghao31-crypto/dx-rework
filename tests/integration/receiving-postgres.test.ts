@@ -312,6 +312,7 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     // PR04 board reads the latest schema's optional cutting identity. This partial-migration
     // fixture stays intentionally legacy, so add only the nullable projection surface it needs.
     await database.query("ALTER TABLE receiving_batches ADD COLUMN cutting_order_id uuid");
+    await migration("0234_receiving_packing_cutting_group.sql");
     await database.query(`CREATE TABLE current_cutting_records(
       cutting_order_id uuid,
       actual_cut_count bigint,
@@ -1469,6 +1470,35 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     expect(board.rows.every((row) => row.cuttingRecordedBy === "仓管测试")).toBe(true);
     expect(board.rows.every((row) => row.cuttingRecordedAt !== null)).toBe(true);
     expect(board.kpis.orderCount).toBe(2);
+  });
+
+  it("isolates legacy packing from cutting groups and rejects a new batch correction across the same group", async () => {
+    const styleNo = "RETEST02-LEGACY-PACKING";
+    const legacy = await service.create(receiver(), { styleNo, documentQuantity: 40, actualQuantity: 40, attachmentIds: [await readyImage()] }, randomUUID());
+    const legacyRow = (await service.board(businessDate(), styleNo)).rows[0]!;
+    await service.recordPacking(packingRecorder(), { receivingBatchId: legacyRow.receivingBatchId, expectedVersion: legacyRow.version, expectedPackingRevisionId: null, packingQuantity: 40 }, randomUUID());
+    const cuttingIds = [randomUUID(), randomUUID()];
+    const batches = [randomUUID(), randomUUID()];
+    for (const [index, batchId] of batches.entries()) {
+      await database.query(`INSERT INTO receiving_batches(receiving_batch_id,style_no,cutting_order_id,created_by,delivery_note_quantity) VALUES($1,$2,$3,$4,60)`, [batchId, styleNo, cuttingIds[index], receiverId]);
+      await insertReceiptAt(batchId, styleNo, 60, 60, 0, new Date().toISOString());
+    }
+    const rows = (await service.board(businessDate(), styleNo)).rows;
+    const packed = await Promise.all(batches.map((batchId) => service.recordPacking(packingRecorder(), {
+      receivingBatchId: batchId, expectedVersion: rows.find(row => row.receivingBatchId === batchId)!.version,
+      expectedPackingRevisionId: null, packingQuantity: 60,
+    }, randomUUID())));
+    expect(packed.map(result => result.value.packingQuantity)).toEqual([60, 60]);
+    // A later receiving batch does not turn a group's existing packing into a first entry.
+    const newBatchId = randomUUID();
+    await database.query(`INSERT INTO receiving_batches(receiving_batch_id,style_no,cutting_order_id,created_by,delivery_note_quantity) VALUES($1,$2,$3,$4,60)`, [newBatchId, styleNo, cuttingIds[0], receiverId]);
+    await insertReceiptAt(newBatchId, styleNo, 60, 1, 0, new Date(Date.now() + 1000).toISOString());
+    const row = (await service.board(businessDate(), styleNo)).rows.find(item => item.receivingBatchId === newBatchId)!;
+    await expect(service.recordPacking(packingRecorder(), { receivingBatchId: row.receivingBatchId, expectedVersion: row.version, expectedPackingRevisionId: null, packingQuantity: 61 }, randomUUID())).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN", message: "已录入的装箱数量只有Root可以修改" });
+    await expect(database.query(`INSERT INTO receiving_packing_revisions(packing_revision_id,receiving_batch_id,packing_quantity,recorded_by,operation_event_id,request_id)
+      SELECT $1,$2,61,recorded_by,operation_event_id,request_id FROM receiving_packing_revisions WHERE packing_revision_id=$3`, [randomUUID(), newBatchId, packed[0]!.value.packingRevisionId])).rejects.toMatchObject({ code: "42501", constraint: "receiving_packing_root_correction_only" });
+    expect((await database.query("SELECT count(*)::int count FROM receiving_packing_revisions WHERE receiving_batch_id=$1", [newBatchId])).rows[0]!.count).toBe(0);
+    expect((await service.board(businessDate(), styleNo)).rows.find(item => item.receivingBatchId === legacy.value.receivingBatchId)?.packingQuantity).toBe(40);
   });
 
   it("keeps backfill facts in their own batch while consolidating the same style on the board", async () => {
