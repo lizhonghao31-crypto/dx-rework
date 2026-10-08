@@ -157,13 +157,16 @@ export class SourcingContractService {
         WHERE NOT sourcing_contract_return_monitors.contract_return_monitor_enabled`,[approvalSnapshotId]);
     const metadata = (await client.query<{identity_version:number;template_version:number}>(`SELECT
       (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=snapshot.sourcing_case_id) AS identity_version,
-      CASE WHEN previous.identity_version<(SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=snapshot.sourcing_case_id)
+      CASE WHEN (previous.sourcing_approval_snapshot_id IS DISTINCT FROM snapshot.sourcing_approval_snapshot_id OR previous.identity_version<(SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=snapshot.sourcing_case_id))
         AND EXISTS(SELECT 1 FROM sourcing_contract_content_overrides WHERE sourcing_contract_document_id=previous.sourcing_contract_document_id)
         THEN previous.template_version
         ELSE (SELECT max(template_version) FROM sourcing_contract_template_versions WHERE effective_from<=CURRENT_TIMESTAMP) END AS template_version
       FROM sourcing_approval_snapshots snapshot
-      LEFT JOIN LATERAL (SELECT sourcing_contract_document_id,identity_version,template_version FROM sourcing_contract_documents
-        WHERE sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id ORDER BY contract_version DESC LIMIT 1) previous ON true
+      LEFT JOIN LATERAL (SELECT sourcing_contract_document_id,sourcing_approval_snapshot_id,identity_version,template_version FROM sourcing_contract_documents
+        WHERE sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id
+          OR sourcing_decision_id=(SELECT supersedes_decision_id FROM sourcing_decisions
+            WHERE sourcing_decision_id=snapshot.sourcing_decision_id AND source_type='factory_change')
+        ORDER BY contract_version DESC LIMIT 1) previous ON true
       WHERE snapshot.sourcing_approval_snapshot_id=$1`,[approvalSnapshotId])).rows[0];
     if (!metadata) throw new ApplicationError("INVALID_STATE_TRANSITION","合同批准快照不存在",409);
     const documentId = randomUUID();
@@ -214,12 +217,16 @@ export class SourcingContractService {
               $2,$4,previous.sourcing_contract_document_id
        FROM sourcing_approval_snapshots snapshot
        LEFT JOIN LATERAL (SELECT * FROM sourcing_contract_documents
-         WHERE sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id ORDER BY contract_version DESC LIMIT 1) previous ON true
+         WHERE sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id
+          OR sourcing_decision_id=(SELECT supersedes_decision_id FROM sourcing_decisions
+            WHERE sourcing_decision_id=snapshot.sourcing_decision_id AND source_type='factory_change')
+        ORDER BY contract_version DESC LIMIT 1) previous ON true
        LEFT JOIN LATERAL (SELECT (SELECT jsonb_object_agg(field_name,field_value) FROM sourcing_contract_supplements
-         WHERE sourcing_contract_document_id=previous.sourcing_contract_document_id)
+         WHERE sourcing_contract_document_id=previous.sourcing_contract_document_id
+           AND previous.sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id)
          || '{}'::jsonb AS direct_values) direct ON true
        LEFT JOIN LATERAL (SELECT COALESCE(jsonb_object_agg(key,value),'{}'::jsonb) || COALESCE(direct.direct_values,'{}'::jsonb) AS values
-         FROM jsonb_each(previous.approval_snapshot) WHERE key=ANY(ARRAY['supplierName','supplierCode','address','contractEntityName','partyBRepresentative','payeeName','bankAccount','bankName'])) supplements ON true
+         FROM jsonb_each(previous.approval_snapshot) WHERE previous.sourcing_approval_snapshot_id=snapshot.sourcing_approval_snapshot_id AND key=ANY(ARRAY['supplierName','supplierCode','address','contractEntityName','partyBRepresentative','payeeName','bankAccount','bankName'])) supplements ON true
        CROSS JOIN LATERAL (
          SELECT template_version
          FROM sourcing_contract_template_versions
@@ -246,6 +253,7 @@ export class SourcingContractService {
       JOIN sourcing_style_revisions r ON r.sourcing_case_id=d.sourcing_case_id AND r.revision=d.identity_version AND r.changed_by=d.prepared_by
       WHERE d.sourcing_contract_document_id=$1 AND d.identity_version>previous.identity_version
         AND d.sourcing_approval_snapshot_id=previous.sourcing_approval_snapshot_id AND d.sourcing_decision_id=previous.sourcing_decision_id`,[documentId]);
+    if (inserted.rows[0]) await this.inheritFactoryContent(client,documentId);
     const existing = inserted.rows[0] ? null : await client.query<{ sourcing_contract_document_id: string }>(
       `SELECT sourcing_contract_document_id FROM sourcing_contract_documents
        WHERE sourcing_approval_snapshot_id=$1 AND identity_version=$2 AND template_version=$3
@@ -256,6 +264,16 @@ export class SourcingContractService {
       ?? existing?.rows[0]?.sourcing_contract_document_id;
     if (!id) throw new ApplicationError("INVALID_STATE_TRANSITION", "合同批准快照不存在", 409);
     return id;
+  }
+
+  private async inheritFactoryContent(client: Pick<PoolClient,"query">,documentId:string):Promise<void> {
+    await client.query(`INSERT INTO sourcing_contract_content_overrides(sourcing_contract_document_id,content,operation_event_id)
+      SELECT d.sourcing_contract_document_id,sourcing_contract_content_for_factory_change(d.sourcing_contract_document_id),snapshot.operation_event_id
+      FROM sourcing_contract_documents d JOIN sourcing_contract_documents previous ON previous.sourcing_contract_document_id=d.revision_of
+      JOIN sourcing_contract_content_overrides old_content ON old_content.sourcing_contract_document_id=d.revision_of
+      JOIN sourcing_approval_snapshots snapshot ON snapshot.sourcing_approval_snapshot_id=d.sourcing_approval_snapshot_id
+      WHERE d.sourcing_contract_document_id=$1 AND d.sourcing_approval_snapshot_id<>previous.sourcing_approval_snapshot_id
+        AND d.status='generation_pending' AND NOT EXISTS(SELECT 1 FROM sourcing_contract_content_overrides WHERE sourcing_contract_document_id=d.sourcing_contract_document_id)`,[documentId]);
   }
 
   async getCurrent(
@@ -340,6 +358,7 @@ export class SourcingContractService {
            WHERE sourcing_contract_document_id=$1`,
           [row.sourcing_contract_document_id,remaining],
         );
+        if (remaining.length===0) await this.inheritFactoryContent(client,row.sourcing_contract_document_id);
         return { statusCode: 200,response: { documentId: row.sourcing_contract_document_id } };
       });
       await client.query("COMMIT");

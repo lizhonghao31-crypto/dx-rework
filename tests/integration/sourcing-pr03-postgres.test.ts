@@ -91,6 +91,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   const factoryId = randomUUID();
   const replacementFactoryId = randomUUID();
   const disabledFactoryId = randomUUID();
+  const incompleteFactoryId = randomUUID();
   const evidenceId = randomUUID();
   let returnTodoRecipientConfigured = false;
   const ensureReturnTodoRecipient = async () => {
@@ -302,8 +303,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     try {
       await database.query(
         `INSERT INTO supplier_catalog_items(supplier_id,supplier_code,supplier_type)
-         VALUES($1,'FAC-01','factory'),($2,'FAC-02','factory'),($3,'FAC-OFF','factory')`,
-        [factoryId, replacementFactoryId, disabledFactoryId],
+         VALUES($1,'FAC-01','factory'),($2,'FAC-02','factory'),($3,'FAC-OFF','factory'),($4,'FAC-INCOMPLETE','factory')`,
+        [factoryId, replacementFactoryId, disabledFactoryId, incompleteFactoryId],
       );
       await database.query(
         `INSERT INTO supplier_catalog_versions(
@@ -313,8 +314,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
          ) VALUES
            ($1,1,'一号加工厂',true,'测试夹具',$4,'广州一号路','一号加工厂有限公司','陈一','陈一','622201','测试银行一支行'),
            ($2,1,'二号加工厂',true,'测试夹具',$4,'广州二号路','二号加工厂有限公司','陈二','陈二','622202','测试银行二支行'),
-           ($3,1,'停用加工厂',false,'测试夹具',$4,NULL,NULL,NULL,NULL,NULL,NULL)`,
-        [factoryId, replacementFactoryId, disabledFactoryId, managerId],
+           ($3,1,'停用加工厂',false,'测试夹具',$4,NULL,NULL,NULL,NULL,NULL,NULL),
+           ($5,1,'待补地址加工厂',true,'测试夹具',$4,NULL,'待补地址加工厂有限公司','新厂代表','新厂收款人','622203','新厂银行')`,
+        [factoryId, replacementFactoryId, disabledFactoryId, managerId, incompleteFactoryId],
       );
     } finally {
       await database.query(`
@@ -755,6 +757,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         dailyCapacity: null,
         notes: "",
         contractDataMissing: [],
+      },
+      {
+        supplierId: incompleteFactoryId, supplierCode: "FAC-INCOMPLETE", supplierName: "待补地址加工厂",
+        supportedCrafts: [], dailyCapacity: null, notes: "", contractDataMissing: ["address"],
       },
     ]);
 
@@ -3856,6 +3862,62 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(financeHistory.item.deliveryDate).toBe("2026-12-01");
     await expect(contractService.content.save(rootActor(),id,{...returnedDraft,content:{...returnedDraft.content,deliveryDate:"2027-01-01"}},randomUUID())).rejects.toMatchObject({statusCode:403});
     expect((await service.getCase(rootReader,id)).deliveryDate).toBe("2026-12-01");
+  });
+
+  it("inherits the latest manual contract across a factory change without rewriting old documents or approvals",async()=>{
+    const created=await service.createCase(merchandiserActor(),{gender:"女装",styleName:"转厂合同继承",estimatedCutPieceSendDate:"2026-10-01",deliveryDate:"2026-10-31",
+      lineItems:[{styleNo:"TRANSFER-CONTENT",color:"蓝",quantity:30}],daxingUnitPrice:"8",attachmentIds:[]},randomUUID());
+    const id=created.value.sourcingCaseId;
+    await service.quoteIePrice(ieActor(),id,{linePrices:[{position:1,unitPrice:"9"}]},randomUUID());
+    await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:[{position:1,unitPrice:"9"}]},randomUUID());
+    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    const original=(await contractService.getCurrent(rootActor(),id)).item!;
+    const draft=await contractService.content.get(rootActor(),id);
+    const first=await contractService.content.save(rootActor(),id,{...draft,content:{...draft.content,contractTitle:"初次人工标题",deliveryDate:"2026-11-01"}},randomUUID());
+    await contractService.generateIfReady(rootActor(),id,first);
+    const latest=await contractService.content.get(rootActor(),id);
+    const manualContent={...latest.content,contractTitle:"最新人工标题",contractDate:"2026-10-06",deliveryDate:"2026-11-02",
+      partyAName:"人工甲方",signingPlace:"人工签订地",contractNumber:"人工转厂编号",terms:{...latest.content.terms,payment:"人工保留付款条款"}};
+    const edited=await contractService.content.save(rootActor(),id,{...latest,content:manualContent},randomUUID());
+    await contractService.generateIfReady(rootActor(),id,edited);
+    const oldDocument=(await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[edited])).rows[0];
+    const oldApproval=(await database.query("SELECT * FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1",[original.sourcingApprovalSnapshotId])).rows[0];
+    const oldAttachment=(await database.query("SELECT * FROM attachments WHERE attachment_id=$1",[oldDocument.pdf_attachment_id])).rows[0];
+    const template=(await contractService.management.templates(rootActor())).item;
+    await contractService.management.saveTemplate(rootActor(),{...template,expectedVersion:template.templateVersion,terms:{...template.terms,payment:"尚未同步的全局条款"}},randomUUID());
+    const key=randomUUID(),transferActor=ownerActor();
+    const changed=await service.requestFactoryChange(transferActor,id,{supplierId:replacementFactoryId,unitPrice:"9",changeReason:"合同继承同价转厂"},key);
+    const retry=await service.requestFactoryChange(transferActor,id,{supplierId:replacementFactoryId,unitPrice:"9",changeReason:"合同继承同价转厂"},key);
+    expect(retry.reused).toBe(true);expect(retry.value).toEqual(changed.value);
+    const current=(await contractService.getCurrent(rootActor(),id)).item!;
+    expect(current.status).toBe("ready");expect(current.templateVersion).toBe(original.templateVersion);
+    const newRow=(await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[current.sourcingContractDocumentId])).rows[0];
+    expect(newRow.revision_of).toBe(edited);expect(newRow.approval_snapshot.supplierId).toBe(replacementFactoryId);
+    expect((await contractService.content.get(rootActor(),id)).content).toMatchObject({...manualContent,
+      partyBName:newRow.approval_snapshot.contractEntityName,partyBAddress:newRow.approval_snapshot.address,
+      partyBRepresentative:newRow.approval_snapshot.partyBRepresentative,payeeName:newRow.approval_snapshot.payeeName,
+      bankAccount:newRow.approval_snapshot.bankAccount,bankName:newRow.approval_snapshot.bankName});
+    expect((await service.getCase({...rootActor(),authorizationCapability:"sourcing:view"},id)).deliveryDate).toBe("2026-11-02");
+    expect((await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[edited])).rows[0]).toEqual(oldDocument);
+    expect((await database.query("SELECT * FROM attachments WHERE attachment_id=$1",[oldDocument.pdf_attachment_id])).rows[0]).toEqual(oldAttachment);
+    expect((await database.query("SELECT * FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1",[original.sourcingApprovalSnapshotId])).rows[0]).toEqual(oldApproval);
+    const content=(await database.query("SELECT * FROM sourcing_contract_content_overrides WHERE sourcing_contract_document_id=$1",[current.sourcingContractDocumentId])).rows[0];
+    await expect(database.query("INSERT INTO sourcing_contract_content_overrides(sourcing_contract_document_id,content,operation_event_id) VALUES($1,$2,$3)",
+      [current.sourcingContractDocumentId,{...content.content,contractTitle:"伪造继承"},content.operation_event_id])).rejects.toMatchObject({code:"42501"});
+    await expect(contractService.content.save(managerActor(),id,{...latest,content:manualContent},randomUUID())).rejects.toMatchObject({statusCode:403});
+    // A later explicit price decision replaces only the new financial fields.
+    await service.requestFactoryChange(ownerActor(),id,{supplierId:factoryId,unitPrice:"8",changeReason:"沿用人工内容并按新厂明确价格计价"},randomUUID());
+    const repriced=(await contractService.content.get(rootActor(),id)).content;
+    expect(repriced).toMatchObject({contractTitle:manualContent.contractTitle,deliveryDate:manualContent.deliveryDate,terms:manualContent.terms,
+      totalQuantity:30,totalAmount:"240.00",lines:[expect.objectContaining({quantity:30,unitPrice:"8.0000",totalAmount:"240.00"})]});
+    await service.requestFactoryChange(ownerActor(),id,{supplierId:incompleteFactoryId,unitPrice:"8",changeReason:"新厂缺地址继续原补充流程"},randomUUID());
+    const pending=(await contractService.getCurrent(rootActor(),id)).item!;
+    expect(pending.status).toBe("pending_supplement");expect(pending.missingFields).toEqual(["address"]);
+    expect((await database.query("SELECT 1 FROM sourcing_contract_content_overrides WHERE sourcing_contract_document_id=$1",[pending.sourcingContractDocumentId])).rowCount).toBe(0);
+    await contractService.supplement(contractActor(),id,{address:"本新厂补充地址"},randomUUID());
+    expect((await contractService.getCurrent(rootActor(),id)).item?.status).toBe("ready");
+    expect((await contractService.content.get(rootActor(),id)).content).toMatchObject({contractTitle:manualContent.contractTitle,
+      deliveryDate:manualContent.deliveryDate,partyBName:"待补地址加工厂有限公司",partyBAddress:"本新厂补充地址",bankAccount:"622203"});
   });
 
   it("keeps unapplied template changes available after a manual edit and rejects forged template advancement",async()=>{

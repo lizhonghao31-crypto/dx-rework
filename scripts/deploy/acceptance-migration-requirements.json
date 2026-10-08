@@ -597,5 +597,18 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0235_factory_change_contract_content": {
+    "checksum": "997e7ae755456834d6818d259cd8dd2f864c6404a8fb476da3e7a4dcd4e98573",
+    "tables": [],
+    "functions": [
+      "guard_sourcing_contract_content_creation"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }
