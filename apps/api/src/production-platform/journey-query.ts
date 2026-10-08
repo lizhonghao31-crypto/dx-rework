@@ -272,6 +272,12 @@ export class DigitalJourneyQuery {
         if(bulk.preshrink!=="无需预缩"&&shrinkTask?.state!=="completed")gate.blockers.push({key:"preshrink_ready",label:"预缩条件尚未齐备",ownerId:shrinkTask?.assigneeId??null,record:shrinkTask?record("task",shrinkTask.taskId,taskUrl(shrinkTask.taskId)):gate.records[0]!});
       }
       gate.state=!gate.blockers.length&&cuttingTask?"completed":"pending";
+      // A released cutting task and original all-line cutting facts are historical
+      // convergence evidence. Current write restrictions cannot undo that fact.
+      if(cuttingTask&&bulk.cutting.completed) {
+        gate.state="completed";
+        gate.blockers=[];
+      }
       gate.completionResult=gate.state==="completed"?"unknown":null;
       const prepFacts=currentPrep?(await db.query("SELECT kind FROM digital_bulk_preparation_facts WHERE preparation_id=$1",[currentPrep])).rows:[];
       const marker=prepFacts.some(fact=>fact.kind==="唛架完成");setFact("bulk_marker",marker?"completed":currentPrep?"pending":"uncreated",[record("preparation",oid,bulkUrl,bulk.instructionVersion)]);
@@ -306,7 +312,10 @@ export class DigitalJourneyQuery {
       setFact("receipts",received?"completed":closure.lines.some(line=>line.receiptCount>0)?"active":"uncreated",[closureRecord]);
       setFact("packing",closure.stage==="本期装箱完成"?"completed":closure.lines.some(line=>line.packingRevisionId)?"active":"uncreated",[closureRecord]);
       setFact("quantity_difference",closure.lines.some(line=>line.receiptCount>0&&line.actualQuantity!==line.documentQuantity&&!line.receivingResolution||line.packingQuantity!==null&&line.packingQuantity!==line.actualQuantity&&!line.packingResolution)?"pending":"not_applicable",[closureRecord]);
-      if(closure.closed)setFact("special_closure","completed",[closureRecord],closure.closed.closedAt);
+      if(closure.closed) {
+        const original=(await db.query<{closed_by:string}>("SELECT closed_by FROM digital_order_closures WHERE production_order_id=$1",[oid])).rows[0]!;
+        setFact("special_closure","completed",[closureRecord],closure.closed.closedAt,{id:original.closed_by,name:closure.closed.closedBy});
+      }
       else replace("special_closure",emptyNode("special_closure","not_applicable"));
       for(const line of closure.lines)for(const rework of line.reworks){const node=emptyNode("rework",rework.status==="completed"?"completed":rework.status==="cancelled"?"cancelled":"active");node.instanceId=rework.reworkId;node.records=[{...record("rework",rework.reworkId,closure.canOpenRework?`/ui/tasks/${rework.reworkId}`:null),lineId:line.lineId}];baseNodes.push(node);}
       if(currentPrep&&gates.instruction&&gates.source)progress.bulk=bulkCockpitProgress({preshrink:bulk.preshrink??"",secondaryCraft:gates.instruction.document.secondaryCraft==="沿用开发"?gates.source.document.craft:gates.instruction.document.secondaryCraft,externalCutting:gates.approval?.cutting_process==="outsourced",tasks:taskDtos.filter(task=>visibleTasks.find(raw=>raw.task_id===task.taskId)?.route_instance_id===currentPrep),received,packed:closure.stage==="本期装箱完成",specialClosed:Boolean(closure.closed)});

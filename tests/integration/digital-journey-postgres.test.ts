@@ -71,6 +71,24 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect((await journeys.list(actor(stranger),JourneyFilterSchema.parse({}))).facets.customers).not.toContain("PD");
     expect((await journeys.list(actor(root,["root_superuser"]),JourneyFilterSchema.parse({}))).canManagePolicies).toBe(true);
   });
+  it("does not invent cutting or normal packing completion from a recorded special closure without actual cuts",async()=>{
+    const order=await identity.createOrder(actor(),input("CLOSED-NO-CUT"),randomUUID());
+    const auditId=randomUUID();
+    await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'production_management',$2,'TEST historical closure director')",[randomUUID(),root]);
+    // A trusted historical closure fixture exercises the read projection independently
+    // of the current close command's production preconditions. All DB guards remain on.
+    await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id) VALUES($1,'TEST-no-cut-closure',$2,'digital.order.special_close','digital_production_order',$3)",[auditId,root,order.productionOrderId]);
+    await db.query("INSERT INTO digital_order_closures(production_order_id,reason,outstanding,source_revision,closed_by,audit_event_id) VALUES($1,'TEST历史未开裁结案','[\"尚无实裁\"]',$2,$3,$4)",[order.productionOrderId,'a'.repeat(64),root,auditId]);
+    const before=(await db.query("SELECT count(*)::int n FROM cutting_records")).rows[0]!.n;
+    const journey=await journeys.read(actor(),order.productionOrderId),nodes=journey.stages.flatMap(stage=>stage.nodes);
+    expect(nodes.find(node=>node.key==='special_closure')).toMatchObject({state:'completed',operator:{id:root,name:'TEST-J owner_group'}});
+    expect(nodes.find(node=>node.key==='cutting_gate')?.state).toBe('pending');
+    expect(nodes.filter(node=>node.key==='bulk_cutting').every(node=>node.state!=='completed')).toBe(true);
+    expect(nodes.find(node=>node.key==='packing')?.state).toBe('uncreated');
+    expect(nodes.find(node=>node.key==='receipts')?.state).toBe('uncreated');
+    expect((await db.query("SELECT count(*)::int n FROM cutting_records")).rows[0]!.n).toBe(before);
+  });
+
   it("projects original per-material plan revisions without inventing node SLA or arrival times",async()=>{
     const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-MATERIAL-PLAN",temporaryStyleNo:null,customerCode:"PD"},randomUUID());
     const fileId=randomUUID(),materialId=randomUUID();

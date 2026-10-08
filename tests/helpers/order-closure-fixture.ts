@@ -79,6 +79,14 @@ export async function exerciseOrderClosure(db:Pool,sourcing:SourcingService,id:s
   }finally{resume();readSpy.mockRestore();await Promise.allSettled([closing,repeated,...(correction?[correction]:[]),...(newRework?[newRework]:[])]);}
  }
  sheet=concurrent[0]!;expect(concurrent[1]!.closed).toEqual(sheet.closed);expect(sheet.stage).toBe('特殊结案');expect(sheet.lines).toEqual(JSON.parse(before));expect(sheet.closed!.outstanding.some(x=>x.includes('未完成'))).toBe(true);expect(sheet.shipmentStatus).toBe('未知');expect(sheet.customerReceiptStatus).toBe('未知');expect((await closure.close(manager,id,input,key)).closed).toEqual(sheet.closed);
+ const journey=await new DigitalJourneyQuery(db).read(primary,id);
+ const nodes=journey.stages.flatMap(stage=>stage.nodes);
+ expect(nodes.find(node=>node.key==='special_closure')).toMatchObject({state:'completed',operator:{id:manager.actorId,name:sheet.closed!.closedBy},actualAt:sheet.closed!.closedAt});
+ expect(nodes.find(node=>node.key==='cutting_gate')).toMatchObject({state:'completed',blockers:[]});
+ expect(nodes.find(node=>node.key==='bulk_cutting'&&node.current)?.state).toBe('completed');
+ expect(nodes.find(node=>node.key==='packing')?.state).toBe('active');
+ expect(nodes.find(node=>node.key==='receipts')?.state).toBe('active');
+ expect((await closure.read(primary,id)).closed).toEqual(sheet.closed);
  expect((await db.query('SELECT status FROM rework_orders WHERE rework_order_id=$1',[draft.value.reworkOrderId])).rows[0].status).toBe('draft');
  const flow=new FactoryFlowService(db),factory=await flow.read(primary,id);await expect(flow.followup(primary,id,{expectedRevision:factory.revision,kind:'工厂到料',occurredAt:null,note:'TEST结案后不得继续生产待办',trackingNumber:''},randomUUID())).rejects.toMatchObject({statusCode:409});
  const board=(await receiving.board('2000-01-01','2999-12-31',order.lines[0]!.formalStyleNo!)).rows[0]!;
