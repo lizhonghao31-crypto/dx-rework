@@ -1,3 +1,4 @@
+import { migrationExecutionSql } from "../../scripts/deploy/migration-execution-compatibility.mjs";
 import { DevelopmentDocumentSchema } from "@dx-rework/contracts/digital-development";
 import { DigitalDevelopmentService } from "../../apps/api/src/production-platform/development-service.js";
 import { DevelopmentExecutionService } from "../../apps/api/src/production-platform/development-execution-service.js";
@@ -35,7 +36,8 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     await admin.query(`CREATE SCHEMA ${schema}`);
     const manifest=JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json",import.meta.url),"utf8")) as {migrations:Array<{version:string;checksum:string}>};
     await db.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)");
-    for(const migration of manifest.migrations){await db.query(await readFile(new URL(`../../apps/api/migrations/${migration.version}.sql`,import.meta.url),"utf8"));await db.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[migration.version,migration.checksum]);}
+    const serverVersion=Number((await db.query("SHOW server_version_num")).rows[0].server_version_num);
+    for(const migration of manifest.migrations){const sql=await readFile(new URL(`../../apps/api/migrations/${migration.version}.sql`,import.meta.url),"utf8");await db.query(migrationExecutionSql({...migration,sql},serverVersion));await db.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[migration.version,migration.checksum]);}
     for(const [id,role] of [[root,"owner_group"],[designer,"sample_designer"],[stranger,"sample_designer"],[worker,"pattern_room_worker"]]){
       await db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)",[id,`TEST-J ${role}`]);
       await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2::uuid,'dingtalk','TEST',$2::text,$2::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id]);
@@ -85,6 +87,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect(nodes.find(node=>node.key==='cutting_gate')?.state).toBe('pending');
     expect(nodes.filter(node=>node.key==='bulk_cutting').every(node=>node.state!=='completed')).toBe(true);
     expect(nodes.find(node=>node.key==='packing')?.state).toBe('uncreated');
+    expect(journey.deliveryRisks).toEqual([]);
     expect(nodes.find(node=>node.key==='receipts')?.state).toBe('uncreated');
     expect((await db.query("SELECT count(*)::int n FROM cutting_records")).rows[0]!.n).toBe(before);
   });

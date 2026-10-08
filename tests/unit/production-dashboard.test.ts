@@ -70,6 +70,13 @@ describe("SSP-08 complete-set selection and refresh",()=>{
     expect(selectDashboardPage(items,{supplierId:randomUUID()}).totalCount).toBe(0);
     expect(selectDashboardPage(items,{status:"shipped"}).totalCount).toBe(0);
   });
+  it("keeps PO promise filtering separate from original progress, attention and completed quantities",()=>{
+    const original=item(40),row={...original,deliveryRisks:[{lineId:randomUUID(),poNumber:"TEST-PO-EARLIEST",color:"黑",kind:"factory" as const,date:"2026-09-07",risk:"overdue" as const,nodeKey:"production_reporting"}]};
+    expect(selectDashboardPage([row,item(41)],{risk:"po_deadline"})).toMatchObject({totalCount:1});
+    expect(selectDashboardPage([row],{}).items[0]!.progress).toEqual(original.progress);
+    expect(selectDashboardPage([row],{}).counts.attention).toBe(selectDashboardPage([original],{}).counts.attention);
+    expect(row.order.lines).toEqual(original.order.lines);expect(row.order.completedQuantity).toBe(original.order.completedQuantity);
+  });
   it("detects only new or materially changed rows after manual refresh",()=>{
     const first=item(1),second=item(2);expect(changedDashboardOrders([first],[first])).toEqual([]);
     expect(changedDashboardOrders([first],[first,second])).toEqual([second.order.productionOrderId]);

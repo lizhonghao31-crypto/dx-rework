@@ -49,6 +49,18 @@ describe("V2 Journey shared query semantics",()=>{
     expect(selectJourneys(orders,JourneyFilterSchema.parse({search:"PO-1"}),at).total).toBe(25);
     expect(selectJourneys(orders,JourneyFilterSchema.parse({search:"款名"}),at).total).toBe(25);
   });
+  it("filters current PO reminders by the same node and preserves original SLA, progress and export identity",()=>{
+    const nodes=[node("production_reporting",{stage:"production",state:"active",enteredAt:at,expectedAt:at,sla:"running"}),node("packing",{stage:"receiving"})];
+    const dates=[{lineId:"00000000-0000-4000-8000-000000000001",poNumber:"PO-1",color:"黑",kind:"factory" as const,date:"2026-10-01",risk:"overdue" as const,nodeKey:"production_reporting"},
+      {lineId:"00000000-0000-4000-8000-000000000002",poNumber:"PO-2",color:"白",kind:"customer" as const,date:"2026-10-02",risk:"overdue" as const,nodeKey:"packing"}];
+    const order=item("one",nodes,{deliveryRisks:dates}),original=structuredClone(order);
+    const filter=JourneyFilterSchema.parse({stage:"production",node:"production_reporting",state:"active",risk:"overdue",kpi:"overdue",search:"PO-1"});
+    const result=selectJourneys([order],filter,at);expect(result.total).toBe(1);expect(result.summary.overdue).toBe(1);
+    expect(selectJourneys([order],filter,at,false).items).toEqual(result.items);
+    expect(selectJourneys([order],JourneyFilterSchema.parse({stage:"development",risk:"overdue"}),at).total).toBe(0);
+    expect(selectJourneys([{...order,deliveryRisks:[dates[1]!]}],filter,at).total).toBe(0);
+    expect(order).toEqual(original);expect(result.items[0]!.stages).toEqual(original.stages);expect(result.items[0]!.progress).toEqual(original.progress);
+  });
   it("does not forge completion results from unknown, unverified or absent expected times",()=>{
     expect(journeyCompletion(at,null,true)).toEqual({result:"unknown",overdueSeconds:null});
     expect(journeyCompletion(null,at,true)).toEqual({result:"unknown",overdueSeconds:null});

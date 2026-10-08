@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PoDeliveryDateSchema } from "./po-delivery-dates.js";
 
 export const SourcingProductionStatusSchema = z.enum(["in_production", "production_completed", "shipped"]);
 export const DispatchSourcingOrderSchema = z.object({
@@ -31,6 +32,8 @@ export const SourcingProductionOrderSchema = SourcingDispatchSummarySchema.exten
   completedQuantity: z.number().int().nonnegative().default(0),
   processes: z.array(z.string()),
   deliveryDate: z.string().nullable(),
+  poDeliveryDates:z.array(PoDeliveryDateSchema).max(50).optional(),
+  poDeliveryClosed:z.boolean().optional(),
   firstStyleNo: z.string(),
   dispatchedBy: z.string().uuid(),
   firstReportedOn: z.string().nullable(),

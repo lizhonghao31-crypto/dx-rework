@@ -8,6 +8,7 @@ import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy, isDigitalLeader, isDigitalTechnicalManager } from "./access-policy.js";
 import { assertIdentityActor, digitalDateText } from "./identity-service.js";
 import { DigitalProductionTaskService } from "./task-service.js";
+import { readOrderPoDeliveryDates } from "./po-delivery-query.js";
 
 /** Read-only projection. Resource authorization is identical to original-page access. */
 export class DigitalCockpitQuery {
@@ -115,7 +116,8 @@ SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
         const image=document?.files?.find((file:{kind:string})=>file.kind==='款图');
         if(image&&await new DigitalDevelopmentService(db,false).canDownload(actor,row.sourceId,image.attachmentId))styleImageId=image.attachmentId;
       }
-      items.push({...row,styleImageId,flow,deliveryDate:digitalDateText(row.deliveryDate),createdAt:new Date(row.createdAt).toISOString(),tasks,progress,lines});
+      const poDeliveryDates=row.orderId?await readOrderPoDeliveryDates(db,row.orderId,lines.map(line=>line.id)):[];
+      items.push({...row,styleImageId,flow,deliveryDate:digitalDateText(row.deliveryDate),poDeliveryDates,createdAt:new Date(row.createdAt).toISOString(),tasks,progress,lines});
     }
     const actorName = (await db.query("SELECT display_name FROM app_users WHERE id=$1",[actor.actorId])).rows[0]?.display_name ?? "当前用户";
     return {actorId:actor.actorId,actorName,canViewTodos:Boolean(actor.authorizationCapabilities?.includes("todo:view")),canManagePolicies:isDigitalLeader(actor),page:input.page,total:result.total,summary,items};

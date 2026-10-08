@@ -1,5 +1,5 @@
 import { addProductionChase, readProductionDays } from "./production-chase.js";
-import { ProductionAnalysisQuerySchema } from "@dx-rework/contracts";
+import { ProductionAnalysisQuerySchema,poDeliveryRisks } from "@dx-rework/contracts";
 import { readProductionAnalysis } from "./production-analysis.js";
 import { productionNotExcluded } from "./production-visibility.js";
 import type { Pool, PoolClient } from "pg";
@@ -18,9 +18,9 @@ const progress = (row:FactsRow, asOf:string) => calculateProductionProgress({sta
 // One shared calculator serves listing, filtering, sorting, detail and future todo consumers.
 export function selectDashboardPage(items:ProductionDashboardItem[],input:ProductionDashboardQuery) {
   const q=input.q?.trim().toLocaleLowerCase()??"";
-  const filtered=items.filter(({order,progress:p,chase})=>(!input.supplierId||order.supplierId===input.supplierId)
+  const filtered=items.filter(({order,progress:p,chase,deliveryRisks})=>(!input.supplierId||order.supplierId===input.supplierId)
     &&(!input.status||order.status===input.status)&&(!input.progressState||p.progressState===input.progressState)
-    &&(!input.risk||(input.risk==="attention" ? p.attention||chase?.deliveryPressure : input.risk==="stale" ? p.daysWithoutUpdate!==null&&p.daysWithoutUpdate>=2 : chase?.deliveryPressure&&chase.dueThisWeek))
+    &&(!input.risk||(input.risk==="attention" ? p.attention||chase?.deliveryPressure : input.risk==="stale" ? p.daysWithoutUpdate!==null&&p.daysWithoutUpdate>=2 : input.risk==='po_deadline'?Boolean(deliveryRisks?.length):chase?.deliveryPressure&&chase.dueThisWeek))
     &&(!q||[order.supplierName,...order.lines.map(l=>l.styleNo)].some(s=>s.toLocaleLowerCase().includes(q))));
   filtered.sort((a,b)=>productionProgressRank(a.progress.progressState)-productionProgressRank(b.progress.progressState)
     ||(a.order.deliveryDate??"9999").localeCompare(b.order.deliveryDate??"9999")||a.order.productionOrderId.localeCompare(b.order.productionOrderId));
@@ -100,7 +100,7 @@ export class ProductionDashboardService {
       const result=await client.query<ProductionRow>(`${selectFactoryProduction} WHERE ${factoryProductionVisibility}`,productionVisibilityArgs(actor));
       const orders=result.rows.map(toOrder),ids=orders.map(o=>o.productionOrderId);
       const current=await readFactoryProductionProgressFacts(client,ids,asOf);
-      const items=addProductionChase(orders.filter(o=>current.has(executionKey(o.productionOrderId,o.factoryDecisionId))).map(order=>({order,progress:current.get(executionKey(order.productionOrderId,order.factoryDecisionId))!})),await readProductionDays(client,ids,asOf,true),asOf);
+      const items=addProductionChase(orders.filter(o=>current.has(executionKey(o.productionOrderId,o.factoryDecisionId))).map(order=>({order,progress:current.get(executionKey(order.productionOrderId,order.factoryDecisionId))!})),await readProductionDays(client,ids,asOf,true),asOf).map(item=>({...item,deliveryRisks:poDeliveryRisks(item.order.poDeliveryDates??[],shanghaiDay(asOf),{finished:Boolean(item.order.poDeliveryClosed),factoryFinished:item.order.status!=='in_production',sampleFinished:true}).filter(risk=>risk.kind==='factory')}));
       const selected=selectDashboardPage(items,input),selectedIds=selected.filtered.map(i=>i.order.productionOrderId);
       const suppliers=[...new Map(orders.map(o=>[o.supplierId,{supplierId:o.supplierId,supplierName:o.supplierName}])).values()]
         .sort((a,b)=>a.supplierName.localeCompare(b.supplierName));
@@ -124,7 +124,7 @@ export class ProductionDashboardService {
     return this.read(actor,async(client,asOf)=>{
       const detail=await this.reporting.detail(actor,id,client,factoryDecisionId);
       const facts=await readFactoryProductionProgressFacts(client,[id],asOf);
-      return ProductionDashboardDetailSchema.parse({asOf,detail,progress:facts.get(executionKey(id,factoryDecisionId))});
+      return ProductionDashboardDetailSchema.parse({asOf,detail,progress:facts.get(executionKey(id,factoryDecisionId)),deliveryRisks:poDeliveryRisks(detail.order.poDeliveryDates??[],shanghaiDay(asOf),{finished:Boolean(detail.order.poDeliveryClosed),factoryFinished:detail.order.status!=='in_production',sampleFinished:true}).filter(risk=>risk.kind==='factory')});
     });
   }
   private async events(client:PoolClient,orders:Pick<ProductionDashboardItem["order"],"productionOrderId"|"factoryDecisionId">[]):Promise<ProductionDashboardEvent[]> {

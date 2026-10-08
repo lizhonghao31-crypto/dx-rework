@@ -504,6 +504,7 @@ export const SourcingCraftSnapshotSchema = z.object({
 
 export const SourcingCaseLineSchema = z.object({
   lineId: IdSchema.optional(),
+  customerWarehouseArrivalDate: BusinessDateSchema.nullable().optional(),
   proposedFactoryDeliveryDate: BusinessDateSchema.nullable().optional(),
   factoryDeliveryDate: BusinessDateSchema.nullable().optional(),
   imageAttachmentId: IdSchema.nullable().optional(),
