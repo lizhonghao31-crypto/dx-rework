@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import "./login-landing.css";
+import publicSecurityFilingBadge from "./assets/public-security-filing.png";
 
 const features = [
   { title: "订单协同", detail: "全流程可视", icon: <><path d="M12 5h22l5 6v29H12a5 5 0 0 1-5-5V10a5 5 0 0 1 5-5Z" /><path d="M34 5v7h6M15 16h16M15 23h16M15 30h10" /></> },
@@ -47,8 +48,12 @@ export function LoginLanding({ message, qr, action }: {
       <footer className="dx-login-filing">
         <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">粤ICP备2026043374号-1</a>
         <span className="dx-login-filing-divider" aria-hidden="true">|</span>
-        <span>粤公网安备44011102484833号</span>
+        <a className="dx-login-public-security" href="https://beian.mps.gov.cn/#/query/webSearch?code=44011102484833" target="_blank" rel="noopener noreferrer">
+          <img src={publicSecurityFilingBadge} alt="" aria-hidden="true" />
+          <span>粤公网安备44011102484833号</span>
+        </a>
       </footer>
     </main>
   );
 }
+
