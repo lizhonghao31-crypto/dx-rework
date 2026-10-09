@@ -98,6 +98,7 @@ export const PatternOrderDetailSchema = PatternOrderSummarySchema.extend({
   canReadMaterials: z.boolean().optional(),
   attachments: z.array(PatternAttachmentSchema),
   history: z.array(z.object({ action: z.string(), actorName: z.string(), at: z.string(), reason: z.string().nullable() })),
+  reworkBlockedReason: z.string().nullable().optional(),
   actions: z.object({ delete: z.boolean().default(false), assign: z.boolean(), complete: z.boolean(), handoff: z.boolean(), edit: z.boolean(), hours: z.boolean(), rework: z.boolean(), transfer: z.boolean(), cancel: z.boolean(), cancelFees: z.boolean() }),
 });
 export type PatternOrderSummary = z.infer<typeof PatternOrderSummarySchema>;

@@ -12,6 +12,7 @@ import { authorizePatternOrder, isPatternRoot } from "./order-authority.js";
 import { bindPatternMaterials } from "./order-attachments.js";
 import { PatternOrderReader, scopedPatternOrder, type PatternOrderRow, type PatternRoundRow, type PatternSegmentRow } from "./order-reader.js";
 import { PATTERN_HOURLY_PRICE_ID } from "./price-service.js";
+import { patternReworkCutBlocked, PATTERN_REWORK_CUT_BLOCK } from "./order-rework-boundary.js";
 
 const parse = <T>(schema: z.ZodType<T>, input: unknown): T => {
   const value = schema.safeParse(input);
@@ -74,11 +75,12 @@ export class PatternRoomOrderService {
     finally { client.release(); }
   }
   private async mutate(actor: TrustedActorContext, capability: PatternOrderCapability, action: string, key: string, input: unknown,
-    work: (client: PoolClient, effective: TrustedActorContext) => Promise<string>) {
+    work: (client: PoolClient, effective: TrustedActorContext) => Promise<string>, lockDigitalLifecycle = false) {
     if (!/^[A-Za-z0-9._:-]{8,128}$/.test(key)) throw new ApplicationError("VALIDATION_ERROR", "缺少有效操作标识，请重试", 400);
     const client = this.options.transactionClient ?? await this.db.connect(); let orderId: string;
     try {
       if (!this.options.transactionClient) await client.query("BEGIN");
+      if (lockDigitalLifecycle) await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       const effective = await authorizePatternOrder(client, actor, capability, this.enabled);
       const outcome = await this.idempotency.execute(client, { scope: action, actorKey: actor.actorId, key,
         requestHash: createHash("sha256").update(JSON.stringify(input)).digest("hex"), expiresAt: new Date("9999-12-31T00:00:00Z") }, async () => ({ statusCode: 200, response: { orderId: await work(client, effective) } }));
@@ -346,6 +348,7 @@ export class PatternRoomOrderService {
       const { order, round } = await this.target(client, effective, orderId, parsed, ["pending_confirmation", "completed"]);
       if (order.kind !== "pattern" || round.completed_at === null) throw new ApplicationError("INVALID_STATE_TRANSITION", "打板当前轮次完工后才能发起原单返工", 409);
       if (!isPatternRoot(effective) && !effective.actorRoles.includes("pattern_room_supervisor") && order.created_by !== effective.actorId) throw new ApplicationError("FORBIDDEN", "只有原设计师或板房主管可发起返工", 403);
+      if (await patternReworkCutBlocked(client, orderId)) throw new ApplicationError("CONFLICT", PATTERN_REWORK_CUT_BLOCK, 409);
       const roundId = randomUUID();
       await client.query(`INSERT INTO pattern_room_rounds(round_id,order_id,round_type,round_index,status,category_id,price_version,category_name,unit,unit_price,quantity,agreed_amount,requested_by,request_reason,reason_category)
         VALUES($1,$2,'rework',NULL,'pending_assignment',$3,$4,'打板返工','轮',NULL,NULL,NULL,$5,$6,$7)`, [roundId, orderId, round.category_id, round.price_version, effective.actorId, parsed.reason, parsed.reasonCategory]);
@@ -362,7 +365,7 @@ export class PatternRoomOrderService {
       await this.todos.completeOpenByDedupeKey(client, effective, patternTodoKey(orderId, round.round_id, "handoff"), "已转入原单返工，等待当前轮次交接");
       if (this.enabled) await this.todos.actionableForUniqueDirectRole(client, effective, { ...this.projection(orderId, roundId, eventId, action, "assignment"), requiredRole: "pattern_room_supervisor", requiredCapability: "pattern_room:orders:assign" });
       return orderId;
-    });
+    }, true);
   }
 
   async transfer(actor: TrustedActorContext, orderId: string, input: unknown, key: string) {
