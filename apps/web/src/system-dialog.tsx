@@ -10,6 +10,10 @@ type DialogOptions = Readonly<{
   cancelLabel?: string;
 }>;
 
+type PromptOptions = DialogOptions & Readonly<{
+  requiredMessage?: string;
+}>;
+
 type ConfirmRequest = Readonly<{
   kind: "confirm";
   message: string;
@@ -21,7 +25,7 @@ type PromptRequest = Readonly<{
   kind: "prompt";
   message: string;
   defaultValue: string;
-  options: DialogOptions;
+  options: PromptOptions;
   resolve: (value: string | null) => void;
 }>;
 
@@ -100,7 +104,7 @@ export const alertInApp = (
 export const promptInApp = (
   message: string,
   defaultValue = "",
-  options: DialogOptions = {},
+  options: PromptOptions = {},
 ): Promise<string | null> => {
   if (typeof document === "undefined") return Promise.resolve(null);
   return new Promise((resolve) => {
@@ -118,8 +122,10 @@ function SystemDialog({
 }) {
   const titleId = useId();
   const messageId = useId();
+  const errorId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState(request.kind === "prompt" ? request.defaultValue : "");
+  const [error, setError] = useState("");
   const title = request.options.title
     ?? (request.kind === "prompt" ? "填写信息" : request.kind === "alert" ? "操作提示" : "确认操作");
   const confirmLabel = request.options.confirmLabel ?? (request.kind === "alert" ? "知道了" : "确认");
@@ -151,6 +157,11 @@ function SystemDialog({
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (request.kind === "prompt" && request.options.requiredMessage && !value.trim()) {
+      setError(request.options.requiredMessage);
+      inputRef.current?.focus();
+      return;
+    }
     onComplete(request.kind === "prompt" ? value : true);
   };
 
@@ -175,10 +186,16 @@ function SystemDialog({
               <input
                 ref={inputRef}
                 aria-label={request.message}
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? errorId : undefined}
                 data-system-dialog-input="true"
                 value={value}
-                onChange={(event) => setValue(event.target.value)}
+                onChange={(event) => {
+                  setValue(event.target.value);
+                  if (event.target.value.trim()) setError("");
+                }}
               />
+              {error ? <span id={errorId} className="system-dialog__error" role="alert">{error}</span> : null}
             </label>
           ) : null}
           <div className="system-dialog__actions">

@@ -67,6 +67,10 @@
   outline-offset: 2px;
 }
 
+.system-dialog__error {
+  color: var(--dx-status-danger);
+}
+
 .system-dialog__actions {
   display: flex;
   justify-content: flex-end;
