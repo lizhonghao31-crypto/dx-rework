@@ -103,7 +103,7 @@ const cases:SectionQuery={title:"外部扣款责任与结案",columns:["供应�
  FROM rework_external_responsibility_cases external LEFT JOIN rework_external_deduction_closures closure USING(case_id)
  LEFT JOIN app_users actor ON actor.id=closure.closed_by WHERE external.rework_order_id=$1 ORDER BY external.created_at DESC`};
 const deductions:SectionQuery={title:"实际扣款明细",columns:["供应商","记录类型","金额","扣款日期","凭证号","记录人","时间"],sql:`
- SELECT external.supplier_name_snapshot,entry.entry_type,entry.amount,entry.deducted_on,entry.reference_no,actor.display_name,entry.created_at
+ SELECT external.supplier_name_snapshot,entry.entry_type,entry.amount,entry.deducted_on::text,entry.reference_no,actor.display_name,entry.created_at
  FROM rework_external_responsibility_cases external JOIN rework_external_deduction_entries entry USING(case_id)
  LEFT JOIN app_users actor ON actor.id=entry.recorded_by WHERE external.rework_order_id=$1 ORDER BY entry.created_at DESC`};
 const special:SectionQuery={title:"财务异常特批记录",columns:["供应商","拟扣金额","实际扣款","剩余金额","申请原因","申请人","决定","审批人","审批时间","审批意见"],sql:`
@@ -123,7 +123,7 @@ export async function readFinanceNode(db:Pool,actor:TrustedActorContext,orderId:
   const order=await client.query("SELECT 1 FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'",[orderId]);
   if(!order.rowCount)fail("返工单不存在",404,"NOT_FOUND");
   const wages:SectionQuery={title:"工资明细",columns:["工人","类型","工序","数量","单价","工资金额","完工日期","结算状态","结算标记人","标记时间"],sql:`${wageSelection}
-    SELECT person_name_snapshot,person_type_snapshot,process_name_snapshot,actual_quantity_snapshot,unit_price_snapshot,wage_amount,completed_date,
+    SELECT person_name_snapshot,person_type_snapshot,process_name_snapshot,actual_quantity_snapshot,unit_price_snapshot,wage_amount,completed_date::text,
       CASE WHEN marked_at IS NULL THEN '未结算' ELSE '已结算' END,(SELECT display_name FROM app_users WHERE id=marked_by),marked_at
     FROM filtered WHERE rework_order_id=$8 ORDER BY person_name_snapshot,completed_date,line_id`,values:['0001-01-01','9999-12-31',null,null,null,null,null,orderId]};
   const initiation:SectionQuery={title:"发起资料",columns:["返工号","款号","数量","原因","问题部位","问题描述","发起人","发起时间"],sql:`
