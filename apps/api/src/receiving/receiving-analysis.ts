@@ -34,13 +34,17 @@ export async function readReceivingAnalysis(database: Pool, baseSql: string, act
           WHERE resolution.receiving_batch_id=action.receiving_batch_id AND resolution.difference_type='receiving'
             AND resolution.document_quantity_snapshot=totals.document_quantity
             AND resolution.actual_quantity_snapshot=totals.cumulative_actual_quantity
-            AND resolution.difference_quantity_snapshot=totals.cumulative_actual_quantity-totals.document_quantity) AS receiving_handled,
+            AND resolution.difference_quantity_snapshot=totals.cumulative_actual_quantity-totals.document_quantity
+            AND COALESCE((SELECT event.after_state->>'quantityRevision' FROM operation_events event WHERE event.event_id=resolution.operation_event_id)=totals.receiving_quantity_revision,
+            totals.receiving_quantity_changed_at IS NULL OR resolution.created_at>=totals.receiving_quantity_changed_at)) AS receiving_handled,
         EXISTS(SELECT 1 FROM receiving_difference_resolutions resolution
           WHERE resolution.receiving_batch_id=action.receiving_batch_id AND resolution.difference_type='packing'
             AND resolution.actual_quantity_snapshot=totals.cumulative_actual_quantity
             AND resolution.packing_revision_id=packing.packing_revision_id
             AND resolution.packing_quantity_snapshot=packing.packing_quantity
-            AND resolution.difference_quantity_snapshot=packing.packing_quantity-totals.cumulative_actual_quantity) AS packing_handled
+            AND resolution.difference_quantity_snapshot=packing.packing_quantity-totals.cumulative_actual_quantity
+            AND COALESCE((SELECT event.after_state->>'quantityRevision' FROM operation_events event WHERE event.event_id=resolution.operation_event_id)=totals.actual_quantity_revision,
+            totals.actual_quantity_changed_at IS NULL OR resolution.created_at>=totals.actual_quantity_changed_at)) AS packing_handled
       FROM style_totals totals
       JOIN LATERAL (SELECT batch.receiving_batch_id,batch.version FROM batch_totals batch
         WHERE batch.group_key=totals.group_key ORDER BY batch.last_through_end_received_at DESC NULLS LAST,

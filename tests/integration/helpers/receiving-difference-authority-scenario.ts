@@ -48,9 +48,11 @@ export async function exerciseReceivingDifferenceAuthority(input:{database:Pool;
       for(const type of ["receiving","packing"] as const) {
         const key=randomUUID(),payload=resolutionInput(type);
         const response=await post(`${base}/difference-resolutions`,payload,key);
-        expect(response.statusCode,response.body).toBe(201);
-        expect(response.json().handledBy).toBe(merchant);
-        expect((await post(`${base}/difference-resolutions`,payload,key)).json().resolutionId).toBe(response.json().resolutionId);
+        expect(response.statusCode,response.body).toBe(merchant===merchants[0]?201:409);
+        if(merchant===merchants[0]){
+          expect(response.json().handledBy).toBe(merchant);
+          expect((await post(`${base}/difference-resolutions`,payload,key)).json().resolutionId).toBe(response.json().resolutionId);
+        }
       }
       expect((await post(`${base}/packing-revisions`,{...packingInput,expectedPackingRevisionId:row.packingRevisionId,packingQuantity:95})).statusCode).toBe(403);
       expect((await post("/receiving/receipts",{styleNo:"DENIED",documentQuantity:100,actualQuantity:100})).statusCode).toBe(403);
@@ -61,7 +63,7 @@ export async function exerciseReceivingDifferenceAuthority(input:{database:Pool;
       expect((await post(`${base}/packing-revisions`,{...packingInput,expectedPackingRevisionId:row.packingRevisionId,packingQuantity:95})).statusCode).toBe(403);
     }
     expect(await board()).toMatchObject({documentQuantity:100,cumulativeActualQuantity:90,packingQuantity:80,differenceQuantity:-10,packingDifferenceQuantity:-10});
-    expect((await database.query("SELECT count(*)::int count FROM receiving_difference_resolutions WHERE receiving_batch_id=$1",[row.receivingBatchId])).rows[0].count).toBe(4);
+    expect((await database.query("SELECT count(*)::int count FROM receiving_difference_resolutions WHERE receiving_batch_id=$1",[row.receivingBatchId])).rows[0].count).toBe(2);
     // Direct database writes also reject the old warehouse/packing privileges.
     await expect(database.query(`INSERT INTO receiving_difference_resolutions
       SELECT $1,receiving_batch_id,difference_type,document_quantity_snapshot,actual_quantity_snapshot,packing_revision_id,packing_quantity_snapshot,difference_quantity_snapshot,result,$2,operation_event_id,request_id,CURRENT_TIMESTAMP
@@ -77,14 +79,13 @@ export async function exerciseReceivingDifferenceAuthority(input:{database:Pool;
     await access.revokeRole(root,assignment.assignmentId,"验证旧会话不能沿用已撤回的差异权限");
     userId=merchants[1];
     expect((await post(`${base}/difference-resolutions`,resolutionInput("packing"))).statusCode).toBe(403);
-    // An explicit second role enables only discrepancy handling, never quantity corrections.
+    // An explicit second role grants discrepancy handling, but does not reopen an already handled quantity snapshot.
     stale=false;userId=warehouseId;
     const mixedRole=await access.assignRole(root,{userId:warehouseId,roleCode:"order_merchandiser",reason:"验证仓管兼任跟单的独立职责"});
     try {
       for(const type of ["receiving","packing"] as const) {
         const response=await post(`${base}/difference-resolutions`,resolutionInput(type));
-        expect(response.statusCode,response.body).toBe(201);
-        expect(response.json().handledBy).toBe(warehouseId);
+        expect(response.statusCode,response.body).toBe(409);
       }
       expect((await post(`${base}/packing-revisions`,{...packingInput,expectedPackingRevisionId:row.packingRevisionId,packingQuantity:95})).statusCode).toBe(403);
       expect((await app.inject({method:"PATCH",url:base,payload:{expectedVersion:row.version,styleNo:row.styleNo,documentQuantity:100,actualQuantity:95}})).statusCode).toBe(403);
@@ -94,12 +95,13 @@ export async function exerciseReceivingDifferenceAuthority(input:{database:Pool;
     stale=true;
     for(const type of ["receiving","packing"] as const) expect((await post(`${base}/difference-resolutions`,resolutionInput(type))).statusCode).toBe(403);
     expect(await board()).toMatchObject({documentQuantity:100,cumulativeActualQuantity:90,packingQuantity:80,differenceQuantity:-10,packingDifferenceQuantity:-10});
-    expect((await database.query("SELECT count(*)::int count FROM receiving_difference_resolutions WHERE receiving_batch_id=$1",[row.receivingBatchId])).rows[0].count).toBe(6);
+    expect((await database.query("SELECT count(*)::int count FROM receiving_difference_resolutions WHERE receiving_batch_id=$1",[row.receivingBatchId])).rows[0].count).toBe(2);
     stale=false;userId=rootId;
     expect((await post(`${base}/packing-revisions`,{...packingInput,expectedPackingRevisionId:row.packingRevisionId,packingQuantity:82})).statusCode).toBe(201);
     expect((await app.inject({method:"PATCH",url:base,payload:{expectedVersion:row.version,styleNo:row.styleNo,documentQuantity:100,actualQuantity:92}})).statusCode).toBe(200);
     row=await board();
     for(const type of ["receiving","packing"] as const) expect((await post(`${base}/difference-resolutions`,resolutionInput(type))).statusCode).toBe(201);
     expect(row).toMatchObject({documentQuantity:100,cumulativeActualQuantity:92,packingQuantity:82});
+    expect((await database.query("SELECT count(*)::int count FROM receiving_difference_resolutions WHERE receiving_batch_id=$1",[row.receivingBatchId])).rows[0].count).toBe(4);
   } finally {await app.close();}
 }
