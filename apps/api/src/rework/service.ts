@@ -157,6 +157,24 @@ export class ReworkInitiationService {
 
   async getReceivingEntry(receivingBatchId: string, finishingActor?: TrustedActorContext): Promise<ReceivingReworkEntry> {
     if (finishingActor) this.ensureFinishingInitiator(finishingActor);
+    const digitalSource = (await this.database.query<{ relation: string | null }>(
+      "SELECT to_regclass('digital_production_child_links') AS relation",
+    )).rows[0]?.relation;
+    // Digital sourcing may be created on behalf of the primary merchandiser.
+    // Both stable child links must agree; never infer an order from its style.
+    const merchandiserSource = digitalSource
+      ? "CASE WHEN source_case.workflow_generation='digital_production_v1' THEN digital_order.primary_merchandiser_id ELSE source_case.created_by END AS merchandiser_user_id"
+      : "source_case.created_by AS merchandiser_user_id";
+    const digitalSourceJoins = digitalSource ? `
+       LEFT JOIN digital_production_child_links digital_cutting
+         ON digital_cutting.module='cutting'
+        AND digital_cutting.child_id=cutting.cutting_order_id
+       LEFT JOIN digital_production_child_links digital_sourcing
+         ON digital_sourcing.module='sourcing'
+        AND digital_sourcing.child_id=source_case.sourcing_case_id
+        AND digital_sourcing.production_order_id=digital_cutting.production_order_id
+       LEFT JOIN digital_production_orders digital_order
+         ON digital_order.production_order_id=digital_sourcing.production_order_id` : "";
     const result = await this.database.query<{
       style_no: string;
       has_existing_rework: boolean;
@@ -172,7 +190,7 @@ export class ReworkInitiationService {
                   AND existing_order.status NOT IN ('cancelled','deleted')
               ) AS has_existing_rework,
               snapshot.supplier_id AS processing_factory_supplier_id,
-              source_case.created_by AS merchandiser_user_id,
+              ${merchandiserSource},
               source_line.image_attachment_id AS source_image_attachment_id
        FROM receiving_batches batch
        LEFT JOIN cutting_orders cutting
@@ -185,6 +203,7 @@ export class ReworkInitiationService {
         AND source_line.position=cutting.sourcing_line_position
        LEFT JOIN sourcing_approval_snapshots snapshot
          ON snapshot.sourcing_approval_snapshot_id=cutting.approval_snapshot_id
+       ${digitalSourceJoins}
        WHERE batch.receiving_batch_id=$1
          AND batch.deleted_at IS NULL`,
       [receivingBatchId],
@@ -1790,3 +1809,4 @@ export class ReworkInitiationService {
     };
   }
 }
+
