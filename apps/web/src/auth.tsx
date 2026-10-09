@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { createWebUrls } from "../url-contract.js";
+import { LoginLanding } from "./login-landing.js";
 
 export type AuthorizedUser = {
   id: string;
@@ -213,8 +214,11 @@ async function loadDingTalkQrSdk(): Promise<void> {
     script.id = "dx-rework-dingtalk-qr-sdk";
     script.src = "https://g.alicdn.com/dingding/h5-dingtalk-login/0.21.0/ddlogin.js";
     script.async = true;
-    script.onload = () => (window as DingTalkWindow).DTFrameLogin ? resolve() : reject(new Error("DingTalk QR SDK unavailable"));
-    script.onerror = () => { dingTalkQrScript = undefined; reject(new Error("DingTalk QR SDK failed")); };
+    script.onload = () => {
+      if ((window as DingTalkWindow).DTFrameLogin) resolve();
+      else { script.remove(); dingTalkQrScript = undefined; reject(new Error("DingTalk QR SDK unavailable")); }
+    };
+    script.onerror = () => { script.remove(); dingTalkQrScript = undefined; reject(new Error("DingTalk QR SDK failed")); };
     document.body.appendChild(script);
   });
   await dingTalkQrScript;
@@ -267,6 +271,26 @@ async function completeQrCode(code: string, state: string, setMessage: (message:
 }
 
 export function QrLoginPage() {
+  if (/DingTalk/i.test(navigator.userAgent)) return <LoginPage />;
+  return <BrowserQrLoginPage />;
+}
+
+function BrowserQrLoginPage() {
+  const [session, setSession] = useState<VerifiedSession | "loading">(() => verifiedSession ?? "loading");
+  useEffect(() => {
+    let mounted = true;
+    void verifySession().then((state) => {
+      if (!mounted) return;
+      if (state !== "denied") window.location.replace(base);
+      else setSession(state);
+    });
+    return () => { mounted = false; };
+  }, []);
+  if (session === "denied") return <QrLoginChallenge />;
+  return <LoginLanding message="正在确认登录状态…" qr={<div aria-label="正在确认登录状态" />} action={<Button disabled>重新生成二维码</Button>} />;
+}
+
+function QrLoginChallenge() {
   const [message, setMessage] = useState("正在生成钉钉二维码…");
   const [attempt, setAttempt] = useState(0);
   const [starting, setStarting] = useState(true);
@@ -335,7 +359,7 @@ export function QrLoginPage() {
         expectedState = body.frame.state;
         await loadDingTalkQrSdk();
         if (cancelled) return;
-        setMessage("请使用手机钉钉扫描二维码，并在钉钉中确认登录。二维码过期时再点击下方按钮重新生成。");
+        setMessage("二维码过期时请点击下方按钮重新生成");
         window.requestAnimationFrame(() => renderDingQr(body));
       } catch {
         if (!cancelled) setMessage("二维码生成失败，请点击重新生成；仍失败请联系管理员确认钉钉应用配置。");
@@ -366,10 +390,10 @@ export function QrLoginPage() {
   };
 
   return (
-    <StatePage tone="info" title="钉钉扫码登录" detail={message}>
-      <div id={QR_CONTAINER_ID} aria-label="钉钉登录二维码" style={{ width: 300, minHeight: 300, margin: "16px auto" }} />
-      <Button disabled={starting} onClick={regenerate}>重新生成二维码</Button>
-    </StatePage>
+    <LoginLanding message={message}
+      qr={<div id={QR_CONTAINER_ID} aria-label="钉钉登录二维码" style={{ width: 300, minHeight: 300 }} />}
+      action={<Button disabled={starting} onClick={regenerate}>重新生成二维码</Button>}
+    />
   );
 }
 
