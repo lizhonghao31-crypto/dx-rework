@@ -17,6 +17,7 @@ describe("digital notification delegates exact child scope to existing readers",
     const production=routeName==="production_detail";
     const route:TodoRouteDescriptor={routeName,entityId:bound?randomUUID():child,todoId,...(bound?{reworkOrderId:child}:{})};
     const row={todo_type:"business_action",required_role:"order_merchandiser",required_capability:"sourcing:view",entity_type:production?"sourcing_production_order":"rework_order",entity_id:child,route_descriptor:route};
+    let boundChild:string|null=child;
     const query=vi.fn(async(sql:string)=>{
       if(sql.includes("FROM digital_production_notification_events e JOIN"))return {rows:[{event_id:eventId,todo_id:todoId,event_kind:"ready",created_at:new Date()}],rowCount:1};
       if(sql.includes("array_agg(DISTINCT r.role_code)"))return {rows:[{id:actor.actorId,roles:actor.actorRoles}],rowCount:1};
@@ -24,6 +25,7 @@ describe("digital notification delegates exact child scope to existing readers",
       if(sql.includes("to_regclass('digital_production_child_links')"))return {rows:[{relation:"digital_production_child_links"}],rowCount:1};
       if(sql.includes("SELECT l.production_order_id"))return {rows:[{production_order_id:mother}],rowCount:1};
       if(sql.startsWith("SELECT 1 FROM digital_production_resource_lifecycle"))return {rows:[],rowCount:0};
+      if(sql.startsWith("SELECT rework_order_id FROM"))return {rows:boundChild?[{rework_order_id:boundChild}]:[],rowCount:boundChild?1:0};
       if(sql.startsWith("UPDATE digital_production_notification_receipts"))return {rows:[],rowCount:1};
       throw new Error(`Unexpected query: ${sql}`);
     });
@@ -32,7 +34,7 @@ describe("digital notification delegates exact child scope to existing readers",
     const reader=production
       ? vi.spyOn(SourcingProductionService.prototype,"get").mockResolvedValue({firstStyleNo:"TEST-EXACT-CHILD",price:"PRIVATE"} as unknown as Awaited<ReturnType<SourcingProductionService["get"]>>)
       : vi.spyOn(ReworkBusinessDetailService.prototype,"get").mockResolvedValue({styleNo:"TEST-EXACT-CHILD",status:"active",budget:"PRIVATE"} as unknown as Awaited<ReturnType<ReworkBusinessDetailService["get"]>>);
-    return {child,eventId,actor,route,row,query,reader,notices:new DigitalProductionNotificationService({query} as unknown as Pool)};
+    return {child,eventId,actor,route,row,query,reader,setBoundChild:(id:string|null)=>{boundChild=id;},notices:new DigitalProductionNotificationService({query} as unknown as Pool)};
   };
   it.each([
     ["production_detail",false], ["rework_detail",false], ["process_configuration",true],
@@ -54,6 +56,14 @@ describe("digital notification delegates exact child scope to existing readers",
   it("rejects a bound rework identity that belongs to another business object",async()=>{
     const f=fixture("process_configuration",true);f.row.entity_id=randomUUID();
     expect((await f.notices.current(f.actor,f.eventId)).notification).toBeNull();expect(f.reader).not.toHaveBeenCalled();
+  });
+  it.each(["rework_tail_inspection_assignment","own_factory_approval","external_responsibility_case","responsibility_determination"])("resolves an exact %s binding before authorizing the child",async(entityType)=>{
+    const f=fixture("rework_detail",true);f.row.entity_type=entityType;f.row.entity_id=randomUUID();
+    expect((await f.notices.current(f.actor,f.eventId)).notification?.context?.styleNo).toBe("TEST-EXACT-CHILD");
+    expect(f.reader).toHaveBeenCalledWith(f.actor,f.child);
+    f.reader.mockClear();f.setBoundChild(randomUUID());
+    expect((await f.notices.current(f.actor,f.eventId)).notification).toBeNull();expect(f.reader).not.toHaveBeenCalled();
+    f.setBoundChild(null);expect((await f.notices.current(f.actor,f.eventId)).notification).toBeNull();
   });
   it("drops a cancelled child even when its historical detail remains readable",async()=>{
     const f=fixture("rework_detail");f.reader.mockResolvedValue({styleNo:"TEST-CANCELLED",status:"cancelled"} as never);

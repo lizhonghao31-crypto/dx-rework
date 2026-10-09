@@ -10,6 +10,8 @@ import { DigitalProductionNotificationService } from "../../apps/api/src/product
 import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
 import { PatternOrderReader } from "../../apps/api/src/pattern-room/order-reader.js";
 import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
+import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
+import { ReworkBusinessDetailService } from "../../apps/api/src/rework/rework-business-detail-service.js";
 import type { DigitalTaskKind } from "../../apps/api/src/production-platform/task-access-repository.js";
 import { linkNewDigitalChild } from "../../apps/api/src/production-platform/child-link-repository.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
@@ -74,7 +76,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     expect((await todos.getForActor(todoActor,taskId)).status).toBe("pending");
   });
 
-  const worker=randomUUID(),otherWorker=randomUUID(),clerk=randomUUID(),supervisor=randomUUID(),payables=randomUUID(),secondaryMerchandiser=randomUUID();
+  const worker=randomUUID(),otherWorker=randomUUID(),clerk=randomUUID(),supervisor=randomUUID(),payables=randomUUID(),secondaryMerchandiser=randomUUID(),tailWorker=randomUUID(),qualityControl=randomUUID();
   let operatorsReady=false;
   const operators=async()=>{
     if(!operatorsReady){
@@ -82,7 +84,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
       await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
       for(const [id,roles] of [[worker,["pattern_room_worker"]],[otherWorker,["pattern_room_worker"]],
         [clerk,["development_clerk","pattern_room_tail_inspector"]],[supervisor,["pattern_room_supervisor"]],
-        [payables,["factory_payables"]],[secondaryMerchandiser,["order_merchandiser"]]] as const){
+        [payables,["factory_payables"]],[secondaryMerchandiser,["order_merchandiser"]],[tailWorker,["worker"]],[qualityControl,["quality_control"]]] as const){
         await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST context operator',true)",[id]);
         await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','P04',$2::uuid::text,$2::uuid::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id]);
         for(const role of roles)await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$4,'TEST context')",[randomUUID(),id,role,user]);
@@ -96,7 +98,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
       const capabilities=(await database.query("SELECT DISTINCT capability FROM role_capabilities WHERE role_code=ANY($1::text[])",[roles])).rows.map(r=>r.capability);
       return {actorId:id,actorRoles:roles,authorizationCapability:"todo:view",authorizationCapabilities:capabilities,requestId:randomUUID()};
     };
-    return {craft:await effective(worker),other:await effective(otherWorker),clerk:await effective(clerk),manager:await effective(supervisor),payables:await effective(payables),secondaryMerchandiser:await effective(secondaryMerchandiser)};
+    return {craft:await effective(worker),other:await effective(otherWorker),clerk:await effective(clerk),manager:await effective(supervisor),payables:await effective(payables),secondaryMerchandiser:await effective(secondaryMerchandiser),tailWorker:await effective(tailWorker),qualityControl:await effective(qualityControl)};
   };
   const transaction=async<T,>(work:(c:pg.PoolClient)=>Promise<T>)=>{
     const c=await database.connect();try{await c.query("BEGIN");const result=await work(c);await c.query("COMMIT");return result;}catch(e){await c.query("ROLLBACK");throw e;}finally{c.release();}
@@ -198,6 +200,31 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     await transaction(c=>tasks.setConditionWithClient(c,actor,id,"business_recorded",true));
     await tasks.complete(assignee,id,{note:"TEST completed"},randomUUID());
     expect((await notices.current(assignee,notice.eventId)).notification).toBeNull();
+  });
+  it("rejects a tail-assignment todo when its exact rework reader denies entry despite effective recipient role and capability",async()=>{
+    const people=await operators(),assignee=people.tailWorker,notices=new DigitalProductionNotificationService(database),policy=new DigitalProductionAccessPolicy(database);
+    const rework=(await new ReworkInitiationService(database,"P04").createDraft({...people.qualityControl,authorizationCapability:"rework:initiate"},{styleNo:"TEST-OWN-REWORK",tailInspectionRequired:true},randomUUID())).value;
+    const mother=await new DigitalProductionIdentityService(database,true).createOrder(actor,DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:user,productGroup:"男装",designStyleNo:"TEST-PRIVATE-MOTHER",orderDate:"2026-09-29",lines:[{color:"PRIVATE",sizes:[{size:"M",quantity:5}]}]}),randomUUID());
+    const assignment=randomUUID(),todo=await transaction(async c=>{
+      await linkNewDigitalChild(c,{module:"rework",childId:rework.reworkOrderId,productionOrderId:mother.productionOrderId,lines:[]});
+      const configured=randomUUID(),rejected=randomUUID();
+      await c.query("INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id,reason) VALUES($1,$1::uuid::text,$2,ARRAY['order_merchandiser'],'process:configure','rework.process_configuration.submit','rework_order',$3,'TEST fixture assignment')",[configured,user,rework.reworkOrderId]);
+      await c.query("INSERT INTO rework_tail_inspection_assignments(tail_inspection_assignment_id,rework_order_id,tail_inspector_user_id,assigned_by,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$5::uuid::text)",[assignment,rework.reworkOrderId,tailWorker,user,configured]);
+      await c.query("INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id,reason) VALUES($1,$1::uuid::text,$2,ARRAY['order_merchandiser'],'tail_inspection:reject','rework.tail_inspection.reject','rework_tail_inspection_assignment',$3,'TEST fixture returned report')",[rejected,user,assignment]);
+      return service.createInTransaction(c,actor,{todoType:"business_action",category:"tail_inspection",sourceEventId:rejected,sourceAction:"rework.tail_inspection.reject",entityType:"rework_tail_inspection_assignment",entityId:assignment,recipientUserId:tailWorker,requiredRole:"worker",requiredCapability:"tail_inspection:report",route:{routeName:"rework_detail",entityId:rework.reworkOrderId,tab:"tail_inspection"},policyKey:"general",dedupeKey:randomUUID()});
+    });
+    const reader=new ReworkBusinessDetailService(database);
+    await expect(reader.get(assignee,rework.reworkOrderId)).rejects.toMatchObject({statusCode:403});
+    await expect(reader.get(people.other,rework.reworkOrderId)).rejects.toMatchObject({statusCode:403});
+    expect(await policy.activeRole(assignee.actorId,"worker")).toBe(true);
+    expect(assignee.authorizationCapabilities).toContain("tail_inspection:report");
+    expect(await policy.allowed(assignee,"order",mother.productionOrderId,"technical")).toBe(false);
+    expect(await policy.allowed(assignee,"order",mother.productionOrderId,"budget")).toBe(false);
+    await runOverdueChildren(notices);
+    expect(await notices.claim(assignee,true)).toEqual({notification:null,remainingCount:0});
+    const events=(await database.query("SELECT event_id FROM digital_production_notification_events WHERE todo_id=$1",[todo.todoId])).rows;
+    for(const event of events)expect((await notices.current(assignee,event.event_id)).notification).toBeNull();
+    expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1",[todo.todoId])).rows[0].status).toBe("pending");
   });
   const patternFixture=async()=>{
     const people=await operators(),source=await contextSource(),orderId=randomUUID(),roundId=randomUUID(),personId=randomUUID();

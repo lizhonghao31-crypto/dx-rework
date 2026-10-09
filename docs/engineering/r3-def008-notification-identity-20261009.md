@@ -18,7 +18,7 @@
 
 原渲染只给有母单 technical 阅读权限的人投影 context。有个人待办、角色和 capability 不等于有母单权限，也不能单独证明对子单有阅读权限。新逻辑保留母单策略，校验业务实体与原 route 相同，再调用既有 sourcing / production / rework 阅读服务校验该精确对象。拒绝 403/404，非活动母单及取消返工不投影。只有已授权子款号会成为 context；orderId=null，PO 和颜色数组为空，不投影私有附件、预算、金额、供应商或其它 PO。
 
-自己有实际 execute 权限的数字生产任务沿用既有 task 授权，补充该任务已绑定母单的款号。上游缺主办异常与 information 通知继续沿用原过滤。开发文员和打版员工的已有授权及拒绝逻辑保持。
+自己有实际 execute 权限的数字生产任务沿用既有 task 授权，补充该任务已绑定母单的款号。尾查指派、厂内审批、外部责任 case 与责任认定这四类既有返工实体，先通过原表查到实际 rework_order_id，再校验与 route 的返工目标相同；缺实体或错绑拒绝。上游缺主办异常与 information 通知继续沿用原过滤。开发文员和打版员工的已有授权及拒绝逻辑保持。
 
 ## 验证范围与证据等级
 
@@ -31,11 +31,13 @@
 | production_detail | exact child reader 返回的 firstStyleNo；不带母单/价格 | 必须委托 SourcingProductionService.get，403/404 拒绝 | 只写 receipt | 错绑、子阅读拒绝 | 组件委托回归；生产动态待办原已有身份，不列为新实机缺陷 |
 | rework_detail / process_configuration / whole_order_review / responsibility_detail / own_factory_approval | exact child reader 返回的 styleNo；绑定 reworkOrderId 必须相同 | 必须委托 ReworkBusinessDetailService.get | 只写 receipt | 错绑子单、取消返工、子阅读拒绝 | 组件委托回归；不替代修复部署后的多角色 UAT |
 
+返工四类子实体的关联回归覆盖相同返工、其它返工与不存在的实体。原生新增尾查指派例：当前实际 worker 角色与 tail_inspection:report capability 有效，原表指派和待办均存在，但既有 ReworkBusinessDetailService 对该 legacy 指派目标拒绝403；通知、剩余数量及展示后的重新阅读同样拒绝，业务待办仍pending。没有赋予 legacy 指派额外阅读权限，也没有用旧 tail_inspector 角色恢复权限。该例说明“收件人+角色+capability”仍不能证明目标可读。
+
 原生测试只运行本轮拥有的 PG16 容器及独立 schema，测试用户为非超级用户。角色/人员 fixture 初始化和角色失效模拟只对其测试 schema 短暂关闭指定 fixture 触发器并恢复，通知实际授权、阅读服务、状态检查不被 mock。超时通过临时恢复式 Date.now 时钟推进，未改实际业务日期或数据库。
 
 旧版 130a58e 原样替换 notification-service 的失败对照：新增会计与非主跟单两例均在 context 应有款号处失败（实际 undefined）；恢复候选后通过。
 
-本地最终检查：通知完整 schema 13/13；通知 thin schema 与完整业务链合计三组 76/76；子阅读委托 10/10；普通测试 423 文件、2126 通过（60 文件、510 环境相关测试跳过，原生三组另行实跑）；lint、typecheck、全量 build 及其 postbuild 本地业务链、migration lint、secret scan、diff check 均通过。当前 Head 的远端 FULL Gate 和一次 Codex Review 另以 PR 记录为准。
+本地检查：初版通知完整 schema 13/13、通知与完整业务链三组76/76、普通测试423文件2126通过（60文件510环境相关测试跳过），lint/typecheck/build/migration lint/secret scan通过。补返工子实体后通知完整schema14/14、子阅读/关联委托14/14；最终三组原生77/77、lint/typecheck/build（postbuild静态链77/77）、secret scan及diff check均通过。当前 Head 的远端 FULL Gate 和一次 Codex Review 另以 PR 记录为准。
 
 sample_detail / supplier_onboarding / wage_period_detail 不映射数字母单，legacy 入口不在本 PR 范围。DingTalk delivery-worker 部分类别身份缺失是独立静态风险；数字子单已有 enqueue/delivery 双抑制，本 PR 不改外部发送，不宣称已修该风险。
 

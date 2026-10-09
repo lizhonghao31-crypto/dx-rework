@@ -215,10 +215,19 @@ export class DigitalProductionNotificationService {
         }else if(route.routeName==="production_detail"&&["production_order","sourcing_production_order"].includes(row.entity_type)){
           if(row.entity_id!==route.entityId)return null;
           ownChildResource={kind:"production",id:route.entityId};
-        }else if(row.entity_type==="rework_order"&&(route.reworkOrderId||["rework_detail","process_configuration","whole_order_review","responsibility_detail","own_factory_approval"].includes(route.routeName))){
+        }else if(route.reworkOrderId||["rework_detail","process_configuration","whole_order_review","responsibility_detail","own_factory_approval"].includes(route.routeName)){
           const childId=route.reworkOrderId??route.entityId;
-          if(row.entity_id!==childId)return null;
-          ownChildResource={kind:"rework",id:childId};
+          const bindings:Record<string,string>={
+            rework_tail_inspection_assignment:"SELECT rework_order_id FROM rework_tail_inspection_assignments WHERE tail_inspection_assignment_id::text=$1",
+            own_factory_approval:"SELECT rework_order_id FROM rework_own_factory_approvals WHERE approval_id::text=$1",
+            external_responsibility_case:"SELECT rework_order_id FROM rework_external_responsibility_cases WHERE case_id::text=$1",
+            responsibility_determination:"SELECT rework_order_id FROM rework_responsibility_determinations WHERE determination_id::text=$1",
+          };
+          if(row.entity_type==="rework_order"||Object.hasOwn(bindings,row.entity_type)){
+            const boundId=row.entity_type==="rework_order"?row.entity_id:(await database.query(bindings[row.entity_type]!,[row.entity_id])).rows[0]?.rework_order_id;
+            if(boundId!==childId)return null;
+            ownChildResource={kind:"rework",id:childId};
+          }
         }
       }
     }
