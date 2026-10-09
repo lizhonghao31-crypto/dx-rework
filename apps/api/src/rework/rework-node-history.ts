@@ -14,7 +14,7 @@ const object = (value: unknown): Snapshot => value !== null && typeof value === 
 const array = (value: unknown): Snapshot[] => Array.isArray(value) ? value.map(object) : [];
 const value = (v: unknown): string | null => v == null ? null : v instanceof Date ? v.toISOString() : typeof v === 'boolean' ? v ? '是' : '否' : typeof v === 'string' || typeof v === 'number' ? String(v) : null;
 export function reworkHistoryNode(action: string): FinanceNodeKey | null {
- if (action === 'rework.submit') return 'initiation';
+ if (action === 'rework.submit' || action === 'rework.finishing.submit') return 'initiation';
  if (action === 'rework.process_configuration.submit') return 'process_configuration';
  if (action === 'rework.process_configuration.review') return 'ie_review';
  if (action === 'rework.work_task.assign') return 'task_assignment';
@@ -29,10 +29,11 @@ export function reworkHistoryNode(action: string): FinanceNodeKey | null {
 }
 // Node audit payloads contain styleNo too, but are not complete initiation forms.
 export function selectReworkInitiationSnapshot(events: readonly Pick<HistoryEvent, 'action' | 'after'>[]): Snapshot {
- const completeActions = new Set(['rework.draft.create', 'rework.draft.update', 'rework.submit']);
+ const completeActions = new Set(['rework.draft.create', 'rework.draft.update', 'rework.submit','rework.finishing.draft.create','rework.finishing.draft.update','rework.finishing.submit']);
  return [...events].reverse().find(event => completeActions.has(event.action))?.after ?? {};
 }
 const labels: Record<FinanceNodeKey,string> = {initiation:'发起返工',process_configuration:'分配工序与工人',ie_review:'IE 核价',task_assignment:'工人分配',work_reporting:'返工执行',whole_order_review:'尾部确认最终数量',final_quantity_ie_review:'IE 复核最终数量',quantity_adjustment:'数量调整',responsibility:'责任判定',owner_signature:'老板签字',settlement_ledger:'责任台账',settlement_followup:'扣款跟进'};
+const finishingNodes: FinanceNodeKey[]=['initiation','process_configuration','ie_review','work_reporting','whole_order_review','final_quantity_ie_review'];
 export function canReadReworkHistoryNode(actor: TrustedActorContext, node: FinanceNodeKey): boolean {
  const caps = actor.authorizationCapabilities ?? [actor.authorizationCapability];
  const has = (...keys: string[]) => keys.some(key => caps.includes(key));
@@ -62,6 +63,9 @@ export async function readReworkNodeHistory(db: Pool, actor: TrustedActorContext
   const past = events.filter(event=>earlierIds.has(event.id));
   const latest = (key:string) => [...past].reverse().find(event=>Object.hasOwn(event.after,key))?.after[key];
   const source = {...selectReworkInitiationSnapshot(past)};
+  const finishing=detail.reworkKind==='inhouse_finishing';
+  if(finishing && !finishingNodes.includes(node)) throw new ApplicationError('NOT_FOUND','本厂做尾没有该历史节点',404);
+  if(finishing) source.receivingBatchId ??= latest('receivingBatchId');
   for(const key of ['tailInspectionRequired','tailInspectionCostBearer','tailInspectionCostBearerSource']) {
    const recorded=latest(key);if(recorded!==undefined) source[key]=recorded;
   }
@@ -69,7 +73,7 @@ export async function readReworkNodeHistory(db: Pool, actor: TrustedActorContext
   let factoryName: string | null = factory.type==='own_factory' ? '本厂' : null;
   if (factory.supplierId && factory.supplierVersion) factoryName=(await client.query<{name:string}>('SELECT supplier_name AS name FROM supplier_catalog_versions WHERE supplier_id=$1 AND version=$2',[factory.supplierId,factory.supplierVersion])).rows[0]?.name ?? null;
   const fields: ReworkNodeHistory['fields'] = [{label:'加工厂',value:factoryName},...Object.entries({styleNo:'款号',customerSupplyCode:'客供款号',factoryStyleNo:'工厂款号',orderNo:'订单号',orderQuantity:'订单数量',reworkQuantity:'返工数量',reworkProcess:'返工工序',reworkReason:'返工原因',problemPart:'问题部位',problemDescription:'问题描述',tailInspectionRequired:'需要整查',tailInspectionCostBearer:'整查费用承担方'}).map(([key,label])=>({label,value:value(source[key])}))];
-  const created=past.find(event=>event.action==='rework.draft.create');
+  const created=past.find(event=>['rework.draft.create','rework.finishing.draft.create'].includes(event.action));
   if(created) fields.push({label:'发起时间',value:created.at},{label:'发起人',value:created.actor});
   const supply = [...past].reverse().find(event=>event.action==='rework.supply_context.save')?.after ?? {};
   for (const [key,label] of [['washingSupplier','洗水厂'],['embroiderySupplier','印绣花厂'],['fabricSupplier','面辅料供应商']] as const) {
@@ -153,11 +157,25 @@ export async function readReworkNodeHistory(db: Pool, actor: TrustedActorContext
   if (sections.some(section=>section.rows.length===0)) notices.push('部分早期节点未留存对应明细快照；空白处未使用当前数据补齐。');
   const ids=latest('attachmentIds');
   const permitted=new Set(detail.attachments.map(item=>item.attachmentId));
-  const attachments=Array.isArray(ids)?detail.attachments.filter(item=>ids.includes(item.attachmentId)&&permitted.has(item.attachmentId)).map(({attachmentId,filename,mimeType})=>({attachmentId,filename,mimeType})):[];
+  const attachments=finishing ? (await client.query(`SELECT attachment.attachment_id AS "attachmentId",attachment.original_filename AS filename,attachment.mime_type AS "mimeType"
+    FROM attachments attachment WHERE attachment.status='ready' AND attachment.ready_at<=$3::timestamptz AND (
+      (attachment.entity_type='rework_order' AND attachment.entity_id=$1::text AND attachment.attachment_id=ANY($4::uuid[]))
+      OR (attachment.entity_type='receiving_batch' AND attachment.entity_id=$2::text AND EXISTS(
+        SELECT 1 FROM operation_events binding WHERE binding.created_at<=$3::timestamptz
+          AND binding.after_state->>'receivingBatchId'=$2::text
+          AND binding.after_state->'attachmentIds' ? attachment.attachment_id::text) AND NOT EXISTS(
+        SELECT 1 FROM receiving_attachment_retirements retired WHERE retired.attachment_id=attachment.attachment_id AND retired.retired_at<=$3::timestamptz))
+      OR (attachment.entity_type='sourcing_case' AND EXISTS(SELECT 1 FROM receiving_batches batch
+        JOIN cutting_orders cutting ON cutting.cutting_order_id=batch.cutting_order_id
+        CROSS JOIN LATERAL sourcing_case_lines_at(cutting.sourcing_case_id,$3::timestamptz) line
+        WHERE batch.receiving_batch_id=$2::uuid AND line.position=cutting.sourcing_line_position
+          AND cutting.sourcing_case_id::text=attachment.entity_id AND line.image_attachment_id=attachment.attachment_id)))
+    ORDER BY attachment.created_at,attachment.attachment_id`,[detail.reworkOrderId,source.receivingBatchId??null,selected.at,Array.isArray(ids)?ids:[]])).rows
+    : Array.isArray(ids)?detail.attachments.filter(item=>ids.includes(item.attachmentId)&&permitted.has(item.attachmentId)).map(({attachmentId,filename,mimeType})=>({attachmentId,filename,mimeType})):[];
   if(!Array.isArray(ids)) notices.push('该历史版本未记录图片清单，当前图片不会混入。');
   const report=InspectionReportDraftSchema.safeParse(source.inspectionReport);
   await client.query('COMMIT');
-  const entry=(event:HistoryEvent)=>({id:event.id,label:labels[node],at:event.at,actor:event.actor});
-  return ReworkNodeHistorySchema.parse({orderId:detail.reworkOrderId,navigation:(Object.keys(labels) as FinanceNodeKey[]).map(key=>({node:key,completed:events.some(event=>reworkHistoryNode(event.action)===key),available:canReadReworkHistoryNode(actor,key)&&events.some(event=>reworkHistoryNode(event.action)===key)})),page,node,entry:entry(selected),versions:versions.map(entry),fields,sections,attachments,notices,inspectionReport:report.success?report.data:null});
+  const entry=(event:HistoryEvent)=>({id:event.id,label:finishing&&node==='initiation'?'本厂做尾':labels[node],at:event.at,actor:event.actor});
+  return ReworkNodeHistorySchema.parse({reworkKind:detail.reworkKind,orderId:detail.reworkOrderId,navigation:(finishing?finishingNodes:Object.keys(labels) as FinanceNodeKey[]).map(key=>({node:key,completed:events.some(event=>reworkHistoryNode(event.action)===key),available:canReadReworkHistoryNode(actor,key)&&events.some(event=>reworkHistoryNode(event.action)===key)})),page,node,entry:entry(selected),versions:versions.map(entry),fields,sections,attachments,notices,inspectionReport:report.success?report.data:null});
  } catch(error) {await client.query('ROLLBACK').catch(()=>undefined);throw error;} finally {client.release();}
 }

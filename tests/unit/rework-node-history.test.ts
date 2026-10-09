@@ -35,10 +35,20 @@ describe('rework historical node boundary',()=>{
  });
  it('keeps supplements and draft edits out of submitted initiation versions',()=>{
   expect(reworkHistoryNode('rework.submit')).toBe('initiation');
+  expect(reworkHistoryNode('rework.finishing.submit')).toBe('initiation');
   expect(reworkHistoryNode('rework.attachments.supplement')).toBeNull();
   expect(reworkHistoryNode('rework.draft.update')).toBeNull();
   expect(reworkHistoryNode('rework.responsibility.owner_reject')).toBe('owner_signature');
   expect(reworkHistoryNode('rework.final_quantity.ie_review')).toBe('final_quantity_ie_review');
+ });
+ it('renders finishing as six historical nodes with its source fields',()=>{
+  const id='00000000-0000-4000-8000-000000000002',entry={id,label:'本厂做尾',at:'2026-10-01T00:00:00Z',actor:'尾部主管'};
+  const data:ReworkNodeHistory={reworkKind:'inhouse_finishing',orderId:id,node:'initiation',entry,versions:[entry],fields:[{label:'款号',value:'TEST-FINISHING'},{label:'加工厂',value:'历史加工厂'},{label:'订单数量',value:'100'}],sections:[],attachments:[],notices:[],inspectionReport:null};
+  const html=renderToStaticMarkup(createElement(ReworkNodeHistoryView,{data,currentHref:'/ui/tasks/test',onVersion:vi.fn(),onImage:vi.fn()}));
+  expect(html).toContain('本厂做尾来源资料');expect(html).toContain('历史加工厂');
+  expect(html.match(/rework-workflow-step /g)).toHaveLength(12); // Desktop and mobile each have six nodes.
+  for(const label of ['质检','责任判定','老板确认签字','发起返工'])expect(html).not.toContain(label);
+  expect(html).not.toContain('type="file"');
  });
  it('renders the original allocation page with submitted workers and no enabled mutation controls',()=>{
   const id='00000000-0000-4000-8000-000000000002';

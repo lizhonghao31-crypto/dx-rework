@@ -363,7 +363,9 @@ export class DigitalProductionTaskService {
     const resource = this.resource(task);
     const paused = (await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2", [resource.kind, resource.id])).rows[0]?.state === "paused";
     const parent = (await db.query(resource.kind === "order" ? "SELECT created_by,primary_merchandiser_id,design_style_no,customer_code FROM digital_production_orders WHERE production_order_id=$1" : "SELECT created_by,design_style_no,customer_code FROM digital_production_sources WHERE source_id=$1", [resource.id])).rows[0];
-    const identity = await policy.allowed(actor, resource.kind, resource.id, "technical")
+    // Exact source-task authorization also permits its basic identity, matching
+    // the development sheet's readable-task fallback without granting source browse access.
+    const identity = resource.kind === "source" || await policy.allowed(actor, resource.kind, resource.id, "technical")
       ? { designStyleNo: parent.design_style_no as string, customerCode: parent.customer_code as string | null } : null;
     const canManage = isDigitalLeader(actor) || ((task.task_kind.startsWith("development_") || task.task_kind === "bulk_pattern") && (isDigitalTechnicalManager(actor) || actor.actorRoles.includes("development_clerk")));
     const canControl = isDigitalLeader(actor) || (resource.kind === "order" ? actor.actorRoles.includes("order_merchandiser") && parent.primary_merchandiser_id === actor.actorId : actor.actorRoles.includes("sample_designer") && parent.created_by === actor.actorId);

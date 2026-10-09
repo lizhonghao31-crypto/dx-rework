@@ -46,6 +46,10 @@ const historyNodes = [
  ['work_reporting','返工执行报数','返工人员 / 整查'],['whole_order_review','尾部最终数量确认','尾部主管'],
  ['final_quantity_ie_review','IE 最终数量复核','IE'],['responsibility','责任判定','供应链总监'],['owner_signature','老板确认签字','老板'],['settlement_followup','返工业务完成','系统'],
 ] as const;
+const finishingHistoryNodes=[
+ ['initiation','本厂做尾','尾部主管'],['process_configuration','分配工序 &工人','尾部主管'],['ie_review','IE 核价','IE'],
+ ['work_reporting','做尾执行报数','做尾人员'],['whole_order_review','尾部最终数量确认','尾部主管'],['final_quantity_ie_review','IE 最终数量复核','IE'],
+] as const;
 export function ReworkNodeHistoryView({data,currentHref,onVersion,onImage}:{data:ReworkNodeHistory;currentHref:string;onVersion:(id:string)=>void;onImage:(image:ReworkNodeHistory['attachments'][number])=>void}) {
  const [expanded,setExpanded]=useState(false);
  const mobileRail=useRef<HTMLDivElement>(null);
@@ -54,8 +58,10 @@ export function ReworkNodeHistoryView({data,currentHref,onVersion,onImage}:{data
  const page=data.page;
  const configuration=page?.configuration;
  const workerPlan=page?.workerPlan;
+ const nodes=data.reworkKind==='inhouse_finishing'?finishingHistoryNodes:historyNodes;
  const content=data.node==='initiation'
-  ? <><ReworkInitiationV2Form reworkOrderId={orderId} embedded existingAttachmentCount={data.attachments.length} history={data.fields}/>{data.inspectionReport?<InspectionReportReadonly report={data.inspectionReport}/>:null}</>
+  ? data.reworkKind==='inhouse_finishing'?<section><h2>本厂做尾来源资料</h2><dl>{data.fields.filter(field=>field.value!==null).map(field=><div key={field.label}><dt>{field.label}</dt><dd>{display(field.value)}</dd></div>)}</dl></section>
+   : <><ReworkInitiationV2Form reworkOrderId={orderId} embedded existingAttachmentCount={data.attachments.length} history={data.fields}/>{data.inspectionReport?<InspectionReportReadonly report={data.inspectionReport}/>:null}</>
   : (data.node==='process_configuration'||data.node==='ie_review') && configuration && workerPlan
    ? <ProcessWorkerAssignmentForm reworkOrderId={orderId} embedded workspaceNode={data.node} history={{configuration,plan:workerPlan}} />
    : (data.node==='whole_order_review'||data.node==='final_quantity_ie_review') && page?.wholeOrderReview
@@ -65,7 +71,7 @@ export function ReworkNodeHistoryView({data,currentHref,onVersion,onImage}:{data
      : (data.node==='work_reporting'||data.node==='task_assignment') && page?.workTasks
       ? <WorkReportingForm reworkOrderId={orderId} embedded taskMode={data.node==='task_assignment'?'task_assignment':'work_reporting'} history={page.workTasks}/>
       : <p role="status">该次提交未保存足够资料，无法完整还原原页面。</p>;
- const renderNode=(item:typeof historyNodes[number],index:number)=>{
+ const renderNode=(item:typeof nodes[number],index:number)=>{
   const record=data.navigation?.find(n=>n.node===item[0]);
   const selected=item[0]===data.node;
   const inner=<><b aria-hidden="true">{selected?index+1:record?.completed?'✓':index+1}</b><span><strong>{item[1]}</strong><small>{item[2]}</small></span><em>{selected?'正在回看':record?.completed?'已提交':'—'}</em></>;
@@ -82,7 +88,7 @@ export function ReworkNodeHistoryView({data,currentHref,onVersion,onImage}:{data
     <section className="rework-workflow" aria-label="订单流程">
      <div className="rework-workflow__heading rework-detail-panel-title"><h2>订单流程</h2><span>历史节点 · 只读</span></div>
      <button className="rework-detail-mobile-workflow-toggle" type="button" aria-expanded={expanded} onClick={()=>setExpanded(!expanded)}><strong>订单流程</strong><span>{data.entry.label} {expanded?'−':'+'}</span></button>
-     <div className={`rework-detail-mobile-collapsible${expanded?' is-expanded':''}`}><WorkflowRail className="rework-workflow__desktop-grid" aria-label="电脑端流程节点">{historyNodes.map(renderNode)}</WorkflowRail><WorkflowRail ref={mobileRail} className="rework-workflow__mobile-rail" aria-label="移动端流程节点">{historyNodes.map(renderNode)}</WorkflowRail></div>
+     <div className={`rework-detail-mobile-collapsible${expanded?' is-expanded':''}`}><WorkflowRail className="rework-workflow__desktop-grid" aria-label="电脑端流程节点">{nodes.map(renderNode)}</WorkflowRail><WorkflowRail ref={mobileRail} className="rework-workflow__mobile-rail" aria-label="移动端流程节点">{nodes.map(renderNode)}</WorkflowRail></div>
     </section>
    </div>
    {data.notices.map(notice=><p key={notice} role="status">{notice}</p>)}

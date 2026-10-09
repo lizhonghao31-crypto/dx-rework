@@ -11,6 +11,7 @@ import { JourneyFilterSchema } from "@dx-rework/contracts/digital-production-jou
 import { DigitalOrderCreateSchema } from "@dx-rework/contracts/digital-production";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
+import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
 import { DigitalJourneyQuery } from "../../apps/api/src/production-platform/journey-query.js";
 import { DevelopmentWorkspaceQuery } from "../../apps/api/src/production-platform/development-workspace-query.js";
 import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "@dx-rework/contracts/digital-development-workspace";
@@ -24,7 +25,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   const schema=ownedPostgresSchema("digital_journey");
   const admin=new pg.Pool({connectionString:databaseUrl});
   const db=new pg.Pool({connectionString:databaseUrl,options:`-c search_path=${schema}`});
-  const root=randomUUID(),designer=randomUUID(),stranger=randomUUID(),worker=randomUUID();
+  const root=randomUUID(),designer=randomUUID(),stranger=randomUUID(),worker=randomUUID(),clerk=randomUUID(),tail=randomUUID();
   const actor=(id=designer,roles=["sample_designer"]):TrustedActorContext=>({actorId:id,actorRoles:roles,authorizationCapability:"pattern_room:orders:create",authorizationCapabilities:["pattern_room:orders:create"],requestId:"TEST-v2-journey"});
   const identity=new DigitalProductionIdentityService(db,true),journeys=new DigitalJourneyQuery(db),tasks=new DigitalProductionTaskService(db);
   const input=(suffix="0001")=>DigitalOrderCreateSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:`TEST-J-${suffix}`,temporaryStyleNo:`TEST-T-${suffix}`,orderDate:"2026-10-01",lines:[{poNumber:"PO-J1",color:"黑",sizes:[{size:"M",quantity:100}],deliveryDate:"2026-10-20"},{poNumber:"PO-J2",color:"白",sizes:[{size:"L",quantity:200}],deliveryDate:"2026-10-22"}]});
@@ -38,7 +39,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     await db.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)");
     const serverVersion=Number((await db.query("SHOW server_version_num")).rows[0].server_version_num);
     for(const migration of manifest.migrations){const sql=await readFile(new URL(`../../apps/api/migrations/${migration.version}.sql`,import.meta.url),"utf8");await db.query(migrationExecutionSql({...migration,sql},serverVersion));await db.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[migration.version,migration.checksum]);}
-    for(const [id,role] of [[root,"owner_group"],[designer,"sample_designer"],[stranger,"sample_designer"],[worker,"pattern_room_worker"]]){
+    for(const [id,role] of [[root,"owner_group"],[designer,"sample_designer"],[stranger,"sample_designer"],[worker,"pattern_room_worker"],[clerk,"development_clerk"],[tail,"pattern_room_tail_inspector"]]){
       await db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)",[id,`TEST-J ${role}`]);
       await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2::uuid,'dingtalk','TEST',$2::text,$2::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id]);
       await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$4,'TEST Journey fixture')",[randomUUID(),id,role,root]);
@@ -148,7 +149,11 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect(nodes.some(node=>node.instanceId===assigned.taskId)).toBe(true);
     expect(JSON.stringify(item)).not.toContain(sibling.taskId);
     const node=nodes.find(node=>node.instanceId===assigned.taskId)!;
-    expect((await tasks.read(actor(worker,["pattern_room_worker"]), assigned.taskId)).identity).toBeNull();
+    const summary=await tasks.read(actor(worker,["pattern_room_worker"]), assigned.taskId);
+    expect(summary.identity).toEqual({designStyleNo:'TEST-WORKER',customerCode:'PD'});
+    expect(summary).not.toHaveProperty('budget');
+    await expect(tasks.read(actor(worker,["pattern_room_worker"]),sibling.taskId)).rejects.toMatchObject({statusCode:404});
+    await expect(tasks.read(actor(stranger),assigned.taskId)).rejects.toMatchObject({statusCode:404});
     expect(node.state).toBe("pending");expect(node.enteredAt).toBeNull();expect(node.sla).toBe("not_started");expect(node.risks).not.toContain("overdue");
     expect(nodes.find(node=>node.key==="development_cutting")?.state).toBe("unavailable");
     await expect(journeys.read(actor(worker,["pattern_room_worker"]),source.sourceId,1)).rejects.toMatchObject({statusCode:404});
@@ -167,6 +172,15 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     const filtered=await journeys.list(actor(),JourneyFilterSchema.parse({search:"TEST-FORMAL-CONCURRENT"}));
     expect(filtered.total).toBe(1);expect(filtered.summary.all).toBe(1);expect(filtered.items[0]?.lines[0]?.id).toBe(corrected.lines[0]?.lineId);
     expect(await count()).toEqual(afterCorrection);expect(afterCorrection.tasks).toBe(before.tasks);expect(afterCorrection.wages).toBe(before.wages);
+  });
+  it.each([[clerk,'development_clerk','development_materials'],[tail,'pattern_room_tail_inspector','development_tail_check']] as const)('shows basic source identity for authorized %s task without widening source access',async(id,role,kind)=>{
+    const source=await identity.createSource(actor(),{developmentType:'头版',designStyleNo:`TEST-SUMMARY-${role}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+    const assigned=await createTask({resource:{kind:'source',id:source.sourceId},kind,routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:id});
+    const viewer=actor(id,[role]),policy=new DigitalProductionAccessPolicy(db);
+    expect(await policy.allowed(viewer,'source',source.sourceId,'technical')).toBe(false);
+    expect((await tasks.read(viewer,assigned.taskId)).identity).toEqual({designStyleNo:`TEST-SUMMARY-${role}`,customerCode:'PD'});
+    expect((await new DigitalDevelopmentService(db,true).read(viewer,source.sourceId)).designStyleNo).toBe(`TEST-SUMMARY-${role}`);
+    await expect(tasks.read(actor(stranger),assigned.taskId)).rejects.toMatchObject({statusCode:404});
   });
   it("resolves names only on visible task reassignment facts while preserving stable IDs",async()=>{
     const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-J-NAMED-HISTORY",temporaryStyleNo:null,customerCode:"PD"},randomUUID());

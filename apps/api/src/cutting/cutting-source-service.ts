@@ -156,7 +156,8 @@ WITH cutting_read AS (
          COALESCE(current_decision.supplier_name_snapshot,snapshot.supplier_name_snapshot) AS supplier_name,
          source_case.created_by AS merchandiser_id,
          creator.display_name AS merchandiser_name,
-         to_char(sourcing_effective_delivery_date(cutting.sourcing_case_id,snapshot.delivery_date),'YYYY-MM-DD') AS delivery_date,
+         to_char(CASE WHEN source_po.line_id IS NOT NULL THEN po.factory_delivery_date
+           ELSE sourcing_effective_delivery_date(cutting.sourcing_case_id,snapshot.delivery_date) END,'YYYY-MM-DD') AS delivery_date,
          current_decision.cutting_process,current_decision.cutting_process_other,
          snapshot.processes,
          snapshot.approved_at,
@@ -183,6 +184,11 @@ WITH cutting_read AS (
     ON snapshot_line.sourcing_approval_snapshot_id=cutting.approval_snapshot_id
    AND snapshot_line.position=cutting.sourcing_line_position
   JOIN app_users creator ON creator.id=source_case.created_by
+  LEFT JOIN digital_production_child_lines source_po
+    ON source_po.module='sourcing' AND source_po.child_id=cutting.sourcing_case_id
+   AND source_po.child_line_key=cutting.sourcing_line_position::text
+  LEFT JOIN digital_production_po_lines po
+    ON po.production_order_id=source_po.production_order_id AND po.line_id=source_po.line_id
   LEFT JOIN current_cutting_records current_record
     ON current_record.cutting_order_id=cutting.cutting_order_id
   LEFT JOIN app_users recorder ON recorder.id=current_record.recorded_by
