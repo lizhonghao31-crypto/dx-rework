@@ -2,10 +2,13 @@ import importlib.util
 import json
 import os
 import pathlib
+import sys
 import tempfile
 import unittest
 
 
+# Keep the source tree clean for the existing release packager after this import.
+sys.dont_write_bytecode = True
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location('production_health', str(ROOT / 'scripts/deploy/production-runtime-health.py'))
 GUARD = importlib.util.module_from_spec(SPEC)
