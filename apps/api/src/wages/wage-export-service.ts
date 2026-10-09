@@ -46,8 +46,8 @@ const first = <T>(rows: T[], message: string): T => {
 };
 export function buildWageWorkbook(detailRows: Cell[][], summaryRows: Cell[][]): Buffer {
   return buildWorkbook([
-    { name: "工资明细", rows: detailRows },
-    { name: "人员汇总", rows: summaryRows },
+    { name: "工资明细", rows: detailRows, fitColumns:true },
+    { name: "人员汇总", rows: summaryRows, fitColumns:true },
   ]);
 }
 

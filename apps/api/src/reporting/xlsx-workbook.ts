@@ -4,7 +4,7 @@ export type WorkbookNumberCell = Readonly<{
   numberFormat?: WorkbookNumberFormat;
 }>;
 export type WorkbookCell = string | number | boolean | null | WorkbookNumberCell;
-export type WorkbookSheet = Readonly<{ name: string; rows: readonly (readonly WorkbookCell[])[]; textColumns?: readonly number[] }>;
+export type WorkbookSheet = Readonly<{ name: string; rows: readonly (readonly WorkbookCell[])[]; textColumns?: readonly number[]; fitColumns?: boolean }>;
 
 export const workbookNumberCell = (
   value: string | number,
@@ -37,7 +37,8 @@ const column = (index: number): string => {
   return output;
 };
 
-const worksheet = (rows: readonly (readonly WorkbookCell[])[], textColumns: readonly number[] = []): string => {
+const displayWidth = (text: string): number => Math.max(...text.split(/\r?\n/).map(line=>Array.from(line).reduce((width,char)=>width+(char.codePointAt(0)!>127?2:1),0)));
+const worksheet = (rows: readonly (readonly WorkbookCell[])[], textColumns: readonly number[] = [], fitColumns=false, wrapStyle=4): string => {
   const data = rows.map((row, rowIndex) => {
     const cells = row.map((value, columnIndex) => {
       const ref = `${column(columnIndex)}${rowIndex + 1}`;
@@ -48,11 +49,17 @@ const worksheet = (rows: readonly (readonly WorkbookCell[])[], textColumns: read
         return numericCellXml(ref, value.value, value.numberFormat === "precise" ? 2 : value.numberFormat === "business3" ? 4 : 1);
       }
       const text = value === null ? "" : typeof value === "boolean" ? (value ? "true" : "false") : String(value);
-      return `<c r="${ref}"${textColumns.includes(columnIndex) ? ' s="3"' : ""} t="inlineStr"><is><t xml:space="preserve">${escapeXml(text)}</t></is></c>`;
+      return `<c r="${ref}"${fitColumns ? ` s="${wrapStyle}"` : textColumns.includes(columnIndex) ? ' s="3"' : ""} t="inlineStr"><is><t xml:space="preserve">${escapeXml(text)}</t></is></c>`;
     }).join("");
     return `<row r="${rowIndex + 1}">${cells}</row>`;
   }).join("");
-  const columns = textColumns.length ? `<cols>${textColumns.map(index => `<col min="${index + 1}" max="${index + 1}" style="3" width="24" customWidth="1"/>`).join("")}</cols>` : "";
+  const widths:number[]=[];
+  if(fitColumns) for(const row of rows) row.forEach((cell,index)=>{
+    const text=cell===null?'':typeof cell==='object'?String(cell.value):String(cell);
+    widths[index]=Math.max(widths[index]??12,Math.min(72,displayWidth(text)+2));
+  });
+  const columns = fitColumns ? `<cols>${widths.map((width,index)=>`<col min="${index+1}" max="${index+1}" width="${width}" customWidth="1"${textColumns.includes(index)?' style="3"':''}/>`).join('')}</cols>`
+    : textColumns.length ? `<cols>${textColumns.map(index => `<col min="${index + 1}" max="${index + 1}" style="3" width="24" customWidth="1"/>`).join("")}</cols>` : "";
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>${columns}<sheetData>${data}</sheetData></worksheet>`;
 };
 
@@ -113,6 +120,8 @@ export function buildWorkbook(sheets: readonly WorkbookSheet[]): Buffer {
   if (sheets.length === 0 || sheets.length > 20) throw new Error("Workbook requires between 1 and 20 sheets");
   const thirdPrecision = sheets.some(sheet => sheet.rows.some(row => row.some(cell => cell !== null && typeof cell === "object" && cell.numberFormat === "business3")));
   const textStyle = thirdPrecision || sheets.some(sheet => sheet.textColumns?.length);
+  const wrapText=sheets.some(sheet=>sheet.fitColumns);
+  const wrapStyle=thirdPrecision?5:textStyle?4:3;
   const used = new Set<string>();
   const names = sheets.map((sheet) => safeSheetName(sheet.name, used));
   const overrides = sheets.map((_, index) => `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("");
@@ -123,7 +132,7 @@ export function buildWorkbook(sheets: readonly WorkbookSheet[]): Buffer {
     { name: "_rels/.rels", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
     { name: "xl/workbook.xml", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${workbookSheets}</sheets></workbook>` },
     { name: "xl/_rels/workbook.xml.rels", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relationships}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
-    { name: "xl/styles.xml", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="${thirdPrecision ? 3 : 2}"><numFmt numFmtId="164" formatCode="#,##0.##"/><numFmt numFmtId="165" formatCode="#,##0.########"/>${thirdPrecision ? '<numFmt numFmtId="166" formatCode="#,##0.###"/>' : ""}</numFmts><fonts count="1"><font><sz val="11"/><name val="Noto Sans SC"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="${thirdPrecision ? 5 : textStyle ? 4 : 3}"><xf xfId="0"/><xf xfId="0" numFmtId="164" applyNumberFormat="1"/><xf xfId="0" numFmtId="165" applyNumberFormat="1"/>${textStyle ? '<xf xfId="0" numFmtId="49" applyNumberFormat="1"/>' : ""}${thirdPrecision ? '<xf xfId="0" numFmtId="166" applyNumberFormat="1"/>' : ""}</cellXfs></styleSheet>` },
-    ...sheets.map((sheet, index) => ({ name: `xl/worksheets/sheet${index + 1}.xml`, content: worksheet(sheet.rows, sheet.textColumns) })),
+    { name: "xl/styles.xml", content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="${thirdPrecision ? 3 : 2}"><numFmt numFmtId="164" formatCode="#,##0.##"/><numFmt numFmtId="165" formatCode="#,##0.########"/>${thirdPrecision ? '<numFmt numFmtId="166" formatCode="#,##0.###"/>' : ""}</numFmts><fonts count="1"><font><sz val="11"/><name val="Noto Sans SC"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="${wrapStyle+(wrapText?1:0)}"><xf xfId="0"/><xf xfId="0" numFmtId="164" applyNumberFormat="1"/><xf xfId="0" numFmtId="165" applyNumberFormat="1"/>${textStyle ? '<xf xfId="0" numFmtId="49" applyNumberFormat="1"/>' : ""}${thirdPrecision ? '<xf xfId="0" numFmtId="166" applyNumberFormat="1"/>' : ""}${wrapText ? '<xf xfId="0" numFmtId="49" applyNumberFormat="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>' : ""}</cellXfs></styleSheet>` },
+    ...sheets.map((sheet, index) => ({ name: `xl/worksheets/sheet${index + 1}.xml`, content: worksheet(sheet.rows, sheet.textColumns, sheet.fitColumns, wrapStyle) })),
   ]);
 }

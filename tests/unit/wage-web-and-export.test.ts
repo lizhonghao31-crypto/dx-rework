@@ -3,8 +3,22 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 import { buildWageWorkbook } from "../../apps/api/src/wages/wage-export-service.js";
+import { unzipSync } from 'fflate';
+import { buildWorkbook, workbookNumberCell } from '../../apps/api/src/reporting/xlsx-workbook.js';
 
 describe("wage web and xlsx delivery", () => {
+  it('fits Chinese labels and long values while preserving numeric formats and text safety',()=>{
+    const sha='abcdef0123'.repeat(4),long='超长工资来源及返工款号说明'.repeat(8);
+    const content=buildWorkbook([{name:'工资明细',fitColumns:true,rows:[['工人姓名快照','返工单号','版本SHA','工资金额','说明'],['张师傅姓名', '00012345678901234567890',sha,workbookNumberCell('12.34000000'),long]]}]);
+    const files=unzipSync(content),sheet=Buffer.from(files['xl/worksheets/sheet1.xml']!).toString(),styles=Buffer.from(files['xl/styles.xml']!).toString();
+    expect(sheet).toContain('min="1" max="1" width="14"');
+    expect(sheet).toContain('min="3" max="3" width="42"');
+    expect(sheet).toContain('min="5" max="5" width="72"');
+    expect(sheet).toContain('<c r="D2" s="1" t="n"><v>12.34000000</v></c>');
+    expect(sheet).toContain('00012345678901234567890');expect(sheet).toContain(long);
+    expect(styles).toContain('wrapText="1"');expect(styles).toContain('formatCode="#,##0.##"');
+    for(const xml of Object.values(unzipSync(buildWageWorkbook([['工资明细']], [['人员汇总']]))).map(bytes=>Buffer.from(bytes).toString()).filter(xml=>xml.includes('<worksheet ')))expect(xml).toContain('<cols>');
+  });
   it("builds a real deterministic XLSX zip with two worksheets", () => {
     const details = [["未锁定预览"], ["工资月份", "工资金额"], ["2026-07", "1.00"]];
     const summary = [["工人", "工资金额"], ["Worker", "1.00"]];
