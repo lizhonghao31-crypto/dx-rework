@@ -1,7 +1,10 @@
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {assertVersion} from './acceptance-update-policy.mjs';
-const [candidate]=process.argv.slice(2);
+const [candidate,productionReceipt]=process.argv.slice(2);
+if(!candidate||!productionReceipt||process.argv.length!==4)throw Error('Candidate and pinned production receipt are required');
 const expected=JSON.parse(await readFile(`${candidate}/api/release-manifest.json`,'utf8'));
 const frontend=JSON.parse(await readFile(`${candidate}/frontend/release-manifest.json`,'utf8'));
 assertVersion(frontend,expected);
@@ -29,5 +32,6 @@ for(const asset of new Set(assets)) {
   const remote=Buffer.from(await (await get(origin+asset)).arrayBuffer());
   if(hash(local)!==hash(remote))throw Error(`Public static asset mismatch: ${relative}`);
 }
-await get('http://127.0.0.1:3201/health/ready');
-process.stdout.write(JSON.stringify({status:'verified',gitSha:expected.gitSha,schema:expected.schemaVersion,production_3201:'ready'})+'\n');
+const helper=fileURLToPath(new URL('./production-runtime-health.py',import.meta.url));
+const production=JSON.parse(execFileSync('python3',[helper,'check','--receipt',productionReceipt],{encoding:'utf8',timeout:12000,stdio:['ignore','pipe','pipe']}));
+process.stdout.write(JSON.stringify({status:'verified',gitSha:expected.gitSha,schema:expected.schemaVersion,production_port:production.port,production_sha:production.sha,production:'ready'})+'\n');

@@ -126,7 +126,7 @@ GitHub Actions 是验收层，不是开发 scratchpad。
 - 任何轻量更新都必须保持运行代码、数据库 schema 与版本标识一致，不能只改显示版本号。
 - **Acceptance Lab 唯一操作手册：`docs/operations/acceptance-lab-runbook-v1.0.md`。**进入A1/A2/A3/A4验收前必须先读该文件；不得重新发明Runner/SSH/tar传输链路、不得重复ENV初始化、不得把控制码错误当成部署错误。
 - A1首次canonical切换完成后，后续批次只走“候选准备 → Acceptance数据库一次必要备份（仅存在migration时）→ 本机候选部署 → 公网技术验证 → Acceptance Lab业务验收”；**不再重复Nginx首次切换、旧root 3202清理、HBA/用户/目录初始化。**
-- 当前Acceptance固定边界：生产API `127.0.0.1:3201` 不动；Acceptance API `127.0.0.1:3202`；独立DB `dx_rework_acceptance`；运行用户 `dxacceptance`；canonical root `/opt/dx-rework-acceptance`；公网入口 `https://staging-api.dxerp.org.cn/acceptance`。
+- 当前Acceptance固定边界：生产活动API由已安装main双槽工具的稳定、可信 `active.json` 标识（`127.0.0.1:3201` 或 `127.0.0.1:3203`），Acceptance操作不修改生产槽或路由；Acceptance API `127.0.0.1:3202`；独立DB `dx_rework_acceptance`；运行用户 `dxacceptance`；canonical root `/opt/dx-rework-acceptance`；公网入口 `https://staging-api.dxerp.org.cn/acceptance`。
 - Acceptance控制码是**5分钟、一次性**凭证；复制不完整、过期或已使用只需重新生成控制码，**不得因此重启API、重跑migration或重做部署**；凭证不得粘贴进聊天、PR、Issue、日志或文档。
 
 ## 11. 高风险红线
