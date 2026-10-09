@@ -129,7 +129,8 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     return {child,order,todo};
   };
   it("identifies both new and overdue own finance child todos without mother, sibling PO or budget access",async()=>{
-    const people=await operators(),f=await financeNotice(people.payables,"TEST-FIX02-PS-BLUE"),notices=new DigitalProductionNotificationService(database),policy=new DigitalProductionAccessPolicy(database);
+    const people=await operators(),f=await financeNotice(people.payables,"TEST-FIX02-PS-BLUE"),readerPool=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`,max:1}),notices=new DigitalProductionNotificationService(readerPool),policy=new DigitalProductionAccessPolicy(database);
+    try {
     expect(await policy.allowed(people.payables,"order",f.order.productionOrderId,"technical")).toBe(false);
     expect(await policy.allowed(people.payables,"order",f.order.productionOrderId,"budget")).toBe(false);
     expect((await service.getForActor(people.payables,f.todo.todoId)).orderContext?.styleNo).toBe("TEST-FIX02-PS-BLUE");
@@ -137,7 +138,10 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     const before=await service.getForActor(people.payables,f.todo.todoId);await runOverdueChildren(notices);
     const seen=[];
     for(let i=0;i<2;i++){
-      const notice=(await notices.claim(people.payables,true)).notification!;
+      // A borrowed pool query here would deadlock max=1 (or a saturated claim pool).
+      const guard=vi.spyOn(readerPool,"query").mockImplementation(()=>{throw new Error("Claim child reads must use the held transaction client");});
+      let notice;
+      try{notice=(await notices.claim(people.payables)).notification!;}finally{guard.mockRestore();}
       expect(notice.route).toMatchObject({routeName:"sourcing_detail",entityId:f.child,todoId:f.todo.todoId});
       expect(notice.context).toEqual({styleNo:"TEST-FIX02-PS-BLUE",orderId:null,colors:[],poNumbers:[]});
       expect(JSON.stringify(notice)).not.toMatch(/PRIVATE|budget|price|supplier|customer/i);
@@ -149,6 +153,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     await expect(policy.assert(people.payables,"order",f.order.productionOrderId,"technical")).rejects.toMatchObject({statusCode:404});
     await expect(policy.assert(people.payables,"order",f.order.productionOrderId,"budget")).rejects.toMatchObject({statusCode:404});
     expect(await policy.allowed(people.payables,"order",f.order.productionOrderId,"technical")).toBe(false);
+    }finally{await readerPool.end();}
   });
   it("keeps child identities attached to their own queued routes and rejects a mismatched business route",async()=>{
     const people=await operators(),a=await financeNotice(people.payables,"TEST-BACKGROUND-PR0506"),b=await financeNotice(people.payables,"TEST-ACTUAL-FIX02"),notices=new DigitalProductionNotificationService(database);

@@ -259,12 +259,15 @@ export class DigitalProductionNotificationService {
     }
     if(ownChildResource&&contextTarget&&!parentReadable){
       if((await database.query("SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2 AND state<>'active'",[contextTarget.kind,contextTarget.id])).rowCount)return null;
+      // These read-only entry methods use query only. Bind them to the current
+      // transaction client so a claim never borrows another pool connection.
+      const childDatabase={query:database.query.bind(database)} as Pool;
       let styleNo:string|null;
       try{
-        if(ownChildResource.kind==="sourcing")styleNo=(await new SourcingService(this.database).getCase({...actor,authorizationCapability:"sourcing:view"},ownChildResource.id)).styleNo;
-        else if(ownChildResource.kind==="production")styleNo=(await new SourcingProductionService(this.database).get(actor,ownChildResource.id)).firstStyleNo;
+        if(ownChildResource.kind==="sourcing")styleNo=(await new SourcingService(childDatabase).getCase({...actor,authorizationCapability:"sourcing:view"},ownChildResource.id)).styleNo;
+        else if(ownChildResource.kind==="production")styleNo=(await new SourcingProductionService(childDatabase).get(actor,ownChildResource.id)).firstStyleNo;
         else {
-          const child=await new ReworkBusinessDetailService(this.database).get(actor,ownChildResource.id);
+          const child=await new ReworkBusinessDetailService(childDatabase).get(actor,ownChildResource.id);
           if(["cancelled","deleted"].includes(child.status))return null;
           styleNo=child.styleNo;
         }

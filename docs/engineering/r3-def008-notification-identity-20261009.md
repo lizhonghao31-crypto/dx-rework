@@ -22,6 +22,8 @@
 
 ## 验证范围与证据等级
 
+子阅读的三个既有只读入口使用当前 query/事务 client，不能在 claim 持有连接时再次借用连接池。单连接原生回归在补丁前明确失败于二次 pool.query；修复后同一 max=1 条件下可正常取得款号并确认待办。该检查也防止并发 claim 占满连接池时互相等待，不改变其它子模块服务写入行为。
+
 | 角色 / route | 最小身份与原对象 | 能进入目标 | 确认提示≠业务完成 | 越权拒绝 | 证据等级 |
 | --- | --- | --- | --- | --- | --- |
 | 工厂应付会计 / sourcing_detail | 新待办、超时均为各自子款号；两单队列不借用背景页；错绑拒绝 | 既有 SourcingService.getCase 实际通过 | 原 TodoResponse（含状态、时钟）确认前后相同 | 外人、缺 capability、失角色、母单 technical/budget、兄弟 PO、information、暂停 | 完整 schema 的原生隔离 PostgreSQL 回归；父仅提供旧版真实 UAT，修复尚未部署 |
