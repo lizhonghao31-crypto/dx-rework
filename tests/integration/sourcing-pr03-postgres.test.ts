@@ -16,6 +16,7 @@ import { exerciseInstructions } from "../helpers/production-instruction-fixture.
 import { DigitalDevelopmentService } from "../../apps/api/src/production-platform/development-service.js";
 import { DevelopmentRoundService } from "../../apps/api/src/production-platform/development-round-service.js";
 import { DevelopmentExecutionService } from "../../apps/api/src/production-platform/development-execution-service.js";
+import { PatternRoomOrderService } from "../../apps/api/src/pattern-room/order-service.js";
 import { unzipSync } from "fflate";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { migrationExecutionSql } from "../../scripts/deploy/migration-execution-compatibility.mjs";
@@ -4751,6 +4752,48 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(after.todos.find(todo => todo.category === "sourcing_ie_quote")?.status).toBe("completed");
     await expect(currentService.quoteIePrice(ieActor(), id, prices, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
     expect(await cycleSnapshot(id)).toEqual(after);
+  });
+
+  it("rejects linked original pattern rework after real cutting before adding a round todo audit or wage",async()=>{
+    const fixture=await budgetFixture(),root=rootActor();
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{stopAtReady:true}))!;
+    const native=new PatternRoomOrderService(database,new TodoProjectionService(new TodoService(database)),{ordersEnabled:true});
+    const execution=new DevelopmentExecutionService(database,true,native);
+    const existingRoot=(await database.query('SELECT user_id FROM owner_bootstrap_consumptions WHERE singleton')).rows[0];
+    const nativeRootId=existingRoot?.user_id??randomUUID();
+    if(!existingRoot){
+      await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST native Root',true)",[nativeRootId]);
+      await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','corp',$3,$3,true,true,CURRENT_TIMESTAMP)",[randomUUID(),nativeRootId,`ding-${nativeRootId}`]);
+      await database.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) VALUES(true,$1,$2,'corp')",[nativeRootId,`ding-${nativeRootId}`]);
+    }
+    const nativeRoot={...root,actorId:nativeRootId,actorRoles:(await database.query("SELECT access_authorized_actor_roles($1,'master_data:manage') AS roles",[nativeRootId])).rows[0].roles};
+    const supervisorId=randomUUID();
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST native supervisor',true)",[supervisorId]);
+    await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','corp',$3,$3,true,true,CURRENT_TIMESTAMP)",[randomUUID(),supervisorId,`ding-${supervisorId}`]);
+    await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
+    try {await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'pattern_room_supervisor',$3,'isolated native role fixture')",[randomUUID(),supervisorId,nativeRootId]);}
+    finally {await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation");}
+    const price=(await database.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0];
+    const linked=await execution.patternOrder({...fixture.designer,authorizationCapabilities:[...fixture.designer.authorizationCapabilities!,'pattern_room:orders:view']},ready.sourceId,{categoryId:price.price_id,priceVersion:price.version},randomUUID());
+    const existingPerson=(await database.query('SELECT person_id AS "personId" FROM business_people WHERE app_user_id=$1 AND active',[nativeRootId])).rows[0];
+    const person=existingPerson??await craftService.createPerson({...nativeRoot,authorizationCapability:'master_data:manage'},{personType:'internal',appUserId:nativeRootId,displayName:'TEST R3 native worker',aliases:[],reason:'隔离原单返工回归'});
+    let order=await native.get(nativeRoot,linked.orderId);
+    order=await native.assign(nativeRoot,order.orderId,{roundId:order.currentRoundId,version:order.version,personId:person.personId},randomUUID());
+    order=await native.complete(nativeRoot,order.orderId,{roundId:order.currentRoundId,version:order.version},randomUUID());
+    expect(order.actions.rework).toBe(true);expect(order.reworkBlockedReason).toBeNull();
+    const before=async()=>({order:(await database.query('SELECT * FROM pattern_room_orders WHERE order_id=$1',[order.orderId])).rows,
+      rounds:(await database.query('SELECT * FROM pattern_room_rounds WHERE order_id=$1 ORDER BY round_id',[order.orderId])).rows,
+      wages:(await database.query('SELECT * FROM pattern_room_segments WHERE round_id=$1 ORDER BY segment_id',[order.currentRoundId])).rows,
+      todos:(await database.query('SELECT * FROM rework_todos WHERE entity_id=$1 ORDER BY todo_id',[order.orderId])).rows,
+      audits:(await database.query('SELECT * FROM operation_events WHERE entity_id=$1 ORDER BY event_id',[order.orderId])).rows});
+    const evidence=await readyCuttingSheet(root.actorId);
+    await ready.cutting.record({...root,authorizationCapability:'cutting:records:create'},ready.cuttingId,{pieceCount:1,actualCutCount:137,attachmentIds:[evidence]},randomUUID());
+    const frozen=await before(),input={roundId:order.currentRoundId,version:order.version,reason:'客户开裁后修改',reasonCategory:'other'};
+    for(const actor of [nativeRoot,{...fixture.designer,authorizationCapability:'pattern_room:orders:rework',authorizationCapabilities:['pattern_room:orders:view','pattern_room:orders:rework']}]){
+      const view=await native.get(actor,order.orderId);expect(view.actions.rework).toBe(false);expect(view.reworkBlockedReason).toContain('已开始实裁');
+      await expect(native.requestRework(actor,order.orderId,input,randomUUID())).rejects.toMatchObject({statusCode:409,message:expect.stringContaining('已开始实裁')});
+    }
+    expect(await before()).toEqual(frozen);
   });
 
 });

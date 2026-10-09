@@ -187,6 +187,7 @@ function PatternRoomDetailWorkspace({ orderId }: { orderId: string }) {
         </>}
       </div>}
       </section></Surface>
+      {currentWorkspace && order.reworkBlockedReason ? <p role="status">{order.reworkBlockedReason}</p> : null}
       {editing && !staleRound ? <PatternOrderForm key={order.version} order={order} onCancel={() => setEditing(false)} onSaved={updated => { showUpdatedOrder(updated); setEditing(false); }} /> : null}
       {order.historicalView && displayRound ? <section className="pattern-history-section" aria-label="本节点执行明细">
         <PatternRoundRecord round={displayRound} misc={order.kind === "misc"} omitSummary />

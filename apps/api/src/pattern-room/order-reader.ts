@@ -4,6 +4,7 @@ import type { Pool, PoolClient } from "pg";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { authorizePatternOrder, canReadAllPatternOrders, canReadAllPatternTechnicalOrders, isPatternRoot, patternActorCapabilities, patternOrderScopeSql, patternOrderScopeValues } from "./order-authority.js";
+import { patternReworkCutBlocked, PATTERN_REWORK_CUT_BLOCK } from "./order-rework-boundary.js";
 
 export type PatternOrderRow = {
   order_id: string; order_no: string; kind: "pattern" | "misc"; task_name: string | null; creator_role: "sample_designer" | "order_merchandiser"; status: PatternOrderSummary["status"]; version: number; current_round_id: string;
@@ -94,7 +95,10 @@ export class PatternOrderReader {
       const currentRound = rounds.find(round => round.round_id === order.current_round_id);
       const available = (capability: PatternOrderCapability) => canUsePatternOrder(effective.actorRoles, patternActorCapabilities(effective), capability);
       const creator = isPatternRoot(effective) || order.created_by === effective.actorId;
+      const mayRework = order.kind === "pattern" && ["pending_confirmation", "completed"].includes(order.status) && !!currentRound?.completed_at && available("pattern_room:orders:rework") && (creator || effective.actorRoles.includes("pattern_room_supervisor"));
+      const reworkCutBlocked = mayRework && await patternReworkCutBlocked(client, orderId);
       const detail = PatternOrderDetailSchema.parse({ ...patternSummary(order), currentRoundId: order.current_round_id, customer: order.customer, sizeColor: order.size_color,
+        reworkBlockedReason: reworkCutBlocked ? PATTERN_REWORK_CUT_BLOCK : null,
         referenceStyleNo: order.reference_style_no, variant: order.variant, note: allMaterials || currentWorkerAccess ? order.note : null,
         rounds: rounds.filter(round => allCosts || round.round_id === order.current_round_id || segments.some(segment => segment.round_id === round.round_id && segment.worker_user_id === effective.actorId)).map(round => ({
           roundId: round.round_id, index: round.round_index, roundType: round.round_type, requestedBy: round.requested_by, requestReason: canReadRoundMaterials(round.round_id) ? round.request_reason : null, status: round.status, categoryName: round.category_name, unit: round.unit, quantity: round.quantity,
@@ -114,7 +118,7 @@ export class PatternOrderReader {
           handoff: order.status === "pending_confirmation" && creator && available(order.kind === "pattern" ? "pattern_room:orders:handoff" : "pattern_room:misc:confirm"),
           edit: ["pending_assignment", "in_progress"].includes(order.status) && creator && available(order.kind === "pattern" ? "pattern_room:orders:edit" : "pattern_room:misc:edit"),
           hours: order.kind === "misc" && ["in_progress", "pending_confirmation", "completed"].includes(order.status) && available("pattern_room:orders:hours") && !!currentRound && !(currentRound.completed_at !== null && currentRound.actual_hours !== null),
-          rework: order.kind === "pattern" && ["pending_confirmation", "completed"].includes(order.status) && !!currentRound?.completed_at && available("pattern_room:orders:rework") && (creator || effective.actorRoles.includes("pattern_room_supervisor")),
+          rework: mayRework && !reworkCutBlocked,
           transfer: order.status === "in_progress" && available("pattern_room:orders:transfer"),
           cancel: available("pattern_room:orders:cancel") && (order.status === "pending_assignment" ? isPatternRoot(effective) || currentRound?.requested_by === effective.actorId : ["in_progress", "pending_confirmation"].includes(order.status) && (isPatternRoot(effective) || effective.actorRoles.includes("pattern_room_supervisor"))),
           cancelFees: order.kind === "pattern" && order.status === "cancelled" && creator && available("pattern_room:orders:cancel_fees") && rounds.some(round => round.cancelled_amount !== null && /[1-9]/.test(round.cancelled_amount) && round.fee_confirmed_at === null && round.handed_over_at === null) },

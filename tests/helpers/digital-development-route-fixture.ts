@@ -1,4 +1,5 @@
 import {DigitalProductionTaskService} from "../../apps/api/src/production-platform/task-service.js";
+import {DevelopmentRoundService} from "../../apps/api/src/production-platform/development-round-service.js";
 import {exerciseDevelopmentRounds} from "./digital-development-round-fixture.js";
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
@@ -31,7 +32,7 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
     await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'工艺板.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[boardId,`p07/${boardId}`,'b'.repeat(64),root.actorId]);
     await execution.recordUploadPurpose(root,sourceId,boardId,'工艺开发板');
   }
-  const task=async(kind:string)=>(await execution.read(root,sourceId)).tasks.find(item=>item.taskKind===kind)!;
+  const task=async(kind:string)=>(await execution.read(root,sourceId)).tasks.filter(item=>item.taskKind===kind).at(-1)!;
   const work=async(kind:string)=>execution.complete(root,sourceId,{taskId:(await task(kind)).taskId,note:'完成并交出',attachmentIds:kind==='development_pattern'&&craft!=='无'?[boardId]:[]},randomUUID());
   const route=async(kind:string,nextAssigneeId:string|null=null)=>{const current=await task(kind);return execution.route(root,sourceId,{craftExecution:kind==='development_craft_dispatch'?'内部':null,taskId:current.taskId,result:'通过',note:'业务验收',nextAssigneeId,sentDate:kind==='development_shipping'?'2026-09-30':null,trackingNo:kind==='development_shipping'?'P07-TEST-001':null},randomUUID());};
   await execution.check(root,sourceId,{taskId:sheet.taskId!,result:'通过',note:'核配',items:[{materialId:mainId,physical:true,quantity:true,color:true,specification:true}]},randomUUID());
@@ -91,6 +92,15 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
     await expect(native.handoff(root,rework.orderId,{roundId:rework.currentRoundId,version:rework.version},randomUUID())).rejects.toMatchObject({statusCode:409});
     expect((await db.query('SELECT count(*)::int n FROM pattern_room_segments WHERE round_id=$1 AND wage_eligible_at IS NOT NULL',[rework.currentRoundId])).rows[0].n).toBe(0);
     expect((await native.get(root,rework.orderId)).status).toBe('pending_confirmation');
+    const rounds=new DevelopmentRoundService(db,true);
+    const revision={basedOnRound:1,document,origin:'内部发现' as const,customerComment:'',internalProblem:'车板返工复核',explanation:'未开裁原单返工',categories:['车缝' as const],affectedNodes:['车板' as const],outputKind:'整件样板' as const};
+    const saved=await rounds.save(root,sourceId,{expectedDraftVersion:0,revision},randomUUID());
+    await rounds.publish(root,sourceId,{expectedDraftVersion:saved.draftVersion,basedOnRound:1},randomUUID());
+    for(const kind of ['development_sewing_transfer','development_sewing','development_tail_check'])await route(kind);
+    expect((await db.query('SELECT count(*)::int n FROM pattern_room_segments WHERE round_id=$1 AND wage_eligible_at IS NOT NULL',[rework.currentRoundId])).rows[0].n).toBe(0);
+    await route('development_confirmation');
+    expect((await db.query('SELECT amount::numeric(12,2)::text,wage_eligible_at IS NOT NULL AS eligible FROM pattern_room_segments WHERE round_id=$1',[rework.currentRoundId])).rows).toEqual([{amount:'10.00',eligible:true}]);
+    expect((await db.query('SELECT count(*)::int n FROM pattern_room_segments WHERE round_id=$1 AND wage_eligible_at IS NOT NULL',[order.currentRoundId])).rows[0].n).toBe(1);
   }
 
  }
