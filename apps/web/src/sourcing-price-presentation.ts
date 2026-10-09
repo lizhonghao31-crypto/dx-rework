@@ -1,10 +1,19 @@
-import { SourcingNewUnitPriceSchema, type SourcingCaseSummary } from "@dx-rework/contracts";
+import { calculateSourcingLinesTotalExact, SourcingNewUnitPriceSchema, type SourcingCaseSummary } from "@dx-rework/contracts";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 
 export const isNewSourcingPrice = (value: string): boolean => SourcingNewUnitPriceSchema.safeParse(value).success;
 
 export const newSourcingPriceDisplay = (value: string): string =>
   isNewSourcingPrice(value) ? formatBusinessDecimal(value) : value;
+
+/** Factory changes retain their existing four-place price, rounding each remaining line to cents. */
+export function factoryChangeTotalPreview(unitPrice: string, quantities: readonly number[]): string {
+  try {
+    return calculateSourcingLinesTotalExact(quantities.map(quantity=>({unitPrice,quantity})));
+  } catch {
+    return "—";
+  }
+}
 
 /** Presentation-only hint; authoritative validation remains in the existing service. */
 export function sourcingDecisionNeedsReason(current: readonly { position: number; unitPrice: string }[], quoted: readonly { position: number; unitPrice: string }[]): boolean {
