@@ -14,6 +14,7 @@ import { exerciseFinanceOrderQueries } from "./helpers/finance-order-query-scena
 import { MemberModuleBindingService } from "../../apps/api/src/access/member-module-binding-service.js";
 import "./member-module-policy-postgres.cases.js";
 import { exerciseAtomicOverDeduction } from "./helpers/atomic-deduction-scenario.js";
+import { exerciseExternalCaseNotificationScope } from "./helpers/external-case-notification-scope.js";
 import { registerManagementReportingRoutes } from "../../apps/api/src/reporting/management-reporting-routes.js";
 import { ReportExportService } from "../../apps/api/src/reporting/report-export-service.js";
 import { PATTERN_ORDER_ROLES } from "@dx-rework/contracts/pattern-orders";
@@ -2190,9 +2191,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       expect((await app.inject({url:`/tools/attachments/${voucherIds[1]}/download`})).statusCode).toBe(200);
       expect(grants).toBe(2);
     } finally {await app.close();}
-
-
-
+    // Link after legacy DingTalk assertions: digital children correctly suppress external delivery.
+    await exerciseExternalCaseNotificationScope({database,creator:actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:create"),primaryMerchandiserId:ids.merchandiser,reworkOrderId:submitted.value.reworkOrderId,processingCaseId,fabricCaseId,
+      factoryActor:factoryPayables("external_responsibility:view"),fabricActor:fabricPayables("external_responsibility:view")});
   });
 
   it("reads pattern people filters and exception labels on the current schema without widening worker scope", async () => {
