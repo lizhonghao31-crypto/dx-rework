@@ -14,6 +14,12 @@ if [[ "$command" == update || "$command" == diagnose ]]; then
   [[ -z "${2:-}" || "$2" =~ ^[0-9a-f]{40}$ ]] || exit 64
 fi
 [[ "$(id -u)" == 0 ]] || { echo 'Run this command as root.' >&2; exit 1; }
+# The same lock used by main updates pins production throughout installation/update.
+# Open read-only: this controller never changes production lock data or generations.
+production_lock=/opt/dx-rework/locks/release.lock
+[[ -f "$production_lock" && ! -L "$production_lock" ]] || { echo 'Production release lock is unavailable.' >&2; exit 1; }
+exec 7<"$production_lock"
+flock -n 7 || { echo 'Production release work is in progress; Acceptance was not changed.' >&2; exit 1; }
 if [[ "$command" == install ]]; then
   [[ $# == 1 ]] || exit 64
   exec 8>/run/lock/dx-acceptance-update.lock
@@ -26,7 +32,29 @@ if [[ "$command" == install ]]; then
   tools=/opt/dx-rework-acceptance-tools
   install -d -o root -g root -m 0755 "$tools"
   staging="$(mktemp -d "$tools/.install.XXXXXX")"
-  trap '[[ -z "${staging:-}" ]] || rm -rf -- "$staging"' EXIT
+  entry_backup=''
+  entry_changes=false
+  cleanup_install() {
+    local rc=$? name restored rollback_failed=false
+    if (( rc )) && [[ "$entry_changes" == true && -n "$entry_backup" ]]; then
+      for name in dx-acceptance dx-rework-update; do
+        if [[ -f "$entry_backup/$name" ]]; then
+          restored="$(mktemp "/usr/local/bin/.$name.restore.XXXXXX")" || { rollback_failed=true; continue; }
+          if install -m 0755 "$entry_backup/$name" "$restored" && mv -Tf "$restored" "/usr/local/bin/$name"; then :; else rollback_failed=true; fi
+        elif [[ -f "$entry_backup/$name.absent" ]]; then
+          rm -f -- "/usr/local/bin/$name" || rollback_failed=true
+        fi
+      done
+      if [[ "$rollback_failed" == true ]]; then
+        echo "ENTRY_ROLLBACK_REQUIRED backup=$entry_backup; no production launcher was changed." >&2
+      else
+        echo "ENTRY_INSTALL_FAILED_ROLLED_BACK backup=$entry_backup" >&2
+      fi
+    fi
+    [[ -z "${staging:-}" ]] || rm -rf -- "$staging"
+    return "$rc"
+  }
+  trap cleanup_install EXIT
   runuser -u "$owner" -- git -C "$tool_root" archive "$tool_sha" | tar -x -C "$staging"
   printf '%s\n' "$tool_sha" > "$staging/TOOL_SHA"
   chown -R root:root "$staging"
@@ -40,6 +68,19 @@ if [[ "$command" == install ]]; then
     mv "$staging" "$tools/$tool_sha"
   fi
   staging=''
+  entry_backup="$(mktemp -d "$tools/.entry-backup-$tool_sha.XXXXXX")"
+  chmod 0700 "$entry_backup"
+  for name in dx-acceptance dx-rework-update; do
+    existing="/usr/local/bin/$name"
+    [[ ! -L "$existing" ]] || { echo 'Unsafe existing Acceptance entry; installation refused.' >&2; exit 1; }
+    if [[ -e "$existing" ]]; then
+      [[ -f "$existing" && "$(stat -c %U "$existing")" == root && "$(stat -c %a "$existing")" == 755 ]] || { echo 'Unsafe existing Acceptance entry; installation refused.' >&2; exit 1; }
+      cp -p -- "$existing" "$entry_backup/$name"
+    else
+      printf 'absent\n' > "$entry_backup/$name.absent"
+    fi
+  done
+  entry_changes=true
   launcher="$(mktemp /usr/local/bin/.dx-acceptance.XXXXXX)"
   printf '#!/usr/bin/env bash\nexec bash %q "$@"\n' "$tools/$tool_sha/scripts/dx-acceptance.sh" > "$launcher"
   chmod 0755 "$launcher"
@@ -48,6 +89,8 @@ if [[ "$command" == install ]]; then
   printf '#!/usr/bin/env bash\nexec bash %q "$@"\n' "$tools/$tool_sha/scripts/dx-update.sh" > "$launcher"
   chmod 0755 "$launcher"
   mv -Tf "$launcher" /usr/local/bin/dx-rework-update
+  entry_changes=false
+  echo "ACCEPTANCE_ENTRY_BACKUP=$entry_backup"
   echo 'Installed. Run: dx-acceptance update'
   exit 0
 fi
@@ -64,7 +107,7 @@ flock -n 8 || { echo 'Another Acceptance update is running.' >&2; exit 1; }
 git_source() { runuser -u dxrework -- git -C "$src" "$@"; }
 origin="$(git_source remote get-url origin)"
 [[ "$origin" == git@github.com:lizhonghao31-crypto/dx-rework.git || "$origin" == https://github.com/lizhonghao31-crypto/dx-rework.git ]]
-curl --max-time 15 -fsS http://127.0.0.1:3201/health/ready >/dev/null
+production_guard="$(python3 "$tool_root/scripts/deploy/production-runtime-health.py" check)"
 nginx -t
 git_source fetch --quiet origin refs/heads/release/digital-production-v1:refs/remotes/origin/release/digital-production-v1
 sha="${requested:-$(git_source rev-parse refs/remotes/origin/release/digital-production-v1)}"
@@ -103,6 +146,9 @@ if [[ "$command" == update && "$sha" != "$(cat "$tool_root/TOOL_SHA")" ]]; then
   tool_root="$target"
   echo "ACCEPTANCE_TOOL_REFRESH_OK sha=$sha"
 fi
+# Root-owned, immutable identity shared with the unprivileged verifier.
+printf '%s\n' "$production_guard" > "$snapshot/production-runtime.json"
+chmod 0444 "$snapshot/production-runtime.json"
 printf 'Tool: %s\n' "$(cat "$tool_root/TOOL_SHA")"
 if [[ "$command" == diagnose ]]; then
   # Read-only database inspection, no candidate build, backup, PM2 or migration.
@@ -141,12 +187,13 @@ exec 9>"$root/locks/release.lock"
 flock -n 9 || { echo 'Acceptance release lock is held.' >&2; exit 1; }
 worker() {
   runuser -u dxacceptance -- env -i HOME=/home/dxacceptance USER=dxacceptance PATH="$PATH" DX_REWORK_LOCK_FD=9 \
-    bash "$tool_root/scripts/deploy/update-acceptance-local.sh" "$sha" "$snapshot" "$1" "$tool_root"
+    bash "$tool_root/scripts/deploy/update-acceptance-local.sh" "$sha" "$snapshot" "$1" "$tool_root" 7<&-
 }
 maintenance() {
-  bash "$tool_root/scripts/deploy/run-acceptance-maintenance.sh" "$snapshot" "$1"
+  bash "$tool_root/scripts/deploy/run-acceptance-maintenance.sh" "$snapshot" "$1" 7<&-
 }
 source "$tool_root/scripts/deploy/acceptance-update-flow.sh"
 acceptance_update_flow
-curl --max-time 15 -fsS http://127.0.0.1:3201/health/ready >/dev/null
-echo "ACCEPTANCE_UPDATE_FINISHED sha=$sha production_3201=ready"
+production_after="$(python3 "$tool_root/scripts/deploy/production-runtime-health.py" check)"
+[[ "$production_after" == "$production_guard" ]] || { echo 'Production identity changed; Acceptance update verification failed.' >&2; exit 1; }
+echo "ACCEPTANCE_UPDATE_FINISHED sha=$sha production_ready=$production_after"

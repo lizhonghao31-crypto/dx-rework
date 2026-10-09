@@ -74,7 +74,7 @@ if [[ "$action" != prepare ]]; then
       if curl --max-time 3 -fsS http://127.0.0.1:3202/health/ready >/dev/null 2>&1; then break; fi
       sleep 1
     done
-    node_exec "$tool_root/scripts/deploy/verify-acceptance-update.mjs" "$DX_ROOT/generations/$previous"
+    node_exec "$tool_root/scripts/deploy/verify-acceptance-update.mjs" "$DX_ROOT/generations/$previous" "$source_dir/production-runtime.json"
     echo old-runtime-verified > "$evidence/phase"
     exit 0
   fi
@@ -109,7 +109,7 @@ for _ in {1..30}; do
 done
 [[ "$ready" == true ]] || die 'Acceptance readiness failed; inspect the current candidate logs'
 echo '[5/5] Verify local/public versions, HTML/assets and production health'
-node_exec "$tool_root/scripts/deploy/verify-acceptance-update.mjs" "$candidate" | tee "$evidence/verification.json"
+node_exec "$tool_root/scripts/deploy/verify-acceptance-update.mjs" "$candidate" "$source_dir/production-runtime.json" | tee "$evidence/verification.json"
 trap - ERR
 echo "Evidence: $evidence"
   echo verified > "$evidence/phase"
@@ -204,7 +204,7 @@ schema_current=false
 if node_exec scripts/deploy/database-state.mjs verify-current "$manifest" >/dev/null; then schema_current=true; fi
 next_action="$(node_exec "$policy" next-action "$previous" "$sha" "$schema_current" "$status")"
 if [[ "$next_action" == verify ]]; then
-  node_exec "$tool_root/scripts/deploy/verify-acceptance-update.mjs" "$candidate"
+  node_exec "$tool_root/scripts/deploy/verify-acceptance-update.mjs" "$candidate" "$source_dir/production-runtime.json"
   echo "Already current and healthy: $sha"
   exit 10
 fi
