@@ -8,7 +8,9 @@ import {
   SubmitProcessConfigurationSchema,
 } from "@dx-rework/contracts";
 import pg from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { ApplicationError } from "../../apps/api/src/platform/errors.js";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { ProcessConfigurationService } from "../../apps/api/src/rework/process-configuration-service.js";
@@ -17,6 +19,8 @@ import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import { ReworkV2SubmissionService } from "../../apps/api/src/rework/v2-submission-service.js";
 import { WholeOrderReviewService } from "../../apps/api/src/rework/whole-order-review-service.js";
 import { WorkReportingService } from "../../apps/api/src/rework/work-reporting-service.js";
+import { ReworkBusinessDetailService } from "../../apps/api/src/rework/rework-business-detail-service.js";
+import { OperationEventRepository } from "../../apps/api/src/tools/repositories.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
 const { Pool } = pg;
@@ -184,11 +188,22 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
       [attachmentId, `private/${attachmentId}.webp`, "a".repeat(64), ids.qc],
     );
     const receivingBatchId = randomUUID();
+    const sourceImageId=randomUUID();
+    const sourceImage=async(id:string)=>{
+      const client=await database.connect();
+      try{await client.query('BEGIN');
+        const eventId=await new OperationEventRepository().append(client,tailConfigure(),{action:'receiving.receipt.create',entityType:'receiving_batch',entityId:receivingBatchId,after:{receivingBatchId,attachmentIds:[id]}});
+        await client.query("SELECT set_config('dx_rework.receiving_event_id',$1,true),set_config('dx_rework.receiving_request_id',$2,true)",[eventId,'TEST-finishing-history']);
+        await client.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at,entity_type,entity_id) VALUES($1,$2,'TEST历史来源.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP,'receiving_batch',$5)",[id,`TEST/finishing/${id}`,'a'.repeat(64),ids.tail,receivingBatchId]);
+        await client.query('COMMIT');
+      }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+    };
     if (kind === "inhouse_finishing") {
       await database.query(
         "INSERT INTO receiving_batches(receiving_batch_id,style_no,created_by,delivery_note_quantity,document_quantity_adjustment,actual_quantity_adjustment) VALUES($1,$2,$3,100,100,100)",
         [receivingBatchId, `test-optional-tail-n05-${kind}`, ids.tail],
       );
+      await sourceImage(sourceImageId);
     }
     const draft = await initiation.createDraft(kind === "inhouse_finishing" ? tailConfigure() : qc(), {
       ...(kind === "inhouse_finishing" ? { receivingBatchId } : {}),
@@ -370,6 +385,19 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
       [draft.value.reworkOrderId, ids.ie],
     )).rows).toEqual([{ count: 1, reviewed_by_ie: true }]);
     if (kind === "inhouse_finishing") {
+      const histories=new ReworkBusinessDetailService(database),viewer=tailAssign();
+      const history=await histories.history(viewer,draft.value.reworkOrderId,'work_reporting');
+      expect(history.reworkKind).toBe('inhouse_finishing');
+      expect(history.navigation?.map(item=>item.node)).toEqual(['initiation','process_configuration','ie_review','work_reporting','whole_order_review','final_quantity_ie_review']);
+      expect(history.fields).toContainEqual({label:'款号',value:`test-optional-tail-n05-${kind}`.toUpperCase()});
+      expect(history.fields).toContainEqual({label:'加工厂',value:'本厂'});
+      expect(history.fields).toContainEqual({label:'订单数量',value:'100'});
+      expect(history.attachments.map(item=>item.attachmentId)).toEqual([sourceImageId]);
+      expect(history.page?.workTasks?.tasks[0]?.submittedQuantity).toBe(10);
+      await sourceImage(randomUUID());
+      expect((await histories.history(viewer,draft.value.reworkOrderId,'work_reporting',history.entry.id)).attachments).toEqual(history.attachments);
+      expect((await histories.history(viewer,draft.value.reworkOrderId,'initiation')).entry.label).toBe('本厂做尾');
+      await expect(histories.history(owner(),draft.value.reworkOrderId,'responsibility')).rejects.toMatchObject({statusCode:404});
       expect((await database.query(
         "SELECT count(*)::int AS count FROM rework_wage_items WHERE rework_order_id=$1",
         [draft.value.reworkOrderId],
@@ -379,5 +407,54 @@ runWithPostgres("optional tail inspection PostgreSQL closure", () => {
         [draft.value.reworkOrderId],
       )).rows).toEqual([{ count: 0 }]);
     }
+  });
+});
+
+runWithPostgres('historical sourcing image download SQL scope',()=>{
+  const schema=ownedPostgresSchema('historical_source'),admin=new pg.Pool({connectionString:databaseUrl!});
+  const db=new pg.Pool({connectionString:databaseUrl!,options:`-c search_path=${schema}`});
+  const order=randomUUID(),batch=randomUUID(),cut=randomUUID(),source=randomUUID();
+  const old=randomUUID(),replacement=randomUUID(),sibling=randomUUID(),unrelated=randomUUID();
+  const viewer:TrustedActorContext={actorId:randomUUID(),actorRoles:['tail_supervisor'],authorizationCapability:'rework:view',authorizationCapabilities:['rework:view'],requestId:randomUUID()};
+  const service=new ReworkBusinessDetailService(db);
+  const get=vi.fn(async(actor:TrustedActorContext)=>{
+    if(actor.actorId!==viewer.actorId)throw new ApplicationError('FORBIDDEN','该做尾单不可见',403);
+    return {canReadBusinessDetails:true} as Awaited<ReturnType<ReworkBusinessDetailService['get']>>;
+  });
+  beforeEach(()=>{get.mockClear();vi.spyOn(service,'get').mockImplementation(get);});
+  const binding=(attachmentId:string)=>({entityType:'sourcing_case',entityId:source,attachmentId,mimeType:'image/png'});
+  beforeAll(async()=>{
+    await admin.query(`CREATE SCHEMA ${schema}`);
+    // Native projection SQL and the real historical line function; order authorization remains the existing get boundary.
+    await db.query(`CREATE TABLE rework_orders(rework_order_id uuid,source_receiving_batch_id uuid,rework_kind text,status text);
+      CREATE TABLE receiving_batches(receiving_batch_id uuid,cutting_order_id uuid);
+      CREATE TABLE cutting_orders(cutting_order_id uuid,sourcing_case_id uuid,sourcing_line_position int);
+      CREATE TABLE sourcing_case_lines(sourcing_case_id uuid,position int,style_no text,image_attachment_id uuid);
+      CREATE TABLE sourcing_case_corrections(sourcing_case_id uuid,correction_version int,corrected_at timestamptz,lines jsonb,corrected_by uuid,operation_event_id uuid,request_id text);
+      CREATE TABLE operation_events(event_id uuid,entity_type text,entity_id text,action text,after_state jsonb,created_at timestamptz);
+      CREATE TABLE attachments(attachment_id uuid,status text,ready_at timestamptz);`);
+    const migration=await readFile('apps/api/migrations/0206_sourcing_merchandiser_corrections.sql','utf8');
+    await db.query(migration.slice(migration.indexOf('CREATE FUNCTION sourcing_case_lines_at'),migration.indexOf('CREATE OR REPLACE VIEW current_sourcing_case_lines')));
+    await db.query('CREATE VIEW current_sourcing_case_lines AS SELECT line.* FROM (SELECT DISTINCT sourcing_case_id FROM sourcing_case_lines) cases CROSS JOIN LATERAL sourcing_case_lines_at(cases.sourcing_case_id) line');
+    await db.query("INSERT INTO rework_orders VALUES($1,$2,'inhouse_finishing','completed')",[order,batch]);
+    await db.query('INSERT INTO receiving_batches VALUES($1,$2)',[batch,cut]);
+    await db.query('INSERT INTO cutting_orders VALUES($1,$2,1)',[cut,source]);
+    await db.query("INSERT INTO sourcing_case_lines VALUES($1,1,'TEST历史行',$2),($1,2,'TEST兄弟行',$3)",[source,old,sibling]);
+    await db.query("INSERT INTO attachments VALUES($1,'ready','2026-09-01'),($2,'ready','2026-09-05'),($3,'ready','2026-09-01'),($4,'ready','2026-09-01')",[old,replacement,sibling,unrelated]);
+    await db.query("INSERT INTO operation_events VALUES($1,'rework_order',$2,'rework.finishing.draft.create',$3,'2026-09-02'),($4,'rework_order',$2,'rework.finishing.submit',$5,'2026-09-03')",[randomUUID(),order,{receivingBatchId:batch,version:1},randomUUID(),{version:2}]);
+    await db.query("INSERT INTO sourcing_case_corrections VALUES($1,1,'2026-09-05',$2,NULL,NULL,'TEST historical correction')",[source,JSON.stringify([{styleNo:'TEST历史行',imageAttachmentId:replacement},{styleNo:'TEST兄弟行',imageAttachmentId:sibling}])]);
+  });
+  afterAll(async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+  it('opens the prior audited image without sourcing view capability',async()=>{
+    expect(viewer.authorizationCapabilities).not.toContain('sourcing:view');
+    expect((await db.query('SELECT image_attachment_id FROM current_sourcing_case_lines WHERE position=1')).rows[0].image_attachment_id).toBe(replacement);
+    expect(await service.canDownloadBoundAttachment(viewer,binding(old))).toBe(true);
+    expect(get).toHaveBeenLastCalledWith(viewer,order);
+  });
+  it.each([sibling,unrelated])('rejects another row or an unreferenced image %s',async id=>{
+    get.mockClear();expect(await service.canDownloadBoundAttachment(viewer,binding(id))).toBe(false);expect(get).not.toHaveBeenCalled();
+  });
+  it('keeps the existing order access refusal for the historical image',async()=>{
+    expect(await service.canDownloadBoundAttachment({...viewer,actorId:randomUUID()},binding(old))).toBe(false);
   });
 });

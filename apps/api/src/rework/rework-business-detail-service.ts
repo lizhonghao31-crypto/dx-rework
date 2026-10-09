@@ -1,4 +1,4 @@
-import { readReworkNodeHistory } from "./rework-node-history.js";
+import { canReadReworkHistoryNode, readReworkNodeHistory, reworkHistoryNode } from "./rework-node-history.js";
 import type { FinanceNodeKey } from "@dx-rework/contracts/reporting";
 import { canReadFinanceOrders, isScopedFinanceReader } from "./finance-order-access.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -819,17 +819,38 @@ export class ReworkBusinessDetailService {
     if (binding.entityType === "rework_order") {
       reworkOrderIds = [binding.entityId];
     } else if (binding.entityType === "sourcing_case" && binding.attachmentId) {
-      const source = await this.database.query<{ rework_order_id: string }>(
-        `SELECT source_order.rework_order_id FROM rework_orders source_order
+      const source = await this.database.query<{ rework_order_id: string; history_action: string | null }>(
+        `SELECT source_order.rework_order_id,NULL::text AS history_action FROM rework_orders source_order
          JOIN receiving_batches batch ON batch.receiving_batch_id=source_order.source_receiving_batch_id
          JOIN cutting_orders cutting ON cutting.cutting_order_id=batch.cutting_order_id
          JOIN current_sourcing_case_lines line ON line.sourcing_case_id=cutting.sourcing_case_id
            AND line.position=cutting.sourcing_line_position
          WHERE source_order.rework_kind='inhouse_finishing' AND source_order.status<>'deleted'
-           AND cutting.sourcing_case_id::text=$1 AND line.image_attachment_id::text=$2`,
+           AND cutting.sourcing_case_id::text=$1 AND line.image_attachment_id::text=$2
+         UNION
+         SELECT source_order.rework_order_id,history.action FROM rework_orders source_order
+         JOIN operation_events history ON (history.entity_type='rework_order' AND history.entity_id=source_order.rework_order_id::text)
+           OR history.after_state->>'reworkOrderId'=source_order.rework_order_id::text
+         JOIN LATERAL (SELECT source.after_state->>'receivingBatchId' AS batch_id FROM operation_events source
+           WHERE source.created_at<=history.created_at AND source.after_state ? 'receivingBatchId'
+             AND ((source.entity_type='rework_order' AND source.entity_id=source_order.rework_order_id::text)
+               OR source.after_state->>'reworkOrderId'=source_order.rework_order_id::text)
+           ORDER BY source.created_at DESC,COALESCE((source.after_state->>'version')::int,(source.after_state->>'orderVersion')::int,0) DESC,source.event_id DESC LIMIT 1) historical_source ON true
+         JOIN receiving_batches batch ON batch.receiving_batch_id::text=historical_source.batch_id
+         JOIN cutting_orders cutting ON cutting.cutting_order_id=batch.cutting_order_id
+         CROSS JOIN LATERAL sourcing_case_lines_at(cutting.sourcing_case_id,history.created_at) line
+         JOIN attachments image ON image.attachment_id=line.image_attachment_id
+         WHERE source_order.rework_kind='inhouse_finishing' AND source_order.status<>'deleted'
+           AND cutting.sourcing_case_id::text=$1 AND line.position=cutting.sourcing_line_position
+           AND line.image_attachment_id::text=$2 AND image.status='ready' AND image.ready_at<=history.created_at`,
         [binding.entityId, binding.attachmentId],
       );
-      reworkOrderIds = source.rows.map((row) => row.rework_order_id);
+      const finishingNodes: FinanceNodeKey[]=['initiation','process_configuration','ie_review','work_reporting','whole_order_review','final_quantity_ie_review'];
+      reworkOrderIds = [...new Set(source.rows.filter(row=>{
+        if(row.history_action===null)return true;
+        const node=reworkHistoryNode(row.history_action);
+        return node!==null&&finishingNodes.includes(node)&&canReadReworkHistoryNode(actor,node);
+      }).map(row=>row.rework_order_id))];
     } else if (binding.entityType === "receiving_batch") {
       const receiving = await this.database.query<{ rework_order_id: string }>(
         `SELECT rework_order_id

@@ -3663,6 +3663,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await service.decideOwner(ownerActor(),caseId,{decision:"approved"},approvalKey)).reused).toBe(true);
     expect(approved.lineItems.map(line=>line.factoryDeliveryDate)).toEqual(["2026-11-06","2026-11-08","2026-11-11"]);
     expect(approved.approvalSnapshot!.linePrices.map(line=>line.factoryDeliveryDate)).toEqual(["2026-11-06","2026-11-08","2026-11-11"]);
+    const poCuttingIds=(await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[caseId])).rows.map(row=>row.cutting_order_id);
+    expect(await Promise.all(poCuttingIds.map(async cuttingId=>(await cutting.get(root,cuttingId)).deliveryDate))).toEqual(["2026-11-06","2026-11-08","2026-11-11"]);
     const original=(await contractService.getCurrent(root,caseId)).item!;
     expect(original.status).toBe("ready");
     const originalRow=(await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[original.sourcingContractDocumentId])).rows[0];
@@ -3687,6 +3689,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await contractService.generateIfReady(root,caseId,document);
     const current=await contractService.content.get(root,caseId);
     expect(current.content.lines.map(line=>line.deliveryDate)).toEqual(["2026-11-06","2026-11-09","2026-11-11"]);
+    expect(await Promise.all(poCuttingIds.map(async cuttingId=>(await cutting.get(root,cuttingId)).deliveryDate))).toEqual(["2026-11-06","2026-11-09","2026-11-11"]);
     expect(current.content.terms.payment).toBe(revised.content.terms.payment);
     const afterJourney=await journeyQuery.read(root,id);
     expect(afterJourney.poDeliveryDates!.map(line=>line.factoryDeliveryDate)).toEqual(["2026-11-06","2026-11-09","2026-11-11"]);
@@ -3719,6 +3722,15 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(contractService.content.save(root,caseId,current,randomUUID())).rejects.toMatchObject({statusCode:403});
     await expect(contractService.content.preview(root,caseId,current)).rejects.toMatchObject({statusCode:403});
     expect((await database.query("SELECT quantity::int FROM sourcing_decision_lines WHERE sourcing_decision_id=$1 ORDER BY position",[approved.decision!.sourcingDecisionId])).rows.map(line=>line.quantity)).toEqual([137,63,40]);
+    // Read an isolated incomplete-date fixture without persisting invalid business facts.
+    const missingDate=await database.connect();
+    try{
+      await missingDate.query('BEGIN');
+      await missingDate.query('ALTER TABLE digital_production_po_lines DISABLE TRIGGER digital_po_date_effective_guard');
+      await missingDate.query('UPDATE digital_production_po_lines SET factory_delivery_date=NULL WHERE line_id=$1',[prepared.lineItems[2]!.lineId]);
+      const scopedCutting=new CuttingSourceService(missingDate as unknown as pg.Pool);
+      expect(await Promise.all(poCuttingIds.map(async cuttingId=>(await scopedCutting.get(root,cuttingId)).deliveryDate))).toEqual(["2026-11-06","2026-11-09",null]);
+    }finally{await missingDate.query('ROLLBACK');missingDate.release();}
   });
 
   it("P09 carries all PO quantities and owned image copies into exactly one original sourcing case", async () => {
