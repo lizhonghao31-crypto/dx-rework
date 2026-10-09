@@ -849,6 +849,58 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     }, randomUUID())).rejects.toThrow("该订单已不可追加收货，请重新搜索选择");
   });
 
+  it('serializes stale difference submissions and allows a new quantity episode even when values return',async()=>{
+    const created=await service.create(receiver(),{styleNo:'TEST-R3-STALE',documentQuantity:10,actualQuantity:11,attachmentIds:[await readyImage()]},randomUUID());
+    const board=async()=>(await service.board(businessDate(),businessDate(),'TEST-R3-STALE')).rows[0]!;
+    let row=await board();
+    const input=(type:'receiving'|'packing')=>({receivingBatchId:row.receivingBatchId,expectedVersion:row.version,expectedDocumentQuantity:row.documentQuantity,expectedActualQuantity:row.cumulativeActualQuantity,expectedPackingRevisionId:row.packingRevisionId,differenceType:type,result:'保留原数核对'});
+    const pending=input('receiving'),keys=[randomUUID(),randomUUID()];
+    const outcomes=await Promise.allSettled(keys.map(key=>service.resolveDifference(differenceResolver(),pending,key)));
+    expect(outcomes.filter(item=>item.status==='fulfilled')).toHaveLength(1);
+    expect((outcomes.find(item=>item.status==='rejected') as PromiseRejectedResult).reason).toMatchObject({statusCode:409});
+    const first=(outcomes.find(item=>item.status==='fulfilled') as PromiseFulfilledResult<Awaited<ReturnType<typeof service.resolveDifference>>>).value;
+    const replay=await service.resolveDifference(differenceResolver(),pending,keys[outcomes.findIndex(item=>item.status==='fulfilled')]!);
+    expect(replay.reused).toBe(true);expect(replay.value.resolutionId).toBe(first.value.resolutionId);
+    const original=(await database.query('SELECT * FROM receiving_difference_resolutions WHERE resolution_id=$1',[first.value.resolutionId])).rows;
+    await expect(service.resolveDifference(differenceResolver(),pending,randomUUID())).rejects.toMatchObject({statusCode:409});
+    expect((await board()).version).toBe(row.version);
+    await service.recordPacking(packingRecorder(),{receivingBatchId:row.receivingBatchId,expectedVersion:row.version,expectedPackingRevisionId:null,packingQuantity:12},randomUUID());
+    row=await board();await service.resolveDifference(differenceResolver(),input('packing'),randomUUID());
+    for(const actualQuantity of [12,11]){
+      row=await board();await service.correctBatch(rootCorrector(),row.receivingBatchId,{expectedVersion:row.version,styleNo:row.styleNo,documentQuantity:10,actualQuantity,defectiveQuantity:0});
+    }
+    row=await board();expect(row.receivingDifferenceResolution).toBeNull();expect(row.packingDifferenceResolution).toBeNull();
+    await service.resolveDifference(differenceResolver(),input('receiving'),randomUUID());
+    await service.resolveDifference(differenceResolver(),input('packing'),randomUUID());
+    row=await board();const packingId=row.packingDifferenceResolution!.resolutionId;
+    await service.correctBatch(rootCorrector(),row.receivingBatchId,{expectedVersion:row.version,styleNo:row.styleNo,documentQuantity:9,actualQuantity:11,defectiveQuantity:0});
+    row=await board();expect(row.receivingDifferenceResolution).toBeNull();expect(row.packingDifferenceResolution!.resolutionId).toBe(packingId);
+    expect((await database.query('SELECT * FROM receiving_difference_resolutions WHERE resolution_id=$1',[first.value.resolutionId])).rows).toEqual(original);
+    expect((await database.query('SELECT count(*)::int count FROM receiving_difference_resolutions WHERE receiving_batch_id=$1',[created.value.receivingBatchId])).rows[0].count).toBe(4);
+  });
+
+  it('does not resurrect a handled snapshot when a later batch is deleted and quantities return',async()=>{
+    const styleNo='TEST-R3-DELETED-EPISODE';
+    const first=await service.create(receiver(),{styleNo,documentQuantity:10,actualQuantity:11,attachmentIds:[await readyImage()]},randomUUID());
+    const board=async()=>(await service.board(businessDate(),businessDate(),styleNo)).rows[0]!;
+    let row=await board();
+    await service.recordPacking(packingRecorder(),{receivingBatchId:row.receivingBatchId,expectedVersion:row.version,expectedPackingRevisionId:null,packingQuantity:12},randomUUID());
+    row=await board();
+    const input=(type:'receiving'|'packing')=>({receivingBatchId:row.receivingBatchId,expectedVersion:row.version,expectedDocumentQuantity:row.documentQuantity,expectedActualQuantity:row.cumulativeActualQuantity,expectedPackingRevisionId:row.packingRevisionId,differenceType:type,result:'保留原数核对'});
+    for(const type of ['receiving','packing'] as const)await service.resolveDifference(differenceResolver(),input(type),randomUUID());
+    const old=(await database.query('SELECT * FROM receiving_difference_resolutions WHERE receiving_batch_id=$1 ORDER BY resolution_id',[first.value.receivingBatchId])).rows;
+    const later=await service.create(receiver(),{styleNo,documentQuantity:10,actualQuantity:5,receivedDate:pastBusinessDate(1),attachmentIds:[await readyImage()]},randomUUID());
+    expect(later.value.receivingBatchId).not.toBe(first.value.receivingBatchId);
+    expect((await board()).cumulativeActualQuantity).toBe(16);
+    const laterVersion=(await database.query('SELECT version FROM receiving_batches WHERE receiving_batch_id=$1',[later.value.receivingBatchId])).rows[0].version;
+    await service.deleteBatch(rootCorrector(),later.value.receivingBatchId,laterVersion);
+    row=await board();expect(row.cumulativeActualQuantity).toBe(11);
+    expect(row.receivingDifferenceResolution).toBeNull();expect(row.packingDifferenceResolution).toBeNull();
+    for(const type of ['receiving','packing'] as const)await service.resolveDifference(differenceResolver(),input(type),randomUUID());
+    expect((await database.query('SELECT * FROM receiving_difference_resolutions WHERE resolution_id=ANY($1::uuid[]) ORDER BY resolution_id',[old.map(item=>item.resolution_id)])).rows).toEqual(old);
+    expect((await database.query('SELECT count(*)::int count FROM receiving_difference_resolutions WHERE receiving_batch_id=$1',[first.value.receivingBatchId])).rows[0].count).toBe(4);
+  });
+
   it.each(["receiving", "packing"] as const)("binds %s evidence to the resolution and preserves its immutable history", async (differenceType) => {
     const created = await service.create(receiver(), {
       styleNo: `TEST-EVIDENCE-${differenceType}`, documentQuantity: 100, actualQuantity: 90,

@@ -227,6 +227,10 @@ type StyleOperationSnapshot = Readonly<{
   actualQuantity: number;
   packingRevisionId: string | null;
   packingQuantity: number | null;
+  receivingQuantityChangedAt: string | null;
+  receivingQuantityRevision: string;
+  actualQuantityChangedAt: string | null;
+  actualQuantityRevision: string;
 }>;
 
 type PackingRevisionResult = Readonly<{
@@ -470,6 +474,30 @@ const receivingBoardBaseSql = (scope: string) => `WITH scoped_groups AS (${scope
                   adjustments.through_end_actual_adjustment,adjustments.all_actual_adjustment,
                   adjustments.through_end_document_adjustment,adjustments.all_document_adjustment,
                   adjustments.period_defective_adjustment
+       ), quantity_changes AS (
+         SELECT scope.group_key,event.event_id::text AS change_id,event.created_at AS changed_at,
+           CASE WHEN receipt.actual_quantity<>0 THEN event.created_at END AS actual_changed_at
+         FROM receiving_receipts receipt JOIN scoped_batches scope USING(receiving_batch_id)
+         JOIN operation_events event ON event.event_id=receipt.operation_event_id
+         WHERE receipt.actual_quantity<>0 OR (receipt.document_quantity<>0 AND (
+           receipt.receiving_source='other_factory' OR receipt.receipt_id=(SELECT first.receipt_id
+             FROM receiving_receipts first WHERE first.receiving_batch_id=receipt.receiving_batch_id ORDER BY first.received_at,first.receipt_id LIMIT 1)))
+         UNION ALL
+         SELECT scope.group_key,event.event_id::text,event.created_at,CASE WHEN event.action='receiving.batch.merge'
+           OR event.after_state->'actualQuantity' IS DISTINCT FROM event.before_state->'actualQuantity' THEN event.created_at END
+         FROM operation_events event JOIN scoped_batches scope ON scope.receiving_batch_id=event.entity_id::uuid
+         WHERE event.entity_type='receiving_batch' AND event.action IN ('receiving.batch.correct','receiving.batch.merge')
+           AND (event.action='receiving.batch.merge'
+             OR event.after_state->'actualQuantity' IS DISTINCT FROM event.before_state->'actualQuantity'
+             OR event.after_state->'documentQuantity' IS DISTINCT FROM event.before_state->'documentQuantity')
+         UNION ALL
+         SELECT scope.group_key,event.event_id::text,event.created_at,
+           CASE WHEN (event.before_state->>'actualQuantity')::bigint<>0 THEN event.created_at END
+         FROM receiving_batches tombstone JOIN scoped_groups scope
+           ON scope.group_key=COALESCE('cut:'||tombstone.cutting_order_id::text,'style:'||upper(btrim(tombstone.style_no)))
+         JOIN operation_events event ON event.entity_id=tombstone.receiving_batch_id::text
+           AND event.entity_type='receiving_batch' AND event.action='receiving.batch.delete'
+         WHERE tombstone.deleted_at IS NOT NULL
        ), style_totals AS (
          SELECT totals.group_key,totals.style_key,
                 (
@@ -487,7 +515,16 @@ const receivingBoardBaseSql = (scope: string) => `WITH scoped_groups AS (${scope
                 sum(totals.cumulative_actual_quantity)::bigint AS cumulative_actual_quantity,
                 sum(totals.receipt_count)::bigint AS receipt_count,
                 count(*)::bigint AS batch_count,
-                max(totals.last_received_at) AS last_received_at
+                max(totals.last_received_at) AS last_received_at,
+                (SELECT max(change.changed_at) FROM quantity_changes change WHERE change.group_key=totals.group_key
+                  AND ($3<>'' OR change.changed_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai'))) AS receiving_quantity_changed_at,
+                (SELECT max(change.actual_changed_at) FROM quantity_changes change WHERE change.group_key=totals.group_key
+                  AND ($3<>'' OR change.changed_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai'))) AS actual_quantity_changed_at,
+                (SELECT md5(COALESCE(string_agg(change.change_id,',' ORDER BY change.change_id),'')) FROM quantity_changes change
+                  WHERE change.group_key=totals.group_key AND ($3<>'' OR change.changed_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai'))) AS receiving_quantity_revision,
+                (SELECT md5(COALESCE(string_agg(change.change_id,',' ORDER BY change.change_id),'')) FROM quantity_changes change
+                  WHERE change.group_key=totals.group_key AND change.actual_changed_at IS NOT NULL
+                    AND ($3<>'' OR change.changed_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai'))) AS actual_quantity_revision
          FROM batch_totals totals
          GROUP BY totals.group_key,totals.style_key
        )`;
@@ -905,12 +942,18 @@ export class ReceivingService {
       actual_quantity: string;
       packing_revision_id: string | null;
       packing_quantity: string | null;
+      receiving_quantity_changed_at: string | null;
+      receiving_quantity_revision: string;
+      actual_quantity_changed_at: string | null;
+      actual_quantity_revision: string;
     }>(
       `${RECEIVING_BOARD_BASE_SQL}
        SELECT action.receiving_batch_id,totals.style_key AS style_no,action.version,
               totals.document_quantity,
               totals.current_actual_quantity AS actual_quantity,
-              packing.packing_revision_id,packing.packing_quantity
+              packing.packing_revision_id,packing.packing_quantity,
+              totals.receiving_quantity_changed_at::text,totals.actual_quantity_changed_at::text,
+              totals.receiving_quantity_revision,totals.actual_quantity_revision
        FROM style_totals totals
        JOIN LATERAL (
          SELECT item.receiving_batch_id,item.version
@@ -942,6 +985,10 @@ export class ReceivingService {
       actualQuantity: Number(snapshot.actual_quantity),
       packingRevisionId: snapshot.packing_revision_id,
       packingQuantity: snapshot.packing_quantity === null ? null : Number(snapshot.packing_quantity),
+      receivingQuantityChangedAt:snapshot.receiving_quantity_changed_at,
+      receivingQuantityRevision:snapshot.receiving_quantity_revision,
+      actualQuantityChangedAt:snapshot.actual_quantity_changed_at,
+      actualQuantityRevision:snapshot.actual_quantity_revision,
     };
   }
 
@@ -2396,6 +2443,20 @@ export class ReceivingService {
           ? snapshot.actualQuantity - snapshot.documentQuantity
           : snapshot.packingQuantity! - snapshot.actualQuantity;
         if (differenceQuantity === 0) fail("当前没有需要处理的差异", 409, "CONFLICT");
+        const handled=(await client.query(`SELECT 1 FROM receiving_difference_resolutions resolution
+          WHERE resolution.receiving_batch_id=$1 AND resolution.difference_type=$2
+            AND resolution.actual_quantity_snapshot=$3
+            AND ($2='packing' OR resolution.document_quantity_snapshot=$4)
+            AND ($2='receiving' OR (resolution.packing_revision_id=$5 AND resolution.packing_quantity_snapshot=$6))
+            AND resolution.difference_quantity_snapshot=$7
+            AND COALESCE((SELECT event.after_state->>'quantityRevision' FROM operation_events event
+              WHERE event.event_id=resolution.operation_event_id)=$9::text,
+              $8::timestamptz IS NULL OR resolution.created_at>=$8::timestamptz)
+          LIMIT 1`,[snapshot.receivingBatchId,differenceType,snapshot.actualQuantity,snapshot.documentQuantity,
+          snapshot.packingRevisionId,snapshot.packingQuantity,differenceQuantity,
+          differenceType==='receiving'?snapshot.receivingQuantityChangedAt:snapshot.actualQuantityChangedAt,
+          differenceType==='receiving'?snapshot.receivingQuantityRevision:snapshot.actualQuantityRevision])).rowCount;
+        if(handled) fail('当前差异已处理，请刷新查看处理结果',409,'CONFLICT');
         const resolutionId = randomUUID();
         const eventId = await this.events.append(client, actor, {
           action: "receiving.difference.resolve",
@@ -2403,6 +2464,7 @@ export class ReceivingService {
           entityId: snapshot.receivingBatchId,
           after: {
             resolutionId,
+            quantityRevision:differenceType==="receiving"?snapshot.receivingQuantityRevision:snapshot.actualQuantityRevision,
             differenceType,
             documentQuantity: snapshot.documentQuantity,
             actualQuantity: snapshot.actualQuantity,
@@ -2690,6 +2752,8 @@ export class ReceivingService {
            AND resolution.document_quantity_snapshot=totals.document_quantity
            AND resolution.actual_quantity_snapshot=totals.cumulative_actual_quantity
            AND resolution.difference_quantity_snapshot=totals.cumulative_actual_quantity-totals.document_quantity
+           AND COALESCE((SELECT event.after_state->>'quantityRevision' FROM operation_events event WHERE event.event_id=resolution.operation_event_id)=totals.receiving_quantity_revision,
+            totals.receiving_quantity_changed_at IS NULL OR resolution.created_at>=totals.receiving_quantity_changed_at)
          ORDER BY resolution.created_at DESC,resolution.resolution_id DESC
          LIMIT 1
        ) receiving_resolution ON true
@@ -2703,6 +2767,8 @@ export class ReceivingService {
            AND resolution.packing_revision_id=packing.packing_revision_id
            AND resolution.packing_quantity_snapshot=packing.packing_quantity
            AND resolution.difference_quantity_snapshot=packing.packing_quantity-totals.cumulative_actual_quantity
+           AND COALESCE((SELECT event.after_state->>'quantityRevision' FROM operation_events event WHERE event.event_id=resolution.operation_event_id)=totals.actual_quantity_revision,
+            totals.actual_quantity_changed_at IS NULL OR resolution.created_at>=totals.actual_quantity_changed_at)
          ORDER BY resolution.created_at DESC,resolution.resolution_id DESC
          LIMIT 1
        ) packing_resolution ON true
