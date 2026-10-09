@@ -1,5 +1,9 @@
 import { projectDevelopmentNotices } from "./development-notifications.js";
 import { patternOrderScopeSql } from "../pattern-room/order-authority.js";
+import { SourcingService } from "../sourcing/sourcing-service.js";
+import { SourcingProductionService } from "../sourcing/sourcing-production-service.js";
+import { ReworkBusinessDetailService } from "../rework/rework-business-detail-service.js";
+import { ApplicationError } from "../platform/errors.js";
 import { isRootActor } from "../access/business-authority.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -159,6 +163,8 @@ export class DigitalProductionNotificationService {
     let contextTarget:{kind:"source"|"order";id:string}|null=null;
     let ownDevelopmentTask:Task|null=null;
     let ownPatternOrderId:string|null=null;
+    let ownChildResource:{kind:"sourcing"|"production"|"rework";id:string}|null=null;
+    let ownOrderTask:Task|null=null;
     if(event.instruction_order_id){
       if(!await new DigitalProductionAccessPolicy(database).allowed(actor,"order",event.instruction_order_id,"technical"))return null;
       const notice=(await database.query("SELECT title,version FROM digital_instruction_notices WHERE event_id=$1",[event.event_id])).rows[0];
@@ -184,6 +190,7 @@ export class DigitalProductionNotificationService {
       if(!(await this.recipients(database,task,event.event_kind,people)).some(p=>p.actorId===actor.actorId))return null;
       actionable=event.event_kind!=="completed"&&(missing||await new DigitalProductionAccessPolicy(database).allowed(actor,"task",task.task_id,"execute"));
       if(actionable&&!missing&&task.source_id&&task.task_kind.startsWith("development_"))ownDevelopmentTask=task;
+      if(actionable&&!missing&&task.production_order_id)ownOrderTask=task;
       title=`${task.label} · ${missing?"待分配主办":labels[event.event_kind]??"事项更新"}`;
       contextTarget=task.production_order_id?{kind:"order",id:task.production_order_id}:task.source_id?{kind:"source",id:task.source_id}:null;
       route={routeName:"digital_production_task",entityId:task.task_id,todoId:task.task_id};
@@ -199,9 +206,25 @@ export class DigitalProductionNotificationService {
       contextTarget=parent;
       route=row.route_descriptor;
       if(actionable&&route.routeName==="pattern_room_order"&&row.required_role==="pattern_room_worker")ownPatternOrderId=route.entityId;
+      // Bind personal business context to its original route. The child reader below
+      // must still authorize that exact object before its identity can be projected.
+      if(row.todo_type==="business_action"&&(row.required_role||row.required_capability)){
+        if(route.routeName==="sourcing_detail"&&row.entity_type==="sourcing_case"){
+          if(row.entity_id!==route.entityId)return null;
+          ownChildResource={kind:"sourcing",id:route.entityId};
+        }else if(route.routeName==="production_detail"&&["production_order","sourcing_production_order"].includes(row.entity_type)){
+          if(row.entity_id!==route.entityId)return null;
+          ownChildResource={kind:"production",id:route.entityId};
+        }else if(row.entity_type==="rework_order"&&(route.reworkOrderId||["rework_detail","process_configuration","whole_order_review","responsibility_detail","own_factory_approval"].includes(route.routeName))){
+          const childId=route.reworkOrderId??route.entityId;
+          if(row.entity_id!==childId)return null;
+          ownChildResource={kind:"rework",id:childId};
+        }
+      }
     }
     let context:DigitalNotification["context"];
-    if(includeContext&&contextTarget&&await new DigitalProductionAccessPolicy(database).allowed(actor,contextTarget.kind,contextTarget.id,"technical")){
+    const parentReadable=contextTarget&&(includeContext||ownChildResource)&&await new DigitalProductionAccessPolicy(database).allowed(actor,contextTarget.kind,contextTarget.id,"technical");
+    if(includeContext&&contextTarget&&parentReadable){
       const resource=(await database.query(contextTarget.kind==='order'?"SELECT design_style_no,production_order_id FROM digital_production_orders WHERE production_order_id=$1":"SELECT design_style_no,NULL::uuid AS production_order_id FROM digital_production_sources WHERE source_id=$1",[contextTarget.id])).rows[0];
       if(resource){
         const lines=resource.production_order_id?(await database.query("SELECT po_number,color FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position",[resource.production_order_id])).rows:[];
@@ -225,6 +248,24 @@ export class DigitalProductionNotificationService {
       [actor.actorId,false,["pattern_room_worker"],true,ownPatternOrderId,contextTarget.kind,contextTarget.id])).rows[0];
       if(resource)context={styleNo:resource.style_no,orderId:null,colors:[],poNumbers:[]};
     }
+    if(ownChildResource&&contextTarget&&!parentReadable){
+      if((await database.query("SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2 AND state<>'active'",[contextTarget.kind,contextTarget.id])).rowCount)return null;
+      let styleNo:string|null;
+      try{
+        if(ownChildResource.kind==="sourcing")styleNo=(await new SourcingService(this.database).getCase({...actor,authorizationCapability:"sourcing:view"},ownChildResource.id)).styleNo;
+        else if(ownChildResource.kind==="production")styleNo=(await new SourcingProductionService(this.database).get(actor,ownChildResource.id)).firstStyleNo;
+        else {
+          const child=await new ReworkBusinessDetailService(this.database).get(actor,ownChildResource.id);
+          if(["cancelled","deleted"].includes(child.status))return null;
+          styleNo=child.styleNo;
+        }
+      }catch(error){
+        if(error instanceof ApplicationError&&[403,404].includes(error.statusCode))return null;
+        throw error;
+      }
+      if(includeContext&&styleNo)context={styleNo,orderId:null,colors:[],poNumbers:[]};
+    }
+    if(includeContext&&!context&&ownOrderTask?.order_style_no)context={styleNo:ownOrderTask.order_style_no,orderId:null,colors:[],poNumbers:[]};
     return {eventId:event.event_id,title,actionable,route,createdAt:iso(event.created_at),...(context?{context}:{})};
   }
   // Atomic claim per recipient is the incremental cursor: refreshes and competing

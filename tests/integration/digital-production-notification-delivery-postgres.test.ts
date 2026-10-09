@@ -9,6 +9,7 @@ import { DigitalProductionIdentityService } from "../../apps/api/src/production-
 import { DigitalProductionNotificationService } from "../../apps/api/src/production-platform/notification-service.js";
 import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
 import { PatternOrderReader } from "../../apps/api/src/pattern-room/order-reader.js";
+import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js";
 import type { DigitalTaskKind } from "../../apps/api/src/production-platform/task-access-repository.js";
 import { linkNewDigitalChild } from "../../apps/api/src/production-platform/child-link-repository.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
@@ -73,14 +74,15 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     expect((await todos.getForActor(todoActor,taskId)).status).toBe("pending");
   });
 
-  const worker=randomUUID(),otherWorker=randomUUID(),clerk=randomUUID(),supervisor=randomUUID();
+  const worker=randomUUID(),otherWorker=randomUUID(),clerk=randomUUID(),supervisor=randomUUID(),payables=randomUUID(),secondaryMerchandiser=randomUUID();
   let operatorsReady=false;
   const operators=async()=>{
     if(!operatorsReady){
       await transaction(async database=>{
       await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
       for(const [id,roles] of [[worker,["pattern_room_worker"]],[otherWorker,["pattern_room_worker"]],
-        [clerk,["development_clerk","pattern_room_tail_inspector"]],[supervisor,["pattern_room_supervisor"]]] as const){
+        [clerk,["development_clerk","pattern_room_tail_inspector"]],[supervisor,["pattern_room_supervisor"]],
+        [payables,["factory_payables"]],[secondaryMerchandiser,["order_merchandiser"]]] as const){
         await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST context operator',true)",[id]);
         await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','P04',$2::uuid::text,$2::uuid::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id]);
         for(const role of roles)await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$4,'TEST context')",[randomUUID(),id,role,user]);
@@ -94,7 +96,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
       const capabilities=(await database.query("SELECT DISTINCT capability FROM role_capabilities WHERE role_code=ANY($1::text[])",[roles])).rows.map(r=>r.capability);
       return {actorId:id,actorRoles:roles,authorizationCapability:"todo:view",authorizationCapabilities:capabilities,requestId:randomUUID()};
     };
-    return {craft:await effective(worker),other:await effective(otherWorker),clerk:await effective(clerk),manager:await effective(supervisor)};
+    return {craft:await effective(worker),other:await effective(otherWorker),clerk:await effective(clerk),manager:await effective(supervisor),payables:await effective(payables),secondaryMerchandiser:await effective(secondaryMerchandiser)};
   };
   const transaction=async<T,>(work:(c:pg.PoolClient)=>Promise<T>)=>{
     const c=await database.connect();try{await c.query("BEGIN");const result=await work(c);await c.query("COMMIT");return result;}catch(e){await c.query("ROLLBACK");throw e;}finally{c.release();}
@@ -105,6 +107,98 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     const row=(await database.query("SELECT design_style_no FROM digital_production_sources WHERE source_id=$1",[source.sourceId])).rows[0];
     return {...source,designStyleNo:row.design_style_no as string};
   };
+  const runOverdueChildren=async(notices:DigitalProductionNotificationService)=>{
+    const clock=vi.spyOn(Date,"now").mockReturnValue(Date.now()+7*86400000);
+    try{await notices.runOnce();}finally{clock.mockRestore();}
+  };
+  const financeNotice=async(recipient:TrustedActorContext,styleNo:string,information=false,routeCaseId?:string)=>{
+    const child=randomUUID(),event=randomUUID();
+    const order=await new DigitalProductionIdentityService(database,true).createOrder(actor,
+      DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:user,productGroup:"男装",designStyleNo:"TEST-PRIVATE-MOTHER",orderDate:"2026-09-29",lines:[{poNumber:"TEST-PRIVATE-SIBLING-PO",color:"PRIVATE-COLOR",sizes:[{size:"M",quantity:5}]}]}),randomUUID());
+    const todo=await transaction(async c=>{
+      await c.query("INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id,reason) VALUES($1,$1::uuid::text,$2,ARRAY['order_merchandiser'],'sourcing:inquiry:create','sourcing.case.create','sourcing_case',$3,'TEST DEF008')",[event,user,child]);
+      await c.query("INSERT INTO sourcing_cases(sourcing_case_id,erp_order_id,erp_order_no,style_no,lane_key,order_quantity,created_by,operation_event_id,request_id,creation_reason) VALUES($1,$1::uuid::text,'TEST', $4,'garment_processing',5,$2,$3,$3::uuid::text,'TEST DEF008')",[child,user,event,styleNo]);
+      await c.query("INSERT INTO sourcing_case_transitions(sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,business_action,transition_reason,actor_id,operation_event_id,request_id) VALUES($1,$2,1,NULL,'pending_ie_quote','created','TEST DEF008',$3,$4,$4::uuid::text)",[randomUUID(),child,user,event]);
+      await linkNewDigitalChild(c,{module:"sourcing",childId:child,productionOrderId:order.productionOrderId,lines:[]});
+      return service.createInTransaction(c,actor,{todoType:information?"information":"business_action",category:information?"configuration_notice":"sourcing_finance_reconcile",sourceEventId:event,sourceAction:"sourcing.case.create",entityType:"sourcing_case",entityId:child,recipientUserId:recipient.actorId,
+        ...(!information?{requiredRole:"factory_payables",requiredCapability:"sourcing:finance:reconcile",policyKey:"general" as const}:{}),
+        route:{routeName:"sourcing_detail",entityId:routeCaseId??child},dedupeKey:randomUUID()});
+    });
+    return {child,order,todo};
+  };
+  it("identifies both new and overdue own finance child todos without mother, sibling PO or budget access",async()=>{
+    const people=await operators(),f=await financeNotice(people.payables,"TEST-FIX02-PS-BLUE"),notices=new DigitalProductionNotificationService(database),policy=new DigitalProductionAccessPolicy(database);
+    expect(await policy.allowed(people.payables,"order",f.order.productionOrderId,"technical")).toBe(false);
+    expect(await policy.allowed(people.payables,"order",f.order.productionOrderId,"budget")).toBe(false);
+    expect((await service.getForActor(people.payables,f.todo.todoId)).orderContext?.styleNo).toBe("TEST-FIX02-PS-BLUE");
+    expect((await new SourcingService(database).getCase({...people.payables,authorizationCapability:"sourcing:view"},f.child)).styleNo).toBe("TEST-FIX02-PS-BLUE");
+    const before=await service.getForActor(people.payables,f.todo.todoId);await runOverdueChildren(notices);
+    const seen=[];
+    for(let i=0;i<2;i++){
+      const notice=(await notices.claim(people.payables,true)).notification!;
+      expect(notice.route).toMatchObject({routeName:"sourcing_detail",entityId:f.child,todoId:f.todo.todoId});
+      expect(notice.context).toEqual({styleNo:"TEST-FIX02-PS-BLUE",orderId:null,colors:[],poNumbers:[]});
+      expect(JSON.stringify(notice)).not.toMatch(/PRIVATE|budget|price|supplier|customer/i);
+      expect((await notices.current(people.other,notice.eventId)).notification).toBeNull();
+      seen.push(notice.title);await notices.acknowledge(people.payables,notice.eventId);
+    }
+    expect(seen.sort()).toEqual(["你有新的订单待办","订单待办已超时"].sort());
+    expect(await service.getForActor(people.payables,f.todo.todoId)).toEqual(before);
+    await expect(policy.assert(people.payables,"order",f.order.productionOrderId,"technical")).rejects.toMatchObject({statusCode:404});
+    await expect(policy.assert(people.payables,"order",f.order.productionOrderId,"budget")).rejects.toMatchObject({statusCode:404});
+    expect(await policy.allowed(people.payables,"order",f.order.productionOrderId,"technical")).toBe(false);
+  });
+  it("keeps child identities attached to their own queued routes and rejects a mismatched business route",async()=>{
+    const people=await operators(),a=await financeNotice(people.payables,"TEST-BACKGROUND-PR0506"),b=await financeNotice(people.payables,"TEST-ACTUAL-FIX02"),notices=new DigitalProductionNotificationService(database);
+    await runOverdueChildren(notices);const identities=new Map([[a.child,"TEST-BACKGROUND-PR0506"],[b.child,"TEST-ACTUAL-FIX02"]]);
+    for(let i=0;i<4;i++){
+      const notice=(await notices.claim(people.payables)).notification!;
+      expect(notice.context?.styleNo).toBe(identities.get(notice.route.entityId));await notices.acknowledge(people.payables,notice.eventId);
+    }
+    const foreign=await financeNotice(people.payables,"TEST-NO-ROUTE-BORROWING",false,a.child);await runOverdueChildren(notices);
+    const events=(await database.query("SELECT event_id FROM digital_production_notification_events WHERE todo_id=$1",[foreign.todo.todoId])).rows;
+    expect(await notices.claim(people.payables)).toEqual({notification:null});
+    for(const event of events)expect((await notices.current(people.payables,event.event_id)).notification).toBeNull();
+  });
+  it("retains information-notice filtering and rechecks child activity, capability and role before projecting identity",async()=>{
+    const people=await operators(),f=await financeNotice(people.payables,"TEST-CURRENT-FINANCE"),notices=new DigitalProductionNotificationService(database);
+    await financeNotice(people.payables,"TEST-INFORMATION-PRIVATE",true);await runOverdueChildren(notices);
+    const own=(await notices.claim(people.payables)).notification!;expect(own.context?.styleNo).toBe("TEST-CURRENT-FINANCE");
+    expect((await notices.current({...people.payables,authorizationCapabilities:["todo:view"]},own.eventId)).notification).toBeNull();
+    await new DigitalProductionTaskService(database).controlResource(actor,{kind:"order",id:f.order.productionOrderId},"pause","TEST DEF008",randomUUID());
+    expect((await notices.current(people.payables,own.eventId)).notification?.context).toBeUndefined();
+    await new DigitalProductionTaskService(database).controlResource(actor,{kind:"order",id:f.order.productionOrderId},"resume","TEST DEF008",randomUUID());
+    // Provision role loss only inside this owned fixture schema; notification authorization is real.
+    await transaction(async c=>{
+      await c.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_revoke_only");
+      await c.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason='TEST DEF008' WHERE user_id=$1 AND role_code='factory_payables' AND revoked_at IS NULL",[payables,user]);
+      await c.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_revoke_only");
+    });
+    expect((await notices.current(people.payables,own.eventId)).notification).toBeNull();
+    expect(await notices.claim(people.payables)).toEqual({notification:null});
+  });
+  it("identifies an own production-sheet task for a non-primary merchandiser without mother access",async()=>{
+    const people=await operators(),assignee=people.secondaryMerchandiser,policy=new DigitalProductionAccessPolicy(database),tasks=new DigitalProductionTaskService(database),notices=new DigitalProductionNotificationService(database);
+    const order=await new DigitalProductionIdentityService(database,true).createOrder(actor,DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:user,productGroup:"男装",designStyleNo:"TEST-OWN-PRODUCTION-SHEET",orderDate:"2026-09-29",lines:[{poNumber:"TEST-PRIVATE-SIBLING",color:"PRIVATE-COLOR",sizes:[{size:"M",quantity:5}]}]}),randomUUID());
+    const id=await transaction(async c=>(await tasks.createWithClient(c,actor,{resource:{kind:"order",id:order.productionOrderId},kind:"production_sheet",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:assignee.actorId})).taskId);
+    expect(await policy.allowed(assignee,"order",order.productionOrderId,"technical")).toBe(false);
+    expect(await policy.allowed(assignee,"order",order.productionOrderId,"budget")).toBe(false);
+    expect(await policy.allowed(assignee,"task",id,"execute")).toBe(true);
+    const before=await tasks.read(assignee,id);await notices.runOnce();
+    const notice=(await notices.claim(assignee,true)).notification!;
+    expect(notice.route).toEqual({routeName:"digital_production_task",entityId:id,todoId:id});
+    expect(notice.context).toEqual({styleNo:"TEST-OWN-PRODUCTION-SHEET",orderId:null,colors:[],poNumbers:[]});
+    expect(JSON.stringify(notice)).not.toMatch(/PRIVATE|budget|price|wage|customer/i);
+    expect((await notices.current(people.other,notice.eventId)).notification).toBeNull();
+    await notices.acknowledge(assignee,notice.eventId);expect(await tasks.read(assignee,id)).toEqual(before);
+    expect(await policy.allowed(assignee,"order",order.productionOrderId,"technical")).toBe(false);
+    await tasks.controlResource(actor,{kind:"order",id:order.productionOrderId},"pause","TEST pause",randomUUID());
+    expect((await notices.current(assignee,notice.eventId)).notification).toBeNull();
+    await tasks.controlResource(actor,{kind:"order",id:order.productionOrderId},"resume","TEST resume",randomUUID());
+    await transaction(c=>tasks.setConditionWithClient(c,actor,id,"business_recorded",true));
+    await tasks.complete(assignee,id,{note:"TEST completed"},randomUUID());
+    expect((await notices.current(assignee,notice.eventId)).notification).toBeNull();
+  });
   const patternFixture=async()=>{
     const people=await operators(),source=await contextSource(),orderId=randomUUID(),roundId=randomUUID(),personId=randomUUID();
     const price=(await database.query("SELECT * FROM pattern_room_prices WHERE kind='category' ORDER BY sort_order LIMIT 1")).rows[0];
