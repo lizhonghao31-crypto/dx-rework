@@ -19,13 +19,14 @@ import { registerDigitalIdentityRoutes } from "../../apps/api/src/production-pla
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { ApplicationError } from "../../apps/api/src/platform/errors.js";
+import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
 
 const databaseUrl=process.env.TEST_DATABASE_URL;
 (databaseUrl?describe:describe.skip)("V2 Journey with full original PostgreSQL schema",()=>{
   const schema=ownedPostgresSchema("digital_journey");
   const admin=new pg.Pool({connectionString:databaseUrl});
   const db=new pg.Pool({connectionString:databaseUrl,options:`-c search_path=${schema}`});
-  const root=randomUUID(),designer=randomUUID(),stranger=randomUUID(),worker=randomUUID(),clerk=randomUUID(),tail=randomUUID();
+  const root=randomUUID(),designer=randomUUID(),stranger=randomUUID(),worker=randomUUID(),clerk=randomUUID(),tail=randomUUID(),merchandiser=randomUUID();
   const actor=(id=designer,roles=["sample_designer"]):TrustedActorContext=>({actorId:id,actorRoles:roles,authorizationCapability:"pattern_room:orders:create",authorizationCapabilities:["pattern_room:orders:create"],requestId:"TEST-v2-journey"});
   const identity=new DigitalProductionIdentityService(db,true),journeys=new DigitalJourneyQuery(db),tasks=new DigitalProductionTaskService(db);
   const input=(suffix="0001")=>DigitalOrderCreateSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:`TEST-J-${suffix}`,temporaryStyleNo:`TEST-T-${suffix}`,orderDate:"2026-10-01",lines:[{poNumber:"PO-J1",color:"黑",sizes:[{size:"M",quantity:100}],deliveryDate:"2026-10-20"},{poNumber:"PO-J2",color:"白",sizes:[{size:"L",quantity:200}],deliveryDate:"2026-10-22"}]});
@@ -39,20 +40,37 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     await db.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)");
     const serverVersion=Number((await db.query("SHOW server_version_num")).rows[0].server_version_num);
     for(const migration of manifest.migrations){const sql=await readFile(new URL(`../../apps/api/migrations/${migration.version}.sql`,import.meta.url),"utf8");await db.query(migrationExecutionSql({...migration,sql},serverVersion));await db.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[migration.version,migration.checksum]);}
-    for(const [id,role] of [[root,"owner_group"],[designer,"sample_designer"],[stranger,"sample_designer"],[worker,"pattern_room_worker"],[clerk,"development_clerk"],[tail,"pattern_room_tail_inspector"]]){
+    for(const [id,role] of [[root,"owner_group"],[designer,"sample_designer"],[stranger,"sample_designer"],[worker,"pattern_room_worker"],[clerk,"development_clerk"],[tail,"pattern_room_tail_inspector"],[merchandiser,"order_merchandiser"]]){
       await db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)",[id,`TEST-J ${role}`]);
       await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2::uuid,'dingtalk','TEST',$2::text,$2::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id]);
       await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$4,'TEST Journey fixture')",[randomUUID(),id,role,root]);
     }
     await db.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) VALUES(true,$1::uuid,$1::uuid::text,'TEST')",[root]);
     app.setErrorHandler((error,_request,reply)=>{const known=error as ApplicationError;reply.code(known.statusCode??500).send({error:{code:known.code,message:known.message}});});
-    registerDigitalIdentityRoutes(app,{service:identity,journeys,creationEnabled:true,authenticate:async token=>{
-      if(token!==designer&&token!==stranger)throw new ApplicationError("UNAUTHORIZED","请登录",401);
-      return {id:token,displayName:"TEST",businessRoles:["sample_designer"],capabilities:["pattern_room:orders:create"]};
+    registerDigitalIdentityRoutes(app,{service:identity,journeys,root:new RootAuthority(db,"TEST",undefined),creationEnabled:true,authenticate:async token=>{
+      if(!token||![root,designer,stranger,merchandiser].includes(token))throw new ApplicationError("UNAUTHORIZED","请登录",401);
+      const roles=(await db.query("SELECT role_code FROM user_role_assignments WHERE user_id=$1 AND revoked_at IS NULL",[token])).rows.map(row=>row.role_code as string);
+      const capabilities=(await db.query("SELECT DISTINCT capability FROM role_capabilities WHERE role_code=ANY($1::text[])",[roles])).rows.map(row=>row.capability as string);
+      return {id:token,displayName:"TEST",businessRoles:roles,capabilities};
     }});
     await app.ready();
   },120000);
   afterAll(async()=>{await app.close();await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+  it("allows Root JSON all-match export but rejects an ordinary merchandiser with legitimate list access",{timeout:60_000},async()=>{
+    const search="TEST-J-EXPORT-SCOPE";
+    for(let index=0;index<21;index++)await identity.createOrder(actor(root,["root_superuser"]),{...input(`EXPORT-SCOPE-${index}`),primaryMerchandiserId:merchandiser},randomUUID());
+    const before=(await db.query("SELECT (SELECT count(*) FROM digital_production_tasks)::int tasks,(SELECT count(*) FROM rework_wage_items)::int wages")).rows[0];
+    const ordinary=await app.inject({url:`/digital-production/journeys?search=${search}`,headers:{cookie:`dx_rework_session=${merchandiser}`}});
+    expect(ordinary.statusCode,ordinary.body).toBe(200);expect(ordinary.json().total).toBe(21);
+    const exported=await app.inject({url:`/digital-production/journeys/export?search=${search}&page=2`,headers:{cookie:`dx_rework_session=${root}`}});
+    expect(exported.statusCode,exported.body).toBe(200);expect(exported.headers["cache-control"]).toBe("no-store");
+    expect(exported.json()).toMatchObject({total:21,items:expect.any(Array)});expect(exported.json().items).toHaveLength(21);expect(exported.json()).not.toHaveProperty("page");
+    const denied=await app.inject({url:`/digital-production/journeys/export?search=${search}`,headers:{cookie:`dx_rework_session=${merchandiser}`}});
+    expect(denied.statusCode,denied.body.slice(0,300)).toBe(403);expect(denied.json()).toEqual({error:{code:"FORBIDDEN",message:"当前身份无权导出业务数据"}});
+    expect((await app.inject({url:`/digital-production/journeys/export?search=${search}`,headers:{cookie:`dx_rework_session=${designer}`}})).statusCode).toBe(403);
+    await expect(journeys.export(actor(merchandiser,["order_merchandiser"]),JourneyFilterSchema.parse({search}))).rejects.toMatchObject({statusCode:403});
+    expect((await db.query("SELECT (SELECT count(*) FROM digital_production_tasks)::int tasks,(SELECT count(*) FROM rework_wage_items)::int wages")).rows[0]).toEqual(before);
+  });
   it("joins a source and confirmed two-PO order once, resolves either ID, and rejects other identities",async()=>{
     const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:input().designStyleNo,temporaryStyleNo:input().temporaryStyleNo,customerCode:"PD"},randomUUID());
     expect((await journeys.read(actor(),source.sourceId)).orderId).toBeNull();
