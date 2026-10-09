@@ -7,6 +7,7 @@ import { initialDigitalProductGroup } from "./digital-production-defaults.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { registerInternalNavigationGuard } from "./internal-navigation.js";
 import { confirmInApp } from "./system-dialog.js";
+import { changePoDate, inheritPoDate, removePoDateOverride } from "./po-date-input-defaults.js";
 
 export type DevelopmentCreateIntent = "development" | "certain_order" | "confirm_order";
 const newLine = (): DigitalOrderInput["lines"][number] => ({formalPoNo:null, customerWarehouseArrivalDate:null, poNumber: null, formalStyleNo: null, temporaryStyleNo: null, color: "", colorForeign: null, deliveryDate: null, sizes: [{size: "", quantity: 1}]});
@@ -23,6 +24,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   onCancel: () => void; onCreated: (sourceId: string, orderId: string | null) => void;
 }) {
   const [form, setForm] = useState(() => initialDevelopmentOrder(customers, source));
+  const customerDateOverrides = useRef(new Set<number>());
   const [developmentType, setDevelopmentType] = useState<"头版" | "开发板">("头版");
   const [createdSource, setCreatedSource] = useState<string | null>(source?.sourceId ?? null);
   const [fixedCustomer, setFixedCustomer] = useState<string | null>(source?.customer ?? null);
@@ -43,6 +45,16 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const withOrder = intent !== "development";
   const title = intent === "confirm_order" ? "客户确定订单 · 补订购信息" : withOrder ? "产品开发（有确定订单）" : "产品开发（无确定订单）";
   const line = (index: number, patch: Partial<DigitalOrderInput["lines"][number]>) => setForm(current => ({...current, lines: current.lines.map((value, i) => i === index ? {...value, ...patch} : value)}));
+  const customerDate = (index: number, date: string | null) => {
+    const overrides = new Set(customerDateOverrides.current);
+    if (index > 0) overrides.add(index);
+    customerDateOverrides.current = overrides;
+    setForm(current => ({...current, lines: changePoDate(current.lines, "customerWarehouseArrivalDate", index, date, overrides)}));
+  };
+  const removeLine = (index: number) => {
+    customerDateOverrides.current = removePoDateOverride(customerDateOverrides.current, index);
+    setForm(current => ({...current, lines: current.lines.filter((_, position) => position !== index)}));
+  };
   const save = async () => {
     if (writing.current) return;
     writing.current = true; setBusy(true); setError("");
@@ -89,10 +101,10 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         <label>代用款号<input maxLength={100} value={value.temporaryStyleNo ?? ""} onChange={event => line(index, {temporaryStyleNo: event.target.value || null})}/></label>
         <label>颜色外文<input maxLength={100} value={value.colorForeign ?? ""} onChange={event => line(index, {colorForeign: event.target.value || null})}/></label>
         <label>颜色<input required maxLength={100} value={value.color} onChange={event => line(index, {color: event.target.value})}/></label>
-        <label>客户仓到货日<input type="date" value={value.customerWarehouseArrivalDate ?? ""} onChange={event => line(index, {customerWarehouseArrivalDate: event.target.value || null})}/></label></div>
+        <label>客户仓到货日<input type="date" value={value.customerWarehouseArrivalDate ?? ""} onChange={event => customerDate(index, event.target.value || null)}/>{index === 0 && <small>其余 PO 默认沿用，可单独修改。</small>}</label></div>
         {value.sizes.map((size, sizeIndex) => <div className="pattern-actions" key={sizeIndex}><label>尺码<input required maxLength={100} value={size.size} onChange={event => line(index, {sizes: value.sizes.map((item, i) => i === sizeIndex ? {...item, size: event.target.value} : item)})}/></label><label>数量<input required type="number" min={1} max={10000000} step={1} value={size.quantity} onChange={event => line(index, {sizes: value.sizes.map((item, i) => i === sizeIndex ? {...item, quantity: Number(event.target.value)} : item)})}/></label>{value.sizes.length > 1 && <Button type="button" onClick={() => line(index, {sizes: value.sizes.filter((_, i) => i !== sizeIndex)})}>删除尺码</Button>}</div>)}
-        <div className="pattern-actions"><Button type="button" disabled={value.sizes.length >= 50} onClick={() => line(index, {sizes: [...value.sizes, {size: "", quantity: 1}]})}>添加尺码</Button>{form.lines.length > 1 && <Button type="button" onClick={() => setForm({...form, lines: form.lines.filter((_, i) => i !== index)})}>删除款色</Button>}</div>
-      </fieldset>)}<Button type="button" disabled={form.lines.length >= 50} onClick={() => setForm({...form, lines: [...form.lines, newLine()]})}>添加款色 / PO</Button>
+        <div className="pattern-actions"><Button type="button" disabled={value.sizes.length >= 50} onClick={() => line(index, {sizes: [...value.sizes, {size: "", quantity: 1}]})}>添加尺码</Button>{form.lines.length > 1 && <Button type="button" onClick={() => removeLine(index)}>删除款色</Button>}</div>
+      </fieldset>)}<Button type="button" disabled={form.lines.length >= 50} onClick={() => setForm(current => ({...current, lines: [...current.lines, inheritPoDate(newLine(), current.lines[0], "customerWarehouseArrivalDate")]}))}>添加款色 / PO</Button>
     </>}
     <div className="pattern-actions"><Button type="submit" disabled={busy}>{busy ? "保存中…" : intent === "confirm_order" ? "确认下单" : "保存并填写开发单"}</Button><Button type="button" disabled={busy} onClick={onCancel}>返回列表</Button></div></fieldset>
   </form></Surface>;

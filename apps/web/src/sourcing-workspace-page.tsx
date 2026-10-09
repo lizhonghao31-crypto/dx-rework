@@ -1,4 +1,5 @@
 import { PoDateSummary } from "./po-delivery-dates.js";
+import { changePoDate, inheritPoDate, removePoDateOverride } from "./po-date-input-defaults.js";
 import { type PoDeliveryDate } from "@dx-rework/contracts";
 import {FactorySettlementPanel} from "./factory-settlement-panel.js";
 import { contractReturnFileError, finishContractReturnUpload, type ContractReturnUpload } from "./sourcing-contract-return-upload.js";
@@ -508,6 +509,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
   const feedback = useSubmissionFeedback(setBusy);
   const [message, setMessage] = useState("");
   const createKey = useRef<string | null>(null);
+  const factoryDateOverrides = useRef(new Set<number>());
   const previewUrls = useRef<string[]>([]);
   const restoredDraftUserId = useRef("");
   const canCreate = canAct(user, "order_merchandiser", "sourcing:inquiry:create");
@@ -517,6 +519,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
     if(!deliveryDate)return;
     if(lineItems.some(line=>line.factoryDeliveryDate && line.factoryDeliveryDate!==deliveryDate)
       && !await confirmInApp("应用默认日期将覆盖已经单独填写的 PO 工厂交期，确认继续吗？"))return;
+    factoryDateOverrides.current=new Set();
     setLineItems(current=>current.map(line=>({...line,factoryDeliveryDate:deliveryDate})));createKey.current=null;
   };
   const duplicateLinesMessage = duplicateSourcingLineMessage(lineItems);
@@ -528,6 +531,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
       if (!live) return;
       setBudgetPreparation(prepared); setGender(prepared.gender); setStyleName(prepared.styleName);
       setDaxingUnitPrice(prepared.daxingUnitPrice);
+      factoryDateOverrides.current=new Set();
       setLineItems(prepared.lineItems.map(line => ({lineId:line.lineId, factoryDeliveryDate:"", customerWarehouseArrivalDate:line.customerWarehouseArrivalDate ?? null, styleNo: line.styleNo, alternateStyleNo: line.alternateStyleNo, color: line.color, quantity: String(line.quantity) })));
       setImages(prepared.images.map(image => ({ ...image, previewUrl: attachmentUrl(image.attachmentId, "preview") })));
     }).catch(reason => { if (live) setMessage(reason.message); });
@@ -586,7 +590,12 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
     field: keyof SourcingLineDraft,
     value: string,
   ): void => {
-    setLineItems((current) => current.map((line, currentIndex) => (
+    if (digitalPo && field === "factoryDeliveryDate") {
+      const overrides=new Set(factoryDateOverrides.current);
+      if(index>0)overrides.add(index);
+      factoryDateOverrides.current=overrides;
+      setLineItems(current=>changePoDate(current,"factoryDeliveryDate",index,value,overrides,!correction));
+    } else setLineItems((current) => current.map((line, currentIndex) => (
       currentIndex === index ? { ...line, [field]: value } : line
     )));
     createKey.current = null;
@@ -597,18 +606,19 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
       setMessage(`每张订单最多登记 ${MAX_SOURCING_LINE_ITEMS} 行款色`);
       return;
     }
-    setLineItems((current) => [...current, {
+    setLineItems((current) => [...current, inheritPoDate({
       styleNo: "",
       alternateStyleNo: "",
       color: "",
       quantity: "",
-    }]);
+    } as SourcingLineDraft, digitalPo ? current[0] : undefined, "factoryDeliveryDate")]);
     createKey.current = null;
   };
 
   const removeLineItem = async (index: number): Promise<void> => {
     if (lineItems.length === 1) return;
     if (!(await confirmInApp(`确认删除第 ${index + 1} 行未提交款色吗？`))) return;
+    factoryDateOverrides.current=removePoDateOverride(factoryDateOverrides.current,index);
     setLineItems((current) => current.filter((_line, currentIndex) => currentIndex !== index));
     createKey.current = null;
   };
@@ -840,7 +850,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
                 <label><span>代用款号</span><input readOnly={digitalPo} value={line.alternateStyleNo} maxLength={100} onChange={(event) => updateLineItem(index, "alternateStyleNo", event.target.value)} placeholder="无正式款号时必填" /></label>
                 <label><span>颜色</span><input readOnly={digitalPo} {...feedback.field(`sourcing-create-color-${index}`)} value={line.color} maxLength={100} onChange={(event) => updateLineItem(index, "color", event.target.value)} placeholder="必填" /></label>
                 <label><span>数量</span><input readOnly={digitalPo} {...feedback.field(`sourcing-create-quantity-${index}`)} value={activeCreateInput === `quantity-${index}` ? line.quantity : businessInputValue(line.quantity)} onFocus={() => setActiveCreateInput(`quantity-${index}`)} onBlur={() => setActiveCreateInput(null)} inputMode="numeric" onChange={(event) => updateLineItem(index, "quantity", businessInputChange(event.target.value))} placeholder="整数" /></label>
-                {digitalPo?<label><span>本 PO 加工厂交货日（必填）</span><input type="date" required value={line.factoryDeliveryDate ?? ""} {...feedback.field(`sourcing-create-factory-date-${index}`)} onChange={event=>updateLineItem(index,"factoryDeliveryDate",event.target.value)}/>{line.customerWarehouseArrivalDate?<small>客户仓到货：{line.customerWarehouseArrivalDate}</small>:null}</label>:null}
+                {digitalPo?<label><span>本 PO 加工厂交货日（必填）</span><input type="date" required value={line.factoryDeliveryDate ?? ""} {...feedback.field(`sourcing-create-factory-date-${index}`)} onChange={event=>updateLineItem(index,"factoryDeliveryDate",event.target.value)}/>{index===0&&!correction?<small>其余 PO 默认沿用，可单独修改。</small>:null}{line.customerWarehouseArrivalDate?<small>客户仓到货：{line.customerWarehouseArrivalDate}</small>:null}</label>:null}
                 <div className="sourcing-line-photo">
                   {line.imageAttachmentId ? <img src={images.find((image) => image.attachmentId === line.imageAttachmentId)?.previewUrl} alt={`第 ${index + 1} 款图片`} /> : null}
                   <label className="rework-v2-upload">
