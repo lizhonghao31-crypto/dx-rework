@@ -2334,13 +2334,21 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await reporting.execute(oldReporter,id,'complete',{businessDate,confirmed:true},randomUUID());await reporting.execute(oldReporter,id,'ship',{businessDate,confirmed:true},randomUUID());
     expect((await production.get(readerActor(),id)).status).toBe('in_production');
     const partialAnalysis=await dashboard.analysis(rootActor(),{q:serial});
-    expect(partialAnalysis.items).toHaveLength(1);
-    expect(partialAnalysis.items[0]).toMatchObject({order:{status:'in_production'},completedOn:null,shippedQuantity:'12'});
+    expect(partialAnalysis.items).toHaveLength(2);
+    expect(partialAnalysis.items.find(item=>!item.order.factoryDecisionId)).toMatchObject({order:{status:'shipped',quantity:12},completedOn:businessDate,shippedQuantity:'12'});
+    expect(partialAnalysis.items.find(item=>item.order.factoryDecisionId===factoryDecisionId)).toMatchObject({order:{status:'in_production',quantity:18},completedOn:null,shippedQuantity:null});
     await reporting.execute(newReporter,id,'complete',{factoryDecisionId,businessDate,confirmed:true},randomUUID());await reporting.execute(newReporter,id,'ship',{factoryDecisionId,businessDate,confirmed:true},randomUUID());
     expect((await production.get(readerActor(),id)).status).toBe('shipped');
     const finishedAnalysis=await dashboard.analysis(rootActor(),{q:serial});
-    expect(finishedAnalysis.summary.totalCount).toBe(1);
-    expect(finishedAnalysis.items[0]?.shippedQuantity).toBe('30');
+    expect(finishedAnalysis.summary.totalCount).toBe(2);
+    expect(finishedAnalysis.items.map(item=>[item.order.factoryDecisionId,item.order.supplierId,item.order.quantity,item.shippedQuantity]))
+      .toEqual(expect.arrayContaining([[null,factoryId,12,'12'],[factoryDecisionId,replacementFactoryId,18,'18']]));
+    const oldAnalysis=await dashboard.analysis(oldReporter,{q:serial});
+    const newAnalysis=await dashboard.analysis(newReporter,{q:serial});
+    expect(oldAnalysis.summary.totalCount).toBe(1);expect(oldAnalysis.items[0]?.order.quantity).toBe(12);
+    expect(newAnalysis.summary.totalCount).toBe(1);expect(newAnalysis.items[0]?.order.quantity).toBe(18);
+    expect((await dashboard.analysis(rootActor(),{q:serial,supplierId:replacementFactoryId})).items)
+      .toMatchObject([{order:{factoryDecisionId,supplierId:replacementFactoryId,quantity:18},shippedQuantity:'18'}]);
     await closure.setPilot(rootActor(),{supplierId:factoryId,enabled:true});await closure.setPilot(rootActor(),{supplierId:replacementFactoryId,enabled:true});
     const receiver={...rootActor(),authorizationCapability:'receiving:create'},receiving=new ReceivingService(database,undefined,undefined,closure);
     const image=await readyCuttingSheet(receiver.actorId),cut=(await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 AND sourcing_line_position=1',[caseId])).rows[0].cutting_order_id;
@@ -2349,6 +2357,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const newReceipt=await receiving.createRepeated(receiver,{cuttingOrderId:cut,receivingBatchId:oldReceipt.value.receivingBatchId,productionOrderId:id,factoryDecisionId,source:'other_factory',documentQuantity:15,actualQuantity:15,defectiveQuantity:0},randomUUID());
     expect((await closure.receiptSummary(rootActor(),id)).shipment!.receipts.map(r=>r.receiptId)).toEqual([oldReceipt.value.receiptId]);
     expect((await closure.receiptSummary(rootActor(),id,factoryDecisionId)).shipment!.receipts.map(r=>r.receiptId)).toEqual([newReceipt.value.receiptId]);
+    const receivedAnalysis=await dashboard.analysis(rootActor(),{q:serial});
+    expect(receivedAnalysis.items.find(item=>!item.order.factoryDecisionId)?.receipts.map(row=>row.receiptId)).toEqual([oldReceipt.value.receiptId]);
+    expect(receivedAnalysis.items.find(item=>item.order.factoryDecisionId===factoryDecisionId)?.receipts.map(row=>row.receiptId)).toEqual([newReceipt.value.receiptId]);
+    expect(receivedAnalysis.items.find(item=>!item.order.factoryDecisionId)?.receivedQuantity).toBe('5');
+    expect(receivedAnalysis.items.find(item=>item.order.factoryDecisionId===factoryDecisionId)?.receivedQuantity).toBe('15');
     const receiptCount=(await database.query('SELECT count(*)::int AS count FROM receiving_receipts WHERE cutting_order_id=$1',[cut])).rows[0].count;
     await expect(receiving.createRepeated(receiver,{cuttingOrderId:cut,receivingBatchId:oldReceipt.value.receivingBatchId,source:'jiashun',actualQuantity:1,defectiveQuantity:0},randomUUID())).rejects.toMatchObject({statusCode:409,message:'该裁剪单有多个工厂发货，请选择本次到货工厂'});
     expect((await database.query('SELECT count(*)::int AS count FROM receiving_receipts WHERE cutting_order_id=$1',[cut])).rows[0].count).toBe(receiptCount);

@@ -8,8 +8,8 @@ import { ProductionDashboardQuerySchema, ProductionDashboardSchema, ProductionDa
   type ProductionDashboardItem, type ProductionDashboardQuery, type ProductionDashboardEvent } from "@dx-rework/contracts";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
-import { selectProduction, selectFactoryProduction, toOrder, type ProductionRow } from "./sourcing-production-service.js";
-import { type ProductionReportingService, canReadProductionReporting, productionVisibility, factoryProductionVisibility, productionVisibilityArgs } from "./production-reporting-service.js";
+import { selectFactoryProduction, toOrder, type ProductionRow } from "./sourcing-production-service.js";
+import { type ProductionReportingService, canReadProductionReporting, factoryProductionVisibility, productionVisibilityArgs } from "./production-reporting-service.js";
 
 type FactsRow = {id:string;status:ProductionProgressFacts["status"];quantity:number;completed_quantity:number;first_on:string|null;due:string|null;last_at:Date|null;completed_on:string|null};
 const iso = (date:Date|string) => new Date(date).toISOString();
@@ -87,7 +87,7 @@ export class ProductionDashboardService {
     return this.read(actor,async(client,asOf)=>{
       const parsed=ProductionAnalysisQuerySchema.safeParse(input);
       if(!parsed.success)throw new ApplicationError("VALIDATION_ERROR","生产分析筛选无效",400);
-      const rows=await client.query<ProductionRow>(`${selectProduction} WHERE ${productionVisibility}`,productionVisibilityArgs(actor));
+      const rows=await client.query<ProductionRow>(`${selectFactoryProduction} WHERE ${factoryProductionVisibility}`,productionVisibilityArgs(actor));
       return readProductionAnalysis(client,rows.rows.map(toOrder),actor,asOf,parsed.data);
     });
   }
