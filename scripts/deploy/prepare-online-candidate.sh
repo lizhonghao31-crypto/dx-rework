@@ -42,20 +42,7 @@ fi
 bundle="$DX_ROOT/candidates/$sha"
 if [[ ! -d "$bundle" ]]; then
   cd "$out"
-  if cmp -s package-lock.json "$DX_ROOT/current/package-lock.json" && [[ -d "$DX_ROOT/current/node_modules" ]]; then
-    mkdir node_modules
-    cp -a "$DX_ROOT/current/node_modules/." node_modules/
-    # Rebind only workspace links to this new complete source tree.
-    node - <<'JS'
-const fs=require('fs'),path=require('path');
-const names={contracts:'packages/contracts',config:'packages/config',domain:'packages/domain',ui:'packages/ui',api:'apps/api',web:'apps/web'};
-fs.mkdirSync('node_modules/@dx-rework',{recursive:true});
-for(const [name,target] of Object.entries(names)){const p=`node_modules/@dx-rework/${name}`;fs.rmSync(p,{recursive:true,force:true});fs.symlinkSync(path.relative(path.dirname(p),target),p,'dir');}
-JS
-    npm ls --depth=0 > "$out/dependency-check.log" 2>&1 || { rm -rf node_modules; timeout 600 npm ci --prefer-offline --no-audit --no-fund; }
-  else
-    timeout 600 npm ci --prefer-offline --no-audit --no-fund
-  fi
+  bash "$kernel/scripts/deploy/prepare-build-dependencies.sh" "$out" "$DX_ROOT/current"
   export VITE_BASE_PATH="$APP_BASE_PATH"
   timeout 300 npm run build:packages
   timeout 300 npm run build --workspace @dx-rework/api
