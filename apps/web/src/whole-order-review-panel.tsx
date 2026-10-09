@@ -215,6 +215,8 @@ export function WholeOrderReviewPanel({
     if (!data || data.reworkStatus !== "pending_order_review") return;
     const reason = await promptInApp(
       executionKind === "tail_inspection" ? "请填写驳回这条整查报数的原因" : "请填写驳回这条上数的原因",
+      "",
+      executionKind === "worker" ? { requiredMessage: "驳回原因必填" } : {},
     );
     if (!reason?.trim()) return;
     try {
