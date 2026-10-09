@@ -65,3 +65,37 @@ it("keeps historical status, name and submission time tied to the selected versi
   expect(renderToStaticMarkup(createElement(SupplierDuplicateCheck, { check: { formalSupplierCount: 1, pendingRequestCount: 0, checkedAt: detail.updatedAt } }))).toContain("发现同名同类型记录");
   expect(renderToStaticMarkup(createElement(SupplierDuplicateCheck, { check: { formalSupplierCount: 0, pendingRequestCount: 0, checkedAt: detail.updatedAt } }))).toContain("未发现同名同类型记录");
 });
+
+it.each(["America/Los_Angeles", "UTC", "Asia/Shanghai"])(
+  "renders supplier event times in Shanghai when the browser timezone is %s",
+  zone => {
+    const previous = process.env.TZ;
+    try {
+      process.env.TZ = zone;
+      expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe(zone);
+      for (const [instant, display] of [
+        ["2026-10-09T12:55:38.000Z", "2026/10/9 20:55:38"],
+        ["2026-10-09T16:00:01.000Z", "2026/10/10 00:00:01"],
+      ] as const) {
+        const item: SupplierOnboardingSummary = {
+          requestId: "timezone-fixture", applicantId: "fixture", applicantName: "申请人",
+          supplierName: profile.supplierName, supplierType: "factory", status: "pending_approval",
+          version: 1, supplierId: null, createdAt: instant, updatedAt: instant,
+        };
+        for (const reviewer of [false, true]) {
+          const html = renderToStaticMarkup(createElement(SupplierApplicationList, { items: [item], reviewer }));
+          expect(html).toContain(`${instant}">${display}</time>`);
+        }
+        const duplicate = renderToStaticMarkup(createElement(SupplierDuplicateCheck, {
+          check: { formalSupplierCount: 0, pendingRequestCount: 0, checkedAt: instant },
+        }));
+        expect(duplicate).toContain(`检查时间：${display}。通过时会再次检查。`);
+        expect(item.updatedAt).toBe(instant);
+        expect(new Date(instant).toISOString()).toBe(instant);
+      }
+    } finally {
+      if (previous === undefined) delete process.env.TZ;
+      else process.env.TZ = previous;
+    }
+  },
+);

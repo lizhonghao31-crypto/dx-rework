@@ -25,7 +25,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok) throw new RequestError(body?.error?.message ?? `请求失败：${response.status}`, response.status);
   return body as T;
 }
-const date = (value: string) => new Date(value).toLocaleString("zh-CN", { hour12: false });
+const date = (value: string) => new Date(value).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false });
 export function SupplierApplicationSnapshot({ profile }: { profile: SupplierOnboardingProfile }) {
   const fields: [string, string | number | null | undefined][] = [
     ["供应商名称", profile.supplierName], ["供应商类型", SUPPLIER_TYPE_LABELS[profile.supplierType]], ["联系人", profile.contactPerson], ["联系电话", profile.contactPhone],
