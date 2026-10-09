@@ -90,9 +90,9 @@ export class ReportExportService {
       ...Object.entries(data.totals).map(([key, value]) => [businessFieldLabel(key), exportCell(key, value)]),
     ];
     const content = buildWorkbook([
-      { name: "导出说明", rows: filterRows },
-      { name: "明细", rows: sheetRows(data.columns, data.rows) },
-      { name: "汇总", rows: summaryRows },
+      { name: "导出说明", rows: filterRows, fitColumns:reportType==='wages' },
+      { name: "明细", rows: sheetRows(data.columns, data.rows), fitColumns:reportType==='wages' },
+      { name: "汇总", rows: summaryRows, fitColumns:reportType==='wages' },
     ]);
 
     await this.events.append(this.auditClient, actor, {
