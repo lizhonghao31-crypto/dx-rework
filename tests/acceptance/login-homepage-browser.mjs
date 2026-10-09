@@ -28,13 +28,13 @@ async function setup({width=1672,height=941,logged=false,noRole=false,mobile=fal
 async function ready(t,path='/auth/login'){await t.page.goto(t.origin+t.base+path);await t.page.locator('#dx-rework-dingtalk-qr iframe').waitFor();}
 try{
  for(const [width,height]of [[1672,941],[1920,1080],[1440,900],[1366,768],[1024,768],[768,1024],[390,844],[320,700]]){
-  const t=await setup({width,height});await ready(t);const geometry=await t.page.evaluate(()=>({scroll:document.documentElement.scrollWidth,client:document.documentElement.clientWidth,frame:document.querySelector('#dx-rework-dingtalk-qr').getBoundingClientRect().toJSON(),card:document.querySelector('.dx-login-qr-card').getBoundingClientRect().toJSON(),hero:document.querySelector('.dx-login-hero').getBoundingClientRect().toJSON()}));
-  assert(geometry.scroll<=geometry.client,`${width}: horizontal overflow ${geometry.scroll}`);assert.equal(geometry.frame.width,300);assert.equal(t.count.start,1);assert.equal(t.count.me,1);
+  const t=await setup({width,height});await ready(t);const geometry=await t.page.evaluate(()=>({scroll:document.documentElement.scrollWidth,client:document.documentElement.clientWidth,frame:document.querySelector('#dx-rework-dingtalk-qr').getBoundingClientRect().toJSON(),card:document.querySelector('.dx-login-qr-card').getBoundingClientRect().toJSON(),brand:document.querySelector('.dx-login-brand').getBoundingClientRect().toJSON(),sdkLayoutWidth:parseFloat(getComputedStyle(document.querySelector('#dx-rework-dingtalk-qr')).width)}));
+  assert(geometry.scroll<=geometry.client,`${width}: horizontal overflow ${geometry.scroll}`);assert.equal(geometry.frame.width,255);assert.equal(geometry.sdkLayoutWidth,300);assert.equal(t.count.start,1);assert.equal(t.count.me,1);
   await t.page.screenshot({path:`${out}/login-${width}.png`,fullPage:true});checks.push({case:'layout',width,height,geometry,requests:{...t.count}});await t.close();
  }
  for(const scale of [1.25,1.5]){
   // Browser zoom reduces the CSS viewport; preserve the physical screen size.
-  const t=await setup({width:Math.floor(1366/scale),height:Math.floor(768/scale)});await ready(t);const geometry=await t.page.evaluate(()=>({scroll:document.documentElement.scrollWidth,client:document.documentElement.clientWidth,frame:document.querySelector('#dx-rework-dingtalk-qr').getBoundingClientRect().width}));assert(geometry.scroll<=geometry.client);assert.equal(geometry.frame,300);checks.push({case:'zoom-equivalent-css-viewport',scale,geometry});await t.close();
+  const t=await setup({width:Math.floor(1366/scale),height:Math.floor(768/scale)});await ready(t);const geometry=await t.page.evaluate(()=>({scroll:document.documentElement.scrollWidth,client:document.documentElement.clientWidth,frame:document.querySelector('#dx-rework-dingtalk-qr').getBoundingClientRect().width}));assert(geometry.scroll<=geometry.client);assert.equal(geometry.frame,255);checks.push({case:'zoom-equivalent-css-viewport',scale,geometry});await t.close();
  }
  {
   const t=await setup();await ready(t);await t.page.clock.install();await t.page.evaluate(()=>window.__qrError('TEST expired'));await t.page.getByRole('status').filter({hasText:'二维码已失效'}).waitFor();await t.page.clock.runFor(60000);assert.equal(t.count.start,1);
@@ -62,3 +62,4 @@ try{
  }
 }finally{await browser.close();await writeFile(`${out}/result.json`,JSON.stringify({checks,errors},null,2));}
 assert.deepEqual(errors,[]);process.stdout.write(JSON.stringify({checks:checks.length,errors})+'\n');
+
