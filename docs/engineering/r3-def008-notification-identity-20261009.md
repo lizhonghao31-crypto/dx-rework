@@ -7,7 +7,7 @@
 - base SHA: 130a58e7a1910e445d2de1e6510e911329f5add8
 - working branch: fix/r3-notification-task-identity
 - task scope: 让可办理的个人站内通知携带其自身已授权对象的最小款号身份。
-- allowed files: notification-service.ts、对应通知回归、本证据文档。
+- allowed files: notification-service.ts、对应通知回归、完整业务链内的精确 case 范围回归 helper、本证据文档。
 - forbidden files: 全局 access-policy、业务角色/capability 配置、数据库迁移、部署工具、依赖、首页。
 - gate class: FULL（通知关键路由与字段权限边界）。
 - main 只读基线：2d4cf6ba183a0f1ce5ac04e5ddfeb60a617479b8。
@@ -44,3 +44,13 @@
 sample_detail / supplier_onboarding / wage_period_detail 不映射数字母单，legacy 入口不在本 PR 范围。DingTalk delivery-worker 部分类别身份缺失是独立静态风险；数字子单已有 enqueue/delivery 双抑制，本 PR 不改外部发送，不宣称已修该风险。
 
 没有部署、真实订单写入、ECS、服务重启、权限扩大或 homepage 变更。合并后仍需用户部署候选，由唯一浏览器执行者复测 UAT315 及相关允许/拒绝路径。
+
+## 唯一 Review 的 P1 收口
+
+Review 对 5724a154 提出 discussion_r4226390830：同一返工有加工厂和面料责任 case，父返工可读不等于精确 case 可读。实际 case 入口使用 `external_responsibility_can_view_case`，必须调用既有 `ExternalResponsibilityService.getCase` 验证 route.entityId，再核对返回的 reworkOrderId；母单 technical 阅读不能绕过这一步。原实体为 case 时还要求 entity_id 与 route.entityId 相同。批次分配的既有 tab=external_responsibility 路由使用原 batch reader，并校验实际活动 batchId 与父返工，不能把 batch UUID 当 case。全部查询沿用当前事务连接，读取结果中的金额、供应商、快照不进入通知。
+
+新增 5 项组件回归覆盖 exact case 允许、跨父错绑、兄弟 case 403（母单可读/不可读两种）、原 case 实体错绑、合法/其它/缺失分配 batch。完整 N01–N11 原生业务链生成的实际加工厂/面料 case 和持久化角色还验证：两个应付角色都可读父返工，各自 case 可读而另一类 case 403；各自通知只带 UAT-FULL-CHAIN 款号，跨职责通知隐藏；确认提示保持业务待办 pending，未泄露母单、供应商或金额。case 阅读与通知授权没有 mock。通知 fixture 只在 owned schema 中生成，并仅为 current/ack 测试设置自身 receipt cursor；关联放在原 legacy 钉钉断言之后，以保留已确认的数字子单外部发送抑制行为。
+
+将 notification-service 原样恢复到 Review 的 5724a154 后，新增原生交叉拒绝与两种母单条件的拒绝回归均明确失败（3 项）；恢复修复后定向 20 项全部通过。仍只有一次主动 Review；最终修复 Head 的 FULL Gate 另以 PR 记录为准。
+
+P1 修复后本地完整通知、完整 N01–N11、原外发原生业务链与组件委托合计 160/160 通过；lint/typecheck/build（静态业务链 77/77）、secret scan 与 diff check 通过。未修改全局权限、schema、部署工具或依赖。

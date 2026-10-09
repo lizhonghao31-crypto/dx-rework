@@ -3,6 +3,7 @@ import { patternOrderScopeSql } from "../pattern-room/order-authority.js";
 import { SourcingService } from "../sourcing/sourcing-service.js";
 import { SourcingProductionService } from "../sourcing/sourcing-production-service.js";
 import { ReworkBusinessDetailService } from "../rework/rework-business-detail-service.js";
+import { ExternalResponsibilityService } from "../rework/external-responsibility-service.js";
 import { ApplicationError } from "../platform/errors.js";
 import { isRootActor } from "../access/business-authority.js";
 import { randomUUID } from "node:crypto";
@@ -164,6 +165,7 @@ export class DigitalProductionNotificationService {
     let ownDevelopmentTask:Task|null=null;
     let ownPatternOrderId:string|null=null;
     let ownChildResource:{kind:"sourcing"|"production"|"rework";id:string}|null=null;
+    let ownExternalResource:{kind:"case"|"batch";id:string}|null=null;
     let ownOrderTask:Task|null=null;
     if(event.instruction_order_id){
       if(!await new DigitalProductionAccessPolicy(database).allowed(actor,"order",event.instruction_order_id,"technical"))return null;
@@ -229,6 +231,12 @@ export class DigitalProductionNotificationService {
             ownChildResource={kind:"rework",id:childId};
           }
         }
+        if(route.routeName==="external_responsibility_detail"){
+          if(ownChildResource?.kind!=="rework")return null;
+          if(row.entity_type==="external_responsibility_case"&&row.entity_id!==route.entityId)return null;
+          // Allocation routes identify a batch; all other existing routes identify a case.
+          ownExternalResource={kind:route.tab==="external_responsibility"?"batch":"case",id:route.entityId};
+        }
       }
     }
     let context:DigitalNotification["context"];
@@ -257,19 +265,31 @@ export class DigitalProductionNotificationService {
       [actor.actorId,false,["pattern_room_worker"],true,ownPatternOrderId,contextTarget.kind,contextTarget.id])).rows[0];
       if(resource)context={styleNo:resource.style_no,orderId:null,colors:[],poNumbers:[]};
     }
-    if(ownChildResource&&contextTarget&&!parentReadable){
+    if(ownChildResource&&contextTarget&&(!parentReadable||ownExternalResource)){
       if((await database.query("SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2 AND state<>'active'",[contextTarget.kind,contextTarget.id])).rowCount)return null;
       // These read-only entry methods use query only. Bind them to the current
       // transaction client so a claim never borrows another pool connection.
       const childDatabase={query:database.query.bind(database)} as Pool;
-      let styleNo:string|null;
+      let styleNo:string|null=null;
       try{
-        if(ownChildResource.kind==="sourcing")styleNo=(await new SourcingService(childDatabase).getCase({...actor,authorizationCapability:"sourcing:view"},ownChildResource.id)).styleNo;
-        else if(ownChildResource.kind==="production")styleNo=(await new SourcingProductionService(childDatabase).get(actor,ownChildResource.id)).firstStyleNo;
-        else {
-          const child=await new ReworkBusinessDetailService(childDatabase).get(actor,ownChildResource.id);
-          if(["cancelled","deleted"].includes(child.status))return null;
-          styleNo=child.styleNo;
+        if(ownExternalResource){
+          const external=new ExternalResponsibilityService(childDatabase);
+          if(ownExternalResource.kind==="case"){
+            const target=await external.getCase(actor,ownExternalResource.id,childDatabase);
+            if(target.reworkOrderId!==ownChildResource.id)return null;
+          }else{
+            const target=await external.get(actor,ownChildResource.id,childDatabase);
+            if(!target||target.batchId!==ownExternalResource.id||target.reworkOrderId!==ownChildResource.id)return null;
+          }
+        }
+        if(!parentReadable){
+          if(ownChildResource.kind==="sourcing")styleNo=(await new SourcingService(childDatabase).getCase({...actor,authorizationCapability:"sourcing:view"},ownChildResource.id)).styleNo;
+          else if(ownChildResource.kind==="production")styleNo=(await new SourcingProductionService(childDatabase).get(actor,ownChildResource.id)).firstStyleNo;
+          else {
+            const child=await new ReworkBusinessDetailService(childDatabase).get(actor,ownChildResource.id);
+            if(["cancelled","deleted"].includes(child.status))return null;
+            styleNo=child.styleNo;
+          }
         }
       }catch(error){
         if(error instanceof ApplicationError&&[403,404].includes(error.statusCode))return null;

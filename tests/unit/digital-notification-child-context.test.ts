@@ -6,6 +6,7 @@ import { DigitalProductionNotificationService } from "../../apps/api/src/product
 import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
 import { SourcingProductionService } from "../../apps/api/src/sourcing/sourcing-production-service.js";
 import { ReworkBusinessDetailService } from "../../apps/api/src/rework/rework-business-detail-service.js";
+import { ExternalResponsibilityService } from "../../apps/api/src/rework/external-responsibility-service.js";
 import { ApplicationError } from "../../apps/api/src/platform/errors.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
@@ -25,16 +26,18 @@ describe("digital notification delegates exact child scope to existing readers",
       if(sql.includes("to_regclass('digital_production_child_links')"))return {rows:[{relation:"digital_production_child_links"}],rowCount:1};
       if(sql.includes("SELECT l.production_order_id"))return {rows:[{production_order_id:mother}],rowCount:1};
       if(sql.startsWith("SELECT 1 FROM digital_production_resource_lifecycle"))return {rows:[],rowCount:0};
+      if(sql.startsWith("SELECT design_style_no"))return {rows:[{design_style_no:"TEST-AUTHORIZED-MOTHER",production_order_id:mother}],rowCount:1};
+      if(sql.startsWith("SELECT po_number,color"))return {rows:[],rowCount:0};
       if(sql.startsWith("SELECT rework_order_id FROM"))return {rows:boundChild?[{rework_order_id:boundChild}]:[],rowCount:boundChild?1:0};
       if(sql.startsWith("UPDATE digital_production_notification_receipts"))return {rows:[],rowCount:1};
       throw new Error(`Unexpected query: ${sql}`);
     });
     vi.spyOn(DigitalProductionAccessPolicy.prototype,"activeRole").mockResolvedValue(true);
-    vi.spyOn(DigitalProductionAccessPolicy.prototype,"allowed").mockResolvedValue(false);
+    const parentReader=vi.spyOn(DigitalProductionAccessPolicy.prototype,"allowed").mockResolvedValue(false);
     const reader=production
       ? vi.spyOn(SourcingProductionService.prototype,"get").mockResolvedValue({firstStyleNo:"TEST-EXACT-CHILD",price:"PRIVATE"} as unknown as Awaited<ReturnType<SourcingProductionService["get"]>>)
       : vi.spyOn(ReworkBusinessDetailService.prototype,"get").mockResolvedValue({styleNo:"TEST-EXACT-CHILD",status:"active",budget:"PRIVATE"} as unknown as Awaited<ReturnType<ReworkBusinessDetailService["get"]>>);
-    return {child,eventId,actor,route,row,query,reader,setBoundChild:(id:string|null)=>{boundChild=id;},notices:new DigitalProductionNotificationService({query} as unknown as Pool)};
+    return {child,eventId,actor,route,row,query,reader,parentReader,setBoundChild:(id:string|null)=>{boundChild=id;},notices:new DigitalProductionNotificationService({query} as unknown as Pool)};
   };
   it.each([
     ["production_detail",false], ["rework_detail",false], ["process_configuration",true],
@@ -68,5 +71,38 @@ describe("digital notification delegates exact child scope to existing readers",
   it("drops a cancelled child even when its historical detail remains readable",async()=>{
     const f=fixture("rework_detail");f.reader.mockResolvedValue({styleNo:"TEST-CANCELLED",status:"cancelled"} as never);
     expect((await f.notices.current(f.actor,f.eventId)).notification).toBeNull();
+  });
+  it("authorizes the exact external case before projecting only its rework identity",async()=>{
+    const f=fixture("external_responsibility_detail",true);
+    const exact=vi.spyOn(ExternalResponsibilityService.prototype,"getCase").mockResolvedValue({reworkOrderId:f.child,proposedDeductionAmount:"PRIVATE"} as never);
+    const notice=(await f.notices.current(f.actor,f.eventId)).notification!;
+    expect(exact).toHaveBeenCalledWith(f.actor,f.route.entityId,expect.objectContaining({query:expect.any(Function)}));
+    expect(f.reader).toHaveBeenCalledWith(f.actor,f.child);
+    expect(notice.context).toEqual({styleNo:"TEST-EXACT-CHILD",orderId:null,colors:[],poNumbers:[]});
+    expect(JSON.stringify(notice)).not.toMatch(/PRIVATE|proposedDeductionAmount/);
+    exact.mockResolvedValue({reworkOrderId:randomUUID()} as never);
+    expect((await f.notices.current(f.actor,f.eventId)).notification).toBeNull();
+  });
+  it.each([false,true])("rejects an unreadable sibling case despite readable rework (mother technical=%s)",async(motherReadable)=>{
+    const f=fixture("external_responsibility_detail",true);f.parentReader.mockResolvedValue(motherReadable);
+    const exact=vi.spyOn(ExternalResponsibilityService.prototype,"getCase").mockRejectedValue(new ApplicationError("FORBIDDEN","different payables scope",403));
+    expect((await f.notices.current(f.actor,f.eventId)).notification).toBeNull();
+    expect(exact).toHaveBeenCalledWith(f.actor,f.route.entityId,expect.anything());
+    expect(f.reader).not.toHaveBeenCalled();
+  });
+  it("rejects a route identifying a different case from the original case entity",async()=>{
+    const f=fixture("external_responsibility_detail",true);f.row.entity_type="external_responsibility_case";f.row.entity_id=randomUUID();
+    const exact=vi.spyOn(ExternalResponsibilityService.prototype,"getCase");
+    expect((await f.notices.current(f.actor,f.eventId)).notification).toBeNull();expect(exact).not.toHaveBeenCalled();
+  });
+  it("keeps an authorized allocation batch route and rejects other or absent batches",async()=>{
+    const f=fixture("external_responsibility_detail",true);f.route.tab="external_responsibility";
+    const exact=vi.spyOn(ExternalResponsibilityService.prototype,"get").mockResolvedValue({batchId:f.route.entityId,reworkOrderId:f.child,sourceSnapshot:{amount:"PRIVATE"}} as never);
+    const caseReader=vi.spyOn(ExternalResponsibilityService.prototype,"getCase");
+    expect((await f.notices.current(f.actor,f.eventId)).notification?.context?.styleNo).toBe("TEST-EXACT-CHILD");
+    expect(exact).toHaveBeenCalledWith(f.actor,f.child,expect.anything());expect(caseReader).not.toHaveBeenCalled();
+    exact.mockResolvedValue({batchId:randomUUID(),reworkOrderId:f.child} as never);
+    expect((await f.notices.current(f.actor,f.eventId)).notification).toBeNull();
+    exact.mockResolvedValue(null);expect((await f.notices.current(f.actor,f.eventId)).notification).toBeNull();
   });
 });
