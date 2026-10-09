@@ -5,9 +5,23 @@ import {
   RequestSourcingFactoryChangeSchema, type SourcingCaseSummary,
 } from "@dx-rework/contracts";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
-import { isNewSourcingPrice, newSourcingPriceDisplay, historicalSourcingPrice, sourcingPriceSummary, sourcingLinePricing, sourcingDeleteConfirmation, sourcingDecisionNeedsReason } from "../../apps/web/src/sourcing-price-presentation.js";
+import { factoryChangeTotalPreview, isNewSourcingPrice, newSourcingPriceDisplay, historicalSourcingPrice, sourcingPriceSummary, sourcingLinePricing, sourcingDeleteConfirmation, sourcingDecisionNeedsReason } from "../../apps/web/src/sourcing-price-presentation.js";
 
 describe("ordinary sourcing price precision and readable facts", () => {
+  it("previews factory changes at their existing four-place precision with per-line cent rounding",()=>{
+    expect(factoryChangeTotalPreview("4.1234",[20])).toBe("82.47");
+    expect(factoryChangeTotalPreview("4.1234",[1,1])).toBe("8.24");
+    expect(factoryChangeTotalPreview("4.125",[1,1])).toBe("8.26");
+    expect(factoryChangeTotalPreview("4.123",[20])).toBe("82.46");
+    expect(formatBusinessDecimal("4.1234")).toBe("4.12");
+    for(const invalid of ["4.12345","4.","","0","-4","1e2","4,1234"]){
+      expect(factoryChangeTotalPreview(invalid,[20])).toBe("—");
+      expect(RequestSourcingFactoryChangeSchema.safeParse({supplierId:"00000000-0000-4000-8000-000000000200",unitPrice:invalid,changeReason:"TEST"}).success).toBe(false);
+    }
+    expect(factoryChangeTotalPreview("4.1234",[])).toBe("—");
+    expect(factoryChangeTotalPreview("4.1234",[0])).toBe("—");
+    expect(isNewSourcingPrice("4.1234")).toBe(false);
+  });
   it("requires a reason only for a position-matched increase, including mixed changes", () => {
     const quoted = [{ position: 1, unitPrice: "12.3000" }, { position: 2, unitPrice: "8.6100" }];
     expect(sourcingDecisionNeedsReason([{ position: 2, unitPrice: "8.61" }, { position: 1, unitPrice: "0012.30" }], quoted)).toBe(false);

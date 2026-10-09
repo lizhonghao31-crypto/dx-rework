@@ -14,7 +14,7 @@ import { moduleCanWrite } from "./member-module-policy.js";
 import { todoReturnPath } from "./todo-query-state.js";
 import { cockpitReturnPath } from "./digital-journey-cockpit-model.js";
 import {WorkAnalysisPanel} from "./work-analysis-panel.js";
-import { isNewSourcingPrice, newSourcingPriceDisplay, historicalSourcingPrice, sourcingPriceSummary, sourcingLinePricing, sourcingDeleteConfirmation, sourcingDecisionNeedsReason } from "./sourcing-price-presentation.js";
+import { factoryChangeTotalPreview, isNewSourcingPrice, newSourcingPriceDisplay, historicalSourcingPrice, sourcingPriceSummary, sourcingLinePricing, sourcingDeleteConfirmation, sourcingDecisionNeedsReason } from "./sourcing-price-presentation.js";
 import { createSourcingPriceInput } from "./sourcing-price-input.js";
 import { applySourcingPriceCascade } from "./sourcing-price-cascade.js";
 import { NavigationIcon } from "./navigation-icons.js";
@@ -1221,7 +1221,6 @@ function OrderDetailPage({
   const feedback = useSubmissionFeedback(setBusy);
   const [message, setMessage] = useState("正在加载订单…");
   const [activeBusinessInput, setActiveBusinessInput] = useState<string | null>(null);
-  const [factoryChangeUnitPriceEdited, setFactoryChangeUnitPriceEdited] = useState(false);
   const actionKey = useRef<string | null>(null);
   const priceInputs = useRef(new Map<string, ReturnType<typeof createSourcingPriceInput>>());
   const quotePriceOverrides = useRef<ReadonlySet<number>>(new Set<number>());
@@ -1304,7 +1303,6 @@ function OrderDetailPage({
         cuttingProcess: current.cuttingProcess || detail.decision?.cuttingProcess || "",
         cuttingProcessOther: current.cuttingProcessOther || detail.decision?.cuttingProcessOther || "",
       }));
-      setFactoryChangeUnitPriceEdited(false);
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "订单加载失败");
@@ -1652,7 +1650,7 @@ function OrderDetailPage({
     :item.ieQuote?.totalAmount;
   const ownerTotalDelta=item.decision&&comparableIeTotal&&comparableIeTotal!=='—'?subtractFixedPoint(item.decision.totalAmount,comparableIeTotal,2):null;
   const transferQuantity=factoryRemainingLines?.reduce((sum,line)=>sum+line.quantity,0)??item.orderQuantity;
-  const transferTotal=factoryRemainingLines?linesTotalPreview(factoryRemainingLines.filter(line=>line.quantity>0).map(line=>({position:line.position,unitPrice:factoryChangeDraft.unitPrice})),item.lineItems.map(line=>({...line,quantity:factoryRemainingLines.find(x=>x.position===line.position)?.quantity??0}))):totalPreview(factoryChangeDraft.unitPrice,item.orderQuantity);
+  const transferTotal=factoryChangeTotalPreview(factoryChangeDraft.unitPrice,factoryRemainingLines?factoryRemainingLines.filter(line=>line.quantity>0).map(line=>line.quantity):[item.orderQuantity]);
   const ownerCraftSummary = <span className="sourcing-owner-craft-summary">承包内容包括 <strong>{item.processes.length ? item.processes.join("、") : "未填写"}</strong>；裁床工序为 <strong>{item.decision?.cuttingProcess === "in_house" ? "本厂裁" : item.decision?.cuttingProcess === "outsourced" ? "外厂裁" : item.decision?.cuttingProcess === "other" ? `其它：${item.decision.cuttingProcessOther ?? "未填写"}` : "未填写"}</strong>。</span>;
   const latestFinance = [...timeline].reverse()
     .find((entry) => entry.kind === "finance_reconciliation" && !entry.factoryDecisionId);
@@ -2072,7 +2070,7 @@ function OrderDetailPage({
               <p>当前：{item.decision.supplierName} · {formatBusinessCurrency(item.decision.unitPrice)}/件。新单价不高于当前价时按角色规则直接生效；超过时交老板批准。</p>
               <div className="sourcing-form-grid">
                 <label><span>新加工厂</span><select value={factoryChangeDraft.supplierId} onChange={(event) => { setFactoryChangeDraft({ ...factoryChangeDraft, supplierId: event.target.value }); actionKey.current = null; }}><option value="">请选择不同的加工厂</option>{factories.filter((factory) => factory.supplierId !== item.decision?.supplierId).map((factory) => <option value={factory.supplierId} key={factory.supplierId}>{factory.supplierName}</option>)}</select></label>
-                <label><span>新加工单价</span><input inputMode="decimal" value={activeBusinessInput === "factory-change-unit-price" && factoryChangeUnitPriceEdited ? factoryChangeDraft.unitPrice : businessInputValue(factoryChangeDraft.unitPrice)} onFocus={() => setActiveBusinessInput("factory-change-unit-price")} onBlur={() => setActiveBusinessInput(null)} onChange={(event) => { setFactoryChangeUnitPriceEdited(true); setFactoryChangeDraft({ ...factoryChangeDraft, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} /></label>
+                <label><span>新加工单价</span><input inputMode="decimal" value={activeBusinessInput === "factory-change-unit-price" ? factoryChangeDraft.unitPrice : businessInputValue(factoryChangeDraft.unitPrice)} onFocus={() => setActiveBusinessInput("factory-change-unit-price")} onBlur={() => setActiveBusinessInput(null)} onChange={(event) => { setFactoryChangeDraft({ ...factoryChangeDraft, unitPrice: businessInputChange(event.target.value) }); actionKey.current = null; }} /></label>
                 <label><span>转入数量</span><input readOnly value={transferQuantity}/></label>
                 <label><span>新总额</span><input readOnly value={businessInputValue(transferTotal)} /></label>
                 <p>已报完成数保留旧厂，未完工余量按生效时最新报量转入新厂。</p>

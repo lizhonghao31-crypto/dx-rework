@@ -47,7 +47,8 @@ describe("sourcing role-aware transfer UI", () => {
     expect(page).toContain("detail.decision?.linePrices.find");
     expect(page).toContain("detail.ieQuote?.linePrices.find");
     expect(page).toContain("linesTotalPreview(decision.linePrices, item.lineItems)");
-    expect(page).toContain("factoryChangeUnitPriceEdited");
+    expect(page).toContain('activeBusinessInput === "factory-change-unit-price" ? factoryChangeDraft.unitPrice');
+    expect(page).not.toContain("factoryChangeUnitPriceEdited");
     expect(page).toContain("supplierId: current.supplierId");
     expect(page).toContain("changeReason: current.changeReason");
     expect(page).toContain("resetFactoryChange = false");
