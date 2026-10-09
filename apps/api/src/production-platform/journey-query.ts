@@ -15,6 +15,7 @@ import type { DevelopmentDocument } from "@dx-rework/contracts/digital-developme
 import { journeyReworkHistoryUrl } from "./journey-rework-record.js";
 import { readOrderPoDeliveryDates } from "./po-delivery-query.js";
 import { poDeliveryRisks } from "@dx-rework/contracts";
+import { assertBusinessExportAllowed } from "../access/export-authority.js";
 
 const iso = (value: Date|string|null|undefined) => value == null ? null : new Date(value).toISOString();
 type Candidate = { source: {source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
@@ -70,6 +71,7 @@ export class DigitalJourneyQuery {
     });
   }
   async export(actor:TrustedActorContext,filter:JourneyFilter) {
+    assertBusinessExportAllowed(actor.actorRoles);
     const result=await this.list(actor,{...filter,page:1},true);
     return {ruleVersion:result.ruleVersion,asOf:result.asOf,total:result.total,summary:result.summary,items:result.items};
   }
