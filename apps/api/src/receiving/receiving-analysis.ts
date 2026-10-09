@@ -8,7 +8,7 @@ import { productionNotExcluded } from "../sourcing/production-visibility.js";
 // Batch-level adjustments cannot be assigned to individual production orders by guessing.
 export const RECEIVING_ANALYSIS_LINKS_SQL = `SELECT receipt.receipt_id,receipt.receiving_batch_id,
  receipt.received_at,COALESCE(correction.actual_quantity,receipt.actual_quantity)::bigint AS actual_quantity,
- correction.correction_id,link.production_order_id,
+ correction.correction_id,link.production_order_id,(to_jsonb(link)->>'factory_decision_id')::uuid AS factory_decision_id,
  batch.deleted_at IS NOT NULL AS archived,
  EXISTS(SELECT 1 FROM sourcing_production_exclusions exclusion
    WHERE exclusion.production_order_id=link.production_order_id) AS excluded
