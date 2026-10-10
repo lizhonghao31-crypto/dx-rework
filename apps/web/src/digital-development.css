@@ -52,7 +52,7 @@
  .dx-doc-development .development-craft-groups h3{display:flex;align-items:center;min-height:40px;box-sizing:border-box;margin:0;padding:8px 12px;font-size:14px;font-weight:600;background:#f5f8fc;border-bottom:1px solid #dce5f0}
  .dx-doc-development .development-craft-groups>section>div{padding:12px;display:flex;flex-direction:column;gap:12px}
  .dx-doc-development .development-craft-groups textarea{min-height:72px;max-height:180px}
- .dx-doc-development.development-editor .dx-doc-card label.development-flag{display:flex;gap:6px;align-items:center;white-space:nowrap;color:#1d2e49}
+ .dx-doc-development.development-editor .dx-doc-card label.development-flag{display:flex;flex-direction:row;gap:6px;align-items:center;white-space:nowrap;color:#1d2e49}
  .dx-doc-development.development-editor .development-flag input{width:16px;min-width:16px;height:16px;min-height:16px;flex:0 0 16px;margin:0}
  .dx-doc-development .development-material-group h3{font-size:14px;line-height:20px;margin:12px 0 8px}
  .dx-doc-development.development-editor table{border-collapse:collapse;width:100%;color:#1d2e49}
