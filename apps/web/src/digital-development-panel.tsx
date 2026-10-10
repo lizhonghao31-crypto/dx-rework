@@ -8,7 +8,8 @@ import { DevelopmentPrint } from "./digital-development-print.js";
 import { useEffect, useRef, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import { DEVELOPMENT_MEASUREMENTS, type DevelopmentDocument, type DevelopmentMaterial, type DevelopmentSheet } from "@dx-rework/contracts/digital-development";
-import type { UploadIntentResponse } from "@dx-rework/contracts";
+import { initialDevelopmentDocument, removeDevelopmentSize } from "./digital-development-editing.js";
+import { uploadDevelopmentMaterial } from "./digital-development-upload.js";
 import { digitalRequest } from "./digital-production-api.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { sha256Hex } from "./attachment-upload.js";
@@ -18,9 +19,9 @@ import { DocumentTableScroll, DocumentToolbar, DocumentAnchors, DocumentErrors, 
 import { developmentIssues } from "./digital-development-validation.js";
 const urls = createWebUrls(import.meta.env.BASE_URL);
 const material = (category: DevelopmentMaterial["category"], label: string): DevelopmentMaterial => ({materialId:createClientRequestId(),category,label,supplier:"",name:"",width:"",weight:"",composition:"",consumption:"",color:"",specification:"",quantity:"",requiredThisRound:true,available:false,expectedDate:null});
-const initial = (): DevelopmentDocument => ({template:"上衣",quantity:null,sampleSize:"",orderDate:null,returnDate:null,unit:"cm",sizes:["M","L"],measurements:DEVELOPMENT_MEASUREMENTS.上衣.map(name=>({name,values:["",""]})),interlining:"",placketInterlining:"",sewingThread:"",buttonholeThread:"",stitchDensity:"",washingIroning:"",packaging:"",formalSizes:"",casualSizes:"",mainLabel:false,mainLabelMethod:"",sizeLabel:false,careLabel:false,instructions:"",craft:"无",washing:"免洗",materials:[material("主布","主布 A"),material("配布","配布 B"),material("配布","配布 C")].map(item=>({...item,requiredThisRound:false})),files:[]});
+const initial = initialDevelopmentDocument;
 const inheritedLabels:Record<string,string>={development_materials:"核配",development_pattern:"纸样",development_cutting:"裁板",development_printing:"印花",development_embroidery:"绣花",development_print_embroidery:"印绣花",development_craft_confirmation:"工艺确认",development_sewing:"车板",development_washing:"洗水",development_tail_check:"尾查",development_confirmation:"最终设计确认",development_shipping:"寄样",development_craft_dispatch:"发工艺",development_sewing_transfer:"转交车板",development_washing_dispatch:"送洗"};
-const labels = {interlining:"朴号",placketInterlining:"门筒朴",sewingThread:"车缝线",buttonholeThread:"纽门线",stitchDensity:"针距",washingIroning:"洗水整烫方法",packaging:"包装方法",formalSizes:"正装尺码",casualSizes:"休闲尺码",mainLabelMethod:"主唛车法",instructions:"制作说明"} as const;
+const labels = {interlining:"朴号",placketInterlining:"门筒朴",sewingThread:"车缝线",buttonholeThread:"纽门线",stitchDensity:"针距",washingMethod:"洗水方法",ironing:"整烫方法",packaging:"包装方法",formalSizes:"正装尺码",casualSizes:"休闲尺码",mainLabelMethod:"主唛车法",instructions:"制作说明"} as const;
 type RoundHistory={roundNumber:number;origin:string;customerComment:string;internalProblem:string;explanation:string;affectedNodes:string[];inherited:Record<string,{taskId:string;roundNumber:number}>};
 type Rounds={rounds:RoundHistory[];draft:{version:number;payload:DevelopmentRevision}|null};
 export function DigitalDevelopmentPanel({sourceId,onClose,initialRound}:{sourceId:string;onClose:()=>void;initialRound?:number|undefined}) {
@@ -70,21 +71,28 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound}:{sourceI
       const limits=await digitalRequest<{maxUploadBytes:number}>(`${base}/upload-limits`);
       for(const file of Array.from(files)){
         if(file.size>limits.maxUploadBytes)throw Error(`${file.name}超过上传大小限制`);
-        const allowed=fileKind==="款图"||fileKind==="局部图"?["image/jpeg","image/png","image/webp"]:["image/jpeg","image/png","image/webp","application/pdf"];
-        if(!allowed.includes(file.type))throw Error(`${file.name}的格式不适用于${fileKind}`);
         const hash=await sha256Hex(file),fingerprint=JSON.stringify([fileKind,file.name,file.size,hash]);
         if(successfulUploads.current.has(fingerprint))continue;
         if(fileCount>=30)throw Error("开发单最多30个附件");
-        const intent=await digitalRequest<UploadIntentResponse>(`${base}/upload-intents`,"POST",{filename:file.name,mimeType:file.type,sizeBytes:file.size,sha256:hash});
-        const form=new FormData();for(const [name,value]of Object.entries(intent.uploadFields))form.append(name,value);form.append("file",file);
-        const response=await fetch(intent.uploadUrl,{method:intent.uploadMethod,body:form,credentials:"omit"});if(!response.ok)throw Error(`${file.name}上传失败`);
-        await digitalRequest(`${base}/attachments/${intent.attachmentId}/finalize`,"POST",{});
-        successfulUploads.current.set(fingerprint,intent.attachmentId);fileCount++;
-        setDocument(current=>({...current,files:[...current.files,{attachmentId:intent.attachmentId,kind:fileKind}]}));setDirty(true);
+        const attachmentId=await uploadDevelopmentMaterial(base,file,fileKind,limits.maxUploadBytes);
+        successfulUploads.current.set(fingerprint,attachmentId);fileCount++;
+        setDocument(current=>({...current,files:[...current.files,{attachmentId,kind:fileKind}]}));setDirty(true);
       }
     }catch(reason){setError(reason instanceof Error?reason.message:"上传失败");}finally{writing.current=false;setBusy(false);}
   };
   const readonly=revision?!sheet?.canRevise:!sheet?.canEdit||sheet.status==="published";
+  const removeSize=async(index:number)=>{
+    const filled=Boolean(document.sizes[index]?.trim())||document.measurements.some(row=>row.values[index]?.trim());
+    if(filled&&!await confirmInApp("删除这个尺码列及对应的尺寸值？"))return;
+    if(!writing.current)edit(removeDevelopmentSize(document,index));
+  };
+  const removeMeasurement=async(index:number)=>{
+    const row=document.measurements[index];
+    if((row?.name.trim()||row?.values.some(value=>value.trim()))&&!await confirmInApp("删除这个尺寸行及全部数值？"))return;
+    if(writing.current)return;
+    measurementIds.current=measurementIds.current.filter((_,position)=>position!==index);
+    edit({measurements:document.measurements.filter((_,position)=>position!==index)});
+  };
   const imageUrl=(id:string)=>urls.apiUrl(`digital-production/${base}/attachments/${id}`);
   const changeMaterial=(index:number,patch:Partial<DevelopmentMaterial>)=>edit({materials:document.materials.map((item,i)=>i===index?{...item,...patch}:item)});
   const issues=validationMode?developmentIssues(document,quantityInput,measurementIds.current,validationMode==="publish",revision):[];
@@ -109,7 +117,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound}:{sourceI
     {sheet&&<>
       {dirty||busy||!savedPrint?<article className="development-print"><p>当前单据不可打印，请先保存当前修改。</p></article>:<DevelopmentPrint sheet={revision?{...sheet,status:"draft",roundNumber:revision.basedOnRound+1,version:draftVersion}:sheet} document={savedPrint} imageUrl={imageUrl}/>}
       <div className="development-heading dx-doc-card"><span>款号：<strong>{sheet.designStyleNo}</strong></span><span>代用号：{sheet.temporaryStyleNo??"—"}</span><span>客户：{sheet.customerCode??"通用开发"}</span><span>设计师：{sheet.designerName}</span><span>{sheet.developmentType} · 第{revision?revision.basedOnRound+1:sheet.roundNumber??1}轮 · 资料版本 {revision?draftVersion:sheet.version}</span></div>
-      <DocumentAnchors sections={[{id:"development-basic",label:"基本资料"},{id:"development-materials",label:"面辅料"},{id:"development-sizes",label:"尺寸表"},{id:"development-craft",label:"工艺要求"},{id:"development-handling",label:"办理记录"}]}/>
+      <DocumentAnchors sections={[{id:"development-basic",label:"基本资料"},{id:"development-materials",label:"面辅料"},{id:"development-sizes",label:"尺寸表"},{id:"development-craft",label:"工艺要求"},...(sheet.status==="published"?[{id:"development-handling",label:"办理记录"}]:[])]}/>
       <form onSubmit={event=>{event.preventDefault();save();}}>
         {revision&&<section id="development-revision" tabIndex={-1} className="dx-doc-card development-revision"><DevelopmentRevisionFields value={revision} disabled={busy} onChange={value=>{setRevision(value);setDirty(true);}}/></section>}
         <div className="development-document-layout"><div className="development-document-left">
@@ -126,8 +134,8 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound}:{sourceI
             </tbody></table></DocumentTableScroll>{!readonly&&<DocumentAddRow label={`添加${category}`} disabled={busy||document.materials.length>=100} onClick={()=>{const next=material(category,category);edit({materials:[...document.materials,next]});requestAnimationFrame(()=>window.document.getElementById(`development-${next.materialId}-label`)?.focus());}}/>}</section>)}
           </DocumentSection>
           <DocumentSection id="development-sizes" title="尺寸表" detail={`${document.sizes.length} 尺码 · ${document.measurements.length} 项目`}>
-            {select("unit","尺寸单位",["cm","inch"])}<DocumentTableScroll><table className="development-size-table"><thead><tr><th>测量项目</th>{document.sizes.map((size,index)=><th key={index}><DocumentField id={`development-size-${index}`} label={`尺码列 ${index+1}`} value={size} readonly={readonly} disabled={busy} issue={issue(`development-size-${index}`)} onValue={value=>edit({sizes:document.sizes.map((old,i)=>i===index?value:old)})}/></th>)}</tr></thead><tbody>{document.measurements.map((row,index)=><tr key={measurementIds.current[index]} data-doc-row><th><DocumentField id={`development-measurement-${measurementIds.current[index]}-name`} label={`尺寸项目 ${index+1}`} value={row.name} readonly={readonly} disabled={busy} column="name" issue={issue(`development-measurement-${measurementIds.current[index]}-name`)} onValue={value=>edit({measurements:document.measurements.map((old,i)=>i===index?{...old,name:value}:old)})}/></th>{row.values.map((value,column)=><td key={column}><DocumentField id={`development-measurement-${measurementIds.current[index]}-${column}`} label={`${row.name} ${document.sizes[column]}`} value={value} readonly={readonly} disabled={busy} column={`size-${column}`} issue={issue(`development-measurement-${measurementIds.current[index]}-${column}`)} onValue={value=>edit({measurements:document.measurements.map((old,i)=>i===index?{...old,values:old.values.map((v,c)=>c===column?value:v)}:old)})}/></td>)}</tr>)}</tbody></table></DocumentTableScroll>
-            {!readonly&&<div className="development-actions"><DocumentAddRow label="添加尺码列" disabled={busy||document.sizes.length>=20} onClick={()=>edit({sizes:[...document.sizes,`尺码${document.sizes.length+1}`],measurements:document.measurements.map(row=>({...row,values:[...row.values,""]}))})}/><DocumentAddRow label="添加尺寸行" disabled={busy||document.measurements.length>=100} onClick={()=>{const id=createClientRequestId();measurementIds.current.push(id);edit({measurements:[...document.measurements,{name:"",values:document.sizes.map(()=>"")}]});requestAnimationFrame(()=>window.document.getElementById(`development-measurement-${id}-name`)?.focus());}}/></div>}
+            {select("unit","尺寸单位",["cm","inch"])}<DocumentTableScroll><table className="development-size-table"><thead><tr><th>测量项目</th>{document.sizes.map((size,index)=><th key={index}><DocumentField id={`development-size-${index}`} label={`尺码列 ${index+1}`} value={size} readonly={readonly} disabled={busy} issue={issue(`development-size-${index}`)} onValue={value=>edit({sizes:document.sizes.map((old,i)=>i===index?value:old)})}/>{!readonly&&<Button type="button" aria-label={`删除尺码列 ${index+1}`} disabled={busy} onClick={()=>void removeSize(index)}>删除列</Button>}</th>)}</tr></thead><tbody>{document.measurements.map((row,index)=><tr key={measurementIds.current[index]} data-doc-row><th><DocumentField id={`development-measurement-${measurementIds.current[index]}-name`} label={`尺寸项目 ${index+1}`} value={row.name} readonly={readonly} disabled={busy} column="name" issue={issue(`development-measurement-${measurementIds.current[index]}-name`)} onValue={value=>edit({measurements:document.measurements.map((old,i)=>i===index?{...old,name:value}:old)})}/>{!readonly&&<Button type="button" aria-label={`删除尺寸行 ${index+1}`} disabled={busy} onClick={()=>void removeMeasurement(index)}>删除行</Button>}</th>{row.values.map((value,column)=><td key={column}><DocumentField id={`development-measurement-${measurementIds.current[index]}-${column}`} label={`${row.name} ${document.sizes[column]}`} value={value} readonly={readonly} disabled={busy} column={`size-${column}`} issue={issue(`development-measurement-${measurementIds.current[index]}-${column}`)} onValue={value=>edit({measurements:document.measurements.map((old,i)=>i===index?{...old,values:old.values.map((v,c)=>c===column?value:v)}:old)})}/></td>)}</tr>)}</tbody></table></DocumentTableScroll>
+            {!readonly&&<div className="development-actions"><DocumentAddRow label="添加尺码列" disabled={busy||document.sizes.length>=20} onClick={()=>edit({sizes:[...document.sizes,""],measurements:document.measurements.map(row=>({...row,values:[...row.values,""]}))})}/><DocumentAddRow label="添加尺寸行" disabled={busy||document.measurements.length>=100} onClick={()=>{const id=createClientRequestId();measurementIds.current.push(id);edit({measurements:[...document.measurements,{name:"",values:document.sizes.map(()=>"")}]});requestAnimationFrame(()=>window.document.getElementById(`development-measurement-${id}-name`)?.focus());}}/></div>}
           </DocumentSection>
           <DocumentSection id="development-files" title="附件" detail={`${document.files.length} / 30`}>
             {!readonly&&<div className="development-file-controls"><label>附件类型<select aria-label="附件类型" disabled={busy} value={fileKind} onChange={event=>setFileKind(event.target.value as typeof fileKind)}>{["款图","局部图","菲林","工艺开发板"].map(value=><option key={value}>{value}</option>)}</select></label><label>上传图片 / 文件<input id="development-upload" disabled={busy||document.files.length>=30} type="file" multiple accept={fileKind==="款图"||fileKind==="局部图"?"image/jpeg,image/png,image/webp":"image/jpeg,image/png,image/webp,application/pdf"} onChange={event=>{const files=Array.from(event.currentTarget.files??[]);event.currentTarget.value="";void upload(files);}}/></label></div>}
@@ -136,17 +144,18 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound}:{sourceI
         </div><div className="development-document-right">
           <DocumentSection id="development-basic" title="基本资料"><div className="development-basic-grid">
             {select("template","模板",["上衣","裤子"],async value=>{const template=value as DevelopmentDocument["template"];if(await confirmInApp("切换模板将重置尺寸项目，继续？")&&!writing.current){measurementIds.current=DEVELOPMENT_MEASUREMENTS[template].map(()=>createClientRequestId());edit({template,measurements:DEVELOPMENT_MEASUREMENTS[template].map(name=>({name,values:document.sizes.map(()=>"")}))});}})}
-            <label>数量<DocumentField id="development-quantity" label="数量" value={quantityInput} numeric readonly={readonly} disabled={busy} issue={issue("development-quantity")} onValue={value=>{setQuantityInput(value);edit({quantity:/^\d+$/.test(value)&&Number(value)>=1&&Number(value)<=100000?Number(value):null});}}/></label>
-            {field("sampleSize","样板尺码")}{(["orderDate","returnDate"] as const).map((key,index)=><label key={key}>{["下单日期","回版日期"][index]}<DocumentField id={`development-${key}`} label={["下单日期","回版日期"][index]!} type="date" value={document[key]??""} readonly={readonly} disabled={busy} issue={issue(`development-${key}`)} onValue={value=>edit({[key]:value||null})}/></label>)}
+            <label>本轮打板数量<DocumentField id="development-quantity" label="本轮打板数量" value={quantityInput} numeric readonly={readonly} disabled={busy} issue={issue("development-quantity")} onValue={value=>{setQuantityInput(value);edit({quantity:/^\d+$/.test(value)&&Number(value)>=1&&Number(value)<=100000?Number(value):null});}}/></label>
+            {field("sampleSize","本轮打样尺码")}{(["orderDate","returnDate"] as const).map((key,index)=><label key={key}>{["开发下单日期","预计样板完成日期"][index]}<DocumentField id={`development-${key}`} label={["开发下单日期","预计样板完成日期"][index]!} type="date" value={document[key]??""} readonly={readonly} disabled={busy} issue={issue(`development-${key}`)} onValue={value=>edit({[key]:value||null})}/></label>)}
             {select("craft","工艺",["无","印花","绣花","印绣花"])}{select("washing","洗水",["免洗","内洗","外洗"])}
           </div></DocumentSection>
           <DocumentSection id="development-craft" title="工艺要求"><div className="development-craft-groups">
-            {([{title:"朴料",keys:["interlining","placketInterlining"]},{title:"车缝",keys:["sewingThread","buttonholeThread","stitchDensity"]},{title:"洗水整烫与包装",keys:["washingIroning","packaging"]},{title:"尺码标识",keys:["formalSizes","casualSizes"]}] as const).map(group=><section key={group.title}><h3>{group.title}</h3><div>{group.keys.map(key=><div key={key}>{field(key,labels[key],key==="formalSizes"||key==="casualSizes"?100:1000,key==="washingIroning"||key==="packaging")}</div>)}</div></section>)}
+            {([{title:"朴料",keys:["interlining","placketInterlining"]},{title:"车缝",keys:["sewingThread","buttonholeThread","stitchDensity"]},{title:"洗水、整烫与包装",keys:["washingMethod","ironing","packaging"]},{title:"尺码标识",keys:["formalSizes","casualSizes"]}] as const).map(group=><section key={group.title}><h3>{group.title}</h3><div>{group.keys.map(key=>key==="washingMethod"&&document.washing==="免洗"?null:<div key={key}>{field(key,labels[key],key==="formalSizes"||key==="casualSizes"?100:1000,key==="washingMethod"||key==="ironing"||key==="packaging")}</div>)}</div></section>)}
+            {document.washingIroning&&<section><h3>原洗水整烫说明</h3><p className="dx-doc-readonly">{document.washingIroning}</p></section>}
             <section><h3>唛类</h3><div>{(["mainLabel","sizeLabel","careLabel"] as const).map((key,index)=><div key={key}>{flag(`development-${key}`,["主唛","码唛","洗水唛"][index]!,document[key],value=>edit({[key]:value}))}</div>)}{field("mainLabelMethod","主唛车法",1000,true)}</div></section>
           </div></DocumentSection>
         </div></div>
       </form>
-      <DocumentSection id="development-handling" title="办理记录">
+      {sheet.status==="published"&&<DocumentSection id="development-handling" title="办理记录">
         {sheet.status==="published"&&<div className="development-round-controls"><label>查看轮次<select aria-label="查看轮次" disabled={busy||Boolean(revision)} value={sheet.roundNumber??1} onChange={async event=>{const round=Number(event.target.value);if((!dirty||await confirmInApp("有未保存修改，确定切换轮次？"))&&!writing.current){setSelectedRound(round);const url=new URL(window.location.href);url.searchParams.set("round",String(round));window.history.replaceState(null,"",url);}}}><option value={1}>第1轮 · 原始开发</option>{rounds.rounds.map(round=><option key={round.roundNumber} value={round.roundNumber}>第{round.roundNumber}轮 · {round.origin}</option>)}</select></label>{sheet.canRevise&&!revision&&<Button disabled={busy} onClick={beginRevision}>{rounds.draft?"继续复版草稿":"发起实际修改 / 复版"}</Button>}
           {rounds.rounds.filter(round=>round.roundNumber===(sheet.roundNumber??1)).map(round=><div key={round.roundNumber}><p>{round.origin} · {round.customerComment||round.internalProblem}</p><p>{round.explanation}</p><p>重做：{round.affectedNodes.join("、")}</p><p>沿用 {Object.keys(round.inherited).length} 项已完成记录</p><ul>{Object.entries(round.inherited).map(([node,reference])=><li key={node}><a href={`${urls.pageUrl("ui/digital-production")}?task=${reference.taskId}`}>{inheritedLabels[node]??"已完成节点"} · 第{reference.roundNumber}轮原记录</a></li>)}</ul></div>)}
         </div>}
@@ -154,7 +163,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound}:{sourceI
         {sheet.status==="published"&&!revision&&<section className="development-material-events"><h3>本轮物料记录</h3>{document.materials.filter(item=>item.requiredThisRound).map(item=><div key={item.materialId} id={`material-${item.materialId}`}><h4>{item.label||item.name}</h4><p>{item.available?"发布时已有实物":"发布时未到"} · 原预计：{item.expectedDate??"未定"}</p>{sheet.materialEvents.filter(event=>event.materialId===item.materialId).map(event=><p key={event.eventId}>{event.action} · {event.expectedDate??""} · {event.note} · {new Date(event.createdAt).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai"})}</p>)}
           {sheet.canEdit&&<form onSubmit={event=>{event.preventDefault();const form=new FormData(event.currentTarget);void run(`${base}/materials/${item.materialId}/events`,{expectedMaterialRevision:sheet.materialEvents.filter(event=>event.materialId===item.materialId).length,expectedVersion:sheet.version,action:form.get("action"),expectedDate:form.get("date")||null,note:form.get("note")});}}><fieldset disabled={busy}><label>操作<select name="action"><option>到货</option><option>修改预计日期</option>{item.category==="辅料"&&<option>确认代用</option>}</select></label><label>预计日期<input type="date" name="date"/></label><label>说明<input name="note" maxLength={1000}/></label><Button type="submit">确认记录</Button></fieldset></form>}
         </div>)}</section>}
-      </DocumentSection>
+      </DocumentSection>}
     </>}
   </section></Surface>;
 }

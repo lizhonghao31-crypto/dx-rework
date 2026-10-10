@@ -15,17 +15,18 @@ export const DevelopmentMaterialSchema = z.object({
 export const DevelopmentDocumentSchema = z.object({
   template: z.enum(["上衣", "裤子"]), quantity: z.number().int().min(1).max(100000).nullable(),
   sampleSize: short, orderDate: z.iso.date().nullable(), returnDate: z.iso.date().nullable(),
-  unit: z.enum(["cm", "inch"]), sizes: z.array(short.min(1)).max(20),
+  unit: z.enum(["cm", "inch"]), sizes: z.array(short).max(20),
   measurements: z.array(z.object({ name: short, values: z.array(short).max(20) }).strict()).max(100),
   interlining: text, placketInterlining: text, sewingThread: text, buttonholeThread: text,
-  stitchDensity: text, washingIroning: text, packaging: text,
+  stitchDensity: text, washingIroning: text, washingMethod: text.optional(), ironing: text.optional(), packaging: text,
   formalSizes: short, casualSizes: short, mainLabel: z.boolean(), mainLabelMethod: text,
   sizeLabel: z.boolean(), careLabel: z.boolean(), instructions: text,
   craft: z.enum(["无", "印花", "绣花", "印绣花"]), washing: z.enum(["免洗", "内洗", "外洗"]),
   materials: z.array(DevelopmentMaterialSchema).max(100),
   files: z.array(z.object({ attachmentId: z.string().uuid(), kind: z.enum(["款图", "局部图", "菲林", "工艺开发板"]) }).strict()).max(30),
 }).strict().superRefine((value, context) => {
-  if (new Set(value.sizes).size !== value.sizes.length) context.addIssue({ code: "custom", path: ["sizes"], message: "尺码列不能重复" });
+  const namedSizes = value.sizes.filter(Boolean);
+  if (new Set(namedSizes).size !== namedSizes.length) context.addIssue({ code: "custom", path: ["sizes"], message: "尺码列不能重复" });
   if (value.measurements.some(row => row.values.length !== value.sizes.length)) context.addIssue({ code: "custom", path: ["measurements"], message: "尺寸数值必须对应尺码列" });
   if (new Set(value.materials.map(row => row.materialId)).size !== value.materials.length) context.addIssue({ code: "custom", path: ["materials"], message: "物料行不能重复" });
   if (new Set(value.files.map(row => row.attachmentId)).size !== value.files.length) context.addIssue({ code: "custom", path: ["files"], message: "附件不能重复" });
@@ -41,8 +42,9 @@ export type DevelopmentMaterial = z.infer<typeof DevelopmentMaterialSchema>;
 export type DevelopmentMaterialEvent = z.infer<typeof DevelopmentMaterialEventSchema>;
 export function developmentPublishErrors(document: DevelopmentDocument): string[] {
   const errors: string[] = [];
-  if (!document.quantity) errors.push("请填写数量");
-  if (!document.sampleSize) errors.push("请填写样板尺码");
+  if (!document.quantity) errors.push("请填写本轮打板数量");
+  if (!document.sampleSize) errors.push("请填写本轮打样尺码");
+  if (document.sizes.some(size => !size.trim())) errors.push("请填写尺码列名称，或删除不用的列");
   if (!document.orderDate) errors.push("请填写下单日期");
   if (!document.files.some(file => file.kind === "款图")) errors.push("请上传款图");
   for (const item of document.materials) {

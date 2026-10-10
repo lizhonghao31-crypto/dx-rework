@@ -45,9 +45,9 @@ describe('explicit PO customer promises and UI authority',()=>{
  });
  it('shows only one formal PO field and customer promise in confirmed-order creation',()=>{
   const create=renderToStaticMarkup(createElement(DevelopmentCreateForm,{intent:'certain_order',customers:[],onCancel:()=>undefined,onCreated:()=>undefined}));
-  expect(create).toContain('正式款号 / PO');expect(create).toContain('客户仓到货日');
+  expect(create).toContain('正式款号 / PO');expect(create).toContain('客户要求到仓日期');
   expect(create).not.toContain('客户合同交付日期');expect(create).not.toContain('工厂交货日');expect(create).not.toContain('明细约定交期');
   const development=renderToStaticMarkup(createElement(DevelopmentCreateForm,{intent:'development',customers:[],onCancel:()=>undefined,onCreated:()=>undefined}));
-  expect(development).not.toContain('客户仓到货日');
+  expect(development).not.toContain('客户要求到仓日期');
  });
 });
