@@ -17,6 +17,7 @@
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field{display:block;min-width:0;position:relative}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field :is(input,textarea){width:100%;box-sizing:border-box;border:1px solid #dce5f0;border-radius:4px;min-height:36px;padding:7px 9px;background:#fff;color:#1d2e49;font:inherit;max-width:100%}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field textarea{min-height:72px;resize:vertical}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field input[inputmode=decimal]{text-align:right;font-variant-numeric:tabular-nums}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) :is(input,textarea,button):focus-visible{outline:2px solid #0066ff;outline-offset:2px}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-readonly{display:block;min-height:36px;padding:7px 0;box-sizing:border-box;overflow-wrap:anywhere;white-space:pre-wrap}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-errors{padding:12px 16px;border:1px solid #e5484d;border-radius:8px;margin:0 0 16px;background:#fff7f7;color:#a92830}
@@ -47,8 +48,11 @@
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field:has(input[type=date]){position:relative}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field input[type=date]::-webkit-datetime-edit{color:transparent}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field input[type=date]:focus::-webkit-datetime-edit{color:#1d2e49}
- :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-date-value{position:absolute;pointer-events:none;left:9px;top:8px;font-size:14px;line-height:20px;color:#1d2e49}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-date-value{position:absolute;pointer-events:none;left:9px;top:0;height:36px;display:flex;align-items:center;font-size:14px;line-height:20px;color:#1d2e49}
+ .dx-doc-development.development-editor .dx-doc-date-value{top:4px}
+ :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) table .dx-doc-date-value{height:30px}
+ .dx-doc-development.development-editor table .dx-doc-date-value{top:0}
  :is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-field:focus-within .dx-doc-date-value{visibility:hidden}
- @media(max-width:800px){:is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-date-value{font-size:16px;top:12px}}
+ @media(max-width:800px){:is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-date-value{font-size:16px;height:44px}:is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) table .dx-doc-date-value{height:44px}}
 }
 @media print{:is(.dx-doc-budget,.dx-doc-development,.dx-doc-instruction) .dx-doc-date-value{display:none}}

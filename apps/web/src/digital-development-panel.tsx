@@ -1,3 +1,4 @@
+import { washingChoiceLabel } from "./digital-workspace-copy.js";
 import { useDigitalDetailNavigationGuard } from "./use-digital-detail-navigation-guard.js";
 import {DevelopmentRevisionFields,type RevisionFields} from "./development-revision-fields.js";
 import type {DevelopmentRevision} from "@dx-rework/contracts/digital-development-rounds";
@@ -89,7 +90,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound}:{sourceI
   const issues=validationMode?developmentIssues(document,quantityInput,measurementIds.current,validationMode==="publish",revision):[];
   const issue=(id:string)=>issues.find(value=>value.id===id)?.message;
   const field=(key:keyof DevelopmentDocument,label:string,maxLength=100,multiline=false)=><label>{label}<DocumentField id={`development-${key}`} label={label} value={String(document[key]??"")} onValue={value=>edit({[key]:value})} readonly={readonly} disabled={busy} maxLength={maxLength} multiline={multiline} issue={issue(`development-${key}`)}/></label>;
-  const select=(key:"template"|"unit"|"craft"|"washing",label:string,options:readonly string[],change?:(value:string)=>void)=><label>{label}{readonly?<span className="dx-doc-readonly" id={`development-${key}`}>{document[key]}</span>:<select id={`development-${key}`} aria-label={label} disabled={busy} value={document[key]} onChange={event=>change?change(event.target.value):edit({[key]:event.target.value})}>{options.map(value=><option key={value}>{value}</option>)}</select>}</label>;
+  const select=(key:"template"|"unit"|"craft"|"washing",label:string,options:readonly string[],change?:(value:string)=>void)=><label>{label}{readonly?<span className="dx-doc-readonly" id={`development-${key}`}>{key==="washing"?washingChoiceLabel(document[key]):document[key]}</span>:<select id={`development-${key}`} aria-label={label} disabled={busy} value={document[key]} onChange={event=>change?change(event.target.value):edit({[key]:event.target.value})}>{options.map(value=><option key={value} value={value}>{key==="washing"?washingChoiceLabel(value):value}</option>)}</select>}</label>;
   const flag=(id:string,label:string,value:boolean,onValue:(value:boolean)=>void,locked=readonly)=><label className="development-flag">{locked?<span id={id} className="dx-doc-readonly">{label}：{value?"有":"无"}</span>:<><input id={id} aria-label={label} type="checkbox" checked={value} disabled={busy} onChange={event=>onValue(event.target.checked)}/>{label}</>}</label>;
   const validate=(publish=false)=>{setValidationMode(publish?"publish":"save");return developmentIssues(document,quantityInput,measurementIds.current,publish,revision).length===0;};
   const save=()=>{if(!validate())return;if(revision)void revisionAction(false);else void run(base,{expectedVersion:sheet!.version,document},"PUT");};
@@ -98,7 +99,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound}:{sourceI
   const pictures=document.files.filter(file=>file.kind==="款图"||file.kind==="局部图");
   const savedPrint=revision?rounds.draft?.payload.document:sheet?.document;
   return <Surface><section className="development-editor dx-doc-development">
-    <DocumentToolbar title="款式设计与制作说明单" status={busy?"保存中":error&&dirty?"保存失败，修改未保存":dirty?"未保存修改":`${revision?`第${revision.basedOnRound+1}轮复版草稿`:sheet?.status==="published"?`已发布 · 第${sheet.roundNumber??1}轮${(sheet.roundNumber??1)===(sheet.latestRoundNumber??1)?" · 当前有效轮次":" · 历史轮次"}`:"草稿"} · 版本 ${revision?draftVersion:sheet?.version??0}`}>
+    <DocumentToolbar title="款式设计与制作说明单" status={busy?"保存中":error&&dirty?"没有保存成功，修改还在":dirty?"未保存修改":`${revision?`第${revision.basedOnRound+1}轮复版草稿`:sheet?.status==="published"?`已发布 · 第${sheet.roundNumber??1}轮${(sheet.roundNumber??1)===(sheet.latestRoundNumber??1)?" · 当前有效轮次":" · 历史轮次"}`:"草稿"} · 版本 ${revision?draftVersion:sheet?.version??0}`}>
       <Button disabled={busy} onClick={onClose}>返回</Button>
       {!readonly&&<><Button disabled={busy} onClick={save}>保存草稿</Button><Button variant="primary" disabled={busy} onClick={publish}>{revision?"正式发布本轮修改":"发布开发单"}</Button></>}
       <Button disabled={!savedPrint||dirty||busy} onClick={()=>window.print()}>打印 / 保存 PDF</Button>
