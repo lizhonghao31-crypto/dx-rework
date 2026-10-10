@@ -6,10 +6,10 @@ type InitiationAccessInput = Readonly<{
   status: string;
 }>;
 
-/** Match the existing API boundaries: withdrawal is owner-only; Root may edit drafts. */
+/** Root manages N01 across creators; ordinary QC maintains only its own orders. */
 export function reworkInitiationAccess(input: InitiationAccessInput) {
   const isOwnOrder = input.currentUserId !== null && input.currentUserId === input.createdByUserId;
-  const canTransition = input.canHandleInitiation && isOwnOrder
+  const canTransition = input.canHandleInitiation && (isOwnOrder || input.isRoot)
     && input.status === "pending_process_configuration";
   return {
     isOwnOrder,

@@ -14,8 +14,8 @@ describe("QC withdrawal ownership and editable-node refresh", () => {
     expect(access({ createdByUserId: "root" })).toMatchObject({ canWithdraw: false, canCancel: false });
   });
 
-  it("does not invent a foreign-order withdrawal bypass for Root or owners", () => {
-    expect(access({ currentUserId: "root", isRoot: true })).toMatchObject({ canWithdraw: false, canCancel: false });
+  it("permits Root maintenance across creators without extending ordinary owner access", () => {
+    expect(access({ currentUserId: "root", isRoot: true })).toMatchObject({ canWithdraw: true, canCancel: true });
     expect(access({ currentUserId: "owner" })).toMatchObject({ canWithdraw: false, canCancel: false });
   });
 
@@ -74,7 +74,8 @@ describe("QC withdrawal ownership and editable-node refresh", () => {
     }
     expect(page).toContain("return initiationAccess.canEditDraft");
     expect(page).toContain("await load(undefined, true)");
-    expect(page).toContain("await onChanged()");
+    const actions = await readFile("apps/web/src/rework-initiation-actions.tsx", "utf8");
+    expect(actions).toContain("await onChanged()");
     expect(page).toContain("撤回和取消需由原发起人操作");
     expect(page).toContain("仅展示本单已填写的业务字段。");
   });

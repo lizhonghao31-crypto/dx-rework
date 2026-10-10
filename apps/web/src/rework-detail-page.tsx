@@ -14,6 +14,7 @@ import { verifySession, type AuthorizedUser } from "./auth.js";
 import { Header, Shell } from "./components.js";
 import { OrderResponsibilityRevisionPanel } from "./order-responsibility-revision-panel.js";
 import { reworkReturnPath } from "./rework-return-path.js";
+import { InitiationFollowUpActions } from "./rework-initiation-actions.js";
 import { publishReworkNodeRefresh, reworkInitiationAccess } from "./rework-initiation-access.js";
 import { ExternalResponsibilityPanel } from "./external-responsibility-panel.js";
 import { InspectionReportReadonly } from "./inspection-report-readonly.js";
@@ -611,7 +612,7 @@ function CurrentReworkDetailPage({
     isRoot: currentUser?.isRoot === true,
     status: detail.status,
   });
-  const initiationOwnershipNotice = !initiationAccess.isOwnOrder
+  const initiationOwnershipNotice = !initiationAccess.isOwnOrder && currentUser?.isRoot !== true
     ? `本单由 ${detail.createdBy.displayName} 发起；撤回和取消需由原发起人操作。` : undefined;
   const canWaiveTailInspection = moduleWritable && detail.tailInspectionRequired
     && (detail.status === "in_progress" || detail.status === "pending_order_review")
@@ -679,7 +680,7 @@ function CurrentReworkDetailPage({
         : <NodePermissionNotice node={selected} message={initiationOwnershipNotice} />;
     }
     if (selected.key === "initiation" && detail.status === "pending_process_configuration") {
-      return <InitiationFollowUpActions detail={detail} canHandleInitiation={initiationAccess.canWithdraw} ownershipNotice={initiationOwnershipNotice} onChanged={syncAfterNodeAction} />;
+      return <InitiationFollowUpActions detail={detail} statusLabel={statusMeta[detail.status].label} canHandleInitiation={initiationAccess.canWithdraw} ownershipNotice={initiationOwnershipNotice} onChanged={syncAfterNodeAction} />;
     }
     if (selected.state !== "future" && (selected.key === "process_configuration" || selected.key === "ie_review")) {
       if (canUseProcessWorkspace(currentUser)) return <ProcessConfigurationForm reworkOrderId={detail.reworkOrderId} initialDetail={detail} embedded workspaceNode={selected.key} onOrderChanged={syncAfterNodeAction} />;
@@ -826,7 +827,7 @@ function CurrentReworkDetailPage({
 
         <section id="node-workspace" className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
           <div className="rework-detail-task__heading"><h2>办理区<span className="rework-mobile-current-node"> · {selected?.number} {selected?.label}</span></h2>{detail.canReadBusinessDetails !== false && <span className="rework-detail-single-piece-total">单件返工总价：{detail.singlePieceReworkTotal === null ? "待核价" : formatBusinessCurrency(detail.singlePieceReworkTotal)}</span>}</div>
-          {detail.status === "pending_process_configuration" && canHandleInitiation ? <InitiationFollowUpActions detail={detail} canHandleInitiation={initiationAccess.canWithdraw} ownershipNotice={initiationOwnershipNotice} onChanged={syncAfterNodeAction} /> : null}
+          {detail.status === "pending_process_configuration" && canHandleInitiation ? <InitiationFollowUpActions detail={detail} statusLabel={statusMeta[detail.status].label} canHandleInitiation={initiationAccess.canWithdraw} ownershipNotice={initiationOwnershipNotice} onChanged={syncAfterNodeAction} /> : null}
           {canWaiveTailInspection ? <TailInspectionWaiverAction detail={detail} onChanged={syncAfterNodeAction} /> : null}
           {renderSelectedTask()}
         </section>
@@ -933,67 +934,6 @@ function TailInspectionWaiverAction({
   </Surface>;
 }
 
-function InitiationFollowUpActions({
-  detail,
-  canHandleInitiation,
-  ownershipNotice,
-  onChanged,
-}: {
-  detail: ReworkBusinessDetail;
-  canHandleInitiation: boolean;
-  ownershipNotice?: string | undefined;
-  onChanged: () => void | Promise<void>;
-}) {
-  const [message, setMessage] = useState("");
-  const [busyAction, setBusyAction] = useState<"withdraw" | "cancel" | null>(null);
-  const canWithdraw = detail.status === "pending_process_configuration";
-  const canCancel = detail.status === "pending_process_configuration";
-
-  const transition = async (action: "withdraw" | "cancel") => {
-    const promptText = action === "withdraw" ? "请输入撤回原因" : "请输入取消原因";
-    const reason = await promptInApp(promptText);
-    if (!reason?.trim()) return;
-    setBusyAction(action);
-    try {
-      const response = await fetch(apiUrl(`rework-orders/${detail.reworkOrderId}/${action}`), {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          accept: "application/json",
-          "content-type": "application/json",
-          "idempotency-key": createClientRequestId(),
-        },
-        body: JSON.stringify({ expectedVersion: detail.version, reason: reason.trim() }),
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-        throw new Error(body?.error?.message ?? "状态变更失败");
-      }
-      setMessage(action === "withdraw" ? "已撤回为草稿，可在本节点继续修改后再次提交。" : "返工单已取消，历史记录继续保留。");
-      await onChanged();
-    } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "状态变更失败");
-    } finally {
-      setBusyAction(null);
-    }
-  };
-
-  return <Surface className="rework-detail-node-preview rework-detail-initiation-actions">
-    <StatusBadge tone={detail.status === "cancelled" ? "danger" : "info"}>{statusMeta[detail.status].label}</StatusBadge>
-    <h2>01 · 发起返工</h2>
-    <p>{detail.status === "cancelled"
-      ? "该返工单已取消，历史资料和操作记录继续保留。"
-      : "提交后的撤回、取消及撤回后的再次提交，统一在订单详情的本节点处理。"}</p>
-    {canHandleInitiation && (canWithdraw || canCancel) ? (
-      <div className="rework-detail-initiation-actions__buttons">
-        {canWithdraw ? <Button disabled={busyAction !== null} onClick={() => void transition("withdraw")}>{busyAction === "withdraw" ? "撤回中…" : "撤回修改"}</Button> : null}
-        {canCancel ? <Button disabled={busyAction !== null} onClick={() => void transition("cancel")}>{busyAction === "cancel" ? "取消中…" : "取消返工单"}</Button> : null}
-      </div>
-    ) : null}
-    {!canHandleInitiation && ownershipNotice ? <p role="status">{ownershipNotice}</p> : null}
-    {message ? <p role="status">{message}</p> : null}
-  </Surface>;
-}
 
 function NodePermissionNotice({ node, message }: { node: WorkflowNode; message?: string | undefined }) {
   return <Surface className="rework-detail-node-preview"><StatusBadge tone="info">仅可查看</StatusBadge><h2>{node.number} · {node.label}</h2><p>{node.preview}</p><p>{message ?? "当前账号没有该节点的处理权限；如需处理，请从本人待办进入或联系节点负责人。"}</p></Surface>;
