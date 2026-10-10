@@ -53,7 +53,8 @@
  .dx-doc-development .development-craft-groups>section>div{padding:12px;display:flex;flex-direction:column;gap:12px}
  .dx-doc-development .development-craft-groups textarea{min-height:72px;max-height:180px}
  .dx-doc-development.development-editor .dx-doc-card label.development-flag{display:flex;flex-direction:row;gap:6px;align-items:center;white-space:nowrap;color:#1d2e49}
- .dx-doc-development.development-editor .development-flag input{width:16px;min-width:16px;height:16px;min-height:16px;flex:0 0 16px;margin:0}
+ .dx-doc-development.development-editor .dx-doc-card label.development-flag input{width:16px;min-width:16px;height:16px;min-height:16px;flex:0 0 16px;margin:0}
+ .dx-doc-development.development-editor .dx-doc-card label :is(input[type=checkbox],input[type=radio]){margin:0}
  .dx-doc-development .development-material-group h3{font-size:14px;line-height:20px;margin:12px 0 8px}
  .dx-doc-development.development-editor table{border-collapse:collapse;width:100%;color:#1d2e49}
  .dx-doc-development.development-editor :is(th,td){border:1px solid #dce5f0;padding:4px;vertical-align:middle;font-weight:400}
@@ -91,7 +92,7 @@
   .dx-doc-development .development-basic-grid{grid-template-columns:minmax(0,1fr)}
   .dx-doc-development.development-editor .dx-doc-card :is(input,select,textarea){font-size:16px;min-height:44px}
   .dx-doc-development.development-editor table .dx-doc-field input{height:44px;min-height:44px}
-  .dx-doc-development.development-editor .development-flag input{width:20px;min-width:20px;height:20px;min-height:20px;flex-basis:20px}
+  .dx-doc-development.development-editor .dx-doc-card label.development-flag input{width:20px;min-width:20px;height:20px;min-height:20px;flex-basis:20px}
  }
 }
 @media print{.dx-doc-development :is(.development-heading,.dx-doc-card){display:none!important}}
