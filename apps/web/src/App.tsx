@@ -25,8 +25,9 @@ import {
   LoginPage,
   QrLoginPage,
   QrRelayPage,
+  LoginSessionLoadingPage,
   verifySession,
-  type AuthorizedUser,
+  verifySessionResult,
 } from "./auth.js";
 import { Shell } from "./components.js";
 import { ReworkInitiationV2Form } from "./rework-v2-form.js";
@@ -61,7 +62,7 @@ import {
 } from "./platform-modules.js";
 import { SourcingWorkspacePage } from "./sourcing-workspace-page.js";
 
-const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
+const { pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 const PROCESS_QUEUE_STATUSES = [
   "pending_process_configuration",
@@ -74,11 +75,6 @@ const WORK_QUEUE_STATUSES = [
   "pending_final_quantity_ie_review",
   "pending_quantity_adjustment_ie_review",
 ] as const;
-
-type LandingMe = {
-  status: "authorized" | "no_role";
-  user: AuthorizedUser;
-};
 
 type InternalLocation = Readonly<{
   path: string;
@@ -188,37 +184,51 @@ function PlatformEntryChecking() {
 }
 
 function HomeLanding() {
+  const [entry, setEntry] = useState<"loading" | "denied" | "blocked">("loading");
   const [message, setMessage] = useState("正在进入业务工作台…");
 
   useEffect(() => {
     let mounted = true;
-    void fetch(apiUrl("auth/me"), { credentials: "include", cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) {
-          window.location.replace(pageUrl("auth/login"));
+    void verifySessionResult()
+      .then((result) => {
+        if (!mounted) return;
+        if (result.requestFailed) {
+          setEntry("blocked");
+          setMessage("工作台加载失败，请刷新页面重试。");
           return;
         }
-        const body = await response.json() as LandingMe;
+        const body = result.session;
+        if (body === "denied") {
+          setEntry("denied");
+          return;
+        }
         if (body.status === "no_role") {
-          if (mounted) setMessage("当前账号尚未分配业务角色，请联系管理员。");
+          setEntry("blocked");
+          setMessage("当前账号尚未分配业务角色，请联系管理员。");
           return;
         }
 
         const target = platformLandingTarget(body.user);
         if (!target) {
-          if (mounted) setMessage("当前角色暂时没有可进入的业务模块，请联系管理员核对岗位权限。");
+          setEntry("blocked");
+          setMessage("当前角色暂时没有可进入的业务模块，请联系管理员核对岗位权限。");
           return;
         }
         window.location.replace(pageUrl(target));
       })
       .catch(() => {
-        if (mounted) setMessage("工作台加载失败，请刷新页面重试。");
+        if (!mounted) return;
+        setEntry("blocked");
+        setMessage("工作台加载失败，请刷新页面重试。");
       });
 
     return () => {
       mounted = false;
     };
   }, []);
+
+  if (entry === "denied") return <LoginPage />;
+  if (entry === "loading" && !/DingTalk/i.test(navigator.userAgent)) return <LoginSessionLoadingPage />;
 
   return (
     <main className="auth-shell">
@@ -502,3 +512,4 @@ export function App() {
   }
   return <AuthGate>{page}</AuthGate>;
 }
+

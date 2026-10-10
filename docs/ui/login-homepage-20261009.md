@@ -49,3 +49,18 @@
 本次执行环境无本地完整 checkout，cloud task 接口暂时不可用。移植前执行 source/main 兼容性与精确差异检查；本次没有重新运行原 21 场景浏览器测试，不能将 #706 的浏览器证据称作 main 新 Head 实测。新 Head 的 lint、typecheck、build、unit/integration、migration 静态检查及 secret scan 以独立 [FULL] PR 的 GitHub Actions 实际结果为准。代码冻结且 Full Gate 通过后进行最多一次独立 Codex Review。
 
 仓库 `docs/operations/safe-main-update.md` 规定已安装正式更新入口为 `sudo dx-rework-update main`。本次首页差异未改变 schema 或更新工具；该入口仍会核验线上与候选的完整迁移历史，历史不一致必须按其错误停下，不能改用 Acceptance 命令或跳过校验。部署、重启、ECS 与真实数据库操作由用户执行，本次未操作。
+
+## 根入口直接显示首页（2026-10-10）
+
+用户反馈访问根地址时先看到白色“正在进入业务工作台”，再跳转到深蓝登录页，随后明确要求直接显示首页。本次基于 main `3bbfbc2066d7dd36be520f72bd3bf38b250dc214` 独立修复，不带入 release 的沙盘或其他业务改动。
+
+- PC 根入口的 React 首帧复用现有深蓝 `LoginLanding`，会话确认期间保持现有二维码占位尺寸、禁用重生成按钮，并显示“正在确认登录状态…”。未登录后在当前文档内显示原 `LoginPage`，地址保留根路径，不再整页跳转到 `/auth/login`。
+- 抽出原会话验证缓存为 `auth-session.ts`，根入口、`AuthGate` 和登录页共用一次在途请求及结果。保留 `verifySession(force)` 原公开契约、请求参数和 fail-closed 行为；额外区分网络/JSON 失败供根入口保留原“工作台加载失败”提示。强制刷新后旧请求不得覆盖新缓存。
+- 已登录用户仍按原 `platformLandingTarget` 进入业务工作台；无角色、无可用模块、网络失败及钉钉内免登入口保留原分流和提示。根入口离开后晚返回的会话结果不会再次重定向。二维码 SDK、挑战/回调、state/origin 校验、角色权限及已有首页视觉尺寸不变。
+
+本次独立本地实测：按仓库原 ESLint 配置对全部 5 个改动代码/测试路径的定向 lint 通过；真实 Vitest 执行 11 项通过（8 项共享会话测试及原 Landing 的 3 项测试）；扩展原浏览器 runner 至 30 项，实际 React 19 + Chromium headless-shell 全部通过、页面异常 0。新增根入口覆盖默认路径与 `/rework/` 的慢请求首帧、未登录仅一次 auth/me 和一次 qr/start、无 `/auth/login` 文档导航、已登录分流、原错误/无角色/无模块、钉钉内免登、离开根入口后的晚响应、后退/前进无循环；原 21 项扫码 fixture、重试和多视口检查完整保留。原 main 代码的负对照实测为白壳 1、深蓝壳 0，新首帧断言如预期失败。
+
+实际像素检查包括根入口等待会话的深蓝首帧、1672×941 完成状态及 390px 普通浏览器页面。二维码为明确 `TEST QR` 夹具，不能当作真实扫码成功。隔离 bundle 使用本次实际 App、认证代码、Landing、UI 和图片；未涉及的业务页面及其他领域访问 helper 使用 fixture，不宣称完成全应用人工 UAT。测试依赖仅装在隔离工具目录，未修改仓库 manifest 或 lockfile。本地为 Node 24/npm 11，完整仓库的 lint、typecheck、build、unit/integration、迁移静态与密钥扫描由本 PR 精确 Head 的 Full Gate（仓库固定 Node 22/npm 10）补齐，不以局部 bundle 代替。
+
+未部署、重启或修改线上数据；真实生产配置下的钉钉扫码与用户端慢网络首帧仍由用户部署后验收。本次按用户授权修复、门禁通过后合并，不主动请求 Codex Review。
+
