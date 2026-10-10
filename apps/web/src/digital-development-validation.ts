@@ -2,7 +2,7 @@ import { DevelopmentDocumentSchema, developmentPublishErrors, type DevelopmentDo
 import { DevelopmentRevisionSchema, type DevelopmentRevision } from "@dx-rework/contracts/digital-development-rounds";
 import type { DocumentIssue } from "./document-editor.js";
 
-const labels:Record<string,string>={quantity:"数量",sampleSize:"样板尺码",orderDate:"下单日期",returnDate:"回版日期",instructions:"制作说明",sizes:"尺码列",measurements:"尺寸表",materials:"面辅料",files:"附件",name:"品名",expectedDate:"预计到料日期",width:"幅宽",weight:"克重",composition:"成分",color:"颜色",consumption:"用量",specification:"规格",supplier:"供应方",label:"名称",craft:"工艺"};
+const labels:Record<string,string>={quantity:"本轮打板数量",sampleSize:"本轮打样尺码",orderDate:"开发下单日期",returnDate:"预计样板完成日期",instructions:"制作说明",sizes:"尺码列",measurements:"尺寸表",materials:"面辅料",files:"附件",name:"品名",expectedDate:"预计到料日期",width:"幅宽",weight:"克重",composition:"成分",color:"颜色",consumption:"用量",specification:"规格",supplier:"供应方",label:"名称",craft:"工艺"};
 /** Validate the raw integer buffer before it can become null in JSON; all business rules remain the original schemas. */
 export function developmentIssues(document:DevelopmentDocument,quantityInput:string,measurementIds:string[],publish=false,revision?:Omit<DevelopmentRevision,"document">|null):DocumentIssue[]{
  const issues:DocumentIssue[]=[];
@@ -19,8 +19,8 @@ export function developmentIssues(document:DevelopmentDocument,quantityInput:str
  if(!publish||!parsed.success||issues.length)return issues;
  for(const message of developmentPublishErrors(parsed.data)){
   if(document.materials.some(row=>row.requiredThisRound&&(message===`${row.label||"物料"}缺少品名`||message===`${row.label||row.name}未到，请填写预计日期`)))continue;
-  const key=message.includes("数量")?"quantity":message.includes("样板尺码")?"sampleSize":message.includes("下单日期")?"orderDate":message.includes("仅适用于")?"craft":"files";
-  issues.push({id:key==="files"?"development-upload":`development-${key}`,label:labels[key]??key,message});
+  const key=message.includes("数量")?"quantity":message.includes("打样尺码")?"sampleSize":message.includes("尺码列")?"sizes":message.includes("下单日期")?"orderDate":message.includes("仅适用于")?"craft":"files";
+  issues.push({id:key==="files"?"development-upload":key==="sizes"?document.sizes.length?`development-size-${document.sizes.findIndex(size=>!size.trim())}`:"development-sizes":`development-${key}`,label:labels[key]??key,message});
  }
  for(const row of parsed.data.materials){if(!row.requiredThisRound)continue;if(!row.name)issues.push({id:`development-${row.materialId}-name`,label:`面辅料 · ${row.label||row.category} · 品名`,message:`${row.label||"物料"}缺少品名`});if(row.category==="辅料"&&!row.available&&!row.expectedDate)issues.push({id:`development-${row.materialId}-expectedDate`,label:`面辅料 · ${row.label||row.category} · 预计到料日期`,message:`${row.label||row.name}未到，请填写预计日期`});}
  return issues;

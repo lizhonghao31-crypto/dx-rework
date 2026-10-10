@@ -84,6 +84,17 @@ run("P05 development forms PostgreSQL", () => {
     await expect(development.save(actor(other),id,{expectedVersion:1,document:draft()},randomUUID())).rejects.toMatchObject({statusCode:403});
     expect((await database.query("SELECT count(*)::int AS n FROM digital_production_task_access WHERE source_id=$1",[id])).rows[0].n).toBe(0);
   });
+  it("keeps creation-image ownership and source-scoped download permissions for designer, Root and other users",async()=>{
+    const id=await source(),document=await ready();
+    await development.save(actor(),id,{expectedVersion:0,document:{...document,washing:"免洗",ironing:"TEST独立整烫"}},randomUUID());
+    await expect(development.authorizeUpload(actor(),id)).resolves.toBeUndefined();
+    await expect(development.authorizeUpload(actor(root,['root_superuser']),id)).resolves.toBeUndefined();
+    await expect(development.authorizeUpload(actor(other),id)).rejects.toMatchObject({statusCode:403});
+    await expect(development.canDownload(actor(),id,document.files[0]!.attachmentId)).resolves.toBe(true);
+    await expect(development.canDownload(actor(root,['root_superuser']),id,document.files[0]!.attachmentId)).resolves.toBe(true);
+    await expect(development.canDownload(actor(other),id,document.files[0]!.attachmentId)).rejects.toMatchObject({statusCode:404});
+    expect((await development.read(actor(),id)).document!.ironing).toBe("TEST独立整烫");
+  });
   it("publishes once under concurrent retries, freezes original form, and creates a real 4h clerk task",async()=>{
     const id=await source(),document=await ready();await development.save(actor(),id,{expectedVersion:0,document},randomUUID());
     const key=randomUUID();const result=await Promise.all([development.publish(actor(),id,1,key),development.publish(actor(),id,1,key)]);
