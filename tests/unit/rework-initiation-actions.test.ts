@@ -1,4 +1,5 @@
 import { Children, createElement, isValidElement, type ReactNode } from "react";
+import type * as ReactModule from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InitiationFollowUpActions } from "../../apps/web/src/rework-initiation-actions.js";
@@ -9,7 +10,7 @@ const hooks = vi.hoisted(() => ({
   direct: false, calls: 0, setMessage: vi.fn(), setBusy: vi.fn(),
 }));
 vi.mock("react", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("react")>();
+  const actual = await importOriginal<typeof ReactModule>();
   return { ...actual, useState: (...args: unknown[]) => {
     if (!hooks.direct) return (actual.useState as (...args: unknown[]) => unknown)(...args);
     const initial = args[0];
