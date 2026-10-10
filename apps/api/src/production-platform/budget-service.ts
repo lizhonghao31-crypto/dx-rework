@@ -23,7 +23,7 @@ export class DigitalBudgetService {
     }
     return { productionOrderId: orderId, budgetVersion: source.budgetVersion, orderVersion: source.order.version,
       gender: ["男装", "男童"].includes(source.order.product_group) ? "男装" : "女装", styleName: source.document.productCategory,
-      contractDeliveryDate: source.order.delivery, daxingUnitPrice: source.document.outsourcingUnitPrice,
+      contractDeliveryDate: source.order.delivery, daxingUnitPrice: source.document.outsourcingUnitPrice,customerCode:source.order.customer_code,budgetRows:source.document.rows,
       lineItems: source.lines.map(line => ({ lineId: line.line_id, styleNo: line.formal_style_no ?? "", alternateStyleNo: line.temporary_style_no || source.order.temporary_style_no || source.order.design_style_no, color: line.color, quantity: line.quantity, customerWarehouseArrivalDate: line.customer })), images };
   }
   private async order(db: Database, actor: TrustedActorContext, orderId: string, write = false) {
