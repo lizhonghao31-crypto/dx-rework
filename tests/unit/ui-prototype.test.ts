@@ -14,6 +14,7 @@ const uiPackage = read("../../packages/ui/package.json");
 const auth = read("../../apps/web/src/auth.tsx");
 const reworkV2Form = read("../../apps/web/src/rework-v2-form.tsx");
 const reworkDetail = read("../../apps/web/src/rework-detail-page.tsx");
+const reworkInitiationActions = read("../../apps/web/src/rework-initiation-actions.tsx");
 const attachmentUpload = read("../../apps/web/src/attachment-upload.ts");
 const processConfigurationForm = read("../../apps/web/src/process-worker-assignment-form.tsx");
 const landingTarget = read("../../apps/web/src/landing-target.ts");
@@ -96,8 +97,9 @@ describe("PR-01A UI prototype contract", () => {
     expect(reworkV2Form).toContain("上传报告 <b>*</b>");
     expect(reworkV2Form).toContain("<summary>更多信息</summary>");
     expect(reworkV2Form).not.toContain("styleNos");
-    expect(reworkDetail).toContain("撤回修改");
-    expect(reworkDetail).toContain("取消返工单");
+    expect(reworkDetail).toContain("InitiationFollowUpActions");
+    expect(reworkInitiationActions).toContain("撤回修改");
+    expect(reworkInitiationActions).toContain("取消返工单");
     expect(webCss).not.toContain("--dx-v2-color-primary:");
   });
   it("adds the merged N02 process and worker page without replacing the established layout", () => {
@@ -113,3 +115,4 @@ describe("PR-01A UI prototype contract", () => {
     expect(processConfigurationForm).toContain("整查工序");
   });
 });
+
