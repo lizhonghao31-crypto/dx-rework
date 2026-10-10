@@ -44,8 +44,8 @@ describe("development workspaces preserve original business facts", () => {
     const id = randomUUID(), owner = {id: actor.actorId, name: "TEST 主办"};
     const items = [journey([node("development_pattern", "active", {owner, risks: ["overdue"]}), node("development_cutting", "pending", {owner})], {id}), journey([node("development_pattern", "active", {risks: ["overdue"]})])];
     const query = new DevelopmentWorkspaceQuery({list: async () => ({asOf: "TEST", items})} as unknown as DigitalJourneyQuery);
-    const all = await query.pattern(actor, PatternWorkspaceFilterSchema.parse({})); expect(all.total).toBe(3); expect(all.archiveTotal).toBe(2);
-    const filtered = await query.pattern(actor, PatternWorkspaceFilterSchema.parse({owner: owner.id, risk: "overdue"}));
+    const all = await query.pattern({...actor,actorRoles:["development_clerk"]}, PatternWorkspaceFilterSchema.parse({scope:"all",})); expect(all.total).toBe(3); expect(all.archiveTotal).toBe(2);
+    const filtered = await query.pattern({...actor,actorRoles:["development_clerk"]}, PatternWorkspaceFilterSchema.parse({scope:"all",owner: owner.id, risk: "overdue"}));
     expect(filtered.total).toBe(1); expect(filtered.counts.pattern).toBe(1); expect(filtered.counts.cutting).toBe(0);
   });
   it("accepts local validated workspace returns and rejects executable/external/duplicate or nested targets", () => {
@@ -72,13 +72,43 @@ describe("development workspaces preserve original business facts", () => {
     const transfer=node("development_sewing_transfer"), sewing=node("development_sewing");
     const items=[journey([printing,washing,transfer,sewing])];
     const query = new DevelopmentWorkspaceQuery({list:async () => ({asOf:"TEST",items})} as unknown as DigitalJourneyQuery);
-    const craft=await query.pattern(actor, PatternWorkspaceFilterSchema.parse({lane:"craft"}));
+    const craft=await query.pattern({...actor,actorRoles:["development_clerk"]}, PatternWorkspaceFilterSchema.parse({scope:"all",lane:"craft"}));
     expect(craft.items.map(item=>item.node.instanceId)).toEqual([printing.instanceId,washing.instanceId]);
     expect(craft.total).toBe(2); expect(craft.archiveTotal).toBe(1);
     expect(craft.counts.craft).toBe(1); expect(craft.counts.washing).toBe(1);
     expect(craft.risks?.map(item=>item.node.instanceId)).toEqual([printing.instanceId]);
-    const work=await query.pattern(actor, PatternWorkspaceFilterSchema.parse({lane:"sewing"}));
+    const work=await query.pattern({...actor,actorRoles:["development_clerk"]}, PatternWorkspaceFilterSchema.parse({scope:"all",lane:"sewing"}));
     expect(work.items.map(item=>item.node.instanceId)).toEqual([transfer.instanceId,sewing.instanceId]);
     expect(work.total).toBe(2);
   });
+  it("counts every authorized risk before the 20-row preview or pagination",async()=>{
+    const owner={id:actor.actorId,name:"TEST本人"};
+    const items=Array.from({length:45},(_,index)=>journey([node("development_pattern","active",{owner,risks:index<25?["overdue"]:["due_soon"]})]));
+    const query=new DevelopmentWorkspaceQuery({list:async()=>({asOf:"TEST",items})} as unknown as DigitalJourneyQuery);
+    const result=await query.pattern(actor,PatternWorkspaceFilterSchema.parse({page:3}));
+    expect(result.total).toBe(45);expect(result.counts.pattern).toBe(45);
+    expect(result.riskCounts.pattern).toEqual({dueSoon:20,overdue:25});
+    expect(result.items).toHaveLength(5);expect(result.risks).toHaveLength(20);
+  });
+  it("defaults to the actor's own effective tasks and refuses a worker's broader scope before reading",async()=>{
+    let reads=0;const own=node("development_pattern","active",{owner:{id:actor.actorId,name:"TEST本人"}}),other=node("development_pattern","active",{owner:{id:randomUUID(),name:"TEST别人"}});
+    const query=new DevelopmentWorkspaceQuery({list:async()=>{reads++;return{asOf:"TEST",items:[journey([own,other])]};}} as unknown as DigitalJourneyQuery);
+    const worker={...actor,actorRoles:["pattern_room_worker"]};
+    const result=await query.pattern(worker,PatternWorkspaceFilterSchema.parse({}));
+    expect(result.items.map(item=>item.node.instanceId)).toEqual([own.instanceId]);expect(result.owners.map(person=>person.id)).toEqual([actor.actorId]);
+    await expect(query.pattern(worker,PatternWorkspaceFilterSchema.parse({scope:"all"}))).rejects.toMatchObject({statusCode:403});
+    await expect(query.pattern({...worker,actorRoles:["development_clerk"]},PatternWorkspaceFilterSchema.parse({scope:"dispatch"}))).rejects.toMatchObject({statusCode:403});
+    expect(reads).toBe(1);
+    expect((await query.pattern({...worker,actorRoles:["root_superuser"]},PatternWorkspaceFilterSchema.parse({scope:"all"}))).total).toBe(2);
+  });
+  it("uses original pending orders for formal dispatch without changing clerk transfer readiness",async()=>{
+    const sourceId=randomUUID(),orderId=randomUUID(),transfer=node("development_sewing_transfer","pending",{owner:{id:randomUUID(),name:"TEST文员"}}),paper=node("development_pattern");
+    const noPending=journey([node("development_sewing_transfer")]);
+    const query=new DevelopmentWorkspaceQuery({list:async()=>({asOf:"TEST",items:[journey([paper,transfer],{sourceId}),noPending]}),pendingPatternAssignments:async(_actor,ids)=>{expect(ids).toContain(sourceId);return[{sourceId,orderId}];}} as unknown as DigitalJourneyQuery);
+    const result=await query.pattern({...actor,actorRoles:["pattern_room_supervisor"]},PatternWorkspaceFilterSchema.parse({scope:"dispatch"}));
+    expect(result.items).toHaveLength(1);expect(result.items[0]).toMatchObject({node:{instanceId:transfer.instanceId,state:"pending",owner:transfer.owner},nativeAssignment:{orderId}});
+    expect(transfer.state).toBe("pending");expect(result.counts.dispatch).toBe(1);expect(result.counts.pattern).toBe(0);
+    await expect(query.pattern({...actor,actorRoles:["production_management"]},PatternWorkspaceFilterSchema.parse({scope:"dispatch"}))).rejects.toMatchObject({statusCode:403});
+  });
+
 });
