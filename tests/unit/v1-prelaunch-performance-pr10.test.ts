@@ -6,14 +6,21 @@ const read = (path: string) => readFile(path, "utf8");
 
 describe("1.0 prelaunch PR-10 perceived performance", () => {
   it("reuses the verified in-page session instead of refetching auth/me", async () => {
-    const [auth, shell, reworkQuery, orderBoard] = await Promise.all([
+    const [auth, session, app, shell, reworkQuery, orderBoard] = await Promise.all([
       read("apps/web/src/auth.tsx"),
+      read("apps/web/src/auth-session.ts"),
+      read("apps/web/src/App.tsx"),
       read("apps/web/src/components.tsx"),
       read("apps/web/src/reporting/rework-query-page.tsx"),
       read("apps/web/src/order-board-page.tsx"),
     ]);
 
-    expect(auth).toContain("export const verifySession");
+    expect(auth).toContain('export { verifySession, verifySessionResult } from "./auth-session.js";');
+    expect(session).toContain("export function verifySession(force = false): Promise<VerifiedSession>");
+    expect(session).toContain("if (!sessionVerification)");
+    expect(session).toContain("return verifySessionResult(force).then((result) => result.session);");
+    expect(app).toContain("void verifySessionResult()");
+    expect(app).not.toContain('apiUrl("auth/me")');
     expect(shell).toContain("verifySession()");
     expect(reworkQuery).toContain("verifySession()");
     expect(orderBoard).toContain("verifySession()");
