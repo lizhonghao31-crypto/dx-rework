@@ -4,7 +4,7 @@
 
 ## 范围与基线
 
-目标为 `release/digital-production-v1`；继承 PR02 修复 Head `99661a10bfdacfc1055de1c4b9bb0f6beeef5d87`，PR02 合并后更新到集成分支。FULL；岗位范围、任务导航与正式派工读模型需要一次 GitHub Codex Review。沿用已有实际任务、原业务 API、授权、幂等、数量与工资事实；无 migration、部署或真实数据操作。
+目标为 `release/digital-production-v1`；已继承 PR02 最终 Head `aa19648c32d3b94bdcd4e6d8e785b9e1627fa808` 和合并基线 `a58f455772b254bd654696c126e2796da6ab79cd`。FULL；岗位范围、任务导航与正式派工读模型需要一次 GitHub Codex Review。沿用已有实际任务、原业务 API、授权、幂等、数量与工资事实；无 migration、部署或真实数据操作。
 
 ## 实际行为
 
