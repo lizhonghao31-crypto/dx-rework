@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { CreateUploadIntentSchema } from "@dx-rework/contracts";
-import { SaveInstructionSchema, PublishInstructionSchema, InstructionDateRequestSchema } from "@dx-rework/contracts/production-instruction";
+import { SaveInstructionSchema, ReviewInstructionSourceSchema, PublishInstructionSchema, InstructionDateRequestSchema } from "@dx-rework/contracts/production-instruction";
 import { businessActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { AttachmentService } from "../tools/attachments.js";
@@ -15,6 +15,7 @@ export function registerInstructionRoutes(app: FastifyInstance, dependencies: Di
   const base="/digital-production/orders/:orderId/instruction";
   app.get(base,async request=>{const query=parse(z.object({version:z.coerce.number().int().positive().optional()}).strict(),request.query);return service.read(await actor(request),id(request,"orderId"),undefined,query.version);});
   app.put(base,async request=>service.save(await actor(request),id(request,"orderId"),parse(SaveInstructionSchema,request.body),key(request)));
+  app.post(`${base}/source-review`,async request=>service.reviewSource(await actor(request),id(request,"orderId"),parse(ReviewInstructionSourceSchema,request.body),key(request)));
   app.post(`${base}/publish`,async request=>service.publish(await actor(request),id(request,"orderId"),parse(PublishInstructionSchema,request.body),key(request)));
   app.post(`${base}/date-requests`,async request=>service.requestDate(await actor(request),id(request,"orderId"),parse(InstructionDateRequestSchema,request.body),key(request)));
   app.post(`${base}/date-requests/:requestId/decision`,async request=>service.decideDate(await actor(request),id(request,"orderId"),id(request,"requestId"),parse(z.object({approved:z.boolean()}).strict(),request.body).approved,key(request)));

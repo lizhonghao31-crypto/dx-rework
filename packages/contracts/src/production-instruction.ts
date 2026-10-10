@@ -26,7 +26,32 @@ export const InstructionDocumentSchema = z.object({
   if (new Set(doc.images.map(row => row.attachmentId)).size !== doc.images.length) ctx.addIssue({ code: "custom", message: "图片不能重复", path: ["images"] });
 });
 export type InstructionDocument = z.infer<typeof InstructionDocumentSchema>;
-export const SaveInstructionSchema = z.object({ expectedVersion: z.number().int().nonnegative(), orderVersion: z.number().int().positive(), document: InstructionDocumentSchema }).strict();
+export const SaveInstructionSchema = z.object({ expectedVersion: z.number().int().nonnegative(), orderVersion: z.number().int().positive(), sourceRound:z.number().int().positive().nullable().optional(), document: InstructionDocumentSchema }).strict();
+export const INSTRUCTION_SOURCE_GROUPS = ["craft", "comments", "measurements", "images", "fabrics", "accessories", "composition"] as const;
+export type InstructionSourceGroup = typeof INSTRUCTION_SOURCE_GROUPS[number];
+export const instructionSourceLabels:Record<InstructionSourceGroup,string> = {craft:"工艺路线",comments:"技术说明",measurements:"尺码与尺寸",images:"开发附图",fabrics:"面料",accessories:"辅料",composition:"成分"};
+export const ReviewInstructionSourceSchema=z.object({expectedVersion:z.number().int().nonnegative(),orderVersion:z.number().int().positive(),sourceRound:z.number().int().positive(),sourceVersion:z.number().int().positive(),document:InstructionDocumentSchema,
+ decisions:z.array(z.object({group:z.enum(INSTRUCTION_SOURCE_GROUPS),action:z.enum(["adopt","retain"])}).strict()).max(INSTRUCTION_SOURCE_GROUPS.length)
+}).strict().superRefine((value,ctx)=>{if(new Set(value.decisions.map(item=>item.group)).size!==value.decisions.length)ctx.addIssue({code:"custom",path:["decisions"],message:"每组资料只能选择一次"});});
+export type InstructionSourceReview=z.infer<typeof ReviewInstructionSourceSchema>;
+export const instructionSourceFields:Record<InstructionSourceGroup,ReadonlyArray<keyof InstructionDocument>>={craft:["secondaryCraft","process"],comments:["comments"],measurements:["unit","sizes","measurements"],images:["images"],fabrics:["fabrics"],accessories:["accessories"],composition:["composition"]};
+export function instructionSourceValue(document:InstructionDocument,group:InstructionSourceGroup){return Object.fromEntries(instructionSourceFields[group].map(field=>[field,document[field]]));}
+const withoutRowIds=(value:unknown):unknown=>Array.isArray(value)?value.map(withoutRowIds):value&&typeof value==="object"?Object.fromEntries(Object.entries(value).filter(([key])=>key!=="id").map(([key,item])=>[key,withoutRowIds(item)])):value;
+export function changedInstructionSourceGroups(before:InstructionDocument,after:InstructionDocument){return INSTRUCTION_SOURCE_GROUPS.filter(group=>JSON.stringify(withoutRowIds(instructionSourceValue(before,group)))!==JSON.stringify(withoutRowIds(instructionSourceValue(after,group))));}
+export function applyInstructionSourceReview(current:InstructionDocument,proposed:InstructionDocument,decisions:InstructionSourceReview["decisions"]){
+ const result=structuredClone(current);
+ for(const decision of decisions){if(decision.action!=="adopt")continue;
+  if(decision.group==="images")result.images=[...result.images,...proposed.images.filter(image=>!result.images.some(existing=>existing.attachmentId===image.attachmentId))];
+  else if(decision.group==="measurements"){
+   const existing=result.measurements,sizes=result.sizes;
+   result.unit=proposed.unit;result.sizes=[...proposed.sizes];
+   result.measurements=proposed.measurements.map(row=>{const manual=existing.find(item=>item.name===row.name);return manual?{...row,id:manual.id,tolerance:manual.tolerance,method:manual.method}:row;});
+   result.measurements.push(...existing.filter(row=>!proposed.measurements.some(item=>item.name===row.name)).map(row=>({...row,values:proposed.sizes.map(size=>row.values[sizes.indexOf(size)]??"")})));
+  }
+  else Object.assign(result,instructionSourceValue(proposed,decision.group));
+ }
+ return InstructionDocumentSchema.parse(result);
+}
 export const PublishInstructionSchema = z.object({ expectedVersion: z.number().int().positive(), orderVersion: z.number().int().positive() }).strict();
 export const InstructionDateRequestSchema = z.object({
   orderVersion: z.number().int().positive(), reason: z.string().trim().min(1).max(500),
@@ -57,6 +82,8 @@ export type InstructionSheet = {
   order: DigitalOrder; currentOrderVersion: number; currentDeliveryDate: string | null; document: InstructionDocument; version: number; publishedVersion: number | null;
   versions: number[]; isPublishedSnapshot: boolean; canEdit: boolean; cutStarted: boolean; merchandiserName: string | null;
   sourceRound: number | null; latestSourceRound: number | null; canApproveDate: boolean; printedBy: string;
+  sourceComparison?:{sourceRound:number;sourceVersion:number;before:InstructionDocument;proposed:InstructionDocument;groups:InstructionSourceGroup[]};
+  sourceReview?:{sourceRound:number;instructionVersion:number;decisions:InstructionSourceReview["decisions"];reviewedAt:string;reviewedBy:string};
   canRequestDate?:boolean;
   customerPoDates?:Array<{lineId:string;poNumber:string|null;color:string;date:string|null;registeredDate:string|null;version:number;source:string|null;factoryDate:string|null}>;
   dateRequests: CustomerDateHistory[];

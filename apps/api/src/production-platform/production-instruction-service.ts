@@ -4,7 +4,7 @@ import type { InstructionDateRequest } from "@dx-rework/contracts/production-ins
 import { BulkPreparationService } from "./bulk-preparation-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { initialInstruction, instructionErrors, type InstructionDocument, type InstructionSheet } from "@dx-rework/contracts/production-instruction";
+import { initialInstruction, instructionErrors, changedInstructionSourceGroups, applyInstructionSourceReview, type InstructionSourceReview, type InstructionDocument, type InstructionSheet } from "@dx-rework/contracts/production-instruction";
 import type { DigitalOrder } from "@dx-rework/contracts/digital-production";
 import type { DevelopmentDocument } from "@dx-rework/contracts/digital-development";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -29,9 +29,9 @@ export class ProductionInstructionService {
     return Boolean((await db.query(`SELECT 1 FROM digital_production_child_links l JOIN cutting_orders c ON c.sourcing_case_id=l.child_id
       JOIN cutting_records r ON r.cutting_order_id=c.cutting_order_id WHERE l.module='sourcing' AND l.production_order_id=$1 LIMIT 1`, [id])).rowCount);
   }
-  private async seed(db: Database, order: DigitalOrder) {
+  private async seed(db: Database, order: DigitalOrder, roundNumber?:number) {
     const document = initialInstruction(); document.sizes = [...new Set(order.lines.flatMap(line => line.sizes.map(size => size.size)))];
-    const row = order.sourceId ? await developmentDocumentRow(db, order.sourceId) : null;
+    const row = order.sourceId ? await developmentDocumentRow(db, order.sourceId, roundNumber) : null;
     if (!row || row.status !== "published") return { document, sourceRound: null };
     const source = row.document as DevelopmentDocument;
     document.secondaryCraft=source.craft; document.unit = source.unit; document.process = [source.craft === "无" ? "" : source.craft, source.washing === "免洗" ? "" : source.washing].filter(Boolean).join("／");
@@ -41,7 +41,7 @@ export class ProductionInstructionService {
     document.fabrics = source.materials.filter(item => item.category !== "辅料").map(item => ({ id: randomUUID(), name: item.name, part: item.label, colors: Object.fromEntries(order.lines.map(line => [line.lineId, item.color])), remarks: [item.width, item.weight, item.composition].filter(Boolean).join("／") }));
     document.accessories = source.materials.filter(item => item.category === "辅料").map(item => ({ id: randomUUID(), group: "车缝", garmentColors: order.lines.map(line => line.color).join("、"), materialColor: item.color, name: item.name, category: "", part: item.label, specification: item.specification, consumption: item.consumption, remarks: "" }));
     document.composition = source.materials.filter(item => item.category === "主布").map(item => item.composition).filter(Boolean).join("／");
-    return { document, sourceRound: row.round_number ?? 1 };
+    return { document, sourceRound: row.round_number ?? 1, sourceVersion:row.version as number };
   }
   async read(actor: TrustedActorContext, id: string, db: Database = this.database, version?: number): Promise<InstructionSheet> {
     const { order, editable } = await this.order(db, actor, id);
@@ -54,8 +54,17 @@ export class ProductionInstructionService {
     const seeded = row ? { document: row.document, sourceRound: row.source_round } : draftAccess?await this.seed(db, order):{document:initialInstruction(),sourceRound:null};
     const name = order.primaryMerchandiserId ? (await db.query("SELECT display_name FROM app_users WHERE id=$1", [order.primaryMerchandiserId])).rows[0]?.display_name ?? null : null;
     const dates = await new PoCustomerDateService(this.database).read(actor, id, db);
+    const latestSourceRound=order.sourceId?(await developmentDocumentRow(db,order.sourceId))?.round_number??null:null;
+    let sourceComparison:InstructionSheet["sourceComparison"];
+    if(draftAccess&&!selectedVersion&&latestSourceRound&&seeded.sourceRound!==latestSourceRound){
+      const before=seeded.sourceRound?await this.seed(db,order,seeded.sourceRound):{document:initialInstruction()};
+      const proposed=await this.seed(db,order,latestSourceRound);
+      if(proposed.sourceRound&&proposed.sourceVersion)sourceComparison={sourceRound:proposed.sourceRound,sourceVersion:proposed.sourceVersion,before:before.document,proposed:proposed.document,groups:changedInstructionSourceGroups(before.document,proposed.document)};
+    }
+    const review=(await db.query("SELECT a.after_state,a.created_at,u.display_name FROM audit_events a LEFT JOIN app_users u ON u.id=a.actor_id WHERE a.entity_type='digital_instruction' AND a.entity_id=$1 AND a.action='instruction_source_decisions' AND (a.after_state->>'version')::int<=$2 ORDER BY a.created_at DESC LIMIT 1",[id,row?.version??0])).rows[0];
+    const sourceReview:InstructionSheet["sourceReview"]=review?{sourceRound:review.after_state.sourceRound,instructionVersion:review.after_state.version,decisions:review.after_state.decisions,reviewedAt:new Date(review.created_at).toISOString(),reviewedBy:review.display_name??""}:undefined;
     return { order: selectedVersion ? {...row.order_snapshot,lines:(row.order_snapshot as DigitalOrder).lines.map(line=>{const current=order.lines.find(l=>l.lineId===line.lineId);return current?{...line,poNumber:current.poNumber,formalStyleNo:current.formalStyleNo,temporaryStyleNo:current.temporaryStyleNo}:line;})} : order, currentOrderVersion:order.version,currentDeliveryDate:order.contractDeliveryDate, document: seeded.document, version: row?.version ?? 0,
-      publishedVersion: selectedVersion ?? published, isPublishedSnapshot:Boolean(selectedVersion), sourceRound: seeded.sourceRound, latestSourceRound: order.sourceId?(await developmentDocumentRow(db,order.sourceId))?.round_number??null:null,
+      publishedVersion: selectedVersion ?? published, isPublishedSnapshot:Boolean(selectedVersion), sourceRound: seeded.sourceRound, latestSourceRound, ...(sourceComparison?{sourceComparison}:{}),...(sourceReview?{sourceReview}:{}),
       versions: (await db.query("SELECT version FROM digital_instruction_versions WHERE production_order_id=$1 ORDER BY version DESC", [id])).rows.map(r => r.version),
       canEdit: draftAccess && !version && (Boolean(row) || this.creationEnabled), cutStarted, merchandiserName: name,
       ...dates, printedBy: (await db.query("SELECT display_name FROM app_users WHERE id=$1",[actor.actorId])).rows[0]?.display_name ?? "" };
@@ -95,13 +104,31 @@ export class ProductionInstructionService {
       await db.query("INSERT INTO digital_instruction_attachment_bindings(production_order_id,attachment_id) VALUES($1,$2) ON CONFLICT DO NOTHING", [order.productionOrderId, image.attachmentId]);
     }
   }
-  async save(actor: TrustedActorContext, id: string, input: { expectedVersion: number; orderVersion: number; document: InstructionDocument }, key: string) {
+  async save(actor: TrustedActorContext, id: string, input: { expectedVersion: number; orderVersion: number; document: InstructionDocument;sourceRound?:number|null|undefined }, key: string) {
     return this.command(actor,id,"save",key,input,async(db,order) => {
       const current = await this.read(actor,id,db);
       if (!current.canEdit || current.version !== input.expectedVersion || order.version !== input.orderVersion) fail("母单或制单已更新，请重新打开");
+      if(current.version===0&&order.sourceId&&input.sourceRound===undefined)fail("首次保存请确认采用的开发轮次");
+      if(current.version===0&&input.sourceRound!==undefined&&input.sourceRound!==current.sourceRound)fail("开发资料已更新，请重新读取初始制单后核对");
       await this.bindImages(db,actor,order,input.document);
       await db.query(`INSERT INTO digital_instruction_documents(production_order_id,version,order_version,document,source_round,updated_by) VALUES($1,1,$2,$3,$4,$5)
-        ON CONFLICT(production_order_id) DO UPDATE SET version=digital_instruction_documents.version+1,order_version=EXCLUDED.order_version,document=EXCLUDED.document,source_round=EXCLUDED.source_round,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP`, [id,order.version,JSON.stringify(input.document),current.latestSourceRound,actor.actorId]);
+        ON CONFLICT(production_order_id) DO UPDATE SET version=digital_instruction_documents.version+1,order_version=EXCLUDED.order_version,document=EXCLUDED.document,source_round=EXCLUDED.source_round,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP`, [id,order.version,JSON.stringify(input.document),current.sourceRound,actor.actorId]);
+      return this.read(actor,id,db);
+    });
+  }
+  async reviewSource(actor:TrustedActorContext,id:string,input:InstructionSourceReview,key:string){
+    return this.command(actor,id,"source_review",key,input,async(db,order)=>{
+      const current=await this.read(actor,id,db),comparison=current.sourceComparison;
+      if(!current.canEdit||current.version!==input.expectedVersion||order.version!==input.orderVersion)fail("母单或制单已更新，请重新核对");
+      if(!comparison)return fail("开发资料已变化，请重新核对最新资料");
+      if(comparison.sourceRound!==input.sourceRound||comparison.sourceVersion!==input.sourceVersion)fail("开发资料已变化，请重新核对最新资料");
+      if(input.decisions.length!==comparison.groups.length||new Set(input.decisions.map(item=>item.group)).size!==input.decisions.length||input.decisions.some(item=>!comparison.groups.includes(item.group)))fail("请逐项选择采用新值或保留本单原值");
+      let document:InstructionDocument;
+      try{document=applyInstructionSourceReview(input.document,comparison.proposed,input.decisions);}catch{return fail("核对后的资料超出制单限制或尺码不一致，请调整后重试");}
+      await this.bindImages(db,actor,order,document);
+      await db.query(`INSERT INTO digital_instruction_documents(production_order_id,version,order_version,document,source_round,updated_by) VALUES($1,1,$2,$3,$4,$5)
+        ON CONFLICT(production_order_id) DO UPDATE SET version=digital_instruction_documents.version+1,order_version=EXCLUDED.order_version,document=EXCLUDED.document,source_round=EXCLUDED.source_round,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP`,[id,order.version,JSON.stringify(document),comparison.sourceRound,actor.actorId]);
+      await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state) VALUES($1,$2,$3,'instruction_source_decisions','digital_instruction',$4,$5,$6)",[randomUUID(),actor.requestId,actor.actorId,id,JSON.stringify({sourceRound:current.sourceRound,version:current.version}),JSON.stringify({sourceRound:comparison.sourceRound,sourceVersion:comparison.sourceVersion,version:current.version+1,decisions:input.decisions})]);
       return this.read(actor,id,db);
     });
   }
@@ -110,7 +137,7 @@ export class ProductionInstructionService {
       const current=await this.read(actor,id,db);
       if (!current.canEdit || !current.version || current.version!==input.expectedVersion || order.version!==input.orderVersion) fail("母单或制单已更新，请重新打开");
       if(current.publishedVersion===current.version)return current;
-      if(current.sourceRound!==current.latestSourceRound)fail("开发资料已更新，请核对制单并保存新版本后发布");
+      if(current.sourceRound!==current.latestSourceRound)fail("开发单有新资料，请逐项核对采用或保留后发布");
       const issues=instructionErrors(current.document,order);if(issues.length)fail(issues.join("；"));
       await this.bindImages(db,actor,order,current.document);
       await db.query("INSERT INTO digital_instruction_versions(production_order_id,version,order_version,document,order_snapshot,source_round,published_by) VALUES($1,$2,$3,$4,$5,$6,$7)",[id,current.version,order.version,JSON.stringify(current.document),JSON.stringify(order),current.sourceRound,actor.actorId]);
@@ -144,7 +171,7 @@ export class ProductionInstructionService {
     const current=await this.read(actor,id);
     if(current.canEdit){
       if((await this.database.query("SELECT 1 FROM digital_instruction_attachment_bindings WHERE production_order_id=$1 AND attachment_id=$2",[id,attachmentId])).rowCount)return true;
-      return current.document.images.some(image=>image.attachmentId===attachmentId);
+      return current.document.images.some(image=>image.attachmentId===attachmentId)||Boolean(current.sourceComparison&&[...current.sourceComparison.before.images,...current.sourceComparison.proposed.images].some(image=>image.attachmentId===attachmentId));
     }
     return Boolean((await this.database.query("SELECT 1 FROM digital_instruction_versions v CROSS JOIN LATERAL jsonb_array_elements(v.document->'images') image WHERE v.production_order_id=$1 AND image->>'attachmentId'=$2 LIMIT 1",[id,attachmentId])).rowCount);
   }

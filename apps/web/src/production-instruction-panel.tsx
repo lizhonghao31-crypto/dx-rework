@@ -1,8 +1,9 @@
+import { InstructionSourceReviewPanel } from "./instruction-source-review.js";
 import { PoCustomerDates } from "./po-customer-dates.js";
 import { useEffect, useRef, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import type { UploadIntentResponse } from "@dx-rework/contracts";
-import { MATERIAL_COUNT_TERM, type InstructionDocument, type InstructionSheet } from "@dx-rework/contracts/production-instruction";
+import { MATERIAL_COUNT_TERM, instructionSourceLabels, type InstructionDocument, type InstructionSheet } from "@dx-rework/contracts/production-instruction";
 import { digitalRequest } from "./digital-production-api.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { sha256Hex } from "./attachment-upload.js";
@@ -20,6 +21,7 @@ const tabKeys = Object.keys(instructionTabs) as InstructionTab[];
 export function ProductionInstructionPanel({ orderId, initialVersion, onClose }: { orderId: string; initialVersion?: number | undefined; onClose: () => void }) {
   const [sheet, setSheet] = useState<InstructionSheet | null>(null), [doc, setDoc] = useState<InstructionDocument | null>(null), [version, setVersion] = useState<number | undefined>(initialVersion);
   const [busy, setBusy] = useState(false), [saving, setSaving] = useState(false), [dirty, setDirty] = useState(false), [error, setError] = useState("");
+  const [sourceReviewOpen,setSourceReviewOpen]=useState(false);
   const [tab, setTab] = useState<InstructionTab>("main");
   const [validationMode, setValidationMode] = useState<"save" | "publish" | null>(null), [saveBlocked, setSaveBlocked] = useState(false), [confirming, setConfirming] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(null), [reloadCount, setReloadCount] = useState(0), [uploadKind, setUploadKind] = useState<typeof kinds[number]>("款图");
@@ -29,7 +31,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose }:
   useEffect(() => {
     let live = true; setSheet(null); setDoc(null); setError(""); setBusy(true);
     void digitalRequest<InstructionSheet>(base + (version ? `?version=${version}` : "")).then(value => {
-      if (live) { setSheet(value); setDoc(value.document); setDirty(false); setSaveBlocked(false); setValidationMode(null); operation.current = null; successfulUploads.current.clear(); }
+      if (live) { setSheet(value); setDoc(value.document); setDirty(false); setSaveBlocked(false); setValidationMode(null); setSourceReviewOpen(false); operation.current = null; successfulUploads.current.clear(); }
     }).catch(e => { if (live) setError(e.message); }).finally(() => { if (live) setBusy(false); });
     return () => { live = false; };
   }, [base, version, reloadCount]);
@@ -60,12 +62,12 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose }:
     setValidationMode("save");
     const issues = instructionIssues(doc, sheet.order);
     if (issues.length) { setError("请核对以下内容，修改尚未保存"); return; }
-    void act("", "PUT", { expectedVersion: sheet.version, orderVersion: sheet.order.version, document: doc });
+    void act("", "PUT", { expectedVersion: sheet.version, orderVersion: sheet.order.version, sourceRound:sheet.sourceRound, document: doc });
   };
   useEffect(() => {
-    if (!dirty || busy || error || saveBlocked || confirming || !sheet?.canEdit || sheet.cutStarted || !doc) return;
+    if (!dirty || busy || error || saveBlocked || confirming || sourceReviewOpen || !sheet?.canEdit || sheet.cutStarted || !doc) return;
     const timer = window.setTimeout(save, 1200); return () => window.clearTimeout(timer);
-  }, [doc, dirty, busy, error, saveBlocked, confirming, sheet]);
+  }, [doc, dirty, busy, error, saveBlocked, confirming, sourceReviewOpen, sheet]);
   const discard = async (message: string) => {
     if (writing.current || busy) return false;
     if (!dirty) return true;
@@ -103,7 +105,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose }:
   if (!sheet.canEdit && !sheet.isPublishedSnapshot && sheet.publishedVersion === null) {
     return <Surface className="dx-doc-instruction"><DocumentToolbar title="大货制单" status="尚未发布有效制单"><Button onClick={onClose}>返回</Button></DocumentToolbar><DocumentSection id="instruction-unpublished" title="尚未发布有效制单"><p>该母单尚无已发布的有效制单。请联系订单跟单发布后查看。</p></DocumentSection><PoCustomerDates sheet={sheet} busy={busy} dirty={dirty} historical={Boolean(version)} onAct={act}/>{error&&<p role="alert">{error}</p>}</Surface>;
   }
-  const order = sheet.order, readonly = !sheet.canEdit || sheet.cutStarted, inputDisabled = busy && !saving;
+  const order = sheet.order, readonly = !sheet.canEdit || sheet.cutStarted, inputDisabled = busy && !saving || sourceReviewOpen;
   const total = order.lines.reduce((n, line) => n + line.sizes.reduce((m, size) => m + size.quantity, 0), 0);
   const orderSizes = [...new Set(order.lines.flatMap(line => line.sizes.map(size => size.size)))];
   const issues = validationMode ? instructionIssues(doc, order, validationMode === "publish") : [];
@@ -154,7 +156,9 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose }:
         <div className="instruction-po-summary"><h3>PO / 颜色概要</h3><p>{new Set(order.lines.map(line => line.poNumber).filter(Boolean)).size} 个 PO · {order.lines.length} 个款色 · 总数 <strong>{total.toLocaleString()}</strong> 件</p>{order.lines.slice(0, 2).map(line => <div key={line.lineId}><span>{line.color}{line.colorForeign ? ` / ${line.colorForeign}` : ""}</span><strong>{line.sizes.reduce((n, size) => n + size.quantity, 0).toLocaleString()} 件</strong></div>)}{order.lines.length > 2 && <button type="button" onClick={() => focus("main", "instruction-quantities")}>查看全部 {order.lines.length} 个款色</button>}</div>
       </header>
       {sheet.cutStarted && <p className="instruction-notice">已开裁，制单内容只读；编号补齐请使用原母单入口。</p>}
-      {sheet.sourceRound !== sheet.latestSourceRound && <p className="instruction-notice">开发资料已更新到第{sheet.latestSourceRound ?? "—"}轮，请核对制单内容，保存后重新发布。</p>}
+      {sheet.sourceRound !== sheet.latestSourceRound && <div className="instruction-notice">开发单有新资料，请核对（第 {sheet.latestSourceRound ?? "—"} 轮）。保存正文不会更新采用记录。{!readonly&&sheet.sourceComparison&&<Button type="button" disabled={busy} onClick={()=>setSourceReviewOpen(true)}>查看改变并核对</Button>}</div>}
+      {sourceReviewOpen&&<InstructionSourceReviewPanel key={`${sheet.sourceComparison?.sourceRound}:${sheet.sourceComparison?.sourceVersion}`} sheet={sheet} document={doc} busy={busy} imageUrl={imageUrl} onClose={()=>setSourceReviewOpen(false)} onReview={decisions=>{const comparison=sheet.sourceComparison;if(comparison)void act("/source-review","POST",{expectedVersion:sheet.version,orderVersion:sheet.order.version,sourceRound:comparison.sourceRound,sourceVersion:comparison.sourceVersion,document:doc,decisions}).then(success=>{if(success)setSourceReviewOpen(false);});}}/>}
+      {sheet.sourceReview&&<p className="instruction-note">制单版本 {sheet.sourceReview.instructionVersion} 由 {sheet.sourceReview.reviewedBy||"跟单"} 于 {new Date(sheet.sourceReview.reviewedAt).toLocaleString()} 核对开发第 {sheet.sourceReview.sourceRound} 轮：{sheet.sourceReview.decisions.map(item=>`${instructionSourceLabels[item.group]}${item.action==="retain"?"保留本单原值":"采用新开发值"}`).join("；")||"技术资料未变化"}。</p>}
       {(error || issues.length > 0) && <div className="dx-doc-errors" role="alert"><strong>{error || "请核对以下内容"}</strong>{issues.length > 0 && <ul>{issues.map((issue, index) => <li key={`${issue.id}-${index}`}><button type="button" onClick={() => focus(issue.tab, issue.id)}>{issue.label}：{issue.message}</button></li>)}</ul>}<Button type="button" disabled={busy} onClick={() => void reload()}>重新载入最新版本</Button></div>}
       <nav className="instruction-tabs" role="tablist" aria-label="制单内容">{tabKeys.map((key, index) => <button key={key} type="button" id={`instruction-tab-${key}`} role="tab" aria-selected={tab === key} aria-controls="instruction-tabpanel" tabIndex={tab === key ? 0 : -1} onClick={() => setTab(key)} onKeyDown={event => { const next = event.key === "ArrowRight" ? (index + 1) % tabKeys.length : event.key === "ArrowLeft" ? (index + tabKeys.length - 1) % tabKeys.length : event.key === "Home" ? 0 : event.key === "End" ? tabKeys.length - 1 : null; if (next !== null) { event.preventDefault(); const nextTab = tabKeys[next]!; setTab(nextTab); document.getElementById(`instruction-tab-${nextTab}`)?.focus(); } }}>{instructionTabs[key]}</button>)}</nav>
       <div className="instruction-document-layout"><form className="instruction-document-main" onSubmit={event => { event.preventDefault(); save(); }}>

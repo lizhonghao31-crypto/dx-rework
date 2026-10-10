@@ -16,10 +16,10 @@ export async function exerciseInstructions(database:Pool,order:DigitalOrder,prim
  const service=new ProductionInstructionService(database,true),id=order.productionOrderId;
  const imageId=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-instruction.png','image/png',10,$3,$4,'ready',CURRENT_TIMESTAMP)",[imageId,`TEST/p10/${imageId}`,"a".repeat(64),primary.actorId]);
  const doc=InstructionDocumentSchema.parse({...initialInstruction(),styleName:"TEST连衣裙",category:"连衣裙",date:"2026-10-01",preshrink:"无需预缩",sizes:["M"],measurements:[{id:randomUUID(),name:"袖长",tolerance:"±1/4",method:"平量",values:["6 1/8"]}],images:[{attachmentId:imageId,kind:"款图",description:"TEST款图"}]});
- await expect(service.save(designer,id,{expectedVersion:0,orderVersion:order.version,document:doc},randomUUID())).rejects.toMatchObject({statusCode:403});
- await expect(service.save(primary,id,{expectedVersion:0,orderVersion:order.version,document:{...doc,images:[{attachmentId:budgetImageId,kind:"款图",description:"不能偷读预算图"}]}},randomUUID())).rejects.toMatchObject({statusCode:403});
- const key=randomUUID();const saved=await service.save(primary,id,{expectedVersion:0,orderVersion:order.version,document:doc},key);
- expect((await service.save(primary,id,{expectedVersion:0,orderVersion:order.version,document:doc},key)).version).toBe(1);
+ await expect(service.save(designer,id,{expectedVersion:0,orderVersion:order.version,sourceRound:(await service.read(primary,id)).sourceRound,document:doc},randomUUID())).rejects.toMatchObject({statusCode:403});
+ await expect(service.save(primary,id,{expectedVersion:0,orderVersion:order.version,sourceRound:(await service.read(primary,id)).sourceRound,document:{...doc,images:[{attachmentId:budgetImageId,kind:"款图",description:"不能偷读预算图"}]}},randomUUID())).rejects.toMatchObject({statusCode:403});
+ const key=randomUUID();const saved=await service.save(primary,id,{expectedVersion:0,orderVersion:order.version,sourceRound:(await service.read(primary,id)).sourceRound,document:doc},key);
+ expect((await service.save(primary,id,{expectedVersion:0,orderVersion:order.version,sourceRound:(await service.read(primary,id)).sourceRound,document:doc},key)).version).toBe(1);
  const pk=randomUUID();const published=await Promise.all([service.publish(primary,id,{expectedVersion:1,orderVersion:order.version},pk),service.publish(primary,id,{expectedVersion:1,orderVersion:order.version},pk)]);
  expect(published.map(x=>x.publishedVersion)).toEqual([1,1]);expect(await service.canDownload(designer,id,imageId)).toBe(true);
  expect(await service.canDownload(primary,id,budgetImageId)).toBe(false);
