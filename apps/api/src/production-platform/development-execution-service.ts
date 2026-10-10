@@ -26,7 +26,11 @@ export class DevelopmentExecutionService {
     const tasks=[];for(const row of ids)if(await new DigitalProductionAccessPolicy(this.database).allowed(actor,"task",row.task_id,"technical"))tasks.push(await this.tasks().read(actor,row.task_id));
     const routeFacts=(await this.database.query('SELECT fact_id AS "factId",task_id AS "taskId",route_version AS "routeVersion",kind,payload,recorded_at AS "recordedAt" FROM digital_development_route_facts WHERE source_id=$1 ORDER BY sequence',[sourceId])).rows;
     const patternOrder=(await this.database.query('SELECT order_id AS "orderId" FROM digital_development_pattern_links WHERE source_id=$1',[sourceId])).rows[0]??null;
-    return {sheet,dispatch,tasks,routeFacts,patternOrder,facts:await this.facts(this.database,sourceId),canReportFabric:isRootActor(actor)||actor.actorRoles.some(role=>["pattern_room_worker","pattern_room_supervisor","order_merchandiser"].includes(role)),canDispatch:isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes("development_clerk"),canDecideFabric:isRootActor(actor)||actor.actorRoles.includes("production_management")};
+    const patternPreparation=patternOrder&&(await this.database.query("SELECT to_regclass('pattern_room_rounds') AS relation")).rows[0]?.relation?(await this.database.query(`SELECT o.status,r.category_id IS NOT NULL AS "categorySaved",r.agreed_amount IS NOT NULL AS "priceSaved",
+      s.worker_user_id AS "workerId",s.worker_name AS "workerName" FROM pattern_room_orders o JOIN pattern_room_rounds r ON r.round_id=o.current_round_id
+      LEFT JOIN LATERAL(SELECT worker_user_id,worker_name FROM pattern_room_segments WHERE round_id=r.round_id ORDER BY segment_index DESC LIMIT 1)s ON true
+      WHERE o.order_id=$1 AND o.deleted_at IS NULL`,[patternOrder.orderId])).rows[0]??null:null;
+    return {sheet,dispatch,tasks,routeFacts,patternOrder,patternPreparation,facts:await this.facts(this.database,sourceId),canReportFabric:isRootActor(actor)||actor.actorRoles.some(role=>["pattern_room_worker","pattern_room_supervisor","order_merchandiser"].includes(role)),canDispatch:isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes("development_clerk"),canDecideFabric:isRootActor(actor)||actor.actorRoles.includes("production_management")};
   }
   private async command(actor:TrustedActorContext,sourceId:string,kind:string,key:string,input:unknown,action:(db:PoolClient)=>Promise<unknown>){
     if(!this.enabled)digitalForbidden();if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail("缺少操作标识");

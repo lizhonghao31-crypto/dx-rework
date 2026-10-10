@@ -1,3 +1,4 @@
+import {authorizePatternOrder} from "../pattern-room/order-authority.js";
 import { BulkPreparationService } from "./bulk-preparation-service.js";
 import {isDeepStrictEqual} from "node:util";
 import {createHash,randomUUID} from 'node:crypto';
@@ -52,11 +53,21 @@ export class DevelopmentRoundService {
    await db.query('DELETE FROM digital_development_round_drafts WHERE source_id=$1',[sourceId]);return result;
   });
  }
- async publishWithClient(db:PoolClient,actor:TrustedActorContext,sourceId:string,input:DevelopmentRevision,returnTaskId?:string){
+ async publishWithClient(db:PoolClient,actor:TrustedActorContext,sourceId:string,input:DevelopmentRevision,returnTaskId?:string,patternReworkRoundId?:string){
   if(!this.enabled)digitalForbidden();
   const parsed=DevelopmentRevisionSchema.safeParse(input);if(!parsed.success)fail(parsed.error.issues[0]?.message??"复版资料无效");input=parsed.data!;
   const sheet=await this.forms().read(actor,sourceId,db);
-  if(!returnTaskId&&!sheet.canEdit)digitalForbidden();
+  if(patternReworkRoundId){
+   const lifecycle=(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='source' AND resource_id=$1",[sourceId])).rows[0];
+   if(lifecycle&&lifecycle.state!=='active')fail('开发单已暂停或取消');
+   const original=(await db.query(`SELECT r.requested_by FROM digital_development_pattern_links l
+     JOIN pattern_room_orders o USING(order_id) JOIN pattern_room_rounds r ON r.round_id=o.current_round_id
+     WHERE l.source_id=$1 AND r.round_id=$2 AND r.round_type='rework' AND r.status='pending_assignment'
+       AND o.status='pending_assignment' AND o.deleted_at IS NULL`,[sourceId,patternReworkRoundId])).rows[0];
+   if(!original||original.requested_by!==actor.actorId)digitalForbidden();
+   await authorizePatternOrder(db,actor,"pattern_room:orders:rework",true);
+  }
+  if(!returnTaskId&&!patternReworkRoundId&&!sheet.canEdit)digitalForbidden();
   if(input.basedOnRound!==(sheet.roundNumber??1))fail('已有新轮次，不能从旧版重复发布');
   if(returnTaskId){const task=(await db.query("SELECT t.route_version,a.task_kind,a.source_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.task_id=$1",[returnTaskId])).rows[0];if(!task||task.source_id!==sourceId||task.task_kind!=='development_tail_check'||task.route_version!==input.basedOnRound||input.origin!=='内部发现')digitalForbidden();}
   const errors=developmentPublishErrors(input.document);if(errors.length)fail(errors.join('；'));
@@ -74,7 +85,7 @@ export class DevelopmentRoundService {
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,[sourceId,roundNumber,input.basedOnRound,sheet.version+1,JSON.stringify(document),input.origin,input.customerComment,input.internalProblem,input.explanation,input.categories,affectedNodes,input.outputKind,route,JSON.stringify(inherited),returnTaskId??null,routeId,actor.actorId]);
   await new DigitalProductionTaskService(this.database).supersedeSourceTasksWithClient(db,actor,sourceId,input.basedOnRound,returnTaskId);
   await new DevelopmentRouteService(this.database).startRound(db,actor,sourceId,route[0]!,routeId,roundNumber,returnTaskId);
-  await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_round_published','digital_development',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify({roundNumber,origin:input.origin,affectedNodes,route,inherited})]);
+  await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_round_published','digital_development',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify({roundNumber,origin:input.origin,affectedNodes,route,inherited,...(patternReworkRoundId?{nativeRoundId:patternReworkRoundId}:{})})]);
   await new BulkPreparationService(this.database).syncSource(db,actor,sourceId);
   return {sourceId,roundNumber};
  }

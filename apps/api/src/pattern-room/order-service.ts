@@ -1,4 +1,6 @@
+import {DevelopmentRoundService} from "../production-platform/development-round-service.js";
 import {DigitalProductionAccessPolicy} from "../production-platform/access-policy.js";
+import {DigitalProductionTaskService} from "../production-platform/task-service.js";
 import {DigitalDevelopmentService} from "../production-platform/development-service.js";
 import type { PatternHistorySelection } from "./order-history.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -181,8 +183,19 @@ export class PatternRoomOrderService {
       await this.todos.completeOpenByDedupeKey(client, effective, patternTodoKey(orderId, round.round_id, "assignment"), "已分配工人");
       if (this.enabled) await this.todos.actionableForRecipient(client, effective, { ...this.projection(orderId, round.round_id, eventId, action, `execution:${segmentId}`), category: "pattern_room_execution",
         recipientUserId: person.app_user_id, requiredRole: "pattern_room_worker", requiredCapability: "pattern_room:orders:complete" });
+      if((await client.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation){
+        const waiting=(await client.query(`SELECT t.task_id FROM digital_development_pattern_links l
+          JOIN digital_production_task_access a ON a.source_id=l.source_id
+          JOIN digital_production_tasks t USING(task_id) JOIN digital_production_task_conditions c USING(task_id)
+          WHERE l.order_id=$1 AND a.task_kind='development_sewing' AND t.state IN ('pending','blocked')
+            AND c.condition_key='pattern_assignment_ready' AND NOT c.satisfied
+            AND t.route_version=(SELECT max(route_version) FROM digital_production_tasks p JOIN digital_production_task_access pa USING(task_id) WHERE pa.source_id=l.source_id)
+          ORDER BY t.task_id`,[orderId])).rows;
+        const tasks=new DigitalProductionTaskService(this.db);
+        for(const task of waiting)await tasks.setConditionWithClient(client,effective,task.task_id,'pattern_assignment_ready',true,undefined,'主管确认原打板执行归属');
+      }
       return orderId;
-    });
+    },true);
   }
 
   async complete(actor: TrustedActorContext, orderId: string, input: unknown, key: string) {
@@ -223,11 +236,12 @@ export class PatternRoomOrderService {
   }
   private async recordWorkCompletion(client: PoolClient, effective: TrustedActorContext, order: PatternOrderRow, round: PatternRoundRow, segment: PatternSegmentRow, developmentTaskId?: string) {
     const orderId=order.order_id,action="pattern_room.order.work_completed";
+      const linked=order.kind==='pattern'&&Boolean((await client.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation)&&Boolean((await client.query("SELECT 1 FROM digital_development_pattern_links WHERE order_id=$1",[orderId])).rowCount);
       await client.query("UPDATE pattern_room_segments SET ended_at=CURRENT_TIMESTAMP,worker_completed_at=CURRENT_TIMESTAMP WHERE segment_id=$1", [segment.segment_id]);
       await client.query("UPDATE pattern_room_rounds SET status='pending_confirmation',completed_at=CURRENT_TIMESTAMP WHERE round_id=$1", [round.round_id]);
       await client.query("UPDATE pattern_room_orders SET status='pending_confirmation',version=version+1,updated_at=CURRENT_TIMESTAMP WHERE order_id=$1", [orderId]);
       await this.moveNode(client, round.round_id, "pending_confirmation");
-      const eventId = await this.event(client, effective, action, orderId, round.round_id, { segmentId: segment.segment_id, awaitingDesignerHandoff: order.kind === "pattern", awaitingCreatorConfirmation: order.kind === "misc", ...(developmentTaskId ? {developmentTaskId,executorUserId:effective.actorId,wageWorkerUserId:segment.worker_user_id} : {}) });
+      const eventId = await this.event(client, effective, action, orderId, round.round_id, { segmentId: segment.segment_id, awaitingDesignerHandoff: order.kind === "pattern"&&!linked, awaitingDigitalFinalConfirmation:linked, awaitingCreatorConfirmation: order.kind === "misc", ...(developmentTaskId ? {developmentTaskId,executorUserId:effective.actorId,wageWorkerUserId:segment.worker_user_id} : {}) });
       if (order.kind === "misc") await this.qualifyMisc(client, round.round_id);
       await this.todos.completeOpenByDedupeKey(client, effective, patternTodoKey(orderId, round.round_id, `execution:${segment.segment_id}`), "工人已完工");
       if (this.enabled) {
@@ -236,7 +250,7 @@ export class PatternRoomOrderService {
         const creatorRole = order.kind === "misc" ? (await client.query<{ role: string }>(
           `SELECT role FROM unnest(ARRAY['sample_designer','order_merchandiser']::text[]) WITH ORDINALITY AS candidate(role,priority)
            WHERE todo_user_has_direct_role($1,role,'pattern_room:misc:confirm') ORDER BY priority LIMIT 1`, [order.created_by])).rows[0]?.role ?? order.creator_role : order.creator_role;
-        await this.todos.actionableForRecipient(client, effective, { ...this.projection(orderId, round.round_id, eventId, action, order.kind === "pattern" ? "handoff" : "misc-confirm"),
+        if(!linked)await this.todos.actionableForRecipient(client, effective, { ...this.projection(orderId, round.round_id, eventId, action, order.kind === "pattern" ? "handoff" : "misc-confirm"),
           category: order.kind === "pattern" ? "pattern_room_handoff" : "pattern_room_misc_confirmation", recipientUserId: order.created_by, requiredRole: creatorRole,
           requiredCapability: order.kind === "pattern" ? "pattern_room:orders:handoff" : "pattern_room:misc:confirm" });
         if (order.kind === "misc" && round.actual_hours === null) await this.todos.actionableForUniqueDirectRole(client, effective, {
@@ -349,6 +363,9 @@ export class PatternRoomOrderService {
       if (order.kind !== "pattern" || round.completed_at === null) throw new ApplicationError("INVALID_STATE_TRANSITION", "打板当前轮次完工后才能发起原单返工", 409);
       if (!isPatternRoot(effective) && !effective.actorRoles.includes("pattern_room_supervisor") && order.created_by !== effective.actorId) throw new ApplicationError("FORBIDDEN", "只有原设计师或板房主管可发起返工", 403);
       if (await patternReworkCutBlocked(client, orderId)) throw new ApplicationError("CONFLICT", PATTERN_REWORK_CUT_BLOCK, 409);
+      const linked=(await client.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation?(await client.query("SELECT source_id FROM digital_development_pattern_links WHERE order_id=$1",[orderId])).rows[0]:null;
+      if(linked&&(!parsed.developmentNodes||!parsed.developmentProblems))throw new ApplicationError("VALIDATION_ERROR","请明确本轮受影响工序与问题分类，同步数字开发复版",400);
+      if(!linked&&(parsed.developmentNodes||parsed.developmentProblems))throw new ApplicationError("VALIDATION_ERROR","独立原打板单不使用数字开发复版参数",400);
       const roundId = randomUUID();
       await client.query(`INSERT INTO pattern_room_rounds(round_id,order_id,round_type,round_index,status,category_id,price_version,category_name,unit,unit_price,quantity,agreed_amount,requested_by,request_reason,reason_category)
         VALUES($1,$2,'rework',NULL,'pending_assignment',$3,$4,'打板返工','轮',NULL,NULL,NULL,$5,$6,$7)`, [roundId, orderId, round.category_id, round.price_version, effective.actorId, parsed.reason, parsed.reasonCategory]);
@@ -361,6 +378,14 @@ export class PatternRoomOrderService {
       await this.moveNode(client, round.round_id, undefined, "rework");
       await client.query("INSERT INTO pattern_room_node_times(node_id,round_id,stage) VALUES($1,$2,'pending_assignment')", [randomUUID(), roundId]);
       await client.query("UPDATE pattern_room_orders SET current_round_id=$2,status='pending_assignment',completed_at=NULL,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE order_id=$1", [orderId, roundId]);
+      if(linked){
+        const sheet=await new DigitalDevelopmentService(this.db,true).read(effective,linked.source_id,client);
+        await new DevelopmentRoundService(this.db,true).publishWithClient(client,effective,linked.source_id,{
+          basedOnRound:sheet.roundNumber??1,document:sheet.document!,origin:parsed.reasonCategory==='customer_change'?'客户新增要求':parsed.reasonCategory==='workmanship'?'未达原要求':'内部发现',
+          customerComment:parsed.reasonCategory==='other'?'':parsed.reason,internalProblem:parsed.reasonCategory==='other'?parsed.reason:'',explanation:parsed.reason,
+          affectedNodes:parsed.developmentNodes!,categories:parsed.developmentProblems!,outputKind:'整件样板'
+        },undefined,roundId);
+      }
       const eventId = await this.event(client, effective, action, orderId, roundId, { previousRoundId: round.round_id, reasonCategory: parsed.reasonCategory, attachments: materials }, undefined, parsed.reason);
       await this.todos.completeOpenByDedupeKey(client, effective, patternTodoKey(orderId, round.round_id, "handoff"), "已转入原单返工，等待当前轮次交接");
       if (this.enabled) await this.todos.actionableForUniqueDirectRole(client, effective, { ...this.projection(orderId, roundId, eventId, action, "assignment"), requiredRole: "pattern_room_supervisor", requiredCapability: "pattern_room:orders:assign" });

@@ -1,5 +1,4 @@
 import {DigitalProductionTaskService} from "../../apps/api/src/production-platform/task-service.js";
-import {DevelopmentRoundService} from "../../apps/api/src/production-platform/development-round-service.js";
 import {exerciseDevelopmentRounds} from "./digital-development-round-fixture.js";
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
@@ -13,20 +12,34 @@ import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-developmen
 import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
 import type {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
 export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionService,root:TrustedActorContext,workerId:string,workerPersonId:string,qc:TrustedActorContext,replacementWorkerId:string){
- const native=new PatternRoomOrderService(db,todos,{ordersEnabled:true}),execution=new DevelopmentExecutionService(db,true,native),forms=new DigitalDevelopmentService(db,true),identity=new DigitalProductionIdentityService(db,true);
+ const native=new PatternRoomOrderService(db,todos,{ordersEnabled:true}),execution=new DevelopmentExecutionService(db,true,native),forms=new DigitalDevelopmentService(db,true,native),identity=new DigitalProductionIdentityService(db,true);
  for(const [craft,washing]of [['无','免洗'],['印花','内洗'],['绣花','外洗'],['印绣花','免洗']] as const){
   const source=await identity.createSource(root,{developmentType:'头版',designStyleNo:`P07-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID());
   const sourceId=source.sourceId,fileId=randomUUID(),mainId=randomUUID(),trimId=randomUUID();
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'款图.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[fileId,`p07/${fileId}`,'a'.repeat(64),root.actorId]);
   const material={supplier:'',width:'',weight:'',composition:'',consumption:'',color:'黑',specification:'',quantity:'1',requiredThisRound:true};
   const document=DevelopmentDocumentSchema.parse({template:'上衣',quantity:1,sampleSize:'M',orderDate:'2026-09-30',returnDate:null,unit:'cm',sizes:['M'],measurements:[{name:'胸围',values:['50']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'',craft,washing,materials:[{...material,materialId:mainId,category:'主布',label:'主布',name:'棉',available:true,expectedDate:null},{...material,materialId:trimId,category:'辅料',label:'拉链',name:'拉链',available:false,expectedDate:'2026-09-30'}],files:[{attachmentId:fileId,kind:'款图'}]});
-  const saved=await forms.save(root,sourceId,{expectedVersion:0,document},randomUUID()),sheet=await forms.publish(root,sourceId,saved.version,randomUUID());
-  await execution.dispatch(root,sourceId,{expectedVersion:0,patternWorkerId:workerId,cuttingWorkerId:workerId,sewingWorkerId:workerId},randomUUID());
+  const saved=await forms.save(root,sourceId,{expectedVersion:0,document},randomUUID());
   const price=(await db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0];
+  const patternChoice={categoryId:price.price_id,priceVersion:price.version};
+  if(craft==='无'){
+   await expect(forms.publish(root,sourceId,saved.version,randomUUID())).rejects.toMatchObject({statusCode:409});
+   await expect(forms.publish(root,sourceId,saved.version,randomUUID(),{...patternChoice,priceVersion:price.version+1})).rejects.toMatchObject({statusCode:409});
+   expect(await forms.read(root,sourceId)).toMatchObject({status:'draft',version:saved.version});
+   expect((await db.query('SELECT count(*)::int n FROM digital_development_pattern_links WHERE source_id=$1',[sourceId])).rows[0].n).toBe(0);
+   expect((await db.query('SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1',[sourceId])).rows[0].n).toBe(0);
+  }
+  const publishKey=randomUUID(),sheet=await forms.publish(root,sourceId,saved.version,publishKey,patternChoice);
+  expect(await forms.publish(root,sourceId,saved.version,publishKey,patternChoice)).toEqual(sheet);
+  expect((await db.query('SELECT count(*)::int n FROM digital_development_pattern_links WHERE source_id=$1',[sourceId])).rows[0].n).toBe(1);
+  await execution.dispatch(root,sourceId,{expectedVersion:0,patternWorkerId:workerId,cuttingWorkerId:workerId,sewingWorkerId:workerId},randomUUID());
   const linked=await execution.patternOrder(root,sourceId,{categoryId:price.price_id,priceVersion:price.version},randomUUID()) as {orderId:string};
   expect(await digitalTodoTarget(db,{routeName:'pattern_room_order',entityId:linked.orderId,todoId:randomUUID()})).toEqual({kind:'source',id:sourceId});
   const again=await execution.patternOrder(root,sourceId,{categoryId:price.price_id,priceVersion:price.version},randomUUID()) as {orderId:string};expect(again.orderId).toBe(linked.orderId);
-  let order=await native.get(root,linked.orderId);order=await native.assign(root,order.orderId,{roundId:order.currentRoundId,version:order.version,personId:workerPersonId},randomUUID());
+  let order=await native.get(root,linked.orderId);
+  expect(order.developmentSourceId).toBe(sourceId);
+  expect((await execution.read(root,sourceId)).patternPreparation).toMatchObject({status:'pending_assignment',categorySaved:true,priceSaved:true,workerId:null});
+  if(craft!=='无')order=await native.assign(root,order.orderId,{roundId:order.currentRoundId,version:order.version,personId:workerPersonId},randomUUID());
   const boardId=randomUUID();
   if(craft!=='无'){
     await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'工艺板.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[boardId,`p07/${boardId}`,'b'.repeat(64),root.actorId]);
@@ -49,6 +62,14 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
   expect(await task('development_sewing')).toMatchObject({state:'pending',enteredAt:null});
   await expect(route('development_sewing')).rejects.toMatchObject({statusCode:409});
   await forms.materialEvent(root,sourceId,trimId,{expectedVersion:sheet.version,expectedMaterialRevision:0,action:'确认代用',expectedDate:null,note:'设计师确认代用'},randomUUID());
+  if(craft==='无'){
+    expect(await task('development_sewing')).toMatchObject({state:'pending',enteredAt:null});
+    await expect(route('development_sewing')).rejects.toMatchObject({statusCode:409});
+    const key=randomUUID(),assignment={roundId:order.currentRoundId,version:order.version,personId:workerPersonId};
+    order=await native.assign(root,order.orderId,assignment,key);
+    expect((await native.assign(root,order.orderId,assignment,key)).currentRoundId).toBe(order.currentRoundId);
+    expect((await db.query('SELECT count(*)::int n FROM pattern_room_segments WHERE round_id=$1',[order.currentRoundId])).rows[0].n).toBe(1);
+  }
   expect(await task('development_sewing')).toMatchObject({state:'ready',slaHours:24});
   const sewing=await task('development_sewing'),digitalTasks=new DigitalProductionTaskService(db);
   const executorId=craft==='无'?replacementWorkerId:workerId;
@@ -68,6 +89,7 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
   await execution.route(executor,sourceId,completion,completionKey);
   order=await native.get(root,order.orderId);
   expect(order.status).toBe('pending_confirmation');
+  expect((await db.query("SELECT count(*)::int n FROM rework_todos WHERE dedupe_key=$1",[`pattern-room:${order.orderId}:${order.currentRoundId}:handoff`])).rows[0].n).toBe(0);
   const segments=(await db.query('SELECT worker_user_id,wage_eligible_at FROM pattern_room_segments WHERE round_id=$1',[order.currentRoundId])).rows;
   expect(segments).toHaveLength(1);expect(segments[0]).toMatchObject({worker_user_id:workerId,wage_eligible_at:null});
   expect((await db.query("SELECT actor_id,after_state FROM operation_events WHERE entity_id=$1 AND action='pattern_room.order.work_completed'",[order.orderId])).rows).toMatchObject([{actor_id:executorId,after_state:{value:{developmentTaskId:sewing.taskId,executorUserId:executorId,wageWorkerUserId:workerId}}}]);
@@ -86,17 +108,27 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
   if(craft==='无')await exerciseDevelopmentRounds(db,execution,root,sourceId,workerId,order.currentRoundId,qc);
   if(craft==='印绣花'){
     const confirmed=await native.get(root,order.orderId);
-    let rework=await native.requestRework(root,order.orderId,{roundId:confirmed.currentRoundId,version:confirmed.version,reason:'复核旧开发确认不可释放新工资轮',reasonCategory:'other'},randomUUID());
+    const before={roundId:confirmed.currentRoundId,version:confirmed.version,reason:'车板局部返工',reasonCategory:'other' as const};
+    await expect(native.requestRework(root,order.orderId,before,randomUUID())).rejects.toMatchObject({statusCode:400});
+    await expect(native.requestRework(root,order.orderId,{...before,developmentNodes:['洗水'],developmentProblems:['洗水']},randomUUID())).rejects.toMatchObject({statusCode:409});
+    expect((await native.get(root,order.orderId)).currentRoundId).toBe(confirmed.currentRoundId);
+    expect((await forms.read(root,sourceId)).roundNumber).toBe(1);
+    const reworkKey=randomUUID(),reworkInput={...before,developmentNodes:['车板'],developmentProblems:['车缝']};
+    let rework=await native.requestRework(root,order.orderId,reworkInput,reworkKey);
+    expect((await native.requestRework(root,order.orderId,reworkInput,reworkKey)).currentRoundId).toBe(rework.currentRoundId);
+    expect((await forms.read(root,sourceId)).roundNumber).toBe(2);
+    expect((await db.query('SELECT route_nodes,inherited FROM digital_development_rounds WHERE source_id=$1',[sourceId])).rows).toMatchObject([{route_nodes:['development_sewing_transfer','development_sewing','development_tail_check','development_confirmation','development_shipping'],inherited:{development_pattern:{roundNumber:1}}}]);
+    expect((await db.query('SELECT count(*)::int n FROM pattern_room_rounds WHERE order_id=$1',[order.orderId])).rows[0].n).toBe(2);
+    await route('development_sewing_transfer');
+    expect(await task('development_sewing')).toMatchObject({state:'pending',enteredAt:null});
+    await expect(route('development_sewing')).rejects.toMatchObject({statusCode:409});
     rework=await native.assign(root,rework.orderId,{roundId:rework.currentRoundId,version:rework.version,personId:workerPersonId,amount:'10.00'},randomUUID());
-    rework=await native.complete(root,rework.orderId,{roundId:rework.currentRoundId,version:rework.version},randomUUID());
+    await route('development_sewing');
+    rework=await native.get(root,rework.orderId);
     await expect(native.handoff(root,rework.orderId,{roundId:rework.currentRoundId,version:rework.version},randomUUID())).rejects.toMatchObject({statusCode:409});
     expect((await db.query('SELECT count(*)::int n FROM pattern_room_segments WHERE round_id=$1 AND wage_eligible_at IS NOT NULL',[rework.currentRoundId])).rows[0].n).toBe(0);
     expect((await native.get(root,rework.orderId)).status).toBe('pending_confirmation');
-    const rounds=new DevelopmentRoundService(db,true);
-    const revision={basedOnRound:1,document,origin:'内部发现' as const,customerComment:'',internalProblem:'车板返工复核',explanation:'未开裁原单返工',categories:['车缝' as const],affectedNodes:['车板' as const],outputKind:'整件样板' as const};
-    const saved=await rounds.save(root,sourceId,{expectedDraftVersion:0,revision},randomUUID());
-    await rounds.publish(root,sourceId,{expectedDraftVersion:saved.draftVersion,basedOnRound:1},randomUUID());
-    for(const kind of ['development_sewing_transfer','development_sewing','development_tail_check'])await route(kind);
+    await route('development_tail_check');
     expect((await db.query('SELECT count(*)::int n FROM pattern_room_segments WHERE round_id=$1 AND wage_eligible_at IS NOT NULL',[rework.currentRoundId])).rows[0].n).toBe(0);
     await route('development_confirmation');
     expect((await db.query('SELECT amount::numeric(12,2)::text,wage_eligible_at IS NOT NULL AS eligible FROM pattern_room_segments WHERE round_id=$1',[rework.currentRoundId])).rows).toEqual([{amount:'10.00',eligible:true}]);

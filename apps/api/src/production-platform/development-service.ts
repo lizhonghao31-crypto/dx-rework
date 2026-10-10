@@ -1,5 +1,6 @@
 import {developmentDocumentRow,developmentRoundsAvailable} from "./development-round-repository.js";
 import {DevelopmentRouteService} from "./development-route-service.js";
+import type {PatternRoomOrderService} from "../pattern-room/order-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { developmentPublishErrors, type DevelopmentDocument, type DevelopmentMaterialEvent, type DevelopmentSheet } from "@dx-rework/contracts/digital-development";
@@ -12,7 +13,7 @@ import { DigitalProductionTaskService } from "./task-service.js";
 type Database = Pick<Pool | PoolClient, "query">;
 const conflict = (message: string): never => { throw new ApplicationError("DEVELOPMENT_CONFLICT", message, 409); };
 export class DigitalDevelopmentService {
-  constructor(private readonly database: Pool, private readonly creationEnabled: boolean) {}
+  constructor(private readonly database: Pool, private readonly creationEnabled: boolean, private readonly patternOrders?:PatternRoomOrderService) {}
   private async source(db: Database, actor: TrustedActorContext, sourceId: string, write = false) {
     const source = (await db.query("SELECT s.*,u.display_name AS designer_name FROM digital_production_sources s JOIN app_users u ON u.id=s.created_by WHERE s.source_id=$1", [sourceId])).rows[0] ?? digitalNotFound();
     const owner = isRootActor(actor) || (actor.actorRoles.includes("sample_designer") && source.created_by === actor.actorId && (actor.authorizationCapabilities ?? []).includes("pattern_room:orders:create"));
@@ -84,13 +85,15 @@ export class DigitalDevelopmentService {
       return this.read(actor, sourceId, db);
     });
   }
-  async publish(actor: TrustedActorContext, sourceId: string, expectedVersion: number, key: string) {
-    return this.command(actor, sourceId, "publish", key, { expectedVersion }, async db => {
+  async publish(actor: TrustedActorContext, sourceId: string, expectedVersion: number, key: string, patternOrder?:{categoryId:string;priceVersion:number}) {
+    return this.command(actor, sourceId, "publish", key, { expectedVersion,...(patternOrder?{patternOrder}:{}) }, async db => {
       const row = (await db.query("SELECT * FROM digital_development_documents WHERE source_id=$1", [sourceId])).rows[0] ?? conflict("请先保存开发单");
       if (row.status === "published") { if (row.version === expectedVersion + 1) return this.read(actor, sourceId, db); conflict("开发单已经发布"); }
       if (row.version !== expectedVersion) conflict("开发单已更新，请重新打开后发布");
       const errors = developmentPublishErrors(row.document);
       if (errors.length) throw new ApplicationError("VALIDATION_ERROR", errors.join("；"), 400);
+      if(this.patternOrders&&!patternOrder)conflict("请先选择有效打板品类与执行价，再正式提交开发单");
+      if(patternOrder&&!this.patternOrders)conflict("打板执行衔接服务未配置");
       await this.bindFiles(db, actor, sourceId, row.document);
       const candidates = (await db.query(`SELECT DISTINCT u.id FROM app_users u JOIN user_role_assignments r ON r.user_id=u.id AND r.revoked_at IS NULL
         WHERE u.enabled AND r.role_code='development_clerk' ORDER BY u.id`)).rows;
@@ -98,6 +101,7 @@ export class DigitalDevelopmentService {
       for (const user of candidates) if (await new DigitalProductionAccessPolicy(db).activeRole(user.id, "development_clerk")) eligible.push(user.id);
       const { taskId } = await new DigitalProductionTaskService(this.database).createWithClient(db, actor, { resource: { kind: "source", id: sourceId }, kind: "development_materials", routeId: randomUUID(), routeVersion: 1, occurrence: 1, assigneeId: eligible.length === 1 ? eligible[0]! : null });
       await db.query("UPDATE digital_development_documents SET status='published',published_at=CURRENT_TIMESTAMP,task_id=$2,version=version+1,updated_by=$3,updated_at=CURRENT_TIMESTAMP WHERE source_id=$1", [sourceId, taskId, actor.actorId]);
+      if(patternOrder)await this.patternOrders!.inTransaction(db).createDevelopment(actor,sourceId,patternOrder.categoryId,patternOrder.priceVersion,`development-publish:${createHash("sha256").update(`${sourceId}:${key}`).digest("hex")}`);
       return this.read(actor, sourceId, db);
     });
   }

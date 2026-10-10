@@ -97,7 +97,8 @@ export class PatternOrderReader {
       const creator = isPatternRoot(effective) || order.created_by === effective.actorId;
       const mayRework = order.kind === "pattern" && ["pending_confirmation", "completed"].includes(order.status) && !!currentRound?.completed_at && available("pattern_room:orders:rework") && (creator || effective.actorRoles.includes("pattern_room_supervisor"));
       const reworkCutBlocked = mayRework && await patternReworkCutBlocked(client, orderId);
-      const detail = PatternOrderDetailSchema.parse({ ...patternSummary(order), currentRoundId: order.current_round_id, customer: order.customer, sizeColor: order.size_color,
+      const developmentSource=allMaterials&&(await client.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation?(await client.query("SELECT source_id FROM digital_development_pattern_links WHERE order_id=$1",[orderId])).rows[0]:null;
+      const detail = PatternOrderDetailSchema.parse({ ...patternSummary(order),...(developmentSource?{developmentSourceId:developmentSource.source_id}:{}), currentRoundId: order.current_round_id, customer: order.customer, sizeColor: order.size_color,
         reworkBlockedReason: reworkCutBlocked ? PATTERN_REWORK_CUT_BLOCK : null,
         referenceStyleNo: order.reference_style_no, variant: order.variant, note: allMaterials || currentWorkerAccess ? order.note : null,
         rounds: rounds.filter(round => allCosts || round.round_id === order.current_round_id || segments.some(segment => segment.round_id === round.round_id && segment.worker_user_id === effective.actorId)).map(round => ({
