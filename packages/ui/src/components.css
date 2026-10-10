@@ -1,4 +1,5 @@
 .dx-button {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -41,8 +42,14 @@
 .dx-surface { padding: var(--dx-v2-space-4); }
 .dx-field { display: grid; gap: 6px; min-width: 250px; }
 .dx-field__control { display: flex; align-items: center; min-height: 44px; padding: 0 12px; background: var(--dx-v2-color-inset); border: 1px solid #b9c8d6; border-radius: var(--dx-v2-radius-md); box-shadow: inset 2px 2px 5px rgba(75, 90, 105, 0.12); }
-.dx-field input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--dx-v2-color-text); font: inherit; }
+.dx-field input { box-sizing: border-box; min-width: 0; width: 100%; border: 0; outline: 0; background: transparent; color: var(--dx-v2-color-text); font: inherit; }
 .dx-field em { font-style: normal; color: var(--dx-v2-color-text-secondary); }
+.dx-field__required, .dx-field__error { color: var(--dx-status-danger); }
+.dx-field__error { font-size: 12px; line-height: 1.5; }
+.dx-field:has(input[aria-invalid="true"]) .dx-field__control { border-color: var(--dx-status-danger); }
+.dx-field:has(input:disabled) .dx-field__control { opacity: 0.66; }
+.dx-field:has(input:read-only) .dx-field__control { background: var(--dx-v2-color-surface); }
+.dx-field input:focus-visible { outline: 2px solid var(--dx-v2-color-focus); outline-offset: 2px; }
 
 @media (max-width: 800px) {
   .dx-field { min-width: 0; }
