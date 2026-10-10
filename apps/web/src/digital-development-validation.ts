@@ -20,7 +20,7 @@ export function developmentIssues(document:DevelopmentDocument,quantityInput:str
  for(const message of developmentPublishErrors(parsed.data)){
   if(document.materials.some(row=>row.requiredThisRound&&(message===`${row.label||"物料"}缺少品名`||message===`${row.label||row.name}未到，请填写预计日期`)))continue;
   const key=message.includes("数量")?"quantity":message.includes("打样尺码")?"sampleSize":message.includes("尺码列")?"sizes":message.includes("下单日期")?"orderDate":message.includes("仅适用于")?"craft":"files";
-  issues.push({id:key==="files"?"development-upload":key==="sizes"?`development-size-${document.sizes.findIndex(size=>!size.trim())}`:`development-${key}`,label:labels[key]??key,message});
+  issues.push({id:key==="files"?"development-upload":key==="sizes"?document.sizes.length?`development-size-${document.sizes.findIndex(size=>!size.trim())}`:"development-sizes":`development-${key}`,label:labels[key]??key,message});
  }
  for(const row of parsed.data.materials){if(!row.requiredThisRound)continue;if(!row.name)issues.push({id:`development-${row.materialId}-name`,label:`面辅料 · ${row.label||row.category} · 品名`,message:`${row.label||"物料"}缺少品名`});if(row.category==="辅料"&&!row.available&&!row.expectedDate)issues.push({id:`development-${row.materialId}-expectedDate`,label:`面辅料 · ${row.label||row.category} · 预计到料日期`,message:`${row.label||row.name}未到，请填写预计日期`});}
  return issues;

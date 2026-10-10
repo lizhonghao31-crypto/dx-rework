@@ -44,6 +44,7 @@ export function developmentPublishErrors(document: DevelopmentDocument): string[
   const errors: string[] = [];
   if (!document.quantity) errors.push("请填写本轮打板数量");
   if (!document.sampleSize) errors.push("请填写本轮打样尺码");
+  if (!document.sizes.length) errors.push("至少填写一个尺码列，或先保存草稿");
   if (document.sizes.some(size => !size.trim())) errors.push("请填写尺码列名称，或删除不用的列");
   if (!document.orderDate) errors.push("请填写下单日期");
   if (!document.files.some(file => file.kind === "款图")) errors.push("请上传款图");

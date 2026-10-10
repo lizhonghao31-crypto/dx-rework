@@ -32,6 +32,9 @@ describe("creation quantity buffers and development matrix", () => {
     expect(before.measurements[0]!.values).toEqual(["2 1/2","123.456"]);
     expect(DevelopmentDocumentSchema.safeParse(after).success).toBe(true);
     expect(after.unit).toBe("inch");
+    const empty=removeDevelopmentSize(after,0);
+    expect(DevelopmentDocumentSchema.safeParse(empty).success).toBe(true);
+    expect(developmentPublishErrors(empty)).toContain("至少填写一个尺码列，或先保存草稿");
   });
   it("permits incomplete size names in a draft, locates them at publication, and preserves legacy combined instructions", () => {
     const old=initialDevelopmentDocument();delete old.washingMethod;delete old.ironing;

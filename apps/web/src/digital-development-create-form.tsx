@@ -32,7 +32,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const [form, setForm] = useState(() => editableDevelopmentOrder(initialDevelopmentOrder(customers, source)));
   const [template, setTemplate] = useState<DevelopmentDocument["template"]>("上衣");
   const [pictures, setPictures] = useState<CreatePicture[]>([]);
-  const picturesRef = useRef<CreatePicture[]>([]), previews = useRef<string[]>([]);
+  const picturesRef = useRef<CreatePicture[]>([]), previews = useRef<string[]>([]), creationAttachments = useRef(new Set<string>());
   const draftSaveKey = useRef<{payload: string; key: string} | null>(null);
   useEffect(() => () => {for (const url of previews.current) URL.revokeObjectURL(url);}, []);
   const customerDateOverrides = useRef(new Set<number>());
@@ -91,8 +91,8 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       if (!id) {
         const payload = JSON.stringify(sourceInput);
         if (sourceKey.current?.payload !== payload) sourceKey.current = {payload, key: createClientRequestId()};
-        const next = await digitalRequest<DigitalSource>("sources", "POST", sourceInput, sourceKey.current.key);
-        id = next.sourceId; setCreatedSource(id); setFixedCustomer(next.customerCode);
+        const next = await digitalRequest<Pick<DigitalSource,"sourceId">>("sources", "POST", sourceInput, sourceKey.current.key);
+        id = next.sourceId; setCreatedSource(id); setFixedCustomer(sourceInput.customerCode);
       }
       if (!source) {
         const base = `sources/${id}/development`;
@@ -105,6 +105,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
             if (picture.attachmentId) continue;
             try {
               const attachmentId = await uploadDevelopmentMaterial(base, picture.file, "款图", limits.maxUploadBytes);
+              creationAttachments.current.add(attachmentId);
               picturesRef.current = picturesRef.current.map(item => item.id === picture.id ? {...item, attachmentId, error: undefined} : item);
               setPictures(picturesRef.current);
             } catch (reason) {
@@ -114,9 +115,11 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
             }
           }
         }
-        const added = picturesRef.current.filter(picture => picture.attachmentId && !document.files.some(file => file.attachmentId === picture.attachmentId)).map(picture => ({attachmentId: picture.attachmentId!, kind: "款图" as const}));
-        if (!sheet.document || added.length) {
-          const body = {expectedVersion: sheet.version, document: {...document, files: [...document.files, ...added]}};
+        const desired = new Set(picturesRef.current.flatMap(picture => picture.attachmentId ? [picture.attachmentId] : []));
+        const retained = document.files.filter(file => !creationAttachments.current.has(file.attachmentId) || desired.has(file.attachmentId));
+        const added = picturesRef.current.filter(picture => picture.attachmentId && !retained.some(file => file.attachmentId === picture.attachmentId)).map(picture => ({attachmentId: picture.attachmentId!, kind: "款图" as const}));
+        if (!sheet.document || added.length || retained.length !== document.files.length) {
+          const body = {expectedVersion: sheet.version, document: {...document, files: [...retained, ...added]}};
           const payload = JSON.stringify(body);
           if (draftSaveKey.current?.payload !== payload) draftSaveKey.current = {payload, key: createClientRequestId()};
           await digitalRequest<DevelopmentSheet>(base, "PUT", body, draftSaveKey.current.key);
@@ -144,7 +147,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       {intent !== "confirm_order" && <label>开发类型<select aria-label="开发类型" disabled={Boolean(createdSource)} value={developmentType} onChange={event => setDevelopmentType(event.target.value as "头版" | "开发板")}><option>头版</option><option>开发板</option></select></label>}
       <label>设计款号<input required maxLength={100} value={form.designStyleNo} readOnly={Boolean(createdSource)} onChange={event => setForm({...form, designStyleNo: event.target.value})}/></label>
       <label>代用款号<input maxLength={100} value={form.temporaryStyleNo ?? ""} readOnly={Boolean(createdSource)} onChange={event => setForm({...form, temporaryStyleNo: event.target.value || null})}/></label>
-      <label>客户<select aria-label="客户" required={withOrder} disabled={Boolean(createdSource && fixedCustomer)} value={form.customerCode} onChange={event => {const customer = customers.find(customer => customer.code === event.target.value); setForm({...form, customerCode: event.target.value, primaryMerchandiserId: customer?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(customers, event.target.value)});}}><option value="">通用开发 / 请选择</option>{customers.map(customer => <option key={customer.code} value={customer.code}>{customer.code} · {customer.name}</option>)}</select></label>
+      <label>客户<select aria-label="客户" required={withOrder} disabled={Boolean(createdSource && (fixedCustomer || !source))} value={form.customerCode} onChange={event => {const customer = customers.find(customer => customer.code === event.target.value); setForm({...form, customerCode: event.target.value, primaryMerchandiserId: customer?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(customers, event.target.value)});}}><option value="">通用开发 / 请选择</option>{customers.map(customer => <option key={customer.code} value={customer.code}>{customer.code} · {customer.name}</option>)}</select></label>
     </div>
     <div className={`development-create-layout${source ? " development-create-layout-existing" : ""}`}>
     {!source && <section className="development-create-pictures"><h3>款图</h3><p>保存时沿用同一开发草稿；进入开发单后直接查看，无需再次上传。</p>
