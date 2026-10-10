@@ -1,7 +1,8 @@
 import type { Pool, PoolClient } from "pg";
 import type { JourneyFilter, JourneyNode, JourneyRecord, JourneyState, OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 import type { TrustedActorContext } from "../tools/repositories.js";
-import { DigitalProductionAccessPolicy, digitalNotFound, isDigitalLeader, isDigitalTechnicalManager } from "./access-policy.js";
+import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDigitalLeader, isDigitalTechnicalManager } from "./access-policy.js";
+import { isRootActor } from "../access/business-authority.js";
 import { assertIdentityActor, digitalDateText } from "./identity-service.js";
 import { DigitalProductionTaskService } from "./task-service.js";
 import { BulkPreparationService } from "./bulk-preparation-service.js";
@@ -80,6 +81,22 @@ export class DigitalJourneyQuery {
     return this.snapshot(async(db,asOf)=>{
       const row=(await this.candidates(db,actor,id))[0]??digitalNotFound();
       const item=await this.project(db,actor,row,asOf,round);return item??digitalNotFound();
+    });
+  }
+  /** Read the original pending assignment fact without exposing its prices or altering digital tasks. */
+  async pendingPatternAssignments(actor:TrustedActorContext,sourceIds:string[]):Promise<Array<{sourceId:string;orderId:string}>> {
+    assertIdentityActor(actor);
+    if(!isRootActor(actor)&&!isDigitalTechnicalManager(actor))digitalForbidden();
+    if(!sourceIds.length)return [];
+    return this.snapshot(async db=>{
+      const requested=new Set(sourceIds);
+      const authorized=(await this.candidates(db,actor)).flatMap(row=>row.source&&requested.has(row.source.source_id)?[row.source.source_id]:[]);
+      if(!authorized.length)return [];
+      return (await db.query(`SELECT l.source_id AS "sourceId",o.order_id AS "orderId"
+        FROM digital_development_pattern_links l JOIN pattern_room_orders o USING(order_id)
+        JOIN pattern_room_rounds r ON r.round_id=o.current_round_id
+        WHERE l.source_id=ANY($1::uuid[]) AND o.deleted_at IS NULL
+          AND o.status='pending_assignment' AND r.status='pending_assignment'`,[authorized])).rows;
     });
   }
   private async project(db:PoolClient,actor:TrustedActorContext,row:Candidate,asOf:string,selectedRound?:number):Promise<OrderJourney|null> {

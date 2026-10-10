@@ -53,16 +53,19 @@ export const PatternWorkspaceFilterSchema = z.object({
   owner: z.string().uuid().optional(),
   state: z.enum(["ongoing", "all", "pending", "active", "blocked", "completed"]).default("ongoing"),
   risk: z.enum(["overdue", "due_soon", "blocked", "unknown"]).optional(),
+  scope: z.enum(["mine", "personnel", "all", "unassigned", "dispatch"]).default("mine"),
 }).strict();
 export type PatternWorkspaceFilter = z.infer<typeof PatternWorkspaceFilterSchema>;
 export type PatternWorkspaceTask = {
   journeyId: string; sourceId: string | null; orderId: string | null; designStyleNo: string;
   customer: string | null; designer: string | null; node: JourneyNode;
   group: typeof PATTERN_GROUPS[number]["key"];
+  nativeAssignment?: {orderId:string};
 };
 export type PatternWorkspaceResult = {
   asOf: string; page: number; pageSize: 20; total: number; archiveTotal: number;
   counts: Record<typeof PATTERN_GROUPS[number]["key"], number>;
   owners: Array<{id: string; name: string | null}>; items: PatternWorkspaceTask[];
   risks?: PatternWorkspaceTask[];
+  riskCounts: Record<typeof PATTERN_GROUPS[number]["key"], {dueSoon: number; overdue: number}>;
 };

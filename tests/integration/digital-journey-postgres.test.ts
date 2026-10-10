@@ -56,6 +56,28 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     await app.ready();
   },120000);
   afterAll(async()=>{await app.close();await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+  it("reads only pending original assignment facts and never starts its digital sewing context",async()=>{
+    const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-J-NATIVE-ASSIGN",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+    const task=await createTask({resource:{kind:"source",id:sourceId},kind:"development_sewing_transfer",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:clerk});
+    const price=(await db.query("SELECT price_id,version,name,unit,amount FROM pattern_room_prices WHERE kind='category' AND enabled AND amount IS NOT NULL LIMIT 1")).rows[0];
+    const orderId=randomUUID(),roundId=randomUUID(),client=await db.connect();
+    try{
+      await client.query("BEGIN");
+      await client.query("INSERT INTO pattern_room_orders(order_id,current_round_id,status,created_by,creator_name,style_no) VALUES($1,$2,'pending_assignment',$3,'TEST设计师','TEST-J-NATIVE-ASSIGN')",[orderId,roundId,designer]);
+      await client.query("INSERT INTO pattern_room_rounds(round_id,order_id,status,category_id,price_version,category_name,unit,unit_price,quantity,agreed_amount,requested_by) VALUES($1,$2,'pending_assignment',$3,$4,$5,$6,$7,1,$7,$8)",[roundId,orderId,price.price_id,price.version,price.name,price.unit,price.amount,designer]);
+      await client.query("INSERT INTO digital_development_pattern_links(source_id,order_id,linked_by) VALUES($1,$2,$3)",[sourceId,orderId,designer]);
+      await client.query("COMMIT");
+    }catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}
+    const rootActor=actor(root,["root_superuser"]);
+    expect(await journeys.pendingPatternAssignments(rootActor,[sourceId])).toEqual([{sourceId,orderId}]);
+    await expect(journeys.pendingPatternAssignments(actor(worker,["pattern_room_worker"]),[sourceId])).rejects.toMatchObject({statusCode:403});
+    await expect(journeys.pendingPatternAssignments(actor(clerk,["development_clerk"]),[sourceId])).rejects.toMatchObject({statusCode:403});
+    const before=await tasks.read(rootActor,task.taskId);
+    await db.query("UPDATE pattern_room_orders SET status='in_progress' WHERE order_id=$1",[orderId]);
+    await db.query("UPDATE pattern_room_rounds SET status='in_progress' WHERE round_id=$1",[roundId]);
+    expect(await journeys.pendingPatternAssignments(rootActor,[sourceId])).toEqual([]);
+    expect((await tasks.read(rootActor,task.taskId)).state).toBe(before.state);
+  });
   it("allows Root JSON all-match export but rejects an ordinary merchandiser with legitimate list access",{timeout:60_000},async()=>{
     const search="TEST-J-EXPORT-SCOPE";
     for(let index=0;index<21;index++)await identity.createOrder(actor(root,["root_superuser"]),{...input(`EXPORT-SCOPE-${index}`),primaryMerchandiserId:merchandiser},randomUUID());
