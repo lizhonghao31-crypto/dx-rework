@@ -47,13 +47,16 @@ describe("zero-role Root UI entry contract", () => {
   });
 
   it("reuses a verified session across route gates and keeps sidebar identity at the bottom", async () => {
-    const [auth, styles] = await Promise.all([
+    const [auth, session, styles] = await Promise.all([
       readFile(new URL("../../apps/web/src/auth.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../../apps/web/src/auth-session.ts", import.meta.url), "utf8"),
       readFile(new URL("../../apps/web/src/styles.css", import.meta.url), "utf8"),
     ]);
-    expect(auth).toContain("let verifiedSession: VerifiedSession | undefined;");
-    expect(auth).toContain("const verifySession = (force=false): Promise<VerifiedSession> =>");
-    expect(auth).toContain('useState<AuthGateState>(() => verifiedSession ?? "loading")');
+    expect(session).toContain("let verifiedResult: SessionVerificationResult | undefined;");
+    expect(session).toContain("let sessionVerification: Promise<SessionVerificationResult> | undefined;");
+    expect(session).toContain("export function verifySession(force = false): Promise<VerifiedSession>");
+    expect(auth).toContain('export { verifySession, verifySessionResult } from "./auth-session.js";');
+    expect(auth).toContain('useState<AuthGateState>(() => cachedVerifiedSession() ?? "loading")');
     expect(styles).toContain("display: flex; flex-direction: column;");
     expect(styles).toContain(".app-shell__identity { margin-top: auto;");
   });

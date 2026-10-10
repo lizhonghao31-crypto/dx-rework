@@ -2,6 +2,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { createWebUrls } from "../url-contract.js";
 import { LoginLanding } from "./login-landing.js";
+import { cachedVerifiedSession, verifySession, type VerifiedSession } from "./auth-session.js";
+
+export { verifySession, verifySessionResult } from "./auth-session.js";
+export type { VerifiedSession } from "./auth-session.js";
 
 export type AuthorizedUser = {
   id: string;
@@ -74,30 +78,6 @@ type ErrorBody = { error?: { code?: string; message?: string } };
 
 const { base, apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 type AuthGateState = "loading" | "denied" | AuthorizedSession;
-export type VerifiedSession = Exclude<AuthGateState, "loading">;
-let verifiedSession: VerifiedSession | undefined;
-let sessionVerification: Promise<VerifiedSession> | undefined;
-let sessionVerificationVersion=0;
-
-export const verifySession = (force=false): Promise<VerifiedSession> => {
-  if(force){verifiedSession=undefined;sessionVerification=undefined;}
-  if (verifiedSession !== undefined) return Promise.resolve(verifiedSession);
-
-  if (!sessionVerification) {
-    const version=++sessionVerificationVersion;
-    sessionVerification = fetch(apiUrl("auth/me"), { credentials: "include",cache:"no-store" })
-      .then(async (response): Promise<VerifiedSession> =>
-        response.ok ? await response.json() as AuthorizedSession : "denied",
-      )
-      .catch((): VerifiedSession => "denied")
-      .then((state): VerifiedSession => {
-        if(version===sessionVerificationVersion)verifiedSession = state;
-        return state;
-      });
-  }
-
-  return sessionVerification;
-};
 
 const QR_CONTAINER_ID = "dx-rework-dingtalk-qr";
 const QR_RELAY_MESSAGE = "dx-rework:dingtalk-qr-code" as const;
@@ -137,7 +117,7 @@ export function AuthGate({
   requiredCapability?: string | undefined;
   requiredAnyOf?: readonly PageAccessRequirement[] | undefined;
 }) {
-  const [state, setState] = useState<AuthGateState>(() => verifiedSession ?? "loading");
+  const [state, setState] = useState<AuthGateState>(() => cachedVerifiedSession() ?? "loading");
   useEffect(() => {
     let mounted = true;
     void verifySession().then((nextState) => {
@@ -276,7 +256,7 @@ export function QrLoginPage() {
 }
 
 function BrowserQrLoginPage() {
-  const [session, setSession] = useState<VerifiedSession | "loading">(() => verifiedSession ?? "loading");
+  const [session, setSession] = useState<VerifiedSession | "loading">(() => cachedVerifiedSession() ?? "loading");
   useEffect(() => {
     let mounted = true;
     void verifySession().then((state) => {
@@ -287,7 +267,11 @@ function BrowserQrLoginPage() {
     return () => { mounted = false; };
   }, []);
   if (session === "denied") return <QrLoginChallenge />;
-  return <LoginLanding message="正在确认登录状态…" qr={<div aria-label="正在确认登录状态" />} action={<Button disabled>重新生成二维码</Button>} />;
+  return <LoginSessionLoadingPage />;
+}
+
+export function LoginSessionLoadingPage({ message = "正在确认登录状态…" }: { message?: string }) {
+  return <LoginLanding message={message} qr={<div aria-label="正在确认登录状态" />} action={<Button disabled>重新生成二维码</Button>} />;
 }
 
 function QrLoginChallenge() {
@@ -419,3 +403,4 @@ export function QrRelayPage() {
 }
 
 export function DeniedPage() { return <StatePage tone="danger" title="无法进入系统" detail="达兴组织、在职或账号启用状态未通过校验。如有疑问，请联系管理员。"><Button onClick={() => window.location.assign(base)}>返回登录</Button></StatePage>; }
+
