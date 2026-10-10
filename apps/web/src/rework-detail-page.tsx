@@ -14,6 +14,7 @@ import { verifySession, type AuthorizedUser } from "./auth.js";
 import { Header, Shell } from "./components.js";
 import { OrderResponsibilityRevisionPanel } from "./order-responsibility-revision-panel.js";
 import { reworkReturnPath } from "./rework-return-path.js";
+import { publishReworkNodeRefresh, reworkInitiationAccess } from "./rework-initiation-access.js";
 import { ExternalResponsibilityPanel } from "./external-responsibility-panel.js";
 import { InspectionReportReadonly } from "./inspection-report-readonly.js";
 import { ImageViewer } from "./image-viewer.js";
@@ -444,7 +445,7 @@ function CurrentReworkDetailPage({
     if (mobileWorkflowExpanded) mobileWorkflowRailRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: "nearest", inline: "center" });
   }, [mobileWorkflowExpanded, state]);
 
-  const load = useCallback(async (signal?: AbortSignal): Promise<ReworkBusinessDetail | null> => {
+  const load = useCallback(async (signal?: AbortSignal, selectCurrentNode = false): Promise<ReworkBusinessDetail | null> => {
     if (!reworkOrderId) {
       setState({ kind: "error", message: "返工单链接无效" });
       return null;
@@ -457,19 +458,17 @@ function CurrentReworkDetailPage({
       throw new Error(body?.error?.message ?? `返工单加载失败（${response.status}）`);
     }
     const latest = await response.json() as ReworkBusinessDetail;
-    setState({ kind: "ready", value: latest });
+    publishReworkNodeRefresh(latest, selectCurrentNode ? currentNodeByStatus[latest.status] : undefined, (nextNode) => {
+      const url = new URL(window.location.href);
+      url.searchParams.set("node", nextNode);
+      window.history.replaceState(window.history.state, "", url);
+    }, (value) => setState({ kind: "ready", value }));
     return latest;
   }, [reworkOrderId]);
 
   const syncAfterNodeAction = useCallback(async (): Promise<void> => {
     try {
-      const latest = await load();
-      if (!latest) return;
-      const nextNode = currentNodeByStatus[latest.status];
-      if (!nextNode) return;
-      const url = new URL(window.location.href);
-      url.searchParams.set("node", nextNode);
-      window.history.replaceState(window.history.state, "", url);
+      await load(undefined, true);
     } catch {
       // Mutation already succeeded; preserve its success feedback and allow a manual refresh.
     }
@@ -605,6 +604,15 @@ function CurrentReworkDetailPage({
     && canSupplementImagesByRole(currentUser);
   const canHandleInitiation = moduleWritable && (elevated(currentUser)
     || (hasRole(currentUser, "quality_control") && hasCapability(currentUser, "rework:initiate")));
+  const initiationAccess = reworkInitiationAccess({
+    canHandleInitiation,
+    currentUserId: currentUser?.id ?? null,
+    createdByUserId: detail.createdBy.userId,
+    isRoot: currentUser?.isRoot === true,
+    status: detail.status,
+  });
+  const initiationOwnershipNotice = !initiationAccess.isOwnOrder
+    ? `本单由 ${detail.createdBy.displayName} 发起；撤回和取消需由原发起人操作。` : undefined;
   const canWaiveTailInspection = moduleWritable && detail.tailInspectionRequired
     && (detail.status === "in_progress" || detail.status === "pending_order_review")
     && (elevated(currentUser) || (
@@ -666,12 +674,12 @@ function CurrentReworkDetailPage({
         {...(selected.state!=="completed"?{attachments:detail.attachments}:{})} /></>;
     }
     if (selected.key === "initiation" && detail.status === "draft") {
-      return canHandleInitiation
+      return initiationAccess.canEditDraft
         ? <ReworkInitiationForm reworkOrderId={detail.reworkOrderId} embedded onOrderChanged={() => { void syncAfterNodeAction(); }} />
-        : <NodePermissionNotice node={selected} />;
+        : <NodePermissionNotice node={selected} message={initiationOwnershipNotice} />;
     }
     if (selected.key === "initiation" && detail.status === "pending_process_configuration") {
-      return <InitiationFollowUpActions detail={detail} canHandleInitiation={canHandleInitiation} onChanged={() => { void load(); }} />;
+      return <InitiationFollowUpActions detail={detail} canHandleInitiation={initiationAccess.canWithdraw} ownershipNotice={initiationOwnershipNotice} onChanged={syncAfterNodeAction} />;
     }
     if (selected.state !== "future" && (selected.key === "process_configuration" || selected.key === "ie_review")) {
       if (canUseProcessWorkspace(currentUser)) return <ProcessConfigurationForm reworkOrderId={detail.reworkOrderId} initialDetail={detail} embedded workspaceNode={selected.key} onOrderChanged={syncAfterNodeAction} />;
@@ -818,7 +826,7 @@ function CurrentReworkDetailPage({
 
         <section id="node-workspace" className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
           <div className="rework-detail-task__heading"><h2>办理区<span className="rework-mobile-current-node"> · {selected?.number} {selected?.label}</span></h2>{detail.canReadBusinessDetails !== false && <span className="rework-detail-single-piece-total">单件返工总价：{detail.singlePieceReworkTotal === null ? "待核价" : formatBusinessCurrency(detail.singlePieceReworkTotal)}</span>}</div>
-          {detail.status === "pending_process_configuration" && canHandleInitiation ? <InitiationFollowUpActions detail={detail} canHandleInitiation={canHandleInitiation} onChanged={() => { void load(); }} /> : null}
+          {detail.status === "pending_process_configuration" && canHandleInitiation ? <InitiationFollowUpActions detail={detail} canHandleInitiation={initiationAccess.canWithdraw} ownershipNotice={initiationOwnershipNotice} onChanged={syncAfterNodeAction} /> : null}
           {canWaiveTailInspection ? <TailInspectionWaiverAction detail={detail} onChanged={syncAfterNodeAction} /> : null}
           {renderSelectedTask()}
         </section>
@@ -928,11 +936,13 @@ function TailInspectionWaiverAction({
 function InitiationFollowUpActions({
   detail,
   canHandleInitiation,
+  ownershipNotice,
   onChanged,
 }: {
   detail: ReworkBusinessDetail;
   canHandleInitiation: boolean;
-  onChanged: () => void;
+  ownershipNotice?: string | undefined;
+  onChanged: () => void | Promise<void>;
 }) {
   const [message, setMessage] = useState("");
   const [busyAction, setBusyAction] = useState<"withdraw" | "cancel" | null>(null);
@@ -960,7 +970,7 @@ function InitiationFollowUpActions({
         throw new Error(body?.error?.message ?? "状态变更失败");
       }
       setMessage(action === "withdraw" ? "已撤回为草稿，可在本节点继续修改后再次提交。" : "返工单已取消，历史记录继续保留。");
-      onChanged();
+      await onChanged();
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : "状态变更失败");
     } finally {
@@ -980,12 +990,13 @@ function InitiationFollowUpActions({
         {canCancel ? <Button disabled={busyAction !== null} onClick={() => void transition("cancel")}>{busyAction === "cancel" ? "取消中…" : "取消返工单"}</Button> : null}
       </div>
     ) : null}
+    {!canHandleInitiation && ownershipNotice ? <p role="status">{ownershipNotice}</p> : null}
     {message ? <p role="status">{message}</p> : null}
   </Surface>;
 }
 
-function NodePermissionNotice({ node }: { node: WorkflowNode }) {
-  return <Surface className="rework-detail-node-preview"><StatusBadge tone="info">仅可查看</StatusBadge><h2>{node.number} · {node.label}</h2><p>{node.preview}</p><p>当前账号没有该节点的处理权限；如需处理，请从本人待办进入或联系节点负责人。</p></Surface>;
+function NodePermissionNotice({ node, message }: { node: WorkflowNode; message?: string | undefined }) {
+  return <Surface className="rework-detail-node-preview"><StatusBadge tone="info">仅可查看</StatusBadge><h2>{node.number} · {node.label}</h2><p>{node.preview}</p><p>{message ?? "当前账号没有该节点的处理权限；如需处理，请从本人待办进入或联系节点负责人。"}</p></Surface>;
 }
 
 function SettlementLedgerNotice({ detail }: { detail: ReworkBusinessDetail }) {
@@ -1010,3 +1021,4 @@ function OrderCompletionAndSettlementSummary({ detail }: { detail: ReworkBusines
     <p>扣款状态：{followUpStatusLabel(detail)}</p>
   </Surface>;
 }
+
