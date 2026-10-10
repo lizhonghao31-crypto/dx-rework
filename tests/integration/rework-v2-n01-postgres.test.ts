@@ -9,6 +9,8 @@ import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import { ReworkSupplyContextService } from "../../apps/api/src/rework/supply-context-service.js";
 import { ReworkV2SubmissionService } from "../../apps/api/src/rework/v2-submission-service.js";
+import { ReworkV2DraftService } from "../../apps/api/src/rework/v2-draft-service.js";
+import { ProcessConfigurationService } from "../../apps/api/src/rework/process-configuration-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { TodoProjectionService } from "../../apps/api/src/todos/projection-service.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
@@ -38,6 +40,8 @@ runWithPostgres("rework v2 N01 PostgreSQL contracts", () => {
     todoProjection,
   );
   const supplyContext = new ReworkSupplyContextService(database, "corp");
+  const draftService = new ReworkV2DraftService(database, "corp");
+  const configuration = new ProcessConfigurationService(database);
   const v2Submission = new ReworkV2SubmissionService(
     database,
     "corp",
@@ -51,6 +55,7 @@ runWithPostgres("rework v2 N01 PostgreSQL contracts", () => {
     owner: randomUUID(),
     root: randomUUID(),
     qc: randomUUID(),
+    otherQc: randomUUID(),
     merchandiser: randomUUID(),
     embroideryMerchandiser: randomUUID(),
     tail: randomUUID(),
@@ -123,6 +128,7 @@ runWithPostgres("rework v2 N01 PostgreSQL contracts", () => {
     const roleUsers = [
       [ids.owner, "老板", "owner_group"],
       [ids.qc, "质检", "quality_control"],
+      [ids.otherQc, "其他质检", "quality_control"],
       [ids.merchandiser, "订单跟单", "order_merchandiser"],
       [ids.embroideryMerchandiser, "印绣花跟单", "embroidery_washing_merchandiser"],
       [ids.tail, "尾部主管", "tail_supervisor"],
@@ -341,6 +347,123 @@ runWithPostgres("rework v2 N01 PostgreSQL contracts", () => {
     });
   });
 
+  it.each(["Root own", "Root foreign", "QC own"])("completes %s create, withdraw, draft save and resubmit without rewriting the creator", async (scenario) => {
+    const creator = scenario === "Root own" ? root() : qc();
+    const maintainer = scenario === "QC own" ? qc() : root();
+    const attachmentId = await readyImage(creator.actorId);
+    const draft = await initiation.createDraft(creator, {
+      styleNo: `WITHDRAW-${scenario}`,
+      merchandiserUserId: ids.merchandiser,
+      processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionCostBearer: "processing_factory",
+      attachmentIds: [attachmentId],
+    }, randomUUID());
+    const first = await v2Submission.submit(creator, draft.value.reworkOrderId,
+      { expectedVersion: draft.value.version }, randomUUID());
+    const key = randomUUID();
+    const input = { expectedVersion: first.value.version, reason: "撤回修改资料" };
+    const withdrawn = await initiation.withdraw(maintainer, first.value.reworkOrderId, input, key);
+    expect((await initiation.withdraw(maintainer, first.value.reworkOrderId, input, key)).reused).toBe(true);
+    expect(withdrawn.value).toMatchObject({
+      status: "draft", reworkOrderId: first.value.reworkOrderId,
+      reworkNo: first.value.reworkNo, submittedAt: first.value.submittedAt,
+    });
+    expect(await draftService.get(maintainer, draft.value.reworkOrderId)).toMatchObject({ status: "draft" });
+    const saved = await draftService.save(maintainer, draft.value.reworkOrderId, {
+      expectedVersion: withdrawn.value.version,
+      styleNo: `EDITED-${scenario}`,
+      merchandiserUserId: ids.merchandiser,
+      processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionRequired: true,
+      tailInspectionCostBearer: "processing_factory",
+    }, randomUUID());
+    const resubmitted = await v2Submission.submit(maintainer, draft.value.reworkOrderId,
+      { expectedVersion: saved.value.version }, randomUUID());
+    expect(resubmitted.value).toMatchObject({ status: "pending_process_configuration",
+      reworkNo: first.value.reworkNo, submittedAt: first.value.submittedAt,
+      attachmentIds: [attachmentId], styleNo: `EDITED-${scenario}` });
+    expect((await database.query("SELECT created_by,updated_by FROM rework_orders WHERE rework_order_id=$1",
+      [draft.value.reworkOrderId])).rows[0]).toEqual({ created_by: creator.actorId, updated_by: maintainer.actorId });
+    const events = (await database.query("SELECT actor_id,action FROM operation_events WHERE entity_id=$1 AND action IN ('rework.withdraw','rework.draft.update') ORDER BY created_at",
+      [draft.value.reworkOrderId])).rows;
+    expect(events).toEqual(expect.arrayContaining([
+      { actor_id: maintainer.actorId, action: "rework.withdraw" },
+      { actor_id: maintainer.actorId, action: "rework.draft.update" },
+    ]));
+    await expect(initiation.withdraw(maintainer, draft.value.reworkOrderId,
+      { expectedVersion: first.value.version, reason: "旧版本" }, randomUUID()))
+      .rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
+    const cancelled = await initiation.cancel(maintainer, draft.value.reworkOrderId,
+      { expectedVersion: resubmitted.value.version, reason: "停止返工" }, randomUUID());
+    expect(cancelled.value).toMatchObject({ status: "cancelled", reworkNo: first.value.reworkNo });
+    await expect(initiation.withdraw(maintainer, draft.value.reworkOrderId,
+      { expectedVersion: cancelled.value.version, reason: "不得撤回已取消单" }, randomUUID()))
+      .rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION", statusCode: 409 });
+  });
+
+  it("rejects ordinary QC maintenance of another creator's order in every stage", async () => {
+    const other = actor(ids.otherQc, ["quality_control"], "rework:initiate");
+    const attachmentId = await readyImage(ids.qc);
+    const draft = await initiation.createDraft(qc(), {
+      styleNo: "FOREIGN-QC-DENIED", merchandiserUserId: ids.merchandiser,
+      processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionCostBearer: "processing_factory", attachmentIds: [attachmentId],
+    }, randomUUID());
+    await expect(draftService.get(other, draft.value.reworkOrderId))
+      .rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+    await expect(draftService.save(other, draft.value.reworkOrderId, {
+      expectedVersion: draft.value.version, styleNo: "MUST-NOT-CHANGE",
+      merchandiserUserId: ids.merchandiser,
+      processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionRequired: true, tailInspectionCostBearer: "processing_factory",
+    }, randomUUID())).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+    await expect(v2Submission.submit(other, draft.value.reworkOrderId,
+      { expectedVersion: draft.value.version }, randomUUID()))
+      .rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+    const submitted = await v2Submission.submit(qc(), draft.value.reworkOrderId,
+      { expectedVersion: draft.value.version }, randomUUID());
+    for (const action of ["withdraw", "cancel"] as const) {
+      await expect(initiation[action](other, draft.value.reworkOrderId,
+        { expectedVersion: submitted.value.version, reason: "不属于本人" }, randomUUID()))
+        .rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+    }
+    expect((await initiation.getOwn(qc(), draft.value.reworkOrderId)).status).toBe("pending_process_configuration");
+  });
+
+  it("keeps configuration-started and advanced-state protections for Root maintenance", async () => {
+    const attachmentId = await readyImage(ids.qc);
+    const draft = await initiation.createDraft(qc(), {
+      styleNo: "ROOT-CONFIGURATION-GUARD", merchandiserUserId: ids.merchandiser,
+      processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionRequired: false, attachmentIds: [attachmentId],
+    }, randomUUID());
+    const submitted = await v2Submission.submit(qc(), draft.value.reworkOrderId,
+      { expectedVersion: draft.value.version }, randomUUID());
+    const tail = actor(ids.tail, ["tail_supervisor"], "process:configure");
+    const configured = await configuration.saveDraft(tail, draft.value.reworkOrderId, {
+      expectedOrderVersion: submitted.value.version,
+      items: [{ source: "custom", customProcessName: "保护工序", pricingUnit: "piece", plannedQuantity: 1, unitPrice: 1 }],
+    }, randomUUID());
+    for (const action of ["withdraw", "cancel"] as const) {
+      await expect(initiation[action](root(), draft.value.reworkOrderId,
+        { expectedVersion: configured.value.orderVersion, reason: "不得回退" }, randomUUID()))
+        .rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION", statusCode: 409 });
+    }
+    const queued = await configuration.submit(tail, draft.value.reworkOrderId, {
+      expectedOrderVersion: configured.value.orderVersion,
+      expectedConfigurationVersion: configured.value.configuration!.configurationVersion,
+    }, randomUUID());
+    await expect(initiation.withdraw(root(), draft.value.reworkOrderId,
+      { expectedVersion: queued.value.orderVersion, reason: "不得回退执行链" }, randomUUID()))
+      .rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION", statusCode: 409 });
+    await expect(draftService.save(root(), draft.value.reworkOrderId, {
+      expectedVersion: queued.value.orderVersion, styleNo: "NO-EDIT-AFTER-N01",
+      merchandiserUserId: ids.merchandiser,
+      processingFactory: { type: "supplier", supplierId: factorySupplierId },
+      tailInspectionRequired: true, tailInspectionCostBearer: "processing_factory",
+    }, randomUUID())).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION", statusCode: 409 });
+  });
+
   it("keeps tail finishing separate from QC initiation and submits without a report", async () => {
     const supervisor = () => actor(ids.tail, ["tail_supervisor"], "process:configure");
     const receivingBatchId = randomUUID();
@@ -387,3 +510,4 @@ runWithPostgres("rework v2 N01 PostgreSQL contracts", () => {
     ]);
   });
 });
+

@@ -920,7 +920,7 @@ export class ReworkInitiationService {
     idempotencyKey: string,
   ): Promise<MutationResult<ReworkOrderResponse>> {
     return this.mutate(actor, "rework.withdraw", idempotencyKey, { reworkOrderId, ...input }, 200, async (client) => {
-      const current = await this.lockOwned(client, actor.actorId, reworkOrderId);
+      const current = await this.lockInitiationMaintenance(client, actor, reworkOrderId);
       this.ensureVersion(current, input.expectedVersion);
       transitionReworkOrder(current.status, "draft");
       if (current.status !== "pending_process_configuration") {
@@ -959,7 +959,7 @@ export class ReworkInitiationService {
         recipientKey: "role:tail_supervisor",
         idempotencyKey: `${reworkOrderId}:withdrawn:${nextVersion}`,
       });
-      return this.getOwnedWithClient(client, actor.actorId, reworkOrderId);
+      return this.getAccessibleWithClient(client, reworkOrderId);
     });
   }
 
@@ -970,7 +970,7 @@ export class ReworkInitiationService {
     idempotencyKey: string,
   ): Promise<MutationResult<ReworkOrderResponse>> {
     return this.mutate(actor, "rework.cancel", idempotencyKey, { reworkOrderId, ...input }, 200, async (client) => {
-      const current = await this.lockOwned(client, actor.actorId, reworkOrderId);
+      const current = await this.lockInitiationMaintenance(client, actor, reworkOrderId);
       this.ensureVersion(current, input.expectedVersion);
       transitionReworkOrder(current.status, "cancelled");
       if (current.status !== "draft" && current.status !== "pending_process_configuration") {
@@ -1017,7 +1017,7 @@ export class ReworkInitiationService {
         recipientKey: "role:tail_supervisor",
         idempotencyKey: `${reworkOrderId}:cancelled:${nextVersion}`,
       });
-      return this.getOwnedWithClient(client, actor.actorId, reworkOrderId);
+      return this.getAccessibleWithClient(client, reworkOrderId);
     });
   }
 
@@ -1465,6 +1465,17 @@ export class ReworkInitiationService {
     return row;
   }
 
+  /** Root may maintain N01 across creators; all workflow/version guards still apply. */
+  private async lockInitiationMaintenance(
+    client: PoolClient,
+    actor: TrustedActorContext,
+    reworkOrderId: string,
+  ): Promise<ReworkOrderRow> {
+    return actor.actorRoles.includes("root_superuser")
+      ? this.lockAccessible(client, reworkOrderId)
+      : this.lockOwned(client, actor.actorId, reworkOrderId);
+  }
+
   private async lockOwned(
     client: PoolClient,
     actorId: string,
@@ -1809,4 +1820,5 @@ export class ReworkInitiationService {
     };
   }
 }
+
 
