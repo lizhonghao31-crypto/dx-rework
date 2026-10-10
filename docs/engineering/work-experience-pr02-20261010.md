@@ -44,4 +44,8 @@ Review 修复后的本地结果：8 项尺寸/发布/数量定向检查通过；
 
 独立浏览器发现通用 `.digital-production label` 还会继承 `flex-direction:column`。新增修复显式设置开发单复选标签 `flex-direction:row`。补齐实际 `.pattern-orders.digital-production` 父作用域和同时加载通用/开发单 CSS 的本地页面后，先复现 column 与 row 不符，再对全部九处勾选文字直接取 Text Range，验证 row、6px 间距及文字/图标中心，重新运行四组桌面 CSS 100%/125% 和此前创建重试回归。真实浏览器菜单 125% 仍等待独立任务按最终 SHA 复验。
 
-补齐实际父作用域及两份 CSS 后，九处复选框 × 四组桌面几何全部通过，创建重试/零列发布/日期/390px 无溢出回归通过，浏览器错误为零；前端构建、secret scan 和 diff 检查通过。需要最终新 Head 的 Full Gate，a2c43225 的绿灯不能用于本修复合并。
+补齐实际父作用域及两份 CSS 后，直接源码 CSS 下九处复选框 × 四组桌面几何通过，但未覆盖完整生产 bundle；表格外勾选仍受 4px margin-top 影响，这部分通过结论撤回。创建重试/零列发布/日期/390px 无溢出回归通过，浏览器错误为零；前端构建、secret scan 和 diff 检查通过。需要最终新 Head 的 Full Gate，a2c43225 的绿灯不能用于本修复合并。
+
+最终 CSS 复核改用实际前端构建产物的完整应用 stylesheet，先在 99661a1 构建产物复现唛类 input 的 computed margin-top=4px。修复仅提高开发单 label 下控件的选择器优先级，checkbox/radio 统一 margin=0，并同步保持手机 20px 规则的优先级。表格内外各控件、普通 checkbox/radio 和实际打印/编译样式组合统一检查后再推送，不修改业务代码。
+
+最终完整构建样式回归通过：九处实际复选框表格内外均 margin=0，四组桌面最大 Text Range 中心偏差 0.5px、间距 6px；另两处原生 checkbox/radio 样式夹具四边外距均为 0。390px 九处勾选均 20×20px、margin=0，页面无溢出。日期与三项创建/发布 P2 回归通过，前端构建、secret scan 和 diff 检查通过。此结果基于完整应用编译 CSS；真实浏览器菜单 125% 仍由独立任务以最终 SHA 复验。
