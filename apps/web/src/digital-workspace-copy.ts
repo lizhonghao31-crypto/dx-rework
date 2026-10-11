@@ -10,3 +10,6 @@ export const unsavedInputLabel = "没有保存成功，请重试；你填的内�
 export function washingChoiceLabel(value: string): string {
   return value === "内洗" ? "本厂洗" : value === "外洗" ? "外厂洗" : value;
 }
+
+/** Current-screen label only; the stored fact remains the customer-agreed warehouse arrival date. */
+export const customerPoDateLabel = "出货日期";

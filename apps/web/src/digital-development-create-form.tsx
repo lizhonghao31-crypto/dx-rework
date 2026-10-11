@@ -1,3 +1,4 @@
+import { customerPoDateLabel } from "./digital-workspace-copy.js";
 import { useEffect, useRef, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import { DigitalOrderCreateSchema, DigitalSourceCreateSchema, type DigitalCustomer, type DigitalOrder, type DigitalOrderInput, type DigitalSource } from "@dx-rework/contracts/digital-production";
@@ -12,6 +13,7 @@ import type { DevelopmentSheet, DevelopmentDocument } from "@dx-rework/contracts
 import { editableDevelopmentOrder, developmentOrderInput, initialDevelopmentDocument, type DevelopmentOrderDraft } from "./digital-development-editing.js";
 import { preparePatternMaterial } from "./pattern-material-upload.js";
 import { uploadDevelopmentMaterial } from "./digital-development-upload.js";
+import { verifySession } from "./auth.js";
 
 type CreatePicture = {id: string; file: File; preview: string; attachmentId?: string; error?: string | undefined};
 
@@ -25,12 +27,22 @@ export function initialDevelopmentOrder(customers: DigitalCustomer[], source?: O
 }
 
 /** A facade over the existing source and order commands; no sample approval or route writes. */
-export function DevelopmentCreateForm({intent, source, customers, onCancel, onCreated}: {
+export function DevelopmentCreateForm({intent, source, customers, onCancel, onCreated, onIntentChange}: {
   intent: DevelopmentCreateIntent; source?: OrderJourney; customers: DigitalCustomer[];
   onCancel: () => void; onCreated: (sourceId: string, orderId: string | null) => void;
+  onIntentChange?: (intent: "development" | "certain_order") => void;
 }) {
   const [form, setForm] = useState(() => editableDevelopmentOrder(initialDevelopmentOrder(customers, source)));
   const [template, setTemplate] = useState<DevelopmentDocument["template"]>("上衣");
+  const [designerName, setDesignerName] = useState<string | null>(source?.designer ?? null);
+  useEffect(() => {
+    if (source) return;
+    let live = true;
+    void verifySession().then(session => {if (live && session !== "denied" && session.status === "authorized") setDesignerName(session.user.displayName);});
+    return () => {live = false;};
+  }, [source]);
+  const [activePicture, setActivePicture] = useState(0);
+  const pictureInput = useRef<HTMLInputElement>(null);
   const [pictures, setPictures] = useState<CreatePicture[]>([]);
   const picturesRef = useRef<CreatePicture[]>([]), previews = useRef<string[]>([]), creationAttachments = useRef(new Set<string>());
   const draftSaveKey = useRef<{payload: string; key: string} | null>(null);
@@ -40,6 +52,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const [createdSource, setCreatedSource] = useState<string | null>(source?.sourceId ?? null);
   const [fixedCustomer, setFixedCustomer] = useState<string | null>(source?.customer ?? null);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const [savedDraft, setSavedDraft] = useState(false);
   const writing = useRef(false), sourceKey = useRef<{payload: string; key: string} | null>(null), orderKey = useRef<{payload: string; key: string} | null>(null);
   const initial = useRef(JSON.stringify(form)), dirty = useRef(false), completed = useRef(false);
   dirty.current = JSON.stringify(form) !== initial.current || developmentType !== "头版" || template !== "上衣" || pictures.length > 0;
@@ -81,12 +94,12 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     customerDateOverrides.current = removePoDateOverride(customerDateOverrides.current, index);
     setForm(current => ({...current, lines: current.lines.filter((_, position) => position !== index)}));
   };
-  const save = async () => {
+  const save = async (draftOnly = false) => {
     if (writing.current) return;
     writing.current = true; setBusy(true); setError("");
     try {
       const sourceInput = DigitalSourceCreateSchema.parse({developmentType, designStyleNo: form.designStyleNo, temporaryStyleNo: form.temporaryStyleNo, customerCode: form.customerCode || null});
-      const orderInput = withOrder ? DigitalOrderCreateSchema.parse(developmentOrderInput(form)) : null;
+      const orderInput = withOrder && !draftOnly ? DigitalOrderCreateSchema.parse(developmentOrderInput(form)) : null;
       let id = createdSource;
       if (!id) {
         const payload = JSON.stringify(sourceInput);
@@ -132,44 +145,52 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         const order = await digitalRequest<DigitalOrder>(`sources/${id}/confirm`, "POST", orderInput, orderKey.current.key);
         orderId = order.productionOrderId;
       }
+      if (draftOnly) {setSavedDraft(true); return;}
       completed.current = true; writing.current = false; onCreated(id, orderId);
     } catch (reason) {
       const validation = reason as {issues?: Array<{message: string}>};
       setError(validation.issues?.[0]?.message ?? (reason instanceof Error ? reason.message : "保存失败"));
     } finally {writing.current = false; setBusy(false);}
   };
-  return <Surface className="development-create"><form onSubmit={event => {event.preventDefault(); void save();}}>
-    <h2>{title}</h2>
+  const selectedPicture = pictures[Math.min(activePicture, Math.max(0, pictures.length - 1))];
+  return <Surface className="development-create development-create-reference"><form onSubmit={event => {event.preventDefault(); void save();}}>
+    <header className="development-create-heading"><div><h2>{intent === "confirm_order" ? title : "创建订单"}</h2><p>{title}</p></div><div className="pattern-actions">{!source && <Button type="button" disabled={busy} onClick={() => void save(true)}>保存开发资料草稿</Button>}<Button type="submit" variant="primary" disabled={busy}>{busy ? "保存中…" : intent === "confirm_order" ? "确认下单" : withOrder ? "创建订单" : "创建开发档案"}</Button></div></header>
+    {!source&&<nav className="development-create-type-tabs" aria-label="创建类型">{([["development","产品开发（无确定订单）"],["certain_order","产品开发（有确定订单）"]]as const).map(([mode,label])=><button type="button" key={mode} aria-pressed={intent===mode} disabled={busy||!onIntentChange} onClick={()=>onIntentChange?.(mode)}>{label}</button>)}</nav>}
     {source && <p>沿用第 {source.adoptedRound ?? source.selectedRound ?? 1} 轮开发资料；头版/开发板与已有工序保持原档案。</p>}
     {error && <p role="alert">{error}</p>}
+    {savedDraft && <p role="status">开发资料草稿已保存；订购信息保留在当前页面，尚未创建订单。</p>}
     {createdSource && !source && error && <p role="status">开发档案已保存。修正订购信息后重试会沿用此档案。</p>}
-    <fieldset disabled={busy}><div className="development-create-grid">
-      {intent !== "confirm_order" && <label>开发类型<select aria-label="开发类型" disabled={Boolean(createdSource)} value={developmentType} onChange={event => setDevelopmentType(event.target.value as "头版" | "开发板")}><option>头版</option><option>开发板</option></select></label>}
-      <label>设计款号<input required maxLength={100} value={form.designStyleNo} readOnly={Boolean(createdSource)} onChange={event => setForm({...form, designStyleNo: event.target.value})}/></label>
-      <label>代用款号<input maxLength={100} value={form.temporaryStyleNo ?? ""} readOnly={Boolean(createdSource)} onChange={event => setForm({...form, temporaryStyleNo: event.target.value || null})}/></label>
-      <label>客户<select aria-label="客户" required={withOrder} disabled={Boolean(createdSource && (fixedCustomer || !source))} value={form.customerCode} onChange={event => {const customer = customers.find(customer => customer.code === event.target.value); setForm({...form, customerCode: event.target.value, primaryMerchandiserId: customer?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(customers, event.target.value)});}}><option value="">通用开发 / 请选择</option>{customers.map(customer => <option key={customer.code} value={customer.code}>{customer.code} · {customer.name}</option>)}</select></label>
-    </div>
-    <div className={`development-create-layout${source ? " development-create-layout-existing" : ""}`}>
-    {!source && <section className="development-create-pictures"><h3>款图</h3><p>保存时沿用同一开发草稿；进入开发单后直接查看，无需再次上传。</p>
-      <label>选择款图<input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy || pictures.length >= 30} onChange={event => {const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; void selectPictures(files);}}/></label>
-      <label>开发单模板<select value={template} disabled={Boolean(createdSource)} onChange={event => setTemplate(event.target.value as DevelopmentDocument["template"])}><option>上衣</option><option>裤子</option></select></label>
-      <div className="development-thumbnails">{pictures.map(picture => <div key={picture.id}><a href={picture.preview} target="_blank" rel="noreferrer"><img src={picture.preview} alt={picture.file.name}/></a><span>{picture.file.name} · {picture.attachmentId ? "上传完成，待保存关联" : "待保存上传"}</span>{picture.error && <p role="alert">{picture.error}</p>}<Button type="button" disabled={busy} onClick={() => {picturesRef.current = picturesRef.current.filter(item => item.id !== picture.id); setPictures(picturesRef.current);}}>移除未保存款图</Button></div>)}</div>
+    <fieldset disabled={busy}><div className={`development-create-layout${source ? " development-create-layout-existing" : ""}`}>
+    {!source && <section className="development-create-pictures"><h3>款图</h3>
+      <input ref={pictureInput} className="development-picture-input" aria-label="选择款图" type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy || pictures.length >= 30} onChange={event => {const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; void selectPictures(files);}}/>
+      <div className="development-create-picture-main">{selectedPicture ? <a href={selectedPicture.preview} target="_blank" rel="noreferrer"><img src={selectedPicture.preview} alt={selectedPicture.file.name}/></a> : <button type="button" onClick={() => pictureInput.current?.click()}>＋<span>上传款图</span></button>}</div>
+      <div className="development-create-picture-strip">{pictures.map((picture,index) => <button type="button" key={picture.id} aria-label={`查看款图 ${index+1}`} aria-pressed={index === Math.min(activePicture,pictures.length-1)} onClick={() => setActivePicture(index)}><img src={picture.preview} alt={picture.file.name}/></button>)}<button type="button" className="development-picture-add" aria-label="添加款图" disabled={pictures.length >= 30} onClick={() => pictureInput.current?.click()}>＋</button></div>
+      {selectedPicture && <div className="development-picture-feedback"><span>{selectedPicture.file.name} · {selectedPicture.attachmentId ? "上传完成，待保存关联" : "待保存上传"}</span>{selectedPicture.error && <p role="alert">{selectedPicture.error}</p>}<Button type="button" disabled={busy} onClick={() => {picturesRef.current = picturesRef.current.filter(item => item.id !== selectedPicture.id); setPictures(picturesRef.current);}}>移除未保存款图</Button></div>}
+      <p className="development-picture-help">保存后在同一开发单直接复用款图，无需再次上传。</p>
       {pictures.some(picture => picture.error) && <Button type="button" disabled={busy} onClick={() => void save()}>重试保存并上传</Button>}
     </section>}
-    <div className="development-create-order">{withOrder && <><h3>订购信息</h3><p>默认主跟单：{customers.find(customer => customer.code === form.customerCode)?.defaultMerchandiserName ?? "未配置，待主管指派"}</p>
-      <div className="development-create-grid"><label>产品分组<select aria-label="产品分组" value={form.productGroup} onChange={event => setForm({...form, productGroup: event.target.value as DigitalOrderInput["productGroup"]})}>{(customers.find(customer => customer.code === form.customerCode)?.productGroups ?? [form.productGroup]).map(group => <option key={group}>{group}</option>)}</select></label>
-        <label>客户下单日期<input required type="date" value={form.orderDate} onChange={event => setForm({...form, orderDate: event.target.value})}/></label>
+    <div className="development-create-order"><section className="development-create-card"><h3>基本资料</h3><div className="development-create-grid">
+      {intent !== "confirm_order" && <label>开发类型<select aria-label="开发类型" disabled={Boolean(createdSource)} value={developmentType} onChange={event => setDevelopmentType(event.target.value as "头版" | "开发板")}><option>头版</option><option>开发板</option></select></label>}
+      <label>设计款号（必填）<input aria-label="设计款号" required maxLength={100} value={form.designStyleNo} readOnly={Boolean(createdSource)} onChange={event => setForm({...form, designStyleNo: event.target.value})}/></label>
+      <label>设计师（只读）<input aria-label="设计师（只读）" readOnly value={designerName ?? "正在确认身份…"}/></label>
+      <label>代用款号（选填）<input maxLength={100} value={form.temporaryStyleNo ?? ""} readOnly={Boolean(createdSource)} onChange={event => setForm({...form, temporaryStyleNo: event.target.value || null})}/></label>
+      <label>客户{withOrder ? "（必填）" : "（选填）"}<select aria-label="客户" required={withOrder} disabled={Boolean(createdSource && (fixedCustomer || !source))} value={form.customerCode} onChange={event => {const customer = customers.find(customer => customer.code === event.target.value); setForm({...form, customerCode: event.target.value, primaryMerchandiserId: customer?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(customers, event.target.value)});}}><option value="">通用开发 / 请选择</option>{customers.map(customer => <option key={customer.code} value={customer.code}>{customer.code} · {customer.name}</option>)}</select></label>
+<label>品类 / 开发单模板<select value={template} disabled={Boolean(createdSource)} onChange={event => setTemplate(event.target.value as DevelopmentDocument["template"])}><option>上衣</option><option>裤子</option></select></label></div>{withOrder && <>      <div className="development-create-grid"><label>产品分组<select aria-label="产品分组" value={form.productGroup} onChange={event => setForm({...form, productGroup: event.target.value as DigitalOrderInput["productGroup"]})}>{(customers.find(customer => customer.code === form.customerCode)?.productGroups ?? [form.productGroup]).map(group => <option key={group}>{group}</option>)}</select></label>
+        <label>客户下单日期（必填）<input required type="date" value={form.orderDate} onChange={event => setForm({...form, orderDate: event.target.value})}/></label>
 </div>
-      <div className="development-table-scroll"><table className="development-create-po-table"><thead><tr><th>PO</th><th>正式款号 / PO</th><th>本 PO 代用号（选填）</th><th>颜色 / 外文</th><th>客户要求到仓日期</th><th>尺码与订购数量</th><th>操作</th></tr></thead><tbody>
+</>}</section>
+    {withOrder && <section className="development-create-card development-create-details"><h3>订单明细 <small>左右滑动可查看完整 PO</small></h3><p>出货日期默认沿用首个 PO，可单独修改。</p><p>默认主跟单：{customers.find(customer => customer.code === form.customerCode)?.defaultMerchandiserName ?? "未配置，待主管指派"}</p>
+      <div className="development-table-scroll" role="region" aria-label="PO 明细，可左右滑动查看全部列" tabIndex={0}><table className="development-create-po-table"><thead><tr><th>PO</th><th>正式款号 / PO</th><th>本 PO 代用号（选填）</th><th>颜色 / 外文</th>{form.lines[0]?.sizes.map((size, sizeIndex) => <th className="development-size-column" key={sizeIndex}><input aria-label={`尺码列 ${sizeIndex+1}`} placeholder="尺码" required maxLength={100} value={size.size} onChange={event => setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: row.sizes.map((item, i) => i === sizeIndex ? {...item, size: event.target.value} : item)}))}))}/>{form.lines[0]!.sizes.length > 1 && <button type="button" aria-label={`删除尺码列 ${sizeIndex+1}`} onClick={async () => {if (await confirmInApp("删除这个尺码列及所有 PO 对应订购数量？") && !writing.current) setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: row.sizes.filter((_, i) => i !== sizeIndex)}))}));}}>×</button>}</th>)}<th>合计</th><th>{customerPoDateLabel}</th><th>操作</th></tr></thead><tbody>
       {form.lines.map((value, index) => <tr key={index}><th>{index + 1}</th>
-        <td><input aria-label={`PO ${index+1} 正式款号 / PO`} maxLength={100} value={value.formalPoNo ?? ""} onChange={event => line(index, {formalPoNo: event.target.value || null})}/></td>
+        <td><input aria-label={`PO ${index+1} 正式款号 / PO`} placeholder="选填，可后补" maxLength={100} value={value.formalPoNo ?? ""} onChange={event => line(index, {formalPoNo: event.target.value || null})}/></td>
         <td><input aria-label={`PO ${index+1} 代用款号（选填）`} maxLength={100} placeholder={form.temporaryStyleNo ?? "沿用母单代用号"} value={value.temporaryStyleNo ?? ""} onChange={event => line(index, {temporaryStyleNo: event.target.value || null})}/></td>
         <td><input aria-label={`PO ${index+1} 颜色`} placeholder="颜色（必填）" required maxLength={100} value={value.color} onChange={event => line(index, {color: event.target.value})}/><input aria-label={`PO ${index+1} 颜色外文`} placeholder="颜色外文（选填）" maxLength={100} value={value.colorForeign ?? ""} onChange={event => line(index, {colorForeign: event.target.value || null})}/></td>
-        <td><input aria-label={`PO ${index+1} 客户要求到仓日期`} type="date" value={value.customerWarehouseArrivalDate ?? ""} onChange={event => customerDate(index, event.target.value || null)}/>{index === 0 && <small>其余 PO 默认沿用，可单独修改。</small>}</td>
-        <td>{value.sizes.map((size, sizeIndex) => <div className="development-create-size" key={sizeIndex}><input aria-label={`PO ${index+1} 尺码 ${sizeIndex+1}`} placeholder="尺码" required maxLength={100} value={size.size} onChange={event => line(index, {sizes: value.sizes.map((item, i) => i === sizeIndex ? {...item, size: event.target.value} : item)})}/><input aria-label={`PO ${index+1} 订购数量 ${sizeIndex+1}`} required type="text" inputMode="numeric" pattern="[0-9]+" maxLength={8} value={size.quantity} onChange={event => line(index, {sizes: value.sizes.map((item, i) => i === sizeIndex ? {...item, quantity: event.target.value} : item)})}/>{value.sizes.length > 1 && <Button type="button" aria-label={`删除 PO ${index+1} 尺码 ${sizeIndex+1}`} onClick={async () => {if (await confirmInApp("删除这个尺码和订购数量？") && !writing.current) line(index, {sizes: value.sizes.filter((_, i) => i !== sizeIndex)});}}>删除</Button>}</div>)}<Button type="button" disabled={value.sizes.length >= 50} onClick={() => line(index, {sizes: [...value.sizes, {size: "", quantity: "1"}]})}>添加尺码</Button></td>
+        {value.sizes.map((size, sizeIndex) => <td className="development-size-column" key={sizeIndex}><input aria-label={`PO ${index+1} 订购数量 ${sizeIndex+1}`} required type="text" inputMode="numeric" pattern="[0-9]+" maxLength={8} value={size.quantity} onChange={event => line(index, {sizes: value.sizes.map((item, i) => i === sizeIndex ? {...item, quantity: event.target.value} : item)})}/></td>)}
+        <td className="development-row-total">{value.sizes.every(size => /^\d+$/.test(size.quantity)) ? value.sizes.reduce((total, size) => total + Number(size.quantity), 0).toLocaleString() : "—"}</td>
+        <td><input aria-label={`PO ${index+1} ${customerPoDateLabel}`} type="date" value={value.customerWarehouseArrivalDate ?? ""} onChange={event => customerDate(index, event.target.value || null)}/></td>
         <td>{form.lines.length > 1 && <Button type="button" onClick={async () => {if (await confirmInApp("删除这个 PO 和全部订购数量？") && !writing.current) removeLine(index);}}>删除 PO</Button>}</td>
-      </tr>)}</tbody></table></div><Button type="button" disabled={form.lines.length >= 50} onClick={() => setForm(current => ({...current, lines: [...current.lines, inheritPoDate({...newLine(), sizes: [{size: "", quantity: "1"}]}, current.lines[0], "customerWarehouseArrivalDate")]}))}>添加款色 / PO</Button>
-    </>}
-    <div className="pattern-actions"><Button type="submit" disabled={busy}>{busy ? "保存中…" : intent === "confirm_order" ? "确认下单" : "保存并填写开发单"}</Button><Button type="button" disabled={busy} onClick={async () => {if ((!dirty.current || await confirmInApp("有未保存订购资料或款图，确定离开？")) && !writing.current) onCancel();}}>返回列表</Button></div></div></div></fieldset>
+      </tr>)}</tbody></table></div><div className="development-create-line-actions"><Button type="button" disabled={form.lines.length >= 50} onClick={() => setForm(current => ({...current, lines: [...current.lines, inheritPoDate({...newLine(), sizes: current.lines[0]!.sizes.map(size => ({size:size.size, quantity:"1"}))}, current.lines[0], "customerWarehouseArrivalDate")]}))}>添加款色 / PO</Button>
+<Button type="button" disabled={form.lines[0]!.sizes.length >= 50} onClick={() => setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: [...row.sizes, {size:"", quantity:"1"}]}))}))}>添加尺码列</Button><strong>总订购数量：{form.lines.every(row => row.sizes.every(size => /^\d+$/.test(size.quantity))) ? form.lines.reduce((total,row) => total + row.sizes.reduce((sum,size) => sum + Number(size.quantity),0),0).toLocaleString() : "—"}</strong></div></section>}
+    </div></div><div className="development-create-return"><Button type="button" disabled={busy} onClick={async () => {if ((!dirty.current || await confirmInApp("有未保存订购资料或款图，确定离开？")) && !writing.current) onCancel();}}>返回列表</Button></div></fieldset>
   </form></Surface>;
 }
