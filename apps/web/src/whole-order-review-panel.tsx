@@ -9,6 +9,7 @@ import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
+import { IePrecountCell, type IePrecountEntry, type IePrecountOverview } from "./ie-precount-cell.js";
 import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { alertInApp, confirmInApp, promptInApp } from "./system-dialog.js";
@@ -77,14 +78,6 @@ const reworkStatusLabel = (status: WholeOrderReviewResponse["reworkStatus"]): st
 
 
 type ReviewReport = WholeOrderReviewResponse["reports"][number];
-type IePrecountEntry = Readonly<{
-  configurationItemId: string;
-  quantity: number;
-  note: string | null;
-  recordedBy: string;
-  recordedAt: string;
-}>;
-type IePrecountOverview = Readonly<{ entries: readonly IePrecountEntry[] }>;
 type PriceReviewDecision = "approved" | "rejected";
 
 export function WholeOrderReviewPanel({
@@ -569,6 +562,13 @@ export function WholeOrderReviewPanel({
               onClick={() => void correctProcess(process.configurationItemId, reports, process.processName)}
             >保存修正</Button> : null}
             </div>
+            {iePrecounts && !history && data.reworkStatus === "pending_order_review" ? <IePrecountCell
+              reworkOrderId={reworkOrderId}
+              configurationItemId={process.configurationItemId}
+              processName={process.processName}
+              overview={{ ...iePrecounts, canRecord: moduleWritable && iePrecounts.canRecord === true }}
+              onChanged={onChanged}
+            /> : null}
             {tailStage && <div className="quantity-process-price">
               <div className="quantity-process-price__copy">
                 <b>最终价格</b>

@@ -50,11 +50,12 @@ describe("IE pre-count reference ledger", () => {
   });
 
   it("keeps one process-level pre-count entry above collapsible worker rows", async () => {
-    const [page, form, detailStyles, formStyles] = await Promise.all([
+    const [page, form, detailStyles, formStyles, cell] = await Promise.all([
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
       readFile("apps/web/src/work-reporting-form.tsx", "utf8"),
       readFile("apps/web/src/rework-detail.css", "utf8"),
       readFile("apps/web/src/work-reporting-form.css", "utf8"),
+      readFile("apps/web/src/ie-precount-cell.tsx", "utf8"),
     ]);
     const processGroup = form.slice(
       form.indexOf("function ManagerProcessProgressGroup"),
@@ -65,13 +66,13 @@ describe("IE pre-count reference ledger", () => {
     expect(page).not.toContain("不替代N06复核");
     expect(page).not.toContain("预核记录（最新在上）");
     expect(page).not.toContain("暂无IE预核记录");
-    expect(form).toContain(">IE预核</button>");
-    expect(form).toContain('className="n04-ie-precount-editor"');
-    expect(form).toContain('placeholder="数量"');
-    expect(form).toContain('placeholder="备注（选填）"');
-    expect(form).toContain('type="submit"');
-    expect(form).toContain('"确认"');
-    expect(form).toContain(">取消</button>");
+    expect(cell).toContain(">IE预核</button>");
+    expect(cell).toContain('className="n04-ie-precount-editor"');
+    expect(cell).toContain('placeholder="数量"');
+    expect(cell).toContain('placeholder="备注（选填）"');
+    expect(cell).toContain('type="submit"');
+    expect(cell).toContain('"确认"');
+    expect(cell).toContain(">取消</button>");
     expect(form).toContain("buildProgressProcessGroups");
     expect(form).toContain("const progressProcessGroups = buildProgressProcessGroups(visibleTasks);");
     expect(processGroup).toContain('className="n04-process-group__header"');
@@ -95,7 +96,7 @@ describe("IE pre-count reference ledger", () => {
       readFile("apps/web/src/work-reporting-form.tsx", "utf8"),
       readFile("apps/web/src/whole-order-review-panel.tsx", "utf8"),
     ]);
-    expect(page).toContain('selected.key === "final_quantity_ie_review" ? { iePrecounts: { ...detail.iePrecounts, canRecord: moduleWritable && detail.iePrecounts.canRecord } }');
+    expect(page).toContain('(selected.key === "whole_order_review" || selected.key === "final_quantity_ie_review") ? { iePrecounts: { ...detail.iePrecounts, canRecord: moduleWritable && detail.iePrecounts.canRecord } }');
     expect(form).toContain("{...(iePrecounts ? { iePrecounts } : {})}");
     expect(review).toContain("<small>IE预核</small>");
     expect(review).toContain('iePrecount ? formatBusinessDecimal(iePrecount.quantity) : "—"');

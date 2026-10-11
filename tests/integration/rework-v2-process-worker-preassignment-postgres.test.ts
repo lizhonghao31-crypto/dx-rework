@@ -263,6 +263,17 @@ runWithPostgres("PR-04 unified execution PostgreSQL", () => {
     await expect(workReporting.list(actor(ids.ie, ["ie_reviewer"], "business:detail:read"), order.value.reworkOrderId))
       .rejects.toMatchObject({ statusCode: 403 });
     const ieProcess = ieExecution.tasks.find(task => task.executionKind === "worker")!;
+    for (const entry of ieExecution.tasks) {
+      expect(entry).not.toHaveProperty("groupAmount");
+      expect(entry).not.toHaveProperty("memberShares");
+      for (const member of entry.members) expect(Object.keys(member).sort()).toEqual(["displayName", "personId", "personType"]);
+    }
+    for (const denied of [tailAssign(), workerReport(), actor(ids.ie, ["ie_reviewer"], "business:detail:read")]) {
+      await expect(historyService.addIePrecount(denied, order.value.reworkOrderId, {
+        configurationItemId: ieProcess.configurationItemId, quantity: 8,
+      }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    }
+
     const preCount = await historyService.addIePrecount(ie(), order.value.reworkOrderId, {
       configurationItemId: ieProcess.configurationItemId, quantity: 8, note: "isolated IE read regression",
     }, randomUUID());
@@ -332,6 +343,13 @@ runWithPostgres("PR-04 unified execution PostgreSQL", () => {
     expect((await historyService.addIePrecount(ie(), order.value.reworkOrderId, {
       configurationItemId: ieProcess.configurationItemId, quantity: 9,
     }, randomUUID())).value.iePrecounts.entries).toEqual(expect.arrayContaining([expect.objectContaining({ configurationItemId: ieProcess.configurationItemId, quantity: 9 })]));
+    const rootCount = await historyService.addIePrecount(actor(ids.root, ["root_superuser"], "process:review"), order.value.reworkOrderId, {
+      configurationItemId: ieProcess.configurationItemId, quantity: 10, note: "root precount regression",
+    }, randomUUID());
+    expect(rootCount.value.iePrecounts.entries.map(entry => entry.quantity)).toEqual([10, 9, 8]);
+    expect(rootCount.value.iePrecounts.entries.map(entry => entry.recordedBy)).toEqual(["Root", "IE", "IE"]);
+    await expect(database.query("UPDATE rework_ie_precount_entries SET quantity=99 WHERE rework_order_id=$1", [order.value.reworkOrderId]))
+      .rejects.toBeTruthy();
     await expect(database.query(
       "UPDATE rework_process_worker_plans SET planned_by=$2 WHERE configuration_id=$1",
       [configurationId, ids.owner],
