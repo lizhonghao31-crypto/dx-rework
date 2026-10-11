@@ -11,3 +11,7 @@
 没有部署、重启、网络修改、真实业务数据或原工资/责任金额算法修改。外部 Full Gate 与一次必要 GitHub Codex Review 以最终 Head 为准。
 
 最终本地验证：全套 2199 通过、525 数据库条件跳过；真实隔离 PostgreSQL 原业务链 29 文件、320 项通过（/workspace/pr09-final-postgres-fixed.log），包括 Root 实数更正、过期差异拒绝、重复结案及工资/责任事实。最终 lint、类型检查、Web 构建、静态 migration、secret 与 diff 检查通过。旧源码字符串测试已适配保留来源查询参数的新节点链接，原节点锚点行为保留。最终全套证据 /workspace/pr09-final-tests-fixed.log；失败日志保留供追溯。
+
+唯一 GitHub Codex Review 的事务连接 P2 已修复：canViewExisting 接收只含 query 的执行器，结案 read/close 把已持有的事务 db 传入，财务、IE、工人、责任与工资可见性查询全部沿用该执行器，原条件和拒绝结果不变。新增真实 PostgreSQL 单连接池测试，在唯一 client 已被事务占用时仍能读取结案资料、保留原不可见返工及版本摘要；现有双并发结案、并发收货更正和返工原生锁屏障也保持通过。
+
+修复验证：类型/lint/secret/diff 检查及 11 项权限/返工测试通过；重建共享包后的真实隔离 PostgreSQL 29 文件、320 项业务链全部通过并清理 23 个自有 TEST schema，日志 /workspace/pr09-review-postgres-final.log。首次本地业务链因继承修复后未更新的共享包编译产物失败，重建后消除，未为此修改制单规则。修复后以新 Head 跑 Full Gate，不触发第二次 Review。
