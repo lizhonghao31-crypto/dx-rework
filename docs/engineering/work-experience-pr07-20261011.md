@@ -15,3 +15,5 @@
 - 证据：/workspace/pr07-evidence、/workspace/pr07-local-postgres-business-chain.log、/workspace/pr07-final-postgres-business-chain.log；缩略图修复前失败日志 /workspace/pr07-final-postgres-sourcing.log。
 
 本地浏览器使用 TEST 合成响应，是组件与路由验证，不代表线上 Acceptance 业务验收。未部署、重启、改网络或操作真实业务数据。最终外部 Full Gate 及一次必要 GitHub Codex Review 仍以最终 PR Head 为准。
+
+继承 PR06 的实际 release 合并后，15 项座舱/制单定向与 36 项预算定向测试、类型检查、秘密扫描通过。补查手机端像素发现逐 PO 表格滚动到末端时固定 PO 列遮住日期前位；在 600px 以下改为逐 PO 带标签的完整事实行，颜色、数量及双交期同时可读，桌面仍为原表格。原表头保留供辅助技术识别，所有值仍按稳定 lineId 对应。Web 构建、原座舱 9 项定向及实际 React/CSS 三岗位五宽度复查通过，手机每个事实单元格均在可见视口内，360px 像素已查看。证据 `/workspace/pr07-evidence/browser-po-mobile-final.log` 和 `detail-dates-360.png`；因发现实际遮挡更新完整 Head 后，须使用新 Full Gate，未请求过 Review。
