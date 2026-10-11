@@ -25,7 +25,7 @@ export function saveBudgetSourcingDraft(storage:Storage,input:unknown){const dra
 export function clearBudgetSourcingDraft(storage:Storage,scope:BudgetDraftScope){storage.removeItem(budgetSourcingDraftKey(scope));if(storage.getItem(latestKey(scope))===String(scope.budgetVersion))storage.removeItem(latestKey(scope));}
 export function recoverBudgetSourcingManual(prepared:BudgetSourcingPreparation,draft:BudgetSourcingDraft){
  const changed=draft.budgetVersion!==prepared.budgetVersion||draft.orderVersion!==prepared.orderVersion;
- const images=[...prepared.images,...draft.extraImages.filter(image=>!prepared.images.some(value=>value.attachmentId===image.attachmentId))].slice(0,20),ids=new Set(images.map(image=>image.attachmentId));
+ const images=[...prepared.images,...draft.extraImages.filter(image=>!prepared.images.some(value=>value.attachmentId===image.attachmentId))],ids=new Set(images.map(image=>image.attachmentId));
  let discarded=0;
  const lines=prepared.lineItems.map(line=>{const manual=draft.lines.find(value=>value.lineId===line.lineId);const proposed=manual?.factoryDeliveryDate??'';
   const valid=!proposed||(!draft.estimatedCutPieceSendDate||proposed>=draft.estimatedCutPieceSendDate)&&(!line.customerWarehouseArrivalDate||proposed<=line.customerWarehouseArrivalDate);
@@ -33,5 +33,5 @@ export function recoverBudgetSourcingManual(prepared:BudgetSourcingPreparation,d
   return{...line,styleNo:!changed&&manual?manual.styleNo:line.styleNo||manual?.styleNo||'',factoryDeliveryDate:valid?proposed:'',imageAttachmentId:manual&&ids.has(manual.imageAttachmentId)?manual.imageAttachmentId:''};
  });
  discarded+=draft.lines.filter(manual=>!prepared.lineItems.some(line=>line.lineId===manual.lineId)).length;
- return{changed,discarded,images,lines,additionalMerchandiserUserId:draft.additionalMerchandiserUserId,estimatedCutPieceSendDate:draft.estimatedCutPieceSendDate,deliveryDate:draft.deliveryDate};
+ return{changed,discarded,imageOverflow:Math.max(0,images.length-20),images,lines,additionalMerchandiserUserId:draft.additionalMerchandiserUserId,estimatedCutPieceSendDate:draft.estimatedCutPieceSendDate,deliveryDate:draft.deliveryDate};
 }
