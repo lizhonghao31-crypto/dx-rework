@@ -970,6 +970,10 @@ export class WorkReportingService {
     return actor.authorizationCapabilities ?? [actor.authorizationCapability];
   }
 
+  private isIeExecutionReader(actor: TrustedActorContext): boolean {
+    return actor.actorRoles.includes("ie_reviewer") && this.capabilities(actor).includes("process:review");
+  }
+
   private isSupervisor(actor: TrustedActorContext): boolean {
     return actor.actorRoles.includes("tail_supervisor") && this.capabilities(actor).includes("work:assign");
   }
@@ -1205,7 +1209,7 @@ export class WorkReportingService {
     const ownWorker = task.execution_kind === "worker" && this.isOwnWorker(actor, members);
     const ownTailInspector = task.execution_kind === "tail_inspection" && this.isOwnTailInspector(actor, members);
     const proxyTask = this.canProxyReport(actor, members);
-    const manager = this.isSupervisor(actor) || this.isWorkforceAdjuster(actor) || isRootActor(actor);
+    const manager = this.isSupervisor(actor) || this.isWorkforceAdjuster(actor) || isRootActor(actor) || this.isIeExecutionReader(actor);
     if (!manager && !ownWorker && !ownTailInspector && !proxyTask) error("当前用户无权读取该任务", 403, "FORBIDDEN");
     const returnScope = members.filter((person) => isRootActor(actor)
       || ((ownWorker || ownTailInspector) && person.app_user_id === actor.actorId)
@@ -1241,7 +1245,7 @@ export class WorkReportingService {
   }
 
   private async tasks(client: Pick<Pool, "query"> | PoolClient, orderId: string, actor: TrustedActorContext): Promise<WorkTaskResponse[]> {
-    const manager = this.isSupervisor(actor) || this.isWorkforceAdjuster(actor) || isRootActor(actor);
+    const manager = this.isSupervisor(actor) || this.isWorkforceAdjuster(actor) || isRootActor(actor) || this.isIeExecutionReader(actor);
     const filters: string[] = [];
     const values: string[] = [orderId];
     if (this.isWorker(actor)) {

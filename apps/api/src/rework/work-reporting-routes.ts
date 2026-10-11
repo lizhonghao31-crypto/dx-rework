@@ -127,6 +127,10 @@ export function registerWorkReportingRoutes(app: FastifyInstance, dependencies: 
         true,
       );
     }
+    // IE reads execution facts for pre-counting without receiving execution write capabilities.
+    if (user.businessRoles?.includes("ie_reviewer") === true && user.capabilities.includes("process:review")) {
+      return businessActor(dependencies.root, user, request.id, "process:review");
+    }
     if (supervisor) return businessActor(dependencies.root, user, request.id, "work:assign");
     if (worker) return businessActor(dependencies.root, user, request.id, "work:report");
     if (tailInspector) return businessActor(dependencies.root, user, request.id, "tail_inspection:report");
