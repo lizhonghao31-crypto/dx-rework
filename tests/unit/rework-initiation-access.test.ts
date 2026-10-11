@@ -77,6 +77,9 @@ describe("QC withdrawal ownership and editable-node refresh", () => {
     const actions = await readFile("apps/web/src/rework-initiation-actions.tsx", "utf8");
     expect(actions).toContain("await onChanged()");
     expect(page).toContain("撤回和取消需由原发起人操作");
-    expect(page).toContain("仅展示本单已填写的业务字段。");
+    expect(page).toContain("Boolean(fact.value)");
+    expect(page).toContain('<dt>{fact.label}</dt><dd>{fact.value}</dd>');
+    const optionalFacts = page.slice(page.indexOf("{dynamicFacts.length > 0"), page.indexOf("</Surface>", page.indexOf("{dynamicFacts.length > 0")));
+    expect(optionalFacts).not.toMatch(/<(?:input|textarea|select)\b/);
   });
 });
