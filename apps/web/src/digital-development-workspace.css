@@ -392,3 +392,13 @@
 .pattern-golden .pattern-workspace-body>.pattern-task-list{padding:12px}
 .pattern-golden .pattern-board-scroll{max-height:260px;min-height:0;overflow:auto}
 .pattern-golden .bulk-pattern-workspace{padding:12px;margin-top:12px}
+
+/* Keep the clerk's current material check ahead of saved staffing and progress. */
+.pattern-golden .development-controls[data-material-check=true]>.development-task-basis{padding:12px;margin:10px 0}
+.pattern-golden .development-controls[data-material-check=true]>.development-task-basis>h3{margin:0 0 8px}
+.pattern-golden .development-material-check-fields{display:grid;grid-template-columns:minmax(150px,.3fr) minmax(0,1fr);gap:12px;align-items:start}
+.pattern-golden .development-material-check-fields>label{display:grid;gap:6px;min-width:0;margin:0}
+.pattern-golden .development-material-check-fields select{min-height:40px;width:100%;max-width:none}
+.pattern-golden .development-material-check-fields textarea{min-height:68px;margin:0}
+.dx-production-ui .pattern-golden .development-controls .dx-button--primary,.dx-production-ui .pattern-golden .pattern-supervisor-assignment .dx-button--primary,.dx-production-ui .pattern-golden .bulk-preparation-reference .dx-button--primary{min-height:40px;padding:8px 16px;font-size:14px}
+@media(max-width:520px){.pattern-golden .development-material-check-fields{grid-template-columns:1fr}}
