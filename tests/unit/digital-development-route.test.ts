@@ -1,11 +1,19 @@
 import {expect,it} from "vitest";
-import {developmentRoute} from "../../apps/api/src/production-platform/development-route.js";
+import {developmentNextSteps,developmentRoute} from "../../apps/api/src/production-platform/development-route.js";
 it("moves no-craft cutting directly into sewing for every washing branch",()=>{
   for(const washing of ["免洗","内洗","外洗"] as const){
     const route=developmentRoute({craft:"无",washing});
     expect(route[route.indexOf("development_cutting")+1]).toBe("development_sewing");
     expect(route).not.toContain("development_sewing_transfer");
   }
+});
+it("describes the saved revision route without inventing skipped craft or washing nodes",()=>{
+  const tasks=[{taskId:"sewing",taskKind:"development_sewing",routeVersion:2},{taskId:"tail",taskKind:"development_tail_check",routeVersion:2},{taskId:"old",taskKind:"development_sewing",routeVersion:1},{taskId:"skipped",taskKind:"development_cutting",routeVersion:2}];
+  expect(developmentNextSteps(["development_sewing","development_tail_check","development_confirmation"],tasks,2)).toEqual([{taskId:"sewing",label:"尾查"},{taskId:"tail",label:"设计确认"}]);
+});
+it("describes material supply and recheck without exposing absent tasks or people",()=>{
+  const tasks=[{taskId:"supply",taskKind:"development_material_supply",routeVersion:1},{taskId:"recheck",taskKind:"development_material_recheck",routeVersion:1}];
+  expect(developmentNextSteps(developmentRoute({craft:"印花",washing:"外洗"}),tasks,1)).toEqual([{taskId:"supply",label:"物料复核"},{taskId:"recheck",label:"纸样"}]);
 });
 it("keeps the clerk handover after craft confirmation",()=>{
   for(const craft of ["印花","绣花","印绣花"] as const){

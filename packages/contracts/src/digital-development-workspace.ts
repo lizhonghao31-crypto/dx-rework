@@ -27,7 +27,7 @@ export type DevelopmentWorkspaceResult = {
 export const PATTERN_GROUPS = [
   { key: "materials", label: "核配与补料", nodes: ["development_materials", "development_material_supply", "development_material_recheck"] },
   { key: "dispatch", label: "派工与转交", nodes: ["development_sewing_transfer"] },
-  { key: "pattern", label: "纸样", nodes: ["development_pattern"] },
+  { key: "pattern", label: "纸样", nodes: ["development_pattern", "bulk_pattern"] },
   { key: "cutting", label: "裁板", nodes: ["development_cutting"] },
   { key: "craft", label: "工艺", nodes: ["development_craft_dispatch", "development_printing", "development_embroidery", "development_print_embroidery", "development_craft_confirmation"] },
   { key: "sewing", label: "车板", nodes: ["development_sewing"] },
@@ -46,6 +46,7 @@ export const PATTERN_LANES = [
   {key:"shipping", label:"寄样", groups:["shipping"]},
 ] as const;
 export const PatternWorkspaceFilterSchema = z.object({
+  business: z.enum(["development", "bulk", "all"]).default("development"),
   page: z.coerce.number().int().min(1).max(100000).default(1),
   search: z.string().trim().max(100).default(""),
   group: z.enum(PATTERN_GROUPS.map(item => item.key)).optional(),

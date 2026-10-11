@@ -15,6 +15,28 @@ const node = (key: string, state: JourneyNode["state"] = "active", patch: Partia
 const journey = (nodes: JourneyNode[], patch: Partial<OrderJourney> = {}): OrderJourney => ({id: randomUUID(), sourceId: randomUUID(), orderId: null, designStyleNo: "TEST-view", temporaryStyleNo: null, customer: "PD", category: "上衣", designer: "TEST", styleName: null, merchandisers: [], orderNumbers: [], createdAt: "2026-10-01T00:00:00Z", deliveryDate: null, selectedRound: 1, adoptedRound: null, sourceVersion: 1, instructionVersion: null, lines: [], links: [], stages: JOURNEY_STAGES.map(stage => ({...stage, state: "active", nodes: nodes.filter(node => node.stage === stage.key)})), progress: {development: null, bulk: null}, hitReasons: [], ...patch});
 const actor: TrustedActorContext = {actorId: randomUUID(), actorRoles: ["sample_designer"], authorizationCapability: "pattern_room:orders:create", authorizationCapabilities: ["pattern_room:orders:create"], requestId: "TEST-workspace"};
 
+describe("bulk paper tasks share the read-only workroom projection", () => {
+  it("keeps development defaults, counts authorized bulk task IDs before paging, and omits fact-only markers", async () => {
+    const owner = {id:actor.actorId,name:"TEST师傅"};
+    const paper=node("development_pattern","active",{owner});
+    const bulk=Array.from({length:23},()=>node("bulk_pattern","pending",{owner,enteredAt:null,sla:"not_started",risks:["due_soon"]}));
+    const marker=node("bulk_marker","pending",{instanceId:"fact:marker",records:[]});
+    const items=[journey([paper]),journey([...bulk,marker],{orderId:randomUUID()})];
+    const query=new DevelopmentWorkspaceQuery({list:async()=>({asOf:"TEST",items})} as unknown as DigitalJourneyQuery);
+    const manager={...actor,actorRoles:["pattern_room_supervisor"]};
+    const original=await query.pattern(manager,PatternWorkspaceFilterSchema.parse({scope:"all"}));
+    expect(original.total).toBe(1);expect(original.items[0]?.node).toEqual(paper);
+    const result=await query.pattern(manager,PatternWorkspaceFilterSchema.parse({business:"bulk",scope:"all",page:2}));
+    expect(result.total).toBe(23);expect(result.counts.pattern).toBe(23);expect(result.riskCounts.pattern.dueSoon).toBe(23);
+    expect(result.items.map(item=>item.node.instanceId)).toEqual(bulk.slice(20).map(item=>item.instanceId));
+    expect(result.items[0]?.node).toEqual(bulk[20]);expect(result.items[0]?.node.enteredAt).toBeNull();
+    const combined=await query.pattern(manager,PatternWorkspaceFilterSchema.parse({business:"all",scope:"all"}));expect(combined.total).toBe(24);
+    const worker={...actor,actorRoles:["pattern_room_worker"]};
+    expect((await query.pattern(worker,PatternWorkspaceFilterSchema.parse({business:"bulk"}))).total).toBe(23);
+    await expect(query.pattern(worker,PatternWorkspaceFilterSchema.parse({business:"bulk",scope:"all"}))).rejects.toMatchObject({statusCode:403});
+  });
+});
+
 describe("development workspaces preserve original business facts", () => {
   it("uses publication/route facts for views, keeps inherited completion and separates a certain order from sample approval", () => {
     expect(developmentView(journey([]))).toBe("draft");
