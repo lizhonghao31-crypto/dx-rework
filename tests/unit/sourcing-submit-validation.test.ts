@@ -12,6 +12,7 @@ describe("外发提交前的真实校验", () => {
     expect(validateSourcingCreate(valid)).toEqual([]);
     expect(validateSourcingCreate({ ...valid, daxingUnitPrice: "12.3000" })).toEqual([]);
   });
+  it("requires explicit resolution when recovery exceeds the real attachment limit",()=>{expect(validateSourcingCreate({...valid,imageCount:20})).toEqual([]);expect(validateSourcingCreate({...valid,imageCount:21})).toEqual([expect.objectContaining({fieldId:"sourcing-create-photos",message:expect.stringContaining("主动移除")})]);});
   it("collects all missing fields with distinct navigable targets", () => {
     const issues = validateSourcingCreate({ ...valid, gender: "", styleName: "", estimatedCutPieceSendDate: "", deliveryDate: "",
       daxingUnitPrice: "", imageCount: 0, lineItems: [{ styleNo: "", alternateStyleNo: "", color: "", quantity: "" }] });
