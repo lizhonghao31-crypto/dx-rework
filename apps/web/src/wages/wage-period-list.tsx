@@ -2,7 +2,8 @@ import { readWageListQuery,wageListPath,wageSourcePath } from "./wage-query-stat
 import { createWebUrls } from "../../url-contract.js";
 import { NavigationIcon } from "../navigation-icons.js";
 import type { ReportPreviewResponse } from "@dx-rework/contracts/reporting";
-import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
+import { formatBusinessDecimal, isBusinessMoneyField } from "@dx-rework/contracts/business-display";
+import { fixedBusinessCurrency as formatBusinessCurrency } from "../fixed-business-currency.js";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useDebouncedValue } from "../use-debounced-value.js";
@@ -32,7 +33,7 @@ const monthEnd = (year: number, month: number): string =>
 const mainFields=new Set(["personName","wageSource","wageKind","orderNo","styleNo","taskName","processName","wageAmount","completedDate","settlementStatus"]);
 const basisFields=new Set(["unitPrice","sourceAmount","roundAmount","actualHours"]);
 const wageCell=(key:string,value:string|number|boolean|null|undefined):string =>
-  basisFields.has(key) && value != null ? formatBusinessDecimal(String(value),3) : businessValue(key,value);
+  basisFields.has(key) && value != null ? formatBusinessDecimal(String(value),3) : value != null && isBusinessMoneyField(key) ? formatBusinessCurrency(String(value)) : businessValue(key,value);
 
 const wageBasis=(row:ReportPreviewResponse["rows"][number]):string => {
   const number=(key:string) => row[key] == null ? "—" : formatBusinessDecimal(String(row[key]),3);
@@ -185,7 +186,7 @@ export function WagePeriodList() {
         <>
           <section className="wage-summary" aria-label="工资查询汇总">
             {Object.entries(value.totals).map(([key, total]) => (
-              <Surface key={key}><small>{businessFieldLabel(key)}</small><strong>{businessValue(key, total)}</strong></Surface>
+              <Surface key={key}><small>{businessFieldLabel(key)}</small><strong>{wageCell(key, total)}</strong></Surface>
             ))}
           </section>
           <p>{formatBusinessDecimal(value.wageSummary?.personCount ?? 0)} 人 · {formatBusinessDecimal(value.wageSummary?.orderCount ?? 0)} 单 · {formatBusinessDecimal(value.wageSummary?.roundCount ?? 0)} 个板房轮次 · {formatBusinessDecimal(value.wageSummary?.rowCount ?? value.rowCount)} 条工资明细</p>

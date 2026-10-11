@@ -1,3 +1,4 @@
+import { customerPoDateLabel } from "./digital-workspace-copy.js";
 import { PoDateSummary } from "./po-delivery-dates.js";
 import { changePoDate, inheritPoDate, removePoDateOverride } from "./po-date-input-defaults.js";
 import { type PoDeliveryDate } from "@dx-rework/contracts";
@@ -1871,7 +1872,7 @@ function OrderDetailPage({
               {canCorrectBudget && line.position === item.lineItems[0]?.position ? <button type="button" className="sourcing-budget-price-correct"
                 onClick={() => { budgetCorrectionKey.current = null; setBudgetCorrectionError(""); setBudgetCorrectionOpen(true); }}>更正</button> : null}
             </span> : "历史未维护" }] : []),
-            ...(item.lineItems.some(line=>line.lineId)?[{key:"customerDate",label:"客户仓到货日",render:(line:SourcingCaseSummary["lineItems"][number])=>line.customerWarehouseArrivalDate ?? "未登记"},{key:"factoryDate",label:"加工厂交货日",render:(line:SourcingCaseSummary["lineItems"][number])=><>{line.factoryDeliveryDate ?? "尚未生效"}{line.proposedFactoryDeliveryDate && line.proposedFactoryDeliveryDate!==line.factoryDeliveryDate?<small>{item.approvalSnapshot?"原申请日期：":"审批提议："}{line.proposedFactoryDeliveryDate}</small>:null}</>}]:[]),
+            ...(item.lineItems.some(line=>line.lineId)?[{key:"customerDate",label:item.approvalSnapshot?"客户仓到货日":customerPoDateLabel,render:(line:SourcingCaseSummary["lineItems"][number])=>line.customerWarehouseArrivalDate ?? "未登记"},{key:"factoryDate",label:"加工厂交货日",render:(line:SourcingCaseSummary["lineItems"][number])=><>{line.factoryDeliveryDate ?? "尚未生效"}{line.proposedFactoryDeliveryDate && line.proposedFactoryDeliveryDate!==line.factoryDeliveryDate?<small>{item.approvalSnapshot?"原申请日期：":"审批提议："}{line.proposedFactoryDeliveryDate}</small>:null}</>}]:[]),
             { key: "ie", label: "IE 单价", render: line => { const price = sourcingLinePricing(item.ieQuote, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
             { key: "production", label: "生产单价", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
             { key: "amount", label: "本款金额", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price?.totalAmount ? formatBusinessCurrency(price.totalAmount) : "—"; } },

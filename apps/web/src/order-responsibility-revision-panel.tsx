@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { OrderResponsibilityRevision } from "@dx-rework/contracts";
-import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
+import { fixedBusinessCurrency as formatBusinessCurrency } from "./fixed-business-currency.js";
 import { Button, Surface } from "@dx-rework/ui";
 import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
