@@ -1,3 +1,4 @@
+import {LegacyPatternWorkspace} from "./legacy-pattern-workspace.js";
 import "./digital-kpi-density.css";
 import { NavigationIcon } from "./navigation-icons.js";
 import { useEffect, useRef, useState } from "react";
@@ -32,8 +33,8 @@ function initialFilter(): PatternWorkspaceFilter {
   return parsed.success ? parsed.data : PatternWorkspaceFilterSchema.parse({});
 }
 export function DigitalPatternWorkspace() {
-  const [section,setSection]=useState(new URLSearchParams(window.location.search).get('section')==='bulk'?'bulk':'development');
-  const [bulkOrder,setBulkOrder]=useState<string|null>(new URLSearchParams(window.location.search).get('bulkOrder'));
+  const [section,setSection]=useState(new URLSearchParams(window.location.search).get('workspace')==='preparation'?'bulk':['bulk','legacy'].includes(new URLSearchParams(window.location.search).get('section')??'')?new URLSearchParams(window.location.search).get('section')!:'development');
+  const [bulkOrder,setBulkOrder]=useState<string|null>(new URLSearchParams(window.location.search).get('bulkOrder')??(new URLSearchParams(window.location.search).get('workspace')==='preparation'?new URLSearchParams(window.location.search).get('selected'):null));
   const [filter, setFilter] = useState(initialFilter), [result, setResult] = useState<PatternWorkspaceResult | null>(null);
   const [options, setOptions] = useState<DigitalAccessOptions | null>(null), [error, setError] = useState(""), [refresh, setRefresh] = useState(0), [notice,setNotice]=useState("");
   const [selectedId, setSelectedId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("task"));
@@ -50,6 +51,7 @@ export function DigitalPatternWorkspace() {
   };
   useEffect(() => {
     let live = true; setError("");
+    if(section==="legacy")return()=>{live=false;};
     if(section==="bulk"){void digitalRequest<DigitalAccessOptions>("access/options").then(access=>{if(live)setOptions(access);}).catch(reason=>{if(live)setError(reason.message);});return()=>{live=false;};}
     const query = new URLSearchParams(Object.entries(filter).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]));
     void Promise.all([digitalRequest<PatternWorkspaceResult>(`workspaces/pattern?${query}`), digitalRequest<DigitalAccessOptions>("access/options")]).then(([data, access]) => {if (live) {setResult(data); setOptions(access);}}).catch(reason => {if (live) {setResult(null); setError(reason.message);}});
@@ -74,7 +76,8 @@ export function DigitalPatternWorkspace() {
   const waitingFor=selectedNode?.node.blockers.map(item=>item.label).join("、")||selected?.blockedReason||"前置工序完成";
   const view = digitalTaskView(window.location.search) === "correct" ? "correct" : selected && ["completed","cancelled"].includes(selected.state) ? "read" : "handle";
   const taskUrl = selected ? `${urls.pageUrl("ui/digital-production")}?task=${selected.taskId}&taskView=${view}&returnTo=${encodeURIComponent(window.location.pathname+window.location.search)}` : "";
-  const sections=<nav className="development-tabs" aria-label="板房业务">{[['development','开发岗位任务'],['bulk','大货纸样与唛架']].map(([key,label])=><button key={key} aria-pressed={section===key} onClick={()=>{setSection(key!);const url=new URL(window.location.href);url.searchParams.set('section',key!);window.history.replaceState(window.history.state,'',url);}}>{label}</button>)}</nav>;
+  const sections=<nav className="development-tabs pattern-business-tabs" aria-label="板房业务">{[['development','开发岗位任务'],['bulk','大货纸样与唛架'],['legacy','独立打板与杂事']].map(([key,label])=><button key={key} aria-pressed={section===key} onClick={()=>{setSection(key!);const url=new URL(window.location.href);url.searchParams.set('section',key!);window.history.replaceState(window.history.state,'',url);}}>{label}</button>)}</nav>;
+  if(section==='legacy')return <div className="pattern-workspace pattern-golden dx-production-refined">{sections}<LegacyPatternWorkspace/></div>;
   if(section==='bulk')return <div className="pattern-workspace pattern-golden dx-production-refined">{sections}<BulkPatternWorkspace orderId={bulkOrder} canViewAll={Boolean(options?.roles.some(role=>['root_superuser','owner_group','production_management','pattern_room_supervisor','development_clerk'].includes(role)))}/></div>;
   return <div className="pattern-workspace pattern-golden dx-production-refined">
     {sections}<div className="development-breadcrumb"><a href={urls.pageUrl('ui/digital-cockpit')}>生产管理座舱</a> › <strong>板房管理台</strong></div>

@@ -24,14 +24,15 @@ import "./pattern-room.css";
 import "./pattern-governed.css";
 
 const { pageUrl } = patternUrls;
-export function PatternRoomOrdersPage() {
+export function PatternRoomOrdersPage({embedded=false}:{embedded?:boolean}={}) {
   const [initial] = useState(() => readPatternListQuery(window.location.search));
   const [data, setData] = useState<z.infer<typeof PatternOrderListSchema> | null>(null), [error, setError] = useState("");
   const [q, setQ] = useState(initial.q), [status, setStatus] = useState(initial.status), [creatorId, setCreatorId] = useState(initial.creatorId), [workerId, setWorkerId] = useState(initial.workerId), [page, setPage] = useState(initial.page);
   const [kind, setKind] = useState(initial.kind);
   const [people, setPeople] = useState<z.infer<typeof PatternPeopleFiltersSchema> | null>(null), [refresh, setRefresh] = useState(0), [loading, setLoading] = useState(true);
   const search = useDebouncedValue(q.trim(), 250);
-  const listPath = patternListPath({ q: search, kind, status, creatorId, workerId, page });
+  const nativeListPath = patternListPath({ q: search, kind, status, creatorId, workerId, page });
+  const listPath=embedded?`/ui/digital-pattern-room?section=legacy&${nativeListPath.split("?")[1]??""}`:nativeListPath;
   const detailHref = (id: string) => `${pageUrl(`ui/pattern-room/orders/${id}`)}?${new URLSearchParams({ returnTo: listPath })}`;
   useEffect(() => { window.history.replaceState(window.history.state, "", pageUrl(listPath)); }, [listPath]);
   useInternalReturnScroll(!loading && data !== null);
