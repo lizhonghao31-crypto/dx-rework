@@ -37,8 +37,11 @@ export class DigitalProductionAccessPolicy {
       if (purpose === "execute") return await this.activeRole(actor.actorId, task.required_role)
         && task.assignee_id === actor.actorId;
       return isDigitalLeader(actor) || isDigitalTechnicalManager(actor) || (actor.actorRoles.includes("development_clerk") && task.task_kind.startsWith("development_")) || (task.assignee_id === actor.actorId && await this.activeRole(actor.actorId, task.required_role))
-        || await this.allowed(actor, task.production_order_id ? "order" : "source", task.production_order_id ?? task.source_id, "technical");
+        || await this.resourceAllowed(actor, task.production_order_id ? "order" : "source", task.production_order_id ?? task.source_id, "technical", false);
     }
+    return this.resourceAllowed(actor, kind, id, purpose, true);
+  }
+  private async resourceAllowed(actor: TrustedActorContext, kind: Exclude<DigitalResourceKind, "task">, id: string, purpose: DigitalAccessPurpose, includeTaskParticipation: boolean): Promise<boolean> {
     if (purpose === "execute") return false;
     const table = kind === "order" ? "digital_production_orders" : "digital_production_sources";
     const column = kind === "order" ? "production_order_id" : "source_id";
@@ -54,6 +57,8 @@ export class DigitalProductionAccessPolicy {
     if (owns || primary && await this.activeRole(actor.actorId,"order_merchandiser")) return true;
     if(kind==="order"&&purpose==="technical"){
       if(actor.actorRoles.includes("development_clerk")&&await this.activeRole(actor.actorId,"development_clerk")&&row.source_id)return true;
+      // Necessary order documents do not grant metadata access to other tasks.
+      if(!includeTaskParticipation)return false;
       const available=(await this.database.query("SELECT to_regclass('digital_bulk_preparations') AS relation")).rows[0]?.relation;
       const tasks=available?(await this.database.query("SELECT a.task_id,a.assignee_id,a.required_role FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id) JOIN digital_bulk_preparations p ON p.preparation_id=t.route_instance_id AND p.production_order_id=a.production_order_id JOIN digital_instruction_documents effective ON effective.production_order_id=p.production_order_id AND effective.published_version=p.instruction_version WHERE a.production_order_id=$1 AND t.state<>'cancelled' AND p.source_round=COALESCE((SELECT max(round_number) FROM digital_development_rounds WHERE source_id=p.source_id),1) AND a.task_kind IN ('bulk_pattern','warehouse_preshrink','bulk_cutting','bulk_cutting_external','process_logistics','bulk_qc','warehouse_dispatch','factory_material_count','bulk_ship_sample')",[id])).rows:[];
       for(const task of tasks){
