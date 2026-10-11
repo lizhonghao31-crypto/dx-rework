@@ -11,3 +11,7 @@
 没有改变原角色创建资格、计价、工资、审批和状态机，没有部署、网络修改或真实数据操作。外部 Full Gate 与一次必要 GitHub Codex Review 以最终 Head 为准。
 
 最终本地全套 2216 通过、525 数据库条件跳过；真实隔离 PostgreSQL 原业务链 29 文件、320 项通过。最终类型、lint、构建、secret 与 diff 检查通过。九角色矩阵的杂事按钮按原角色表断言（设计师/跟单等原有资格，主管未获额外创建权）；手机业务页签换行修复后再次通过。证据 /workspace/pr10-final-tests.log、/workspace/pr10-local-postgres-business-chain.log、/workspace/pr10-evidence/browser-final2.log。
+
+唯一 GitHub Codex Review 的返回上下文 P2 已修复：内嵌列表将当前允许列表路径传给创建入口，两个 create 链接实时携带 q、kind、status、creatorId、workerId、page；初始来源使用原 validPatternReturnPath 同源白名单校验。没有新增开放重定向或权限。
+
+25 项导航/历史/深链测试通过；实际 React 原创建表单、原详情与 SPA 路由验证两类创建：筛选与人员、第 3 页→取消→同筛选页；再次创建并提交→原详情→同筛选页。制作资料仍按原必填条件上传合成 TEST PDF，未改校验。九岗位、五屏宽导航矩阵再通过，已逐像素查看两类返回的 390 宽页面。lint/typecheck/Web 构建/secret/diff 通过；证据 /workspace/pr10-evidence/create-return-review.log、browser-review-final.log 与 /workspace/pr10-review-*.log。修复以新 Head Full Gate 为准，不触发第二次 Review。
