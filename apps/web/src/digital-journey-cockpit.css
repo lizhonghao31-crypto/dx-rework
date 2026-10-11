@@ -78,12 +78,12 @@
 @media(max-width:800px){.dx-production-ui .digital-journey-cockpit .journey-current-body{max-height:none;overflow:visible;}.journey-current-primary-actions a{min-height:44px;font-size:16px;}}
 
 @media(max-width:600px){
- .digital-journey-cockpit .journey-po-order-facts{overflow:visible;}
- .digital-journey-cockpit .journey-po-order-facts table{display:block;min-width:0;width:100%;}
- .digital-journey-cockpit .journey-po-order-facts thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}
- .digital-journey-cockpit .journey-po-order-facts tbody{display:block;}
- .digital-journey-cockpit .journey-po-order-facts tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px;padding:12px 0;border-bottom:1px solid #e5eef8;}
- .digital-journey-cockpit .journey-po-order-facts td{position:static;min-width:0;padding:0;border:0;white-space:normal;overflow-wrap:anywhere;background:transparent;}
- .digital-journey-cockpit .journey-po-order-facts td:first-child{grid-column:1/-1;position:static;background:transparent;}
- .digital-journey-cockpit .journey-po-order-facts td::before{content:attr(data-label);display:block;margin-bottom:3px;font-size:11px;color:#637a99;}
+ :is(.digital-journey-cockpit,.production-workspace-page) .journey-po-order-facts{overflow:visible;}
+ :is(.digital-journey-cockpit,.production-workspace-page) .journey-po-order-facts table{display:block;min-width:0;width:100%;}
+ :is(.digital-journey-cockpit,.production-workspace-page) .journey-po-order-facts thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}
+ :is(.digital-journey-cockpit,.production-workspace-page) .journey-po-order-facts tbody{display:block;}
+ :is(.digital-journey-cockpit,.production-workspace-page) .journey-po-order-facts tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px;padding:12px 0;border-bottom:1px solid #e5eef8;}
+ :is(.digital-journey-cockpit,.production-workspace-page) .journey-po-order-facts td{position:static;min-width:0;padding:0;border:0;white-space:normal;overflow-wrap:anywhere;background:transparent;}
+ :is(.digital-journey-cockpit,.production-workspace-page) .journey-po-order-facts td:first-child{grid-column:1/-1;position:static;background:transparent;}
+ :is(.digital-journey-cockpit,.production-workspace-page) .journey-po-order-facts td::before{content:attr(data-label);display:block;margin-bottom:3px;font-size:12px;color:#637a99;}
 }
