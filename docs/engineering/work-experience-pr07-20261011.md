@@ -17,3 +17,5 @@
 本地浏览器使用 TEST 合成响应，是组件与路由验证，不代表线上 Acceptance 业务验收。未部署、重启、改网络或操作真实业务数据。最终外部 Full Gate 及一次必要 GitHub Codex Review 仍以最终 PR Head 为准。
 
 继承 PR06 的实际 release 合并后，15 项座舱/制单定向与 36 项预算定向测试、类型检查、秘密扫描通过。补查手机端像素发现逐 PO 表格滚动到末端时固定 PO 列遮住日期前位；在 600px 以下改为逐 PO 带标签的完整事实行，颜色、数量及双交期同时可读，桌面仍为原表格。原表头保留供辅助技术识别，所有值仍按稳定 lineId 对应。Web 构建、原座舱 9 项定向及实际 React/CSS 三岗位五宽度复查通过，手机每个事实单元格均在可见视口内，360px 像素已查看。证据 `/workspace/pr07-evidence/browser-po-mobile-final.log` 和 `detail-dates-360.png`；因发现实际遮挡更新完整 Head 后，须使用新 Full Gate，未请求过 Review。
+
+唯一一次 Codex Review 的 P2 已修复：直达产前/发厂页跳过列表时，ready 信号原先仍依赖列表数据，现按已完成订单及对应详情判断；展开列表时继续等待该列表完成。没有为标记追加全局列表读取。实际 React/CSS 延迟返回、403 拒绝及列表展开检查覆盖 preparation/factory 四个场景，成功只读取当前详情、拒绝不就绪，1440/1280/768/390/360 无页面溢出，手机逐 PO 日期完整可见（已查看像素）。小屏 PO 事实显示也适用于两个原工作区，标签至少12px。原三岗位办理复查通过；类型、构建、原13项定向、秘密扫描通过。证据 `/workspace/pr07-readiness-evidence/browser-final.log`、`/workspace/pr07-evidence/browser-readiness-final.log`。全部配套修改同一 Head 推送，新 Head Full Gate 通过后合入，不请求第二次 Review。
