@@ -1,3 +1,4 @@
+import { Button } from "@dx-rework/ui";
 import {digitalDetailReturnUrl} from "./digital-detail-route.js";
 import { moduleCanWrite } from "./member-module-policy.js";
 import { NavigationIcon } from "./navigation-icons.js";
@@ -865,7 +866,7 @@ export function OrderBoardPage() {
               <span className="order-board-history__status">{historyStatus}</span>
               <span>收货人 {item.receiverName}</span>
               <time dateTime={item.receivedAt}>{historyDateTime(item.receivedAt)}</time>
-              {isRoot ? <button type="button" onClick={() => openReceiptCorrection(item)}>修正本次</button> : null}
+              {isRoot ? <Button type="button" onClick={() => openReceiptCorrection(item)}>修正本次</Button> : null}
             </article>;
           })}
         </section> : null}

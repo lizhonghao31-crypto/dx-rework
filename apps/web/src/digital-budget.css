@@ -85,6 +85,10 @@
 
 @media screen{.budget-print-only{display:none}}
 @media print{.dx-doc-budget{display:none!important}.budget-print-only{display:block}}
+@media print{
+ .app-shell:has(.budget-print-only),.app-shell:has(.budget-print-only)>main,.dx-production-ui:has(.budget-print-only){min-height:0;padding:0}
+ .app-shell:has(.budget-print-only)>aside,.app-shell:has(.budget-print-only)>.mobile-primary-navigation{display:none}
+}
 @media screen{
  .dx-doc-budget.budget-editor .dx-doc-card label{margin:0;font-size:14px;line-height:20px;font-weight:400;color:#64748b;gap:4px;display:flex;flex-direction:column}
  .dx-doc-budget.budget-editor .dx-doc-field :is(input,textarea){font-size:14px;line-height:20px;font-weight:400}

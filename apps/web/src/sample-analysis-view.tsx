@@ -1,7 +1,8 @@
 import {analysisGroupFilter} from './sample-analysis-model.js';
 import { useState } from 'react';
 import type { SampleAnalysisQuery,SampleAnalysisResponse,SampleAmounts } from '@dx-rework/contracts';
-import { formatBusinessCurrency,formatBusinessDecimal } from '@dx-rework/contracts/business-display';
+import { formatBusinessDecimal } from '@dx-rework/contracts/business-display';
+import { fixedBusinessCurrency as formatBusinessCurrency } from './fixed-business-currency.js';
 import { Button,Surface } from '@dx-rework/ui';
 import { ListPagination } from './list-pagination.js';
 import './sample-analysis.css';

@@ -174,3 +174,8 @@
 .rework-governed[data-legacy-ui="rework-detail"] .rework-workflow__desktop-grid:has(>a:nth-child(9)) > a { grid-column:span 4; }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-workflow__desktop-grid:has(>a:nth-child(9)) > a:nth-child(n+6) { grid-column:span 5; }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-workflow__desktop-grid:has(>a:nth-child(9)) .rework-workflow-row-bridge { grid-area:1/1/2/21; left:12.5%; }
+.rework-governed[data-legacy-ui="rework-detail"] .rework-detail-workspace h2{font-size:16px;line-height:24px}
+.rework-governed[data-legacy-ui="rework-detail"] .rework-detail-workspace,.rework-governed[data-legacy-ui="rework-detail"] .whole-order-review-flow{align-content:start}
+.rework-governed[data-legacy-ui="rework-detail"] .whole-order-review-flow>.dx-surface{margin:0}
+
+.rework-governed[data-legacy-ui="rework-detail"] .rework-detail-workspace>.work-reporting-page{padding-bottom:0}

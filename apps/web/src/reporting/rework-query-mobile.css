@@ -68,3 +68,16 @@
 @media(min-width:761px) {
  .rework-query-content[data-legacy-ui="rework-board"] .reporting-filters.reporting-filters--orders { display:flex; flex-wrap:wrap; align-items:end; }
 }
+
+/* Keep the same fact positions across active, terminal and restricted cards. */
+.rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card:not(.basic-rework-card) dl{grid-template-columns:repeat(5,minmax(0,1fr));align-items:start;margin:0}
+.rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card .rework-card-fact{display:grid;gap:4px;align-content:start;margin:0}
+.rework-query-content[data-legacy-ui="rework-board"] .rework-card-fact--state{grid-column:1}
+.rework-query-content[data-legacy-ui="rework-board"] .rework-card-fact--wage{grid-column:2}
+.rework-query-content[data-legacy-ui="rework-board"] .rework-card-fact--responsibility{grid-column:3}
+.rework-query-content[data-legacy-ui="rework-board"] .rework-card-fact--external{grid-column:4}
+.rework-query-content[data-legacy-ui="rework-board"] .rework-card-fact--deduction{grid-column:5}
+.rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card dt,.rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card dd{margin:0;min-width:0}
+.rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card dd{text-align:left;font-variant-numeric:tabular-nums}
+@media(min-width:761px){.rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card__heading{display:grid;grid-template-columns:minmax(0,1fr) 200px;align-items:start}.rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card__heading>.dx-badge{justify-self:end;width:200px;min-width:0}.rework-query-content[data-legacy-ui="rework-board"] .basic-rework-card dl{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:760px){.rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card:not(.basic-rework-card) dl{grid-template-columns:repeat(2,minmax(0,1fr))}.rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card .rework-card-fact{grid-column:auto}.rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card__heading>.dx-badge{min-width:0}}

@@ -236,3 +236,6 @@
 .order-board-page[data-legacy-ui="receiving-board"] .order-board-row .order-board-row__facts strong { font-size:14px; line-height:20px; }
 .order-board-page[data-legacy-ui="receiving-board"] .order-board-row { grid-template-columns:minmax(0,1fr); min-width:0; }
 .order-board-page[data-legacy-ui="receiving-board"] .order-board-row > :is(.order-board-row__main,.order-board-row__facts) { min-width:0; max-width:100%; box-sizing:border-box; }
+.order-board-page[data-legacy-ui="receiving-board"] .order-board-heading h1{font-size:24px;line-height:32px}
+.order-board-page[data-legacy-ui="receiving-board"] :is(.order-board-operation-button,.order-board-packing-button,.order-board-attachment-button,.order-board-root-actions button){min-height:32px;display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;border:1px solid #c8d2df;border-radius:6px;background:#fff;font:600 12px/18px inherit;text-decoration:none}
+.order-board-page[data-legacy-ui="receiving-board"] .order-board-dialog__actions button{border-radius:6px}

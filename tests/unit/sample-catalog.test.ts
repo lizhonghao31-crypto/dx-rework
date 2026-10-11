@@ -15,10 +15,12 @@ describe('sample catalog selection boundary',()=>{
     expect(sampleBatchSelection(items,['one','two','three','off-page'],{id:'root',isRoot:true})).toEqual([items[0],items[1]]);
     expect(sampleBatchSelection(items,[],{id:'root',isRoot:true})).toEqual([]);
   });
-  it('preserves decimal text while grouping large purchase prices',()=>{
+  it('formats two-decimal purchase prices without losing large integer precision',()=>{
     expect(sampleDisplayMoney('999999999999.99')).toBe('999,999,999,999.99');
-    expect(sampleDisplayMoney('12999.80')).toBe('12,999.8');
-    expect(sampleDisplayMoney('0.00')).toBe('0');
+    expect(sampleDisplayMoney('12999.80')).toBe('12,999.80');
+    expect(sampleDisplayMoney('0.00')).toBe('0.00');
     expect(sampleDisplayMoney('0.01')).toBe('0.01');
+    expect(sampleDisplayMoney('9999999999999999.995')).toBe('10,000,000,000,000,000.00');
+    expect(sampleDisplayMoney('0.105')).toBe('0.11');
   });
 });

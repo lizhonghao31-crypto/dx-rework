@@ -5,7 +5,7 @@ import {
   type ExternalResponsibilityBatchResponse,
   type ExternalResponsibilityCaseResponse,
 } from "@dx-rework/contracts/external-responsibility";
-import { formatBusinessCurrency } from "@dx-rework/contracts/business-display";
+import { fixedBusinessCurrency as formatBusinessCurrency } from "./fixed-business-currency.js";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 

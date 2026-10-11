@@ -2,7 +2,8 @@ import {
   ExternalResponsibilityQueueResponseSchema,
   type ExternalResponsibilityQueueResponse,
 } from "@dx-rework/contracts/external-responsibility";
-import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
+import { fixedBusinessCurrency as formatBusinessCurrency } from "./fixed-business-currency.js";
 import { Button, InsetField, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 

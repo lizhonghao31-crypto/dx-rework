@@ -4,7 +4,8 @@ import {
   WagePeriodDetailSchema,
   type WagePeriodDetail,
 } from "@dx-rework/contracts/wages";
-import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
+import { fixedBusinessCurrency as formatBusinessCurrency } from "../fixed-business-currency.js";
 import { Button, Surface } from "@dx-rework/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 

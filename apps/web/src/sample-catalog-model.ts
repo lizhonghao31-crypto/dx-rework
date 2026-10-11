@@ -1,9 +1,8 @@
 import type { SampleView } from '@dx-rework/contracts';
+import { fixedBusinessMoney } from './fixed-business-currency.js';
 
 export function sampleDisplayMoney(value: string) {
-  const [whole = '', fraction = ''] = value.split('.');
-  const decimals = fraction.replace(/0+$/, '');
-  return whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (decimals ? `.${decimals}` : '');
+  return fixedBusinessMoney(value);
 }
 
 export function sampleBatchSelection(items: SampleView[], selected: string[], user: { id: string; isRoot: boolean } | null) {

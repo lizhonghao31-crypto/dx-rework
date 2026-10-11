@@ -242,3 +242,11 @@
   .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-order-detail .sourcing-key-facts { grid-template-columns:repeat(2,minmax(0,1fr)); padding:12px; }
   .sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-finance-actions > button { min-height:48px; }
 }
+.sourcing-workspace[data-legacy-ui="sourcing"] .page-heading h1{font-size:24px;line-height:32px}
+.sourcing-workspace[data-legacy-ui="sourcing"] h2{line-height:24px}
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-lines-table td{font-size:14px;line-height:20px}
+
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-contract-return-facts .sourcing-finance-reference{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px 18px}
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-contract-return-facts .sourcing-finance-reference>div{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;min-width:0;align-content:start}
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-contract-return-facts .sourcing-finance-reference :is(dt,dd){margin:0;font-size:14px;line-height:20px;text-align:left}
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-contract-return-facts .sourcing-finance-reference>div:nth-child(-n+3) dd{white-space:nowrap}

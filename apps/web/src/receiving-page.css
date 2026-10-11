@@ -55,3 +55,5 @@
  .receiving-shell[data-legacy-ui="receiving"] { padding-top:60px; }
  .receiving-shell[data-legacy-ui="receiving"] .receiving-form-actions button { min-height:48px!important; }
 }
+
+.receiving-shell[data-legacy-ui="receiving"] .receiving-form-card:has(>.receiving-source-choice)>.receiving-cancel{height:40px;min-height:40px;padding:8px 12px;border-radius:8px;font:inherit;font-size:16px;line-height:24px;box-sizing:border-box}

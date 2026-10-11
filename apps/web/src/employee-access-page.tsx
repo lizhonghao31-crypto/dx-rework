@@ -325,6 +325,39 @@ export function EmployeeAccessPage() {
                       <div><dt>当前角色 / 模块</dt><dd>{accessRoleNames.length ? accessRoleNames.join("、") : "未分配"}</dd></div>
                     </dl>
 
+                    <details className="employee-access-history">
+                      <summary>角色历史（{formatBusinessDecimal(employee.roleHistory.length)}）</summary>
+                      {employee.roleHistory.length === 0 ? <p>暂无角色历史。</p> : employee.roleHistory.map((history) => (
+                        <div className="employee-access-history-row" key={history.assignmentId}>
+                          <div>
+                            <b>{roleName(history.roleCode)}</b>
+                            <p>授予：{new Date(history.grantedAt).toLocaleString("zh-CN")} · {history.grantReason}</p>
+                            {history.revokedAt ? <p>撤销：{new Date(history.revokedAt).toLocaleString("zh-CN")} · {history.revokeReason ?? "—"}</p> : <p>当前有效</p>}
+                          </div>
+                          {history.revokedAt === null ? (
+                            <Button
+                              disabled={Boolean(busy)
+                                || (PROTECTED_ROLES.has(history.roleCode) && me?.isRoot !== true)
+                                || (history.roleCode === "owner_group" && wouldDisableLastOwner)}
+                              onClick={() => void revoke(employee, history.assignmentId, history.roleCode)}
+                            >
+                              撤销
+                            </Button>
+                          ) : null}
+                        </div>
+                      ))}
+                    </details>
+
+                    {isSelf ? (
+                      <p className="employee-access-note">
+                        当前账号仅允许唯一超级用户为自己授予系统管理员；其他自授角色仍禁止。
+                      </p>
+                    ) : null}
+                    {protectedTargetLocked ? <p className="employee-access-note">Root、老板和系统管理员账号仅可由超级用户维护。</p> : null}
+                    {wouldDisableLastOwner ? <p className="employee-access-note">最后一名有效老板不可撤销老板角色或停用访问。</p> : null}
+                    {activeAssignments.length === 0 ? <p className="employee-access-note">当前没有业务角色。</p> : null}
+                    {activeAssignments.length > 0 && assignableRoles.length === 0 ? <p className="employee-access-note">所有可授予角色均已生效。</p> : null}
+                    <footer className="employee-access-footer">
                     <label className="employee-access-reason">
                       操作原因（必填）
                       <input
@@ -371,39 +404,7 @@ export function EmployeeAccessPage() {
                         </Button>
                       ) : null}
                     </div>
-
-                    <details className="employee-access-history">
-                      <summary>角色历史（{formatBusinessDecimal(employee.roleHistory.length)}）</summary>
-                      {employee.roleHistory.length === 0 ? <p>暂无角色历史。</p> : employee.roleHistory.map((history) => (
-                        <div className="employee-access-history-row" key={history.assignmentId}>
-                          <div>
-                            <b>{roleName(history.roleCode)}</b>
-                            <p>授予：{new Date(history.grantedAt).toLocaleString("zh-CN")} · {history.grantReason}</p>
-                            {history.revokedAt ? <p>撤销：{new Date(history.revokedAt).toLocaleString("zh-CN")} · {history.revokeReason ?? "—"}</p> : <p>当前有效</p>}
-                          </div>
-                          {history.revokedAt === null ? (
-                            <Button
-                              disabled={Boolean(busy)
-                                || (PROTECTED_ROLES.has(history.roleCode) && me?.isRoot !== true)
-                                || (history.roleCode === "owner_group" && wouldDisableLastOwner)}
-                              onClick={() => void revoke(employee, history.assignmentId, history.roleCode)}
-                            >
-                              撤销
-                            </Button>
-                          ) : null}
-                        </div>
-                      ))}
-                    </details>
-
-                    {isSelf ? (
-                      <p className="employee-access-note">
-                        当前账号仅允许唯一超级用户为自己授予系统管理员；其他自授角色仍禁止。
-                      </p>
-                    ) : null}
-                    {protectedTargetLocked ? <p className="employee-access-note">Root、老板和系统管理员账号仅可由超级用户维护。</p> : null}
-                    {wouldDisableLastOwner ? <p className="employee-access-note">最后一名有效老板不可撤销老板角色或停用访问。</p> : null}
-                    {activeAssignments.length === 0 ? <p className="employee-access-note">当前没有业务角色。</p> : null}
-                    {activeAssignments.length > 0 && assignableRoles.length === 0 ? <p className="employee-access-note">所有可授予角色均已生效。</p> : null}
+                    </footer>
                   </article>
                 );
               })}

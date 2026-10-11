@@ -6,7 +6,8 @@ import {
   type ResponsibilityType,
   type TailInspectionCostBearer,
 } from "@dx-rework/contracts";
-import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
+import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
+import { fixedBusinessCurrency as formatBusinessCurrency } from "./fixed-business-currency.js";
 import { Button, InsetField, StatusBadge } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
