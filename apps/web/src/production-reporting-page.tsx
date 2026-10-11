@@ -60,7 +60,7 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
     }catch(e){setError(e instanceof Error?e.message:"保存失败");}finally{mutation.current=false;setBusy(false);}
   };
   const execute=async(kind:"complete"|"ship")=>{
-    if(!detail||busy)return;
+    if(!detail||busy||selectedLine.lineId)return;
     const text=kind==="complete"?`确认生产完成？已上报 ${formatBusinessDecimal(detail.order.completedQuantity)} / ${formatBusinessDecimal(detail.order.quantity)} 件。请按实际完成情况确认。`:
       `确认已发货？款号 ${detail.order.firstStyleNo}，已登记产量 ${formatBusinessDecimal(detail.order.completedQuantity)} 件。此操作不会确认仓库收货。`;
     if(await confirmInApp(text,{confirmLabel:kind==="complete"?"确认生产完成":"确认已发货"}))await write(`/${productionOrderId}/${kind}`,{businessDate:date,confirmed:true},kind==="complete"?"已登记生产完成":"已登记发货，等待仓库实际收货");
@@ -112,8 +112,9 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
             <Button type="submit" disabled={busy||loading||!date||!quantities[line.position]||line.quantity===line.completedQuantity}>保存上报</Button>
           </form>:null}
         </div></Surface>)}</div>
-        {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&detail.order.status==="in_production"?<Button disabled={busy||loading||!date} onClick={()=>{void execute("complete");}}>生产完成</Button>:null}
-        {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&detail.order.status==="production_completed"?<Button disabled={busy||loading||!date} onClick={()=>{void execute("ship");}}>登记发货</Button>:null}
+        {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&!selectedLine.lineId&&detail.order.status==="in_production"?<Button disabled={busy||loading||!date} onClick={()=>{void execute("complete");}}>生产完成</Button>:null}
+        {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&!selectedLine.lineId&&detail.order.status==="production_completed"?<Button disabled={busy||loading||!date} onClick={()=>{void execute("ship");}}>登记发货</Button>:null}
+        {selectedLine.lineId?<p>当前仅办理这个PO的日报。生产完成和发货涉及整单，请先<a href={(()=>{const query=new URLSearchParams(window.location.search);query.delete("line");return `${window.location.pathname}${query.size?`?${query}`:""}`;})()}>查看全部PO</a>再确认。</p>:null}
         {detail.shipment?<p>发货款号 {detail.shipment.firstStyleNo} · {detail.shipment.shippedOn} · 发货时登记产量 {formatBusinessDecimal(detail.shipment.recordedQuantity)} 件（仓库收货另行记录）</p>:null}
       </Surface>
       <Surface className="sourcing-list-card"><details><summary>生产历史（{detail.history.length} 条）</summary>
