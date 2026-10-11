@@ -62,6 +62,7 @@ export type JourneyNode = {
   countsInProgress: boolean; unavailableReason: "permission" | "fact_not_recorded" | null;
 };
 export type OrderJourney = {
+  asOf?: string; styleImageUrl?: string | null;
   id: string; sourceId: string | null; orderId: string | null; designStyleNo: string;
   temporaryStyleNo: string | null; customer: string | null; category: string | null;
   designer: string | null; styleName: string | null; merchandisers: Array<{id:string;name:string|null}>;

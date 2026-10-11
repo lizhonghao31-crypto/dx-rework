@@ -1,6 +1,6 @@
 import type { FastifyInstance,FastifyRequest } from "fastify";
 import { z } from "zod";
-import { BulkDispatchSchema,BulkCompletionSchema } from "@dx-rework/contracts/bulk-preparation";
+import { BulkDispatchSchema,BulkCompletionSchema,BulkWorkroomFilterSchema } from "@dx-rework/contracts/bulk-preparation";
 import { businessActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { DigitalIdentityDependencies } from "./identity-routes.js";
@@ -11,6 +11,7 @@ export function registerBulkPreparationRoutes(app:FastifyInstance,deps:DigitalId
  const id=(r:FastifyRequest)=>parse(z.string().uuid(),(r.params as {orderId:unknown}).orderId);
  const key=(r:FastifyRequest)=>typeof r.headers['idempotency-key']==='string'?r.headers['idempotency-key']:'';
  const base='/digital-production/orders/:orderId/bulk-preparation';
+ app.get('/digital-production/workspaces/bulk-pattern',async r=>service.workroom(await actor(r),parse(BulkWorkroomFilterSchema,r.query)));
  app.get(base,async r=>service.read(await actor(r),id(r)));
  app.put(`${base}/dispatch`,async r=>service.dispatch(await actor(r),id(r),parse(BulkDispatchSchema,r.body),key(r)));
  app.post(`${base}/complete`,async r=>service.complete(await actor(r),id(r),parse(BulkCompletionSchema,r.body),key(r)));

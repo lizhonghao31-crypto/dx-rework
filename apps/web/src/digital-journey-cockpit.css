@@ -69,3 +69,10 @@
 .journey-flow .dx-production-stage dd{margin:0;line-height:1.15}
 .journey-stage-time{display:flex;flex-direction:column;align-items:flex-start}
 .journey-stage-time>span{white-space:nowrap}
+
+.journey-order-heading .journey-style-image {width:100px;height:100px;object-fit:contain;flex-shrink:0;border-radius:8px;}
+.bulk-pattern-workspace .pattern-lane-cards {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;}
+@media(max-width:480px){.journey-order-heading .journey-style-image{width:72px;height:72px;}.bulk-pattern-workspace .pattern-lane-cards{grid-template-columns:1fr;}}
+
+.journey-current-primary-actions{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}.journey-current-primary-actions a{display:inline-flex;align-items:center;min-height:32px;padding:4px 10px;border:1px solid #b7d5ff;border-radius:4px;background:#fbfdff;}
+@media(max-width:800px){.dx-production-ui .digital-journey-cockpit .journey-current-body{max-height:none;overflow:visible;}.journey-current-primary-actions a{min-height:44px;font-size:16px;}}

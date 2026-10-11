@@ -73,16 +73,9 @@ describe("formal Journey cockpit", () => {
     expect(html).toContain("returnTo=");
     expect(html).not.toContain("交货完成");
     expect(html).toMatch(/权限隔离节点[\s\S]*无权限查看[\s\S]*无权限查看/);
-    expect(html).toContain("开发节点完成");
-    expect(html).toContain("大货节点完成");
-    expect(html).toContain("0 / 2");
-    expect(html).toContain("4 / 9");
+    expect(html).not.toContain('class="journey-order-metrics"');
+    expect(html).not.toContain('class="journey-business-tabs"');
     expect(html).not.toContain("已交货");
-    const tabs = html.match(/<nav class="journey-business-tabs"[\s\S]*?<\/nav>/)?.[0];
-    expect(tabs).toContain("订单总览");
-    expect(tabs).not.toContain("开发表样");
-    expect(tabs).not.toContain("财务对账");
-    expect(tabs).not.toContain("disabled");
   });
   it("retains different historical destinations while grouping identical record references once", () => {
     const record = {domain: "development", id, url: "/ui/digital-production?development=" + id + "&round=1", mode: "read" as const, version: 1, lineId: null};
@@ -91,7 +84,7 @@ describe("formal Journey cockpit", () => {
     const groups = journeyDocumentGroups(item);
     expect(groups).toHaveLength(1);
     expect(groups[0]!.entries.map(entry => entry.record.version)).toEqual([1, 2]);
-    expect(groups[0]!.entries.map(entry => entry.label)).toEqual(["发布 · 第 1 轮 · v1", "复版 · 第 2 轮 · v2"]);
+    expect(groups[0]!.entries.map(entry => entry.label)).toEqual(["开发单 · 第 1 轮", "开发单 · 第 2 轮"]);
   });
   it("does not label complete mixed-precision targets as missing or invent a phase date", () => {
     const stage = order([node("日期计划", {expectedAt: "2026-10-03", expectedPrecision: "date"}), node("办理时限", {expectedAt: "2026-10-03T08:30:00Z", expectedPrecision: "instant"})]).stages[1]!;
