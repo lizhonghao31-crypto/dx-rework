@@ -98,3 +98,8 @@
  .dx-doc-budget .dx-doc-section[id^=budget-section-]>h2::before{content:"";width:4px;height:20px;flex-shrink:0;background:#0066ff;border-radius:2px}
  .dx-doc-budget.budget-editor .budget-po-summary>summary{min-height:24px;margin-bottom:4px;font-weight:400}
 }
+@media screen{
+ .dx-doc-budget.budget-editor #budget-summary label:has(.dx-doc-readonly){display:grid;grid-template-columns:minmax(0,1fr) minmax(90px,.6fr);gap:12px;align-items:start}
+ .dx-doc-budget.budget-editor #budget-summary label:has(.dx-doc-readonly) .dx-doc-field{min-width:0;text-align:right}
+ .dx-doc-budget.budget-editor #budget-summary label:has(.dx-doc-readonly) .dx-doc-readonly{text-align:right;min-height:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+}

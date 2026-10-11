@@ -8,7 +8,7 @@ export function DigitalBudgetPrint({order,sheet,permitted}:{order:DigitalOrder;s
  const doc=sheet?.document;
  if(!doc||!permitted)return <p className="budget-editor budget-print-only">当前单据不可打印，请先保存当前修改。</p>;
  const totals=calculateBudget(doc),amount=(value:string|null)=>value===null?"—":budgetDisplayAmount(value);
- const field=(key:"fabricType"|"productCategory"|"monthSeries"|"freight"|"cm"|"salePrice"|"outsourcingScope"|"outsourcingUnitPrice",label:string)=><label>{label}<span className="budget-print-value">{doc[key]||"—"}</span></label>;
+ const field=(key:"fabricType"|"productCategory"|"monthSeries"|"freight"|"cm"|"salePrice"|"outsourcingScope"|"outsourcingUnitPrice",label:string)=><label>{label}<span className="budget-print-value">{doc[key]?["freight","cm","salePrice","outsourcingUnitPrice"].includes(key)?budgetDisplayAmount(doc[key]):doc[key]:"—"}</span></label>;
  return <section className="budget-editor budget-print-only"><form><fieldset>
   <header><h2>广州市达兴制衣有限公司</h2><h3>成本预算表</h3></header>
   <div className="budget-heading"><span>产品性别：{order.productGroup}</span>{field("fabricType","面料属性")}{field("productCategory","产品类别")}<span>{order.productGroup}{doc.fabricType}{doc.productCategory}</span><span>设计师：{sheet.designerName}</span>{field("monthSeries","月份系列")}<span>设计款号：{order.designStyleNo}</span><span>客户：{order.customerCode}</span></div>
