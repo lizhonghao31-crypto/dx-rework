@@ -15,3 +15,7 @@
 PR07 手机 PO 日期遮挡修复接入同一组合代码后，Web 构建及原座舱 9 项定向检查通过；用实际最终组合 React/CSS 复查三岗位五宽度，逐 PO 所有事实单元格均在手机可见视口内，原办理和同键重试通过。证据 `/workspace/pr11-order-evidence/browser.log`、`detail-dates-360.png`。该后续调整只有展示属性和 CSS，没有改变已通过 320 项业务链的数据库逻辑。
 
 PR07 唯一 Review 的就绪标记修复接入组合分支后，完整类型检查、Web 构建、原13项定向及实际 React/CSS 四种深链/拒绝场景通过。就绪标记不追加全局列表读取，展开时才读取一次列表；手机 PO 事实仍完整可见。证据 `/workspace/pr11-ready-evidence/browser.log`，这是隔离 TEST API 组件验证。
+
+唯一 GitHub Codex Review 的底部返回 P2 已修复：申请详情底部与顶部使用同一个已校验 returnPath，保留姓名与状态筛选；待办来源仍返回待办且标注正确，无已验证来源时保留原岗位默认路径。没有改变原申请人/审批权限、审批及未保存草稿逻辑。
+
+真实 React 浏览器验证申请人原 order_merchandiser 与审批人 production_management：已退回筛选列表→原申请详情→顶部/底部 href 相同→底部返回原姓名和已退回筛选，且没有写请求；两个 390 宽详情逐像素检查。原申请列表与工资只登记状态确认回归再次通过；筛选/草稿守卫/申请界面/路由测试和 lint/type/Web build/secret/diff 通过。证据 /workspace/pr11-evidence/footer-return-review-final.log、extra-review-final.log 与 /workspace/pr11-review-*.log。修复后新 Head Full Gate，不触发第二次 Review。

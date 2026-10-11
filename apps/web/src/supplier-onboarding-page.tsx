@@ -176,7 +176,7 @@ export function SupplierOnboardingPage({ requestId, user: providedUser }: { requ
           </form> : null}
         </Surface>
         <Surface className="supplier-application-history"><h2>审批记录</h2>{detail.decisions.length ? detail.decisions.map(d => <div key={d.version}><strong>第 {d.version} 版 · {d.decision === "approved" ? "通过" : "退回"}</strong><p>{d.reviewerName} · {date(d.decidedAt)}</p>{d.reason ? <p>{d.reason}</p> : null}</div>) : <p>暂无审批记录</p>}</Surface>
-        <a href={pageUrl(reviewer ? "ui/suppliers/requests" : "ui/suppliers/manage")}>返回申请列表</a>
+        <a href={pageUrl((returnPath ?? (reviewer ? "/ui/suppliers/requests" : "/ui/suppliers/manage")).replace(/^\//, ""))}>{todoReturnPath(window.location.search)?"返回待办列表":"返回申请列表"}</a>
       </> : !requestId ? <Surface className="supplier-directory"><div className="supplier-directory__filters">
           <input value={query} onChange={e => setQuery(e.target.value)} placeholder="搜索供应商名称或申请人" aria-label="搜索申请" /><select aria-label="申请状态" value={status} onChange={e => setStatus(e.target.value as typeof status)}><option value="all">全部状态</option>{Object.entries(SUPPLIER_REQUEST_STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
           <Button disabled={busy} onClick={() => setReload(v => v + 1)}>刷新</Button></div>
