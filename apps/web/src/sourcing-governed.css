@@ -1,3 +1,5 @@
+/* V4 presentation is opt-in below; earlier governed defaults remain intact. */
+
 /* Only migrated sourcing pages use these surfaces; existing module styles stay scoped out. */
 [data-dx-ui="governed"].sourcing-governed { min-width: 0; color: var(--dx-v2-color-text); }
 [data-dx-ui="governed"] .sourcing-workspace:not(:has(.sourcing-order-list)) { min-width: 0; gap: 16px; }
@@ -174,3 +176,69 @@
 .sourcing-budget-price-correction-dialog .system-dialog__field textarea { width:100%; min-height:76px; resize:vertical; font:inherit; }
 .sourcing-budget-price-correction-dialog .system-dialog__field small,
 .sourcing-budget-price-correction-dialog .sourcing-budget-price-correction__error { color:var(--dx-status-danger); font-size:12px; }
+
+/* V4 PR02: only existing sourcing list/detail/history roots opt in. */
+.sourcing-workspace[data-legacy-ui="sourcing"] { gap:16px; min-width:0; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .page-heading__copy { min-width:0; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .page-heading h1 { overflow-wrap:anywhere; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-search { display:flex; flex-wrap:wrap; gap:12px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-search > label { flex:1 1 132px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-search > .sourcing-search__keyword { flex:2 1 220px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-search :is(input,select) { width:100%; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-list-card { padding:20px; border:1px solid var(--legacy-ui-border); border-radius:var(--legacy-ui-radius); background:#fff; box-shadow:none; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-order-list { gap:12px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-order-card { border-radius:10px; box-shadow:none; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-order-card__main { padding:16px 56px 16px 16px; gap:12px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-order-card__identity { grid-template-columns:72px minmax(0,1fr); gap:12px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-order-card__photo { width:72px; height:72px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-order-card__title-line > strong { font-size:14px; line-height:20px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] :is(.sourcing-order-card__merchant,.sourcing-order-card__activity,.sourcing-order-card__line-count) { font-size:12px; line-height:18px; overflow-wrap:anywhere; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-order-card__workflow-status { white-space:normal; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-order-card .dx-badge { font-size:12px; line-height:18px; white-space:normal; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-order-card dd { font-size:14px; line-height:20px; overflow-wrap:anywhere; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-order-card dt { font-size:12px; line-height:18px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-order-delete { width:32px; height:32px; right:12px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-detail-layout { padding:20px; gap:16px; border-radius:10px; background:#fff; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-order-detail .sourcing-key-facts { grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; padding:16px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-order-detail .sourcing-key-facts > div { min-width:0; padding:0 8px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-order-detail .sourcing-key-facts dt { font-size:12px; line-height:18px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-order-detail .sourcing-key-facts dd { margin:5px 0 0; font-size:14px; line-height:20px; white-space:normal; overflow-wrap:anywhere; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-supporting-overview { grid-template-columns:minmax(160px,.6fr) minmax(480px,1.4fr); gap:24px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-photo { width:80px; min-height:96px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-photo img { width:76px; height:64px; object-fit:contain; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-photo__filename { max-width:76px; white-space:normal; overflow-wrap:anywhere; font-size:12px; line-height:18px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-workflow-step { min-width:0; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-workflow-step :is(strong,small,em) { font-size:12px; line-height:18px; white-space:normal; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-workflow-step > b { width:20px; height:20px; font-size:12px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] :is(.dx-decision-summary,.sourcing-node-workspace .dx-surface) { padding:20px; border-radius:10px; box-shadow:none; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .dx-decision-summary { padding:16px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-node-workspace :is(p,dd) { font-size:14px; line-height:20px; overflow-wrap:anywhere; }
+.sourcing-workspace[data-legacy-ui="sourcing"] :is(.sourcing-form-grid,.sourcing-history-fields) { gap:12px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-finance-reference { grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] :is(.sourcing-contract-bar__actions,.sourcing-history-navigation) { gap:8px; flex-wrap:wrap; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-contract-bar__actions > .dx-button { white-space:normal; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-finance-actions { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-finance-actions > button { min-height:var(--dx-button-height); line-height:20px; }
+.sourcing-workspace[data-legacy-ui="sourcing"] :is(.sourcing-history-record,.sourcing-transfer-history-entry) { padding:12px 0; }
+@media (min-width:801px) {
+  .sourcing-workspace[data-legacy-ui="sourcing"] .dx-responsive-facts { min-width:0; overflow-x:auto; }
+  .sourcing-workspace[data-legacy-ui="sourcing"] .dx-facts-table { min-width:760px; }
+  .sourcing-workspace[data-legacy-ui="sourcing"] .dx-facts-table th { height:40px; padding:12px; font-size:12px; line-height:18px; }
+  .sourcing-workspace[data-legacy-ui="sourcing"] .dx-facts-table td { padding:12px; height:48px; font-size:14px; line-height:20px; }
+  .sourcing-workspace[data-legacy-ui="sourcing"] .dx-facts-table :is(th,td):first-child { min-width:160px; text-align:left; }
+  .sourcing-workspace[data-legacy-ui="sourcing"] .dx-facts-table :is(th,td):nth-child(2) { min-width:100px; text-align:left; }
+  .sourcing-workspace[data-legacy-ui="sourcing"] .dx-facts-table :is(th,td):nth-child(n+3) { min-width:80px; text-align:right; }
+}
+@media (max-width:1250px) and (min-width:801px) {
+  .sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-order-card__main { grid-template-columns:minmax(0,1fr) minmax(112px,.45fr); }
+  .sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-order-card__main dl { grid-area:2 / 1 / auto / -1; }
+  .sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-order-card__activity { grid-area:3 / 1 / auto / -1; }
+  .sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-supporting-overview { grid-template-columns:minmax(0,1fr); }
+}
+@media (max-width:800px) {
+  .sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-list-card { padding:12px; }
+  .sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-detail-layout { padding:0; border:0; background:transparent; }
+  .sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-supporting-overview { grid-template-columns:minmax(0,1fr); gap:16px; }
+  .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-order-detail .sourcing-key-facts { grid-template-columns:repeat(2,minmax(0,1fr)); padding:12px; }
+  .sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-finance-actions > button { min-height:48px; }
+}
