@@ -14,7 +14,7 @@ type Resource = { kind: "order" | "source"; id: string };
 type TimeQuality = "现场登记" | "补报未核实" | "已核实" | "缺失";
 const fail = (message: string): never => { throw new ApplicationError("DIGITAL_TASK_CONFLICT", message, 409); };
 const iso = (value: Date | string | null) => value === null ? null : new Date(value).toISOString();
-export const DIGITAL_CONDITION_KEYS = ["customer_confirmed", "owner_approved", "materials_ready", "handover_received", "pattern_ready", "preshrink_ready", "qc_approved", "all_po_complete", "factory_arrived", "washing_finished", "business_recorded"] as const;
+export const DIGITAL_CONDITION_KEYS = ["customer_confirmed", "owner_approved", "materials_ready", "handover_received", "pattern_ready", "preshrink_ready", "qc_approved", "all_po_complete", "factory_arrived", "washing_finished", "pattern_assignment_ready", "business_recorded"] as const;
 const REQUIRED_ACTIVATION: Partial<Record<DigitalTaskKind, readonly typeof DIGITAL_CONDITION_KEYS[number][]>> = {
   development_pattern: ["materials_ready", "handover_received"], development_cutting: ["handover_received"], development_sewing: ["materials_ready", "handover_received"],
   development_washing: ["handover_received"], development_tail_check: ["washing_finished"], bulk_pattern: ["owner_approved"], warehouse_preshrink: ["owner_approved"],

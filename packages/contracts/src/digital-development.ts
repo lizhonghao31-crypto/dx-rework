@@ -32,7 +32,7 @@ export const DevelopmentDocumentSchema = z.object({
   if (new Set(value.files.map(row => row.attachmentId)).size !== value.files.length) context.addIssue({ code: "custom", path: ["files"], message: "附件不能重复" });
 });
 export const SaveDevelopmentSchema = z.object({ expectedVersion: z.number().int().nonnegative(), document: DevelopmentDocumentSchema }).strict();
-export const PublishDevelopmentSchema = z.object({ expectedVersion: z.number().int().positive() }).strict();
+export const PublishDevelopmentSchema = z.object({ expectedVersion: z.number().int().positive(), patternOrder:z.object({categoryId:z.string().uuid(),priceVersion:z.number().int().positive()}).strict().optional() }).strict();
 export const DevelopmentMaterialEventSchema = z.object({ expectedMaterialRevision: z.number().int().nonnegative(), expectedVersion: z.number().int().positive(), action: z.enum(["到货", "修改预计日期", "确认代用"]), expectedDate: z.iso.date().nullable(), note: text }).strict().superRefine((value, context) => {
   if (value.action === "修改预计日期" && !value.expectedDate) context.addIssue({code:"custom",path:["expectedDate"],message:"请填写预计日期"});
   if (value.action === "确认代用" && !value.note) context.addIssue({code:"custom",path:["note"],message:"请填写代用说明"});

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {DEVELOPMENT_REVISION_NODES,DEVELOPMENT_PROBLEM_CATEGORIES} from "./digital-development-rounds.js";
 
 // Switched on only when the six-PR wage closure is complete. Root can verify each increment.
 export const PATTERN_ROOM_ORDERS_ENABLED = true;
@@ -63,6 +64,8 @@ export const RequestPatternReworkSchema = PatternRoundActionSchema.extend({
   reason: z.string().trim().min(1, "请填写返工内容或原因").max(2000), reasonCategory: z.enum(["customer_change", "workmanship", "other"]),
   attachmentIds: z.array(z.string().uuid()).max(20).default([]).refine(ids => new Set(ids).size === ids.length, "附件不能重复"),
   retainedAttachmentIds: z.array(z.string().uuid()).max(20).refine(ids => new Set(ids).size === ids.length, "附件不能重复").optional(),
+  developmentNodes:z.array(z.enum(DEVELOPMENT_REVISION_NODES)).min(1).max(6).refine(nodes=>new Set(nodes).size===nodes.length,"受影响工序不能重复").optional(),
+  developmentProblems:z.array(z.enum(DEVELOPMENT_PROBLEM_CATEGORIES)).min(1).max(8).refine(nodes=>new Set(nodes).size===nodes.length,"问题分类不能重复").optional(),
 }).strict();
 export const TransferPatternOrderSchema = PatternRoundActionSchema.extend({ segmentId: z.string().uuid(), personId: z.string().uuid(), reason: z.string().trim().min(1).max(500), amount: PatternWorkAmountSchema.optional(), hours: PatternStoppedHoursSchema.optional() }).strict();
 export const CancelPatternOrderSchema = PatternRoundActionSchema.extend({ segmentId: z.string().uuid().optional(), reason: z.string().trim().min(1, "请填写取消原因").max(500), amount: PatternWorkAmountSchema.optional(), hours: PatternStoppedHoursSchema.optional() }).strict();
@@ -85,6 +88,7 @@ export const PatternWorkerOptionsSchema = z.array(z.object({ personId: z.string(
 export const PatternPeopleFiltersSchema = z.object({ creators: z.array(z.object({ id: z.string().uuid(), name: z.string() })), workers: z.array(z.object({ id: z.string().uuid(), name: z.string() })) });
 export const PatternAttachmentSchema = z.object({ attachmentId: z.string().uuid(), roundId: z.string().uuid(), filename: z.string(), mimeType: z.string(), sizeBytes: z.number(), active: z.boolean(), addedAt: z.string(), reason: z.string() });
 export const PatternOrderDetailSchema = PatternOrderSummarySchema.extend({
+  developmentSourceId:z.string().uuid().optional(),
   currentRoundId: z.string().uuid(), customer: z.string().nullable(), sizeColor: z.string().nullable(), referenceStyleNo: z.string().nullable(), variant: z.string().nullable(), note: z.string().nullable(),
   rounds: z.array(z.object({
     roundId: z.string().uuid(), index: z.number().int().nullable(), roundType: z.enum(["initial", "rework"]), requestedBy: z.string().uuid(), requestReason: z.string().nullable(), status: PatternOrderStatusSchema, categoryName: z.string(), unit: z.string(), quantity: z.number().int().nullable(), actualHours: z.string().nullable().optional(),

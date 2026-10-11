@@ -11,6 +11,12 @@ describe("pattern rework and stopped-labor input", () => {
     expect(PatternStoppedHoursSchema.parse("1.2")).toBe("1.2");
     for (const value of ["", "-0.1", "1.25", "1e2"]) expect(PatternStoppedHoursSchema.safeParse(value).success).toBe(false);
   });
+  it("requires explicit distinct affected nodes and categories when digital revision parameters are supplied",()=>{
+    const input={version:1,roundId:"11111111-1111-4111-8111-111111111111",reason:"局部车缝返工",reasonCategory:"other"};
+    expect(RequestPatternReworkSchema.safeParse({...input,developmentNodes:["车板"],developmentProblems:["车缝"]}).success).toBe(true);
+    for(const developmentNodes of [[],["车板","车板"],["未知"]])expect(RequestPatternReworkSchema.safeParse({...input,developmentNodes,developmentProblems:["车缝"]}).success).toBe(false);
+    for(const developmentProblems of [[],["车缝","车缝"],["未知"]])expect(RequestPatternReworkSchema.safeParse({...input,developmentNodes:["车板"],developmentProblems}).success).toBe(false);
+  });
   it("requires a reason and rejects creator-supplied automatic rework pricing", () => {
     const input = { version: 1, roundId: "11111111-1111-4111-8111-111111111111", reason: "修改要求", reasonCategory: "customer_change" };
     expect(RequestPatternReworkSchema.safeParse(input).success).toBe(true);

@@ -80,12 +80,15 @@ export function PatternRoomOrderDetailPage({ orderId }: { orderId: string }) {
   return <PatternRoomDetailWorkspace key={viewKey} orderId={orderId} />;
 }
 
-export function PatternRoomAssignmentWorkspace({orderId,onChanged}:{orderId:string;onChanged?:()=>void}) {
-  return <PatternRoomDetailWorkspace key={orderId} orderId={orderId} assignmentOnly onChanged={onChanged}/>;
+export function PatternRoomAssignmentWorkspace({orderId,onChanged,suggestedWorker}:{orderId:string;onChanged?:()=>void;suggestedWorker?:{id:string;name:string}|undefined}) {
+  return <PatternRoomDetailWorkspace key={orderId} orderId={orderId} assignmentOnly onChanged={onChanged} suggestedWorker={suggestedWorker}/>;
 }
-function PatternRoomDetailWorkspace({ orderId, assignmentOnly=false, onChanged }: { orderId: string; assignmentOnly?:boolean; onChanged?:((()=>void)|undefined) }) {
+function PatternRoomDetailWorkspace({ orderId, assignmentOnly=false, onChanged,suggestedWorker }: { orderId: string; assignmentOnly?:boolean; onChanged?:((()=>void)|undefined);suggestedWorker?:{id:string;name:string}|undefined }) {
   const [order, setOrder] = useState<PatternOrderDetail | null>(null), [error, setError] = useState(""), [busy, setBusy] = useState(false), [editing, setEditing] = useState(false), [refresh, setRefresh] = useState(0);
   const [workers, setWorkers] = useState<z.infer<typeof PatternWorkerOptionsSchema>>([]), [workerSearch, setWorkerSearch] = useState(""), [personId, setPersonId] = useState("");
+  const prefillFor=useRef<string|null>(null),personPrefilledFor=useRef<string|null>(null);
+  useEffect(()=>{if(assignmentOnly&&suggestedWorker&&prefillFor.current!==orderId){prefillFor.current=orderId;setWorkerSearch(suggestedWorker.name);}},[assignmentOnly,suggestedWorker,orderId]);
+  useEffect(()=>{if(assignmentOnly&&suggestedWorker&&!personId&&personPrefilledFor.current!==orderId){const person=workers.find(worker=>worker.userId===suggestedWorker.id);if(person){personPrefilledFor.current=orderId;setPersonId(person.personId);}}},[assignmentOnly,suggestedWorker,workers,personId]);
   const [hours, setHours] = useState("");
   const [workflowOpen, setWorkflowOpen] = useState(() => !window.matchMedia("(max-width: 760px)").matches);
   const [reworkAmount, setReworkAmount] = useState(""), [exception, setException] = useState<PatternExceptionAction | null>(null);

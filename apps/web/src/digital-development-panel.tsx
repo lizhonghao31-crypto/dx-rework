@@ -2,6 +2,7 @@ import { washingChoiceLabel } from "./digital-workspace-copy.js";
 import { useDigitalDetailNavigationGuard } from "./use-digital-detail-navigation-guard.js";
 import {DevelopmentRevisionFields,type RevisionFields} from "./development-revision-fields.js";
 import type {DevelopmentRevision} from "@dx-rework/contracts/digital-development-rounds";
+import {DevelopmentPatternLink,type DevelopmentPatternChoice} from "./development-pattern-link.js";
 import { DevelopmentExecutionPanel } from "./digital-development-execution-panel.js";
 import { confirmInApp } from "./system-dialog.js";
 import { DevelopmentPrint } from "./digital-development-print.js";
@@ -32,6 +33,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound}:{sourceI
     if (!/^material-[0-9a-f-]{36}$/.test(anchor)) return;
     window.document.getElementById(anchor)?.scrollIntoView({ block: "center" });
   }, [sheet]);
+  const [patternChoice,setPatternChoice]=useState<DevelopmentPatternChoice|null>(null);
   const [quantityInput,setQuantityInput]=useState(""),[validationMode,setValidationMode]=useState<"save"|"publish"|null>(null);
   const measurementIds=useRef<string[]>([]),successfulUploads=useRef(new Map<string,string>());
   const installDocument=(value:DevelopmentDocument)=>{setDocument(value);setQuantityInput(value.quantity===null?"":String(value.quantity));measurementIds.current=value.measurements.map(()=>createClientRequestId());setValidationMode(null);};
@@ -102,7 +104,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound}:{sourceI
   const flag=(id:string,label:string,value:boolean,onValue:(value:boolean)=>void,locked=readonly)=><label className="development-flag">{locked?<span id={id} className="dx-doc-readonly">{label}：{value?"有":"无"}</span>:<><input id={id} aria-label={label} type="checkbox" checked={value} disabled={busy} onChange={event=>onValue(event.target.checked)}/>{label}</>}</label>;
   const validate=(publish=false)=>{setValidationMode(publish?"publish":"save");return developmentIssues(document,quantityInput,measurementIds.current,publish,revision).length===0;};
   const save=()=>{if(!validate())return;if(revision)void revisionAction(false);else void run(base,{expectedVersion:sheet!.version,document},"PUT");};
-  const publish=()=>{if(!validate(true))return;if(dirty){setError("请先保存当前修改");return;}if(revision)void revisionAction(true);else void run(`${base}/publish`,{expectedVersion:sheet!.version});};
+  const publish=()=>{if(!validate(true))return;if(dirty){setError("请先保存当前修改");return;}if(revision)void revisionAction(true);else{if(!patternChoice){setError("请先选择有效打板品类与执行价，再正式提交开发单");window.document.getElementById("development-pattern-preparation")?.scrollIntoView({block:"center"});return;}void run(`${base}/publish`,{expectedVersion:sheet!.version,patternOrder:patternChoice});}};
   const reload=async()=>{if(writing.current||dirty&&!await confirmInApp("重新载入将丢弃未保存修改，确定继续？"))return;setBusy(true);try{const value=await digitalRequest<DevelopmentSheet>(`${base}${selectedRound?`?round=${selectedRound}`:""}`);setSheet(value);installDocument(value.document??initial());setRevision(null);setDirty(false);setError("");if(value.status==="published")setRounds(await digitalRequest<Rounds>(`${base}/rounds`));}catch(reason){setError(reason instanceof Error?reason.message:"读取失败");}finally{setBusy(false);}};
   const pictures=document.files.filter(file=>file.kind==="款图"||file.kind==="局部图");
   const savedPrint=revision?rounds.draft?.payload.document:sheet?.document;
@@ -117,6 +119,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound}:{sourceI
     {sheet&&<>
       {dirty||busy||!savedPrint?<article className="development-print"><p>当前单据不可打印，请先保存当前修改。</p></article>:<DevelopmentPrint sheet={revision?{...sheet,status:"draft",roundNumber:revision.basedOnRound+1,version:draftVersion}:sheet} document={savedPrint} imageUrl={imageUrl}/>}
       <div className="development-heading dx-doc-card"><span>款号：<strong>{sheet.designStyleNo}</strong></span><span>代用号：{sheet.temporaryStyleNo??"—"}</span><span>客户：{sheet.customerCode??"通用开发"}</span><span>设计师：{sheet.designerName}</span><span>{sheet.developmentType} · 第{revision?revision.basedOnRound+1:sheet.roundNumber??1}轮 · 资料版本 {revision?draftVersion:sheet.version}</span></div>
+      {sheet.status==="draft"&&!revision&&sheet.canEdit&&<div id="development-pattern-preparation" className="dx-doc-card"><DevelopmentPatternLink busy={busy} preparing onSelection={setPatternChoice}/></div>}
       <DocumentAnchors sections={[{id:"development-basic",label:"基本资料"},{id:"development-materials",label:"面辅料"},{id:"development-sizes",label:"尺寸表"},{id:"development-craft",label:"工艺要求"},...(sheet.status==="published"?[{id:"development-handling",label:"办理记录"}]:[])]}/>
       <form onSubmit={event=>{event.preventDefault();save();}}>
         {revision&&<section id="development-revision" tabIndex={-1} className="dx-doc-card development-revision"><DevelopmentRevisionFields value={revision} disabled={busy} onChange={value=>{setRevision(value);setDirty(true);}}/></section>}
