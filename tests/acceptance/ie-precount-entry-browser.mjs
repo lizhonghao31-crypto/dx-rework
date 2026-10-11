@@ -33,6 +33,7 @@ try {
     }
     const editor = page.getByRole("button", { name: "IE预核", exact: true });
     if (["ie", "root"].includes(role)) {
+      assert.equal(await editor.count(), 1);
       await editor.click();
       await page.getByRole("spinbutton", { name: "TEST 工序预核数量" }).fill("7");
       await page.getByRole("textbox", { name: "TEST 工序预核备注" }).fill("入口回归");

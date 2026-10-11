@@ -182,7 +182,7 @@ function ManagerProcessProgressGroup({
         <span><small>上报合计</small><b>{formatBusinessDecimal(submittedTotal)}件</b></span>
         <StatusBadge tone={allCompleted ? "success" : "warning"}>{allCompleted ? "已完成" : `未完成 ${formatBusinessDecimal(incompleteCount)}`}</StatusBadge>
       </button>
-      {iePrecounts ? <IePrecountCell
+      {iePrecounts && group.tasks.some(task => task.executionKind === "worker") ? <IePrecountCell
         reworkOrderId={reworkOrderId}
         configurationItemId={group.configurationItemId}
         processName={group.processName}
