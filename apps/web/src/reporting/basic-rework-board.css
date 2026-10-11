@@ -1,1 +1,8 @@
 .basic-rework-card details{margin-top:12px}.basic-rework-card summary{cursor:pointer;font-weight:700}.basic-rework-card p{overflow-wrap:anywhere}.basic-rework-photos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.basic-rework-photos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px}.basic-rework-switch{padding:8px 16px}.basic-rework-switch button{font:inherit;min-height:44px;border:1px solid #d7dbe1;border-radius:8px;background:#fff;padding:4px 12px}
+
+/* Basic permission view keeps its original limited facts and linked title only. */
+.rework-query-content[data-legacy-ui="rework-board"] .basic-rework-card .reporting-order-card__main { padding:16px!important; }
+.rework-query-content[data-legacy-ui="rework-board"] .basic-rework-card details { margin:0; padding:0 16px 16px; }
+.rework-query-content[data-legacy-ui="rework-board"] .basic-rework-card summary { font-size:14px; line-height:20px; }
+.rework-query-content[data-legacy-ui="rework-board"] .basic-rework-card p { font-size:14px; line-height:20px; overflow-wrap:anywhere; }
+.rework-query-content[data-legacy-ui="rework-board"] .basic-rework-photos img { object-fit:contain; }
