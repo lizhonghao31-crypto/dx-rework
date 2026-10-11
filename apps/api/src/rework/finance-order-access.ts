@@ -3,7 +3,7 @@ import type { TrustedActorContext } from "../tools/repositories.js";
 
 export const FINANCE_ORDER_CAPABILITY = "rework:finance_orders:read";
 
-export async function canReadFinanceOrders(database: Pool | PoolClient, actor: TrustedActorContext): Promise<boolean> {
+export async function canReadFinanceOrders(database: Pick<Pool | PoolClient, "query">, actor: TrustedActorContext): Promise<boolean> {
   if (!(actor.authorizationCapabilities ?? [actor.authorizationCapability]).includes(FINANCE_ORDER_CAPABILITY)) return false;
   const result=await database.query<{permitted:boolean}>("SELECT rework_finance_can_read_orders($1) permitted",[actor.actorId]);
   return result.rows[0]?.permitted===true;
