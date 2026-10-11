@@ -99,6 +99,41 @@ const create = (
 };
 
 describe("work reporting routes", () => {
+  it("allows ordinary IE to read execution facts without granting reporting or assignment", async () => {
+    const { app, service } = create(["ie_reviewer"], ["process:review"]);
+    const headers = { cookie: "dx_rework_session=trusted", "idempotency-key": "ie-read-only" };
+    const response = await app.inject({ method: "GET", url: `/rework-orders/${orderId}/work-tasks`, headers });
+    expect(response.statusCode).toBe(200);
+    expect(service.list).toHaveBeenCalledWith(expect.objectContaining({
+      actorRoles: ["ie_reviewer"], authorizationCapability: "process:review",
+      authorizationCapabilities: ["process:review"],
+    }), orderId);
+    for (const url of ["/work-task-options", `/rework-orders/${orderId}/work-tasks`, `/work-tasks/${taskId}/reports`, `/rework-orders/${orderId}/work-tasks/add-members`]) {
+      const rejected = await app.inject({ method: url === "/work-task-options" ? "GET" : "POST", url, headers, ...(url !== "/work-task-options" ? { payload: { expectedOrderVersion: 2, actualQuantity: 1, completedAt: "2026-10-11T00:00:00.000Z" } } : {}) });
+      expect(rejected.statusCode).toBe(403);
+    }
+    expect(service.createTask).not.toHaveBeenCalled();
+    expect(service.submitReport).not.toHaveBeenCalled();
+    expect(service.addActiveTaskMembers).not.toHaveBeenCalled();
+  });
+
+  it("preserves Root execution reads without an IE role", async () => {
+    const { app, service } = create([], [], true);
+    const response = await app.inject({ method: "GET", url: `/rework-orders/${orderId}/work-tasks`, headers: { cookie: "dx_rework_session=trusted" } });
+    expect(response.statusCode).toBe(200);
+    expect(service.list).toHaveBeenCalledWith(expect.objectContaining({ actorRoles: expect.arrayContaining(["root_superuser"]) }), orderId);
+  });
+
+  it.each([
+    { roles: ["ie_reviewer"], capabilities: [] },
+    { roles: ["quality_control"], capabilities: ["process:review"] },
+  ])("rejects execution reads without both IE role and review capability: $roles", async ({ roles, capabilities }) => {
+    const { app, service } = create(roles, capabilities);
+    const response = await app.inject({ method: "GET", url: `/rework-orders/${orderId}/work-tasks`, headers: { cookie: "dx_rework_session=trusted" } });
+    expect(response.statusCode).toBe(403);
+    expect(service.list).not.toHaveBeenCalled();
+  });
+
   it("returns a migration-0079 tail inspector instead of failing the whole personnel response", async () => {
     const { app, service } = create(["tail_supervisor"], ["work:assign"]);
     const response = await app.inject({ method: "GET", url: "/work-task-options", headers: { cookie: "dx_rework_session=trusted" } });

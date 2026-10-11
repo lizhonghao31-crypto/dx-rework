@@ -19,6 +19,7 @@ import { mapWithConcurrency } from "./concurrency.js";
 import { canAdjustActiveWorkforce, canAssignWork, type WorkReportingUser } from "./work-reporting-permissions.js";
 import { reportsArePersisted } from "./work-reporting-submission.js";
 import { alertInApp } from "./system-dialog.js";
+import { IePrecountCell, type IePrecountOverview } from "./ie-precount-cell.js";
 import { WholeOrderReviewPanel } from "./whole-order-review-panel.js";
 import "./work-reporting-form.css";
 
@@ -30,20 +31,6 @@ type Person = {
   eligibleExecutionKinds: Array<"worker" | "tail_inspection">;
 };
 type Task = ReworkWorkTasksResponse["tasks"][number];
-type IePrecountEntry = Readonly<{
-  entryId: string;
-  configurationItemId: string;
-  processName: string;
-  quantity: number;
-  note: string | null;
-  recordedBy: string;
-  recordedAt: string;
-}>;
-type IePrecountOverview = Readonly<{
-  canRecord: boolean;
-  processes: readonly Readonly<{ configurationItemId: string; processName: string }>[];
-  entries: readonly IePrecountEntry[];
-}>;
 type ProgressProcessGroup = Readonly<{
   configurationItemId: string;
   processName: string;
@@ -126,87 +113,6 @@ const buildProgressProcessGroups = (tasks: readonly Task[]): ProgressProcessGrou
   return groups;
 };
 
-const formatIePrecountTime = (value: string): string =>
-  new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "Asia/Shanghai",
-  }).format(new Date(value));
-
-function IePrecountCell({
-  reworkOrderId,
-  configurationItemId,
-  processName,
-  overview,
-  onChanged,
-}: Readonly<{
-  reworkOrderId: string;
-  configurationItemId: string;
-  processName: string;
-  overview: IePrecountOverview;
-  onChanged?: () => Promise<void> | void;
-}>): ReactElement {
-  const [editing, setEditing] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [quantity, setQuantity] = useState("");
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const latest = overview.entries.find((entry) =>
-    entry.configurationItemId === configurationItemId);
-
-  const record = async (): Promise<void> => {
-    const parsedQuantity = Number(quantity);
-    if (!Number.isInteger(parsedQuantity) || parsedQuantity < 1) {
-      setMessage("数量必须是大于0的整数");
-      return;
-    }
-    setBusy(true);
-    setMessage("");
-    try {
-      await requestNoContent(`rework-orders/${reworkOrderId}/ie-precounts`, {
-        method: "POST",
-        headers: { "idempotency-key": createClientRequestId() },
-        body: JSON.stringify({
-          configurationItemId,
-          quantity: parsedQuantity,
-          ...(note.trim() ? { note: note.trim() } : {}),
-        }),
-      });
-      setQuantity("");
-      setNote("");
-      setEditing(false);
-      setMessage("已记录");
-      await onChanged?.();
-    } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "记录失败");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return <div className={`n04-progress-ie-precount${editing ? " is-editing" : ""}`}>
-    {overview.canRecord && !editing
-      ? <button type="button" className="n04-ie-precount-button" onClick={() => { setEditing(true); setMessage(""); }}>IE预核</button>
-      : null}
-    {latest && !editing
-      ? <button type="button" className="n04-ie-precount-latest" aria-expanded={detailsOpen} onClick={() => setDetailsOpen((open) => !open)}>{formatBusinessDecimal(latest.quantity)}件</button>
-      : null}
-    {editing ? <form className="n04-ie-precount-editor" onSubmit={(event) => { event.preventDefault(); void record(); }}>
-      <input aria-label={`${processName}预核数量`} autoFocus inputMode="numeric" min="1" step="1" type="number" placeholder="数量" value={quantity} onChange={(event) => setQuantity(event.target.value)} />
-      <input aria-label={`${processName}预核备注`} maxLength={200} placeholder="备注（选填）" value={note} onChange={(event) => setNote(event.target.value)} />
-      <button type="submit" className="n04-ie-precount-confirm" disabled={busy}>{busy ? "确认中…" : "确认"}</button>
-      <button type="button" className="n04-ie-precount-cancel" disabled={busy} onClick={() => { setEditing(false); setQuantity(""); setNote(""); setMessage(""); }}>取消</button>
-    </form> : null}
-    {latest && detailsOpen && !editing ? <small className="n04-ie-precount-detail">{latest.recordedBy} · {formatIePrecountTime(latest.recordedAt)}{latest.note ? ` · ${latest.note}` : ""}</small> : null}
-    {message ? <small className="n04-ie-precount-message" role="status">{message}</small> : null}
-  </div>;
-}
-
-
 function ReturnedReportContext({ task }: Readonly<{ task: Task }>): ReactElement | null {
   if (!task.returnedReport) return null;
   return <div className="work-reporting-return-context" role="status">
@@ -276,7 +182,7 @@ function ManagerProcessProgressGroup({
         <span><small>上报合计</small><b>{formatBusinessDecimal(submittedTotal)}件</b></span>
         <StatusBadge tone={allCompleted ? "success" : "warning"}>{allCompleted ? "已完成" : `未完成 ${formatBusinessDecimal(incompleteCount)}`}</StatusBadge>
       </button>
-      {iePrecounts ? <IePrecountCell
+      {iePrecounts && group.tasks.some(task => task.executionKind === "worker") ? <IePrecountCell
         reworkOrderId={reworkOrderId}
         configurationItemId={group.configurationItemId}
         processName={group.processName}

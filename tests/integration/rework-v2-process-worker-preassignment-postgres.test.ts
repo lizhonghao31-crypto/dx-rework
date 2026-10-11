@@ -255,6 +255,30 @@ runWithPostgres("PR-04 unified execution PostgreSQL", () => {
     );
     expect(activated).toMatchObject({ reworkStatus: "in_progress", tasksCreated: 2 });
     const historyService = new ReworkBusinessDetailService(database);
+    // IE must read activated worker/inspection tasks without becoming an execution writer.
+    const ieExecution = await workReporting.list(ie(), order.value.reworkOrderId);
+    expect(ieExecution.tasks).toHaveLength(2);
+    expect(ieExecution.tasks.every(task => task.canSubmitReport === false)).toBe(true);
+    expect(new Set(ieExecution.tasks.map(task => task.executionKind))).toEqual(new Set(["worker", "tail_inspection"]));
+    await expect(workReporting.list(actor(ids.ie, ["ie_reviewer"], "business:detail:read"), order.value.reworkOrderId))
+      .rejects.toMatchObject({ statusCode: 403 });
+    const ieProcess = ieExecution.tasks.find(task => task.executionKind === "worker")!;
+    for (const entry of ieExecution.tasks) {
+      expect(entry).not.toHaveProperty("groupAmount");
+      expect(entry).not.toHaveProperty("memberShares");
+      for (const member of entry.members) expect(Object.keys(member).sort()).toEqual(["displayName", "personId", "personType"]);
+    }
+    for (const denied of [tailAssign(), workerReport(), actor(ids.ie, ["ie_reviewer"], "business:detail:read")]) {
+      await expect(historyService.addIePrecount(denied, order.value.reworkOrderId, {
+        configurationItemId: ieProcess.configurationItemId, quantity: 8,
+      }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    }
+
+    const preCount = await historyService.addIePrecount(ie(), order.value.reworkOrderId, {
+      configurationItemId: ieProcess.configurationItemId, quantity: 8, note: "isolated IE read regression",
+    }, randomUUID());
+    expect(preCount.value.iePrecounts.entries).toEqual(expect.arrayContaining([expect.objectContaining({ configurationItemId: ieProcess.configurationItemId, quantity: 8 })]));
+
     const historyReader = actor(ids.owner, ["owner_group"], "rework:view");
     const configuredHistory = await historyService.history(historyReader, order.value.reworkOrderId, "process_configuration");
     expect(configuredHistory.fields.find(field => field.label === "核价结果")?.value).toBe("pending_ie_review");
@@ -313,6 +337,19 @@ runWithPostgres("PR-04 unified execution PostgreSQL", () => {
       "SELECT status FROM rework_orders WHERE rework_order_id=$1",
       [order.value.reworkOrderId],
     )).rows[0]?.status).toBe("pending_order_review");
+    const ieReviewTasks = await workReporting.list(ie(), order.value.reworkOrderId);
+    expect(ieReviewTasks.reworkStatus).toBe("pending_order_review");
+    expect(ieReviewTasks.tasks.every(task => task.canSubmitReport === false)).toBe(true);
+    expect((await historyService.addIePrecount(ie(), order.value.reworkOrderId, {
+      configurationItemId: ieProcess.configurationItemId, quantity: 9,
+    }, randomUUID())).value.iePrecounts.entries).toEqual(expect.arrayContaining([expect.objectContaining({ configurationItemId: ieProcess.configurationItemId, quantity: 9 })]));
+    const rootCount = await historyService.addIePrecount(actor(ids.root, ["root_superuser"], "process:review"), order.value.reworkOrderId, {
+      configurationItemId: ieProcess.configurationItemId, quantity: 10, note: "root precount regression",
+    }, randomUUID());
+    expect(rootCount.value.iePrecounts.entries.map(entry => entry.quantity)).toEqual([10, 9, 8]);
+    expect(rootCount.value.iePrecounts.entries.map(entry => entry.recordedBy)).toEqual(["Root", "IE", "IE"]);
+    await expect(database.query("UPDATE rework_ie_precount_entries SET quantity=99 WHERE rework_order_id=$1", [order.value.reworkOrderId]))
+      .rejects.toBeTruthy();
     await expect(database.query(
       "UPDATE rework_process_worker_plans SET planned_by=$2 WHERE configuration_id=$1",
       [configurationId, ids.owner],

@@ -135,7 +135,16 @@
 
 **状态：APPROVED**
 
-保持本轮基准 main 的现有权限，不拓展；继续承担返工 N02 预核、N06 复核以及外发节点 2 核价。
+未被下述明确增量覆盖的权限继续保持本轮基准 main；原返工 N02 预核、N06 复核以及外发节点 2 核价职责保留。
+
+**2026-10-11 已批准增量：返工 N04/N05 执行事实只读与 IE 预核入口修复。**
+
+- 普通 IE 同时具有 `ie_reviewer` 角色及 `process:review` capability 时，可以在返工 N04/N05 读取本单返工/整查任务的工序、计划/已报数量、已核单价及已分配人员的既有姓名/类型等执行事实，以办理预核；继续使用真实 IE 身份，不以尾部主管身份代行。不得因此暴露工人登录账号、个人工资、成员分成或扩大其他模块/导出权限。
+- IE 在 `in_progress`（N04）和 `pending_order_review`（N05）可针对返工 `worker` 工序记录正整数预核数量及可选备注。入口受返工模块可写和服务返回的 `canRecord` 控制；整查工序不提供返工预核写入口。沿用原预核 API、追加式记录、记录人与时间及操作审计；再次记录保留原记录，不覆盖既有日志。
+- 预核权限不授予执行任务分配、员工调整、工人报数/代报数或正式数量修正能力；相关 capability 与原职责边界保持。历史页面及 N06 的预核记录保持只读；返工模块只读 IE 不得记录预核。
+- Root 既有跨角色维护与调试特例保留，可在上述 N04/N05 合法状态记录预核；原工序、状态和日志不可覆盖等约束继续有效。
+
+依据：[既有 IE/Root 预核角色与状态规则](../../apps/api/src/rework/rework-business-detail-service.ts)、[不可覆盖的预核审计账本](../../apps/api/migrations/0118_ie_precount_ledger.sql)。验证：[真实 PostgreSQL 核价、任务读取与 N04/N05 预核回归](../../tests/integration/rework-v2-process-worker-preassignment-postgres.test.ts)、[任务允许/拒绝路由测试](../../tests/integration/work-reporting-routes.test.ts)、[普通 IE/Root/只读 IE 的前端入口回归](../../tests/acceptance/ie-precount-entry-browser.mjs)及[修复记录](../engineering/ie-precount-task-read-fix-20261011.md)。
 
 ### PERM-ROLE-WORKER-001 · 普通工人
 

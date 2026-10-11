@@ -710,7 +710,7 @@ function CurrentReworkDetailPage({
         taskMode="whole_order_review"
         embedded
         onOrderChanged={syncAfterNodeAction}
-        {...(selected.key === "final_quantity_ie_review" ? { iePrecounts: { ...detail.iePrecounts, canRecord: moduleWritable && detail.iePrecounts.canRecord } } : {})}
+        {...((selected.key === "whole_order_review" || selected.key === "final_quantity_ie_review") ? { iePrecounts: { ...detail.iePrecounts, canRecord: moduleWritable && detail.iePrecounts.canRecord } } : {})}
       />;
       if (selected.state === "current") return <NodePermissionNotice node={selected} />;
     }
