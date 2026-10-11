@@ -1,4 +1,5 @@
-import { currentModuleCanWrite } from "./member-module-policy.js";
+import { moduleCanWrite } from "./member-module-policy.js";
+import { verifySession } from "./auth.js";
 import {
   TailInspectionResponseSchema,
   WholeOrderReviewResponseSchema,
@@ -136,7 +137,15 @@ export function WholeOrderReviewPanel({
 
   const load = async () => {
     if (history) { applyOverview(history.data); setMessage(historyMessage); return; }
-    setModuleWritable(await currentModuleCanWrite("rework"));
+    const session = await verifySession();
+    if (session === "denied" || session.status !== "authorized") throw new Error("当前登录状态已失效，请重新登录。");
+    setModuleWritable(moduleCanWrite(session.user, "rework"));
+    // The dedicated inspection endpoint has a narrower read scope than the order summary.
+    const canReadTailInspection = session.user.isRoot === true
+      || (session.user.businessRoles?.includes("tail_supervisor") === true
+        && ["process:configure", "submission:audit"].some(capability => session.user.capabilities.includes(capability)))
+      || (session.user.businessRoles?.includes("worker") === true
+        && session.user.capabilities.includes("tail_inspection:report"));
     if (requestInFlight.current) return;
     requestInFlight.current = true;
     try {
@@ -144,7 +153,7 @@ export function WholeOrderReviewPanel({
         "rework-orders/" + reworkOrderId + "/whole-order-review",
         WholeOrderReviewResponseSchema.parse,
       );
-      const tail = overview.unifiedExecutionRequired || !overview.tailInspectionRequired
+      const tail = !canReadTailInspection || overview.unifiedExecutionRequired || !overview.tailInspectionRequired
         ? null
         : await request(
           "rework-orders/" + reworkOrderId + "/tail-inspection",
@@ -405,7 +414,8 @@ export function WholeOrderReviewPanel({
     }
   };
 
-  if (!data || ["draft", "pending_process_configuration", "pending_ie_review", "pending_task_assignment"].includes(data.reworkStatus)) return null;
+  if (!data) return <p role="status">{message}</p>;
+  if (["draft", "pending_process_configuration", "pending_ie_review", "pending_task_assignment"].includes(data.reworkStatus)) return null;
   const tailStage = history ? history.node === "whole_order_review" : data.reworkStatus === "pending_order_review";
   const ieStage = history ? history.node === "final_quantity_ie_review" : data.reworkStatus === "pending_final_quantity_ie_review";
   const allComplete = data.processes.length > 0 && data.processes.every((process) => process.complete);
