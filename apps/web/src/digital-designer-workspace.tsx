@@ -22,10 +22,10 @@ function initialFilter(): DevelopmentWorkspaceFilter {
   const parsed = DevelopmentWorkspaceFilterSchema.safeParse(Object.fromEntries([...new URLSearchParams(window.location.search)].filter(([key]) => ["page", "search", "customer", "view", "designer", "startDate", "endDate"].includes(key))));
   return parsed.success ? parsed.data : DevelopmentWorkspaceFilterSchema.parse({});
 }
-function StyleImage({sheet}: {sheet: DevelopmentSheet | undefined}) {
+function StyleImage({item}: {item: DevelopmentWorkspaceItem}) {
   const [failed, setFailed] = useState(false);
-  const file = sheet?.document?.files.find(file => file.kind === "款图");
-  return file && !failed ? <img className="development-style-image" alt={`${sheet!.designStyleNo} 款图`} src={urls.apiUrl(`digital-production/sources/${sheet!.sourceId}/development/attachments/${file.attachmentId}`)} onError={() => setFailed(true)}/> : <span className="development-style-placeholder">{failed ? "款图不可用" : "暂无款图"}</span>;
+  const image = item.journey.styleImageUrl;
+  return image && !failed ? <img loading="lazy" decoding="async" className="development-style-image" alt={`${item.journey.designStyleNo} 款图`} src={urls.apiUrl(image.replace(/^\/api\//,''))} onError={() => setFailed(true)}/> : <span className="development-style-placeholder">{failed ? "款图不可用" : "暂无款图"}</span>;
 }
 export function DigitalDesignerWorkspace() {
   const [filter, setFilter] = useState(initialFilter), [result, setResult] = useState<DevelopmentWorkspaceResult | null>(null);
@@ -51,14 +51,15 @@ export function DigitalDesignerWorkspace() {
   }, [filter, refresh]);
   useEffect(() => {
     let live = true; setSheets({}); setSheetErrors({});
-    if (result) for (const item of result.items) if (item.journey.sourceId) {
+    const item = result?.items.find(value => value.journey.id === selectedId);
+    if (item?.journey.sourceId) {
       const source = item.journey.sourceId;
       void digitalRequest<DevelopmentSheet>(`sources/${source}/development${item.journey.sourceVersion && item.journey.selectedRound ? `?round=${item.journey.selectedRound}` : ""}`)
         .then(sheet => {if (live) setSheets(current => ({...current, [item.journey.id]:sheet}));})
         .catch(reason => {if (live) setSheetErrors(current => ({...current, [item.journey.id]:reason.message}));});
     }
     return () => {live = false;};
-  }, [result]);
+  }, [result, selectedId]);
   const update = (patch: Partial<DevelopmentWorkspaceFilter>) => {
     const parsed = DevelopmentWorkspaceFilterSchema.safeParse({...filter, page: 1, ...patch});
     if (!parsed.success) {setError(parsed.error.issues[0]?.message ?? "筛选条件无效"); return;}
@@ -79,14 +80,14 @@ export function DigitalDesignerWorkspace() {
       {error && <p role="alert">{error}</p>}
       {intent && options ? <DevelopmentCreateForm key={confirm?.journey.id ?? intent} intent={intent} {...(confirm ? {source: confirm.journey} : {})} customers={options.customers} onCancel={() => {setIntent(null); setConfirm(null); setRefresh(value => value + 1);}} onCreated={id => {void navigateInternalPage(contextUrl({development:id},filter,id));}}/> : <>
       <div className="development-view-cards">{DEVELOPMENT_VIEWS.filter(view => view.key !== "all").map((view,index) => <KpiCard key={view.key} icon={<NavigationIcon name={(["FileText","History","Users","PackageCheck"] as const)[index]??"FileText"} />} className={`development-kpi development-kpi-${index}`} label={view.label} value={result?.counts[view.key] ?? "—"} detail={['待完善资料','正在开发','等待订购确认','已记录订购信息'][index]} selected={filter.view === view.key} onClick={() => update({view:filter.view === view.key ? 'all' : view.key})}/>)}</div>
-      <div className="development-table-scroll development-list-viewport"><BusinessTable><thead><tr><th>序号</th><th>款图 / 款号</th><th>款名</th><th>客户</th><th>开发类型</th><th>当前轮次</th><th>状态</th><th>要求完成</th><th>创建日期</th><th>操作</th></tr></thead><tbody>{result?.items.map((item,index) => <tr key={item.journey.id} className={selectedId === item.journey.id ? 'is-selected' : ''}><td>{(filter.page-1)*20+index+1}</td><td><button className="development-row-select" aria-pressed={selectedId === item.journey.id} onClick={() => select(item.journey.id)}><StyleImage key={item.journey.id} sheet={sheets[item.journey.id]}/><strong>{item.journey.designStyleNo}</strong></button></td><td>{item.journey.styleName ?? "未登记"}</td><td>{item.journey.customer ?? "通用开发"}</td><td>{sheets[item.journey.id]?.developmentType ?? (sheetErrors[item.journey.id] ? "资料不可用" : item.journey.sourceId ? "读取中…" : "待完善")}</td><td>{item.journey.sourceVersion ? `第 ${item.journey.selectedRound ?? 1} 轮` : "待填写"}</td><td><StatusBadge tone={item.view === 'ordered' ? 'success' : item.view === 'draft' ? 'neutral' : 'info'}>{viewLabel(item)}</StatusBadge></td><td>{date(sheets[item.journey.id]?.document?.returnDate)}</td><td>{date(item.journey.createdAt)}</td><td><button className="development-text-action" onClick={() => select(item.journey.id)}>查看</button></td></tr>)}</tbody></BusinessTable>
+      <div className="development-table-scroll development-list-viewport"><BusinessTable><thead><tr><th>序号</th><th>款图 / 款号</th><th>款名</th><th>客户</th><th>开发类型</th><th>当前轮次</th><th>状态</th><th>要求完成</th><th>创建日期</th><th>操作</th></tr></thead><tbody>{result?.items.map((item,index) => <tr key={item.journey.id} className={selectedId === item.journey.id ? 'is-selected' : ''}><td>{(filter.page-1)*20+index+1}</td><td><button className="development-row-select" aria-pressed={selectedId === item.journey.id} onClick={() => select(item.journey.id)}><StyleImage key={`${item.journey.id}:${item.journey.sourceVersion}:${item.journey.selectedRound}:${item.journey.styleImageUrl}`} item={item}/><strong>{item.journey.designStyleNo}</strong></button></td><td>{item.journey.styleName ?? "未登记"}</td><td>{item.journey.customer ?? "通用开发"}</td><td>{item.journey.developmentType ?? "待完善"}</td><td>{item.journey.sourceVersion ? `第 ${item.journey.selectedRound ?? 1} 轮` : "待填写"}</td><td><StatusBadge tone={item.view === 'ordered' ? 'success' : item.view === 'draft' ? 'neutral' : 'info'}>{viewLabel(item)}</StatusBadge></td><td>{date(item.journey.requiredCompletionDate)}</td><td>{date(item.journey.createdAt)}</td><td><button className="development-text-action" onClick={() => select(item.journey.id)}>查看</button></td></tr>)}</tbody></BusinessTable>
       {result && !result.items.length && <p className="development-empty">当前视图暂无档案</p>}{!result && !error && <p role="status">正在读取开发档案…</p>}</div>
       <Pagination page={filter.page} pageSize={20} total={result?.total ?? null} onPage={page => update({page})}/>
       </>}
     </section>
     {!intent && <section className="dx-production-panel development-selected" aria-label="选中开发档案">
       {!selected ? <p className="development-empty">从上方列表选择档案，查看开发资料与订购信息。</p> : <>
-        <header className="development-selected-heading"><StyleImage key={selected.journey.id} sheet={sheet}/><div><h2>{selected.journey.designStyleNo} <StatusBadge tone="info">{viewLabel(selected)}</StatusBadge></h2><p>款名：{selected.journey.styleName ?? "未登记"} · 客户：{selected.journey.customer ?? "通用开发"} · 开发类型：{sheet?.developmentType ?? "未读取"} · 设计师：{selected.journey.designer ?? "未登记"} · 创建日期：{date(selected.journey.createdAt)}</p></div><button className="development-text-action" aria-expanded={!collapsed} onClick={() => setCollapsed(value => !value)}>{collapsed ? "展开" : "收起"}</button></header>
+        <header className="development-selected-heading"><StyleImage key={`${selected.journey.id}:${selected.journey.sourceVersion}:${selected.journey.styleImageUrl}`} item={selected}/><div><h2>{selected.journey.designStyleNo} <StatusBadge tone="info">{viewLabel(selected)}</StatusBadge></h2><p>款名：{selected.journey.styleName ?? "未登记"} · 客户：{selected.journey.customer ?? "通用开发"} · 开发类型：{sheet?.developmentType ?? "未读取"} · 设计师：{selected.journey.designer ?? "未登记"} · 创建日期：{date(selected.journey.createdAt)}</p></div><button className="development-text-action" aria-expanded={!collapsed} onClick={() => setCollapsed(value => !value)}>{collapsed ? "展开" : "收起"}</button></header>
         {!collapsed && <><nav className="development-tabs" aria-label="档案资料">{['基础资料','开发资料','订购信息','版本记录'].map(label => <button key={label} aria-pressed={tab === label} onClick={() => setTab(label)}>{label}</button>)}</nav>
         {sheetErrors[selected.journey.id] && <p role="alert">开发资料读取失败：{sheetErrors[selected.journey.id]}</p>}
         <div className={`development-detail-columns ${tab !== '基础资料' ? 'is-single' : ''}`}>
