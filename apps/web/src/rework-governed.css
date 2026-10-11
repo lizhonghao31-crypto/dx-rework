@@ -121,7 +121,7 @@
 .rework-governed[data-legacy-ui="rework-detail"] .rework-detail-core-fact dt { font-size:12px; line-height:18px; }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-detail-core-fact dd { margin:4px 0 0; font-size:14px; line-height:20px; font-weight:600; white-space:normal; overflow-wrap:anywhere; }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-detail-core-fact--defective button { min-height:32px; font-size:14px; line-height:20px; }
-.rework-governed[data-legacy-ui="rework-detail"] .rework-detail-dynamic-facts { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin:16px 0 0; padding-top:16px; border-top:1px solid var(--legacy-ui-border); }
+.rework-governed[data-legacy-ui="rework-detail"] .rework-detail-dynamic-facts { display:grid; grid-template-columns:repeat(4,minmax(140px,1fr)); gap:12px; margin:16px 0 0; padding-top:16px; border-top:1px solid var(--legacy-ui-border); }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-detail-dynamic-facts > div { padding:0; min-width:0; }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-detail-dynamic-facts > [data-long="true"] { grid-column:1/-1; }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-detail-dynamic-facts dt { font-size:12px; line-height:18px; }
