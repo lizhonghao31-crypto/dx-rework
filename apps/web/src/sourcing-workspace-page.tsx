@@ -533,7 +533,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
     const restored=recoverBudgetSourcingManual(prepared,draft);
     setAdditionalMerchandiserUserId(restored.additionalMerchandiserUserId);setEstimatedCutPieceSendDate(restored.estimatedCutPieceSendDate);setDeliveryDate(restored.deliveryDate);
     setLineItems(restored.lines.map(line=>({...line,quantity:String(line.quantity)})));setImages(restored.images.map(image=>({...image,previewUrl:attachmentUrl(image.attachmentId,"preview")})));
-    setBudgetDraftStatus(`已恢复当前账号的人工补填${restored.discarded?`；${restored.discarded}项不再适用，请重新填写`:""}。`);
+    setBudgetDraftStatus(`已恢复当前账号的人工补填${restored.discarded?`；${restored.discarded}项不再适用，请重新填写`:""}${restored.imageOverflow?"；来源图与人工补图已全部保留，超过图片上限，请手动处理后提交":""}。`);
   };
   useEffect(() => {
     if (!budgetOrderId || !canCreate || !user?.id) return;
@@ -924,6 +924,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
             <div><h2>订单照片（必填）</h2><p>至少上传1张；款图也会显示在这里，无需重复上传。支持 JPG、PNG、WebP。</p></div>
             <StatusBadge tone="info">{images.length}/{MAX_SOURCING_ATTACHMENTS}</StatusBadge>
           </div>
+          {budgetOrderId&&images.length>MAX_SOURCING_ATTACHMENTS&&<p role="alert">来源图与人工补图共{images.length}张，最多{MAX_SOURCING_ATTACHMENTS}张；恢复未丢弃图片或PO引用，请自行移除{images.length-MAX_SOURCING_ATTACHMENTS}张后提交。</p>}
           {images.length > 0 ? <div className="rework-v2-image-grid">
             {images.map((image) => <article key={image.attachmentId}>
               <a href={image.previewUrl} target="_blank" rel="noreferrer">
