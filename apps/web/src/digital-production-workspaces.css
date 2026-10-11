@@ -3,3 +3,14 @@
 .workspace-table-scroll td,.workspace-table-scroll th{font-size:13px!important}
 
 .workspace-breadcrumb button{float:right;border:1px solid #dce8fb;background:#fff;border-radius:4px;color:#0869ff;padding:5px 10px;cursor:pointer}.workspace-node-facts{max-height:190px}.workspace-gate-card{max-height:273px}.workspace-risks{max-height:260px}
+
+.production-workspace-page[data-workspace-kind=factory] .workspace-order-list .workspace-table-scroll{height:auto;max-height:max(360px,calc(100dvh - 300px));overflow:auto}
+.production-workspace-page[data-workspace-kind=factory] .workspace-order-list .workspace-table-scroll table{width:100%;min-width:1060px;table-layout:fixed}
+.production-workspace-page[data-workspace-kind=factory] .workspace-order-list .workspace-table-scroll :is(th,td):nth-child(1){width:260px}
+.production-workspace-page[data-workspace-kind=factory] .workspace-order-list .workspace-table-scroll :is(th,td):nth-child(2){width:130px}
+.production-workspace-page[data-workspace-kind=factory] .workspace-order-list .workspace-table-scroll :is(th,td):nth-child(3){width:220px}
+.production-workspace-page[data-workspace-kind=factory] .workspace-order-list .workspace-table-scroll :is(th,td):nth-child(4){width:100px}
+.production-workspace-page[data-workspace-kind=factory] .workspace-order-list .workspace-table-scroll :is(th,td):nth-child(5){width:240px;min-width:240px}
+.production-workspace-page[data-workspace-kind=factory] .workspace-order-list .workspace-table-scroll :is(th,td):nth-child(6){width:110px}
+.production-workspace-page[data-workspace-kind=factory] .workspace-order-list .workspace-table-scroll td:nth-child(1),.production-workspace-page[data-workspace-kind=factory] .workspace-order-list .workspace-table-scroll td:nth-child(3){white-space:normal;overflow-wrap:anywhere}
+.production-workspace-page[data-workspace-kind=factory] .workspace-order-list .workspace-table-scroll td:nth-child(1) :is(button,strong,small){max-width:100%;white-space:normal;overflow-wrap:anywhere}

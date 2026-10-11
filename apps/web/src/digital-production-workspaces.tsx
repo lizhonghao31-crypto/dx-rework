@@ -25,7 +25,7 @@ export function DigitalProductionWorkspace({kind}:{kind:ProductionWorkspaceKind}
  const groups=productionWorkspaceGroups[kind],nodes=order?.stages.flatMap(value=>value.nodes).filter(node=>node.current)??[];
  const href=(url:string,mode?:'read'|'handle')=>{const original=new URL(journeyRecordHref(url,context,mode),'https://local.invalid');original.searchParams.set('returnTo',contextUrl());return urls.pageUrl(original.pathname+original.search);};
  const reasons=bulk?.reasons??factory?.reasons??[];
- return <div className="production-workspace-page dx-production-refined" data-workspace-ready={Boolean(order&&(kind==='preparation'?bulk:factory)&&(!listOpen||data))}>
+ return <div className="production-workspace-page dx-production-refined" data-workspace-kind={kind} data-workspace-ready={Boolean(order&&(kind==='preparation'?bulk:factory)&&(!listOpen||data))}>
   <form className="workspace-global-search" onSubmit={event=>{event.preventDefault();update({search,page:1,selected:undefined});}}><input aria-label="搜索产前与发厂订单" value={search} placeholder="搜索母单、客户、款号、PO…" maxLength={100} onChange={event=>setSearch(event.target.value)}/><Button type="submit">搜索</Button></form>
   <div className="workspace-breadcrumb">生产管理座舱 › <strong>{title}</strong><button onClick={()=>setListOpen(value=>!value)}>{listOpen?'收起订单列表':'选择其它订单'}</button></div>
   {listOpen&&<section className="dx-production-panel workspace-order-list"><header><h1>{title}</h1><Button variant="secondary" onClick={()=>setRefresh(value=>value+1)}>刷新数据</Button></header>
