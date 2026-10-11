@@ -11,12 +11,13 @@ describe("order detail information architecture", () => {
     expect(report).not.toContain('<details className="inspection-readonly" open');
   });
 
-  it("renders the approved core facts as explicit semantic cards without nth-child field selection", async () => {
+  it("renders the approved core facts as explicit semantic cards in the unified order panel", async () => {
     const [detail, styles] = await Promise.all([
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
-      readFile("apps/web/src/rework-detail-compact.css", "utf8"),
+      readFile("apps/web/src/rework-governed.css", "utf8"),
     ]);
     expect(detail).toContain('className="rework-detail-core-facts"');
+    expect(detail).toContain("<dt>返工类型</dt>");
     expect(detail).toContain("<dt>返工工序</dt>");
     expect(detail).toContain("<dt>加工厂</dt>");
     expect(detail).toContain("<dt>发起时间</dt>");
@@ -25,15 +26,14 @@ describe("order detail information architecture", () => {
     expect(detail).toContain("<dt>实收数量</dt>");
     expect(detail).toContain("sourceReceivingActualQuantity");
     expect(styles).toContain(".rework-detail-core-facts");
-    expect(styles).toContain("grid-template-columns: repeat(7, minmax(0, 1fr));");
-    expect(styles).not.toContain("nth-child");
-    expect(styles).not.toContain("display: contents");
+    expect(styles).toContain("grid-template-columns:repeat(4,minmax(0,1fr));");
+    expect(styles).not.toMatch(/\.rework-detail-core-facts[^{}]*\{[^}]*display:\s*contents/);
   });
 
-  it("shows only populated optional order fields in a responsive dynamic information section", async () => {
+  it("keeps populated optional facts inside the responsive unified order panel", async () => {
     const [detail, styles] = await Promise.all([
       readFile("apps/web/src/rework-detail-page.tsx", "utf8"),
-      readFile("apps/web/src/rework-detail-compact.css", "utf8"),
+      readFile("apps/web/src/rework-governed.css", "utf8"),
     ]);
     expect(detail).toContain("const dynamicFacts = [");
     expect(detail).toContain('{ label: "客供款号", value: detail.customerSupplyCode }');
@@ -45,10 +45,16 @@ describe("order detail information architecture", () => {
     expect(detail).toContain('{ label: "面辅料供应商", value: detail.supplyContext.fabricSupplierName }');
     expect(detail).toContain('{ label: "印绣花跟单", value: detail.supplyContext.embroideryMerchandiserName }');
     expect(detail).toContain("Boolean(fact.value)");
-    expect(detail).toContain('className="rework-detail-dynamic-information"');
-    expect(detail).toContain("仅展示本单已填写的业务字段");
+    expect(detail).toContain('className="rework-detail-order-information"');
+    expect(detail).not.toContain('className="rework-detail-dynamic-information"');
+    expect(detail).not.toContain("订单补充信息");
+    expect(detail).toMatch(/rework-detail-order-information[\s\S]*?rework-detail-core-facts[\s\S]*?dynamicFacts\.map[\s\S]*?<\/Surface>/);
+    expect(detail).toContain('{ label: "返工原因", value: detail.reworkReason }');
+    expect(detail).toContain('{ label: "问题部位", value: detail.problemPart }');
+    expect(detail).toContain('{ label: "订单数量", value: detail.orderQuantity');
+    expect(detail).toContain('{ label: "返工数量", value: detail.reworkQuantity');
     expect(styles).toContain(".rework-detail-dynamic-facts");
-    expect(styles).toContain("repeat(auto-fit, minmax(180px, 1fr))");
+    expect(styles).toContain("repeat(4,minmax(140px,1fr))");
   });
 
   it("uses the accepted sourcing rail without changing real node links or workspaces", async () => {
