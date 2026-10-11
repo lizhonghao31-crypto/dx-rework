@@ -726,6 +726,11 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
       rootMutable: false,
     });
 
+    const targeted=await service.board(today,today,"IGNORED","all",1,15,backfilled.value.receivingBatchId);
+    expect(targeted.rows).toHaveLength(1);
+    expect(targeted.rows[0]).toMatchObject({styleNo:"IN20546664",cumulativeActualQuantity:3658,receiptCount:2});
+    await expect(service.board(today,today,"","all",1,15,randomUUID())).rejects.toMatchObject({statusCode:404});
+    await expect(service.board(today,today,"","all",1,15,"invalid")).rejects.toMatchObject({statusCode:400});
     const allTimeSearch = await service.board(today, today, "in20546664");
     expect(allTimeSearch).toMatchObject({
       mode: "search",

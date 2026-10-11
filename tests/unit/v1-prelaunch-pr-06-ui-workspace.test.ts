@@ -48,7 +48,7 @@ describe("1.0 prelaunch PR-06 UI and workspace clarity", () => {
       read("apps/web/src/internal-navigation.ts"),
     ]);
 
-    expect(detail).toContain("?node=${key}#node-workspace");
+    expect(detail).toContain("?${query}#node-workspace");
     expect(detail).toContain('id="node-workspace"');
     expect(detail).toContain("workspaceNode={selected.key}");
     expect(navigation).toContain("scrollIntoView({ block: \"start\" })");

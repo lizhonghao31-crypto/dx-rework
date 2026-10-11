@@ -546,6 +546,11 @@ export const RECEIVING_BOARD_BASE_SQL = receivingBoardBaseSql(`
            AND receipt.received_at<(($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')
          )
 `);
+export const RECEIVING_BATCH_BOARD_BASE_SQL = receivingBoardBaseSql(`
+ SELECT COALESCE('cut:'||batch.cutting_order_id::text,'style:'||upper(btrim(batch.style_no))) AS group_key,
+ upper(btrim(batch.style_no)) AS style_key FROM receiving_batches batch
+ WHERE batch.receiving_batch_id=$3::text::uuid AND batch.deleted_at IS NULL
+`);
 export const DIGITAL_RECEIVING_BASE_SQL = receivingBoardBaseSql(`
  SELECT DISTINCT 'cut:'||batch.cutting_order_id::text AS group_key,
                  'cut:'||batch.cutting_order_id::text AS style_key
@@ -2570,12 +2575,15 @@ export class ReceivingService {
     statusInput = "all",
     pageInput = 1,
     pageSizeInput = 15,
+    targetBatchId?: string,
   ): Promise<BoardResult> {
     const startDate = normalizeBoardDate(startDateInput);
     const hasExplicitEndDate = /^\d{4}-\d{2}-\d{2}$/.test(endDateOrQuery);
     const endDate = normalizeBoardDate(hasExplicitEndDate ? endDateOrQuery : startDate);
     if (endDate < startDate) fail("结束日期不能早于开始日期");
-    const needle = (hasExplicitEndDate ? query : endDateOrQuery).trim().toUpperCase();
+    const target = normalizeOptionalUuid(targetBatchId, "收货批次标识");
+    const needle = target ?? (hasExplicitEndDate ? query : endDateOrQuery).trim().toUpperCase();
+    const boardBaseSql = target ? RECEIVING_BATCH_BOARD_BASE_SQL : RECEIVING_BOARD_BASE_SQL;
     const status = normalizeBoardStatus(statusInput);
     const mode = needle ? "search" : "range";
     const page = Number.isInteger(pageInput) && pageInput > 0 ? pageInput : fail("分页页码无效");
@@ -2597,7 +2605,7 @@ export class ReceivingService {
       difference_quantity: string;
       document_quantity: string;
     }>(
-      `${RECEIVING_BOARD_BASE_SQL}${RECEIVING_BOARD_FILTERS_SQL}
+      `${boardBaseSql}${RECEIVING_BOARD_FILTERS_SQL}
        SELECT count(*) FILTER(WHERE pending_difference)::text AS pending_count,
               count(*) FILTER(WHERE missing_packing)::text AS missing_packing_count,
               count(*) FILTER(WHERE stale_resolution)::text AS stale_count,
@@ -2660,7 +2668,7 @@ export class ReceivingService {
       root_deletable: boolean;
       root_mutable: boolean;
     }>(
-      `${RECEIVING_BOARD_BASE_SQL}${RECEIVING_BOARD_FILTERS_SQL}, page_totals AS (
+      `${boardBaseSql}${RECEIVING_BOARD_FILTERS_SQL}, page_totals AS (
          SELECT *
          FROM filtered_totals
          ORDER BY difference_rank ASC,absolute_difference DESC,last_received_at DESC,style_key ASC,group_key ASC
@@ -2964,6 +2972,7 @@ export class ReceivingService {
     const differenceQuantity = Number(summary.difference_quantity);
     const documentQuantity = Number(summary.document_quantity);
     const totalCount = Number(summary.order_count);
+    if (target && totalCount === 0) fail("该收货批次不存在或尚无有效收货记录", 404, "NOT_FOUND");
       await client.query("COMMIT");
       return {
       date: endDate,

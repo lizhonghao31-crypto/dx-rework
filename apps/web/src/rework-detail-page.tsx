@@ -1,3 +1,4 @@
+import {reworkResultNode} from "./rework-result-node.js";
 import { FinanceNodeKeySchema } from "@dx-rework/contracts/reporting";
 import { ReworkNodeHistoryPage, reworkHistoryHref } from "./rework-node-history-page.js";
 import { moduleCanWrite } from "./member-module-policy.js";
@@ -366,7 +367,10 @@ const nodeStatusLabel = (node: WorkflowNode, detail: ReworkBusinessDetail): stri
     ? `${detail.status === "completed" ? "订单已完成 · " : ""}${followUpStatusLabel(detail)}`
     : node.state === "completed" ? "已完成" : node.state === "current" ? "处理中" : "未开始";
 
-const nodeHref = (orderId: string, key: WorkflowNodeKey): string => `${pageUrl(`ui/tasks/${orderId}`)}?node=${key}#node-workspace`;
+const nodeHref = (orderId: string, key: WorkflowNodeKey): string => {
+  const query=new URLSearchParams(window.location.search);query.delete("view");query.delete("entryId");query.set("node",key);
+  return `${pageUrl(`ui/tasks/${orderId}`)}?${query}#node-workspace`;
+};
 
 const historyNode = (action: string): WorkflowNodeKey | null => {
   if (action === "rework.attachments.supplement") return "initiation";
@@ -459,7 +463,7 @@ function CurrentReworkDetailPage({
       throw new Error(body?.error?.message ?? `返工单加载失败（${response.status}）`);
     }
     const latest = await response.json() as ReworkBusinessDetail;
-    publishReworkNodeRefresh(latest, selectCurrentNode ? currentNodeByStatus[latest.status] : undefined, (nextNode) => {
+    publishReworkNodeRefresh(latest, selectCurrentNode ? reworkResultNode(latest.status,latest.reworkKind,currentNodeByStatus[latest.status]) : undefined, (nextNode) => {
       const url = new URL(window.location.href);
       url.searchParams.set("node", nextNode);
       window.history.replaceState(window.history.state, "", url);
@@ -572,16 +576,17 @@ function CurrentReworkDetailPage({
     { label: "印绣花跟单", value: detail.supplyContext.embroideryMerchandiserName },
   ].filter((fact): fact is { label: string; value: string } => Boolean(fact.value));
   const visibleImageAttachments = imageAttachments;
-  const meta = statusMeta[detail.status];
+  const meta = detail.reworkKind==="inhouse_finishing"&&detail.status==="completed"?{label:"已完成",next:"本厂做尾已完成 IE 最终数量复核，工资沿原规则登记"}:detail.reworkKind==="inhouse_finishing"&&detail.status==="pending_final_quantity_ie_review"?{label:"最终数量待 IE 复核",next:"IE 核对最终数量；通过后按原规则登记工资并完成本厂做尾"}:statusMeta[detail.status];
   const stages = buildWorkflow(detail, currentUser, returnToTodos ? focusedNode : undefined);
   const workflowNodes = stages.flatMap((stage) => stage.nodes);
   const activeNode = workflowNodes.find((node) => node.state === "current" || node.state === "followup")?.key
     ?? (detail.status === "completed" ? detail.reworkKind === "inhouse_finishing" ? "final_quantity_ie_review" : "settlement_followup" : undefined);
   const activeWorkflowNode = workflowNodes.find((node) => node.key === activeNode);
-  const selectedFromUrl = workflowNodeFromSearch();
+  const selectedFromUrl = reworkResultNode(detail.status,detail.reworkKind,workflowNodeFromSearch()??undefined);
   const defaultSelectedNode = activeNode ?? "settlement_followup";
   const selectedNode = selectedFromUrl ?? (focusedNode === activeNode ? focusedNode : defaultSelectedNode);
   const selected = workflowNodes.find((node) => node.key === selectedNode);
+  const invalidSelectedNode=Boolean(selectedFromUrl&&!selected);
   const activeStepIndex = Math.max(1, workflowNodes.findIndex((node) => node.key === activeNode) + 1);
   const selectedImageIndex = selectedImage
     ? imageAttachments.findIndex((attachment) => attachment.attachmentId === selectedImage.attachmentId)
@@ -829,7 +834,7 @@ function CurrentReworkDetailPage({
           <div className="rework-detail-task__heading"><h2>办理区<span className="rework-mobile-current-node"> · {selected?.number} {selected?.label}</span></h2>{detail.canReadBusinessDetails !== false && <span className="rework-detail-single-piece-total">单件返工总价：{detail.singlePieceReworkTotal === null ? "待核价" : formatBusinessCurrency(detail.singlePieceReworkTotal)}</span>}</div>
           {detail.status === "pending_process_configuration" && canHandleInitiation ? <InitiationFollowUpActions detail={detail} statusLabel={statusMeta[detail.status].label} canHandleInitiation={initiationAccess.canWithdraw} ownershipNotice={initiationOwnershipNotice} onChanged={syncAfterNodeAction} /> : null}
           {canWaiveTailInspection ? <TailInspectionWaiverAction detail={detail} onChanged={syncAfterNodeAction} /> : null}
-          {renderSelectedTask()}
+          {invalidSelectedNode?<p role="alert">该业务没有此办理节点，请选择本单已有节点查看。</p>:renderSelectedTask()}
         </section>
       </div>
 

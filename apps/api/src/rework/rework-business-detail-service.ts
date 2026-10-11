@@ -881,9 +881,13 @@ export class ReworkBusinessDetailService {
     return false;
   }
 
-  private async canView(actor: TrustedActorContext, row: DetailRow, includeFinance = true): Promise<boolean> {
+  async canViewExisting(actor: TrustedActorContext, row: Pick<DetailRow, "rework_order_id" | "created_by" | "merchandiser_user_id" | "embroidery_merchandiser_user_id">, database: Pick<Pool | PoolClient, "query"> = this.database): Promise<boolean> {
+    return this.canView(actor, row, true, database);
+  }
+
+  private async canView(actor: TrustedActorContext, row: Pick<DetailRow, "rework_order_id" | "created_by" | "merchandiser_user_id" | "embroidery_merchandiser_user_id">, includeFinance = true, database: Pick<Pool | PoolClient, "query"> = this.database): Promise<boolean> {
     if(includeFinance) {
-      if (await canReadFinanceOrders(this.database,actor)) return true;
+      if (await canReadFinanceOrders(database,actor)) return true;
       if (actorCapabilities(actor).includes("rework:finance_orders:read")) return false;
     } else if(isScopedFinanceReader(actor)) return false;
     if (broadBusinessReader(actor)) return true;
@@ -894,7 +898,7 @@ export class ReworkBusinessDetailService {
     ) return true;
 
     if (actorCapabilities(actor).includes("responsibility:determine")) {
-      const responsibility = await this.database.query<{ permitted: boolean }>(
+      const responsibility = await database.query<{ permitted: boolean }>(
         "SELECT responsibility_can_determine($1,$2) permitted",
         [actor.actorId, row.rework_order_id],
       );
@@ -902,7 +906,7 @@ export class ReworkBusinessDetailService {
     }
 
     if (actor.actorRoles.includes("ie_reviewer")) {
-      const configuration = await this.database.query(
+      const configuration = await database.query(
         "SELECT 1 FROM rework_process_configurations WHERE rework_order_id=$1 LIMIT 1",
         [row.rework_order_id],
       );
@@ -910,7 +914,7 @@ export class ReworkBusinessDetailService {
     }
 
     if (actor.actorRoles.includes("worker")) {
-      const assignment = await this.database.query(
+      const assignment = await database.query(
         `SELECT 1
          FROM business_people person
          JOIN rework_work_task_members member ON member.person_id=person.person_id
@@ -926,7 +930,7 @@ export class ReworkBusinessDetailService {
       actor.actorRoles.includes("tail_inspector")
       && actorCapabilities(actor).includes("tail_inspection:report")
     ) {
-      const assignment = await this.database.query(
+      const assignment = await database.query(
         `SELECT 1
          FROM rework_work_tasks task
          JOIN rework_process_configuration_items item
@@ -951,7 +955,7 @@ export class ReworkBusinessDetailService {
       "embroidery_washing_merchandiser",
       ...(includeFinance ? ["factory_payables","embroidery_washing_payables","fabric_payables"] : []),
     ].includes(role))) {
-      const external = await this.database.query(
+      const external = await database.query(
         `SELECT 1
          FROM rework_external_responsibility_cases target_case
          WHERE target_case.rework_order_id=$2
@@ -968,7 +972,7 @@ export class ReworkBusinessDetailService {
       "administrative_clerk",
       ...(includeFinance ? ["wage_month_close_accountant","finance_read"] : []),
     ].includes(role))) {
-      const wage = await this.database.query(
+      const wage = await database.query(
         "SELECT 1 FROM rework_wage_items WHERE rework_order_id=$1 LIMIT 1",
         [row.rework_order_id],
       );

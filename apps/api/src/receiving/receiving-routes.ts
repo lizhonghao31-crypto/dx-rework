@@ -325,6 +325,7 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
     endDate?: string;
     q?: string;
     status?: string;
+    receivingBatchId?: string;
   } }>("/receiving/board", async (request) => {
     await readUser(request);
     const today = new Intl.DateTimeFormat("en-CA", {
@@ -345,6 +346,8 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
       request.query.q ?? "",
       request.query.status ?? "all",
       page,
+      15,
+      request.query.receivingBatchId,
     );
   });
 

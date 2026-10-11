@@ -1,3 +1,4 @@
+import {digitalDetailReturnUrl} from "./digital-detail-route.js";
 import { ProcessWorkerAssignmentForm } from './process-worker-assignment-form.js';
 import { WholeOrderReviewPanel } from './whole-order-review-panel.js';
 import { ResponsibilityDeterminationPanel } from './responsibility-determination-panel.js';
@@ -25,6 +26,7 @@ export function reworkHistoryHref(orderId:string,node?:string,entryId?:string) {
 export function ReworkNodeHistoryPage({orderId,node}:{orderId:string;node:FinanceNodeKey}) {
  const [data,setData]=useState<ReworkNodeHistory|null>(null);const [error,setError]=useState('');
  const [image,setImage]=useState<ReworkNodeHistory['attachments'][number]|null>(null);
+ const motherReturn=digitalDetailReturnUrl(new URLSearchParams(window.location.search).get("returnTo"),import.meta.env.BASE_URL);
  const entryId=new URLSearchParams(window.location.search).get('entryId');
  useEffect(()=>{const controller=new AbortController();setData(null);setError('');
   const query=entryId?`?${new URLSearchParams({entryId})}`:'';
@@ -35,6 +37,7 @@ export function ReworkNodeHistoryPage({orderId,node}:{orderId:string;node:Financ
  },[orderId,node,entryId]);
  useEffect(()=>{if(!image)return;const close=(event:KeyboardEvent)=>{if(event.key==='Escape')setImage(null);};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close);},[image]);
  return <Shell active="全部订单"><div className="rework-governed rework-history rework-history-readonly" data-dx-ui="governed">
+  {motherReturn&&<a className="dx-button" href={motherReturn}>返回这张订单</a>}
   {!data?<div aria-busy={!error}><p role="status">{error||'正在加载历史页面…'}</p>{error?<a className="dx-button" href={reworkHistoryHref(orderId)}>返回当前节点</a>:null}</div>:<>
    <ReworkNodeHistoryView key={data.entry.id} data={data} currentHref={reworkHistoryHref(orderId)} onVersion={id=>{window.location.href=reworkHistoryHref(orderId,node,id);}} onImage={setImage} />
    {image?<div className="rework-image-modal"><section className="rework-image-modal__content" role="dialog" aria-modal="true" aria-label={image.filename}><div className="rework-image-modal__heading"><strong>{image.filename}</strong><button type="button" onClick={()=>setImage(null)}>关闭</button></div><ImageViewer src={apiUrl(`tools/attachments/${image.attachmentId}/download?mode=preview`)} alt={image.filename} /></section></div>:null}

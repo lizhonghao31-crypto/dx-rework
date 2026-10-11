@@ -1,3 +1,4 @@
+import {digitalDetailReturnUrl} from "./digital-detail-route.js";
 import { moduleCanWrite } from "./member-module-policy.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
@@ -197,6 +198,10 @@ const uploadReplacementImage = async (source: File): Promise<string> => {
 };
 
 export function OrderBoardPage() {
+  const targetValues=new URLSearchParams(window.location.search).getAll("receivingBatchId");
+  const targetBatchId=targetValues[0];
+  const invalidTarget=targetValues.length>1||Boolean(targetValues.length&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(targetBatchId??""));
+  const motherReturn=digitalDetailReturnUrl(new URLSearchParams(window.location.search).get("returnTo"),import.meta.env.BASE_URL);
   const [startDate, setStartDate] = useState(localDate);
   const [endDate, setEndDate] = useState(localDate);
   const [query, setQuery] = useState("");
@@ -322,14 +327,16 @@ export function OrderBoardPage() {
 
   useEffect(() => {
     let active = true;
+    if(invalidTarget){setData(null);setMessage("收货批次链接无效，请返回来源订单");return;}
     setPageLoading(true);
     const params = new URLSearchParams({ startDate, endDate });
     params.set("status", status);
     params.set("page", String(page));
+    if(targetBatchId){params.set("receivingBatchId",targetBatchId);params.set("status","all");params.set("page","1");}
     if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim().toUpperCase());
     void fetch(apiUrl(`receiving/board?${params.toString()}`), { credentials: "include", cache: "no-store" })
       .then(async (response) => {
-        if (!response.ok) throw new Error("订单回货加载失败");
+        if (!response.ok) {const error=await response.json().catch(()=>null);throw new Error(error?.error?.message??`订单回货加载失败（${response.status}）`);}
         return response.json() as Promise<BoardResult>;
       })
       .then((body) => {
@@ -341,15 +348,16 @@ export function OrderBoardPage() {
             ? "全时间范围内没有匹配的收货记录"
             : "选中日期内没有收货记录");
       })
-      .catch(() => {
+      .catch((error:unknown) => {
         if (!active) return;
-        setMessage("订单回货加载失败，请刷新后重试");
+        setData(null);
+        setMessage(error instanceof Error?error.message:"订单回货加载失败，请刷新后重试");
       })
       .finally(() => {
         if (active) setPageLoading(false);
       });
     return () => { active = false; };
-  }, [startDate, endDate, debouncedQuery, status, page, refreshToken]);
+  }, [startDate, endDate, debouncedQuery, status, page, refreshToken, targetBatchId, invalidTarget]);
 
   const kpis = useMemo(() => data?.kpis ?? {
     orderCount: 0,
@@ -683,10 +691,11 @@ export function OrderBoardPage() {
     <div className="order-board-heading">
       <div className="order-board-heading__title">
         {new URLSearchParams(window.location.search).get("returnTo")==="/ui/receiving"&&<a href={pageUrl("/ui/receiving")}>返回仓库收货</a>}
+        {motherReturn&&<a href={motherReturn}>返回这张订单</a>}
         <h1><NavigationIcon route="/ui/orders" size="title" />订单回货</h1>
         <p>快速查看收货数量差异；少收订单默认置顶。</p>
       </div>
-      <div className="order-board-filters">
+      {!targetBatchId&&!invalidTarget&&<div className="order-board-filters">
         {canExport ? <button
           type="button"
           className="order-board-export-button"
@@ -711,7 +720,7 @@ export function OrderBoardPage() {
           <option value="extra">多收</option>
           <option value="multiple">多次收货</option>
         </select></label>
-      </div>
+      </div>}
       <div className="order-board-heading__action">
         {canReceive ? <a className="order-board-receiving-link" href={pageUrl("ui/receiving")}>＋ 仓库收货</a> : null}
       </div>
