@@ -135,7 +135,7 @@
 .rework-governed[data-legacy-ui="rework-detail"] .rework-detail-target-layout .rework-workflow { width:min(535px,100%); min-height:241px; padding:6px; border:1px solid var(--legacy-ui-border); border-radius:8px; box-sizing:border-box; }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-workflow__heading { padding-bottom:6px; border-bottom:1px solid var(--legacy-ui-border); }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-workflow__step-count { font-size:12px; line-height:18px; }
-.rework-governed[data-legacy-ui="rework-detail"] .rework-detail-target-layout .rework-workflow__desktop-grid { position:relative; overflow:visible; grid-template-columns:repeat(5,minmax(0,1fr)); row-gap:36px; padding:8px 0; }
+.rework-governed[data-legacy-ui="rework-detail"] .rework-detail-target-layout .rework-workflow__desktop-grid { position:relative; overflow:visible; grid-template-columns:repeat(5,minmax(0,1fr)); row-gap:12px; padding:6px 0; }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-workflow-step { gap:4px; }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-workflow-step b { width:20px; height:20px; }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-workflow-step strong,
@@ -143,9 +143,9 @@
 .rework-governed[data-legacy-ui="rework-detail"] .rework-workflow__desktop-grid > a::before { height:1px; top:10px; }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-workflow__desktop-grid > a:nth-child(5)::before { right:0; }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-workflow__desktop-grid > a:last-of-type::before { right:50%; }
-.rework-governed[data-legacy-ui="rework-detail"] .rework-workflow-row-bridge { position:absolute; grid-area:1/1/2/6; top:10px; bottom:-18px; left:10%; right:0; border-right:1px solid #d8e2ef; border-bottom:1px solid #d8e2ef; pointer-events:none; }
-.rework-governed[data-legacy-ui="rework-detail"] .rework-workflow-row-bridge::before { content:""; position:absolute; top:100%; left:0; height:17px; border-left:1px solid #d8e2ef; }
-.rework-governed[data-legacy-ui="rework-detail"] .rework-workflow-row-bridge::after { content:""; position:absolute; left:-3px; bottom:-18px; width:6px; height:6px; border-right:1px solid #d8e2ef; border-bottom:1px solid #d8e2ef; transform:rotate(45deg); }
+.rework-governed[data-legacy-ui="rework-detail"] .rework-workflow-row-bridge { position:absolute; grid-area:1/1/2/6; top:10px; bottom:-6px; left:10%; right:0; border-right:1px solid #d8e2ef; border-bottom:1px solid #d8e2ef; pointer-events:none; }
+.rework-governed[data-legacy-ui="rework-detail"] .rework-workflow-row-bridge::before { content:""; position:absolute; top:100%; left:0; height:15px; border-left:1px solid #d8e2ef; }
+.rework-governed[data-legacy-ui="rework-detail"] .rework-workflow-row-bridge::after { content:""; position:absolute; left:-3px; bottom:-16px; width:6px; height:6px; border-right:1px solid #d8e2ef; border-bottom:1px solid #d8e2ef; transform:rotate(45deg); }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-workflow__desktop-grid:has(>a:nth-child(5).is-completed) .rework-workflow-row-bridge,
 .rework-governed[data-legacy-ui="rework-detail"] .rework-workflow__desktop-grid:has(>a:nth-child(5).is-completed) .rework-workflow-row-bridge::before,
 .rework-governed[data-legacy-ui="rework-detail"] .rework-workflow__desktop-grid:has(>a:nth-child(5).is-completed) .rework-workflow-row-bridge::after { border-color:#25a6b6; }
