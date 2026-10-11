@@ -52,10 +52,12 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const [createdSource, setCreatedSource] = useState<string | null>(source?.sourceId ?? null);
   const [fixedCustomer, setFixedCustomer] = useState<string | null>(source?.customer ?? null);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
-  const [savedDraft, setSavedDraft] = useState(false);
+  const [savedDraft, setSavedDraft] = useState<string | null>(null);
   const writing = useRef(false), sourceKey = useRef<{payload: string; key: string} | null>(null), orderKey = useRef<{payload: string; key: string} | null>(null);
-  const initial = useRef(JSON.stringify(form)), dirty = useRef(false), completed = useRef(false);
-  dirty.current = JSON.stringify(form) !== initial.current || developmentType !== "头版" || template !== "上衣" || pictures.length > 0;
+  const draftSnapshot = (items: CreatePicture[]) => JSON.stringify({form, developmentType, template, pictures: items.map(item => [item.id, item.attachmentId ?? null])});
+  const currentSnapshot = draftSnapshot(pictures);
+  const initial = useRef(currentSnapshot), dirty = useRef(false), completed = useRef(false);
+  dirty.current = currentSnapshot !== initial.current;
   useEffect(() => {
     const unregister = registerInternalNavigationGuard(async () => {
       if (writing.current) return false;
@@ -145,7 +147,12 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         const order = await digitalRequest<DigitalOrder>(`sources/${id}/confirm`, "POST", orderInput, orderKey.current.key);
         orderId = order.productionOrderId;
       }
-      if (draftOnly) {setSavedDraft(true); return;}
+      if (draftOnly) {
+        const snapshot = draftSnapshot(picturesRef.current);
+        if (!withOrder) {initial.current = snapshot; dirty.current = false;}
+        setSavedDraft(snapshot);
+        return;
+      }
       completed.current = true; writing.current = false; onCreated(id, orderId);
     } catch (reason) {
       const validation = reason as {issues?: Array<{message: string}>};
@@ -158,7 +165,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     {!source&&<nav className="development-create-type-tabs" aria-label="创建类型">{([["development","产品开发（无确定订单）"],["certain_order","产品开发（有确定订单）"]]as const).map(([mode,label])=><button type="button" key={mode} aria-pressed={intent===mode} disabled={busy||!onIntentChange} onClick={()=>onIntentChange?.(mode)}>{label}</button>)}</nav>}
     {source && <p>沿用第 {source.adoptedRound ?? source.selectedRound ?? 1} 轮开发资料；头版/开发板与已有工序保持原档案。</p>}
     {error && <p role="alert">{error}</p>}
-    {savedDraft && <p role="status">开发资料草稿已保存；订购信息保留在当前页面，尚未创建订单。</p>}
+    {savedDraft === currentSnapshot && <p role="status">开发资料草稿已保存；订购信息保留在当前页面，尚未创建订单。</p>}
     {createdSource && !source && error && <p role="status">开发档案已保存。修正订购信息后重试会沿用此档案。</p>}
     <fieldset disabled={busy}><div className={`development-create-layout${source ? " development-create-layout-existing" : ""}`}>
     {!source && <section className="development-create-pictures"><h3>款图</h3>
@@ -174,7 +181,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       <label>设计款号（必填）<input aria-label="设计款号" required maxLength={100} value={form.designStyleNo} readOnly={Boolean(createdSource)} onChange={event => setForm({...form, designStyleNo: event.target.value})}/></label>
       <label>设计师（只读）<input aria-label="设计师（只读）" readOnly value={designerName ?? "正在确认身份…"}/></label>
       <label>代用款号（选填）<input maxLength={100} value={form.temporaryStyleNo ?? ""} readOnly={Boolean(createdSource)} onChange={event => setForm({...form, temporaryStyleNo: event.target.value || null})}/></label>
-      <label>客户{withOrder ? "（必填）" : "（选填）"}<select aria-label="客户" required={withOrder} disabled={Boolean(createdSource && (fixedCustomer || !source))} value={form.customerCode} onChange={event => {const customer = customers.find(customer => customer.code === event.target.value); setForm({...form, customerCode: event.target.value, primaryMerchandiserId: customer?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(customers, event.target.value)});}}><option value="">通用开发 / 请选择</option>{customers.map(customer => <option key={customer.code} value={customer.code}>{customer.code} · {customer.name}</option>)}</select></label>
+      <label>客户{withOrder ? "（必填）" : "（选填）"}<select aria-label="客户" required={withOrder} disabled={Boolean(createdSource && (fixedCustomer || !withOrder))} value={form.customerCode} onChange={event => {const customer = customers.find(customer => customer.code === event.target.value); setForm({...form, customerCode: event.target.value, primaryMerchandiserId: customer?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(customers, event.target.value)});}}><option value="">通用开发 / 请选择</option>{customers.map(customer => <option key={customer.code} value={customer.code}>{customer.code} · {customer.name}</option>)}</select></label>
 <label>品类 / 开发单模板<select value={template} disabled={Boolean(createdSource)} onChange={event => setTemplate(event.target.value as DevelopmentDocument["template"])}><option>上衣</option><option>裤子</option></select></label></div>{withOrder && <>      <div className="development-create-grid"><label>产品分组<select aria-label="产品分组" value={form.productGroup} onChange={event => setForm({...form, productGroup: event.target.value as DigitalOrderInput["productGroup"]})}>{(customers.find(customer => customer.code === form.customerCode)?.productGroups ?? [form.productGroup]).map(group => <option key={group}>{group}</option>)}</select></label>
         <label>客户下单日期（必填）<input required type="date" value={form.orderDate} onChange={event => setForm({...form, orderDate: event.target.value})}/></label>
 </div>
