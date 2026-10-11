@@ -12,3 +12,7 @@
 .factory-flow section > form label { flex: 1 1 180px; }
 .factory-flow button { justify-self: start; }
 .factory-flow fieldset:disabled { opacity: .65; }
+
+.factory-po-focused{border-left:3px solid #0065ff;padding-left:12px;scroll-margin-top:16px;}.factory-flow input[type=file]{max-width:100%;min-width:0;width:100%;box-sizing:border-box;}
+
+.factory-qc-images{display:flex;flex-wrap:wrap;gap:8px;}.factory-qc-images img{width:80px;height:80px;object-fit:contain;}

@@ -1,5 +1,8 @@
 import { CuttingOrderQuerySchema } from "@dx-rework/contracts";
 
+import {digitalDetailReturnUrl} from "./digital-detail-route.js";
+import {normalizeBasePath} from "../url-contract.js";
+
 export type CuttingListQuery = {
   q: string;
   status: "all" | "pending" | "recorded";
@@ -33,8 +36,10 @@ export function cuttingListPath(query: CuttingListQuery): string {
   return `/ui/cutting${params.size ? `?${params}` : ""}`;
 }
 
-export function cuttingReturnPath(search: string): string {
+export function cuttingReturnPath(search: string,base="/"): string {
   const target = new URLSearchParams(search).get("returnTo");
+  const domain=target?digitalDetailReturnUrl(target,base):null;
+  if(domain){const prefix=normalizeBasePath(base).slice(0,-1);return prefix&&domain.startsWith(prefix+"/")?domain.slice(prefix.length):domain;}
   if (!target || target.includes("\\") || target.includes("#")) return "/ui/cutting";
   if (target.split("?")[0] !== "/ui/cutting") return "/ui/cutting";
   const targetSearch = target.includes("?") ? target.slice(target.indexOf("?")) : "";
