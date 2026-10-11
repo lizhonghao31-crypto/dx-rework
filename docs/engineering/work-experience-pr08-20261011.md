@@ -9,3 +9,7 @@
 实际 React 与完整编译 CSS 浏览器验证 QC、工艺收发、仓库及主跟单四个角色；1440/1280/768/390/360 无页面横向溢出或 JS 错误。指定 PO、图片预处理和预览、409 保留相同请求体/请求键、未全部合格不能发厂、默认实际发厂时间重试不变、无权 QC 只读提示和错误 PO 拒绝通过。已逐像素查看 390 宽 QC 页面。证据位于 /workspace/pr08-evidence、/workspace/pr08-tests.log、/workspace/pr08-local-postgres-business-chain.log 及 /workspace/pr08-final-focused.log。
 
 浏览器使用 TEST 合成响应，仅证明组件和路由行为，不代表线上 Acceptance 岗位验收。没有部署、重启、修改网络或操作真实业务数据；外部 Full Gate 和一次必要 GitHub Codex Review 待最终 PR Head。
+
+一次 GitHub Codex Review 两处 P2 已修复：指定 PO 视图仅保留日报办理，抑制整单生产完成/发货入口与执行函数；“查看全部 PO”只删除 line 参数，保留 factoryDecisionId 和返回来源，完整全单页面恢复原合法动作。QC 使用共享 uploadImageWithNormalizationRetry，服务端声明格式拒绝后浏览器解码重编码再申请上传；只有 finalize 成功的引用进入检查，暂时失败保留未上传原文件并提供显式重试，不重复已成功图片。
+
+修复验证：14 项生产填报/样品图片测试及共享图片管线测试通过。真实 React 浏览器多 PO 在生产中/生产完成两种状态确认单行日报可用、整单按钮不可见、切换全单恢复按钮且保留工厂参数；QC 首次 MIME 拒绝自动重编码为 WebP，随后暂时失败可直接重试未上传文件。原四岗位、五屏宽场景再次通过，并逐像素查看生产填报与 QC 390 宽页面。证据 /workspace/pr08-evidence/reporting-review.log、browser-review.log 和 /workspace/pr08-review-*.log。修复后等待新 Head Full Gate，不触发第二次 Review。
