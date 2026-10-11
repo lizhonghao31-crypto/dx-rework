@@ -15,6 +15,12 @@ it("describes material supply and recheck without exposing absent tasks or peopl
   const tasks=[{taskId:"supply",taskKind:"development_material_supply",routeVersion:1},{taskId:"recheck",taskKind:"development_material_recheck",routeVersion:1}];
   expect(developmentNextSteps(developmentRoute({craft:"印花",washing:"外洗"}),tasks,1)).toEqual([{taskId:"supply",label:"物料复核"},{taskId:"recheck",label:"纸样"}]);
 });
+it("hands revision material checks to the saved successor and does not invent an absent successor",()=>{
+  const tasks=[{taskId:"check",taskKind:"development_materials",routeVersion:2},{taskId:"recheck",taskKind:"development_material_recheck",routeVersion:2}];
+  expect(developmentNextSteps(["development_materials","development_sewing","development_tail_check"],tasks,2)).toEqual([{taskId:"check",label:"车板"},{taskId:"recheck",label:"车板"}]);
+  expect(developmentNextSteps(["development_sewing","development_materials"],tasks,2)).toEqual([]);
+  expect(developmentNextSteps(["development_sewing","development_tail_check"],tasks,2)).toEqual([]);
+});
 it("keeps the clerk handover after craft confirmation",()=>{
   for(const craft of ["印花","绣花","印绣花"] as const){
     const route=developmentRoute({craft,washing:"免洗"});

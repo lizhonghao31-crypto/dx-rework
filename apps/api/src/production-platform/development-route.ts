@@ -5,8 +5,9 @@ import {JOURNEY_NODES} from '@dx-rework/contracts/digital-production-journey';
 /** Describe only supplied authorized tasks, using the saved route for this round. */
 export function developmentNextSteps(route:readonly string[],tasks:ReadonlyArray<{taskId:string;taskKind:string;routeVersion:number}>,roundNumber:number){
   return tasks.filter(task=>task.routeVersion===roundNumber).flatMap(task=>{
-    const index=route.indexOf(task.taskKind);
-    const kind=task.taskKind==='development_material_supply'?'development_material_recheck':['development_materials','development_material_recheck'].includes(task.taskKind)?route[0]:index>=0?route[index+1]:undefined;
+    const materialCheck=['development_materials','development_material_recheck'].includes(task.taskKind);
+    const index=route.indexOf(task.taskKind==='development_material_recheck'?'development_materials':task.taskKind);
+    const kind=task.taskKind==='development_material_supply'?'development_material_recheck':materialCheck&&index<0&&roundNumber===1?route[0]:index>=0?route[index+1]:undefined;
     const label=JOURNEY_NODES.find(node=>node.key===kind)?.label;
     return label?[{taskId:task.taskId,label}]:[];
   });

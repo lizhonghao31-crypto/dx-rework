@@ -43,9 +43,10 @@ export function DigitalPatternWorkspace({selectedOnly=false}:{selectedOnly?:bool
   const [suggestedWorker,setSuggestedWorker]=useState<{id:string;name:string}|null>(null);
   const [patternOrderId,setPatternOrderId]=useState<string|null>(null);
   const board=useRef<HTMLDivElement>(null);
+  const scope=section==="bulk"?(filter.scope==="all"?"all":"mine"):filter.scope;
   const urls = createWebUrls(import.meta.env.BASE_URL);
   const persist = (next: PatternWorkspaceFilter, task: string | null) => {
-    const query = new URLSearchParams(Object.entries(next).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]));
+    const query = new URLSearchParams(Object.entries({...next,scope:section==="bulk"?(next.scope==="all"?"all":"mine"):next.scope}).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]));
     if (task) query.set("task", task);
     if (section !== "development") query.set("section", section);
     if (section === "bulk" && bulkOrder) query.set("bulkOrder", bulkOrder);
@@ -54,7 +55,7 @@ export function DigitalPatternWorkspace({selectedOnly=false}:{selectedOnly?:bool
   useEffect(() => {
     let live = true; setError("");
     if(section==="legacy")return()=>{live=false;};
-    const query = new URLSearchParams(Object.entries({...filter,business:section==="bulk"?"bulk":filter.business}).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]));
+    const query = new URLSearchParams(Object.entries({...filter,scope,business:section==="bulk"?"bulk":filter.business}).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]));
     void Promise.all([digitalRequest<PatternWorkspaceResult>(`workspaces/pattern?${query}`), digitalRequest<DigitalAccessOptions>("access/options")]).then(([data, access]) => {if (live) {setResult(data); setOptions(access);}}).catch(reason => {if (live) {setResult(null); setError(reason.message);}});
     return () => {live = false;};
   }, [filter, refresh,section]);
@@ -70,7 +71,7 @@ export function DigitalPatternWorkspace({selectedOnly=false}:{selectedOnly?:bool
     }).catch(reason => {if (live) {setSelected(null); setSheet(null); setDetailError(reason.message);}});
     return () => {live = false;};
   }, [selectedId, refresh]);
-  const update = (patch: Partial<PatternWorkspaceFilter>) => {const next = PatternWorkspaceFilterSchema.parse({...filter, page: 1, ...patch}); setFilter(next); setResult(null); setSelectedId(null); persist(next, null);};
+  const update = (patch: Partial<PatternWorkspaceFilter>) => {const next = PatternWorkspaceFilterSchema.parse({...filter, page: 1, ...patch,...(section==="bulk"?{scope:patch.scope==="all"||!patch.scope&&scope==="all"?"all":"mine"}:{})}); setFilter(next); setResult(null); setSelectedId(null); persist(next, null);};
   const changed = (confirmation?:string) => {if(confirmation)setNotice(confirmation);setRefresh(value => value + 1);};
   const choose = (id: string) => {setSelectedId(id); setTab("当前办理"); setCollapsed(false); persist(filter,id);};
   const selectedNode = [...(result?.items ?? []), ...(result?.risks ?? [])].find(item => item.node.instanceId === selectedId);
@@ -78,7 +79,7 @@ export function DigitalPatternWorkspace({selectedOnly=false}:{selectedOnly?:bool
   const requestedView = digitalTaskView(window.location.search);
   const view = requestedView === "correct" ? "correct" : requestedView === "read" ? "read" : selected && ["completed","cancelled"].includes(selected.state) ? "read" : "handle";
   const taskUrl = selected ? `${urls.pageUrl("ui/digital-production")}?task=${selected.taskId}&taskView=${view}&returnTo=${encodeURIComponent(window.location.pathname+window.location.search)}` : "";
-  const sections=<nav className="development-tabs pattern-business-tabs" aria-label="板房业务">{[['development','开发岗位任务'],['bulk','大货纸样与唛架'],['legacy','独立打板与杂事']].map(([key,label])=><button key={key} aria-pressed={section===key} onClick={()=>{setSection(key!);const url=new URL(window.location.href);url.searchParams.set('section',key!);window.history.replaceState(window.history.state,'',url);}}>{label}</button>)}</nav>;
+  const sections=<nav className="development-tabs pattern-business-tabs" aria-label="板房业务">{[['development','开发岗位任务'],['bulk','大货纸样与唛架'],['legacy','独立打板与杂事']].map(([key,label])=><button key={key} aria-pressed={section===key} onClick={()=>{setSection(key!);setSelectedId(null);setSelected(null);setSheet(null);setBulkOrder(null);setDetailError('');const url=new URL(window.location.href);url.searchParams.set('section',key!);url.searchParams.delete('task');url.searchParams.delete('bulkOrder');url.searchParams.delete('lane');url.searchParams.delete('group');const next=PatternWorkspaceFilterSchema.parse({...filter,page:1,lane:undefined,group:undefined,...(key==='bulk'?{scope:filter.scope==='all'?'all':'mine'}:{})});setFilter(next);url.searchParams.set('scope',next.scope);window.history.replaceState(window.history.state,'',url);}}>{label}</button>)}</nav>;
   if(section==='legacy')return <div className="pattern-workspace pattern-golden dx-production-refined">{sections}<LegacyPatternWorkspace/></div>;
   return <div className="pattern-workspace pattern-golden dx-production-refined">
     {!selectedOnly&&<>
@@ -88,7 +89,7 @@ export function DigitalPatternWorkspace({selectedOnly=false}:{selectedOnly?:bool
     {(filter.scope==="all"||section==="bulk")&&<div className="pattern-group-cards">{PATTERN_LANES.map((lane,index) => <KpiCard key={lane.key} icon={<NavigationIcon name={(["FileText","Shirt","Scissors","Settings","Shirt","ClipboardCheck","PackageCheck"] as const)[index]??"FileText"} />} className={`pattern-lane-kpi lane-${index}`} label={lane.label} value={result ? lane.groups.reduce((total,group) => total+result.counts[group],0) : "—"} detail={result?.riskCounts?`临期 ${lane.groups.reduce((total,group)=>total+result.riskCounts[group].dueSoon,0)} / 逾期 ${lane.groups.reduce((total,group)=>total+result.riskCounts[group].overdue,0)}`:"临期 / 逾期读取中"} selected={filter.lane === lane.key} onClick={() => update({lane:filter.lane === lane.key ? undefined : lane.key,group:undefined})}/>)}</div>}
 
     <div className="pattern-workspace-body"><section className="dx-production-panel pattern-task-list" data-layout={filter.scope==="all"||section==="bulk"?"board":"tasks"}><div className="pattern-board-title"><h2>{filter.scope==="all"||section==="bulk"?"岗位进度看板":filter.scope==="dispatch"?"待确认派工":filter.scope==="personnel"?"人员安排":"岗位任务"}</h2><span>{result ? `${result.archiveTotal} 款 · ${result.total} 项任务` : "读取中…"}</span>{(filter.lane || filter.group) && <Button onClick={() => update({lane:undefined,group:undefined})}>显示全部环节</Button>}</div>
-    <div className="pattern-board-filters"><nav className="development-tabs" aria-label="岗位任务范围">{[["mine","我的任务"],...(options?.roles.some(role=>["development_clerk","pattern_room_supervisor","root_superuser","owner_group","production_management"].includes(role))?[["personnel","人员安排"],["all","全部进度"]]:[]),...(options?.roles.some(role=>["pattern_room_supervisor","root_superuser","owner_group","production_management"].includes(role))?[["unassigned","待分派"]]:[]),...(options?.roles.some(role=>["pattern_room_supervisor","root_superuser"].includes(role))?[["dispatch","正式派工"]]:[])].map(([scope,label])=><button key={scope} aria-pressed={filter.scope===scope} onClick={()=>update({scope:scope as PatternWorkspaceFilter["scope"],owner:undefined})}>{label}</button>)}</nav><FilterBar as="div"><label>款号 / PO<input maxLength={100} value={filter.search} onChange={event => update({search: event.target.value})}/></label>
+    <div className="pattern-board-filters"><nav className="development-tabs" aria-label="岗位任务范围">{(section==="bulk"?[["mine","我的任务"],...(options?.roles.some(role=>["root_superuser","owner_group","production_management","pattern_room_supervisor","development_clerk"].includes(role))?[["all","全部进度"]]:[])]:[["mine","我的任务"],...(options?.roles.some(role=>["development_clerk","pattern_room_supervisor","root_superuser","owner_group","production_management"].includes(role))?[["personnel","人员安排"],["all","全部进度"]]:[]),...(options?.roles.some(role=>["pattern_room_supervisor","root_superuser","owner_group","production_management"].includes(role))?[["unassigned","待分派"]]:[]),...(options?.roles.some(role=>["pattern_room_supervisor","root_superuser"].includes(role))?[["dispatch","正式派工"]]:[])]).map(([scope,label])=><button key={scope} aria-pressed={filter.scope===scope||(section==="bulk"&&filter.scope!=="all"&&scope==="mine")} onClick={()=>update({scope:scope as PatternWorkspaceFilter["scope"],owner:undefined})}>{label}</button>)}</nav><FilterBar as="div"><label>款号 / PO<input maxLength={100} value={filter.search} onChange={event => update({search: event.target.value})}/></label>
       <label>主办人<select value={filter.owner ?? ""} onChange={event => update({owner: event.target.value || undefined})}><option value="">全部主办</option>{result?.owners.map(owner => <option key={owner.id} value={owner.id}>{owner.name ?? "原主办人"}</option>)}</select></label>
       <label>任务状态<select value={filter.state} onChange={event => update({state: event.target.value as PatternWorkspaceFilter["state"]})}>{Object.entries({ongoing: "在办与待启动", all: "全部当前任务", pending: "等待前置", active: "办理中", blocked: "暂时办不了", completed: "已完成"}).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
       <label>风险<select value={filter.risk ?? ""} onChange={event => update({risk: (event.target.value || undefined) as PatternWorkspaceFilter["risk"]})}><option value="">全部风险</option><option value="overdue">超时</option><option value="due_soon">临期</option><option value="blocked">受阻</option><option value="unknown">时间待核实</option></select></label>
@@ -109,7 +110,7 @@ export function DigitalPatternWorkspace({selectedOnly=false}:{selectedOnly?:bool
       <Pagination page={filter.page} pageSize={20} total={result?.total ?? null} onPage={page => update({page})}/>
     </section></div>
     </>}
-    {section==="bulk"?<BulkPatternWorkspace orderId={bulkOrder} canViewAll={Boolean(options?.roles.some(role=>["root_superuser","owner_group","production_management","pattern_room_supervisor","development_clerk"].includes(role)))} scope={filter.scope==="all"?"all":"mine"} onScopeChange={scope=>update({scope})}/>:<section className="dx-production-panel pattern-task-detail" aria-label="选中任务详情">
+    {section==="bulk"?<BulkPatternWorkspace orderId={bulkOrder} canViewAll={Boolean(options?.roles.some(role=>["root_superuser","owner_group","production_management","pattern_room_supervisor","development_clerk"].includes(role)))} scope={filter.scope==="all"?"all":"mine"} onScopeChange={scope=>update({scope})} onOrderChange={orderId=>{setBulkOrder(orderId);setSelectedId(null);setSelected(null);}}/>:<section className="dx-production-panel pattern-task-detail" aria-label="选中任务详情">
       {!selectedId && <p className="development-empty">选择任务，下方直接办理当前工作，并可查看资料与历史。</p>}
       {detailError && <p role="alert">{detailError}</p>}
       {selectedId && !selected && !detailError && <p role="status">正在读取任务…</p>}
