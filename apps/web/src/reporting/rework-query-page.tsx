@@ -15,6 +15,7 @@ import { deleteReworkOrder, loadReworkOrders } from "./reporting-client.js";
 import { ManagementOrderCard } from "./management-order-card.js";
 import "./reporting.css";
 import "./rework-query-mobile.css";
+import "../legacy-ui.css";
 
 const statuses: Array<[ManagementReworkRow["status"] | "", string]> = [
   ["", "全部状态"],["draft","草稿"],["pending_process_configuration","待配置工序"],["pending_ie_review","待 IE 审核"],
@@ -93,7 +94,7 @@ function BusinessReworkQueryPage() {
       .finally(() => setDeletingOrderId(""));
   };
   const items = state.kind === "ready" ? state.value.items : [];
-  return <Shell active="返工单看板"><div className="rework-query-content">
+  return <Shell active="返工单看板"><div className="rework-query-content" data-legacy-ui="rework-board">
     <Header title="返工单看板" subtitle="查看权限范围内返工单；进入订单详情查看完整流程并处理对应节点。" badge={!refreshing && state.kind === "ready" ? `${formatBusinessDecimal(items.length)} 条当前结果` : "查询中"} />
     {canSandbox ? <ReworkModuleTabs active="board" /> : null}
     <Surface className="reporting-filters reporting-filters--orders">

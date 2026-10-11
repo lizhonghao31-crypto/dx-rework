@@ -1,0 +1,55 @@
+/* V4 legacy pages opt in; platform defaults and business layouts stay local. */
+[data-legacy-ui] {
+  --legacy-ui-border: var(--dx-form-control-border);
+  --legacy-ui-radius: var(--dx-v2-radius-md);
+  --legacy-ui-muted: var(--dx-v2-color-text-secondary);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+[data-legacy-ui] .page-heading h1 {
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
+}
+
+[data-legacy-ui] :is(.section-title h2, .rework-detail-task__heading h2) {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+[data-legacy-ui] :is(.page-heading__subtitle, .dx-field__label, dt) {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+[data-legacy-ui] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]), select) {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: var(--dx-form-control-height);
+  font-size: var(--dx-form-control-font-size);
+  padding-inline: 12px;
+}
+
+[data-legacy-ui] textarea {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 80px;
+  font-size: 14px;
+  line-height: 20px;
+  padding: 12px;
+}
+
+[data-legacy-ui] .dx-button {
+  min-height: var(--dx-button-height);
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 20px;
+  padding-inline: 16px;
+}
+
+[data-legacy-ui] :is(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--dx-v2-color-primary);
+  outline-offset: 2px;
+}

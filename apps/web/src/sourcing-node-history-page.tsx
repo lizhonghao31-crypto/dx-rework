@@ -70,7 +70,7 @@ export function SourcingNodeHistoryView({ history, currentHref, nodeHref, expand
   const index = nodes.findIndex(([key]) => key === node);
   const prices = node === "ie_quote" ? item.ieQuote : item.decision;
   const cutting = item.decision?.cuttingProcess === "in_house" ? "本厂裁" : item.decision?.cuttingProcess === "outsourced" ? "外厂裁" : item.decision?.cuttingProcessOther;
-  return <div className="sourcing-workspace sourcing-order-detail sourcing-node-history">
+  return <div className="sourcing-workspace sourcing-order-detail sourcing-node-history" data-legacy-ui="sourcing">
     <Header iconRoute="/ui/sourcing/pending" title={item.styleNo} subtitle={`${item.gender ?? "历史未维护"} · ${item.styleName ?? "历史未维护"}`} badge="历史节点 · 只读" badgePlacement="subtitle" />
     <div className="sourcing-history-navigation">
       <div><h2>{labels[node]}</h2><span>{dateTime(entry.handledAt)} · {entry.handledBy}</span></div>

@@ -31,6 +31,7 @@ import "./rework-detail-compact.css";
 import "./rework-mobile.css";
 import "./order-overview-responsive.css";
 import "./rework-governed.css";
+import "./legacy-ui.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -742,7 +743,7 @@ function CurrentReworkDetailPage({
 
   return (
     <Shell active="全部订单">
-      <div className="rework-governed" data-dx-ui="governed"><div className="rework-detail-header"><Header title={detail.styleNo ?? "款号未填写"} subtitle={detail.reworkNo ?? "未提交返工草稿"} badge={meta.label} badgePlacement="subtitle" {...backAction} /></div>
+      <div className="rework-governed" data-dx-ui="governed" data-legacy-ui="rework-detail"><div className="rework-detail-header"><Header title={detail.styleNo ?? "款号未填写"} subtitle={detail.reworkNo ?? "未提交返工草稿"} badge={meta.label} badgePlacement="subtitle" {...backAction} /></div>
       <div className="rework-detail-layout rework-detail-target-layout">
       {canSeeResponsibility && ["pending_responsibility_determination","pending_owner_signature","pending_responsibility_action","completed"].includes(detail.status) && <OrderResponsibilityRevisionPanel readOnly={!moduleWritable} orderId={detail.reworkOrderId} orderVersion={detail.version} onChanged={syncAfterNodeAction} />}
         <dl className="rework-detail-core-facts" aria-label="返工单核心信息">

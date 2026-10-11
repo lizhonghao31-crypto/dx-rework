@@ -8,6 +8,7 @@ import { useDebouncedValue } from "../use-debounced-value.js";
 import { createWebUrls } from "../../url-contract.js";
 import { loadBasicReworkOrders } from "./reporting-client.js";
 import "./basic-rework-board.css";
+import "../legacy-ui.css";
 const {apiUrl,pageUrl}=createWebUrls(import.meta.env.BASE_URL);
 
 export function ReworkBoardAccess({basic,business}:{basic:ReactNode;business:ReactNode}) {
@@ -34,7 +35,7 @@ export function BasicReworkBoard(){
       .then(value=>{if(!controller.signal.aborted)setData(value);}).catch((e:unknown)=>{if(!controller.signal.aborted)setError(e instanceof Error?e.message:"读取失败");})
       .finally(()=>{if(!controller.signal.aborted)setBusy(false);});return()=>controller.abort();
   },[search,status,page,refresh]);
-  return <Shell active="返工单看板"><div className="rework-query-content">
+  return <Shell active="返工单看板"><div className="rework-query-content" data-legacy-ui="rework-board">
     <Header title="返工单看板" subtitle="查看返工基础资料、照片与当前进度。" badge={busy?"查询中":`${data?.totalCount??0} 条返工单`} />
     <Surface className="reporting-filters">
       <InsetField label="关键词" value={q} onChange={event=>{setQ(event.target.value);setPage(1);}} placeholder="返工号 / 款号 / 加工厂 / 跟单姓名" />
