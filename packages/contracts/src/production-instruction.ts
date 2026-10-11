@@ -38,15 +38,23 @@ export const instructionSourceFields:Record<InstructionSourceGroup,ReadonlyArray
 export function instructionSourceValue(document:InstructionDocument,group:InstructionSourceGroup){return Object.fromEntries(instructionSourceFields[group].map(field=>[field,document[field]]));}
 const withoutRowIds=(value:unknown):unknown=>Array.isArray(value)?value.map(withoutRowIds):value&&typeof value==="object"?Object.fromEntries(Object.entries(value).filter(([key])=>key!=="id").map(([key,item])=>[key,withoutRowIds(item)])):value;
 export function changedInstructionSourceGroups(before:InstructionDocument,after:InstructionDocument){return INSTRUCTION_SOURCE_GROUPS.filter(group=>JSON.stringify(withoutRowIds(instructionSourceValue(before,group)))!==JSON.stringify(withoutRowIds(instructionSourceValue(after,group))));}
-export function applyInstructionSourceReview(current:InstructionDocument,proposed:InstructionDocument,decisions:InstructionSourceReview["decisions"]){
+export function applyInstructionSourceReview(current:InstructionDocument,proposed:InstructionDocument,decisions:InstructionSourceReview["decisions"],before?:InstructionDocument){
  const result=structuredClone(current);
  for(const decision of decisions){if(decision.action!=="adopt")continue;
   if(decision.group==="images")result.images=[...result.images,...proposed.images.filter(image=>!result.images.some(existing=>existing.attachmentId===image.attachmentId))];
   else if(decision.group==="measurements"){
-   const existing=result.measurements,sizes=result.sizes;
+   const existing=result.measurements,sizes=result.sizes,unitChanged=current.unit!==proposed.unit,used=new Set<string>();
+   const count=(rows:InstructionDocument['measurements'],name:string)=>rows.filter(row=>row.name===name).length;
+   // Ambiguous same-name rows remain intact. Only a unique existing/source row can be matched.
+   const eligible=existing.filter(row=>count(existing,row.name)===1&&(!before||count(before.measurements,row.name)===1));
    result.unit=proposed.unit;result.sizes=[...proposed.sizes];
-   result.measurements=proposed.measurements.map(row=>{const manual=existing.find(item=>item.name===row.name);return manual?{...row,id:manual.id,tolerance:manual.tolerance,method:manual.method}:row;});
-   result.measurements.push(...existing.filter(row=>!proposed.measurements.some(item=>item.name===row.name)).map(row=>({...row,values:proposed.sizes.map(size=>row.values[sizes.indexOf(size)]??"")})));
+   result.measurements=proposed.measurements.map(row=>{
+    const manual=eligible.find(item=>item.name===row.name&&!used.has(item.id));
+    if(manual){used.add(manual.id);return {...row,id:manual.id,tolerance:unitChanged?'':manual.tolerance,method:manual.method};}
+    return {...row,id:existing.some(item=>item.id===row.id)?globalThis.crypto.randomUUID():row.id};
+   });
+   result.measurements.push(...existing.filter(row=>!used.has(row.id)).map(row=>({...row,tolerance:unitChanged?'':row.tolerance,values:proposed.sizes.map(size=>unitChanged?'':row.values[sizes.indexOf(size)]??'')})));
+
   }
   else Object.assign(result,instructionSourceValue(proposed,decision.group));
  }
@@ -83,7 +91,7 @@ export type InstructionSheet = {
   versions: number[]; isPublishedSnapshot: boolean; canEdit: boolean; cutStarted: boolean; merchandiserName: string | null;
   sourceRound: number | null; latestSourceRound: number | null; canApproveDate: boolean; printedBy: string;
   sourceComparison?:{sourceRound:number;sourceVersion:number;before:InstructionDocument;proposed:InstructionDocument;groups:InstructionSourceGroup[]};
-  sourceReview?:{sourceRound:number;instructionVersion:number;decisions:InstructionSourceReview["decisions"];reviewedAt:string;reviewedBy:string};
+  sourceReview?:{sourceRound:number;instructionVersion:number;decisions:InstructionSourceReview["decisions"];reviewedAt:string;reviewedBy:string;priorMeasurements?:Pick<InstructionDocument,"unit"|"sizes"|"measurements">};
   canRequestDate?:boolean;
   customerPoDates?:Array<{lineId:string;poNumber:string|null;color:string;date:string|null;registeredDate:string|null;version:number;source:string|null;factoryDate:string|null}>;
   dateRequests: CustomerDateHistory[];

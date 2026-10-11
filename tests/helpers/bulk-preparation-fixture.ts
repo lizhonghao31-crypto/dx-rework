@@ -121,7 +121,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  await expect(done('纸样完成')).rejects.toMatchObject({statusCode:409});expect((await cutting.get(actors.root,cuttingId)).canRecord).toBe(false);
  if(mode==='none'){
   const rounds=new DevelopmentRoundService(db,true);
-  await rounds.save(designer,source.sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:{...development,instructions:'TEST客户新技术要求'},origin:'客户新增要求',customerComment:'TEST改版',internalProblem:'',explanation:'',categories:['尺寸'],affectedNodes:['纸样'],outputKind:'整件样板'}},randomUUID());
+  await rounds.save(designer,source.sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:{...development,unit:'cm',measurements:[{name:'袖长',values:['15.5575']},{name:'袖长',values:['16']}],instructions:'TEST客户新技术要求'},origin:'客户新增要求',customerComment:'TEST改版',internalProblem:'',explanation:'',categories:['尺寸'],affectedNodes:['纸样'],outputKind:'整件样板'}},randomUUID());
   await rounds.publish(designer,source.sourceId,{expectedDraftVersion:1,basedOnRound:1},randomUUID());
   await expect(instruction.read(worker,id)).rejects.toMatchObject({statusCode:404});
   expect((await bulk.read(primary,id))).toMatchObject({customerConfirmed:false,instructionValid:false,preparationId:null});
@@ -131,12 +131,15 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
   const unreviewed=await instruction.read(primary,id);expect(unreviewed.sourceRound).toBe(1);expect(unreviewed.latestSourceRound).toBe(2);expect(unreviewed.document.comments).toBe('TEST核对第二轮开发');
   await expect(instruction.publish(primary,id,{expectedVersion:3,orderVersion:order.version},randomUUID())).rejects.toMatchObject({statusCode:409});
   const comparison=unreviewed.sourceComparison!;
-  const review={expectedVersion:3,orderVersion:order.version,sourceRound:comparison.sourceRound,sourceVersion:comparison.sourceVersion,document:unreviewed.document,decisions:comparison.groups.map(group=>({group,action:'retain' as const}))};
+  const review={expectedVersion:3,orderVersion:order.version,sourceRound:comparison.sourceRound,sourceVersion:comparison.sourceVersion,document:unreviewed.document,decisions:comparison.groups.map(group=>({group,action:group==='measurements'?'adopt' as const:'retain' as const}))};
   await expect(instruction.reviewSource(designer,id,review,randomUUID())).rejects.toMatchObject({statusCode:403});
   await expect(instruction.reviewSource(primary,id,{...review,sourceVersion:comparison.sourceVersion+1},randomUUID())).rejects.toMatchObject({statusCode:409});
   await expect(instruction.reviewSource(primary,id,{...review,decisions:[]},randomUUID())).rejects.toMatchObject({statusCode:409});
   const reviewKey=randomUUID(),reviewed=await instruction.reviewSource(primary,id,review,reviewKey);
   expect(reviewed).toMatchObject({version:4,sourceRound:2,document:{comments:'TEST核对第二轮开发'},sourceReview:{instructionVersion:4,decisions:review.decisions}});
+  expect(reviewed.document.unit).toBe('cm');expect(reviewed.document.measurements.map(row=>row.values)).toEqual([['15.5575'],['16']]);
+  expect(new Set(reviewed.document.measurements.map(row=>row.id)).size).toBe(2);
+  expect(reviewed.sourceReview?.priorMeasurements).toMatchObject({unit:'inch',sizes:['M'],measurements:doc.measurements});
   expect((await instruction.reviewSource(primary,id,review,reviewKey)).version).toBe(4);
   expect((await instruction.read(primary,id,undefined,1)).sourceRound).toBe(1);
   expect((await db.query("SELECT count(*)::int n FROM audit_events WHERE entity_id=$1 AND action='instruction_source_decisions'",[id])).rows[0].n).toBe(1);
