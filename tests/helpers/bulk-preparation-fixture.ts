@@ -89,7 +89,17 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  await expect(cutting.record(actors.root,cuttingId,{pieceCount:1,actualCutCount:137,attachmentIds:[]},randomUUID())).rejects.toMatchObject({statusCode:409});
  await expect(tasks.handover(worker,sheet.tasks.find(t=>t.taskKind==='bulk_pattern')!.taskId,{note:'不能自行绕过文员'},randomUUID())).rejects.toMatchObject({statusCode:409});
  await bulk.dispatch(clerk,id,{expectedVersion:1,patternWorkerId:worker.actorId,deliverPattern:true},randomUUID());
- sheet=await bulk.read(worker,id);if(mode!=='none')expect(sheet.tasks.find(t=>t.taskKind==='warehouse_preshrink')).toMatchObject({state:'ready',slaHours:36,timeQuality:'现场登记'});expect(sheet.tasks.find(t=>t.taskKind==='bulk_pattern')).toMatchObject({state:'ready',slaHours:48,timeQuality:'现场登记'});
+ sheet=await bulk.read(worker,id);expect(sheet.tasks.map(t=>t.taskKind)).toEqual(['bulk_pattern']);expect(sheet.tasks.find(t=>t.taskKind==='bulk_pattern')).toMatchObject({state:'ready',slaHours:48,timeQuality:'现场登记'});
+ expect(sheet.dispatch).toMatchObject({patternWorkerId:worker.actorId,warehouseWorkerId:null,cuttingWorkerId:null});
+ expect((await tasks.history(worker,sheet.tasks[0]!.taskId)).events.length).toBeGreaterThan(0);
+ if(mode!=='none'){
+  const warehouseSheet=await bulk.read(warehouse,id),warehouseTask=warehouseSheet.tasks.find(t=>t.taskKind==='warehouse_preshrink')!;
+  expect(warehouseSheet.tasks.map(t=>t.taskKind)).toEqual(['warehouse_preshrink']);expect(warehouseTask).toMatchObject({state:'ready',slaHours:36,timeQuality:'现场登记'});
+  await expect(tasks.read(worker,warehouseTask.taskId)).rejects.toMatchObject({statusCode:404});
+  await expect(tasks.history(worker,warehouseTask.taskId)).rejects.toMatchObject({statusCode:404});
+  await expect(tasks.read(warehouse,sheet.tasks[0]!.taskId)).rejects.toMatchObject({statusCode:404});
+  expect(JSON.stringify(sheet)).not.toContain(warehouseTask.taskId);expect((await bulk.read(clerk,id)).tasks).toHaveLength(2);
+ }
  await expect(fixture.budget.read(worker,id)).rejects.toMatchObject({statusCode:404});
  expect((await instruction.read(worker,id)).canEdit).toBe(false);
  await expect(bulk.complete(clerk,id,{preparationId:sheet.preparationId!,kind:'纸样完成'},randomUUID())).rejects.toMatchObject({statusCode:404});

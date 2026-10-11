@@ -3996,7 +3996,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       const qcTask=state.tasks.find(t=>t.taskKind==='bulk_qc')!;expect(qcTask.state).toBe('ready');
       state=await flow.qc(qc,id,{expectedRevision:state.revision,checks:[{lineId:state.lines[0]!.lineId,result:'需处理',problem:'TEST发厂前发现问题',treatment:'',attachmentIds:[]}],note:''},randomUUID());expect(state.allQc).toBe(false);
       state=await flow.qc(qc,id,{expectedRevision:state.revision,checks:[{lineId:state.lines[0]!.lineId,result:'合格',problem:'',treatment:'TEST复查已处理',attachmentIds:[]}],note:''},randomUUID());
-      expect(state.tasks.find(t=>t.taskKind==='warehouse_dispatch')!.state).toBe('ready');
+      expect(state.tasks.every(t=>t.assigneeId===qc.actorId)).toBe(true);
+      const warehouseTask=(await flow.read(warehouse,id)).tasks.find(t=>t.taskKind==='warehouse_dispatch')!;
+      expect(warehouseTask.state).toBe('ready');
+      await expect(tasks.read(qc,warehouseTask.taskId)).rejects.toMatchObject({statusCode:404});
+      await expect(tasks.history(qc,warehouseTask.taskId)).rejects.toMatchObject({statusCode:404});
     }
     continuation={primary,root,ready,ids,fixture};
     });

@@ -48,8 +48,8 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     }
     await db.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) VALUES(true,$1::uuid,$1::uuid::text,'TEST')",[root]);
     app.setErrorHandler((error,_request,reply)=>{const known=error as ApplicationError;reply.code(known.statusCode??500).send({error:{code:known.code,message:known.message}});});
-    registerDigitalIdentityRoutes(app,{service:identity,journeys,root:new RootAuthority(db,"TEST",undefined),creationEnabled:true,authenticate:async token=>{
-      if(!token||![root,designer,stranger,merchandiser].includes(token))throw new ApplicationError("UNAUTHORIZED","请登录",401);
+    registerDigitalIdentityRoutes(app,{service:identity,journeys,taskService:tasks,root:new RootAuthority(db,"TEST",undefined),creationEnabled:true,authenticate:async token=>{
+      if(!token||![root,designer,stranger,merchandiser,worker,clerk,tail].includes(token))throw new ApplicationError("UNAUTHORIZED","请登录",401);
       const roles=(await db.query("SELECT role_code FROM user_role_assignments WHERE user_id=$1 AND revoked_at IS NULL",[token])).rows.map(row=>row.role_code as string);
       const capabilities=(await db.query("SELECT DISTINCT capability FROM role_capabilities WHERE role_code=ANY($1::text[])",[roles])).rows.map(row=>row.capability as string);
       return {id:token,displayName:"TEST",businessRoles:roles,capabilities};
@@ -195,6 +195,12 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect(summary).not.toHaveProperty('budget');
     await expect(tasks.read(actor(worker,["pattern_room_worker"]),sibling.taskId)).rejects.toMatchObject({statusCode:404});
     await expect(tasks.read(actor(stranger),assigned.taskId)).rejects.toMatchObject({statusCode:404});
+    const headers={cookie:`dx_rework_session=${worker}`};
+    expect((await app.inject({url:`/digital-production/tasks/${assigned.taskId}`,headers})).statusCode).toBe(200);
+    expect((await app.inject({url:`/digital-production/tasks/${assigned.taskId}/history`,headers})).statusCode).toBe(200);
+    for(const path of [`/digital-production/tasks/${sibling.taskId}`,`/digital-production/tasks/${sibling.taskId}/history`]){
+      const rejected=await app.inject({url:path,headers});expect(rejected.statusCode).toBe(404);expect(rejected.body).not.toContain(sibling.taskId);
+    }
     expect(node.state).toBe("pending");expect(node.enteredAt).toBeNull();expect(node.sla).toBe("not_started");expect(node.risks).not.toContain("overdue");
     expect(nodes.find(node=>node.key==="development_cutting")?.state).toBe("unavailable");
     await expect(journeys.read(actor(worker,["pattern_room_worker"]),source.sourceId,1)).rejects.toMatchObject({statusCode:404});

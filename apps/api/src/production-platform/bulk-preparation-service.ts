@@ -83,12 +83,17 @@ export class BulkPreparationService {
   for(const row of (await db.query("SELECT production_order_id FROM digital_production_orders WHERE source_id=$1 ORDER BY production_order_id",[sourceId])).rows)await this.sync(db,actor,row.production_order_id);
  }
  async read(actor:TrustedActorContext,id:string,db:DB=this.database):Promise<BulkPreparationSheet>{
-  await new DigitalProductionAccessPolicy(db).assert(actor,'order',id,'technical');const g=await this.gates(db,id),prep=await this.current(db,id,g);
+  const policy=new DigitalProductionAccessPolicy(db);await policy.assert(actor,'order',id,'technical');const g=await this.gates(db,id),prep=await this.current(db,id,g);
+  const tasks=prep?await this.tasks().readAuthorized(actor,(await this.routeTasks(db,prep.preparation_id)).map(t=>t.task_id),db):[];
+  const canDispatchPattern=isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes('development_clerk'),canDispatchWarehouse=isDigitalLeader(actor);
+  const canReadDispatch=canDispatchPattern||actor.actorRoles.includes('sample_designer')&&g.order.created_by===actor.actorId
+   ||actor.actorRoles.includes('order_merchandiser')&&g.order.primary_merchandiser_id===actor.actorId&&await policy.activeRole(actor.actorId,'order_merchandiser');
+  const dispatchPerson=(person:string|null|undefined)=>person&&(canReadDispatch||tasks.some(task=>task.assigneeId===person))?person:null;
   const row=(await db.query("SELECT * FROM digital_bulk_dispatch WHERE production_order_id=$1",[id])).rows[0];
   const cuttingRows=(await db.query(`SELECT po.line_id AS "lineId",po.po_number AS "poNumber",po.formal_style_no AS "formalStyleNo",po.temporary_style_no AS "temporaryStyleNo",po.color,l.child_id AS "cuttingOrderId",(SELECT sum(quantity)::int FROM digital_production_po_sizes WHERE line_id=po.line_id) AS "orderQuantity",r.actual_cut_count AS "actualCutCount",r.piece_count AS "pieceCount",coalesce(r.corrected,false) AS corrected FROM digital_production_po_lines po LEFT JOIN digital_production_child_lines l ON l.module='cutting' AND l.line_id=po.line_id LEFT JOIN current_cutting_records r ON r.cutting_order_id=l.child_id WHERE po.production_order_id=$1 ORDER BY po.position`,[id])).rows;
   return {cutting:{mode:g.approval?.cutting_process??null,completed:cuttingRows.length>0&&cuttingRows.every(r=>r.actualCutCount!==null),lines:cuttingRows.map(r=>({...r,actualCutCount:r.actualCutCount===null?null:Number(r.actualCutCount),pieceCount:r.pieceCount===null?null:Number(r.pieceCount)})) as BulkPreparationSheet['cutting']['lines']},orderId:id,instructionVersion:g.instruction?.version??null,sourceRound:g.source?.round_number??null,customerConfirmed:g.customerConfirmed,ownerApproved:g.ownerApproved,instructionValid:g.instructionValid,reasons:g.reasons,preparationId:prep?.preparation_id??null,preshrink:g.instruction?.document.preshrink??null,
-   dispatch:{version:row?.version??0,patternWorkerId:row?.pattern_worker_id??null,warehouseWorkerId:row?.warehouse_worker_id??null,cuttingWorkerId:row?.cutting_worker_id??null},canDispatchPattern:isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes('development_clerk'),canDispatchWarehouse:isDigitalLeader(actor),
-   facts:prep?(await db.query('SELECT kind,recorded_at AS "recordedAt" FROM digital_bulk_preparation_facts WHERE preparation_id=$1 ORDER BY recorded_at',[prep.preparation_id])).rows:[],tasks:prep?await Promise.all((await this.routeTasks(db,prep.preparation_id)).map(t=>this.tasks().read(actor,t.task_id,db))):[]};
+   dispatch:{version:row?.version??0,patternWorkerId:dispatchPerson(row?.pattern_worker_id),warehouseWorkerId:dispatchPerson(row?.warehouse_worker_id),cuttingWorkerId:dispatchPerson(row?.cutting_worker_id)},canDispatchPattern,canDispatchWarehouse,
+   facts:prep?(await db.query('SELECT kind,recorded_at AS "recordedAt" FROM digital_bulk_preparation_facts WHERE preparation_id=$1 ORDER BY recorded_at',[prep.preparation_id])).rows:[],tasks};
  }
  async workroom(actor:TrustedActorContext,filter:BulkWorkroomFilter):Promise<BulkWorkroomResult>{
   const policy=new DigitalProductionAccessPolicy(this.database);

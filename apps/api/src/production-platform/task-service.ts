@@ -421,6 +421,11 @@ export class DigitalProductionTaskService {
       });
     });
   }
+  async readAuthorized(actor: TrustedActorContext, ids: readonly string[], db: Pick<Pool, "query"> = this.database) {
+    const policy = new DigitalProductionAccessPolicy(db), tasks = [];
+    for (const id of ids) if (await policy.allowed(actor, "task", id, "technical")) tasks.push(await this.read(actor, id, db));
+    return tasks;
+  }
   async list(actor: TrustedActorContext, page: number) {
     const global = isDigitalLeader(actor) || isDigitalTechnicalManager(actor);
     const result = await this.database.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
