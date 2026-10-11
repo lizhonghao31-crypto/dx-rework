@@ -150,7 +150,7 @@ function PrimaryNavigation({
 export function NavigationGroupMenu({ group, active, basePath }: { group: NavigationGroup; active: string; basePath: string }) {
   if (!group.entries.length) return null;
   const groupIsActive = group.entries.some(entry => (entry.activeKey ?? entry.name) === active);
-  return <details className={"desktop-navigation__group" + (groupIsActive ? " is-active" : "")} open={groupIsActive || undefined}>
+  return <details className="desktop-navigation__group" open={groupIsActive || undefined}>
     <summary><span><strong className="dx-navigation-group-label"><NavigationIcon group={group.name} size="primary" />{group.name}</strong><small>{group.description}</small></span><b aria-hidden="true">⌄</b></summary>
     <PrimaryNavigation navigation={group.entries} active={active} basePath={basePath} />
   </details>;
@@ -550,14 +550,13 @@ export function Shell({
   const digital = currentUser && canAccessDigitalProduction(currentUser);
   const designerNavigation: NavigationEntry[] = digital && (isRoot || (hasRole("sample_designer") && hasCapability("pattern_room:orders:create"))) ? [{ name: "设计师创建订单", description: "产品开发与订购资料", href: "/ui/digital-production?workspace=designer", activeKey: "digital-designer" }] : [];
   // Keep the mature creation capability, but place the source entry under creation.
-  const creationNavigation = [...designerNavigation, ...patternRoomNavigation.filter(entry => entry.activeKey === "pattern-room-create")];
+  const creationNavigation = designerNavigation;
   const developmentNavigation: NavigationEntry[] = [
-    ...(digital ? [{ name: "板房管理台", description: "开发任务与人员调度", href: "/ui/digital-pattern-room", activeKey: "digital-pattern" }] : []),
-    ...patternRoomNavigation.filter(entry => entry.activeKey === "pattern-room-orders"),
+    ...((digital || patternRoomNavigation.length) ? [{ name: "板房管理台", description: "岗位办理、独立打板与杂事", href: digital ? "/ui/digital-pattern-room" : "/ui/digital-pattern-room?section=legacy", activeKey: "digital-pattern" }] : []),
     ...(digital ? [{ name: "板房数据沙盘", description: "同源分析与改进记录", href: "/ui/digital-analysis" }] : []),
     ...patternRoomNavigation.filter(entry => entry.href === "/ui/pattern-room/prices"),
   ];
-  const preparationNavigation: NavigationEntry[] = digital ? [{ name: "大货产前准备", description: "产前订单与原单办理", href: "/ui/digital-cockpit?stage=preparation&workspace=preparation", activeKey: "digital-preparation" }] : [];
+  const preparationNavigation: NavigationEntry[] = [];
   const factoryNavigation: NavigationEntry[] = digital ? [{ name: "裁后工艺与发厂", description: "工艺、QC与实际发厂", href: "/ui/digital-cockpit?stage=post_cutting&workspace=factory", activeKey: "digital-factory" }] : [];
   const navigation: NavigationEntry[] = [
     ...creationNavigation,
@@ -569,7 +568,6 @@ export function Shell({
     ...mobileSourcingNavigation,
     ...(cuttingNavigation.length ? [{ name: "订单开裁", description: "裁床实裁登记", href: "/ui/cutting", activeKey: "cutting" }] : []),
     ...mobileSupplierNavigation,
-    ...(patternRoomNavigation.length ? [{ name: "订单打板", description: "订单打板与价格管控", href: "/ui/pattern-room" }] : []),
     ...sampleNavigation,
     ...platformNavigation,
   ];

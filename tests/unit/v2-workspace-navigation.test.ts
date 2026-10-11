@@ -5,7 +5,7 @@ import { canAccessDigitalProduction, canAccessSourcing, canAccessProduction } fr
 describe("V2 shell route adapter", () => {
   it("selects only the current digital workspace and leaves domain detail routes alone", () => {
     expect(digitalWorkspaceActive("生产管理座舱", "?workspace=pattern")).toBe("digital-pattern");
-    expect(digitalWorkspaceActive("生产管理座舱", "?workspace=preparation&stage=bulk")).toBe("digital-preparation");
+    expect(digitalWorkspaceActive("生产管理座舱", "?workspace=preparation&stage=bulk")).toBe("digital-pattern");
     expect(digitalWorkspaceActive("生产管理座舱", "?workspace=factory")).toBe("digital-factory");
     expect(digitalWorkspaceActive("开发与大货办理", "?workspace=designer")).toBe("digital-designer");
     expect(digitalWorkspaceActive("cutting", "?workspace=pattern")).toBe("cutting");

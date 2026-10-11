@@ -27,6 +27,11 @@ export function validPatternReturnPath(target: string | null): string | null {
   if (!target || target.includes("\\") || target.includes("#")) return null;
   const todo = todoReturnPath(`?${new URLSearchParams({ returnTo: target })}`); if (todo) return todo;
   const wage=wageReturnPath(target);if(wage)return wage;
+  if(target.startsWith("/ui/digital-pattern-room?")) {
+    const params=new URLSearchParams(target.split("?")[1]);
+    if(params.get("section")!=="legacy"||[...params.keys()].some(key=>!["section","q","kind","status","creatorId","workerId","page"].includes(key))||params.size!==new Set(params.keys()).size)return null;
+    return `/ui/digital-pattern-room?section=legacy&${patternListPath(readPatternListQuery(params.toString())).split("?")[1]??""}`;
+  }
   if (["/ui/pattern-room", "/ui/pattern-room/prices"].includes(target)) return target;
   if (!["/ui/pattern-room/orders", "/ui/pattern-room/create"].includes(target.split("?")[0]!)) return null;
   return patternListPath(readPatternListQuery(target.includes("?") ? target.slice(target.indexOf("?")) : ""));

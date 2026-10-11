@@ -29,7 +29,7 @@ const kpis = [
 
 function RecordLink({ record, context, children }: { record: JourneyRecord; context: CockpitContext; children?: ReactNode }) {
   const href = record.url ? journeyRecordHref(record.url, context, record.mode) : "";
-  return href ? <a href={urls.pageUrl(href)}>{children ?? (record.mode === "handle" ? "进入原办理" : "查看原记录")}</a> : <span className="journey-muted">原记录不可用</span>;
+  return href ? <a href={urls.pageUrl(href)}>{children ?? (record.mode === "handle" ? "办理当前任务" : "查看记录")}</a> : <span className="journey-muted">原记录不可用</span>;
 }
 function CockpitFilters({ context, data, onChange }: { context: CockpitContext; data: JourneyResult | null; onChange: (patch: Partial<CockpitContext>) => void }) {
   const [more, setMore] = useState(Boolean(context.stage || context.node || context.state || context.risk || context.startDate || context.endDate));

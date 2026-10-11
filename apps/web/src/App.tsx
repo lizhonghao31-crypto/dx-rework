@@ -282,7 +282,7 @@ export function App() {
   const cuttingOrderMatch = path.match(/^\/ui\/cutting\/orders\/([0-9a-f-]{36})$/i);
   let page;
   if (path === "/ui/digital-analysis") page = <Shell active="板房数据沙盘" appearance="digital"><ProductionWorkspace><DigitalAnalysisPage /></ProductionWorkspace></Shell>;
-  else if (path === "/ui/digital-cockpit") page = <Shell active="生产管理座舱" appearance="digital"><ProductionWorkspace>{new URLSearchParams(search).get("workspace") === "pattern" ? <DigitalPatternWorkspace key={search}/> : ["preparation","factory"].includes(new URLSearchParams(search).get("workspace") ?? "") ? <DigitalProductionWorkspace key={search} kind={new URLSearchParams(search).get("workspace") === "factory" ? "factory" : "preparation"}/> : <DigitalCockpitPage key={search} />}</ProductionWorkspace></Shell>;
+  else if (path === "/ui/digital-cockpit") page = <Shell active="生产管理座舱" appearance="digital"><ProductionWorkspace>{["pattern","preparation"].includes(new URLSearchParams(search).get("workspace")??"") ? <DigitalPatternWorkspace key={search}/> : ["factory"].includes(new URLSearchParams(search).get("workspace") ?? "") ? <DigitalProductionWorkspace key={search} kind={new URLSearchParams(search).get("workspace") === "factory" ? "factory" : "preparation"}/> : <DigitalCockpitPage key={search} />}</ProductionWorkspace></Shell>;
   else if (path === "/ui/digital-production") page = <Shell active="开发与大货办理" appearance="digital"><ProductionWorkspace>{new URLSearchParams(search).get("workspace") === "designer" ? <DigitalDesignerWorkspace key={search}/> : <><DevelopmentWorkspaceReturn/><DigitalProductionPage key={search} /></>}</ProductionWorkspace></Shell>;
   else if (path === "/ui/digital-pattern-room") page = <Shell active="digital-pattern" appearance="digital"><ProductionWorkspace><DigitalPatternWorkspace key={search}/></ProductionWorkspace></Shell>;
   else if (path === "/ui/home") page = <HomeLanding />;
@@ -358,6 +358,7 @@ export function App() {
 
   const owner = { requiredRole: "owner_group" } as const;
 
+  if(path === "/ui/digital-pattern-room")return <AuthGate requiredAnyOf={[...DIGITAL_PRODUCTION_ROLES.map(requiredRole=>({requiredRole})),...patternRoomOrderRequirements,...patternRoomPriceRequirements,...patternRoomCreateRequirements]}>{page}</AuthGate>;
   if (path === "/ui/digital-production" || path === "/ui/digital-cockpit" || path === "/ui/digital-analysis" || path === "/ui/digital-pattern-room") return <AuthGate requiredAnyOf={DIGITAL_PRODUCTION_ROLES.map(requiredRole => ({ requiredRole }))}>{page}</AuthGate>;
   if (path === "/ui/home") return <AuthGate>{page}</AuthGate>;
   if (path.startsWith("/ui/samples")) {
