@@ -45,7 +45,7 @@ export class DevelopmentWorkspaceQuery {
     if(filter.scope==="unassigned"&&!manager)digitalForbidden();
     if(filter.scope==="dispatch"&&!isRootActor(actor)&&!actor.actorRoles.includes("pattern_room_supervisor"))digitalForbidden();
     const result = await this.journeys.list(actor, JourneyFilterSchema.parse({search: filter.search}), true);
-    const all = patternTasks(result.items);
+    const all = patternTasks(result.items).filter(task => filter.business === "all" || (task.node.key === "bulk_pattern" ? filter.business === "bulk" : filter.business === "development"));
     const assignments=filter.scope==="dispatch"?await this.journeys.pendingPatternAssignments(actor,[...new Set(all.flatMap(task=>task.sourceId?[task.sourceId]:[]))]):[];
     // One genuine current task supplies document context for each pending original order.
     // Formal assignment never changes this task's readiness, owner or completion.

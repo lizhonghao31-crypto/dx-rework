@@ -1,3 +1,5 @@
+import { DigitalPatternWorkspace } from "./digital-pattern-workspace.js";
+import type { DigitalTask } from "@dx-rework/contracts/digital-production-tasks";
 import { useEffect, useRef, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import { PageHeader } from "@dx-rework/ui/production";
@@ -118,9 +120,10 @@ function HistoricalSourceAttach({ order, onAttached }: { order: DigitalOrder; on
 }
 
 function TaskDetail({ id }: { id: string }) {
+  const [task,setTask]=useState<DigitalTask|null>(null);
   const [access, setAccess] = useState<DigitalAccessOptions | null>(null), [error, setError] = useState("");
-  useEffect(() => { let live = true; void digitalRequest<DigitalAccessOptions>("access/options").then(next => { if (live) setAccess(next); }).catch(reason => { if (live) setError(reason.message); }); return () => { live = false; }; }, []);
-  return <><div className="pattern-actions"><Button onClick={() => void closeDetail()}>返回</Button></div>{error && <p role="alert">{error}</p>}{access ? <DigitalTasksPanel options={access} taskId={id} compact view={digitalTaskView(window.location.search)} /> : !error && <p role="status">正在读取原任务…</p>}</>;
+  useEffect(() => { let live = true; setAccess(null);setTask(null);setError("");void Promise.all([digitalRequest<DigitalAccessOptions>("access/options"),digitalRequest<DigitalTask>(`tasks/${id}`)]).then(([next,current]) => { if (live) {setAccess(next);setTask(current);} }).catch(reason => { if (live) setError(reason.message); }); return () => { live = false; }; }, [id]);
+  return <><div className="pattern-actions"><Button onClick={() => void closeDetail()}>返回</Button></div>{error && <p role="alert">{error}</p>}{access ? task?.taskKind.startsWith("development_") ? <DigitalPatternWorkspace key={id} selectedOnly/> : <DigitalTasksPanel options={access} taskId={id} compact view={digitalTaskView(window.location.search)} /> : !error && <p role="status">正在读取原任务…</p>}</>;
 }
 
 /** Native detail consumers; no order/task list or creation state. */

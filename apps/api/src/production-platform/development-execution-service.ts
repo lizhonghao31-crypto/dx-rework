@@ -11,7 +11,7 @@ import {ApplicationError} from "../platform/errors.js";
 import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound,isDigitalLeader,isDigitalTechnicalManager} from "./access-policy.js";
 import {DigitalDevelopmentService} from "./development-service.js";
 import {DigitalProductionTaskService} from "./task-service.js";
-import {missingMainMaterials} from "./development-route.js";
+import {developmentNextSteps,developmentRoute,missingMainMaterials} from "./development-route.js";
 const fail=(message:string):never=>{throw new ApplicationError("DEVELOPMENT_EXECUTION_CONFLICT",message,409);};
 export class DevelopmentExecutionService {
   constructor(private readonly database:Pool,private readonly enabled:boolean,private readonly patternOrders?:PatternRoomOrderService){}
@@ -30,7 +30,10 @@ export class DevelopmentExecutionService {
       s.worker_user_id AS "workerId",s.worker_name AS "workerName" FROM pattern_room_orders o JOIN pattern_room_rounds r ON r.round_id=o.current_round_id
       LEFT JOIN LATERAL(SELECT worker_user_id,worker_name FROM pattern_room_segments WHERE round_id=r.round_id ORDER BY segment_index DESC LIMIT 1)s ON true
       WHERE o.order_id=$1 AND o.deleted_at IS NULL`,[patternOrder.orderId])).rows[0]??null:null;
-    return {sheet,dispatch,tasks,routeFacts,patternOrder,patternPreparation,facts:await this.facts(this.database,sourceId),canReportFabric:isRootActor(actor)||actor.actorRoles.some(role=>["pattern_room_worker","pattern_room_supervisor","order_merchandiser"].includes(role)),canDispatch:isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes("development_clerk"),canDecideFabric:isRootActor(actor)||actor.actorRoles.includes("production_management")};
+    const currentRound=sheet.roundNumber??1;
+    const route:string[]=currentRound===1&&sheet.document?developmentRoute(sheet.document):(await this.database.query('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,currentRound])).rows[0]?.route_nodes??[];
+    const nextSteps=developmentNextSteps(route,tasks,currentRound);
+    return {sheet,nextSteps,dispatch,tasks,routeFacts,patternOrder,patternPreparation,facts:await this.facts(this.database,sourceId),canReportFabric:isRootActor(actor)||actor.actorRoles.some(role=>["pattern_room_worker","pattern_room_supervisor","order_merchandiser"].includes(role)),canDispatch:isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes("development_clerk"),canDecideFabric:isRootActor(actor)||actor.actorRoles.includes("production_management")};
   }
   private async command(actor:TrustedActorContext,sourceId:string,kind:string,key:string,input:unknown,action:(db:PoolClient)=>Promise<unknown>){
     if(!this.enabled)digitalForbidden();if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail("缺少操作标识");
