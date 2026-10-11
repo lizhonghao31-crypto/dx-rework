@@ -116,10 +116,10 @@ export function WagePeriodList() {
       const preview = await previewWageSettlement(filters);
       if (currentKey.current !== keyAtStart) return;
       if (!preview.lineCount) { setRefresh(n=>n+1); return; }
-      if (!await confirmInApp(`将当前筛选范围内的 ${formatBusinessDecimal(preview.personCount)} 名工人、${formatBusinessDecimal(preview.lineCount)} 条未结算明细标记为已结算？`)) return;
+      if (!await confirmInApp(`将当前筛选范围内的 ${formatBusinessDecimal(preview.personCount)} 名工人、${formatBusinessDecimal(preview.lineCount)} 条未结算明细登记为已结算？此操作只记录结算状态。`)) return;
       if (currentKey.current !== keyAtStart) return;
       const result = await markWageSettlement(filters,preview.lineIds);
-      setMessage(`已标记 ${formatBusinessDecimal(result.markedCount)} 条工资明细。`);
+      setMessage(`已标记 ${formatBusinessDecimal(result.markedCount)} 条工资明细的结算状态。`);
       setRefresh(n=>n+1);
     } catch(error) {setMessage(error instanceof Error ? error.message : "工资结算标记失败");setRefresh(n=>n+1);}
     finally {busyRef.current=false;setBusy(false);}
@@ -146,7 +146,7 @@ export function WagePeriodList() {
       <header className="page-heading">
         <div>
           <h1><NavigationIcon route="/ui/wages" size="title" />工资管理</h1>
-          <p>按人员、工资来源、订单和劳动完成月份查询，统一核对与标记结清。</p>
+          <p>按人员、工资来源、订单和劳动完成月份查询，统一核对并登记结算状态。</p>
         </div>
       </header>
 
@@ -171,7 +171,7 @@ export function WagePeriodList() {
           <label>结算状态<select value={status} onChange={event=>setStatus(event.target.value)}><option value="">全部</option><option value="unsettled">未结算</option><option value="settled">已结算</option></select></label>
           <label>工资月份<input type="month" value={from.slice(0,7) === to.slice(0,7) ? from.slice(0,7) : ""} onChange={event=>{const month=event.target.value;if(month){setFrom(`${month}-01`);setTo(monthEnd(Number(month.slice(0,4)),Number(month.slice(5,7))));}}} /></label>
           <div className="wage-query-actions">
-            {value?.canSettleWages ? <Button disabled={stale || busy || !value.wageSummary?.pendingLineCount} onClick={()=>void settle()}>工资已结清</Button> : null}
+            {value?.canSettleWages ? <Button disabled={stale || busy || !value.wageSummary?.pendingLineCount} onClick={()=>void settle()}>登记结算状态</Button> : null}
             {value?.canExport ? <a href={reportExportUrl("wages", filters)} onClick={event=>{if(stale)event.preventDefault();}} aria-disabled={stale}><Button variant="primary" disabled={stale}>导出当前工资明细</Button></a> : null}
           </div>
         </div>
@@ -193,7 +193,7 @@ export function WagePeriodList() {
           <Surface className="wage-person-summary">
             <div className="wage-section-heading">
               <div><h2>按工人汇总</h2><p>随上方姓名、订单与期间条件同步变化。</p></div>
-              <span>汇总、导出及结清确认均按完整筛选范围。</span>
+              <span>汇总、导出及结算状态登记均按完整筛选范围。</span>
             </div>
             {personSummary.length ? (
               <div className="wage-person-grid">

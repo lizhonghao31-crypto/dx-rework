@@ -1,3 +1,5 @@
+import {LazyHistoryDetails} from "./lazy-history-details.js";
+import {readSupplierWorkspaceQuery,supplierWorkspaceSearch} from "./supplier-workspace-query.js";
 import { SupplierOnboardingPage } from "./supplier-onboarding-page.js";
 import { canRequestSupplier, canApproveSupplier, canAccessSupplierMaintenance } from "./supplier-onboarding-model.js";
 import { ProductionAnalysisPanel } from "./production-analysis-panel.js";
@@ -63,17 +65,14 @@ export function SupplierMaintenancePage() { return <SupplierCenterPage mode="man
 export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" | "manage" }) {
   const [user, setUser] = useState<AuthorizedUser | null>(null);
   const [suppliers, setSuppliers] = useState<SupplierSummary[]>([]);
-  const [selectedId, setSelectedId] = useState(() => {
-    const id = typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("supplierId") ?? "";
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ? id : "";
-  });
+  const [initialQuery]=useState(()=>readSupplierWorkspaceQuery(typeof window==="undefined"?"":window.location.search));
+  const [selectedId, setSelectedId] = useState(initialQuery.supplierId);
   const [profile, setProfile] = useState<SupplierProfile | null>(null);
-  const [history, setHistory] = useState<SupplierProfile[]>([]);
-  const [query, setQuery] = useState("");
-  const [supplierType, setSupplierType] = useState<"all" | SupplierSummary["supplierType"]>("all");
-  const [status, setStatus] = useState<"active" | "inactive" | "all">("active");
-  const [craft, setCraft] = useState("");
-  const [completeness, setCompleteness] = useState<"all" | "missing" | "complete">("all");
+  const [query, setQuery] = useState(initialQuery.q);
+  const [supplierType, setSupplierType] = useState<"all" | SupplierSummary["supplierType"]>(initialQuery.type);
+  const [status, setStatus] = useState<"active" | "inactive" | "all">(initialQuery.status);
+  const [craft, setCraft] = useState(initialQuery.craft);
+  const [completeness, setCompleteness] = useState<"all" | "missing" | "complete">(initialQuery.completeness);
   const [draft, setDraft] = useState<SupplierDraft>(emptyDraft);
   const [editing, setEditing] = useState(false);
   const [batchOpen, setBatchOpen] = useState(false);
@@ -85,6 +84,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
   const [detailLoading, setDetailLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [reload, setReload] = useState(0);
+  useEffect(()=>{const search=supplierWorkspaceSearch({q:query,type:supplierType,status,craft,completeness,supplierId:selectedId});window.history.replaceState(window.history.state,'',window.location.pathname+(search?'?'+search:''));},[query,supplierType,status,craft,completeness,selectedId]);
   const selectedRef = useRef(selectedId);
   const writeLock = useRef(false);
   const refreshLock = useRef(false);
@@ -123,7 +123,6 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
     setCreating(false);
     setError("");
     setProfile(null);
-    setHistory([]);
     setDraft(emptyDraft());
     setEditing(false);
     setDetailLoading(Boolean(id));
@@ -152,13 +151,13 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
     if(!canMaintain||!await discardChanges()||writeLock.current||refreshLock.current)return;
     creationCode.current='SUP_'+Array.from(crypto.getRandomValues(new Uint8Array(12)),value=>value.toString(16).padStart(2,'0')).join('').toUpperCase();
     savedSelection.current='';setSavedMessage('');
-    selectedRef.current='';setSelectedId('');setProfile(null);setHistory([]);setDraft(emptyDraft());setError('');setDetailLoading(false);setCreating(true);setEditing(true);
+    selectedRef.current='';setSelectedId('');setProfile(null);setDraft(emptyDraft());setError('');setDetailLoading(false);setCreating(true);setEditing(true);
   };
 
   const beginBatch = async () => {
     if (!canMaintain || !await discardChanges() || writeLock.current || refreshLock.current) return;
     creationCode.current = ""; savedSelection.current = ""; selectedRef.current = "";
-    setSelectedId(""); setProfile(null); setHistory([]); setDraft(emptyDraft());
+    setSelectedId(""); setProfile(null);  setDraft(emptyDraft());
     setCreating(false); setEditing(false); setDetailLoading(false); setError(""); setSavedMessage("");
     setBatchOpen(true);
   };
@@ -171,7 +170,6 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
     setError("");
     // Invalidate the editable snapshot before either directory or detail reload.
     setProfile(null);
-    setHistory([]);
     setDraft(emptyDraft());
     setEditing(false);
     setDetailLoading(true);
@@ -194,21 +192,16 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
     let mounted = true;
     if(creating)return ()=>{mounted=false;};
     setProfile(null);
-    setHistory([]);
     setDraft(emptyDraft());
     setEditing(false);
     setDetailLoading(Boolean(selectedId));
     if (!selectedId || refreshing) return () => { mounted = false; };
-    void Promise.all([
-      json<SupplierProfile>(`master-data/suppliers/${selectedId}`),
-      json<SupplierProfile[]>(`master-data/suppliers/${selectedId}/history`),
-    ]).then(([nextProfile, nextHistory]) => {
+    void json<SupplierProfile>(`master-data/suppliers/${selectedId}`).then((nextProfile) => {
       if (!mounted || selectedRef.current !== selectedId) return;
-      if (nextProfile.supplierId !== selectedId || nextHistory.some((item) => item.supplierId !== selectedId)) {
+      if (nextProfile.supplierId !== selectedId) {
         throw new Error("供应商详情与当前选择不一致，请刷新后重试。");
       }
       setProfile(nextProfile);
-      setHistory(nextHistory);
       setDraft(draftFromProfile(nextProfile));
       setEditing(mode === "manage" && canWrite && savedSelection.current !== selectedId);
     }).catch((loadError: unknown) => {
@@ -241,7 +234,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       // Once committed, leave create mode before refreshing so a read failure cannot resubmit a new supplier.
       draftGuard.markClean();creationCode.current="";setDraft(emptyDraft());
       savedSelection.current=result.supplierId;setSavedMessage("资料已保存 · 版本 "+result.version);
-      selectedRef.current=result.supplierId;setCreating(false);setSelectedId(result.supplierId);setEditing(false);setProfile(null);setHistory([]);setDetailLoading(true);
+      selectedRef.current=result.supplierId;setCreating(false);setSelectedId(result.supplierId);setEditing(false);setProfile(null);setDetailLoading(true);
       setReload(value=>value+1);
       try{setSuppliers(await json<SupplierSummary[]>("master-data/suppliers?includeInactive=true"));}
       catch{setError("资料已保存，目录刷新失败，请刷新目录核对。");}
@@ -334,7 +327,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
                   </section>
                   <section><h3>工艺与产能</h3><dl><div className="is-wide"><dt>可承接工艺</dt><dd>{profile.supportedCrafts.length ? profile.supportedCrafts.join("、") : "尚未维护"}</dd></div><div><dt>常规日产能</dt><dd>{profile.dailyCapacity === null ? "尚未维护" : `${profile.dailyCapacity.toLocaleString("zh-CN")} 件 / 日`}</dd></div></dl></section>
                   <ProductionAnalysisPanel key={profile.supplierId} supplierId={profile.supplierId} view="supplier"/>
-                  <section><h3>变更历史</h3><ol className="supplier-history">{history.map((version) => <li key={version.version}><div><b>版本 {version.version}</b><StatusBadge tone={version.active ? "success" : "warning"}>{version.active ? "启用" : "停用"}</StatusBadge></div><p>{version.changeReason}</p><small>{new Date(version.changedAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })} · 修改人 {version.changedBy}</small></li>)}</ol></section>
+                  <LazyHistoryDetails key={`${profile.supplierId}-${profile.version}`} summary="变更历史"><SupplierVersionHistory supplierId={profile.supplierId}/></LazyHistoryDetails>
                 </div>
               )}
             </>
@@ -343,4 +336,10 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       </div>}
     </Shell>
   );
+}
+
+function SupplierVersionHistory({supplierId}:{supplierId:string}){
+ const [history,setHistory]=useState<SupplierProfile[]>([]),[error,setError]=useState('');
+ useEffect(()=>{const controller=new AbortController();void json<SupplierProfile[]>(`master-data/suppliers/${supplierId}/history`,{signal:controller.signal}).then(items=>{if(items.some(item=>item.supplierId!==supplierId))throw Error('供应商历史与当前选择不一致');if(!controller.signal.aborted)setHistory(items);}).catch(e=>{if(!controller.signal.aborted)setError(e instanceof Error?e.message:'供应商历史读取失败');});return()=>controller.abort();},[supplierId]);
+ return <>{error&&<p role="alert">{error}</p>}<ol className="supplier-history">{history.map(version=><li key={version.version}><div><b>版本 {version.version}</b><StatusBadge tone={version.active?'success':'warning'}>{version.active?'启用':'停用'}</StatusBadge></div><p>{version.changeReason}</p><small>{new Date(version.changedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})} · 修改人 {version.changedBy}</small></li>)}</ol></>;
 }
