@@ -9,3 +9,5 @@
 定向 23 项通过；九角色实际 React + 完整编译 CSS 浏览器矩阵通过（Root、设计师、文员、主管、工人、跟单、仓库、财务、无角色），五宽度无页面溢出或 JS 错误；390 宽像素已看。浏览器使用 TEST 拦截响应，仅验证组件/路由，不代表 Acceptance 业务验收。全套及真实隔离 PostgreSQL 最终检查正在收口。证据 /workspace/pr10-evidence、/workspace/pr10-focused.log。
 
 没有改变原角色创建资格、计价、工资、审批和状态机，没有部署、网络修改或真实数据操作。外部 Full Gate 与一次必要 GitHub Codex Review 以最终 Head 为准。
+
+最终本地全套 2216 通过、525 数据库条件跳过；真实隔离 PostgreSQL 原业务链 29 文件、320 项通过。最终类型、lint、构建、secret 与 diff 检查通过。九角色矩阵的杂事按钮按原角色表断言（设计师/跟单等原有资格，主管未获额外创建权）；手机业务页签换行修复后再次通过。证据 /workspace/pr10-final-tests.log、/workspace/pr10-local-postgres-business-chain.log、/workspace/pr10-evidence/browser-final2.log。
