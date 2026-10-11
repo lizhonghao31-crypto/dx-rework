@@ -32,4 +32,13 @@ describe('budget sourced manual drafts',()=>{
   const store=storage(),value=draft(),other={...value,userId:id('6')};saveBudgetSourcingDraft(store,value);saveBudgetSourcingDraft(store,other);clearBudgetSourcingDraft(store,value);expect(readBudgetSourcingDraft(store,value)).toBeNull();expect(readBudgetSourcingDraft(store,other)).toEqual(other);
   expect(()=>saveBudgetSourcingDraft({...store,setItem:()=>{throw Error('quota');}},value)).toThrow('quota');
  });
+ it('preserves every manual image and surviving PO selection on overflow until explicit user removal',()=>{
+  const value=draft();value.extraImages=Array.from({length:20},(_,index)=>({attachmentId:`00000000-0000-4000-8000-${String(index+1).padStart(12,'0')}`,filename:`manual-${index}.png`,mimeType:'image/png' as const}));
+  value.lines[0]!.imageAttachmentId=value.extraImages[19]!.attachmentId;
+  const current={...prepared(),budgetVersion:2,images:[{attachmentId:id('8'),filename:'new-source.png',mimeType:'image/png'},{...value.extraImages[0]!}]};
+  const result=recoverBudgetSourcingManual(current,value);expect(result.images).toHaveLength(21);expect(result.imageOverflow).toBe(1);expect(result.lines[0]!.imageAttachmentId).toBe(value.extraImages[19]!.attachmentId);expect(result.images.filter(image=>image.attachmentId===value.extraImages[0]!.attachmentId)).toHaveLength(1);
+  expect(value.extraImages).toHaveLength(20);expect(value.lines[0]!.imageAttachmentId).toBe(value.extraImages[19]!.attachmentId);
+  const boundary=recoverBudgetSourcingManual({...current,images:[value.extraImages[0]!] },value);expect(boundary.images).toHaveLength(20);expect(boundary.imageOverflow).toBe(0);expect(boundary.lines[0]!.imageAttachmentId).toBe(value.lines[0]!.imageAttachmentId);
+ });
+
 });
