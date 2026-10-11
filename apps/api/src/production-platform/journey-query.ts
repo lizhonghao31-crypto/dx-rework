@@ -1,3 +1,4 @@
+import {journeyTaskSummaries} from './journey-task-summary.js';
 import type { Pool, PoolClient } from "pg";
 import type { JourneyFilter, JourneyNode, JourneyRecord, JourneyState, OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -19,7 +20,7 @@ import { poDeliveryRisks } from "@dx-rework/contracts";
 import { assertBusinessExportAllowed } from "../access/export-authority.js";
 
 const iso = (value: Date|string|null|undefined) => value == null ? null : new Date(value).toISOString();
-type Candidate = { source: {source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
+type Candidate = { source: {development_type:string;source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
   order: {production_order_id:string;source_id:string|null;created_by:string;primary_merchandiser_id:string|null;design_style_no:string;temporary_style_no:string|null;customer_code:string;product_group:string;contract_delivery_date:string|null;created_at:string}|null };
 const record = (domain:string,id:string,url:string|null,version:number|null=null):JourneyRecord => ({domain,id,url,version,lineId:null,mode:"read"});
 const taskUrl = (id:string) => `/ui/digital-production?task=${encodeURIComponent(id)}`;
@@ -58,17 +59,25 @@ export class DigitalJourneyQuery {
 )
     ORDER BY coalesce(s.created_at,o.created_at) DESC,coalesce(s.source_id,o.production_order_id) DESC`,[actor.actorId,actor.actorRoles,leader,id])).rows;
   }
-  async list(actor:TrustedActorContext,filter:JourneyFilter,exportAll=false) {
+  async list(actor:TrustedActorContext,filter:JourneyFilter,exportAll=false,selectPage?: (items:OrderJourney[])=>OrderJourney[]) {
     assertIdentityActor(actor);
     return this.snapshot(async(db,asOf)=>{
-      const items:OrderJourney[]=[];
-      for(const row of await this.candidates(db,actor)) { const item=await this.project(db,actor,row,asOf);if(item)items.push(item); }
+      // Internal workspace selection runs after all authorized facts, before detail hydration.
+      const summaryOnly=!exportAll||Boolean(selectPage);
+      const items:OrderJourney[]=[],candidates=new Map<string,Candidate>();
+      for(const row of await this.candidates(db,actor)) { const item=await this.project(db,actor,row,asOf,undefined,summaryOnly);if(item){items.push(item);candidates.set(item.id,row);} }
       const facets = {
         customers: [...new Set(items.map(item=>item.customer).filter((value):value is string=>Boolean(value)))].sort(),
         categories: [...new Set(items.map(item=>item.category).filter((value):value is string=>Boolean(value)))].sort(),
         merchandisers: [...new Map(items.flatMap(item=>item.merchandisers).map(person=>[person.id,person])).values()],
       };
-      return {...selectJourneys(items,filter,asOf,!exportAll),canManagePolicies:isDigitalLeader(actor),facets};
+      const result=selectJourneys(items,filter,asOf,!exportAll);
+      if(summaryOnly){
+        const details:OrderJourney[]=[];
+        for(const summary of selectPage?selectPage(result.items):result.items){const detail=await this.project(db,actor,candidates.get(summary.id)!,asOf);if(detail)details.push({...detail,hitReasons:summary.hitReasons});}
+        result.items=details;
+      }
+      return {...result,canManagePolicies:isDigitalLeader(actor),facets};
     });
   }
   async export(actor:TrustedActorContext,filter:JourneyFilter) {
@@ -99,7 +108,7 @@ export class DigitalJourneyQuery {
           AND o.status='pending_assignment' AND r.status='pending_assignment'`,[authorized])).rows;
     });
   }
-  private async project(db:PoolClient,actor:TrustedActorContext,row:Candidate,asOf:string,selectedRound?:number):Promise<OrderJourney|null> {
+  private async project(db:PoolClient,actor:TrustedActorContext,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false):Promise<OrderJourney|null> {
     const policy=new DigitalProductionAccessPolicy(db),source=row.source,order=row.order;
     const sid=source?.source_id??null,oid=order?.production_order_id??null;
     const attached=Boolean(sid&&oid&&(await db.query("SELECT 1 FROM audit_events WHERE entity_type='digital_production' AND entity_id=$1 AND action='digital_source_attached' AND after_state->>'sourceId'=$2 LIMIT 1",[oid,sid])).rowCount);
@@ -168,9 +177,10 @@ export class DigitalJourneyQuery {
     if(fullOrder&&oid)setFact("order_information","completed",[record("order",oid,`/ui/digital-production?instruction=${oid}`)],iso(order!.created_at),{id:order!.created_by,name:designer});
     if(!oid)replace("order_information",emptyNode("order_information","uncreated"));
     const taskService=new DigitalProductionTaskService(this.database),taskDtos=[];
+    const summaries=summaryOnly?await journeyTaskSummaries(db,visibleTasks.map(task=>task.task_id)):null;
     for(const raw of visibleTasks) {
       const definition=journeyDefinition(raw.task_kind);if(!definition)continue;
-      const task=await taskService.read(actor,raw.task_id,db);taskDtos.push(task);
+      const task=summaries?summaries.get(raw.task_id)!:await taskService.read(actor,raw.task_id,db);taskDtos.push(task);
       const state:JourneyState=task.paused&&!["completed","cancelled"].includes(task.state)?"blocked":task.state==="ready"?"active":task.state;
       const node=emptyNode(definition.key,state,task.routeVersion);node.instanceId=task.taskId;node.occurrence=task.occurrence;
       node.expectedAt=task.dueAt;node.expectedPrecision=task.dueAt?"instant":"missing";node.expectedKind=task.dueAt?"sla":"unset";node.enteredAt=task.enteredAt;
@@ -178,9 +188,9 @@ export class DigitalJourneyQuery {
       node.current=raw.source_id?task.routeVersion===round&&!raw.returned:raw.task_kind==="sourcing_preparation"?task.state!=="cancelled":raw.route_instance_id===currentPrep;
       node.actualAt=task.completedAt;node.actualQuality=raw.completed_quality==="现场登记"||raw.completed_quality==="已核实"?"verified":raw.completed_quality==="补报未核实"?"unverified":"missing";
       const completion=journeyCompletion(node.expectedAt,node.actualAt,node.actualQuality==="verified");node.completionResult=state==="completed"?completion.result:null;node.overdueSeconds=state==="completed"?completion.overdueSeconds:null;
-      const events=(await db.query(`SELECT e.*,u.display_name AS actor_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id
+      const events=summaryOnly?[]:(await db.query(`SELECT e.*,u.display_name AS actor_name FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id
         WHERE task_id=$1 AND event_kind IN ('created','reassigned','completed') ORDER BY recorded_at,event_id`,[task.taskId])).rows;
-      const assignments=(await db.query("SELECT created_at,actor_id,before_state,after_state FROM audit_events WHERE entity_type='digital_task' AND entity_id=$1 AND action='digital_task_reassigned' ORDER BY created_at,id",[task.taskId])).rows;
+      const assignments=summaryOnly?[]:(await db.query("SELECT created_at,actor_id,before_state,after_state FROM audit_events WHERE entity_type='digital_task' AND entity_id=$1 AND action='digital_task_reassigned' ORDER BY created_at,id",[task.taskId])).rows;
       node.assignmentHistory=assignments.map(event=>({at:iso(event.created_at)!,actorId:event.actor_id,from:event.before_state?.assigneeId??null,to:event.after_state?.assigneeId??null}));
       const done=events.filter(event=>event.event_kind==="completed").at(-1);
       node.operator=done?{id:done.actor_id,name:done.actor_name}:null;
@@ -188,7 +198,7 @@ export class DigitalJourneyQuery {
       if(done) { const later=assignments.find(event=>new Date(event.created_at)>new Date(done.recorded_at));if(later)ownerId=later.before_state?.assigneeId??null; }
       node.owner=ownerId?{id:ownerId,name:ownerId===task.assigneeId?task.assigneeName:(await db.query("SELECT display_name FROM app_users WHERE id=$1",[ownerId])).rows[0]?.display_name??null}:null;
       node.records=[{...record("task",task.taskId,taskUrl(task.taskId),task.routeVersion),mode:task.canExecute&&!["completed","cancelled"].includes(task.state)?"handle":"read"}];
-      const conditions=(await db.query("SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1 AND NOT satisfied",[task.taskId])).rows;
+      const conditions=summaryOnly?[]:(await db.query("SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1 AND NOT satisfied",[task.taskId])).rows;
       const labels:Record<string,string>={business_recorded:"尚缺原业务完成事实",handover_received:"尚未收到实物/资料交接",materials_ready:"物料尚未齐备",owner_approved:"原外发老板批准尚未通过",pattern_ready:"纸样/唛架尚未完成",pattern_assignment_ready:"等待主管确认原打板正式派工",preshrink_ready:"预缩条件尚未齐备",craft_returned:"工艺尚未回仓",qc_approved:"整款工艺QC尚未通过",customer_confirmed:"客户样板尚未确认",all_po_complete:"全部PO/颜色尚未完成",washing_finished:"洗水尚未完成",factory_arrived:"尚缺工厂到料事实"};
       node.blockers=conditions.map(condition=>({key:condition.condition_key,label:labels[condition.condition_key]??condition.condition_key,ownerId:null,record:node.records[0]!}));
       if(task.paused)node.blockers.push({key:"resource_paused",label:"原业务已暂停",ownerId:null,record:node.records[0]!});
@@ -399,6 +409,6 @@ export class DigitalJourneyQuery {
     const instructionImages=!sourceImage&&orderAccess?(await db.query(`SELECT v.document->'images' AS images FROM digital_instruction_documents d JOIN digital_instruction_versions v ON v.production_order_id=d.production_order_id AND v.version=d.published_version WHERE d.production_order_id=$1`,[oid])).rows[0]?.images:null;
     const instructionImage=instructionImages?.find((file:{kind:string})=>file.kind==='款图');
     const styleImageUrl=sourceImage&&sid?`/api/digital-production/sources/${sid}/development/attachments/${sourceImage.attachmentId}`:instructionImage&&oid?`/api/digital-production/orders/${oid}/instruction/attachments/${instructionImage.attachmentId}`:null;
-    return {asOf,styleImageUrl,id:canonicalId,sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosenIdentity.design_style_no,temporaryStyleNo:chosenIdentity.temporary_style_no,customer:chosenIdentity.customer_code,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages:journeyStages(baseNodes),progress,hitReasons:[]};
+    return {asOf,styleImageUrl,developmentType:sourceAccess?source?.development_type??null:null,requiredCompletionDate:sourceAccess?currentDocument?.document?.returnDate??null:null,id:canonicalId,sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosenIdentity.design_style_no,temporaryStyleNo:chosenIdentity.temporary_style_no,customer:chosenIdentity.customer_code,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages:journeyStages(baseNodes),progress,hitReasons:[]};
   }
 }

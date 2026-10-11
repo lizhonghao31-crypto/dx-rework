@@ -6,14 +6,15 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
 import Fastify from "fastify";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { JourneyFilterSchema } from "@dx-rework/contracts/digital-production-journey";
 import { DigitalOrderCreateSchema } from "@dx-rework/contracts/digital-production";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
+import { selectJourneys } from "../../apps/api/src/production-platform/journey-projection.js";
 import { DigitalJourneyQuery } from "../../apps/api/src/production-platform/journey-query.js";
-import { DevelopmentWorkspaceQuery } from "../../apps/api/src/production-platform/development-workspace-query.js";
+import { developmentView, DevelopmentWorkspaceQuery } from "../../apps/api/src/production-platform/development-workspace-query.js";
 import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "@dx-rework/contracts/digital-development-workspace";
 import { registerDigitalIdentityRoutes } from "../../apps/api/src/production-platform/identity-routes.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
@@ -254,4 +255,59 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     const allowed=await app.inject({method:"GET",url:"/digital-production/workspaces/designer?search=TEST-J-WORKSPACE&view=ordered",headers:{cookie:`dx_rework_session=${designer}`}});
     expect(allowed.statusCode).toBe(200);expect(allowed.json().total).toBe(1);expect(allowed.headers["cache-control"]).toBe("no-store");
   });
+  it("paginates full authorized facts before hydrating only current-page tasks, and rechecks live roles",async()=>{
+    for(let index=0;index<25;index++){
+      const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:`TEST-PR12-PAGE-${index}`,temporaryStyleNo:null,customerCode:null},randomUUID());
+      const routeId=randomUUID();
+      for(const kind of ["development_pattern","development_cutting"]){await createTask({resource:{kind:"source",id:source.sourceId},kind,routeId,routeVersion:1,occurrence:1,assigneeId:kind==='development_pattern'?worker:null});}
+    }
+    const normalize=(value:unknown)=>JSON.parse(JSON.stringify(value,(key,item)=>key==='asOf'||key==='overdueSeconds'?undefined:item));
+    for(const context of [actor(root,["root_superuser"]),actor(),actor(worker,["pattern_room_worker"]),actor(stranger)]){
+      const full=await journeys.list(context,JourneyFilterSchema.parse({search:'TEST-PR12-PAGE'}),true);
+      for(const patch of [{page:1},{page:2},{page:3},{page:2,risk:'unknown'},{page:1,state:'pending'},{page:1,kpi:'active'},{page:1,kpi:'blocked'}]){
+        const filter=JourneyFilterSchema.parse({search:'TEST-PR12-PAGE',...patch});
+        const reads=vi.spyOn(DigitalProductionTaskService.prototype,'read');
+        const paged=await journeys.list(context,filter);
+        const hydrated=reads.mock.calls.map(call=>call[1]);reads.mockRestore();
+        const expected=selectJourneys(full.items,filter,paged.asOf);
+        expect(normalize(paged)).toEqual(normalize({...expected,facets:full.facets,canManagePolicies:full.canManagePolicies}));
+        const pageTasks=paged.items.flatMap(item=>item.stages.flatMap(stage=>stage.nodes).filter(node=>node.records.some(record=>record.domain==='task'&&record.id===node.instanceId)).map(node=>node.instanceId));
+        expect(hydrated.every(id=>pageTasks.includes(id))).toBe(true);
+        expect(hydrated.length).toBeLessThanOrEqual(paged.items.length*2);
+        if(context.actorId===designer&&patch.page===2&&!('risk' in patch)){expect(paged.total).toBe(25);expect(paged.items).toHaveLength(5);}
+        if(context.actorId===designer&&patch.page===3){expect(paged.total).toBe(25);expect(paged.items).toHaveLength(0);}
+        if(context.actorId===stranger){expect(paged.total).toBe(0);}
+        if(context.actorId===worker){expect(paged.items.every(item=>item.developmentType===null&&item.requiredCompletionDate===null)).toBe(true);}
+        if(context.actorId===designer){expect(paged.items.every(item=>item.developmentType==='头版'&&item.requiredCompletionDate===null)).toBe(true);}
+      }
+    }
+    const workspaces=new DevelopmentWorkspaceQuery(journeys);
+    for(const context of [actor(root,["root_superuser"]),actor(),actor(stranger)]){
+      const full=await journeys.list(context,JourneyFilterSchema.parse({search:'TEST-PR12-PAGE'}),true);
+      for(const patch of [{page:1},{page:2},{page:3},{page:2,view:'draft'},{view:'ordered'},{designer:'not-the-designer'}]){
+        const filter=DevelopmentWorkspaceFilterSchema.parse({search:'TEST-PR12-PAGE',...patch});
+        const all=full.items.filter(item=>!filter.designer||item.designer===filter.designer);
+        const filtered=all.filter(item=>filter.view==='all'||developmentView(item)===filter.view);
+        const reads=vi.spyOn(DigitalProductionTaskService.prototype,'read');
+        const result=await workspaces.designer(context,filter),hydrated=reads.mock.calls.map(call=>call[1]);reads.mockRestore();
+        expect(result.total).toBe(filtered.length);expect(result.counts.all).toBe(all.length);
+        expect(result.items.map(item=>normalize(item.journey))).toEqual(filtered.slice((filter.page-1)*20,filter.page*20).map(normalize));
+        expect(hydrated.length).toBeLessThanOrEqual(result.items.length*2);
+      }
+    }
+    // Compare mixed published/returned/closed/order fixtures created by the existing tests.
+    const context=actor(root,["root_superuser"]),full=await journeys.list(context,JourneyFilterSchema.parse({}),true);
+    for(const patch of [{page:1},{page:2},{risk:'blocked'},{risk:'overdue'},{state:'completed'},{kpi:'completed'},{node:'development_materials'}]){
+      const filter=JourneyFilterSchema.parse(patch),paged=await journeys.list(context,filter);
+      expect(normalize(paged)).toEqual(normalize({...selectJourneys(full.items,filter,paged.asOf),facets:full.facets,canManagePolicies:full.canManagePolicies}));
+    }
+    const client=await db.connect();try{await client.query('BEGIN');
+      await client.query("INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','TEST') ON CONFLICT DO NOTHING");
+      await client.query("SELECT set_config('dx_rework.role_revoke_event_id',$1,true),set_config('dx_rework.role_revoke_request_id','TEST-PR12-revoke',true)",[randomUUID()]);
+      await client.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason='TEST PR12 live role withdrawal' WHERE user_id=$1 AND role_code='pattern_room_worker' AND revoked_at IS NULL",[worker,root]);
+      await client.query('COMMIT');
+    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+    expect((await journeys.list(actor(worker,["pattern_room_worker"]),JourneyFilterSchema.parse({search:'TEST-PR12-PAGE'}))).total).toBe(0);
+  },120000);
+
 });
