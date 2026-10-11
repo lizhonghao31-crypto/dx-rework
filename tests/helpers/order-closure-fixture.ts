@@ -2,7 +2,7 @@ import { PoCustomerDateService } from "../../apps/api/src/production-platform/po
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {randomUUID} from 'node:crypto';
 import {expect,vi} from 'vitest';
-import type {Pool} from 'pg';
+import {Pool} from 'pg';
 import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
 import type {SourcingService} from '../../apps/api/src/sourcing/sourcing-service.js';
 import {ReceivingService} from '../../apps/api/src/receiving/receiving-service.js';
@@ -56,6 +56,19 @@ export async function exerciseOrderClosure(db:Pool,sourcing:SourcingService,id:s
  let sheet=await closure.read(primary,id);expect((await closure.read(root,id)).canClose).toBe(true);expect(sheet.lines[0]!.reworks[0]).toMatchObject({reworkId:draft.value.reworkOrderId,wageItemCount:0});expect(sheet.outstanding.some(x=>x.includes('未到足量'))).toBe(true);
  for(const actor of [primary,warehouse,qc])await expect(closure.close(actor,id,{reason:'TEST无权结案',expectedRevision:sheet.revision},randomUUID())).rejects.toMatchObject({statusCode:403});
  await expect(closure.close(manager,id,{reason:'TEST过期资料',expectedRevision:stale.revision},randomUUID())).rejects.toMatchObject({statusCode:409});
+ if(process.env.TEST_DATABASE_URL!=='postgres://in-memory-only'){
+  // Exhaust a real one-connection pool while closure reads through its held transaction.
+  const single=new Pool({...db.options,max:1,connectionTimeoutMillis:200});
+  const client=await single.connect();
+  try{
+   await client.query('BEGIN');
+   const financeActor={...manager,authorizationCapabilities:[...(manager.authorizationCapabilities??[]),'rework:finance_orders:read']};
+   const heldSheet=await new OrderClosureService(single).read(financeActor,id,client);
+   expect(heldSheet.revision).toBe(sheet.revision);
+   expect(heldSheet.lines[0]!.reworks[0]!.canView).toBe(false);
+   await client.query('ROLLBACK');
+  }finally{client.release();await single.end();}
+ }
  const before=JSON.stringify(sheet.lines),key=randomUUID(),input={reason:'TEST客户取消余量，保留原QC问题继续处理',expectedRevision:sheet.revision};
  let concurrent:Awaited<ReturnType<typeof closure.close>>[];
  if(process.env.TEST_DATABASE_URL==='postgres://in-memory-only'){
