@@ -3472,7 +3472,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await database.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,2,'最终设计确认','{}',$3)", [randomUUID(), sourceId, fixture.designer.actorId]);
     await new DevelopmentExecutionService(database, true).customerSample(fixture.designer, sourceId, { routeVersion: 2, note: 'TEST第2轮客户确认' }, randomUUID());
     const fourth = await instruction.read(primary, id);
-    await instruction.save(primary, id, { expectedVersion: fourth.version, orderVersion: fourth.order.version, document: { ...fourth.document!, comments: 'TEST制单v5采用开发第2轮' } }, randomUUID());
+    const comparison=fourth.sourceComparison!;await instruction.reviewSource(primary,id,{expectedVersion:fourth.version,orderVersion:fourth.order.version,sourceRound:comparison.sourceRound,sourceVersion:comparison.sourceVersion,document:{...fourth.document,comments:'TEST制单v5核对开发第2轮'},decisions:comparison.groups.map(group=>({group,action:'retain' as const}))},randomUUID());
     await instruction.publish(primary, id, { expectedVersion: 5, orderVersion: fourth.order.version }, randomUUID());
     let prep = await bulk.read(primary, id);
     await bulk.dispatch(people.development_clerk!, id, { expectedVersion: prep.dispatch.version, patternWorkerId: people.pattern_room_worker!.actorId, deliverPattern: true }, randomUUID());

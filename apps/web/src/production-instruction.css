@@ -136,3 +136,11 @@
 .dx-doc-instruction .instruction-po-dates-table tr>:first-child{position:sticky;left:0;min-width:145px;max-width:190px;overflow-wrap:anywhere}
 .dx-doc-instruction .instruction-po-dates-table input[type=checkbox]{width:16px;min-height:16px;vertical-align:middle;margin-right:4px}
 .dx-doc-instruction .instruction-date-history small{display:block;overflow-wrap:anywhere}
+
+.dx-doc-instruction .instruction-source-review {padding:16px;border:1px solid var(--dx-border,#d5dde8);border-radius:12px;margin-bottom:16px;}
+.dx-doc-instruction .instruction-source-review > label {display:flex;flex-direction:column;gap:6px;margin:12px 0;}
+.dx-doc-instruction .instruction-source-comparison {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.dx-doc-instruction .instruction-source-comparison > div {min-width:0;overflow-wrap:anywhere;}
+.dx-doc-instruction .instruction-source-text {white-space:pre-wrap;}
+.dx-doc-instruction .instruction-source-images img {max-width:100%;height:auto;}
+@media(max-width:767px){.dx-doc-instruction .instruction-source-comparison{grid-template-columns:1fr;}}
