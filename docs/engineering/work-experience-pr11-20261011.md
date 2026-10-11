@@ -13,3 +13,5 @@
 继承已经合入 release 的 PR05、PR06 修复并接入后续本地分支后，再次执行完整组合检查：本地完整测试 2222 通过、525 跳过；真实隔离 PostgreSQL 原业务链仍为 320 项通过，23 个自有测试 schema 清理完成。继承后的类型检查、44 项定向检查、所有工作区构建及秘密扫描通过。组合日志 `/workspace/pr11-combined-final-tests.log`、`/workspace/pr11-combined-final-postgres.log`、`/workspace/pr11-combined-final-build.log`；这不替代各独立 PR 最终 Head 的外部 Gate。
 
 PR07 手机 PO 日期遮挡修复接入同一组合代码后，Web 构建及原座舱 9 项定向检查通过；用实际最终组合 React/CSS 复查三岗位五宽度，逐 PO 所有事实单元格均在手机可见视口内，原办理和同键重试通过。证据 `/workspace/pr11-order-evidence/browser.log`、`detail-dates-360.png`。该后续调整只有展示属性和 CSS，没有改变已通过 320 项业务链的数据库逻辑。
+
+PR07 唯一 Review 的就绪标记修复接入组合分支后，完整类型检查、Web 构建、原13项定向及实际 React/CSS 四种深链/拒绝场景通过。就绪标记不追加全局列表读取，展开时才读取一次列表；手机 PO 事实仍完整可见。证据 `/workspace/pr11-ready-evidence/browser.log`，这是隔离 TEST API 组件验证。
