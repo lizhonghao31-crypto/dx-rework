@@ -881,7 +881,11 @@ export class ReworkBusinessDetailService {
     return false;
   }
 
-  private async canView(actor: TrustedActorContext, row: DetailRow, includeFinance = true): Promise<boolean> {
+  async canViewExisting(actor: TrustedActorContext, row: Pick<DetailRow, "rework_order_id" | "created_by" | "merchandiser_user_id" | "embroidery_merchandiser_user_id">): Promise<boolean> {
+    return this.canView(actor, row);
+  }
+
+  private async canView(actor: TrustedActorContext, row: Pick<DetailRow, "rework_order_id" | "created_by" | "merchandiser_user_id" | "embroidery_merchandiser_user_id">, includeFinance = true): Promise<boolean> {
     if(includeFinance) {
       if (await canReadFinanceOrders(this.database,actor)) return true;
       if (actorCapabilities(actor).includes("rework:finance_orders:read")) return false;

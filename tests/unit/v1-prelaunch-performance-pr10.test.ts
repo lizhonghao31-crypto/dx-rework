@@ -49,6 +49,7 @@ describe("1.0 prelaunch PR-10 perceived performance", () => {
     expect(reworkQuery).toContain('current.kind === "ready" ? current : { kind: "loading" }');
     expect(workflowQueue).toContain('current.kind === "ready" ? current : { kind: "loading" }');
     expect(wages).toContain('current.kind === "ready" ? current : { kind: "loading" }');
-    expect(orderBoard).not.toContain("setData(null)");
+    expect(orderBoard.split("setPageLoading(true);")[1]?.split(".catch(")[0]).not.toContain("setData(null)");
+    expect(orderBoard).toContain("setData(null)"); // Error/permission rejection clears stale facts.
   });
 });
