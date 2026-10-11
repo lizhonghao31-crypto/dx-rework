@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {randomUUID} from "node:crypto";
-import {initialInstruction,changedInstructionSourceGroups,applyInstructionSourceReview,ReviewInstructionSourceSchema} from "@dx-rework/contracts/production-instruction";
+import {initialInstruction,changedInstructionSourceGroups,applyInstructionSourceReview,ReviewInstructionSourceSchema,instructionErrors} from "@dx-rework/contracts/production-instruction";
 describe("instruction source decisions",()=>{
  it("compares source values rather than regenerated row IDs or unrelated remarks",()=>{
   const before={...initialInstruction(),measurements:[{id:randomUUID(),name:"胸围",tolerance:"",method:"",values:["20"]}],sizes:["M"]};
@@ -30,4 +30,25 @@ describe("instruction source decisions",()=>{
   const reviewed=applyInstructionSourceReview(current,proposed,[{group:"measurements",action:"adopt"}]);
   expect(reviewed.measurements).toEqual([{...row,values:["21","22"]},{...custom,values:["18",""]}]);expect(reviewed.sizes).toEqual(["M","L"]);
  });
+ it('clears preserved measurements and unit-dependent tolerances when adopting another unit',()=>{
+  const base={...initialInstruction(),unit:'inch' as const,sizes:['M'],measurements:[{id:randomUUID(),name:'胸围',tolerance:'1/4',method:'平量',values:['20']}]};
+  const manual={id:randomUUID(),name:'人工腰围',tolerance:'1/8',method:'人工量法',values:['18']},current={...base,measurements:[...base.measurements,manual]};
+  const proposed={...base,unit:'cm' as const,measurements:[{...base.measurements[0]!,id:randomUUID(),values:['50.8']}]};
+  const adopted=applyInstructionSourceReview(current,proposed,[{group:'measurements',action:'adopt'}],base);
+  expect(adopted.unit).toBe('cm');expect(adopted.measurements[0]).toMatchObject({values:['50.8'],tolerance:'',method:'平量'});
+  expect(adopted.measurements[1]).toEqual({...manual,tolerance:'',values:['']});
+  expect(instructionErrors(adopted,{lines:[]} as never)).toContain('每个尺寸项目须有名称，所有尺码须填写尺寸值');
+  expect(applyInstructionSourceReview(current,proposed,[{group:'measurements',action:'retain'}],base)).toEqual(current);
+ });
+ it('retains all ambiguous same-named manual rows and gives proposed duplicates distinct IDs',()=>{
+  const first={id:randomUUID(),name:'胸围',tolerance:'1/4',method:'原量法',values:['20']},manual={...first,id:randomUUID(),method:'人工新增量法',values:['19']};
+  const base={...initialInstruction(),sizes:['M'],measurements:[first]},current={...base,measurements:[first,manual]};
+  const proposed={...base,measurements:[{...first,id:randomUUID(),values:['21']},{...first,id:randomUUID(),values:['22']}]};
+  const adopted=applyInstructionSourceReview(current,proposed,[{group:'measurements',action:'adopt'}],base);
+  expect(adopted.measurements).toHaveLength(4);expect(adopted.measurements).toContainEqual(first);expect(adopted.measurements).toContainEqual(manual);
+  expect(new Set(adopted.measurements.map(row=>row.id)).size).toBe(4);expect(current.measurements).toEqual([first,manual]);
+  const unique=applyInstructionSourceReview(base,proposed,[{group:'measurements',action:'adopt'}],base);
+  expect(unique.measurements).toHaveLength(2);expect(new Set(unique.measurements.map(row=>row.id)).size).toBe(2);
+ });
+
 });

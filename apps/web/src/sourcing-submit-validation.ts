@@ -1,4 +1,4 @@
-import { sourcingDatesValid, SOURCING_DATE_ORDER_ERROR, calculateSourcingOrderQuantity, findDuplicateSourcingLine } from "@dx-rework/contracts";
+import { MAX_SOURCING_ATTACHMENTS, sourcingDatesValid, SOURCING_DATE_ORDER_ERROR, calculateSourcingOrderQuantity, findDuplicateSourcingLine } from "@dx-rework/contracts";
 import { isNewSourcingPrice, sourcingDecisionNeedsReason } from "./sourcing-price-presentation.js";
 import type { SubmissionIssue } from "./submission-validation.js";
 
@@ -35,6 +35,7 @@ export function validateSourcingCreate(input: {
   if (input.uploading) add("photos", "照片正在上传，请等待上传完成后提交");
   else if (input.uploadFailed) add("photos", "本次照片上传未完成，请重新选择图片上传成功后提交");
   else if (!input.imageCount) add("photos", "请至少上传一张订单照片");
+  else if(input.imageCount>MAX_SOURCING_ATTACHMENTS)add("photos",`订单照片最多${MAX_SOURCING_ATTACHMENTS}张，请主动移除超出的图片后提交`);
   return issues;
 }
 
