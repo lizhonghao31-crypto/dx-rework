@@ -87,7 +87,7 @@ export type BudgetSheet = {
 export type BudgetSourcingPreparation = {
   productionOrderId: string; budgetVersion: number; orderVersion: number;
   gender: "男装" | "女装"; styleName: string; contractDeliveryDate: string | null;
-  daxingUnitPrice: string;
+  daxingUnitPrice: string; customerCode?: string | null; budgetRows?: BudgetRow[];
   lineItems: Array<{ lineId: string; styleNo: string; alternateStyleNo: string; color: string; quantity: number; customerWarehouseArrivalDate?: string | null }>;
   images: Array<{ attachmentId: string; filename: string; mimeType: string }>;
 };

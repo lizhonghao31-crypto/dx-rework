@@ -42,14 +42,22 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion }: { order: 
     if (!sheet || !sheet.canEdit || writing.current || (sheet.status==="published"&&!copyPublished)) return;
     if(copyPublished&&(publish||sheet.status!=="published"||initialVersion!==undefined||!sheet.document))return;
     const saveDocument=copyPublished?sheet.document!:doc;
-    if(publish&&dirty){setError("请先保存当前修改");return;}
     setValidationMode(publish?"publish":"save");
     const problems=budgetIssues(saveDocument,publish);if(problems.length){setError("");requestAnimationFrame(()=>document.getElementById(problems[0]!.id)?.focus());return;}
     writing.current = true; setBusy(true); setError("");
-    const body = publish ? { expectedVersion: sheet.version } : { expectedVersion: sheet.version, document: saveDocument };
-    const path = `${base}${publish ? "/publish" : ""}`, payload = JSON.stringify([path, body]);
-    if (operation.current?.payload !== payload) operation.current = { payload, key: createClientRequestId() };
-    try { const value = await digitalRequest<BudgetSheet>(path, publish ? "POST" : "PUT", body, operation.current.key); setSheet(value); setDoc(value.document!); setDirty(false); operation.current = null; }
+    const write=async(path:string,method:string,body:unknown)=>{
+      const payload=JSON.stringify([path,body]);if(operation.current?.payload!==payload)operation.current={payload,key:createClientRequestId()};
+      const value=await digitalRequest<BudgetSheet>(path,method,body,operation.current.key);operation.current=null;return value;
+    };
+    try {
+      let value=sheet;
+      if(!publish||dirty||!sheet.document){
+        value=await write(base,"PUT",{expectedVersion:sheet.version,document:saveDocument});
+        setSheet(value);setDoc(value.document!);setDirty(false);
+      }
+      if(publish)value=await write(`${base}/publish`,"POST",{expectedVersion:value.version});
+      setSheet(value);setDoc(value.document!);setDirty(false);
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : "预算操作失败"); }
     finally { writing.current = false; setBusy(false); }
   };

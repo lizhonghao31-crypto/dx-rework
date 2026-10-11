@@ -3,6 +3,9 @@ import { changePoDate, inheritPoDate, removePoDateOverride } from "./po-date-inp
 import { type PoDeliveryDate } from "@dx-rework/contracts";
 import {FactorySettlementPanel} from "./factory-settlement-panel.js";
 import { contractReturnFileError, finishContractReturnUpload, type ContractReturnUpload } from "./sourcing-contract-return-upload.js";
+import {readBudgetSourcingDraft,saveBudgetSourcingDraft,clearBudgetSourcingDraft,recoverBudgetSourcingManual,type BudgetSourcingDraft} from "./budget-sourcing-draft.js";
+import {registerInternalNavigationGuard} from "./internal-navigation.js";
+import type {BudgetSheet} from "@dx-rework/contracts/digital-budget";
 import type { BudgetSourcingPreparation } from "@dx-rework/contracts/digital-budget";
 import { digitalRequest } from "./digital-production-api.js";
 import { SourcingReturnDialog } from "./sourcing-return-dialog.js";
@@ -56,7 +59,7 @@ import {
   type SourcingTimelineEntry,
 } from "@dx-rework/contracts";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
-import { DecisionSummary, ActionBar, ImageStrip, KeyFacts, ResponsiveFactsTable, WorkflowRail, StatusBadge, Surface } from "@dx-rework/ui";
+import { Button, DecisionSummary, ActionBar, ImageStrip, KeyFacts, ResponsiveFactsTable, WorkflowRail, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
@@ -482,6 +485,9 @@ export function SourcingWorkspacePage({
 function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; correction?: {item:SourcingCaseSummary; attachments:readonly SourcingAttachment[]} }) {
   const [budgetOrderId] = useState(() => correction ? null : new URLSearchParams(window.location.search).get("budget"));
   const [budgetPreparation, setBudgetPreparation] = useState<BudgetSourcingPreparation | null>(null);
+  const [budgetNeedsReview,setBudgetNeedsReview]=useState(false),[budgetDraftStatus,setBudgetDraftStatus]=useState(""),[budgetSourceOpen,setBudgetSourceOpen]=useState(false);
+  const pendingBudgetDraft=useRef<BudgetSourcingDraft|null>(null),savedBudgetFingerprint=useRef(""),initialBudgetScope=useRef("");
+  const budgetGuard=useRef({dirty:false,busy:false,confirmed:false});
   const [gender, setGender] = useState<"" | "男装" | "女装">(correction?.item.gender ?? "");
   const [styleName, setStyleName] = useState(correction?.item.styleName ?? "");
   const [additionalMerchandiserUserId, setAdditionalMerchandiserUserId] = useState("");
@@ -523,20 +529,64 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
     setLineItems(current=>current.map(line=>({...line,factoryDeliveryDate:deliveryDate})));createKey.current=null;
   };
   const duplicateLinesMessage = duplicateSourcingLineMessage(lineItems);
+  const restoreBudgetManual=(prepared:BudgetSourcingPreparation,draft:BudgetSourcingDraft)=>{
+    const restored=recoverBudgetSourcingManual(prepared,draft);
+    setAdditionalMerchandiserUserId(restored.additionalMerchandiserUserId);setEstimatedCutPieceSendDate(restored.estimatedCutPieceSendDate);setDeliveryDate(restored.deliveryDate);
+    setLineItems(restored.lines.map(line=>({...line,quantity:String(line.quantity)})));setImages(restored.images.map(image=>({...image,previewUrl:attachmentUrl(image.attachmentId,"preview")})));
+    setBudgetDraftStatus(`已恢复当前账号的人工补填${restored.discarded?`；${restored.discarded}项不再适用，请重新填写`:""}${restored.imageOverflow?"；来源图与人工补图已全部保留，超过图片上限，请手动处理后提交":""}。`);
+  };
   useEffect(() => {
-    if (!budgetOrderId || !canCreate) return;
+    if (!budgetOrderId || !canCreate || !user?.id) return;
     let live = true;
-    const version = Number(new URLSearchParams(window.location.search).get("budgetVersion"));
-    void digitalRequest<BudgetSourcingPreparation>(`orders/${budgetOrderId}/budget/prepare-sourcing`, "POST", { expectedVersion: version }).then(prepared => {
+    void (async()=>{
+      const current=await digitalRequest<BudgetSheet>(`orders/${budgetOrderId}/budget`);
+      if(current.status!=="published"||!current.canSubmitSourcing)throw Error(current.sourcingCaseId?"该母单已关联外发订单，请打开原订单":"请先发布当前有效预算，并由本单主跟单发起外发");
+      const prepared=await digitalRequest<BudgetSourcingPreparation>(`orders/${budgetOrderId}/budget/prepare-sourcing`, "POST", { expectedVersion: current.version });
       if (!live) return;
-      setBudgetPreparation(prepared); setGender(prepared.gender); setStyleName(prepared.styleName);
-      setDaxingUnitPrice(prepared.daxingUnitPrice);
+      let previous:BudgetSourcingDraft|null=null;try{previous=readBudgetSourcingDraft(window.localStorage,{userId:user.id,productionOrderId:budgetOrderId,budgetVersion:prepared.budgetVersion});}catch{setBudgetDraftStatus("本机存储不可用，当前表单仍可填写与正式提交。");}
+      const staleUrl=Number(new URLSearchParams(window.location.search).get("budgetVersion"))!==prepared.budgetVersion;
+      const changed=!!previous&&(previous.budgetVersion!==prepared.budgetVersion||previous.orderVersion!==prepared.orderVersion);
+      pendingBudgetDraft.current=previous;setBudgetNeedsReview(staleUrl||changed);
+      setAdditionalMerchandiserUserId("");setEstimatedCutPieceSendDate("");setDeliveryDate("");setBudgetSourceOpen(false);
+      setBudgetPreparation(prepared);setGender(prepared.gender);setStyleName(prepared.styleName);setDaxingUnitPrice(prepared.daxingUnitPrice);
       factoryDateOverrides.current=new Set();
       setLineItems(prepared.lineItems.map(line => ({lineId:line.lineId, factoryDeliveryDate:"", customerWarehouseArrivalDate:line.customerWarehouseArrivalDate ?? null, styleNo: line.styleNo, alternateStyleNo: line.alternateStyleNo, color: line.color, quantity: String(line.quantity) })));
       setImages(prepared.images.map(image => ({ ...image, previewUrl: attachmentUrl(image.attachmentId, "preview") })));
-    }).catch(reason => { if (live) setMessage(reason.message); });
+      if(previous&&!changed&&!staleUrl)restoreBudgetManual(prepared,previous);
+      else if(staleUrl||changed)setBudgetDraftStatus(`预算或母单来源已变化，当前有效预算第${prepared.budgetVersion}版；请核对后继续。`);
+      const url=new URL(window.location.href);url.searchParams.set("budgetVersion",String(prepared.budgetVersion));window.history.replaceState(window.history.state,"",url);
+    })().catch(reason => { if (live) setMessage(reason.message); });
     return () => { live = false; };
-  }, [budgetOrderId, canCreate]);
+  }, [budgetOrderId, canCreate,user?.id]);
+  const budgetManual=budgetPreparation&&user?.id?{userId:user.id,productionOrderId:budgetPreparation.productionOrderId,budgetVersion:budgetPreparation.budgetVersion,orderVersion:budgetPreparation.orderVersion,
+    additionalMerchandiserUserId,estimatedCutPieceSendDate,deliveryDate,lines:lineItems.filter(line=>line.lineId).map(line=>({lineId:line.lineId!,factoryDeliveryDate:line.factoryDeliveryDate??"",styleNo:line.styleNo,imageAttachmentId:line.imageAttachmentId??""})),
+    extraImages:images.filter(image=>!budgetPreparation.images.some(source=>source.attachmentId===image.attachmentId)).map(({attachmentId,filename,mimeType})=>({attachmentId,filename,mimeType}))}:null;
+  const budgetFingerprint=budgetManual?JSON.stringify(budgetManual):"";
+  const scopeIdentity=budgetManual?`${budgetManual.userId}:${budgetManual.productionOrderId}:${budgetManual.budgetVersion}:${budgetManual.orderVersion}`:"";
+  if(scopeIdentity&&scopeIdentity!==initialBudgetScope.current){initialBudgetScope.current=scopeIdentity;savedBudgetFingerprint.current=budgetFingerprint;}
+  budgetGuard.current.dirty=!budgetNeedsReview&&!!budgetFingerprint&&budgetFingerprint!==savedBudgetFingerprint.current;
+  budgetGuard.current.busy=busy||uploading||feedback.uncertain;
+  const persistBudgetManual=()=>{
+    if(!budgetManual||budgetNeedsReview||!canCreate||budgetGuard.current.confirmed)return;
+    try{saveBudgetSourcingDraft(window.localStorage,{...budgetManual,savedAt:new Date().toISOString()});savedBudgetFingerprint.current=budgetFingerprint;budgetGuard.current.dirty=false;setBudgetDraftStatus("人工补填已保存在当前账号 / 母单 / 预算版本的本机草稿。");}
+    catch{setBudgetDraftStatus("本机草稿未保存成功，当前填写仍在，请重试保存后离开。");}
+  };
+  useEffect(()=>{
+    if(!budgetFingerprint||budgetNeedsReview||uploading||busy||budgetGuard.current.confirmed)return;
+    const timer=window.setTimeout(persistBudgetManual,600);return()=>window.clearTimeout(timer);
+  },[budgetFingerprint,budgetNeedsReview,uploading,busy]);
+  useEffect(()=>{
+    if(!budgetOrderId)return;
+    const unregister=registerInternalNavigationGuard(async()=>{const state=budgetGuard.current;if(state.confirmed)return true;if(state.busy)return false;if(!state.dirty)return true;return await confirmInApp("本单人工补填尚未保存，确定离开？")&&!budgetGuard.current.busy;});
+    const beforeUnload=(event:BeforeUnloadEvent)=>{const state=budgetGuard.current;if(!state.confirmed&&(state.dirty||state.busy)){event.preventDefault();event.returnValue="";}};
+    window.addEventListener("beforeunload",beforeUnload);return()=>{unregister();window.removeEventListener("beforeunload",beforeUnload);};
+  },[budgetOrderId]);
+  const acceptBudgetReview=()=>{
+    if(!budgetPreparation)return;
+    if(pendingBudgetDraft.current)restoreBudgetManual(budgetPreparation,pendingBudgetDraft.current);
+    else setBudgetDraftStatus("已核对当前有效预算及母单资料，请补齐加工厂日期后正式提交。");
+    pendingBudgetDraft.current=null;setBudgetNeedsReview(false);createKey.current=null;
+  };
 
 
   useEffect(() => {
@@ -773,7 +823,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
 
   const createOrder = async (): Promise<void> => {
     if (busy || feedback.uncertain) return;
-    if (budgetOrderId && !budgetPreparation) return;
+    if (budgetOrderId && (!budgetPreparation||budgetNeedsReview)) return;
     if (!canCreate) { await alertInApp("当前账号没有创建订单权限", { title: "无权执行此操作" }); return; }
     const normalizedDaxingPrice = businessInputChange(daxingUnitPrice).trim();
     const issues = validateSourcingCreate({ gender, styleName, estimatedCutPieceSendDate, deliveryDate:effectiveDeliveryDate, digitalPo,
@@ -800,9 +850,9 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
       const created = await requestWithStyleCheck(correction ? `sourcing/cases/${correction.item.sourcingCaseId}/corrections` : "sourcing/cases", SourcingCaseSummarySchema, {
         method: "POST", headers: { "idempotency-key": requestKey }, body,
       }, normalizedLines, true);
-      feedback.confirmed();
+      feedback.confirmed();budgetGuard.current.confirmed=true;
       // A local storage failure after a confirmed write must never invite another submission.
-      try { if (!correction && user?.id) clearLocalSourcingDraft(user.id); } catch { /* Navigation still proceeds. */ }
+      try { if (!correction && user?.id) {if(budgetPreparation)clearBudgetSourcingDraft(window.localStorage,{userId:user.id,productionOrderId:budgetPreparation.productionOrderId,budgetVersion:budgetPreparation.budgetVersion});else clearLocalSourcingDraft(user.id);} } catch { /* Navigation still proceeds. */ }
       window.location.assign(detailHref(created));
     });
   };
@@ -814,10 +864,11 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
         title={correction ? "修改订单资料" : "创建订单"}
         badge="外发定价&选厂"
       />
+      {budgetPreparation&&<section aria-label="本单预算来源"><p>客户：{budgetPreparation.customerCode??"未登记"} · 有效预算第{budgetPreparation.budgetVersion}版 · 母单版本{budgetPreparation.orderVersion}</p><p role="status">{budgetDraftStatus}</p>{budgetNeedsReview&&<Button onClick={acceptBudgetReview} disabled={busy||uploading}>已核对当前来源，沿用合法补填</Button>}{budgetPreparation.budgetRows&&<details onToggle={event=>setBudgetSourceOpen(event.currentTarget.open)}><summary>查看设计师预算项</summary>{budgetSourceOpen&&budgetPreparation.budgetRows.map(row=><p key={row.rowId}>{row.section} · {row.category} · {row.name} {row.specification} · 单耗：{row.consumption||"未填"} · 单价：{row.unitPrice||"未填"} 元/{row.unit||"未填单位"}</p>)}</details>}</section>}
       {correction ? <p role="status">退回原因：{correction.item.correctionReason}<a href={detailHref(correction.item)}>返回订单</a></p> : null}
       <SubmissionFeedback feedback={feedback} busy={busy} />
       <Surface className="sourcing-create-card">
-        <fieldset className="sourcing-submission-fields" disabled={busy || feedback.uncertain}>
+        <fieldset className="sourcing-submission-fields" disabled={busy || feedback.uncertain || budgetNeedsReview}>
         <div className="section-title">
           <div><h2>订单资料</h2></div>
           <StatusBadge tone="info">跟单提交</StatusBadge>
@@ -873,6 +924,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
             <div><h2>订单照片（必填）</h2><p>至少上传1张；款图也会显示在这里，无需重复上传。支持 JPG、PNG、WebP。</p></div>
             <StatusBadge tone="info">{images.length}/{MAX_SOURCING_ATTACHMENTS}</StatusBadge>
           </div>
+          {budgetOrderId&&images.length>MAX_SOURCING_ATTACHMENTS&&<p role="alert">来源图与人工补图共{images.length}张，最多{MAX_SOURCING_ATTACHMENTS}张；恢复未丢弃图片或PO引用，请自行移除{images.length-MAX_SOURCING_ATTACHMENTS}张后提交。</p>}
           {images.length > 0 ? <div className="rework-v2-image-grid">
             {images.map((image) => <article key={image.attachmentId}>
               <a href={image.previewUrl} target="_blank" rel="noreferrer">
@@ -891,8 +943,8 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
           {duplicateLinesMessage || message ? <p role="status">{duplicateLinesMessage ?? message}</p> : null}
           {uploadFailed && !uploading ? <p role="alert">本次图片上传未完成，请重新选择图片上传成功后再提交。</p> : null}
           <ActionBar className="sourcing-create-actions">
-            {!correction && !budgetOrderId ? <button className="dx-button dx-button--secondary" type="button" disabled={busy || uploading} onClick={saveLocalDraft}>保存草稿</button> : null}
-            <button className="dx-button dx-button--primary" type="button" disabled={busy || feedback.uncertain || !canCreate || Boolean(budgetOrderId && !budgetPreparation)} onClick={() => void createOrder()}>
+            {!correction ? <button className="dx-button dx-button--secondary" type="button" disabled={busy || uploading} onClick={budgetOrderId?persistBudgetManual:saveLocalDraft}>保存草稿</button> : null}
+            <button className="dx-button dx-button--primary" type="button" disabled={busy || feedback.uncertain || !canCreate || Boolean(budgetOrderId && (!budgetPreparation||budgetNeedsReview))} onClick={() => void createOrder()}>
               {busy ? "正在提交…" : "提交并进入审批"}
             </button>
           </ActionBar>
