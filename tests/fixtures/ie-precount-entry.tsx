@@ -14,8 +14,9 @@ const stage = params.get("stage") ?? "N04";
 const role = params.get("role") ?? "ie";
 const readOnly = params.get("readonly") === "1";
 const processId = id("1"), orderId = id("2"), userId = id("3");
-const user = { id: userId, displayName: "TEST IE", isRoot: role === "root", businessRoles: [role === "tail" ? "tail_supervisor" : "ie_reviewer"], capabilities: role === "tail" ? ["submission:audit", "work:assign"] : ["process:review"], readOnlyModules: readOnly ? ["rework"] : [] };
+const user = { id: userId, displayName: "TEST IE", isRoot: role === "root", businessRoles: [role === "tail" ? "tail_supervisor" : "ie_reviewer"], capabilities: role === "tail" ? ["submission:audit", "work:assign"] : ["process:review"], effectiveWriteCapabilities: readOnly ? [] : role === "tail" ? ["submission:audit", "work:assign"] : ["process:review"], readOnlyModules: readOnly ? ["rework"] : [] };
 const canRecord = role !== "tail";
+const tailRequired = params.get("tail") === "1";
 const entries = [{ entryId: id("4"), configurationItemId: processId, processName: "TEST 工序", quantity: 3, note: "原预核", recordedBy: "TEST IE", recordedAt: "2026-10-11T00:00:00.000Z" }];
 const detail: ReworkBusinessDetail = {
   reworkOrderId: orderId, reworkNo: "RW-TEST", reworkKind: "qc_rework", status: stage === "N04" ? "in_progress" : "pending_order_review", version: 7,
@@ -24,7 +25,7 @@ const detail: ReworkBusinessDetail = {
   defectiveQuantity: { receiving: 2, receivingLinked: true, tail: 0, total: 2, canAddTail: false, tailEntries: [] },
   supplyContext: { washingSupplierName: null, embroiderySupplierName: null, fabricSupplierName: null, embroideryMerchandiserName: null },
   merchandiser: null, processingFactory: { type: "own_factory", supplierId: null, displayName: "TEST 本厂" }, reworkReason: "TEST", reworkProcess: "TEST 工序", problemPart: null, problemDescription: null, reworkQuantity: 10,
-  tailInspectionRequired: false, canReadBusinessDetails: true, singlePieceReworkTotal: 1, inspectionReport: null,
+  tailInspectionRequired: tailRequired, canReadBusinessDetails: true, singlePieceReworkTotal: 1, inspectionReport: null,
   createdBy: { userId: id("5"), displayName: "TEST QC" }, processConfigurationCreatedBy: null,
   createdAt: "2026-10-11T00:00:00.000Z", updatedAt: "2026-10-11T00:00:00.000Z", submittedAt: null, cancelledAt: null, cancelReason: null,
   settlementStatus: "not_required", wageSettlementStatus: "not_required", unsettledWagePeriods: [], attachments: [], workflowHistory: [],
@@ -32,8 +33,8 @@ const detail: ReworkBusinessDetail = {
 const overview = {
   reworkOrderId: orderId, reworkStatus: detail.status, orderVersion: 7,
   canReview: role === "tail" || role === "root", canIeReview: false, canAdjustQuantity: false, canConfirmQuantity: false,
-  canReviewQuantityIncrease: false, unifiedExecutionRequired: false, tailInspectionRequired: false,
-  processes: [{ configurationItemId: processId, processName: "TEST 工序", pricingUnit: "piece", plannedQuantity: 10, originalCompletedQuantity: 10, completedQuantity: 10, originalTailCheckedQuantity: 0, tailCheckedQuantity: 0, countGap: 0, complete: true, finalUnitPrice: 1 }],
+  canReviewQuantityIncrease: false, unifiedExecutionRequired: false, tailInspectionRequired: tailRequired,
+  processes: [{ configurationItemId: processId, processName: "TEST 工序", pricingUnit: "piece", plannedQuantity: 10, originalCompletedQuantity: 10, completedQuantity: 10, originalTailCheckedQuantity: tailRequired ? 10 : 0, tailCheckedQuantity: tailRequired ? 10 : 0, countGap: 0, complete: true, finalUnitPrice: 1 }],
   reports: [], adjustments: [], temporaryWorkers: [], reviewId: null, finalConfirmation: null,
 };
 const requests: { path: string; method: string; body: unknown }[] = [];
@@ -50,7 +51,15 @@ window.fetch = async (input, init) => {
   }
   if (path.endsWith("auth/me")) return Response.json({ status: "authorized", user });
   if (path.endsWith("business-detail")) return Response.json(detail);
-  if (path.endsWith("whole-order-review")) return Response.json(overview);
+  if (path.endsWith("whole-order-review")) {
+    if (params.get("fault") === "overview") return Response.json({ error: { message: "TEST 审核摘要读取失败" } }, { status: 500 });
+    return Response.json(overview);
+  }
+  if (path.endsWith("tail-inspection")) {
+    if (!["root", "tail"].includes(role)) return Response.json({ error: { message: "当前角色无权查看整查报数" } }, { status: 403 });
+    if (params.get("fault") === "tail") return Response.json({ error: { message: "TEST 整查读取失败" } }, { status: 500 });
+    return Response.json({ reworkOrderId: orderId, reworkStatus: detail.status, assignments: [], processes: [{configurationItemId: processId, processName: "TEST 工序", inspectedQuantity: 10}] });
+  }
   if (path.endsWith("work-task-adjustment-options")) return Response.json({ people: [] });
   if (path.endsWith("process-configuration")) return Response.json({ reworkOrderId: orderId, reworkStatus: detail.status, orderVersion: 7, configuration: null, reworkNo: "RW-TEST" });
   if (path.endsWith("work-tasks")) return Response.json({ reworkOrderId: orderId, reworkStatus: detail.status, orderVersion: 7, tasks: [{ workTaskId: id("6"), reworkOrderId: orderId, configurationItemId: processId, processName: "TEST 工序", executionKind: "worker", pricingUnit: "piece", plannedQuantity: 10, unitPrice: 1, mode: "individual", version: 1, status: "active", canSubmitReport: false, members: [{ personId: id("7"), displayName: "TEST 工人", personType: "internal" }], submittedQuantity: 0, remainingQuantity: 10 }, { workTaskId: id("8"), reworkOrderId: orderId, configurationItemId: id("9"), processName: "整查", executionKind: "tail_inspection", pricingUnit: "piece", plannedQuantity: 10, unitPrice: null, mode: "individual", version: 1, status: "active", canSubmitReport: false, members: [{ personId: id("10"), displayName: "TEST 整查员", personType: "internal" }], submittedQuantity: 0, remainingQuantity: 10 }] });
