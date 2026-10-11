@@ -3978,6 +3978,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       const movement=async(kind:'工艺发出'|'工艺回仓')=>{state=await flow.read(logistics,id);return flow.logistics(logistics,id,{expectedRevision:state.revision,kind,occurredAt:new Date().toISOString(),supplier:'TEST印花厂',note:'TEST整款'},randomUUID());};
       await expect(flow.logistics(logistics,id,{expectedRevision:state.revision,kind:'工艺发出',occurredAt:'2000-01-01T00:00:00Z',supplier:'TEST印花厂',note:'TEST不允许早于实裁'},randomUUID())).rejects.toMatchObject({statusCode:409});
       await movement('工艺发出');await movement('工艺回仓');state=await flow.read(qc,id);
+      const firstReturn=state.currentReturn!.factId;expect(state.currentReturn).toMatchObject({factId:state.facts.filter(f=>f.kind==='工艺回仓').at(-1)!.factId});
+      const staleRevision=state.revision;
       const qcImage=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-P13-QC.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[qcImage,`TEST/P13/QC/${qcImage}`,'d'.repeat(64),qc.actorId]);
       const checks=state.lines.map((l,i)=>({lineId:l.lineId,result:i===0?'合格' as const:'需处理' as const,problem:i===0?'':'TEST印花错位，请重做',treatment:'',attachmentIds:i===0?[qcImage]:[]}));
       await expect(flow.qc(logistics,id,{expectedRevision:state.revision,checks,note:''},randomUUID())).rejects.toMatchObject({statusCode:403});
@@ -3987,7 +3989,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       await expect(flow.qc(qc,id,{expectedRevision:state.revision,checks:[checks[0]!],note:''},randomUUID())).rejects.toMatchObject({statusCode:409});
 
       await expect(flow.dispatch(warehouse,id,{expectedRevision:state.revision,occurredAt:new Date().toISOString(),supplierId:factoryId,note:''},randomUUID())).rejects.toMatchObject({statusCode:409});
-      await movement('工艺发出');await movement('工艺回仓');state=await flow.read(qc,id);expect(state.lines.every(l=>l.result===null)).toBe(true);
+      await movement('工艺发出');await movement('工艺回仓');state=await flow.read(qc,id);expect(state.lines.every(l=>l.result===null)).toBe(true);expect(state.currentReturn!.factId).not.toBe(firstReturn);expect(state.checks.every(check=>check.returnFactId===firstReturn)).toBe(true);
+      await expect(flow.qc(qc,id,{expectedRevision:staleRevision,checks:[{...checks[0]!,attachmentIds:[]}],note:''},randomUUID())).rejects.toMatchObject({statusCode:409});
       state=await flow.qc(qc,id,{expectedRevision:state.revision,checks:state.lines.map(l=>({lineId:l.lineId,result:'合格',problem:'',treatment:'TEST已重做复查合格',attachmentIds:[]})),note:''},randomUUID());expect(state.allQc).toBe(true);
       // New issue before actual dispatch must block the entire order again.
       const qcTask=state.tasks.find(t=>t.taskKind==='bulk_qc')!;expect(qcTask.state).toBe('ready');

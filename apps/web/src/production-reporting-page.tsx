@@ -16,6 +16,8 @@ import { confirmInApp } from "./system-dialog.js";
 import { createWebUrls } from "../url-contract.js";
 import "./sourcing-workspace.css";
 import "./production-reporting-page.css";
+import {productionLineTarget} from "./production-line-target.js";
+import {digitalDetailReturnUrl} from "./digital-detail-route.js";
 const {apiUrl,pageUrl}=createWebUrls(import.meta.env.BASE_URL);
 const labels={in_production:"生产中",production_completed:"生产完成",shipped:"已发货"} as const;
 const today=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
@@ -58,7 +60,7 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
     }catch(e){setError(e instanceof Error?e.message:"保存失败");}finally{mutation.current=false;setBusy(false);}
   };
   const execute=async(kind:"complete"|"ship")=>{
-    if(!detail||busy)return;
+    if(!detail||busy||selectedLine.lineId)return;
     const text=kind==="complete"?`确认生产完成？已上报 ${formatBusinessDecimal(detail.order.completedQuantity)} / ${formatBusinessDecimal(detail.order.quantity)} 件。请按实际完成情况确认。`:
       `确认已发货？款号 ${detail.order.firstStyleNo}，已登记产量 ${formatBusinessDecimal(detail.order.completedQuantity)} 件。此操作不会确认仓库收货。`;
     if(await confirmInApp(text,{confirmLabel:kind==="complete"?"确认生产完成":"确认已发货"}))await write(`/${productionOrderId}/${kind}`,{businessDate:date,confirmed:true},kind==="complete"?"已登记生产完成":"已登记发货，等待仓库实际收货");
@@ -71,12 +73,14 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
       await loadScopes();setMessage(input.active?"负责范围已保存":"负责范围已撤销");
     }catch(e){setError(e instanceof Error?e.message:"保存失败");}finally{mutation.current=false;setBusy(false);}
   };
+  const selectedLine=productionLineTarget(window.location.search,detail?.order.poDeliveryDates);
+  const orderReturn=digitalDetailReturnUrl(new URLSearchParams(window.location.search).get("returnTo"),import.meta.env.BASE_URL);
   return <Shell active="生产数据填报"><main className="sourcing-workspace production-reporting">
     <Header iconRoute="/ui/production-reporting" title="生产数据填报" subtitle="按实际生产情况上报，系统自动累计。" badge="实时生产看板" />
     <a href={pageUrl("ui/production-dashboard")}><NavigationIcon route="/ui/production-dashboard" />实时看板</a>
     {error?<p role="alert" className="sourcing-delete-error">{error}</p>:null}
     {message?<p role="status">{message}</p>:null}
-    {productionOrderId?<a href={productionDisplayReturnUrl(new URLSearchParams(window.location.search).get("returnTo"))??pageUrl("ui/production-reporting")}>{productionDisplayReturnUrl(new URLSearchParams(window.location.search).get("returnTo"))?"返回实时生产展示":"返回生产订单"}</a>:null}
+    {productionOrderId?<a href={orderReturn??productionDisplayReturnUrl(new URLSearchParams(window.location.search).get("returnTo"))??pageUrl("ui/production-reporting")}>{orderReturn?"返回这张订单":productionDisplayReturnUrl(new URLSearchParams(window.location.search).get("returnTo"))?"返回实时生产展示":"返回生产订单"}</a>:null}
     <Button disabled={busy||loading} variant="secondary" onClick={()=>{void load();}}>刷新</Button>
     {loading?<p role="status">正在加载…</p>:null}
     {!productionOrderId?<>
@@ -93,14 +97,14 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
         {!loading&&list?.items.length===0?<p>暂无负责范围内的生产订单</p>:null}
       </div>{list?<ListPagination page={page} totalPages={Math.max(1,Math.ceil(list.totalCount/15))} onPageChange={setPage} busy={loading} ariaLabel="生产订单分页"/>:null}</Surface>
     </>:null}
-    {detail?<>
+    {detail&&selectedLine.error?<p role="alert">{selectedLine.error}</p>:detail?<>
       <Surface className="sourcing-list-card"><h2>{detail.order.firstStyleNo} · {detail.order.supplierName}</h2>
         <p>{labels[detail.order.status]} · 合同 {detail.order.contractNumber} · 交货日期 {detail.order.deliveryDate??"未记录"}</p>
         <p>累计生产 {formatBusinessDecimal(detail.order.completedQuantity)} / {formatBusinessDecimal(detail.order.quantity)} 件{detail.order.reportingState?" · 待首次上报":""}</p>
         {detail.order.sourceCaseArchived?<p>原外发单已删除，生产记录继续保留。</p>:null}
         <p>工艺：{detail.order.processes.join("、")}</p>
         {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&detail.order.status!=="shipped"?<div className="sourcing-form-grid"><label>业务日期<input type="date" value={date} max={today()} onChange={e=>setDate(e.target.value)} disabled={busy}/></label></div>:null}
-        <div className="sourcing-order-list">{detail.order.lines.map(line=><Surface key={line.position} className="sourcing-order-card"><div className="production-reporting__line">
+        <div className="sourcing-order-list">{detail.order.lines.filter(line=>selectedLine.position===null||line.position===selectedLine.position).map(line=><Surface key={line.position} className="sourcing-order-card"><div className="production-reporting__line">
           <strong>{line.position}. {line.styleNo} · {line.color??"未记录颜色"}</strong>
           <p>累计 {formatBusinessDecimal(line.completedQuantity)} / {formatBusinessDecimal(line.quantity)} 件 · 剩余 {formatBusinessDecimal(line.quantity-line.completedQuantity)} 件</p>
           {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&detail.order.status==="in_production"?<form className="sourcing-form-grid production-reporting__report" onSubmit={e=>{e.preventDefault();void write(`/${productionOrderId}/reports`,{position:line.position,businessDate:date,quantity:Number(quantities[line.position])},"本次产量已保存");}}>
@@ -108,8 +112,9 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
             <Button type="submit" disabled={busy||loading||!date||!quantities[line.position]||line.quantity===line.completedQuantity}>保存上报</Button>
           </form>:null}
         </div></Surface>)}</div>
-        {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&detail.order.status==="in_production"?<Button disabled={busy||loading||!date} onClick={()=>{void execute("complete");}}>生产完成</Button>:null}
-        {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&detail.order.status==="production_completed"?<Button disabled={busy||loading||!date} onClick={()=>{void execute("ship");}}>登记发货</Button>:null}
+        {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&!selectedLine.lineId&&detail.order.status==="in_production"?<Button disabled={busy||loading||!date} onClick={()=>{void execute("complete");}}>生产完成</Button>:null}
+        {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&!selectedLine.lineId&&detail.order.status==="production_completed"?<Button disabled={busy||loading||!date} onClick={()=>{void execute("ship");}}>登记发货</Button>:null}
+        {selectedLine.lineId?<p>当前仅办理这个PO的日报。生产完成和发货涉及整单，请先<a href={(()=>{const query=new URLSearchParams(window.location.search);query.delete("line");return `${window.location.pathname}${query.size?`?${query}`:""}`;})()}>查看全部PO</a>再确认。</p>:null}
         {detail.shipment?<p>发货款号 {detail.shipment.firstStyleNo} · {detail.shipment.shippedOn} · 发货时登记产量 {formatBusinessDecimal(detail.shipment.recordedQuantity)} 件（仓库收货另行记录）</p>:null}
       </Surface>
       <Surface className="sourcing-list-card"><details><summary>生产历史（{detail.history.length} 条）</summary>

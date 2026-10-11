@@ -353,7 +353,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
     Boolean(item?.canRecord && !item.record
       && (pieceCount || actualCutCount || cuttingSheets.length > 0)),
   );
-  const backHref = cuttingReturnPath(window.location.search);
+  const backHref = cuttingReturnPath(window.location.search,import.meta.env.BASE_URL);
 
   useEffect(() => () => {
     for (const previewUrl of previewUrls.current) URL.revokeObjectURL(previewUrl);
