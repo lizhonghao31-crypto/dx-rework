@@ -11,3 +11,5 @@
 实际 React + 完整 CSS + TEST 拦截 API 浏览器检查：样衣可借/只读/财务、供应商正常/历史拒绝、申请筛选返回及工资确认，共 7 个场景，1440/1280/768/390/360 宽度无横向页面溢出或脚本异常。历史初始 0 请求、首展开 1 请求、再次展开不重复，拒绝后资料可读；工资取消确认没有写请求。390 手机样衣、供应商和工资像素已逐页查看。证据 `/workspace/pr11-evidence`、`/workspace/pr11-tests.log`、`/workspace/pr11-postgres.log`。这些是隔离组件和业务链证据，不代表线上 Acceptance 岗位接力验收；最终外部 Full Gate 和一次必要 Review 以 PR 最终 Head 为准。
 
 继承已经合入 release 的 PR05、PR06 修复并接入后续本地分支后，再次执行完整组合检查：本地完整测试 2222 通过、525 跳过；真实隔离 PostgreSQL 原业务链仍为 320 项通过，23 个自有测试 schema 清理完成。继承后的类型检查、44 项定向检查、所有工作区构建及秘密扫描通过。组合日志 `/workspace/pr11-combined-final-tests.log`、`/workspace/pr11-combined-final-postgres.log`、`/workspace/pr11-combined-final-build.log`；这不替代各独立 PR 最终 Head 的外部 Gate。
+
+PR07 手机 PO 日期遮挡修复接入同一组合代码后，Web 构建及原座舱 9 项定向检查通过；用实际最终组合 React/CSS 复查三岗位五宽度，逐 PO 所有事实单元格均在手机可见视口内，原办理和同键重试通过。证据 `/workspace/pr11-order-evidence/browser.log`、`detail-dates-360.png`。该后续调整只有展示属性和 CSS，没有改变已通过 320 项业务链的数据库逻辑。
