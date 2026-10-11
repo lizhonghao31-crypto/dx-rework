@@ -8,7 +8,7 @@ const detail = "/ui/pattern-room/orders/00000000-0000-4000-8000-000000000001";
 afterEach(() => vi.unstubAllGlobals());
 
 describe("pattern return context", () => {
-  it.each([board, "/ui/my-tasks?q=TEST&module=pattern_room&page=2", "/ui/wages?from=2026-09-01&to=2026-09-16&wageSource=pattern_room&page=2", "/ui/pattern-room/prices"])("preserves the allowlisted origin %s", source => {
+  it.each([board, "/ui/my-tasks?q=TEST&module=pattern_room&page=2", "/ui/wages?from=2026-09-01&to=2026-09-16&wageSource=pattern_room&page=2", "/ui/pattern-room/prices", "/ui/digital-pattern-room?section=legacy&q=TEST&kind=misc&status=completed&creatorId=11111111-1111-4111-8111-111111111111&workerId=22222222-2222-4222-8222-222222222222&page=3"])("preserves the allowlisted origin %s", source => {
     const created = preparePatternNavigation(source, "/ui/pattern-room/create?kind=misc", null, 630);
     expect(patternReturnPath(new URL(created.target, "https://local.test").search)).toBe(source);
     const saved = preparePatternNavigation(created.target, detail, created.origin, 50);

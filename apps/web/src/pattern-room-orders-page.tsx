@@ -24,7 +24,7 @@ import "./pattern-room.css";
 import "./pattern-governed.css";
 
 const { pageUrl } = patternUrls;
-export function PatternRoomOrdersPage({embedded=false}:{embedded?:boolean}={}) {
+export function PatternRoomOrdersPage({embedded=false,onListPathChange}:{embedded?:boolean;onListPathChange?:(path:string)=>void}={}) {
   const [initial] = useState(() => readPatternListQuery(window.location.search));
   const [data, setData] = useState<z.infer<typeof PatternOrderListSchema> | null>(null), [error, setError] = useState("");
   const [q, setQ] = useState(initial.q), [status, setStatus] = useState(initial.status), [creatorId, setCreatorId] = useState(initial.creatorId), [workerId, setWorkerId] = useState(initial.workerId), [page, setPage] = useState(initial.page);
@@ -34,7 +34,7 @@ export function PatternRoomOrdersPage({embedded=false}:{embedded?:boolean}={}) {
   const nativeListPath = patternListPath({ q: search, kind, status, creatorId, workerId, page });
   const listPath=embedded?`/ui/digital-pattern-room?section=legacy&${nativeListPath.split("?")[1]??""}`:nativeListPath;
   const detailHref = (id: string) => `${pageUrl(`ui/pattern-room/orders/${id}`)}?${new URLSearchParams({ returnTo: listPath })}`;
-  useEffect(() => { window.history.replaceState(window.history.state, "", pageUrl(listPath)); }, [listPath]);
+  useEffect(() => { window.history.replaceState(window.history.state, "", pageUrl(listPath)); onListPathChange?.(listPath); }, [listPath,onListPathChange]);
   useInternalReturnScroll(!loading && data !== null);
   useEffect(() => {
     const abort = new AbortController(); setLoading(true); setError("");
