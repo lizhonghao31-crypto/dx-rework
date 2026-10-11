@@ -17,6 +17,7 @@ import { mapWithConcurrency } from "./concurrency.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import { hasExistingReceivingSource } from "./receiving-source.js";
 import "./receiving-page.css";
+import "./legacy-ui.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 const MAX_RECEIVING_IMAGES = 3;
@@ -465,7 +466,7 @@ export function ReceivingPage() {
     }
   };
 
-  return <main className="receiving-shell receiving-governed">
+  return <main className="receiving-shell receiving-governed" data-legacy-ui="receiving">
     <a className="dx-button dx-button--secondary receiving-order-link" href={pageUrl("/ui/orders?returnTo=%2Fui%2Freceiving")}>查看订货回货</a>
     <section className="receiving-hero">
       <div className="receiving-brand">达兴 · 仓库收货</div>

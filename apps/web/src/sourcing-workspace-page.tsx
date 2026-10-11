@@ -103,6 +103,7 @@ import "./rework-detail-compact.css";
 import "./sourcing-workspace.css";
 import "./order-overview-responsive.css";
 import "./sourcing-governed.css";
+import "./legacy-ui.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -1060,7 +1061,7 @@ function OrderListPage({
   };
 
   return (
-    <div className="sourcing-workspace">
+    <div className="sourcing-workspace" data-legacy-ui="sourcing">
       <Header
         iconRoute={mode === "pending" ? "/ui/sourcing/pending" : "/ui/sourcing/history"}
         title={mode === "pending" ? "待审批订单" : "历史订单"}
@@ -1748,7 +1749,7 @@ function OrderDetailPage({
   const canReturn = canAct(user,"owner_group","sourcing:owner:approve") && !item.approvalSnapshot
     && ["pending_ie_quote","pending_management_decision","pending_owner_approval"].includes(item.status);
   return (
-    <div className="sourcing-workspace sourcing-order-detail">
+    <div className="sourcing-workspace sourcing-order-detail" data-legacy-ui="sourcing">
       {returnOpen ? <SourcingReturnDialog busy={busy} error={returnError} onClose={()=>{setReturnOpen(false);returnKey.current=null;}} onSubmit={reason=>void submitReturn(reason)} /> : null}
       {budgetCorrectionOpen && item?.daxingUnitPrice ? <SourcingBudgetPriceCorrectionDialog
         currentPrice={item.daxingUnitPrice}

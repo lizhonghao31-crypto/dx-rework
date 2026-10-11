@@ -22,6 +22,7 @@ import { ListPagination } from "./list-pagination.js";
 import { alertInApp } from "./system-dialog.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
 import "./order-board-page.css";
+import "./legacy-ui.css";
 
 const { apiUrl, pageUrl } = createWebUrls(import.meta.env.BASE_URL);
 
@@ -687,7 +688,7 @@ export function OrderBoardPage() {
     }
   };
 
-  return <div className="order-board-page">
+  return <div className="order-board-page" data-legacy-ui="receiving-board">
     <div className="order-board-heading">
       <div className="order-board-heading__title">
         {new URLSearchParams(window.location.search).get("returnTo")==="/ui/receiving"&&<a href={pageUrl("/ui/receiving")}>返回仓库收货</a>}
