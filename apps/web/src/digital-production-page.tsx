@@ -81,7 +81,7 @@ function OrderDetail({ id, budgetVersion, budget = false }: { id: string; budget
         <div><dt>正式款号 / PO</dt><dd>{line.formalPoNo ?? line.poNumber ?? line.formalStyleNo ?? "未登记"}</dd></div>
         {line.formalStyleNo && line.formalStyleNo !== (line.formalPoNo ?? line.poNumber) && <div><dt>原正式款号</dt><dd>{line.formalStyleNo}</dd></div>}
         <div><dt>代用款号</dt><dd>{line.temporaryStyleNo ?? order.temporaryStyleNo ?? "未登记"}</dd></div>
-        <div><dt>出货日期日</dt><dd>{line.customerWarehouseArrivalDate ?? line.deliveryDate ?? "未登记"}</dd></div>
+        <div><dt>出货日期</dt><dd>{line.customerWarehouseArrivalDate ?? line.deliveryDate ?? "未登记"}</dd></div>
         <div><dt>加工厂交货日</dt><dd>{line.factoryDeliveryDate ?? "未登记"}</dd></div>
         <div><dt>尺码与数量</dt><dd>{line.sizes.map(size => `${size.size}：${size.quantity.toLocaleString()}`).join(" / ")}</dd></div>
       </dl></section>)}

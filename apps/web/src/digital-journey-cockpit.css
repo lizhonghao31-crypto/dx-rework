@@ -136,6 +136,7 @@
 .journey-golden[data-reference=UI10] .journey-flow-panel .dx-production-stage{height:auto;min-height:148px;padding:18px 8px 10px}
 .journey-golden[data-reference=UI10] .journey-flow .dx-production-stage :is(dt,dd){font-size:12px;line-height:1.5}
 .journey-golden[data-reference=UI10] .journey-activities .journey-activity-empty{display:block;font-size:13px;line-height:1.6}
+@media(min-width:1351px){.journey-golden[data-reference=UI10] .journey-activities li:not(.journey-activity-empty){grid-template-columns:94px 80px minmax(0,1fr)}}
 .journey-golden[data-reference=UI10] .journey-preparation-reference{padding:12px}
 .journey-golden[data-reference=UI10] .journey-preparation-group{padding:0;border:0;background:transparent}
 .journey-golden[data-reference=UI10] .journey-preparation-group>h3{font-size:13px;margin:0 0 8px}
