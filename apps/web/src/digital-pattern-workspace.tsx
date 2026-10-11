@@ -14,6 +14,7 @@ import { digitalTaskView } from "./digital-task-view.js";
 import { createWebUrls } from "../url-contract.js";
 import "./digital-development-workspace.css";
 import { PatternRoomAssignmentWorkspace } from "./pattern-room-orders-page.js";
+import { BulkPatternWorkspace } from "./bulk-pattern-workspace.js";
 import { patternTaskAction } from "./pattern-task-action.js";
 
 const states = {uncreated: "尚未创建", pending: "等待前置", active: "办理中", blocked: "暂时办不了", completed: "已完成", cancelled: "已取消", inherited: "沿用", unavailable: "不可访问", not_applicable: "不适用"};
@@ -31,6 +32,8 @@ function initialFilter(): PatternWorkspaceFilter {
   return parsed.success ? parsed.data : PatternWorkspaceFilterSchema.parse({});
 }
 export function DigitalPatternWorkspace() {
+  const [section,setSection]=useState(new URLSearchParams(window.location.search).get('section')==='bulk'?'bulk':'development');
+  const [bulkOrder,setBulkOrder]=useState<string|null>(new URLSearchParams(window.location.search).get('bulkOrder'));
   const [filter, setFilter] = useState(initialFilter), [result, setResult] = useState<PatternWorkspaceResult | null>(null);
   const [options, setOptions] = useState<DigitalAccessOptions | null>(null), [error, setError] = useState(""), [refresh, setRefresh] = useState(0), [notice,setNotice]=useState("");
   const [selectedId, setSelectedId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("task"));
@@ -47,15 +50,17 @@ export function DigitalPatternWorkspace() {
   };
   useEffect(() => {
     let live = true; setError("");
+    if(section==="bulk"){void digitalRequest<DigitalAccessOptions>("access/options").then(access=>{if(live)setOptions(access);}).catch(reason=>{if(live)setError(reason.message);});return()=>{live=false;};}
     const query = new URLSearchParams(Object.entries(filter).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]));
     void Promise.all([digitalRequest<PatternWorkspaceResult>(`workspaces/pattern?${query}`), digitalRequest<DigitalAccessOptions>("access/options")]).then(([data, access]) => {if (live) {setResult(data); setOptions(access);}}).catch(reason => {if (live) {setResult(null); setError(reason.message);}});
     return () => {live = false;};
-  }, [filter, refresh]);
+  }, [filter, refresh,section]);
   useEffect(() => {
     let live = true; setSelected(null); setSheet(null); setPatternOrderId(null); setSuggestedWorker(null); setDetailError("");
     if (selectedId) void digitalRequest<DigitalTask>(`tasks/${selectedId}`).then(async task => {
       if (!live) return;
       // A direct query cannot turn a non-development task into a board operation.
+      if(task.taskKind==='bulk_pattern'&&task.orderId){setBulkOrder(task.orderId);setSection('bulk');return;}
       if (!task.taskKind.startsWith("development_")) throw Error("该任务请在原业务入口办理");
       setSelected(task);
       if (task.sourceId) {const document = await digitalRequest<DevelopmentSheet>(`sources/${task.sourceId}/development?round=${task.routeVersion}`); if (live) setSheet(document);}
@@ -69,8 +74,10 @@ export function DigitalPatternWorkspace() {
   const waitingFor=selectedNode?.node.blockers.map(item=>item.label).join("、")||selected?.blockedReason||"前置工序完成";
   const view = digitalTaskView(window.location.search) === "correct" ? "correct" : selected && ["completed","cancelled"].includes(selected.state) ? "read" : "handle";
   const taskUrl = selected ? `${urls.pageUrl("ui/digital-production")}?task=${selected.taskId}&taskView=${view}&returnTo=${encodeURIComponent(window.location.pathname+window.location.search)}` : "";
+  const sections=<nav className="development-tabs" aria-label="板房业务">{[['development','开发岗位任务'],['bulk','大货纸样与唛架']].map(([key,label])=><button key={key} aria-pressed={section===key} onClick={()=>{setSection(key!);const url=new URL(window.location.href);url.searchParams.set('section',key!);window.history.replaceState(window.history.state,'',url);}}>{label}</button>)}</nav>;
+  if(section==='bulk')return <div className="pattern-workspace pattern-golden dx-production-refined">{sections}<BulkPatternWorkspace orderId={bulkOrder} canViewAll={Boolean(options?.roles.some(role=>['root_superuser','owner_group','production_management','pattern_room_supervisor','development_clerk'].includes(role)))}/></div>;
   return <div className="pattern-workspace pattern-golden dx-production-refined">
-    <div className="development-breadcrumb"><a href={urls.pageUrl('ui/digital-cockpit')}>生产管理座舱</a> › <strong>板房管理台</strong></div>
+    {sections}<div className="development-breadcrumb"><a href={urls.pageUrl('ui/digital-cockpit')}>生产管理座舱</a> › <strong>板房管理台</strong></div>
     <PageHeader title="板房管理台" description="按真实开发任务查看材料、交接与办理" actions={<Button onClick={()=>changed()}>刷新</Button>}/>
     {error && <p role="alert">{error}</p>}{notice&&<p role="status" className="pattern-submit-notice">{notice}</p>}
     <div className="pattern-group-cards">{PATTERN_LANES.map((lane,index) => <KpiCard key={lane.key} icon={<NavigationIcon name={(["FileText","Shirt","Scissors","Settings","Shirt","ClipboardCheck","PackageCheck"] as const)[index]??"FileText"} />} className={`pattern-lane-kpi lane-${index}`} label={lane.label} value={result ? lane.groups.reduce((total,group) => total+result.counts[group],0) : "—"} detail={result?.riskCounts?`临期 ${lane.groups.reduce((total,group)=>total+result.riskCounts[group].dueSoon,0)} / 逾期 ${lane.groups.reduce((total,group)=>total+result.riskCounts[group].overdue,0)}`:"临期 / 逾期读取中"} selected={filter.lane === lane.key} onClick={() => update({lane:filter.lane === lane.key ? undefined : lane.key,group:undefined})}/>)}</div>

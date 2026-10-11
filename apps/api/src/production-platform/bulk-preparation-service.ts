@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import type { BulkDispatch, BulkCompletion, BulkPreparationSheet } from "@dx-rework/contracts/bulk-preparation";
+import type { BulkDispatch, BulkCompletion, BulkPreparationSheet, BulkWorkroomFilter, BulkWorkroomResult } from "@dx-rework/contracts/bulk-preparation";
 import type { InstructionDocument } from "@dx-rework/contracts/production-instruction";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { ApplicationError } from "../platform/errors.js";
@@ -8,6 +8,7 @@ import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDig
 import { DigitalProductionTaskService } from "./task-service.js";
 import { developmentDocumentRow } from "./development-round-repository.js";
 import { resolveDigitalChild } from "./child-link-repository.js";
+import { isRootActor } from "../access/business-authority.js";
 type DB=Pick<Pool|PoolClient,"query">;
 const fail=(message:string):never=>{throw new ApplicationError("BULK_PREPARATION_CONFLICT",message,409);};
 const lock=(db:DB)=>db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
@@ -88,6 +89,24 @@ export class BulkPreparationService {
   return {cutting:{mode:g.approval?.cutting_process??null,completed:cuttingRows.length>0&&cuttingRows.every(r=>r.actualCutCount!==null),lines:cuttingRows.map(r=>({...r,actualCutCount:r.actualCutCount===null?null:Number(r.actualCutCount),pieceCount:r.pieceCount===null?null:Number(r.pieceCount)})) as BulkPreparationSheet['cutting']['lines']},orderId:id,instructionVersion:g.instruction?.version??null,sourceRound:g.source?.round_number??null,customerConfirmed:g.customerConfirmed,ownerApproved:g.ownerApproved,instructionValid:g.instructionValid,reasons:g.reasons,preparationId:prep?.preparation_id??null,preshrink:g.instruction?.document.preshrink??null,
    dispatch:{version:row?.version??0,patternWorkerId:row?.pattern_worker_id??null,warehouseWorkerId:row?.warehouse_worker_id??null,cuttingWorkerId:row?.cutting_worker_id??null},canDispatchPattern:isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes('development_clerk'),canDispatchWarehouse:isDigitalLeader(actor),
    facts:prep?(await db.query('SELECT kind,recorded_at AS "recordedAt" FROM digital_bulk_preparation_facts WHERE preparation_id=$1 ORDER BY recorded_at',[prep.preparation_id])).rows:[],tasks:prep?await Promise.all((await this.routeTasks(db,prep.preparation_id)).map(t=>this.tasks().read(actor,t.task_id,db))):[]};
+ }
+ async workroom(actor:TrustedActorContext,filter:BulkWorkroomFilter):Promise<BulkWorkroomResult>{
+  const policy=new DigitalProductionAccessPolicy(this.database);
+  const root=isRootActor(actor);
+  const managementRoles=['owner_group','production_management','pattern_room_supervisor','development_clerk'];
+  let manager=root,worker=false;
+  for(const role of managementRoles)if(actor.actorRoles.includes(role)&&await policy.activeRole(actor.actorId,role))manager=true;
+  if(actor.actorRoles.includes('pattern_room_worker'))worker=await policy.activeRole(actor.actorId,'pattern_room_worker');
+  if(!manager&&!worker||filter.scope==='all'&&!manager)digitalForbidden();
+  const where=`o.source_id IS NOT NULL AND ($2='' OR strpos(lower(s.design_style_no),lower($2))>0 OR strpos(lower(coalesce(s.customer_code,'')),lower($2))>0 OR EXISTS(SELECT 1 FROM digital_production_po_lines po WHERE po.production_order_id=o.production_order_id AND strpos(lower(coalesce(po.po_number,'')),lower($2))>0))
+   AND ($3::boolean OR EXISTS(SELECT 1 FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id) JOIN digital_bulk_preparations p ON p.preparation_id=t.route_instance_id JOIN digital_instruction_documents d ON d.production_order_id=p.production_order_id AND d.published_version=p.instruction_version WHERE a.production_order_id=o.production_order_id AND a.task_kind='bulk_pattern' AND a.assignee_id=$1 AND t.state<>'cancelled' AND p.source_round=coalesce((SELECT max(round_number) FROM digital_development_rounds WHERE source_id=p.source_id),1)))`;
+  const args=[actor.actorId,filter.search,filter.scope==='all'];
+  const from='FROM digital_production_orders o JOIN digital_production_sources s ON s.source_id=o.source_id';
+  const total=Number((await this.database.query(`SELECT count(*) AS total ${from} WHERE ${where}`,args)).rows[0].total);
+  const rows=(await this.database.query(`SELECT o.production_order_id,s.design_style_no,s.customer_code ${from} WHERE ${where} ORDER BY o.created_at DESC,o.production_order_id LIMIT 20 OFFSET $4`,[...args,(filter.page-1)*20])).rows;
+  const items=[];
+  for(const row of rows){if(await policy.allowed(actor,'order',row.production_order_id,'technical'))items.push({orderId:row.production_order_id,designStyleNo:row.design_style_no,customer:row.customer_code,sheet:await this.read(actor,row.production_order_id)});}
+  return {page:filter.page,pageSize:20,total,items};
  }
  private async command(actor:TrustedActorContext,id:string,action:string,input:unknown,key:string,work:(db:PoolClient)=>Promise<void>){
   if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail('缺少有效操作标识');const db=await this.database.connect();try{

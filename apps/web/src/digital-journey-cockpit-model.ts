@@ -119,7 +119,8 @@ export function journeyDocumentGroups(order: OrderJourney) {
     const key = [record.domain, record.id, record.url, record.version, record.lineId].join(":");
     if (entries.has(key)) continue;
     const label = [node?.subject || node?.label || "订单档案", node?.round ? `第 ${node.round} 轮` : null, node?.occurrence && node.occurrence > 1 ? `第 ${node.occurrence} 次` : null, record.version ? `v${record.version}` : null, record.lineId ? `明细 ${record.lineId.slice(-8)}` : null].filter(Boolean).join(" · ");
-    entries.set(key, {key, record, label});
+    const documentLabel=record.domain==='development'?`开发单 · 第 ${node?.round??new URL(record.url??'/', 'https://local.invalid').searchParams.get('round')??1} 轮`:record.domain==='budget'?`预算${record.version?` · 第 ${record.version} 版`:''}`:record.domain==='instruction'?`大货制单${record.version?` · 第 ${record.version} 版`:''}`:record.domain==='cutting'?`${order.lines.find(line=>line.id===record.lineId)?.po??'对应PO'} · 裁床单`:record.domain==='sourcing'?'外发审批 / 合同':label;
+    entries.set(key, {key, record, label:documentLabel});
   }
   const groups = new Map<string, Array<{ key: string; record: JourneyRecord; label: string }>>();
   for (const entry of entries.values()) groups.set(entry.record.domain, [...(groups.get(entry.record.domain) ?? []), entry]);

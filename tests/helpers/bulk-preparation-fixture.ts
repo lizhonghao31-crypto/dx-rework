@@ -72,6 +72,18 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
   expect((await bulk.read(primary,id)).dispatch).toEqual(before.dispatch);
  }
 
+ const workerJourney=await new DigitalJourneyQuery(db).read(worker,id);
+ expect(workerJourney.styleImageUrl).toBe(`/api/digital-production/orders/${id}/instruction/attachments/${image}`);
+ expect(Number.isFinite(Date.parse(workerJourney.asOf!))).toBe(true);
+ const rootWorkroom=await bulk.workroom(actors.root,{page:1,search:fixture.order.designStyleNo,scope:'all'});
+ expect(rootWorkroom.items.some(item=>item.orderId===id)).toBe(true);
+ const ownWorkroom=await bulk.workroom(worker,{page:1,search:fixture.order.designStyleNo,scope:'mine'});
+ expect(ownWorkroom.items.some(item=>item.orderId===id)).toBe(true);
+ await expect(bulk.workroom(worker,{page:1,search:'',scope:'all'})).rejects.toMatchObject({statusCode:403});
+ await expect(bulk.workroom(warehouse,{page:1,search:'',scope:'mine'})).rejects.toMatchObject({statusCode:403});
+ await db.query('UPDATE identity_mappings SET employed=false WHERE user_id=$1',[worker.actorId]);
+ await expect(bulk.workroom(worker,{page:1,search:'',scope:'mine'})).rejects.toMatchObject({statusCode:403});
+ await db.query('UPDATE identity_mappings SET employed=true WHERE user_id=$1',[worker.actorId]);
  const cuttingId=(await db.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[caseId])).rows[0].cutting_order_id;
  expect((await cutting.get(actors.root,cuttingId)).canRecord).toBe(false);
  await expect(cutting.record(actors.root,cuttingId,{pieceCount:1,actualCutCount:137,attachmentIds:[]},randomUUID())).rejects.toMatchObject({statusCode:409});

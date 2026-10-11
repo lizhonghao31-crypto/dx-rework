@@ -1,4 +1,5 @@
 import { earliestFactoryPo,poDateSummary,type PoDeliveryDate,type PoDeliveryRisk } from "@dx-rework/contracts";
+import type {OrderJourney} from "@dx-rework/contracts/digital-production-journey";
 import "./po-delivery-dates.css";
 
 export const poDeliveryKindLabels={factory:"加工厂交货日",customer:"客户仓到货日",sample:"船样目标日"};
@@ -16,4 +17,9 @@ export function PoDateRisks({risks}:{risks:readonly PoDeliveryRisk[]|undefined})
 export function PoDateDetails({lines,finished=false}:{lines:readonly PoDeliveryDate[]|undefined;finished?:boolean}) {
   if(!lines?.length)return null;
   return <details className="po-date-details"><summary>逐 PO 双交期与船样目标（{lines.length}）</summary><PoDeadline lines={lines} finished={finished}/><div className="po-date-scroll" tabIndex={0} aria-label="逐 PO 交期明细"><table><thead><tr><th>PO / 颜色</th><th>客户仓到货日</th><th>加工厂交货日</th><th>船样目标日</th></tr></thead><tbody>{lines.map(line=><tr key={line.lineId} id={`po-date-${line.lineId}`}><td>{line.poNumber||"待补 PO"} / {line.color}</td><td>{line.customerWarehouseArrivalDate||"未登记"}</td><td>{line.factoryDeliveryDate||"未登记"}</td><td>{line.sampleTargetDate||"客户日期待补"}</td></tr>)}</tbody></table></div></details>;
+}
+
+export function PoOrderFacts({order}:{order:OrderJourney}) {
+  if(!order.orderId)return null;
+  return <div className="po-date-scroll journey-po-order-facts" tabIndex={0} aria-label="实际下单与逐PO交期"><table><thead><tr><th>PO / 款号</th><th>颜色</th><th>下单数量</th><th>客户仓到货日</th><th>加工厂交货日</th></tr></thead><tbody>{order.lines.map(line=>{const dates=order.poDeliveryDates?.find(item=>item.lineId===line.id);return <tr key={line.id} id={`po-date-${line.id}`}><td data-label="PO / 款号">{line.po||"待补PO"} / {line.formalStyleNo||line.temporaryStyleNo||order.designStyleNo}</td><td data-label="颜色">{line.color}</td><td data-label="下单数量">{line.orderedQuantity.toLocaleString()}</td><td data-label="客户仓到货日">{dates?.customerWarehouseArrivalDate||"未登记"}</td><td data-label="加工厂交货日">{dates?.factoryDeliveryDate||"未登记"}</td></tr>;})}</tbody></table></div>;
 }
