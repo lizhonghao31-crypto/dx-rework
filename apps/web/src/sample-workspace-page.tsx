@@ -1,3 +1,4 @@
+import {LazyHistoryDetails} from "./lazy-history-details.js";
 import { todoReturnPath } from "./todo-query-state.js";
 import {SampleAnalysisPage} from './sample-analysis-page.js';
 import {SampleDisposalActions,SampleArchiveList,SampleFinancialHistory} from "./sample-disposal-page.js";
@@ -90,6 +91,10 @@ export function SampleDetail({ detail }: { detail: SampleDetailResponse }) {
   return <>
     <a href={pageUrl(todoReturnPath(window.location.search) ?? "ui/samples")}>{todoReturnPath(window.location.search) ? "返回我的待办" : "返回在管样衣"}</a>
     <header className="sample-detail-heading"><div><h2>{item.styleName}</h2><p>{item.sampleCode} · {item.styleNo}</p></div><SampleBadge status={item.status} /></header>
+    <section id="sample-current-actions" aria-label="当前样衣操作">
+    <SampleWorkflowActions key={`workflow-${item.version}`} sampleId={item.sampleId} />
+    <SampleDisposalActions key={`disposal-${item.version}`} item={item} />
+    </section>
     <div className="sample-detail-grid"><Surface className="rework-v2-core"><div className="sample-detail-photo"><SampleThumbnail key={`${item.sampleId}:${item.version}`} sampleId={item.sampleId} large /></div></Surface><Surface className="rework-v2-core"><h2>样衣资料</h2>
       <dl className="sample-info">
         {Object.entries({ 品牌: item.brand, 款号: item.styleNo, 类别: item.category, 颜色: item.color, 尺码: item.size,
@@ -99,15 +104,11 @@ export function SampleDetail({ detail }: { detail: SampleDetailResponse }) {
         {item.finance ? <div><dt>采购价</dt><dd>¥{sampleDisplayMoney(item.finance.purchasePrice)}</dd></div> : null}
       </dl>
     </Surface></div>
-    <section id="sample-current-actions" aria-label="当前样衣操作">
-    <SampleWorkflowActions key={`workflow-${item.version}`} sampleId={item.sampleId} />
-    <SampleDisposalActions key={`disposal-${item.version}`} item={item} />
-    </section>
     {item.finance?<SampleFinancialHistory key={`finance-${item.version}`} sampleId={item.sampleId}/>:null}
     <SampleAttachments key={`attachments-${item.version}`} sampleId={item.sampleId} />
-    <Surface className="rework-v2-core"><details open><summary>借还记录</summary><SampleHistory key={item.version} sampleId={item.sampleId} kind="custody" /></details></Surface>
-    <Surface className="rework-v2-core"><details><summary>处置记录</summary><SampleHistory key={item.version} sampleId={item.sampleId} kind="disposal" /></details></Surface>
-    {detail.canViewAudit ? <Surface className="rework-v2-core"><details><summary>操作日志</summary><SampleHistory key={item.version} sampleId={item.sampleId} kind="audit" /></details></Surface> : null}
+    <Surface className="rework-v2-core"><LazyHistoryDetails key={`custody-${item.sampleId}-${item.version}`} summary="借还记录"><SampleHistory sampleId={item.sampleId} kind="custody" /></LazyHistoryDetails></Surface>
+    <Surface className="rework-v2-core"><LazyHistoryDetails key={`disposal-${item.sampleId}-${item.version}`} summary="处置记录"><SampleHistory sampleId={item.sampleId} kind="disposal" /></LazyHistoryDetails></Surface>
+    {detail.canViewAudit ? <Surface className="rework-v2-core"><LazyHistoryDetails key={`audit-${item.sampleId}-${item.version}`} summary="操作日志"><SampleHistory sampleId={item.sampleId} kind="audit" /></LazyHistoryDetails></Surface> : null}
   </>;
 }
 
