@@ -562,7 +562,6 @@ function CurrentReworkDetailPage({
     attachment.entityType === "rework_order" || attachment.entityType === "receiving_batch" || attachment.entityType === "sourcing_case");
   const imageAttachments = orderAttachments.filter((attachment) => attachment.mimeType.startsWith("image/"));
   const dynamicFacts = [
-    { label: "业务类型", value: detail.reworkKind === "inhouse_finishing" ? "本厂做尾" : "QC返工" },
     { label: "客供款号", value: detail.customerSupplyCode },
     { label: "工厂款号", value: detail.factoryStyleNo },
     { label: "订单号", value: detail.orderNo },
@@ -746,7 +745,10 @@ function CurrentReworkDetailPage({
       <div className="rework-governed" data-dx-ui="governed" data-legacy-ui="rework-detail"><div className="rework-detail-header"><Header title={detail.styleNo ?? "款号未填写"} subtitle={detail.reworkNo ?? "未提交返工草稿"} badge={meta.label} badgePlacement="subtitle" {...backAction} /></div>
       <div className="rework-detail-layout rework-detail-target-layout">
       {canSeeResponsibility && ["pending_responsibility_determination","pending_owner_signature","pending_responsibility_action","completed"].includes(detail.status) && <OrderResponsibilityRevisionPanel readOnly={!moduleWritable} orderId={detail.reworkOrderId} orderVersion={detail.version} onChanged={syncAfterNodeAction} />}
-        <dl className="rework-detail-core-facts" aria-label="返工单核心信息">
+        <Surface className="rework-detail-order-information">
+          <div className="section-title rework-detail-panel-title"><h2>订单详情</h2></div>
+          <dl className="rework-detail-core-facts" aria-label="返工单核心信息">
+          <div className="rework-detail-core-fact"><dt>返工类型</dt><dd>{detail.reworkKind === "inhouse_finishing" ? "本厂做尾" : "QC返工"}</dd></div>
           <div className="rework-detail-core-fact"><dt>加工厂</dt><dd>{detail.processingFactory?.displayName ?? "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>返工工序</dt><dd title={detail.reworkProcess ?? undefined}>{detail.reworkProcess ?? "—"}</dd></div>
           <div className="rework-detail-core-fact"><dt>发起时间</dt><dd>{formatTime(detail.createdAt)}</dd></div>
@@ -754,7 +756,13 @@ function CurrentReworkDetailPage({
           <div className="rework-detail-core-fact rework-detail-core-fact--merchandiser"><dt>订单跟单</dt><dd>{detail.merchandiser?.displayName ?? "—"}</dd></div>
           <div className="rework-detail-core-fact rework-detail-core-fact--received"><dt>实收数量</dt><dd>{detail.sourceReceivingActualQuantity === null ? "—" : `${formatBusinessDecimal(detail.sourceReceivingActualQuantity)} 件`}</dd></div>
           <div className="rework-detail-core-fact rework-detail-core-fact--defective"><dt>次品数量</dt><dd><button type="button" onClick={() => { setTailDefectMessage(""); setDefectDialogOpen(true); }}>{formatBusinessDecimal(detail.defectiveQuantity.total)} 件 · 查看</button></dd></div>
-        </dl>
+          </dl>
+          {dynamicFacts.length > 0 ? <dl className="rework-detail-dynamic-facts">
+            {dynamicFacts.map((fact) => <div key={fact.label} data-long={fact.label === "返工原因" || fact.label === "问题描述" ? "true" : undefined}>
+              <dt>{fact.label}</dt><dd>{fact.value}</dd>
+            </div>)}
+          </dl> : null}
+        </Surface>
 
         <div className="rework-detail-overview-grid order-overview--compact">
           <section className="rework-detail-images" aria-label="订单图片">
@@ -809,6 +817,7 @@ function CurrentReworkDetailPage({
             <div id="order-workflow-content" className={`rework-detail-mobile-collapsible${mobileWorkflowExpanded ? " is-expanded" : ""}`}>
               <WorkflowRail className="rework-workflow__desktop-grid" aria-label="电脑端流程节点">
                 {workflowNodes.map(renderWorkflowNode)}
+                {workflowNodes.length > 5 ? <span className="rework-workflow-row-bridge" aria-hidden="true" /> : null}
               </WorkflowRail>
               <WorkflowRail className="rework-workflow__mobile-rail" ref={mobileWorkflowRailRef} aria-label="移动端流程节点">
                 {workflowNodes.map(renderWorkflowNode)}
@@ -816,18 +825,6 @@ function CurrentReworkDetailPage({
             </div>
           </section>
         </div>
-
-        {dynamicFacts.length > 0 ? <Surface className="rework-detail-dynamic-information">
-          <div className="section-title rework-detail-panel-title">
-            <div><h2>订单补充信息</h2><p>仅展示本单已填写的业务字段。</p></div>
-            <StatusBadge tone="info">{formatBusinessDecimal(dynamicFacts.length)} 项</StatusBadge>
-          </div>
-          <dl className="rework-detail-dynamic-facts">
-            {dynamicFacts.map((fact) => <div key={fact.label}>
-              <dt>{fact.label}</dt><dd>{fact.value}</dd>
-            </div>)}
-          </dl>
-        </Surface> : null}
 
         {detail.inspectionReport ? <InspectionReportReadonly report={detail.inspectionReport} /> : null}
 
