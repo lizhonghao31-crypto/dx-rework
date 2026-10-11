@@ -34,3 +34,24 @@
   .receiving-governed .receiving-field input { min-height: 48px; }
   .receiving-governed .receiving-form-actions > button { min-height: 48px!important; }
 }
+
+/* V4 PR03: standalone receiving form, preserving its original mobile flow. */
+.receiving-shell[data-legacy-ui="receiving"] { padding:64px 16px 24px; }
+.receiving-shell[data-legacy-ui="receiving"] .receiving-hero { width:min(680px,100%); margin-inline:auto; gap:16px; }
+.receiving-shell[data-legacy-ui="receiving"] .receiving-form-card { padding:20px!important; border-radius:10px!important; gap:12px; }
+.receiving-shell[data-legacy-ui="receiving"] .receiving-form-card h1 { font-size:20px; line-height:28px; }
+.receiving-shell[data-legacy-ui="receiving"] .receiving-field { gap:6px; min-width:0; }
+.receiving-shell[data-legacy-ui="receiving"] .receiving-field > span { font-size:12px; line-height:18px; }
+.receiving-shell[data-legacy-ui="receiving"] .receiving-field input { min-height:var(--dx-v2-control-height); font-size:var(--dx-v2-control-font-size); border-radius:8px; }
+.receiving-shell[data-legacy-ui="receiving"] .receiving-source-choice { width:100%; min-height:56px; font-size:16px; line-height:24px; white-space:normal; }
+.receiving-shell[data-legacy-ui="receiving"] .receiving-image-upload { min-height:64px; }
+.receiving-shell[data-legacy-ui="receiving"] .receiving-image-list img { object-fit:contain; }
+.receiving-shell[data-legacy-ui="receiving"] .receiving-repeat-selected,
+.receiving-shell[data-legacy-ui="receiving"] .receiving-repeat-hint,
+.receiving-shell[data-legacy-ui="receiving"] .receiving-message { overflow-wrap:anywhere; }
+.receiving-shell[data-legacy-ui="receiving"] .receiving-form-actions { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.receiving-shell[data-legacy-ui="receiving"] .receiving-form-actions button { min-height:40px!important; font-size:14px!important; line-height:20px; border-radius:8px; }
+@media(max-width:600px) {
+ .receiving-shell[data-legacy-ui="receiving"] { padding-top:60px; }
+ .receiving-shell[data-legacy-ui="receiving"] .receiving-form-actions button { min-height:48px!important; }
+}
