@@ -9,3 +9,5 @@
 浏览器实际 React、完整编译 CSS 与 TEST 拦截接口已通过五类场景：母单精确批次和返工返回、批次读取、403 原因、非法批次不请求全局、做尾旧结算链接进入 IE 结果。1440/1280/768/390/360 无页面溢出或 JS 错误；390 宽做尾像素已查看。证据 /workspace/pr09-evidence。该验证不是线上 Acceptance 业务验收。
 
 没有部署、重启、网络修改、真实业务数据或原工资/责任金额算法修改。外部 Full Gate 与一次必要 GitHub Codex Review 以最终 Head 为准。
+
+最终本地验证：全套 2199 通过、525 数据库条件跳过；真实隔离 PostgreSQL 原业务链 29 文件、320 项通过（/workspace/pr09-final-postgres-fixed.log），包括 Root 实数更正、过期差异拒绝、重复结案及工资/责任事实。最终 lint、类型检查、Web 构建、静态 migration、secret 与 diff 检查通过。旧源码字符串测试已适配保留来源查询参数的新节点链接，原节点锚点行为保留。最终全套证据 /workspace/pr09-final-tests-fixed.log；失败日志保留供追溯。
