@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DigitalOrderCreateSchema, type DigitalOrderInput } from "@dx-rework/contracts/digital-production";
 import { DevelopmentDocumentSchema, developmentPublishErrors } from "@dx-rework/contracts/digital-development";
-import { developmentOrderInput, editableDevelopmentOrder, initialDevelopmentDocument, removeDevelopmentSize } from "../../apps/web/src/digital-development-editing.js";
+import { developmentOrderInput, developmentQuantityError, developmentQuantityTotal, editableDevelopmentOrder, initialDevelopmentDocument, removeDevelopmentSize } from "../../apps/web/src/digital-development-editing.js";
 
 const order = (): DigitalOrderInput => ({customerCode:"TEST",designStyleNo:"TEST-STYLE",temporaryStyleNo:"TEST-TEMP",productGroup:"男装",orderDate:"2026-10-10",contractDeliveryDate:null,lines:[{formalPoNo:"TEST-PO",poNumber:null,formalStyleNo:null,temporaryStyleNo:null,color:"黑",colorForeign:null,deliveryDate:null,customerWarehouseArrivalDate:"2026-11-10",sizes:[{size:"M",quantity:1}]}]});
 describe("creation quantity buffers and development matrix", () => {
@@ -9,13 +9,33 @@ describe("creation quantity buffers and development matrix", () => {
     const draft=editableDevelopmentOrder(order());
     draft.lines[0]!.sizes[0]!.quantity="";
     expect(draft.lines[0]!.sizes[0]!.quantity).toBe("");
-    expect(()=>developmentOrderInput(draft)).toThrow("数量须为");
+    expect(()=>developmentOrderInput(draft)).toThrow("至少填写一项正整数订购数量");
     draft.lines[0]!.sizes[0]!.quantity="100";
     expect(developmentOrderInput(draft).lines[0]!.sizes[0]!.quantity).toBe(100);
     draft.lines[0]!.sizes[0]!.quantity="0100";
     expect(developmentOrderInput(draft).lines[0]!.sizes[0]!.quantity).toBe(100);
     expect(draft.lines[0]!.sizes[0]!.quantity).toBe("0100");
-    for(const value of ["0","-1","1.5","1e2"," 1","10000001"]) {draft.lines[0]!.sizes[0]!.quantity=value;expect(()=>developmentOrderInput(draft)).toThrow("数量须为");}
+    for(const value of ["-1","1.5","1e2"," 1","文字","10000001"]) {draft.lines[0]!.sizes[0]!.quantity=value;expect(()=>developmentOrderInput(draft)).toThrow("数量");}
+  });
+  it("totals blank and zero buffers as zero without treating invalid quantities as an order", () => {
+    expect(developmentQuantityError("")).toBeNull();
+    expect(developmentQuantityError("0")).toBeNull();
+    expect(developmentQuantityTotal([{size:"S",quantity:""},{size:"M",quantity:"0"},{size:"36",quantity:"002"}])).toBe(2);
+    for (const value of ["-1","0.5","S","1e2"]) {
+      expect(developmentQuantityError(value)).not.toBeNull();
+      expect(developmentQuantityTotal([{size:"S",quantity:value}])).toBeNull();
+    }
+  });
+  it("omits un-ordered zero size cells while retaining the original positive PO and API limits", () => {
+    const draft=editableDevelopmentOrder(order());
+    draft.lines[0]!.sizes=[{size:"S",quantity:""},{size:"M",quantity:"0"},{size:"均码",quantity:"2"},{size:"36",quantity:"3"}];
+    const parsed=DigitalOrderCreateSchema.parse(developmentOrderInput(draft));
+    expect(parsed.lines[0]!.sizes).toEqual([{size:"均码",quantity:2},{size:"36",quantity:3}]);
+    expect(draft.lines[0]!.sizes.map(size=>size.quantity)).toEqual(["","0","2","3"]);
+    draft.lines[0]!.sizes=[{size:"S",quantity:"0"}];
+    expect(()=>developmentOrderInput(draft)).toThrow("至少填写一项正整数订购数量");
+    draft.lines[0]!.sizes=[{size:"S",quantity:"10000000"},{size:"M",quantity:"1"}];
+    expect(DigitalOrderCreateSchema.safeParse(developmentOrderInput(draft)).success).toBe(false);
   });
   it("preserves two independent PO identities, colours, quantities and dates with an optional line temporary override", () => {
     const draft=editableDevelopmentOrder(order());

@@ -40,6 +40,8 @@
 .rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card__main { display:grid; grid-template-columns:minmax(0,1fr); min-width:0; padding:16px 56px 16px 16px!important; gap:12px!important; }
 .rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card__heading { display:flex; flex-wrap:wrap; align-items:start; gap:12px!important; min-width:0; }
 .rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card__heading > div { flex:1 1 220px; min-width:0; }
+.rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card__title-line { display:flex; align-items:baseline; flex-wrap:wrap; justify-content:flex-start; gap:6px 10px; min-width:0; }
+.rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card__title-line strong { min-width:0; max-width:100%; }
 .rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card__heading strong { font-size:14px; line-height:20px; font-weight:600; white-space:normal; overflow:visible; text-overflow:clip; overflow-wrap:anywhere; }
 .rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card__heading small { font-size:12px; line-height:18px; white-space:normal; overflow-wrap:anywhere; }
 .rework-query-content[data-legacy-ui="rework-board"] .reporting-order-card__heading > .dx-badge { flex:0 1 auto; min-width:140px; max-width:100%; box-sizing:border-box; font-size:12px; line-height:18px; white-space:normal; overflow-wrap:anywhere; }

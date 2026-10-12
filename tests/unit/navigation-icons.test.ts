@@ -13,6 +13,8 @@ describe("approved navigation icons", () => {
     expect(navigationIconForRoute("/ui/sourcing/pending")).toBe("FileText");
   });
   it("ignores query and hash without guessing unknown or similarly named routes", () => {
+    expect(navigationIconForRoute("/ui/digital-pattern-room")).toBe("Shirt");
+    expect(navigationIconForRoute("/ui/digital-pattern-room?section=legacy")).toBe("Shirt");
     expect(navigationIconForRoute("/ui/samples/?status=active#list")).toBe("Shirt");
     expect(navigationIconForRoute("/ui/samples/amounts")).toBe("ChartColumn");
     expect(navigationIconForRoute("/ui/samples-archive")).toBeUndefined();

@@ -10,7 +10,7 @@ import { registerInternalNavigationGuard } from "./internal-navigation.js";
 import { confirmInApp } from "./system-dialog.js";
 import { changePoDate, inheritPoDate, removePoDateOverride } from "./po-date-input-defaults.js";
 import type { DevelopmentSheet, DevelopmentDocument } from "@dx-rework/contracts/digital-development";
-import { editableDevelopmentOrder, developmentOrderInput, initialDevelopmentDocument, type DevelopmentOrderDraft } from "./digital-development-editing.js";
+import { developmentOrderInput, developmentQuantityError, developmentQuantityTotal, initialDevelopmentDocument, type DevelopmentOrderDraft } from "./digital-development-editing.js";
 import { preparePatternMaterial } from "./pattern-material-upload.js";
 import { uploadDevelopmentMaterial } from "./digital-development-upload.js";
 import { verifySession } from "./auth.js";
@@ -18,8 +18,8 @@ import { verifySession } from "./auth.js";
 type CreatePicture = {id: string; file: File; preview: string; attachmentId?: string; error?: string | undefined};
 
 export type DevelopmentCreateIntent = "development" | "certain_order" | "confirm_order";
-const newLine = (): DigitalOrderInput["lines"][number] => ({formalPoNo:null, customerWarehouseArrivalDate:null, poNumber: null, formalStyleNo: null, temporaryStyleNo: null, color: "", colorForeign: null, deliveryDate: null, sizes: [{size: "", quantity: 1}]});
-export function initialDevelopmentOrder(customers: DigitalCustomer[], source?: OrderJourney): DigitalOrderInput {
+const newLine = (): DevelopmentOrderDraft["lines"][number] => ({formalPoNo:null, customerWarehouseArrivalDate:null, poNumber: null, formalStyleNo: null, temporaryStyleNo: null, color: "", colorForeign: null, deliveryDate: null, sizes: [{size: "", quantity: ""}]});
+export function initialDevelopmentOrder(customers: DigitalCustomer[], source?: OrderJourney): DevelopmentOrderDraft {
   return {customerCode: source?.customer ?? "", designStyleNo: source?.designStyleNo ?? "", temporaryStyleNo: source?.temporaryStyleNo ?? null,
     productGroup: initialDigitalProductGroup(customers, source?.customer ?? undefined),
     primaryMerchandiserId: customers.find(customer => customer.code === source?.customer)?.defaultMerchandiserId ?? null,
@@ -32,7 +32,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   onCancel: () => void; onCreated: (sourceId: string, orderId: string | null) => void;
   onIntentChange?: (intent: "development" | "certain_order") => void;
 }) {
-  const [form, setForm] = useState(() => editableDevelopmentOrder(initialDevelopmentOrder(customers, source)));
+  const [form, setForm] = useState(() => initialDevelopmentOrder(customers, source));
   const [template, setTemplate] = useState<DevelopmentDocument["template"]>("上衣");
   const [designerName, setDesignerName] = useState<string | null>(source?.designer ?? null);
   useEffect(() => {
@@ -94,7 +94,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   };
   const removeLine = (index: number) => {
     customerDateOverrides.current = removePoDateOverride(customerDateOverrides.current, index);
-    setForm(current => ({...current, lines: current.lines.filter((_, position) => position !== index)}));
+    setForm(current => ({...current, lines: current.lines.length > 1 ? current.lines.filter((_, position) => position !== index) : current.lines}));
   };
   const save = async (draftOnly = false) => {
     if (writing.current) return;
@@ -160,8 +160,13 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     } finally {writing.current = false; setBusy(false);}
   };
   const selectedPicture = pictures[Math.min(activePicture, Math.max(0, pictures.length - 1))];
+  const rowTotals = form.lines.map(row => developmentQuantityTotal(row.sizes));
+  const totalQuantity = rowTotals.some(total => total === null) ? null : rowTotals.reduce<number>((sum, total) => sum + (total ?? 0), 0);
+  const returnToList = async () => {
+    if ((!dirty.current || await confirmInApp("有未保存订购资料或款图，确定离开？")) && !writing.current) onCancel();
+  };
   return <Surface className="development-create development-create-reference"><form onSubmit={event => {event.preventDefault(); void save();}}>
-    <header className="development-create-heading"><div><h2>{intent === "confirm_order" ? title : "创建订单"}</h2><p>{title}</p></div><div className="pattern-actions">{!source && <Button type="button" disabled={busy} onClick={() => void save(true)}>保存开发资料草稿</Button>}<Button type="submit" variant="primary" disabled={busy}>{busy ? "保存中…" : intent === "confirm_order" ? "确认下单" : withOrder ? "创建订单" : "创建开发档案"}</Button></div></header>
+    <header className="development-create-heading"><div><div className="development-create-title"><h2>{intent === "confirm_order" ? title : "创建订单"}</h2><Button type="button" disabled={busy} onClick={() => void returnToList()}>返回列表</Button></div><p>{title}</p></div><div className="pattern-actions">{!source && <Button type="button" disabled={busy} onClick={() => void save(true)}>保存开发资料草稿</Button>}<Button type="submit" variant="primary" disabled={busy}>{busy ? "保存中…" : intent === "confirm_order" ? "确认下单" : withOrder ? "创建订单" : "创建开发档案"}</Button></div></header>
     {!source&&<nav className="development-create-type-tabs" aria-label="创建类型">{([["development","产品开发（无确定订单）"],["certain_order","产品开发（有确定订单）"]]as const).map(([mode,label])=><button type="button" key={mode} aria-pressed={intent===mode} disabled={busy||!onIntentChange} onClick={()=>onIntentChange?.(mode)}>{label}</button>)}</nav>}
     {source && <p>沿用第 {source.adoptedRound ?? source.selectedRound ?? 1} 轮开发资料；头版/开发板与已有工序保持原档案。</p>}
     {error && <p role="alert">{error}</p>}
@@ -187,17 +192,35 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
 </div>
 </>}</section>
     {withOrder && <section className="development-create-card development-create-details"><h3>订单明细 <small>左右滑动可查看完整 PO</small></h3><p>出货日期默认沿用首个 PO，可单独修改。</p><p>默认主跟单：{customers.find(customer => customer.code === form.customerCode)?.defaultMerchandiserName ?? "未配置，待主管指派"}</p>
-      <div className="development-table-scroll" role="region" aria-label="PO 明细，可左右滑动查看全部列" tabIndex={0}><table className="development-create-po-table"><thead><tr><th>PO</th><th>正式款号 / PO</th><th>本 PO 代用号（选填）</th><th>颜色 / 外文</th>{form.lines[0]?.sizes.map((size, sizeIndex) => <th className="development-size-column" key={sizeIndex}><input aria-label={`尺码列 ${sizeIndex+1}`} placeholder="尺码" required maxLength={100} value={size.size} onChange={event => setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: row.sizes.map((item, i) => i === sizeIndex ? {...item, size: event.target.value} : item)}))}))}/>{form.lines[0]!.sizes.length > 1 && <button type="button" aria-label={`删除尺码列 ${sizeIndex+1}`} onClick={async () => {if (await confirmInApp("删除这个尺码列及所有 PO 对应订购数量？") && !writing.current) setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: row.sizes.filter((_, i) => i !== sizeIndex)}))}));}}>×</button>}</th>)}<th>合计</th><th>{customerPoDateLabel}</th><th>操作</th></tr></thead><tbody>
-      {form.lines.map((value, index) => <tr key={index}><th>{index + 1}</th>
-        <td><input aria-label={`PO ${index+1} 正式款号 / PO`} placeholder="选填，可后补" maxLength={100} value={value.formalPoNo ?? ""} onChange={event => line(index, {formalPoNo: event.target.value || null})}/></td>
-        <td><input aria-label={`PO ${index+1} 代用款号（选填）`} maxLength={100} placeholder={form.temporaryStyleNo ?? "沿用母单代用号"} value={value.temporaryStyleNo ?? ""} onChange={event => line(index, {temporaryStyleNo: event.target.value || null})}/></td>
-        <td><input aria-label={`PO ${index+1} 颜色`} placeholder="颜色（必填）" required maxLength={100} value={value.color} onChange={event => line(index, {color: event.target.value})}/><input aria-label={`PO ${index+1} 颜色外文`} placeholder="颜色外文（选填）" maxLength={100} value={value.colorForeign ?? ""} onChange={event => line(index, {colorForeign: event.target.value || null})}/></td>
-        {value.sizes.map((size, sizeIndex) => <td className="development-size-column" key={sizeIndex}><input aria-label={`PO ${index+1} 订购数量 ${sizeIndex+1}`} required type="text" inputMode="numeric" pattern="[0-9]+" maxLength={8} value={size.quantity} onChange={event => line(index, {sizes: value.sizes.map((item, i) => i === sizeIndex ? {...item, quantity: event.target.value} : item)})}/></td>)}
-        <td className="development-row-total">{value.sizes.every(size => /^\d+$/.test(size.quantity)) ? value.sizes.reduce((total, size) => total + Number(size.quantity), 0).toLocaleString() : "—"}</td>
-        <td><input aria-label={`PO ${index+1} ${customerPoDateLabel}`} type="date" value={value.customerWarehouseArrivalDate ?? ""} onChange={event => customerDate(index, event.target.value || null)}/></td>
-        <td>{form.lines.length > 1 && <Button type="button" onClick={async () => {if (await confirmInApp("删除这个 PO 和全部订购数量？") && !writing.current) removeLine(index);}}>删除 PO</Button>}</td>
-      </tr>)}</tbody></table></div><div className="development-create-line-actions"><Button type="button" disabled={form.lines.length >= 50} onClick={() => setForm(current => ({...current, lines: [...current.lines, inheritPoDate({...newLine(), sizes: current.lines[0]!.sizes.map(size => ({size:size.size, quantity:"1"}))}, current.lines[0], "customerWarehouseArrivalDate")]}))}>添加款色 / PO</Button>
-<Button type="button" disabled={form.lines[0]!.sizes.length >= 50} onClick={() => setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: [...row.sizes, {size:"", quantity:"1"}]}))}))}>添加尺码列</Button><strong>总订购数量：{form.lines.every(row => row.sizes.every(size => /^\d+$/.test(size.quantity))) ? form.lines.reduce((total,row) => total + row.sizes.reduce((sum,size) => sum + Number(size.quantity),0),0).toLocaleString() : "—"}</strong></div></section>}
-    </div></div><div className="development-create-return"><Button type="button" disabled={busy} onClick={async () => {if ((!dirty.current || await confirmInApp("有未保存订购资料或款图，确定离开？")) && !writing.current) onCancel();}}>返回列表</Button></div></fieldset>
+      <div className="development-table-scroll" role="region" aria-label="PO 明细，可左右滑动查看全部列" tabIndex={0}>
+        <table className="development-create-po-table"><thead><tr>
+          <th className="development-po-index">PO</th><th className="development-po-number">正式款号 / PO</th><th className="development-po-color">颜色</th>
+          {form.lines[0]?.sizes.map((size, sizeIndex) => <th className="development-size-column" key={sizeIndex}>
+            <span className="development-size-label">尺码名称</span>
+            <input aria-label={`尺码列 ${sizeIndex + 1}`} placeholder="如 S / M / 36" required maxLength={100} value={size.size} onChange={event => setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: row.sizes.map((item, i) => i === sizeIndex ? {...item, size: event.target.value} : item)}))}))}/>
+            {form.lines[0]!.sizes.length > 1 && <button type="button" aria-label={`删除尺码列 ${sizeIndex + 1}`} onClick={async () => {if (await confirmInApp("删除这个尺码列及所有 PO 对应订购数量？") && !writing.current) setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: row.sizes.filter((_, i) => i !== sizeIndex)}))}));}}>×</button>}
+          </th>)}
+          <th className="development-row-total">合计（件）</th><th className="development-po-date">{customerPoDateLabel}</th>{form.lines.length > 1 && <th className="development-po-actions">删除 PO</th>}
+        </tr></thead><tbody>{form.lines.map((value, index) => <tr key={index}>
+          <th className="development-po-index">{index + 1}</th>
+          <td className="development-po-number"><input aria-label={`PO ${index + 1} 正式款号 / PO`} placeholder="选填，可后补" maxLength={100} value={value.formalPoNo ?? ""} onChange={event => line(index, {formalPoNo: event.target.value || null})}/></td>
+          <td className="development-po-color"><input aria-label={`PO ${index + 1} 颜色`} placeholder="颜色（必填）" required maxLength={100} value={value.color} onChange={event => line(index, {color: event.target.value})}/><input aria-label={`PO ${index + 1} 颜色外文`} placeholder="颜色外文（选填）" maxLength={100} value={value.colorForeign ?? ""} onChange={event => line(index, {colorForeign: event.target.value || null})}/></td>
+          {value.sizes.map((size, sizeIndex) => {
+            const quantityError = developmentQuantityError(size.quantity), errorId = `development-quantity-error-${index}-${sizeIndex}`;
+            return <td className="development-size-column" key={sizeIndex}><label className="development-quantity-field"><span>数量（件）</span>
+              <input aria-label={`PO ${index + 1} 订购数量 ${sizeIndex + 1}`} type="text" inputMode="numeric" maxLength={8} placeholder="件数" value={size.quantity} aria-invalid={quantityError !== null} aria-describedby={quantityError ? errorId : undefined} onChange={event => line(index, {sizes: value.sizes.map((item, i) => i === sizeIndex ? {...item, quantity: event.target.value} : item)})}/>
+              {quantityError && <small className="development-quantity-error" id={errorId} role="alert">{quantityError}</small>}
+            </label></td>;
+          })}
+          <td className="development-row-total">{rowTotals[index] === null ? <span className="development-quantity-error">请修正数量</span> : rowTotals[index]?.toLocaleString()}</td>
+          <td className="development-po-date"><input aria-label={`PO ${index + 1} ${customerPoDateLabel}`} type="date" value={value.customerWarehouseArrivalDate ?? ""} onChange={event => customerDate(index, event.target.value || null)}/></td>
+          {form.lines.length > 1 && <td className="development-po-actions"><Button type="button" onClick={async () => {if (await confirmInApp("删除这个 PO 和全部订购数量？") && !writing.current) removeLine(index);}}>删除 PO</Button></td>}
+        </tr>)}</tbody></table>
+      </div>
+      <div className="development-create-line-actions"><Button type="button" disabled={form.lines.length >= 50} onClick={() => setForm(current => ({...current, lines: [...current.lines, inheritPoDate({...newLine(), sizes: current.lines[0]!.sizes.map(size => ({size:size.size, quantity:""}))}, current.lines[0], "customerWarehouseArrivalDate")]}))}>添加款色 / PO</Button>
+        <Button type="button" disabled={form.lines[0]!.sizes.length >= 50} onClick={() => setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: [...row.sizes, {size:"", quantity:""}]}))}))}>添加尺码列</Button>
+        <strong className="development-total-quantity" role="status">总订购数量：{totalQuantity === null ? <span className="development-quantity-error">请修正数量</span> : `${totalQuantity.toLocaleString()} 件`}</strong>
+      </div></section>}
+    </div></div></fieldset>
   </form></Surface>;
 }

@@ -109,7 +109,8 @@
 .rework-history-readonly .rework-detail-core-facts { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 
 /* V4 PR04: B geometry only within the existing detail opt-in root. */
-.rework-governed[data-legacy-ui="rework-detail"] { max-width:880px; width:100%; container-type:inline-size; gap:16px; }
+.app-shell > main:has(> .rework-governed[data-legacy-ui="rework-detail"]) { max-width:none; }
+.rework-governed[data-legacy-ui="rework-detail"] { max-width:none; width:100%; container-type:inline-size; gap:16px; }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-detail-header h1 { font-size:28px; line-height:36px; font-weight:600; overflow-wrap:anywhere; }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-detail-target-layout { padding:0; border:0; background:transparent; gap:16px; }
 .rework-governed[data-legacy-ui="rework-detail"] .rework-detail-order-information { padding:20px; border:1px solid var(--legacy-ui-border); border-radius:10px; box-shadow:none; }

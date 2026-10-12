@@ -51,8 +51,7 @@ export function BasicReworkBoard(){
     {error&&<Surface><p role="alert">{error}</p></Surface>}
     {!busy&&!error&&data?.items.length===0&&<Surface>没有符合条件的返工单。</Surface>}
     <div className="reporting-order-grid">{data?.items.map(order=><Surface className="reporting-order-card basic-rework-card" key={order.reworkOrderId}>
-      <div className="reporting-order-card__main"><div className="reporting-order-card__heading"><div><strong>{data.canOpenOrder?<a href={pageUrl(`ui/tasks/${order.reworkOrderId}`)}>{order.styleNo??"款号未填写"}</a>:order.styleNo??"款号未填写"}</strong><small>{order.reworkNo??"返工单"}</small></div>
-        <StatusBadge tone={order.status==="completed"?"success":"info"}>{order.nodeLabel}</StatusBadge></div>
+      <div className="reporting-order-card__main"><div className="reporting-order-card__heading"><div><div className="reporting-order-card__title-line"><strong>{data.canOpenOrder?<a href={pageUrl(`ui/tasks/${order.reworkOrderId}`)}>{order.styleNo??"款号未填写"}</a>:order.styleNo??"款号未填写"}</strong><StatusBadge tone={order.status==="completed"?"success":"info"}>{order.nodeLabel}</StatusBadge></div><small>{order.reworkNo??"返工单"}</small></div></div>
       <dl><div><dt>加工厂</dt><dd>{order.processingFactory??"未填写"}</dd></div><div><dt>跟单</dt><dd>{order.merchandiser??"未填写"}</dd></div>
         <div><dt>返工数量</dt><dd>{order.quantity??"未填写"}</dd></div><div><dt>订单号</dt><dd>{order.orderNo??"未填写"}</dd></div></dl>
       <details><summary>查看基础资料与照片</summary><p>返工原因：{order.reason??"未填写"}</p><p>问题部位：{order.problemPart??"未填写"}</p><p>问题描述：{order.problemDescription??"未填写"}</p>
