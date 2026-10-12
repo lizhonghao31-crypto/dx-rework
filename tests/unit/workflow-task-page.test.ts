@@ -25,6 +25,6 @@ describe("workflow task page", () => {
     expect(configuration).toContain("<ProcessWorkerAssignmentForm");
     expect(mergedProcess).toContain("reworkOrderId: string;");
     expect(reporting).toContain('taskMode?: "workspace" | "task_assignment" | "work_reporting" | "whole_order_review"');
-    expect(reporting).toContain('if (effectiveTaskMode === "whole_order_review")');
+    expect(reporting).toContain('<WholeOrderReviewPanel reworkOrderId={reworkOrderId}');
   });
 });
