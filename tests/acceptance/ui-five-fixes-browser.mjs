@@ -127,13 +127,15 @@ try {
       const checks = await page.locator('.reporting-order-card__title-line').evaluateAll(lines => lines.map(line => {
         const strong = line.querySelector('strong'), badge = line.querySelector('.dx-badge');
         const a = strong.getBoundingClientRect(), b = badge.getBoundingClientRect(), p = line.getBoundingClientRect();
-        return { sameTitleLine: Boolean(strong && badge), contained: b.right <= p.right + 1 && a.right <= p.right + 1, shortGap: strong.textContent === 'TEST-SHORT' ? b.left - a.right : null };
+        const heading = line.closest('.reporting-order-card__heading').getBoundingClientRect();
+        return { sameTitleLine: Boolean(strong && badge), titleUsesHeadingWidth: Math.abs(p.width - heading.width) < 2, contained: b.right <= p.right + 1 && a.right <= p.right + 1, shortGap: strong.textContent === 'TEST-SHORT' ? b.left - a.right : null };
       }));
       assert.ok(checks.every(c => c.sameTitleLine && c.contained));
+      if (width > 760) assert.ok(checks.every(c => c.titleUsesHeadingWidth), JSON.stringify(checks));
       assert.ok(checks.filter(c => c.shortGap !== null).every(c => c.shortGap >= 0 && c.shortGap <= 16));
       assert.deepEqual(errors, []);
       if (evidence) await page.screenshot({ path: join(evidence, `${mode}-${width}.png`), fullPage: true });
-      results.push({ width, mode, statusAdjacentToStyle: true, longStyleWraps: true, passed: true }); await page.close();
+      results.push({ width, mode, statusAdjacentToStyle: true, longStyleWraps: true, titleUsesHeadingWidth: checks.every(c => c.titleUsesHeadingWidth), passed: true }); await page.close();
     }
     {
       const { page, errors } = await createPage(width, 'mode=detail&stage=N05&role=ie&tail=1&picture=1');
