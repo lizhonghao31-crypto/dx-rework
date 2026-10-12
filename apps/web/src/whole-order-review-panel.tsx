@@ -21,6 +21,7 @@ class ApiRequestError extends Error {
     message: string,
     readonly code: string | null,
     readonly requestId: string | null,
+    readonly status: number,
   ) {
     super(message);
     this.name = "ApiRequestError";
@@ -54,6 +55,7 @@ const request = async <T,>(path: string, parse: (value: unknown) => T, init?: Re
       body?.error?.message ?? "请求未完成，请稍后重试",
       body?.error?.code ?? null,
       body?.error?.requestId ?? null,
+      response.status,
     );
   }
   return parse(await response.json());
@@ -87,12 +89,14 @@ export function WholeOrderReviewPanel({
   embedded = false,
   iePrecounts,
   history,
+  onReviewReadForbidden,
 }: {
   reworkOrderId: string;
   onChanged: () => Promise<void>;
   embedded?: boolean;
   iePrecounts?: IePrecountOverview;
   history?: { data: WholeOrderReviewResponse; tail?: TailInspectionResponse | null; node: "whole_order_review" | "final_quantity_ie_review" };
+  onReviewReadForbidden?: () => void;
 }) {
   const historyMessage = history?.node === 'final_quantity_ie_review' && history.data.finalConfirmation
     ? `复核结果：${history.data.finalConfirmation.status==='approved'?'已通过':history.data.finalConfirmation.status==='rejected'?'已退回':'待复核'}${history.data.finalConfirmation.reviewReason ? ` · ${history.data.finalConfirmation.reviewReason}` : ''}` : '';
@@ -152,7 +156,16 @@ export function WholeOrderReviewPanel({
       const overview = await request(
         "rework-orders/" + reworkOrderId + "/whole-order-review",
         WholeOrderReviewResponseSchema.parse,
-      );
+      ).catch((cause: unknown) => {
+        // Only the formal summary denial can select an already authorized IE facts view.
+        // Inspection, session, missing-order and server errors keep their normal error UI.
+        if (cause instanceof ApiRequestError && cause.status === 403 && onReviewReadForbidden) {
+          onReviewReadForbidden();
+          return null;
+        }
+        throw cause;
+      });
+      if (!overview) return;
       const tail = !canReadTailInspection || overview.unifiedExecutionRequired || !overview.tailInspectionRequired
         ? null
         : await request(

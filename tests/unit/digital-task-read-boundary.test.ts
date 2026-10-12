@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import Fastify from "fastify";
 import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { BulkPreparationService } from "../../apps/api/src/production-platform/bulk-preparation-service.js";
 import { FactoryFlowService } from "../../apps/api/src/production-platform/factory-flow-service.js";
+import { ProductionInstructionService } from "../../apps/api/src/production-platform/production-instruction-service.js";
+import { registerInstructionRoutes } from "../../apps/api/src/production-platform/production-instruction-routes.js";
+import { ApplicationError } from "../../apps/api/src/platform/errors.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
 function fixture() {
@@ -127,6 +131,99 @@ describe("task metadata is authorized independently from necessary order documen
       expect(readable.dispatch.warehouseWorkerId).toBe(f.warehouseId);
       expect(readable.dispatch.cuttingWorkerId).toBeTruthy();
     }
+  });
+
+  it.each(["pattern_room_worker", "warehouse_receiver"])("returns only current instruction reference fields for an assigned %s", async role => {
+    const f = fixture(), bulk = new BulkPreparationService(f.pool), imageId = randomUUID();
+    const reader = role === "pattern_room_worker" ? f.actor() : f.actor(f.warehouseId, [role]);
+    const other = role === "pattern_room_worker" ? f.foreign : f.own;
+    vi.spyOn(bulk, "gates").mockResolvedValue({ order: f.order, source: { round_number: 2, document: { files: [{ attachmentId: randomUUID(), kind: "款图" }] } },
+      instruction: { version: 2, source_round: 2, order_snapshot: { productionOrderId: f.orderId, designStyleNo: "TEST-PUBLISHED-V2", customerCode: "TEST-CUSTOMER-V2", budget: "TEST-HIDDEN-BUDGET", primaryMerchandiserId: "TEST-HIDDEN-PERSON" },
+        document: { preshrink: "需要预缩", images: [{ attachmentId: randomUUID(), kind: "其它工艺" }, { attachmentId: imageId, kind: "款图" }] } },
+      approval: { cutting_process: "in_house" }, customerConfirmed: true, ownerApproved: true, instructionValid: true, reasons: [] } as never);
+    const sheet = await bulk.read(reader, f.orderId);
+    expect(sheet.reference).toEqual({ designStyleNo: "TEST-PUBLISHED-V2", customerCode: "TEST-CUSTOMER-V2", styleImageUrl: `/api/digital-production/orders/${f.orderId}/instruction/attachments/${imageId}`, instructionVersion: 2, sourceRound: 2 });
+    expect(sheet.tasks).toHaveLength(1);
+    expect(JSON.stringify(sheet)).not.toContain(other.task_id);
+    expect(JSON.stringify(sheet)).not.toContain("TEST-HIDDEN-BUDGET");
+    expect(JSON.stringify(sheet)).not.toContain("TEST-HIDDEN-PERSON");
+    expect(await f.policy.allowed(reader, "source", f.sourceId, "technical")).toBe(false);
+    expect(await f.policy.allowed(reader, "order", f.orderId, "budget")).toBe(false);
+    await expect(f.service.read(reader, other.task_id)).rejects.toMatchObject({ statusCode: 404 });
+    await expect(f.service.history(reader, other.task_id)).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it("does not use an old instruction snapshot or image for another source round", async () => {
+    const f = fixture(), bulk = new BulkPreparationService(f.pool), oldImageId = randomUUID();
+    vi.spyOn(bulk, "gates").mockResolvedValue({ order: f.order, source: { round_number: 3 },
+      instruction: { version: 2, source_round: 2, order_snapshot: { designStyleNo: "TEST-OLD-STYLE", customerCode: "TEST-OLD-CUSTOMER" }, document: { preshrink: "需要预缩", images: [{ attachmentId: oldImageId, kind: "款图" }] } },
+      approval: { cutting_process: "in_house" }, customerConfirmed: true, ownerApproved: true, instructionValid: false, reasons: ["请核对当前开发资料并发布有效大货制单"] } as never);
+    const sheet = await bulk.read(f.actor(randomUUID(), ["pattern_room_supervisor"]), f.orderId);
+    expect(sheet.reference).toEqual({ designStyleNo: f.order.design_style_no, customerCode: f.order.customer_code, styleImageUrl: null, instructionVersion: null, sourceRound: null });
+    expect(sheet).toMatchObject({ sourceRound: 3, instructionVersion: 2, instructionValid: false });
+    expect(sheet.reasons).toContain("请核对当前开发资料并发布有效大货制单");
+    expect(JSON.stringify(sheet)).not.toContain(oldImageId);
+    expect(JSON.stringify(sheet)).not.toContain("TEST-OLD-STYLE");
+  });
+
+  it("does not fall back to development images when the bound published instruction has no style image", async () => {
+    const f = fixture(), bulk = new BulkPreparationService(f.pool), sourceImageId = randomUUID(), processImageId = randomUUID();
+    vi.spyOn(bulk, "gates").mockResolvedValue({ order: f.order, source: { round_number: 2, document: { files: [{ attachmentId: sourceImageId, kind: "款图" }] } },
+      instruction: { version: 2, source_round: 2, order_snapshot: { designStyleNo: "TEST-PUBLISHED-V2", customerCode: "TEST-CUSTOMER-V2" }, document: { preshrink: "需要预缩", images: [{ attachmentId: processImageId, kind: "其它工艺" }] } },
+      approval: { cutting_process: "in_house" }, customerConfirmed: true, ownerApproved: true, instructionValid: true, reasons: [] } as never);
+    const sheet = await bulk.read(f.actor(), f.orderId);
+    expect(sheet.reference).toMatchObject({ designStyleNo: "TEST-PUBLISHED-V2", customerCode: "TEST-CUSTOMER-V2", styleImageUrl: null, instructionVersion: 2, sourceRound: 2 });
+    expect(JSON.stringify(sheet)).not.toContain(sourceImageId);
+    expect(JSON.stringify(sheet)).not.toContain(processImageId);
+  });
+
+  it("does not add reference scope for an unrelated or newly ineligible worker", async () => {
+    const f = fixture(), bulk = new BulkPreparationService(f.pool);
+    const gates = vi.spyOn(bulk, "gates");
+    await expect(bulk.read(f.actor(randomUUID()), f.orderId)).rejects.toMatchObject({ statusCode: 404 });
+    f.activeRoles.set(f.workerId, []);
+    await expect(bulk.read(f.actor(), f.orderId)).rejects.toMatchObject({ statusCode: 404 });
+    expect(gates).not.toHaveBeenCalled();
+  });
+
+  it.each(["pattern_room_worker", "warehouse_receiver"])("keeps the native instruction attachment route scoped for %s", async role => {
+    const f = fixture(), imageId = randomUUID(), unpublishedImageId = randomUUID(), foreignOrderId = randomUUID();
+    const reader = role === "pattern_room_worker" ? f.actor() : f.actor(f.warehouseId, [role]);
+    Object.assign(f.order, { created_at: "2026-10-12T04:00:00Z", order_date: "2026-10-12", version: 2, product_group: "TEST" });
+    const version = { version: 2, source_round: 2, document: { images: [{ attachmentId: imageId, kind: "款图" }] }, order_snapshot: { productionOrderId: f.orderId, lines: [] } };
+    const originalQuery = f.query.getMockImplementation()!;
+    const query = vi.fn(async (sql: string, args: unknown[] = []) => {
+      let rows: object[];
+      if (sql.startsWith("SELECT o.* FROM digital_production_orders")) rows = args[0] === f.orderId ? [f.order] : [];
+      else if (sql.startsWith("SELECT l.line_id") || sql.startsWith("SELECT line_id,po_number,color") || sql.startsWith("SELECT 1 FROM digital_production_child_links l JOIN cutting_orders")) rows = [];
+      else if (sql.startsWith("SELECT published_version FROM digital_instruction_documents")) rows = [{ published_version: 2 }];
+      else if (sql.startsWith("SELECT * FROM digital_instruction_versions")) rows = args[0] === f.orderId && args[1] === 2 ? [version] : [];
+      else if (sql.startsWith("SELECT version,primary_merchandiser_id FROM digital_production_orders")) rows = [f.order];
+      else if (sql.startsWith("SELECT to_regclass('digital_production_resource_lifecycle')") || sql.startsWith("SELECT to_regclass('digital_order_closures')") || sql.startsWith("SELECT to_regclass($1)")) rows = [{ relation: null }];
+      else if (sql.startsWith("SELECT * FROM digital_development_documents") || sql.startsWith("SELECT a.after_state,a.created_at,u.display_name")) rows = [];
+      else if (sql.startsWith("SELECT version FROM digital_instruction_versions")) rows = [{ version: 2 }];
+      else if (sql.startsWith("SELECT 1 FROM digital_instruction_versions v CROSS JOIN LATERAL")) rows = args[0] === f.orderId && args[1] === imageId ? [{}] : [];
+      else return originalQuery(sql, args);
+      return { rows, rowCount: rows.length };
+    });
+    const service = new ProductionInstructionService({ query } as unknown as Pool, false), app = Fastify();
+    let issued = 0;
+    registerInstructionRoutes(app, { authenticate: async () => ({ id: reader.actorId, displayName: "TEST本人", businessRoles: [role], capabilities: ["digital_production:view"] }) } as never, service,
+      { createDownloadIntent: async (_actor: TrustedActorContext, _attachmentId: string, authorize: () => Promise<boolean>) => {
+        if (!await authorize()) throw new ApplicationError("FORBIDDEN", "TEST附件未在已发布制单引用", 403);
+        issued++; return { downloadUrl: "/TEST-current-instruction-image" };
+      } } as never);
+    try {
+      expect(await service.canDownload(reader, f.orderId, imageId)).toBe(true);
+      expect(await service.canDownload(reader, f.orderId, unpublishedImageId)).toBe(false);
+      await expect(service.canDownload(reader, foreignOrderId, imageId)).rejects.toMatchObject({ statusCode: 404 });
+      const current = await app.inject({ method: "GET", url: `/digital-production/orders/${f.orderId}/instruction/attachments/${imageId}` });
+      expect(current.statusCode).toBe(302); expect(current.headers.location).toBe("/TEST-current-instruction-image");
+      const foreign = await app.inject({ method: "GET", url: `/digital-production/orders/${foreignOrderId}/instruction/attachments/${imageId}` });
+      expect(foreign.statusCode).toBe(404); expect(issued).toBe(1);
+      const unpublished = await app.inject({ method: "GET", url: `/digital-production/orders/${f.orderId}/instruction/attachments/${unpublishedImageId}` });
+      expect(unpublished.statusCode).toBe(403); expect(issued).toBe(1);
+    } finally { await app.close(); }
   });
 
   it("keeps the warehouse's factory work and prerequisite state without sibling-task details", async () => {

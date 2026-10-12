@@ -18,39 +18,40 @@ try {
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || "/usr/bin/chromium", args: ["--no-sandbox"] });
   const results = [];
-  for (const width of [390, 1440]) for (const stage of ["N04", "N05"]) for (const role of ["ie", "root", "tail", "readonly-ie"]) for (const tailRequired of [false, true]) {
+  for (const width of [390, 1440]) for (const stage of ["N04", "N05"]) for (const role of ["ie", "root", "tail", "readonly-ie", "mixed", "delegated-ie"]) for (const tailRequired of [false, true]) {
     const page = await browser.newPage({ viewport: { width, height: 900 } });
     console.log(`scenario ${width}/${stage}/${role}/tail=${tailRequired}`);
     const errors = [];
     page.on("pageerror", error => errors.push(String(error)));
     await page.goto(`http://127.0.0.1:${server.address().port}/?stage=${stage}&role=${role === "readonly-ie" ? "ie" : role}&readonly=${role === "readonly-ie" ? 1 : 0}&tail=${tailRequired ? 1 : 0}`);
     try {
-      if (stage === "N04") await page.getByLabel("返工任务进度汇总").waitFor({ timeout: 5000 });
+      if (stage === "N04" || ["ie", "readonly-ie"].includes(role)) await page.getByLabel("返工任务进度汇总").waitFor({ timeout: 5000 });
       else await page.getByRole("heading", { name: "按工序核对", exact: true }).waitFor({ timeout: 5000 });
     } catch (error) {
       console.log(await page.locator("body").innerText(), await page.evaluate(() => window.iePrecountRequests), errors);
       throw error;
     }
     const editor = page.getByRole("button", { name: "IE预核", exact: true });
-    if (["ie", "root"].includes(role)) {
+    if (["ie", "root", "mixed", "delegated-ie"].includes(role)) {
       assert.equal(await editor.count(), 1);
       await editor.click();
-      await page.getByRole("spinbutton", { name: "TEST 工序预核数量" }).fill("7");
+      await page.getByRole("spinbutton", { name: "TEST 工序预核数量" }).fill("2");
       await page.getByRole("textbox", { name: "TEST 工序预核备注" }).fill("入口回归");
       if (process.env.DX_IE_PRECOUNT_EVIDENCE_DIR && role === "ie") {
         await page.screenshot({ path: join(process.env.DX_IE_PRECOUNT_EVIDENCE_DIR, `${stage}-${width}-tail-${tailRequired}-editor.png`), fullPage: true });
       }
       await page.locator(".n04-ie-precount-confirm").click();
-      await page.locator(".n04-ie-precount-latest").filter({ hasText: "7件" }).waitFor();
+      await page.locator(".n04-ie-precount-latest").filter({ hasText: "2件" }).waitFor();
       await page.locator(".n04-ie-precount-latest").click();
       await page.locator(".n04-ie-precount-detail").filter({ hasText: "入口回归" }).waitFor();
       const mutations = await page.evaluate(() => window.iePrecountRequests.filter(request => request.method !== "GET"));
       assert.equal(mutations.length, 1);
       assert.match(mutations[0].path, /\/ie-precounts$/);
-      assert.equal(mutations[0].body.quantity, 7);
+      assert.equal(mutations[0].body.quantity, 2);
       const ledger = await page.evaluate(() => window.iePrecountEntries);
       assert.equal(ledger.length, 2);
       assert.equal(ledger[1].quantity, 3);
+      assert.equal(await page.evaluate(() => window.iePrecountStatus), stage === "N05" ? "pending_order_review" : "in_progress");
       assert.equal(await page.getByRole("button", { name: "我已完工&上数", exact: true }).count(), 0);
     } else {
       assert.equal(await editor.count(), 0);
@@ -60,19 +61,35 @@ try {
     assert.deepEqual(errors, []);
     if (stage === "N05") {
       const tailRequests = await page.evaluate(() => window.iePrecountRequests.filter(request => request.path.endsWith("tail-inspection")));
-      assert.equal(tailRequests.length > 0, tailRequired && ["root", "tail"].includes(role));
+      assert.equal(tailRequests.length > 0, tailRequired && ["root", "tail", "mixed"].includes(role));
       if (["ie", "readonly-ie"].includes(role)) {
         assert.equal(await page.getByRole("button", {name: "确认数量并提交 IE", exact: true}).count(), 0);
         assert.equal(await page.getByLabel("拟提交单价（元/件）").count(), 0);
+        assert.equal(await page.getByRole("button", { name: /新增员工|移除|代为报数|完工上数|整查完成|IE 复核/ }).count(), 0);
+        assert.equal(await page.getByRole("heading", { name: "按工序核对", exact: true }).count(), 0);
+        assert.equal(await page.getByRole("button", { name: "整查预核数量" }).count(), 0);
+        assert.ok((await page.evaluate(() => window.iePrecountRequests)).some(request => request.path.endsWith("whole-order-review")));
       }
     }
     results.push({ width, stage, role, tailRequired, passed: true });
     await page.close();
   }
-  for (const fault of ["overview", "tail"]) {
+  for (const width of [390, 1440]) for (const role of ["ie", "root", "readonly-ie", "tail"]) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    await page.goto(`http://127.0.0.1:${server.address().port}/?stage=N06&role=${role === "readonly-ie" ? "ie" : role}&readonly=${role === "readonly-ie" ? 1 : 0}`);
+    if (role === "tail") await page.getByText("当前用户无权读取最终数量确认信息", { exact: true }).waitFor();
+    else await page.getByRole("heading", { name: "按工序核对", exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "IE预核", exact: true }).count(), 0);
+    assert.equal(await page.getByLabel("返工任务进度汇总").count(), 0);
+    assert.equal((await page.evaluate(() => window.iePrecountRequests.filter(request => request.method !== "GET"))).length, 0);
+    results.push({ width, stage: "N06", role, passed: true });
+    await page.close();
+  }
+  for (const fault of ["overview", "tail", "missing", "facts"]) {
     const page = await browser.newPage({viewport:{width:1440,height:900}});
     await page.goto(`http://127.0.0.1:${server.address().port}/?stage=N05&role=${fault === "tail" ? "root" : "ie"}&tail=1&fault=${fault}`);
-    await page.getByText(fault === "tail" ? "TEST 整查读取失败" : "TEST 审核摘要读取失败", {exact:true}).waitFor({timeout:5000});
+    const expected = { overview: "TEST 审核摘要读取失败", tail: "TEST 整查读取失败", missing: "TEST 订单不存在", facts: "TEST 执行事实读取失败" };
+    await page.getByText(expected[fault], {exact:true}).waitFor({timeout:5000});
     assert.equal(await page.getByRole("heading", {name:"按工序核对",exact:true}).count(),0);
     assert.equal(await page.getByRole("button", {name:"确认数量并提交 IE",exact:true}).count(),0);
     assert.equal((await page.evaluate(()=>window.iePrecountRequests.filter(request=>request.method!=="GET"))).length,0);
