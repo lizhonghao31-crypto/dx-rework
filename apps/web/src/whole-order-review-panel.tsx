@@ -116,7 +116,9 @@ export function WholeOrderReviewPanel({
   const [multiplierReasons, setMultiplierReasons] = useState<Record<string, string>>({});
   const [priceReviewDecisions, setPriceReviewDecisions] = useState<Record<string, PriceReviewDecision>>({});
   const attempts = useRef<Record<string, string>>({});
-  const requestInFlight = useRef(false);
+  const currentOrder = useRef(reworkOrderId);
+  currentOrder.current = reworkOrderId;
+  const requestInFlight = useRef<string | null>(null);
 
   const applyOverview = (overview: WholeOrderReviewResponse) => {
     setData(overview);
@@ -142,6 +144,7 @@ export function WholeOrderReviewPanel({
   const load = async () => {
     if (history) { applyOverview(history.data); setMessage(historyMessage); return; }
     const session = await verifySession();
+    if (currentOrder.current !== reworkOrderId) return;
     if (session === "denied" || session.status !== "authorized") throw new Error("当前登录状态已失效，请重新登录。");
     setModuleWritable(moduleCanWrite(session.user, "rework"));
     // The dedicated inspection endpoint has a narrower read scope than the order summary.
@@ -150,18 +153,18 @@ export function WholeOrderReviewPanel({
         && ["process:configure", "submission:audit"].some(capability => session.user.capabilities.includes(capability)))
       || (session.user.businessRoles?.includes("worker") === true
         && session.user.capabilities.includes("tail_inspection:report"));
-    if (requestInFlight.current) return;
-    requestInFlight.current = true;
+    if (requestInFlight.current === reworkOrderId) return;
+    requestInFlight.current = reworkOrderId;
     try {
       const overview = await request(
         "rework-orders/" + reworkOrderId + "/whole-order-review",
         WholeOrderReviewResponseSchema.parse,
       ).catch((cause: unknown) => {
-        // Only the formal summary denial can select an already authorized IE facts view.
-        // Inspection, session, missing-order and server errors keep their normal error UI.
+        if (currentOrder.current !== reworkOrderId) return null;
+        // Remember the denial before facts arrive. The parent selects a fallback only
+        // after the matching N05 facts are authorized; other actors retain this error.
         if (cause instanceof ApiRequestError && cause.status === 403 && onReviewReadForbidden) {
           onReviewReadForbidden();
-          return null;
         }
         throw cause;
       });
@@ -172,6 +175,7 @@ export function WholeOrderReviewPanel({
           "rework-orders/" + reworkOrderId + "/tail-inspection",
           TailInspectionResponseSchema.parse,
         );
+      if (currentOrder.current !== reworkOrderId) return;
       applyOverview(overview);
       setTailData(tail);
       if (overview.reviewId) setMessage("IE 已复核通过，工资已按批准的有效数量和最终价格锁定并进入责任判定。");
@@ -187,12 +191,16 @@ export function WholeOrderReviewPanel({
         setMessage(overview.tailInspectionRequired ? "返工人员与整查全部完成报数后进入尾部确认。" : "返工人员全部完成报数后进入尾部确认。");
       } else setMessage("");
     } finally {
-      requestInFlight.current = false;
+      if (requestInFlight.current === reworkOrderId) requestInFlight.current = null;
     }
   };
 
   useEffect(() => {
-    void load().catch((cause) => setMessage(cause instanceof Error ? cause.message : "读取失败"));
+    setData(history?.data ?? null);
+    setTailData(history?.tail ?? null);
+    void load().catch((cause) => {
+      if (currentOrder.current === reworkOrderId) setMessage(cause instanceof Error ? cause.message : "读取失败");
+    });
   }, [reworkOrderId]);
 
   const call = async <T,>(

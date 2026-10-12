@@ -1,6 +1,8 @@
 // Offline synthetic detail-page fixture: every fetch is intercepted, no business API.
 import { createRoot } from "react-dom/client";
+import { useState } from "react";
 import { ReworkDetailPage, type ReworkBusinessDetail } from "../../apps/web/src/rework-detail-page.js";
+import { WorkReportingForm } from "../../apps/web/src/work-reporting-form.js";
 import "../../packages/ui/src/tokens.css";
 import "../../packages/ui/src/components.css";
 import "../../apps/web/src/styles.css";
@@ -39,9 +41,14 @@ const overview = {
   reports: [], adjustments: [], temporaryWorkers: [], reviewId: null, finalConfirmation: null,
 };
 const requests: { path: string; method: string; body: unknown }[] = [];
-Object.assign(window, { iePrecountRequests: requests, iePrecountEntries: entries, iePrecountStatus: detail.status });
+const readEvents: { orderId: string; event: "facts" | "summary403" }[] = [];
+Object.assign(window, { iePrecountRequests: requests, iePrecountEntries: entries, iePrecountStatus: detail.status, ieReadEvents: readEvents });
 window.fetch = async (input, init) => {
   const path = String(input), method = init?.method ?? "GET";
+  const requestedOrderId = path.match(/rework-orders\/([^/]+)/)?.[1] ?? orderId;
+  const switching = params.get("switch") === "1";
+  const secondOrder = requestedOrderId === id("22");
+  const taskProcessName = switching ? secondOrder ? "TEST 新工序" : "TEST 旧工序" : "TEST 工序";
   requests.push({ path, method, body: init?.body ? JSON.parse(String(init.body)) : null });
   if (method !== "GET") {
     if (!path.endsWith(`/rework-orders/${orderId}/ie-precounts`)) throw new Error("Unexpected synthetic mutation");
@@ -53,12 +60,17 @@ window.fetch = async (input, init) => {
   if (path.endsWith("auth/me")) return Response.json({ status: "authorized", user });
   if (path.endsWith("business-detail")) return Response.json(detail);
   if (path.endsWith("whole-order-review")) {
+    const delay = switching && !secondOrder && params.get("late") === "summary" ? 650 : params.get("delay") === "both" ? 800 : params.get("delay") === "summary" ? 400 : 0;
+    if (delay) await new Promise(resolve => setTimeout(resolve, delay));
     if (params.get("fault") === "overview") return Response.json({ error: { message: "TEST 审核摘要读取失败" } }, { status: 500 });
     if (params.get("fault") === "missing") return Response.json({ error: { message: "TEST 订单不存在" } }, { status: 404 });
     // Match the actual service: ordinary IE cannot read formal N05 confirmation.
-    if (stage === "N05" && role === "ie") return Response.json({ error: { code: "FORBIDDEN", message: "当前用户无权读取最终数量确认信息" } }, { status: 403 });
+    if (stage === "N05" && role === "ie") {
+      readEvents.push({ orderId: requestedOrderId, event: "summary403" });
+      return Response.json({ error: { code: "FORBIDDEN", message: "当前用户无权读取最终数量确认信息" } }, { status: 403 });
+    }
     if (stage === "N06" && role === "tail") return Response.json({ error: { code: "FORBIDDEN", message: "当前用户无权读取最终数量确认信息" } }, { status: 403 });
-    return Response.json(overview);
+    return Response.json({ ...overview, reworkOrderId: requestedOrderId, processes: overview.processes.map(process => ({ ...process, processName: taskProcessName })) });
   }
   if (path.endsWith("tail-inspection")) {
     if (!["root", "tail", "mixed"].includes(role)) return Response.json({ error: { message: "当前角色无权查看整查报数" } }, { status: 403 });
@@ -68,9 +80,16 @@ window.fetch = async (input, init) => {
   if (path.endsWith("work-task-adjustment-options")) return Response.json({ people: [] });
   if (path.endsWith("process-configuration")) return Response.json({ reworkOrderId: orderId, reworkStatus: detail.status, orderVersion: 7, configuration: null, reworkNo: "RW-TEST" });
   if (path.endsWith("work-tasks")) {
+    const delay = switching && !secondOrder && params.get("late") === "facts" ? 650 : params.get("delay") === "both" ? 600 : params.get("delay") === "facts" ? 400 : 0;
+    if (delay) await new Promise(resolve => setTimeout(resolve, delay));
     if (params.get("fault") === "facts") return Response.json({ error: { message: "TEST 执行事实读取失败" } }, { status: 403 });
-    return Response.json({ reworkOrderId: orderId, reworkStatus: detail.status, orderVersion: 7, tasks: [{ workTaskId: id("6"), reworkOrderId: orderId, configurationItemId: processId, processName: "TEST 工序", executionKind: "worker", pricingUnit: "piece", plannedQuantity: 10, unitPrice: 1, mode: "individual", version: 1, status: "active", canSubmitReport: false, members: [{ personId: id("7"), displayName: "TEST 工人", personType: "internal" }], submittedQuantity: stage === "N04" ? 0 : 10, remainingQuantity: stage === "N04" ? 10 : 0 }, { workTaskId: id("8"), reworkOrderId: orderId, configurationItemId: id("9"), processName: "整查", executionKind: "tail_inspection", pricingUnit: "piece", plannedQuantity: 10, unitPrice: null, mode: "individual", version: 1, status: "active", canSubmitReport: false, members: [{ personId: id("10"), displayName: "TEST 整查员", personType: "internal" }], submittedQuantity: stage === "N04" ? 0 : 10, remainingQuantity: stage === "N04" ? 10 : 0 }] });
+    readEvents.push({ orderId: requestedOrderId, event: "facts" });
+    return Response.json({ reworkOrderId: requestedOrderId, reworkStatus: detail.status, orderVersion: 7, tasks: [{ workTaskId: id("6"), reworkOrderId: requestedOrderId, configurationItemId: processId, processName: taskProcessName, executionKind: "worker", pricingUnit: "piece", plannedQuantity: 10, unitPrice: 1, mode: "individual", version: 1, status: "active", canSubmitReport: false, members: [{ personId: id("7"), displayName: "TEST 工人", personType: "internal" }], submittedQuantity: stage === "N04" ? 0 : 10, remainingQuantity: stage === "N04" ? 10 : 0 }, { workTaskId: id("8"), reworkOrderId: requestedOrderId, configurationItemId: id("9"), processName: "整查", executionKind: "tail_inspection", pricingUnit: "piece", plannedQuantity: 10, unitPrice: null, mode: "individual", version: 1, status: "active", canSubmitReport: false, members: [{ personId: id("10"), displayName: "TEST 整查员", personType: "internal" }], submittedQuantity: stage === "N04" ? 0 : 10, remainingQuantity: stage === "N04" ? 10 : 0 }] });
   }
   throw new Error(`Unexpected synthetic read: ${path}`);
 };
-createRoot(document.getElementById("root")!).render(<ReworkDetailPage reworkOrderId={orderId} />);
+function SwitchingFixture() {
+  const [selected, setSelected] = useState(orderId);
+  return <><button onClick={() => setSelected(id("22"))}>切换到新订单</button><WorkReportingForm reworkOrderId={selected} taskMode="whole_order_review" embedded iePrecounts={{ ...detail.iePrecounts, canRecord: canRecord && (!readOnly || role === "root") }} /></>;
+}
+createRoot(document.getElementById("root")!).render(params.get("switch") === "1" ? <SwitchingFixture /> : <ReworkDetailPage reworkOrderId={orderId} />);

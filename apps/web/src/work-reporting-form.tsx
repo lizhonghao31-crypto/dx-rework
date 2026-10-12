@@ -10,7 +10,7 @@ import {
 } from "@dx-rework/contracts";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useMemo, useState, type ReactElement } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
@@ -222,6 +222,9 @@ export function WorkReportingForm({
   history?: ReworkWorkTasksResponse;
 } = {}) {
   const reworkOrderId = providedReworkOrderId ?? new URLSearchParams(window.location.search).get("rework");
+  const currentOrder = useRef(reworkOrderId);
+  currentOrder.current = reworkOrderId;
+  const factsRequest = useRef(0);
   const [data, setData] = useState<ReworkWorkTasksResponse | null>(history ?? null);
   const [configItems, setConfigItems] = useState<Array<{ configurationItemId: string; processName: string; executionKind: "worker" | "tail_inspection" }>>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -249,6 +252,9 @@ export function WorkReportingForm({
   const [canUseIeExecutionFacts, setCanUseIeExecutionFacts] = useState(false);
   const [reviewReadDeniedForOrder, setReviewReadDeniedForOrder] = useState<string | null>(null);
   const [expandedProcesses, setExpandedProcesses] = useState<Record<string, boolean>>({});
+  const onReviewReadForbidden = useCallback(() => {
+    if (reworkOrderId && currentOrder.current === reworkOrderId) setReviewReadDeniedForOrder(reworkOrderId);
+  }, [reworkOrderId]);
 
   useEffect(() => {
     if (!removalTask && !adjustmentDialogOpen && !temporaryDialogOpen && !reportTasks) return;
@@ -287,7 +293,9 @@ export function WorkReportingForm({
   const reload = async (): Promise<ReworkWorkTasksResponse | null> => {
     if (history) return history;
     if (!reworkOrderId) return null;
+    const requestNumber = ++factsRequest.current;
     const loaded = await request(`rework-orders/${reworkOrderId}/work-tasks`, ReworkWorkTasksResponseSchema.parse);
+    if (currentOrder.current !== reworkOrderId || factsRequest.current !== requestNumber) return null;
     setData(loaded);
     return loaded;
   };
@@ -301,9 +309,12 @@ export function WorkReportingForm({
   useEffect(() => {
     if (history) return;
     if (!reworkOrderId) { setMessage("请从当前节点工作台选择一张订单进入处理。"); return; }
+    let live = true;
     const load = async () => {
       setReviewReadDeniedForOrder(null);
+      setMessage("");
       const session = await verifySession();
+      if (!live) return;
       if (session === "denied" || session.status !== "authorized") throw new Error("当前登录状态已失效，请重新登录。");
       const writable = moduleCanWrite(session.user, "rework");
       setModuleWritable(writable);
@@ -318,6 +329,7 @@ export function WorkReportingForm({
       const temporaryManageable = writable && (root || session.user.capabilities.includes("temporary_worker:manage"));
       setCanAssign(assignable); setCanAdjustActive(activeAdjustable); setCanCreateTemporary(temporaryManageable); setIsRoot(root); setReviewEligible(orderReviewable);
       const loaded = taskReadable ? await reload() : null;
+      if (!live) return;
       if (!taskReadable) setMessage(orderReviewable ? "当前岗位只处理尾部确认，不展示工人的个人上数。" : "当前岗位没有这个节点的处理权限。");
       const assignmentView = loaded?.reworkStatus === "pending_task_assignment"
         && (taskMode === "task_assignment" || taskMode === "workspace");
@@ -337,7 +349,8 @@ export function WorkReportingForm({
         executionKind: item.executionKind,
       })) ?? []);
     };
-    void load().catch((cause: unknown) => setMessage(cause instanceof Error ? cause.message : "当前节点加载失败"));
+    void load().catch((cause: unknown) => { if (live) setMessage(cause instanceof Error ? cause.message : "当前节点加载失败"); });
+    return () => { live = false; };
   }, [reworkOrderId, taskMode]);
 
   const choosePeopleType = (type: "internal" | "temporary") => {
@@ -659,9 +672,9 @@ export function WorkReportingForm({
 
   if (effectiveTaskMode === "whole_order_review" && !ieN05FactsView) return <div className="mobile-page work-reporting-page">
     {!reviewEligible && <Surface>{message}</Surface>}
-    {reviewEligible && canUseIeExecutionFacts && iePrecounts && data?.reworkOrderId !== reworkOrderId
+    {reviewEligible && reviewReadDeniedForOrder === reworkOrderId && canUseIeExecutionFacts && iePrecounts && data?.reworkOrderId !== reworkOrderId
       ? <Surface>{message || "正在加载返工任务…"}</Surface>
-      : reworkOrderId && reviewEligible && <WholeOrderReviewPanel reworkOrderId={reworkOrderId} embedded={embedded} onChanged={async () => { await onOrderChanged?.(); }} {...(iePrecounts ? { iePrecounts } : {})} {...(ieN05FactsAvailable ? { onReviewReadForbidden: () => setReviewReadDeniedForOrder(reworkOrderId) } : {})} />}
+      : reworkOrderId && reviewEligible && <WholeOrderReviewPanel reworkOrderId={reworkOrderId} embedded={embedded} onChanged={async () => { await onOrderChanged?.(); }} onReviewReadForbidden={onReviewReadForbidden} {...(iePrecounts ? { iePrecounts } : {})} />}
   </div>;
 
   return <div className={`mobile-page work-reporting-page${embedded ? " is-embedded" : ""}${frontlineContext ? " is-frontline" : ""}`}>

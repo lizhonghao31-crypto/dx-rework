@@ -9,7 +9,7 @@ describe("whole-order review refresh policy", () => {
     expect(source).not.toContain("window.setInterval");
     expect(source).not.toContain('window.addEventListener("focus"');
     expect(source).not.toContain("visibilitychange");
-    expect(source).toContain("if (requestInFlight.current) return;");
+    expect(source).toContain("if (requestInFlight.current === reworkOrderId) return;");
     expect(source).toContain("await load();");
     expect(source).toContain("await onChanged();");
   });

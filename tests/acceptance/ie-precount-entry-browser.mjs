@@ -95,6 +95,34 @@ try {
     assert.equal((await page.evaluate(()=>window.iePrecountRequests.filter(request=>request.method!=="GET"))).length,0);
     results.push({fault,passed:true});await page.close();
   }
+  for (const width of [390, 1440]) for (const readOnly of [false, true]) for (const delay of ["facts", "summary", "both"]) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    await page.goto(`http://127.0.0.1:${server.address().port}/?stage=N05&role=ie&tail=1&delay=${delay}&readonly=${readOnly ? 1 : 0}`);
+    await page.getByLabel("返工任务进度汇总").waitFor({ timeout: 5000 });
+    const readEvents = await page.evaluate(() => window.ieReadEvents);
+    assert.equal(readEvents.findIndex(event => event.event === "summary403") < readEvents.findIndex(event => event.event === "facts"), delay === "facts");
+    assert.equal(await page.getByText("当前用户无权读取最终数量确认信息", { exact: true }).count(), 0);
+    assert.equal(await page.getByRole("button", { name: "IE预核", exact: true }).count(), readOnly ? 0 : 1);
+    assert.equal((await page.evaluate(() => window.iePrecountRequests.filter(request => request.method !== "GET"))).length, 0);
+    results.push({ width, stage: "N05", readOnly, delay, summary403BeforeFacts: delay === "facts", passed: true });
+    await page.close();
+  }
+  for (const width of [390, 1440]) for (const role of ["ie", "root"]) for (const late of ["facts", "summary"]) {
+    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    const errors = []; page.on("pageerror", error => errors.push(String(error)));
+    await page.goto(`http://127.0.0.1:${server.address().port}/?stage=N05&role=${role}&switch=1&late=${late}`);
+    await page.waitForFunction(() => window.iePrecountRequests.some(request => request.path.endsWith("whole-order-review")) && window.iePrecountRequests.some(request => request.path.endsWith("work-tasks")));
+    await page.getByRole("button", { name: "切换到新订单", exact: true }).click();
+    await page.getByText("TEST 新工序", { exact: true }).waitFor({ timeout: 5000 });
+    await page.waitForTimeout(750); // Let the obsolete order response complete before asserting isolation.
+    assert.equal(await page.getByText("TEST 旧工序", { exact: true }).count(), 0);
+    assert.equal(await page.getByText("TEST 新工序", { exact: true }).count(), 1);
+    assert.equal(await page.getByText("当前用户无权读取最终数量确认信息", { exact: true }).count(), 0);
+    assert.deepEqual(errors, []);
+    assert.equal((await page.evaluate(() => window.iePrecountRequests.filter(request => request.method !== "GET"))).length, 0);
+    results.push({ width, role, switchingOrder: true, lateOldResponse: late, passed: true });
+    await page.close();
+  }
   console.log(JSON.stringify({ localOnly: true, synthetic: true, results }, null, 2));
 } finally {
   await browser?.close();
