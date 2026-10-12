@@ -179,3 +179,14 @@
 .rework-governed[data-legacy-ui="rework-detail"] .whole-order-review-flow>.dx-surface{margin:0}
 
 .rework-governed[data-legacy-ui="rework-detail"] .rework-detail-workspace>.work-reporting-page{padding-bottom:0}
+.rework-governed[data-legacy-ui="rework-detail"] .quantity-process-toggle:not(.quantity-coefficient-toggle) { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; }
+.rework-governed[data-legacy-ui="rework-detail"] .quantity-process-toggle:not(.quantity-coefficient-toggle) .quantity-process-name { flex:1 1 120px; min-width:0; overflow:visible; overflow-wrap:anywhere; white-space:normal; text-overflow:clip; }
+.rework-governed[data-legacy-ui="rework-detail"] .quantity-process-toggle > span:not(.quantity-process-name) { flex:0 0 auto; white-space:nowrap; }
+.rework-governed[data-legacy-ui="rework-detail"] .quantity-process-toggle .quantity-process-outcome { display:inline-flex; align-items:center; gap:8px; margin-left:auto; }
+.rework-governed[data-legacy-ui="rework-detail"] .quantity-process-outcome .dx-badge { display:inline-flex; flex-shrink:0; white-space:nowrap; }
+.rework-governed[data-legacy-ui="rework-detail"] .quantity-process-outcome .quantity-process-expander { flex:0 0 20px; }
+@media (max-width:800px) {
+  .rework-governed[data-legacy-ui="rework-detail"] .quantity-process-toolbar { flex-wrap:wrap; }
+  .rework-governed[data-legacy-ui="rework-detail"] .quantity-process-toolbar > .quantity-process-toggle { flex-basis:100%; }
+  .rework-governed[data-legacy-ui="rework-detail"] .quantity-process-toolbar > .quantity-process-save { margin:0 8px 8px auto; }
+}

@@ -60,6 +60,7 @@ import {
   type SourcingTimelineEntry,
 } from "@dx-rework/contracts";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
+import { fixedBusinessCurrency } from "./fixed-business-currency.js";
 import { Button, DecisionSummary, ActionBar, ImageStrip, KeyFacts, ResponsiveFactsTable, WorkflowRail, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -257,7 +258,7 @@ const businessInputValue = (value: string): string =>
 
 const businessInputChange = (value: string): string => value.replace(/,/g, "");
 
-const subtractFixedPoint = (left: string, right: string, scale: number): string | null => {
+const subtractFixedPoint = (left: string, right: string, scale: number, formatCurrency = formatBusinessCurrency): string | null => {
   const toScaled = (value: string): bigint | null => {
     const match = /^(\d+)(?:\.(\d+))?$/.exec(value);
     if (!match || (match[2]?.length ?? 0) > scale) return null;
@@ -273,7 +274,7 @@ const subtractFixedPoint = (left: string, right: string, scale: number): string 
   const divisor = 10n ** BigInt(scale);
   const whole = absolute / divisor;
   const fraction = (absolute % divisor).toString().padStart(scale, "0");
-  return sign + formatBusinessCurrency(whole.toString() + "." + fraction);
+  return sign + formatCurrency(whole.toString() + "." + fraction);
 };
 
 const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): string =>
@@ -1702,7 +1703,7 @@ function OrderDetailPage({
   const comparableIeTotal=item.ieQuote&&item.decision?.sourceType==='factory_change'
     ?item.ieQuote.linePrices.length?linesTotalPreview(item.ieQuote.linePrices.filter(price=>item.decision!.linePrices.some(line=>line.position===price.position)),item.lineItems.map(line=>({...line,quantity:item.decision!.linePrices.find(price=>price.position===line.position)?.quantity??0}))):totalPreview(item.ieQuote.unitPrice,item.decision.quantity)
     :item.ieQuote?.totalAmount;
-  const ownerTotalDelta=item.decision&&comparableIeTotal&&comparableIeTotal!=='—'?subtractFixedPoint(item.decision.totalAmount,comparableIeTotal,2):null;
+  const ownerTotalDelta=item.decision&&comparableIeTotal&&comparableIeTotal!=='—'?subtractFixedPoint(item.decision.totalAmount,comparableIeTotal,2,fixedBusinessCurrency):null;
   const transferQuantity=factoryRemainingLines?.reduce((sum,line)=>sum+line.quantity,0)??item.orderQuantity;
   const transferTotal=factoryChangeTotalPreview(factoryChangeDraft.unitPrice,factoryRemainingLines?factoryRemainingLines.filter(line=>line.quantity>0).map(line=>line.quantity):[item.orderQuantity]);
   const ownerCraftSummary = <span className="sourcing-owner-craft-summary">承包内容包括 <strong>{item.processes.length ? item.processes.join("、") : "未填写"}</strong>；裁床工序为 <strong>{item.decision?.cuttingProcess === "in_house" ? "本厂裁" : item.decision?.cuttingProcess === "outsourced" ? "外厂裁" : item.decision?.cuttingProcess === "other" ? `其它：${item.decision.cuttingProcessOther ?? "未填写"}` : "未填写"}</strong>。</span>;
@@ -1786,8 +1787,8 @@ function OrderDetailPage({
           <div><dt>跟单</dt><dd>{item.merchandiserName ?? "历史未维护"}</dd></div>
           <div className="sourcing-key-facts__factory"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
           <div><dt>总数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
-          <div><dt>生产总额</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.totalAmount) : "—"}</dd></div>
-          <div><dt>IE 总额</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.totalAmount) : "—"}</dd></div>
+          <div><dt>生产总额</dt><dd>{item.decision ? fixedBusinessCurrency(item.decision.totalAmount) : "—"}</dd></div>
+          <div><dt>IE 总额</dt><dd>{item.ieQuote ? fixedBusinessCurrency(item.ieQuote.totalAmount) : "—"}</dd></div>
           <div><dt>较 IE 总额变化</dt><dd className={ownerTotalDelta?.startsWith("-") ? "sourcing-price-lower" : undefined}>{ownerTotalDelta ?? "—"}</dd></div>
           <div className="sourcing-key-facts__date"><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
           {sourcingPoDates(item)?<div className="sourcing-key-facts__date"><dt>PO 双交期</dt><dd><PoDateSummary lines={sourcingPoDates(item)}/></dd></div>:<div className="sourcing-key-facts__date"><dt>要求交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>}
@@ -1841,13 +1842,13 @@ function OrderDetailPage({
         </div>
 
         {item.decision ? <DecisionSummary title={selectedNode === "owner" ? "审批摘要" : "选厂摘要"}>
-          <p className="sourcing-owner-decision__lead">供应链总监建议由 <strong>{item.decision.supplierName}</strong> 承接 <strong>{formatBusinessDecimal(item.decision.quantity)} 件</strong>，生产总额 <strong>{formatBusinessCurrency(item.decision.totalAmount)}</strong>，相对 IE 总额变化{item.decision.sourceType==='factory_change'?'（按转入同份额）':''} <strong>{ownerTotalDelta ?? "—"}</strong>。</p>
+          <p className="sourcing-owner-decision__lead">供应链总监建议由 <strong>{item.decision.supplierName}</strong> 承接 <strong>{formatBusinessDecimal(item.decision.quantity)} 件</strong>，生产总额 <strong>{fixedBusinessCurrency(item.decision.totalAmount)}</strong>，相对 IE 总额变化{item.decision.sourceType==='factory_change'?'（按转入同份额）':''} <strong>{ownerTotalDelta ?? "—"}</strong>。</p>
           <p>{ownerCraftSummary}</p>
           {item.decision.decisionReason ? <p>供应链总监说明：{item.decision.decisionReason}</p> : null}
           {selectedNode === "owner" && selectedState === "current" ? <p>请核对价格、加工厂及交期，确认后审批。</p> : null}
         </DecisionSummary> : null}
         <ResponsiveFactsTable caption="款式明细" mobileLayout="compact" rows={item.lineItems} rowKey={line => line.position}
-          totals={{ style: "合计", quantity: `${formatBusinessDecimal(item.orderQuantity)} 件`, amount: item.decision ? formatBusinessCurrency(item.decision.totalAmount) : "—" }}
+          totals={{ style: "合计", quantity: `${formatBusinessDecimal(item.orderQuantity)} 件`, amount: item.decision ? fixedBusinessCurrency(item.decision.totalAmount) : "—" }}
           columns={[
             {
               key: "style", label: "款号", mobileHeading: true,
@@ -1875,7 +1876,7 @@ function OrderDetailPage({
             ...(item.lineItems.some(line=>line.lineId)?[{key:"customerDate",label:item.approvalSnapshot?"客户仓到货日":customerPoDateLabel,render:(line:SourcingCaseSummary["lineItems"][number])=>line.customerWarehouseArrivalDate ?? "未登记"},{key:"factoryDate",label:"加工厂交货日",render:(line:SourcingCaseSummary["lineItems"][number])=><>{line.factoryDeliveryDate ?? "尚未生效"}{line.proposedFactoryDeliveryDate && line.proposedFactoryDeliveryDate!==line.factoryDeliveryDate?<small>{item.approvalSnapshot?"原申请日期：":"审批提议："}{line.proposedFactoryDeliveryDate}</small>:null}</>}]:[]),
             { key: "ie", label: "IE 单价", render: line => { const price = sourcingLinePricing(item.ieQuote, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
             { key: "production", label: "生产单价", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
-            { key: "amount", label: "本款金额", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price?.totalAmount ? formatBusinessCurrency(price.totalAmount) : "—"; } },
+            { key: "amount", label: "本款金额", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price?.totalAmount ? fixedBusinessCurrency(price.totalAmount) : "—"; } },
           ]} />
         {item.decision?.sourceType === "factory_change" && item.lineItems.length > 1 && item.lineItems.some(line => !item.decision?.linePrices.some(price => price.position === line.position)) ? <p className="sourcing-price-note">转厂后按统一生产单价执行，部分款式缺少逐款金额记录，生产总额见合计。</p> : null}
 
@@ -1893,7 +1894,7 @@ function OrderDetailPage({
                   return <label className="sourcing-line-price-row" key={line.position}>
                     <span><b>{String(line.position).padStart(2, "0")}</b> {line.styleNo} · {line.color ?? "历史未维护颜色"} · {formatBusinessDecimal(line.quantity)} 件</span>
                     <span className="sourcing-price-control"><input aria-label={`${line.styleNo} IE单价`} {...control.props} {...feedback.field(`sourcing-quote-price-${line.position}`)} aria-describedby={control.error ? errorId : feedback.field(errorId.replace("-error-", "-"))["aria-describedby"]} />{control.error ? <small id={errorId} role="status">{control.error}</small> : null}</span>
-                    <strong>{formatBusinessCurrency(isNewSourcingPrice(price) ? totalPreview(price, line.quantity) : "—")}</strong>
+                    <strong>{fixedBusinessCurrency(isNewSourcingPrice(price) ? totalPreview(price, line.quantity) : "—")}</strong>
                   </label>;
                 })}
               </div>
@@ -1915,7 +1916,7 @@ function OrderDetailPage({
                   const control = priceInput("decision", line.position, price);
                   const errorId = `sourcing-decision-price-error-${line.position}`;
                   const iePrice = item.ieQuote?.linePrices.find((entry) => entry.position === line.position)?.unitPrice;
-                  return <label className="sourcing-line-price-row" key={line.position}><span><b>{String(line.position).padStart(2, "0")}</b> {line.styleNo} · {line.color ?? "历史未维护颜色"}<small>IE {iePrice ? formatBusinessCurrency(iePrice) : "—"}</small></span><span className="sourcing-price-control"><input aria-label={`${line.styleNo} 生产单价`} {...control.props} {...feedback.field(`sourcing-decision-price-${line.position}`)} aria-describedby={control.error ? errorId : feedback.field(errorId.replace("-error-", "-"))["aria-describedby"]} />{control.error ? <small id={errorId} role="status">{control.error}</small> : null}</span><strong>{formatBusinessCurrency(isNewSourcingPrice(price) ? totalPreview(price, line.quantity) : "—")}</strong></label>;
+                  return <label className="sourcing-line-price-row" key={line.position}><span><b>{String(line.position).padStart(2, "0")}</b> {line.styleNo} · {line.color ?? "历史未维护颜色"}<small>IE {iePrice ? formatBusinessCurrency(iePrice) : "—"}</small></span><span className="sourcing-price-control"><input aria-label={`${line.styleNo} 生产单价`} {...control.props} {...feedback.field(`sourcing-decision-price-${line.position}`)} aria-describedby={control.error ? errorId : feedback.field(errorId.replace("-error-", "-"))["aria-describedby"]} />{control.error ? <small id={errorId} role="status">{control.error}</small> : null}</span><strong>{fixedBusinessCurrency(isNewSourcingPrice(price) ? totalPreview(price, line.quantity) : "—")}</strong></label>;
                 })}
               </div>
               <label><span>逐款汇总</span><input value={businessInputValue(linesTotalPreview(decision.linePrices, item.lineItems))} readOnly /></label>
@@ -2043,7 +2044,7 @@ function OrderDetailPage({
               <div><dt>批准加工厂</dt><dd>{item.decision.supplierName}</dd></div>
               <div><dt>批准单价</dt><dd>{sourcingPriceSummary(item.decision)}</dd></div>
               <div><dt>批准数量</dt><dd>{formatBusinessDecimal(item.decision.quantity)} 件</dd></div>
-              <div><dt>批准总额</dt><dd>{formatBusinessCurrency(item.decision.totalAmount)}</dd></div>
+              <div><dt>批准总额</dt><dd>{fixedBusinessCurrency(item.decision.totalAmount)}</dd></div>
               <div><dt>对应合同</dt><dd>{contract?.status === "ready" ? `${contract.contractNumber} · V${contract.contractVersion}` : "合同 PDF 尚未就绪"}</dd></div>
             </dl> : null}
             {item.decision && item.decision.sourceType !== "factory_change" && item.decision.linePrices.length > 1 ? <ResponsiveFactsTable
@@ -2054,7 +2055,7 @@ function OrderDetailPage({
                 { key: "color", label: "颜色", mobileHeading: true, render: price => item.lineItems.find(line => line.position === price.position)?.color ?? "历史颜色缺失" },
                 { key: "quantity", label: "批准数量", render: price => `${formatBusinessDecimal(price.quantity)} 件` },
                 { key: "price", label: "批准价", render: price => historicalSourcingPrice(price.unitPrice) },
-                { key: "amount", label: "批准行金额", render: price => formatBusinessCurrency(price.totalAmount) },
+                { key: "amount", label: "批准行金额", render: price => fixedBusinessCurrency(price.totalAmount) },
               ]} /> : null}
             {hasPendingFactoryChange ? <p className="sourcing-finance-waiting">订单转厂正在审批，财务核对已暂停；转厂生效或驳回后会自动恢复。</p> : contract?.status !== "ready" ? <p className="sourcing-finance-waiting">系统合同 PDF 未就绪，暂不能提交财务核对。</p> : canFinance ? <div className="sourcing-finance-confirmation">
               <p>请对照已批准的选厂决定确认上述四项事实。若发现不一致，只记录差异项和说明，由供应链总监核实；财务不能在此页改写业务数据。</p>
@@ -2106,7 +2107,7 @@ function OrderDetailPage({
           {transferNodeRole ? <section className="sourcing-factory-change" aria-label="订单转厂">
             {!item.decision ? <button className="dx-button dx-button--primary" type="button" disabled title="供应链总监首次提交加工厂和单价后开放">订单转厂</button> : factoryChange?.status === "pending_management" ? <>
               <h2>订单转厂</h2>
-              <p><strong>{factoryChange.proposedSupplierName}</strong> · {formatBusinessCurrency(factoryChange.proposedUnitPrice)}/件 · {formatBusinessCurrency(factoryChange.proposedTotalAmount)}。跟单申请，等待供应链总监审批。</p>
+              <p><strong>{factoryChange.proposedSupplierName}</strong> · {formatBusinessCurrency(factoryChange.proposedUnitPrice)}/件 · {fixedBusinessCurrency(factoryChange.proposedTotalAmount)}。跟单申请，等待供应链总监审批。</p>
               {canReviewManagementTransfer ? <div className="sourcing-factory-change__review">
                 <label><span>审批说明</span><input maxLength={500} value={factoryChangeReviewReason} onChange={(event) => { setFactoryChangeReviewReason(event.target.value); actionKey.current = null; }} /></label>
                 <div><button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/decision`, { decision: "approved", verificationReason: factoryChangeReviewReason.trim() }, factoryChange.requiresOwnerApproval ? "供应链总监已通过，转老板审批" : "转厂已生效", true)}>批准转厂</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/decision`, { decision: "rejected", verificationReason: factoryChangeReviewReason.trim() }, "转厂申请已驳回", true)}>驳回</button></div>

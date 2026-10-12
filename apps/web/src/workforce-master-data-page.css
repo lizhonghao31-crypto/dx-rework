@@ -1,1 +1,14 @@
 .workforce-page{display:grid;gap:var(--dx-v2-space-5);max-width:1180px}.workforce-page>.page-heading{margin-bottom:0}.workforce-heading{gap:24px}.workforce-heading p,.workforce-message p{margin-bottom:0}.workforce-create-grid{display:grid;grid-template-columns:minmax(180px,1fr) minmax(220px,1fr) auto;gap:var(--dx-v2-space-3);align-items:end}.workforce-create-grid label{display:grid;gap:6px}.workforce-create-grid input{min-height:44px;padding:0 12px;border:0;border-radius:var(--dx-v2-radius-md);background:var(--dx-v2-color-inset);font:inherit}.workforce-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--dx-v2-space-4)}.workforce-list{display:grid;gap:var(--dx-v2-space-3);margin-top:var(--dx-v2-space-3)}.workforce-list article{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:var(--dx-v2-space-3);align-items:center;padding:var(--dx-v2-space-3);border-radius:var(--dx-v2-radius-md);background:var(--dx-v2-color-inset)}.workforce-list article>div:first-child{display:grid;gap:2px}.workforce-list small{color:var(--dx-v2-color-text-secondary);overflow-wrap:anywhere}.workforce-row-actions,.workforce-aliases{display:flex;gap:8px;flex-wrap:wrap}.workforce-aliases{grid-column:1/-1}.workforce-alias{border:0;border-radius:999px;padding:6px 10px;background:var(--dx-v2-color-surface);color:var(--dx-v2-color-text-secondary);cursor:pointer}.workforce-alias:disabled{cursor:default;opacity:.6}@media(max-width:900px){.workforce-grid,.workforce-create-grid{grid-template-columns:1fr}.workforce-heading{display:grid}.workforce-list article{grid-template-columns:1fr}.workforce-aliases{grid-column:auto}}
+.workforce-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.workforce-grid > .dx-surface { min-width:0; }
+.workforce-list article { display:flex; flex-wrap:wrap; }
+.workforce-list article > div:first-child { flex:1 1 180px; min-width:0; overflow-wrap:anywhere; }
+.workforce-list article > :is(.dx-badge,.dx-button,.workforce-row-actions) { flex:0 0 auto; white-space:nowrap; }
+.workforce-row-actions { margin-left:auto; max-width:100%; }
+.workforce-aliases { flex-basis:100%; }
+@media (max-width:900px) {
+  .workforce-grid { grid-template-columns:minmax(0,1fr); }
+  .workforce-list article { display:grid; grid-template-columns:minmax(0,1fr); }
+  .workforce-list article > .dx-badge { justify-self:start; }
+  .workforce-row-actions { margin-left:0; }
+}
