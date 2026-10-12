@@ -1,6 +1,7 @@
 import { canAccessFinance } from "../finance-access.js";
 import { verifySession } from "../auth.js";
-import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
+import { formatBusinessDecimal, isBusinessMoneyField } from "@dx-rework/contracts/business-display";
+import { fixedBusinessCurrency } from "../fixed-business-currency.js";
 import { ReportTypeSchema, type ReportPreviewResponse, type ReportType } from "@dx-rework/contracts/reporting";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
@@ -21,7 +22,9 @@ const statuses:Record<ReportType,readonly (readonly [string,string])[]>={
   exceptions:[["","全部异常"],["overdue_todo","待办逾期"],["blocked_recipient","接收人失效"],["todo_delivery_failed","投递失败"],["deduction_follow_up_overdue","扣款跟进逾期"]],
 };
 type State={kind:"loading"}|{kind:"ready";value:ReportPreviewResponse}|{kind:"unavailable";message:string};
-const snapshotBusinessValue = businessValue;
+const snapshotBusinessValue = (key: string, value: Parameters<typeof businessValue>[1]): string =>
+  value !== null && value !== undefined && value !== "" && isBusinessMoneyField(key)
+    ? fixedBusinessCurrency(String(value)) : businessValue(key, value);
 
 export function ReportCenterPage(){
   const [wageAccess,setWageAccess]=useState<boolean|null>(null);
@@ -51,7 +54,7 @@ export function ReportCenterPage(){
     {state.kind==="unavailable"&&<Surface className="reporting-state">{state.message}</Surface>}
     {value&&<>
       <Surface className="reporting-summary"><div><h2>{names[type]}</h2><p>{formatBusinessTime(value.asOf)}</p></div><div>{Object.entries(value.totals).map(([key,total])=><StatusBadge tone="info" key={key}>{businessFieldLabel(key)}：{snapshotBusinessValue(key, total)}</StatusBadge>)}</div></Surface>
-      <Surface className="reporting-table-surface"><div className="reporting-table-wrap"><table><thead><tr>{value.columns.map(column=><th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{page.items.map((row,index)=><tr key={index}>{value.columns.map(column=><td key={column.key}>{column.key === "settlementStatus" ? (row[column.key] === "settled" ? "已结算" : "未结算") : businessValue(column.key, row[column.key])}</td>)}</tr>)}</tbody></table></div>{value.rows.length===0&&<p>当前筛选范围没有数据。</p>}{value.truncated&&<StatusBadge tone="warning">预览达到 100 行上限；Excel 最多可导出 50,000 行。</StatusBadge>}<ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} ariaLabel="财务报表分页" /></Surface>
+      <Surface className="reporting-table-surface"><div className="reporting-table-wrap"><table><thead><tr>{value.columns.map(column=><th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{page.items.map((row,index)=><tr key={index}>{value.columns.map(column=><td key={column.key}>{column.key === "settlementStatus" ? (row[column.key] === "settled" ? "已结算" : "未结算") : snapshotBusinessValue(column.key, row[column.key])}</td>)}</tr>)}</tbody></table></div>{value.rows.length===0&&<p>当前筛选范围没有数据。</p>}{value.truncated&&<StatusBadge tone="warning">预览达到 100 行上限；Excel 最多可导出 50,000 行。</StatusBadge>}<ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} ariaLabel="财务报表分页" /></Surface>
     </>}
   </Shell>;
 }

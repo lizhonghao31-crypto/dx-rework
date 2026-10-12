@@ -558,12 +558,12 @@ export function WholeOrderReviewPanel({
                 <span><small>整查</small><strong>{formatBusinessDecimal(process.tailCheckedQuantity)}</strong></span>
                 <span><small>整查余量</small><strong>{formatBusinessDecimal(process.tailCheckedQuantity - process.completedQuantity)}</strong></span>
               </> : null}
-              <StatusBadge tone={process.complete ? "success" : "danger"}>
+              <span className="quantity-process-outcome"><StatusBadge tone={process.complete ? "success" : "danger"}>
                 {data.tailInspectionRequired
                   ? process.complete ? "✓ 可确认" : process.completedQuantity <= 0 || process.tailCheckedQuantity <= 0 ? "⚠ 待报数" : "⚠ 工序超数"
                   : process.complete ? "✓ 已上报" : "⚠ 待完成"}
               </StatusBadge>
-              <b className="quantity-process-expander">{open ? "−" : "+"}</b>
+              <b className="quantity-process-expander">{open ? "−" : "+"}</b></span>
             </button>
             {canSaveProcess ? <Button
               className="quantity-process-save"

@@ -1,4 +1,12 @@
 .development-editor header { text-align:center; }
+@media screen {
+  .dx-doc-development.development-editor .dx-doc-toolbar { align-items:flex-start; flex-wrap:wrap; }
+  .dx-doc-development.development-editor .dx-doc-toolbar > div:first-child { display:grid; grid-template-columns:auto minmax(0,1fr); flex:1 1 280px; align-items:start; min-width:0; }
+  .dx-doc-development.development-editor .dx-doc-toolbar h1 { min-width:0; overflow-wrap:anywhere; }
+  .dx-doc-development.development-editor .dx-doc-status { grid-column:2; justify-self:start; overflow-wrap:anywhere; }
+  .dx-doc-development.development-editor .dx-doc-actions { flex:0 0 auto; max-width:100%; margin-left:auto; justify-content:flex-end; }
+  .dx-doc-development.development-editor .dx-doc-actions .dx-button { flex-shrink:0; white-space:nowrap; }
+}
 .development-heading { display:flex;flex-wrap:wrap;gap:16px;padding:12px 0; }
 .development-sheet-layout { display:grid;grid-template-columns:minmax(0, 3fr) minmax(300px, 1fr);gap:16px; }
 .development-images figure { margin:0 0 12px;break-inside:avoid; }
