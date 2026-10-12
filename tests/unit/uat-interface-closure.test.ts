@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 import { businessFieldLabel, businessValue, formatBusinessCurrency, formatBusinessDecimal, formatBusinessMoney, translateTechnicalDetails } from "@dx-rework/contracts/business-display";
+import { fixedBusinessCurrency } from "../../apps/web/src/fixed-business-currency.js";
 
 const read = (path: string) => readFile(path, "utf8");
 
@@ -59,10 +60,12 @@ describe("UAT interface closure", () => {
       read("apps/web/src/admin-console-page.tsx"),
       read("apps/web/src/business-display.ts"),
     ]);
-    expect(report).toContain("businessValue(column.key, row[column.key])");
+    expect(report).toContain("snapshotBusinessValue(column.key, row[column.key])");
     expect(report).toContain("businessFieldLabel(key)");
     expect(report).toContain("snapshotBusinessValue(key, total)");
-    expect(report).toContain("snapshotBusinessValue = businessValue");
+    expect(report).toContain("isBusinessMoneyField(key)");
+    expect(report).toContain("fixedBusinessCurrency(String(value))");
+    expect(report).toContain("businessValue(key, value)");
     expect(report).not.toContain("Math.round(numeric)");
     expect(report).not.toContain('action="返回全部订单"');
     expect(report).not.toContain("数据快照：");
@@ -78,6 +81,12 @@ describe("UAT interface closure", () => {
     expect(formatBusinessMoney("4.5000")).toBe("4.5");
     expect(formatBusinessCurrency("9000.00")).toBe("¥9,000");
     expect(businessValue("amount", "9000.00")).toBe("¥9,000");
+    expect(fixedBusinessCurrency("0")).toBe("¥0.00");
+    expect(fixedBusinessCurrency("2.5")).toBe("¥2.50");
+    expect(fixedBusinessCurrency("10")).toBe("¥10.00");
+    expect(fixedBusinessCurrency("0.5")).toBe("¥0.50");
+    expect(fixedBusinessCurrency("0.6")).toBe("¥0.60");
+    expect(fixedBusinessCurrency("9007199254740993.5")).toBe("¥9,007,199,254,740,993.50");
     expect(translateTechnicalDetails({
       expiresAt: "2026-08-11T00:00:00.000Z",
       boundEntityType: "rework_order",

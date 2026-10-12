@@ -41,7 +41,8 @@ describe("N01 image and wage integrity", () => {
     expect(wages).not.toContain("rework_tail_temporary_wage_coefficients");
     expect(exportService).toContain("rework_tail_completion_coefficients");
     expect(exportService).not.toContain("rework_tail_temporary_wage_coefficients");
-    expect(reports).toContain("snapshotBusinessValue = businessValue");
+    expect(reports).toContain("businessValue(key, value)");
+    expect(reports).toContain("isBusinessMoneyField(key)");
     expect(reports).not.toContain("Math.round(numeric)");
   });
 });
