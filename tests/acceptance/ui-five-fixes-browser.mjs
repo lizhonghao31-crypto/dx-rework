@@ -12,7 +12,7 @@ let browser, server;
 const results = [];
 try {
   const buildFixture = async (entry, destination) => {
-    await build({ configFile: false, esbuild: { jsx: 'automatic' }, define: { 'import.meta.env.BASE_URL': '\"/\"', 'process.env.NODE_ENV': '\"production\"' }, build: { outDir: destination, lib: { entry: resolve(entry), name: 'UiFiveFixes', formats: ['iife'] } } });
+    await build({ configFile: false, esbuild: { jsx: 'automatic' }, define: { 'import.meta.env.BASE_URL': '"/"', 'process.env.NODE_ENV': '"production"' }, build: { outDir: destination, lib: { entry: resolve(entry), name: 'UiFiveFixes', formats: ['iife'] } } });
     const names = await readdir(destination), js = await readFile(join(destination, names.find(n => n.endsWith('.js'))), 'utf8'), css = await readFile(join(destination, names.find(n => n.endsWith('.css'))), 'utf8');
     return `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script>${js.replace(/<\/script/gi, '<\\/script')}</script></html>`;
   };
