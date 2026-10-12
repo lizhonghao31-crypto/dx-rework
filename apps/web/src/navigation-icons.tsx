@@ -6,6 +6,7 @@ type IconName = keyof typeof NAVIGATION_ICON_DATA;
 export const NAVIGATION_ROUTE_ICONS: Readonly<Record<string, IconName>> = {
   "/ui/digital-cockpit": "Activity",
   "/ui/digital-production": "ClipboardPen",
+  "/ui/digital-pattern-room": "Shirt",
   "/ui/digital-analysis": "ChartColumn",
   "/ui/my-tasks": "ClipboardCheck",
   "/ui/production-dashboard": "Activity",

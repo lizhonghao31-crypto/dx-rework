@@ -21,11 +21,13 @@ export function ManagementOrderCard({
   canDelete = false,
   deleting = false,
   onDelete,
+  statusBesideStyle = false,
 }: {
   order: ManagementReworkRow;
   canDelete?: boolean;
   deleting?: boolean;
   onDelete?: (order: ManagementReworkRow) => void;
+  statusBesideStyle?: boolean;
 }) {
   const tone = order.status === "cancelled"
     ? "danger"
@@ -51,10 +53,10 @@ export function ManagementOrderCard({
     >
         <div className="reporting-order-card__heading">
           <div>
-            <strong>{order.styleNo ?? "款号未填写"}</strong>
+            {statusBesideStyle ? <div className="reporting-order-card__title-line"><strong>{order.styleNo ?? "款号未填写"}</strong><StatusBadge tone={tone}>{order.nodeLabel}</StatusBadge></div> : <strong>{order.styleNo ?? "款号未填写"}</strong>}
             <small>{order.reworkNo ?? "返工单"} · {order.reworkKind === "inhouse_finishing" ? "本厂做尾" : "QC返工"}</small>
           </div>
-          <StatusBadge tone={tone}>{order.nodeLabel}</StatusBadge>
+          {!statusBesideStyle && <StatusBadge tone={tone}>{order.nodeLabel}</StatusBadge>}
         </div>
         <dl>
           <div className="rework-card-fact rework-card-fact--state"><dt>{terminal ? "流程状态" : "节点停留"}</dt><dd>{order.status === "cancelled" ? "已取消 · 停止计时" : order.status === "completed" ? "已完成 · 停止计时" : age(order.agingSeconds)}</dd></div>

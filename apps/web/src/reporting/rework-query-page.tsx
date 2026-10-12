@@ -114,7 +114,7 @@ function BusinessReworkQueryPage() {
     {state.kind === "unavailable" && <Surface className="reporting-state">{state.message}</Surface>}
     {deleteError && <Surface className="reporting-state reporting-delete-error"><p role="alert">{deleteError}</p></Surface>}
     {state.kind === "ready" && items.length === 0 && <Surface className="reporting-state">没有符合筛选条件的返工单。</Surface>}
-    <div className="reporting-order-grid">{items.map((order) => <ManagementOrderCard order={order} key={order.reworkOrderId} canDelete={isRoot} deleting={deletingOrderId === order.reworkOrderId} onDelete={remove} />)}</div>
+    <div className="reporting-order-grid">{items.map((order) => <ManagementOrderCard order={order} key={order.reworkOrderId} statusBesideStyle canDelete={isRoot} deleting={deletingOrderId === order.reworkOrderId} onDelete={remove} />)}</div>
     {state.kind === "ready" && <ListPagination
       page={state.value.page}
       totalPages={state.value.totalPages}

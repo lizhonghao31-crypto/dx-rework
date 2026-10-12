@@ -31,7 +31,7 @@ const detail: ReworkBusinessDetail = {
   tailInspectionRequired: tailRequired, canReadBusinessDetails: true, singlePieceReworkTotal: 1, inspectionReport: null,
   createdBy: { userId: id("5"), displayName: "TEST QC" }, processConfigurationCreatedBy: null,
   createdAt: "2026-10-11T00:00:00.000Z", updatedAt: "2026-10-11T00:00:00.000Z", submittedAt: null, cancelledAt: null, cancelReason: null,
-  settlementStatus: "not_required", wageSettlementStatus: "not_required", unsettledWagePeriods: [], attachments: [], workflowHistory: [],
+  settlementStatus: "not_required", wageSettlementStatus: "not_required", unsettledWagePeriods: [], attachments: params.get("picture") === "1" ? [{ attachmentId: id("91"), filename: "TEST-2x1.png", mimeType: "image/png", entityType: "rework_order" }] : [], workflowHistory: [],
 };
 const overview = {
   reworkOrderId: orderId, reworkStatus: detail.status, orderVersion: 7,
