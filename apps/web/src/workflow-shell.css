@@ -399,3 +399,5 @@
 html[data-session-suspended="true"] #root { visibility: hidden; }
 .auth-shell .session-logout { color: #b44545; }
 .auth-shell .session-logout-error { color: #b44545; }
+
+.frontline-session-exit{display:flex;justify-content:flex-end;margin-bottom:8px}

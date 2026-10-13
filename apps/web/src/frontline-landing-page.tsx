@@ -1,3 +1,4 @@
+import { LogoutButton } from "./session-exit.js";
 import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useState } from "react";
@@ -62,7 +63,7 @@ export function FrontlineLandingPage() {
 
   const entries = state.kind === "ready" ? frontlineEntries(state.user) : [];
   return (
-    <main className="frontline-landing">
+    <main className="frontline-landing"><div className="frontline-session-exit"><LogoutButton /></div>
       <Surface className="frontline-landing__surface">
         <div className="frontline-landing__heading">
           <StatusBadge tone="info">一线工作台</StatusBadge>

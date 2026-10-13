@@ -3894,6 +3894,16 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const internal={...people.cutting_worker!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create','cutting:orders:view']};
     const external={...primary,authorizationCapability:'cutting:records:create'};
     const recorder=mode==='in_house'?internal:external,wrong=mode==='in_house'?external:internal;
+    const uploadApp=Fastify();let uploading=recorder;
+    uploadApp.setErrorHandler((error,_request,reply)=>reply.code(error instanceof ApplicationError?error.statusCode:500).send({error:{message:error.message}}));
+    const intent=vi.spyOn(attachments,"createUploadIntent").mockResolvedValue({attachmentId:randomUUID(),objectKey:"TEST/P12-upload",uploadMethod:"POST",uploadUrl:"https://example.invalid/TEST",uploadFields:{},expiresAt:new Date().toISOString()});
+    registerCuttingRoutes(uploadApp,{authenticate:async()=>({id:uploading.actorId,displayName:"TEST P12 uploader",businessRoles:uploading.actorRoles,capabilities:["cutting:orders:view","tools:user",...(mode==='in_house'?["cutting:records:create"]:[])]}),service:cutting,attachments});
+    try {
+      const payload={filename:"TEST-P12.png",mimeType:"image/png",sizeBytes:100,sha256:"c".repeat(64)};
+      const url=`/cutting/orders/${ids[0]}/attachments/upload-intents`;
+      const allowed=await uploadApp.inject({method:"POST",url,payload});expect(allowed.statusCode,allowed.body).toBe(201);expect(intent).toHaveBeenCalledOnce();
+      uploading=wrong;expect((await uploadApp.inject({method:"POST",url,payload})).statusCode).toBe(403);expect(intent).toHaveBeenCalledOnce();
+    }finally{await uploadApp.close();intent.mockRestore();}
     const photo=async(actor:typeof recorder)=>{const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-P12.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/P12/${image}`,'c'.repeat(64),actor.actorId]);return image;};
     await expect(cutting.record(wrong,ids[0],{pieceCount:2,actualCutCount:99,attachmentIds:[await photo(wrong)]},randomUUID())).rejects.toMatchObject({statusCode:403});
     await cutting.record(recorder,ids[0],{pieceCount:2,actualCutCount:99,attachmentIds:[await photo(recorder)]},randomUUID());

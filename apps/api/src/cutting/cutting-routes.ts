@@ -3,7 +3,6 @@ import {
   CorrectCuttingRecordSchema,
   CreateCuttingRecordSchema,
   CreateUploadIntentSchema,
-  canUseCutting,
   CuttingOrderQuerySchema,
   type CuttingCapability,
 } from "@dx-rework/contracts";
@@ -93,10 +92,7 @@ export function registerCuttingRoutes(
 
   app.post("/cutting/orders/:cuttingOrderId/attachments/upload-intents", async (request, reply) => {
     const user = await dependencies.authenticate(cookieToken(request));
-    const trusted = await businessActor(dependencies.root, user, request.id, "cutting:records:create");
-    if (!canUseCutting(trusted.actorRoles, trusted.authorizationCapabilities ?? [], "cutting:records:create")) {
-      throw new ApplicationError("FORBIDDEN", "当前角色仅可查看裁床订单", 403);
-    }
+    const trusted = await businessActor(dependencies.root, user, request.id, "cutting:orders:view");
     const { cuttingOrderId } = parse(orderParams, request.params);
     const detail = await dependencies.service.get(
       { ...trusted, authorizationCapability: "cutting:orders:view" }, cuttingOrderId,

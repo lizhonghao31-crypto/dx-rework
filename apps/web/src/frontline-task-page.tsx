@@ -1,3 +1,4 @@
+import { LogoutButton } from "./session-exit.js";
 import {
   FrontlineTasksResponseSchema,
   type FrontlineTaskItem,
@@ -82,7 +83,7 @@ export function FrontlineTaskPage() {
   };
 
   if (selected && kind) {
-    return <main className="frontline-task-workspace">
+    return <main className="frontline-task-workspace"><div className="frontline-session-exit"><LogoutButton /></div>
       {selected.images.length > 0 ? <section className="frontline-task-images" aria-label="订单图片">
         <strong>订单图片</strong>
         <div>
@@ -105,7 +106,7 @@ export function FrontlineTaskPage() {
     </main>;
   }
 
-  return <main className="frontline-task-page">
+  return <main className="frontline-task-page"><div className="frontline-session-exit"><LogoutButton /></div>
     <header>
       <StatusBadge tone="info">{kind === "tail_inspection" ? "本人整查任务" : "本人返工任务"}</StatusBadge>
       <h1>{kind === "tail_inspection" ? "待整查报数" : "待完工上数"}</h1>
