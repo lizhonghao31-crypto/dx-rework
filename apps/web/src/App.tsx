@@ -28,6 +28,7 @@ import {
   LoginSessionLoadingPage,
   verifySession,
   verifySessionResult,
+  SessionBoundary,
 } from "./auth.js";
 import { Shell } from "./components.js";
 import { ReworkInitiationV2Form } from "./rework-v2-form.js";
@@ -264,7 +265,9 @@ function LegacySupplierCenterRedirect() {
   return <Shell active="供应商目录"><Surface className="admin-card"><p>正在进入供应商中心…</p></Surface></Shell>;
 }
 
-export function App() {
+export function App() { return <SessionBoundary><AppRoutes /></SessionBoundary>; }
+
+function AppRoutes() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const { path: requestedPath, search } = useInternalLocation(basePath);
   const path = patternPagePath(requestedPath, search);

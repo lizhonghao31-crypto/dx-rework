@@ -11,6 +11,16 @@ const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 let verifiedResult: SessionVerificationResult | undefined;
 let sessionVerification: Promise<SessionVerificationResult> | undefined;
 let sessionVerificationVersion = 0;
+const invalidators = new Set<() => void>();
+
+export function sessionCacheVersion(): number { return sessionVerificationVersion; }
+export function registerSessionInvalidator(reset: () => void): void { invalidators.add(reset); }
+export function invalidateSession(): void {
+  ++sessionVerificationVersion;
+  verifiedResult = undefined;
+  sessionVerification = undefined;
+  for (const reset of invalidators) reset();
+}
 
 export function cachedVerifiedSession(): VerifiedSession | undefined {
   return verifiedResult?.session;
@@ -19,8 +29,7 @@ export function cachedVerifiedSession(): VerifiedSession | undefined {
 /** The public entry and protected pages share one request and its result. */
 export function verifySessionResult(force = false): Promise<SessionVerificationResult> {
   if (force) {
-    verifiedResult = undefined;
-    sessionVerification = undefined;
+    invalidateSession();
   }
   if (verifiedResult !== undefined) return Promise.resolve(verifiedResult);
 
@@ -33,7 +42,8 @@ export function verifySessionResult(force = false): Promise<SessionVerificationR
       }))
       .catch((): SessionVerificationResult => ({ session: "denied", requestFailed: true }))
       .then((result): SessionVerificationResult => {
-        if (version === sessionVerificationVersion) verifiedResult = result;
+        if (version !== sessionVerificationVersion) return { session: "denied", requestFailed: false };
+        verifiedResult = result;
         return result;
       });
   }
