@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 
 import { businessActor, isRootUser } from "../access/business-authority.js";
 import { assertDataExportPolicy } from "../access/data-export-policy.js";
@@ -249,7 +250,7 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
   const creator = async (request: FastifyRequest) => {
     const user = await dependencies.authenticate(token(request));
     const root = await isRootUser(dependencies.root, user.id);
-    const warehouse = user.businessRoles?.includes("warehouse_receiver") === true
+    const warehouse = hasWarehouseReceivingRole(user.businessRoles ?? [])
       && user.capabilities.includes("receiving:create");
     if (!root && !warehouse) {
       throw new ApplicationError("FORBIDDEN", "只有仓管人员可以登记收货", 403);
@@ -284,7 +285,8 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
     const user = await dependencies.authenticate(token(request));
     const root = await isRootUser(dependencies.root, user.id);
     const permitted = user.capabilities.includes(capability)
-      && (role === null || user.businessRoles?.includes(role) === true);
+      && (role === null || (role === "warehouse_receiver"
+        ? hasWarehouseReceivingRole(user.businessRoles ?? []) : user.businessRoles?.includes(role) === true));
     if (!root && !permitted) {
       throw new ApplicationError("FORBIDDEN", "没有权限执行此订单回货操作", 403);
     }

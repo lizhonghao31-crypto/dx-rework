@@ -382,6 +382,7 @@ function AppRoutes() {
   if (path === "/ui/frontline" || path === "/ui/frontline/tasks") {
     return <AuthGate requiredAnyOf={[
       { requiredRole: "warehouse_receiver", requiredCapability: "receiving:create" },
+      { requiredRole: "warehouse_supervisor", requiredCapability: "receiving:create" },
       { requiredRole: "worker", requiredCapability: "work:report" },
       { requiredRole: "worker", requiredCapability: "tail_inspection:report" },
     ]}>{page}</AuthGate>;
@@ -389,6 +390,7 @@ function AppRoutes() {
   if (path === "/ui/receiving") {
     return <AuthGate requiredAnyOf={[
       { requiredRole: "warehouse_receiver", requiredCapability: "receiving:create" },
+      { requiredRole: "warehouse_supervisor", requiredCapability: "receiving:create" },
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/qc/new") {

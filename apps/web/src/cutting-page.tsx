@@ -408,7 +408,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
     : false;
 
   const uploadCuttingSheets = async (files: FileList | null): Promise<void> => {
-    if (!files || files.length === 0 || busy || uploading || item?.record) return;
+    if (!files || files.length === 0 || busy || uploading || item?.record || !item?.canRecord) return;
     const selected = Array.from(files);
     if (cuttingSheets.length + selected.length > MAX_CUTTING_SHEET_ATTACHMENTS) {
       setError(`裁床单最多上传 ${MAX_CUTTING_SHEET_ATTACHMENTS} 张图片`);
@@ -462,7 +462,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
               candidateTiming,
               "intent",
               () => uploadRequest(
-                "tools/attachments/upload-intents",
+                `cutting/orders/${cuttingOrderId}/attachments/upload-intents`,
                 UploadIntentResponseSchema,
                 {
                   method: "POST",
@@ -525,7 +525,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
   };
 
   const submitRecord = async () => {
-    if (!item || busy || uploading) return;
+    if (!item || !item.canRecord || busy || uploading) return;
     if (cuttingSheets.length === 0) {
       setError("请上传裁床单");
       return;
@@ -696,7 +696,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
           <Surface className="cutting-record-panel">
             <div className="cutting-record-panel__heading">
               <div>
-                <h2>{item.record ? "实裁登记" : "登记裁床数量"}</h2>
+                <h2>{item.record ? "实裁登记" : item.canRecord ? "登记裁床数量" : "实裁记录"}</h2>
                 <p>士啤片按片记录；实裁数按可用于制作成衣的件数记录。</p>
               </div>
               <div className="cutting-card__status-line">
@@ -767,7 +767,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
                   </details>
                 ) : null}
               </>
-            ) : (
+            ) : item.canRecord ? (
               <>
                 {!item.formalStyleNo ? (
                   <p className="cutting-range-note is-warning">
@@ -850,7 +850,7 @@ export function CuttingDetailPage({ cuttingOrderId }: { cuttingOrderId: string }
                   </div>
                 ) : null}
               </>
-            )}
+            ) : <p className="cutting-range-note" role="status">尚未登记实裁。当前仅可查看订单及登记后记录。</p>}
           </Surface>
         </>
       ) : null}

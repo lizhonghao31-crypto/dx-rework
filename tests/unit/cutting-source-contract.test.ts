@@ -40,18 +40,20 @@ describe("cutting source contract", () => {
     expect(parsed.displayStyleNo).toBe("TEMP-001");
   });
 
-  it("does not grant cutting capability to warehouse or pattern-room roles", () => {
+  it("adds warehouse supervisor as a reader while keeping recorder roles unchanged", () => {
     expect(CUTTING_VIEW_ROLES).toEqual([
       "cutting_supervisor",
       "cutting_worker",
       "owner_group",
       "production_management",
       "order_merchandiser",
+      "warehouse_supervisor",
     ]);
     expect(CUTTING_RECORD_ROLES).toEqual(["cutting_supervisor","cutting_worker"]);
-    for (const excluded of ["warehouse_keeper","pattern_room_supervisor","pattern_room_worker"]) {
+    for (const excluded of ["warehouse_receiver","warehouse_keeper","pattern_room_supervisor","pattern_room_worker"]) {
       expect(CUTTING_VIEW_ROLES).not.toContain(excluded as never);
       expect(CUTTING_RECORD_ROLES).not.toContain(excluded as never);
     }
+    expect(CUTTING_RECORD_ROLES).not.toContain("warehouse_supervisor");
   });
 });

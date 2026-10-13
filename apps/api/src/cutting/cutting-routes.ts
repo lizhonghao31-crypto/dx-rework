@@ -2,6 +2,8 @@ import {
   AttachmentParamsSchema,
   CorrectCuttingRecordSchema,
   CreateCuttingRecordSchema,
+  CreateUploadIntentSchema,
+  canUseCutting,
   CuttingOrderQuerySchema,
   type CuttingCapability,
 } from "@dx-rework/contracts";
@@ -87,6 +89,22 @@ export function registerCuttingRoutes(
     );
     if (result.reused) reply.header("idempotency-replayed", "true");
     return reply.code(result.value.outcome === "created" ? 201 : 200).send(result.value);
+  });
+
+  app.post("/cutting/orders/:cuttingOrderId/attachments/upload-intents", async (request, reply) => {
+    const user = await dependencies.authenticate(cookieToken(request));
+    const trusted = await businessActor(dependencies.root, user, request.id, "cutting:records:create");
+    if (!canUseCutting(trusted.actorRoles, trusted.authorizationCapabilities ?? [], "cutting:records:create")) {
+      throw new ApplicationError("FORBIDDEN", "当前角色仅可查看裁床订单", 403);
+    }
+    const { cuttingOrderId } = parse(orderParams, request.params);
+    const detail = await dependencies.service.get(
+      { ...trusted, authorizationCapability: "cutting:orders:view" }, cuttingOrderId,
+    );
+    if (!detail.canRecord) throw new ApplicationError("FORBIDDEN", "当前裁床订单不能上传登记附件", 403);
+    const uploader = await businessActor(dependencies.root, user, request.id, "tools:user");
+    if (!uploader.authorizationCapabilities?.includes("tools:user")) throw new ApplicationError("FORBIDDEN", "无权上传附件", 403);
+    return reply.code(201).send(await dependencies.attachments.createUploadIntent(uploader, parse(CreateUploadIntentSchema, request.body)));
   });
 
   app.post("/cutting/orders/:cuttingOrderId/corrections", async (request, reply) => {

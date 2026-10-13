@@ -30,6 +30,7 @@ const VIEW_ROLES = new Set([
   "owner_group",
   "production_management",
   "order_merchandiser",
+  "warehouse_supervisor",
 ]);
 const RECORD_ROLES = new Set(["cutting_supervisor", "cutting_worker"]);
 const BROAD_VIEW_ROLES = new Set([
@@ -38,6 +39,7 @@ const BROAD_VIEW_ROLES = new Set([
   "cutting_worker",
   "owner_group",
   "production_management",
+  "warehouse_supervisor",
 ]);
 const KEY_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
 type Queryable = Pick<Pool, "query"> | Pick<PoolClient, "query">;
