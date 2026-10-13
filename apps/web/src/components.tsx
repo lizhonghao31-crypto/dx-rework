@@ -14,6 +14,8 @@ import {
 } from "@dx-rework/ui";
 import { createWebUrls } from "../url-contract.js";
 import { hasPageAccess, verifySession, type AuthorizedUser } from "./auth.js";
+import { sessionCacheVersion } from "./auth-session.js";
+import { LogoutButton } from "./session-exit.js";
 import type { Task } from "./types.js";
 import "./shell-navigation.css";
 import "./production-command-center-view.css";
@@ -65,6 +67,7 @@ const ROLE_LABELS: Record<string, string> = {
   pattern_room_tail_inspector: "板房尾查",
   quality_control: "质检",
   warehouse_receiver: "仓管人员",
+  warehouse_supervisor: "仓库主管",
   tail_supervisor: "尾部主管",
   ie_reviewer: "IE 审核",
   order_merchandiser: "订单跟单",
@@ -87,7 +90,12 @@ function loadShellMe() {
 }
 
 let employeeAccessPermission: Promise<boolean> | undefined;
+let employeeAccessPermissionVersion = -1;
 function loadEmployeeAccessPermission(): Promise<boolean> {
+  if (employeeAccessPermissionVersion !== sessionCacheVersion()) {
+    employeeAccessPermission = undefined;
+    employeeAccessPermissionVersion = sessionCacheVersion();
+  }
   employeeAccessPermission ??= loadShellMe().then((body) => {
     if (body?.status !== "authorized" || !body.user) return false;
     return hasPageAccess(body.user, { requiredRole: "owner_group", requiredCapability: "access:admin" });
@@ -265,7 +273,8 @@ function MobilePrimaryNavigation({
           />
         </div>
       ))}
-      {moreNavigation.length || financeGroup.entries.length ? (
+      {/* Logout keeps this existing account surface reachable even without overflow links. */}
+      {
         <details className="mobile-primary-navigation__more">
           <summary aria-label="更多导航">
             <span className={"mobile-primary-navigation__more-trigger" + (moreIsActive ? " is-active" : "")}>
@@ -276,9 +285,10 @@ function MobilePrimaryNavigation({
           <div className="mobile-primary-navigation__drawer">
             <PrimaryNavigation navigation={moreNavigation} active={active} basePath={basePath} />
             <NavigationGroupMenu group={financeGroup} active={active} basePath={basePath} />
+            <LogoutButton mobile />
           </div>
         </details>
-      ) : null}
+      }
     </nav>
   );
 }
@@ -620,6 +630,8 @@ export function Shell({
       ) : null}
       <aside>
         <a className="production-command-brand" href={basePath+(todoAccess?"/ui/my-tasks":digital?"/ui/digital-cockpit":globalNavigation[0]?.href??"/ui/orders")}><strong>DX</strong><span>达兴服装<small>数字生产平台</small></span></a>
+        <LogoutButton />
+
         <DesktopNavigation
           globalNavigation={globalNavigation}
           groups={desktopNavigationGroups}

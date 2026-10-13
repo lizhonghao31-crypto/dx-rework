@@ -1,5 +1,6 @@
 import {linkDigitalReceipt} from "../production-platform/receiving-link-adapter.js";
 import { RECEIVING_BOARD_FILTERS_SQL } from "./receiving-board-filters.js";
+import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import { readReceivingAnalysis } from "./receiving-analysis.js";
 import type { ProductionClosureService } from "../sourcing/production-closure-service.js";
 import { createHash, randomUUID } from "node:crypto";
@@ -909,7 +910,7 @@ export class ReceivingService {
     if (!root && (
       actor.authorizationCapability !== capability
       || !actor.authorizationCapabilities?.includes(capability)
-      || (role !== undefined && !actor.actorRoles.includes(role))
+      || (role !== undefined && !(role === "warehouse_receiver" ? hasWarehouseReceivingRole(actor.actorRoles) : actor.actorRoles.includes(role)))
     )) {
       fail("没有权限执行此订单回货操作", 403, "FORBIDDEN");
     }

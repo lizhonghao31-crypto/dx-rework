@@ -1,3 +1,4 @@
+import { hasRequiredWarehouseRole } from "@dx-rework/contracts";
 import { projectDevelopmentNotices } from "./development-notifications.js";
 import { patternOrderScopeSql } from "../pattern-room/order-authority.js";
 import { SourcingService } from "../sourcing/sourcing-service.js";
@@ -61,7 +62,7 @@ export class DigitalProductionNotificationService {
   }
   private async recipients(database:Database,task:Task,kind:string,people:TrustedActorContext[]):Promise<TrustedActorContext[]> {
     const policy=new DigitalProductionAccessPolicy(database);
-    const assignee=people.find(p=>p.actorId===task.assignee_id&&p.actorRoles.includes(task.required_role));
+    const assignee=people.find(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role));
     const development=task.task_kind.startsWith("development_");
     const technical=development||["bulk_pattern","bulk_cutting","bulk_cutting_external","process_logistics"].includes(task.task_kind);
     const missing=!assignee;
@@ -102,7 +103,7 @@ export class DigitalProductionNotificationService {
         ORDER BY i.created_at,i.event_id LIMIT 200`)).rows;
       for(const intent of intents){
         const task=intent.task_id?(await client.query<Task>(`${TASKS} WHERE t.task_id=$1`,[intent.task_id])).rows[0]:undefined;
-        if(task&&people.some(p=>p.actorId===task.assignee_id&&p.actorRoles.includes(task.required_role))&&labels[intent.event_kind]&&task.lifecycle==="active"&&
+        if(task&&people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role))&&labels[intent.event_kind]&&task.lifecycle==="active"&&
           await this.currentTaskEvent(client,task,intent.event_id,intent.event_kind)&&
           (intent.event_kind!=="created"||(task.state==="pending"&&!task.assignee_id))){
           await this.notice(client,{key:`event:${intent.event_id}`,eventId:intent.event_id,taskId:task.task_id,kind:intent.event_kind},(await this.recipients(client,task,intent.event_kind,people)).map(p=>p.actorId));
@@ -112,7 +113,7 @@ export class DigitalProductionNotificationService {
       const tasks=(await client.query<Task>(`${TASKS} WHERE ${ACTIVE}`)).rows;
       for(const task of tasks){
         // Repair an unassigned/disabled operator as an upstream routing task; never broadcast to all craftspeople.
-        if(!people.some(p=>p.actorId===task.assignee_id&&p.actorRoles.includes(task.required_role)))
+        if(!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role)))
           await this.notice(client,{key:`missing:${task.task_id}:${task.assignee_id??'none'}`,taskId:task.task_id,kind:"created"},(await this.recipients(client,task,"created",people)).map(p=>p.actorId));
         if(task.state==="pending"||!task.due_at)continue;
         const now=Date.now(),kind=new Date(task.due_at).getTime()<=now?"overdue":task.warning_at&&new Date(task.warning_at).getTime()<=now?"warning":null;
@@ -146,7 +147,7 @@ export class DigitalProductionNotificationService {
     const tasks=(await this.database.query<Task>(`${TASKS} WHERE ${ACTIVE} ORDER BY d.due_at NULLS LAST,t.created_at,t.task_id`)).rows;
     const result:TodoResponse[]=[];
     for(const task of tasks){
-      const missing=!people.some(p=>p.actorId===task.assignee_id&&p.actorRoles.includes(task.required_role));
+      const missing=!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role));
       if(task.state==="pending"&&!missing)continue;
       if(!(await this.recipients(this.database,task,"ready",people)).some(p=>p.actorId===actor.actorId))continue;
       // An effective personal action carries only its exact parent's style identity.
@@ -187,7 +188,7 @@ export class DigitalProductionNotificationService {
       if(!await this.currentTaskEvent(database,task,event.event_id,event.event_kind))return null;
       if(event.deadline_revision_id&&String(event.deadline_revision_id)!==String(task.revision_id))return null;
       if(event.event_kind==="warning"&&task.due_at&&new Date(task.due_at).getTime()<=Date.now())return null;
-      const missing=!people.some(p=>p.actorId===task.assignee_id&&p.actorRoles.includes(task.required_role));
+      const missing=!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role));
       if(event.event_kind==="created"&&!missing)return null;
       if(!(await this.recipients(database,task,event.event_kind,people)).some(p=>p.actorId===actor.actorId))return null;
       actionable=event.event_kind!=="completed"&&(missing||await new DigitalProductionAccessPolicy(database).allowed(actor,"task",task.task_id,"execute"));

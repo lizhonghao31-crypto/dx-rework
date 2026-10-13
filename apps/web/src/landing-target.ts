@@ -1,3 +1,4 @@
+import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import { canAccessFinance } from "./finance-access.js";
 import type { AuthorizedUser } from "./auth.js";
 
@@ -14,7 +15,7 @@ const hasStandardWorkspaceRole = (user: AuthorizedUser): boolean =>
 function frontlineTargets(user: AuthorizedUser): readonly string[] {
   const targets: string[] = [];
 
-  if (hasRole(user, "warehouse_receiver") && has(user, "receiving:create")) {
+  if (hasWarehouseReceivingRole(user.businessRoles ?? []) && has(user, "receiving:create")) {
     targets.push("ui/receiving");
   }
   if (hasRole(user, "worker") && has(user, "work:report")) {

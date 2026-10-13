@@ -71,7 +71,7 @@ describe("PR-01A UI prototype contract", () => {
     expect(auth).toContain('apiUrl("auth/client-config")');
     expect(auth).toContain('apiUrl("auth/mobile")');
     expect(auth).toContain('apiUrl("auth/qr/start")');
-    expect(auth).toContain("if (!isContainer) return <QrLoginPage />;");
+    expect(auth).toContain("if (!isContainer) return <QrLoginPage explicitLoginMarker={explicitLoginMarker} />;");
   });
   it("retains accessible status, meter, audit and touch contracts", () => {
     expect(ui).toContain('aria-hidden="true" className={`dx-meter');

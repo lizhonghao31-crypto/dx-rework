@@ -22,12 +22,19 @@ describe("cutting capability boundaries", () => {
   });
 
   it("keeps management readers read-only and Root unrestricted", () => {
-    for (const role of ["owner_group", "production_management", "order_merchandiser"]) {
+    for (const role of ["owner_group", "production_management", "order_merchandiser", "warehouse_supervisor"]) {
       expect(canUseCutting([role], ["cutting:orders:view"], "cutting:orders:view")).toBe(true);
       expect(canUseCutting([role], ["cutting:records:create"], "cutting:records:create")).toBe(false);
       expect(canUseCutting([role], ["cutting:records:correct"], "cutting:records:correct")).toBe(false);
     }
     expect(canUseCutting(["root_superuser"], [], "cutting:records:correct")).toBe(true);
+  });
+
+  it("preserves the union of a supervisor's independently assigned cutting role", () => {
+    const roles = ["warehouse_supervisor", "cutting_worker"];
+    expect(canUseCutting(roles, ["cutting:orders:view", "cutting:records:create"], "cutting:records:create")).toBe(true);
+    expect(canUseCutting(roles, ["cutting:records:correct"], "cutting:records:correct")).toBe(false);
+    expect(canUseCutting(["warehouse_supervisor"], [], "cutting:orders:view")).toBe(false);
   });
 
   it("declares correction capability only for Root", () => {

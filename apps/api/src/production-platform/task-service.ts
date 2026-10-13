@@ -1,3 +1,4 @@
+import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import {FactoryFlowService} from "./factory-flow-service.js";
 import type { DigitalTaskState, DigitalTimeQuality } from "@dx-rework/contracts/digital-production-tasks";
 import {developmentRoute} from "./development-route.js";
@@ -220,7 +221,7 @@ export class DigitalProductionTaskService {
   }
   async completeFactoryDispatchFactsWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,factId:string){
     const fact=(await client.query(`SELECT f.* FROM digital_factory_facts f JOIN digital_factory_routes r USING(preparation_id) WHERE r.production_order_id=$1 AND f.fact_id=$2 AND f.kind='仓库实际发厂' AND f.actor_id=$3`,[orderId,factId,actor.actorId])).rows[0];
-    if(!fact||!actor.actorRoles.some(r=>['root_superuser','warehouse_receiver'].includes(r)))digitalForbidden();
+    if(!fact||!(actor.actorRoles.includes('root_superuser')||hasWarehouseReceivingRole(actor.actorRoles)))digitalForbidden();
     const tasks=(await client.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.route_instance_id=$1 AND a.task_kind IN ('process_logistics','bulk_qc','warehouse_dispatch')",[fact.preparation_id])).rows;
     for(const row of tasks){
       const task=await this.task(client,row.task_id,true);if(task.state==='completed')continue;

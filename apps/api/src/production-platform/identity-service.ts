@@ -21,7 +21,7 @@ export const digitalDateText = (value: Date | string | null) => value instanceof
     }).format(value)
   : value;
 export function assertIdentityActor(actor: TrustedActorContext): void {
-  if (!isRootActor(actor) && !actor.actorRoles.some(role => ["sample_designer", "order_merchandiser", "owner_group", "production_management", "pattern_room_supervisor", "development_clerk", "pattern_room_tail_inspector", "pattern_room_worker", "quality_control", "embroidery_washing_merchandiser", "warehouse_receiver", "cutting_worker"].includes(role))) digitalForbidden();
+  if (!isRootActor(actor) && !actor.actorRoles.some(role => ["sample_designer", "order_merchandiser", "owner_group", "production_management", "pattern_room_supervisor", "development_clerk", "pattern_room_tail_inspector", "pattern_room_worker", "quality_control", "embroidery_washing_merchandiser", "warehouse_receiver", "warehouse_supervisor", "cutting_worker"].includes(role))) digitalForbidden();
 }
 const assertCreator = (actor: TrustedActorContext) => {
   if (!isRootActor(actor) && (!actor.actorRoles.includes("sample_designer") || !(actor.authorizationCapabilities ?? []).includes("pattern_room:orders:create"))) digitalForbidden();

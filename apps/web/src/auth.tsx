@@ -1,7 +1,14 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { createWebUrls } from "../url-contract.js";
 import { LoginLanding } from "./login-landing.js";
+import { cachedVerifiedSession, invalidateSession, registerSessionInvalidator, verifySession, type VerifiedSession } from "./auth-session.js";
+import { beginLoginIntent, completeExplicitLogin, currentLoginIntent, loginIntentStillCurrent, logoutMarker, markLoggedOut, subscribeLogout } from "./logout-state.js";
+import { LogoutButton } from "./session-exit.js";
+
+export { verifySession, verifySessionResult } from "./auth-session.js";
+export type { VerifiedSession } from "./auth-session.js";
 
 export type AuthorizedUser = {
   id: string;
@@ -74,30 +81,6 @@ type ErrorBody = { error?: { code?: string; message?: string } };
 
 const { base, apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 type AuthGateState = "loading" | "denied" | AuthorizedSession;
-export type VerifiedSession = Exclude<AuthGateState, "loading">;
-let verifiedSession: VerifiedSession | undefined;
-let sessionVerification: Promise<VerifiedSession> | undefined;
-let sessionVerificationVersion=0;
-
-export const verifySession = (force=false): Promise<VerifiedSession> => {
-  if(force){verifiedSession=undefined;sessionVerification=undefined;}
-  if (verifiedSession !== undefined) return Promise.resolve(verifiedSession);
-
-  if (!sessionVerification) {
-    const version=++sessionVerificationVersion;
-    sessionVerification = fetch(apiUrl("auth/me"), { credentials: "include",cache:"no-store" })
-      .then(async (response): Promise<VerifiedSession> =>
-        response.ok ? await response.json() as AuthorizedSession : "denied",
-      )
-      .catch((): VerifiedSession => "denied")
-      .then((state): VerifiedSession => {
-        if(version===sessionVerificationVersion)verifiedSession = state;
-        return state;
-      });
-  }
-
-  return sessionVerification;
-};
 
 const QR_CONTAINER_ID = "dx-rework-dingtalk-qr";
 const QR_RELAY_MESSAGE = "dx-rework:dingtalk-qr-code" as const;
@@ -121,6 +104,61 @@ async function getQrStart(): Promise<QrStartResponse> {
 function resetQrStart(): void {
   qrStartPromise = undefined;
 }
+registerSessionInvalidator(resetQrStart);
+
+/** The application root owns explicit logout and restored-page admission. */
+export function SessionBoundary({ children }: { children: ReactNode }) {
+  const [state, setState] = useState(() => ({ marker: logoutMarker(), checking: false, revision: 0 }));
+  const [manual, setManual] = useState<{ marker: string | null } | null>(null);
+  useEffect(() => {
+    let alive = true, sequence = 0;
+    let observedMarker = logoutMarker();
+    const refresh = async (wasLoggedOut = false) => {
+      const request = ++sequence;
+      setManual(null);
+      flushSync(() => setState(current => ({ ...current, checking: true, revision: current.revision + 1 })));
+      const result = await verifySession(true);
+      if (!alive || request !== sequence) return;
+      if (wasLoggedOut && result === "denied" && !logoutMarker()) markLoggedOut();
+      observedMarker = logoutMarker();
+      setState(current => ({ ...current, marker: observedMarker, checking: false }));
+    };
+    const changed = () => {
+      const previous = observedMarker;
+      observedMarker = logoutMarker();
+      if (!observedMarker) { void refresh(previous !== null); return; }
+      ++sequence; invalidateSession(); setManual(null);
+      flushSync(() => setState(current => ({ marker: observedMarker, checking: false, revision: current.revision + 1 })));
+    };
+    const hide = (event: PageTransitionEvent) => {
+      if (event.persisted) document.documentElement.dataset.sessionSuspended = "true";
+    };
+    const show = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      if (logoutMarker()) changed(); else void refresh(observedMarker !== null);
+      document.documentElement.removeAttribute("data-session-suspended");
+    };
+    const focus = () => { if (observedMarker !== logoutMarker()) changed(); };
+    const unsubscribe = subscribeLogout(changed);
+    window.addEventListener("pagehide", hide);
+    window.addEventListener("pageshow", show);
+    window.addEventListener("focus", focus);
+    return () => {
+      alive = false; ++sequence; unsubscribe();
+      window.removeEventListener("pagehide", hide); window.removeEventListener("pageshow", show); window.removeEventListener("focus", focus);
+    };
+  }, []);
+  if (state.checking) return <LoginSessionLoadingPage message="正在重新确认登录状态…" />;
+  const exitLanding = typeof window !== "undefined" && window.location.pathname === `${base}auth/logged-out`;
+  if (state.marker || exitLanding) {
+    if (typeof window !== "undefined" && window.location.pathname === `${base}auth/qr/relay` && currentLoginIntent() !== undefined) return children;
+    if (manual && loginIntentStillCurrent(manual.marker)) return <LoginPage explicitLoginMarker={manual.marker} />;
+    return <StatePage tone="info" title="已退出登录" detail="当前浏览器已退出。点击下方按钮后重新登录。">
+      <Button onClick={() => { const marker = logoutMarker(); if (beginLoginIntent(marker)) setManual({ marker }); }}>重新登录</Button>
+    </StatePage>;
+  }
+  return <Fragment key={state.revision}>{children}</Fragment>;
+}
 
 function StatePage({ tone, title, detail, children }: { tone: "info" | "warning" | "danger"; title: string; detail: string; children?: ReactNode }) {
   return <main className="auth-shell"><Surface className="auth-card"><StatusBadge tone={tone}>达兴组织准入</StatusBadge><h1>{title}</h1><p>{detail}</p>{children}</Surface></main>;
@@ -137,7 +175,7 @@ export function AuthGate({
   requiredCapability?: string | undefined;
   requiredAnyOf?: readonly PageAccessRequirement[] | undefined;
 }) {
-  const [state, setState] = useState<AuthGateState>(() => verifiedSession ?? "loading");
+  const [state, setState] = useState<AuthGateState>(() => cachedVerifiedSession() ?? "loading");
   useEffect(() => {
     let mounted = true;
     void verifySession().then((nextState) => {
@@ -149,7 +187,7 @@ export function AuthGate({
   }, []);
   if (state === "loading") return <StatePage tone="info" title="正在确认身份" detail="正在确认钉钉组织与账号状态，请稍候。" />;
   if (state === "denied") return <LoginPage />;
-  if (state.status === "no_role") return <StatePage tone="warning" title="尚未分配业务角色" detail="您的达兴组织身份已验证，但暂时不能读取业务数据。请联系管理员分配业务角色。"><Button onClick={() => void fetch(apiUrl("auth/logout"), { method: "POST", credentials: "include" }).then(() => window.location.assign(base))}>退出登录</Button></StatePage>;
+  if (state.status === "no_role") return <StatePage tone="warning" title="尚未分配业务角色" detail="您的达兴组织身份已验证，但暂时不能读取业务数据。请联系管理员分配业务角色。"><LogoutButton /></StatePage>;
   if (
     !hasPageAccess(state.user, { requiredRole, requiredCapability })
     || (
@@ -162,11 +200,13 @@ export function AuthGate({
   return children;
 }
 
-export function LoginPage() {
+export function LoginPage({ explicitLoginMarker = null }: { explicitLoginMarker?: string | null } = {}) {
   const [message, setMessage] = useState("正在准备钉钉身份认证…");
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const isContainer = /DingTalk/i.test(navigator.userAgent);
   const start = async () => {
-    if (!isContainer) return;
+    if (!isContainer || !beginLoginIntent(explicitLoginMarker)) return;
     setMessage("正在唤起钉钉免密认证…");
     try {
       const response = await fetch(apiUrl("auth/client-config"), { credentials: "include" });
@@ -175,19 +215,34 @@ export function LoginPage() {
       await loadDingTalkJsApi();
       const requestAuthCode = (window as DingTalkWindow).dd?.runtime?.permission?.requestAuthCode;
       if (!requestAuthCode) throw new Error();
-      requestAuthCode({ corpId: config.corpId, onSuccess: ({ code }) => { void submitMobileCode(code, setMessage); }, onFail: () => setMessage("钉钉免密认证失败，请重试；仍无法登录请联系管理员确认应用权限。") });
+      if (!mounted.current || !loginIntentStillCurrent(explicitLoginMarker)) return;
+      requestAuthCode({ corpId: config.corpId, onSuccess: ({ code }) => { if (mounted.current) void submitMobileCode(code, setMessage, explicitLoginMarker, () => mounted.current); }, onFail: () => setMessage("钉钉免密认证失败，请重试；仍无法登录请联系管理员确认应用权限。") });
     } catch { setMessage("无法加载钉钉认证能力，请检查网络后重试，或联系管理员。") }
   };
   useEffect(() => { if (isContainer) void start(); }, []);
-  if (!isContainer) return <QrLoginPage />;
+  if (!isContainer) return <QrLoginPage explicitLoginMarker={explicitLoginMarker} />;
   return <StatePage tone="info" title="钉钉安全登录" detail={message}><Button onClick={() => void start()}>重新尝试免密登录</Button></StatePage>;
 }
 
-async function submitMobileCode(code: string, setMessage: (message: string) => void): Promise<void> {
+async function submitMobileCode(code: string, setMessage: (message: string) => void, intent: string | null, mounted: () => boolean): Promise<void> {
+  if (!mounted() || !loginIntentStillCurrent(intent)) return;
   try {
     const response = await fetch(apiUrl("auth/mobile"), { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ code }) });
-    if (response.ok) window.location.assign(base); else setMessage(await loginErrorMessage(response));
+    if (!mounted() || !loginIntentStillCurrent(intent)) {
+      if (response.ok) await revokeLateLogin();
+      return;
+    }
+    if (response.ok) {
+      if (await verifySession(true) === "denied") { setMessage("登录尚未完成，请重试。"); return; }
+      if (mounted() && completeExplicitLogin(intent)) window.location.replace(base);
+    } else setMessage(await loginErrorMessage(response));
   } catch { setMessage("登录请求未送达，请检查网络后重试。"); }
+}
+
+async function revokeLateLogin(): Promise<void> {
+  // A login started before another tab logged out must not leave a newly issued
+  // cookie usable. Never revoke a session after a newer explicit login completed.
+  if (logoutMarker()) await fetch(apiUrl("auth/logout"), { method: "POST", credentials: "include", cache: "no-store" }).catch(() => undefined);
 }
 
 let dingTalkScript: Promise<void> | undefined;
@@ -236,7 +291,8 @@ async function loginErrorMessage(response: Response): Promise<string> {
   }
 }
 
-async function completeQrCode(code: string, state: string, setMessage: (message: string) => void): Promise<boolean> {
+async function completeQrCode(code: string, state: string, setMessage: (message: string) => void, intent: string | null, current: () => boolean): Promise<boolean> {
+  if (!current() || !loginIntentStillCurrent(intent)) return false;
   if (!code || !state) {
     setMessage("钉钉未返回完整授权信息，请重新生成二维码。");
     return false;
@@ -253,6 +309,7 @@ async function completeQrCode(code: string, state: string, setMessage: (message:
       setMessage(await loginErrorMessage(response));
       return false;
     }
+    if (!current() || !loginIntentStillCurrent(intent)) { await revokeLateLogin(); return false; }
     const session = await fetch(apiUrl("auth/me"), {
       credentials: "include",
       cache: "no-store",
@@ -261,6 +318,7 @@ async function completeQrCode(code: string, state: string, setMessage: (message:
       setMessage("扫码已通过，但登录未完成。请联系管理员后重试。");
       return false;
     }
+    if (!current() || !completeExplicitLogin(intent)) return false;
     resetQrStart();
     window.location.replace(base);
     return true;
@@ -270,27 +328,31 @@ async function completeQrCode(code: string, state: string, setMessage: (message:
   }
 }
 
-export function QrLoginPage() {
-  if (/DingTalk/i.test(navigator.userAgent)) return <LoginPage />;
-  return <BrowserQrLoginPage />;
+export function QrLoginPage({ explicitLoginMarker = null }: { explicitLoginMarker?: string | null } = {}) {
+  if (/DingTalk/i.test(navigator.userAgent)) return <LoginPage explicitLoginMarker={explicitLoginMarker} />;
+  return <BrowserQrLoginPage explicitLoginMarker={explicitLoginMarker} />;
 }
 
-function BrowserQrLoginPage() {
-  const [session, setSession] = useState<VerifiedSession | "loading">(() => verifiedSession ?? "loading");
+function BrowserQrLoginPage({ explicitLoginMarker }: { explicitLoginMarker: string | null }) {
+  const [session, setSession] = useState<VerifiedSession | "loading">(() => cachedVerifiedSession() ?? "loading");
   useEffect(() => {
     let mounted = true;
-    void verifySession().then((state) => {
+    void verifySession(explicitLoginMarker !== null).then((state) => {
       if (!mounted) return;
-      if (state !== "denied") window.location.replace(base);
+      if (state !== "denied" && completeExplicitLogin(explicitLoginMarker)) window.location.replace(base);
       else setSession(state);
     });
     return () => { mounted = false; };
   }, []);
-  if (session === "denied") return <QrLoginChallenge />;
-  return <LoginLanding message="正在确认登录状态…" qr={<div aria-label="正在确认登录状态" />} action={<Button disabled>重新生成二维码</Button>} />;
+  if (session === "denied") return <QrLoginChallenge explicitLoginMarker={explicitLoginMarker} />;
+  return <LoginSessionLoadingPage />;
 }
 
-function QrLoginChallenge() {
+export function LoginSessionLoadingPage({ message = "正在确认登录状态…" }: { message?: string }) {
+  return <LoginLanding message={message} qr={<div aria-label="正在确认登录状态" />} action={<Button disabled>重新生成二维码</Button>} />;
+}
+
+function QrLoginChallenge({ explicitLoginMarker }: { explicitLoginMarker: string | null }) {
   const [message, setMessage] = useState("正在生成钉钉二维码…");
   const [attempt, setAttempt] = useState(0);
   const [starting, setStarting] = useState(true);
@@ -302,15 +364,16 @@ function QrLoginChallenge() {
     let expectedState = "";
     let retryTimer: number | undefined;
     completing.current = false;
+    if (!beginLoginIntent(explicitLoginMarker)) return;
 
     const consumeCode = async (code: string, returnedState?: string) => {
-      if (cancelled || completing.current) return;
+      if (cancelled || completing.current || !loginIntentStillCurrent(explicitLoginMarker)) return;
       if (returnedState && returnedState !== expectedState) {
         setMessage("扫码状态校验失败，请点击重新生成二维码后再扫一次。");
         return;
       }
       completing.current = true;
-      const succeeded = await completeQrCode(code, expectedState, setMessage);
+      const succeeded = await completeQrCode(code, expectedState, setMessage, explicitLoginMarker, () => !cancelled);
       if (!succeeded) completing.current = false;
     };
 
@@ -413,7 +476,11 @@ export function QrRelayPage() {
       setMessage("授权已通过，正在返回登录窗口…");
       return;
     }
-    void completeQrCode(authCode, state, setMessage);
+    const intent = currentLoginIntent();
+    if (intent === undefined && logoutMarker()) { setMessage("登录请求已结束，请重新登录。"); return; }
+    let mounted = true;
+    void completeQrCode(authCode, state, setMessage, intent ?? null, () => mounted);
+    return () => { mounted = false; };
   }, []);
   return <StatePage tone="info" title="正在完成扫码登录" detail={message} />;
 }

@@ -55,7 +55,7 @@ export class DigitalJourneyQuery {
       OR ('order_merchandiser' IN (SELECT role_code FROM live_roles) AND o.primary_merchandiser_id=$1)
       OR ('development_clerk' IN (SELECT role_code FROM live_roles) AND (o.source_id IS NOT NULL OR EXISTS(SELECT 1 FROM digital_production_task_access a WHERE a.source_id=s.source_id AND a.task_kind LIKE 'development_%')))
       OR EXISTS(SELECT 1 FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
-        WHERE (a.source_id=s.source_id OR a.production_order_id=o.production_order_id) AND a.assignee_id=$1 AND a.required_role IN (SELECT role_code FROM live_roles))
+        WHERE (a.source_id=s.source_id OR a.production_order_id=o.production_order_id) AND a.assignee_id=$1 AND (a.required_role IN (SELECT role_code FROM live_roles) OR a.required_role='warehouse_receiver' AND 'warehouse_supervisor' IN (SELECT role_code FROM live_roles)))
 )
     ORDER BY coalesce(s.created_at,o.created_at) DESC,coalesce(s.source_id,o.production_order_id) DESC`,[actor.actorId,actor.actorRoles,leader,id])).rows;
   }
@@ -262,7 +262,7 @@ export class DigitalJourneyQuery {
       const sourcing=children.find(child=>child.module==="sourcing");
       // The original detail flow hides logically deleted cases, including approval history and URLs.
       const sourcingFields=sourcing&&sourcingAllowed?(await db.query("SELECT source.additional_merchandiser_user_id,source.style_name_snapshot,source.erp_order_no,current.status FROM sourcing_cases source JOIN current_sourcing_cases current USING(sourcing_case_id) WHERE source.sourcing_case_id=$1 AND source.deleted_at IS NULL",[sourcing.child_id])).rows[0]:null;
-      const closureAllowed=actor.actorRoles.some(role=>["root_superuser","owner_group","production_management","order_merchandiser","warehouse_receiver","quality_control"].includes(role));
+      const closureAllowed=actor.actorRoles.some(role=>["root_superuser","owner_group","production_management","order_merchandiser","warehouse_receiver", "warehouse_supervisor","quality_control"].includes(role));
       const childLines=(await db.query("SELECT module,child_id,line_id FROM digital_production_child_lines WHERE production_order_id=$1 ORDER BY module,line_id,child_id",[oid])).rows;
       for(const child of children) {
         let url:string|null=null;

@@ -1,3 +1,4 @@
+import { WAREHOUSE_RECEIVING_ROLES } from "@dx-rework/contracts";
 import type { Pool, PoolClient } from "pg";
 import type { DigitalResourceKind, DigitalAccessPurpose } from "@dx-rework/contracts/digital-production-access";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -14,18 +15,18 @@ export class DigitalProductionAccessPolicy {
   // Hold current eligibility while a personnel write commits; deactivation/revocation must serialize.
   async lockActiveRole(userId: string, role: string): Promise<boolean> {
     const found=await this.database.query(`SELECT 1 FROM app_users u
-      JOIN user_role_assignments a ON a.user_id=u.id AND a.role_code=$2 AND a.revoked_at IS NULL
+      JOIN user_role_assignments a ON a.user_id=u.id AND a.role_code=ANY($2::text[]) AND a.revoked_at IS NULL
       JOIN business_roles r ON r.role_code=a.role_code AND r.enabled
       JOIN identity_mappings i ON i.user_id=u.id AND i.active AND i.employed
       WHERE u.id=$1 AND u.enabled AND NOT coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)
-      FOR SHARE OF u,a,r,i`,[userId,role]);
+      FOR SHARE OF u,a,r,i`,[userId,role === "warehouse_receiver" ? [...WAREHOUSE_RECEIVING_ROLES] : [role]]);
     return Boolean(found.rowCount);
   }
   async activeRole(userId: string, role: string): Promise<boolean> {
     const found = await this.database.query(`SELECT 1 FROM app_users u JOIN user_role_assignments a ON a.user_id=u.id
       JOIN business_roles r ON r.role_code=a.role_code AND r.enabled
-      WHERE u.id=$1 AND u.enabled AND coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)=false AND a.role_code=$2 AND a.revoked_at IS NULL
-      AND EXISTS(SELECT 1 FROM identity_mappings i WHERE i.user_id=u.id AND i.active AND i.employed)`, [userId, role]);
+      WHERE u.id=$1 AND u.enabled AND coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)=false AND a.role_code=ANY($2::text[]) AND a.revoked_at IS NULL
+      AND EXISTS(SELECT 1 FROM identity_mappings i WHERE i.user_id=u.id AND i.active AND i.employed)`, [userId,role === "warehouse_receiver" ? [...WAREHOUSE_RECEIVING_ROLES] : [role]]);
     return Boolean(found.rowCount);
   }
   async allowed(actor: TrustedActorContext, kind: DigitalResourceKind, id: string, purpose: DigitalAccessPurpose): Promise<boolean> {
