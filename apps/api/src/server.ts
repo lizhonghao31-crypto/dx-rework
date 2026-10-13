@@ -149,7 +149,7 @@ const patternOrders = new PatternRoomOrderService(database, todoProjection);
 const cuttingService = new CuttingService(database);
 const receivingService = new ReceivingService(database,undefined,undefined,productionClosure,{allowLegacyStyleInput:true});
 const sourcingProductionService = new SourcingProductionService(database);
-const sourcingContractService = new SourcingContractService(database, attachments);
+const sourcingContractService = new SourcingContractService(database, attachments,undefined,undefined,todoProjection);
 const sourcingService = new SourcingService(
   database,undefined,undefined,todoProjection,sourcingContractService,
 );

@@ -18,6 +18,7 @@ import {
   ContractContentSchema,
   ReviseSourcingStylesSchema,
   SOURCING_IMAGE_SUPPLEMENT_ROLES,
+  RequestSourcingFactoryChangeSchema, canChangeSourcingTransferDeliveryDate,
 } from "@dx-rework/contracts";
 import type {
   CorrectSourcingCase, ReturnSourcingCase,
@@ -1541,6 +1542,8 @@ export class SourcingService {
       requested_at: Date | string;
       proposed_processes: string[];
       changes_crafts: boolean;
+      proposed_delivery_date: string | null;
+      changes_delivery_date: boolean;
       management_decision: "approved" | "rejected" | null;
       owner_decision: "approved" | "rejected" | null;
       effective: boolean;
@@ -1552,6 +1555,8 @@ export class SourcingService {
               change.change_reason,change.requires_owner_approval,
               change.requested_by,change.requested_at,
               proposal.after_state ? 'crafts' AS changes_crafts,
+              proposal.after_state->>'deliveryDate' AS proposed_delivery_date,
+              (proposal.after_state->>'deliveryDate') IS DISTINCT FROM (proposal.after_state->>'baseDeliveryDate') AS changes_delivery_date,
               ARRAY(SELECT craft->>'craftName' FROM jsonb_array_elements(
                 COALESCE(proposal.after_state->'crafts',basis.crafts,'[]'::jsonb)) craft) AS proposed_processes,
               management_review.decision AS management_decision,
@@ -1593,6 +1598,8 @@ export class SourcingService {
         proposedSupplierName: row.proposed_supplier_name_snapshot,
         proposedProcesses: row.proposed_processes,
         changesCrafts: row.changes_crafts,
+        proposedDeliveryDate: row.proposed_delivery_date,
+        changesDeliveryDate: row.changes_delivery_date,
         proposedUnitPrice: row.proposed_unit_price,
         proposedQuantity: Number(row.proposed_quantity),
         proposedTotalAmount: row.proposed_total_amount,
@@ -2658,7 +2665,12 @@ export class SourcingService {
                     ORDER BY correction.correction_version DESC LIMIT 1
                   ),source_case.daxing_unit_price)::text AS daxing_unit_price,
                   source_case.estimated_cut_piece_send_date::text AS estimated_cut_piece_send_date,
-                  source_case.delivery_date::text AS delivery_date,source_case.gender,source_case.style_name_snapshot,
+                  COALESCE((SELECT (proposal.after_state->>'deliveryDate')::date
+                    FROM sourcing_factory_change_requests request_row
+                    JOIN operation_events proposal ON proposal.event_id=request_row.operation_event_id
+                    WHERE request_row.factory_change_request_id=decision_row.source_change_request_id),
+                    sourcing_effective_delivery_date(source_case.sourcing_case_id,source_case.delivery_date))::text AS delivery_date,
+                  source_case.gender,source_case.style_name_snapshot,
                   CASE WHEN decision_row.crafts IS NULL THEN source_case.process_items
                     ELSE ARRAY(SELECT craft->>'craftName' FROM jsonb_array_elements(decision_row.crafts) craft) END AS process_items
            FROM sourcing_cases source_lock
@@ -2704,6 +2716,7 @@ export class SourcingService {
           after: {
             status: approved ? "pending_finance_reconciliation" : "pending_management_decision",
             decision: input.decision,
+            deliveryDate: source.delivery_date,
           },
           reason: decisionReason,
         });
@@ -3152,7 +3165,11 @@ export class SourcingService {
                 $8,(SELECT sum(line.total_amount) FROM sourcing_decision_lines line
                     WHERE line.sourcing_decision_id=$3),
                 source_case.daxing_unit_price,source_case.estimated_cut_piece_send_date,
-                source_case.delivery_date,
+                COALESCE((SELECT (proposal.after_state->>'deliveryDate')::date
+                  FROM sourcing_factory_change_requests request_row
+                  JOIN operation_events proposal ON proposal.event_id=request_row.operation_event_id
+                  WHERE request_row.factory_change_request_id=$12),
+                  sourcing_effective_delivery_date(source_case.sourcing_case_id,source_case.delivery_date)),
                 CASE WHEN decision.crafts IS NULL THEN COALESCE(source_case.process_items,'{}'::text[])
                   ELSE ARRAY(SELECT craft->>'craftName' FROM jsonb_array_elements(decision.crafts) craft) END,
                 $9,$10,$11,source_case.gender,source_case.style_name_snapshot
@@ -3164,7 +3181,7 @@ export class SourcingService {
         [snapshotId,source.sourcing_case_id,decisionId,nextDecisionVersion,
           source.proposed_supplier_id,source.proposed_supplier_code_snapshot,
           source.proposed_supplier_name_snapshot,Number(source.proposed_quantity),
-          actor.actorId,eventId,actor.requestId],
+          actor.actorId,eventId,actor.requestId,source.factory_change_request_id],
       );
       await client.query(
         `INSERT INTO sourcing_approval_snapshot_lines(
@@ -3355,6 +3372,12 @@ export class SourcingService {
     idempotencyKey: string,
   ): Promise<Result<SourcingCaseSummary>> {
     const initiatorRole = this.factoryChangeInitiator(actor);
+    const parsed = RequestSourcingFactoryChangeSchema.safeParse(input);
+    if (!parsed.success) fail(parsed.error.issues[0]?.message ?? "转厂资料无效");
+    if (input.deliveryDate !== undefined && !canChangeSourcingTransferDeliveryDate({
+      isRoot: actor.actorRoles.includes(ROOT_ROLE), businessRoles: actor.actorRoles,
+      capabilities: actor.authorizationCapabilities ?? [actor.authorizationCapability],
+    })) fail("仅Root或生产管理可在转厂时修改交货日期",403,"FORBIDDEN");
     if (!UUID_PATTERN.test(sourcingCaseId)) fail("报价选厂询价标识无效");
     if (!UUID_PATTERN.test(input.supplierId)) fail("加工厂标识无效");
     const unitPrice = normalizeSourcingUnitPrice(input.unitPrice);
@@ -3376,7 +3399,7 @@ export class SourcingService {
         actorKey: actor.actorId,
         key: idempotencyKey,
         requestHash: requestHash(scope, {
-          sourcingCaseId, supplierId: input.supplierId, unitPrice, changeReason, ...(craftIds ? { craftIds } : {}), ...(craftNames ? { craftNames } : {}),
+          sourcingCaseId, supplierId: input.supplierId, unitPrice, changeReason, ...(craftIds ? { craftIds } : {}), ...(craftNames ? { craftNames } : {}), ...(input.deliveryDate !== undefined ? {deliveryDate:input.deliveryDate} : {}),
         }),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
       }, async () => {
@@ -3393,6 +3416,8 @@ export class SourcingService {
           open_change_id: string | null;
           created_by: string;
           additional_merchandiser_user_id: string | null;
+          current_delivery_date: string | null;
+          estimated_send_date: string | null;
         }>(
           `SELECT source_case.sourcing_case_id,source_case.order_quantity,source_lock.created_by,
                   nullif(to_jsonb(source_lock)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id,
@@ -3401,7 +3426,9 @@ export class SourcingService {
                   decision_row.unit_price AS decision_unit_price,
                   decision_row.decision_version,
                   COALESCE(reconciliation_row.reconciliation_version,0) AS reconciliation_version,
-                  open_change.factory_change_request_id AS open_change_id
+                  open_change.factory_change_request_id AS open_change_id,
+                  to_char(sourcing_effective_delivery_date(source_case.sourcing_case_id,source_case.delivery_date),'YYYY-MM-DD') AS current_delivery_date,
+                  to_char(source_case.estimated_cut_piece_send_date,'YYYY-MM-DD') AS estimated_send_date
            FROM sourcing_cases source_lock
            CROSS JOIN LATERAL sourcing_case_facts_at(source_lock.sourcing_case_id) source_case
            JOIN LATERAL (
@@ -3444,6 +3471,8 @@ export class SourcingService {
         );
         const source = current.rows[0];
         if (!source) return fail("报价选厂询价不存在", 404, "NOT_FOUND");
+        const transferDeliveryDate = input.deliveryDate ?? source.current_delivery_date;
+        if (!sourcingDatesValid(source.estimated_send_date,transferDeliveryDate)) fail(SOURCING_DATE_ORDER_ERROR);
         if (initiatorRole === "order_merchandiser" && !actor.actorRoles.includes(ROOT_ROLE)
           && source.additional_merchandiser_user_id === actor.actorId && source.created_by !== actor.actorId)
           fail("添加跟单仅可回传合同",403,"FORBIDDEN");
@@ -3466,9 +3495,9 @@ export class SourcingService {
         const selectedCraftIds = craftNames
           ? await this.resolveTransferCraftNames(client,actor,sourcingCaseId,factoryChangeRequestId,craftNames)
           : craftIds;
-        const baseContractDocumentId = selectedCraftIds ? (await client.query<{id:string}>(
+        const baseContractDocumentId = (await client.query<{id:string}>(
           "SELECT sourcing_contract_document_id AS id FROM sourcing_contract_documents WHERE sourcing_case_id=$1 ORDER BY contract_version DESC LIMIT 1",
-          [sourcingCaseId])).rows[0]?.id ?? null : null;
+          [sourcingCaseId])).rows[0]?.id ?? null;
         const selectedCrafts = selectedCraftIds ? (await client.query<{
           position: number; craft_id: string; craft_code: string; craft_version: number; craft_name: string;
         }>(`SELECT requested.position::integer AS position,catalog.craft_id,catalog.craft_code,
@@ -3506,6 +3535,7 @@ export class SourcingService {
             decisionId: source.sourcing_decision_id,
             supplierId: source.supplier_id,
             unitPrice: source.decision_unit_price,
+            deliveryDate: source.current_delivery_date,
           },
           after: {
             status: immediate ? effectiveStatus : source.status,
@@ -3516,7 +3546,10 @@ export class SourcingService {
             supplierName: selected.supplier_name,
             unitPrice, quantity, totalAmount, requiresOwnerApproval,
             effective: immediate,
-            ...(selectedCrafts ? { crafts: selectedCrafts, baseContractDocumentId } : {}),
+            ...(selectedCrafts ? { crafts: selectedCrafts } : {}),
+            ...(selectedCrafts || input.deliveryDate !== undefined || baseContractDocumentId !== null ? {baseContractDocumentId} : {}),
+            baseDeliveryDate:source.current_delivery_date,
+            deliveryDate:transferDeliveryDate,
           },
           reason: changeReason,
         });

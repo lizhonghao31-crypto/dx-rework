@@ -337,6 +337,7 @@ export const RecordSourcingContractSchema = z.object({
 }).strict();
 
 export const RequestSourcingFactoryChangeSchema = z.object({
+  deliveryDate: BusinessDateSchema.optional(),
   craftIds: z.array(IdSchema).min(1).max(MAX_SOURCING_PROCESSES).refine(ids => new Set(ids).size === ids.length, "工艺不能重复").optional(),
   craftNames: z.array(z.string().trim().min(1, "工艺不能为空").max(100))
     .min(1).max(MAX_SOURCING_PROCESSES)
@@ -345,6 +346,11 @@ export const RequestSourcingFactoryChangeSchema = z.object({
   unitPrice: MoneyInputSchema,
   changeReason: z.string().trim().min(1, "换厂原因不能为空").max(500),
 }).strict().refine(input => !(input.craftIds && input.craftNames), "工艺编号和名称不能同时提交");
+
+export const canChangeSourcingTransferDeliveryDate = (actor: {
+  isRoot?: boolean; businessRoles?: readonly string[]; capabilities?: readonly string[];
+}): boolean => actor.isRoot === true || (actor.businessRoles?.includes("production_management") === true
+  && actor.capabilities?.includes("sourcing:decision:record") === true);
 
 export const DecideSourcingFactoryChangeSchema = z.object({
   decision: z.enum(["approved", "rejected"]),
@@ -359,6 +365,8 @@ export const SourcingFactoryChangeStateSchema = z.object({
   proposedSupplierName: z.string(),
   proposedProcesses: z.array(z.string()).max(MAX_SOURCING_PROCESSES).optional(),
   changesCrafts: z.boolean().optional(),
+  proposedDeliveryDate: BusinessDateSchema.nullable().optional(),
+  changesDeliveryDate: z.boolean().optional(),
   proposedUnitPrice: z.string(),
   proposedQuantity: z.number().int().positive(),
   proposedTotalAmount: z.string(),
