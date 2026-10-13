@@ -13,6 +13,8 @@ import {
 } from "@dx-rework/ui";
 import { createWebUrls } from "../url-contract.js";
 import { hasPageAccess, verifySession, type AuthorizedUser } from "./auth.js";
+import { sessionCacheVersion } from "./auth-session.js";
+import { LogoutButton } from "./session-exit.js";
 import type { Task } from "./types.js";
 import "./shell-navigation.css";
 import { canAccessSupplierMaintenance } from "./supplier-onboarding-model.js";
@@ -76,7 +78,12 @@ function loadShellMe() {
 }
 
 let employeeAccessPermission: Promise<boolean> | undefined;
+let employeeAccessPermissionVersion = -1;
 function loadEmployeeAccessPermission(): Promise<boolean> {
+  if (employeeAccessPermissionVersion !== sessionCacheVersion()) {
+    employeeAccessPermission = undefined;
+    employeeAccessPermissionVersion = sessionCacheVersion();
+  }
   employeeAccessPermission ??= loadShellMe().then((body) => {
     if (body?.status !== "authorized" || !body.user) return false;
     return hasPageAccess(body.user, { requiredRole: "owner_group", requiredCapability: "access:admin" });
@@ -250,7 +257,8 @@ function MobilePrimaryNavigation({
           />
         </div>
       ))}
-      {moreNavigation.length || financeGroup.entries.length ? (
+      {/* Logout keeps this existing account surface reachable even without overflow links. */}
+      {
         <details className="mobile-primary-navigation__more">
           <summary aria-label="更多导航">
             <span className={"mobile-primary-navigation__more-trigger" + (moreIsActive ? " is-active" : "")}>
@@ -261,9 +269,10 @@ function MobilePrimaryNavigation({
           <div className="mobile-primary-navigation__drawer">
             <PrimaryNavigation navigation={moreNavigation} active={active} basePath={basePath} />
             <NavigationGroupMenu group={financeGroup} active={active} basePath={basePath} />
+            <LogoutButton mobile />
           </div>
         </details>
-      ) : null}
+      }
     </nav>
   );
 }
@@ -579,6 +588,7 @@ export function Shell({
       ) : null}
       <aside>
         <h2>达兴 · 数字助手</h2>
+        <LogoutButton />
         <DesktopNavigation
           globalNavigation={globalNavigation}
           groups={desktopNavigationGroups}

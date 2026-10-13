@@ -63,3 +63,11 @@ describe("shared entry session verification", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
+
+it("invalidates every pending authorization result and dependent cache on explicit logout",async()=>{
+  let resolve!:(response:Response)=>void;
+  vi.stubGlobal("fetch",vi.fn(()=>new Promise<Response>(done=>{resolve=done;})));
+  const state=await import("../../apps/web/src/auth-session.js"),reset=vi.fn();state.registerSessionInvalidator(reset);
+  const old=state.verifySession();state.invalidateSession();resolve(new Response(JSON.stringify(authorized)));
+  expect(await old).toBe("denied");expect(state.cachedVerifiedSession()).toBeUndefined();expect(reset).toHaveBeenCalledTimes(1);
+});
