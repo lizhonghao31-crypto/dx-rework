@@ -486,15 +486,20 @@ run("digital production P01 identities", () => {
     expect((await service.read(actor(),order.productionOrderId)).lines[0]!.customerDateVersion).toBe(2);
     expect((await database.query("SELECT count(*)::int n FROM digital_po_date_changes WHERE line_id=$1",[line.lineId])).rows[0].n).toBe(2);
   });
-  it("preserves the permanent factory finance lock even for Root without locking an independent customer promise",async()=>{
+  it("locks the current reviewed factory document even for Root without locking an independent customer promise",async()=>{
     const order=await service.createOrder(actor(),input(),randomUUID());const line=order.lines[0]!;const child=randomUUID();
     await database.query("INSERT INTO sourcing_cases VALUES($1)",[child]);
     await tx(client=>linkNewDigitalChild(client,{module:"sourcing",childId:child,productionOrderId:order.productionOrderId,lines:[{childLineKey:"1",lineId:line.lineId}]}));
     await tx(client=>approvedDate(client,order.productionOrderId,line.lineId,"factory","2026-10-09",0));
-    await database.query("INSERT INTO sourcing_finance_reconciliations VALUES($1)",[child]);
+    const reviewed=randomUUID();
+    await database.query("INSERT INTO sourcing_contract_documents VALUES($1,$2,NULL,1)",[reviewed,child]);
+    await database.query("INSERT INTO sourcing_finance_reconciliations VALUES($1,$2)",[child,reviewed]);
     await expect(tx(client=>approvedDate(client,order.productionOrderId,line.lineId,"factory","2026-10-08",1))).rejects.toMatchObject({statusCode:409});
     await tx(client=>approvedDate(client,order.productionOrderId,line.lineId,"customer","2026-10-11",1));
     expect((await service.read(actor(),order.productionOrderId)).lines[0]).toMatchObject({factoryDeliveryDate:"2026-10-09",factoryDateVersion:1,customerWarehouseArrivalDate:"2026-10-11",customerDateVersion:2});
+    await database.query("INSERT INTO sourcing_contract_documents VALUES($1,$2,NULL,2)",[randomUUID(),child]);
+    await tx(client=>approvedDate(client,order.productionOrderId,line.lineId,"factory","2026-10-08",1));
+    expect((await service.read(actor(),order.productionOrderId)).lines[0]).toMatchObject({factoryDeliveryDate:"2026-10-08",factoryDateVersion:2});
   });
   it("detects historical number conflicts without rewriting them and denies unaudited or orphan effective date writes",async()=>{
     const order=await service.createOrder(actor(),input(),randomUUID());const line=order.lines[0]!;

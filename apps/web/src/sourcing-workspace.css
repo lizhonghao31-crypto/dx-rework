@@ -1770,3 +1770,6 @@
   .sourcing-workspace--create-digital-po .sourcing-line-row > button { white-space: nowrap; }
   .sourcing-workspace--create-digital-po .sourcing-form-grid > p { grid-column: 1 / -1; margin: 0; }
 }
+
+.sourcing-form-grid .sourcing-transfer-date-toggle {display:flex;flex-direction:row;align-items:center;gap:var(--dx-v2-space-2);}
+.sourcing-form-grid .sourcing-transfer-date-toggle input[type="checkbox"] {width:18px;height:18px;min-height:18px;flex:0 0 18px;margin:0;padding:0;}

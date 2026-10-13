@@ -76,7 +76,7 @@ export function ContractContentEditor({caseId,onClose,onUpdated}:{caseId:string;
   };
   return <dialog ref={dialog} className="system-dialog contract-supplier-dialog contract-content-editor" aria-label="修改合同内容"
     onCancel={event=>{event.preventDefault();if(!busy)onClose();}}>
-    <div className="system-dialog__copy"><h2>修改合同内容</h2><p>{draft?.poFactoryDates?"逐 PO 工厂交期同步到对应订单，其他内容仅修改本单合同。":"交货日期同步到订单当前交期，其他内容仅修改本单合同。"}保存后生成新版，旧合同、审批记录和回签保留；财务核对后不能修改。</p></div>
+    <div className="system-dialog__copy"><h2>修改合同内容</h2><p>{draft?.poFactoryDates?"逐 PO 工厂交期同步到对应订单，其他内容仅修改本单合同。":"交货日期同步到订单当前交期，其他内容仅修改本单合同。"}保存后生成新版，旧合同、审批记录和回签保留；当前合同版本财务核对后不能修改。</p></div>
     {draft?<fieldset className="contract-template-fields" disabled={busy}>
       {Object.entries(fields).map(([name,label])=><label key={name}>{label}<input type={name==="deliveryDate"?"date":"text"} readOnly={name==="deliveryDate" && !!draft.poFactoryDates} value={draft.content[name as keyof typeof fields] ?? ""}
         onChange={event=>update(content=>({...content,[name]:event.target.value}))}/></label>)}

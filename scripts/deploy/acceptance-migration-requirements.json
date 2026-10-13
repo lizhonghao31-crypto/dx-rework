@@ -761,5 +761,54 @@
       "digital_sourcing_actor_can_write"
     ],
     "sequences": []
+  },
+  "0224_contract_version_review_transfer_delivery": {
+    "checksum": "c1005533652409d4b8b912b7399490b7926af417ce3eaf3b9388b46fc424bc53",
+    "tables": [
+      "sourcing_case_transitions",
+      "sourcing_factory_change_requests",
+      "sourcing_approval_snapshots"
+    ],
+    "functions": [
+      "guard_sourcing_contract_content_creation",
+      "guard_sourcing_transition_insert",
+      "sourcing_effective_delivery_date"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "guard_sourcing_transfer_delivery_request",
+      "guard_sourcing_transfer_delivery_approval"
+    ],
+    "sequences": []
+  },
+  "0241_contract_version_review_transfer_delivery": {
+    "checksum": "70761c9c3011af9660d2a7bac0434eb862d907404de2a68ff6386c632eb9230e",
+    "tables": [
+      "sourcing_case_transitions",
+      "sourcing_factory_change_requests",
+      "sourcing_approval_snapshots"
+    ],
+    "functions": [
+      "guard_sourcing_contract_content_creation",
+      "guard_sourcing_transition_insert",
+      "sourcing_effective_delivery_date",
+      "sourcing_contract_content_for_factory_change",
+      "guard_digital_po_date_change",
+      "guard_sourcing_contract_information_refresh"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "guard_sourcing_transfer_delivery_request",
+      "guard_sourcing_transfer_delivery_approval",
+      "sourcing_authorized_transfer_po_snapshot",
+      "sourcing_po_factory_date_locked"
+    ],
+    "sequences": []
   }
 }

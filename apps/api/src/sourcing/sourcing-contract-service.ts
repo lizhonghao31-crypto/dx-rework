@@ -13,6 +13,7 @@ import type {
 import { ApplicationError } from "../platform/errors.js";
 import { SourcingContractManagementService, canRefreshContractInformation } from "./sourcing-contract-management-service.js";
 import type { AttachmentService } from "../tools/attachments.js";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 import {
   IdempotencyService,
   OperationEventRepository,
@@ -74,7 +75,8 @@ export class SourcingContractService {
     private readonly attachments: AttachmentService,
     private readonly idempotency = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
-  ) { this.management = new SourcingContractManagementService(database); this.content = new SourcingContractContentService(database,attachments); }
+    todos?: Pick<TodoProjectionService,"actionableForAllAssignedRole"|"cancelOpenByDedupePrefix">,
+  ) { this.management = new SourcingContractManagementService(database); this.content = new SourcingContractContentService(database,attachments,undefined,undefined,todos); }
 
   async validateLineImages(client: Pick<PoolClient, "query">, actor: TrustedActorContext, attachmentIds: readonly string[]): Promise<void> {
     for (const attachmentId of new Set(attachmentIds)) {
@@ -288,7 +290,7 @@ export class SourcingContractService {
     const result = await this.database.query<ContractRow>(
       `SELECT document.*,source_case.created_by,
               EXISTS(SELECT 1 FROM sourcing_contract_return_submissions WHERE sourcing_case_id=document.sourcing_case_id) AS returned,
-              EXISTS(SELECT 1 FROM sourcing_finance_reconciliations WHERE sourcing_case_id=document.sourcing_case_id) AS reconciled,
+              EXISTS(SELECT 1 FROM sourcing_finance_reconciliations WHERE sourcing_contract_document_id=document.sourcing_contract_document_id) AS reconciled,
               (SELECT content->>'contractNumber' FROM sourcing_contract_content_overrides WHERE sourcing_contract_document_id=document.sourcing_contract_document_id) AS display_contract_number
        FROM sourcing_contract_documents document
        JOIN sourcing_cases source_case ON source_case.sourcing_case_id=document.sourcing_case_id

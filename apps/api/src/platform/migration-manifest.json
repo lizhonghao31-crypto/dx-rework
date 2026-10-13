@@ -917,6 +917,10 @@
       "checksum": "a374629a47ed1c233816ad98083f6de924f0964eb7c3ef2dbca184dc1d8b44d0"
     },
     {
+      "version": "0224_contract_version_review_transfer_delivery",
+      "checksum": "c1005533652409d4b8b912b7399490b7926af417ce3eaf3b9388b46fc424bc53"
+    },
+    {
       "version": "0224_digital_development_route",
       "checksum": "5f57dc1202b50b172f2db8347647dfcda4c8c76c9ed17b634cf11a2799871244"
     },
@@ -983,6 +987,10 @@
     {
       "version": "0240_digital_merchandiser_handover",
       "checksum": "ee01893516d6946d5d5c9dfeb97cb5b0458502581b1657425afa881deb9e5d3a"
+    },
+    {
+      "version": "0241_contract_version_review_transfer_delivery",
+      "checksum": "70761c9c3011af9660d2a7bac0434eb862d907404de2a68ff6386c632eb9230e"
     }
   ]
 }
