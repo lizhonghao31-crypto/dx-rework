@@ -1,3 +1,4 @@
+import { LogoutButton } from "./session-exit.js";
 import {FactoryReceiptSelector} from "./production-closure-ui.js";
 import type {ProductionReceivingSummary} from "@dx-rework/contracts";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
@@ -466,7 +467,7 @@ export function ReceivingPage() {
     }
   };
 
-  return <main className="receiving-shell receiving-governed" data-legacy-ui="receiving">
+  return <main className="receiving-shell receiving-governed" data-legacy-ui="receiving"><div className="frontline-session-exit"><LogoutButton /></div>
     <a className="dx-button dx-button--secondary receiving-order-link" href={pageUrl("/ui/orders?returnTo=%2Fui%2Freceiving")}>查看订货回货</a>
     <section className="receiving-hero">
       <div className="receiving-brand">达兴 · 仓库收货</div>

@@ -36,6 +36,7 @@ import {
   QrRelayPage,
   verifySession,
   type AuthorizedUser,
+  SessionBoundary,
 } from "./auth.js";
 import { Shell } from "./components.js";
 import { ReworkInitiationV2Form } from "./rework-v2-form.js";
@@ -264,7 +265,9 @@ function LegacySupplierCenterRedirect() {
   return <Shell active="供应商目录"><Surface className="admin-card"><p>正在进入供应商中心…</p></Surface></Shell>;
 }
 
-export function App() {
+export function App() { return <SessionBoundary><AppRoutes /></SessionBoundary>; }
+
+function AppRoutes() {
   const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
   const { path: requestedPath, search } = useInternalLocation(basePath);
   const path = patternPagePath(requestedPath, search);
@@ -385,6 +388,7 @@ export function App() {
   if (path === "/ui/frontline" || path === "/ui/frontline/tasks") {
     return <AuthGate requiredAnyOf={[
       { requiredRole: "warehouse_receiver", requiredCapability: "receiving:create" },
+      { requiredRole: "warehouse_supervisor", requiredCapability: "receiving:create" },
       { requiredRole: "worker", requiredCapability: "work:report" },
       { requiredRole: "worker", requiredCapability: "tail_inspection:report" },
     ]}>{page}</AuthGate>;
@@ -392,6 +396,7 @@ export function App() {
   if (path === "/ui/receiving") {
     return <AuthGate requiredAnyOf={[
       { requiredRole: "warehouse_receiver", requiredCapability: "receiving:create" },
+      { requiredRole: "warehouse_supervisor", requiredCapability: "receiving:create" },
     ]}>{page}</AuthGate>;
   }
   if (path === "/ui/qc/new") {

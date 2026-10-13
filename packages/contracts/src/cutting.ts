@@ -6,6 +6,7 @@ export const CUTTING_VIEW_ROLES = [
   "owner_group",
   "production_management",
   "order_merchandiser",
+  "warehouse_supervisor",
 ] as const;
 export const CUTTING_RECORD_ROLES = ["cutting_supervisor", "cutting_worker"] as const;
 export const CUTTING_CAPABILITY_ROLES = {

@@ -1,3 +1,5 @@
+import { LogoutButton } from "./session-exit.js";
+import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import { StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useState } from "react";
 
@@ -25,7 +27,7 @@ const hasRole = (user: AuthorizedUser, role: string): boolean =>
 export function frontlineEntries(user: AuthorizedUser): readonly Entry[] {
   const entries: Entry[] = [];
 
-  if (hasRole(user, "warehouse_receiver") && has(user, "receiving:create")) {
+  if (hasWarehouseReceivingRole(user.businessRoles ?? []) && has(user, "receiving:create")) {
     entries.push({ label: "仓库收货", description: "登记返工订单的到货信息", href: pageUrl("ui/receiving") });
   }
   if (hasRole(user, "worker") && has(user, "work:report")) {
@@ -61,7 +63,7 @@ export function FrontlineLandingPage() {
 
   const entries = state.kind === "ready" ? frontlineEntries(state.user) : [];
   return (
-    <main className="frontline-landing">
+    <main className="frontline-landing"><div className="frontline-session-exit"><LogoutButton /></div>
       <Surface className="frontline-landing__surface">
         <div className="frontline-landing__heading">
           <StatusBadge tone="info">一线工作台</StatusBadge>

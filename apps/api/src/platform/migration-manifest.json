@@ -928,6 +928,7 @@
       "version": "0225_digital_development_rounds",
       "checksum": "299ac4b17ef8a618a4b740b8ffcc30d377b4c51ca6b1880dbe1e19d49514a6f3"
     },
+    {"version": "0225_warehouse_supervisor_cutting_read", "checksum": "85ce0adb63cdba755011a53455bd9f7c762d9e5f0d5dd0157111c375b1d0d4b1"},
     {
       "version": "0226_digital_production_budgets",
       "checksum": "83432181bd2ee6d48ce44abb854edc554d4a0213a4a2b95301243226b35bd144"
@@ -991,6 +992,7 @@
     {
       "version": "0241_contract_version_review_transfer_delivery",
       "checksum": "70761c9c3011af9660d2a7bac0434eb862d907404de2a68ff6386c632eb9230e"
-    }
+    },
+    {"version": "0242_warehouse_supervisor_digital_dispatch", "checksum": "970d9bfac3cd416b6f600890bf99c7ccc7565614db65caa6a7d7618d02845104"}
   ]
 }

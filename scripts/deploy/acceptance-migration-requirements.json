@@ -810,5 +810,38 @@
       "sourcing_po_factory_date_locked"
     ],
     "sequences": []
+  },
+  "0225_warehouse_supervisor_cutting_read": {
+    "checksum": "85ce0adb63cdba755011a53455bd9f7c762d9e5f0d5dd0157111c375b1d0d4b1",
+    "tables": [
+      "business_roles",
+      "role_capabilities"
+    ],
+    "functions": [
+      "receiving_authorized_board_operator",
+      "cutting_authorized_roles"
+    ],
+    "references": [],
+    "insert": [
+      "business_roles",
+      "role_capabilities"
+    ],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
+  },
+  "0242_warehouse_supervisor_digital_dispatch": {
+    "checksum": "970d9bfac3cd416b6f600890bf99c7ccc7565614db65caa6a7d7618d02845104",
+    "tables": [],
+    "functions": [
+      "guard_sourcing_production_creation"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

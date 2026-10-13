@@ -37,7 +37,7 @@ export function canAccessProduction(user: AuthorizedUser): boolean {
     || (user.businessRoles?.some(role => ["finance_director", "finance_read"].includes(role)) === true && user.capabilities.includes("sourcing:view"));
 }
 
-export const DIGITAL_PRODUCTION_ROLES = ["sample_designer", "order_merchandiser", "production_management", "owner_group", "pattern_room_supervisor", "development_clerk", "pattern_room_tail_inspector", "pattern_room_worker", "quality_control", "embroidery_washing_merchandiser", "warehouse_receiver", "cutting_worker"] as const;
+export const DIGITAL_PRODUCTION_ROLES = ["sample_designer", "order_merchandiser", "production_management", "owner_group", "pattern_room_supervisor", "development_clerk", "pattern_room_tail_inspector", "pattern_room_worker", "quality_control", "embroidery_washing_merchandiser", "warehouse_receiver", "warehouse_supervisor", "cutting_worker"] as const;
 export function canAccessDigitalProduction(user: AuthorizedUser): boolean {
   return user.isRoot === true || user.businessRoles?.some(role => DIGITAL_PRODUCTION_ROLES.some(allowed => allowed === role)) === true;
 }

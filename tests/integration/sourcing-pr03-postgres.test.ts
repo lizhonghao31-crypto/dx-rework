@@ -1,3 +1,7 @@
+import { ApplicationError } from "../../apps/api/src/platform/errors.js";
+import { PostgresAuthStore } from "../../apps/api/src/auth/postgres-store.js";
+import { registerReceivingRoutes } from "../../apps/api/src/receiving/receiving-routes.js";
+import { registerCuttingRoutes } from "../../apps/api/src/cutting/cutting-routes.js";
 import { PoCustomerDateService } from "../../apps/api/src/production-platform/po-customer-date-service.js";
 import { ProductionInstructionService } from "../../apps/api/src/production-platform/production-instruction-service.js";
 import Fastify from "fastify";
@@ -3890,6 +3894,16 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const internal={...people.cutting_worker!,authorizationCapability:'cutting:records:create',authorizationCapabilities:['cutting:records:create','cutting:orders:view']};
     const external={...primary,authorizationCapability:'cutting:records:create'};
     const recorder=mode==='in_house'?internal:external,wrong=mode==='in_house'?external:internal;
+    const uploadApp=Fastify();let uploading=recorder;
+    uploadApp.setErrorHandler((error,_request,reply)=>reply.code(error instanceof ApplicationError?error.statusCode:500).send({error:{message:error.message}}));
+    const intent=vi.spyOn(attachments,"createUploadIntent").mockResolvedValue({attachmentId:randomUUID(),objectKey:"TEST/P12-upload",uploadMethod:"POST",uploadUrl:"https://example.invalid/TEST",uploadFields:{},expiresAt:new Date().toISOString()});
+    registerCuttingRoutes(uploadApp,{authenticate:async()=>({id:uploading.actorId,displayName:"TEST P12 uploader",businessRoles:uploading.actorRoles,capabilities:["cutting:orders:view","tools:user",...(mode==='in_house'?["cutting:records:create"]:[])]}),service:cutting,attachments});
+    try {
+      const payload={filename:"TEST-P12.png",mimeType:"image/png",sizeBytes:100,sha256:"c".repeat(64)};
+      const url=`/cutting/orders/${ids[0]}/attachments/upload-intents`;
+      const allowed=await uploadApp.inject({method:"POST",url,payload});expect(allowed.statusCode,allowed.body).toBe(201);expect(intent).toHaveBeenCalledOnce();
+      uploading=wrong;expect((await uploadApp.inject({method:"POST",url,payload})).statusCode).toBe(403);expect(intent).toHaveBeenCalledOnce();
+    }finally{await uploadApp.close();intent.mockRestore();}
     const photo=async(actor:typeof recorder)=>{const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-P12.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/P12/${image}`,'c'.repeat(64),actor.actorId]);return image;};
     await expect(cutting.record(wrong,ids[0],{pieceCount:2,actualCutCount:99,attachmentIds:[await photo(wrong)]},randomUUID())).rejects.toMatchObject({statusCode:403});
     await cutting.record(recorder,ids[0],{pieceCount:2,actualCutCount:99,attachmentIds:[await photo(recorder)]},randomUUID());
@@ -3940,11 +3954,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       .rejects.toMatchObject({ statusCode: 404 });
   });
 
-  describe.each(['无','印花'] as const)('P13/P14 whole-order %s flow links native receiving and preserves closure facts',secondaryCraft=>{
+  describe.each(['无','印花','仓库主管'] as const)('P13/P14 whole-order %s flow links native receiving and preserves closure facts',variant=>{
+    const secondaryCraft=variant==='仓库主管'?'无':variant;
     let continuation:{primary:ReturnType<typeof merchandiserActor>;root:ReturnType<typeof rootActor>;ready:NonNullable<Awaited<ReturnType<typeof exerciseBulkPreparation>>>;ids:string[];fixture:Awaited<ReturnType<typeof budgetFixture>>}|undefined;
     it('keeps original cutting and QC gates before actual dispatch',async()=>{
     const fixture=await budgetFixture(),primary=merchandiserActor(),root=rootActor(),flow=new FactoryFlowService(database),tasks=new DigitalProductionTaskService(database);
-    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId("净色车缝"),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft}))!;
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId("净色车缝"),'none',{cuttingProcess:'in_house',stopAtReady:true,secondaryCraft,...(variant==='仓库主管'?{warehouseRole:'warehouse_supervisor' as const}:{})}))!;
     const {id,caseId,people,cutting}=ready;
     const ids=(await database.query('SELECT cutting_order_id FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[caseId])).rows.map(r=>r.cutting_order_id);
     for(const cuttingId of ids){const image=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-P13-cut.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/P13/${image}`,'c'.repeat(64),root.actorId]);await cutting.record({...root,authorizationCapability:'cutting:records:create'},cuttingId,{pieceCount:1,actualCutCount:100,attachmentIds:[image]},randomUUID());}
@@ -4970,5 +4985,103 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await contractService.getCurrent(rootActor(),id)).item?.canEditContent).toBe(false);
     expect((await database.query("SELECT sourcing_contract_document_id FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1 ORDER BY reconciliation_version DESC LIMIT 1",[id])).rows[0].sourcing_contract_document_id).toBe(contract.sourcingContractDocumentId);
   });
+  it("enforces warehouse supervisor read-only cutting through HTTP, real grants and database authority while retaining receiving and mixed roles", async () => {
+    const caseId = await reviewedContractCase("WAREHOUSE-SUPERVISOR");
+    const order = (await cutting.listSources(cuttingOwnerActor())).items.find(item => item.sourcingCaseId === caseId)!;
+    const supervisorId = randomUUID(), receiverId = randomUUID(), mixedId = randomUUID();
+    await craftService.ensureOrganizationPolicy();
+    // All people and assignments below belong to this disposable owned schema.
+    for (const [userId, roles] of [
+      [supervisorId, ["warehouse_supervisor"]],
+      [receiverId, ["warehouse_receiver"]],
+      [mixedId, ["warehouse_supervisor", "cutting_worker"]],
+    ] as const) {
+      await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST仓库角色',true)", [userId]);
+      await database.query(`INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at)
+        VALUES($1,$2,'dingtalk','corp',$3,$4,true,true,CURRENT_TIMESTAMP)`, [randomUUID(), userId, `TEST-${userId}`, `TEST-union-${userId}`]);
+      await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
+      try {
+        for (const role of roles) await database.query(`INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason)
+          VALUES($1,$2,$3,$2,'TEST owned role fixture')`, [randomUUID(), userId, role]);
+      } finally { await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation"); }
+    }
+    const auth = new PostgresAuthStore(database, "corp");
+    const user = (userId: string) => auth.upsertIdentity({ corpId: "corp", userId: `TEST-${userId}`, unionId: `TEST-union-${userId}`,
+      active: true, employed: true, displayName: "TEST仓库角色" });
+    const supervisor = await user(supervisorId), mixed = await user(mixedId), receiver = await user(receiverId);
+    expect(supervisor.businessRoles).toEqual(["warehouse_supervisor"]);
+    expect(supervisor.capabilities).toEqual(["cutting:orders:view", "receiving:create", "receiving:packing_manage", "tools:user"]);
+    const actor = (capability: string): TrustedActorContext => ({ actorId: supervisorId, actorRoles: supervisor.businessRoles!,
+      authorizationCapability: capability, authorizationCapabilities: supervisor.capabilities, requestId: randomUUID() });
+    expect((await database.query("SELECT cutting_authorized_roles($1,'cutting:orders:view') roles", [supervisorId])).rows[0].roles).toEqual(["warehouse_supervisor"]);
+    expect((await database.query("SELECT receiving_authorized_board_operator($1,'receiving:packing_manage') roles", [supervisorId])).rows[0].roles).toEqual(["warehouse_supervisor"]);
+    for (const [functionName, capability, id] of [
+      ["cutting_authorized_roles", "cutting:records:create", supervisorId],
+      ["cutting_authorized_roles", "cutting:records:correct", supervisorId],
+      ["cutting_authorized_roles", "cutting:orders:view", receiverId],
+      ["receiving_authorized_board_operator", "receiving:resolve_difference", supervisorId],
+    ]) await expect(database.query(`SELECT ${functionName}($1,$2)`, [id, capability])).rejects.toMatchObject({ code: "42501" });
+    const detail = await cutting.get(actor("cutting:orders:view"), order.cuttingOrderId);
+    expect(detail).toMatchObject({ canRecord: false, canCorrect: false, record: null });
+    expect((await cutting.list(actor("cutting:orders:view"), { q: "WAREHOUSE-SUPERVISOR" })).items.map(item => item.cuttingOrderId)).toContain(order.cuttingOrderId);
+    expect(JSON.stringify(detail)).not.toMatch(/daxingUnitPrice|unitPrice|totalAmount|bankAccount/);
+    await expect(cutting.record({ ...actor("cutting:records:create"), authorizationCapabilities: ["cutting:records:create"] }, order.cuttingOrderId,
+      { pieceCount: 100, actualCutCount: 2020, attachmentIds: [randomUUID()] }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
 
+    let httpUser = supervisor;
+    const upload = vi.spyOn(attachments, "createUploadIntent").mockResolvedValue({ attachmentId: randomUUID(), objectKey: "TEST/sheet.png", uploadMethod: "POST", uploadUrl: "https://example.invalid/TEST", uploadFields: {}, expiresAt: new Date().toISOString() });
+    const app = Fastify();
+    app.setErrorHandler((error, _request, reply) => reply.code(error instanceof ApplicationError ? error.statusCode : 500).send({ error: { message: error.message } }));
+    registerCuttingRoutes(app, { authenticate: async () => httpUser, service: cutting, attachments });
+    registerReceivingRoutes(app, { authenticate: async () => httpUser, service: receiving });
+    try {
+      expect((await app.inject({ method: "GET", url: "/cutting/orders?q=WAREHOUSE-SUPERVISOR" })).statusCode).toBe(200);
+      expect((await app.inject({ method: "GET", url: `/cutting/orders/${order.cuttingOrderId}` })).json()).toMatchObject({ canRecord: false, canCorrect: false });
+      const uploadBody = { filename: "TEST.png", mimeType: "image/png", sizeBytes: 128, sha256: "a".repeat(64) };
+      for (const [suffix, payload] of [
+        ["records", { pieceCount: 100, actualCutCount: 2020, attachmentIds: [randomUUID()] }],
+        ["corrections", { expectedVersion: 1, pieceCount: 100, actualCutCount: 2020, reason: "TEST forged" }],
+        ["attachments/upload-intents", uploadBody],
+      ] as const) { const response=await app.inject({ method: "POST", url: `/cutting/orders/${order.cuttingOrderId}/${suffix}`, headers: { "idempotency-key": randomUUID() }, payload }); expect(response.statusCode, suffix+": "+response.body).toBe(403); }
+      expect(upload).not.toHaveBeenCalled();
+      expect((await app.inject({ method: "GET", url: "/receiving/board/export" })).statusCode).toBe(403);
+      httpUser = receiver;
+      expect((await app.inject({ method: "GET", url: "/cutting/orders" })).statusCode).toBe(403);
+      httpUser = mixed;
+      expect((await app.inject({ method: "GET", url: `/cutting/orders/${order.cuttingOrderId}` })).json()).toMatchObject({ canRecord: true, canCorrect: false });
+      expect((await app.inject({ method: "POST", url: `/cutting/orders/${order.cuttingOrderId}/attachments/upload-intents`, payload: uploadBody })).statusCode).toBe(201);
+      expect(upload).toHaveBeenCalledOnce();
+      expect((await database.query("SELECT cutting_authorized_roles($1,'cutting:records:create') roles", [mixedId])).rows[0].roles).toEqual(["cutting_worker", "warehouse_supervisor"]);
+      const sheet = await readyCuttingSheet(mixedId);
+      expect((await app.inject({ method: "POST", url: `/cutting/orders/${order.cuttingOrderId}/records`, headers: { "idempotency-key": randomUUID() },
+        payload: { pieceCount: 100, actualCutCount: 2020, attachmentIds: [sheet] } })).statusCode).toBe(201);
+      httpUser = supervisor;
+      const recorded = (await app.inject({ method: "GET", url: `/cutting/orders/${order.cuttingOrderId}` })).json();
+      expect(recorded).toMatchObject({ canRecord: false, canCorrect: false, record: { actualCutCount: 2020, recordedBy: mixedId } });
+      expect(recorded.record.cuttingSheetPhotos[0].attachmentId).toBe(sheet);
+      expect(await cutting.canDownload(actor("cutting:orders:view"), { entityType: "cutting_record", entityId: recorded.record.cuttingRecordId, mimeType: "image/png" })).toBe(true);
+      const receiptPhoto = await readyCuttingSheet(supervisorId);
+      const receipt = await app.inject({ method: "POST", url: "/receiving/receipts", headers: { "idempotency-key": randomUUID() },
+        payload: { cuttingOrderId: order.cuttingOrderId, documentQuantity: 20, actualQuantity: 19, defectiveQuantity: 1, attachmentIds: [receiptPhoto] } });
+      expect(receipt.statusCode, receipt.body).toBe(201);
+      const receiptData = receipt.json();
+      expect(receiptData.receivedBy).toBe(supervisorId);
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+      const board = await receiving.board(today, today, "TEST-WAREHOUSE-SUPERVISOR");
+      const row = board.rows.find(item => item.receivingBatchId === receiptData.receivingBatchId)!;
+      const packing = await app.inject({ method: "POST", url: `/receiving/batches/${row.receivingBatchId}/packing-revisions`, headers: { "idempotency-key": randomUUID() },
+        payload: { expectedVersion: row.version, expectedPackingRevisionId: null, packingQuantity: 19 } });
+      expect(packing.statusCode, packing.body).toBe(201);
+      expect((await app.inject({ method: "POST", url: `/receiving/batches/${row.receivingBatchId}/packing-revisions`, headers: { "idempotency-key": randomUUID() },
+        payload: { expectedVersion: row.version, expectedPackingRevisionId: packing.json().packingRevisionId, packingQuantity: 20 } })).statusCode).toBe(403);
+      expect((await app.inject({ method: "POST", url: `/receiving/batches/${row.receivingBatchId}/difference-resolutions`, payload: {
+        expectedVersion: row.version, expectedDocumentQuantity: 20, expectedActualQuantity: 19,
+        differenceType: "receiving", result: "TEST forged", attachmentIds: [],
+      } })).statusCode).toBe(403);
+      expect((await database.query("SELECT 1 FROM cutting_record_corrections WHERE cutting_record_id=$1", [recorded.record.cuttingRecordId])).rowCount).toBe(0);
+      await database.query("UPDATE identity_mappings SET active=false WHERE user_id=$1", [supervisorId]);
+      for (const [functionName, capability] of [["cutting_authorized_roles", "cutting:orders:view"], ["receiving_authorized_board_operator", "receiving:packing_manage"]])
+        await expect(database.query(`SELECT ${functionName}($1,$2)`, [supervisorId, capability])).rejects.toMatchObject({ code: "42501" });
+    } finally { await app.close(); upload.mockRestore(); }
+  });
 });

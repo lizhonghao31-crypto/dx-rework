@@ -17,7 +17,14 @@ describe("web refresh policy", () => {
     const dashboard = await readFile(`${root}/production-dashboard-page.tsx`, "utf8");
     expect(dashboard).toContain(displayClock);
     expect(displayClock).not.toMatch(/fetch|load\(|request\(|dispatchEvent|location/);
-    const source = queueSources.join("\n").replace(displayClock, "");
+    // Explicit logout admits/restores identity at the application root; it does
+    // not introduce background business-queue refresh.
+    const auth = await readFile(`${root}/auth.tsx`, "utf8");
+    const admission = auth.match(/export function SessionBoundary[\s\S]*?(?=\nexport function AuthGate)/)?.[0];
+    expect(admission).toBeDefined();
+    expect(admission).toContain("verifySession(true)");
+    expect(admission).not.toMatch(/fetch\(|todos\/|setInterval|dispatchEvent/);
+    const source = queueSources.join("\n").replace(displayClock, "").replace(admission!, "");
     expect(source).not.toContain("window.setInterval");
     expect(source).not.toContain('window.addEventListener("focus"');
     expect(source).not.toContain('document.addEventListener("visibilitychange"');
