@@ -26,6 +26,10 @@ function rememberCookie(key: string, value: string | null): void {
 
 export function logoutMarker(): string | null {
   if (typeof window === "undefined") return memoryMarker;
+  // The path-scoped cookie also carries a newer sibling intent when storage
+  // writes fail and this tab still holds an older sessionStorage marker.
+  const shared = cookieMarker(logoutStorageKey);
+  if (shared !== null) return shared;
   try {
     const stored = window.localStorage.getItem(logoutStorageKey);
     if (!localWriteFailed && stored !== null) return stored;
@@ -34,7 +38,7 @@ export function logoutMarker(): string | null {
   catch { return cookieMarker(logoutStorageKey) ?? memoryMarker; }
 }
 
-function remember(marker: string | null, notify = true): void {
+function remember(marker: string | null, notify = true, forceNotify = false): void {
   const previous = logoutMarker();
   memoryMarker = marker;
   rememberCookie(logoutStorageKey, marker);
@@ -45,7 +49,7 @@ function remember(marker: string | null, notify = true): void {
       if (storage === "localStorage") localWriteFailed = false;
     } catch { if (storage === "localStorage") localWriteFailed = true; }
   }
-  if (notify && previous !== marker) for (const listener of listeners) listener();
+  if (notify && (forceNotify || previous !== marker)) for (const listener of listeners) listener();
 }
 
 export function markLoggedOut(): string {
@@ -67,6 +71,7 @@ export function completeExplicitLogin(expectedMarker: string | null): boolean {
   // Only sibling tabs recheck via storage; an old-page request would be aborted
   // by replacement and could incorrectly recreate the logout marker.
   remember(null, false);
+  if (expectedMarker) channel?.postMessage({ kind: "login-completed", expectedMarker });
   return true;
 }
 
@@ -127,6 +132,12 @@ function changed(event: StorageEvent): void {
 }
 
 function broadcast(event: MessageEvent<unknown>): void {
+  if (typeof event.data === "object" && event.data !== null && "kind" in event.data && event.data.kind === "login-completed") {
+    if ("expectedMarker" in event.data && typeof event.data.expectedMarker === "string" && logoutMarker() === event.data.expectedMarker) {
+      clearLoginIntent(); remember(null);
+    }
+    return;
+  }
   if (typeof event.data !== "object" || event.data === null || !("marker" in event.data)
     || typeof event.data.marker !== "string") return;
   // Shared storage is authoritative when available; the channel supplies logout
@@ -137,5 +148,5 @@ function broadcast(event: MessageEvent<unknown>): void {
     if (marker === null && (window.localStorage.getItem(completedKey) ?? cookieMarker(completedKey)) !== event.data.marker) marker = event.data.marker;
   }
   catch { marker = event.data.marker; }
-  if (marker) { clearLoginIntent(); remember(marker); }
+  if (marker) { clearLoginIntent(); remember(marker, true, true); }
 }

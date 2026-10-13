@@ -257,7 +257,8 @@ function MobilePrimaryNavigation({
           />
         </div>
       ))}
-      {moreNavigation.length || financeGroup.entries.length ? (
+      {/* Logout keeps this existing account surface reachable even without overflow links. */}
+      {
         <details className="mobile-primary-navigation__more">
           <summary aria-label="更多导航">
             <span className={"mobile-primary-navigation__more-trigger" + (moreIsActive ? " is-active" : "")}>
@@ -271,7 +272,7 @@ function MobilePrimaryNavigation({
             <LogoutButton mobile />
           </div>
         </details>
-      ) : null}
+      }
     </nav>
   );
 }

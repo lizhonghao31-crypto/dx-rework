@@ -15,7 +15,7 @@ try{
  await build({configFile:false,esbuild:{jsx:'automatic'},define:{'import.meta.env.BASE_URL':'"/"','process.env.NODE_ENV':'"production"'},build:{outDir:output,lib:{entry:resolve('tests/fixtures/session-logout.tsx'),name:'LogoutFixture',formats:['iife']}}});
  const files=await readdir(output),js=await readFile(join(output,files.find(n=>n.endsWith('.js'))),'utf8'),css=await readFile(join(output,files.find(n=>n.endsWith('.css'))),'utf8');
  const html='<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+css+'</style><div id="root"></div><script>'+js.replace(/<\/script/gi,'<\\/script')+'</script></html>';
- const user=role=>({status:'authorized',user:{id:'TEST-'+role,displayName:'TEST '+role,capabilities:role==='root'?['todo:view']:['sourcing:view','todo:view'],isRoot:role==='root',businessRoles:role==='root'?['root_superuser']:['order_merchandiser']}});
+ const user=role=>({status:'authorized',user:{id:'TEST-'+role,displayName:'TEST '+role,capabilities:role==='root'||role==='worker'?['todo:view']:['sourcing:view','todo:view'],isRoot:role==='root',businessRoles:role==='root'?['root_superuser']:role==='worker'?['worker']:['order_merchandiser']}});
  server=createServer((request,response)=>{
   const url=new URL(request.url,'http://localhost'),cookies=Object.fromEntries((request.headers.cookie||'').split(';').filter(Boolean).map(c=>c.trim().split('=')));
   const sid=cookies.test_session,role=cookies.test_role||'root';
@@ -102,6 +102,17 @@ try{
   while(counts.logout<beforeLogout+2)await b.waitForTimeout(10);
   assert.equal(await a.evaluate(()=>fetch('/api/auth/me').then(response=>response.status)),401);
   results.push({scenario:'late-login-response-revoked-after-sibling-logout'});await ctx.close();
+ }
+ {
+  const ctx=await context('worker',true),page=await open(ctx);await page.getByLabel('更多导航').click();
+  assert.equal(await page.locator('.mobile-primary-navigation__drawer').getByRole('link').count(),0);
+  await page.getByRole('button',{name:'退出登录',exact:true}).filter({visible:true}).click();await page.getByRole('heading',{name:'已退出登录'}).waitFor();results.push({scenario:'worker-empty-overflow-logout-reachable'});await ctx.close();
+ }
+ {
+  const ctx=await context('root',true);await ctx.addInitScript(()=>{const write=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(this===localStorage)throw new Error('TEST persistent storage blocked');return write.call(this,key,value);};});
+  const a=await open(ctx),b=await open(ctx);await logout(a,true);await b.getByRole('heading',{name:'已退出登录'}).waitFor();
+  const before=counts.dd;await a.getByRole('button',{name:'重新登录',exact:true}).click();await protectedAgain(a);await protectedAgain(b);assert.equal(counts.dd,before+1);
+  results.push({scenario:'fallback-sibling-explicit-login-broadcast-fresh-admission'});await ctx.close();
  }
  if(evidence)await writeFile(join(evidence,'browser-result.json'),JSON.stringify({results,counts},null,2));console.log(JSON.stringify({success:true,results,counts}));
 }finally{await browser?.close();await new Promise(resolve=>server?server.close(resolve):resolve());await rm(output,{recursive:true,force:true});}
