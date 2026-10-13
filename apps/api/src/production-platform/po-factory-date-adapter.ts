@@ -145,3 +145,34 @@ async function loadOriginalHeader(db:Db,documentId:string):Promise<string> {
 export async function editFactoryPoDates(db:Db,actor:TrustedActorContext,caseId:string,eventId:string,changes:Parameters<typeof activate>[5]) {
   await activate(db,actor,caseId,eventId,"Root通过原修改合同内容逐 PO 修订工厂交期",changes);
 }
+
+// Freeze only an explicitly requested transfer date. Omitted dates preserve each PO promise.
+export async function prepareTransferPoDates(db:Db,caseId:string,date:string,positions:readonly number[]) {
+  const lines=await factoryPoLines(db,caseId);if(!lines)return undefined;
+  const selected=lines.filter(row=>positions.includes(row.position));
+  const send=(await db.query("SELECT estimated_cut_piece_send_date::text AS send FROM sourcing_case_facts_at($1)",[caseId])).rows[0]?.send;
+  if(!selected.length)conflict("转入款色缺少 PO 关联");
+  for(const row of selected)if(!z.iso.date().safeParse(date).success || send && date<send || row.customer && date>row.customer)
+    conflict("转厂工厂交期不能早于裁片发出或晚于对应客户仓到货");
+  return selected.map(row=>({lineId:row.line_id,position:row.position,date,expectedVersion:Number(row.factory_date_version),oldDate:row.factory}));
+}
+export async function approveTransferPoDates(db:Db,actor:TrustedActorContext,caseId:string,requestId:string,eventId:string,reason:string) {
+  const basis=(await db.query(`SELECT event.after_state FROM sourcing_factory_change_requests request
+    JOIN operation_events event ON event.event_id=request.operation_event_id
+    WHERE request.factory_change_request_id=$1 AND request.sourcing_case_id=$2`,[requestId,caseId])).rows[0]?.after_state;
+  if(!basis?.transferPoDates)return;
+  const lines=await factoryPoLines(db,caseId);if(!lines)conflict("转厂 PO 关联已变化");
+  const positions=(await db.query(`SELECT line.position FROM sourcing_decision_lines line JOIN sourcing_decisions decision USING(sourcing_decision_id)
+    WHERE decision.source_change_request_id=$1`,[requestId])).rows.map(row=>row.position);
+  const changes=[];
+  const send=(await db.query("SELECT estimated_cut_piece_send_date::text AS send FROM sourcing_case_facts_at($1)",[caseId])).rows[0]?.send;
+  for(const row of lines.filter(row=>positions.includes(row.position))){
+    const frozen=basis.transferPoDates.find((item:{lineId:string})=>item.lineId===row.line_id);
+    if(!frozen || frozen.position!==row.position || frozen.expectedVersion!==Number(row.factory_date_version) || frozen.oldDate!==row.factory)
+      conflict("PO 工厂交期已变化，请驳回后重新发起转厂");
+    if(frozen.date!==basis.deliveryDate || !z.iso.date().safeParse(frozen.date).success || send && frozen.date<send || row.customer && frozen.date>row.customer)
+      conflict("转厂交期已与当前裁片发出或客户仓日期冲突，请驳回后重新申请");
+    if(frozen.date!==row.factory)changes.push({...frozen});
+  }
+  await activate(db,actor,caseId,eventId,reason,changes);
+}

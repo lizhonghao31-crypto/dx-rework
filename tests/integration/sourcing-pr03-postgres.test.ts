@@ -4815,4 +4815,160 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(await before()).toEqual(frozen);
   });
 
+  const reviewedContractCase = async (label: string, currentService = service) => {
+    const id=(await currentService.createCase(merchandiserActor(),{gender:"女装",styleName:"TEST-"+label,
+      estimatedCutPieceSendDate:"2026-10-04",deliveryDate:"2026-10-22",
+      lineItems:[{styleNo:"TEST-"+label,color:"蓝",quantity:2020}],daxingUnitPrice:"8",attachmentIds:[]},randomUUID())).value.sourcingCaseId;
+    await currentService.quoteIePrice(ieActor(),id,{unitPrice:"15.5"},randomUUID());
+    await currentService.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],unitPrice:"15.5"},randomUUID());
+    await currentService.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    return id;
+  };
+
+  it("keeps historical finance and signed PDFs while Root edits an unreviewed transfer contract and finance reviews its new version",async()=>{
+    const id=await reviewedContractCase("VERSION-REVIEW");
+    const old=(await contractService.getCurrent(rootActor(),id)).item!;
+    const file=randomUUID();
+    await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'TEST-signed.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[file,`TEST-version-return/${file}`,"a".repeat(64),merchandiserId]);
+    await contractReturns.submit(contractActor(),id,[file],randomUUID());
+    await service.recordFinanceReconciliation(financeActor(),id,{result:"match"},randomUUID());
+    const history=(await database.query("SELECT * FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1",[id])).rows;
+    const returns=(await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[id])).rows;
+    const oldRow=(await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[old.sourcingContractDocumentId])).rows[0];
+    expect((await contractService.getCurrent(rootActor(),id)).item?.canEditContent).toBe(false);
+    await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"15.5",changeReason:"TEST-original fault chain"},randomUUID());
+    const transfer=(await contractService.getCurrent(rootActor(),id)).item!;
+    expect(transfer.canEditContent).toBe(true);
+    expect((await service.getCase(readerActor(),id)).status).toBe("pending_finance_reconciliation");
+    const draft=await contractService.content.get(rootActor(),id);
+    const input={...draft,content:{...draft.content,deliveryDate:"2026-10-30"}};
+    const key=randomUUID();
+    const [document,retry]=await Promise.all([contractService.content.save(rootActor(),id,input,key),contractService.content.save(rootActor(),id,input,key)]);
+    expect(document).toBe(retry);
+    await contractService.generateIfReady(rootActor(),id,document);
+    expect((await service.getCase(readerActor(),id))).toMatchObject({status:"pending_finance_reconciliation",deliveryDate:"2026-10-30"});
+    expect((await contractService.content.get(rootActor(),id)).content.deliveryDate).toBe("2026-10-30");
+    expect((await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id))).toMatchObject({currentContractReturned:false,signedContractDocumentId:old.sourcingContractDocumentId});
+    expect((await database.query("SELECT * FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1",[id])).rows).toEqual(history);
+    expect((await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[id])).rows).toEqual(returns);
+    expect((await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[old.sourcingContractDocumentId])).rows[0]).toEqual(oldRow);
+    for(const user of [contractActor(),managerActor(),financeActor()]) await expect(contractService.content.get(user,id)).rejects.toMatchObject({statusCode:403});
+    await service.recordFinanceReconciliation(financeActor(),id,{result:"match"},randomUUID());
+    const finance=(await database.query("SELECT * FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1 ORDER BY reconciliation_version",[id])).rows;
+    expect(finance).toHaveLength(2);expect(finance[0]).toEqual(history[0]);
+    expect(finance[1].sourcing_contract_document_id).toBe(document);
+    expect((await contractService.getCurrent(rootActor(),id)).item?.canEditContent).toBe(false);
+    await expect(contractService.content.get(rootActor(),id)).rejects.toMatchObject({statusCode:403});
+  });
+
+  it("applies transfer delivery with production or Root authority, preserves unchanged clients, and rejects forged or invalid dates",async()=>{
+    const id=await reviewedContractCase("TRANSFER-DELIVERY");
+    for(const user of [factoryChangeActor(),ownerActor()]) await expect(service.requestFactoryChange(user,id,
+      {supplierId:replacementFactoryId,unitPrice:"15.5",deliveryDate:"2026-10-30",changeReason:"TEST-denied"},randomUUID())).rejects.toMatchObject({statusCode:403});
+    for(const date of ["2026-02-30","2026-10-03"]) await expect(service.requestFactoryChange(managerActor(),id,
+      {supplierId:replacementFactoryId,unitPrice:"15.5",deliveryDate:date,changeReason:"TEST-invalid"},randomUUID())).rejects.toMatchObject({code:"VALIDATION_ERROR"});
+    const key=randomUUID(),input={supplierId:replacementFactoryId,unitPrice:"15.5",deliveryDate:"2026-10-30",changeReason:"TEST-delivery"};
+    await Promise.all([service.requestFactoryChange(managerActor(),id,input,key),service.requestFactoryChange(managerActor(),id,input,key)]);
+    expect((await service.getCase(readerActor(),id))).toMatchObject({deliveryDate:"2026-10-30",status:"pending_finance_reconciliation",approvalSnapshot:{deliveryDate:"2026-10-30"}});
+    expect((await contractService.content.get(rootActor(),id)).content.deliveryDate).toBe("2026-10-30");
+    expect((await database.query("SELECT count(*)::int AS count FROM sourcing_factory_change_requests WHERE sourcing_case_id=$1",[id])).rows[0].count).toBe(1);
+    await service.requestFactoryChange(ownerActor(),id,{supplierId:factoryId,unitPrice:"15.5",changeReason:"TEST-old client no date"},randomUUID());
+    expect((await service.getCase(readerActor(),id)).deliveryDate).toBe("2026-10-30");
+    await service.requestFactoryChange({...rootActor(),authorizationCapability:"sourcing:owner:approve"},id,
+      {supplierId:replacementFactoryId,unitPrice:"15.5",deliveryDate:"2026-11-02",changeReason:"TEST-root date"},randomUUID());
+    expect((await service.getCase(readerActor(),id)).approvalSnapshot?.deliveryDate).toBe("2026-11-02");
+  });
+
+  it("freezes increased-price delivery proposals until owner approval, keeps rejected dates inactive and rejects changed contract bases",async()=>{
+    const id=await reviewedContractCase("DELIVERY-APPROVAL");
+    const old=(await contractService.getCurrent(rootActor(),id)).item!;
+    await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"16",deliveryDate:"2026-10-30",changeReason:"TEST-price approval"},randomUUID());
+    const request=(await service.getCurrentFactoryChange(readerActor(),id)).item!;
+    expect(request).toMatchObject({status:"pending_owner",requiresOwnerApproval:true,proposedDeliveryDate:"2026-10-30",changesDeliveryDate:true});
+    expect((await service.getCase(readerActor(),id)).deliveryDate).toBe("2026-10-22");
+    expect((await contractService.getCurrent(rootActor(),id)).item?.sourcingContractDocumentId).toBe(old.sourcingContractDocumentId);
+    await service.decideFactoryChange(ownerActor(),id,request.factoryChangeRequestId,{decision:"rejected",verificationReason:"TEST-reject"},randomUUID());
+    expect((await service.getCase(readerActor(),id)).deliveryDate).toBe("2026-10-22");
+    await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"16",deliveryDate:"2026-10-30",changeReason:"TEST-approve"},randomUUID());
+    const next=(await service.getCurrentFactoryChange(readerActor(),id)).item!;
+    await service.decideFactoryChange(ownerActor(),id,next.factoryChangeRequestId,{decision:"approved",verificationReason:"TEST-approved"},randomUUID());
+    expect((await service.getCase(readerActor(),id))).toMatchObject({deliveryDate:"2026-10-30",approvalSnapshot:{deliveryDate:"2026-10-30"}});
+    await service.requestFactoryChange(managerActor(),id,{supplierId:factoryId,unitPrice:"17",deliveryDate:"2026-11-01",changeReason:"TEST-stale"},randomUUID());
+    const stale=(await service.getCurrentFactoryChange(readerActor(),id)).item!;
+    const draft=await contractService.content.get(rootActor(),id);
+    const doc=await contractService.content.save(rootActor(),id,{...draft,content:{...draft.content,deliveryDate:"2026-11-02"}},randomUUID());
+    await contractService.generateIfReady(rootActor(),id,doc);
+    await expect(service.decideFactoryChange(ownerActor(),id,stale.factoryChangeRequestId,{decision:"approved",verificationReason:"TEST-stale rejected"},randomUUID())).rejects.toMatchObject({statusCode:409});
+    expect((await service.getCase(readerActor(),id)).deliveryDate).toBe("2026-11-02");
+  });
+
+  it("reopens financial review and creates one real finance todo when a fresh unreviewed revision was on a closed order",async()=>{
+    const {projection}=await cycleTodoServices();
+    const contracts=new SourcingContractService(database,attachments,undefined,undefined,projection);
+    const currentService=new SourcingService(database,undefined,undefined,projection,contracts);
+    const id=await reviewedContractCase("CLOSED-FRESH",currentService);
+    await currentService.recordFinanceReconciliation(financeActor(),id,{result:"match"},randomUUID());
+    await currentService.reviseStyles(merchandiserActor(),id,{expectedRevision:0,lines:[{position:1,styleNo:"TEST-CLOSED-FRESH-REV",alternateStyleNo:null}]},randomUUID());
+    expect((await currentService.getCase(readerActor(),id)).status).toBe("closed");
+    const draft=await contracts.content.get(rootActor(),id);
+    const key=randomUUID(),input={...draft,content:{...draft.content,deliveryDate:"2026-10-30"}};
+    const [doc,retry]=await Promise.all([contracts.content.save(rootActor(),id,input,key),contracts.content.save(rootActor(),id,input,key)]);
+    expect(retry).toBe(doc);await contracts.generateIfReady(rootActor(),id,doc);
+    expect((await currentService.getCase(readerActor(),id)).status).toBe("pending_finance_reconciliation");
+    const todos=(await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 AND category='sourcing_finance_reconcile' AND status='pending'",[id])).rows;
+    expect(todos).toHaveLength(1);expect(todos[0].dedupe_key).toContain(doc);
+    await currentService.recordFinanceReconciliation(financeActor(),id,{result:"match"},randomUUID());
+    expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1",[todos[0].todo_id])).rows[0].status).toBe("completed");
+  });
+
+  it("keeps reviewed PO history while an approved transfer activates only its frozen factory dates",async()=>{
+    const fixture=await budgetFixture(true),orderId=fixture.order.productionOrderId;
+    await fixture.budget.save(fixture.designer,orderId,{expectedVersion:0,document:fixture.document},randomUUID());
+    await fixture.budget.publish(fixture.designer,orderId,1,randomUUID());
+    const prepared=await fixture.budget.prepareSourcing(merchandiserActor(),orderId,1,attachments);
+    const dates=["2026-11-05","2026-11-08","2026-11-11"];
+    const created=(await service.createCase(merchandiserActor(),{gender:prepared.gender,styleName:prepared.styleName,
+      deliveryDate:dates[0]!,estimatedCutPieceSendDate:"2026-10-20",daxingUnitPrice:prepared.daxingUnitPrice,
+      attachmentIds:prepared.images.map(image=>image.attachmentId),lineItems:prepared.lineItems.map((line,index)=>({
+        lineId:line.lineId,styleNo:line.styleNo,alternateStyleNo:line.alternateStyleNo,color:line.color,quantity:line.quantity,factoryDeliveryDate:dates[index]!})),
+      digitalBudget:{productionOrderId:orderId,budgetVersion:prepared.budgetVersion,orderVersion:prepared.orderVersion}},randomUUID())).value;
+    const id=created.sourcingCaseId,prices=prepared.lineItems.map((_,index)=>({position:index+1,unitPrice:"5.50"}));
+    await service.quoteIePrice(ieActor(),id,{linePrices:prices},randomUUID());
+    await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:prices,cuttingProcess:"in_house"},randomUUID());
+    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    const old=(await contractService.getCurrent(rootActor(),id)).item!;
+    await service.recordFinanceReconciliation(financeActor(),id,{result:"match"},randomUUID());
+    const history=(await database.query("SELECT * FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1",[id])).rows;
+    const poDates=async()=>(await database.query("SELECT line_id,factory_delivery_date::text AS factory,customer_warehouse_arrival_date::text AS customer,factory_date_version FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position",[orderId])).rows;
+    const original=await poDates();
+    await expect(service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"5.50",deliveryDate:"2026-11-21",changeReason:"TEST customer bounds"},randomUUID())).rejects.toMatchObject({statusCode:409});
+    await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"5.50",changeReason:"TEST omitted date keeps mixed PO"},randomUUID());
+    expect(await poDates()).toEqual(original);
+    const rootDraft=await contractService.content.get(rootActor(),id);
+    const rootInput={...rootDraft,poFactoryDates:rootDraft.poFactoryDates!.map((row,index)=>index===1?{...row,factoryDeliveryDate:"2026-11-09"}:row),
+      content:{...rootDraft.content,lines:rootDraft.content.lines.map((row,index)=>index===1?{...row,deliveryDate:"2026-11-09"}:row)}};
+    const revised=await contractService.content.save(rootActor(),id,rootInput,randomUUID());
+    await contractService.generateIfReady(rootActor(),id,revised);
+    expect((await poDates()).map(row=>row.factory)).toEqual([dates[0],"2026-11-09",dates[2]]);
+    const before=await poDates();
+    await service.requestFactoryChange(managerActor(),id,{supplierId:factoryId,unitPrice:"6",deliveryDate:"2026-11-15",changeReason:"TEST freeze until owner"},randomUUID());
+    const pending=(await service.getCurrentFactoryChange(readerActor(),id)).item!;
+    expect(await poDates()).toEqual(before);
+    const key=randomUUID();
+    await service.decideFactoryChange(ownerActor(),id,pending.factoryChangeRequestId,{decision:"approved",verificationReason:"TEST activate proposal"},key);
+    expect((await service.decideFactoryChange(ownerActor(),id,pending.factoryChangeRequestId,{decision:"approved",verificationReason:"TEST activate proposal"},key)).reused).toBe(true);
+    const active=await poDates();expect(active.map(row=>row.factory)).toEqual(Array(3).fill("2026-11-15"));
+    expect(active.map(row=>row.customer)).toEqual(original.map(row=>row.customer));
+    const contract=(await contractService.getCurrent(rootActor(),id)).item!;
+    const content=await contractService.content.get(rootActor(),id);
+    expect(content.content.deliveryDate).toBe("2026-11-15");expect(content.content.lines.map(row=>row.deliveryDate)).toEqual(Array(3).fill("2026-11-15"));
+    expect((await service.getCase(readerActor(),id)).approvalSnapshot?.deliveryDate).toBe("2026-11-15");
+    expect((await database.query("SELECT * FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1",[id])).rows).toEqual(history);
+    expect((await database.query("SELECT approval_snapshot FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[old.sourcingContractDocumentId])).rows[0].approval_snapshot.lines.map((row:{deliveryDate:string})=>row.deliveryDate)).toEqual(dates);
+    await service.recordFinanceReconciliation(financeActor(),id,{result:"match"},randomUUID());
+    expect((await contractService.getCurrent(rootActor(),id)).item?.canEditContent).toBe(false);
+    expect((await database.query("SELECT sourcing_contract_document_id FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1 ORDER BY reconciliation_version DESC LIMIT 1",[id])).rows[0].sourcing_contract_document_id).toBe(contract.sourcingContractDocumentId);
+  });
+
 });

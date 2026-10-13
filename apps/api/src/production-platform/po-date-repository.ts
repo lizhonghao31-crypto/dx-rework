@@ -38,9 +38,9 @@ export class DigitalPoDateRepository {
       await this.db.query(`SELECT s.sourcing_case_id FROM sourcing_cases s JOIN digital_production_child_links link
         ON link.module='sourcing' AND link.child_id=s.sourcing_case_id WHERE link.production_order_id=$1
         ORDER BY s.sourcing_case_id FOR UPDATE OF s`,[orderId]);
-      if ((await this.db.query(`SELECT 1 FROM sourcing_finance_reconciliations finance JOIN digital_production_child_links link
-        ON link.module='sourcing' AND link.child_id=finance.sourcing_case_id WHERE link.production_order_id=$1 LIMIT 1`,[orderId])).rowCount)
-        conflict("财务核对后工厂交期永久锁定");
+      for(const change of changes)if((await this.db.query<{locked:boolean}>(
+        "SELECT sourcing_po_factory_date_locked($1,$2,$3,$4::date) AS locked",[orderId,change.lineId,approvalEventId,change.date])).rows[0]?.locked)
+        conflict("当前合同版本财务核对后工厂交期锁定");
     }
     const order = (await this.db.query("SELECT created_by FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE",[orderId])).rows[0];
     if (!order) conflict("母单不存在");

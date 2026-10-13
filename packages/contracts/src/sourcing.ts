@@ -339,10 +339,16 @@ export const RecordSourcingContractSchema = z.object({
 }).strict();
 
 export const RequestSourcingFactoryChangeSchema = z.object({
+  deliveryDate: BusinessDateSchema.optional(),
   supplierId: IdSchema,
   unitPrice: MoneyInputSchema,
   changeReason: z.string().trim().min(1, "换厂原因不能为空").max(500),
 }).strict();
+
+export const canChangeSourcingTransferDeliveryDate = (actor: {
+  isRoot?: boolean; businessRoles?: readonly string[]; capabilities?: readonly string[];
+}): boolean => actor.isRoot === true || (actor.businessRoles?.includes("production_management") === true
+  && actor.capabilities?.includes("sourcing:decision:record") === true);
 
 export const DecideSourcingFactoryChangeSchema = z.object({
   decision: z.enum(["approved", "rejected"]),
@@ -350,6 +356,8 @@ export const DecideSourcingFactoryChangeSchema = z.object({
 }).strict();
 
 export const SourcingFactoryChangeStateSchema = z.object({
+  proposedDeliveryDate: BusinessDateSchema.nullable().optional(),
+  changesDeliveryDate: z.boolean().optional(),
   factoryChangeRequestId: IdSchema,
   fromDecisionId: IdSchema,
   initiatorRole: z.enum(["order_merchandiser", "production_management", "owner_group"]),

@@ -68,7 +68,7 @@ export function assertMigrationSequence(migrations) {
       throw new Error(`Frozen branch migration checksum drift: ${row.version}`);
     }
     if (prefix === next) next += 1;
-    else if (!(prefix === next - 1 && prefix >= 218 && prefix <= 223
+    else if (!(prefix === next - 1 && prefix >= 218 && prefix <= 224
       && knownByVersion.get(row.version) === row.checksum && counts.get(prefix) === 1)) {
       throw new Error(`Migration sequence gap or unapproved duplicate: expected ${String(next).padStart(4, '0')}, found ${row.version}`);
     }

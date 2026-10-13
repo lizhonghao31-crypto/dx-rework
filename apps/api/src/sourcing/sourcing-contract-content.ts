@@ -1,7 +1,8 @@
 import { contractFactoryState, normalizeFactoryContract, editFactoryPoDates } from "../production-platform/po-factory-date-adapter.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { ContractContentSchema, type ContractContent, type ContractContentState, type SaveContractContent } from "@dx-rework/contracts";
+import { ContractContentSchema, sourcingDatesValid, SOURCING_DATE_ORDER_ERROR, type ContractContent, type ContractContentState, type SaveContractContent } from "@dx-rework/contracts";
+import type { TodoProjectionService } from "../todos/projection-service.js";
 import { ApplicationError } from "../platform/errors.js";
 import { IdempotencyService, OperationEventRepository, type TrustedActorContext } from "../tools/repositories.js";
 import type { AttachmentService } from "../tools/attachments.js";
@@ -58,14 +59,18 @@ export async function hydrateContractContentImages(attachments:AttachmentService
 
 export class SourcingContractContentService {
   constructor(private readonly database:Pool,private readonly attachments:AttachmentService,
-    private readonly idempotency=new IdempotencyService(),private readonly events=new OperationEventRepository()) {}
+    private readonly idempotency=new IdempotencyService(),private readonly events=new OperationEventRepository(),
+    private readonly todos?: Pick<TodoProjectionService,"actionableForAllAssignedRole"|"cancelOpenByDedupePrefix">) {}
   private async current(db:Queryable,actor:TrustedActorContext,caseId:string) {
     assertRoot(actor);
-    const row = (await db.query(`SELECT d.*,EXISTS(SELECT 1 FROM sourcing_finance_reconciliations f WHERE f.sourcing_case_id=d.sourcing_case_id) AS reconciled
+    const row = (await db.query(`SELECT d.*,EXISTS(SELECT 1 FROM sourcing_finance_reconciliations f WHERE f.sourcing_contract_document_id=d.sourcing_contract_document_id) AS reconciled,
+      facts.estimated_cut_piece_send_date::text AS applicable_send_date,workflow.status AS case_status,workflow.version AS case_version
       FROM sourcing_contract_documents d JOIN sourcing_cases s USING(sourcing_case_id)
+      CROSS JOIN LATERAL sourcing_case_facts_at(s.sourcing_case_id) facts
+      JOIN current_sourcing_cases workflow ON workflow.sourcing_case_id=s.sourcing_case_id
       WHERE s.sourcing_case_id=$1 AND s.deleted_at IS NULL ORDER BY d.contract_version DESC LIMIT 1`,[caseId])).rows[0];
     if (!row) throw new ApplicationError("NOT_FOUND","合同不存在",404);
-    if (!canEditContractContent(actor,row.reconciled)) throw new ApplicationError("FORBIDDEN","财务已核对合同，Root也不能修改合同内容",403);
+    if (!canEditContractContent(actor,row.reconciled)) throw new ApplicationError("FORBIDDEN","财务已核对当前合同版本，Root也不能修改合同内容",403);
     if (row.status!=="ready") throw new ApplicationError("INVALID_STATE_TRANSITION","请先完成当前合同生成",409);
     return row;
   }
@@ -116,6 +121,8 @@ export class SourcingContractContentService {
         const row = await this.current(client,actor,caseId);
         if (row.sourcing_contract_document_id!==input.sourcingContractDocumentId || row.snapshot_fingerprint!==input.informationFingerprint)
           throw new ApplicationError("INVALID_STATE_TRANSITION","合同已更新，请重新打开后修改",409);
+        if (!sourcingDatesValid(row.applicable_send_date,input.content.deliveryDate))
+          throw new ApplicationError("VALIDATION_ERROR",SOURCING_DATE_ORDER_ERROR,422);
         await client.query("SELECT sourcing_case_id FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1 FOR UPDATE",[caseId]);
         const templateVersion=Number(row.template_version);
         const id=randomUUID();
@@ -134,6 +141,22 @@ export class SourcingContractContentService {
           templateVersion,approvalSnapshot,actor.actorId,row.identity_version,row.sourcing_contract_document_id,Number(row.information_revision)+1,eventId]);
         await this.images(client,actor,caseId,content,id);
         await client.query("INSERT INTO sourcing_contract_content_overrides(sourcing_contract_document_id,content,operation_event_id) VALUES($1,$2,$3)",[id,content,eventId]);
+        if (["closed","pending_exception_verification"].includes(row.case_status)) {
+          const reason="当前合同版本已修订，需重新财务核对";
+          const reviewActor={...actor,authorizationCapability:"sourcing:contract:record"};
+          const reviewEvent=await this.events.append(client,reviewActor,{action:"sourcing.contract.content.revise",entityType:"sourcing_case",entityId:caseId,
+            before:{status:row.case_status,documentId:row.sourcing_contract_document_id},
+            after:{status:"pending_finance_reconciliation",documentId:id,contractVersion:Number(row.contract_version)+1},reason});
+          await client.query(`INSERT INTO sourcing_case_transitions(sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,business_action,transition_reason,actor_id,operation_event_id,request_id)
+            VALUES($1,$2,$3,$4,'pending_finance_reconciliation','contract_content_revised',$5,$6,$7,$8)`,[randomUUID(),caseId,Number(row.case_version)+1,row.case_status,reason,actor.actorId,reviewEvent,actor.requestId]);
+          await this.todos?.cancelOpenByDedupePrefix(client,reviewActor,`sourcing:${caseId}:finance:`,reason);
+          await this.todos?.cancelOpenByDedupePrefix(client,reviewActor,`sourcing:${caseId}:exception:`,reason);
+          const facts=(await client.query(`SELECT (SELECT decision_version FROM sourcing_decisions WHERE sourcing_decision_id=$1) AS decision_version,
+            COALESCE((SELECT max(reconciliation_version) FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$2),0)+1 AS review_version`,[row.sourcing_decision_id,caseId])).rows[0]!;
+          await this.todos?.actionableForAllAssignedRole(client,reviewActor,{category:"sourcing_finance_reconcile",sourceEventId:reviewEvent,sourceAction:"sourcing.contract.content.revise",entityType:"sourcing_case",entityId:caseId,
+            requiredRole:"factory_payables",requiredCapability:"sourcing:finance:reconcile",route:{routeName:"sourcing_detail",entityId:caseId},policyKey:"general",
+            dedupeKey:`sourcing:${caseId}:finance:${facts.decision_version}:${facts.review_version}:contract:${id}`});
+        }
         return {statusCode:200,response:{documentId:id}};
       });
       await client.query("COMMIT");
@@ -146,6 +169,8 @@ export class SourcingContractContentService {
     try {
       await client.query("BEGIN");
       const row=await this.current(client,actor,caseId);
+      if (!sourcingDatesValid(row.applicable_send_date,input.content.deliveryDate))
+        throw new ApplicationError("VALIDATION_ERROR",SOURCING_DATE_ORDER_ERROR,422);
       if (row.sourcing_contract_document_id!==input.sourcingContractDocumentId || row.snapshot_fingerprint!==input.informationFingerprint)
         throw new ApplicationError("INVALID_STATE_TRANSITION","合同已更新，请重新打开后修改",409);
       const normalized=await normalizeFactoryContract(client,caseId,input);

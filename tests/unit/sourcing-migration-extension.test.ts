@@ -7,9 +7,9 @@ const head:Entry[]=JSON.parse(readFileSync("apps/api/src/platform/migration-mani
 const branches:{main:Entry[];digital:Entry[]}=JSON.parse(readFileSync("scripts/migration-branches.json","utf8"));
 const extension:Entry[]=JSON.parse(readFileSync("scripts/migration-main-extensions.json","utf8"));
 const common=head.slice(0,217);
-const main:Entry[]=[...common,...branches.main,...extension].sort((a,b)=>a.version.localeCompare(b.version));
+const main=[...common,...branches.main,...extension];
 const sorted=(rows:Entry[])=>[...rows].sort((a,b)=>a.version.localeCompare(b.version));
-const markers=head.some(row=>row.version.startsWith("0232_"))?head.filter(row=>Number(row.version.slice(0,4))>231):[{version:"0232_reconcile_contract_and_digital_histories",checksum:"a".repeat(64)},
+const markers=[{version:"0232_reconcile_contract_and_digital_histories",checksum:"a".repeat(64)},
   {version:"0233_manual_contract_template_provenance",checksum:"b".repeat(64)}];
 const release=sorted([...common,...branches.main,...branches.digital,...markers]);
 const merged=sorted([...release,...extension]);
@@ -27,6 +27,8 @@ describe("explicit main extension alongside the existing release migration ident
     expect(merged.filter(r=>r.version.startsWith("0221_"))).toHaveLength(2);
     expect(merged.filter(r=>r.version.startsWith("0222_"))).toHaveLength(2);
     expect(merged.filter(r=>r.version.startsWith("0223_"))).toHaveLength(2);
+    expect(merged.filter(r=>r.version.startsWith("0224_"))).toHaveLength(2);
+    expect(()=>assertMigrationSequence(sorted([...merged,{version:"0224_unapproved",checksum:"0".repeat(64)}]))).toThrow();
   });
   it("preserves every resumable lane prefix while rejecting holes and unknown collisions",()=>{
     for(let m=0;m<=branches.main.length+extension.length;m++)for(let d=0;d<=branches.digital.length;d++){
