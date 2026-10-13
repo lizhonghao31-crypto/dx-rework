@@ -18,5 +18,28 @@
     "languages":["plpgsql"],
     "onlineCompatible":false,
     "rollback":"restart-previous-only-if-entire-history-unchanged"
+  },
+  {
+    "version": "0224_contract_version_review_transfer_delivery",
+    "checksum": "c1005533652409d4b8b912b7399490b7926af417ce3eaf3b9388b46fc424bc53",
+    "strategy": "quiesce-backup-transactional-ddl",
+    "tables": [
+      "public.sourcing_case_transitions"
+    ],
+    "triggerTables": [
+      "public.sourcing_factory_change_requests",
+      "public.sourcing_approval_snapshots"
+    ],
+    "schema": "public",
+    "functions": [
+      "public.guard_sourcing_contract_content_creation()",
+      "public.guard_sourcing_transition_insert()",
+      "public.sourcing_effective_delivery_date(uuid,date,timestamp with time zone)"
+    ],
+    "languages": [
+      "plpgsql"
+    ],
+    "onlineCompatible": false,
+    "rollback": "restart-previous-only-if-entire-history-unchanged"
   }
 ]

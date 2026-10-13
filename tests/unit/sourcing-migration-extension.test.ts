@@ -26,6 +26,8 @@ describe("explicit main extension alongside the existing release migration ident
     expect(merged.filter(r=>r.version.startsWith("0221_"))).toHaveLength(2);
     expect(merged.filter(r=>r.version.startsWith("0222_"))).toHaveLength(2);
     expect(merged.filter(r=>r.version.startsWith("0223_"))).toHaveLength(2);
+    expect(merged.filter(r=>r.version.startsWith("0224_"))).toHaveLength(2);
+    expect(()=>assertMigrationSequence(sorted([...merged,{version:"0224_unapproved",checksum:"0".repeat(64)}]))).toThrow();
   });
   it("preserves every resumable lane prefix while rejecting holes and unknown collisions",()=>{
     for(let m=0;m<=branches.main.length+extension.length;m++)for(let d=0;d<=branches.digital.length;d++){

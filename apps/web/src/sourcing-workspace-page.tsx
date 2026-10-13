@@ -4,7 +4,7 @@ import { SourcingReturnDialog } from "./sourcing-return-dialog.js";
 import { isMerchandiserOnly } from "./sourcing-role-visibility.js";
 import { sourcingContractReturnBadgeLabel, sourcingContractReturnLabel } from "./sourcing-contract-return-presentation.js";
 import { ContractInformationRefresh } from "./contract-information-refresh.js";
-import { sourcingDatesValid, SOURCING_DATE_ORDER_ERROR } from "@dx-rework/contracts";
+import { sourcingDatesValid, SOURCING_DATE_ORDER_ERROR, canChangeSourcingTransferDeliveryDate } from "@dx-rework/contracts";
 import { moduleCanWrite } from "./member-module-policy.js";
 import { todoReturnPath } from "./todo-query-state.js";
 import {WorkAnalysisPanel} from "./work-analysis-panel.js";
@@ -146,7 +146,7 @@ type LinePriceDraft = Readonly<{ position: number; unitPrice: string }>;
 type QuoteDraft = Readonly<{ linePrices: readonly LinePriceDraft[]; quoteReason: string }>;
 type DecisionDraft = Readonly<{ supplierId: string; linePrices: readonly LinePriceDraft[]; decisionReason: string; cuttingProcess: "" | "in_house" | "outsourced" | "other"; cuttingProcessOther: string }>;
 type FinanceReviewDraft = Readonly<{ differenceFields: readonly string[]; differenceReason: string }>;
-type FactoryChangeDraft = Readonly<{ supplierId: string; unitPrice: string; changeReason: string; craftNames?: readonly string[] | undefined }>;
+type FactoryChangeDraft = Readonly<{ supplierId: string; unitPrice: string; changeReason: string; craftNames?: readonly string[] | undefined; deliveryDate?: string | undefined }>;
 type ContractSupplementDraft = Readonly<Partial<Record<SourcingContractMissingField, string>>>;
 
 class SourcingRequestError extends SubmissionRequestError {}
@@ -1228,6 +1228,7 @@ function OrderDetailPage({
         supplierId: current.supplierId,
         unitPrice: current.unitPrice || detail.decision?.unitPrice || "",
         changeReason: current.changeReason,
+        ...(current.deliveryDate !== undefined ? {deliveryDate:current.deliveryDate} : {}),
         ...(current.craftNames ? { craftNames: current.craftNames } : {}),
       }));
       setQuote((current) => ({
@@ -1430,6 +1431,9 @@ function OrderDetailPage({
   const canOwnerTransfer = canOwner;
   const canReviewManagementTransfer = canAct(user, "production_management", "sourcing:factory_change:verify");
   const canFinance = canAct(user, "factory_payables", "sourcing:finance:reconcile");
+  const canChangeTransferDate = canChangeSourcingTransferDeliveryDate(user ?? {});
+  const transferDateError = factoryChangeDraft.deliveryDate === undefined ? "" : !factoryChangeDraft.deliveryDate
+    ? "请选择交货日期" : !sourcingDatesValid(item?.estimatedCutPieceSendDate ?? null,factoryChangeDraft.deliveryDate) ? SOURCING_DATE_ORDER_ERROR : "";
   const hideFinanceForMerchandiser = isMerchandiserOnly(user?.businessRoles,user?.isRoot);
   const canReadContractData = user?.isRoot === true
     || user?.capabilities.includes("supplier_contract_data:read") === true;
@@ -1873,7 +1877,6 @@ function OrderDetailPage({
                       onClick={()=>contractFileInput.current?.click()}>
                       {contractUploading?"正在上传…":contractReturn.attachments.length?"补传回签合同":"上传回签合同"}
                     </button>
-                    <span>可一次传两个，也可分次追加；累计最多 2 个 PDF/JPG/PNG，合计不超过 20 MB</span>
                   </> : null}
                   {(contractReturn.uploadedFileCount ?? contractReturn.attachments.length)>=2 ? <span>已达累计文件上限，已保存附件及历史记录保留</span> : null}
                   {contractReturn.attachments.length ? <div className="sourcing-contract-return-links" aria-label="回签附件，可左右滑动查看更多">
@@ -2008,6 +2011,7 @@ function OrderDetailPage({
               <h2>订单转厂</h2>
               <p><strong>{factoryChange.proposedSupplierName}</strong> · {formatBusinessCurrency(factoryChange.proposedUnitPrice)}/件 · {formatBusinessCurrency(factoryChange.proposedTotalAmount)}。跟单申请，等待生产管理审批。</p>
               {factoryChange.proposedProcesses?.length ? <p>申请工艺：{factoryChange.proposedProcesses.join("、")}</p> : null}
+              {factoryChange.changesDeliveryDate ? <p>申请交货日期：{factoryChange.proposedDeliveryDate}，随转厂批准生效。</p> : null}
               {canReviewManagementTransfer ? <div className="sourcing-factory-change__review">
                 <label><span>审批说明</span><input maxLength={500} value={factoryChangeReviewReason} onChange={(event) => { setFactoryChangeReviewReason(event.target.value); actionKey.current = null; }} /></label>
                 <div><button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/decision`, { decision: "approved", verificationReason: factoryChangeReviewReason.trim() }, factoryChange.requiresOwnerApproval ? "生产管理已通过，转老板审批" : "转厂已生效", true)}>批准转厂</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/decision`, { decision: "rejected", verificationReason: factoryChangeReviewReason.trim() }, "转厂申请已驳回", true)}>驳回</button></div>
@@ -2016,6 +2020,7 @@ function OrderDetailPage({
               <h2>订单转厂</h2>
               <p><strong>{factoryChange.proposedSupplierName}</strong> · {formatBusinessCurrency(factoryChange.proposedUnitPrice)}/件，超过当前单价，等待老板批准。</p>
               {factoryChange.proposedProcesses?.length ? <p>申请工艺：{factoryChange.proposedProcesses.join("、")}</p> : null}
+              {factoryChange.changesDeliveryDate ? <p>申请交货日期：{factoryChange.proposedDeliveryDate}，随转厂批准生效。</p> : null}
               {canOwner ? <div className="sourcing-factory-change__review">
                 <label><span>审批说明</span><input maxLength={500} value={factoryChangeReviewReason} onChange={(event) => { setFactoryChangeReviewReason(event.target.value); actionKey.current = null; }} /></label>
                 <div><button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/owner-decision`, { decision: "approved", verificationReason: factoryChangeReviewReason.trim() }, "老板已批准，转厂生效", true)}>批准转厂</button><button className="dx-button dx-button--secondary" type="button" disabled={busy || !factoryChangeReviewReason.trim()} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/factory-changes/${factoryChange.factoryChangeRequestId}/owner-decision`, { decision: "rejected", verificationReason: factoryChangeReviewReason.trim() }, "老板已驳回转厂", true)}>驳回</button></div>
@@ -2042,8 +2047,12 @@ function OrderDetailPage({
                   <datalist id="sourcing-transfer-craft-options">{craftCatalog.map(craft => <option key={craft.craftId} value={craft.craftName}>{craft.craftCode}</option>)}</datalist>
                   {transferCraftError ? <p id="sourcing-transfer-craft-error" role="status">{transferCraftError}</p> : null}
                 </section> : null}
+                {canChangeTransferDate ? <>
+                  <label className="sourcing-transfer-date-toggle"><input type="checkbox" checked={factoryChangeDraft.deliveryDate !== undefined} onChange={event=>{setFactoryChangeDraft(current=>({...current,deliveryDate:event.target.checked ? item.deliveryDate ?? "" : undefined}));actionKey.current=null;}} /><span>修改交货日期</span></label>
+                  {factoryChangeDraft.deliveryDate !== undefined ? <label><span>转厂后交货日期</span><input type="date" aria-label="转厂后交货日期" aria-describedby={transferDateError ? "sourcing-transfer-date-error" : undefined} required min={item.estimatedCutPieceSendDate ?? undefined} value={factoryChangeDraft.deliveryDate} aria-invalid={Boolean(transferDateError)} onChange={event=>{setFactoryChangeDraft(current=>({...current,deliveryDate:event.target.value}));actionKey.current=null;}} />{transferDateError ? <small id="sourcing-transfer-date-error" role="alert">{transferDateError}</small> : null}</label> : null}
+                </> : null}
                 <label className="sourcing-form-wide"><span>转厂原因</span><input maxLength={500} value={factoryChangeDraft.changeReason} onChange={(event) => { setFactoryChangeDraft({ ...factoryChangeDraft, changeReason: event.target.value }); actionKey.current = null; }} /></label>
-                <button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeDraft.supplierId || !factoryChangeDraft.unitPrice || !factoryChangeDraft.changeReason.trim() || Boolean(transferCraftError)} onClick={() => void submit(transferRequestPath, { supplierId: factoryChangeDraft.supplierId, unitPrice: factoryChangeDraft.unitPrice, changeReason: factoryChangeDraft.changeReason.trim(), ...(factoryChangeDraft.craftNames ? { craftNames: factoryChangeDraft.craftNames.map(name => name.trim()) } : {}) }, transferNodeRole === "owner_group" ? "老板发起的转厂已直接生效" : transferNodeRole === "production_management" && (transferPriceDelta?.startsWith("+") !== true) ? "转厂已生效" : "转厂申请已提交", true)}>提交转厂</button>
+                <button className="dx-button dx-button--primary" type="button" disabled={busy || !factoryChangeDraft.supplierId || !factoryChangeDraft.unitPrice || !factoryChangeDraft.changeReason.trim() || Boolean(transferCraftError) || Boolean(transferDateError)} onClick={() => void submit(transferRequestPath, { supplierId: factoryChangeDraft.supplierId, unitPrice: factoryChangeDraft.unitPrice, changeReason: factoryChangeDraft.changeReason.trim(), ...(factoryChangeDraft.craftNames ? { craftNames: factoryChangeDraft.craftNames.map(name => name.trim()) } : {}), ...(canChangeTransferDate && factoryChangeDraft.deliveryDate !== undefined ? {deliveryDate:factoryChangeDraft.deliveryDate} : {}) }, transferNodeRole === "owner_group" ? "老板发起的转厂已直接生效" : transferNodeRole === "production_management" && (transferPriceDelta?.startsWith("+") !== true) ? "转厂已生效" : "转厂申请已提交", true)}>提交转厂</button>
               </div>
             </div> : null}
             </> : <p>当前账号可查看转厂记录，但不能在本节点发起。</p>}

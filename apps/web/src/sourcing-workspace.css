@@ -1762,13 +1762,13 @@
   .sourcing-order-card--overview .sourcing-order-card__activity { grid-area: 4 / 1; }
 }
 
-.sourcing-form-grid .sourcing-transfer-craft-toggle {
+.sourcing-form-grid :is(.sourcing-transfer-craft-toggle,.sourcing-transfer-date-toggle) {
   display: flex;
   flex-direction: row;
   align-items: center;
   gap: var(--dx-v2-space-2);
 }
-.sourcing-form-grid .sourcing-transfer-craft-toggle input[type="checkbox"] {
+.sourcing-form-grid :is(.sourcing-transfer-craft-toggle,.sourcing-transfer-date-toggle) input[type="checkbox"] {
   width: 18px;
   height: 18px;
   min-height: 18px;

@@ -7,9 +7,10 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 const plans = JSON.parse(readFileSync("scripts/deploy/main-maintenance-plans.json", "utf8"));
 const manifest = JSON.parse(readFileSync("apps/api/src/platform/migration-manifest.json", "utf8"));
-const version = "0223_sourcing_factory_change_craft_names";
+const versions = ["0223_sourcing_factory_change_craft_names","0224_contract_version_review_transfer_delivery"] as const;
 
-function check(mode = "allowed", oldPlans = false, drift = false) {
+function check(version: string, mode = "allowed", oldPlans = false, drift = false) {
+  const selectedManifest={...manifest,migrations:manifest.migrations.filter((row: {version:string})=>row.version<=version)};
   const fixture = mkdtempSync(join(tmpdir(), "main-plan-"));
   try {
     mkdirSync(join(fixture, "scripts/deploy"), { recursive: true });
@@ -19,7 +20,7 @@ function check(mode = "allowed", oldPlans = false, drift = false) {
     writeFileSync(join(fixture, "scripts/deploy/main-maintenance-plans.json"), JSON.stringify(oldPlans ? plans.filter((p: { version: string }) => p.version !== version) : plans));
     mkdirSync(join(fixture, "node_modules/pg"), { recursive: true });
     writeFileSync(join(fixture, "node_modules/pg/package.json"), '{"type":"module","exports":"./index.js"}');
-    const history = mode === "current" ? manifest.migrations : manifest.migrations.slice(0, -1);
+    const history = mode === "current" ? selectedManifest.migrations : selectedManifest.migrations.slice(0, -1);
     writeFileSync(join(fixture, "data.json"), JSON.stringify({ mode, history }));
     writeFileSync(join(fixture, "node_modules/pg/index.js"), `
       import { readFileSync, appendFileSync } from 'node:fs';
@@ -38,14 +39,11 @@ function check(mode = "allowed", oldPlans = false, drift = false) {
         }
       }};
     `);
-    let source = root;
-    if (drift) {
-      source = join(fixture, "source");
-      mkdirSync(join(source, "apps/api/src/platform"), { recursive: true });
-      mkdirSync(join(source, "apps/api/migrations"), { recursive: true });
-      writeFileSync(join(source, "apps/api/src/platform/migration-manifest.json"), JSON.stringify(manifest));
-      writeFileSync(join(source, `apps/api/migrations/${version}.sql`), readFileSync(`apps/api/migrations/${version}.sql`, "utf8") + "\n");
-    }
+    const source = join(fixture, "source");
+    mkdirSync(join(source, "apps/api/src/platform"), { recursive: true });
+    mkdirSync(join(source, "apps/api/migrations"), { recursive: true });
+    writeFileSync(join(source, "apps/api/src/platform/migration-manifest.json"), JSON.stringify(selectedManifest));
+    writeFileSync(join(source, `apps/api/migrations/${version}.sql`), readFileSync(`apps/api/migrations/${version}.sql`, "utf8") + (drift ? "\n" : ""));
     const result = spawnSync(process.execPath, [join(fixture, "scripts/deploy/check-main-maintenance-plan.mjs"), source], {
       encoding: "utf8", env: { ...process.env, PLAN_FIXTURE: fixture },
     });
@@ -57,40 +55,42 @@ function check(mode = "allowed", oldPlans = false, drift = false) {
   } finally { rmSync(fixture, { recursive: true, force: true }); }
 }
 
-describe("0223 main maintenance admission", () => {
+describe.each(versions)("%s main maintenance admission", version => {
+  const run=(mode="allowed",oldPlans=false,drift=false)=>check(version,mode,oldPlans,drift);
+  const current=version.startsWith("0224");
   it("admits the exact plan while retaining maintenance-only routing", () => {
-    const result = check();
+    const result = run();
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({ pending: [version], onlineAllowed: false });
     expect(plans.find((p: { version: string }) => p.version === version)).toMatchObject({
-      checksum: "a374629a47ed1c233816ad98083f6de924f0964eb7c3ef2dbca184dc1d8b44d0",
-      tables: ["public.craft_catalog_versions"], schema: "public",
-      triggerTables: ["public.craft_catalog_versions"],
-      functions: ["public.guard_craft_catalog_version_creation()"], languages: ["plpgsql"],
+      checksum: manifest.migrations.find((row: {version:string})=>row.version===version).checksum,
+      tables: current ? ["public.sourcing_case_transitions"] : ["public.craft_catalog_versions"], schema: "public",
+      triggerTables: current ? ["public.sourcing_factory_change_requests","public.sourcing_approval_snapshots"] : ["public.craft_catalog_versions"],
+      functions: current ? ["public.guard_sourcing_contract_content_creation()","public.guard_sourcing_transition_insert()","public.sourcing_effective_delivery_date(uuid,date,timestamp with time zone)"] : ["public.guard_craft_catalog_version_creation()"], languages: ["plpgsql"],
       onlineCompatible: false,
     });
   });
   it("rejects the old installed plan before maintenance", () => {
-    expect(check("allowed", true).stderr).toContain(`MIGRATION_PLAN_REQUIRED: ${version}`);
+    expect(run("allowed", true).stderr).toContain(`MIGRATION_PLAN_REQUIRED: ${version}`);
   });
   it("rejects SQL fingerprint drift", () => {
-    expect(check("allowed", false, true).stderr).toContain("Migration plan fingerprint drift");
+    expect(run("allowed", false, true).stderr).toContain("Migration plan fingerprint drift");
   });
   it.each([
-    ["table", "public.craft_catalog_versions"],
-    ["trigger", "table public.craft_catalog_versions TRIGGER"],
+    ["table", current ? "public.sourcing_case_transitions" : "public.craft_catalog_versions"],
+    ["trigger", current ? "table public.sourcing_factory_change_requests TRIGGER" : "table public.craft_catalog_versions TRIGGER"],
     ["schema", "schema public USAGE/CREATE/current_schema"],
     ["shadow-schema", "schema public USAGE/CREATE/current_schema"],
-    ["function", "function public.guard_craft_catalog_version_creation() owner"],
-    ["missing-function", "function public.guard_craft_catalog_version_creation() owner"],
+    ["function", current ? "function public.guard_sourcing_contract_content_creation() owner" : "function public.guard_craft_catalog_version_creation() owner"],
+    ["missing-function", current ? "function public.guard_sourcing_contract_content_creation() owner" : "function public.guard_craft_catalog_version_creation() owner"],
     ["language", "language plpgsql USAGE"],
   ])("rejects insufficient %s permission without writes", (mode, object) => {
-    const result = check(mode);
+    const result = run(mode);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain(`MIGRATION_PERMISSION_REQUIRED: ${object}`);
   });
   it("requires no new DDL permissions once the full history is current", () => {
-    const result = check("current");
+    const result = run("current");
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({ pending: [], onlineAllowed: true });
   });
