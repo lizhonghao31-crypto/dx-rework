@@ -1,3 +1,4 @@
+import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import { productionNotExcluded } from "./production-visibility.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
@@ -23,7 +24,7 @@ export function productionRiskKind(state:string):"behind"|"high_risk"|"stale"|nu
 export class ProductionClosureService {
  constructor(private readonly database:Pool,private readonly root?:Pick<RootAuthority,"isRootUser">,private readonly clock?:()=>Date,private readonly events=new OperationEventRepository()) {}
  private async rootActor(actor:TrustedActorContext) {return isRootActor(actor)||await this.root?.isRootUser(actor.actorId)===true;}
- private warehouse(actor:TrustedActorContext){return isRootActor(actor)||(actor.actorRoles.includes("warehouse_receiver")&&caps(actor).includes("receiving:create"));}
+ private warehouse(actor:TrustedActorContext){return isRootActor(actor)||(hasWarehouseReceivingRole(actor.actorRoles)&&caps(actor).includes("receiving:create"));}
  async pilots(actor:TrustedActorContext){
   if(!await this.rootActor(actor))fail("仅超级用户可设置生产试点");
   const result=await this.database.query<{supplier_id:string;supplier_name:string;enabled:boolean}>(`SELECT DISTINCT ON(production.supplier_id) production.supplier_id,

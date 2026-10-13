@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 const plans = JSON.parse(readFileSync("scripts/deploy/main-maintenance-plans.json", "utf8"));
 const manifest = JSON.parse(readFileSync("apps/api/src/platform/migration-manifest.json", "utf8"));
-const versions = ["0223_sourcing_factory_change_craft_names","0224_contract_version_review_transfer_delivery"] as const;
+const versions = ["0223_sourcing_factory_change_craft_names","0224_contract_version_review_transfer_delivery","0225_warehouse_supervisor_cutting_read"] as const;
 
 function check(version: string, mode = "allowed", oldPlans = false, drift = false) {
   const selectedManifest={...manifest,migrations:manifest.migrations.filter((row: {version:string})=>row.version<=version)};
@@ -58,15 +58,16 @@ function check(version: string, mode = "allowed", oldPlans = false, drift = fals
 describe.each(versions)("%s main maintenance admission", version => {
   const run=(mode="allowed",oldPlans=false,drift=false)=>check(version,mode,oldPlans,drift);
   const current=version.startsWith("0224");
+  const warehouse=version.startsWith("0225");
   it("admits the exact plan while retaining maintenance-only routing", () => {
     const result = run();
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({ pending: [version], onlineAllowed: false });
     expect(plans.find((p: { version: string }) => p.version === version)).toMatchObject({
       checksum: manifest.migrations.find((row: {version:string})=>row.version===version).checksum,
-      tables: current ? ["public.sourcing_case_transitions"] : ["public.craft_catalog_versions"], schema: "public",
-      triggerTables: current ? ["public.sourcing_factory_change_requests","public.sourcing_approval_snapshots"] : ["public.craft_catalog_versions"],
-      functions: current ? ["public.guard_sourcing_contract_content_creation()","public.guard_sourcing_transition_insert()","public.sourcing_effective_delivery_date(uuid,date,timestamp with time zone)"] : ["public.guard_craft_catalog_version_creation()"], languages: ["plpgsql"],
+      tables: warehouse ? ["public.business_roles","public.role_capabilities"] : current ? ["public.sourcing_case_transitions"] : ["public.craft_catalog_versions"], schema: "public",
+      triggerTables: warehouse ? ["public.business_roles","public.role_capabilities"] : current ? ["public.sourcing_factory_change_requests","public.sourcing_approval_snapshots"] : ["public.craft_catalog_versions"],
+      functions: warehouse ? ["public.receiving_authorized_board_operator(uuid,text)","public.cutting_authorized_roles(uuid,text)"] : current ? ["public.guard_sourcing_contract_content_creation()","public.guard_sourcing_transition_insert()","public.sourcing_effective_delivery_date(uuid,date,timestamp with time zone)"] : ["public.guard_craft_catalog_version_creation()"], languages: ["plpgsql"],
       onlineCompatible: false,
     });
   });
@@ -77,12 +78,12 @@ describe.each(versions)("%s main maintenance admission", version => {
     expect(run("allowed", false, true).stderr).toContain("Migration plan fingerprint drift");
   });
   it.each([
-    ["table", current ? "public.sourcing_case_transitions" : "public.craft_catalog_versions"],
-    ["trigger", current ? "table public.sourcing_factory_change_requests TRIGGER" : "table public.craft_catalog_versions TRIGGER"],
+    ["table", warehouse ? "public.business_roles" : current ? "public.sourcing_case_transitions" : "public.craft_catalog_versions"],
+    ["trigger", warehouse ? "table public.business_roles TRIGGER" : current ? "table public.sourcing_factory_change_requests TRIGGER" : "table public.craft_catalog_versions TRIGGER"],
     ["schema", "schema public USAGE/CREATE/current_schema"],
     ["shadow-schema", "schema public USAGE/CREATE/current_schema"],
-    ["function", current ? "function public.guard_sourcing_contract_content_creation() owner" : "function public.guard_craft_catalog_version_creation() owner"],
-    ["missing-function", current ? "function public.guard_sourcing_contract_content_creation() owner" : "function public.guard_craft_catalog_version_creation() owner"],
+    ["function", warehouse ? "function public.receiving_authorized_board_operator(uuid,text) owner" : current ? "function public.guard_sourcing_contract_content_creation() owner" : "function public.guard_craft_catalog_version_creation() owner"],
+    ["missing-function", warehouse ? "function public.receiving_authorized_board_operator(uuid,text) owner" : current ? "function public.guard_sourcing_contract_content_creation() owner" : "function public.guard_craft_catalog_version_creation() owner"],
     ["language", "language plpgsql USAGE"],
   ])("rejects insufficient %s permission without writes", (mode, object) => {
     const result = run(mode);

@@ -1,3 +1,4 @@
+import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import { moduleCanWrite } from "./member-module-policy.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
@@ -293,7 +294,7 @@ export function OrderBoardPage() {
         const isRoot = session.user.isRoot === true;
         const roles = session.user.businessRoles ?? [];
         const capabilities = session.user.capabilities;
-        const warehouseReceiver = roles.includes("warehouse_receiver")
+        const warehouseReceiver = hasWarehouseReceivingRole(roles)
           && capabilities.includes("receiving:create");
         const qualityControl = roles.includes("quality_control")
           && capabilities.includes("rework:initiate");
@@ -306,7 +307,7 @@ export function OrderBoardPage() {
           roles.includes("order_merchandiser") && capabilities.includes("receiving:resolve_difference")
         ));
         setCanManagePacking(isRoot || (
-          roles.includes("warehouse_receiver") && capabilities.includes("receiving:packing_manage")
+          hasWarehouseReceivingRole(roles) && capabilities.includes("receiving:packing_manage")
         ));
         setIsRoot(isRoot);
       })

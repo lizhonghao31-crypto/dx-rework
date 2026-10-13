@@ -56,6 +56,7 @@ const ROLE_LABELS: Record<string, string> = {
   production_management: "生产管理",
   quality_control: "质检",
   warehouse_receiver: "仓管人员",
+  warehouse_supervisor: "仓库主管",
   tail_supervisor: "尾部主管",
   ie_reviewer: "IE 审核",
   order_merchandiser: "订单跟单",

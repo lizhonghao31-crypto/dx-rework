@@ -41,5 +41,28 @@
     ],
     "onlineCompatible": false,
     "rollback": "restart-previous-only-if-entire-history-unchanged"
+  },
+  {
+    "version": "0225_warehouse_supervisor_cutting_read",
+    "checksum": "85ce0adb63cdba755011a53455bd9f7c762d9e5f0d5dd0157111c375b1d0d4b1",
+    "strategy": "quiesce-backup-transactional-ddl",
+    "tables": [
+      "public.business_roles",
+      "public.role_capabilities"
+    ],
+    "triggerTables": [
+      "public.business_roles",
+      "public.role_capabilities"
+    ],
+    "schema": "public",
+    "functions": [
+      "public.receiving_authorized_board_operator(uuid,text)",
+      "public.cutting_authorized_roles(uuid,text)"
+    ],
+    "languages": [
+      "plpgsql"
+    ],
+    "onlineCompatible": false,
+    "rollback": "restart-previous-only-if-entire-history-unchanged"
   }
 ]
