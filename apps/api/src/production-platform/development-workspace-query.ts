@@ -4,6 +4,7 @@ import { DEVELOPMENT_VIEWS, PATTERN_GROUPS, PATTERN_LANES, type DevelopmentView,
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { isRootActor } from "../access/business-authority.js";
 import { digitalForbidden } from "./access-policy.js";
+import {journeyMatchesSearch} from "./journey-projection.js";
 
 /** Display views only. The original publication, route and order facts remain authoritative. */
 export function developmentView(item: OrderJourney): DevelopmentView {
@@ -44,7 +45,9 @@ export class DevelopmentWorkspaceQuery {
     if(filter.scope!=="mine"&&!manager&&!clerk)digitalForbidden();
     if(filter.scope==="unassigned"&&!manager)digitalForbidden();
     if(filter.scope==="dispatch"&&!isRootActor(actor)&&!actor.actorRoles.includes("pattern_room_supervisor"))digitalForbidden();
-    const result = await this.journeys.list(actor, JourneyFilterSchema.parse({search: filter.search}), true);
+    // Board cards contain read-only facts. Handling always re-reads the actual task.
+    const result = await this.journeys.list(actor, JourneyFilterSchema.parse({}), true,undefined,{details:false});
+    const journeys=new Map(result.items.map(item=>[item.id,item])),search=filter.search.toLocaleLowerCase();
     const all = patternTasks(result.items).filter(task => filter.business === "all" || (task.node.key === "bulk_pattern" ? filter.business === "bulk" : filter.business === "development"));
     const assignments=filter.scope==="dispatch"?await this.journeys.pendingPatternAssignments(actor,[...new Set(all.flatMap(task=>task.sourceId?[task.sourceId]:[]))]):[];
     // One genuine current task supplies document context for each pending original order.
@@ -55,16 +58,16 @@ export class DevelopmentWorkspaceQuery {
       return task?[{...task,nativeAssignment:{orderId:assignment.orderId}}]:[];
     });
     const scoped=filter.scope==="dispatch"?dispatch:all.filter(task=>filter.scope==="mine"?task.node.owner?.id===actor.actorId:filter.scope==="unassigned"?!task.node.owner:filter.scope==="personnel"?["materials","dispatch"].includes(task.group):true);
-    const filtered = scoped.filter(task => (!filter.owner || task.node.owner?.id === filter.owner)
+    const filtered = scoped.filter(task => (journeyMatchesSearch(journeys.get(task.journeyId)!,search)||Boolean(task.node.owner?.name?.toLocaleLowerCase().includes(search)))&&(!filter.owner || task.node.owner?.id === filter.owner)
       && (filter.state === "all" || (filter.state === "ongoing" ? ["pending", "active", "blocked"].includes(task.node.state) : task.node.state === filter.state))
       && (!filter.risk || task.node.risks.includes(filter.risk)));
     const lane = PATTERN_LANES.find(item => item.key === filter.lane);
     const visible = filtered.filter(task => (!filter.group || task.group === filter.group) && (!lane || (lane.groups as readonly string[]).includes(task.group)));
     const owners = [...new Map(scoped.flatMap(task => task.node.owner ? [[task.node.owner.id, task.node.owner] as const] : [])).values()];
-    return {asOf: result.asOf, page: filter.page, pageSize: 20, total: visible.length, archiveTotal: new Set(visible.map(task => task.journeyId)).size,
+    return {asOf: result.asOf, page: filter.page, pageSize: 15, total: visible.length, archiveTotal: new Set(visible.map(task => task.journeyId)).size,
       counts: Object.fromEntries(PATTERN_GROUPS.map(group => [group.key, filtered.filter(task => task.group === group.key).length])) as PatternWorkspaceResult["counts"], owners,
       riskCounts:Object.fromEntries(PATTERN_GROUPS.map(group=>[group.key,{dueSoon:filtered.filter(task=>task.group===group.key&&task.node.risks.includes("due_soon")).length,overdue:filtered.filter(task=>task.group===group.key&&task.node.risks.includes("overdue")).length}])) as PatternWorkspaceResult["riskCounts"],
-      risks: visible.filter(task => task.node.risks.length > 0).slice(0, 20),
-      items: visible.slice((filter.page - 1) * 20, filter.page * 20)};
+      risks: visible.filter(task => task.node.risks.length > 0).slice(0, 15),
+      items: visible.slice((filter.page - 1) * 15, filter.page * 15)};
   }
 }
