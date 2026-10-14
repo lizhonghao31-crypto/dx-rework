@@ -4,7 +4,7 @@ import { z } from "zod";
 const IdSchema = z.string().uuid();
 const ReasonSchema = z.string().trim().min(1).max(500);
 const MoneyStringSchema = z.string()
-  .regex(/^-?\d+(?:\.\d{1,2})?$/, "Amount must be a 2-decimal string");
+  .regex(/^-?\d+(?:\.\d{1,2})?$/, "金额须填写两位小数");
 const AttachmentIdsSchema = z.array(IdSchema).max(50).default([])
   .superRefine((value, context) => {
     if (new Set(value).size !== value.length) {
@@ -110,7 +110,7 @@ export const CreateExternalDeductionEntrySchema = z.object({
   entryType: z.enum(["deduction", "adjustment", "reversal"]),
   amount: MoneyStringSchema.refine(
     (value) => !/^-?0(?:\.0{1,2})?$/.test(value),
-    "Amount must be non-zero",
+    "金额不能为0",
   ),
   deductedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   referenceNo: z.string().trim().min(1).max(200).optional(),

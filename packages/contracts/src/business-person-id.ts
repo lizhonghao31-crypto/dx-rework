@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const BusinessPersonIdSchema = z.string().regex(
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-  "Expected a PostgreSQL UUID value",
+  "请选择已有的有效人员",
 );
 
 export type BusinessPersonId = z.infer<typeof BusinessPersonIdSchema>;

@@ -343,7 +343,7 @@ export const InspectionCheckResultSchema = z.enum(["pass", "fail"]);
 const DateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const TenthCentimeterSchema = z.number().finite().refine(
   (value) => Math.abs(value * 10 - Math.round(value * 10)) < 1e-8,
-  "Measurement must use 0.1 cm precision",
+  "测量值须精确到0.1厘米",
 );
 
 export const InspectionMeasurementSchema = z.object({
@@ -945,12 +945,12 @@ export const ReviewWholeOrderSchema = z.object({
   processPrices: z.array(z.object({
     configurationItemId: IdSchema,
     unitPrice: z.number().finite().positive().max(99_999_999_999.999)
-      .refine((value) => Math.abs(value * 1000 - Math.round(value * 1000)) < 1e-8, "Unit price keeps at most three decimals"),
+      .refine((value) => Math.abs(value * 1000 - Math.round(value * 1000)) < 1e-8, "单价最多保留三位小数"),
   }).strict()).optional(),
   temporaryCoefficients: z.array(z.object({
     configurationItemId: IdSchema,
     personId: IdSchema,
-    multiplier: z.number().finite().positive().max(10).refine((value) => Math.abs(value * 1000 - Math.round(value * 1000)) < 1e-8, "Multiplier keeps at most three decimals"),
+    multiplier: z.number().finite().positive().max(10).refine((value) => Math.abs(value * 1000 - Math.round(value * 1000)) < 1e-8, "倍数最多保留三位小数"),
     reason: z.string().trim().min(1).max(500).optional(),
   }).strict().superRefine((value, context) => {
     if (value.multiplier !== 1 && !value.reason) {
@@ -1127,8 +1127,8 @@ const responsibilityMultiplierScaled = (value: string): bigint => {
   return BigInt(whole!) * 1000n + BigInt(fraction.padEnd(3, "0"));
 };
 const ResponsibilityMultiplierSchema = z.string()
-  .regex(/^(?:[1-9]\d{0,4})(?:\.\d{1,3})?$/, "Multiplier must be between 1 and 99999.999 with at most 3 places")
-  .refine((value) => responsibilityMultiplierScaled(value) <= 99_999_999n, "Multiplier exceeds database numeric(8,3) range");
+  .regex(/^(?:[1-9]\d{0,4})(?:\.\d{1,3})?$/, "责任倍数须在1至99999.999之间，最多保留三位小数")
+  .refine((value) => responsibilityMultiplierScaled(value) <= 99_999_999n, "责任倍数不能超过99999.999");
 export const ResponsibilityOrderParamsSchema = z.object({ reworkOrderId: IdSchema }).strict();
 export const ResponsibilityDeterminationParamsSchema = z.object({ determinationId: IdSchema }).strict();
 export const ResponsibilityTypeSchema = z.enum(["own_factory", "processing_factory", "embroidery_factory", "washing_factory", "fabric_supplier"]);

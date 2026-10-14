@@ -1,4 +1,4 @@
-import { InspectionReportDraftSchema, InspectionReportSchema } from "../../packages/contracts/src/index.js";
+import { InspectionReportDraftSchema, InspectionReportSchema, ReviewWholeOrderSchema } from "../../packages/contracts/src/index.js";
 import { completeInspectionReport } from "../inspection-report-fixture.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -12,6 +12,18 @@ describe("Chinese validation preserves constraints and domain messages", () => {
     const published = InspectionReportSchema.safeParse(draft);
     expect(published.success).toBe(false);
     expect(published.error?.issues.find(issue => issue.path[0] === "inspectionLocation")?.message).toBe("验货地点：请填写此项");
+  });
+  it("keeps three-decimal money constraints and returns Chinese custom reasons", () => {
+    const id = "550e8400-e29b-41d4-a716-446655440000";
+    const valid = { expectedOrderVersion: 1, processPrices: [{ configurationItemId: id, unitPrice: 1.123 }], temporaryCoefficients: [{ configurationItemId: id, personId: id, multiplier: 1.123, reason: "TEST" }] };
+    expect(ReviewWholeOrderSchema.safeParse(valid).success).toBe(true);
+    const invalid = ReviewWholeOrderSchema.safeParse({ ...valid, processPrices: [{ configurationItemId: id, unitPrice: 1.1234 }], temporaryCoefficients: [{ ...valid.temporaryCoefficients[0], multiplier: 1.1234 }] });
+    expect(invalid.success).toBe(false);
+    if (invalid.success) return;
+    const message = requestValidationMessage(invalid);
+    expect(message).toContain("单价最多保留三位小数");
+    expect(message).toContain("倍数最多保留三位小数");
+    expect(message).not.toMatch(/Unit price|Multiplier/);
   });
   it("locates nested rows without exposing submitted values and retains schema business reasons", () => {
     configureChineseValidation();

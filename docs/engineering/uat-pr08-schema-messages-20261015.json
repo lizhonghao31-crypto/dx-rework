@@ -390,5 +390,61 @@
     "before": "to must not be earlier than from",
     "after": "结束日期不能早于开始日期",
     "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/business-person-id.ts",
+    "lineBefore": 5,
+    "before": "Expected a PostgreSQL UUID value",
+    "after": "请选择已有的有效人员",
+    "change": "Review补齐位置参数中的固定文案；schema谓词/regex/精度/范围/金额规则保持"
+  },
+  {
+    "file": "packages/contracts/src/external-responsibility.ts",
+    "lineBefore": 7,
+    "before": "Amount must be a 2-decimal string",
+    "after": "金额须填写两位小数",
+    "change": "Review补齐位置参数中的固定文案；schema谓词/regex/精度/范围/金额规则保持"
+  },
+  {
+    "file": "packages/contracts/src/external-responsibility.ts",
+    "lineBefore": 113,
+    "before": "Amount must be non-zero",
+    "after": "金额不能为0",
+    "change": "Review补齐位置参数中的固定文案；schema谓词/regex/精度/范围/金额规则保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 346,
+    "before": "Measurement must use 0.1 cm precision",
+    "after": "测量值须精确到0.1厘米",
+    "change": "Review补齐位置参数中的固定文案；schema谓词/regex/精度/范围/金额规则保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 948,
+    "before": "Unit price keeps at most three decimals",
+    "after": "单价最多保留三位小数",
+    "change": "Review补齐位置参数中的固定文案；schema谓词/regex/精度/范围/金额规则保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 953,
+    "before": "Multiplier keeps at most three decimals",
+    "after": "倍数最多保留三位小数",
+    "change": "Review补齐位置参数中的固定文案；schema谓词/regex/精度/范围/金额规则保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 1131,
+    "before": "Multiplier exceeds database numeric(8,3) range",
+    "after": "责任倍数不能超过99999.999",
+    "change": "Review补齐位置参数中的固定文案；schema谓词/regex/精度/范围/金额规则保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 1130,
+    "before": "Multiplier must be between 1 and 99999.999 with at most 3 places",
+    "after": "责任倍数须在1至99999.999之间，最多保留三位小数",
+    "change": "Review补齐位置参数中的固定文案；schema谓词/regex/精度/范围/金额规则保持"
   }
 ]

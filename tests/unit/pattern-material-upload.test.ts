@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { INVALID_DECLARED_IMAGE_MESSAGE, normalizeOriginalImageForUpload } from "../../apps/web/src/attachment-upload.js";
+import { INVALID_DECLARED_IMAGE_MESSAGE, INVALID_DECLARED_IMAGE_MESSAGE_ZH, normalizeOriginalImageForUpload } from "../../apps/web/src/attachment-upload.js";
 import { preparePatternMaterial, uploadPatternMaterial } from "../../apps/web/src/pattern-material-upload.js";
 
 describe("pattern original material uploads", () => {
@@ -24,11 +24,11 @@ describe("pattern original material uploads", () => {
     await expect(uploadPatternMaterial(new File(["invalid"], "bad.pdf", { type: "application/pdf" }), upload)).rejects.toThrow("请选择可读取");
     expect(upload).not.toHaveBeenCalled();
   });
-  it("retries validator-rejected images once at full resolution and does not retry access/network errors", async () => {
+  it.each([INVALID_DECLARED_IMAGE_MESSAGE, INVALID_DECLARED_IMAGE_MESSAGE_ZH])("retries validator-rejected images once at full resolution (%s), preserving error boundaries", async message => {
     const close = vi.fn(), canvas = { width: 0, height: 0, getContext: () => ({ drawImage: vi.fn() }), toBlob: (callback: BlobCallback, type: string) => callback(new Blob(["normalized"], { type })) };
     vi.stubGlobal("createImageBitmap", vi.fn(async () => ({ width: 6000, height: 4000, close })));
     vi.stubGlobal("document", { createElement: () => canvas });
-    const upload = vi.fn().mockRejectedValueOnce(new Error(INVALID_DECLARED_IMAGE_MESSAGE)).mockResolvedValueOnce("ready");
+    const upload = vi.fn().mockRejectedValueOnce(new Error(message)).mockResolvedValueOnce("ready");
     await expect(uploadPatternMaterial(jpeg(), upload)).resolves.toBe("ready");
     expect(upload).toHaveBeenCalledTimes(2);
     expect(upload.mock.calls[1]![0]).toMatchObject({ type: "image/png", name: "制作资料.png" });
@@ -37,7 +37,7 @@ describe("pattern original material uploads", () => {
     const denied = vi.fn().mockRejectedValue(new Error("FORBIDDEN"));
     await expect(uploadPatternMaterial(jpeg(), denied)).rejects.toThrow("FORBIDDEN");
     expect(denied).toHaveBeenCalledOnce();
-    const invalid = vi.fn().mockRejectedValue(new Error(INVALID_DECLARED_IMAGE_MESSAGE));
+    const invalid = vi.fn().mockRejectedValue(new Error(message));
     await expect(uploadPatternMaterial(jpeg(), invalid)).rejects.toThrow("图片内容无法读取");
     expect(invalid).toHaveBeenCalledTimes(2);
   });
