@@ -1,3 +1,4 @@
+import { SearchableSelect } from "./search-select.js";
 import {useEffect,useRef,useState} from "react";
 import {Button} from "@dx-rework/ui";
 import type {DigitalCustomer,DigitalOrder} from "@dx-rework/contracts/digital-production";
@@ -47,8 +48,8 @@ export function DigitalCockpitPersonnel({orderId,onChanged}:{orderId:string|null
       <p>{dialog.kind==="customer"?"仅影响以后创建的母单，已有订单与任务不变。":"交接未完成的主跟单任务与合同办理权，保留历史记录与原时钟。"}</p>
       {error&&<p role="alert">{error}</p>}
       <form onSubmit={event=>{event.preventDefault();void save();}}><fieldset disabled={busy}>
-        {dialog.kind==="customer"?<label>客户<select required value={customerCode} onChange={event=>{setCustomerCode(event.target.value);setPersonId(dialog.customers.find(customer=>customer.code===event.target.value)?.defaultMerchandiserId??"");}}>{dialog.customers.map(customer=><option key={customer.code} value={customer.code}>{customer.code}</option>)}</select></label>:<p>{dialog.order.designStyleNo} · 当前主跟单：{people.find(person=>person.id===dialog.order.primaryMerchandiserId)?.displayName??(dialog.order.primaryMerchandiserId?"原人员未在有效候选中":"待指派")}</p>}
-        <label>主跟单<select required={dialog.kind==="order"} value={personId} onChange={event=>setPersonId(event.target.value)}><option value="">{dialog.kind==="customer"?"未指定":"请选择"}</option>{invalidPerson&&<option value={personId} disabled>原人员已失效，请重新选择</option>}{people.map(person=><option key={person.id} value={person.id}>{person.displayName}</option>)}</select></label>
+        {dialog.kind==="customer"?<label>客户<SearchableSelect required value={customerCode} onChange={event=>{setCustomerCode(event.target.value);setPersonId(dialog.customers.find(customer=>customer.code===event.target.value)?.defaultMerchandiserId??"");}}>{dialog.customers.map(customer=><option key={customer.code} value={customer.code}>{customer.code}</option>)}</SearchableSelect></label>:<p>{dialog.order.designStyleNo} · 当前主跟单：{people.find(person=>person.id===dialog.order.primaryMerchandiserId)?.displayName??(dialog.order.primaryMerchandiserId?"原人员未在有效候选中":"待指派")}</p>}
+        <label>主跟单<SearchableSelect required={dialog.kind==="order"} value={personId} onChange={event=>setPersonId(event.target.value)}><option value="">{dialog.kind==="customer"?"未指定":"请选择"}</option>{invalidPerson&&<option value={personId} disabled>原人员已失效，请重新选择</option>}{people.map(person=><option key={person.id} value={person.id}>{person.displayName}</option>)}</SearchableSelect></label>
         <Button type="submit" disabled={Boolean(invalidPerson)||dialog.kind==="customer"&&!customerCode}>{busy?"保存中…":"保存"}</Button>
       </fieldset></form>
     </section></div>}

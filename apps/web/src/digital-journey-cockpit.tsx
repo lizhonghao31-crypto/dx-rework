@@ -1,3 +1,4 @@
+import { SearchableSelect } from "./search-select.js";
 import { customerPoDateLabel } from "./digital-workspace-copy.js";
 import "./digital-kpi-density.css";
 import { PoDateSummary,PoOrderFacts,PoDateRisks } from "./po-delivery-dates.js";
@@ -39,14 +40,14 @@ function CockpitFilters({ context, data, onChange }: { context: CockpitContext; 
   const field = (key: keyof CockpitContext, value: string) => setDraft(current => ({ ...current, [key]: key === "search" ? value : value || undefined }));
   return <FilterBar className="journey-filters" onSubmit={event => { event.preventDefault(); onChange({ ...draft, page: 1 }); }}>
     <label className="journey-search">综合搜索<input maxLength={100} aria-label="综合搜索" placeholder="款号、款名、客户、PO、跟单" value={draft.search} onChange={event => field("search", event.target.value)} /></label>
-    <label>客户<select aria-label="客户" value={draft.customer ?? ""} onChange={event => field("customer", event.target.value)}><option value="">全部客户</option>{data?.facets?.customers.map(value => <option key={value}>{value}</option>)}</select></label>
-    <label>跟单<select aria-label="跟单" value={draft.merchandiserId ?? ""} onChange={event => field("merchandiserId", event.target.value)}><option value="">主 / 第二跟单</option>{data?.facets?.merchandisers.map(person => <option value={person.id} key={person.id}>{person.name ?? person.id}</option>)}</select></label>
-    <label>品类 / 款式<select aria-label="品类 / 款式" value={draft.category ?? ""} onChange={event => field("category", event.target.value)}><option value="">全部品类</option>{data?.facets?.categories.map(value => <option key={value}>{value}</option>)}</select></label>
+    <label>客户<SearchableSelect aria-label="客户" value={draft.customer ?? ""} onChange={event => field("customer", event.target.value)}><option value="">全部客户</option>{data?.facets?.customers.map(value => <option key={value}>{value}</option>)}</SearchableSelect></label>
+    <label>跟单<SearchableSelect aria-label="跟单" value={draft.merchandiserId ?? ""} onChange={event => field("merchandiserId", event.target.value)}><option value="">主 / 第二跟单</option>{data?.facets?.merchandisers.map(person => <option value={person.id} key={person.id}>{person.name ?? person.id}</option>)}</SearchableSelect></label>
+    <label>品类 / 款式<SearchableSelect aria-label="品类 / 款式" value={draft.category ?? ""} onChange={event => field("category", event.target.value)}><option value="">全部品类</option>{data?.facets?.categories.map(value => <option key={value}>{value}</option>)}</SearchableSelect></label>
     <Button type="submit">查询</Button><Button type="button" variant="secondary" onClick={() => setMore(!more)} aria-expanded={more}>更多筛选</Button>
     <Button type="button" variant="secondary" onClick={() => onChange({ page: 1, search: "", kpi: "all", customer: undefined, merchandiserId: undefined, category: undefined, stage: undefined, node: undefined, state: undefined, risk: undefined, startDate: undefined, endDate: undefined })}>重置筛选</Button>
     {more && <div className="journey-more-filters">
       <label>大流程<select aria-label="大流程" value={draft.stage ?? ""} onChange={event => field("stage", event.target.value)}><option value="">全部流程</option>{JOURNEY_STAGES.map(stage => <option key={stage.key} value={stage.key}>{stage.label}</option>)}</select></label>
-      <label>小流程<select aria-label="小流程" value={draft.node ?? ""} onChange={event => field("node", event.target.value)}><option value="">全部节点</option>{JOURNEY_NODES.map(node => <option key={node.key} value={node.key}>{node.label}</option>)}</select></label>
+      <label>小流程<SearchableSelect aria-label="小流程" value={draft.node ?? ""} onChange={event => field("node", event.target.value)}><option value="">全部节点</option>{JOURNEY_NODES.map(node => <option key={node.key} value={node.key}>{node.label}</option>)}</SearchableSelect></label>
       <label>业务状态<select aria-label="业务状态" value={draft.state ?? ""} onChange={event => field("state", event.target.value)}><option value="">全部状态</option>{Object.entries(journeyStateLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
       <label>风险<select aria-label="风险" value={draft.risk ?? ""} onChange={event => field("risk", event.target.value)}><option value="">全部风险</option>{Object.entries(journeyRiskLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
       <label>创建开始日期<input type="date" value={draft.startDate ?? ""} onChange={event => field("startDate", event.target.value)} /></label>
