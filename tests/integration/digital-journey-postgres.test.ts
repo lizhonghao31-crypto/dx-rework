@@ -29,8 +29,15 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   const db=new pg.Pool({connectionString:databaseUrl,options:`-c search_path=${schema}`});
   const root=randomUUID(),designer=randomUUID(),stranger=randomUUID(),worker=randomUUID(),clerk=randomUUID(),tail=randomUUID(),merchandiser=randomUUID();
   const actor=(id=designer,roles=["sample_designer"]):TrustedActorContext=>({actorId:id,actorRoles:roles,authorizationCapability:"pattern_room:orders:create",authorizationCapabilities:["pattern_room:orders:create"],requestId:"TEST-v2-journey"});
-  const identity=new DigitalProductionIdentityService(db,true),journeys=new DigitalJourneyQuery(db),tasks=new DigitalProductionTaskService(db);
+  const identity=new DigitalProductionIdentityService(db,true,undefined,()=>new Date("2026-09-01T00:00:00Z")),journeys=new DigitalJourneyQuery(db),tasks=new DigitalProductionTaskService(db);
   const input=(suffix="0001")=>DigitalOrderCreateSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:`TEST-J-${suffix}`,temporaryStyleNo:`TEST-T-${suffix}`,orderDate:"2026-10-01",lines:[{poNumber:"PO-J1",color:"黑",sizes:[{size:"M",quantity:100}],deliveryDate:"2026-10-20"},{poNumber:"PO-J2",color:"白",sizes:[{size:"L",quantity:200}],deliveryDate:"2026-10-22"}]});
+  const publishSource=async(sourceId:string)=>{
+    const fileId=randomUUID();
+    await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[fileId,`TEST/journey/${fileId}`,"a".repeat(64),designer]);
+    const document=DevelopmentDocumentSchema.parse({template:"上衣",quantity:1,sampleSize:"M",orderDate:"2026-10-01",returnDate:null,unit:"cm",sizes:["M"],measurements:[],interlining:"",placketInterlining:"",sewingThread:"",buttonholeThread:"",stitchDensity:"",washingIroning:"",packaging:"",formalSizes:"",casualSizes:"",mainLabel:false,mainLabelMethod:"",sizeLabel:false,careLabel:false,instructions:"",craft:"无",washing:"免洗",materials:[],files:[{attachmentId:fileId,kind:"款图"}]});
+    const forms=new DigitalDevelopmentService(db,true),draft=await forms.save(actor(),sourceId,{expectedVersion:0,document},randomUUID());
+    await forms.publish(actor(),sourceId,draft.version,randomUUID());
+  };
   const createTask=async(input:Parameters<DigitalProductionTaskService["createWithClient"]>[2])=>{
     const client=await db.connect();try{await client.query("BEGIN");const task=await tasks.createWithClient(client,actor(root,["root_superuser"]),input);await client.query("COMMIT");return task;}catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}
   };
@@ -98,6 +105,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:input().designStyleNo,temporaryStyleNo:input().temporaryStyleNo,customerCode:"PD"},randomUUID());
     expect((await journeys.read(actor(),source.sourceId)).orderId).toBeNull();
     expect((await journeys.read(actor(),source.sourceId)).stages.flatMap(stage=>stage.nodes).find(node=>node.key==="product_development")?.records[0]?.url).toBe(`/ui/digital-production?development=${source.sourceId}`);
+    await publishSource(source.sourceId);
     const order=await identity.createOrder(actor(),input(),randomUUID(),source.sourceId);
     const item=await journeys.read(actor(),source.sourceId);
     expect(item.stages.flatMap(stage=>stage.nodes).find(node=>node.key==="product_development")?.operator).toEqual({id:designer,name:"TEST-J sample_designer"});
@@ -208,6 +216,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   it("keeps queries read-only under concurrent confirmation and official-number correction",async()=>{
     const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-CONCURRENT",temporaryStyleNo:"TEST-CONCURRENT-T",customerCode:"PD"},randomUUID());
     const request={...input("CONCURRENT"),designStyleNo:"TEST-CONCURRENT",temporaryStyleNo:"TEST-CONCURRENT-T"};
+    await publishSource(source.sourceId);
     const key=randomUUID();const results=await Promise.all([identity.createOrder(actor(),request,key,source.sourceId),identity.createOrder(actor(),request,key,source.sourceId),journeys.read(actor(),source.sourceId)]);
     expect(results[0].productionOrderId).toBe(results[1].productionOrderId);
     const order=results[0];const count=async()=> (await db.query("SELECT (SELECT count(*) FROM digital_production_tasks)::int tasks,(SELECT count(*) FROM rework_wage_items)::int wages,(SELECT count(*) FROM digital_production_commands)::int commands")).rows[0];
@@ -253,6 +262,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:input("WORKSPACE").designStyleNo,temporaryStyleNo:input("WORKSPACE").temporaryStyleNo,customerCode:"PD"},randomUUID());
     const workspaces=new DevelopmentWorkspaceQuery(journeys);
     expect((await workspaces.designer(actor(),DevelopmentWorkspaceFilterSchema.parse({search:"TEST-J-WORKSPACE"}))).counts.draft).toBe(1);
+    await publishSource(source.sourceId);
     await identity.createOrder(actor(),input("WORKSPACE"),randomUUID(),source.sourceId);
     expect((await workspaces.designer(actor(),DevelopmentWorkspaceFilterSchema.parse({search:"TEST-J-WORKSPACE",view:"ordered"}))).total).toBe(1);
     expect((await workspaces.designer(actor(stranger),DevelopmentWorkspaceFilterSchema.parse({search:"TEST-J-WORKSPACE"}))).total).toBe(0);

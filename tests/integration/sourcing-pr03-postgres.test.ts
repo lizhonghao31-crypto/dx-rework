@@ -1,3 +1,4 @@
+import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { ApplicationError } from "../../apps/api/src/platform/errors.js";
 import { PostgresAuthStore } from "../../apps/api/src/auth/postgres-store.js";
 import { registerReceivingRoutes } from "../../apps/api/src/receiving/receiving-routes.js";
@@ -3438,7 +3439,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     } finally { await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation"); }
     const designer: TrustedActorContext = { actorId: designerId, actorRoles: ["sample_designer"], authorizationCapability: "digital_production:view", authorizationCapabilities: ["digital_production:view", "pattern_room:orders:create"], requestId: randomUUID() };
     await database.query("UPDATE digital_production_customers SET default_merchandiser_id=$1 WHERE code='PD'", [merchandiserId]);
-    const identity = new DigitalProductionIdentityService(database, true);
+    const identity = new DigitalProductionIdentityService(database, true, undefined,()=>new Date("2026-09-01T00:00:00Z"));
     const order = await identity.createOrder(designer, DigitalOrderCreateSchema.parse({
       customerCode: "PD", productGroup: "男装", designStyleNo: `TEST-P09-${randomUUID()}`,
       orderDate: "2026-09-30", contractDeliveryDate: "2026-11-20", primaryMerchandiserId: merchandiserId,
@@ -4566,7 +4567,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(await currentVersion()).toBe(beforeVersion);expect(await todoRows()).toEqual(beforeCorrection);
     await access.setCustomerDefault(managerActor(),"PD",next);
     expect((await identity.read(rootActor(),id)).primaryMerchandiserId).toBe(merchandiserId);
-    const future=await identity.createOrder(fixture.designer,DigitalOrderCreateSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:`TEST-DEFAULT-${randomUUID()}`,orderDate:"2026-10-08",lines:[{color:"黑",sizes:[{size:"M",quantity:1}]}]}),randomUUID());
+    const future=await identity.createOrder(fixture.designer,DigitalOrderCreateSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:`TEST-DEFAULT-${randomUUID()}`,orderDate:"2026-10-08",lines:[{color:"黑",customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:"M",quantity:1}]}]}),randomUUID());
     expect(future.primaryMerchandiserId).toBe(next);
     await access.assignMerchandiser(ownerActor(),id,next,beforeVersion);
     const moved=(await todoRows()).find(row=>row.todo_id===correction.todo_id)!;

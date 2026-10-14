@@ -1,3 +1,4 @@
+import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { applyDigitalPoDateFixture } from "../helpers/digital-po-date-fixture.js";
 import { DigitalCockpitQuery } from "../../apps/api/src/production-platform/cockpit-query.js";
 import { randomUUID } from "node:crypto";
@@ -213,7 +214,7 @@ run("P06 development execution PostgreSQL", () => {
       await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'order_merchandiser')",[person]);
     }
     const sheet=await development.read(boss(),id);
-    await service.createOrder(boss(),{customerCode:"PD",productGroup:"男装",designStyleNo:sheet.designStyleNo,temporaryStyleNo:null,orderDate:"2026-09-30",contractDeliveryDate:null,primaryMerchandiserId:primary,lines:[{poNumber:null,formalStyleNo:null,temporaryStyleNo:null,color:"黑",colorForeign:null,deliveryDate:null,sizes:[{size:"M",quantity:1}]}]},randomUUID(),id);
+    await service.createOrder(boss(),{customerCode:"PD",productGroup:"男装",designStyleNo:sheet.designStyleNo,temporaryStyleNo:null,orderDate:"2026-09-30",contractDeliveryDate:null,primaryMerchandiserId:primary,lines:[{poNumber:null,formalStyleNo:null,temporaryStyleNo:null,color:"黑",colorForeign:null,deliveryDate:minimumInitialCustomerDate(),sizes:[{size:"M",quantity:1}]}]},randomUUID(),id);
     const merchant=actor(primary,["order_merchandiser"]),outsider=actor(unrelated,["order_merchandiser"]);
     expect((await execution.read(merchant,id)).canReportFabric).toBe(true);
     expect((await development.read(merchant,id)).canEdit).toBe(false);

@@ -1,4 +1,5 @@
 import { applyDigitalPoDateFixture } from "../helpers/digital-po-date-fixture.js";
+import {DigitalOrderCreateSchema,InitialCustomerOrderDraftSchema,initialCustomerOrderInput,minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { DigitalCockpitQuery } from "../../apps/api/src/production-platform/cockpit-query.js";
 import { randomUUID } from "node:crypto";
@@ -64,6 +65,53 @@ run("P05 development forms PostgreSQL", () => {
     await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$4,'test.png','image/png',100,$2,$3,'ready',CURRENT_TIMESTAMP)`,[id,"a".repeat(64),designer,`test/${id}`]);
     return {...doc,quantity:1,sampleSize:"M",orderDate:"2026-09-30",files:[{attachmentId:id,kind:"款图" as const}]};
   };
+  it("persists incomplete customer PO drafts, rejects invalid initial publication without tasks, and hides PO drafts from technical readers",async()=>{
+    const id=await source(),identity=await development.read(actor(),id);
+    const document:DevelopmentDocument=await ready();
+    const order=InitialCustomerOrderDraftSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:identity.designStyleNo,temporaryStyleNo:null,orderDate:"2026-10-15",contractDeliveryDate:null,lines:[{color:"TEST蓝",deliveryDate:null,sizes:[{size:"M",quantity:"12."}]}]});
+    document.customerOrderDraft={withOrder:true,order};
+    const count=async()=>(await database.query("SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1",[id])).rows[0].n;
+    let saved=await development.save(actor(),id,{expectedVersion:0,document},randomUUID());
+    expect(saved.document?.customerOrderDraft?.order.lines[0]?.sizes[0]?.quantity).toBe("12.");
+    await expect(development.publish(actor(),id,saved.version,randomUUID())).rejects.toMatchObject({statusCode:400,message:expect.stringContaining("PO 1")});
+    expect(await count()).toBe(0);
+    order.lines[0]!.sizes[0]!.quantity="12";
+    const minimum=minimumInitialCustomerDate(),prior=new Date(`${minimum}T00:00:00Z`);prior.setUTCDate(prior.getUTCDate()-1);
+    order.lines[0]!.customerWarehouseArrivalDate=prior.toISOString().slice(0,10);
+    saved=await development.save(actor(),id,{expectedVersion:saved.version,document},randomUUID());
+    await expect(development.publish(actor(),id,saved.version,randomUUID())).rejects.toMatchObject({statusCode:400,message:expect.stringContaining("客户侧交期")});
+    expect(await count()).toBe(0);
+    order.lines[0]!.customerWarehouseArrivalDate=minimum;order.designStyleNo="TEST-TAMPERED";
+    saved=await development.save(actor(),id,{expectedVersion:saved.version,document},randomUUID());
+    await expect(development.publish(actor(),id,saved.version,randomUUID())).rejects.toMatchObject({statusCode:400,message:expect.stringContaining("当前开发来源一致")});
+    expect(await count()).toBe(0);
+    order.designStyleNo=identity.designStyleNo;
+    saved=await development.save(actor(),id,{expectedVersion:saved.version,document},randomUUID());
+    await development.publish(actor(),id,saved.version,randomUUID());
+    const confirmation=DigitalOrderCreateSchema.parse(initialCustomerOrderInput(order));
+    for(const patch of [
+      {...confirmation.lines[0]!,color:"TEST其他颜色"},
+      {...confirmation.lines[0]!,sizes:[{size:"M",quantity:13}]},
+      {...confirmation.lines[0]!,customerWarehouseArrivalDate:"2099-12-31"},
+    ])await expect(service.createOrder(actor(),{...confirmation,lines:[patch]},randomUUID(),id)).rejects.toMatchObject({statusCode:409,message:expect.stringContaining("已发布的订购草稿一致")});
+    expect((await database.query("SELECT count(*)::int n FROM digital_production_orders WHERE source_id=$1",[id])).rows[0].n).toBe(0);
+    await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'order_merchandiser')",[other]);
+    await expect(service.createOrder(actor(),{...confirmation,primaryMerchandiserId:other},randomUUID(),id)).rejects.toMatchObject({statusCode:403});
+    const confirmed=await service.createOrder(actor(root,['root_superuser']),{...confirmation,primaryMerchandiserId:other},randomUUID(),id);
+    expect(confirmed.primaryMerchandiserId).toBe(other);
+    expect(confirmed.lines[0]?.sizes[0]?.quantity).toBe(12);expect((await development.read(actor(),id)).document?.quantity).toBe(1);
+    expect((await development.read(actor(),id)).productionOrderId).toBe(confirmed.productionOrderId);
+    expect((await new DigitalDevelopmentService(database,false).read(actor(),id)).document?.customerOrderDraft).toEqual(document.customerOrderDraft);
+    await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'pattern_room_supervisor')",[other]);
+    const technical=await development.read(actor(other,['pattern_room_supervisor']),id);
+    expect(technical.document?.customerOrderDraft).toBeUndefined();expect(technical.productionOrderId).toBeNull();expect(technical.document?.quantity).toBe(1);
+  });
+  it("retains later customer confirmation with independent PO quantities after development published without an order",async()=>{
+    const id=await source(),sheet=await development.read(actor(),id),document=await ready();
+    const saved=await development.save(actor(),id,{expectedVersion:0,document},randomUUID());await development.publish(actor(),id,saved.version,randomUUID());
+    const confirmed=await service.createOrder(actor(),DigitalOrderCreateSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:sheet.designStyleNo,orderDate:"2026-10-15",lines:[{color:"TEST后确认",customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:"M",quantity:19}]}]}),randomUUID(),id);
+    expect(confirmed.lines[0]?.sizes[0]?.quantity).toBe(19);expect((await development.read(actor(),id)).document?.quantity).toBe(1);
+  });
   it("projects authorized style images and the declared development flow without inventing tasks",async()=>{
     const id=await source(),document=await ready();
     await development.save(actor(),id,{expectedVersion:0,document},randomUUID());

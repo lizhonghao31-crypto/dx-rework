@@ -1,3 +1,4 @@
+import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { TodoListResponseSchema } from "@dx-rework/contracts";
 import { randomUUID } from "node:crypto";
@@ -37,7 +38,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   afterAll(async()=>{await database.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
   const create=async(digital:boolean,linkAfter=false)=>{
     const child=randomUUID(),source=randomUUID(),requestId=randomUUID();
-    const order=digital?await new DigitalProductionIdentityService(database,true).createOrder(actor,DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:user,productGroup:"男装",designStyleNo:"TEST-P04",orderDate:"2026-09-29",lines:[{color:"黑",sizes:[{size:"M",quantity:5}]}]}),randomUUID()):null;
+    const order=digital?await new DigitalProductionIdentityService(database,true).createOrder(actor,DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:user,productGroup:"男装",designStyleNo:`TEST-P04-${randomUUID()}`,orderDate:"2026-09-29",lines:[{color:"黑",customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:"M",quantity:5}]}]}),randomUUID()):null;
     const c=await database.connect();
     try{await c.query("BEGIN");
       await c.query("INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id,reason) VALUES($1,$2,$3,ARRAY['order_merchandiser'],'sourcing:inquiry:create','sourcing.case.create','sourcing_case',$4,'TEST')",[source,requestId,user,child]);
@@ -62,7 +63,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
     expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1",[first.route.todoId])).rows[0].status).toBe("pending");
   });
   it("integrates actionable tasks into the original todo list and badge without letting prompt acknowledgement clear either",async()=>{
-    const order=await new DigitalProductionIdentityService(database,true).createOrder(actor,DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:user,productGroup:"男装",designStyleNo:"TEST-P04",orderDate:"2026-09-29",lines:[{color:"黑",sizes:[{size:"M",quantity:5}]}]}),randomUUID());
+    const order=await new DigitalProductionIdentityService(database,true).createOrder(actor,DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:user,productGroup:"男装",designStyleNo:`TEST-P04-${randomUUID()}`,orderDate:"2026-09-29",lines:[{color:"黑",customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:"M",quantity:5}]}]}),randomUUID());
     const tasks=new DigitalProductionTaskService(database),notifications=new DigitalProductionNotificationService(database),todos=new TodoService(database,undefined,undefined,undefined,notifications);
     const c=await database.connect();let taskId:string;
     try{await c.query("BEGIN");taskId=(await tasks.createWithClient(c,actor,{resource:{kind:"order",id:order.productionOrderId},kind:"production_sheet",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:user})).taskId;await c.query("COMMIT");}catch(e){await c.query("ROLLBACK");throw e;}finally{c.release();}
@@ -116,7 +117,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   const financeNotice=async(recipient:TrustedActorContext,styleNo:string,information=false,routeCaseId?:string)=>{
     const child=randomUUID(),event=randomUUID();
     const order=await new DigitalProductionIdentityService(database,true).createOrder(actor,
-      DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:user,productGroup:"男装",designStyleNo:"TEST-PRIVATE-MOTHER",orderDate:"2026-09-29",lines:[{poNumber:"TEST-PRIVATE-SIBLING-PO",color:"PRIVATE-COLOR",sizes:[{size:"M",quantity:5}]}]}),randomUUID());
+      DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:user,productGroup:"男装",designStyleNo:`TEST-PRIVATE-MOTHER-${randomUUID()}`,orderDate:"2026-09-29",lines:[{poNumber:"TEST-PRIVATE-SIBLING-PO",color:"PRIVATE-COLOR",customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:"M",quantity:5}]}]}),randomUUID());
     const todo=await transaction(async c=>{
       await c.query("INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id,reason) VALUES($1,$1::uuid::text,$2,ARRAY['order_merchandiser'],'sourcing:inquiry:create','sourcing.case.create','sourcing_case',$3,'TEST DEF008')",[event,user,child]);
       await c.query("INSERT INTO sourcing_cases(sourcing_case_id,erp_order_id,erp_order_no,style_no,lane_key,order_quantity,created_by,operation_event_id,request_id,creation_reason) VALUES($1,$1::uuid::text,'TEST', $4,'garment_processing',5,$2,$3,$3::uuid::text,'TEST DEF008')",[child,user,event,styleNo]);
@@ -186,7 +187,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   });
   it("identifies an own production-sheet task for a non-primary merchandiser without mother access",async()=>{
     const people=await operators(),assignee=people.secondaryMerchandiser,policy=new DigitalProductionAccessPolicy(database),tasks=new DigitalProductionTaskService(database),notices=new DigitalProductionNotificationService(database);
-    const order=await new DigitalProductionIdentityService(database,true).createOrder(actor,DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:user,productGroup:"男装",designStyleNo:"TEST-OWN-PRODUCTION-SHEET",orderDate:"2026-09-29",lines:[{poNumber:"TEST-PRIVATE-SIBLING",color:"PRIVATE-COLOR",sizes:[{size:"M",quantity:5}]}]}),randomUUID());
+    const order=await new DigitalProductionIdentityService(database,true).createOrder(actor,DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:user,productGroup:"男装",designStyleNo:"TEST-OWN-PRODUCTION-SHEET",orderDate:"2026-09-29",lines:[{poNumber:"TEST-PRIVATE-SIBLING",color:"PRIVATE-COLOR",customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:"M",quantity:5}]}]}),randomUUID());
     const id=await transaction(async c=>(await tasks.createWithClient(c,actor,{resource:{kind:"order",id:order.productionOrderId},kind:"production_sheet",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:assignee.actorId})).taskId);
     expect(await policy.allowed(assignee,"order",order.productionOrderId,"technical")).toBe(false);
     expect(await policy.allowed(assignee,"order",order.productionOrderId,"budget")).toBe(false);
@@ -209,7 +210,7 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   it("rejects a tail-assignment todo when its exact rework reader denies entry despite effective recipient role and capability",async()=>{
     const people=await operators(),assignee=people.tailWorker,notices=new DigitalProductionNotificationService(database),policy=new DigitalProductionAccessPolicy(database);
     const rework=(await new ReworkInitiationService(database,"P04").createDraft({...people.qualityControl,authorizationCapability:"rework:initiate"},{styleNo:"TEST-OWN-REWORK",tailInspectionRequired:true},randomUUID())).value;
-    const mother=await new DigitalProductionIdentityService(database,true).createOrder(actor,DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:user,productGroup:"男装",designStyleNo:"TEST-PRIVATE-MOTHER",orderDate:"2026-09-29",lines:[{color:"PRIVATE",sizes:[{size:"M",quantity:5}]}]}),randomUUID());
+    const mother=await new DigitalProductionIdentityService(database,true).createOrder(actor,DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:user,productGroup:"男装",designStyleNo:`TEST-PRIVATE-MOTHER-${randomUUID()}`,orderDate:"2026-09-29",lines:[{color:"PRIVATE",customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:"M",quantity:5}]}]}),randomUUID());
     const assignment=randomUUID(),todo=await transaction(async c=>{
       await linkNewDigitalChild(c,{module:"rework",childId:rework.reworkOrderId,productionOrderId:mother.productionOrderId,lines:[]});
       const configured=randomUUID(),rejected=randomUUID();

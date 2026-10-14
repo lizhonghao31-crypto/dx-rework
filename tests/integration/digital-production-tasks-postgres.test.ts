@@ -1,3 +1,4 @@
+import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { applyDigitalPoDateFixture } from "../helpers/digital-po-date-fixture.js";
 import { DigitalCockpitQuery } from "../../apps/api/src/production-platform/cockpit-query.js";
 import { randomUUID } from "node:crypto";
@@ -24,9 +25,10 @@ run("P03 task lifecycle PostgreSQL", () => {
   const actor=(id=designer,roles=["sample_designer"]):TrustedActorContext=>({actorId:id,actorRoles:roles,authorizationCapability:"pattern_room:orders:create",authorizationCapabilities:["pattern_room:orders:create"],requestId:"P03"});
   const boss=actor(root,["root_superuser"]);
   const service=new DigitalProductionIdentityService(database,true), tasks=new DigitalProductionTaskService(database), app=Fastify();
-  const input=()=>DigitalOrderCreateSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:"TEST-P03",orderDate:"2026-09-29",lines:[{color:"黑",sizes:[{size:"M",quantity:5}]}]});
+  let currentStyle="TEST-P03";
+  const input=()=>DigitalOrderCreateSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:currentStyle,orderDate:"2026-09-29",lines:[{color:"黑",customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:"M",quantity:5}]}]});
   const tx=async <T,>(action:(client:pg.PoolClient)=>Promise<T>)=>{const c=await database.connect();try{await c.query("BEGIN");const r=await action(c);await c.query("COMMIT");return r;}catch(e){await c.query("ROLLBACK");throw e;}finally{c.release();}};
-  const order=async()=>({kind:"order" as const,id:(await service.createOrder(actor(),input(),randomUUID())).productionOrderId});
+  const order=async()=>{currentStyle=`TEST-P03-${randomUUID()}`;return {kind:"order" as const,id:(await service.createOrder(actor(),input(),randomUUID())).productionOrderId};};
   const create=async(resource:{kind:"order"|"source";id:string},kind:DigitalTaskKind="budget",extra:Partial<Parameters<DigitalProductionTaskService["createWithClient"]>[2]>={})=>tx(c=>tasks.createWithClient(c,boss,{resource,kind,routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:kind==="budget"?designer:null,...extra}));
   const condition=async(id:string,key:Parameters<DigitalProductionTaskService["setConditionWithClient"]>[3],at:string|null=null)=>tx(c=>tasks.setConditionWithClient(c,boss,id,key,true,at));
   beforeAll(async () => {

@@ -1,10 +1,8 @@
 import { DEVELOPMENT_MEASUREMENTS, type DevelopmentDocument, type DevelopmentMaterial } from "@dx-rework/contracts/digital-development";
-import type { DigitalOrderInput } from "@dx-rework/contracts/digital-production";
+import type { DigitalOrderInput, InitialCustomerOrderDraft } from "@dx-rework/contracts/digital-production";
 import { createClientRequestId } from "./client-request-id.js";
 
-export type DevelopmentOrderDraft = Omit<DigitalOrderInput, "lines"> & {
-  lines: Array<Omit<DigitalOrderInput["lines"][number], "sizes"> & { sizes: Array<{size: string; quantity: string}> }>;
-};
+export type DevelopmentOrderDraft = InitialCustomerOrderDraft;
 export function editableDevelopmentOrder(order: DigitalOrderInput): DevelopmentOrderDraft {
   return {...order, lines: order.lines.map(line => ({...line, sizes: line.sizes.map(size => ({...size, quantity: String(size.quantity)}))}))};
 }

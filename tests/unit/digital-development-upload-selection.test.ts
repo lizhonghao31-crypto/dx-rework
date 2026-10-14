@@ -4,7 +4,7 @@ import ts from "typescript";
 
 describe("development file selection survives asynchronous upload limits", () => {
   for (const [path, expected] of [
-    ["digital-development-panel.tsx", 1],
+    ["development-document-fields.tsx", 1],
     ["digital-development-execution-panel.tsx", 2],
   ] as const) {
     it(path, async () => {
