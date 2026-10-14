@@ -872,6 +872,7 @@ function OrderListPage({
   const [totalPages, setTotalPages] = useState(1);
   const loadVersion = useRef(0);
   const [loadedPath, setLoadedPath] = useState<string | null>(null);
+  const [messagePath, setMessagePath] = useState<string | null>(null);
   const [summary, setSummary] = useState({ totalCount: 0, totalOrderQuantity: 0 });
   const [reloadRevision, setReloadRevision] = useState(0);
   const debouncedSearch = useDebouncedValue(search.trim(), 180);
@@ -888,6 +889,7 @@ function OrderListPage({
 
   const load = async (state: SourcingListQuery): Promise<void> => {
     const version = ++loadVersion.current;
+    setMessagePath(sourcingListPath(mode, state));
     setMessage("正在加载订单…");
     try {
       const params = new URLSearchParams({
@@ -904,6 +906,10 @@ function OrderListPage({
         SourcingCaseListResponseSchema,
       );
       if (version !== loadVersion.current) return;
+      if (body.page > body.totalPages) {
+        setPage(Math.max(1, body.totalPages));
+        return;
+      }
       setItems(body.items);
       setSummary({ totalCount: body.totalCount, totalOrderQuantity: body.totalOrderQuantity });
       setLoadedPath(sourcingListPath(mode, state));
@@ -934,9 +940,10 @@ function OrderListPage({
     setPage(1);
   };
 
-  const currentResult = loadedPath === listPath && search.trim() === debouncedSearch
-    && styleName.trim() === debouncedStyleName;
-  const listMessage = message || (!currentResult ? "正在加载订单…" : "");
+  const inputsSettled = search.trim() === debouncedSearch && styleName.trim() === debouncedStyleName;
+  const currentResult = loadedPath === listPath && inputsSettled;
+  const listMessage = !inputsSettled || messagePath !== listPath
+    ? "正在加载订单…" : message || (!currentResult ? "正在加载订单…" : "");
   const visible = useMemo(
     () => listMessage ? [] : items.filter((item) => mode === "history" ? item.status === "closed" : item.status !== "closed"),
     [items, mode, listMessage],

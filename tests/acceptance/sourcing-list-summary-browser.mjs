@@ -16,29 +16,37 @@ try {
  server=createServer((_req,res)=>{res.setHeader('content-type','text/html;charset=utf-8');res.end(html);});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',args:['--no-sandbox']});
  for(const [width,height] of [[1440,1024],[768,1024],[390,844]]) {
-  const page=await browser.newPage({viewport:{width,height}}),errors=[],queries=[];let releaseSlow,slowStarted;
-  const started=new Promise(r=>{slowStarted=r;});
+  const page=await browser.newPage({viewport:{width,height}}),errors=[],queries=[];let releaseSlow,slowStarted,releaseOldError,oldErrorStarted;
+  const started=new Promise(r=>{slowStarted=r;}),errorStarted=new Promise(r=>{oldErrorStarted=r;});
   page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/api/**',async route=>{
    const url=new URL(route.request().url());
    if(url.pathname.endsWith('/auth/me'))return route.fulfill({json:{status:'authorized',user:{id:id(99),displayName:'验收跟单',businessRoles:['order_merchandiser'],capabilities:['sourcing:view']}}});
    if(!url.pathname.endsWith('/sourcing/cases'))return route.fulfill({status:403,json:{error:{message:'无权限'}}});
    const params=url.searchParams;queries.push(Object.fromEntries(params));const q=params.get('q'),currentPage=Number(params.get('page'));
+   if(q==='旧错误'){oldErrorStarted();await new Promise(r=>{releaseOldError=r;});return route.fulfill({status:500,json:{error:{message:'过期筛选错误'}}});}
    if(q==='失败')return route.fulfill({status:500,json:{error:{message:'列表读取失败'}}});
    if(q==='慢响应'){slowStarted();await new Promise(r=>{releaseSlow=r;});}
    const totalCount=q==='不存在'?0:q==='快响应'?2:17;
    const count=Math.max(0,Math.min(15,totalCount-(currentPage-1)*15));
    return route.fulfill({json:{items:Array.from({length:count},(_,i)=>item(i+1+(currentPage-1)*15)),page:currentPage,pageSize:15,totalCount,totalPages:Math.max(1,Math.ceil(totalCount/15)),totalOrderQuantity:totalCount*100}});
   });
-  await page.goto(`http://127.0.0.1:${server.address().port}/ui/sourcing/pending`);
+  await page.goto(`http://127.0.0.1:${server.address().port}/ui/sourcing/pending?page=3`);
   const summary=page.getByRole('status',{name:'筛选结果汇总'}),search=page.getByRole('textbox',{name:'关键词搜索'});
   await summary.waitFor();assert.match(await summary.innerText(),/共 17 张订单.*订单数量合计 1,700 件/);
-  await page.getByRole('navigation',{name:'订单列表分页'}).getByRole('button',{name:'2',exact:true}).click();
+  assert.ok(queries.some(q=>q.page==='3')&&queries.some(q=>q.page==='2'));assert.equal(new URL(page.url()).searchParams.get('page'),'2');
   await page.waitForFunction(()=>document.querySelectorAll('.sourcing-order-card').length===2);assert.match(await summary.innerText(),/1,700/);
+  await page.getByRole('navigation',{name:'订单列表分页'}).getByRole('button',{name:'1',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelectorAll('.sourcing-order-card').length===15);assert.match(await summary.innerText(),/1,700/);
   await search.fill('慢响应');await started;assert.equal(await summary.count(),0);
   await search.fill('快响应');await page.waitForFunction(()=>document.querySelector('.sourcing-list-summary')?.textContent.includes('200'));releaseSlow();
   await page.waitForResponse(res=>new URL(res.url()).searchParams.get('q')==='慢响应');
   assert.match(await summary.innerText(),/共 2 张订单.*200 件/);
+  await search.fill('旧错误');await errorStarted;
+  await page.clock.install();await page.clock.pauseAt(new Date(Date.now()+1000));
+  await search.fill('快响应');const oldErrorResponse=page.waitForResponse(res=>new URL(res.url()).searchParams.get('q')==='旧错误');releaseOldError();await oldErrorResponse;await page.clock.runFor(50);
+  assert.equal(await page.getByText('过期筛选错误',{exact:true}).count(),0);assert.equal(await summary.count(),0);
+  await page.clock.resume();await page.waitForFunction(()=>document.querySelector('.sourcing-list-summary')?.textContent.includes('200'));
   await search.fill('不存在');await page.waitForFunction(()=>document.querySelector('.sourcing-list-summary')?.textContent.includes('共 0'));
   assert.match(await summary.innerText(),/共 0 张订单.*0 件/);
   await search.fill('失败');await page.getByText('列表读取失败',{exact:true}).waitFor();assert.equal(await summary.count(),0);
@@ -50,6 +58,6 @@ try {
   const layout=await page.evaluate(()=>{const f=document.querySelector('.sourcing-search').getBoundingClientRect(),s=document.querySelector('.sourcing-list-summary').getBoundingClientRect(),l=document.querySelector('.sourcing-order-list').getBoundingClientRect();return {filterBottom:f.bottom,summaryTop:s.top,summaryBottom:s.bottom,listTop:l.top,summaryRight:s.right,width:innerWidth,font:getComputedStyle(document.querySelector('.sourcing-list-summary')).fontSize};});
   assert.ok(layout.summaryTop>=layout.filterBottom&&layout.summaryBottom<=layout.listTop&&layout.summaryRight<=width);assert.equal(layout.font,'12px');assert.deepEqual(errors,[]);
   if(process.env.SUMMARY_EVIDENCE_DIR){await mkdir(process.env.SUMMARY_EVIDENCE_DIR,{recursive:true});await page.screenshot({path:join(process.env.SUMMARY_EVIDENCE_DIR,`${width}.png`),fullPage:false});}
-  await page.close();console.log(`PASS ${width}: full totals across pages, zero/reset, late response/error isolation, combined filters, inline layout`);
+  await page.close();console.log(`PASS ${width}: out-of-range page recovery, full totals across pages, zero/reset, pre-debounce error and late response isolation, combined filters, inline layout`);
  }
 } finally {await browser?.close();if(server)await new Promise(r=>server.close(r));await rm(output,{recursive:true,force:true});}
