@@ -216,6 +216,7 @@ type SourcingCaseRow = Readonly<{
   contract_return_overdue_seconds: number | string | null;
   contract_return_as_of: Date | string;
   total_count?: string;
+  total_order_quantity?: string;
 }>;
 
 const fail = (message: string, status = 400, code = "VALIDATION_ERROR"): never => {
@@ -745,8 +746,8 @@ export class SourcingService {
       LEFT JOIN digital_production_orders principal_order ON principal_order.production_order_id=principal_link.production_order_id
       LEFT JOIN app_users principal_user ON principal_user.id=principal_order.primary_merchandiser_id`:"";
     const result = await this.database.query<SourcingCaseRow>(
-      `SELECT
-         count(*) OVER()::text AS total_count,
+      `WITH filtered_cases AS MATERIALIZED (
+       SELECT
          COALESCE(to_jsonb(additional_case)->>'workflow_generation','legacy') AS workflow_generation,
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
@@ -990,8 +991,19 @@ export class SourcingService {
              )
            )
          )
-       ORDER BY case_view.created_at DESC,case_view.sourcing_case_id DESC
-       LIMIT 15 OFFSET $7`,
+       )
+       SELECT page_row.*,totals.total_count,totals.total_order_quantity
+       FROM (
+         SELECT count(*)::text AS total_count,
+           COALESCE(sum(order_quantity),0)::text AS total_order_quantity
+         FROM filtered_cases
+       ) totals
+       LEFT JOIN LATERAL (
+         SELECT * FROM filtered_cases
+         ORDER BY created_at DESC,sourcing_case_id DESC
+         LIMIT 15 OFFSET $7
+       ) page_row ON true
+       ORDER BY page_row.created_at DESC,page_row.sourcing_case_id DESC`,
       [
         normalizedQuery,
         statusFilter,
@@ -1002,8 +1014,8 @@ export class SourcingService {
         offset,
       ],
     );
-    const pageRows = result.rows;
-    const totalCount = Number(pageRows[0]?.total_count ?? "0");
+    const pageRows = result.rows.filter(row => row.sourcing_case_id != null);
+    const totalCount = Number(result.rows[0]?.total_count ?? "0");
     const items=pageRows.map(row=>mapCase(row,actor));
     for(const [index,row] of pageRows.entries())if(row.workflow_generation==='digital_production_v1') {
       const dates=(await factoryPoLines(this.database,row.sourcing_case_id))!;
@@ -1017,6 +1029,7 @@ export class SourcingService {
       page,
       pageSize: SOURCING_LIST_PAGE_SIZE,
       totalCount,
+      totalOrderQuantity: Number(result.rows[0]?.total_order_quantity ?? "0"),
       totalPages: Math.max(1, Math.ceil(totalCount / SOURCING_LIST_PAGE_SIZE)),
     };
   }

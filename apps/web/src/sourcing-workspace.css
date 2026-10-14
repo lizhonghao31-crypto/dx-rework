@@ -1773,3 +1773,5 @@
 
 .sourcing-form-grid .sourcing-transfer-date-toggle {display:flex;flex-direction:row;align-items:center;gap:var(--dx-v2-space-2);}
 .sourcing-form-grid .sourcing-transfer-date-toggle input[type="checkbox"] {width:18px;height:18px;min-height:18px;flex:0 0 18px;margin:0;padding:0;}
+.sourcing-list-summary { margin: 10px 0; color: var(--dx-text-muted, #64748b); font-size: 12px; line-height: 1.6; }
+.sourcing-list-summary strong { color: var(--dx-text, #1e293b); font-weight: 600; }
