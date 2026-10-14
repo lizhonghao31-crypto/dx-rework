@@ -1,3 +1,4 @@
+import { SearchableSelect } from "./search-select.js";
 import { PatternNodeHistory, PatternRoundRecord } from "./pattern-round-record.js";
 import { patternSelectedStage, patternWorkflow } from "./pattern-workflow.js";
 import { PatternOrderCard } from "./pattern-order-card.js";
@@ -56,8 +57,8 @@ export function PatternRoomOrdersPage() {
       <div className="pattern-fields pattern-filters"><InsetField label="搜索款号、订单号或任务名称" placeholder="款号 / 订单号 / 任务名称" value={q} onChange={e => { setQ(e.target.value); setPage(1); }} />
         <label>订单类型<select value={kind} onChange={e => { setKind(e.target.value); setPage(1); }}><option value="">全部</option><option value="pattern">打板</option><option value="misc">杂事</option></select></label>
         <label>订单状态<select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="">全部状态</option>{Object.entries(PATTERN_ORDER_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        {people ? <><label>创建人<select value={creatorId} onChange={e => { setCreatorId(e.target.value); setPage(1); }}><option value="">全部创建人</option>{people.creators.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
-          <label>板房师傅<select value={workerId} onChange={e => { setWorkerId(e.target.value); setPage(1); }}><option value="">全部师傅</option>{people.workers.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label></> : null}
+        {people ? <><label>创建人<SearchableSelect value={creatorId} onChange={e => { setCreatorId(e.target.value); setPage(1); }}><option value="">全部创建人</option>{people.creators.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</SearchableSelect></label>
+          <label>板房师傅<SearchableSelect value={workerId} onChange={e => { setWorkerId(e.target.value); setPage(1); }}><option value="">全部师傅</option>{people.workers.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</SearchableSelect></label></> : null}
       </div>
       </Surface>
       <div className="reporting-order-grid" aria-busy={loading}>
