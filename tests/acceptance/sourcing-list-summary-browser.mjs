@@ -49,7 +49,7 @@ try {
   await summary.waitFor();assert.ok(queries.some(q=>q.gender==='男装'&&q.stage==='ie'&&q.contractReturn==='pending'&&q.page==='1'));
   const layout=await page.evaluate(()=>{const f=document.querySelector('.sourcing-search').getBoundingClientRect(),s=document.querySelector('.sourcing-list-summary').getBoundingClientRect(),l=document.querySelector('.sourcing-order-list').getBoundingClientRect();return {filterBottom:f.bottom,summaryTop:s.top,summaryBottom:s.bottom,listTop:l.top,summaryRight:s.right,width:innerWidth,font:getComputedStyle(document.querySelector('.sourcing-list-summary')).fontSize};});
   assert.ok(layout.summaryTop>=layout.filterBottom&&layout.summaryBottom<=layout.listTop&&layout.summaryRight<=width);assert.equal(layout.font,'12px');assert.deepEqual(errors,[]);
-  if(process.env.SUMMARY_EVIDENCE_DIR){await mkdir(process.env.SUMMARY_EVIDENCE_DIR,{recursive:true});await page.screenshot({path:join(process.env.SUMMARY_EVIDENCE_DIR,`${width}.png`),fullPage:true});}
+  if(process.env.SUMMARY_EVIDENCE_DIR){await mkdir(process.env.SUMMARY_EVIDENCE_DIR,{recursive:true});await page.screenshot({path:join(process.env.SUMMARY_EVIDENCE_DIR,`${width}.png`),fullPage:false});}
   await page.close();console.log(`PASS ${width}: full totals across pages, zero/reset, late response/error isolation, combined filters, inline layout`);
  }
 } finally {await browser?.close();if(server)await new Promise(r=>server.close(r));await rm(output,{recursive:true,force:true});}
