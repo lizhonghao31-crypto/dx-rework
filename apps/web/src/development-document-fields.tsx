@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { Button } from "@dx-rework/ui";
 import { DEVELOPMENT_MEASUREMENTS, type DevelopmentDocument, type DevelopmentMaterial } from "@dx-rework/contracts/digital-development";
 import { washingChoiceLabel } from "./digital-workspace-copy.js";
@@ -12,13 +12,13 @@ type Props = {
  writing:{current:boolean};quantityInput:string;setQuantityInput:(value:string)=>void;
  measurementIds:{current:string[]};successfulUploads:{current:Map<string,string>};
  imageUrl:(id:string)=>string;upload:(files:File[])=>Promise<void>;fileKind:FileKind;setFileKind:(value:FileKind)=>void;
- issue:(id:string)=>string|undefined;patternSection?:ReactNode;uploadHelp?:string;
+ issue:(id:string)=>string|undefined;patternSection?:ReactNode;uploadHelp?:string;templateResetKey?:string|number;
 };
 const material = (category: DevelopmentMaterial["category"], label: string): DevelopmentMaterial => ({materialId:createClientRequestId(),category,label,supplier:"",name:"",width:"",weight:"",composition:"",consumption:"",color:"",specification:"",quantity:"",requiredThisRound:true,available:false,expectedDate:null});
 const fileKinds=["款图","局部图","菲林","工艺开发板"] as const;
 const fileLabels:Record<FileKind,string>={款图:"主款图",局部图:"局部图",菲林:"菲林图",工艺开发板:"工艺开发板"};
 const labels = {interlining:"朴号",placketInterlining:"门筒朴",sewingThread:"车缝线",buttonholeThread:"纽门线",stitchDensity:"针距",washingMethod:"洗水方法",ironing:"整烫方法",packaging:"包装方法",formalSizes:"正装尺码",casualSizes:"休闲尺码",mainLabelMethod:"主唛车法",instructions:"制作说明"} as const;
-export function DevelopmentDocumentFields({document,edit,readonly,busy,writing,quantityInput,setQuantityInput,measurementIds,successfulUploads,imageUrl,upload,fileKind,setFileKind,issue,patternSection,uploadHelp}:Props){
+export function DevelopmentDocumentFields({document,edit,readonly,busy,writing,quantityInput,setQuantityInput,measurementIds,successfulUploads,imageUrl,upload,fileKind,setFileKind,issue,patternSection,uploadHelp,templateResetKey}:Props){
   const removeSize=async(index:number)=>{
     const filled=Boolean(document.sizes[index]?.trim())||document.measurements.some(row=>row.values[index]?.trim());
     if(filled&&!await confirmInApp("删除这个尺码列及对应的尺寸值？"))return;
@@ -32,6 +32,7 @@ export function DevelopmentDocumentFields({document,edit,readonly,busy,writing,q
     edit({measurements:document.measurements.filter((_,position)=>position!==index)});
   };
   const [previousTemplate,setPreviousTemplate]=useState<{template:DevelopmentDocument["template"];sizes:string[];measurements:DevelopmentDocument["measurements"];ids:string[]}|null>(null);
+  useEffect(()=>setPreviousTemplate(null),[templateResetKey]);
   const [choosingKind,setChoosingKind]=useState(false);
   const replaceTemplate=async(value:string)=>{
     const template=value as DevelopmentDocument["template"];

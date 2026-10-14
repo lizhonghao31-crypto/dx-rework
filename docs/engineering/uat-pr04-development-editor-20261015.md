@@ -25,3 +25,7 @@
 - 两桌面视口截图逐张目视检查；另补390px控件／长表溢出验证通过：/workspace/uat-pr04-evidence/editor-1440.png、editor-1600.png；结果 /workspace/uat-pr04-evidence/result.json。统一建单结果 /workspace/uat-pr04-unified-evidence/result.json。
 
 所有浏览器数据为TEST合成资料，不代表在线部署或业务验收。PR03已合并39cbe7df76040b24821d767d7e2dcff8a8003a3b，本分支已同步；接着执行当前PR04 Head的Full Gate与一次必要Review；最终部署由业务负责人执行。
+
+## Review修复
+
+唯一Review的P2：保存草稿增加sheet.version会重挂整个共享字段及报价子树，清空品类选择。改为只用版本号清理尺寸模板撤回状态；报价子树只在来源或初版/复版上下文变化时重挂。浏览器补“选择品类→编辑→保存→保留报价→正式发布”验证，发布请求仍携带原categoryId/priceVersion；不同文档版本的旧模板撤回仍清理。没有重写报价或发布服务。
