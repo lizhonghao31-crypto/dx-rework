@@ -1,3 +1,4 @@
+import { SearchableSelect } from "./search-select.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { useEffect, useMemo, useState } from "react";
@@ -336,14 +337,14 @@ export function EmployeeAccessPage() {
                     </label>
 
                     <div className="employee-access-actions">
-                      <select
+                      <SearchableSelect
                         aria-label={`${employee.displayName} 授予角色`}
                         value={selected}
                         disabled={assignableRoles.length === 0}
                         onChange={(event) => setRoleByUser((current) => ({ ...current, [employee.userId]: event.target.value }))}
                       >
                         {assignableRoles.map((role) => <option key={role.roleCode} value={role.roleCode}>{roleDisplayName(role)}</option>)}
-                      </select>
+                      </SearchableSelect>
                       <Button
                         disabled={Boolean(busy)
                           || !selected
