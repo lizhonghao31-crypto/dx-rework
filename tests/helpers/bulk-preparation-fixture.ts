@@ -77,7 +77,10 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  expect(workerJourney.styleImageUrl).toBe(`/api/digital-production/orders/${id}/instruction/attachments/${image}`);
  expect(Number.isFinite(Date.parse(workerJourney.asOf!))).toBe(true);
  const rootWorkroom=await bulk.workroom(actors.root,{page:1,search:fixture.order.designStyleNo,scope:'all'});
- expect(rootWorkroom.items.some(item=>item.orderId===id)).toBe(true);
+ expect(rootWorkroom.items.some(item=>item.orderId===id)).toBe(true);expect(rootWorkroom.pageSize).toBe(15);
+ expect(rootWorkroom.items.find(item=>item.orderId===id)?.sheet.adoptedRound).toBe(1);
+ expect((await bulk.workroom(actors.root,{page:1,search:'TEST P11 pattern_room_worker',scope:'all'})).items.some(item=>item.orderId===id)).toBe(true);
+ await expect(bulk.workroom(actors.primary,{page:1,search:'',scope:'all'})).rejects.toMatchObject({statusCode:403});
  const ownWorkroom=await bulk.workroom(worker,{page:1,search:fixture.order.designStyleNo,scope:'mine'});
  expect(ownWorkroom.items.some(item=>item.orderId===id)).toBe(true);
  await expect(bulk.workroom(worker,{page:1,search:'',scope:'all'})).rejects.toMatchObject({statusCode:403});

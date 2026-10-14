@@ -14,7 +14,7 @@ import { DigitalProductionTaskService } from "../../apps/api/src/production-plat
 import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
 import { selectJourneys } from "../../apps/api/src/production-platform/journey-projection.js";
 import { DigitalJourneyQuery } from "../../apps/api/src/production-platform/journey-query.js";
-import { developmentView, DevelopmentWorkspaceQuery } from "../../apps/api/src/production-platform/development-workspace-query.js";
+import { developmentView, patternTasks, DevelopmentWorkspaceQuery } from "../../apps/api/src/production-platform/development-workspace-query.js";
 import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "@dx-rework/contracts/digital-development-workspace";
 import { registerDigitalIdentityRoutes } from "../../apps/api/src/production-platform/identity-routes.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
@@ -316,6 +316,28 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     for(const patch of [{page:1},{page:2},{risk:'blocked'},{risk:'overdue'},{state:'completed'},{kpi:'completed'},{node:'development_materials'}]){
       const filter=JourneyFilterSchema.parse(patch),paged=await journeys.list(context,filter);
       expect(normalize(paged)).toEqual(normalize({...selectJourneys(full.items,filter,paged.asOf),facets:full.facets,canManagePolicies:full.canManagePolicies}));
+    }
+    // Workroom previews retain every business card fact without hydrating executable DTOs.
+    const completedSource=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-PR05-COMPLETED-OWNER",temporaryStyleNo:null,customerCode:"PD"},randomUUID());
+    const completedTask=await createTask({resource:{kind:"source",id:completedSource.sourceId},kind:"development_pattern",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:worker});
+    await db.query("UPDATE digital_production_tasks SET state='completed',completed_at=CURRENT_TIMESTAMP,completed_quality='现场登记' WHERE task_id=$1",[completedTask.taskId]);
+    await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality) VALUES($1,$2,'source',$3,'completed',$4,CURRENT_TIMESTAMP,'现场登记')",[randomUUID(),completedTask.taskId,completedSource.sourceId,worker]);
+    // An imported historical audit can predate today's prohibition on reassigning ended tasks.
+    await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state) VALUES($1,'TEST historical owner audit',$2,'digital_task_reassigned','digital_task',$3,$4,$5)",[randomUUID(),root,completedTask.taskId,JSON.stringify({assigneeId:worker}),JSON.stringify({assigneeId:null})]);
+    await db.query("UPDATE digital_production_task_access SET assignee_id=NULL WHERE task_id=$1",[completedTask.taskId]);
+    const cardFacts=(items:ReturnType<typeof patternTasks>)=>normalize(items.map(item=>({...item,node:{...item.node,assignmentHistory:[],records:item.node.records.map(record=>({...record,mode:'read'})),blockers:item.node.blockers.map(blocker=>({...blocker,record:{...blocker.record,mode:'read'}})).sort((a,b)=>a.key.localeCompare(b.key))}})));
+    for(const context of [actor(root,["root_superuser"]),actor(clerk,["development_clerk"]),actor(worker,["pattern_room_worker"]),actor(),actor(stranger)]){
+      const rich=await journeys.list(context,JourneyFilterSchema.parse({}),true);
+      const reads=vi.spyOn(DigitalProductionTaskService.prototype,'read');
+      const preview=await journeys.list(context,JourneyFilterSchema.parse({}),true,undefined,{details:false});
+      expect(reads).not.toHaveBeenCalled();reads.mockRestore();
+      expect(cardFacts(patternTasks(preview.items))).toEqual(cardFacts(patternTasks(rich.items)));
+      const reference=new DevelopmentWorkspaceQuery({list:async()=>rich} as unknown as DigitalJourneyQuery);
+      for(const patch of [{page:1},{page:2},{page:3},{search:'TEST-J pattern_room_worker',state:'all'},{search:'TEST-PR12-PAGE'},{lane:'pattern'},{risk:'blocked'},{state:'completed'}]){
+        const filter=PatternWorkspaceFilterSchema.parse({...patch,scope:context.actorId===root||context.actorId===clerk?'all':'mine'});
+        const expected=await reference.pattern(context,filter),actual=await workspaces.pattern(context,filter);
+        expect({...normalize(actual),items:cardFacts(actual.items),risks:cardFacts(actual.risks??[])}).toEqual({...normalize(expected),items:cardFacts(expected.items),risks:cardFacts(expected.risks??[])});
+      }
     }
     const client=await db.connect();try{await client.query('BEGIN');
       await client.query("INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','TEST') ON CONFLICT DO NOTHING");

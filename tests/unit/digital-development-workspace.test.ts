@@ -28,8 +28,8 @@ describe("bulk paper tasks share the read-only workroom projection", () => {
     expect(original.total).toBe(1);expect(original.items[0]?.node).toEqual(paper);
     const result=await query.pattern(manager,PatternWorkspaceFilterSchema.parse({business:"bulk",scope:"all",page:2}));
     expect(result.total).toBe(23);expect(result.counts.pattern).toBe(23);expect(result.riskCounts.pattern.dueSoon).toBe(23);
-    expect(result.items.map(item=>item.node.instanceId)).toEqual(bulk.slice(20).map(item=>item.instanceId));
-    expect(result.items[0]?.node).toEqual(bulk[20]);expect(result.items[0]?.node.enteredAt).toBeNull();
+    expect(result.items.map(item=>item.node.instanceId)).toEqual(bulk.slice(15).map(item=>item.instanceId));
+    expect(result.items[0]?.node).toEqual(bulk[15]);expect(result.items[0]?.node.enteredAt).toBeNull();
     const combined=await query.pattern(manager,PatternWorkspaceFilterSchema.parse({business:"all",scope:"all"}));expect(combined.total).toBe(24);
     const worker={...actor,actorRoles:["pattern_room_worker"]};
     expect((await query.pattern(worker,PatternWorkspaceFilterSchema.parse({business:"bulk"}))).total).toBe(23);
@@ -70,6 +70,15 @@ describe("development workspaces preserve original business facts", () => {
     const filtered = await query.pattern({...actor,actorRoles:["development_clerk"]}, PatternWorkspaceFilterSchema.parse({scope:"all",owner: owner.id, risk: "overdue"}));
     expect(filtered.total).toBe(1); expect(filtered.counts.pattern).toBe(1); expect(filtered.counts.cutting).toBe(0);
   });
+  it("matches the single keyword against current owner names without broadening task scope, including duplicate names",async()=>{
+    const own={id:actor.actorId,name:"TEST 同名主办"},other={id:randomUUID(),name:own.name};
+    const tasks=[node("development_pattern","active",{owner:own}),node("development_cutting","active",{owner:other})];
+    const query=new DevelopmentWorkspaceQuery({list:async(_actor,_filter,_all,_page,options)=>{expect(options).toEqual({details:false});return{asOf:"TEST",items:[journey(tasks)]};}} as unknown as DigitalJourneyQuery);
+    const worker=await query.pattern({...actor,actorRoles:["pattern_room_worker"]},PatternWorkspaceFilterSchema.parse({search:"同名主办"}));
+    expect(worker.items.map(item=>item.node.owner?.id)).toEqual([own.id]);
+    const manager=await query.pattern({...actor,actorRoles:["development_clerk"]},PatternWorkspaceFilterSchema.parse({scope:"all",search:"同名主办"}));
+    expect(manager.items.map(item=>item.node.owner?.id)).toEqual([own.id,other.id]);expect(manager.total).toBe(2);
+  });
   it("accepts local validated workspace returns and rejects executable/external/duplicate or nested targets", () => {
     const task = randomUUID();
     expect(developmentWorkspaceReturnUrl(`/ui/digital-pattern-room?search=TEST&page=2&task=${task}`)).toContain(`task=${task}`);
@@ -103,14 +112,14 @@ describe("development workspaces preserve original business facts", () => {
     expect(work.items.map(item=>item.node.instanceId)).toEqual([transfer.instanceId,sewing.instanceId]);
     expect(work.total).toBe(2);
   });
-  it("counts every authorized risk before the 20-row preview or pagination",async()=>{
+  it("counts every authorized risk before the 15-row preview or pagination",async()=>{
     const owner={id:actor.actorId,name:"TEST本人"};
     const items=Array.from({length:45},(_,index)=>journey([node("development_pattern","active",{owner,risks:index<25?["overdue"]:["due_soon"]})]));
     const query=new DevelopmentWorkspaceQuery({list:async()=>({asOf:"TEST",items})} as unknown as DigitalJourneyQuery);
     const result=await query.pattern(actor,PatternWorkspaceFilterSchema.parse({page:3}));
     expect(result.total).toBe(45);expect(result.counts.pattern).toBe(45);
     expect(result.riskCounts.pattern).toEqual({dueSoon:20,overdue:25});
-    expect(result.items).toHaveLength(5);expect(result.risks).toHaveLength(20);
+    expect(result.items).toHaveLength(15);expect(result.risks).toHaveLength(15);
   });
   it("defaults to the actor's own effective tasks and refuses a worker's broader scope before reading",async()=>{
     let reads=0;const own=node("development_pattern","active",{owner:{id:actor.actorId,name:"TEST本人"}}),other=node("development_pattern","active",{owner:{id:randomUUID(),name:"TEST别人"}});

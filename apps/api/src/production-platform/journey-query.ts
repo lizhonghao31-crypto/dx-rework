@@ -59,11 +59,11 @@ export class DigitalJourneyQuery {
 )
     ORDER BY coalesce(s.created_at,o.created_at) DESC,coalesce(s.source_id,o.production_order_id) DESC`,[actor.actorId,actor.actorRoles,leader,id])).rows;
   }
-  async list(actor:TrustedActorContext,filter:JourneyFilter,exportAll=false,selectPage?: (items:OrderJourney[])=>OrderJourney[]) {
+  async list(actor:TrustedActorContext,filter:JourneyFilter,exportAll=false,selectPage?: (items:OrderJourney[])=>OrderJourney[],options:{details?:boolean}={}) {
     assertIdentityActor(actor);
     return this.snapshot(async(db,asOf)=>{
       // Internal workspace selection runs after all authorized facts, before detail hydration.
-      const summaryOnly=!exportAll||Boolean(selectPage);
+      const summaryOnly=options.details===false||!exportAll||Boolean(selectPage);
       const items:OrderJourney[]=[],candidates=new Map<string,Candidate>();
       for(const row of await this.candidates(db,actor)) { const item=await this.project(db,actor,row,asOf,undefined,summaryOnly);if(item){items.push(item);candidates.set(item.id,row);} }
       const facets = {
@@ -72,7 +72,7 @@ export class DigitalJourneyQuery {
         merchandisers: [...new Map(items.flatMap(item=>item.merchandisers).map(person=>[person.id,person])).values()],
       };
       const result=selectJourneys(items,filter,asOf,!exportAll);
-      if(summaryOnly){
+      if(summaryOnly&&options.details!==false){
         const details:OrderJourney[]=[];
         for(const summary of selectPage?selectPage(result.items):result.items){const detail=await this.project(db,actor,candidates.get(summary.id)!,asOf);if(detail)details.push({...detail,hitReasons:summary.hitReasons});}
         result.items=details;
@@ -192,13 +192,14 @@ export class DigitalJourneyQuery {
         WHERE task_id=$1 AND event_kind IN ('created','reassigned','completed') ORDER BY recorded_at,event_id`,[task.taskId])).rows;
       const assignments=summaryOnly?[]:(await db.query("SELECT created_at,actor_id,before_state,after_state FROM audit_events WHERE entity_type='digital_task' AND entity_id=$1 AND action='digital_task_reassigned' ORDER BY created_at,id",[task.taskId])).rows;
       node.assignmentHistory=assignments.map(event=>({at:iso(event.created_at)!,actorId:event.actor_id,from:event.before_state?.assigneeId??null,to:event.after_state?.assigneeId??null}));
-      const done=events.filter(event=>event.event_kind==="completed").at(-1);
+      const taskSummary=summaries?.get(task.taskId);
+      const done=summaryOnly?taskSummary?.completion:events.filter(event=>event.event_kind==="completed").at(-1);
       node.operator=done?{id:done.actor_id,name:done.actor_name}:null;
       let ownerId=task.assigneeId;
-      if(done) { const later=assignments.find(event=>new Date(event.created_at)>new Date(done.recorded_at));if(later)ownerId=later.before_state?.assigneeId??null; }
-      node.owner=ownerId?{id:ownerId,name:ownerId===task.assigneeId?task.assigneeName:(await db.query("SELECT display_name FROM app_users WHERE id=$1",[ownerId])).rows[0]?.display_name??null}:null;
+      if(done) { const later=summaryOnly?taskSummary?.laterOwner?{before_state:taskSummary.laterOwner}:null:assignments.find(event=>new Date(event.created_at)>new Date(done.recorded_at));if(later)ownerId=later.before_state?.assigneeId??null; }
+      node.owner=ownerId?{id:ownerId,name:ownerId===task.assigneeId?task.assigneeName:summaryOnly?taskSummary?.previousOwnerName??null:(await db.query("SELECT display_name FROM app_users WHERE id=$1",[ownerId])).rows[0]?.display_name??null}:null;
       node.records=[{...record("task",task.taskId,taskUrl(task.taskId),task.routeVersion),mode:task.canExecute&&!["completed","cancelled"].includes(task.state)?"handle":"read"}];
-      const conditions=summaryOnly?[]:(await db.query("SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1 AND NOT satisfied",[task.taskId])).rows;
+      const conditions=summaryOnly?(taskSummary?.conditionKeys??[]).map(condition_key=>({condition_key})):(await db.query("SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1 AND NOT satisfied",[task.taskId])).rows;
       const labels:Record<string,string>={business_recorded:"尚缺原业务完成事实",handover_received:"尚未收到实物/资料交接",materials_ready:"物料尚未齐备",owner_approved:"原外发老板批准尚未通过",pattern_ready:"纸样/唛架尚未完成",pattern_assignment_ready:"等待主管确认原打板正式派工",preshrink_ready:"预缩条件尚未齐备",craft_returned:"工艺尚未回仓",qc_approved:"整款工艺QC尚未通过",customer_confirmed:"客户样板尚未确认",all_po_complete:"全部PO/颜色尚未完成",washing_finished:"洗水尚未完成",factory_arrived:"尚缺工厂到料事实"};
       node.blockers=conditions.map(condition=>({key:condition.condition_key,label:labels[condition.condition_key]??condition.condition_key,ownerId:null,record:node.records[0]!}));
       if(task.paused)node.blockers.push({key:"resource_paused",label:"原业务已暂停",ownerId:null,record:node.records[0]!});

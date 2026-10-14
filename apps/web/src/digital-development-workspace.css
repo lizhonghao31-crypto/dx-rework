@@ -424,3 +424,13 @@
 .development-create-reference .development-size-column{width:88px;min-width:88px}
 
 .development-create .development-order-fields{border:0;padding:0;margin:0;min-width:0}
+
+/* The two workroom views share a shell, never a task model or global form rule. */
+.pattern-golden .pattern-keyword-search{display:flex;align-items:end;gap:8px;flex-wrap:wrap;margin:10px 0}
+.pattern-golden .pattern-keyword-search label{display:grid;gap:5px;min-width:0}
+.pattern-golden .pattern-keyword-search input{width:300px;max-width:100%;box-sizing:border-box}
+.pattern-golden .bulk-workroom-list{max-height:560px;overflow:auto}
+.pattern-golden .bulk-workroom-list td{vertical-align:top;overflow-wrap:anywhere}
+.pattern-golden .bulk-workroom-list small{display:block;margin-top:5px;white-space:normal}
+.pattern-golden .bulk-workroom-detail{border-top:1px solid #dae7f4;margin-top:16px;padding-top:12px}
+@media(max-width:600px){.pattern-golden .pattern-keyword-search input{width:100%}.pattern-golden .bulk-workroom-list table{min-width:850px}}

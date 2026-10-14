@@ -64,7 +64,7 @@ export type PatternWorkspaceTask = {
   nativeAssignment?: {orderId:string};
 };
 export type PatternWorkspaceResult = {
-  asOf: string; page: number; pageSize: 20; total: number; archiveTotal: number;
+  asOf: string; page: number; pageSize: 15; total: number; archiveTotal: number;
   counts: Record<typeof PATTERN_GROUPS[number]["key"], number>;
   owners: Array<{id: string; name: string | null}>; items: PatternWorkspaceTask[];
   risks?: PatternWorkspaceTask[];

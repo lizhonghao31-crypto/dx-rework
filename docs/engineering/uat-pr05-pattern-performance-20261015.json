@@ -1,0 +1,104 @@
+{
+  "before": {
+    "label": "matched-before",
+    "scope": "Local synthetic PostgreSQL16; 24 published sources/24 genuine material tasks; one warmup plus five runs; no online claims",
+    "samples": [
+      {
+        "ms": 186.6598299999996,
+        "queries": 604,
+        "total": 24,
+        "pageItems": 20
+      },
+      {
+        "ms": 219.7027680000001,
+        "queries": 604,
+        "total": 24,
+        "pageItems": 20
+      },
+      {
+        "ms": 161.50162699999964,
+        "queries": 604,
+        "total": 24,
+        "pageItems": 20
+      },
+      {
+        "ms": 151.38752899999963,
+        "queries": 604,
+        "total": 24,
+        "pageItems": 20
+      },
+      {
+        "ms": 123.4244090000002,
+        "queries": 604,
+        "total": 24,
+        "pageItems": 20
+      },
+      {
+        "ms": 145.26349799999934,
+        "queries": 604,
+        "total": 24,
+        "pageItems": 20
+      }
+    ],
+    "p50": 151.38752899999963,
+    "p95": 219.7027680000001,
+    "queryCounts": [
+      604,
+      604,
+      604,
+      604,
+      604
+    ]
+  },
+  "after": {
+    "label": "matched-after",
+    "scope": "Local synthetic PostgreSQL16; 24 published sources/24 genuine material tasks; one warmup plus five runs; no online claims",
+    "samples": [
+      {
+        "ms": 170.66384800000014,
+        "queries": 244,
+        "total": 24,
+        "pageItems": 15
+      },
+      {
+        "ms": 121.9226719999997,
+        "queries": 244,
+        "total": 24,
+        "pageItems": 15
+      },
+      {
+        "ms": 129.45709699999998,
+        "queries": 244,
+        "total": 24,
+        "pageItems": 15
+      },
+      {
+        "ms": 113.60525000000007,
+        "queries": 244,
+        "total": 24,
+        "pageItems": 15
+      },
+      {
+        "ms": 111.12808700000005,
+        "queries": 244,
+        "total": 24,
+        "pageItems": 15
+      },
+      {
+        "ms": 116.24344999999994,
+        "queries": 244,
+        "total": 24,
+        "pageItems": 15
+      }
+    ],
+    "p50": 116.24344999999994,
+    "p95": 129.45709699999998,
+    "queryCounts": [
+      244,
+      244,
+      244,
+      244,
+      244
+    ]
+  }
+}
