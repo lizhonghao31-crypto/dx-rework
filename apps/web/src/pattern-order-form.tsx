@@ -1,3 +1,4 @@
+import { SearchableSelect } from "./search-select.js";
 import { PatternDialog } from "./pattern-dialog.js";
 import "./pattern-governed.css";
 import { PatternMaterials } from "./pattern-materials.js";
@@ -70,7 +71,7 @@ export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSav
     <div className={`pattern-fields pattern-form-primary${!order && !misc ? " is-pattern-create" : ""}`}>
       {misc ? <InsetField label="任务名称 *" value={values.taskName} required maxLength={200} onChange={e => setValues({ ...values, taskName: e.target.value })} disabled={disabled} /> : null}
       <InsetField label={misc ? "关联款号" : "款号 *"} value={values.styleNo} required={!misc} maxLength={100} onChange={e => setValues({ ...values, styleNo: e.target.value })} disabled={disabled} />
-      {!order && !misc ? <><label>品类 *<select className="rework-v2-control" required value={categoryId} onChange={e => setCategoryId(e.target.value)} disabled={disabled}><option value="">请选择品类</option>{categories.map(category => <option key={category.priceId} value={category.priceId}>{category.name}（{category.unit}）</option>)}</select></label>
+      {!order && !misc ? <><label>品类 *<SearchableSelect className="rework-v2-control" required value={categoryId} onChange={e => setCategoryId(e.target.value)} disabled={disabled}><option value="">请选择品类</option>{categories.map(category => <option key={category.priceId} value={category.priceId}>{category.name}（{category.unit}）</option>)}</SearchableSelect></label>
         <InsetField label="数量 *" type="number" min={1} max={1_000_000} step={1} required value={quantity} onChange={e => setQuantity(e.target.value)} disabled={disabled} />
         <div className="pattern-total"><span>本单价格</span><strong>{price.status === "loading" ? "正在读取…" : estimated !== null ? `¥${formatBusinessDecimal(estimated, 2)}` : "—"}</strong></div></> : null}
       <InsetField label="要求完成日期" type="date" value={values.requiredDate} onChange={e => setValues({ ...values, requiredDate: e.target.value })} disabled={disabled} />

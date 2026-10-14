@@ -1,3 +1,4 @@
+import { SearchableSelect } from "./search-select.js";
 import {analysisGroupFilter} from './sample-analysis-model.js';
 import { useState } from 'react';
 import type { SampleAnalysisQuery,SampleAnalysisResponse,SampleAmounts } from '@dx-rework/contracts';
@@ -17,7 +18,7 @@ export function SampleAnalysisView({data,legacy,busy,error,draft,onDraft,onApply
  const [theme,setTheme]=useState<'purchase'|'holding'|'disposal'>('purchase');
  const s=data?.summary,options=data?.options;
  const input=(key:string,label:string,type='text')=><label key={key}>{label}<input className="rework-v2-control" type={type} inputMode={type==='text'&&key.includes('Price')?'decimal':undefined} value={draft[key]??''} onChange={e=>onDraft(key,e.target.value)}/></label>;
- const select=(key:string,label:string,items:{id:string;name:string}[])=><label key={key}>{label}<select className="rework-v2-control" value={draft[key]??''} onChange={e=>onDraft(key,e.target.value)}><option value="">全部</option>{items.map(item=><option key={item.id} value={item.id}>{item.name}{items.some(other=>other.name===item.name&&other.id!==item.id)?` · ${item.id.slice(-6)}`:''}</option>)}</select></label>;
+ const select=(key:string,label:string,items:{id:string;name:string}[])=>{const Select=key==='status'?'select':SearchableSelect;return <label key={key}>{label}<Select className="rework-v2-control" value={draft[key]??''} onChange={e=>onDraft(key,e.target.value)}><option value="">全部</option>{items.map(item=><option key={item.id} value={item.id}>{item.name}{items.some(other=>other.name===item.name&&other.id!==item.id)?` · ${item.id.slice(-6)}`:''}</option>)}</Select></label>;};
  const metric=(label:string,value:string|number,unit='',fact?:SampleAnalysisQuery['fact'])=><div><dt>{label}</dt><dd><button type="button" aria-label={'查看'+label+'对应样衣'} disabled={busy} onClick={()=>onDrill({fact,page:1})}>{typeof value==='number'?n(value):value}<small>{unit}</small></button></dd></div>;
  return <div className="sample-analysis" aria-busy={busy}>
   <div className="analysis-toolbar"><p>{data?<time dateTime={data.asOf}>数据截至 {new Date(data.asOf).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}</time>:'读取采购、持有与处置事实'}</p><Button variant="secondary" disabled={busy} onClick={onRefresh}>{busy?'读取中…':'刷新'}</Button></div>
