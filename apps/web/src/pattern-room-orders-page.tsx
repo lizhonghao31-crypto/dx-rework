@@ -27,11 +27,11 @@ import "./pattern-governed.css";
 const { pageUrl } = patternUrls;
 const assignmentMoney = (value:string|number):string => {const [whole,fraction=""] = formatBusinessDecimal(value,2).split(".");return `${whole}.${fraction.padEnd(2,"0")}`;};
 
-export function PatternRoomOrdersPage({embedded=false,onListPathChange}:{embedded?:boolean;onListPathChange?:(path:string)=>void}={}) {
+export function PatternRoomOrdersPage({embedded=false,miscOnly=false,onListPathChange}:{embedded?:boolean;miscOnly?:boolean;onListPathChange?:(path:string)=>void}={}) {
   const [initial] = useState(() => readPatternListQuery(window.location.search));
   const [data, setData] = useState<z.infer<typeof PatternOrderListSchema> | null>(null), [error, setError] = useState("");
   const [q, setQ] = useState(initial.q), [status, setStatus] = useState(initial.status), [creatorId, setCreatorId] = useState(initial.creatorId), [workerId, setWorkerId] = useState(initial.workerId), [page, setPage] = useState(initial.page);
-  const [kind, setKind] = useState(initial.kind);
+  const [kind, setKind] = useState(miscOnly?"misc":initial.kind);
   const [people, setPeople] = useState<z.infer<typeof PatternPeopleFiltersSchema> | null>(null), [refresh, setRefresh] = useState(0), [loading, setLoading] = useState(true);
   const search = useDebouncedValue(q.trim(), 250);
   const nativeListPath = patternListPath({ q: search, kind, status, creatorId, workerId, page });
@@ -53,12 +53,12 @@ export function PatternRoomOrdersPage({embedded=false,onListPathChange}:{embedde
     void patternRequest("people-filters", PatternPeopleFiltersSchema, { signal: abort.signal }).then(result => { if (!abort.signal.aborted) setPeople(result); }).catch(e => { if (!abort.signal.aborted) setError(e.message); });
     return () => abort.abort();
   }, [data?.canFilterPeople, refresh]);
-  return <div className="pattern-orders rework-query-content"><Header title="订单打板/杂事看板" badge="订单打板" badgePlacement="subtitle" />
+  return <div className="pattern-orders rework-query-content">{!embedded&&<Header title={miscOnly?"杂事看板":"历史打板/杂事看板"} badge="订单打板" badgePlacement="subtitle" />}
     {error ? <Surface><p role="alert">{error}</p><Button onClick={() => setRefresh(value => value + 1)}>重新读取</Button></Surface> : null}
     {data ? <>
       <Surface>
       <div className="pattern-fields pattern-filters"><InsetField label="搜索款号、订单号或任务名称" placeholder="款号 / 订单号 / 任务名称" value={q} onChange={e => { setQ(e.target.value); setPage(1); }} />
-        <label>订单类型<select value={kind} onChange={e => { setKind(e.target.value); setPage(1); }}><option value="">全部</option><option value="pattern">打板</option><option value="misc">杂事</option></select></label>
+        {!miscOnly&&<label>订单类型<select value={kind} onChange={e => { setKind(e.target.value); setPage(1); }}><option value="">全部</option><option value="pattern">打板</option><option value="misc">杂事</option></select></label>}
         <label>订单状态<select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="">全部状态</option>{Object.entries(PATTERN_ORDER_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         {people ? <><label>创建人<SearchableSelect value={creatorId} onChange={e => { setCreatorId(e.target.value); setPage(1); }}><option value="">全部创建人</option>{people.creators.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</SearchableSelect></label>
           <label>板房师傅<SearchableSelect value={workerId} onChange={e => { setWorkerId(e.target.value); setPage(1); }}><option value="">全部师傅</option>{people.workers.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</SearchableSelect></label></> : null}
@@ -170,7 +170,7 @@ function PatternRoomDetailWorkspace({ orderId, assignmentOnly=false, onChanged,s
           <div><dt>创建人</dt><dd>{order.creatorName}</dd></div>
         </dl>{displayRound && <PatternRoundRecord round={displayRound} misc={order.kind === "misc"} summaryOnly />}</div>
         {(order.kind === "misc" ? order.styleNo : order.customer || order.sizeColor || order.variant || order.referenceStyleNo) ? <dl className="pattern-facts pattern-summary-extra">
-          {order.kind === "misc" ? <div><dt>关联款号</dt><dd>{order.styleNo}</dd></div> : <>
+          {order.kind === "misc" ? <div><dt>关联款号</dt><dd>{order.association?.label??order.styleNo}</dd></div> : <>
             {order.customer && <div><dt>客户</dt><dd>{order.customer}</dd></div>}
             {order.sizeColor && <div><dt>尺码与颜色</dt><dd>{order.sizeColor}</dd></div>}
             {order.variant && <div><dt>版型</dt><dd>{order.variant}</dd></div>}

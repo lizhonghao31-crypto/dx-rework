@@ -1,5 +1,5 @@
 import { patternOrderAtNode, type PatternHistorySelection, type PatternHistoryEvent } from "./order-history.js";
-import { PatternOrderDetailSchema, PatternOrderListSchema, PatternOrderQuerySchema, canUsePatternOrder, type PatternOrderCapability, type PatternOrderDetail, type PatternOrderQuery, type PatternOrderSummary } from "@dx-rework/contracts/pattern-orders";
+import { PatternOrderDetailSchema, PatternOrderListSchema, PatternOrderQuerySchema, canUsePatternOrder, type MiscAssociationSnapshot, type PatternOrderCapability, type PatternOrderDetail, type PatternOrderQuery, type PatternOrderSummary } from "@dx-rework/contracts/pattern-orders";
 import type { Pool, PoolClient } from "pg";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -8,6 +8,7 @@ import { patternReworkCutBlocked, PATTERN_REWORK_CUT_BLOCK } from "./order-rewor
 
 export type PatternOrderRow = {
   order_id: string; order_no: string; kind: "pattern" | "misc"; task_name: string | null; creator_role: "sample_designer" | "order_merchandiser"; status: PatternOrderSummary["status"]; version: number; current_round_id: string;
+  misc_association?:MiscAssociationSnapshot|null;
   created_by: string; creator_name: string; style_no: string; required_date: string | null; customer: string | null; size_color: string | null;
   reference_style_no: string | null; variant: string | null; note: string | null; submitted_at: Date; updated_at: Date; rework_count: number; current_worker_name?: string | null;
 };
@@ -63,7 +64,7 @@ export class PatternOrderReader {
       const rows = await client.query<PatternOrderRow>(`SELECT orders.*,to_char(orders.required_date,'YYYY-MM-DD') required_date,${currentWorkerSql} current_worker_name FROM pattern_room_orders orders WHERE ${where}
         ORDER BY orders.submitted_at DESC,orders.order_id DESC LIMIT $10 OFFSET $11`, [...values, input.limit, (input.page - 1) * input.limit]);
       return PatternOrderListSchema.parse({ items: rows.rows.map(patternSummary), totalCount: count, page: input.page, pageSize: input.limit,
-        totalPages: Math.max(1, Math.ceil(count / input.limit)), canCreate: canUsePatternOrder(effective.actorRoles, patternActorCapabilities(effective), "pattern_room:orders:create"), canCreateMisc: canUsePatternOrder(effective.actorRoles, patternActorCapabilities(effective), "pattern_room:misc:create"), canFilterPeople: broad, canDelete: isPatternRoot(effective) });
+        totalPages: Math.max(1, Math.ceil(count / input.limit)), canCreate: false, canCreateMisc: canUsePatternOrder(effective.actorRoles, patternActorCapabilities(effective), "pattern_room:misc:create"), canFilterPeople: broad, canDelete: isPatternRoot(effective) });
     });
   }
 
@@ -98,7 +99,7 @@ export class PatternOrderReader {
       const mayRework = order.kind === "pattern" && ["pending_confirmation", "completed"].includes(order.status) && !!currentRound?.completed_at && available("pattern_room:orders:rework") && (creator || effective.actorRoles.includes("pattern_room_supervisor"));
       const reworkCutBlocked = mayRework && await patternReworkCutBlocked(client, orderId);
       const developmentSource=allMaterials&&(await client.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation?(await client.query("SELECT source_id FROM digital_development_pattern_links WHERE order_id=$1",[orderId])).rows[0]:null;
-      const detail = PatternOrderDetailSchema.parse({ ...patternSummary(order),...(developmentSource?{developmentSourceId:developmentSource.source_id}:{}), currentRoundId: order.current_round_id, customer: order.customer, sizeColor: order.size_color,
+      const detail = PatternOrderDetailSchema.parse({ ...patternSummary(order), association:order.misc_association??null,...(developmentSource?{developmentSourceId:developmentSource.source_id}:{}), currentRoundId: order.current_round_id, customer: order.customer, sizeColor: order.size_color,
         reworkBlockedReason: reworkCutBlocked ? PATTERN_REWORK_CUT_BLOCK : null,
         referenceStyleNo: order.reference_style_no, variant: order.variant, note: allMaterials || currentWorkerAccess ? order.note : null,
         rounds: rounds.filter(round => allCosts || round.round_id === order.current_round_id || segments.some(segment => segment.round_id === round.round_id && segment.worker_user_id === effective.actorId)).map(round => ({

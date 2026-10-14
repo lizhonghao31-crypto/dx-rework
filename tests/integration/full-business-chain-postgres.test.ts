@@ -1,3 +1,4 @@
+import {createHistoricalPatternFixture} from "../helpers/historical-pattern-fixture.js";
 import { registerWorkReportingRoutes } from "../../apps/api/src/rework/work-reporting-routes.js";
 import { journeyReworkHistoryUrl } from "../../apps/api/src/production-platform/journey-rework-record.js";
 import { PatternOrderReader } from "../../apps/api/src/pattern-room/order-reader.js";
@@ -492,15 +493,15 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       VALUES($1,$2,'制作原稿.pdf','application/pdf',10,$3,$4,'ready',CURRENT_TIMESTAMP)`, [file, `private/${file}.pdf`, "a".repeat(64), ids.patternDesigner]);
     const input = { styleNo: "PATTERN-本次款号", referenceStyleNo: "OLD-参考款号", categoryId: "92000000-0000-4000-8000-000000000002", quantity: 2, priceVersion: 1, attachmentIds: [files[0]], requiredDate: "2026-09-30" };
     await expect(new PatternRoomOrderService(database, todoProjection, { ordersEnabled: false }).create(designer, input, randomUUID())).rejects.toMatchObject({ statusCode: 503 });
-    await expect(service.create(supervisor, input, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
-    await expect(service.create(designer, { ...input, attachmentIds: [] }, randomUUID())).rejects.toMatchObject({ statusCode: 400 });
-    await expect(service.create(designer, { ...input, priceVersion: 99 }, randomUUID())).rejects.toMatchObject({ statusCode: 409, code: "PRICE_CHANGED" });
-    const key = randomUUID(), created = await service.create(designer, input, key);
+    await expect(createHistoricalPatternFixture(service,supervisor, input, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    await expect(createHistoricalPatternFixture(service,designer, { ...input, attachmentIds: [] }, randomUUID())).rejects.toMatchObject({ statusCode: 400 });
+    await expect(createHistoricalPatternFixture(service,designer, { ...input, priceVersion: 99 }, randomUUID())).rejects.toMatchObject({ statusCode: 409, code: "PRICE_CHANGED" });
+    const key = randomUUID(), created = await createHistoricalPatternFixture(service,designer, input, key);
     expect(created).toMatchObject({ styleNo: input.styleNo, referenceStyleNo: input.referenceStyleNo, status: "pending_assignment", requiredDate: "2026-09-30", reworkCount: 0 });
     await exerciseFinancePatternQueries({database,service,orderId:created.orderId,attachmentId:files[0]!,readers:[[ids.financeDirector,"finance_director"],[ids.financeRead,"finance_read"],[ids.monthClose,"wage_month_close_accountant"]]});
     expect(created.rounds[0]).toMatchObject({ index: 0, unitPrice: "40.000", quantity: 2, agreedAmount: "80.00000000" });
-    expect((await service.create(designer, input, key)).orderId).toBe(created.orderId);
-    await expect(service.create(designer, { ...input, styleNo: "重复键不同内容" }, key)).rejects.toMatchObject({ statusCode: 409 });
+    expect((await createHistoricalPatternFixture(service,designer, input, key)).orderId).toBe(created.orderId);
+    await expect(createHistoricalPatternFixture(service,designer, { ...input, styleNo: "重复键不同内容" }, key)).rejects.toMatchObject({ statusCode: 409 });
     const listing = { page: 1, limit: 25, q: "PATTERN-本次" };
     expect((await service.list(otherDesigner, listing)).totalCount).toBe(0);
     expect((await service.list(otherWorker, listing)).totalCount).toBe(0);
@@ -590,8 +591,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect((await database.query("SELECT count(*)::int count FROM pattern_room_segments WHERE round_id=$1 AND wage_eligible_at IS NOT NULL", [handed.currentRoundId])).rows[0].count).toBe(1);
     expect((await database.query("SELECT status FROM rework_todos WHERE dedupe_key=$1", [patternTodoKey(created.orderId, created.currentRoundId, "handoff")])).rows[0].status).toBe("completed");
     await expect(service.handoff(designer, created.orderId, handoffInput, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
-    await expect(service.create(otherDesigner, { ...input, attachmentIds: [files[2]] }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
-    await expect(service.create(designer, input, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    await expect(createHistoricalPatternFixture(service,otherDesigner, { ...input, attachmentIds: [files[2]] }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    await expect(createHistoricalPatternFixture(service,designer, input, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
     await expect(database.query("DELETE FROM pattern_room_orders WHERE order_id=$1", [created.orderId])).rejects.toThrow();
   });
 
@@ -601,7 +602,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     const personId = (await access.createPerson({ ...root, authorizationCapability: "master_data:manage" }, { personType: "internal", appUserId: ids.patternRoot, displayName: "Root验收", aliases: [], reason: "Root单账号验收" })).personId;
     const fileId = randomUUID();
     await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'Root.pdf','application/pdf',10,$3,$4,'ready',CURRENT_TIMESTAMP)", [fileId, `private/${fileId}.pdf`, "b".repeat(64), ids.patternRoot]);
-    const created = await service.create(root, { styleNo: "ROOT-PATTERN", categoryId: "92000000-0000-4000-8000-000000000002", quantity: 1, priceVersion: 1, attachmentIds: [fileId] }, randomUUID());
+    const created = await createHistoricalPatternFixture(service,root, { styleNo: "ROOT-PATTERN", categoryId: "92000000-0000-4000-8000-000000000002", quantity: 1, priceVersion: 1, attachmentIds: [fileId] }, randomUUID());
     expect((await service.workers(root, "Root")).some(person => person.personId === personId)).toBe(true);
     const assigned = await service.assign(root, created.orderId, { version: created.version, roundId: created.currentRoundId, personId }, randomUUID());
     const revised = await service.updateMaterials(root, created.orderId, { version: assigned.version, roundId: assigned.currentRoundId, styleNo: created.styleNo, attachmentIds: [fileId], reason: "Root验收资料修正" }, randomUUID());
@@ -654,7 +655,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       await expect(service.get(other, created.orderId)).rejects.toMatchObject({ statusCode: 404 });
       const deniedPattern = await app.inject({ method: "POST", url: "/pattern-room/orders", payload: { styleNo: "无权打板", categoryId: "92000000-0000-4000-8000-000000000002", priceVersion: 1, attachmentIds: [randomUUID()] }, headers: headers("merchant") });
       expect(deniedPattern.statusCode).toBe(403);
-      const revised = await service.updateMiscMaterials(merchant, created.orderId, { ...roundAction(created), taskName: input.taskName, styleNo: "可选关联款号", reason: "补充关联资料" }, randomUUID());
+      const revised = await service.updateMiscMaterials(merchant, created.orderId, { ...roundAction(created), taskName: input.taskName, styleNo: "", association:null, note:"TEST补充杂事说明", reason: "补充任务资料" }, randomUUID());
       const assigned = await service.assign(supervisor, created.orderId, { ...roundAction(revised), personId: workerPersonId }, randomUUID());
       await expect(service.recordHours(merchant, created.orderId, { ...roundAction(assigned), hours: "1.2" }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
       await prices.change(owner, "hourly", PATTERN_HOURLY_PRICE_ID, { version: hourly.version, amount: "99.000", enabled: true, reason: "隔离测试旧单不重算" }, randomUUID());
@@ -767,7 +768,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   const makePattern = async (service: PatternRoomOrderService, creator: TrustedActorContext, styleNo: string, quantity = 2, note?:string) => {
     const fileId = randomUUID();
     await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'本轮制作.pdf','application/pdf',10,$3,$4,'ready',CURRENT_TIMESTAMP)", [fileId, `private/${fileId}.pdf`, "c".repeat(64), creator.actorId]);
-    return service.create(creator, { styleNo, note, categoryId: "92000000-0000-4000-8000-000000000002", quantity, priceVersion: 1, attachmentIds: [fileId] }, randomUUID());
+    return createHistoricalPatternFixture(service,creator, { styleNo, note, categoryId: "92000000-0000-4000-8000-000000000002", quantity, priceVersion: 1, attachmentIds: [fileId] }, randomUUID());
   };
   const patternHttp = async (service: PatternRoomOrderService, current: TrustedActorContext, path: string, input: object, key: string) => {
     const app = Fastify();

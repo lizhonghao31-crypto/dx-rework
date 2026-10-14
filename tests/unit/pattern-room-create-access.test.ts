@@ -5,7 +5,8 @@ import { hasPageAccess } from "../../apps/web/src/auth.js";
 describe("board-room creation navigation", () => {
   const user = (role: string, capabilities: string[]) => ({ id: "fixture", businessRoles: [role], capabilities });
   it("opens creation for each authorized creator and Root", () => {
-    expect(canCreatePatternRoomOrders(user("sample_designer", ["pattern_room:orders:create"]))).toBe(true);
+    expect(canCreatePatternRoomOrders(user("sample_designer", ["pattern_room:orders:create"]))).toBe(false);
+    expect(canCreatePatternRoomOrders(user("sample_designer", ["pattern_room:misc:create"]))).toBe(true);
     expect(canCreatePatternRoomOrders(user("order_merchandiser", ["pattern_room:misc:create"]))).toBe(true);
     expect(canCreatePatternRoomOrders({ id: "root", isRoot: true, capabilities: [] })).toBe(true);
   });

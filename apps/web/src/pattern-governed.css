@@ -143,3 +143,9 @@
   .pattern-orders.rework-query-content > .pattern-pagination { grid-template-columns: minmax(0,1fr); }
   .pattern-orders.rework-query-content > .pattern-pagination > .my-todos-pagination { grid-column: 1; width: 100%; justify-content: center; }
 }
+
+/* Only the new optional misc association field; keep its hidden native select
+   anchored inside the visible combobox even when old form rules set width:100%. */
+.pattern-form-page .misc-association-field{display:grid;gap:5px;min-width:0}
+.pattern-form-page .misc-association-field .native-search-select__native{left:0;top:0;width:1px!important;height:1px!important;min-height:0!important;padding:0!important}
+.pattern-form-page .misc-association-field small{overflow-wrap:anywhere}

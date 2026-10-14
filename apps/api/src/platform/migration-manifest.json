@@ -993,6 +993,7 @@
       "version": "0241_contract_version_review_transfer_delivery",
       "checksum": "70761c9c3011af9660d2a7bac0434eb862d907404de2a68ff6386c632eb9230e"
     },
-    {"version": "0242_warehouse_supervisor_digital_dispatch", "checksum": "970d9bfac3cd416b6f600890bf99c7ccc7565614db65caa6a7d7618d02845104"}
+    {"version": "0242_warehouse_supervisor_digital_dispatch", "checksum": "970d9bfac3cd416b6f600890bf99c7ccc7565614db65caa6a7d7618d02845104"},
+    {"version": "0243_misc_order_stable_association", "checksum": "da197c78527196f9dd70909433a16f3b358c00eb424d2e9bf2b7872181a615a5"}
   ]
 }
