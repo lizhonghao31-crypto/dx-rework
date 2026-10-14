@@ -979,6 +979,10 @@ function OrderListPage({
   const [page, setPage] = useState(initial.page);
   const [totalPages, setTotalPages] = useState(1);
   const loadVersion = useRef(0);
+  const [loadedPath, setLoadedPath] = useState<string | null>(null);
+  const [messagePath, setMessagePath] = useState<string | null>(null);
+  const [summary, setSummary] = useState({ totalCount: 0, totalOrderQuantity: 0 });
+  const [reloadRevision, setReloadRevision] = useState(0);
   const debouncedSearch = useDebouncedValue(search.trim(), 180);
   const debouncedStyleName = useDebouncedValue(styleName.trim(), 180);
   const listState: SourcingListQuery = {
@@ -993,6 +997,8 @@ function OrderListPage({
 
   const load = async (state: SourcingListQuery): Promise<void> => {
     const version = ++loadVersion.current;
+    setMessagePath(sourcingListPath(mode, state));
+    setMessage("正在加载订单…");
     try {
       const params = new URLSearchParams({
         status: mode === "history" ? "closed" : "pending",
@@ -1008,7 +1014,13 @@ function OrderListPage({
         SourcingCaseListResponseSchema,
       );
       if (version !== loadVersion.current) return;
+      if (body.page > body.totalPages) {
+        setPage(Math.max(1, body.totalPages));
+        return;
+      }
       setItems(body.items);
+      setSummary({ totalCount: body.totalCount, totalOrderQuantity: body.totalOrderQuantity });
+      setLoadedPath(sourcingListPath(mode, state));
       setPage(body.page);
       setTotalPages(body.totalPages);
       setMessage("");
@@ -1024,7 +1036,8 @@ function OrderListPage({
 
   useEffect(() => {
     void load(listState);
-  }, [debouncedSearch, debouncedStyleName, stage, gender, contractReturn, page, mode]);
+    return () => { loadVersion.current += 1; };
+  }, [debouncedSearch, debouncedStyleName, stage, gender, contractReturn, page, mode, reloadRevision]);
 
   const changeStage = (value: SourcingStageFilter): void => {
     setStage(value);
@@ -1035,9 +1048,13 @@ function OrderListPage({
     setPage(1);
   };
 
+  const inputsSettled = search.trim() === debouncedSearch && styleName.trim() === debouncedStyleName;
+  const currentResult = loadedPath === listPath && inputsSettled;
+  const listMessage = !inputsSettled || messagePath !== listPath
+    ? "正在加载订单…" : message || (!currentResult ? "正在加载订单…" : "");
   const visible = useMemo(
-    () => items.filter((item) => mode === "history" ? item.status === "closed" : item.status !== "closed"),
-    [items, mode],
+    () => listMessage ? [] : items.filter((item) => mode === "history" ? item.status === "closed" : item.status !== "closed"),
+    [items, mode, listMessage],
   );
 
   const remove = async (item: SourcingCaseSummary): Promise<void> => {
@@ -1055,7 +1072,8 @@ function OrderListPage({
           headers: { "idempotency-key": createClientRequestId() },
         },
       );
-      setItems((current) => current.filter((entry) => entry.sourcingCaseId !== item.sourcingCaseId));
+      setLoadedPath(null);
+      setReloadRevision(current => current + 1);
     } catch (error) {
       setDeleteError(error instanceof Error ? error.message : "删除失败");
     } finally {
@@ -1149,9 +1167,12 @@ function OrderListPage({
             </select>
           </label>
         </div>
+        {!listMessage ? <p className="sourcing-list-summary" role="status" aria-label="筛选结果汇总">
+          共 {summary.totalCount.toLocaleString("zh-CN")} 张订单 <span aria-hidden="true">｜</span> 订单数量合计 <strong>{summary.totalOrderQuantity.toLocaleString("zh-CN")}</strong> 件
+        </p> : null}
         {deleteError ? <p className="sourcing-delete-error" role="alert">{deleteError}</p> : null}
-        {message ? <p className="sourcing-list-message" role="status">{message}</p> : null}
-        {!message && visible.length === 0 ? <p className="sourcing-list-message">暂无符合条件的订单</p> : null}
+        {listMessage ? <p className="sourcing-list-message" role="status">{listMessage}</p> : null}
+        {!listMessage && visible.length === 0 ? <p className="sourcing-list-message">暂无符合条件的订单</p> : null}
         <div className="sourcing-order-list">
           {visible.map((item) => <SourcingOrderCard
             item={item}
@@ -1162,7 +1183,7 @@ function OrderListPage({
             onDelete={(order) => { void remove(order); }}
           />)}
         </div>
-        {!message ? <ListPagination
+        {!listMessage ? <ListPagination
           page={page}
           totalPages={totalPages}
           ariaLabel="订单列表分页"

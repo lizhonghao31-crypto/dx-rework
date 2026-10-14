@@ -5084,4 +5084,43 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
         await expect(database.query(`SELECT ${functionName}($1,$2)`, [supervisorId, capability])).rejects.toMatchObject({ code: "42501" });
     } finally { await app.close(); upload.mockRestore(); }
   });
+  it("summarizes all filtered sourcing orders across pages, multi-colors, transfer history and read permissions", async () => {
+    const before = await service.listCases(readerActor());
+    for (let index = 0; index < 17; index += 1) {
+      await service.createCase(merchandiserActor(), {
+        gender: "男装", styleName: "SUMMARY-PAGE-针织",
+        estimatedCutPieceSendDate: "2026-10-01", deliveryDate: "2026-10-22",
+        lineItems: [
+          { styleNo: `SUMMARY-PAGE-${index}`, color: "蓝", quantity: 40 },
+          { styleNo: `SUMMARY-PAGE-${index}`, color: "白", quantity: 60 + index },
+        ], daxingUnitPrice: "8", attachmentIds: [],
+      }, randomUUID());
+    }
+    const filters = { stage: "ie" as const, gender: "男装" as const, styleName: "SUMMARY-PAGE" };
+    const first = await service.listCases(readerActor(), "SUMMARY-PAGE", "pending", 1, filters);
+    const second = await service.listCases(readerActor(), "SUMMARY-PAGE", "pending", 2, filters);
+    const beyond = await service.listCases(readerActor(), "SUMMARY-PAGE", "pending", 3, filters);
+    for (const result of [first, second, beyond]) expect(result).toMatchObject({ totalCount: 17, totalOrderQuantity: 1836, totalPages: 2 });
+    expect(first.items).toHaveLength(15); expect(second.items).toHaveLength(2); expect(beyond.items).toEqual([]);
+    expect([...first.items, ...second.items].reduce((sum, row) => sum + row.orderQuantity, 0)).toBe(1836);
+    for (const filter of [{ ...filters, gender: "女装" as const }, { ...filters, contractReturn: "all" as const }]) {
+      expect(await service.listCases(readerActor(), "SUMMARY-PAGE", "pending", 1, filter)).toMatchObject({ items: [], totalCount: 0, totalOrderQuantity: 0 });
+    }
+    const id = await reviewedContractCase("SUMMARY-TRANSFER");
+    await service.requestFactoryChange(managerActor(), id, { supplierId: replacementFactoryId, unitPrice: "15.5", changeReason: "TEST-summary transfer history" }, randomUUID());
+    const transferred = await service.getCase(readerActor(), id);
+    const result = await service.listCases(readerActor(), "SUMMARY-TRANSFER", "all", 1, { contractReturn: "all" });
+    expect(result).toMatchObject({ totalCount: 1, totalOrderQuantity: transferred.orderQuantity });
+    expect((await database.query("SELECT count(*)::int AS count FROM sourcing_contract_documents WHERE sourcing_case_id=$1", [id])).rows[0].count).toBeGreaterThan(1);
+    const company = await service.listCases(readerActor(), transferred.decision!.supplierName, "all", 1, { styleName: "SUMMARY-TRANSFER", contractReturn: "all" });
+    expect(company).toMatchObject({ totalCount: 1, totalOrderQuantity: 2020 });
+    expect(await service.listCases(readerActor(), "SUMMARY-NOT-FOUND")).toMatchObject({ items: [], totalCount: 0, totalOrderQuantity: 0 });
+    const cleared = await service.listCases(readerActor());
+    expect(cleared.totalCount).toBe(before.totalCount + 18);
+    expect(cleared.totalOrderQuantity).toBe(before.totalOrderQuantity + 3856);
+    expect((await service.listCases(anotherMerchandiserReader(), "SUMMARY-PAGE")).totalOrderQuantity).toBe(1836);
+    await expect(service.listCases({ ...readerActor(), authorizationCapabilities: [] }, "SUMMARY-PAGE")).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(service.listCases({ ...rootActor(), authorizationCapability: "sourcing:delete" }, "SUMMARY-PAGE")).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
 });
