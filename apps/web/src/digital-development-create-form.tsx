@@ -46,6 +46,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const [validationMode,setValidationMode]=useState<"save"|"publish"|null>(null);
   const [patternChoice,setPatternChoice]=useState<DevelopmentPatternChoice|null>(null);
   const [published,setPublished]=useState(existingDraft?.status==="published");
+  const [boundOrder,setBoundOrder]=useState(existingDraft?.status==="published"&&existingDraft.document?.customerOrderDraft?.withOrder?existingDraft.document.customerOrderDraft.order:null);
   const loadedVersion=useRef<number|null>(existingDraft?.version??null);
   const [fileKind,setFileKind]=useState<DevelopmentDocument["files"][number]["kind"]>("款图");
   const measurementIds=useRef(document.measurements.map(()=>createClientRequestId()));
@@ -173,9 +174,10 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
           if(!draftOnly){
             const body={expectedVersion:sheet.version,patternOrder:patternChoice},payload=JSON.stringify(body);
             if(publishKey.current?.payload!==payload)publishKey.current={payload,key:createClientRequestId()};
-            await digitalRequest<DevelopmentSheet>(`${base}/publish`,"POST",body,publishKey.current.key);setPublished(true);
+            const publishedSheet=await digitalRequest<DevelopmentSheet>(`${base}/publish`,"POST",body,publishKey.current.key);setPublished(true);
+            if(publishedSheet.document?.customerOrderDraft?.withOrder){setBoundOrder(publishedSheet.document.customerOrderDraft.order);setForm(publishedSheet.document.customerOrderDraft.order);}
           }
-        } else {setPublished(true);if(draftOnly)throw new Error("开发单已发布，请继续确认客户订单或重新打开查看");persistedDocument=sheet.document??document;}
+        } else {setPublished(true);if(sheet.document?.customerOrderDraft?.withOrder){setBoundOrder(sheet.document.customerOrderDraft.order);setForm(sheet.document.customerOrderDraft.order);}if(draftOnly)throw new Error("开发单已发布，请继续确认客户订单或重新打开查看");persistedDocument=sheet.document??document;}
       }
       let orderId: string | null = null;
       if (orderInput) {
@@ -212,7 +214,8 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     {duplicateSource&&<a href={createWebUrls(import.meta.env.BASE_URL).pageUrl(`ui/digital-production?development=${duplicateSource}`)}>打开已有开发档案</a>}
     {savedDraft === currentSnapshot && <p role="status">开发资料与订购草稿已保存，重开可继续；尚未发布或创建客户订单。</p>}
     {createdSource && !source && error && <p role="status">开发档案已保存。修正订购信息后重试会沿用此档案。</p>}
-    <fieldset disabled={busy}><div className="development-create-layout development-create-layout-existing">
+    {boundOrder&&<p role="status">订购草稿已随开发资料发布；确认与重试沿用已发布的 PO、数量和日期。</p>}
+    <fieldset disabled={busy}><fieldset disabled={Boolean(boundOrder)} className="development-order-fields"><div className="development-create-layout development-create-layout-existing">
     <div className="development-create-order"><section className="development-create-card"><h3>基本资料</h3><div className="development-create-grid">
       {intent !== "confirm_order" && <label>开发类型<select aria-label="开发类型" disabled={Boolean(createdSource)} value={developmentType} onChange={event => setDevelopmentType(event.target.value as "头版" | "开发板")}><option>头版</option><option>开发板</option></select></label>}
       <label>设计款号（必填）<input aria-label="设计款号" required maxLength={100} value={form.designStyleNo} readOnly={Boolean(createdSource)} onBlur={event=>void findExistingSource(event.target.value)} onChange={event => {sourceSearchSequence.current++;setDuplicateSource(null);setForm({...form, designStyleNo: event.target.value});}}/></label>
@@ -253,7 +256,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         <Button type="button" disabled={form.lines[0]!.sizes.length >= 50} onClick={() => setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: [...row.sizes, {size:"", quantity:""}]}))}))}>添加尺码列</Button>
         <strong className="development-total-quantity" role="status">总订购数量：{totalQuantity === null ? <span className="development-quantity-error">请修正数量</span> : `${totalQuantity.toLocaleString()} 件`}</strong>
       </div></section>}
-    </div></div>
+    </div></div></fieldset>
     {!source&&<div className="development-editor dx-doc-development">
       {issues.map(value=><p key={value.id} role="alert"><a href={`#${value.id}`}>{value.message}</a></p>)}
       {pictures.filter(picture=>picture.error).map(picture=><p key={picture.id} role="alert">{picture.file.name}：{picture.error}</p>)}
@@ -263,10 +266,10 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   </form></Surface>;
 }
 
-export function ResumeDevelopmentCreateForm({sheet,onClose,onCreated}:{sheet:DevelopmentSheet;onClose:()=>void;onCreated:()=>void}) {
+export function ResumeDevelopmentCreateForm({sheet,onClose,onCreated,onViewPublished}:{sheet:DevelopmentSheet;onClose:()=>void;onCreated:()=>void;onViewPublished?:()=>void}) {
   const [options,setOptions]=useState<{customers:DigitalCustomer[];minimumInitialCustomerDate?:string}|null>(null);
   const [error,setError]=useState("");
   const [intent,setIntent]=useState<"development"|"certain_order">(sheet.document?.customerOrderDraft?.withOrder?"certain_order":"development");
   useEffect(()=>{let live=true;void digitalRequest<{customers:DigitalCustomer[];minimumInitialCustomerDate?:string}>("options").then(value=>{if(live)setOptions(value);}).catch(reason=>{if(live)setError(reason instanceof Error?reason.message:"读取客户资料失败");});return()=>{live=false;};},[]);
-  return error?<p role="alert">{error}</p>:!options?<p role="status">正在读取开发草稿…</p>:<DevelopmentCreateForm existingDraft={sheet} intent={intent} customers={options.customers} minimumDate={options.minimumInitialCustomerDate} onIntentChange={setIntent} onCancel={onClose} onCreated={onCreated}/>;
+  return error?<p role="alert">{error}</p>:!options?<p role="status">正在读取开发草稿…</p>:<>{sheet.status==="published"&&onViewPublished&&<Button type="button" onClick={onViewPublished}>查看已发布资料、版本与办理</Button>}<DevelopmentCreateForm existingDraft={sheet} intent={intent} customers={options.customers} minimumDate={options.minimumInitialCustomerDate} onIntentChange={setIntent} onCancel={onClose} onCreated={onCreated}/></>;
 }

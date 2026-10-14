@@ -1,7 +1,8 @@
 import type { SourcingService } from "../sourcing/sourcing-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { digitalFormalPoNo, digitalPoKey, initialCustomerDateErrors, minimumInitialCustomerDate } from "@dx-rework/contracts/digital-production";
+import { DigitalOrderCreateSchema, initialCustomerOrderInput, digitalFormalPoNo, digitalPoKey, initialCustomerDateErrors, minimumInitialCustomerDate } from "@dx-rework/contracts/digital-production";
+import {developmentDocumentRow} from "./development-round-repository.js";
 import { DigitalPoDateRepository } from "./po-date-repository.js";
 import type { DigitalCustomer, DigitalOrder, DigitalOrderInput, DigitalSource, DigitalSourceInput, DigitalNumberCorrection } from "@dx-rework/contracts/digital-production";
 import { isRootActor } from "../access/business-authority.js";
@@ -12,6 +13,12 @@ import { ProductionOrderRootRepository } from "./order-root-repository.js";
 
 const fail = (message: string, status = 409): never => { throw new ApplicationError(status === 404 ? "NOT_FOUND" : status === 403 ? "FORBIDDEN" : "DIGITAL_PRODUCTION_CONFLICT", message, status); };
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const orderFactsDigest=(value:DigitalOrderInput)=>{
+  const facts=DigitalOrderCreateSchema.parse(value);
+  // Assignment continues through the existing active-role/default/Root policy.
+  delete facts.primaryMerchandiserId;
+  return digest(facts);
+};
 export const digitalDateText = (value: Date | string | null) => value instanceof Date
   ? new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Shanghai",
@@ -48,7 +55,7 @@ export class DigitalProductionIdentityService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
-      if(command.startsWith("numbers:"))await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+      if(command.startsWith("numbers:")||command.startsWith("confirm-source:"))await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify([actor.actorId, command, key])]);
       const hash = digest(payload);
       const prior = await client.query("SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3", [actor.actorId, command, key]);
@@ -131,8 +138,10 @@ export class DigitalProductionIdentityService {
           if (existing.rows[0].creation_hash !== digest(input)) fail("该开发来源已确认下单，不能重复建立不同订单");
           return this.readWith(client, actor, existing.rows[0].production_order_id);
         }
-        if (!(await client.query("SELECT 1 FROM digital_development_documents WHERE source_id=$1 AND status='published'",[sourceId])).rowCount)
-          fail("请先发布开发单，再正式确认客户订单");
+        const published=await developmentDocumentRow(client,sourceId);
+        if(published?.status!=="published")fail("请先发布开发单，再正式确认客户订单");
+        if(published.document?.customerOrderDraft?.withOrder&&orderFactsDigest(input)!==orderFactsDigest(initialCustomerOrderInput(published.document.customerOrderDraft.order)))
+          fail("确认信息须与当前已发布的订购草稿一致，请重新打开原档案恢复资料");
       }
       const styleKey = digitalPoKey(input.designStyleNo);
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify(["digital-order-style",styleKey])]);

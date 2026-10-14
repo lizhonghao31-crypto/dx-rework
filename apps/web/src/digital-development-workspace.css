@@ -422,3 +422,5 @@
 .development-create-reference .development-create-po-table .development-row-total{width:90px;min-width:90px}
 .development-create-reference .development-create-po-table .development-po-date{width:145px;min-width:145px}
 .development-create-reference .development-size-column{width:88px;min-width:88px}
+
+.development-create .development-order-fields{border:0;padding:0;margin:0;min-width:0}

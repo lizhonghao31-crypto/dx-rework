@@ -88,13 +88,29 @@ run("P05 development forms PostgreSQL", () => {
     order.designStyleNo=identity.designStyleNo;
     saved=await development.save(actor(),id,{expectedVersion:saved.version,document},randomUUID());
     await development.publish(actor(),id,saved.version,randomUUID());
-    const confirmed=await service.createOrder(actor(),DigitalOrderCreateSchema.parse(initialCustomerOrderInput(order)),randomUUID(),id);
+    const confirmation=DigitalOrderCreateSchema.parse(initialCustomerOrderInput(order));
+    for(const patch of [
+      {...confirmation.lines[0]!,color:"TEST其他颜色"},
+      {...confirmation.lines[0]!,sizes:[{size:"M",quantity:13}]},
+      {...confirmation.lines[0]!,customerWarehouseArrivalDate:"2099-12-31"},
+    ])await expect(service.createOrder(actor(),{...confirmation,lines:[patch]},randomUUID(),id)).rejects.toMatchObject({statusCode:409,message:expect.stringContaining("已发布的订购草稿一致")});
+    expect((await database.query("SELECT count(*)::int n FROM digital_production_orders WHERE source_id=$1",[id])).rows[0].n).toBe(0);
+    await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'order_merchandiser')",[other]);
+    await expect(service.createOrder(actor(),{...confirmation,primaryMerchandiserId:other},randomUUID(),id)).rejects.toMatchObject({statusCode:403});
+    const confirmed=await service.createOrder(actor(root,['root_superuser']),{...confirmation,primaryMerchandiserId:other},randomUUID(),id);
+    expect(confirmed.primaryMerchandiserId).toBe(other);
     expect(confirmed.lines[0]?.sizes[0]?.quantity).toBe(12);expect((await development.read(actor(),id)).document?.quantity).toBe(1);
     expect((await development.read(actor(),id)).productionOrderId).toBe(confirmed.productionOrderId);
     expect((await new DigitalDevelopmentService(database,false).read(actor(),id)).document?.customerOrderDraft).toEqual(document.customerOrderDraft);
     await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'pattern_room_supervisor')",[other]);
     const technical=await development.read(actor(other,['pattern_room_supervisor']),id);
     expect(technical.document?.customerOrderDraft).toBeUndefined();expect(technical.productionOrderId).toBeNull();expect(technical.document?.quantity).toBe(1);
+  });
+  it("retains later customer confirmation with independent PO quantities after development published without an order",async()=>{
+    const id=await source(),sheet=await development.read(actor(),id),document=await ready();
+    const saved=await development.save(actor(),id,{expectedVersion:0,document},randomUUID());await development.publish(actor(),id,saved.version,randomUUID());
+    const confirmed=await service.createOrder(actor(),DigitalOrderCreateSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:sheet.designStyleNo,orderDate:"2026-10-15",lines:[{color:"TEST后确认",customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:"M",quantity:19}]}]}),randomUUID(),id);
+    expect(confirmed.lines[0]?.sizes[0]?.quantity).toBe(19);expect((await development.read(actor(),id)).document?.quantity).toBe(1);
   });
   it("projects authorized style images and the declared development flow without inventing tasks",async()=>{
     const id=await source(),document=await ready();
