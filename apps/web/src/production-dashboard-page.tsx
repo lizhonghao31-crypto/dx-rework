@@ -1,3 +1,4 @@
+import { SearchableSelect } from "./search-select.js";
 import { todoReturnPath } from "./todo-query-state.js";
 import { ProductionExclusionControls } from "./production-exclusion-controls.js";
 import { NavigationIcon } from "./navigation-icons.js";
@@ -107,7 +108,7 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
       <Surface className="sourcing-list-card board-directory"><div className="board-filters">
         <label>关键词<input value={q} maxLength={100} placeholder="款号或供应商" onChange={e=>{setQ(e.target.value);setPage(1);}}/></label>
         <div className="board-extra"><button className="board-filter-toggle" aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(value=>!value)}>供应商 / 状态 / 进度筛选</button><div className={filtersOpen?"is-open":""}>
-        <label>供应商<select value={supplier} onChange={e=>{setSupplier(e.target.value);setPage(1);}}><option value="">全部负责供应商</option>{data?.suppliers.map(s=><option key={s.supplierId} value={s.supplierId}>{s.supplierName}</option>)}</select></label>
+        <label>供应商<SearchableSelect value={supplier} onChange={e=>{setSupplier(e.target.value);setPage(1);}}><option value="">全部负责供应商</option>{data?.suppliers.map(s=><option key={s.supplierId} value={s.supplierId}>{s.supplierName}</option>)}</SearchableSelect></label>
         <label>生产状态<select value={status} onChange={e=>{setStatus(e.target.value);setPage(1);}}><option value="">全部状态</option>{Object.entries(productionStatusLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
         <label>生产进度<select value={progressState} onChange={e=>{setProgressState(e.target.value);setPage(1);}}><option value="">全部进度</option>{Object.entries(progressLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
         <label>追单风险<select value={risk} onChange={e=>{setRisk(e.target.value);setPage(1);}}><option value="">全部</option><option value="attention">需关注</option><option value="stale">2天未更新</option><option value="due_pressure">本周交期承压</option></select></label>

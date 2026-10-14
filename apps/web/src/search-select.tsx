@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useLayoutEffect, useMemo, useRef, useState, type SelectHTMLAttributes } from "react";
 import "./search-select.css";
 
 export type SearchSelectOption = Readonly<{
@@ -86,4 +86,75 @@ export function SearchSelect({
       ) : null}
     </div>
   );
+}
+
+/** Search is transient; only an existing enabled native option can change the value.
+ * The native control remains responsible for FormData, required, and change events.
+ */
+export function SearchableSelect({ children, onSearchChange, ...props }: SelectHTMLAttributes<HTMLSelectElement> & { onSearchChange?: (query: string) => void }) {
+  const native = useRef<HTMLSelectElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const listId = useId();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(-1);
+  const [error, setError] = useState("");
+  const [snapshot, setSnapshot] = useState<{ value: string; rows: Array<{ value: string; label: string; disabled: boolean }> }>({ value: "", rows: [] });
+  useLayoutEffect(() => {
+    const select = native.current;
+    if (!select) return;
+    const next = { value: select.value, rows: Array.from(select.options, option => ({ value: option.value, label: option.label, disabled: option.disabled || Boolean(option.closest("optgroup")?.disabled) })) };
+    setSnapshot(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
+  });
+  const matches = snapshot.rows.filter(row => row.label.toLocaleLowerCase("zh-CN").includes(query.trim().toLocaleLowerCase("zh-CN")));
+  const selected = snapshot.rows.find(row => row.value === snapshot.value)?.label ?? "";
+  const close = () => { setOpen(false); setQuery(""); setActive(-1); onSearchChange?.(""); };
+  const choose = (value: string) => {
+    const select = native.current;
+    if (!select || select.matches(":disabled")) return;
+    const option = Array.from(select.options).find(option => option.value === value);
+    if (!option || option.disabled || option.closest("optgroup")?.disabled) return;
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    setError("");
+    close();
+    input.current?.focus();
+  };
+  return <div className="search-select native-search-select" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) close(); }}>
+    <input ref={input} id={props.id} type="text" role="combobox" autoComplete="off" disabled={props.disabled}
+      aria-label={props["aria-label"]} aria-labelledby={props["aria-labelledby"]}
+      aria-describedby={error ? `${listId}-error` : props["aria-describedby"]} aria-invalid={error ? true : props["aria-invalid"]}
+      aria-required={props.required} aria-expanded={open} aria-controls={listId} aria-autocomplete="list"
+      aria-activedescendant={open && active >= 0 && matches[active] ? `${listId}-${active}` : undefined}
+      value={open ? query : selected} placeholder={selected || "输入关键词选择"}
+      onClick={() => { if (!open) { setOpen(true); setQuery(""); setActive(-1); } }}
+      onChange={event => { setQuery(event.target.value); setOpen(true); setActive(-1); onSearchChange?.(event.target.value); }}
+      onKeyDown={event => {
+        if (event.key === "Escape") { if (open) { event.preventDefault(); event.stopPropagation(); close(); } return; }
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault(); setOpen(true);
+          const direction = event.key === "ArrowDown" ? 1 : -1;
+          let index = active < 0 ? (direction === 1 ? -1 : 0) : active;
+          for (let attempt = 0; attempt < matches.length; attempt++) {
+            index = (index + direction + matches.length) % matches.length;
+            if (!matches[index]?.disabled) { setActive(index); requestAnimationFrame(() => document.getElementById(`${listId}-${index}`)?.scrollIntoView({ block: "nearest" })); break; }
+          }
+        } else if (event.key === "Enter" && open) {
+          event.preventDefault();
+          const row = matches[active];
+          if (row && !row.disabled) choose(row.value);
+        }
+      }} />
+    <select {...props} ref={native} id={props.id ? `${props.id}-native` : undefined} className="native-search-select__native" tabIndex={-1} aria-hidden="true"
+      onFocus={() => input.current?.focus()}
+      onInvalid={event => { props.onInvalid?.(event); event.preventDefault(); setError("请选择已有选项"); input.current?.focus(); }}
+      onChange={event => { const value = event.currentTarget.value; setSnapshot(previous => ({ ...previous, value })); props.onChange?.(event); }}>
+      {children}
+    </select>
+    <button className="native-search-select__toggle" type="button" disabled={props.disabled} tabIndex={-1} aria-label="展开已有选项" onClick={() => { setOpen(!open); setQuery(""); setActive(-1); input.current?.focus(); }}>▾</button>
+    {open && !props.disabled && <div className="search-select__results" role="listbox" id={listId}>
+      {matches.length ? matches.map((row, index) => <button type="button" role="option" id={`${listId}-${index}`} tabIndex={-1} key={`${index}:${row.value}`} disabled={row.disabled} aria-selected={row.value === snapshot.value} data-active={index === active || undefined} onMouseDown={event => event.preventDefault()} onClick={() => choose(row.value)}>{row.label}</button>) : <span>没有匹配的已有选项</span>}
+    </div>}
+    {error && <span id={`${listId}-error`} role="alert">{error}</span>}
+  </div>;
 }

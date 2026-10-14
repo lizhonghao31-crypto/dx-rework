@@ -1,3 +1,4 @@
+import { SearchableSelect } from "./search-select.js";
 import { moduleCanWrite } from "./member-module-policy.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { useEffect, useRef, useState } from "react";
@@ -78,7 +79,7 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
     {!productionOrderId?<>
       <Surface className="sourcing-list-card"><div className="sourcing-form-grid">
         <label>关键词<input aria-label="搜索生产订单" value={q} onChange={e=>{setQ(e.target.value);setPage(1);}} placeholder="款号或供应商" maxLength={100}/></label>
-        <label>供应商<select value={supplier} onChange={e=>{setSupplier(e.target.value);setPage(1);}}><option value="">全部负责供应商</option>{list?.suppliers.map(s=><option key={`${s.supplierId}:${s.supplierName}`} value={s.supplierId}>{s.supplierName}</option>)}</select></label>
+        <label>供应商<SearchableSelect value={supplier} onChange={e=>{setSupplier(e.target.value);setPage(1);}}><option value="">全部负责供应商</option>{list?.suppliers.map(s=><option key={`${s.supplierId}:${s.supplierName}`} value={s.supplierId}>{s.supplierName}</option>)}</SearchableSelect></label>
         <label>生产状态<select value={status} onChange={e=>{setStatus(e.target.value);setPage(1);}}><option value="">全部状态</option>{Object.entries(labels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
       </div><div className="sourcing-order-list">
         {list?.items.map(order=><Surface className="sourcing-order-card" key={order.productionOrderId}><a className="sourcing-order-card__main" href={pageUrl(`ui/production-reporting/${order.productionOrderId}`)}>
@@ -126,8 +127,8 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
     {user?.isRoot?<Surface className="sourcing-list-card"><details onToggle={e=>{if(e.currentTarget.open&&!directory)void loadScopes();}}><summary>驻厂人员负责范围</summary>
       <p>先在“人员与权限”分配驻厂生产填报角色，再配置负责范围。</p>
       <form className="sourcing-form-grid" onSubmit={e=>{e.preventDefault();void saveScope({userId:scopeUser,scopeType:productionOrderId&&!scopeSupplier?"order":"supplier",scopeId:scopeSupplier||productionOrderId||"",active:true});}}>
-        <label>驻厂人员<select required value={scopeUser} onChange={e=>setScopeUser(e.target.value)}><option value="">请选择</option>{directory?.users.map(u=><option key={u.userId} value={u.userId}>{u.displayName}</option>)}</select></label>
-        <label>负责范围<select required={!productionOrderId} value={scopeSupplier} onChange={e=>setScopeSupplier(e.target.value)}><option value="">{productionOrderId?"仅当前订单":"请选择供应商"}</option>{directory?.suppliers.map(s=><option key={s.supplierId} value={s.supplierId}>{s.supplierName}</option>)}</select></label>
+        <label>驻厂人员<SearchableSelect required value={scopeUser} onChange={e=>setScopeUser(e.target.value)}><option value="">请选择</option>{directory?.users.map(u=><option key={u.userId} value={u.userId}>{u.displayName}</option>)}</SearchableSelect></label>
+        <label>负责范围<SearchableSelect required={!productionOrderId} value={scopeSupplier} onChange={e=>setScopeSupplier(e.target.value)}><option value="">{productionOrderId?"仅当前订单":"请选择供应商"}</option>{directory?.suppliers.map(s=><option key={s.supplierId} value={s.supplierId}>{s.supplierName}</option>)}</SearchableSelect></label>
         <Button type="submit" disabled={busy||!scopeUser||(!scopeSupplier&&!productionOrderId)}>保存负责范围</Button>
       </form>
       {directory?.scopes.map(s=><p key={`${s.userId}:${s.scopeType}:${s.scopeId}`}>{directory.users.find(u=>u.userId===s.userId)?.displayName??"已撤销角色人员"} · {s.scopeLabel} <Button variant="secondary" disabled={busy} onClick={()=>{void confirmInApp("确认撤销该负责范围？").then(ok=>{if(ok)void saveScope({userId:s.userId,scopeType:s.scopeType,scopeId:s.scopeId,active:false});});}}>撤销</Button></p>)}
