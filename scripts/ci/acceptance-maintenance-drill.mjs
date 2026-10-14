@@ -197,7 +197,8 @@ try {
  await assert.rejects(appDb.query("INSERT INTO digital_factory_qc(check_id,preparation_id,return_fact_id,line_id,result,problem,treatment,checked_by) VALUES($1,$2,$3,$4,'合格','','',$5)",[randomUUID(),randomUUID(),randomUUID(),randomUUID(),sentinel]),error=>error.code==='23503');
  const actorId=randomUUID();await db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST budget actor',true)",[actorId]);
  const actor={actorId,actorRoles:['root_superuser'],authorizationCapability:'pattern_room:orders:create',authorizationCapabilities:['pattern_room:orders:create'],requestId:randomUUID()};
- const service=new DigitalProductionIdentityService(appDb,true),budget=new DigitalBudgetService(appDb,true);
+ // Fixed fixture clock: this drill validates privileges/idempotency, not a moving customer-date boundary.
+ const service=new DigitalProductionIdentityService(appDb,true,undefined,()=>new Date('2026-09-01T00:00:00Z')),budget=new DigitalBudgetService(appDb,true);
  const order=await service.createOrder(actor,{customerCode:'PD',productGroup:'男装',designStyleNo:'TEST-MIGRATION',temporaryStyleNo:'TEST-MIGRATION',orderDate:'2026-10-03',lines:[{color:'黑',sizes:[{size:'M',quantity:10}],deliveryDate:'2026-11-01'}]},randomUUID());
  const document={fabricType:'针织',productCategory:'套装',monthSeries:'',date:'2026-10-03',currency:'人民币',rows:[],freight:'0.3',cm:'8.3',salePrice:'48',outsourcingScope:'裁、车、烫、包装',outsourcingUnitPrice:'8.3',imageAttachmentIds:[]};
  const key=randomUUID();assert.equal((await budget.save(actor,order.productionOrderId,{expectedVersion:0,document},key)).version,1);

@@ -27,6 +27,11 @@ export function registerPatternRoomOrderRoutes(app: FastifyInstance, dependencie
     reply.header("cache-control", "no-store");
     return dependencies.service.list(await actor(request, "pattern_room:orders:view"), parse(PatternOrderQuerySchema, request.query));
   });
+  app.get("/pattern-room/misc-associations",async(request,reply)=>{
+    reply.header("cache-control","no-store");
+    const query=parse(z.object({q:z.string().trim().max(100).default("")}).strict(),request.query);
+    return dependencies.service.miscAssociations(await actor(request,"pattern_room:misc:create"),query.q);
+  });
   app.get("/pattern-room/workers", async (request, reply) => {
     reply.header("cache-control", "no-store");
     return dependencies.service.workers(await actor(request, "pattern_room:orders:assign"), parse(z.object({ q: z.string().max(100).default("") }), request.query).q);

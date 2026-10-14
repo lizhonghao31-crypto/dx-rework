@@ -39,7 +39,13 @@ export const CreatePatternOrderSchema = z.object({ ...materials,
   categoryId: z.string().uuid(), quantity: z.number().int().min(1).max(1_000_000).default(1), priceVersion: z.number().int().positive(),
 }).strict();
 export type CreatePatternOrder = z.infer<typeof CreatePatternOrderSchema>;
+export const MiscAssociationSchema=z.object({kind:z.enum(["source","po"]),id:z.string().uuid()}).strict();
+export type MiscAssociation=z.infer<typeof MiscAssociationSchema>;
+export const MiscAssociationSnapshotSchema=MiscAssociationSchema.extend({styleNo:z.string().max(100),label:z.string().max(500)});
+export type MiscAssociationSnapshot=z.infer<typeof MiscAssociationSnapshotSchema>;
+export const MiscAssociationOptionsSchema=z.array(MiscAssociationSnapshotSchema);
 const miscMaterials = {
+  association:MiscAssociationSchema.nullable().optional(),
   taskName: z.string().trim().min(1, "请填写杂事内容或任务名称").max(200),
   styleNo: z.string().trim().max(100).default(""),
   attachmentIds: z.array(z.string().uuid()).max(20).default([]).refine(ids => new Set(ids).size === ids.length, "附件不能重复"),
@@ -74,7 +80,7 @@ export const PatternOrderQuerySchema = z.object({
   q: z.string().trim().max(100).optional(), status: PatternOrderStatusSchema.optional(),
   kind: z.enum(["pattern", "misc"]).optional(),
   creatorId: z.string().uuid().optional(), workerId: z.string().uuid().optional(),
-  page: z.coerce.number().int().min(1).max(100_000).default(1), limit: z.coerce.number().int().min(1).max(100).default(25),
+  page: z.coerce.number().int().min(1).max(100_000).default(1), limit: z.coerce.number().int().min(1).max(100).default(15),
 }).strict();
 export type PatternOrderQuery = z.infer<typeof PatternOrderQuerySchema>;
 
@@ -88,6 +94,7 @@ export const PatternWorkerOptionsSchema = z.array(z.object({ personId: z.string(
 export const PatternPeopleFiltersSchema = z.object({ creators: z.array(z.object({ id: z.string().uuid(), name: z.string() })), workers: z.array(z.object({ id: z.string().uuid(), name: z.string() })) });
 export const PatternAttachmentSchema = z.object({ attachmentId: z.string().uuid(), roundId: z.string().uuid(), filename: z.string(), mimeType: z.string(), sizeBytes: z.number(), active: z.boolean(), addedAt: z.string(), reason: z.string() });
 export const PatternOrderDetailSchema = PatternOrderSummarySchema.extend({
+  association:MiscAssociationSnapshotSchema.nullable().optional(),
   developmentSourceId:z.string().uuid().optional(),
   currentRoundId: z.string().uuid(), customer: z.string().nullable(), sizeColor: z.string().nullable(), referenceStyleNo: z.string().nullable(), variant: z.string().nullable(), note: z.string().nullable(),
   rounds: z.array(z.object({

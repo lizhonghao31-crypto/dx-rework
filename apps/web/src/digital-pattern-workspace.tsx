@@ -89,7 +89,7 @@ export function DigitalPatternWorkspace({selectedOnly=false}:{selectedOnly?:bool
   const requestedView = digitalTaskView(window.location.search);
   const view = requestedView === "correct" ? "correct" : requestedView === "read" ? "read" : selected && ["completed","cancelled"].includes(selected.state) ? "read" : "handle";
   const taskUrl = selected ? `${urls.pageUrl("ui/digital-production")}?task=${selected.taskId}&taskView=${view}&returnTo=${encodeURIComponent(window.location.pathname+window.location.search)}` : "";
-  const sections=<nav className="development-tabs pattern-business-tabs" aria-label="板房业务">{[['development','开发岗位任务'],['bulk','大货纸样与唛架'],['legacy','独立打板与杂事']].map(([key,label])=><button key={key} aria-pressed={section===key} onClick={()=>{
+  const sections=<nav className="development-tabs pattern-business-tabs" aria-label="板房业务">{[['development','开发岗位任务'],['bulk','大货纸样与唛架'],['legacy','杂事看板']].map(([key,label])=><button key={key} aria-pressed={section===key} onClick={()=>{
     setSection(key!);setSelectedId(null);setSelected(null);setSheet(null);setBulkOrder(null);setDetailError('');setResult(null);setSearch('');
     const next=PatternWorkspaceFilterSchema.parse({scope:canViewAll?'all':'mine',business:'development'});setFilter(next);
     const query=new URLSearchParams({section:key!,scope:next.scope});

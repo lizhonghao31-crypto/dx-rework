@@ -1,3 +1,4 @@
+import {MiscAssociationSnapshotSchema} from "@dx-rework/contracts/pattern-orders";
 import type { PatternOrderDetail } from "@dx-rework/contracts/pattern-orders";
 import { ApplicationError } from "../platform/errors.js";
 
@@ -44,6 +45,7 @@ export function patternOrderAtNode(detail: PatternOrderDetail, selection: Patter
   result.currentRoundId = round.roundId;
   result.status = stage;
   result.styleNo = text("styleNo") ?? "历史未记录";
+  result.association=MiscAssociationSnapshotSchema.safeParse(facts?.association).success?MiscAssociationSnapshotSchema.parse(facts?.association):null;
   result.taskName = text("taskName"); result.requiredDate = text("requiredDate");
   result.customer = text("customer"); result.sizeColor = text("sizeColor");
   result.referenceStyleNo = text("referenceStyleNo"); result.variant = text("variant");

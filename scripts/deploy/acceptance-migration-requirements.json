@@ -843,5 +843,18 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0243_misc_order_stable_association": {
+    "checksum": "da197c78527196f9dd70909433a16f3b358c00eb424d2e9bf2b7872181a615a5",
+    "tables": [
+      "pattern_room_orders"
+    ],
+    "functions": [],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }
