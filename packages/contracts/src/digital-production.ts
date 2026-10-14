@@ -81,3 +81,46 @@ export type DigitalOrder = Omit<DigitalOrderInput, "lines"> & {
     factoryDateSource?: "approved_factory_change" | "legacy_unregistered";
   }>;
 };
+
+/** Initial customer-order dates use the server's Shanghai calendar and clamp month-end. */
+export function minimumInitialCustomerDate(now: Date = new Date()): string {
+  const day = new Intl.DateTimeFormat("en-CA", {timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit"}).format(now);
+  const [year, month, date] = day.split("-").map(Number) as [number, number, number];
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const lastDay = new Date(Date.UTC(nextYear, nextMonth, 0)).getUTCDate();
+  return `${nextYear}-${String(nextMonth).padStart(2,"0")}-${String(Math.min(date,lastDay)).padStart(2,"0")}`;
+}
+export function initialCustomerDateErrors(lines: ReadonlyArray<{customerWarehouseArrivalDate?: string | null | undefined; deliveryDate?: string | null | undefined}>, minimum: string = minimumInitialCustomerDate()): string[] {
+  return lines.flatMap((line,index) => {
+    const date = line.customerWarehouseArrivalDate === undefined ? line.deliveryDate : line.customerWarehouseArrivalDate;
+    return !date || date < minimum ? [`PO ${index+1} 客户侧交期须填写 ${minimum} 或之后的日期（首次确定订单至少一个自然月）`] : [];
+  });
+}
+
+/** Incomplete PO values belong to the development draft, not a production-order root. */
+export const InitialCustomerOrderDraftSchema = z.object({
+  customerCode: z.string().max(100), productGroup: z.enum(["男装","女装","男童","女童"]),
+  designStyleNo: z.string().max(100), temporaryStyleNo: optionalText,
+  orderDate: z.string().max(10), contractDeliveryDate: date.nullable(),
+  primaryMerchandiserId: z.string().uuid().nullable().optional(),
+  lines: z.array(z.object({
+    formalPoNo: optionalText.optional(), poNumber: optionalText, formalStyleNo: optionalText,
+    temporaryStyleNo: optionalText, color: z.string().max(100), colorForeign: optionalText,
+    deliveryDate: date.nullable(), customerWarehouseArrivalDate: date.nullable().optional(),
+    sizes: z.array(z.object({size:z.string().max(100),quantity:z.string().max(30)}).strict()).min(1).max(50),
+  }).strict()).min(1).max(50),
+}).strict();
+export type InitialCustomerOrderDraft = z.infer<typeof InitialCustomerOrderDraftSchema>;
+
+export function initialCustomerOrderInput(draft: InitialCustomerOrderDraft): DigitalOrderInput {
+  return {...draft,lines:draft.lines.map((line,index)=>{
+    const sizes=line.sizes.map(size=>{
+      if(size.quantity!==""&&(!/^\d+$/.test(size.quantity)||!Number.isSafeInteger(Number(size.quantity))||Number(size.quantity)>10000000))
+        throw new Error(`PO ${index+1} ${size.size||"尺码"}：数量须为不超过10000000的非负整数（件）`);
+      return {...size,quantity:Number(size.quantity||0)};
+    }).filter(size=>size.quantity>0);
+    if(!sizes.length)throw new Error(`PO ${index+1} 至少填写一项正整数订购数量`);
+    return {...line,temporaryStyleNo:line.temporaryStyleNo??draft.temporaryStyleNo,sizes};
+  })};
+}

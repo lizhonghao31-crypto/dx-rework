@@ -1,3 +1,4 @@
+import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -65,7 +66,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
   const list = async (actor: TrustedActorContext, query?: string) => TodoListResponseSchema.parse(await todos.listForActor(actor, { module: "digital_production", ...(query ? { query } : {}) }));
   it("searches the actual primary merchandiser order style and keeps node title separate", async () => {
     const style = `TEST-DOC-ORDER-${randomUUID()}`;
-    const order = await new DigitalProductionIdentityService(db, true).createOrder(root, { customerCode: "PD", primaryMerchandiserId: ids.merch, productGroup: "男装", designStyleNo: style, orderDate: "2026-10-06", lines: [{ color: "TEST PRIVATE COLOR", sizes: [{ size: "M", quantity: 9 }] }] }, randomUUID());
+    const order = await new DigitalProductionIdentityService(db, true).createOrder(root, { customerCode: "PD", primaryMerchandiserId: ids.merch, productGroup: "男装", designStyleNo: style, orderDate: "2026-10-06", lines: [{ color: "TEST PRIVATE COLOR", customerWarehouseArrivalDate: minimumInitialCustomerDate(), sizes: [{ size: "M", quantity: 9 }] }] }, randomUUID());
     const task = await tx(c => tasks.createWithClient(c, root, { resource: { kind: "order", id: order.productionOrderId }, kind: "sourcing_preparation", routeId: randomUUID(), routeVersion: 5, occurrence: 1, assigneeId: ids.merch }));
     const before = await tasks.read(actors.merch!, task.taskId);
     const found = await list(actors.merch!, style.toLowerCase());

@@ -413,3 +413,12 @@
 .pattern-golden .development-preassignment .development-preassign-field{display:grid;gap:6px;min-width:0}
 .pattern-golden .development-preassignment .development-preassign-field select{width:100%;max-width:none;min-height:40px;box-sizing:border-box;font:inherit}
 .pattern-golden .development-preassignment>fieldset>.dx-button{grid-column:1/-1;justify-self:start}
+
+/* Unified customer PO entry: common three-to-five size columns fit a PC card. */
+.development-create-reference .development-create-po-table{width:100%;min-width:0}
+.development-create-reference .development-create-po-table .development-po-index{width:38px;min-width:38px}
+.development-create-reference .development-create-po-table .development-po-number{width:136px;min-width:136px}
+.development-create-reference .development-create-po-table .development-po-color{width:140px;min-width:140px}
+.development-create-reference .development-create-po-table .development-row-total{width:90px;min-width:90px}
+.development-create-reference .development-create-po-table .development-po-date{width:145px;min-width:145px}
+.development-create-reference .development-size-column{width:88px;min-width:88px}

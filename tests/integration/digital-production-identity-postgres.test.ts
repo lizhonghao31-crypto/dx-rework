@@ -1,10 +1,11 @@
+import {historicalDigitalOrder} from "../helpers/historical-digital-order-fixture.js";
 import { PoCustomerDateService } from "../../apps/api/src/production-platform/po-customer-date-service.js";
 import { applyDigitalPoDateFixture } from "../helpers/digital-po-date-fixture.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
 import Fastify from "fastify";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DigitalOrderCreateSchema, DigitalSourceCreateSchema } from "@dx-rework/contracts/digital-production";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { registerDigitalIdentityRoutes } from "../../apps/api/src/production-platform/identity-routes.js";
@@ -25,12 +26,15 @@ run("digital production P01 identities", () => {
   const database = new pg.Pool({ connectionString: databaseUrl!, options: `-c search_path=${schema}` });
   const designer = randomUUID(); const other = randomUUID(); const root = randomUUID();
   const actor = (id = designer, roles = ["sample_designer"]): TrustedActorContext => ({ actorId: id, actorRoles: roles, authorizationCapability: "pattern_room:orders:create", authorizationCapabilities: ["pattern_room:orders:create"], requestId: "p01-test" });
-  const service = new DigitalProductionIdentityService(database, true);
-  const input = () => DigitalOrderCreateSchema.parse({ customerCode: "PD", productGroup: "男装", designStyleNo: "TEST-STYLE", temporaryStyleNo: "TEST-TEMP", orderDate: "2026-09-29", lines: [
+  let today = new Date("2026-09-01T00:00:00Z");
+  const service = new DigitalProductionIdentityService(database, true, undefined, () => today);
+  let style="";
+  beforeEach(()=>{style=`TEST-STYLE-${randomUUID()}`;today=new Date("2026-09-01T00:00:00Z");});
+  const input = (designStyleNo=style) => DigitalOrderCreateSchema.parse({ customerCode: "PD", productGroup: "男装", designStyleNo, temporaryStyleNo: "TEST-TEMP", orderDate: "2026-09-29", lines: [
     { color: "黑", sizes: [{ size: "M", quantity: 2000 }, { size: "L", quantity: 1000 }], deliveryDate: "2026-10-10" },
     { color: "白", poNumber: "PO-2", sizes: [{ size: "M", quantity: 2000 }], deliveryDate: "2026-10-12" },
   ] });
-  const sourceInput = () => DigitalSourceCreateSchema.parse({ developmentType: "头版", designStyleNo: "TEST-STYLE", temporaryStyleNo: "TEST-TEMP", customerCode: "PD" });
+  const sourceInput = (designStyleNo=style) => DigitalSourceCreateSchema.parse({ developmentType: "头版", designStyleNo, temporaryStyleNo: "TEST-TEMP", customerCode: "PD" });
   const app = Fastify();
   beforeAll(async () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
@@ -46,6 +50,7 @@ run("digital production P01 identities", () => {
       CREATE TABLE pattern_room_orders(order_id uuid PRIMARY KEY);`);
     await database.query(await readFile(new URL("../../apps/api/migrations/0218_digital_production_identity.sql", import.meta.url), "utf8"));
     await applyDigitalPoDateFixture(database);
+    await database.query("CREATE TABLE digital_development_documents(source_id uuid PRIMARY KEY REFERENCES digital_production_sources,status text NOT NULL)");
     const lifecycleSql=await readFile(new URL("../../apps/api/migrations/0220_digital_production_tasks.sql",import.meta.url),"utf8");
     await database.query(lifecycleSql.match(/CREATE TABLE digital_production_resource_lifecycle[\s\S]*?\n\);/)![0]);
     await database.query(`CREATE TABLE business_roles(role_code text PRIMARY KEY,display_name text,description text,enabled boolean DEFAULT true,updated_at timestamptz);
@@ -74,6 +79,11 @@ run("digital production P01 identities", () => {
     await app.ready();
   });
   afterAll(async () => { await app.close(); await database.end(); await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await admin.end(); });
+  const publishedSource=async(currentActor=actor(),request=sourceInput())=>{
+    const value=await service.createSource(currentActor,request,randomUUID());
+    await database.query("INSERT INTO digital_development_documents VALUES($1,'published')",[value.sourceId]);
+    return value;
+  };
   const tx = async <T,>(work:(client:pg.PoolClient)=>Promise<T>)=>{
     const client = await database.connect();
     try {await client.query("BEGIN");const result=await work(client);await client.query("COMMIT");return result;}
@@ -112,14 +122,15 @@ run("digital production P01 identities", () => {
     await expect(database.query("INSERT INTO digital_production_po_lines(line_id,production_order_id,position,color) VALUES($1,$2,3,' 黑 ')", [randomUUID(), order.productionOrderId])).rejects.toMatchObject({ code: "23505" });
   });
   it("preserves source substitute numbers on confirmation and later attachment", async () => {
-    const source = await service.createSource(actor(), sourceInput(), randomUUID());
+    const source = await publishedSource();
     for (const temporaryStyleNo of [null, "CHANGED"]) {
       await expect(service.createOrder(actor(), { ...input(), temporaryStyleNo }, randomUUID(), source.sourceId)).rejects.toMatchObject({ statusCode: 409 });
-      const order = await service.createOrder(actor(), { ...input(), temporaryStyleNo }, randomUUID());
+      const order = await historicalDigitalOrder(database,actor(), { ...input(), temporaryStyleNo });
       await expect(service.attachSource(actor(), order.productionOrderId, source.sourceId, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
       expect((await service.read(actor(), order.productionOrderId)).sourceId).toBeNull();
     }
-    const confirmed = await service.createOrder(actor(), input(), randomUUID(), source.sourceId);
+    const fresh=await publishedSource(actor(),sourceInput(`${style}-CONFIRM`));
+    const confirmed = await service.createOrder(actor(), input(`${style}-CONFIRM`), randomUUID(), fresh.sourceId);
     expect(confirmed.temporaryStyleNo).toBe("TEST-TEMP");
   });
   it("deduplicates direct-order retries and rejects a changed payload on the same key", async () => {
@@ -128,24 +139,49 @@ run("digital production P01 identities", () => {
     expect(a.productionOrderId).toBe(b.productionOrderId);
     await expect(service.createOrder(actor(), { ...request, designStyleNo: "DIFFERENT" }, key)).rejects.toMatchObject({ statusCode: 409 });
   });
+  it("serializes normalized duplicate sources and orders without exposing another owner's facts",async()=>{
+    const sources=await Promise.allSettled([service.createSource(actor(),sourceInput(),randomUUID()),service.createSource(actor(other),sourceInput(` ${style.toLowerCase()} `),randomUUID())]);
+    expect(sources.filter(result=>result.status==="fulfilled")).toHaveLength(1);
+    expect(sources.find(result=>result.status==="rejected")).toMatchObject({reason:{statusCode:409,message:"该编号已有开发档案，请打开原档案继续办理"}});
+    const orders=await Promise.allSettled([service.createOrder(actor(),input(),randomUUID()),service.createOrder(actor(other),input(style.toLowerCase()),randomUUID())]);
+    expect(orders.filter(result=>result.status==="fulfilled")).toHaveLength(1);
+    expect(orders.find(result=>result.status==="rejected")).toMatchObject({reason:{statusCode:409,message:"该编号已有客户订单，请打开原档案继续办理"}});
+  });
+  it("requires published development before a first source confirmation and leaves drafts without roots",async()=>{
+    const source=await service.createSource(actor(),sourceInput(),randomUUID());
+    await expect(service.createOrder(actor(),input(),randomUUID(),source.sourceId)).rejects.toMatchObject({statusCode:409,message:"请先发布开发单，再正式确认客户订单"});
+    expect((await database.query("SELECT count(*)::int n FROM digital_production_orders WHERE source_id=$1",[source.sourceId])).rows[0].n).toBe(0);
+  });
+  it("enforces every initial PO date, accepts the natural-month boundary and replays success after the calendar advances",async()=>{
+    today=new Date("2026-01-31T01:00:00Z");
+    const request=input();request.lines.forEach(line=>{line.deliveryDate="2026-02-28";});
+    const invalid={...request,lines:request.lines.map((line,index)=>({...line,deliveryDate:index===1?"2026-02-27":line.deliveryDate}))};
+    await expect(service.createOrder(actor(),invalid,randomUUID())).rejects.toMatchObject({statusCode:400,message:expect.stringContaining("PO 2")});
+    await expect(service.createOrder(actor(),{...request,lines:request.lines.map((line,index)=>({...line,deliveryDate:index===1?null:line.deliveryDate}))},randomUUID())).rejects.toMatchObject({statusCode:400});
+    const key=randomUUID(),order=await service.createOrder(actor(),request,key);
+    today=new Date("2026-10-14T18:00:00Z");
+    expect((await service.createOrder(actor(),request,key)).productionOrderId).toBe(order.productionOrderId);
+    expect((await service.read(actor(),order.productionOrderId)).lines.map(line=>line.deliveryDate)).toEqual(["2026-02-28","2026-02-28"]);
+    await expect(service.createOrder(actor(),{...request,designStyleNo:`${style}-LATE`},randomUUID())).rejects.toMatchObject({statusCode:400});
+  });
   it("concurrent source confirmations with different keys create one order", async () => {
-    const source = await service.createSource(actor(), sourceInput(), randomUUID());
+    const source = await publishedSource();
     const [a, b] = await Promise.all([service.createOrder(actor(), input(), randomUUID(), source.sourceId), service.createOrder(actor(), input(), randomUUID(), source.sourceId)]);
     expect(a.productionOrderId).toBe(b.productionOrderId); expect(a.sourceId).toBe(source.sourceId);
     await expect(service.createOrder(actor(), { ...input(), orderDate: "2026-09-28" }, randomUUID(), source.sourceId)).rejects.toMatchObject({ statusCode: 409 });
   });
   it("root confirmation retains the source designer's access", async () => {
-    const source = await service.createSource(actor(), sourceInput(), randomUUID());
+    const source = await publishedSource();
     const order = await service.createOrder(actor(root, ["root_superuser"]), input(), randomUUID(), source.sourceId);
     expect(order.createdBy).toBe(designer);
     expect((await service.read(actor(), order.productionOrderId)).sourceId).toBe(source.sourceId);
   });
   it("attaches a later development source to the original direct-order identity", async () => {
     const order = await service.createOrder(actor(), input(), randomUUID());
-    const source = await service.createSource(actor(), sourceInput(), randomUUID());
+    const source = await publishedSource();
     const attached = await service.attachSource(actor(), order.productionOrderId, source.sourceId, randomUUID());
     expect(attached.productionOrderId).toBe(order.productionOrderId); expect(attached.status).toBe("development_linked");
-    const second = await service.createOrder(actor(), input(), randomUUID());
+    const second = await service.createOrder(actor(), input(`${style}-SECOND`), randomUUID());
     await expect(service.attachSource(actor(), second.productionOrderId, source.sourceId, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
   });
   it("root cannot attach a different designer's source to a direct order", async () => {
@@ -155,7 +191,9 @@ run("digital production P01 identities", () => {
     const order = await service.createOrder(actor(), input(), randomUUID());
     await expect(service.attachSource(actor(root, ["root_superuser"]), order.productionOrderId, source.sourceId, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
     expect((await service.read(actor(), order.productionOrderId)).sourceId).toBeNull();
-    const ownSource = await service.createSource(actor(), sourceInput(), randomUUID());
+    const ownSourceId=randomUUID();
+    await database.query("INSERT INTO digital_production_sources(source_id,created_by,development_type,design_style_no,temporary_style_no,customer_code) VALUES($1,$2,'头版',$3,'TEST-TEMP','PD')",[ownSourceId,designer,style]);
+    const ownSource={sourceId:ownSourceId};
     expect((await service.attachSource(actor(root, ["root_superuser"]), order.productionOrderId, ownSource.sourceId, randomUUID())).sourceId).toBe(ownSource.sourceId);
   });
   it("number correction preserves root, PO identity, dates and quantities; rejects stale updates", async () => {
@@ -167,11 +205,11 @@ run("digital production P01 identities", () => {
     await expect(service.correctNumbers(actor(), order.productionOrderId, line.lineId, { expectedVersion: 1, poNumber: "STALE", formalStyleNo: null }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
   });
   it("isolates another designer in read, search, source conversion and mutation", async () => {
-    const source = await service.createSource(actor(), sourceInput(), randomUUID());
+    const source = await publishedSource();
     const order = await service.createOrder(actor(), input(), randomUUID());
     await expect(service.read(actor(other), order.productionOrderId)).rejects.toMatchObject({ statusCode: 404 });
-    expect((await service.orders(actor(other), 1, "TEST")).items).toEqual([]);
-    expect((await service.sources(actor(other), 1, "TEST")).items).toEqual([]);
+    expect((await service.orders(actor(other), 1, style)).items).toEqual([]);
+    expect((await service.sources(actor(other), 1, style)).items).toEqual([]);
     await expect(service.createOrder(actor(other), input(), randomUUID(), source.sourceId)).rejects.toMatchObject({ statusCode: 404 });
     await expect(service.correctNumbers(actor(other), order.productionOrderId, order.lines[0]!.lineId, { expectedVersion: 1, poNumber: "NO", formalStyleNo: null }, randomUUID())).rejects.toMatchObject({ statusCode: 404 });
     await expect(service.orders(actor(other, ["warehouse_keeper"]), 1, "")).rejects.toMatchObject({ statusCode: 403 });
@@ -184,7 +222,7 @@ run("digital production P01 identities", () => {
     expect((await closed.correctNumbers(actor(), order.productionOrderId, order.lines[0]!.lineId, { expectedVersion: 1, poNumber: "LATE", formalStyleNo: null }, randomUUID())).version).toBe(2);
   });
   it("uses real child foreign keys, prevents cross-root and cross-PO mapping, and fails closed", async () => {
-    const order = await service.createOrder(actor(), input(), randomUUID()); const second = await service.createOrder(actor(), input(), randomUUID());
+    const order = await service.createOrder(actor(), input(), randomUUID()); const second = await service.createOrder(actor(), input(`${style}-SECOND`), randomUUID());
     const childId = randomUUID(); await database.query("INSERT INTO sourcing_cases VALUES($1)", [childId]);
     const client = await database.connect();
     try {
@@ -217,7 +255,7 @@ run("digital production P01 identities", () => {
     expect((await database.query("SELECT count(*)::int AS n FROM production_order_roots")).rows[0].n).toBe(before);
   });
   it("revalidates scope before replaying a previous privileged response", async () => {
-    const source = await service.createSource(actor(), sourceInput(), randomUUID()); const key = randomUUID();
+    const source = await publishedSource(); const key = randomUUID();
     await service.createOrder(actor(root, ["root_superuser"]), input(), key, source.sourceId);
     await expect(service.createOrder(actor(root), input(), key, source.sourceId)).rejects.toMatchObject({ statusCode: 404 });
   });
@@ -241,11 +279,11 @@ run("digital production P01 identities", () => {
       await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,$2)",[id,role]);
     }
     const boss=actor(root,["root_superuser"]),dates=new PoCustomerDateService(database),access=new DigitalProductionAccessService(database);
-    const order=await service.createOrder(boss,DigitalOrderCreateSchema.parse({...input(),primaryMerchandiserId:primary,lines:[
+    const order=await historicalDigitalOrder(database,boss,DigitalOrderCreateSchema.parse({...input(),primaryMerchandiserId:primary,lines:[
       {formalPoNo:"TEST-DATE-1",color:"黑",customerWarehouseArrivalDate:"2026-12-10",sizes:[{size:"M",quantity:11}]},
       {formalPoNo:"TEST-DATE-2",color:"白",customerWarehouseArrivalDate:"2026-12-12",sizes:[{size:"M",quantity:13}]},
       {formalPoNo:null,temporaryStyleNo:"TEST-ALT",color:"蓝",sizes:[{size:"M",quantity:17}]},
-    ]}),randomUUID()),id=order.productionOrderId,p=actor(primary,["order_merchandiser"]),m=actor(director,["production_management"]);
+    ]})),id=order.productionOrderId,p=actor(primary,["order_merchandiser"]),m=actor(director,["production_management"]);
     await database.query("INSERT INTO digital_production_delegations(delegation_id,production_order_id,delegate_id,purpose,granted_by,expires_at) VALUES($1,$2,$3,'technical',$4,CURRENT_TIMESTAMP+interval '1 day')",[randomUUID(),id,secondary,root]);
     const inputDate={orderVersion:order.version,reason:"TEST客户确认选中一条",changes:[{lineId:order.lines[1]!.lineId,expectedVersion:1,date:"2026-12-20"}]};
     await expect(dates.request(actor(secondary,["order_merchandiser"]),id,inputDate,randomUUID())).rejects.toMatchObject({statusCode:404});
@@ -336,13 +374,13 @@ run("digital production P01 identities", () => {
     const count = await database.query("SELECT count(*) FROM digital_production_orders");
     for (const primaryMerchandiserId of [alternate, null]) {
       await expect(service.createOrder(actor(), { ...input(), primaryMerchandiserId }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
-      const source = await service.createSource(actor(), sourceInput(), randomUUID());
-      await expect(service.createOrder(actor(), { ...input(), primaryMerchandiserId }, randomUUID(), source.sourceId)).rejects.toMatchObject({ statusCode: 403 });
+      const source = await publishedSource(actor(),sourceInput(`${style}-${primaryMerchandiserId}`));
+      await expect(service.createOrder(actor(), { ...input(`${style}-${primaryMerchandiserId}`), primaryMerchandiserId }, randomUUID(), source.sourceId)).rejects.toMatchObject({ statusCode: 403 });
     }
     expect((await database.query("SELECT count(*) FROM digital_production_orders")).rows).toEqual(count.rows);
     const order = await service.createOrder(actor(), { ...input(), primaryMerchandiserId: primary }, randomUUID());
     expect(order.primaryMerchandiserId).toBe(primary);
-    expect((await service.createOrder(boss, { ...input(), primaryMerchandiserId: alternate }, randomUUID())).primaryMerchandiserId).toBe(alternate);
+    expect((await service.createOrder(boss, { ...input(`${style}-BOSS`), primaryMerchandiserId: alternate }, randomUUID())).primaryMerchandiserId).toBe(alternate);
     const dual = actor(primary, ["order_merchandiser", "production_management"]);
     const request = await new PoCustomerDateService(database).request(dual,order.productionOrderId,{orderVersion:1,reason:"客户改期",changes:order.lines.map(line=>({lineId:line.lineId,expectedVersion:line.customerDateVersion??0,date:"2026-12-22"}))},randomUUID());
     for (const decision of ["approved", "rejected"] as const) await expect(access.decideDelivery(dual, request.requestId, decision)).rejects.toMatchObject({ statusCode: 403 });
@@ -354,8 +392,8 @@ run("digital production P01 identities", () => {
     expect(await access.decideDelivery(boss, rootRequest.requestId, "approved")).toEqual({ decision: "approved" });
     expect((await service.read(boss, order.productionOrderId)).lines.map(line=>line.customerWarehouseArrivalDate)).toEqual(["2026-12-23","2026-12-23"]);
     await access.setCustomerDefault(boss, "PD", null);
-    await expect(service.createOrder(actor(), { ...input(), primaryMerchandiserId: alternate }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
-    expect((await service.createOrder(actor(), { ...input(), primaryMerchandiserId: null }, randomUUID())).primaryMerchandiserId).toBeNull();
+    await expect(service.createOrder(actor(), { ...input(`${style}-ALT`), primaryMerchandiserId: alternate }, randomUUID())).rejects.toMatchObject({ statusCode: 403 });
+    expect((await service.createOrder(actor(), { ...input(`${style}-NO-PRIMARY`), primaryMerchandiserId: null }, randomUUID())).primaryMerchandiserId).toBeNull();
   });
   it("PR05 retires historical digital grants while preserving ordinary QC task reassignment", async () => {
     const access = new DigitalProductionAccessService(database); const policy = new DigitalProductionAccessPolicy(database);
@@ -440,20 +478,20 @@ run("digital production P01 identities", () => {
   });
 
 
-  it("registers only explicit customer dates and one formal PO without changing quantities or stable identities",async()=>{
+  it("preserves historical missing dates and one formal PO without changing quantities or stable identities",async()=>{
     const request=DigitalOrderCreateSchema.parse({...input(),lines:[
       {formalPoNo:" PO-A ",color:"A",customerWarehouseArrivalDate:"2026-12-10",sizes:[{size:"M",quantity:5}]},
       {formalPoNo:"PO-B",color:"B",customerWarehouseArrivalDate:"2026-12-12",sizes:[{size:"L",quantity:7}]},
       {formalPoNo:null,temporaryStyleNo:"TEMP-C",color:"C",sizes:[{size:"S",quantity:3}]},
     ]});
-    const key=randomUUID();const order=await service.createOrder(actor(),request,key);
+    const order=await historicalDigitalOrder(database,actor(),request);
     expect(order.lines.map(row=>row.formalPoNo)).toEqual(["PO-A","PO-B",null]);
     expect(order.lines.map(row=>row.poNumber)).toEqual(order.lines.map(row=>row.formalStyleNo));
     expect(order.lines.map(row=>row.customerWarehouseArrivalDate)).toEqual(["2026-12-10","2026-12-12",null]);
     expect(order.lines.map(row=>row.factoryDeliveryDate)).toEqual([null,null,null]);
     expect(order.lines.map(row=>row.customerDateVersion)).toEqual([1,1,0]);
     expect(order.lines.map(row=>row.sizes)).toEqual(request.lines.map(row=>row.sizes));
-    expect((await service.createOrder(actor(),request,key)).lines.map(row=>row.lineId)).toEqual(order.lines.map(row=>row.lineId));
+    expect((await service.read(actor(),order.productionOrderId)).lines.map(row=>row.lineId)).toEqual(order.lines.map(row=>row.lineId));
     expect((await database.query("SELECT count(*)::int n FROM digital_po_date_changes WHERE production_order_id=$1",[order.productionOrderId])).rows[0].n).toBe(2);
     await expect(service.correctNumbers(actor(),order.productionOrderId,order.lines[1]!.lineId,{expectedVersion:1,formalPoNo:" po-a ",poNumber:null,formalStyleNo:null},randomUUID())).rejects.toMatchObject({statusCode:400});
     expect((await service.read(actor(),order.productionOrderId)).version).toBe(1);

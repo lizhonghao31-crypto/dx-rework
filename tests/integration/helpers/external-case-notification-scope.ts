@@ -1,3 +1,4 @@
+import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { expect } from "vitest";
@@ -15,7 +16,7 @@ import type { TrustedActorContext } from "../../../apps/api/src/tools/repositori
 export async function exerciseExternalCaseNotificationScope(input:{database:Pool;creator:TrustedActorContext;primaryMerchandiserId:string;reworkOrderId:string;processingCaseId:string;fabricCaseId:string;factoryActor:TrustedActorContext;fabricActor:TrustedActorContext}){
   const {database,creator,reworkOrderId,factoryActor,fabricActor,processingCaseId,fabricCaseId}=input;
   const external=new ExternalResponsibilityService(database),detail=new ReworkBusinessDetailService(database);
-  const mother=await new DigitalProductionIdentityService(database,true).createOrder(creator,DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:input.primaryMerchandiserId,productGroup:"男装",designStyleNo:"TEST-PRIVATE-MOTHER",orderDate:"2026-09-29",lines:[{color:"PRIVATE",sizes:[{size:"M",quantity:1}]}]}),randomUUID());
+  const mother=await new DigitalProductionIdentityService(database,true).createOrder(creator,DigitalOrderCreateSchema.parse({customerCode:"PD",primaryMerchandiserId:input.primaryMerchandiserId,productGroup:"男装",designStyleNo:`TEST-PRIVATE-MOTHER-${randomUUID()}`,orderDate:"2026-09-29",lines:[{color:"PRIVATE",customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:"M",quantity:1}]}]}),randomUUID());
   const notices=new DigitalProductionNotificationService(database),todos=new TodoService(database),policy=new DigitalProductionAccessPolicy(database);
   for(const [reader,ownCase,siblingCase] of [[factoryActor,processingCaseId,fabricCaseId],[fabricActor,fabricCaseId,processingCaseId]] as const){
     expect((await detail.get(reader,reworkOrderId)).styleNo).toBe("UAT-FULL-CHAIN");

@@ -1,3 +1,4 @@
+import { DigitalOrderCreateSchema, initialCustomerOrderInput, initialCustomerDateErrors } from "@dx-rework/contracts/digital-production";
 import {developmentDocumentRow,developmentRoundsAvailable} from "./development-round-repository.js";
 import {DevelopmentRouteService} from "./development-route-service.js";
 import type {PatternRoomOrderService} from "../pattern-room/order-service.js";
@@ -24,7 +25,7 @@ export class DigitalDevelopmentService {
       for (const task of tasks) if (await new DigitalProductionAccessPolicy(db).allowed(actor, "task", task.task_id, "technical")) { visible = true; break; }
       if (!visible) digitalNotFound();
     }
-    return { ...source, can_edit: owner && this.creationEnabled };
+    return { ...source, can_edit: owner && this.creationEnabled, can_view_order_draft: owner };
   }
   async authorizeUpload(actor: TrustedActorContext, sourceId: string) { await this.source(this.database, actor, sourceId, true); }
   async canDownload(actor: TrustedActorContext, sourceId: string, attachmentId: string): Promise<boolean> {
@@ -38,9 +39,12 @@ export class DigitalDevelopmentService {
     if(roundNumber&&!row)digitalNotFound();
     const materialEvents = (await db.query(`SELECT event_id AS "eventId",material_id AS "materialId",action,expected_date::text AS "expectedDate",note,created_at AS "createdAt"
       FROM digital_development_material_events WHERE source_id=$1 ${rounds?"AND route_version<=$2":""} ORDER BY sequence`, rounds?[sourceId,row?.round_number??1]:[sourceId])).rows;
-    return { sourceId, designStyleNo: source.design_style_no, temporaryStyleNo: source.temporary_style_no, customerCode: source.customer_code,
+    const productionOrderId=source.can_view_order_draft?(await db.query("SELECT production_order_id FROM digital_production_orders WHERE source_id=$1",[sourceId])).rows[0]?.production_order_id??null:null;
+    let document=row?.document??null;
+    if(document?.customerOrderDraft&&!source.can_view_order_draft){document={...document};delete document.customerOrderDraft;}
+    return { sourceId, productionOrderId, designStyleNo: source.design_style_no, temporaryStyleNo: source.temporary_style_no, customerCode: source.customer_code,
       developmentType: source.development_type, designerName: source.designer_name, version: row?.version ?? 0, status: row?.status ?? "draft",
-      document: row?.document ?? null, publishedAt: row?.published_at ? new Date(row.published_at).toISOString() : null, taskId: row?.task_id ?? null,
+      document, publishedAt: row?.published_at ? new Date(row.published_at).toISOString() : null, taskId: row?.task_id ?? null,
       canRevise:source.can_edit,roundNumber:row?.round_number??1,latestRoundNumber:row?.latest_round_number??1,canEdit: source.can_edit && (!row || row.round_number===row.latest_round_number), materialEvents };
   }
   private async command<T>(actor: TrustedActorContext, sourceId: string, command: string, key: string, input: unknown, action: (db: PoolClient) => Promise<T>): Promise<T> {
@@ -92,6 +96,17 @@ export class DigitalDevelopmentService {
       if (row.version !== expectedVersion) conflict("开发单已更新，请重新打开后发布");
       const errors = developmentPublishErrors(row.document);
       if (errors.length) throw new ApplicationError("VALIDATION_ERROR", errors.join("；"), 400);
+      if(row.document.customerOrderDraft?.withOrder){
+        let input;
+        try{input=initialCustomerOrderInput(row.document.customerOrderDraft.order);}catch(reason){throw new ApplicationError("VALIDATION_ERROR",reason instanceof Error?reason.message:"请核实订购数量",400);}
+        const parsed=DigitalOrderCreateSchema.safeParse(input);
+        if(!parsed.success)throw new ApplicationError("VALIDATION_ERROR","请补齐客户、产品分组、下单日期及各 PO 的颜色、尺码和订购数量，并核实没有重复 PO 或颜色",400);
+        const source=(await db.query("SELECT design_style_no,temporary_style_no,customer_code FROM digital_production_sources WHERE source_id=$1",[sourceId])).rows[0];
+        if(source.design_style_no!==parsed.data.designStyleNo||(source.temporary_style_no??"")!==(parsed.data.temporaryStyleNo??"")||(source.customer_code&&source.customer_code!==parsed.data.customerCode))
+          throw new ApplicationError("VALIDATION_ERROR","订购草稿的款号、代用款号及客户须与当前开发来源一致",400);
+        const dateErrors=initialCustomerDateErrors(parsed.data.lines);
+        if(dateErrors.length)throw new ApplicationError("VALIDATION_ERROR",dateErrors.join("；"),400);
+      }
       if(this.patternOrders&&!patternOrder)conflict("请先选择有效打板品类与执行价，再正式提交开发单");
       if(patternOrder&&!this.patternOrders)conflict("打板执行衔接服务未配置");
       await this.bindFiles(db, actor, sourceId, row.document);

@@ -46,7 +46,7 @@ export async function exerciseInstructions(database:Pool,order:DigitalOrder,prim
  const access=new DigitalProductionAccessService(database);
  await expect(access.requestDelivery(primary,id,{expectedVersion:decided.currentOrderVersion,deliveryDate:"2026-11-28",reason:"旧入口退休"})).rejects.toMatchObject({statusCode:409});
  // Seed the two genuine old request shapes on independent unchanged legacy orders.
- const legacyIdentity=new DigitalProductionIdentityService(database,true);
+ const legacyIdentity=new DigitalProductionIdentityService(database,true,undefined,()=>new Date("2026-09-01T00:00:00Z"));
  for(const lane of ["instruction","delivery"] as const){
    const oldOrder=await legacyIdentity.createOrder(designer,{customerCode:order.customerCode,productGroup:order.productGroup,designStyleNo:`TEST-old-${randomUUID()}`,temporaryStyleNo:null,primaryMerchandiserId:primary.actorId,orderDate:order.orderDate,contractDeliveryDate:"2026-11-20",lines:order.lines.map(line=>({poNumber:null,formalStyleNo:null,temporaryStyleNo:null,color:line.color,colorForeign:null,deliveryDate:"2026-11-20",sizes:line.sizes}))},randomUUID());
    const oldId=randomUUID();

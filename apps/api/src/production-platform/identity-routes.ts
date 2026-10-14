@@ -1,3 +1,4 @@
+import { minimumInitialCustomerDate } from "@dx-rework/contracts/digital-production";
 import type { DigitalJourneyQuery } from "./journey-query.js";
 import { DevelopmentWorkspaceQuery } from "./development-workspace-query.js";
 import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "@dx-rework/contracts/digital-development-workspace";
@@ -101,7 +102,7 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
   if (dependencies.cockpit) app.get("/digital-production/cockpit", async request => dependencies.cockpit!.list(await actor(request), parse(cockpitZ.object({ page: cockpitZ.coerce.number().int().min(1).max(100000).default(1), search: cockpitZ.string().trim().max(100).default(""), stage: cockpitZ.enum(["development", "bulk"]).default("development"), workload: cockpitZ.enum(["all","unassigned","blocked","urgent"]).default("all") }).strict(), request.query)));
   app.get("/digital-production/options", async request => {
     const trusted = await actor(request);
-    return { creationEnabled: dependencies.creationEnabled, customers: await dependencies.service.customers(trusted) };
+    return { creationEnabled: dependencies.creationEnabled, minimumInitialCustomerDate: minimumInitialCustomerDate(), customers: await dependencies.service.customers(trusted) };
   });
   app.get("/digital-production/sources", async request => {
     const trusted = await actor(request); const query = parse(DigitalPageSchema, request.query);

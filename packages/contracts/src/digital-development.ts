@@ -1,3 +1,4 @@
+import { InitialCustomerOrderDraftSchema } from "./digital-production.js";
 import { z } from "zod";
 
 const text = z.string().trim().max(1000);
@@ -13,6 +14,7 @@ export const DevelopmentMaterialSchema = z.object({
   available: z.boolean(), expectedDate: z.iso.date().nullable(),
 }).strict();
 export const DevelopmentDocumentSchema = z.object({
+  customerOrderDraft: z.object({withOrder:z.boolean(),order:InitialCustomerOrderDraftSchema}).strict().optional(),
   template: z.enum(["上衣", "裤子"]), quantity: z.number().int().min(1).max(100000).nullable(),
   sampleSize: short, orderDate: z.iso.date().nullable(), returnDate: z.iso.date().nullable(),
   unit: z.enum(["cm", "inch"]), sizes: z.array(short).max(20),
@@ -57,6 +59,7 @@ export function developmentPublishErrors(document: DevelopmentDocument): string[
   return errors;
 }
 export type DevelopmentSheet = {
+  productionOrderId?:string|null;
   sourceId: string; designStyleNo: string; temporaryStyleNo: string | null; customerCode: string | null;
   developmentType: string; designerName: string; version: number; status: "draft" | "published";
   document: DevelopmentDocument | null; publishedAt: string | null; taskId: string | null; canEdit: boolean;

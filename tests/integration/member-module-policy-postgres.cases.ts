@@ -1,3 +1,4 @@
+import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { DigitalProductionAccessService } from "../../apps/api/src/production-platform/access-service.js";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalOrderCreateSchema } from "@dx-rework/contracts/digital-production";
@@ -262,7 +263,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     await binder.run(ids.li_junyue,ids,true);
     await access.assignRole(root,{userId:ids.wu_yunfeng,roleCode:"order_merchandiser",reason:"TEST read-only role remains insufficient"});
     const direct=await access.assignRole(root,{userId:ids.li_zhonghao,roleCode:"order_merchandiser",reason:"TEST writable primary"});
-    const order=await identity.createOrder(root,DigitalOrderCreateSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:`TEST-READONLY-PRIMARY-${randomUUID()}`,orderDate:"2026-10-08",lines:[{color:"黑",sizes:[{size:"M",quantity:1}]}]}),randomUUID());
+    const order=await identity.createOrder(root,DigitalOrderCreateSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:`TEST-READONLY-PRIMARY-${randomUUID()}`,orderDate:"2026-10-08",lines:[{color:"黑",customerWarehouseArrivalDate:minimumInitialCustomerDate(),sizes:[{size:"M",quantity:1}]}]}),randomUUID());
     expect((await database.query("SELECT count(*)::int n FROM rework_todos WHERE entity_id=$1",[order.productionOrderId])).rows[0].n).toBe(0);
     const candidates=await personnel.candidates(root);
     expect(candidates.find(row=>row.id===ids.wu_yunfeng)?.roles??[]).not.toContain("order_merchandiser");
