@@ -1,3 +1,4 @@
+import { validationFieldLabel } from "./validation-language.js";
 import { z } from "zod";
 import { InspectionReportDraftSchema, TailInspectionResponseSchema, ReworkWorkTasksResponseSchema, ProcessConfigurationResponseSchema, WholeOrderReviewResponseSchema, ResponsibilityDeterminationResponseSchema } from "./compat-index.js";
 import { ProcessWorkerPlanResponseSchema } from "./process-worker-plan.js";
@@ -43,7 +44,7 @@ export const DashboardQuerySchema = z.object({
   to: DateSchema.optional(),
 }).strict().superRefine((value, context) => {
   if (value.from && value.to && value.from > value.to) {
-    context.addIssue({ code: "custom", path: ["to"], message: "to must not be earlier than from" });
+    context.addIssue({ code: "custom", path: ["to"], message: `${validationFieldLabel(["to"])}：结束日期不能早于开始日期` });
   }
 });
 
@@ -62,7 +63,7 @@ export const ManagementReworkQuerySchema = DashboardQuerySchema.extend({
   supplierId: IdSchema.optional(),
   overdue: z.enum(["true", "false"]).optional(),
   exception: z.enum(["true", "false"]).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(25),
+  limit: z.coerce.number().int().min(1).max(100).default(15),
   page: z.coerce.number().int().min(1).max(100_000).default(1),
 }).strict();
 

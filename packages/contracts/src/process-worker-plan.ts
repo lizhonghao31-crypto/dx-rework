@@ -1,3 +1,4 @@
+import { validationFieldLabel } from "./validation-language.js";
 import { z } from "zod";
 
 import { BusinessPersonIdSchema } from "./business-person-id.js";
@@ -25,7 +26,7 @@ const ProcessWorkerAssignmentSchema = z.object({
   memberIds: z.array(BusinessPersonIdSchema).min(1).max(40),
 }).strict().superRefine((value, context) => {
   if (new Set(value.memberIds).size !== value.memberIds.length) {
-    context.addIssue({ code: "custom", path: ["memberIds"], message: "Workers cannot contain duplicates" });
+    context.addIssue({ code: "custom", path: ["memberIds"], message: `${validationFieldLabel(["memberIds"])}：工人不能重复选择` });
   }
 });
 
@@ -37,7 +38,7 @@ export const SaveProcessWorkerPlanSchema = z.object({
 }).strict().superRefine((value, context) => {
   const itemIds = value.assignments.map((item) => item.configurationItemId);
   if (new Set(itemIds).size !== itemIds.length) {
-    context.addIssue({ code: "custom", path: ["assignments"], message: "Each process can be assigned once" });
+    context.addIssue({ code: "custom", path: ["assignments"], message: `${validationFieldLabel(["assignments"])}：每道工序只能分派一次` });
   }
 });
 

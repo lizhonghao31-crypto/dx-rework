@@ -1,3 +1,4 @@
+import { validationFieldLabel } from "./validation-language.js";
 import { z } from "zod";
 export * from "./supplier-batch.js";
 
@@ -237,10 +238,10 @@ export const CreateDelegationSchema = z.object({
   reason: ReasonSchema,
 }).strict().superRefine((value, context) => {
   if ((value.scopeType === "global") !== (value.scopeId === undefined)) {
-    context.addIssue({ code: "custom", path: ["scopeId"], message: "Global scope must omit scopeId; non-global scope must provide it" });
+    context.addIssue({ code: "custom", path: ["scopeId"], message: `${validationFieldLabel(["scopeId"])}：全局范围不能指定关联对象，其他范围须选择关联对象` });
   }
   if (Date.parse(value.validUntil) <= Date.parse(value.validFrom)) {
-    context.addIssue({ code: "custom", path: ["validUntil"], message: "validUntil must be later than validFrom" });
+    context.addIssue({ code: "custom", path: ["validUntil"], message: `${validationFieldLabel(["validUntil"])}：有效结束时间必须晚于开始时间` });
   }
 });
 export const DelegationParamsSchema = z.object({ delegationId: IdSchema }).strict();
@@ -332,7 +333,7 @@ const ReworkAttachmentIdsSchema = (minimum = 0) => z.array(IdSchema)
   .max(MAX_REWORK_ATTACHMENTS)
   .superRefine((ids, context) => {
     if (new Set(ids).size !== ids.length) {
-      context.addIssue({ code: "custom", message: "attachmentIds cannot contain duplicates" });
+      context.addIssue({ code: "custom", message: "附件不能重复选择" });
     }
   });
 
@@ -359,7 +360,7 @@ export const InspectionSizeSampleSchema = z.object({
   measurements: z.array(InspectionMeasurementSchema).min(1).max(30),
 }).strict().superRefine((value, context) => {
   if (new Set(value.measurements.map((item) => item.partName)).size !== value.measurements.length) {
-    context.addIssue({ code: "custom", path: ["measurements"], message: "Measurement parts cannot contain duplicates" });
+    context.addIssue({ code: "custom", path: ["measurements"], message: `${validationFieldLabel(["measurements"])}：测量部位不能重复` });
   }
 });
 
@@ -413,19 +414,19 @@ export const InspectionReportSchema = InspectionReportDraftSchema.superRefine((v
     ["nonconformanceCause", value.nonconformanceCause],
   ];
   for (const [field, content] of requiredText) {
-    if (!content) context.addIssue({ code: "custom", path: [field], message: "Required" });
+    if (!content) context.addIssue({ code: "custom", path: [field], message: `${validationFieldLabel([field])}：请填写此项` });
   }
   if (!value.inspectionStage) {
-    context.addIssue({ code: "custom", path: ["inspectionStage"], message: "Required" });
+    context.addIssue({ code: "custom", path: ["inspectionStage"], message: `${validationFieldLabel(["inspectionStage"])}：请填写此项` });
   }
   if (!value.sampleQuantity) {
-    context.addIssue({ code: "custom", path: ["sampleQuantity"], message: "Required" });
+    context.addIssue({ code: "custom", path: ["sampleQuantity"], message: `${validationFieldLabel(["sampleQuantity"])}：请填写此项` });
   }
   if (!value.inspectionDate) {
-    context.addIssue({ code: "custom", path: ["inspectionDate"], message: "Required" });
+    context.addIssue({ code: "custom", path: ["inspectionDate"], message: `${validationFieldLabel(["inspectionDate"])}：请填写此项` });
   }
   if (value.sizeSamples.length === 0) {
-    context.addIssue({ code: "custom", path: ["sizeSamples"], message: "At least one size sample is required" });
+    context.addIssue({ code: "custom", path: ["sizeSamples"], message: `${validationFieldLabel(["sizeSamples"])}：至少填写一条抽检尺码记录` });
   }
   value.sizeSamples.forEach((sample, sampleIndex) => {
     sample.measurements.forEach((measurement, measurementIndex) => {
@@ -433,7 +434,7 @@ export const InspectionReportSchema = InspectionReportDraftSchema.superRefine((v
         context.addIssue({
           code: "custom",
           path: ["sizeSamples", sampleIndex, "measurements", measurementIndex],
-          message: "Actual and deviation are required unless the part is not applicable",
+          message: `${validationFieldLabel(["sizeSamples", sampleIndex, "measurements", measurementIndex])}：除不适用部位外，须填写实测值和偏差`,
         });
       }
     });
@@ -449,26 +450,26 @@ export const InspectionReportSchema = InspectionReportDraftSchema.superRefine((v
     context.addIssue({
       code: "custom",
       path: ["documentChecks", "exceptionReason"],
-      message: "Reason is required when a document is missing",
+      message: `${validationFieldLabel(["documentChecks", "exceptionReason"])}：资料缺失时须填写原因`,
     });
   }
-  if (!value.fabricMatch) context.addIssue({ code: "custom", path: ["fabricMatch"], message: "Required" });
+  if (!value.fabricMatch) context.addIssue({ code: "custom", path: ["fabricMatch"], message: `${validationFieldLabel(["fabricMatch"])}：请填写此项` });
   if (value.fabricMatch === "mismatch" && !value.fabricMismatchReason) {
-    context.addIssue({ code: "custom", path: ["fabricMismatchReason"], message: "Required" });
+    context.addIssue({ code: "custom", path: ["fabricMismatchReason"], message: `${validationFieldLabel(["fabricMismatchReason"])}：请填写此项` });
   }
-  if (!value.fitDecision) context.addIssue({ code: "custom", path: ["fitDecision"], message: "Required" });
-  if (!value.factoryPreparation) context.addIssue({ code: "custom", path: ["factoryPreparation"], message: "Required" });
+  if (!value.fitDecision) context.addIssue({ code: "custom", path: ["fitDecision"], message: `${validationFieldLabel(["fitDecision"])}：请填写此项` });
+  if (!value.factoryPreparation) context.addIssue({ code: "custom", path: ["factoryPreparation"], message: `${validationFieldLabel(["factoryPreparation"])}：请填写此项` });
   Object.entries(value.materialChecks).forEach(([field, result]) => {
-    if (!result) context.addIssue({ code: "custom", path: ["materialChecks", field], message: "Required" });
+    if (!result) context.addIssue({ code: "custom", path: ["materialChecks", field], message: `${validationFieldLabel(["materialChecks", field])}：请填写此项` });
   });
   if (value.issues.length === 0) {
-    context.addIssue({ code: "custom", path: ["issues"], message: "At least one issue is required" });
+    context.addIssue({ code: "custom", path: ["issues"], message: `${validationFieldLabel(["issues"])}：至少填写一条问题记录` });
   }
   value.issues.forEach((issue, index) => {
-    if (!issue.category) context.addIssue({ code: "custom", path: ["issues", index, "category"], message: "Required" });
-    if (!issue.description) context.addIssue({ code: "custom", path: ["issues", index, "description"], message: "Required" });
+    if (!issue.category) context.addIssue({ code: "custom", path: ["issues", index, "category"], message: `${validationFieldLabel(["issues", index, "category"])}：请填写此项` });
+    if (!issue.description) context.addIssue({ code: "custom", path: ["issues", index, "description"], message: `${validationFieldLabel(["issues", index, "description"])}：请填写此项` });
     if (issue.majorCount + issue.minorCount === 0) {
-      context.addIssue({ code: "custom", path: ["issues", index], message: "Issue count must be greater than zero" });
+      context.addIssue({ code: "custom", path: ["issues", index], message: `${validationFieldLabel(["issues", index])}：问题数量必须大于0` });
     }
   });
 });
@@ -643,7 +644,7 @@ export const ProcessConfigurationItemSchema = z.discriminatedUnion("source", [
     context.addIssue({
       code: "custom",
       path: ["plannedQuantity"],
-      message: "Piece-based planned quantity must be an integer",
+      message: `${validationFieldLabel(["plannedQuantity"])}：按件计价的计划数量必须为整数`,
     });
   }
 });
@@ -659,7 +660,7 @@ export const SaveProcessConfigurationSchema = z.object({
       : `custom:${item.customProcessName.trim().toLocaleLowerCase("zh-CN")}`,
   );
   if (new Set(duplicateKeys).size !== duplicateKeys.length) {
-    context.addIssue({ code: "custom", path: ["items"], message: "A process can appear only once in one configuration" });
+    context.addIssue({ code: "custom", path: ["items"], message: `${validationFieldLabel(["items"])}：同一配置中每道工序只能出现一次` });
   }
 });
 
@@ -675,7 +676,7 @@ export const ReviewProcessConfigurationSchema = z.object({
   reason: z.string().trim().max(500).optional(),
 }).strict().superRefine((value, context) => {
   if (value.decision === "rejected" && !value.reason) {
-    context.addIssue({ code: "custom", path: ["reason"], message: "Rejection reason is required" });
+    context.addIssue({ code: "custom", path: ["reason"], message: `${validationFieldLabel(["reason"])}：退回时须填写原因` });
   }
 });
 
@@ -759,11 +760,11 @@ export const SubmitTailInspectionReportSchema = z.object({
   }).strict()).min(1).max(100),
 }).strict().superRefine((value, context) => {
   if (new Set(value.items.map((item) => item.configurationItemId)).size !== value.items.length) {
-    context.addIssue({ code: "custom", path: ["items"], message: "Each process may be counted once" });
+    context.addIssue({ code: "custom", path: ["items"], message: `${validationFieldLabel(["items"])}：每道工序只能计算一次` });
   }
   for (const [index, item] of value.items.entries()) {
     if (item.inspectedQuantity > value.returnedQuantity) {
-      context.addIssue({ code: "custom", path: ["items", index, "inspectedQuantity"], message: "Process count cannot exceed returned quantity" });
+      context.addIssue({ code: "custom", path: ["items", index, "inspectedQuantity"], message: `${validationFieldLabel(["items", index, "inspectedQuantity"])}：工序数量不能超过回货数量` });
     }
   }
 });
@@ -788,10 +789,10 @@ export const CreateWorkTaskSchema = z.object({
   members: z.array(WorkTaskMemberSchema).min(1).max(40),
 }).strict().superRefine((value, context) => {
   if (new Set(value.members.map((member) => member.personId)).size !== value.members.length) {
-    context.addIssue({ code: "custom", path: ["members"], message: "Task members cannot contain duplicates" });
+    context.addIssue({ code: "custom", path: ["members"], message: `${validationFieldLabel(["members"])}：任务成员不能重复` });
   }
   if (value.mode === "individual" && value.members.length !== 1) {
-    context.addIssue({ code: "custom", path: ["members"], message: "An individual task has exactly one worker" });
+    context.addIssue({ code: "custom", path: ["members"], message: `${validationFieldLabel(["members"])}：个人任务只能指定一名工人` });
   }
 });
 export const AddActiveWorkTaskMembersSchema = z.object({
@@ -800,7 +801,7 @@ export const AddActiveWorkTaskMembersSchema = z.object({
   memberIds: z.array(IdSchema).min(1).max(40),
 }).strict().superRefine((value, context) => {
   if (new Set(value.memberIds).size !== value.memberIds.length) {
-    context.addIssue({ code: "custom", path: ["memberIds"], message: "Work task members cannot contain duplicates" });
+    context.addIssue({ code: "custom", path: ["memberIds"], message: `${validationFieldLabel(["memberIds"])}：工作任务成员不能重复` });
   }
 });
 export const RemoveActiveWorkTaskSchema = z.object({
@@ -845,7 +846,7 @@ export const CreateWorkReportsBatchSchema = z.object({
   reports: z.array(WorkReportBatchItemSchema).min(1).max(200),
 }).strict().superRefine((value, context) => {
   if (new Set(value.reports.map((report) => report.workTaskId)).size !== value.reports.length) {
-    context.addIssue({ code: "custom", path: ["reports"], message: "Work tasks cannot be reported more than once per batch" });
+    context.addIssue({ code: "custom", path: ["reports"], message: `${validationFieldLabel(["reports"])}：同一批次中每个工作任务只能报数一次` });
   }
 });
 export const WorkTaskAssignablePeopleResponseSchema = z.object({
@@ -936,7 +937,7 @@ export const CorrectWorkReportQuantitiesSchema = z.object({
 }).strict().superRefine((value, context) => {
   const reportIds = value.corrections.map((correction) => correction.workReportId);
   if (new Set(reportIds).size !== reportIds.length) {
-    context.addIssue({ code: "custom", path: ["corrections"], message: "Work reports cannot be corrected twice in one batch" });
+    context.addIssue({ code: "custom", path: ["corrections"], message: `${validationFieldLabel(["corrections"])}：同一批次中每条报数记录只能修正一次` });
   }
 });
 export const ReviewWholeOrderSchema = z.object({
@@ -953,17 +954,17 @@ export const ReviewWholeOrderSchema = z.object({
     reason: z.string().trim().min(1).max(500).optional(),
   }).strict().superRefine((value, context) => {
     if (value.multiplier !== 1 && !value.reason) {
-      context.addIssue({ code: "custom", path: ["reason"], message: "Non-default multiplier requires a reason" });
+      context.addIssue({ code: "custom", path: ["reason"], message: `${validationFieldLabel(["reason"])}：使用非默认倍数时须填写原因` });
     }
   })),
 }).strict().superRefine((value, context) => {
   const priceIds = value.processPrices?.map((item) => item.configurationItemId) ?? [];
   if (new Set(priceIds).size !== priceIds.length) {
-    context.addIssue({ code: "custom", path: ["processPrices"], message: "Process prices cannot contain duplicates" });
+    context.addIssue({ code: "custom", path: ["processPrices"], message: `${validationFieldLabel(["processPrices"])}：工序单价不能重复配置` });
   }
   const coefficientKeys = value.temporaryCoefficients.map((item) => `${item.configurationItemId}:${item.personId}`);
   if (new Set(coefficientKeys).size !== coefficientKeys.length) {
-    context.addIssue({ code: "custom", path: ["temporaryCoefficients"], message: "Temporary worker coefficients cannot contain duplicates" });
+    context.addIssue({ code: "custom", path: ["temporaryCoefficients"], message: `${validationFieldLabel(["temporaryCoefficients"])}：临时工系数不能重复配置` });
   }
 });
 export const ReviewFinalQuantitySchema = z.object({
@@ -972,7 +973,7 @@ export const ReviewFinalQuantitySchema = z.object({
   reason: z.string().trim().max(500).optional(),
 }).strict().superRefine((value, context) => {
   if (value.decision === "rejected" && !value.reason) {
-    context.addIssue({ code: "custom", path: ["reason"], message: "Rejection reason is required" });
+    context.addIssue({ code: "custom", path: ["reason"], message: `${validationFieldLabel(["reason"])}：退回时须填写原因` });
   }
 });
 export const CreateQuantityDecreaseSchema = z.object({
@@ -1000,7 +1001,7 @@ export const ConfirmQuantityIncreaseSchema = z.object({
   reason: z.string().trim().max(500).optional(),
 }).strict().superRefine((value, context) => {
   if (value.decision === "rejected" && !value.reason) {
-    context.addIssue({ code: "custom", path: ["reason"], message: "Rejection reason is required" });
+    context.addIssue({ code: "custom", path: ["reason"], message: `${validationFieldLabel(["reason"])}：退回时须填写原因` });
   }
 });
 export const ReviewQuantityIncreaseSchema = z.object({
@@ -1010,7 +1011,7 @@ export const ReviewQuantityIncreaseSchema = z.object({
   reason: z.string().trim().max(500).optional(),
 }).strict().superRefine((value, context) => {
   if (value.decision === "rejected" && !value.reason) {
-    context.addIssue({ code: "custom", path: ["reason"], message: "Rejection reason is required" });
+    context.addIssue({ code: "custom", path: ["reason"], message: `${validationFieldLabel(["reason"])}：退回时须填写原因` });
   }
 });
 export const QuantityAdjustmentResponseSchema = z.object({
@@ -1154,28 +1155,28 @@ export const ResponsibilityProcessInputSchema = z.object({
   allocations: z.array(ResponsibilityAllocationInputSchema).min(1).max(5),
 }).strict().superRefine((value, context) => {
   if (responsibilityMultiplierScaled(value.multiplier) !== 1_000n) {
-    context.addIssue({ code: "custom", path: ["multiplier"], message: "The retired responsibility coefficient must remain 1" });
+    context.addIssue({ code: "custom", path: ["multiplier"], message: `${validationFieldLabel(["multiplier"])}：已停用的责任系数必须保持为1` });
   }
   if (value.highMultiplierReason !== undefined) {
-    context.addIssue({ code: "custom", path: ["highMultiplierReason"], message: "The retired responsibility coefficient reason is not accepted" });
+    context.addIssue({ code: "custom", path: ["highMultiplierReason"], message: `${validationFieldLabel(["highMultiplierReason"])}：已停用的责任系数不接受原因填写` });
   }
   const totalShareBps = value.allocations.reduce((sum, allocation) => sum + allocation.shareBps, 0);
   if (totalShareBps !== 10_000) {
-    context.addIssue({ code: "custom", path: ["allocations"], message: "Responsibility shares must total 100%" });
+    context.addIssue({ code: "custom", path: ["allocations"], message: `${validationFieldLabel(["allocations"])}：责任分摊比例合计必须为100%` });
   }
   const seenTypes = new Set<string>();
   value.allocations.forEach((allocation, index) => {
     if (seenTypes.has(allocation.responsibilityType)) {
-      context.addIssue({ code: "custom", path: ["allocations", index, "responsibilityType"], message: "A responsibility type can only be selected once per process" });
+      context.addIssue({ code: "custom", path: ["allocations", index, "responsibilityType"], message: `${validationFieldLabel(["allocations", index, "responsibilityType"])}：每道工序的同一责任类型只能选择一次` });
     }
     seenTypes.add(allocation.responsibilityType);
     const multiplier = responsibilityMultiplierScaled(allocation.multiplier ?? (allocation.responsibilityType === "own_factory" ? "1.000" : "1.200"));
     if (allocation.responsibilityType === "own_factory") {
-      if (multiplier !== 1_000n) context.addIssue({ code: "custom", path: ["allocations", index, "multiplier"], message: "Own-factory responsibility multiplier must be 1" });
-      if (allocation.supplierId) context.addIssue({ code: "custom", path: ["allocations", index, "supplierId"], message: "Own-factory responsibility cannot carry a supplier" });
+      if (multiplier !== 1_000n) context.addIssue({ code: "custom", path: ["allocations", index, "multiplier"], message: `${validationFieldLabel(["allocations", index, "multiplier"])}：本厂承担的责任倍数必须为1` });
+      if (allocation.supplierId) context.addIssue({ code: "custom", path: ["allocations", index, "supplierId"], message: `${validationFieldLabel(["allocations", index, "supplierId"])}：本厂承担不能关联外部供应商` });
     } else {
-      if (multiplier < 1_200n) context.addIssue({ code: "custom", path: ["allocations", index, "multiplier"], message: "External deduction multiplier cannot be lower than 1.2" });
-      if (!allocation.supplierId) context.addIssue({ code: "custom", path: ["allocations", index, "supplierId"], message: "External responsibility requires the actual supplier" });
+      if (multiplier < 1_200n) context.addIssue({ code: "custom", path: ["allocations", index, "multiplier"], message: `${validationFieldLabel(["allocations", index, "multiplier"])}：外部扣款倍数不能低于1.2` });
+      if (!allocation.supplierId) context.addIssue({ code: "custom", path: ["allocations", index, "supplierId"], message: `${validationFieldLabel(["allocations", index, "supplierId"])}：外部责任须选择实际供应商` });
     }
   });
 });

@@ -109,7 +109,7 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
           <strong>{line.position}. {line.styleNo} · {line.color??"未记录颜色"}</strong>
           <p>累计 {formatBusinessDecimal(line.completedQuantity)} / {formatBusinessDecimal(line.quantity)} 件 · 剩余 {formatBusinessDecimal(line.quantity-line.completedQuantity)} 件</p>
           {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&detail.order.status==="in_production"?<form className="sourcing-form-grid production-reporting__report" onSubmit={e=>{e.preventDefault();void write(`/${productionOrderId}/reports`,{position:line.position,businessDate:date,quantity:Number(quantities[line.position])},"本次产量已保存");}}>
-            <label>本次新增数量<input type="number" inputMode="numeric" min={1} max={line.quantity-line.completedQuantity} step={1} required disabled={busy||line.quantity===line.completedQuantity} value={quantities[line.position]??""} onChange={e=>setQuantities(v=>({...v,[line.position]:e.target.value}))}/></label>
+            <label>本次新增数量 *<input type="number" inputMode="numeric" min={1} max={line.quantity-line.completedQuantity} step={1} required disabled={busy||line.quantity===line.completedQuantity} value={quantities[line.position]??""} onChange={e=>setQuantities(v=>({...v,[line.position]:e.target.value}))}/></label>
             <Button type="submit" disabled={busy||loading||!date||!quantities[line.position]||line.quantity===line.completedQuantity}>保存上报</Button>
           </form>:null}
         </div></Surface>)}</div>
@@ -127,17 +127,17 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
       </details></Surface>
       {detail.canCorrect&&correcting?<Surface className="sourcing-list-card"><h2>Root 修正原始上报</h2><p>原记录保留；以下数量替换该条记录的有效数量。</p>
         <form className="sourcing-form-grid" onSubmit={e=>{e.preventDefault();void write(`/${productionOrderId}/reports/${correcting.rootReportId}/corrections`,{expectedReportId:correcting.reportId,businessDate:correctionDate,quantity:Number(correctionQuantity),reason},"修正已保存，原记录保留");}}>
-          <label>修正后数量<input required type="number" min={0} step={1} value={correctionQuantity} onChange={e=>setCorrectionQuantity(e.target.value)} disabled={busy}/></label>
-          <label>业务日期<input required type="date" max={today()} value={correctionDate} onChange={e=>setCorrectionDate(e.target.value)} disabled={busy}/></label>
-          <label>修正原因<input required maxLength={500} value={reason} onChange={e=>setReason(e.target.value)} disabled={busy}/></label>
+          <label>修正后数量 *<input required type="number" min={0} step={1} value={correctionQuantity} onChange={e=>setCorrectionQuantity(e.target.value)} disabled={busy}/></label>
+          <label>业务日期 *<input required type="date" max={today()} value={correctionDate} onChange={e=>setCorrectionDate(e.target.value)} disabled={busy}/></label>
+          <label>修正原因 *<input required maxLength={500} value={reason} onChange={e=>setReason(e.target.value)} disabled={busy}/></label>
           <div className="production-reporting__actions"><Button type="submit" disabled={busy||!reason.trim()}>保存修正</Button><Button variant="secondary" disabled={busy} onClick={()=>setCorrecting(null)}>取消</Button></div>
         </form></Surface>:null}
     </>:null}
     {user?.isRoot?<Surface className="sourcing-list-card"><details onToggle={e=>{if(e.currentTarget.open&&!directory)void loadScopes();}}><summary>驻厂人员负责范围</summary>
       <p>先在“人员与权限”分配驻厂生产填报角色，再配置负责范围。</p>
       <form className="sourcing-form-grid" onSubmit={e=>{e.preventDefault();void saveScope({userId:scopeUser,scopeType:productionOrderId&&!scopeSupplier?"order":"supplier",scopeId:scopeSupplier||productionOrderId||"",active:true});}}>
-        <label>驻厂人员<SearchableSelect required value={scopeUser} onChange={e=>setScopeUser(e.target.value)}><option value="">请选择</option>{directory?.users.map(u=><option key={u.userId} value={u.userId}>{u.displayName}</option>)}</SearchableSelect></label>
-        <label>负责范围<SearchableSelect required={!productionOrderId} value={scopeSupplier} onChange={e=>setScopeSupplier(e.target.value)}><option value="">{productionOrderId?"仅当前订单":"请选择供应商"}</option>{directory?.suppliers.map(s=><option key={s.supplierId} value={s.supplierId}>{s.supplierName}</option>)}</SearchableSelect></label>
+        <label>驻厂人员 *<SearchableSelect required value={scopeUser} onChange={e=>setScopeUser(e.target.value)}><option value="">请选择</option>{directory?.users.map(u=><option key={u.userId} value={u.userId}>{u.displayName}</option>)}</SearchableSelect></label>
+        <label>负责范围{!productionOrderId ? " *" : "（选填）"}<SearchableSelect required={!productionOrderId} value={scopeSupplier} onChange={e=>setScopeSupplier(e.target.value)}><option value="">{productionOrderId?"仅当前订单":"请选择供应商"}</option>{directory?.suppliers.map(s=><option key={s.supplierId} value={s.supplierId}>{s.supplierName}</option>)}</SearchableSelect></label>
         <Button type="submit" disabled={busy||!scopeUser||(!scopeSupplier&&!productionOrderId)}>保存负责范围</Button>
       </form>
       {directory?.scopes.map(s=><p key={`${s.userId}:${s.scopeType}:${s.scopeId}`}>{directory.users.find(u=>u.userId===s.userId)?.displayName??"已撤销角色人员"} · {s.scopeLabel} <Button variant="secondary" disabled={busy} onClick={()=>{void confirmInApp("确认撤销该负责范围？").then(ok=>{if(ok)void saveScope({userId:s.userId,scopeType:s.scopeType,scopeId:s.scopeId,active:false});});}}>撤销</Button></p>)}

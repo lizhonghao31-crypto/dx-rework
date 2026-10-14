@@ -1,3 +1,4 @@
+import { requestValidationMessage } from "@dx-rework/contracts/validation-language";
 import { assertFinanceWageAccess, type WageAccessCapability } from "../wages/wage-access.js";
 import {
   FinanceNodeParamsSchema, FinanceNodeReadSchema,
@@ -28,9 +29,9 @@ const token = (request: FastifyRequest): string | undefined => request.headers.c
   .find((value) => value.startsWith("dx_rework_session="))
   ?.slice(18);
 
-const parse = <T>(schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } }, value: unknown): T => {
+const parse = <T>(schema: { safeParse(value: unknown): { success: true; data: T } | { success: false; error?: { issues?: readonly { path?: readonly PropertyKey[]; message?: string }[] } } }, value: unknown): T => {
   const result = schema.safeParse(value);
-  if (!result.success) throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400);
+  if (!result.success) throw new ApplicationError("VALIDATION_ERROR", requestValidationMessage(result), 400);
   return result.data;
 };
 

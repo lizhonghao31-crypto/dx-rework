@@ -1,3 +1,4 @@
+import { validationFieldLabel } from "./validation-language.js";
 import { z } from "zod";
 
 const IdSchema = z.string().uuid();
@@ -9,7 +10,7 @@ const AttachmentIdsSchema = z.array(IdSchema).max(50).default([])
     if (new Set(value).size !== value.length) {
       context.addIssue({
         code: "custom",
-        message: "attachmentIds cannot contain duplicates",
+        message: "附件不能重复选择",
       });
     }
   });
@@ -18,7 +19,7 @@ const UniqueIdsSchema = z.array(IdSchema).min(1).max(100)
     if (new Set(value).size !== value.length) {
       context.addIssue({
         code: "custom",
-        message: "IDs cannot contain duplicates",
+        message: "关联记录不能重复",
       });
     }
   });
@@ -79,7 +80,7 @@ export const AllocateExternalSuppliersSchema = z.object({
     context.addIssue({
       code: "custom",
       path: ["allocations"],
-      message: "An external item can only be assigned once",
+      message: `${validationFieldLabel(["allocations"])}：同一外部责任明细只能分派一次`,
     });
   }
 });
@@ -124,14 +125,14 @@ export const CreateExternalDeductionEntrySchema = z.object({
     context.addIssue({
       code: "custom",
       path: ["reversesEntryId"],
-      message: "A deduction must be a positive new entry",
+      message: `${validationFieldLabel(["reversesEntryId"])}：新增扣款金额必须大于0`,
     });
   }
   if (value.entryType !== "deduction" && value.reversesEntryId === undefined) {
     context.addIssue({
       code: "custom",
       path: ["reversesEntryId"],
-      message: "An adjustment or reversal must reference an entry",
+      message: `${validationFieldLabel(["reversesEntryId"])}：调整或冲回必须关联原记录`,
     });
   }
 });
@@ -153,7 +154,7 @@ export const CloseExternalDeductionCaseSchema = z.object({
     context.addIssue({
       code: "custom",
       message:
-        "A full deduction cannot provide failure evidence or a remaining-difference disposition",
+        "全额扣款不能同时填写未扣凭证或剩余差额处理方式",
     });
   }
   if (
@@ -167,7 +168,7 @@ export const CloseExternalDeductionCaseSchema = z.object({
     context.addIssue({
       code: "custom",
       message:
-        "Partial and failed deductions require a reason, ready evidence, and a remaining-difference disposition",
+        "部分扣款或未扣款须填写原因、已就绪凭证及剩余差额处理方式",
     });
   }
 });
@@ -211,7 +212,7 @@ const ProcessAllocationChangeSchema = z.object({
     context.addIssue({
       code: "custom",
       path: ["allocations"],
-      message: "Responsibility shares must total 10000 bps",
+      message: `${validationFieldLabel(["allocations"])}：责任分摊比例合计必须为100%`,
     });
   }
   if (
@@ -221,7 +222,7 @@ const ProcessAllocationChangeSchema = z.object({
     context.addIssue({
       code: "custom",
       path: ["allocations"],
-      message: "Responsibility types cannot repeat",
+      message: `${validationFieldLabel(["allocations"])}：责任类型不能重复选择`,
     });
   }
 });

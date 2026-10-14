@@ -58,7 +58,7 @@ describe("development workspaces preserve original business facts", () => {
     const query = new DevelopmentWorkspaceQuery({list: async (_actor, _filter, all) => {expect(all).toBe(true); calls++; return {asOf: "TEST", items};}} as unknown as DigitalJourneyQuery);
     const result = await query.designer(actor, DevelopmentWorkspaceFilterSchema.parse({page: 2, view: "draft"}));
     expect(result.counts).toEqual({all: 21, draft: 21, developing: 0, awaiting_order: 0, ordered: 0});
-    expect(result.items).toHaveLength(1); expect(result.items[0]?.canConfirm).toBe(true);
+    expect(result.items).toHaveLength(6); expect(result.items[0]?.canConfirm).toBe(true);
     await expect(query.designer({...actor, actorRoles: ["pattern_room_worker"]}, DevelopmentWorkspaceFilterSchema.parse({}))).rejects.toMatchObject({statusCode: 403});
     expect(calls).toBe(1);
   });

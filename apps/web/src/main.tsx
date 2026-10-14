@@ -1,3 +1,5 @@
+import { configureChineseValidation } from "@dx-rework/contracts/validation-language";
+import { installChineseNativeValidation } from "./native-validation.js";
 import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -16,6 +18,10 @@ const AcceptanceProductionCommandCenterPage = lazy(async () => {
   const module = await import("./acceptance-production-command-center-page.js");
   return { default: module.AcceptanceProductionCommandCenterPage };
 });
+
+configureChineseValidation();
+const removeNativeValidation = installChineseNativeValidation(document);
+import.meta.hot?.dispose(removeNativeValidation);
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Root element is missing");

@@ -219,7 +219,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
     completeness: mode === "manage" ? completeness : "all",
   }), [query, status, supplierType, suppliers, craft, completeness, mode]);
   const crafts = useMemo(() => [...new Set(suppliers.flatMap(supplier => supplier.supportedCrafts))].sort((a, b) => a.localeCompare(b, "zh-CN")), [suppliers]);
-  const page = usePaginatedItems(filtered, `${query}:${supplierType}:${status}:${craft}:${completeness}`, 12);
+  const page = usePaginatedItems(filtered, `${query}:${supplierType}:${status}:${craft}:${completeness}`);
   const missingLabels = supplierContractMissingLabels(profile?.contractDataMissing ?? []);
   const contractVisible = profile ? Object.hasOwn(profile, "contractEntityName") : false;
 

@@ -73,10 +73,10 @@ export function ContractTemplateSettingsPage() {
       <form onSubmit={event=>{event.preventDefault();void submit("save");}}>
         <fieldset disabled={busy} className="contract-template-fields">
           {([ ["templateName","模板名称"],["partyAName","甲方名称"],["partyAAddress","甲方地址"],["signingPlace","签订地点"] ] as const).map(([field,label])=>
-            <label key={field}><span>{label}</span><input required value={draft[field]} maxLength={field==="partyAAddress"?500:field==="templateName"?100:200}
+            <label key={field}><span>{label} *</span><input required value={draft[field]} maxLength={field==="partyAAddress"?500:field==="templateName"?100:200}
               onChange={event=>edit({...draft,[field]:event.target.value})}/></label>)}
           {(Object.keys(CONTRACT_TERM_LABELS) as (keyof typeof CONTRACT_TERM_LABELS)[]).map(field=>
-            <label key={field}><span>{CONTRACT_TERM_LABELS[field]}</span><textarea required value={draft.terms[field]} maxLength={4000}
+            <label key={field}><span>{CONTRACT_TERM_LABELS[field]} *</span><textarea required value={draft.terms[field]} maxLength={4000}
               rows={field==="qualityRequirements"?5:3} onChange={event=>edit({...draft,terms:{...draft.terms,[field]:event.target.value}})}/></label>)}
         </fieldset>
         <div className="contract-template-actions">

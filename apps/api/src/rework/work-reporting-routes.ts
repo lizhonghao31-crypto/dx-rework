@@ -1,3 +1,4 @@
+import { requestValidationMessage } from "@dx-rework/contracts/validation-language";
 import {
   AddActiveWorkTaskMembersSchema,
   CreateWorkReportSchema,
@@ -30,7 +31,7 @@ import type { TrustedActorContext } from "../tools/repositories.js";
 import { type WorkReportingService } from "./work-reporting-service.js";
 
 const token = (request: FastifyRequest): string | undefined => request.headers.cookie?.split(";").map((part) => part.trim()).find((part) => part.startsWith("dx_rework_session="))?.slice("dx_rework_session=".length);
-const parse = <T>(schema: { safeParse(input: unknown): { success: true; data: T } | { success: false } }, input: unknown): T => { const result = schema.safeParse(input); if (!result.success) throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400); return result.data; };
+const parse = <T>(schema: { safeParse(input: unknown): { success: true; data: T } | { success: false; error?: { issues?: readonly { path?: readonly PropertyKey[]; message?: string }[] } } }, input: unknown): T => { const result = schema.safeParse(input); if (!result.success) throw new ApplicationError("VALIDATION_ERROR", requestValidationMessage(result), 400); return result.data; };
 const key = (request: FastifyRequest): string => parse(IdempotencyKeySchema, request.headers["idempotency-key"]);
 
 export type WorkReportingHttpDependencies = Readonly<{

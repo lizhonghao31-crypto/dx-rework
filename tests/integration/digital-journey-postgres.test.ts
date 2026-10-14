@@ -290,7 +290,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
         const pageTasks=paged.items.flatMap(item=>item.stages.flatMap(stage=>stage.nodes).filter(node=>node.records.some(record=>record.domain==='task'&&record.id===node.instanceId)).map(node=>node.instanceId));
         expect(hydrated.every(id=>pageTasks.includes(id))).toBe(true);
         expect(hydrated.length).toBeLessThanOrEqual(paged.items.length*2);
-        if(context.actorId===designer&&patch.page===2&&!('risk' in patch)){expect(paged.total).toBe(25);expect(paged.items).toHaveLength(5);}
+        if(context.actorId===designer&&patch.page===2&&!('risk' in patch)){expect(paged.total).toBe(25);expect(paged.items).toHaveLength(10);}
         if(context.actorId===designer&&patch.page===3){expect(paged.total).toBe(25);expect(paged.items).toHaveLength(0);}
         if(context.actorId===stranger){expect(paged.total).toBe(0);}
         if(context.actorId===worker){expect(paged.items.every(item=>item.developmentType===null&&item.requiredCompletionDate===null)).toBe(true);}
@@ -307,7 +307,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
         const reads=vi.spyOn(DigitalProductionTaskService.prototype,'read');
         const result=await workspaces.designer(context,filter),hydrated=reads.mock.calls.map(call=>call[1]);reads.mockRestore();
         expect(result.total).toBe(filtered.length);expect(result.counts.all).toBe(all.length);
-        expect(result.items.map(item=>normalize(item.journey))).toEqual(filtered.slice((filter.page-1)*20,filter.page*20).map(normalize));
+        expect(result.items.map(item=>normalize(item.journey))).toEqual(filtered.slice((filter.page-1)*15,filter.page*15).map(normalize));
         expect(hydrated.length).toBeLessThanOrEqual(result.items.length*2);
       }
     }

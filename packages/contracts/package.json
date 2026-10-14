@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./validation-language": { "types": "./src/validation-language.ts", "import": "./dist/validation-language.js" },
     "./todo-destination": { "types": "./src/todo-destination.ts", "import": "./dist/todo-destination.js" },
     "./digital-development-workspace": { "types": "./src/digital-development-workspace.ts", "import": "./dist/digital-development-workspace.js" },
     "./digital-production-journey": { "types": "./src/digital-production-journey.ts", "import": "./dist/digital-production-journey.js" },

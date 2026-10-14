@@ -4,7 +4,7 @@ import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { Header, Shell } from "../components.js";
-import { ListPagination, usePaginatedItems } from "../list-pagination.js";
+import { LIST_PAGE_SIZE, ListPagination } from "../list-pagination.js";
 import { useDebouncedValue } from "../use-debounced-value.js";
 import { loadReworkOrders, reportingPageUrl } from "./reporting-client.js";
 import "./reporting.css";
@@ -95,7 +95,7 @@ const age = (seconds: number): string => {
 
 type LoadState =
   | { kind: "loading" }
-  | { kind: "ready"; pages: Partial<Record<WorkflowStatus, ManagementReworkPage>>; available: WorkflowStatus[] }
+  | { kind: "ready"; requestKey: string; pages: Partial<Record<WorkflowStatus, ManagementReworkPage>>; available: WorkflowStatus[] }
   | { kind: "unavailable"; message: string };
 
 export function WorkflowQueuePage({
@@ -126,16 +126,23 @@ export function WorkflowQueuePage({
     exception: exception || undefined,
     from: from || undefined,
     to: to || undefined,
-    limit: "100",
+    limit: String(LIST_PAGE_SIZE),
   }), [debouncedQ, overdue, exception, from, to]);
+
+  const scopeKey = JSON.stringify([selected, baseFilters]);
+  const [paging, setPaging] = useState({ key: "", page: 1 });
+  // Remember each filter transition, so clearing a filter cannot resurrect its old page.
+  if (paging.key !== scopeKey) setPaging({ key: scopeKey, page: 1 });
+  const currentPage = paging.key === scopeKey ? paging.page : 1;
+  const requestKey = JSON.stringify([scopeKey, currentPage, refresh]);
 
   useEffect(() => {
     const controller = new AbortController();
-    setState((current) => current.kind === "ready" ? current : { kind: "loading" });
+    setState(current => current.kind === "ready" ? current : { kind: "loading" });
     void Promise.allSettled(
       statuses.map(async (status) => [
         status,
-        await loadReworkOrders({ ...baseFilters, status }, controller.signal),
+        await loadReworkOrders({ ...baseFilters, status, page: String(status === selected ? currentPage : 1) }, controller.signal),
       ] as const),
     ).then((results) => {
         if (controller.signal.aborted) return;
@@ -155,13 +162,13 @@ export function WorkflowQueuePage({
           setState({ kind: "unavailable", message: errors[0] ?? "当前账号没有可进入的节点队列" });
           return;
         }
-        setState({ kind: "ready", pages, available });
+        setState({ kind: "ready", requestKey, pages, available });
         setSelected((current) => available.includes(current) ? current : available[0]!);
     });
     return () => {
       controller.abort();
     };
-  }, [baseFilters, refresh, statuses]);
+  }, [baseFilters, currentPage, refresh, requestKey, selected, statuses]);
 
   const selectStatus = (status: WorkflowStatus) => {
     setSelected(status);
@@ -172,11 +179,12 @@ export function WorkflowQueuePage({
 
   const ready = state.kind === "ready" ? state : null;
   const page = ready?.pages[selected];
-  const items = page?.items ?? [];
-  const itemPage = usePaginatedItems(
-    items,
-    `${selected}:${debouncedQ}:${overdue}:${exception}:${from}:${to}`,
-  );
+  const busy = ready?.requestKey !== requestKey;
+  const items = busy ? [] : page?.items ?? [];
+  const totalPages = Math.max(1, Math.ceil((page?.totalCount ?? 0) / LIST_PAGE_SIZE));
+  useEffect(() => {
+    if (ready && !busy && currentPage > totalPages) setPaging({ key: scopeKey, page: totalPages });
+  }, [busy, currentPage, ready, scopeKey, totalPages]);
   const meta = queueMeta[selected];
   const canUseUnifiedQuery = ready?.available.some((status) => ready.pages[status]?.canViewReports === true) === true;
 
@@ -229,13 +237,13 @@ export function WorkflowQueuePage({
             <Button onClick={() => setRefresh((value) => value + 1)}>立即刷新</Button>
           </Surface>
 
-          {items.length === 0 ? (
+          {busy ? <Surface className="reporting-state"><p role="status">正在读取当前节点订单…</p></Surface> : items.length === 0 ? (
             <Surface className="reporting-state">
               当前没有停留在 {meta.node} · {meta.label} 的订单。订单只有进入这个真实节点后才会出现在这里。
             </Surface>
           ) : (
             <div className="reporting-order-grid workflow-order-grid">
-              {itemPage.items.map((order) => (
+              {items.map((order) => (
                 <a className="reporting-order-link" href={reportingPageUrl(actionHref(order))} key={order.reworkOrderId}>
                   <Surface className="reporting-order-card workflow-order-card">
                     <div className="reporting-order-card__heading">
@@ -257,7 +265,7 @@ export function WorkflowQueuePage({
               ))}
             </div>
           )}
-          <ListPagination page={itemPage.page} totalPages={itemPage.totalPages} onPageChange={itemPage.setPage} ariaLabel="节点订单分页" />
+          <ListPagination page={currentPage} totalPages={totalPages} onPageChange={page => setPaging({ key: scopeKey, page })} ariaLabel="节点订单分页" busy={busy} />
         </>
       )}
 

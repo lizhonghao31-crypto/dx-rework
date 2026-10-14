@@ -100,3 +100,7 @@
 - allowed files: AGENTS.md、docs/roadmap/platform-2.0-rules-index-v1.0.md、docs/requirements/rework-ui-golden-source-v1.0.md、docs/requirements/sourcing-supplier-production-v1.0.md、packages/ui/src/、apps/web/src/相关共享组件和样式、对应验证证据。
 - forbidden files: 数据库迁移、API业务逻辑、身份权限、ERP接入、部署配置、SSP-06与样衣业务代码。
 - gate: 本地lint、web类型检查与构建、真实页面对照；共享UI使用Full Gate。
+
+### 本轮UAT公共列表/反馈规则（2026-10-15）
+
+适用业务订单、档案、任务、杂事列表默认每页15条；按原权限先筛选再统计/分页，全量指标/导出、面辅料/尺码/工艺/合同内容不能被15条截断。已有可搜索选择保留下拉、关键词及仅选择现有对象；固定枚举/多选保留原能力，公共箭头/焦点/手机和IME行为由组件自身限定样式处理。既有required按当前阶段显示清楚标识，不新增审批前置；原生约束、Zod、API反馈使用中文字段和业务原因、保留输入、定位首个可见错误字段。原业务错误代码、权限、校验和恢复分支保持。覆盖边界与逐项例外见`docs/engineering/uat-pr08-list-control-audit-20261015.md`及其路由/控件附件。

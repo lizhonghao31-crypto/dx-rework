@@ -43,8 +43,8 @@ describe("V2 Journey shared query semantics",()=>{
     const orders=Array.from({length:25},(_,index)=>item(`${index}`,[node("pattern",{state:"active",risks:["overdue"]})]));
     const filter=JourneyFilterSchema.parse({search:"第二跟单",merchandiserId:"19b5331b-c76f-4b9a-8773-849e24a35ad1",customer:"PD",startDate:"2026-10-04",endDate:"2026-10-04",kpi:"overdue",page:2});
     const list=selectJourneys(orders,filter,at),exported=selectJourneys(orders,filter,at,false);
-    expect(list.total).toBe(25);expect(list.items).toHaveLength(5);expect(exported.items).toHaveLength(25);expect(list.summary).toEqual(exported.summary);
-    expect(list.items.map(item=>item.id)).toEqual(exported.items.slice(20).map(item=>item.id));
+    expect(list.total).toBe(25);expect(list.items).toHaveLength(10);expect(exported.items).toHaveLength(25);expect(list.summary).toEqual(exported.summary);
+    expect(list.items.map(item=>item.id)).toEqual(exported.items.slice(15).map(item=>item.id));
     expect(selectJourneys(orders,JourneyFilterSchema.parse({search:"FORMAL-1"}),at).total).toBe(25);
     expect(selectJourneys(orders,JourneyFilterSchema.parse({search:"PO-1"}),at).total).toBe(25);
     expect(selectJourneys(orders,JourneyFilterSchema.parse({search:"款名"}),at).total).toBe(25);

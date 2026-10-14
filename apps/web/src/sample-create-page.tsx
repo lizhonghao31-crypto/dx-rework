@@ -119,7 +119,7 @@ export function SampleCreatePage({ batch = false }: { batch?: boolean }) {
     {items.map((item, index) => <Surface className="rework-v2-core" key={item.key}>
       <div className="rework-v2-section-heading"><h2>样衣 {index + 1}</h2>{batch && items.length > 1 ? <Button disabled={disabled} onClick={() => { setItems(current => current.filter(row => row.key !== item.key)); onPendingUpload(item.key, 0); }}>移除本件</Button> : null}</div>
       <div className="rework-v2-grid">
-        {([['brand','品牌'],['styleName','样衣名称'],['color','颜色'],['department','部门'],['purchaseDate','采购日期'],['purchasePrice','采购价']] as const).map(([field,label]) => <label key={field}>{label}<input required value={item[field]} disabled={disabled} type={field === 'purchaseDate' ? 'date' : 'text'} inputMode={field === 'purchasePrice' ? 'decimal' : undefined} onChange={e => update(item.key,{[field]:e.target.value})} /></label>)}
+        {([['brand','品牌'],['styleName','样衣名称'],['color','颜色'],['department','部门'],['purchaseDate','采购日期'],['purchasePrice','采购价']] as const).map(([field,label]) => <label key={field}>{label} *<input required value={item[field]} disabled={disabled} type={field === 'purchaseDate' ? 'date' : 'text'} inputMode={field === 'purchasePrice' ? 'decimal' : undefined} onChange={e => update(item.key,{[field]:e.target.value})} /></label>)}
         <SamplePersonPicker label="采购人" value={item.purchaserUserId} disabled={disabled} onChange={purchaserUserId => update(item.key,{purchaserUserId})} />
       </div>
       <p><label><input type="checkbox" checked={item.differentHolder} disabled={disabled} onChange={e => update(item.key,{differentHolder:e.target.checked})} />初始持有人与采购人不同</label></p>

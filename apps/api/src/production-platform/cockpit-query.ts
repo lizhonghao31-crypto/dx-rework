@@ -46,7 +46,7 @@ SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
         OR ($3='urgent' AND (SELECT e.payload->>'priority' FROM digital_production_task_events e WHERE e.task_id=qt.task_id AND e.event_kind='priority_changed' ORDER BY e.recorded_at DESC,e.event_id DESC LIMIT 1)='urgent'))))
       AND ${scope}
     ), totals AS (SELECT count(*)::int AS total FROM visible), page AS (
-      SELECT * FROM visible ORDER BY "createdAt" DESC,id DESC LIMIT 20 OFFSET $8
+      SELECT * FROM visible ORDER BY "createdAt" DESC,id DESC LIMIT 15 OFFSET $8
     ), summary AS (
       SELECT count(DISTINCT a.${column}) FILTER(WHERE t.state NOT IN ('completed','cancelled'))::int AS active,
       count(DISTINCT a.${column}) FILTER(WHERE t.state='blocked')::int AS blocked,
@@ -56,7 +56,7 @@ SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
       FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
       LEFT JOIN LATERAL(SELECT due_at,warning_at FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1) r ON true
       WHERE EXISTS(SELECT 1 FROM visible v WHERE v."${visibleColumn}"=a.${column})
-    ) SELECT totals.total,row_to_json(summary) AS summary,coalesce((SELECT json_agg(page) FROM page),'[]'::json) AS items FROM totals CROSS JOIN summary`,[input.stage,input.search,input.workload??"all",actor.actorId,actor.actorRoles,isDigitalLeader(actor),isDigitalTechnicalManager(actor),(input.page-1)*20])).rows[0];
+    ) SELECT totals.total,row_to_json(summary) AS summary,coalesce((SELECT json_agg(page) FROM page),'[]'::json) AS items FROM totals CROSS JOIN summary`,[input.stage,input.search,input.workload??"all",actor.actorId,actor.actorRoles,isDigitalLeader(actor),isDigitalTechnicalManager(actor),(input.page-1)*15])).rows[0];
     const summary=result.summary;
     const service = new DigitalProductionTaskService(db);
     const items: CockpitRow[] = [];

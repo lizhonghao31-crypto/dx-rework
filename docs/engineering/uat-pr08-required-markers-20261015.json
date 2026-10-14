@@ -1,0 +1,242 @@
+[
+  {
+    "file": "apps/web/src/contract-template-settings-page.tsx",
+    "line": 76,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/contract-template-settings-page.tsx",
+    "line": 79,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/development-pattern-link.tsx",
+    "line": 13,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/development-revision-fields.tsx",
+    "line": 7,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/development-revision-fields.tsx",
+    "line": 7,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-analysis-page.tsx",
+    "line": 52,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-analysis-page.tsx",
+    "line": 52,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-analysis-page.tsx",
+    "line": 52,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-cockpit-page.tsx",
+    "line": 34,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-cockpit-personnel.tsx",
+    "line": 51,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-cockpit-personnel.tsx",
+    "line": 52,
+    "required": "required={dialog.kind===\"order\"}",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-development-execution-panel.tsx",
+    "line": 49,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-development-execution-panel.tsx",
+    "line": 64,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-development-execution-panel.tsx",
+    "line": 68,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-development-execution-panel.tsx",
+    "line": 68,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-development-execution-panel.tsx",
+    "line": 69,
+    "required": "required={task.taskKind===\"development_tail_check\"&&Boolean(tailReturn[task.taskId])}",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-development-execution-panel.tsx",
+    "line": 74,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-development-execution-panel.tsx",
+    "line": 75,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-development-execution-panel.tsx",
+    "line": 77,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-production-page.tsx",
+    "line": 115,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-production-tasks-panel.tsx",
+    "line": 50,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-production-tasks-panel.tsx",
+    "line": 52,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-production-tasks-panel.tsx",
+    "line": 53,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-production-tasks-panel.tsx",
+    "line": 56,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/digital-production-tasks-panel.tsx",
+    "line": 58,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/factory-flow-panel.tsx",
+    "line": 62,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/factory-settlement-panel.tsx",
+    "line": 16,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/order-closure-panel.tsx",
+    "line": 20,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/order-closure-panel.tsx",
+    "line": 20,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/order-responsibility-revision-panel.tsx",
+    "line": 100,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/production-reporting-page.tsx",
+    "line": 112,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/production-reporting-page.tsx",
+    "line": 130,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/production-reporting-page.tsx",
+    "line": 131,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/production-reporting-page.tsx",
+    "line": 132,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/production-reporting-page.tsx",
+    "line": 139,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/production-reporting-page.tsx",
+    "line": 140,
+    "required": "required={!productionOrderId}",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/sample-create-page.tsx",
+    "line": 122,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/sourcing-return-dialog.tsx",
+    "line": 14,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/sourcing-workspace-page.tsx",
+    "line": 2103,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  },
+  {
+    "file": "apps/web/src/sourcing-workspace-page.tsx",
+    "line": 2162,
+    "required": "required",
+    "change": "只补可见标识，未改required/条件/审批前置"
+  }
+]

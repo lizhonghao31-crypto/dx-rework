@@ -77,7 +77,7 @@ export type OrderJourney = {
   progress: { development: {applicable:number;completed:number} | null; bulk: {applicable:number;completed:number} | null };
   hitReasons: Array<{nodeId:string;nodeKey:string;stage:JourneyStageKey;risks:JourneyNode["risks"]}>;
 };
-export type JourneyResult = { ruleVersion: "journey-v2.0"; asOf: string; page: number; pageSize: 20; total: number; canManagePolicies?: boolean;
+export type JourneyResult = { ruleVersion: "journey-v2.0"; asOf: string; page: number; pageSize: 15; total: number; canManagePolicies?: boolean;
   facets?: { customers: string[]; categories: string[]; merchandisers: Array<{id:string;name:string|null}> };
   summary: {all:number;active:number;dueSoon:number;overdue:number;blocked:number;completed:number}; items: OrderJourney[] };
 

@@ -1,3 +1,4 @@
+import { requestValidationMessage } from "@dx-rework/contracts/validation-language";
 import { IdempotencyKeySchema } from "@dx-rework/contracts";
 import {
   ErpEmergencyLinkV1Schema,
@@ -20,12 +21,12 @@ const cookieToken = (request: FastifyRequest): string | undefined => request.hea
   ?.slice("dx_rework_session=".length);
 
 const parse = <T>(
-  schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } },
+  schema: { safeParse(value: unknown): { success: true; data: T } | { success: false; error?: { issues?: readonly { path?: readonly PropertyKey[]; message?: string }[] } } },
   value: unknown,
 ): T => {
   const result = schema.safeParse(value);
   if (!result.success) {
-    throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400);
+    throw new ApplicationError("VALIDATION_ERROR", requestValidationMessage(result), 400);
   }
   return result.data;
 };

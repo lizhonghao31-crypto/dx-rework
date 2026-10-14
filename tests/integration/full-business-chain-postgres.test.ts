@@ -1420,7 +1420,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
         // The wire contract rejects a non-1 own-factory multiplier before
         // the application service is called; assert that synchronous boundary.
         expect(() => CreateResponsibilityDraftSchema.parse(invalidDraft))
-          .toThrow("Own-factory responsibility multiplier must be 1");
+          .toThrow("本厂承担的责任倍数必须为1");
       } else {
         // A valid external allocation still conflicts with the explicit
         // own-factory tail bearer, which the application service must reject.

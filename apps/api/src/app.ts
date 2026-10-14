@@ -1,3 +1,5 @@
+import { publicErrorMessage } from "./platform/public-error-message.js";
+import { configureChineseValidation } from "@dx-rework/contracts/validation-language";
 import { registerDigitalIdentityRoutes, type DigitalIdentityDependencies } from "./production-platform/identity-routes.js";
 import { registerMemberModuleHttpGuard } from "./access/member-module-http.js";
 import { registerSupplierOnboardingRoutes, type SupplierOnboardingDependencies } from "./access/supplier-onboarding-routes.js";
@@ -110,6 +112,7 @@ export function serializeRequestForLog(request: { id?: string; method?: string; 
 }
 
 export function buildApp(dependencies: AppDependencies): FastifyInstance {
+  configureChineseValidation();
   const { config } = dependencies;
   const app = Fastify({
     trustProxy: (address) => address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1",
@@ -268,7 +271,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
     const response: ErrorResponse = {
       error: {
         code: "NOT_FOUND",
-        message: "Resource not found",
+        message: "请求的资料不存在",
         requestId: request.id,
       },
     };
@@ -295,7 +298,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
     const response: ErrorResponse = {
       error: {
         code: known || denied ? error.code : frameworkClientError ? "VALIDATION_ERROR" : "INTERNAL_ERROR",
-        message: known || denied ? error.message : frameworkClientError ? "Request validation failed" : "Internal server error",
+        message: known || denied ? publicErrorMessage(error) : frameworkClientError ? "请求格式不正确，请检查填写内容" : "系统暂时无法处理，请稍后重试",
         requestId: request.id,
       },
     };

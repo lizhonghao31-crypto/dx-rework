@@ -65,7 +65,7 @@ describe("formal Journey cockpit", () => {
     const denied = node("权限隔离节点", {state: "unavailable", unavailableReason: "permission", owner: null});
     const item = order([first, second, denied]);
     item.progress.bulk = { completed: 4, applicable: 9 };
-    const html = renderToStaticMarkup(createElement(DigitalJourneyCockpit, { data: { ruleVersion: "journey-v2.0", asOf: "2026-10-05T00:00:00Z", page: 1, pageSize: 20, total: 1, summary: { all: 1, active: 1, dueSoon: 0, overdue: 0, blocked: 0, completed: 0 }, items: [item] }, detail: item, context: JourneyReturnContextSchema.parse({ selected: id, expanded: "development,preparation" }), error: "", detailError: "", detailLoading: false, onChange: () => undefined, actions: null }));
+    const html = renderToStaticMarkup(createElement(DigitalJourneyCockpit, { data: { ruleVersion: "journey-v2.0", asOf: "2026-10-05T00:00:00Z", page: 1, pageSize: 15, total: 1, summary: { all: 1, active: 1, dueSoon: 0, overdue: 0, blocked: 0, completed: 0 }, items: [item] }, detail: item, context: JourneyReturnContextSchema.parse({ selected: id, expanded: "development,preparation" }), error: "", detailError: "", detailLoading: false, onChange: () => undefined, actions: null }));
     for (const stage of JOURNEY_STAGES) expect(html).toContain(stage.label);
     for (const label of ["并行纸样", "并行预缩", "预计完成时间", "实际完成时间", "相关单据", "操作记录", "办理当前任务"]) expect(html).toContain(label);
     expect(html).not.toContain('aria-label="订单列表"');
