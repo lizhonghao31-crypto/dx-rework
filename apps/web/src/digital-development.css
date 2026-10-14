@@ -177,3 +177,72 @@
 }
 
 @media screen{.dx-doc-development .development-technical-table thead th{white-space:nowrap;font-size:12px;padding:4px}.dx-doc-development .development-technical-table td:nth-child(2) .development-flag,.dx-doc-development .development-technical-table td:nth-child(3) .development-flag{justify-content:center}}
+
+/* UAT PR04: all formal document cards share the same two-column grid. */
+@media screen {
+ .dx-doc-development .development-document-layout{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);grid-template-areas:"images basic" "images labels" "materials sizes" "craft craft";align-items:stretch;gap:16px}
+ .dx-doc-development #development-images{grid-area:images}
+ .dx-doc-development #development-basic{grid-area:basic}
+ .dx-doc-development #development-materials{grid-area:materials}
+ .dx-doc-development #development-sizes{grid-area:sizes}
+ .dx-doc-development #development-labels{grid-area:labels}
+ .dx-doc-development #development-craft{grid-area:craft}
+ .dx-doc-development #development-craft .development-craft-groups{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .dx-doc-development .dx-doc-section>h2{min-height:36px;box-sizing:border-box;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+ .dx-doc-development #development-basic>h2{position:static;width:auto;height:auto;margin:0 0 12px;overflow:visible;clip-path:none}
+ .dx-doc-development .development-basic-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+ .dx-doc-development .development-basic-grid label{line-height:20px;white-space:nowrap}
+ .dx-doc-development .development-basic-grid #development-pattern-preparation{min-width:0}
+ .dx-doc-development .development-price-quote{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12px;margin-top:6px}
+ .dx-doc-development .development-price-quote .dx-button{min-height:28px;padding:3px 8px;font-size:12px}
+ .dx-doc-development .development-file-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-bottom:12px}
+ .dx-doc-development .development-file-tabs .dx-button{padding:6px 4px;min-height:34px;font-size:12px;white-space:nowrap}
+ .dx-doc-development .development-file-tabs .dx-button[aria-pressed=true]{background:var(--dx-v2-color-primary,#0066ff);color:white;border-color:var(--dx-v2-color-primary,#0066ff)}
+ .dx-doc-development .development-main-picture{height:240px;min-height:220px}
+ .dx-doc-development .development-main-picture object{width:100%;height:100%;border:0}
+ .dx-doc-development .development-thumbnails{max-height:240px}
+ .dx-doc-development .development-file-list{margin:8px 0}
+ .dx-doc-development .development-file-kind-picker{padding:12px;margin-top:8px;border:1px solid #dce5f0;border-radius:4px;background:#f5f8fc;display:flex;gap:8px;flex-wrap:wrap}
+ .dx-doc-development .development-file-kind-picker p{flex-basis:100%;margin:0;font-size:13px}
+ .dx-doc-development #development-images textarea{min-height:72px;max-height:160px}
+ .dx-doc-development .development-technical-table{min-width:0;table-layout:fixed}
+ .dx-doc-development .development-technical-table th:nth-child(1){width:44px}
+ .dx-doc-development .development-technical-table th:nth-child(2){width:auto}
+ .dx-doc-development .development-technical-table th:nth-child(3),.dx-doc-development .development-technical-table th:nth-child(4){width:56px}
+ .dx-doc-development .development-technical-table th:nth-child(5){width:118px}
+ .dx-doc-development .development-technical-table th:last-child{width:46px}
+ .dx-doc-development .development-technical-table .dx-doc-field input{min-width:0}
+ .dx-doc-development .development-technical-table .dx-button{padding:4px;min-height:30px;font-size:12px}
+ .dx-doc-development .development-material-category{display:inline-block;font-size:12px;font-weight:600;white-space:nowrap}
+ .dx-doc-development .development-technical-table td:nth-child(2) .dx-doc-field+.dx-doc-field{display:block;margin-top:4px}
+ .dx-doc-development .development-material-details>div{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .dx-doc-development .development-size-controls{justify-content:flex-start;gap:10px}
+ .dx-doc-development .development-size-controls>label{font-size:12px!important;white-space:nowrap}
+ .dx-doc-development .development-size-controls .dx-button{min-height:32px;padding:4px 8px;font-size:12px}
+ .dx-doc-development .development-size-controls .development-actions{margin-left:auto}
+ .dx-doc-development #development-sizes .dx-doc-table-scroll{max-height:440px}
+ .dx-doc-development .development-size-table{width:100%!important;table-layout:fixed}
+ .dx-doc-development .development-size-table tr>th:first-child{width:42%;min-width:140px;max-width:none}
+ .dx-doc-development .development-size-table :is(th,td){width:88px;min-width:88px;max-width:none}
+ @container(min-width:1120px){.dx-doc-development .development-document-layout{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}}
+ @media(max-width:1100px){.dx-doc-development .development-document-layout{grid-template-columns:1fr;grid-template-areas:"images" "basic" "materials" "sizes" "labels" "craft"}}
+ @media(max-width:520px){.dx-doc-development .development-basic-grid,.dx-doc-development .development-craft-groups{grid-template-columns:1fr}.dx-doc-development .development-file-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}.dx-doc-development .development-technical-table{min-width:420px}.dx-doc-development .development-material-details>div{grid-template-columns:1fr}}
+}
+
+@media screen{.dx-doc-development .development-material-detail-row,.dx-doc-development .development-material-detail-row>td{height:auto;min-height:0}.dx-doc-development .development-material-detail-row>td{padding:2px 4px}.dx-doc-development .development-plan-retained{display:block;font-size:10px;color:#64748b}}
+
+@media screen{
+ .dx-doc-development #development-materials .dx-doc-table-scroll{max-height:440px;overflow-y:auto}
+ .dx-doc-development .development-material-details summary{min-height:22px}
+ .dx-doc-development #development-sizes{display:flex;flex-direction:column}
+ .dx-doc-development #development-sizes .dx-doc-table-scroll{flex:1;min-height:0}
+ .dx-doc-development #development-sizes .development-size-table{height:100%}
+ @media(max-width:800px){.dx-doc-development .development-material-details summary{min-height:40px}.dx-doc-development #development-materials .dx-doc-table-scroll{max-height:520px}.dx-doc-development #development-sizes .development-size-table{height:auto}}
+}
+
+@media screen and (max-width:800px){.dx-doc-development #development-craft .development-craft-groups{grid-template-columns:1fr}}
+
+@media screen{
+ .dx-doc-development .native-search-select .native-search-select__native{left:0;top:0;width:1px!important;min-width:0!important;height:1px!important;min-height:0!important;margin:0;padding:0}
+ .dx-doc-development #development-materials .dx-doc-table-viewport,.dx-doc-development #development-sizes .dx-doc-table-viewport{overflow:auto!important}
+}

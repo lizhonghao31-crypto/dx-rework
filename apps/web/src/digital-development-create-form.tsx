@@ -1,3 +1,4 @@
+import {DocumentErrors} from "./document-editor.js";
 import { DevelopmentDocumentFields } from "./development-document-fields.js";
 import { DevelopmentPatternLink, type DevelopmentPatternChoice } from "./development-pattern-link.js";
 import { developmentIssues } from "./digital-development-validation.js";
@@ -258,9 +259,9 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       </div></section>}
     </div></div></fieldset>
     {!source&&<div className="development-editor dx-doc-development">
-      {issues.map(value=><p key={value.id} role="alert"><a href={`#${value.id}`}>{value.message}</a></p>)}
+      <DocumentErrors issues={issues}/>
       {pictures.filter(picture=>picture.error).map(picture=><p key={picture.id} role="alert">{picture.file.name}：{picture.error}</p>)}
-      <DevelopmentDocumentFields uploadHelp="选择后可预览，保存草稿或发布时上传；失败资料仍保留。" document={document} edit={edit} readonly={published} busy={busy} writing={writing} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} imageUrl={id=>picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id)?.preview??createWebUrls(import.meta.env.BASE_URL).apiUrl(`digital-production/sources/${createdSource}/development/attachments/${id}`)} upload={selectPictures} fileKind={fileKind} setFileKind={setFileKind} issue={id=>issues.find(value=>value.id===id)?.message} patternSection={!published?<div id="development-pattern-preparation" className="dx-doc-card"><DevelopmentPatternLink busy={busy} preparing onSelection={setPatternChoice}/></div>:null}/>
+      <DevelopmentDocumentFields uploadHelp="选择后可预览，保存草稿或发布时上传；失败资料仍保留。" document={document} edit={edit} readonly={published} busy={busy} writing={writing} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} imageUrl={id=>picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id)?.preview??createWebUrls(import.meta.env.BASE_URL).apiUrl(`digital-production/sources/${createdSource}/development/attachments/${id}`)} upload={selectPictures} fileKind={fileKind} setFileKind={setFileKind} issue={id=>issues.find(value=>value.id===id)?.message} patternSection={!published?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing onSelection={setPatternChoice}/></div>:null}/>
     </div>}
     </fieldset>
   </form></Surface>;
