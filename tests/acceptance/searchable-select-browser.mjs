@@ -40,4 +40,19 @@ try {
     if(process.env.SEARCH_EVIDENCE_DIR){await mkdir(process.env.SEARCH_EVIDENCE_DIR,{recursive:true});await page.screenshot({path:join(process.env.SEARCH_EVIDENCE_DIR,`${width}.png`),fullPage:true});}
     await page.close();console.log(`PASS ${width}x${height}: legal options, required, FormData, keyboard, disabled, async options, legacy search`);
   }
+  for (const denied of [false,true]) {
+    const page=await browser.newPage(),pages=[];
+    await page.route('**/*expected-receipts*',async route=>{
+      const url=new URL(route.request().url()),pageNumber=Number(url.searchParams.get('page'));
+      assert.equal(url.searchParams.get('cuttingOrderId'),'00000000-0000-4000-8000-000000000099');pages.push(pageNumber);
+      if(denied&&pageNumber===2){await route.fulfill({status:403,json:{error:{message:'无权读取'}}});return;}
+      const items=Array.from({length:31},(_,i)=>({productionOrderId:`00000000-0000-4000-8000-${String(i).padStart(12,'0')}`,factoryDecisionId:null,firstStyleNo:'TEST',contractNumber:`合同${i}`,supplierName:`授权加工厂${i}`,shippedOn:'2026-10-14',expectedQuantity:10,receipts:[]}));
+      await route.fulfill({json:{items:items.slice((pageNumber-1)*15,pageNumber*15),page:pageNumber,totalCount:31}});
+    });
+    await page.goto(`http://127.0.0.1:${server.address().port}/?receipt`);
+    if(denied){await page.getByRole('alert').waitFor();assert.equal(await page.getByRole('combobox').count(),0);assert.deepEqual(pages,[1,2]);}
+    else {const input=page.getByRole('combobox',{name:'本次到货加工厂'});await input.fill('加工厂30');await page.getByRole('option',{name:/授权加工厂30/}).click();assert.equal(await page.locator('#shipment').innerText(),'授权加工厂30');assert.deepEqual(pages,[1,2,3]);}
+    await page.close();console.log(`PASS scoped factory receipt pagination denied=${denied}`);
+  }
+
 } finally {await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));await rm(output,{recursive:true,force:true});}

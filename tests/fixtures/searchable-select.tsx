@@ -1,3 +1,5 @@
+import { FactoryReceiptSelector } from "../../apps/web/src/production-closure-ui.js";
+import type { ProductionReceivingSummary } from "@dx-rework/contracts";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { SearchableSelect, SearchSelect } from "../../apps/web/src/search-select.js";
@@ -14,4 +16,8 @@ function Fixture() {
     <label>原有搜索<SearchSelect ariaLabel="原有搜索" value="" options={[{value:"old",label:"原有合法候选"}]} placeholder="原有搜索" onChange={() => undefined}/></label>
   </main>;
 }
-createRoot(document.getElementById("root")!).render(<Fixture/>);
+function ReceiptFixture() {
+ const [shipment,setShipment]=useState<ProductionReceivingSummary|null>(null);
+ return <main><FactoryReceiptSelector cuttingOrderId="00000000-0000-4000-8000-000000000099" shipment={shipment} onSelect={setShipment}/><output id="shipment">{shipment?.supplierName??""}</output></main>;
+}
+createRoot(document.getElementById("root")!).render(window.location.search.includes("receipt")?<ReceiptFixture/>:<Fixture/>);
