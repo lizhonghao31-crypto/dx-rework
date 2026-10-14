@@ -1,12 +1,12 @@
 import { SearchableSelect } from "./search-select.js";
-import { PoDateSummary,PoDateDetails } from "./po-delivery-dates.js";
+import {DevelopmentOrderArchive} from "./development-order-archive.js";
 import "./digital-kpi-density.css";
 import { NavigationIcon } from "./navigation-icons.js";
 import { useEffect, useState } from "react";
 import { Button } from "@dx-rework/ui";
 import { BusinessTable, FilterBar, KpiCard, Pagination, StatusBadge } from "@dx-rework/ui/production";
 import { DEVELOPMENT_VIEWS, DevelopmentWorkspaceFilterSchema, type DevelopmentWorkspaceFilter, type DevelopmentWorkspaceItem, type DevelopmentWorkspaceResult } from "@dx-rework/contracts/digital-development-workspace";
-import type { DigitalCustomer } from "@dx-rework/contracts/digital-production";
+import type { DigitalCustomer, DigitalOrder } from "@dx-rework/contracts/digital-production";
 import type { DevelopmentSheet } from "@dx-rework/contracts/digital-development";
 import { digitalRequest } from "./digital-production-api.js";
 import { DigitalDevelopmentPanel } from "./digital-development-panel.js";
@@ -35,7 +35,8 @@ export function DigitalDesignerWorkspace() {
   const [error, setError] = useState(""), [refresh, setRefresh] = useState(0);
   const [sheets, setSheets] = useState<Record<string, DevelopmentSheet>>({}), [sheetErrors, setSheetErrors] = useState<Record<string, string>>({});
   const [selectedId, setSelectedId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("selected"));
-  const [tab, setTab] = useState("基础资料"), [collapsed, setCollapsed] = useState(false), [search, setSearch] = useState(filter.search);
+  const [collapsed, setCollapsed] = useState(false), [search, setSearch] = useState(filter.search);
+  const [orders,setOrders]=useState<Record<string,DigitalOrder>>({}),[orderErrors,setOrderErrors]=useState<Record<string,string>>({});
   const editor = new URLSearchParams(window.location.search).get("development");
   const round = Number(new URLSearchParams(window.location.search).get("round")) || undefined;
   const contextUrl = (parameters: Record<string, string> = {}, next = filter, selected = selectedId) => {
@@ -50,7 +51,7 @@ export function DigitalDesignerWorkspace() {
     return () => {live = false;};
   }, [filter, refresh]);
   useEffect(() => {
-    let live = true; setSheets({}); setSheetErrors({});
+    let live = true; setSheets({}); setSheetErrors({});setOrders({});setOrderErrors({});
     const item = result?.items.find(value => value.journey.id === selectedId);
     if (item?.journey.sourceId) {
       const source = item.journey.sourceId;
@@ -58,6 +59,7 @@ export function DigitalDesignerWorkspace() {
         .then(sheet => {if (live) setSheets(current => ({...current, [item.journey.id]:sheet}));})
         .catch(reason => {if (live) setSheetErrors(current => ({...current, [item.journey.id]:reason.message}));});
     }
+    if(item?.journey.orderId){const id=item.journey.orderId;void digitalRequest<DigitalOrder>(`orders/${id}`).then(order=>{if(live)setOrders({[item.journey.id]:order});}).catch(reason=>{if(live)setOrderErrors({[item.journey.id]:reason.message});});}
     return () => {live = false;};
   }, [result, selectedId]);
   const update = (patch: Partial<DevelopmentWorkspaceFilter>) => {
@@ -67,7 +69,7 @@ export function DigitalDesignerWorkspace() {
     setFilter(next); setResult(null); setSelectedId(null); setCollapsed(false);
     window.history.replaceState(window.history.state, "", contextUrl({}, next, null));
   };
-  const select = (id: string) => {setSelectedId(id); setCollapsed(false); setTab("基础资料"); window.history.replaceState(window.history.state, "", contextUrl({}, filter, id));};
+  const select = (id: string) => {setSelectedId(id); setCollapsed(false); window.history.replaceState(window.history.state, "", contextUrl({}, filter, id));};
   const selected = result?.items.find(item => item.journey.id === selectedId), sheet = selected ? sheets[selected.journey.id] : undefined;
   const openUrl = (item: DevelopmentWorkspaceItem) => contextUrl({development:item.journey.sourceId!, ...(item.journey.selectedRound && item.journey.sourceVersion ? {round:String(item.journey.selectedRound)} : {})}, filter, item.journey.id);
   if (editor) return <div className="development-workspace pattern-orders digital-production"><DigitalDevelopmentPanel sourceId={editor} {...(round ? {initialRound: round} : {})} onClose={() => {void navigateInternalPage(contextUrl()).then(() => setRefresh(value => value + 1));}}/></div>;
@@ -92,14 +94,7 @@ export function DigitalDesignerWorkspace() {
     {!intent && <section className="dx-production-panel development-selected" aria-label="选中开发档案">
       {!selected ? <p className="development-empty">从上方列表选择档案，查看开发资料与订购信息。</p> : <>
         <header className="development-selected-heading"><StyleImage key={`${selected.journey.id}:${selected.journey.sourceVersion}:${selected.journey.styleImageUrl}`} item={selected}/><div><h2>{selected.journey.designStyleNo} <StatusBadge tone="info">{viewLabel(selected)}</StatusBadge></h2><p>款名：{selected.journey.styleName ?? "未登记"} · 客户：{selected.journey.customer ?? "通用开发"} · 开发类型：{sheet?.developmentType ?? "未读取"} · 设计师：{selected.journey.designer ?? "未登记"} · 创建日期：{date(selected.journey.createdAt)}</p></div><button className="development-text-action" aria-expanded={!collapsed} onClick={() => setCollapsed(value => !value)}>{collapsed ? "展开" : "收起"}</button></header>
-        {!collapsed && <><nav className="development-tabs" aria-label="档案资料">{['基础资料','开发资料','订购信息','版本记录'].map(label => <button key={label} aria-pressed={tab === label} onClick={() => setTab(label)}>{label}</button>)}</nav>
-        {sheetErrors[selected.journey.id] && <p role="alert">开发资料读取失败：{sheetErrors[selected.journey.id]}</p>}
-        <div className={`development-detail-columns ${tab !== '基础资料' ? 'is-single' : ''}`}>
-          {tab === '基础资料' && <section><h3>基础资料</h3><dl className="development-fact-pairs"><div><dt>款号</dt><dd>{selected.journey.designStyleNo}</dd></div><div><dt>款名</dt><dd>{selected.journey.styleName ?? "未登记"}</dd></div><div><dt>客户</dt><dd>{selected.journey.customer ?? "通用开发"}</dd></div><div><dt>产品类别</dt><dd>{selected.journey.category ?? "未登记"}</dd></div><div><dt>设计师</dt><dd>{selected.journey.designer ?? "未登记"}</dd></div><div><dt>开发类型</dt><dd>{sheet?.developmentType ?? "未读取"}</dd></div><div className="is-wide"><dt>制作说明</dt><dd>{sheet?.document?.instructions || "未登记"}</dd></div></dl></section>}
-          {['基础资料','开发资料'].includes(tab) && <section><h3>开发资料</h3><div className="development-column-body"><dl><dt>当前轮次</dt><dd>第 {selected.journey.selectedRound ?? 1} 轮</dd><dt>当前状态</dt><dd>{viewLabel(selected)}</dd><dt>要求完成</dt><dd>{date(sheet?.document?.returnDate)}</dd><dt>工艺 / 洗水</dt><dd>{sheet?.document ? `${sheet.document.craft} / ${sheet.document.washing}` : "未登记"}</dd><dt>面辅料</dt><dd>{sheet?.document?.materials.filter(item => item.requiredThisRound).map(item => `${item.category}：${item.name || item.label}`).join('；') || "未登记"}</dd></dl>{sheet?.document?.files.length ? <p className="development-attachment-summary">附件：{sheet.document.files.map(file => file.kind).join('、')}（在原单查看）</p> : null}</div>{selected.journey.sourceId && <a className="development-column-action" href={openUrl(selected)}>打开完整开发单 / 附件 / 打印</a>}</section>}
-          {['基础资料','订购信息'].includes(tab) && <section><h3>订购信息</h3><PoDateDetails lines={selected.journey.poDeliveryDates}/><div className="development-column-body"><dl><dt>确定订单</dt><dd>{selected.journey.orderId ? "有" : "无"}</dd><dt>订购数量</dt><dd>{selected.journey.orderId ? selected.journey.lines.reduce((total,line) => total+line.orderedQuantity,0).toLocaleString() : "尚无确定订单"}</dd><dt>PO / 颜色</dt><dd>{selected.journey.lines.map(line => `${line.po ?? '未补号'} / ${line.color}`).join('；') || "未登记"}</dd><dt>PO 双交期</dt><dd><PoDateSummary lines={selected.journey.poDeliveryDates??[]}/></dd></dl></div><div className="development-column-action">{selected.canConfirm && sheet?.status==="published" && options?.creationEnabled && access?.create && <Button variant="primary" disabled={!sheet} onClick={() => {setConfirm(selected); setIntent('confirm_order');}}>客户确定订单</Button>}{selected.journey.orderId && <a href={`${urls.pageUrl('ui/digital-production')}?order=${selected.journey.orderId}&returnTo=${encodeURIComponent(contextUrl())}`}>查看完整订购信息</a>}</div></section>}
-          {tab === '版本记录' && <section><h3>版本与采用轮次</h3><p>当前开发第 {selected.journey.selectedRound ?? 1} 轮 · {sheet?.version ? `版本 ${sheet.version}` : "资料尚未保存"}</p><p>{selected.journey.adoptedRound ? `大货采用第 ${selected.journey.adoptedRound} 轮` : "尚未登记大货采用轮次"}</p>{selected.journey.sourceId && <a href={openUrl(selected)}>查看完整版本历史 / 复版</a>}</section>}
-        </div></>}
+        {!collapsed&&<DevelopmentOrderArchive item={selected} sheet={sheet} order={orders[selected.journey.id]} sheetError={sheetErrors[selected.journey.id]} orderError={orderErrors[selected.journey.id]} sourceUrl={selected.journey.sourceId?openUrl(selected):null} canConfirm={Boolean(selected.canConfirm&&sheet?.status==="published"&&options?.creationEnabled&&access?.create)} onConfirm={()=>{setConfirm(selected);setIntent('confirm_order');}}/>}
       </>}
     </section>}
   </div>;
