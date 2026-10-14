@@ -194,11 +194,17 @@ run("P03 task lifecycle PostgreSQL", () => {
     expect((await database.query("SELECT e.event_id FROM digital_production_task_events e LEFT JOIN digital_production_event_intents i USING(event_id) WHERE e.task_id=$1 AND i.event_id IS NULL",[first.taskId])).rows).toHaveLength(0);
   });
   it("records downstream receipt without inventing the unknown upstream completion and blocks missing material",async()=>{
+    const worker=randomUUID();
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST receipt worker',true)",[worker]);
+    await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'pattern_room_worker')",[worker]);
     const source=await service.createSource(actor(),DigitalSourceCreateSchema.parse({developmentType:"头版",designStyleNo:"TEST-SOURCE"}),randomUUID());
     const resource={kind:"source" as const,id:source.sourceId};const routeId=randomUUID();const a=await create(resource,"budget",{routeId,occurredAt:null});const b=await create(resource,"development_sewing",{routeId,predecessors:[a.taskId]});
     await tasks.handover(boss,b.taskId,{note:"补交接"},randomUUID());expect((await tasks.history(boss,b.taskId)).events.some(e=>e.kind==="condition"&&e.payload.note==="补交接")).toBe(true);expect((await tasks.read(boss,b.taskId)).state).toBe("pending");
     await condition(a.taskId,"business_recorded");await tasks.complete(boss,a.taskId,{occurredAt:null,note:"未知"},randomUUID());
-    await condition(b.taskId,"materials_ready",new Date().toISOString());expect(await tasks.read(boss,b.taskId)).toMatchObject({state:"ready",enteredAt:null,dueAt:null,timeQuality:"缺失"});
+    await condition(b.taskId,"materials_ready",new Date().toISOString());
+    expect(await tasks.read(boss,b.taskId)).toMatchObject({state:"pending",enteredAt:null,dueAt:null});
+    await tasks.reassign(boss,b.taskId,worker,randomUUID());
+    expect(await tasks.read(boss,b.taskId)).toMatchObject({state:"ready",enteredAt:null,dueAt:null,timeQuality:"缺失"});
     expect((await tasks.read(boss,a.taskId)).completedAt).toBeNull();
     expect((await database.query("SELECT * FROM production_order_node_clocks WHERE node_instance_id=$1",[b.taskId])).rows).toHaveLength(0);
   });

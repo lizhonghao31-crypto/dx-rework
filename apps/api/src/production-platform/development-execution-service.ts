@@ -59,11 +59,25 @@ export class DevelopmentExecutionService {
         ["sewingWorkerId","sewing_worker_id","development_sewing"],
       ] as const){
         if(before?.[column]===input[field])continue;
-        if(before&&(await db.query("SELECT 1 FROM digital_production_task_access WHERE source_id=$1 AND task_kind=$2 LIMIT 1",[sourceId,kind])).rowCount)fail("该节点任务已派出，请在对应任务使用改派；不更改工资归属");
+        if((await db.query(`SELECT 1 FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
+          WHERE a.source_id=$1 AND a.task_kind=$2 AND ($3::boolean OR
+            (t.state IN ('pending','ready','blocked') AND a.assignee_id IS NOT NULL AND a.assignee_id<>$4)) LIMIT 1`,[sourceId,kind,Boolean(before),input[field]])).rowCount)fail("该节点任务已派出，请在对应任务使用改派；不更改工资归属");
         if(!await new DigitalProductionAccessPolicy(db).activeRole(input[field],"pattern_room_worker"))fail("请选择有效板房工人");
       }
       await db.query(`INSERT INTO digital_development_dispatch(source_id,pattern_worker_id,cutting_worker_id,sewing_worker_id,changed_by) VALUES($1,$2,$3,$4,$5)
         ON CONFLICT(source_id) DO UPDATE SET version=digital_development_dispatch.version+1,pattern_worker_id=$2,cutting_worker_id=$3,sewing_worker_id=$4,changed_by=$5,changed_at=CURRENT_TIMESTAMP`,[sourceId,input.patternWorkerId,input.cuttingWorkerId,input.sewingWorkerId,actor.actorId]);
+      if(!before){
+        const pending=(await db.query(`SELECT a.task_id,a.task_kind FROM digital_production_task_access a
+          JOIN digital_production_tasks t USING(task_id)
+          WHERE a.source_id=$1 AND a.assignee_id IS NULL AND t.state='pending'
+            AND a.task_kind IN ('development_pattern','development_cutting','development_sewing')
+            AND t.route_version=(SELECT max(t2.route_version) FROM digital_production_tasks t2
+              JOIN digital_production_task_access a2 USING(task_id) WHERE a2.source_id=$1)`,[sourceId])).rows;
+        for(const task of pending){
+          const assignee=task.task_kind==='development_pattern'?input.patternWorkerId:task.task_kind==='development_cutting'?input.cuttingWorkerId:input.sewingWorkerId;
+          await this.tasks().reassignWithClient(db,actor,task.task_id,assignee);
+        }
+      }
       await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_dispatch','digital_development',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify(input)]);
       return {version:input.expectedVersion+1};
     });
@@ -78,18 +92,21 @@ export class DevelopmentExecutionService {
     return this.command(actor,sourceId,"check",key,input,async db=>{
       await new DigitalProductionAccessPolicy(db).assert(actor,"task",input.taskId,"execute");
       const task=await this.task(db,sourceId,input.taskId);if(!["development_materials","development_material_recheck"].includes(task.task_kind)||task.state!=="ready")fail("当前不是可办理的核配任务");
-      const sheet=await this.forms().read(actor,sourceId,db),document=sheet.document!;
+      const sheet=await this.forms().read(actor,sourceId,db,task.route_version),document=sheet.document!;
       const required=document.materials.filter(item=>item.requiredThisRound&&item.category!=="辅料");
       if(input.items.some(item=>!required.some(material=>material.materialId===item.materialId)))fail("核配行不属于本轮主配料");
       if(input.result==="通过"){
         if(!required.some(item=>item.category==="主布"))fail("请先补齐本轮主布资料，不能无主料通过");
-        const prior=(await this.facts(db,sourceId)).filter(f=>f.kind==="缺项退回").at(-1)?.payload.items??[];
+        const prior=(await db.query(`SELECT f.payload FROM digital_development_execution_facts f
+          JOIN digital_production_tasks t ON t.task_id=f.task_id
+          WHERE f.source_id=$1 AND f.kind='缺项退回' AND t.route_version=$2
+          ORDER BY f.sequence DESC LIMIT 1`,[sourceId,task.route_version])).rows[0]?.payload.items??[];
         for(const item of required){const checked=input.items.find(check=>check.materialId===item.materialId)??prior.find((check:{materialId:string})=>check.materialId===item.materialId);if(!checked||!checked.physical||!checked.quantity||!checked.color||!checked.specification)fail(`${item.label||item.name}实物、数量、颜色及规格须全部核实`);}
         await this.fabricReady(db,sourceId);
-        const dispatch=(await db.query("SELECT * FROM digital_development_dispatch WHERE source_id=$1",[sourceId])).rows[0]??fail("请先预派纸样、裁板和车板人员");
+        const dispatch=(await db.query("SELECT * FROM digital_development_dispatch WHERE source_id=$1",[sourceId])).rows[0];
         if(task.route_version===1){
-        const pattern=await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:input.taskId,kind:"development_pattern",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:task.route_version,assigneeId:dispatch.pattern_worker_id});
-        await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:input.taskId,kind:"development_cutting",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:task.route_version,assigneeId:dispatch.cutting_worker_id,predecessors:[pattern.taskId]});
+        const pattern=await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:input.taskId,kind:"development_pattern",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:task.route_version,assigneeId:dispatch?.pattern_worker_id??null});
+        await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:input.taskId,kind:"development_cutting",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:task.route_version,assigneeId:dispatch?.cutting_worker_id??null,predecessors:[pattern.taskId]});
         await this.tasks().setConditionWithClient(db,actor,pattern.taskId,"materials_ready",true,undefined);await this.tasks().setConditionWithClient(db,actor,pattern.taskId,"handover_received",true,undefined,"核配通过并交纸样");
         }
       }
