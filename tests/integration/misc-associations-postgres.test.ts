@@ -1,3 +1,4 @@
+import { resolveMiscAssociation } from "../../apps/api/src/pattern-room/misc-associations.js";
 import {PatternRoomPriceService,PATTERN_HOURLY_PRICE_ID} from "../../apps/api/src/pattern-room/price-service.js";
 import {randomUUID} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
@@ -52,6 +53,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   expect((await service.miscAssociations(actor(other),'TEST-MISC')).map(item=>item.id)).toEqual([foreign]);await expect(service.miscAssociations(actor(worker,['pattern_room_worker']),'')).rejects.toMatchObject({statusCode:403});
   const empty=await service.createMisc(actor(),input('TEST no association'),randomUUID());expect(empty.association).toBeNull();
   const source=options.find(item=>item.id===sourceId)!,po=options.find(item=>item.id===poId)!,key=randomUUID(),request=input('TEST stable source',{kind:'source',id:sourceId},source.styleNo);
+  const rootSaved=await service.createMisc(actor(root,['root_superuser']),input('TEST Root authorized association',{kind:'source',id:sourceId},source.styleNo),randomUUID());expect(rootSaved.association?.id).toBe(sourceId);
   const saved=await service.createMisc(actor(),request,key);expect(saved.association).toEqual(source);expect((await service.createMisc(actor(),request,key)).orderId).toBe(saved.orderId);
   const selected=await service.createMisc(actor(),input('TEST stable PO',{kind:'po',id:poId},po.styleNo),randomUUID());expect(selected.association).toEqual(po);expect(selected.association?.label).toContain('PO-MISC-1');
   expect((await db.query('SELECT count(*)::int n FROM pattern_room_orders WHERE task_name=$1',[request.taskName])).rows[0].n).toBe(1);
@@ -78,4 +80,52 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   for(let i=0;i<31;i++)await service.createMisc(actor(),input(`TEST-PAGE-${i}`),randomUUID());
   for(const [page,count]of [[1,15],[2,15],[3,1],[4,0]]){const result=await service.list(actor(),{page,limit:15,q:'TEST-PAGE-',kind:'misc'});expect(result).toMatchObject({totalCount:31,pageSize:15,totalPages:3});expect(result.items).toHaveLength(count);}
  });
+ it('refreshes a stable PO snapshot after real identity corrections while keeping tampered replacement text rejected',async()=>{
+  const old=(await service.miscAssociations(actor(),'PO-MISC-1')).find(item=>item.id===poId)!;
+  let misc=await service.createMisc(actor(),input('TEST renamed PO',{kind:'po',id:poId},old.styleNo),randomUUID());
+  let order=await identity.read(actor(),orderId);
+  order=await identity.correctNumbers(actor(),orderId,poId,{expectedVersion:order.version,formalPoNo:'PO-MISC-RENAMED',poNumber:null,formalStyleNo:null},randomUUID());
+  const request={version:misc.version,roundId:misc.currentRoundId,taskName:'TEST renamed PO',styleNo:old.styleNo,association:{kind:'po' as const,id:poId},note:'TEST unrelated note survives',reason:'TEST refresh existing ID'};
+  const editKey=randomUUID();misc=await service.updateMiscMaterials(actor(),misc.orderId,request,editKey);
+  expect((await service.updateMiscMaterials(actor(),misc.orderId,request,editKey)).version).toBe(misc.version);
+  expect(misc.styleNo).toBe('PO-MISC-RENAMED');expect(misc.note).toBe(request.note);
+  expect(misc.association).toMatchObject({kind:'po',id:poId,styleNo:'PO-MISC-RENAMED'});expect(misc.association?.label).toContain('PO-MISC-RENAMED');
+  await expect(service.updateMiscMaterials(actor(),misc.orderId,{...request,version:misc.version,styleNo:'INVENTED-NUMBER'},randomUUID())).rejects.toMatchObject({statusCode:400});
+  await identity.correctNumbers(actor(),orderId,poId,{expectedVersion:order.version,formalPoNo:'PO-MISC-RENAMED-2',poNumber:null,formalStyleNo:null},randomUUID());
+  misc=await service.updateMiscMaterials(actor(),misc.orderId,{version:misc.version,roundId:misc.currentRoundId,taskName:'TEST renamed PO',styleNo:misc.styleNo,reason:'TEST omitted association uses persisted stable ID'},randomUUID());
+  expect(misc.styleNo).toBe('PO-MISC-RENAMED-2');expect(misc.association?.styleNo).toBe(misc.styleNo);
+  const historical=(await db.query("SELECT after_state->'value'->>'styleNo' AS style_no FROM operation_events WHERE entity_id=$1 AND action='pattern_room.misc.submitted'",[misc.orderId])).rows[0];expect(historical.style_no).toBe(old.styleNo);
+ });
+ it('rejects an elevated role revoked after authorization and serializes a later revocation until the association commits',async()=>{
+  const foreign=(await identity.createSource(actor(other),{developmentType:'头版',designStyleNo:'TEST-MISC-ROLE-RACE',temporaryStyleNo:null,customerCode:'FL'},randomUUID())).sourceId;
+  const revoke=async(existing?:pg.PoolClient)=>{
+   const client=existing??await db.connect();try{await client.query('BEGIN');await client.query("SELECT set_config('dx_rework.role_revoke_event_id',$1,true),set_config('dx_rework.role_revoke_request_id','TEST-MISC-role-race',true)",[randomUUID()]);const result=await client.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason='TEST mixed role concurrent revocation' WHERE user_id=$1 AND role_code='production_management' AND revoked_at IS NULL",[designer,root]);await client.query('COMMIT');return result;}catch(error){await client.query('ROLLBACK');throw error;}finally{if(!existing)client.release();}
+  };
+  const restore=async()=>{const client=await db.connect();try{await client.query('BEGIN');await client.query("SELECT set_config('dx_rework.role_assign_event_id',$1,true),set_config('dx_rework.role_assign_request_id','TEST-MISC-role-restore',true)",[randomUUID()]);await client.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) SELECT $1,$2,'production_management',$3,'TEST restore mixed role' WHERE NOT EXISTS(SELECT 1 FROM user_role_assignments WHERE user_id=$2 AND role_code='production_management' AND revoked_at IS NULL)",[randomUUID(),designer,root]);await client.query('COMMIT');}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}};
+  const client=await db.connect();let resume!:()=>void,seen!:()=>void;
+  const paused=new Promise<void>(resolve=>{resume=resolve;}),observed=new Promise<void>(resolve=>{seen=resolve;});let held=false;
+  const query=client.query.bind(client);
+  const gated=new Proxy(client,{get(target,key){if(key==='query')return async(...args:unknown[])=>{const result=await Reflect.apply(query,client,args);if(!held&&typeof args[0]==='string'&&args[0].includes('pattern_room_authorized_order_roles')){held=true;seen();await paused;}return result;};return Reflect.get(target,key);}});
+  let pending:Promise<{error?:unknown;value?:unknown}>|undefined;
+  try{
+   await client.query('BEGIN');
+   const scoped=new PatternRoomOrderService(db,new TodoProjectionService(new TodoService(db)),{ordersEnabled:true,transactionClient:gated});
+   pending=scoped.createMisc(actor(),input('TEST role revoked before choice',{kind:'source',id:foreign},'TEST-MISC-ROLE-RACE'),randomUUID()).then(value=>({value}),error=>({error}));
+   await observed;await revoke();resume();
+   expect((await pending).error).toMatchObject({statusCode:400});
+  }finally{resume();await pending;await client.query('ROLLBACK');client.release();await restore();}
+  expect((await db.query("SELECT count(*)::int n FROM pattern_room_orders WHERE task_name='TEST role revoked before choice'")).rows[0].n).toBe(0);
+  const holder=await db.connect(),revoker=await db.connect();let committed=false,revocation:ReturnType<typeof revoke>|undefined;
+  try{
+   await holder.query('BEGIN');
+   await resolveMiscAssociation(holder,actor(designer,['sample_designer','production_management']),{styleNo:'TEST-MISC-ROLE-RACE',association:{kind:'source',id:foreign}});
+   const pid=(await revoker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+   revocation=revoke(revoker);
+   let waiting=false;const until=Date.now()+5000;
+   while(Date.now()<until){waiting=(await db.query("SELECT wait_event_type='Lock' AS waiting FROM pg_stat_activity WHERE pid=$1",[pid])).rows[0]?.waiting===true;if(waiting)break;await new Promise(resolve=>setTimeout(resolve,10));}
+   expect(waiting).toBe(true);
+   await holder.query('COMMIT');committed=true;expect((await revocation).rowCount).toBe(1);
+  }finally{if(!committed)await holder.query('ROLLBACK');await revocation;holder.release();revoker.release();await restore();}
+ });
+
 });

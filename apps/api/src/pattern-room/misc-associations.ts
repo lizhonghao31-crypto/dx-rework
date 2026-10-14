@@ -27,18 +27,23 @@ export async function resolveMiscAssociation(db:DB,actor:TrustedActorContext,inp
  if(input.association===undefined&&existing){
   if(input.styleNo!==existing.style_no)invalid();
   if(!existing.misc_association)return null; // Keep unchanged historical text; never infer an ID.
-  return resolveMiscAssociation(db,actor,{styleNo:input.styleNo,association:existing.misc_association});
+  return resolveMiscAssociation(db,actor,{styleNo:input.styleNo,association:existing.misc_association},existing);
  }
  const association=input.association;
  if(!association){if(input.styleNo)invalid();return null;}
  const policy=new DigitalProductionAccessPolicy(db);
- if(!isRootActor(actor))for(const role of actor.actorRoles.filter(role=>['sample_designer','order_merchandiser'].includes(role)))if(!await policy.lockActiveRole(actor.actorId,role))invalid();
+ // Keep the effective authority snapshot current until commit, including broad
+ // management and any task-participation role used by the original read policy.
+ if(!isRootActor(actor))for(const role of [...new Set(actor.actorRoles)].sort())if(!await policy.lockActiveRole(actor.actorId,role))invalid();
+ const previous=existing?.misc_association;
+ const samePersistedChoice=previous?.kind===association.kind&&previous.id===association.id&&input.styleNo===existing?.style_no;
+ const displayMatches=(styleNo:string)=>input.styleNo===styleNo||samePersistedChoice;
  if(association.kind==='source'){
   const row=(await db.query("SELECT source_id,design_style_no AS style_no,customer_code AS customer FROM digital_production_sources WHERE source_id=$1 FOR SHARE",[association.id])).rows[0];
-  if(!row||!await policy.allowed(actor,'source',association.id,'technical')||input.styleNo!==row.style_no)invalid();
+  if(!row||!await policy.allowed(actor,'source',association.id,'technical')||!displayMatches(row.style_no))invalid();
   return {...association,styleNo:row.style_no,label:sourceLabel(row)};
  }
  const row=(await db.query("SELECT po.production_order_id,coalesce(po.formal_style_no,po.temporary_style_no,o.design_style_no) AS style_no,o.customer_code AS customer,po.po_number,po.color FROM digital_production_po_lines po JOIN digital_production_orders o USING(production_order_id) WHERE po.line_id=$1 FOR SHARE OF po,o",[association.id])).rows[0];
- if(!row||!await policy.allowed(actor,'order',row.production_order_id,'technical')||input.styleNo!==row.style_no)invalid();
+ if(!row||!await policy.allowed(actor,'order',row.production_order_id,'technical')||!displayMatches(row.style_no))invalid();
  return {...association,styleNo:row.style_no,label:poLabel(row)};
 }

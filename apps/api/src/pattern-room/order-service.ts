@@ -153,6 +153,7 @@ export class PatternRoomOrderService {
     const action = kind === "pattern" ? "pattern_room.order.submitted" : "pattern_room.misc.submitted";
     return this.mutate(actor, kind === "pattern" ? "pattern_room:orders:create" : "pattern_room:misc:create", action, key, developmentSourceId?{parsed,developmentSourceId}:parsed, async (client, effective) => {
       const association=kind==="misc"?await resolveMiscAssociation(client,effective,parsed):null;
+      const styleNo=association?.styleNo??parsed.styleNo;
       const price = (await client.query<{ price_id: string; version: number; name: string; unit: string; amount: string | null }>(
         "SELECT price_id,version,name,unit,amount FROM pattern_room_prices WHERE price_id=$1 AND kind=$2 AND enabled FOR SHARE", [parsed.categoryId, kind === "pattern" ? "category" : "hourly"])).rows[0];
       if (!price) throw new ApplicationError("PRICE_CHANGED", "品类已停用或不存在，请重新选择品类", 409);
@@ -163,14 +164,14 @@ export class PatternRoomOrderService {
       const orderId = randomUUID(), roundId = randomUUID();
       const creatorRole = kind === "misc" && !effective.actorRoles.includes("sample_designer") && effective.actorRoles.includes("order_merchandiser") ? "order_merchandiser" : "sample_designer";
       await client.query(`INSERT INTO pattern_room_orders(order_id,current_round_id,status,created_by,creator_name,style_no,required_date,customer,size_color,reference_style_no,variant,note,kind,task_name,creator_role)
-        VALUES($1,$2,'pending_assignment',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, [orderId, roundId, creatorId, creator.display_name, parsed.styleNo, parsed.requiredDate, parsed.customer, parsed.sizeColor, parsed.referenceStyleNo, parsed.variant, parsed.note, kind, parsed.taskName, creatorRole]);
+        VALUES($1,$2,'pending_assignment',$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, [orderId, roundId, creatorId, creator.display_name, styleNo, parsed.requiredDate, parsed.customer, parsed.sizeColor, parsed.referenceStyleNo, parsed.variant, parsed.note, kind, parsed.taskName, creatorRole]);
       if(association)await client.query("UPDATE pattern_room_orders SET misc_association=$2 WHERE order_id=$1",[orderId,JSON.stringify(association)]);
       await client.query(`INSERT INTO pattern_room_rounds(round_id,order_id,status,category_id,price_version,category_name,unit,unit_price,quantity,agreed_amount,requested_by)
         VALUES($1,$2,'pending_assignment',$3,$4,$5,$6,$7,$8,$7::numeric*$8::integer,$9)`, [roundId, orderId, price.price_id, price.version, price.name, price.unit, price.amount, parsed.quantity, effective.actorId]);
       await client.query("INSERT INTO pattern_room_node_times(node_id,round_id,stage) VALUES($1,$2,'pending_assignment')", [randomUUID(), roundId]);
       if(developmentSourceId)await client.query("INSERT INTO digital_development_pattern_links(source_id,order_id,linked_by) VALUES($1,$2,$3)",[developmentSourceId,orderId,effective.actorId]);
       await bindPatternMaterials(client, effective, orderId, roundId, parsed.attachmentIds, "创建制作资料", kind === "pattern");
-      const eventId = await this.event(client, effective, action, orderId, roundId, {...parsed,...(kind==="misc"?{association}: {})});
+      const eventId = await this.event(client, effective, action, orderId, roundId, {...parsed,styleNo,...(kind==="misc"?{association}: {})});
       if (this.enabled) await this.todos.actionableForUniqueDirectRole(client, effective, { ...this.projection(orderId, roundId, eventId, action, "assignment"), requiredRole: "pattern_room_supervisor", requiredCapability: "pattern_room:orders:assign" });
       return orderId;
     });
@@ -316,11 +317,12 @@ export class PatternRoomOrderService {
       if (order.kind !== kind) throw new ApplicationError("INVALID_STATE_TRANSITION", "订单类型不匹配，请刷新本单", 409);
       if (!isPatternRoot(effective) && order.created_by !== effective.actorId) throw new ApplicationError("FORBIDDEN", "只有发起人可以修正制作资料", 403);
       const association=kind==="misc"?await resolveMiscAssociation(client,effective,parsed,order):null;
+      const styleNo=association?.styleNo??parsed.styleNo;
       await bindPatternMaterials(client, effective, orderId, round.round_id, parsed.attachmentIds, parsed.reason, kind === "pattern");
       await client.query(`UPDATE pattern_room_orders SET style_no=$2,required_date=$3,customer=$4,size_color=$5,reference_style_no=$6,variant=$7,note=$8,task_name=$9,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE order_id=$1`,
-        [orderId, parsed.styleNo, parsed.requiredDate, parsed.customer, parsed.sizeColor, parsed.referenceStyleNo, parsed.variant, parsed.note, parsed.taskName]);
+        [orderId, styleNo, parsed.requiredDate, parsed.customer, parsed.sizeColor, parsed.referenceStyleNo, parsed.variant, parsed.note, parsed.taskName]);
       if(kind==="misc")await client.query("UPDATE pattern_room_orders SET misc_association=$2 WHERE order_id=$1",[orderId,association?JSON.stringify(association):null]);
-      const eventId = await this.event(client, effective, action, orderId, round.round_id, {...parsed,...(kind==="misc"?{association}: {})}, order, parsed.reason);
+      const eventId = await this.event(client, effective, action, orderId, round.round_id, {...parsed,styleNo,...(kind==="misc"?{association}: {})}, order, parsed.reason);
       if (this.enabled && order.status === "in_progress") {
         const worker = (await client.query<{ worker_user_id: string }>("SELECT worker_user_id FROM pattern_room_segments WHERE round_id=$1 AND ended_at IS NULL", [round.round_id])).rows[0];
         const supervisor = await this.supervisor(client, round.supervisor_user_id ?? round.assigned_by ?? effective.actorId);
