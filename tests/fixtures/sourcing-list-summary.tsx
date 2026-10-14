@@ -1,0 +1,11 @@
+import { createRoot } from "react-dom/client";
+import { SourcingWorkspacePage } from "../../apps/web/src/sourcing-workspace-page.js";
+import "@dx-rework/ui/tokens.css";
+import "@dx-rework/ui/components.css";
+import "../../apps/web/src/styles.css";
+import "../../apps/web/src/responsibility-determination.css";
+import "../../apps/web/src/workflow-shell.css";
+import "../../apps/web/src/dialog-visual-system.css";
+import "../../apps/web/src/workflow-state-visual.css";
+import "../../apps/web/src/ui-polish.css";
+createRoot(document.getElementById("root")!).render(<SourcingWorkspacePage view="pending" />);

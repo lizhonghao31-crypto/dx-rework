@@ -581,6 +581,7 @@ export const SourcingCaseListResponseSchema = z.object({
   page: z.number().int().positive(),
   pageSize: z.literal(15),
   totalCount: z.number().int().nonnegative(),
+  totalOrderQuantity: z.number().int().nonnegative().safe(),
   totalPages: z.number().int().positive(),
 }).strict();
 

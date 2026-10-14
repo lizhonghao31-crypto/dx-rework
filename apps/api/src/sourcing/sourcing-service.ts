@@ -210,6 +210,7 @@ type SourcingCaseRow = Readonly<{
   contract_return_overdue_seconds: number | string | null;
   contract_return_as_of: Date | string;
   total_count?: string;
+  total_order_quantity?: string;
 }>;
 
 const fail = (message: string, status = 400, code = "VALIDATION_ERROR"): never => {
@@ -744,8 +745,8 @@ export class SourcingService {
     if (!Number.isInteger(page) || page < 1 || page > 100_000) fail("分页页码无效");
     const offset = (page - 1) * SOURCING_LIST_PAGE_SIZE;
     const result = await this.database.query<SourcingCaseRow>(
-      `SELECT
-         count(*) OVER()::text AS total_count,
+      `WITH filtered_cases AS MATERIALIZED (
+       SELECT
          case_view.sourcing_case_id,case_view.erp_order_id,case_view.erp_order_no,
          case_view.style_no,case_view.lane_key,case_view.order_quantity,
          (SELECT COALESCE(max(revision),0) FROM sourcing_style_revisions WHERE sourcing_case_id=case_view.sourcing_case_id) AS identity_revision,
@@ -985,8 +986,19 @@ export class SourcingService {
              )
            )
          )
-       ORDER BY case_view.created_at DESC,case_view.sourcing_case_id DESC
-       LIMIT 15 OFFSET $7`,
+       )
+       SELECT page_row.*,totals.total_count,totals.total_order_quantity
+       FROM (
+         SELECT count(*)::text AS total_count,
+           COALESCE(sum(order_quantity),0)::text AS total_order_quantity
+         FROM filtered_cases
+       ) totals
+       LEFT JOIN LATERAL (
+         SELECT * FROM filtered_cases
+         ORDER BY created_at DESC,sourcing_case_id DESC
+         LIMIT 15 OFFSET $7
+       ) page_row ON true
+       ORDER BY page_row.created_at DESC,page_row.sourcing_case_id DESC`,
       [
         normalizedQuery,
         statusFilter,
@@ -997,13 +1009,14 @@ export class SourcingService {
         offset,
       ],
     );
-    const pageRows = result.rows;
-    const totalCount = Number(pageRows[0]?.total_count ?? "0");
+    const pageRows = result.rows.filter(row => row.sourcing_case_id != null);
+    const totalCount = Number(result.rows[0]?.total_count ?? "0");
     return {
       items: pageRows.map((row) => mapCase(row, actor)),
       page,
       pageSize: SOURCING_LIST_PAGE_SIZE,
       totalCount,
+      totalOrderQuantity: Number(result.rows[0]?.total_order_quantity ?? "0"),
       totalPages: Math.max(1, Math.ceil(totalCount / SOURCING_LIST_PAGE_SIZE)),
     };
   }

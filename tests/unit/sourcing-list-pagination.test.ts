@@ -14,6 +14,7 @@ const actor: TrustedActorContext = {
 
 const row = (index: number, totalCount = 16) => ({
   total_count: String(totalCount),
+  total_order_quantity: String(totalCount * 100),
   sourcing_case_id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
   erp_order_id: `ERP-${index}`,
   erp_order_no: `ERP-${index}`,
@@ -68,15 +69,16 @@ describe("sourcing list pagination", () => {
     const first = await service.listCases(actor, "", "pending", 1);
     expect(first.items).toHaveLength(15);
     expect(first).toMatchObject({ page: 1, pageSize: 15, totalCount: 16, totalPages: 2 });
-    expect(query.mock.calls[0]?.[0]).toContain("count(*) OVER()");
+    expect(first.totalOrderQuantity).toBe(1600);
     expect(query.mock.calls[0]?.[0]).toContain("LIMIT 15 OFFSET $7");
     expect(query.mock.calls[0]?.[0]).toContain(
-      "ORDER BY case_view.created_at DESC,case_view.sourcing_case_id DESC",
+      "ORDER BY created_at DESC,sourcing_case_id DESC",
     );
     expect(query.mock.calls[0]?.[1]).toEqual(["", "pending", "all", "all", "", null, 0]);
 
     const second = await service.listCases(actor, "", "pending", 2);
     expect(second.items).toHaveLength(1);
+    expect(second.totalOrderQuantity).toBe(1600);
     expect(second).toMatchObject({ page: 2, pageSize: 15, totalCount: 16, totalPages: 2 });
     expect(query.mock.calls[1]?.[1]).toEqual(["", "pending", "all", "all", "", null, 15]);
   });
@@ -105,4 +107,20 @@ describe("sourcing list pagination", () => {
     expect(query.mock.calls[0]?.[0]).toContain("image.status='ready'");
     expect(query.mock.calls[0]?.[0]).toContain("ORDER BY image.created_at,image.attachment_id LIMIT 1");
   });
+  it("retains full totals on an empty out-of-range page and returns zero for no matches", async () => {
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rows: [{ sourcing_case_id: null, total_count: "16", total_order_quantity: "1600" }] })
+      .mockResolvedValueOnce({ rows: [{ sourcing_case_id: null, total_count: "0", total_order_quantity: "0" }] });
+    const service = new SourcingService({ query } as unknown as Pool);
+    expect(await service.listCases(actor, "", "pending", 3)).toMatchObject({ items: [], totalCount: 16, totalOrderQuantity: 1600, totalPages: 2 });
+    expect(await service.listCases(actor, "not found")).toMatchObject({ items: [], totalCount: 0, totalOrderQuantity: 0 });
+  });
+
+  it("does not query or expose summary without the existing read capability", async () => {
+    const query = vi.fn();
+    const service = new SourcingService({ query } as unknown as Pool);
+    await expect(service.listCases({ ...actor, authorizationCapabilities: [] })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(query).not.toHaveBeenCalled();
+  });
+
 });
