@@ -1,3 +1,4 @@
+import {reuseJourneySnapshotReads} from "./journey-snapshot-reads.js";
 import {journeyTaskSummaries} from './journey-task-summary.js';
 import type { Pool, PoolClient } from "pg";
 import type { JourneyFilter, JourneyNode, JourneyRecord, JourneyState, OrderJourney } from "@dx-rework/contracts/digital-production-journey";
@@ -37,7 +38,7 @@ export class DigitalJourneyQuery {
     const db=await this.database.connect();
     try { await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
       const asOf=iso((await db.query("SELECT CURRENT_TIMESTAMP AS as_of")).rows[0].as_of)!;
-      const result=await work(db,asOf);await db.query("COMMIT");return result;
+      const result=await work(reuseJourneySnapshotReads(db),asOf);await db.query("COMMIT");return result;
     } catch(error) { await db.query("ROLLBACK");throw error; } finally {db.release();}
   }
   private async candidates(db:PoolClient,actor:TrustedActorContext,id:string|null=null):Promise<Candidate[]> {

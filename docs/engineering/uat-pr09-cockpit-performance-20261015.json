@@ -1,0 +1,3328 @@
+{
+  "scope": "Local actual Fastify inject GET routes, original RootAuthority/authentication/access policies and SQL; isolated PostgreSQL16 TEST data only. No ECS/online claims.",
+  "baselineRevision": "ee0f76380e7c74132f07a84092ce59c60d6a26c9",
+  "fixture": {
+    "schema": "uat_cockpit_perf_8071236a2330471b8a01ca676481097f",
+    "publishedSources": 24,
+    "designerOwned": 18,
+    "otherDesignerOwned": 6,
+    "realOrders": 12,
+    "poPerOrder": 1,
+    "sizes": [
+      {
+        "size": "M",
+        "quantity": 10
+      },
+      {
+        "size": "L",
+        "quantity": 20
+      }
+    ],
+    "materialTasks": 24,
+    "assignedPatternTasks": 6,
+    "testActors": 7,
+    "pageSize": 15
+  },
+  "method": "Two sequential before→after rounds on the same unchanged fixture; one warmup then five measured requests per scenario each round; ten samples per version. p50 median; p95 nearest-rank max of10. SQL includes request authentication/authority, BEGIN/asOf/COMMIT, not setup. No local regression suite ran concurrently with samples.",
+  "responseParity": {
+    "scenarios": 14,
+    "equal": true,
+    "excludedFields": [
+      "asOf",
+      "overdueSeconds"
+    ],
+    "normalizedResponseSha256": "06803c0828400179fef1419cbc45c939ab00a8e9437a334621faac5e8b914cdd",
+    "covers": "HTTP status, permission-denied result, total/page/order IDs, full authorized JSON including KPI/risks/stages/current+historical records and record URLs; only facts present in this TEST fixture."
+  },
+  "browser": {
+    "scope": "Actual built App from PR08, unchanged cockpit frontend; isolated TEST API responses from independently measured PostgreSQL routes",
+    "checks": {
+      "initialList": 1,
+      "extraRequestsDuringFastTyping": 0,
+      "extraRequestsDuringSlowTyping": 0,
+      "queriesPerSubmit": 1,
+      "detailRequestsOnSelection": 1,
+      "extraListRequestsWhileDetailSelected": 0,
+      "filterPreservedOnReturn": true
+    },
+    "requests": [
+      {
+        "path": "auth/me",
+        "search": "",
+        "method": "GET"
+      },
+      {
+        "path": "digital-production/access/options",
+        "search": "",
+        "method": "GET"
+      },
+      {
+        "path": "todos/mine/indicator",
+        "search": "",
+        "method": "GET"
+      },
+      {
+        "path": "digital-production/notifications/claim",
+        "search": "?remaining=1",
+        "method": "POST"
+      },
+      {
+        "path": "digital-production/journeys",
+        "search": "?page=1&kpi=all",
+        "method": "GET"
+      },
+      {
+        "path": "digital-production/journeys",
+        "search": "?page=1&search=TEST-COCKPIT-00&kpi=all",
+        "method": "GET"
+      },
+      {
+        "path": "digital-production/journeys/48769a95-61b7-4823-b2bb-cffe87a89c3e",
+        "search": "",
+        "method": "GET"
+      },
+      {
+        "path": "digital-production/sources/48769a95-61b7-4823-b2bb-cffe87a89c3e/development/attachments/049e10ce-45b1-482f-a6fc-7303e96dee2f",
+        "search": "",
+        "method": "GET"
+      },
+      {
+        "path": "digital-production/access/options",
+        "search": "",
+        "method": "GET"
+      },
+      {
+        "path": "digital-production/access/options",
+        "search": "",
+        "method": "GET"
+      },
+      {
+        "path": "digital-production/journeys",
+        "search": "?page=1&search=TEST-COCKPIT-00&kpi=all",
+        "method": "GET"
+      }
+    ]
+  },
+  "results": [
+    {
+      "name": "root-list-page1",
+      "role": "root",
+      "url": "/digital-production/journeys?page=1",
+      "pageSize": 15,
+      "before": {
+        "queries": 1491,
+        "p50Ms": 536.3493249999998,
+        "p95Ms": 598.8453960000002,
+        "measuredSamples": [
+          {
+            "ms": 550.529229,
+            "queries": 1491,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 540.4932929999998,
+            "queries": 1491,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 479.31481099999974,
+            "queries": 1491,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 427.99259299999994,
+            "queries": 1491,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 417.57251700000006,
+            "queries": 1491,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 598.8453960000002,
+            "queries": 1491,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 588.0114470000001,
+            "queries": 1491,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 532.2053569999998,
+            "queries": 1491,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 548.9207379999998,
+            "queries": 1491,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 500.60601399999996,
+            "queries": 1491,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 707.051199,
+            "queries": 1491,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 625.4860639999999,
+            "queries": 1491,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          }
+        ],
+        "repeatedQueryCalls": 776,
+        "topRepeated": [
+          {
+            "sql": "SELECT DISTINCT ON(node_key) node_key,sla_seconds FROM digital_production_deadline_policies ORDER BY node_key,version DESC",
+            "valuesHash": "4f53cda18c2b",
+            "count": 39
+          },
+          {
+            "sql": "SELECT to_regclass('digital_development_rounds') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 38
+          },
+          {
+            "sql": "SELECT to_regclass('digital_order_closures') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 38
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "fafd4ea352e5",
+            "count": 27
+          },
+          {
+            "sql": "SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])",
+            "valuesHash": "4b49e969e730",
+            "count": 20
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "17feff0d95ab",
+            "count": 19
+          },
+          {
+            "sql": "SELECT to_regclass('digital_development_documents') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 18
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "a6732eddb4d8",
+            "count": 15
+          }
+        ]
+      },
+      "after": {
+        "queries": 715,
+        "p50Ms": 386.2690339999999,
+        "p95Ms": 404.33255600000007,
+        "measuredSamples": [
+          {
+            "ms": 381.39406099999997,
+            "queries": 715,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 404.33255600000007,
+            "queries": 715,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 378.84147600000006,
+            "queries": 715,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 394.01722500000005,
+            "queries": 715,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 391.1440069999999,
+            "queries": 715,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 403.689041,
+            "queries": 715,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 352.7861170000001,
+            "queries": 715,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 354.9437640000001,
+            "queries": 715,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 402.12274100000013,
+            "queries": 715,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 342.5012109999998,
+            "queries": 715,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 505.14766900000006,
+            "queries": 715,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          },
+          {
+            "ms": 442.07666299999994,
+            "queries": 715,
+            "status": 200,
+            "total": 24,
+            "pageItems": 15
+          }
+        ],
+        "repeatedQueryCalls": 0,
+        "topRepeated": []
+      },
+      "sqlReductionPercent": 52.045606975184434
+    },
+    {
+      "name": "root-list-page2",
+      "role": "root",
+      "url": "/digital-production/journeys?page=2",
+      "pageSize": 15,
+      "before": {
+        "queries": 1255,
+        "p50Ms": 430.4295474999999,
+        "p95Ms": 469.3882059999996,
+        "measuredSamples": [
+          {
+            "ms": 391.9448859999993,
+            "queries": 1255,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 423.70836099999997,
+            "queries": 1255,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 437.15073399999983,
+            "queries": 1255,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 438.5041289999999,
+            "queries": 1255,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 469.3882059999996,
+            "queries": 1255,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 437.69755799999984,
+            "queries": 1255,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 393.8202279999996,
+            "queries": 1255,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 442.0524289999994,
+            "queries": 1255,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 416.7255180000002,
+            "queries": 1255,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 386.64508399999977,
+            "queries": 1255,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 367.55898100000013,
+            "queries": 1255,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 399.27489900000046,
+            "queries": 1255,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          }
+        ],
+        "repeatedQueryCalls": 618,
+        "topRepeated": [
+          {
+            "sql": "SELECT to_regclass('digital_development_rounds') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 34
+          },
+          {
+            "sql": "SELECT to_regclass('digital_order_closures') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 34
+          },
+          {
+            "sql": "SELECT DISTINCT ON(node_key) node_key,sla_seconds FROM digital_production_deadline_policies ORDER BY node_key,version DESC",
+            "valuesHash": "4f53cda18c2b",
+            "count": 33
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "fafd4ea352e5",
+            "count": 27
+          },
+          {
+            "sql": "SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])",
+            "valuesHash": "4b49e969e730",
+            "count": 19
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "17feff0d95ab",
+            "count": 17
+          },
+          {
+            "sql": "SELECT * FROM digital_production_orders WHERE production_order_id=$1",
+            "valuesHash": "5d3f9f5c1c37",
+            "count": 12
+          },
+          {
+            "sql": "SELECT * FROM digital_production_orders WHERE production_order_id=$1",
+            "valuesHash": "78d5ac9ce806",
+            "count": 12
+          }
+        ]
+      },
+      "after": {
+        "queries": 637,
+        "p50Ms": 334.33599300000014,
+        "p95Ms": 387.42627099999936,
+        "measuredSamples": [
+          {
+            "ms": 343.8326470000002,
+            "queries": 637,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 341.20803399999977,
+            "queries": 637,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 306.7564769999999,
+            "queries": 637,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 300.68487000000005,
+            "queries": 637,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 312.9298170000002,
+            "queries": 637,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 303.0447559999998,
+            "queries": 637,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 364.00357399999984,
+            "queries": 637,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 327.4639520000005,
+            "queries": 637,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 387.42627099999936,
+            "queries": 637,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 364.2120669999995,
+            "queries": 637,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 360.1048560000004,
+            "queries": 637,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          },
+          {
+            "ms": 318.7012459999996,
+            "queries": 637,
+            "status": 200,
+            "total": 24,
+            "pageItems": 9
+          }
+        ],
+        "repeatedQueryCalls": 0,
+        "topRepeated": []
+      },
+      "sqlReductionPercent": 49.243027888446214
+    },
+    {
+      "name": "root-search-hit",
+      "role": "root",
+      "url": "/digital-production/journeys?search=TEST-COCKPIT-00",
+      "pageSize": 15,
+      "before": {
+        "queries": 849,
+        "p50Ms": 295.24995600000057,
+        "p95Ms": 323.4164780000001,
+        "measuredSamples": [
+          {
+            "ms": 323.4164780000001,
+            "queries": 849,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 297.6402699999999,
+            "queries": 849,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 304.83081499999935,
+            "queries": 849,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 296.2159390000006,
+            "queries": 849,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 294.2839730000005,
+            "queries": 849,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 286.47836800000005,
+            "queries": 849,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 283.5773130000007,
+            "queries": 849,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 292.1980139999996,
+            "queries": 849,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 291.1571870000007,
+            "queries": 849,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 297.3197230000005,
+            "queries": 849,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 346.37343899999996,
+            "queries": 849,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 285.5973020000001,
+            "queries": 849,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          }
+        ],
+        "repeatedQueryCalls": 336,
+        "topRepeated": [
+          {
+            "sql": "SELECT to_regclass('digital_development_rounds') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 26
+          },
+          {
+            "sql": "SELECT to_regclass('digital_order_closures') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 26
+          },
+          {
+            "sql": "SELECT DISTINCT ON(node_key) node_key,sla_seconds FROM digital_production_deadline_policies ORDER BY node_key,version DESC",
+            "valuesHash": "4f53cda18c2b",
+            "count": 25
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "fafd4ea352e5",
+            "count": 19
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "17feff0d95ab",
+            "count": 13
+          },
+          {
+            "sql": "SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])",
+            "valuesHash": "4b49e969e730",
+            "count": 13
+          },
+          {
+            "sql": "SELECT * FROM digital_production_orders WHERE production_order_id=$1",
+            "valuesHash": "2e6ee422441f",
+            "count": 12
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "fcdd11137533",
+            "count": 6
+          }
+        ]
+      },
+      "after": {
+        "queries": 513,
+        "p50Ms": 260.0738430000001,
+        "p95Ms": 270.1157169999997,
+        "measuredSamples": [
+          {
+            "ms": 248.09158399999978,
+            "queries": 513,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 268.5342149999997,
+            "queries": 513,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 262.20446900000024,
+            "queries": 513,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 261.4740149999998,
+            "queries": 513,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 245.06216499999937,
+            "queries": 513,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 251.83889999999974,
+            "queries": 513,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 269.30470199999945,
+            "queries": 513,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 270.1157169999997,
+            "queries": 513,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 258.67367100000047,
+            "queries": 513,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 248.02892800000063,
+            "queries": 513,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 244.69900700000017,
+            "queries": 513,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 245.1835599999995,
+            "queries": 513,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          }
+        ],
+        "repeatedQueryCalls": 0,
+        "topRepeated": []
+      },
+      "sqlReductionPercent": 39.57597173144877
+    },
+    {
+      "name": "root-search-miss",
+      "role": "root",
+      "url": "/digital-production/journeys?search=NOT-FOUND",
+      "pageSize": 15,
+      "before": {
+        "queries": 764,
+        "p50Ms": 265.44135949999963,
+        "p95Ms": 290.245234,
+        "measuredSamples": [
+          {
+            "ms": 271.3098709999995,
+            "queries": 764,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 269.7358779999995,
+            "queries": 764,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 261.0596150000001,
+            "queries": 764,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 270.4248239999997,
+            "queries": 764,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 290.245234,
+            "queries": 764,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 249.2254350000003,
+            "queries": 764,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 264.43004699999983,
+            "queries": 764,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 266.45267199999944,
+            "queries": 764,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 261.2622589999992,
+            "queries": 764,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 247.68177900000046,
+            "queries": 764,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 298.8430559999997,
+            "queries": 764,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 273.73467999999957,
+            "queries": 764,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          }
+        ],
+        "repeatedQueryCalls": 278,
+        "topRepeated": [
+          {
+            "sql": "SELECT DISTINCT ON(node_key) node_key,sla_seconds FROM digital_production_deadline_policies ORDER BY node_key,version DESC",
+            "valuesHash": "4f53cda18c2b",
+            "count": 24
+          },
+          {
+            "sql": "SELECT to_regclass('digital_development_rounds') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 24
+          },
+          {
+            "sql": "SELECT to_regclass('digital_order_closures') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 24
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "fafd4ea352e5",
+            "count": 18
+          },
+          {
+            "sql": "SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])",
+            "valuesHash": "4b49e969e730",
+            "count": 13
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "17feff0d95ab",
+            "count": 12
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "fcdd11137533",
+            "count": 6
+          },
+          {
+            "sql": "SELECT * FROM digital_production_orders WHERE production_order_id=$1",
+            "valuesHash": "569ec90c3c04",
+            "count": 6
+          }
+        ]
+      },
+      "after": {
+        "queries": 486,
+        "p50Ms": 256.55969400000004,
+        "p95Ms": 279.1833180000003,
+        "measuredSamples": [
+          {
+            "ms": 223.4414510000006,
+            "queries": 486,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 237.72994299999937,
+            "queries": 486,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 252.0128279999999,
+            "queries": 486,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 253.8458209999999,
+            "queries": 486,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 264.0450550000005,
+            "queries": 486,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 279.1833180000003,
+            "queries": 486,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 274.7644600000003,
+            "queries": 486,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 259.2735670000002,
+            "queries": 486,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 266.4608900000003,
+            "queries": 486,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 242.16588300000058,
+            "queries": 486,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 256.5503859999999,
+            "queries": 486,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 256.44921200000044,
+            "queries": 486,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          }
+        ],
+        "repeatedQueryCalls": 0,
+        "topRepeated": []
+      },
+      "sqlReductionPercent": 36.38743455497382
+    },
+    {
+      "name": "root-detail",
+      "role": "root",
+      "url": "/digital-production/journeys/48769a95-61b7-4823-b2bb-cffe87a89c3e",
+      "pageSize": 15,
+      "before": {
+        "queries": 93,
+        "p50Ms": 27.38138650000019,
+        "p95Ms": 32.34843300000102,
+        "measuredSamples": [
+          {
+            "ms": 26.821101000001363,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 24.73756499999945,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 26.116817000000083,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 27.95170599999983,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 27.941671999999016,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 25.720706000000064,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 22.816389999999956,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 28.6998339999991,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 32.34843300000102,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 29.991093000000546,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 25.38022500000079,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 24.61312799999905,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          }
+        ],
+        "repeatedQueryCalls": 21,
+        "topRepeated": [
+          {
+            "sql": "SELECT * FROM digital_production_orders WHERE production_order_id=$1",
+            "valuesHash": "2e6ee422441f",
+            "count": 6
+          },
+          {
+            "sql": "SELECT * FROM digital_development_documents WHERE source_id=$1",
+            "valuesHash": "a703c56b3c7a",
+            "count": 3
+          },
+          {
+            "sql": "SELECT * FROM digital_production_task_access WHERE task_id=$1",
+            "valuesHash": "7c17e00cdf68",
+            "count": 2
+          },
+          {
+            "sql": "SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2",
+            "valuesHash": "fb8775d33743",
+            "count": 2
+          },
+          {
+            "sql": "SELECT created_by,design_style_no,customer_code FROM digital_production_sources WHERE source_id=$1",
+            "valuesHash": "a703c56b3c7a",
+            "count": 2
+          },
+          {
+            "sql": "SELECT to_regclass('digital_development_documents') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 2
+          },
+          {
+            "sql": "SELECT document FROM digital_development_documents WHERE source_id=$1 AND status='published'",
+            "valuesHash": "a703c56b3c7a",
+            "count": 2
+          },
+          {
+            "sql": "SELECT * FROM digital_production_task_access WHERE task_id=$1",
+            "valuesHash": "9b6719d09c53",
+            "count": 2
+          }
+        ]
+      },
+      "after": {
+        "queries": 72,
+        "p50Ms": 27.073723499999687,
+        "p95Ms": 31.30544800000007,
+        "measuredSamples": [
+          {
+            "ms": 26.836389000000054,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 28.4228949999997,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 28.054779000000053,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 31.30544800000007,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 31.165776000001642,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 25.58857799999987,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 25.92657799999961,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 25.064366999999947,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 25.034310000000005,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 27.31105799999932,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 26.292358000000604,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 25.94868099999985,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          }
+        ],
+        "repeatedQueryCalls": 0,
+        "topRepeated": []
+      },
+      "sqlReductionPercent": 22.580645161290324
+    },
+    {
+      "name": "root-detail-round1",
+      "role": "root",
+      "url": "/digital-production/journeys/48769a95-61b7-4823-b2bb-cffe87a89c3e?round=1",
+      "pageSize": 15,
+      "before": {
+        "queries": 93,
+        "p50Ms": 28.34026350000022,
+        "p95Ms": 39.94276600000012,
+        "measuredSamples": [
+          {
+            "ms": 30.25429299999996,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 28.42478200000005,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 28.25574500000039,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 30.9537990000008,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 27.22144500000104,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 25.069000999999844,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 25.029942999999548,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 24.50805500000024,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 31.974146999998993,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 39.94276600000012,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 26.86127999999917,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 25.781036000000313,
+            "queries": 93,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          }
+        ],
+        "repeatedQueryCalls": 21,
+        "topRepeated": [
+          {
+            "sql": "SELECT * FROM digital_production_orders WHERE production_order_id=$1",
+            "valuesHash": "2e6ee422441f",
+            "count": 6
+          },
+          {
+            "sql": "SELECT * FROM digital_development_documents WHERE source_id=$1",
+            "valuesHash": "a703c56b3c7a",
+            "count": 3
+          },
+          {
+            "sql": "SELECT * FROM digital_production_task_access WHERE task_id=$1",
+            "valuesHash": "7c17e00cdf68",
+            "count": 2
+          },
+          {
+            "sql": "SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2",
+            "valuesHash": "fb8775d33743",
+            "count": 2
+          },
+          {
+            "sql": "SELECT created_by,design_style_no,customer_code FROM digital_production_sources WHERE source_id=$1",
+            "valuesHash": "a703c56b3c7a",
+            "count": 2
+          },
+          {
+            "sql": "SELECT to_regclass('digital_development_documents') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 2
+          },
+          {
+            "sql": "SELECT document FROM digital_development_documents WHERE source_id=$1 AND status='published'",
+            "valuesHash": "a703c56b3c7a",
+            "count": 2
+          },
+          {
+            "sql": "SELECT * FROM digital_production_task_access WHERE task_id=$1",
+            "valuesHash": "9b6719d09c53",
+            "count": 2
+          }
+        ]
+      },
+      "after": {
+        "queries": 72,
+        "p50Ms": 28.070113999999194,
+        "p95Ms": 38.89273300000059,
+        "measuredSamples": [
+          {
+            "ms": 28.580152999998973,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 29.935284000001047,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 31.120738999999958,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 38.89273300000059,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 33.88034400000106,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 25.376758000000336,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 26.89476999999897,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 25.852355999999418,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 26.118328000000474,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 27.560074999999415,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 28.781687000000602,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 25.118548000000374,
+            "queries": 72,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          }
+        ],
+        "repeatedQueryCalls": 0,
+        "topRepeated": []
+      },
+      "sqlReductionPercent": 22.580645161290324
+    },
+    {
+      "name": "designer-page1",
+      "role": "designer",
+      "url": "/digital-production/journeys?page=1",
+      "pageSize": 15,
+      "before": {
+        "queries": 1356,
+        "p50Ms": 447.46032000000014,
+        "p95Ms": 501.7138590000013,
+        "measuredSamples": [
+          {
+            "ms": 461.65072600000167,
+            "queries": 1356,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 464.0533290000003,
+            "queries": 1356,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 407.6540960000002,
+            "queries": 1356,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 405.46079499999905,
+            "queries": 1356,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 449.3386330000012,
+            "queries": 1356,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 418.36328500000127,
+            "queries": 1356,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 422.62559599999986,
+            "queries": 1356,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 445.58200699999907,
+            "queries": 1356,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 488.1463309999999,
+            "queries": 1356,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 501.7138590000013,
+            "queries": 1356,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 488.850719,
+            "queries": 1356,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 450.6994250000007,
+            "queries": 1356,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          }
+        ],
+        "repeatedQueryCalls": 750,
+        "topRepeated": [
+          {
+            "sql": "SELECT DISTINCT ON(node_key) node_key,sla_seconds FROM digital_production_deadline_policies ORDER BY node_key,version DESC",
+            "valuesHash": "4f53cda18c2b",
+            "count": 33
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "fafd4ea352e5",
+            "count": 33
+          },
+          {
+            "sql": "SELECT to_regclass('digital_development_rounds') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 32
+          },
+          {
+            "sql": "SELECT to_regclass('digital_order_closures') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 32
+          },
+          {
+            "sql": "SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])",
+            "valuesHash": "4b49e969e730",
+            "count": 24
+          },
+          {
+            "sql": "SELECT to_regclass('digital_development_documents') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 19
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "17feff0d95ab",
+            "count": 16
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "a6732eddb4d8",
+            "count": 15
+          }
+        ]
+      },
+      "after": {
+        "queries": 606,
+        "p50Ms": 293.12379899999996,
+        "p95Ms": 357.3667150000001,
+        "measuredSamples": [
+          {
+            "ms": 295.43402400000014,
+            "queries": 606,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 309.5659749999995,
+            "queries": 606,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 357.3667150000001,
+            "queries": 606,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 323.0287589999989,
+            "queries": 606,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 320.45588900000075,
+            "queries": 606,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 273.13434400000006,
+            "queries": 606,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 280.88385500000004,
+            "queries": 606,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 274.0609029999996,
+            "queries": 606,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 290.8135739999998,
+            "queries": 606,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 283.82613800000036,
+            "queries": 606,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 318.6760209999993,
+            "queries": 606,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          },
+          {
+            "ms": 301.1538079999991,
+            "queries": 606,
+            "status": 200,
+            "total": 18,
+            "pageItems": 15
+          }
+        ],
+        "repeatedQueryCalls": 0,
+        "topRepeated": []
+      },
+      "sqlReductionPercent": 55.30973451327434
+    },
+    {
+      "name": "designer-page2",
+      "role": "designer",
+      "url": "/digital-production/journeys?page=2",
+      "pageSize": 15,
+      "before": {
+        "queries": 760,
+        "p50Ms": 259.7330054999993,
+        "p95Ms": 322.84491399999933,
+        "measuredSamples": [
+          {
+            "ms": 252.6875229999987,
+            "queries": 760,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 322.84491399999933,
+            "queries": 760,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 245.5329469999997,
+            "queries": 760,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 241.03843099999904,
+            "queries": 760,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 243.00468999999975,
+            "queries": 760,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 275.6068460000006,
+            "queries": 760,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 260.60749399999986,
+            "queries": 760,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 272.3355279999996,
+            "queries": 760,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 258.85851699999876,
+            "queries": 760,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 275.61918499999956,
+            "queries": 760,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 248.35191200000008,
+            "queries": 760,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 284.2473570000002,
+            "queries": 760,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          }
+        ],
+        "repeatedQueryCalls": 340,
+        "topRepeated": [
+          {
+            "sql": "SELECT to_regclass('digital_development_rounds') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 22
+          },
+          {
+            "sql": "SELECT to_regclass('digital_order_closures') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 22
+          },
+          {
+            "sql": "SELECT DISTINCT ON(node_key) node_key,sla_seconds FROM digital_production_deadline_policies ORDER BY node_key,version DESC",
+            "valuesHash": "4f53cda18c2b",
+            "count": 21
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "fafd4ea352e5",
+            "count": 21
+          },
+          {
+            "sql": "SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])",
+            "valuesHash": "4b49e969e730",
+            "count": 15
+          },
+          {
+            "sql": "SELECT * FROM digital_production_orders WHERE production_order_id=$1",
+            "valuesHash": "502aac5676aa",
+            "count": 12
+          },
+          {
+            "sql": "SELECT * FROM digital_production_orders WHERE production_order_id=$1",
+            "valuesHash": "2e6ee422441f",
+            "count": 12
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "17feff0d95ab",
+            "count": 11
+          }
+        ]
+      },
+      "after": {
+        "queries": 420,
+        "p50Ms": 208.21380299999964,
+        "p95Ms": 237.67037399999936,
+        "measuredSamples": [
+          {
+            "ms": 204.84462000000167,
+            "queries": 420,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 219.12295799999993,
+            "queries": 420,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 237.67037399999936,
+            "queries": 420,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 230.0633770000004,
+            "queries": 420,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 232.708842,
+            "queries": 420,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 205.19589899999846,
+            "queries": 420,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 208.41054299999996,
+            "queries": 420,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 203.0408950000001,
+            "queries": 420,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 203.60745999999926,
+            "queries": 420,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 208.01706299999933,
+            "queries": 420,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 235.6465220000009,
+            "queries": 420,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          },
+          {
+            "ms": 209.54115000000093,
+            "queries": 420,
+            "status": 200,
+            "total": 18,
+            "pageItems": 3
+          }
+        ],
+        "repeatedQueryCalls": 0,
+        "topRepeated": []
+      },
+      "sqlReductionPercent": 44.73684210526315
+    },
+    {
+      "name": "designer-foreign-detail",
+      "role": "designer",
+      "url": "/digital-production/journeys/52566173-2a73-45ea-b7de-4d80b55a475c",
+      "pageSize": 15,
+      "before": {
+        "queries": 7,
+        "p50Ms": 2.8748450000002777,
+        "p95Ms": 6.581116999999722,
+        "measuredSamples": [
+          {
+            "ms": 2.8753100000012637,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 2.637912000000142,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 2.7304719999992813,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 2.6033100000004197,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 2.6474960000014107,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 6.581116999999722,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 3.5102699999988545,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 3.4206950000007055,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 2.8743799999992916,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 3.916853999999148,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 3.975501000000804,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 6.397689999999784,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          }
+        ],
+        "repeatedQueryCalls": 0,
+        "topRepeated": []
+      },
+      "after": {
+        "queries": 7,
+        "p50Ms": 2.951451499999166,
+        "p95Ms": 3.3784709999999905,
+        "measuredSamples": [
+          {
+            "ms": 3.3784709999999905,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 2.943143999998938,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 2.9597589999993943,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 3.0063389999995707,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 3.2034569999996165,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 2.7597069999992527,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 2.622400000000198,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 2.592133999998623,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 2.5954990000009275,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 3.075525000000198,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 4.203127000000677,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 3.8845060000003286,
+            "queries": 7,
+            "status": 404,
+            "total": null,
+            "pageItems": null
+          }
+        ],
+        "repeatedQueryCalls": 0,
+        "topRepeated": []
+      },
+      "sqlReductionPercent": 0.0
+    },
+    {
+      "name": "merch-list",
+      "role": "merch",
+      "url": "/digital-production/journeys",
+      "pageSize": 15,
+      "before": {
+        "queries": 1801,
+        "p50Ms": 547.3919485000006,
+        "p95Ms": 676.0789449999993,
+        "measuredSamples": [
+          {
+            "ms": 499.3776259999995,
+            "queries": 1801,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 505.7129499999992,
+            "queries": 1801,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 502.9088069999998,
+            "queries": 1801,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 521.8107510000009,
+            "queries": 1801,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 498.02233999999953,
+            "queries": 1801,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 668.0671720000009,
+            "queries": 1801,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 676.0789449999993,
+            "queries": 1801,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 628.2942800000019,
+            "queries": 1801,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 613.0547050000023,
+            "queries": 1801,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 572.9731460000003,
+            "queries": 1801,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 516.1427349999994,
+            "queries": 1801,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 698.3020329999999,
+            "queries": 1801,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          }
+        ],
+        "repeatedQueryCalls": 1165,
+        "topRepeated": [
+          {
+            "sql": "SELECT 1 FROM app_users u JOIN user_role_assignments a ON a.user_id=u.id JOIN business_roles r ON r.role_code=a.role_code AND r.enabled WHERE u.id=$1 AND u.enabled AND coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)=false AND (a.role_code=$2 OR ($2='warehouse_receiver' AND a.role_code='warehouse_supervisor')) AND a.revoked_at IS NULL AND EXISTS(SELECT 1 FROM identity_mappings i WHERE i.user_id=u.id AND i.active AND i.employed)",
+            "valuesHash": "bd2711f7a7b7",
+            "count": 162
+          },
+          {
+            "sql": "SELECT to_regclass('digital_development_rounds') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 48
+          },
+          {
+            "sql": "SELECT to_regclass('digital_order_closures') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 48
+          },
+          {
+            "sql": "SELECT DISTINCT ON(node_key) node_key,sla_seconds FROM digital_production_deadline_policies ORDER BY node_key,version DESC",
+            "valuesHash": "4f53cda18c2b",
+            "count": 24
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "17feff0d95ab",
+            "count": 24
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "fafd4ea352e5",
+            "count": 18
+          },
+          {
+            "sql": "SELECT to_regclass('digital_development_documents') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 18
+          },
+          {
+            "sql": "SELECT * FROM digital_production_orders WHERE production_order_id=$1",
+            "valuesHash": "569ec90c3c04",
+            "count": 12
+          }
+        ]
+      },
+      "after": {
+        "queries": 636,
+        "p50Ms": 294.3413865000002,
+        "p95Ms": 308.5841939999991,
+        "measuredSamples": [
+          {
+            "ms": 304.810872,
+            "queries": 636,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 298.4362309999997,
+            "queries": 636,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 302.7571309999985,
+            "queries": 636,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 308.5841939999991,
+            "queries": 636,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 294.63950999999906,
+            "queries": 636,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 260.71418000000085,
+            "queries": 636,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 294.0432630000014,
+            "queries": 636,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 280.0534520000001,
+            "queries": 636,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 251.23332200000004,
+            "queries": 636,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 275.9262259999996,
+            "queries": 636,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 302.9824860000008,
+            "queries": 636,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          },
+          {
+            "ms": 264.6288060000006,
+            "queries": 636,
+            "status": 200,
+            "total": 12,
+            "pageItems": 12
+          }
+        ],
+        "repeatedQueryCalls": 0,
+        "topRepeated": []
+      },
+      "sqlReductionPercent": 64.68628539700167
+    },
+    {
+      "name": "merch-search-po",
+      "role": "merch",
+      "url": "/digital-production/journeys?search=PO-COCKPIT-00",
+      "pageSize": 15,
+      "before": {
+        "queries": 827,
+        "p50Ms": 286.54140949999965,
+        "p95Ms": 304.88592399999834,
+        "measuredSamples": [
+          {
+            "ms": 249.67365000000063,
+            "queries": 827,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 264.2688280000002,
+            "queries": 827,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 297.2087040000006,
+            "queries": 827,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 293.4445670000023,
+            "queries": 827,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 279.0008479999997,
+            "queries": 827,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 304.88592399999834,
+            "queries": 827,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 291.48560200000065,
+            "queries": 827,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 281.59721699999864,
+            "queries": 827,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 269.1857319999981,
+            "queries": 827,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 296.29211099999884,
+            "queries": 827,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 259.88887100000284,
+            "queries": 827,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 307.0395159999971,
+            "queries": 827,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          }
+        ],
+        "repeatedQueryCalls": 384,
+        "topRepeated": [
+          {
+            "sql": "SELECT 1 FROM app_users u JOIN user_role_assignments a ON a.user_id=u.id JOIN business_roles r ON r.role_code=a.role_code AND r.enabled WHERE u.id=$1 AND u.enabled AND coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)=false AND (a.role_code=$2 OR ($2='warehouse_receiver' AND a.role_code='warehouse_supervisor')) AND a.revoked_at IS NULL AND EXISTS(SELECT 1 FROM identity_mappings i WHERE i.user_id=u.id AND i.active AND i.employed)",
+            "valuesHash": "bd2711f7a7b7",
+            "count": 80
+          },
+          {
+            "sql": "SELECT to_regclass('digital_development_rounds') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 26
+          },
+          {
+            "sql": "SELECT to_regclass('digital_order_closures') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 26
+          },
+          {
+            "sql": "SELECT DISTINCT ON(node_key) node_key,sla_seconds FROM digital_production_deadline_policies ORDER BY node_key,version DESC",
+            "valuesHash": "4f53cda18c2b",
+            "count": 13
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "17feff0d95ab",
+            "count": 13
+          },
+          {
+            "sql": "SELECT * FROM digital_production_orders WHERE production_order_id=$1",
+            "valuesHash": "2e6ee422441f",
+            "count": 12
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "fafd4ea352e5",
+            "count": 10
+          },
+          {
+            "sql": "SELECT * FROM digital_production_orders WHERE production_order_id=$1",
+            "valuesHash": "569ec90c3c04",
+            "count": 6
+          }
+        ]
+      },
+      "after": {
+        "queries": 443,
+        "p50Ms": 231.474146999999,
+        "p95Ms": 280.42646500000046,
+        "measuredSamples": [
+          {
+            "ms": 236.15123900000071,
+            "queries": 443,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 240.201094,
+            "queries": 443,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 224.43065200000092,
+            "queries": 443,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 230.19609299999865,
+            "queries": 443,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 263.59255200000007,
+            "queries": 443,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 183.10082899999907,
+            "queries": 443,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 212.40625700000055,
+            "queries": 443,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 280.42646500000046,
+            "queries": 443,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 219.09483100000034,
+            "queries": 443,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 232.75220099999933,
+            "queries": 443,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 224.08004299999993,
+            "queries": 443,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          },
+          {
+            "ms": 214.71290500000032,
+            "queries": 443,
+            "status": 200,
+            "total": 1,
+            "pageItems": 1
+          }
+        ],
+        "repeatedQueryCalls": 0,
+        "topRepeated": []
+      },
+      "sqlReductionPercent": 46.4328899637243
+    },
+    {
+      "name": "worker-list",
+      "role": "worker",
+      "url": "/digital-production/journeys",
+      "pageSize": 15,
+      "before": {
+        "queries": 271,
+        "p50Ms": 95.73196149999785,
+        "p95Ms": 121.1392130000022,
+        "measuredSamples": [
+          {
+            "ms": 96.92458800000168,
+            "queries": 271,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 96.621820999997,
+            "queries": 271,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 102.83712399999786,
+            "queries": 271,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 100.49428699999771,
+            "queries": 271,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 121.1392130000022,
+            "queries": 271,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 94.8421019999987,
+            "queries": 271,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 89.35715999999957,
+            "queries": 271,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 91.91651400000046,
+            "queries": 271,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 94.19120899999689,
+            "queries": 271,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 92.3075659999995,
+            "queries": 271,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 101.56200900000113,
+            "queries": 271,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 108.87191600000006,
+            "queries": 271,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          }
+        ],
+        "repeatedQueryCalls": 129,
+        "topRepeated": [
+          {
+            "sql": "SELECT 1 FROM app_users u JOIN user_role_assignments a ON a.user_id=u.id JOIN business_roles r ON r.role_code=a.role_code AND r.enabled WHERE u.id=$1 AND u.enabled AND coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)=false AND (a.role_code=$2 OR ($2='warehouse_receiver' AND a.role_code='warehouse_supervisor')) AND a.revoked_at IS NULL AND EXISTS(SELECT 1 FROM identity_mappings i WHERE i.user_id=u.id AND i.active AND i.employed)",
+            "valuesHash": "9a68e23e2baa",
+            "count": 24
+          },
+          {
+            "sql": "SELECT to_regclass('digital_bulk_preparations') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 12
+          },
+          {
+            "sql": "SELECT DISTINCT ON(node_key) node_key,sla_seconds FROM digital_production_deadline_policies ORDER BY node_key,version DESC",
+            "valuesHash": "4f53cda18c2b",
+            "count": 12
+          },
+          {
+            "sql": "SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])",
+            "valuesHash": "1a931e133d5c",
+            "count": 12
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "fafd4ea352e5",
+            "count": 10
+          },
+          {
+            "sql": "SELECT * FROM digital_production_deadline_policies WHERE node_key=$1 ORDER BY version DESC LIMIT 1",
+            "valuesHash": "0b1f54e8c5dc",
+            "count": 6
+          },
+          {
+            "sql": "SELECT display_name FROM app_users WHERE id=$1",
+            "valuesHash": "288334bd549e",
+            "count": 6
+          },
+          {
+            "sql": "SELECT to_regclass('digital_development_documents') AS relation",
+            "valuesHash": "4f53cda18c2b",
+            "count": 6
+          }
+        ]
+      },
+      "after": {
+        "queries": 142,
+        "p50Ms": 81.52241299999969,
+        "p95Ms": 108.35600499999964,
+        "measuredSamples": [
+          {
+            "ms": 81.95290999999997,
+            "queries": 142,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 108.35600499999964,
+            "queries": 142,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 90.80112100000042,
+            "queries": 142,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 78.05749600000127,
+            "queries": 142,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 76.46510599999965,
+            "queries": 142,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 72.07806999999957,
+            "queries": 142,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 74.20491199999924,
+            "queries": 142,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 81.40603499999997,
+            "queries": 142,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 81.6387909999994,
+            "queries": 142,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 88.63296199999968,
+            "queries": 142,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 89.86396799999966,
+            "queries": 142,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          },
+          {
+            "ms": 70.46657200000118,
+            "queries": 142,
+            "status": 200,
+            "total": 6,
+            "pageItems": 6
+          }
+        ],
+        "repeatedQueryCalls": 0,
+        "topRepeated": []
+      },
+      "sqlReductionPercent": 47.601476014760145
+    },
+    {
+      "name": "worker-detail",
+      "role": "worker",
+      "url": "/digital-production/journeys/48769a95-61b7-4823-b2bb-cffe87a89c3e",
+      "pageSize": 15,
+      "before": {
+        "queries": 38,
+        "p50Ms": 12.776792999999088,
+        "p95Ms": 13.937921000000642,
+        "measuredSamples": [
+          {
+            "ms": 13.937921000000642,
+            "queries": 38,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 13.128758999999263,
+            "queries": 38,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 12.680171999996674,
+            "queries": 38,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 13.542224000000715,
+            "queries": 38,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 12.873414000001503,
+            "queries": 38,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 12.139630000001489,
+            "queries": 38,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 12.071617000001424,
+            "queries": 38,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 12.3206339999997,
+            "queries": 38,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 13.475782000001345,
+            "queries": 38,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 12.084446000000753,
+            "queries": 38,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 21.006812999999966,
+            "queries": 38,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 12.627125999999407,
+            "queries": 38,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          }
+        ],
+        "repeatedQueryCalls": 3,
+        "topRepeated": [
+          {
+            "sql": "SELECT 1 FROM app_users u JOIN user_role_assignments a ON a.user_id=u.id JOIN business_roles r ON r.role_code=a.role_code AND r.enabled WHERE u.id=$1 AND u.enabled AND coalesce((to_jsonb(u)->>'manual_access_disabled')::boolean,false)=false AND (a.role_code=$2 OR ($2='warehouse_receiver' AND a.role_code='warehouse_supervisor')) AND a.revoked_at IS NULL AND EXISTS(SELECT 1 FROM identity_mappings i WHERE i.user_id=u.id AND i.active AND i.employed)",
+            "valuesHash": "9a68e23e2baa",
+            "count": 3
+          },
+          {
+            "sql": "SELECT * FROM digital_production_task_access WHERE task_id=$1",
+            "valuesHash": "9b6719d09c53",
+            "count": 2
+          }
+        ]
+      },
+      "after": {
+        "queries": 35,
+        "p50Ms": 12.66655450000053,
+        "p95Ms": 15.518793999999616,
+        "measuredSamples": [
+          {
+            "ms": 12.4864120000002,
+            "queries": 35,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 11.778403000000253,
+            "queries": 35,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 11.854357999998683,
+            "queries": 35,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 13.188187000001562,
+            "queries": 35,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 15.518793999999616,
+            "queries": 35,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 12.846697000000859,
+            "queries": 35,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 12.418781999998828,
+            "queries": 35,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 12.46847600000001,
+            "queries": 35,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 14.643169999999373,
+            "queries": 35,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 15.172107999998843,
+            "queries": 35,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 13.789068000000043,
+            "queries": 35,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          },
+          {
+            "ms": 12.591220999998768,
+            "queries": 35,
+            "status": 200,
+            "total": null,
+            "pageItems": null
+          }
+        ],
+        "repeatedQueryCalls": 0,
+        "topRepeated": []
+      },
+      "sqlReductionPercent": 7.8947368421052655
+    },
+    {
+      "name": "stranger-list",
+      "role": "stranger",
+      "url": "/digital-production/journeys",
+      "pageSize": 15,
+      "before": {
+        "queries": 7,
+        "p50Ms": 2.6826505000008183,
+        "p95Ms": 3.4466229999998177,
+        "measuredSamples": [
+          {
+            "ms": 2.5191930000000866,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 2.5509109999984503,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 3.4466229999998177,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 3.0452769999974407,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 2.633095000001049,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 2.7322060000005877,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 2.4979119999989052,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 2.52523199999996,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 2.9902339999971446,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 2.8154709999980696,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 2.77564099999654,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 5.367965000001277,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          }
+        ],
+        "repeatedQueryCalls": 0,
+        "topRepeated": []
+      },
+      "after": {
+        "queries": 7,
+        "p50Ms": 3.0164795000000595,
+        "p95Ms": 3.254374000000098,
+        "measuredSamples": [
+          {
+            "ms": 2.9982569999992847,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 2.8201270000008662,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 2.8716260000001057,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 2.883001999998669,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 3.0226930000007997,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 3.254374000000098,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 3.0628149999993184,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 3.0110060000006342,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 3.0602899999994406,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 3.0219529999994847,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          }
+        ],
+        "warmups": [
+          {
+            "ms": 3.2370670000000246,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          },
+          {
+            "ms": 3.559864999999263,
+            "queries": 7,
+            "status": 200,
+            "total": 0,
+            "pageItems": 0
+          }
+        ],
+        "repeatedQueryCalls": 0,
+        "topRepeated": []
+      },
+      "sqlReductionPercent": 0.0
+    }
+  ]
+}
