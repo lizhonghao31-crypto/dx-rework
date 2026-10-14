@@ -31,7 +31,8 @@ export async function journeyTaskSummaries(db:Pick<Pool|PoolClient,'query'>,ids:
   LEFT JOIN LATERAL(SELECT array_agg(condition_key ORDER BY condition_key) AS keys FROM digital_production_task_conditions WHERE task_id=t.task_id AND NOT satisfied)conditions ON true
   LEFT JOIN LATERAL(SELECT jsonb_build_object('actor_id',e.actor_id,'actor_name',u.display_name,'recorded_at',e.recorded_at) AS event,e.recorded_at
     FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id WHERE e.task_id=t.task_id AND e.event_kind='completed' ORDER BY e.recorded_at DESC,e.event_id DESC LIMIT 1)completion ON true
-  LEFT JOIN LATERAL(SELECT before_state FROM audit_events WHERE entity_type='digital_task' AND entity_id=t.task_id::text AND action='digital_task_reassigned' AND created_at>completion.recorded_at ORDER BY created_at,id LIMIT 1)later ON true
+  -- Rich projection compares JS Dates, which retain milliseconds only.
+  LEFT JOIN LATERAL(SELECT before_state FROM audit_events WHERE entity_type='digital_task' AND entity_id=t.task_id::text AND action='digital_task_reassigned' AND date_trunc('milliseconds',created_at)>date_trunc('milliseconds',completion.recorded_at) ORDER BY created_at,id LIMIT 1)later ON true
   LEFT JOIN app_users previous_owner ON previous_owner.id=(later.before_state->>'assigneeId')::uuid
   WHERE t.task_id=ANY($1::uuid[])`,[ids])).rows;
  return new Map(rows.map(row=>{
