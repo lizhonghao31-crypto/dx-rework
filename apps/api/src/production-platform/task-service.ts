@@ -15,6 +15,7 @@ type Resource = { kind: "order" | "source"; id: string };
 type TimeQuality = "现场登记" | "补报未核实" | "已核实" | "缺失";
 const fail = (message: string): never => { throw new ApplicationError("DIGITAL_TASK_CONFLICT", message, 409); };
 const iso = (value: Date | string | null) => value === null ? null : new Date(value).toISOString();
+const requiresDevelopmentAssignee = (task: { source_id: string | null; task_kind: string }) => Boolean(task.source_id) && ["development_pattern", "development_cutting", "development_sewing"].includes(task.task_kind);
 export const DIGITAL_CONDITION_KEYS = ["customer_confirmed", "owner_approved", "materials_ready", "handover_received", "pattern_ready", "preshrink_ready", "qc_approved", "all_po_complete", "factory_arrived", "washing_finished", "pattern_assignment_ready", "business_recorded"] as const;
 const REQUIRED_ACTIVATION: Partial<Record<DigitalTaskKind, readonly typeof DIGITAL_CONDITION_KEYS[number][]>> = {
   development_pattern: ["materials_ready", "handover_received"], development_cutting: ["handover_received"], development_sewing: ["materials_ready", "handover_received"],
@@ -85,6 +86,7 @@ export class DigitalProductionTaskService {
   }
   private async activate(client: PoolClient, actor: TrustedActorContext, id: string, occurredAt: string | null, quality: TimeQuality) {
     const task = await this.task(client, id, true);
+    if (requiresDevelopmentAssignee(task) && !task.assignee_id) return false;
     if (task.state !== "pending" || !await this.conditionsReady(client, id)) return false;
     const lifecycle = (await client.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2", [this.resource(task).kind, this.resource(task).id])).rows[0]?.state;
     if (lifecycle === "paused" || lifecycle === "cancelled") return false;
@@ -96,7 +98,9 @@ export class DigitalProductionTaskService {
         ORDER BY (to_jsonb(i)->>'notification_sequence')::bigint DESC NULLS LAST,e.recorded_at DESC,e.event_id DESC LIMIT 1) AS quality
       FROM digital_production_task_conditions c WHERE c.task_id=$1 AND c.stage='activation' AND c.satisfied
       UNION ALL SELECT p.completed_at,p.completed_quality FROM digital_production_task_dependencies d JOIN digital_production_tasks p ON p.task_id=d.predecessor_id WHERE d.task_id=$1
-      ) facts`, [id])).rows[0];
+      UNION ALL SELECT occurred_at,time_quality FROM digital_production_task_events
+        WHERE task_id=$1 AND event_kind='reassigned' AND $2::boolean
+      ) facts`, [id, requiresDevelopmentAssignee(task)])).rows[0];
     if (facts.has_unknown) occurredAt = null;
     else if (facts.count > 0) {occurredAt = iso(facts.latest_at);quality=facts.has_unverified?'补报未核实':facts.all_verified?'已核实':'现场登记';}
     if (occurredAt === null) quality = "缺失";
@@ -272,6 +276,7 @@ export class DigitalProductionTaskService {
         if (['completed','cancelled'].includes(task.state)) fail("已结束任务不可日常改派");
         const result = await reassignDigitalTask(client, actor, id, assigneeId);
         await this.event(client, actor, id, this.resource(task), "reassigned", new Date().toISOString(), "现场登记", { previousAssigneeId: task.assignee_id, assigneeId });
+        if (requiresDevelopmentAssignee(task)) await this.activate(client, actor, id, new Date().toISOString(), "现场登记");
         return result;
       });
     });
@@ -399,6 +404,7 @@ export class DigitalProductionTaskService {
   async reassignWithClient(client:PoolClient,actor:TrustedActorContext,id:string,assigneeId:string){
     const task=await this.task(client,id,true);if(['completed','cancelled'].includes(task.state))fail("已结束任务不可改派");
     await reassignDigitalTask(client,actor,id,assigneeId);await this.event(client,actor,id,this.resource(task),"reassigned",new Date().toISOString(),"现场登记",{assigneeId});
+    if (requiresDevelopmentAssignee(task)) await this.activate(client,actor,id,new Date().toISOString(),"现场登记");
   }
   async supersedeBulkTasksWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string){
     // Internal adapter only: the source/approval command already authorized its actor.

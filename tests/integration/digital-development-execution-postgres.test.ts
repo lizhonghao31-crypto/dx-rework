@@ -70,15 +70,41 @@ run("P06 development execution PostgreSQL", () => {
   };
 
   const clerk=()=>actor(root,["development_clerk"]),worker=()=>actor(other,["pattern_room_worker"]),boss=()=>actor(root,["root_superuser"]);
-  const prepare=async(missing=false,craft:"无"|"印花"="无")=>{
+  const prepare=async(missing=false,craft:"无"|"印花"="无",preassign=true)=>{
     const id=await source(),document=await ready(),materialId=randomUUID();document.craft=craft;
     document.materials=[{materialId,category:"主布",label:"主布A",supplier:"",name:"棉布",width:"",weight:"",composition:"",consumption:"",color:"黑",specification:"",quantity:"1",requiredThisRound:true,available:!missing,expectedDate:null}];
     const draft=await development.save(actor(),id,{expectedVersion:0,document},randomUUID());
     const sheet=await development.publish(actor(),id,draft.version,randomUUID());
-    await execution.dispatch(clerk(),id,{expectedVersion:0,patternWorkerId:other,cuttingWorkerId:other,sewingWorkerId:other},randomUUID());
+    if(preassign)await execution.dispatch(clerk(),id,{expectedVersion:0,patternWorkerId:other,cuttingWorkerId:other,sewingWorkerId:other},randomUUID());
     return {id,materialId,taskId:sheet.taskId!,version:sheet.version};
   };
   const checks=(materialId:string,physical=true)=>[{materialId,physical,quantity:true,color:true,specification:true}];
+  it("accepts materials without preassignment and starts successor clocks only on authorized assignment",async()=>{
+    const {id,taskId,materialId}=await prepare(false,"无",false);
+    const input={taskId,result:"通过" as const,note:"TEST 无预派核料",items:checks(materialId)},key=randomUUID();
+    const results=await Promise.all([execution.check(clerk(),id,input,key),execution.check(clerk(),id,input,key)]);
+    expect(results[0]).toEqual(results[1]);
+    const state=await execution.read(boss(),id),paper=state.tasks.find(t=>t.taskKind==="development_pattern")!,cut=state.tasks.find(t=>t.taskKind==="development_cutting")!;
+    expect(state.tasks.find(t=>t.taskId===taskId)?.state).toBe("completed");
+    expect(state.tasks.filter(t=>["development_pattern","development_cutting"].includes(t.taskKind))).toHaveLength(2);
+    for(const task of [paper,cut])expect(task).toMatchObject({state:"pending",assigneeId:null,enteredAt:null,dueAt:null});
+    expect(state.facts.filter(f=>f.kind==="核配通过")).toHaveLength(1);
+    await expect(execution.check(clerk(),id,input,randomUUID())).rejects.toMatchObject({statusCode:409});
+    await expect(tasks.read(worker(),paper.taskId)).rejects.toMatchObject({statusCode:404});
+    await expect(tasks.reassign(worker(),paper.taskId,other,randomUUID())).rejects.toMatchObject({statusCode:403});
+    const assignedAfter=Date.now();
+    await tasks.reassign(boss(),paper.taskId,other,randomUUID());
+    const assigned=await tasks.read(worker(),paper.taskId);
+    expect(assigned).toMatchObject({state:"ready",assigneeId:other,slaHours:48});
+    expect(new Date(assigned.enteredAt!).getTime()).toBeGreaterThanOrEqual(assignedAfter);
+    await tasks.reassign(clerk(),paper.taskId,other,randomUUID());
+    expect(await tasks.read(worker(),paper.taskId)).toMatchObject({enteredAt:assigned.enteredAt,dueAt:assigned.dueAt});
+    await execution.complete(worker(),id,{taskId:paper.taskId,note:"TEST 纸样完成",attachmentIds:[]},randomUUID());
+    expect(await tasks.read(boss(),cut.taskId)).toMatchObject({state:"pending",assigneeId:null,enteredAt:null});
+    await tasks.reassign(boss(),cut.taskId,other,randomUUID());
+    expect(await tasks.read(worker(),cut.taskId)).toMatchObject({state:"ready",slaHours:4});
+    expect((await execution.read(boss(),id)).dispatch).toBeNull();
+  });
   it("preassigns without starting clocks, rejects main-material bypass, then activates only paper before cutting",async()=>{
     const {id,taskId,materialId}=await prepare();
     expect((await execution.read(clerk(),id)).tasks).toHaveLength(1);
@@ -92,8 +118,30 @@ run("P06 development execution PostgreSQL", () => {
     await execution.complete(worker(),id,{taskId:cut.taskId,note:"裁板交出",attachmentIds:[]},randomUUID());
     expect((await execution.read(worker(),id)).facts.map(f=>f.kind)).toEqual(["核配通过","纸样完成","裁板完成"]);
   });
-  it("keeps failed feedback out of production progress and gives recheck no extra 4h",async()=>{
-    const {id,taskId,materialId,version}=await prepare(true);
+  it("assigns already-created waiting tasks through the existing authorized dispatch entry",async()=>{
+    const {id,taskId,materialId}=await prepare(false,"无",false);
+    await execution.check(clerk(),id,{taskId,result:"通过",note:"",items:checks(materialId)},randomUUID());
+    await execution.dispatch(clerk(),id,{expectedVersion:0,patternWorkerId:other,cuttingWorkerId:other,sewingWorkerId:other},randomUUID());
+    const state=await execution.read(boss(),id),paper=state.tasks.find(t=>t.taskKind==="development_pattern")!,cut=state.tasks.find(t=>t.taskKind==="development_cutting")!;
+    expect(paper).toMatchObject({state:"ready",assigneeId:other});
+    expect(cut).toMatchObject({state:"pending",assigneeId:other,enteredAt:null});
+    expect(state.tasks.filter(t=>["development_pattern","development_cutting"].includes(t.taskKind))).toHaveLength(2);
+    await execution.complete(worker(),id,{taskId:paper.taskId,note:"",attachmentIds:[]},randomUUID());
+    expect(await tasks.read(worker(),cut.taskId)).toMatchObject({state:"ready",assigneeId:other});
+  });
+  it("does not overwrite an existing task owner through first-time preassignment",async()=>{
+    const {id,taskId,materialId}=await prepare(false,"无",false),replacement=randomUUID();
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST replacement',true)",[replacement]);
+    await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'pattern_room_worker')",[replacement]);
+    await execution.check(clerk(),id,{taskId,result:"通过",note:"",items:checks(materialId)},randomUUID());
+    const paper=(await execution.read(boss(),id)).tasks.find(t=>t.taskKind==="development_pattern")!;
+    await tasks.reassign(boss(),paper.taskId,other,randomUUID());
+    await expect(execution.dispatch(clerk(),id,{expectedVersion:0,patternWorkerId:replacement,cuttingWorkerId:other,sewingWorkerId:other},randomUUID())).rejects.toThrow("对应任务使用改派");
+    expect((await tasks.read(boss(),paper.taskId)).assigneeId).toBe(other);
+    expect((await execution.read(boss(),id)).dispatch).toBeNull();
+  });
+  it.each([true,false])("keeps failed feedback out of production progress and gives recheck no extra 4h (preassigned=%s)",async(preassigned)=>{
+    const {id,taskId,materialId,version}=await prepare(true,"无",preassigned);
     await execution.check(clerk(),id,{taskId,result:"缺项退回",note:"主布实物未到",items:checks(materialId,false)},randomUUID());
     const supply=(await execution.read(actor(),id)).tasks.find(t=>t.taskKind==="development_material_supply")!;
     expect(supply.routeProgress.completed).toBe(0);
@@ -112,6 +160,20 @@ run("P06 development execution PostgreSQL", () => {
 
     expect((await tasks.read(clerk(),taskId)).slaHours).toBe(4);
     await execution.check(clerk(),id,{taskId:recheck.taskId,result:"通过",note:"缺项已补",items:checks(materialId)},randomUUID());
+    const paper=(await execution.read(boss(),id)).tasks.find(t=>t.taskKind==="development_pattern")!;
+    expect(paper.state).toBe(preassigned?"ready":"pending");
+    if(!preassigned)expect(paper).toMatchObject({assigneeId:null,enteredAt:null,dueAt:null});
+  });
+  it("uses fixed material categories despite custom labels and does not require accessory checks",async()=>{
+    const id=await source(),document=await ready(),main=randomUUID(),secondary=randomUUID(),accessory=randomUUID();
+    const material=(materialId:string,category:"主布"|"配布"|"辅料",label:string)=>({materialId,category,label,supplier:"",name:"测试材料",width:"",weight:"",composition:"",consumption:"",color:"黑",specification:"",quantity:"1",requiredThisRound:true,available:true,expectedDate:null});
+    document.materials=[material(main,"主布","自定义面料"),material(secondary,"配布","罗纹"),material(accessory,"辅料","拉链")];
+    const saved=await development.save(actor(),id,{expectedVersion:0,document},randomUUID());
+    const sheet=await development.publish(actor(),id,saved.version,randomUUID());
+    const input={taskId:sheet.taskId!,result:"通过" as const,note:"",items:checks(main)};
+    await expect(execution.check(clerk(),id,input,randomUUID())).rejects.toThrow("罗纹");
+    await execution.check(clerk(),id,{...input,items:[...checks(main),...checks(secondary)]},randomUUID());
+    expect((await execution.read(boss(),id)).facts.filter(f=>f.kind==="核配通过")).toHaveLength(1);
   });
   it("requires craft sample before paper completion and rejects unrelated operators",async()=>{
     const {id,taskId,materialId}=await prepare(false,"印花");await execution.check(clerk(),id,{taskId,result:"通过",note:"",items:checks(materialId)},randomUUID());
