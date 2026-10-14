@@ -1,3 +1,4 @@
+import { SearchableSelect } from "./search-select.js";
 import {LazyHistoryDetails} from "./lazy-history-details.js";
 import {readSupplierWorkspaceQuery,supplierWorkspaceSearch} from "./supplier-workspace-query.js";
 import { SupplierOnboardingPage } from "./supplier-onboarding-page.js";
@@ -287,9 +288,9 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
             <select value={status} onChange={(event) => setStatus(event.target.value as typeof status)} aria-label="启用状态">
               <option value="active">仅启用</option><option value="inactive">仅停用</option><option value="all">全部状态</option>
             </select>
-            {mode === "directory" ? <select value={craft} onChange={event => setCraft(event.target.value)} aria-label="工艺">
+            {mode === "directory" ? <SearchableSelect value={craft} onChange={event => setCraft(event.target.value)} aria-label="工艺">
               <option value="">全部工艺</option>{crafts.map(value => <option key={value} value={value}>{value}</option>)}
-            </select> : <select value={completeness} onChange={event => setCompleteness(event.target.value as typeof completeness)} aria-label="资料完整度">
+            </SearchableSelect> : <select value={completeness} onChange={event => setCompleteness(event.target.value as typeof completeness)} aria-label="资料完整度">
               <option value="all">全部资料</option><option value="missing">有缺项</option><option value="complete">完整</option>
             </select>}
           </div>

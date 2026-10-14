@@ -1,3 +1,5 @@
+import { SearchableSelect } from "./search-select.js";
+import { factoryReceiptKey, loadFactoryReceiptOptions } from "./factory-receipt-options.js";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { ProductionPilotListSchema,ProductionExpectedReceiptsSchema,ProductionReceivingSummarySchema,type ProductionReceivingSummary } from "@dx-rework/contracts";
@@ -41,12 +43,12 @@ export function ProductionExpectedPicker({value,onSelect,disabled=false,cuttingO
  </Surface>;
 }
 export function FactoryReceiptSelector({cuttingOrderId,shipment,onSelect,disabled=false}:{cuttingOrderId:string;shipment:ProductionReceivingSummary|null;onSelect:(shipment:ProductionReceivingSummary|null)=>void;disabled?:boolean}){
- const[page,setPage]=useState(1),[data,setData]=useState<z.infer<typeof ProductionExpectedReceiptsSchema>|null>(null),[error,setError]=useState('');
- useEffect(()=>{const c=new AbortController();void read(`expected-receipts?${new URLSearchParams({cuttingOrderId,page:String(page)})}`,ProductionExpectedReceiptsSchema,c.signal).then(d=>{setData(d);setError('');}).catch(e=>{if(!c.signal.aborted)setError(e.message);});return()=>c.abort();},[cuttingOrderId,page]);
- const key=(s:ProductionReceivingSummary)=>`${s.productionOrderId}:${s.factoryDecisionId??'original'}`;
+ const[items,setItems]=useState<ProductionReceivingSummary[]|null>(null),[error,setError]=useState('');
+ useEffect(()=>{const c=new AbortController();setItems(null);setError('');void loadFactoryReceiptOptions(page=>read(`expected-receipts?${new URLSearchParams({cuttingOrderId,page:String(page)})}`,ProductionExpectedReceiptsSchema,c.signal),c.signal).then(setItems).catch(e=>{if(!c.signal.aborted)setError(e.message);});return()=>c.abort();},[cuttingOrderId]);
  if(error)return <p role="alert">本次到货加工厂读取失败：{error}</p>;
- if(!data||!data.totalCount||(data.totalCount===1&&!data.items[0]?.factoryDecisionId))return null;
- return <label className="receiving-field">本次到货加工厂<select aria-label="本次到货加工厂" disabled={disabled} value={shipment?key(shipment):''} onChange={e=>onSelect(data.items.find(s=>key(s)===e.target.value)??null)}><option value="">请选择本次发货厂</option>{data.items.map(s=><option key={key(s)} value={key(s)}>{s.supplierName} · 合同 {s.contractNumber} · 已发 {s.expectedQuantity} 件</option>)}</select>{data.totalCount>15?<ListPagination page={page} totalPages={Math.ceil(data.totalCount/15)} onPageChange={setPage} ariaLabel="本裁单发货厂分页"/>:null}</label>;
+ if(!items)return <p role="status">正在读取本裁单全部加工厂候选…</p>;
+ if(!items.length||(items.length===1&&!items[0]?.factoryDecisionId))return null;
+ return <label className="receiving-field">本次到货加工厂<SearchableSelect aria-label="本次到货加工厂" disabled={disabled} value={shipment?factoryReceiptKey(shipment):''} onChange={e=>onSelect(items.find(s=>factoryReceiptKey(s)===e.target.value)??null)}><option value="">请选择本次发货厂</option>{items.map(s=><option key={factoryReceiptKey(s)} value={factoryReceiptKey(s)}>{s.supplierName} · 合同 {s.contractNumber} · 已发 {s.expectedQuantity} 件</option>)}</SearchableSelect></label>;
 }
 export function ProductionReceiptSummary({productionOrderId,refreshKey,factoryDecisionId}:{productionOrderId:string;factoryDecisionId?:string|null|undefined;refreshKey?:string|undefined}){
  const [data,setData]=useState<ProductionReceivingSummary|null>(null),[error,setError]=useState("");
