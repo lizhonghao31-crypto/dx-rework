@@ -1,10 +1,11 @@
+import * as snapshotReads from "../../apps/api/src/production-platform/journey-snapshot-reads.js";
 import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { applyDigitalPoDateFixture } from "../helpers/digital-po-date-fixture.js";
 import { DigitalCockpitQuery } from "../../apps/api/src/production-platform/cockpit-query.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it,vi } from "vitest";
 import { DevelopmentExecutionService } from "../../apps/api/src/production-platform/development-execution-service.js";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
@@ -288,6 +289,31 @@ run("P06 development execution PostgreSQL", () => {
     await execution.report(merchant,id,{recommendation:"正常",note:"主跟单跟进",attachmentIds:[file]},randomUUID());
     await database.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=$1",[primary]);
     await expect(execution.authorizeUpload(merchant,id)).rejects.toMatchObject({statusCode:404});
+  });
+
+  it("R2 reuses material and policy reads only inside one actor's read-only snapshot",async()=>{
+    const {id,taskId,materialId}=await prepare();
+    await execution.check(clerk(),id,{taskId,result:"通过",note:"TEST snapshot",items:checks(materialId)},randomUUID());
+    const statements:string[]=[];
+    const measured={connect:async()=>{
+      const client=await database.connect();
+      return new Proxy(client,{get(target,key){
+        if(key==='query')return (...args:unknown[])=>{if(typeof args[0]==='string')statements.push(args[0]);return Reflect.apply(target.query,target,args);};
+        const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
+      }});
+    }} as unknown as pg.Pool;
+    const measuredExecution=new DevelopmentExecutionService(measured,true);
+    const disabled=vi.spyOn(snapshotReads,'reuseJourneySnapshotReads').mockImplementation(client=>client);
+    let baseline:Awaited<ReturnType<DevelopmentExecutionService['read']>>;
+    try{baseline=await measuredExecution.read(boss(),id);}finally{disabled.mockRestore();}
+    const baselineCount=statements.length;statements.length=0;
+    const result=await measuredExecution.read(boss(),id);
+    expect(result).toEqual(baseline!);expect(statements.length).toBeLessThan(baselineCount);
+    expect(statements[0]).toBe('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');expect(statements.at(-1)).toBe('COMMIT');
+    const optimizedCount=statements.length;
+    const workerResult=await measuredExecution.read(worker(),id);
+    expect(workerResult.tasks.some(task=>task.taskKind==='development_materials')).toBe(false);
+    console.info(JSON.stringify({evidence:'R2 execution SQL count',baseline:baselineCount,optimized:optimizedCount}));
   });
 
 });
