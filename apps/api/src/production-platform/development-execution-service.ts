@@ -201,7 +201,16 @@ export class DevelopmentExecutionService {
     });
   }
   async route(actor:TrustedActorContext,sourceId:string,input:DevelopmentRouteAction,key:string){
-    return this.command(actor,sourceId,"route",key,input,async db=>{await this.fabricReady(db,sourceId);const result=await new DevelopmentRouteService(this.database,this.patternOrders).complete(db,actor,sourceId,input,key);
+    return this.command(actor,sourceId,"route",key,input,async db=>{await this.fabricReady(db,sourceId);
+      if(input.attachmentIds?.length){
+        await this.authorizeSewingUpload(actor,sourceId,input.taskId,db);
+        for(const attachmentId of input.attachmentIds)if(!(await db.query("SELECT 1 FROM digital_development_upload_purposes WHERE source_id=$1 AND attachment_id=$2 AND purpose='车板成果' AND task_id=$3",[sourceId,attachmentId,input.taskId])).rowCount)fail("成果附件不属于本次车板任务，请核对轮次");
+        const sheet=await this.forms().read(actor,sourceId,db);
+        // bindFiles only establishes the original technical download binding; the
+        // authoritative purpose remains 车板成果 and the route fact records task/round.
+        await this.forms().bindFiles(db,actor,sourceId,{...sheet.document!,files:input.attachmentIds.map(attachmentId=>({attachmentId,kind:'工艺开发板'}))});
+      }
+      const result=await new DevelopmentRouteService(this.database,this.patternOrders).complete(db,actor,sourceId,input,key);
       if(input.result==="退回"){
         const task=await this.task(db,sourceId,input.taskId),sheet=await this.forms().read(actor,sourceId,db);
         if(!input.returnNodes?.length)fail("请选择退回的问题节点");
@@ -236,9 +245,15 @@ export class DevelopmentExecutionService {
   private async assertUploadPurpose(db:Pick<Pool,"query">,sourceId:string,ids:string[],purpose:"工艺开发板"|"面料报告"){
     for(const attachmentId of ids)if(!(await db.query("SELECT 1 FROM digital_development_upload_purposes WHERE source_id=$1 AND attachment_id=$2 AND purpose=$3",[sourceId,attachmentId,purpose])).rowCount)fail(`附件用途不符，请在${purpose}栏重新上传`);
   }
-  async recordUploadPurpose(actor:TrustedActorContext,sourceId:string,attachmentId:string,purpose:"工艺开发板"|"面料报告"){
+  async authorizeSewingUpload(actor:TrustedActorContext,sourceId:string,taskId:string,db:Pick<Pool,"query">=this.database){
+    await new DigitalProductionAccessPolicy(db).assert(actor,'task',taskId,'execute');
+    const task=(await db.query("SELECT t.state,a.task_kind FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE task_id=$1 AND source_id=$2",[taskId,sourceId])).rows[0];
+    if(!task||task.task_kind!=='development_sewing'||task.state!=='ready')fail('当前车板任务不具备成果上传条件');
+  }
+  async recordUploadPurpose(actor:TrustedActorContext,sourceId:string,attachmentId:string,purpose:"工艺开发板"|"面料报告"|"车板成果",taskId?:string){
     await this.authorizeUpload(actor,sourceId);
-    const result=await this.database.query("INSERT INTO digital_development_upload_purposes(attachment_id,source_id,purpose,uploaded_by) SELECT attachment_id,$2,$3,$4 FROM attachments WHERE attachment_id=$1 AND uploaded_by=$4 AND entity_type IS NULL ON CONFLICT DO NOTHING RETURNING attachment_id",[attachmentId,sourceId,purpose,actor.actorId]);
+    if(purpose==='车板成果'){if(!taskId)fail('车板成果缺少任务');await this.authorizeSewingUpload(actor,sourceId,taskId!);}else if(taskId)fail('附件用途与任务不符');
+    const result=await this.database.query("INSERT INTO digital_development_upload_purposes(attachment_id,source_id,purpose,uploaded_by,task_id) SELECT attachment_id,$2,$3,$4,$5 FROM attachments WHERE attachment_id=$1 AND uploaded_by=$4 AND entity_type IS NULL ON CONFLICT DO NOTHING RETURNING attachment_id",[attachmentId,sourceId,purpose,actor.actorId,taskId??null]);
     if(!result.rowCount)fail("上传用途登记失败，请重新上传");
   }
   async authorizeFinalize(actor:TrustedActorContext,sourceId:string,attachmentId:string){

@@ -9,7 +9,7 @@ import { DEVELOPMENT_VIEWS, DevelopmentWorkspaceFilterSchema, type DevelopmentWo
 import type { DigitalCustomer, DigitalOrder } from "@dx-rework/contracts/digital-production";
 import type { DevelopmentSheet } from "@dx-rework/contracts/digital-development";
 import { digitalRequest } from "./digital-production-api.js";
-import { DigitalDevelopmentPanel } from "./digital-development-panel.js";
+import {OrderDocumentContainer} from "./order-document-container.js";
 import { DevelopmentCreateForm, type DevelopmentCreateIntent } from "./digital-development-create-form.js";
 import type { DigitalAccessOptions } from "./digital-production-access-panel.js";
 import { navigateInternalPage } from "./internal-navigation.js";
@@ -72,7 +72,7 @@ export function DigitalDesignerWorkspace() {
   const select = (id: string) => {setSelectedId(id); setCollapsed(false); window.history.replaceState(window.history.state, "", contextUrl({}, filter, id));};
   const selected = result?.items.find(item => item.journey.id === selectedId), sheet = selected ? sheets[selected.journey.id] : undefined;
   const openUrl = (item: DevelopmentWorkspaceItem) => contextUrl({development:item.journey.sourceId!, ...(item.journey.selectedRound && item.journey.sourceVersion ? {round:String(item.journey.selectedRound)} : {})}, filter, item.journey.id);
-  if (editor) return <div className="development-workspace pattern-orders digital-production"><DigitalDevelopmentPanel sourceId={editor} {...(round ? {initialRound: round} : {})} onClose={() => {void navigateInternalPage(contextUrl()).then(() => setRefresh(value => value + 1));}}/></div>;
+  if (editor) return <div className="development-workspace pattern-orders digital-production"><OrderDocumentContainer key={`${editor}:${round}`} initial={{kind:"development",id:editor,version:round}} onClose={() => {void navigateInternalPage(contextUrl()).then(() => setRefresh(value => value + 1));}}/></div>;
   if (intent && options) return <div className="development-workspace development-golden dx-production-refined development-create-page">
     <div className="development-breadcrumb">产品开发 › <strong>新建开发订单</strong></div>
     <DevelopmentCreateForm key={confirm?.journey.id ?? "new-development"} intent={intent} {...(confirm ? {source: confirm.journey,...(sheets[confirm.journey.id]?.document?.customerOrderDraft?.withOrder?{existingDraft:sheets[confirm.journey.id]!}:{})} : {})} customers={options.customers} minimumDate={options.minimumInitialCustomerDate} onIntentChange={setIntent} onCancel={() => {setIntent(null); setConfirm(null); setRefresh(value => value + 1);}} onCreated={sourceId => {void navigateInternalPage(contextUrl({development:sourceId}));}}/>

@@ -5,7 +5,8 @@ import ts from "typescript";
 describe("development file selection survives asynchronous upload limits", () => {
   for (const [path, expected] of [
     ["development-document-fields.tsx", 1],
-    ["digital-development-execution-panel.tsx", 2],
+    ["development-result-upload.tsx", 1],
+    ["development-fabric-report.tsx", 1],
   ] as const) {
     it(path, async () => {
       const source = ts.createSourceFile(path, readFileSync(`apps/web/src/${path}`, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -35,7 +36,7 @@ describe("development file selection survives asynchronous upload limits", () =>
           pending = (async () => { await limits; uploaded.push(...Array.from(files)); })();
           return pending;
         };
-        const onChange = new Function("upload", `return (${handler})`)(upload);
+        const onChange = new Function("upload", "purpose", `return (${handler})`)(upload,"工艺开发板");
         onChange({ target: input, currentTarget: input });
         expect(liveFiles).toHaveLength(0);
         expect(uploaded).toHaveLength(0);

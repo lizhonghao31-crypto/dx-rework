@@ -3467,6 +3467,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await new DigitalDevelopmentService(database,true).read(worker,ready.sourceId)).sourceId).toBe(ready.sourceId);
     expect(limited.budget).toEqual({state:'unavailable'});expect(JSON.stringify(limited)).not.toMatch(/salePrice|unitPrice|attachmentId/);
     const stranger=await budgetFixture();await expect(tasks.documents(stranger.designer,taskId)).rejects.toMatchObject({statusCode:404});
+    expect(await tasks.resourceDocuments(root,'source',ready.sourceId)).toEqual({development:{state:'available',id:ready.sourceId},instruction:{state:'available',id:ready.id},budget:{state:'available',id:ready.id}});
+    expect((await tasks.resourceDocuments(worker,'source',ready.sourceId)).budget).toEqual({state:'unavailable'});
+    await expect(tasks.resourceDocuments(stranger.designer,'source',ready.sourceId)).rejects.toMatchObject({statusCode:404});
+    await expect(tasks.resourceDocuments(stranger.designer,'order',ready.id)).rejects.toMatchObject({statusCode:404});
     await expect(fixture.budget.read(worker,ready.id)).rejects.toMatchObject({statusCode:404});
     const draftClient=await database.connect();
     try{

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@dx-rework/ui";
+import { createPortal } from "react-dom";
 import { flushSync } from "react-dom";
 import { NavigationIcon } from "./navigation-icons.js";
 import "./document-editor.css";
@@ -10,9 +11,15 @@ export function DocumentChapterScope({chapter,children}:{chapter:string;children
   useEffect(()=>{const before=()=>flushSync(()=>setPrinting(true)),after=()=>setPrinting(false);window.addEventListener('beforeprint',before);window.addEventListener('afterprint',after);return()=>{window.removeEventListener('beforeprint',before);window.removeEventListener('afterprint',after);};},[]);
   return <DocumentChapterContext.Provider value={printing?null:chapter}>{children}</DocumentChapterContext.Provider>;
 }
+const DocumentToolbarTarget=createContext<HTMLElement|null>(null);
+export function DocumentToolbarScope({target,children}:{target:HTMLElement|null;children:ReactNode}){
+  return <DocumentToolbarTarget.Provider value={target}>{children}</DocumentToolbarTarget.Provider>;
+}
 export type DocumentIssue = { id: string; label: string; message: string };
 export function DocumentToolbar({ title, status, children }: { title: string; status: string; children: ReactNode }) {
-  return <div className="dx-doc-toolbar"><div><NavigationIcon name="FileText" size="title" /><h1>{title}</h1><span className="dx-doc-status" role="status">{status}</span></div><div className="dx-doc-actions">{children}</div></div>;
+  const target=useContext(DocumentToolbarTarget);
+  const toolbar=<div className="dx-doc-toolbar"><div><NavigationIcon name="FileText" size="title" /><h1>{title}</h1><span className="dx-doc-status" role="status">{status}</span></div><div className="dx-doc-actions">{children}</div></div>;
+  return target?createPortal(toolbar,target):toolbar;
 }
 export function DocumentAnchors({ sections }: { sections: Array<{ id: string; label: string }> }) {
   const chapter=useContext(DocumentChapterContext);

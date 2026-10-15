@@ -15,6 +15,10 @@ export function registerDigitalTaskRoutes(app: FastifyInstance, dependencies: Di
   };
   const key = (request: FastifyRequest) => typeof request.headers["idempotency-key"] === "string" ? request.headers["idempotency-key"] : "";
   const id = (request: FastifyRequest) => parse(z.string().uuid(), (request.params as Record<string, unknown>).taskId);
+  app.get("/digital-production/document-directory/:kind/:id",async request=>{
+    const params=parse(z.object({kind:z.enum(['source','order']),id:z.string().uuid()}).strict(),request.params);
+    return service.resourceDocuments(await actor(request),params.kind,params.id);
+  });
   app.post("/digital-production/tasks/:taskId/priority", async request => service.prioritize(await actor(request), id(request), parse(z.object({ priority: z.enum(["normal", "urgent"]) }).strict(), request.body).priority, key(request)));
   app.get("/digital-production/tasks", async request => service.list(await actor(request), parse(z.object({ page: z.coerce.number().int().min(1).max(100000).default(1) }).strict(), request.query).page));
   app.get("/digital-production/tasks/:taskId", async request => service.read(await actor(request), id(request)));

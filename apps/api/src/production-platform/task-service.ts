@@ -1,4 +1,4 @@
-import {taskDocuments} from "./task-documents.js";
+import {taskDocuments,resourceDocuments} from "./task-documents.js";
 import {developmentTaskBlockers} from "./development-task-blockers.js";
 import {materialReadiness} from "./development-material-readiness.js";
 import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
@@ -156,6 +156,11 @@ export class DigitalProductionTaskService {
   async documents(actor:TrustedActorContext,id:string){
     const db=await this.database.connect();
     try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');const result=await taskDocuments(db,actor,id);await db.query('COMMIT');return result;}
+    catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
+  }
+  async resourceDocuments(actor:TrustedActorContext,kind:'source'|'order',id:string){
+    const db=await this.database.connect();
+    try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');const result=await resourceDocuments(db,actor,kind,id);await db.query('COMMIT');return result;}
     catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
   // Only omission denotes the server's live business action. Explicit dates remain backreports.

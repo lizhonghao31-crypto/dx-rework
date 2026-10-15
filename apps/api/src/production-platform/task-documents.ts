@@ -30,3 +30,22 @@ export async function taskDocuments(db:PoolClient,actor:TrustedActorContext,id:s
  }
  return result;
 }
+
+/** Non-task legacy entries share the same access policy, including visible task sources. */
+export async function resourceDocuments(db:PoolClient,actor:TrustedActorContext,kind:'source'|'order',id:string){
+ const policy=new DigitalProductionAccessPolicy(db);
+ let sourceId:string|null=null,orderId:string|null=null;
+ if(kind==='order'){
+  await policy.assert(actor,'order',id,'technical');
+  orderId=id;sourceId=(await db.query('SELECT source_id FROM digital_production_orders WHERE production_order_id=$1',[id])).rows[0]?.source_id??null;
+ }else{
+  let allowed=await policy.allowed(actor,'source',id,'technical');
+  if(!allowed){for(const task of (await db.query('SELECT task_id FROM digital_production_task_access WHERE source_id=$1',[id])).rows){if(await policy.allowed(actor,'task',task.task_id,'technical')){allowed=true;break;}}}
+  if(!allowed)digitalNotFound();
+  sourceId=id;orderId=(await db.query('SELECT production_order_id FROM digital_production_orders WHERE source_id=$1',[id])).rows[0]?.production_order_id??null;
+ }
+ const sourceAllowed=sourceId&&(kind==='source'||await policy.allowed(actor,'source',sourceId,'technical'));
+ return {development:sourceAllowed?{state:'available' as const,id:sourceId!}:{state:sourceId?'unavailable' as const:'not_applicable' as const},
+  instruction:orderId?(await policy.allowed(actor,'order',orderId,'technical')?{state:'available' as const,id:orderId}:{state:'unavailable' as const}):{state:'not_applicable' as const},
+  budget:orderId?(await policy.allowed(actor,'order',orderId,'budget')?{state:'available' as const,id:orderId}:{state:'unavailable' as const}):{state:'not_applicable' as const}};
+}
