@@ -34,5 +34,29 @@ export async function processBrowser({page,context,origin,database,root,actors,s
   await context.clearCookies();await context.addCookies([{name:'dx_rework_session',value:actors.pattern_room_worker.actorId,url:origin}]);await page.goto(`${origin}/ui/digital-production?task=${bulkTaskId}`);await page.getByLabel('大货工序工作台').waitFor();await page.getByRole('heading',{name:'大货纸样与唛架办理',exact:true}).waitFor();await page.getByRole('heading',{name:'本轮事实',exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'返回来源',exact:true}).count(),1);assert.equal(await page.locator('input[type=file]').count(),0);
   await page.screenshot({path:`${out}/process-bulk-pattern.png`});checks.push('PR05 bulk paper/marker uses native preparation service and adds no upload requirement');
+  const returnTo='/ui/digital-pattern-room?state=all&page=3&round=2',orderId=(await service.read(root,bulkTaskId)).orderId;
+  const client=await database.connect();let active;
+  try{await client.query('BEGIN');active=(await service.createWithClient(client,root,{resource:{kind:'order',id:orderId},kind:'bulk_pattern',routeId:randomUUID(),routeVersion:1,occurrence:101,assigneeId:actors.pattern_room_worker.actorId})).taskId;
+    for(const row of (await client.query("SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1 AND stage='activation'",[active])).rows)await service.setConditionWithClient(client,root,active,row.condition_key,true,undefined,'TEST fixture activation');
+    await client.query('COMMIT');
+  }catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}
+  await context.clearCookies();await context.addCookies([{name:'dx_rework_session',value:root.actorId,url:origin}]);
+  const taskUrl=`${origin}/ui/digital-production?task=${active}&returnTo=${encodeURIComponent(returnTo)}`;
+  await page.goto(taskUrl);await page.getByLabel('当前任务辅助动作').waitFor();
+  await page.locator('summary').filter({hasText:/改派当前.*优先级/}).click();
+  await page.getByRole('button',{name:'改派当前岗位',exact:true}).waitFor();
+  await page.getByRole('button',{name:'设为优先处理',exact:true}).click();await page.getByRole('button',{name:'恢复普通优先级',exact:true}).waitFor();
+  assert.equal((await service.read(root,active)).priority,'urgent');
+  assert.equal(await page.getByText('报告问题 / 恢复办理',{exact:true}).count(),1);
+  assert.equal(await page.getByText('暂停 / 恢复 / 取消后续任务',{exact:true}).count(),1);
+  await page.getByRole('button',{name:'操作记录',exact:true}).click();
+  const correction=page.getByRole('link',{name:'核实原任务时间',exact:true});await correction.waitFor();const correctionUrl=new URL(await correction.getAttribute('href'),origin);
+  assert.equal(correctionUrl.searchParams.get('returnTo'),returnTo);assert.equal(correctionUrl.searchParams.get('taskView'),'correct');
+  await page.goto(taskUrl+'&taskView=read');await page.getByLabel('大货工序工作台').waitFor();assert.equal(await page.getByLabel('当前任务辅助动作').count(),0);
+  const dev=(await service.list(root,1)).items.find(t=>t.sourceId===sourceId);
+  assert(dev);await page.goto(`${origin}/ui/digital-production?task=${dev.taskId}&returnTo=${encodeURIComponent(returnTo)}`);await page.getByLabel('工序工作台样板').waitFor();await page.getByRole('button',{name:'操作记录',exact:true}).click();await correction.waitFor();
+  assert.equal(new URL(await correction.getAttribute('href'),origin).searchParams.get('returnTo'),returnTo);
+  checks.push('PR05 review fixes: bulk authorized auxiliary commands, actual priority write, read-only exclusion, both correction links preserve return context');
+
  }
 }

@@ -56,3 +56,7 @@
 - 未测：生产/Acceptance 实单、真实 OSS/钉钉交付、移动浏览器、所有工序逐一浏览器完整提交。未作生产业务验收声明。真实用户最终视觉验收仍由用户执行。
 
 最终 Head 的 Full Gate、一次 GitHub Codex Review、merge SHA 以 PR 记录为准；本文件不预先宣称门禁或合并成功。
+
+## 唯一 Review 收口
+
+Review 5536285145（Head447e2303）提出两项真实P2：大货任务缺辅助动作/核时入口，开发核时链接丢失来源上下文。修复复用同一 `TaskWorkbenchActions`，只读页不显示写操作；两种工作台核时链接均以当前URL修改 task/taskView，保留 returnTo 等查询。新增浏览器定向验证原优先级实际写入、授权动作入口、只读排除，以及两种工作台核时上下文。修复后须以新Head Full Gate为最终证据，不再触发第二次Review。
