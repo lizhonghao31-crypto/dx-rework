@@ -9,10 +9,13 @@ export const DEVELOPMENT_MEASUREMENTS = {
 } as const;
 export const DevelopmentMaterialSchema = z.object({
   materialId: z.string().uuid(), category: z.enum(["主布", "配布", "辅料"]), label: short,
+  auxiliaryKind: z.enum(["普通辅料", "拉链", "扁机"]).optional(),
   supplier: short, name: short, width: short, weight: short, composition: short, consumption: short,
   color: short, specification: short, quantity: short, requiredThisRound: z.boolean(),
   available: z.boolean(), expectedDate: z.iso.date().nullable(),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (value.auxiliaryKind && value.category !== "辅料") context.addIssue({code:"custom",path:["auxiliaryKind"],message:"仅辅料可以设置辅料类型"});
+});
 export const DevelopmentDocumentSchema = z.object({
   customerOrderDraft: z.object({withOrder:z.boolean(),order:InitialCustomerOrderDraftSchema}).strict().optional(),
   template: z.enum(["上衣", "裤子"]), quantity: z.number().int().min(1).max(100000).nullable(),
@@ -41,6 +44,10 @@ export const DevelopmentMaterialEventSchema = z.object({ expectedMaterialRevisio
 });
 export type DevelopmentDocument = z.infer<typeof DevelopmentDocumentSchema>;
 export type DevelopmentMaterial = z.infer<typeof DevelopmentMaterialSchema>;
+/** Legacy/unclassified auxiliaries remain ordinary; never infer exceptions from a name. */
+export function isEarlyMaterialException(material: DevelopmentMaterial): boolean {
+  return material.category === "辅料" && (material.auxiliaryKind === "拉链" || material.auxiliaryKind === "扁机");
+}
 export type DevelopmentMaterialEvent = z.infer<typeof DevelopmentMaterialEventSchema>;
 export function developmentPublishErrors(document: DevelopmentDocument): string[] {
   const errors: string[] = [];
@@ -59,6 +66,7 @@ export function developmentPublishErrors(document: DevelopmentDocument): string[
   return errors;
 }
 export type DevelopmentSheet = {
+  materialReadiness?:Array<{materialId:string;available:boolean;verified:boolean;missing:string[];evidenceId:string|null}>;
   productionOrderId?:string|null;
   sourceId: string; designStyleNo: string; temporaryStyleNo: string | null; customerCode: string | null;
   developmentType: string; designerName: string; version: number; status: "draft" | "published";

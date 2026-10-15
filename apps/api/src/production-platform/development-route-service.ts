@@ -8,7 +8,8 @@ import {DigitalDevelopmentService} from './development-service.js';
 import {DigitalProductionTaskService} from './task-service.js';
 import {DigitalProductionAccessPolicy,digitalNotFound} from './access-policy.js';
 import {DIGITAL_TASK_ROLES,type DigitalTaskKind} from './task-access-repository.js';
-import {developmentRoute,missingSewingMaterials} from './development-route.js';
+import {materialReadiness} from './development-material-readiness.js';
+import {developmentRoute} from './development-route.js';
 const fail=(message:string):never=>{throw new ApplicationError('DEVELOPMENT_ROUTE_CONFLICT',message,409);};
 export type DevelopmentRouteAction={returnNodes?:DevelopmentRevision["affectedNodes"]|undefined;problemCategories?:DevelopmentRevision["categories"]|undefined;craftExecution:'内部'|'外发'|null;taskId:string;note:string;result:'通过'|'退回';nextAssigneeId:string|null;sentDate:string|null;trackingNo:string|null};
 export class DevelopmentRouteService {
@@ -32,10 +33,12 @@ export class DevelopmentRouteService {
  }
  async startRound(db:PoolClient,actor:TrustedActorContext,sourceId:string,kind:DigitalTaskKind,routeId:string,roundNumber:number,authorizingTaskId?:string,predecessorId?:string,nextAssigneeId:string|null=null){
    const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,roundNumber),service=new DigitalProductionTaskService(this.database);
-   const next=await service.createWithClient(db,actor,{resource:{kind:'source',id:sourceId},...(authorizingTaskId?{authorizingTaskId}:{}),kind,routeId,routeVersion:roundNumber,occurrence:roundNumber,assigneeId:await this.recipient(db,sourceId,kind,nextAssigneeId),predecessors:predecessorId?[predecessorId]:[],conditions:kind==='development_sewing'?['pattern_assignment_ready']:[]});
+   const next=await service.createWithClient(db,actor,{resource:{kind:'source',id:sourceId},...(authorizingTaskId?{authorizingTaskId}:{}),kind,routeId,routeVersion:roundNumber,occurrence:roundNumber,assigneeId:await this.recipient(db,sourceId,kind,nextAssigneeId),predecessors:predecessorId?[predecessorId]:[],conditions:kind==='development_sewing'?['pattern_assignment_ready']:kind==='development_cutting'?['materials_ready']:[]});
    if(['development_pattern','development_cutting','development_sewing','development_washing'].includes(kind))await service.setConditionWithClient(db,actor,next.taskId,'handover_received',true,undefined,'本轮已交出');
-   if(kind==='development_pattern'&&(Boolean((await db.query("SELECT 1 FROM digital_development_execution_facts f JOIN digital_production_tasks t ON t.task_id=f.task_id WHERE f.source_id=$1 AND t.route_version=$2 AND f.kind='核配通过'",[sourceId,roundNumber])).rowCount)||sheet.document!.materials.filter(item=>item.requiredThisRound&&item.category!=='辅料').every(item=>item.available||sheet.materialEvents.some(event=>event.materialId===item.materialId&&event.action==='到货'))))await service.setConditionWithClient(db,actor,next.taskId,'materials_ready',true,undefined,'本轮主配料已齐');
-   if(kind==='development_sewing'&&!missingSewingMaterials(sheet.document!,sheet.materialEvents).length)await service.setConditionWithClient(db,actor,next.taskId,'materials_ready',true,undefined,'本轮物料齐备');
+   if(['development_pattern','development_cutting','development_sewing'].includes(kind)){
+     const materialState=await materialReadiness(db,sourceId,roundNumber);
+     await service.setConditionWithClient(db,actor,next.taskId,'materials_ready',kind==='development_sewing'?materialState.sewingReady:materialState.earlyReady,undefined,'依据本轮逐项核验、到料和问题决定');
+   }
    if(kind==='development_sewing'){
      const native=(await db.query(`SELECT to_jsonb(o)->>'status' AS status FROM digital_development_pattern_links l
        JOIN pattern_room_orders o USING(order_id) WHERE l.source_id=$1 AND to_jsonb(o)->>'deleted_at' IS NULL`,[sourceId])).rows[0];
@@ -58,9 +61,19 @@ export class DevelopmentRouteService {
  }
  async releaseSewing(db:PoolClient,actor:TrustedActorContext,sourceId:string){
    const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db);
-   if(missingSewingMaterials(sheet.document!,sheet.materialEvents).length)return;
-   const tasks=(await db.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_sewing' AND t.state='pending' AND t.route_version=$2",[sourceId,sheet.roundNumber??1])).rows;
-   for(const task of tasks)await new DigitalProductionTaskService(this.database).setConditionWithClient(db,actor,task.task_id,'materials_ready',true,undefined,'设计师确认本轮物料齐备');
+   const roundNumber=sheet.roundNumber??1;
+   const tasks=(await db.query("SELECT t.task_id,t.state,a.task_kind FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind IN ('development_pattern','development_cutting','development_sewing') AND t.state IN ('pending','ready','blocked') AND t.route_version=$2",[sourceId,roundNumber])).rows;
+   if(!tasks.length)return;
+   const readiness=await materialReadiness(db,sourceId,roundNumber),service=new DigitalProductionTaskService(this.database);
+   for(const task of tasks){
+     // Older unfinished cutting tasks did not contain this gate. Add a condition
+     // only to the affected current task; completed history is never rewritten.
+     await db.query("INSERT INTO digital_production_task_conditions(task_id,condition_key,stage) VALUES($1,'materials_ready','activation') ON CONFLICT DO NOTHING",[task.task_id]);
+     const ready=task.task_kind==='development_sewing'?readiness.sewingReady:readiness.earlyReady;
+     const prior=(await db.query("SELECT satisfied FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='materials_ready'",[task.task_id])).rows[0];
+     if(prior.satisfied!==ready||(!ready&&task.state==='ready'))await service.setConditionWithClient(db,actor,task.task_id,'materials_ready',ready,undefined,'本轮材料有效事实重新核实');
+     if(ready)await service.refreshBusinessConditionsWithClient(db,actor,task.task_id);
+   }
  }
  async complete(db:PoolClient,actor:TrustedActorContext,sourceId:string,input:DevelopmentRouteAction,key:string){
    await new DigitalProductionAccessPolicy(db).assert(actor,'task',input.taskId,'execute');
@@ -75,8 +88,8 @@ export class DevelopmentRouteService {
    if(task.task_kind==='development_shipping'&&(!input.sentDate||!input.trackingNo?.trim()))fail('请填写实际寄出日期和快递号');
    if(task.task_kind==='development_shipping'&&input.sentDate&&input.sentDate>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'}))fail('实际寄出日期不能晚于今天');
    if(task.task_kind==='development_sewing'){
-     const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db);
-     if(missingSewingMaterials(sheet.document!,sheet.materialEvents).length)fail('本轮所需物料尚未齐备');
+     const readiness=await materialReadiness(db,sourceId,task.route_version);
+     if(!readiness.sewingReady)fail(readiness.sewingMissing.map(item=>`${item.name}：${item.missing.join('、')}`).join('；')||'问题面料须供应链总监确认允许使用');
    }
    const revision=task.route_version>1?(await db.query('SELECT output_kind FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,task.route_version])).rows[0]:null;
    const nativeRoundId=task.task_kind==='development_confirmation'&&revision?.output_kind!=='工艺布片'?(await db.query("SELECT o.current_round_id FROM digital_development_pattern_links l JOIN pattern_room_orders o USING(order_id) WHERE l.source_id=$1 AND o.deleted_at IS NULL FOR UPDATE OF o",[sourceId])).rows[0]?.current_round_id??null:null;

@@ -17,6 +17,7 @@ export function registerDevelopmentExecutionRoutes(app:FastifyInstance,dependenc
   app.get(base,async request=>({...await service.read(await actor(request),id(request)),qrAvailable:Boolean(dependencies.developmentQrBase)}));
   app.put(`${base}/dispatch`,async request=>service.dispatch(await actor(request),id(request),parse(DevelopmentDispatchSchema,request.body),key(request)));
   app.post(`${base}/check`,async request=>service.check(await actor(request),id(request),parse(DevelopmentCheckSchema,request.body),key(request)));
+  app.post(`${base}/supplement-check`,async request=>service.supplementCheck(await actor(request),id(request),parse(z.object({taskId:z.string().uuid()}).strict(),request.body).taskId,key(request)));
   app.post(`${base}/resubmit`,async request=>service.resubmit(await actor(request),id(request),parse(z.object({taskId:z.string().uuid()}).strict(),request.body).taskId,key(request)));
   app.post(`${base}/complete`,async request=>service.complete(await actor(request),id(request),parse(DevelopmentWorkSchema,request.body),key(request)));
   app.post(`${base}/send-washing`,async request=>{const input=parse(z.object({taskId:z.string().uuid(),note:z.string().trim().max(2000)}).strict(),request.body);return service.sendWashing(await actor(request),id(request),input.taskId,input.note,key(request));});

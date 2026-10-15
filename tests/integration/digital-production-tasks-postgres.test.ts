@@ -95,7 +95,7 @@ run("P03 task lifecycle PostgreSQL", () => {
     for(let n=0;n<21;n++)sources.push(await service.createSource(actor(),DigitalSourceCreateSchema.parse({developmentType:"头版",designStyleNo:`${search}-${n}`,customerCode:"PD"}),randomUUID()));
     const cockpit=new DigitalCockpitQuery(database),query={page:1,search,stage:"development" as const};
     const first=await cockpit.list(actor(),query),second=await cockpit.list(actor(),{...query,page:2});
-    expect(first.total).toBe(21);expect(first.items).toHaveLength(20);expect(second.items).toHaveLength(1);expect(second.total).toBe(21);
+    expect(first.total).toBe(21);expect(first.items).toHaveLength(15);expect(second.items).toHaveLength(6);expect(second.total).toBe(21);
     expect(new Set([...first.items,...second.items].map(row=>row.id)).size).toBe(21);
     expect(first.summary).toEqual(second.summary);expect((await cockpit.list(actor(other),query)).total).toBe(0);
     const access=new DigitalProductionAccessService(database);
