@@ -176,7 +176,8 @@ export class DigitalProductionTaskService {
     if (!updated.rowCount) fail("任务不包含该前置条件");
     await this.event(client, actor, id, this.resource(task), "condition", at, quality, { condition, satisfied, note,...provenance });
     if (!satisfied && task.state === "ready") await client.query("UPDATE digital_production_tasks SET state='blocked',blocked_reason='前置条件未满足' WHERE task_id=$1", [id]);
-    return this.activate(client, actor, id, at, quality);
+    // A negative completion-stage fact must remain blocked even when activation conditions are ready.
+    return satisfied ? this.activate(client, actor, id, at, quality) : false;
   }
   async complete(actor: TrustedActorContext, id: string, input: { occurredAt?: string | null | undefined; note: string }, key: string) {
     return this.transaction(client => this.completeWithClient(client, actor, id, input, key));

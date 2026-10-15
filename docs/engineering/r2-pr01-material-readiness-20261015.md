@@ -42,3 +42,7 @@
 修正一处既有测试的陈旧分页预期：座舱实现已经是每页 15 条，21 条应为 15 + 6；未修改座舱分页实现。
 
 本说明记录代码和测试合同；GitHub 当前 Head 的 Full Gate、Codex Review 与合并结果另以 PR 证据为准。此 PR 不代表部署或线上验收完成。
+
+## Full Gate 业务链补充修复
+
+Head 43cc268c 的 Full Gate 在 P16 业务链发现：完成阶段负向条件写入后，自动恢复仅检查启动条件，立即将 blocked 改回 ready。负向条件现不调用激活；正向恢复仍按原权限、前置条件与时钟规则处理。原失败 sourcing 回归与任务、开发执行三组隔离 PostgreSQL 测试 119 项通过，API typecheck 与修改文件 lint 通过。
