@@ -26,14 +26,3 @@ export function developmentRoute(document: Pick<DevelopmentDocument,'craft'|'was
   route.push('development_tail_check','development_confirmation','development_shipping');
   return route;
 }
-export function missingSewingMaterials(document: DevelopmentDocument, events: ReadonlyArray<{materialId:string;action:string}>): string[] {
-  return document.materials.filter(material=>material.requiredThisRound&&!material.available
-    && !events.some(event=>event.materialId===material.materialId&&(event.action==='到货'||(material.category==='辅料'&&event.action==='确认代用'))))
-    .map(material=>material.label||material.name||'未命名物料');
-}
-/** The original material-supply resubmission gate: auxiliaries are not main/contrast cloth. */
-export function missingMainMaterials(document: DevelopmentDocument, events: ReadonlyArray<{materialId:string;action:string}>): string[] {
-  return document.materials.filter(material=>material.requiredThisRound&&material.category!=='辅料'&&!material.available
-    &&!events.some(event=>event.materialId===material.materialId&&event.action==='到货'))
-    .map(material=>material.label||material.name||'未命名物料');
-}

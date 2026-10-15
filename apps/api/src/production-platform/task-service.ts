@@ -1,3 +1,5 @@
+import {developmentTaskBlockers} from "./development-task-blockers.js";
+import {materialReadiness} from "./development-material-readiness.js";
 import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import {FactoryFlowService} from "./factory-flow-service.js";
 import type { DigitalTaskState, DigitalTimeQuality } from "@dx-rework/contracts/digital-production-tasks";
@@ -87,9 +89,15 @@ export class DigitalProductionTaskService {
   private async activate(client: PoolClient, actor: TrustedActorContext, id: string, occurredAt: string | null, quality: TimeQuality) {
     const task = await this.task(client, id, true);
     if (requiresDevelopmentAssignee(task) && !task.assignee_id) return false;
-    if (task.state !== "pending" || !await this.conditionsReady(client, id)) return false;
+    const restoring=task.state==='blocked'&&task.blocked_reason==='前置条件未满足';
+    if ((task.state !== "pending"&&!restoring) || !await this.conditionsReady(client, id)) return false;
     const lifecycle = (await client.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2", [this.resource(task).kind, this.resource(task).id])).rows[0]?.state;
     if (lifecycle === "paused" || lifecycle === "cancelled") return false;
+    if(restoring){
+      await client.query("UPDATE digital_production_tasks SET state='ready',blocked_reason=NULL WHERE task_id=$1",[id]);
+      await this.event(client,actor,id,this.resource(task),'unblocked',new Date().toISOString(),'现场登记',{note:'业务前置恢复，保留原进入时间'});
+      return true;
+    }
     const facts = (await client.query(`SELECT count(*)::int AS count,bool_or(moment IS NULL) AS has_unknown,max(moment) AS latest_at,
       bool_or(coalesce(quality,'缺失') NOT IN ('现场登记','已核实')) AS has_unverified,bool_and(quality='已核实') AS all_verified FROM (
       SELECT c.occurred_at AS moment,(SELECT e.time_quality FROM digital_production_task_events e
@@ -162,12 +170,14 @@ export class DigitalProductionTaskService {
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
     const task = await this.task(client, id, true);
     if (["completed", "cancelled"].includes(task.state)) fail("已结束任务不能重写条件");
+    if(condition==='pattern_assignment_ready'&&satisfied)await this.refreshDevelopmentMaterialCondition(client,actor,id);
     if (at !== null && (!Number.isFinite(new Date(at).getTime()) || new Date(at).getTime() > Date.now())) fail("条件发生时间无效");
     const updated = await client.query("UPDATE digital_production_task_conditions SET satisfied=$3,occurred_at=$4 WHERE task_id=$1 AND condition_key=$2 RETURNING task_id", [id, condition, satisfied, at]);
     if (!updated.rowCount) fail("任务不包含该前置条件");
     await this.event(client, actor, id, this.resource(task), "condition", at, quality, { condition, satisfied, note,...provenance });
     if (!satisfied && task.state === "ready") await client.query("UPDATE digital_production_tasks SET state='blocked',blocked_reason='前置条件未满足' WHERE task_id=$1", [id]);
-    return this.activate(client, actor, id, at, quality);
+    // A negative completion-stage fact must remain blocked even when activation conditions are ready.
+    return satisfied ? this.activate(client, actor, id, at, quality) : false;
   }
   async complete(actor: TrustedActorContext, id: string, input: { occurredAt?: string | null | undefined; note: string }, key: string) {
     return this.transaction(client => this.completeWithClient(client, actor, id, input, key));
@@ -239,7 +249,8 @@ export class DigitalProductionTaskService {
   }
   async refreshBusinessConditionsWithClient(client:PoolClient,actor:TrustedActorContext,id:string){
     const task=await this.task(client,id,true);await this.active(client,this.resource(task));
-    if(task.state==='blocked'&&task.blocked_reason==='前置条件未满足'&&await this.conditionsReady(client,id)){
+    if(task.state==='pending'){await this.activate(client,actor,id,null,'缺失');return;}
+    if(task.state==='blocked'&&task.blocked_reason==='前置条件未满足'&&(!requiresDevelopmentAssignee(task)||task.assignee_id)&&await this.conditionsReady(client,id)){
       await client.query("UPDATE digital_production_tasks SET state='ready',blocked_reason=NULL WHERE task_id=$1",[id]);
       await this.event(client,actor,id,this.resource(task),'unblocked',new Date().toISOString(),'现场登记',{note:'业务前置恢复，保留原进入时间'});
     }
@@ -276,10 +287,22 @@ export class DigitalProductionTaskService {
         if (['completed','cancelled'].includes(task.state)) fail("已结束任务不可日常改派");
         const result = await reassignDigitalTask(client, actor, id, assigneeId);
         await this.event(client, actor, id, this.resource(task), "reassigned", new Date().toISOString(), "现场登记", { previousAssigneeId: task.assignee_id, assigneeId });
+        await this.refreshDevelopmentMaterialCondition(client,actor,id);
         if (requiresDevelopmentAssignee(task)) await this.activate(client, actor, id, new Date().toISOString(), "现场登记");
         return result;
       });
     });
+  }
+  private async refreshDevelopmentMaterialCondition(client:PoolClient,actor:TrustedActorContext,id:string){
+    const task=await this.task(client,id);
+    if(!requiresDevelopmentAssignee(task)||['completed','cancelled'].includes(task.state))return;
+    if(!(await client.query("SELECT to_regclass('digital_development_execution_facts') AS relation")).rows[0]?.relation)return;
+    if(!(await client.query("SELECT 1 FROM digital_development_documents WHERE source_id=$1 AND status='published'",[task.source_id])).rowCount)return;
+    const readiness=await materialReadiness(client,task.source_id,task.route_version);
+    await client.query("INSERT INTO digital_production_task_conditions(task_id,condition_key,stage) VALUES($1,'materials_ready','activation') ON CONFLICT DO NOTHING",[id]);
+    const ready=task.task_kind==='development_sewing'?readiness.sewingReady:readiness.earlyReady;
+    const before=(await client.query("SELECT satisfied FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='materials_ready'",[id])).rows[0];
+    if(before.satisfied!==ready||(!ready&&task.state==='ready'))await this.setConditionWithClient(client,actor,id,'materials_ready',ready,undefined,'派工前核实本轮材料事实');
   }
   async policies(actor: TrustedActorContext) {
     if (!isDigitalLeader(actor)) digitalForbidden();
@@ -388,7 +411,10 @@ export class DigitalProductionTaskService {
     }
     const handover = await db.query("SELECT 1 FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='handover_received'", [id]);
     const priority = (await db.query("SELECT payload->>'priority' AS priority FROM digital_production_task_events WHERE task_id=$1 AND event_kind='priority_changed' ORDER BY recorded_at DESC,event_id DESC LIMIT 1",[id])).rows[0]?.priority === "urgent" ? "urgent" as const : "normal" as const;
-    return { identity, priority, taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: currentPolicy.label as string,
+    const unmetConditions=task.source_id?await developmentTaskBlockers(db,task,canManage):[];
+    if(paused)unmetConditions.push({condition:'paused',name:'业务暂停',missing:'当前业务已暂停，须先由有权人员恢复',responsibleRole:'业务负责人',action:canControl?'恢复业务':null,evidenceId:null,verified:true});
+    if(task.state==='blocked'&&task.blocked_reason&&task.blocked_reason!=='前置条件未满足')unmetConditions.push({condition:'manual_block',name:'任务阻断',missing:task.blocked_reason,responsibleRole:task.required_role,action:canManage?'处理阻断原因':null,evidenceId:null,verified:true});
+    return { unmetConditions, identity, priority, taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: currentPolicy.label as string,
       routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage, canControl, canCorrect: isDigitalLeader(actor) || isDigitalTechnicalManager(actor),
       assigneeId: task.assignee_id as string | null, state: task.state as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
       enteredAt: iso(task.entered_at), recordedAt: iso(task.created_at)!, completedAt: iso(task.completed_at), paused,
@@ -404,6 +430,7 @@ export class DigitalProductionTaskService {
   async reassignWithClient(client:PoolClient,actor:TrustedActorContext,id:string,assigneeId:string){
     const task=await this.task(client,id,true);if(['completed','cancelled'].includes(task.state))fail("已结束任务不可改派");
     await reassignDigitalTask(client,actor,id,assigneeId);await this.event(client,actor,id,this.resource(task),"reassigned",new Date().toISOString(),"现场登记",{assigneeId});
+    await this.refreshDevelopmentMaterialCondition(client,actor,id);
     if (requiresDevelopmentAssignee(task)) await this.activate(client,actor,id,new Date().toISOString(),"现场登记");
   }
   async supersedeBulkTasksWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string){

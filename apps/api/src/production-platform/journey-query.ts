@@ -1,3 +1,4 @@
+import {materialReadiness} from "./development-material-readiness.js";
 import {reuseJourneySnapshotReads} from "./journey-snapshot-reads.js";
 import {journeyTaskSummaries} from './journey-task-summary.js';
 import type { Pool, PoolClient } from "pg";
@@ -177,6 +178,8 @@ export class DigitalJourneyQuery {
     }
     if(fullOrder&&oid)setFact("order_information","completed",[record("order",oid,`/ui/digital-production?instruction=${oid}`)],iso(order!.created_at),{id:order!.created_by,name:designer});
     if(!oid)replace("order_information",emptyNode("order_information","uncreated"));
+    const materialStates=new Map<number,Awaited<ReturnType<typeof materialReadiness>>>();
+    const materialsFor=async(version:number)=>{let value=materialStates.get(version);if(!value){value=await materialReadiness(db,sid!,version);materialStates.set(version,value);}return value;};
     const taskService=new DigitalProductionTaskService(this.database),taskDtos=[];
     const summaries=summaryOnly?await journeyTaskSummaries(db,visibleTasks.map(task=>task.task_id)):null;
     for(const raw of visibleTasks) {
@@ -203,6 +206,12 @@ export class DigitalJourneyQuery {
       const conditions=summaryOnly?(taskSummary?.conditionKeys??[]).map(condition_key=>({condition_key})):(await db.query("SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1 AND NOT satisfied",[task.taskId])).rows;
       const labels:Record<string,string>={business_recorded:"尚缺原业务完成事实",handover_received:"尚未收到实物/资料交接",materials_ready:"物料尚未齐备",owner_approved:"原外发老板批准尚未通过",pattern_ready:"纸样/唛架尚未完成",pattern_assignment_ready:"等待主管确认原打板正式派工",preshrink_ready:"预缩条件尚未齐备",craft_returned:"工艺尚未回仓",qc_approved:"整款工艺QC尚未通过",customer_confirmed:"客户样板尚未确认",all_po_complete:"全部PO/颜色尚未完成",washing_finished:"洗水尚未完成",factory_arrived:"尚缺工厂到料事实"};
       node.blockers=conditions.map(condition=>({key:condition.condition_key,label:labels[condition.condition_key]??condition.condition_key,ownerId:null,record:node.records[0]!}));
+      if(raw.source_id&&['development_pattern','development_cutting','development_sewing'].includes(raw.task_kind)&&!['completed','cancelled'].includes(task.state)){
+        const materialState=await materialsFor(raw.route_version),missing=raw.task_kind==='development_sewing'?materialState.sewingMissing:materialState.earlyMissing;
+        node.blockers=node.blockers.filter(blocker=>blocker.key!=='materials_ready');
+        for(const item of missing)node.blockers.push({key:`materials_ready:${item.materialId}`,label:`${item.name}：${item.missing.join('、')}`,ownerId:null,record:node.records[0]!});
+        for(const issue of materialState.quality)node.blockers.push({key:`fabric_quality:${issue.id}`,label:'面料停用／质量决定待处理：须供应链总监决定',ownerId:null,record:node.records[0]!});
+      }
       if(task.paused)node.blockers.push({key:"resource_paused",label:"原业务已暂停",ownerId:null,record:node.records[0]!});
       if(task.blockedReason)node.blockers.push({key:"recorded_block",label:task.blockedReason,ownerId:task.assigneeId,record:node.records[0]!});
       if(["active","blocked"].includes(state)) {
@@ -220,14 +229,15 @@ export class DigitalJourneyQuery {
     // from delivery dates, creation time or an SLA that has not started.
     if (sid && sourceAccess && currentDocument?.document) {
       const materialEvents = (await db.query<{material_id:string;action:string;expected_date:string|null}>(
-        "SELECT material_id,action,expected_date::text FROM digital_development_material_events WHERE source_id=$1 AND route_version<=$2 ORDER BY sequence", [sid, round ?? 1])).rows;
+        "SELECT material_id,action,expected_date::text FROM digital_development_material_events WHERE source_id=$1 AND route_version=$2 ORDER BY sequence", [sid, round ?? 1])).rows;
+      const effectiveMaterials=(await materialsFor(round??1)).materials;
       const today = new Intl.DateTimeFormat("en-CA", {timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(asOf));
       const materials = (currentDocument.document as DevelopmentDocument).materials.filter(material => material.requiredThisRound);
       const supplyPlaceholder = baseNodes.findIndex(value => value.key === "development_material_supply" && value.instanceId === `development_material_supply:${value.round ?? 0}`);
       if (!materials.length && supplyPlaceholder >= 0) baseNodes[supplyPlaceholder] = emptyNode("development_material_supply", "not_applicable", round);
       materials.forEach((material, index) => {
         const events = materialEvents.filter(event => event.material_id === material.materialId);
-        const arrived = material.available || events.some(event => ["到货", "确认代用"].includes(event.action));
+        const arrived = effectiveMaterials.find(item=>item.materialId===material.materialId)?.available??false;
         const plannedDate = events.filter(event => event.action === "修改预计日期").at(-1)?.expected_date ?? material.expectedDate;
         const node = emptyNode("development_material_supply", arrived ? "completed" : currentDocument.status === "published" || (round ?? 1) > 1 ? "pending" : "uncreated", round);
         node.instanceId = `material:${material.materialId}:${round ?? 1}`;

@@ -6,6 +6,7 @@ import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js
 import type {DevelopmentRevision} from '@dx-rework/contracts/digital-development-rounds';
 import {DevelopmentRoundService} from '../../apps/api/src/production-platform/development-round-service.js';
 import {DigitalDevelopmentService} from '../../apps/api/src/production-platform/development-service.js';
+import {materialReadiness} from '../../apps/api/src/production-platform/development-material-readiness.js';
 import type {DevelopmentExecutionService} from '../../apps/api/src/production-platform/development-execution-service.js';
 export async function exerciseDevelopmentRounds(db:Pool,execution:DevelopmentExecutionService,root:TrustedActorContext,sourceId:string,workerId:string,patternRoundId:string,outsider:TrustedActorContext){
  const rounds=new DevelopmentRoundService(db,true),forms=new DigitalDevelopmentService(db,true);
@@ -32,6 +33,7 @@ export async function exerciseDevelopmentRounds(db:Pool,execution:DevelopmentExe
  expect(await wages()).toBe(before);
  const second:DevelopmentRevision={...revision,basedOnRound:2,document:current.document!,origin:'内部发现',customerComment:'',internalProblem:'调整领口车缝',categories:['车缝'],affectedNodes:['车板'],outputKind:'整件样板'};
  const draft=await rounds.save(root,sourceId,{expectedDraftVersion:0,revision:second},randomUUID());await rounds.publish(root,sourceId,{expectedDraftVersion:draft.draftVersion,basedOnRound:2},randomUUID());
+ expect((await materialReadiness(db,sourceId,3)).sewingReady).toBe(true);
  await act(3,'development_sewing_transfer');await act(3,'development_sewing');
  const oldTail=(await versionTasks(3)).find(task=>task.taskKind==='development_tail_check')!;
  await act(3,'development_tail_check',true);
@@ -50,4 +52,15 @@ export async function exerciseDevelopmentRounds(db:Pool,execution:DevelopmentExe
  expect(nodes.filter(node=>node.key==='development_sewing'&&node.current)).toHaveLength(1);
  expect(await wages()).toBe(before);
  await expect(db.query("UPDATE digital_development_rounds SET customer_comment='覆盖' WHERE source_id=$1 AND round_number=2",[sourceId])).rejects.toThrow();
+ // A new ordinary auxiliary with the same name as an arrived older trim must
+ // receive a fresh check; the server also inserts 核配 into the revision route.
+ const latest=await forms.read(root,sourceId),oldTrim=latest.document!.materials.find(row=>row.category==='辅料')!;
+ const newTrim={...oldTrim,materialId:randomUUID(),auxiliaryKind:'普通辅料' as const};
+ const fifth:DevelopmentRevision={...second,basedOnRound:4,document:{...latest.document!,materials:[...latest.document!.materials,newTrim]}};
+ const fifthDraft=await rounds.save(root,sourceId,{expectedDraftVersion:0,revision:fifth},randomUUID());
+ await rounds.publish(root,sourceId,{expectedDraftVersion:fifthDraft.draftVersion,basedOnRound:4},randomUUID());
+ const fifthState=await execution.read(root,sourceId);
+ expect(fifthState.tasks.find(task=>task.routeVersion===5&&task.taskKind==='development_materials')?.state).toBe('ready');
+ expect(fifthState.materialReadiness.find(row=>row.materialId===newTrim.materialId)).toMatchObject({available:false,verified:false,evidenceId:null});
+ expect((await forms.read(root,sourceId)).materialEvents).toHaveLength(0);
 }

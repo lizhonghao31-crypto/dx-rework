@@ -8,7 +8,9 @@ export const DigitalDeadlinePolicySchema = z.object({ expectedVersion: z.number(
 export const DigitalTimeCorrectionSchema = z.object({ eventId: z.string().uuid(), occurredAt: z.iso.datetime({ offset: true }).nullable(), reason: z.string().trim().min(1).max(1000) }).strict();
 export type DigitalTaskState = z.infer<typeof DigitalTaskStateSchema>;
 export type DigitalTimeQuality = z.infer<typeof DigitalTimeQualitySchema>;
+export type DigitalTaskBlocker = {condition:string;name:string;missing:string;responsibleRole:string;action:string|null;evidenceId:string|null;verified:boolean};
 export type DigitalTask = {
+  unmetConditions?:DigitalTaskBlocker[];
   identity?: { designStyleNo: string; customerCode: string | null } | null;
   priority?: "normal" | "urgent"; taskId: string; orderId: string | null; sourceId: string | null; taskKind: string; label: string;
   assigneeId: string | null; state: DigitalTaskState; routeVersion: number; occurrence: number;

@@ -150,7 +150,7 @@ export function DigitalPatternWorkspace({selectedOnly=false}:{selectedOnly?:bool
   </div>;
 }
 function BusinessMaterials({sheet}: {sheet: DevelopmentSheet | null}) {
-  return <table><thead><tr><th>材料</th><th>规格 / 数量</th><th>到料事实</th><th>原计划日期</th></tr></thead><tbody>{sheet?.document?.materials.filter(material => material.requiredThisRound).map(material => <tr key={material.materialId}><td>{material.category} · {material.label || material.name}</td><td>{material.specification || '—'} · {material.quantity || '—'}</td><td>{material.available || sheet.materialEvents.some(event => event.materialId === material.materialId && ['到货','确认代用'].includes(event.action)) ? '已登记到料/代用' : '尚缺到料记录'}</td><td>{sheet.materialEvents.filter(event => event.materialId === material.materialId && event.action === '修改预计日期').at(-1)?.expectedDate ?? material.expectedDate ?? '未登记'}</td></tr>)}</tbody></table>;
+  return <table><thead><tr><th>材料</th><th>规格 / 数量</th><th>到料事实</th><th>原计划日期</th></tr></thead><tbody>{sheet?.document?.materials.filter(material => material.requiredThisRound).map(material => <tr key={material.materialId}><td>{material.category} · {material.label || material.name}</td><td>{material.specification || '—'} · {material.quantity || '—'}</td><td>{sheet.materialReadiness?.find(row=>row.materialId===material.materialId)?.available?'本轮有效可用（核验 / 到料 / 代用）':sheet.materialReadiness?.find(row=>row.materialId===material.materialId)?.missing.join('、')||'尚未逐项核验'}</td><td>{sheet.materialEvents.filter(event => event.materialId === material.materialId && event.action === '修改预计日期').at(-1)?.expectedDate ?? material.expectedDate ?? '未登记'}</td></tr>)}</tbody></table>;
 }
 
 function PatternTaskGallery({files}:{files:{id:string;kind:string;url:string}[]}){
