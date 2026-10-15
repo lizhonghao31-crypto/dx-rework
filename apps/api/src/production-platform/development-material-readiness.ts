@@ -41,7 +41,7 @@ export function materialCheckError(material:DevelopmentDocument['materials'][num
 
 export async function materialReadiness(db:Pick<Pool|PoolClient,'query'>,sourceId:string,roundNumber:number){
   const saved=await developmentDocumentRow(db,sourceId,roundNumber);
-  if(!saved)throw new Error('本轮开发资料不存在');
+  if(!saved)return {documentMissing:true,materials:[] as MaterialReadiness[],quality:[] as {id:string}[],supplyMissing:[] as MaterialReadiness[],earlyMissing:[] as MaterialReadiness[],sewingMissing:[] as MaterialReadiness[],earlyReady:false,sewingReady:false};
   const inherited=saved.revision?.inherited?.development_materials?.taskId??null;
   const facts=(await db.query(`SELECT f.fact_id AS id,f.kind,f.payload,f.recorded_at AS at
     FROM digital_development_execution_facts f JOIN digital_production_tasks t ON t.task_id=f.task_id
@@ -65,5 +65,5 @@ export async function materialReadiness(db:Pick<Pool|PoolClient,'query'>,sourceI
   const supplyMissing=materials.filter(m=>m.required&&!m.supplyAvailable&&!m.earlyException);
   const earlyMissing=materials.filter(m=>m.required&&!m.available&&!m.earlyAllowed);
   const sewingMissing=materials.filter(m=>m.required&&!m.available);
-  return {materials,quality,supplyMissing,earlyMissing,sewingMissing,earlyReady:!earlyMissing.length&&!quality.length,sewingReady:!sewingMissing.length&&!quality.length};
+  return {documentMissing:false,materials,quality,supplyMissing,earlyMissing,sewingMissing,earlyReady:!earlyMissing.length&&!quality.length,sewingReady:!sewingMissing.length&&!quality.length};
 }

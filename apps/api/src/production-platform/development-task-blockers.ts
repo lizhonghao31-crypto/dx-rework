@@ -20,6 +20,7 @@ export async function developmentTaskBlockers(db:Pick<Pool,'query'>,task:{task_i
   for(const row of predecessors)add('predecessor',row.label,`${row.label}尚未完成`,row.required_role);
   if(['development_pattern','development_cutting','development_sewing'].includes(task.task_kind)&&(await db.query("SELECT to_regclass('digital_development_execution_facts') AS relation")).rows[0]?.relation){
     const ready=await materialReadiness(db,task.source_id,task.route_version);
+    if(ready.documentMissing)add('development_document','本轮开发资料','尚无本轮可核验开发资料','设计师');
     for(const material of task.task_kind==='development_sewing'?ready.sewingMissing:ready.earlyMissing){
       add(`materials_ready:${material.materialId}`,material.name,material.missing.join('、'),material.earlyException?'设计师':'开发文员',null,material.evidenceId,material.verified);
     }
