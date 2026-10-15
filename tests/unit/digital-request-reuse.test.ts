@@ -31,3 +31,14 @@ it('passes cancellation only to its own read and does not share cancellable requ
  await Promise.all([digitalRequest('access/candidates','GET',undefined,undefined,{signal:controller.signal}),digitalRequest('access/candidates')]);
  expect(fetcher).toHaveBeenCalledTimes(2);expect(fetcher.mock.calls[0]?.[1]).toHaveProperty('signal',controller.signal);expect(fetcher.mock.calls[1]?.[1]).not.toHaveProperty('signal');
 });
+it.each(['access/candidates?purpose=technical','tasks/00000000-0000-4000-8000-000000000001'])('refreshes %s after a successful write instead of joining an overlapping stale read',async(path)=>{
+ const writing=deferred(),reading=deferred();
+ const fetcher=vi.fn().mockReturnValueOnce(writing.promise).mockReturnValueOnce(reading.promise).mockResolvedValue(reply({state:'committed'}));vi.stubGlobal('fetch',fetcher);
+ const {digitalRequest}=await import('../../apps/web/src/digital-production-api.js');
+ const write=digitalRequest('tasks/change','POST',{value:1},'request-key');
+ const stale=digitalRequest(path),rejected=expect(stale).rejects.toThrow('读取条件已变化');
+ writing.resolve(reply({saved:true}));await write;
+ expect(await digitalRequest(path)).toEqual({state:'committed'});
+ expect(fetcher).toHaveBeenCalledTimes(3);
+ reading.resolve(reply({state:'before-commit'}));await rejected;
+});

@@ -23,6 +23,7 @@ export async function digitalRequest<T>(path: string, method = "GET", body?: unk
       throw new Error(data.error?.message??(response.status===404?'数字生产功能尚未开放':'操作失败，请重试'));
     }
     const value:unknown=await response.json();
+    if(!reading)invalidate();
     if(reading&&(identity!==sessionCacheVersion()||revision!==generation))throw new Error('读取条件已变化，请重试刷新');
     return value;
   })();
