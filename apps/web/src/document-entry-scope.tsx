@@ -5,7 +5,7 @@ import {Button} from '@dx-rework/ui';
 import {OrderDocumentContainer,type DocumentCategory} from './order-document-container.js';
 
 type EntryContext={open:(category:DocumentCategory)=>void;targets:Partial<Record<DocumentCategory,HTMLElement>>};
-const Entries=createContext<EntryContext|null>(null);
+export const Entries=createContext<EntryContext|null>(null);
 /** Move the original controls, not their command/state owner, into the document directory. */
 export function DocumentEntryScope({sourceId,orderId,round,children,taskId}:{sourceId?:string;orderId?:string;round?:number;taskId?:string|undefined;children:ReactNode}){
  const [category,setCategory]=useState<DocumentCategory|null>(null),[targets,setTargets]=useState<Partial<Record<DocumentCategory,HTMLElement>>>({});

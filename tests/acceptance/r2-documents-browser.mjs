@@ -43,7 +43,7 @@ export async function documentBrowser({page,context,origin,database,root,worker,
  const pending=(await database.query("SELECT attachment_id,task_id FROM digital_development_upload_purposes WHERE source_id=$1 AND purpose='车板成果'",[original.sourceId])).rows;
  assert.equal(pending.length,1);assert.equal(pending[0].task_id,sewingTaskId);
  assert.equal((await database.query('SELECT 1 FROM digital_development_attachment_bindings WHERE attachment_id=$1',[pending[0].attachment_id])).rowCount,0);
- await page.locator('.order-document-container>header').getByRole('button',{name:'返回来源',exact:true}).click();assert.equal(await sewingNote.inputValue(),'TEST PR04 portal retains original form');
+ await page.getByRole('button',{name:'当前办理',exact:true}).click();assert.equal(await sewingNote.inputValue(),'TEST PR04 portal retains original form');
  checks.push('PR04 original sewing page: upload lives only in document directory, pending file pins task, return preserves original form');
  await page.goto(`${origin}/ui/digital-production?development=${original.sourceId}&round=1`);await page.locator('.development-picture-layout').waitFor();
  await page.getByRole('button',{name:'面辅料与检测报告',exact:true}).click();
