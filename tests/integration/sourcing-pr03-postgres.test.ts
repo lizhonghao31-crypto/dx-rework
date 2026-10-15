@@ -3463,9 +3463,22 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const full=await tasks.documents(root,taskId);
     expect(full).toMatchObject({development:{state:'published',id:ready.sourceId,version:1},instruction:{state:'published',id:ready.id,version:1},budget:{state:'published',id:ready.id,version:1}});
     const limited=await tasks.documents(worker,taskId);
+    expect(limited.development).toEqual(full.development);
+    expect((await new DigitalDevelopmentService(database,true).read(worker,ready.sourceId)).sourceId).toBe(ready.sourceId);
     expect(limited.budget).toEqual({state:'unavailable'});expect(JSON.stringify(limited)).not.toMatch(/salePrice|unitPrice|attachmentId/);
     const stranger=await budgetFixture();await expect(tasks.documents(stranger.designer,taskId)).rejects.toMatchObject({statusCode:404});
     await expect(fixture.budget.read(worker,ready.id)).rejects.toMatchObject({statusCode:404});
+    const draftClient=await database.connect();
+    try{
+      await draftClient.query('BEGIN');
+      const second=await tasks.createWithClient(draftClient,root,{resource:{kind:'source',id:ready.sourceId},kind:'development_pattern',routeId:randomUUID(),routeVersion:2,occurrence:2,assigneeId:worker.actorId});
+      await draftClient.query('UPDATE digital_instruction_documents SET source_round=2,version=version+1 WHERE production_order_id=$1',[ready.id]);
+      const {taskDocuments}=await import('../../apps/api/src/production-platform/task-documents.js');
+      expect((await taskDocuments(draftClient,root,second.taskId)).instruction).toEqual({state:'draft'});
+      expect((await taskDocuments(draftClient,root,taskId)).instruction).toEqual(full.instruction);
+      await draftClient.query('UPDATE digital_instruction_documents SET source_round=3 WHERE production_order_id=$1',[ready.id]);
+      expect((await taskDocuments(draftClient,root,second.taskId)).instruction).toEqual({state:'missing'});
+    }finally{await draftClient.query('ROLLBACK');draftClient.release();}
     if(process.env.R2_WORKBENCH_EVIDENCE){
       await database.query("UPDATE app_users SET display_name='TEST-R2 纸样师傅' WHERE id=$1",[worker.actorId]);
       const imageBytes=await sharp({create:{width:240,height:160,channels:3,background:'#4073a4'}}).png().toBuffer();
