@@ -21,11 +21,12 @@ export function effectiveMaterials(document:DevelopmentDocument,evidence:readonl
     const earlyException=isEarlyMaterialException(material);
     // An arrival can resolve an explicitly recorded missing exception. It cannot
     // certify omitted ordinary checks or overrule an actual quality mismatch.
-    const available=verified||Boolean(row&&!row.physical&&earlyException&&arrived);
+    const resolvedException=Boolean(row&&!row.physical&&earlyException&&arrived);
+    const available=verified||resolvedException;
     const missing=!material.requiredThisRound||available?[]:!row?['尚未逐项核验']:dimensions.filter(key=>!row[key]).map(key=>`${labels[key]}未核实`);
     const earlyAllowed=earlyException&&Boolean(row&&!row.physical&&check?.kind==='核配通过');
     const supplyAvailable=row?row.physical||arrived:material.available||arrived;
-    return {materialId:material.materialId,name:material.label||material.name||'未命名物料',required:material.requiredThisRound,earlyException,earlyAllowed,verified,available,supplyAvailable,missing,evidenceId:(arrived?arrival?.id:check?.id)??null};
+    return {materialId:material.materialId,name:material.label||material.name||'未命名物料',required:material.requiredThisRound,earlyException,earlyAllowed,verified,available,supplyAvailable,missing,evidenceId:(resolvedException?arrival?.id:check?.id)??null};
   });
 }
 

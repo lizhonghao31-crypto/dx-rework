@@ -29,7 +29,7 @@ describe('R2 material evidence',()=>{
   it('does not let a later arrival erase a known specification defect',()=>{
     const row=material({category:'辅料',auxiliaryKind:'拉链'}),items=[{...checked(row),specification:false}];
     expect(materialCheckError(row,items[0],'规格不符',null)).toContain('规格');
-    expect(effectiveMaterials(doc(row),[{id:'check',kind:'缺项退回',items,at:'2026-10-15T01:00:00Z'},{id:'arrival',kind:'到货',materialId:row.materialId,at:'2026-10-15T02:00:00Z'}])[0]?.available).toBe(false);
+    expect(effectiveMaterials(doc(row),[{id:'check',kind:'缺项退回',items,at:'2026-10-15T01:00:00Z'},{id:'arrival',kind:'到货',materialId:row.materialId,at:'2026-10-15T02:00:00Z'}])[0]).toMatchObject({available:false,evidenceId:'check',missing:['规格未核实']});
   });
   it('matches stable IDs rather than identical material names',()=>{
     const old=material(),current=material({materialId:'00000000-0000-4000-8000-000000000002'});
