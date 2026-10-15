@@ -83,8 +83,14 @@ export type DigitalOrder = Omit<DigitalOrderInput, "lines"> & {
 };
 
 /** Initial customer-order dates use the server's Shanghai calendar and clamp month-end. */
+export function beijingCalendarDate(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(now);
+}
+export function customerOrderDateError(orderDate:string,today:string): string|null {
+  return orderDate>today?`客户下单日期不能晚于服务器北京时间今日（${today}）`:null;
+}
 export function minimumInitialCustomerDate(now: Date = new Date()): string {
-  const day = new Intl.DateTimeFormat("en-CA", {timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit"}).format(now);
+  const day = beijingCalendarDate(now);
   const [year, month, date] = day.split("-").map(Number) as [number, number, number];
   const nextYear = month === 12 ? year + 1 : year;
   const nextMonth = month === 12 ? 1 : month + 1;
@@ -94,7 +100,7 @@ export function minimumInitialCustomerDate(now: Date = new Date()): string {
 export function initialCustomerDateErrors(lines: ReadonlyArray<{customerWarehouseArrivalDate?: string | null | undefined; deliveryDate?: string | null | undefined}>, minimum: string = minimumInitialCustomerDate()): string[] {
   return lines.flatMap((line,index) => {
     const date = line.customerWarehouseArrivalDate === undefined ? line.deliveryDate : line.customerWarehouseArrivalDate;
-    return !date || date < minimum ? [`PO ${index+1} 客户侧交期须填写 ${minimum} 或之后的日期（首次确定订单至少一个自然月）`] : [];
+    return !date || date < minimum ? [`PO ${index+1} 出货日期须填写 ${minimum} 或之后的日期（首次确定订单至少一个自然月）`] : [];
   });
 }
 

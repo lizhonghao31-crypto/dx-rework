@@ -37,7 +37,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   await db.query("INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','TEST') ON CONFLICT(policy_key) DO UPDATE SET dingtalk_corp_id='TEST'");
   hourlyVersion=(await new PatternRoomPriceService(db).change(actor(root,["root_superuser"]),"hourly",PATTERN_HOURLY_PRICE_ID,{version:1,amount:"12.000",enabled:true,reason:"TEST misc price fixture"},randomUUID())).version;
   sourceId=(await identity.createSource(actor(),{developmentType:'头版',designStyleNo:'TEST-MISC-SOURCE',temporaryStyleNo:null,customerCode:'PD'},randomUUID())).sourceId;
-  const order=await identity.createOrder(actor(),DigitalOrderCreateSchema.parse({designStyleNo:'TEST-MISC-MOTHER',temporaryStyleNo:null,customerCode:'PD',productGroup:'男装',orderDate:'2026-10-01',lines:[{poNumber:'PO-MISC-1',color:'蓝',sizes:[{size:'M',quantity:10}],deliveryDate:'2026-12-01'}]}),randomUUID());orderId=order.productionOrderId;poId=order.lines[0]!.lineId;
+  const order=await identity.createOrder(actor(),DigitalOrderCreateSchema.parse({designStyleNo:'TEST-MISC-MOTHER',temporaryStyleNo:null,customerCode:'PD',productGroup:'男装',orderDate:'2026-09-01',lines:[{poNumber:'PO-MISC-1',color:'蓝',sizes:[{size:'M',quantity:10}],deliveryDate:'2026-12-01'}]}),randomUUID());orderId=order.productionOrderId;poId=order.lines[0]!.lineId;
  },120000);
  afterAll(async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
  it('rejects standalone new pattern for Root/designer/other roles and the old POST, while advertising no create action',async()=>{

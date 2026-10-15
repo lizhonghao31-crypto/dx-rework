@@ -3442,7 +3442,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const identity = new DigitalProductionIdentityService(database, true, undefined,()=>new Date("2026-09-01T00:00:00Z"));
     const order = await identity.createOrder(designer, DigitalOrderCreateSchema.parse({
       customerCode: "PD", productGroup: "男装", designStyleNo: `${stylePrefix}-${randomUUID()}`,
-      orderDate: "2026-09-30", contractDeliveryDate: "2026-11-20", primaryMerchandiserId: merchandiserId,
+      orderDate: "2026-09-01", contractDeliveryDate: "2026-11-20", primaryMerchandiserId: merchandiserId,
       lines: [{ poNumber: `TEST-PO1-${designerId}`, color: "黑", customerWarehouseArrivalDate:"2026-11-20", sizes: [{ size: "M", quantity: 137 }] }, { poNumber: `TEST-PO2-${designerId}`, color: "白", customerWarehouseArrivalDate:"2026-11-20", sizes: [{ size: "M", quantity: 63 }] }, ...(threePo?[{poNumber:`TEST-PO3-${designerId}`,color:"蓝",customerWarehouseArrivalDate:"2026-11-20",sizes:[{size:"M",quantity:40}]}]:[])],
     }), randomUUID());
     const bytes = await sharp({ create: { width: 2, height: 2, channels: 3, background: "white" } }).png().toBuffer();
