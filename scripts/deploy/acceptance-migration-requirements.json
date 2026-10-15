@@ -871,5 +871,18 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0245_development_pattern_result_attachments": {
+    "checksum": "0d0b85f6f13ba9962c9f4b6fad4bdb73bceafd5ced2202b32ae343a25083d695",
+    "tables": [
+      "digital_development_upload_purposes"
+    ],
+    "functions": [],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

@@ -31,10 +31,10 @@ export class DevelopmentRouteService {
    const active=[];for(const person of people)if(await policy.activeRole(person.user_id,role))active.push(person.user_id);
    return active.length===1?active[0]:null;
  }
- async startRound(db:PoolClient,actor:TrustedActorContext,sourceId:string,kind:DigitalTaskKind,routeId:string,roundNumber:number,authorizingTaskId?:string,predecessorId?:string,nextAssigneeId:string|null=null){
+ async startRound(db:PoolClient,actor:TrustedActorContext,sourceId:string,kind:DigitalTaskKind,routeId:string,roundNumber:number,authorizingTaskId?:string,predecessorId?:string,nextAssigneeId:string|null=null,requireActualReceipt=false){
    const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,roundNumber),service=new DigitalProductionTaskService(this.database);
    const next=await service.createWithClient(db,actor,{resource:{kind:'source',id:sourceId},...(authorizingTaskId?{authorizingTaskId}:{}),kind,routeId,routeVersion:roundNumber,occurrence:roundNumber,assigneeId:await this.recipient(db,sourceId,kind,nextAssigneeId),predecessors:predecessorId?[predecessorId]:[],conditions:kind==='development_sewing'?['pattern_assignment_ready']:kind==='development_cutting'?['materials_ready']:[]});
-   if(['development_pattern','development_cutting','development_sewing','development_washing'].includes(kind))await service.setConditionWithClient(db,actor,next.taskId,'handover_received',true,undefined,'本轮已交出');
+   if(!requireActualReceipt&&['development_pattern','development_cutting','development_sewing','development_washing'].includes(kind))await service.setConditionWithClient(db,actor,next.taskId,'handover_received',true,undefined,'本轮已交出');
    if(['development_pattern','development_cutting','development_sewing'].includes(kind)){
      const materialState=await materialReadiness(db,sourceId,roundNumber);
      await service.setConditionWithClient(db,actor,next.taskId,'materials_ready',kind==='development_sewing'?materialState.sewingReady:materialState.earlyReady,undefined,'依据本轮逐项核验、到料和问题决定');
@@ -57,7 +57,17 @@ export class DevelopmentRouteService {
    const route:DigitalTaskKind[]=task.route_version===1?developmentRoute(sheet.document!):(await db.query('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,task.route_version])).rows[0].route_nodes;
    const index=route.indexOf(task.task_kind==='development_material_recheck'?'development_materials':task.task_kind);
    if(index<0||index===route.length-1)return null;
-   return this.startRound(db,actor,sourceId,route[index+1]!,task.route_instance_id,task.route_version,taskId,taskId,nextAssigneeId);
+   let nextKind=route[index+1]!,requireActualReceipt=false;
+   if(task.task_kind==='development_craft_confirmation'&&nextKind==='development_sewing_transfer'){
+     const existing=(await db.query("SELECT 1 FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id) WHERE a.source_id=$1 AND t.route_version=$2 AND a.task_kind='development_sewing_transfer'",[sourceId,task.route_version])).rowCount;
+     if(!existing){
+       nextKind='development_sewing';requireActualReceipt=true;
+       await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_system_route','digital_development',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify({mode:'system_route',fromTaskId:taskId,round:task.route_version,nextKind,reason:'设计师已确认工艺，沿用本单车板安排；不记录人工转交或实物接收'})]);
+     }
+   }
+   const next=await this.startRound(db,actor,sourceId,nextKind,task.route_instance_id,task.route_version,taskId,taskId,nextAssigneeId,requireActualReceipt);
+   if(requireActualReceipt)await new DigitalProductionTaskService(this.database).recordSystemRouteWithClient(db,actor,next.taskId,taskId);
+   return next;
  }
  async releaseSewing(db:PoolClient,actor:TrustedActorContext,sourceId:string){
    const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db);

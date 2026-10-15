@@ -33,3 +33,8 @@
  .task-workbench-sample,.task-workbench-sample>main,.task-workbench-documents {display:block;height:auto;min-height:0;overflow:visible;border:0;padding:0;}
  .task-workbench-sample>header,.task-workbench-sample>nav,.task-workbench-sample>footer,.task-workbench-documents>nav,.task-document-reader>nav,.task-document-reader>p {display:none;}
 }
+.task-workbench-sample [hidden] {display:none !important;}
+.task-workbench-sample>footer>div:last-child {display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;}
+.task-workbench-sample .development-material-check-form th {position:sticky;top:0;background:var(--dx-surface,#fff);}
+.task-workbench-sample .development-material-check-form input[type=checkbox] {width:18px;height:18px;}
+.task-workbench-sample small {display:block;}

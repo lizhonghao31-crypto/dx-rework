@@ -8,14 +8,14 @@ const manifest = JSON.parse(readFileSync("apps/api/src/platform/migration-manife
 const branches = JSON.parse(readFileSync("scripts/migration-branches.json", "utf8"));
 const extensions = JSON.parse(readFileSync("scripts/migration-main-extensions.json", "utf8"));
 const production = [...manifest.migrations.slice(0, 217), ...branches.main, ...extensions].sort((a, b) => a.version.localeCompare(b.version));
-const added = ["0225_warehouse_supervisor_cutting_read", "0242_warehouse_supervisor_digital_dispatch", "0243_misc_order_stable_association", "0244_development_sewing_result_attachments"];
+const added = ["0225_warehouse_supervisor_cutting_read", "0242_warehouse_supervisor_digital_dispatch", "0243_misc_order_stable_association", "0244_development_sewing_result_attachments", "0245_development_pattern_result_attachments"];
 const acceptance = manifest.migrations.filter((row: { version: string }) => !added.includes(row.version));
 
 describe("main 0225 and Acceptance 248 compatible sync", () => {
   it("admits both exact histories without rewriting applied rows", () => {
     expect(production).toHaveLength(225);
     expect(acceptance).toHaveLength(248);
-    expect(checkHistory({ database: "dx_rework", migrations: production }, manifest, "production").pending).toHaveLength(27);
+    expect(checkHistory({ database: "dx_rework", migrations: production }, manifest, "production").pending).toHaveLength(28);
     expect(checkHistory({ database: "dx_rework_acceptance", migrations: acceptance }, manifest, "acceptance").pending).toEqual(added);
     expect(extensions.at(-1)).toEqual({ version: added[0], checksum: "85ce0adb63cdba755011a53455bd9f7c762d9e5f0d5dd0157111c375b1d0d4b1" });
     expect(() => assertMigrationSequence(manifest.migrations)).not.toThrow();

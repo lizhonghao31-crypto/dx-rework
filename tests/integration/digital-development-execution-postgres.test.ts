@@ -1,3 +1,4 @@
+import {taskResult} from "../helpers/development-task-result-fixture.js";
 import * as snapshotReads from "../../apps/api/src/production-platform/journey-snapshot-reads.js";
 import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { applyDigitalPoDateFixture } from "../helpers/digital-po-date-fixture.js";
@@ -60,6 +61,7 @@ run("P06 development execution PostgreSQL", () => {
     await database.query(await readFile(new URL("../../apps/api/migrations/0223_digital_development_execution.sql", import.meta.url), "utf8"));
     await database.query(await readFile(new URL("../../apps/api/migrations/0224_digital_development_route.sql", import.meta.url), "utf8"));
     await database.query(await readFile(new URL("../../apps/api/migrations/0244_development_sewing_result_attachments.sql", import.meta.url), "utf8"));
+    await database.query(await readFile(new URL("../../apps/api/migrations/0245_development_pattern_result_attachments.sql", import.meta.url), "utf8"));
     await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'development_clerk'),($2,'pattern_room_worker')",[root,other]);
   });
 
@@ -82,6 +84,28 @@ run("P06 development execution PostgreSQL", () => {
     return {id,materialId,taskId:sheet.taskId!,version:sheet.version};
   };
   const checks=(materialId:string,physical=true)=>[{materialId,physical,quantity:true,color:true,specification:true}];
+  it("R2 requires exact-task paper results even without craft and preserves the task on rejection",async()=>{
+    const {id,taskId,materialId}=await prepare();await execution.check(clerk(),id,{taskId,result:'通过',note:'',items:checks(materialId)},randomUUID());
+    const paper=(await execution.read(worker(),id)).tasks.find(t=>t.taskKind==='development_pattern')!;
+    await expect(execution.complete(worker(),id,{taskId:paper.taskId,note:'',attachmentIds:[]},randomUUID())).rejects.toThrow('本任务成果');
+    const file=await taskResult(database,execution,worker(),id,paper.taskId,'纸样成果');
+    const another=await prepare();await execution.check(clerk(),another.id,{taskId:another.taskId,result:'通过',note:'',items:checks(another.materialId)},randomUUID());
+    const otherPaper=(await execution.read(worker(),another.id)).tasks.find(t=>t.taskKind==='development_pattern')!;
+    await expect(execution.complete(worker(),another.id,{taskId:otherPaper.taskId,note:'旧文件不可代替',attachmentIds:[file]},randomUUID())).rejects.toThrow('本轮纸样任务');
+    expect((await tasks.read(worker(),otherPaper.taskId)).state).toBe('ready');
+    const key=randomUUID(),input={taskId:paper.taskId,note:'合法本任务成果',attachmentIds:[file]};
+    await execution.complete(worker(),id,input,key);await execution.complete(worker(),id,input,key);
+    expect((await execution.read(worker(),id)).facts.filter(f=>f.kind==='纸样完成'&&f.taskId===paper.taskId)).toHaveLength(1);
+  });
+  it("keeps invalid saved workers pending instead of choosing another person",async()=>{
+    const {id,taskId,materialId}=await prepare();
+    await database.query('UPDATE app_users SET enabled=false WHERE id=$1',[other]);
+    try {
+      await execution.check(clerk(),id,{taskId,result:'通过',note:'失效人选应待安排',items:checks(materialId)},randomUUID());
+      const state=await execution.read(boss(),id);
+      for(const kind of ['development_pattern','development_cutting'])expect(state.tasks.find(t=>t.taskKind===kind)).toMatchObject({state:'pending',assigneeId:null,enteredAt:null});
+    } finally {await database.query('UPDATE app_users SET enabled=true WHERE id=$1',[other]);}
+  });
   it("accepts materials without preassignment and starts successor clocks only on authorized assignment",async()=>{
     const {id,taskId,materialId}=await prepare(false,"无",false);
     const input={taskId,result:"通过" as const,note:"TEST 无预派核料",items:checks(materialId)},key=randomUUID();
@@ -102,7 +126,7 @@ run("P06 development execution PostgreSQL", () => {
     expect(new Date(assigned.enteredAt!).getTime()).toBeGreaterThanOrEqual(assignedAfter);
     await tasks.reassign(clerk(),paper.taskId,other,randomUUID());
     expect(await tasks.read(worker(),paper.taskId)).toMatchObject({enteredAt:assigned.enteredAt,dueAt:assigned.dueAt});
-    await execution.complete(worker(),id,{taskId:paper.taskId,note:"TEST 纸样完成",attachmentIds:[]},randomUUID());
+    await execution.complete(worker(),id,{taskId:paper.taskId,note:"TEST 纸样完成",attachmentIds:[await taskResult(database,execution,worker(),id,paper.taskId,"纸样成果")]},randomUUID());
     expect(await tasks.read(boss(),cut.taskId)).toMatchObject({state:"pending",assigneeId:null,enteredAt:null});
     await tasks.reassign(boss(),cut.taskId,other,randomUUID());
     expect(await tasks.read(worker(),cut.taskId)).toMatchObject({state:"ready",slaHours:4});
@@ -116,7 +140,7 @@ run("P06 development execution PostgreSQL", () => {
     const state=await execution.read(worker(),id),paper=state.tasks.find(t=>t.taskKind==="development_pattern")!,cut=state.tasks.find(t=>t.taskKind==="development_cutting")!;
     expect(paper).toMatchObject({state:"ready",slaHours:48});expect(cut).toMatchObject({state:"pending",enteredAt:null});
     await expect(execution.complete(worker(),id,{taskId:cut.taskId,note:"",attachmentIds:[]},randomUUID())).rejects.toMatchObject({statusCode:409});
-    await execution.complete(worker(),id,{taskId:paper.taskId,note:"纸样完成并交出",attachmentIds:[]},randomUUID());
+    await execution.complete(worker(),id,{taskId:paper.taskId,note:"纸样完成并交出",attachmentIds:[await taskResult(database,execution,worker(),id,paper.taskId,"纸样成果")]},randomUUID());
     expect(await tasks.read(worker(),cut.taskId)).toMatchObject({state:"ready",slaHours:4});
     await execution.complete(worker(),id,{taskId:cut.taskId,note:"裁板交出",attachmentIds:[]},randomUUID());
     expect((await execution.read(worker(),id)).facts.map(f=>f.kind)).toEqual(["核配通过","纸样完成","裁板完成"]);
@@ -129,7 +153,7 @@ run("P06 development execution PostgreSQL", () => {
     expect(paper).toMatchObject({state:"ready",assigneeId:other});
     expect(cut).toMatchObject({state:"pending",assigneeId:other,enteredAt:null});
     expect(state.tasks.filter(t=>["development_pattern","development_cutting"].includes(t.taskKind))).toHaveLength(2);
-    await execution.complete(worker(),id,{taskId:paper.taskId,note:"",attachmentIds:[]},randomUUID());
+    await execution.complete(worker(),id,{taskId:paper.taskId,note:"",attachmentIds:[await taskResult(database,execution,worker(),id,paper.taskId,"纸样成果")]},randomUUID());
     expect(await tasks.read(worker(),cut.taskId)).toMatchObject({state:"ready",assigneeId:other});
   });
   it("does not overwrite an existing task owner through first-time preassignment",async()=>{
@@ -139,9 +163,13 @@ run("P06 development execution PostgreSQL", () => {
     await execution.check(clerk(),id,{taskId,result:"通过",note:"",items:checks(materialId)},randomUUID());
     const paper=(await execution.read(boss(),id)).tasks.find(t=>t.taskKind==="development_pattern")!;
     await tasks.reassign(boss(),paper.taskId,other,randomUUID());
-    await expect(execution.dispatch(clerk(),id,{expectedVersion:0,patternWorkerId:replacement,cuttingWorkerId:other,sewingWorkerId:other},randomUUID())).rejects.toThrow("对应任务使用改派");
+    await expect(execution.dispatch(clerk(),id,{expectedVersion:0,patternWorkerId:replacement,cuttingWorkerId:other,sewingWorkerId:other},randomUUID())).rejects.toThrow("明确执行岗位改派");
     expect((await tasks.read(boss(),paper.taskId)).assigneeId).toBe(other);
     expect((await execution.read(boss(),id)).dispatch).toBeNull();
+    const before=await tasks.read(boss(),paper.taskId);
+    await execution.dispatch(clerk(),id,{expectedVersion:0,reassignExisting:true,patternWorkerId:replacement,cuttingWorkerId:other,sewingWorkerId:other},randomUUID());
+    expect(await tasks.read(boss(),paper.taskId)).toMatchObject({assigneeId:replacement,enteredAt:before.enteredAt,dueAt:before.dueAt});
+
   });
   it.each([true,false])("keeps failed feedback out of production progress and gives recheck no extra 4h (preassigned=%s)",async(preassigned)=>{
     const {id,taskId,materialId,version}=await prepare(true,"无",preassigned);
@@ -186,7 +214,7 @@ run("P06 development execution PostgreSQL", () => {
     await expect(execution.check(clerk(),id,{taskId,result:"通过",note:"",items:[...checks(materialId),...checks(extra.materialId,false)]},randomUUID())).rejects.toThrow("缺项说明");
     await execution.check(clerk(),id,{taskId,result:"通过",note:"由设计师跟进缺料",items:[...checks(materialId),...checks(extra.materialId,false)]},randomUUID());
     const paper=(await execution.read(worker(),id)).tasks.find(t=>t.taskKind==="development_pattern")!;
-    await execution.complete(worker(),id,{taskId:paper.taskId,note:"",attachmentIds:[]},randomUUID());
+    await execution.complete(worker(),id,{taskId:paper.taskId,note:"",attachmentIds:[await taskResult(database,execution,worker(),id,paper.taskId,"纸样成果")]},randomUUID());
     const cutting=(await execution.read(worker(),id)).tasks.find(t=>t.taskKind==="development_cutting")!;
     await execution.complete(worker(),id,{taskId:cutting.taskId,note:"",attachmentIds:[]},randomUUID());
     const sewing=(await execution.read(worker(),id)).tasks.find(t=>t.taskKind==="development_sewing")!;
@@ -246,7 +274,7 @@ run("P06 development execution PostgreSQL", () => {
     await expect(execution.complete(worker(),id,{taskId:paper.taskId,note:"",attachmentIds:[]},randomUUID())).rejects.toThrow("工艺开发板");
     await expect(execution.complete(actor(),id,{taskId:paper.taskId,note:"",attachmentIds:[]},randomUUID())).rejects.toMatchObject({statusCode:404});
     const file=randomUUID();await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'工艺.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[file,`test/${file}`,"a".repeat(64),other]);
-    await execution.recordUploadPurpose(worker(),id,file,"工艺开发板");
+    await execution.recordUploadPurpose(worker(),id,file,"纸样成果",paper.taskId);
     await execution.complete(worker(),id,{taskId:paper.taskId,note:"",attachmentIds:[file]},randomUUID());
     expect(await development.canDownload(actor(),id,file)).toBe(true);
   });

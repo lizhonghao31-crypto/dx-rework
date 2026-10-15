@@ -1,0 +1,13 @@
+import {Button} from '@dx-rework/ui';
+import {SearchableSelect} from './search-select.js';
+import {useDevelopmentExecution} from './digital-development-execution-panel.js';
+/** One personnel selection; formal ownership still uses the original native assignment command. */
+export function DevelopmentAssignmentTable({controller}:{controller:ReturnType<typeof useDevelopmentExecution>}){
+ const {state,people,peopleFor,busy,run}=controller;
+ if(!state?.canDispatch||peopleFor!==`${state.sheet.sourceId}:${state.dispatch?.version??0}`)return null;
+ const native=state.patternPreparation;
+ const currentTask=(kind:string)=>state.tasks.filter(task=>task.routeVersion===(state.sheet.latestRoundNumber??state.sheet.roundNumber??1)&&task.taskKind===`development_${kind}`).at(-1);
+ return <section aria-label="人员安排与主管确认"><h3>人员安排与主管确认</h3><form key={state.dispatch?.version??0} onSubmit={event=>{event.preventDefault();const form=new FormData(event.currentTarget),confirm=(event.nativeEvent as SubmitEvent).submitter?.getAttribute('value')==='confirm';void run('dispatch',{reassignExisting:true,expectedVersion:state.dispatch?.version??0,patternWorkerId:form.get('pattern'),cuttingWorkerId:form.get('cutting'),sewingWorkerId:form.get('sewing'),...(confirm&&native?{confirmExecution:{version:native.version,roundId:native.roundId,...(native.roundType==='rework'?{amount:form.get('amount')}:{})}}:{})},'PUT');}}><fieldset disabled={busy}><table><thead><tr><th>岗位</th><th>当前安排</th></tr></thead><tbody>{(['pattern','cutting','sewing']as const).map((kind,index)=><tr key={kind}><th>{['纸样','裁板','车板'][index]}</th><td><SearchableSelect aria-label={`安排${['纸样','裁板','车板'][index]}`} name={kind} required defaultValue={currentTask(kind)?.assigneeId??state.dispatch?.[`${kind}WorkerId`]??''}><option value="">待安排</option>{people.filter(person=>person.roles.includes('pattern_room_worker')).map(person=><option key={person.id} value={person.id}>{person.displayName}</option>)}</SearchableSelect></td></tr>)}</tbody></table><p>正式车板执行归属：{native?.workerName??'待主管确认'}。已开工改派沿原任务审计；工资分段仍在原执行单处理。</p>{state.canConfirmExecution&&native?.status==='pending_assignment'&&native.roundType==='rework'&&<label>本轮返工金额（确认时必填）<input name="amount" inputMode="decimal"/></label>}<Button type="submit" value="save">保存人员安排 / 改派</Button>{state.canConfirmExecution&&native?.status==='pending_assignment'&&<Button type="submit" value="confirm">保存安排并确认车板执行归属</Button>}</fieldset></form></section>;
+}
+
+export function DevelopmentAssignmentEntry({sourceId,onChanged}:{sourceId:string;onChanged:()=>void}){const controller=useDevelopmentExecution({sourceId,onChanged});return <>{controller.error&&<p role="alert">{controller.error}</p>}<DevelopmentAssignmentTable controller={controller}/></>;}

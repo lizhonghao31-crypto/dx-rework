@@ -1,3 +1,4 @@
+import {taskResult} from "./development-task-result-fixture.js";
 import {DigitalProductionTaskService} from "../../apps/api/src/production-platform/task-service.js";
 import {exerciseDevelopmentRounds} from "./digital-development-round-fixture.js";
 import {randomUUID} from 'node:crypto';
@@ -39,15 +40,21 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
   let order=await native.get(root,linked.orderId);
   expect(order.developmentSourceId).toBe(sourceId);
   expect((await execution.read(root,sourceId)).patternPreparation).toMatchObject({status:'pending_assignment',categorySaved:true,priceSaved:true,workerId:null});
-  if(craft!=='无')order=await native.assign(root,order.orderId,{roundId:order.currentRoundId,version:order.version,personId:workerPersonId},randomUUID());
-  const boardId=randomUUID();
   if(craft!=='无'){
-    await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'工艺板.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[boardId,`p07/${boardId}`,'b'.repeat(64),root.actorId]);
-    await execution.recordUploadPurpose(root,sourceId,boardId,'工艺开发板');
+    const dispatch={expectedVersion:1,patternWorkerId:workerId,cuttingWorkerId:workerId,sewingWorkerId:workerId,confirmExecution:{roundId:order.currentRoundId,version:order.version}};
+    await expect(execution.dispatch(root,sourceId,{...dispatch,confirmExecution:{...dispatch.confirmExecution,version:order.version+1}},randomUUID())).rejects.toMatchObject({statusCode:409});
+    expect((await execution.read(root,sourceId)).dispatch?.version).toBe(1);
+    expect((await native.get(root,order.orderId)).status).toBe('pending_assignment');
+    await expect(execution.dispatch({...root,actorRoles:['development_clerk'],authorizationCapability:'digital_production:view',authorizationCapabilities:['digital_production:view']},sourceId,dispatch,randomUUID())).rejects.toMatchObject({statusCode:403});
+    expect((await execution.read(root,sourceId)).dispatch?.version).toBe(1);
+    const key=randomUUID();await execution.dispatch(root,sourceId,dispatch,key);await execution.dispatch(root,sourceId,dispatch,key);
+    order=await native.get(root,order.orderId);expect(order.status).toBe('in_progress');
+    expect((await execution.read(root,sourceId)).dispatch?.version).toBe(2);
+    expect((await db.query('SELECT count(*)::int n FROM pattern_room_segments WHERE round_id=$1',[order.currentRoundId])).rows[0].n).toBe(1);
   }
   const task=async(kind:string)=>(await execution.read(root,sourceId)).tasks.filter(item=>item.taskKind===kind).at(-1)!;
-  const work=async(kind:string)=>execution.complete(root,sourceId,{taskId:(await task(kind)).taskId,note:'完成并交出',attachmentIds:kind==='development_pattern'&&craft!=='无'?[boardId]:[]},randomUUID());
-  const route=async(kind:string,nextAssigneeId:string|null=null)=>{const current=await task(kind);return execution.route(root,sourceId,{craftExecution:kind==='development_craft_dispatch'?'内部':null,taskId:current.taskId,result:'通过',note:'业务验收',nextAssigneeId,sentDate:kind==='development_shipping'?'2026-09-30':null,trackingNo:kind==='development_shipping'?'P07-TEST-001':null},randomUUID());};
+  const work=async(kind:string)=>{const current=await task(kind);return execution.complete(root,sourceId,{taskId:current.taskId,note:'完成并交出',attachmentIds:kind==='development_pattern'?[await taskResult(db,execution,root,sourceId,current.taskId,'纸样成果')]:[]},randomUUID());};
+  const route=async(kind:string,nextAssigneeId:string|null=null)=>{const current=await task(kind);return execution.route(root,sourceId,{...(kind==='development_sewing'&&current.state==='ready'?{attachmentIds:[await taskResult(db,execution,root,sourceId,current.taskId,'车板成果')]}:{}),craftExecution:kind==='development_craft_dispatch'?'内部':null,taskId:current.taskId,result:'通过',note:'业务验收',nextAssigneeId,sentDate:kind==='development_shipping'?'2026-09-30':null,trackingNo:kind==='development_shipping'?'P07-TEST-001':null},randomUUID());};
   await execution.check(root,sourceId,{taskId:sheet.taskId!,result:'通过',note:'拉链未到，由设计师按预计日期跟进',items:[{materialId:mainId,physical:true,quantity:true,color:true,specification:true},{materialId:trimId,physical:false,quantity:false,color:false,specification:false}]},randomUUID());
   await work('development_pattern');await work('development_cutting');
   if(craft!=='无'){
@@ -57,8 +64,14 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
    await route(kind);await route('development_craft_confirmation');
    expect((await db.query('SELECT count(*)::int n FROM pattern_room_segments WHERE round_id=$1 AND wage_eligible_at IS NOT NULL',[order.currentRoundId])).rows[0].n).toBe(0);
   }
-  if(craft!=='无')await route('development_sewing_transfer');
-  else expect(await task('development_sewing_transfer')).toBeUndefined();
+  expect(await task('development_sewing_transfer')).toBeUndefined();
+  if(craft!=='无'){
+    const sewing=await task('development_sewing');
+    expect((await db.query("SELECT satisfied,occurred_at FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='handover_received'",[sewing.taskId])).rows[0]).toEqual({satisfied:false,occurred_at:null});
+    expect((await db.query("SELECT count(*)::int n FROM digital_production_task_events WHERE task_id=$1 AND event_kind='system_route' AND payload->>'mode'='system_route'",[sewing.taskId])).rows[0].n).toBe(1);
+    await new DigitalProductionTaskService(db).handover(root,sewing.taskId,{note:'TEST实际收到裁片'},randomUUID());
+    expect((await db.query("SELECT count(*)::int n FROM audit_events WHERE entity_id=$1 AND action='development_system_route'",[sourceId])).rows[0].n).toBe(1);
+  }
   expect(await task('development_sewing')).toMatchObject({state:'pending',enteredAt:null});
   await expect(route('development_sewing')).rejects.toMatchObject({statusCode:409});
   await forms.materialEvent(root,sourceId,trimId,{expectedVersion:sheet.version,expectedMaterialRevision:0,action:'确认代用',expectedDate:null,note:'设计师确认代用'},randomUUID());
@@ -76,11 +89,14 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
   if(craft==='无')await digitalTasks.reassign(root,sewing.taskId,executorId,randomUUID());
   const executor:TrustedActorContext={actorId:executorId,actorRoles:['pattern_room_worker'],authorizationCapability:'pattern_room:orders:complete',authorizationCapabilities:['pattern_room:orders:complete','pattern_room:orders:view','digital_production:view'],requestId:randomUUID()};
   const resultId=randomUUID();
-  await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-sewing.pdf','application/pdf',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[resultId,`r2-pr04/${resultId}`,'c'.repeat(64),executorId]);
+  await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-sewing.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[resultId,`r2-pr04/${resultId}`,'c'.repeat(64),executorId]);
   await expect(execution.recordUploadPurpose(qc,sourceId,resultId,'车板成果',sewing.taskId)).rejects.toMatchObject({statusCode:404});
   await expect(execution.authorizeSewingUpload(executor,randomUUID(),sewing.taskId)).rejects.toMatchObject({statusCode:409});
   await execution.recordUploadPurpose(executor,sourceId,resultId,'车板成果',sewing.taskId);
   expect((await db.query('SELECT purpose,task_id FROM digital_development_upload_purposes WHERE attachment_id=$1',[resultId])).rows[0]).toEqual({purpose:'车板成果',task_id:sewing.taskId});
+  const pdf=randomUUID();await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-not-photo.pdf','application/pdf',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[pdf,`test-r2-pdf/${pdf}`,'f'.repeat(64),executorId]);
+  await execution.recordUploadPurpose(executor,sourceId,pdf,'车板成果',sewing.taskId);
+  await expect(execution.route(executor,sourceId,{attachmentIds:[pdf],taskId:sewing.taskId,result:'通过',note:'PDF不代替完成照片',craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null},randomUUID())).rejects.toThrow('实际完成照片');
   const completion={attachmentIds:[resultId],taskId:sewing.taskId,result:'通过' as const,note:'实际任务执行人完工',craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null},completionKey=randomUUID();
   if(craft==='无'){
     await expect(native.complete(executor,order.orderId,{roundId:order.currentRoundId,version:order.version},randomUUID())).rejects.toMatchObject({statusCode:404});

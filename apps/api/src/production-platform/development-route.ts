@@ -7,7 +7,8 @@ export function developmentNextSteps(route:readonly string[],tasks:ReadonlyArray
   return tasks.filter(task=>task.routeVersion===roundNumber).flatMap(task=>{
     const materialCheck=['development_materials','development_material_recheck'].includes(task.taskKind);
     const index=route.indexOf(task.taskKind==='development_material_recheck'?'development_materials':task.taskKind);
-    const kind=task.taskKind==='development_material_supply'?'development_material_recheck':materialCheck&&index<0&&roundNumber===1?route[0]:index>=0?route[index+1]:undefined;
+    let kind=task.taskKind==='development_material_supply'?'development_material_recheck':materialCheck&&index<0&&roundNumber===1?route[0]:index>=0?route[index+1]:undefined;
+    if(task.taskKind==='development_craft_confirmation'&&kind==='development_sewing_transfer'&&!tasks.some(t=>t.routeVersion===roundNumber&&t.taskKind==='development_sewing_transfer'))kind='development_sewing';
     const label=JOURNEY_NODES.find(node=>node.key===kind)?.label;
     return label?[{taskId:task.taskId,label}]:[];
   });

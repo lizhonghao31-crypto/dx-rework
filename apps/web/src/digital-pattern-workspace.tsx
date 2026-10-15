@@ -1,3 +1,4 @@
+import {TaskWorkbenchSample} from "./task-workbench-sample.js";
 import {LegacyPatternWorkspace} from "./legacy-pattern-workspace.js";
 import "./digital-kpi-density.css";
 import { NavigationIcon } from "./navigation-icons.js";
@@ -95,6 +96,7 @@ export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialA
     const query=new URLSearchParams({section:key!,scope:next.scope});
     window.history.replaceState(window.history.state,'',`${urls.pageUrl("ui/digital-pattern-room")}?${query}`);
   }}>{label}</button>)}</nav>;
+  if(selected?.sourceId&&selected.taskKind.startsWith('development_')&&view!=='correct')return <TaskWorkbenchSample key={selected.taskId} task={selected} onClose={()=>{setSelectedId(null);setSelected(null);persist(filter,null);}} onChanged={()=>changed()}/>;
   if(section==='legacy')return <div className="pattern-workspace pattern-golden dx-production-refined">{sections}<LegacyPatternWorkspace/></div>;
   if(section==='bulk')return <div className="pattern-workspace pattern-golden dx-production-refined">
     {!selectedOnly&&<>{sections}<div className="development-breadcrumb"><a href={urls.pageUrl('ui/digital-cockpit')}>生产管理座舱</a> › <strong>板房管理台</strong></div><PageHeader title="板房管理台"/></>}

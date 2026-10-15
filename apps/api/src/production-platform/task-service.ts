@@ -481,6 +481,12 @@ export class DigitalProductionTaskService {
     for (const row of result.rows) if (await policy.allowed(actor, "task", row.task_id, "technical")) items.push(await this.read(actor, row.task_id));
     return { items, page };
   }
+  /** Internal fixed-route audit only; never records receipt, approval or completion. */
+  async recordSystemRouteWithClient(client:PoolClient,actor:TrustedActorContext,id:string,fromId:string){
+    const from=await this.task(client,fromId),next=await this.task(client,id);
+    if(from.task_kind!=='development_craft_confirmation'||from.state!=='completed'||next.task_kind!=='development_sewing'||!from.source_id||next.source_id!==from.source_id||next.route_version!==from.route_version)digitalForbidden();
+    await this.event(client,actor,id,this.resource(next),'system_route',new Date().toISOString(),'现场登记',{mode:'system_route',fromTaskId:fromId,note:'系统衔接：工艺已由设计师确认，沿用车板安排；尚未登记实际接收'});
+  }
   async history(actor: TrustedActorContext, id: string) {
     await new DigitalProductionAccessPolicy(this.database).assert(actor, "task", id, "technical");
     return { events: (await this.database.query("SELECT event_id AS \"eventId\",event_kind AS kind,occurred_at AS \"occurredAt\",recorded_at AS \"recordedAt\",time_quality AS quality,corrects_event_id AS \"correctsEventId\",payload,u.display_name AS \"actorName\" FROM digital_production_task_events e JOIN app_users u ON u.id=e.actor_id WHERE task_id=$1 ORDER BY recorded_at,event_id", [id])).rows,
