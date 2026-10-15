@@ -856,5 +856,20 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0244_development_sewing_result_attachments": {
+    "checksum": "2ffcf0e87fce2365db8ddd1b5392059c49dd157e88b56d6e87041cdebdcde1b9",
+    "tables": [
+      "digital_development_upload_purposes"
+    ],
+    "functions": [],
+    "references": [
+      "digital_production_tasks"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

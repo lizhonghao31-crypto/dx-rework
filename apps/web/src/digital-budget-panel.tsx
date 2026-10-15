@@ -1,3 +1,4 @@
+import {useDocumentUploadPreviews} from "./document-upload-previews.js";
 import { useEffect, useRef, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import { BUDGET_SECTIONS, BudgetDocumentSchema, budgetDisplayAmount, calculateBudget, type BudgetDocument, type BudgetRow, type BudgetSheet } from "@dx-rework/contracts/digital-budget";
@@ -22,7 +23,9 @@ const initial = (): BudgetDocument => ({ fabricType: "", productCategory: "", mo
     ...[...Array<string>(6).fill("通用物料"), ...Array<string>(3).fill("拉链"), ...Array<string>(3).fill("扣类"), ...Array<string>(3).fill("橡筋类"), ...Array<string>(3).fill("装饰牌标"), ...Array<string>(4).fill("花边/织带"), ...Array<string>(3).fill("其它")].map(category => newRow("辅料", category)),
     ...Array.from({ length: 4 }, () => newRow("外发工序"))] });
 
-export function DigitalBudgetPanel({ order, onClose, initialVersion, embedded=false }: { order: DigitalOrder; onClose: () => void; initialVersion?: number | undefined; embedded?:boolean }) {
+export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVersion, embedded=false,contained=false }: { order: DigitalOrder; onClose: () => void; initialVersion?: number | undefined; contained?:boolean;embedded?:boolean }) {
+  const previews=useDocumentUploadPreviews();
+  const [initialVersion,setInitialVersion]=useState(requestedVersion);
   const [sheet, setSheet] = useState<BudgetSheet | null>(null), [doc, setDoc] = useState<BudgetDocument>(initial);
   const [busy, setBusy] = useState(false), [dirty, setDirty] = useState(false), [error, setError] = useState("");
   const writing = useRef(false), operation = useRef<{ payload: string; key: string } | null>(null);
@@ -53,10 +56,10 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion, embedded=fa
       let value=sheet;
       if(!publish||dirty||!sheet.document){
         value=await write(base,"PUT",{expectedVersion:sheet.version,document:saveDocument});
-        setSheet(value);setDoc(value.document!);setDirty(false);
+        setSheet(value);setDoc(value.document!);setDirty(false);previews.saved();
       }
       if(publish)value=await write(`${base}/publish`,"POST",{expectedVersion:value.version});
-      setSheet(value);setDoc(value.document!);setDirty(false);
+      setSheet(value);setDoc(value.document!);setDirty(false);previews.saved();
     }
     catch (reason) { setError(reason instanceof Error ? reason.message : "预算操作失败"); }
     finally { writing.current = false; setBusy(false); }
@@ -68,26 +71,26 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion, embedded=fa
     finally{confirmingCopy.current=false;}
   };
   const upload = async (files: File[]) => {
-    if (!files.length || writing.current) return;
+    if (!files.length || writing.current) return;previews.start(files);
     writing.current = true; setBusy(true); setError("");
     try {
       const associated=new Set(doc.imageAttachmentIds);
       const limits = await digitalRequest<{ maxUploadBytes: number }>(`${base}/upload-limits`);
-      for (const file of files) {
+      for (const file of files) {try{
         if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) throw Error("请上传 JPG、PNG 或 WebP 图片");
         if (file.size > limits.maxUploadBytes) throw Error(`${file.name}超过上传大小限制`);
         const fingerprint=`${file.name}:${file.size}:${await sha256Hex(file)}`;
-        const prior=completedUploads.current.get(fingerprint);if(prior&&associated.has(prior))continue;
+        const prior=completedUploads.current.get(fingerprint);if(prior&&associated.has(prior)){previews.uploaded(file,prior);continue;}
         if(associated.size>=8)throw Error("预算图片最多8张");
         const intent = await digitalRequest<UploadIntentResponse>(`${base}/upload-intents`, "POST", { filename: file.name, mimeType: file.type, sizeBytes: file.size, sha256: fingerprint.slice(fingerprint.lastIndexOf(":")+1) });
         const form = new FormData(); for (const [name, value] of Object.entries(intent.uploadFields)) form.append(name, value); form.append("file", file);
         const response = await fetch(intent.uploadUrl, { method: intent.uploadMethod, body: form, credentials: "omit" });
         if (!response.ok) throw Error(`${file.name}上传失败`);
         await digitalRequest(`${base}/attachments/${intent.attachmentId}/finalize`, "POST", {});
-        completedUploads.current.set(fingerprint,intent.attachmentId);associated.add(intent.attachmentId);
+        previews.uploaded(file,intent.attachmentId);completedUploads.current.set(fingerprint,intent.attachmentId);associated.add(intent.attachmentId);
         setDoc(current => ({ ...current, imageAttachmentIds: [...current.imageAttachmentIds, intent.attachmentId] })); setDirty(true);
-      }
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "上传失败"); }
+      }catch(reason){const message=reason instanceof Error?reason.message:"上传失败";previews.failed(file,message);setError(message);}}
+    } catch (reason) {const message=reason instanceof Error?reason.message:"上传失败";for(const file of files)previews.failed(file,message);setError(message);}
     finally { writing.current = false; setBusy(false); }
   };
   const valid = BudgetDocumentSchema.safeParse(doc), totals = valid.success ? calculateBudget(valid.data) : null;
@@ -101,13 +104,14 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion, embedded=fa
   const reload=async()=>{if(writing.current||dirty&&!await confirmInApp("重新载入将丢弃未保存修改，确定继续？"))return;setBusy(true);try{install(await digitalRequest<BudgetSheet>(`${base}${initialVersion?`?version=${initialVersion}`:""}`));setError("");}catch(reason){setError(reason instanceof Error?reason.message:"读取失败");}finally{setBusy(false);}};
   return <><Surface><section ref={root} className="budget-editor dx-doc-budget">
     <DocumentToolbar title="成本预算表" status={busy?"保存中":error&&dirty?"保存失败，修改未保存":dirty?"未保存修改":`${initialVersion?"历史版本":sheet?.status==="published"?"已发布 · 当前有效版本":sheet?.version?"已保存":"草稿"}${sheet?.version?` · 版本 ${sheet.version}`:""}`}>
-      {!embedded&&<Button disabled={busy} onClick={onClose}>返回</Button>}
-      {sheet?.canEdit&&sheet.status==="published"&&sheet.document&&initialVersion===undefined&&<Button disabled={busy} onClick={()=>void copyPublished()}>另存为新草稿</Button>}
+      {!embedded&&!contained&&<Button disabled={busy} onClick={onClose}>返回</Button>}
+      {!embedded&&sheet?.canEdit&&sheet.status==="published"&&sheet.document&&initialVersion===undefined&&<Button disabled={busy} onClick={()=>void copyPublished()}>另存为新草稿</Button>}
       {!readonly&&<><Button disabled={busy} onClick={()=>void run(false)}>保存预算</Button><Button variant="primary" disabled={busy} onClick={()=>void run(true)}>发布预算</Button></>}
       <Button disabled={!sheet?.document||dirty||busy} onClick={()=>window.print()}>打印 / 保存 PDF</Button>
     </DocumentToolbar>
     <p className="budget-mobile-overview">{order.designStyleNo} · {order.customerCode} · 成本 {amount(totals?.cost)} · 利润 {amount(totals?.profit)}</p>
-    <DocumentErrors issues={issues} error={error}/>
+    {sheet&&<label>查看预算版本<select aria-label="查看预算版本" disabled={busy||embedded} value={initialVersion??''} onChange={async event=>{const version=event.target.value?Number(event.target.value):undefined;if(writing.current||dirty&&!await confirmInApp('切换版本将丢弃未保存修改，确定继续？'))return;setInitialVersion(version);const url=new URL(window.location.href);if(version)url.searchParams.set('budgetVersion',String(version));else url.searchParams.delete('budgetVersion');window.history.replaceState(window.history.state,'',url);}}>{!embedded&&<option value="">当前资料</option>}{sheet.versions?.map(version=><option key={version} value={version}>已发布版本 {version}</option>)}</select></label>}
+    {previews.view}<DocumentErrors issues={issues} error={error}/>
     {error&&/更新|版本|冲突/.test(error)&&<Button disabled={busy} onClick={()=>void reload()}>重新载入最新版本</Button>}
     {sheet?.canSubmitSourcing&&initialVersion===undefined&&!dirty&&<a className="dx-button dx-button--secondary budget-controls" href={`${urls.pageUrl("ui/sourcing/create")}?budget=${order.productionOrderId}&budgetVersion=${sheet.version}`}>核实并发起外发</a>}
     {sheet?.sourcingCaseId&&<a className="dx-button dx-button--secondary budget-controls" href={urls.pageUrl(`ui/sourcing/orders/${sheet.sourcingCaseId}`)}>查看外发订单</a>}

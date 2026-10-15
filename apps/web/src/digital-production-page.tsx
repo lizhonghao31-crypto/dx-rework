@@ -1,3 +1,4 @@
+import {OrderDocumentContainer} from "./order-document-container.js";
 import {TaskWorkbenchSample} from "./task-workbench-sample.js";
 import { DigitalPatternWorkspace } from "./digital-pattern-workspace.js";
 import type { DigitalTask } from "@dx-rework/contracts/digital-production-tasks";
@@ -12,9 +13,6 @@ import { navigateInternalPage } from "./internal-navigation.js";
 import { OrderClosurePanel } from "./order-closure-panel.js";
 import { FactoryFlowPanel } from "./factory-flow-panel.js";
 import { BulkPreparationPanel } from "./bulk-preparation-panel.js";
-import { ProductionInstructionPanel } from "./production-instruction-panel.js";
-import { DigitalBudgetPanel } from "./digital-budget-panel.js";
-import { DigitalDevelopmentPanel } from "./digital-development-panel.js";
 import { DigitalTasksPanel } from "./digital-production-tasks-panel.js";
 import { digitalTaskView } from "./digital-task-view.js";
 import { digitalRequest } from "./digital-production-api.js";
@@ -54,17 +52,16 @@ function LegacyLanding() {
   return error ? <p role="alert">{error}</p> : <p role="status">正在打开工作台…</p>;
 }
 
-function OrderDetail({ id, budgetVersion, budget = false }: { id: string; budgetVersion?: number | undefined; budget?: boolean }) {
+function OrderDetail({ id }: { id: string }) {
   const [order, setOrder] = useState<DigitalOrder | null>(null), [access, setAccess] = useState<DigitalAccessOptions | null>(null), [error, setError] = useState("");
   useEffect(() => {
     let live = true;
-    void Promise.all([digitalRequest<DigitalOrder>(`orders/${id}`), budget ? Promise.resolve(null) : digitalRequest<DigitalAccessOptions>("access/options")])
+    void Promise.all([digitalRequest<DigitalOrder>(`orders/${id}`), digitalRequest<DigitalAccessOptions>("access/options")])
       .then(([next, flags]) => { if (live) { setOrder(next); setAccess(flags); } }).catch(reason => { if (live) setError(reason.message); });
     return () => { live = false; };
-  }, [id, budget]);
+  }, [id]);
   if (error) return <><Button onClick={() => void closeDetail()}>返回</Button><p role="alert">{error}</p></>;
   if (!order) return <p role="status">正在读取原订单…</p>;
-  if (budget) return <DigitalBudgetPanel order={order} initialVersion={budgetVersion} onClose={() => void closeDetail()} />;
   if (!access) return <p role="status">正在读取原订单权限…</p>;
   const detailUrl = (kind: string, value: string) => `${urls.pageUrl("ui/digital-production")}?${kind}=${encodeURIComponent(value)}&returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`;
   return <><PageHeader title={order.designStyleNo} description={`${order.customerCode} · ${order.productGroup}`} />
@@ -138,10 +135,10 @@ export function DigitalProductionPage() {
     case "closure": detail = <OrderClosurePanel orderId={route.id} onClose={() => void closeDetail()} />; break;
     case "factory": detail = <FactoryFlowPanel orderId={route.id} onClose={() => void closeDetail()} />; break;
     case "bulk": detail = <BulkPreparationPanel orderId={route.id} onClose={() => void closeDetail()} />; break;
-    case "instruction": detail = <ProductionInstructionPanel orderId={route.id} initialVersion={route.version} onClose={() => void closeDetail()} />; break;
-    case "budget": detail = <OrderDetail id={route.id} budget budgetVersion={route.version} />; break;
+    case "instruction": detail = <OrderDocumentContainer key={`instruction:${route.id}:${route.version}`} initial={{kind:"instruction",id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;
+    case "budget": detail = <OrderDocumentContainer key={`budget:${route.id}:${route.version}`} initial={{kind:"budget",id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;
     case "order": detail = <OrderDetail id={route.id} />; break;
-    case "development": detail = <DigitalDevelopmentPanel sourceId={route.id} initialRound={route.version} onClose={() => void closeDetail()} />; break;
+    case "development": detail = <OrderDocumentContainer key={`development:${route.id}:${route.version}`} initial={{kind:"development",id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;
     case "task": detail = <TaskDetail id={route.id} />; break;
   }
   return <div className="pattern-orders digital-production">{detail}</div>;

@@ -75,7 +75,13 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
   const executorId=craft==='无'?replacementWorkerId:workerId;
   if(craft==='无')await digitalTasks.reassign(root,sewing.taskId,executorId,randomUUID());
   const executor:TrustedActorContext={actorId:executorId,actorRoles:['pattern_room_worker'],authorizationCapability:'pattern_room:orders:complete',authorizationCapabilities:['pattern_room:orders:complete','pattern_room:orders:view','digital_production:view'],requestId:randomUUID()};
-  const completion={taskId:sewing.taskId,result:'通过' as const,note:'实际任务执行人完工',craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null},completionKey=randomUUID();
+  const resultId=randomUUID();
+  await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-sewing.pdf','application/pdf',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[resultId,`r2-pr04/${resultId}`,'c'.repeat(64),executorId]);
+  await expect(execution.recordUploadPurpose(qc,sourceId,resultId,'车板成果',sewing.taskId)).rejects.toMatchObject({statusCode:404});
+  await expect(execution.authorizeSewingUpload(executor,randomUUID(),sewing.taskId)).rejects.toMatchObject({statusCode:409});
+  await execution.recordUploadPurpose(executor,sourceId,resultId,'车板成果',sewing.taskId);
+  expect((await db.query('SELECT purpose,task_id FROM digital_development_upload_purposes WHERE attachment_id=$1',[resultId])).rows[0]).toEqual({purpose:'车板成果',task_id:sewing.taskId});
+  const completion={attachmentIds:[resultId],taskId:sewing.taskId,result:'通过' as const,note:'实际任务执行人完工',craftExecution:null,nextAssigneeId:null,sentDate:null,trackingNo:null},completionKey=randomUUID();
   if(craft==='无'){
     await expect(native.complete(executor,order.orderId,{roundId:order.currentRoundId,version:order.version},randomUUID())).rejects.toMatchObject({statusCode:404});
     await expect(execution.route({...executor,actorId:workerId},sourceId,completion,randomUUID())).rejects.toMatchObject({statusCode:404});
@@ -87,6 +93,9 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
   }
   await execution.route(executor,sourceId,completion,completionKey);
   await execution.route(executor,sourceId,completion,completionKey);
+  expect(await forms.canDownload(executor,sourceId,resultId)).toBe(true);
+  expect((await db.query("SELECT route_version,payload->'attachmentIds' AS files FROM digital_development_route_facts WHERE task_id=$1 AND kind='车板完成'",[sewing.taskId])).rows).toEqual([{route_version:1,files:[resultId]}]);
+  await expect(execution.authorizeSewingUpload(executor,sourceId,sewing.taskId)).rejects.toMatchObject({statusCode:409});
   order=await native.get(root,order.orderId);
   expect(order.status).toBe('pending_confirmation');
   expect((await db.query("SELECT count(*)::int n FROM rework_todos WHERE dedupe_key=$1",[`pattern-room:${order.orderId}:${order.currentRoundId}:handoff`])).rows[0].n).toBe(0);

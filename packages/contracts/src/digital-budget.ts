@@ -79,6 +79,7 @@ export function budgetPublishErrors(document: BudgetDocument): string[] {
   return errors;
 }
 export type BudgetSheet = {
+  versions?:number[];
   productionOrderId: string; version: number; status: "draft" | "published";
   document: BudgetDocument | null; totals: ReturnType<typeof calculateBudget> | null;
   canEdit: boolean; canSubmitSourcing: boolean; sourcingCaseId: string | null;

@@ -1,3 +1,4 @@
+import {useDocumentUploadPreviews} from "./document-upload-previews.js";
 import { customerPoDateLabel } from "./digital-workspace-copy.js";
 import { InstructionSourceReviewPanel } from "./instruction-source-review.js";
 import { PoCustomerDates } from "./po-customer-dates.js";
@@ -19,7 +20,8 @@ const urls = createWebUrls(import.meta.env.BASE_URL);
 const kinds = ["款图", "主唛", "腰卡", "吊牌", "洗水唛", "二维码唛", "包装辅料", "其它工艺"] as const;
 const tabKeys = Object.keys(instructionTabs) as InstructionTab[];
 
-export function ProductionInstructionPanel({ orderId, initialVersion, onClose, embedded=false }: { orderId: string; initialVersion?: number | undefined; onClose: () => void; embedded?:boolean }) {
+export function ProductionInstructionPanel({ orderId, initialVersion, onClose, embedded=false,contained=false }: { orderId: string; initialVersion?: number | undefined; onClose: () => void; contained?:boolean;embedded?:boolean }) {
+  const previews=useDocumentUploadPreviews();
   const [sheet, setSheet] = useState<InstructionSheet | null>(null), [doc, setDoc] = useState<InstructionDocument | null>(null), [version, setVersion] = useState<number | undefined>(initialVersion);
   const [busy, setBusy] = useState(false), [saving, setSaving] = useState(false), [dirty, setDirty] = useState(false), [error, setError] = useState("");
   const [sourceReviewOpen,setSourceReviewOpen]=useState(false);
@@ -53,7 +55,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
     const editGeneration = generation.current;
     try {
       const value = await digitalRequest<InstructionSheet>(base + path, method, body, operation.current.key);
-      setSheet(value); if (editGeneration === generation.current) { setDoc(value.document); setDirty(false); }
+      setSheet(value); if (editGeneration === generation.current) { setDoc(value.document); setDirty(false); previews.saved(); }
       setSaveBlocked(false); setValidationMode(null); operation.current = null; return true;
     } catch (e) { setError(e instanceof Error ? e.message : "操作失败"); setSaveBlocked(true); return false; }
     finally { writing.current = false; setBusy(false); setSaving(false); }
@@ -83,29 +85,29 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
   };
   const reload = async () => { if (await discard("重新载入将丢弃未保存修改，确定继续？")) { setDirty(false); setReloadCount(value => value + 1); } };
   const upload = async (files: File[]) => {
-    if (!files.length || !doc || !sheet?.canEdit || sheet.cutStarted || writing.current) return;
+    if (!files.length || !doc || !sheet?.canEdit || sheet.cutStarted || writing.current) return;previews.start(files);
     writing.current = true; setBusy(true); setError("");
     try {
       let count = doc.images.length;
       const limits = await digitalRequest<{ maxUploadBytes: number }>(base + "/upload-limits");
-      for (const file of files) {
+      for (const file of files) {try{
         if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > limits.maxUploadBytes) throw Error(`${file.name}：请选择符合大小限制的 JPG、PNG、WebP 图片`);
         const hash = await sha256Hex(file), fingerprint = JSON.stringify([uploadKind, file.name, file.size, hash]);
-        if (successfulUploads.current.has(fingerprint)) continue;
+        if (successfulUploads.current.has(fingerprint)){previews.uploaded(file,successfulUploads.current.get(fingerprint)!);continue;}
         if (count >= 60) throw Error("图片最多60张");
         const intent = await digitalRequest<UploadIntentResponse>(base + "/upload-intents", "POST", { filename: file.name, mimeType: file.type, sizeBytes: file.size, sha256: hash });
         const form = new FormData(); for (const [key, value] of Object.entries(intent.uploadFields)) form.append(key, value); form.append("file", file);
         if (!(await fetch(intent.uploadUrl, { method: intent.uploadMethod, body: form, credentials: "omit" })).ok) throw Error(`${file.name}上传失败`);
         await digitalRequest(base + `/attachments/${intent.attachmentId}/finalize`, "POST", {});
-        successfulUploads.current.set(fingerprint, intent.attachmentId); count++; generation.current++;
+        previews.uploaded(file,intent.attachmentId);successfulUploads.current.set(fingerprint, intent.attachmentId); count++; generation.current++;
         setDoc(current => current ? { ...current, images: [...current.images, { attachmentId: intent.attachmentId, kind: uploadKind, description: "" }] } : current); setDirty(true);
-      }
-    } catch (e) { setError(e instanceof Error ? e.message : "上传失败"); setSaveBlocked(true); }
+      }catch(reason){const message=reason instanceof Error?reason.message:"上传失败";previews.failed(file,message);setError(message);}}
+    } catch (e) {const message=e instanceof Error?e.message:"上传失败";for(const file of files)previews.failed(file,message);setError(message);setSaveBlocked(true);}
     finally { writing.current = false; setBusy(false); }
   };
-  if (!sheet || !doc) return <Surface>{error ? <p role="alert">{error}</p> : <p role="status">正在读取制单…</p>}{!embedded&&<Button onClick={onClose}>返回</Button>}</Surface>;
+  if (!sheet || !doc) return <Surface>{error ? <p role="alert">{error}</p> : <p role="status">正在读取制单…</p>}{!embedded&&!contained&&<Button onClick={onClose}>返回</Button>}</Surface>;
   if (!sheet.canEdit && !sheet.isPublishedSnapshot && sheet.publishedVersion === null) {
-    return <Surface className="dx-doc-instruction"><DocumentToolbar title="大货制单" status="尚未发布有效制单">{!embedded&&<Button onClick={onClose}>返回</Button>}</DocumentToolbar><DocumentSection id="instruction-unpublished" title="尚未发布有效制单"><p>该母单尚无已发布的有效制单。请联系订单跟单发布后查看。</p></DocumentSection><PoCustomerDates sheet={sheet} busy={busy} dirty={dirty} historical={embedded||Boolean(version)} onAct={act}/>{error&&<p role="alert">{error}</p>}</Surface>;
+    return <Surface className="dx-doc-instruction"><DocumentToolbar title="大货制单" status="尚未发布有效制单">{!embedded&&!contained&&<Button onClick={onClose}>返回</Button>}</DocumentToolbar><DocumentSection id="instruction-unpublished" title="尚未发布有效制单"><p>该母单尚无已发布的有效制单。请联系订单跟单发布后查看。</p></DocumentSection><PoCustomerDates sheet={sheet} busy={busy} dirty={dirty} historical={embedded||Boolean(version)} onAct={act}/>{error&&<p role="alert">{error}</p>}</Surface>;
   }
   const order = sheet.order, readonly = embedded || !sheet.canEdit || sheet.cutStarted, inputDisabled = busy && !saving || sourceReviewOpen;
   const total = order.lines.reduce((n, line) => n + line.sizes.reduce((m, size) => m + size.quantity, 0), 0);
@@ -148,11 +150,11 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
   return <Surface><article className="dx-doc-instruction">
     <div className="instruction-screen">
       <DocumentToolbar title="大货制单" status={status}>
-        {!embedded&&<Button type="button" disabled={busy} onClick={onClose}>返回</Button>}
+        {!embedded&&!contained&&<Button type="button" disabled={busy} onClick={onClose}>返回</Button>}
         {!readonly && <><Button type="button" disabled={busy} onClick={save}>保存草稿</Button><Button type="button" disabled={busy || sheet.publishedVersion === sheet.version && !dirty} onClick={publish}>发布有效制单</Button></>}
         <Button type="button" disabled={!printable} title={!printable ? "请先保存并打开已发布版本后打印" : "打印当前已发布快照的全部六类内容"} onClick={() => window.print()}>打印 / 保存 PDF</Button>
       </DocumentToolbar>
-      <header className="instruction-summary dx-doc-card">
+      {previews.view}<header className="instruction-summary dx-doc-card">
         <div className="instruction-summary-image">{mainImage && publishedImage(mainImage.attachmentId) ? <a href={imageUrl(mainImage.attachmentId)} target="_blank" rel="noreferrer"><img src={imageUrl(mainImage.attachmentId)} alt="款图" /></a> : <span>{mainImage ? "保存后预览" : "暂无款图"}</span>}</div>
         <div className="instruction-summary-details"><h2>{order.designStyleNo}</h2><dl><div><dt>客户</dt><dd>{order.customerCode}</dd></div><div><dt>款名</dt><dd>{doc.styleName || "—"}</dd></div><div><dt>跟单</dt><dd>{sheet.merchandiserName || "待指派"}</dd></div><div><dt>类型</dt><dd>{doc.category || "—"}</dd></div><div><dt>年份季节</dt><dd>{doc.season || "—"}</dd></div><div><dt>{version?"客户仓到货日":customerPoDateLabel}</dt><dd>{[...new Set((sheet.customerPoDates??[]).map(line=>line.date).filter(Boolean))].sort().join("、")||"未登记"}</dd></div></dl></div>
         <div className="instruction-po-summary"><h3>PO / 颜色概要</h3><p>{new Set(order.lines.map(line => line.poNumber).filter(Boolean)).size} 个 PO · {order.lines.length} 个款色 · 总数 <strong>{total.toLocaleString()}</strong> 件</p>{order.lines.slice(0, 2).map(line => <div key={line.lineId}><span>{line.color}{line.colorForeign ? ` / ${line.colorForeign}` : ""}</span><strong>{line.sizes.reduce((n, size) => n + size.quantity, 0).toLocaleString()} 件</strong></div>)}{order.lines.length > 2 && <button type="button" onClick={() => focus("main", "instruction-quantities")}>查看全部 {order.lines.length} 个款色</button>}</div>
