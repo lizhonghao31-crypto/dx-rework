@@ -1,3 +1,4 @@
+import {taskDocuments} from "./task-documents.js";
 import {developmentTaskBlockers} from "./development-task-blockers.js";
 import {materialReadiness} from "./development-material-readiness.js";
 import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
@@ -151,6 +152,11 @@ export class DigitalProductionTaskService {
     await this.event(client, actor, id, input.resource, "created", new Date().toISOString(), "现场登记");
     await this.activate(client, actor, id, input.occurredAt === undefined ? new Date().toISOString() : input.occurredAt, input.occurredAt === null ? "缺失" : input.occurredAt === undefined ? "现场登记" : "补报未核实");
     return { taskId: id };
+  }
+  async documents(actor:TrustedActorContext,id:string){
+    const db=await this.database.connect();
+    try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');const result=await taskDocuments(db,actor,id);await db.query('COMMIT');return result;}
+    catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
   // Only omission denotes the server's live business action. Explicit dates remain backreports.
   async setConditionWithClient(client: PoolClient, actor: TrustedActorContext, id: string, condition: typeof DIGITAL_CONDITION_KEYS[number], satisfied: boolean, occurredAt: string | null | undefined = undefined, note = "") {

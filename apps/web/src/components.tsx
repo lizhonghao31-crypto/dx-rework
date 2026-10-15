@@ -83,7 +83,7 @@ const ROLE_LABELS: Record<string, string> = {
   worker: "员工",
 };
 
-const roleLabel = (role: string): string => ROLE_LABELS[role] ?? role;
+export const roleLabel = (role: string): string => ROLE_LABELS[role] ?? role;
 
 function loadShellMe() {
   return verifySession().then((session) => session === "denied" ? null : session);

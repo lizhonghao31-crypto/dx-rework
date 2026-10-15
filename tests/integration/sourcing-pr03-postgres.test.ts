@@ -3428,7 +3428,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_contract_return'",[id]))
       .rows[0]?.count).toBe(1);
   });
-  const budgetFixture = async (threePo=false) => {
+  const budgetFixture = async (threePo=false,stylePrefix="TEST-P09") => {
     await cycleTodoServices();
     const designerId = randomUUID();
     await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST P09 designer',true)", [designerId]);
@@ -3441,7 +3441,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await database.query("UPDATE digital_production_customers SET default_merchandiser_id=$1 WHERE code='PD'", [merchandiserId]);
     const identity = new DigitalProductionIdentityService(database, true, undefined,()=>new Date("2026-09-01T00:00:00Z"));
     const order = await identity.createOrder(designer, DigitalOrderCreateSchema.parse({
-      customerCode: "PD", productGroup: "男装", designStyleNo: `TEST-P09-${randomUUID()}`,
+      customerCode: "PD", productGroup: "男装", designStyleNo: `${stylePrefix}-${randomUUID()}`,
       orderDate: "2026-09-30", contractDeliveryDate: "2026-11-20", primaryMerchandiserId: merchandiserId,
       lines: [{ poNumber: `TEST-PO1-${designerId}`, color: "黑", customerWarehouseArrivalDate:"2026-11-20", sizes: [{ size: "M", quantity: 137 }] }, { poNumber: `TEST-PO2-${designerId}`, color: "白", customerWarehouseArrivalDate:"2026-11-20", sizes: [{ size: "M", quantity: 63 }] }, ...(threePo?[{poNumber:`TEST-PO3-${designerId}`,color:"蓝",customerWarehouseArrivalDate:"2026-11-20",sizes:[{size:"M",quantity:40}]}]:[])],
     }), randomUUID());
@@ -3454,6 +3454,40 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const budget = new DigitalBudgetService(database, true);
     return { order, designer, document, imageId, budget };
   };
+
+  it('R2 task document directory preserves independent budget rights and exact development round',async()=>{
+    const fixture=await budgetFixture(false,"TEST-R2"),root=rootActor();
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true}))!;
+    const tasks=new DigitalProductionTaskService(database),worker=ready.people.pattern_room_worker!,client=await database.connect();let taskId:string;
+    try{await client.query('BEGIN');taskId=(await tasks.createWithClient(client,root,{resource:{kind:'source',id:ready.sourceId},kind:'development_pattern',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:worker.actorId})).taskId;await client.query('COMMIT');}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+    const full=await tasks.documents(root,taskId);
+    expect(full).toMatchObject({development:{state:'published',id:ready.sourceId,version:1},instruction:{state:'published',id:ready.id,version:1},budget:{state:'published',id:ready.id,version:1}});
+    const limited=await tasks.documents(worker,taskId);
+    expect(limited.budget).toEqual({state:'unavailable'});expect(JSON.stringify(limited)).not.toMatch(/salePrice|unitPrice|attachmentId/);
+    const stranger=await budgetFixture();await expect(tasks.documents(stranger.designer,taskId)).rejects.toMatchObject({statusCode:404});
+    await expect(fixture.budget.read(worker,ready.id)).rejects.toMatchObject({statusCode:404});
+    if(process.env.R2_WORKBENCH_EVIDENCE){
+      await database.query("UPDATE app_users SET display_name='TEST-R2 纸样师傅' WHERE id=$1",[worker.actorId]);
+      const imageBytes=await sharp({create:{width:240,height:160,channels:3,background:'#4073a4'}}).png().toBuffer();
+      const sourceFiles=(await new DigitalDevelopmentService(database,true).read(root,ready.sourceId)).document!.files;
+      for(const file of sourceFiles){const row=(await database.query('SELECT object_key FROM attachments WHERE attachment_id=$1',[file.attachmentId])).rows[0];await contractStorage.writeImmutable(row.object_key,imageBytes,{mimeType:'image/png',sha256:createHash('sha256').update(imageBytes).digest('hex')});}
+      const readyClient=await database.connect();try{await readyClient.query('BEGIN');for(const row of (await readyClient.query("SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1 AND stage='activation'",[taskId])).rows)await tasks.setConditionWithClient(readyClient,root,taskId,row.condition_key,true);await readyClient.query('COMMIT');}catch(error){await readyClient.query('ROLLBACK');throw error;}finally{readyClient.release();}
+      const identity=new DigitalProductionIdentityService(database,true),forms=new DigitalDevelopmentService(database,true);
+      const standalone=await identity.createSource(fixture.designer,{developmentType:'头版',designStyleNo:`TEST-R2-NO-ORDER-${randomUUID()}`,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+      const picture=randomUUID(),bytes=await sharp({create:{width:80,height:80,channels:3,background:'#2855a0'}}).png().toBuffer(),objectKey=`tests/r2/${picture}.png`,digest=createHash('sha256').update(bytes).digest('hex');
+      await contractStorage.writeImmutable(objectKey,bytes,{mimeType:'image/png',sha256:digest});
+      await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-r2.png','image/png',$3,$4,$5,'ready',CURRENT_TIMESTAMP)",[picture,objectKey,bytes.length,digest,fixture.designer.actorId]);
+      const original=(await forms.read(root,ready.sourceId)).document!;
+      const syntheticFiles:Array<{attachmentId:string;kind:'款图'}>=[{attachmentId:picture,kind:'款图'}];
+      for(let index=1;index<8;index++){const attachmentId=randomUUID(),key=`tests/r2/${attachmentId}.png`;await contractStorage.writeImmutable(key,bytes,{mimeType:'image/png',sha256:digest});await database.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-R2.png','image/png',$3,$4,$5,'ready',CURRENT_TIMESTAMP)",[attachmentId,key,bytes.length,digest,fixture.designer.actorId]);syntheticFiles.push({attachmentId,kind:'款图'});}
+
+      await forms.save(fixture.designer,standalone.sourceId,{expectedVersion:0,document:{...original,sizes:['XS','S','M','L','XL','2XL','3XL','4XL'],measurements:Array.from({length:40},(_,index)=>({name:`TEST 尺寸 ${index+1}`,values:['1','2','3','4','5','6','7','8']})),files:syntheticFiles}},randomUUID());await forms.publish(fixture.designer,standalone.sourceId,1,randomUUID());
+      const extra=await database.connect();let sewingTaskId:string,standaloneTaskId:string;
+      try{await extra.query('BEGIN');sewingTaskId=(await tasks.createWithClient(extra,root,{resource:{kind:'source',id:ready.sourceId},kind:'development_sewing',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:worker.actorId})).taskId;standaloneTaskId=(await tasks.createWithClient(extra,root,{resource:{kind:'source',id:standalone.sourceId},kind:'development_pattern',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:worker.actorId})).taskId;await extra.query('COMMIT');}catch(error){await extra.query('ROLLBACK');throw error;}finally{extra.release();}
+      expect(await tasks.documents(root,standaloneTaskId)).toMatchObject({development:{state:'published',id:standalone.sourceId,version:1},instruction:{state:'not_applicable'},budget:{state:'not_applicable'}});
+      for(let index=0;index<12;index++)await tasks.prioritize(root,taskId,index%2?'normal':'urgent',randomUUID());
+      const {workbenchBrowser}=await import('../acceptance/r2-workbench-browser.mjs');await workbenchBrowser({database,attachments,storage:contractStorage,root,worker,taskId,sewingTaskId,standaloneTaskId});}
+  },120000);
 
   it('analysis separates frozen development rounds from preparation and factory instruction versions', async () => {
     const fixture = await budgetFixture(), primary = merchandiserActor(), root = rootActor();

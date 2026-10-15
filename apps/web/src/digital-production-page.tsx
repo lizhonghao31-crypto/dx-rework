@@ -1,3 +1,4 @@
+import {TaskWorkbenchSample} from "./task-workbench-sample.js";
 import { DigitalPatternWorkspace } from "./digital-pattern-workspace.js";
 import type { DigitalTask } from "@dx-rework/contracts/digital-production-tasks";
 import { useEffect, useRef, useState } from "react";
@@ -123,6 +124,7 @@ function TaskDetail({ id }: { id: string }) {
   const [task,setTask]=useState<DigitalTask|null>(null);
   const [access, setAccess] = useState<DigitalAccessOptions | null>(null), [error, setError] = useState("");
   useEffect(() => { let live = true; setAccess(null);setTask(null);setError("");void Promise.all([digitalRequest<DigitalAccessOptions>("access/options"),digitalRequest<DigitalTask>(`tasks/${id}`)]).then(([next,current]) => { if (live) {setAccess(next);setTask(current);} }).catch(reason => { if (live) setError(reason.message); }); return () => { live = false; }; }, [id]);
+  if(task?.sourceId&&['development_pattern','development_sewing'].includes(task.taskKind)&&new URLSearchParams(window.location.search).get('workbench')==='sample')return <TaskWorkbenchSample key={id} task={task} onClose={()=>void closeDetail()}/>;
   return <><div className="pattern-actions"><Button onClick={() => void closeDetail()}>返回</Button></div>{error && <p role="alert">{error}</p>}{access ? task?.taskKind.startsWith("development_") ? <DigitalPatternWorkspace key={id} selectedOnly initialTask={task} initialAccess={access}/> : <DigitalTasksPanel options={access} taskId={id} compact view={digitalTaskView(window.location.search)} /> : !error && <p role="status">正在读取原任务…</p>}</>;
 }
 
