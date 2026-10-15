@@ -32,7 +32,7 @@ function initialFilter(): PatternWorkspaceFilter {
   const parsed = PatternWorkspaceFilterSchema.safeParse(Object.fromEntries([...new URLSearchParams(window.location.search)].filter(([key]) => ["page", "search", "group", "lane", "owner", "state", "risk", "scope", "business"].includes(key))));
   return parsed.success ? parsed.data : PatternWorkspaceFilterSchema.parse({});
 }
-export function DigitalPatternWorkspace({selectedOnly=false}:{selectedOnly?:boolean}={}) {
+export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialAccess}:{selectedOnly?:boolean;initialTask?:DigitalTask;initialAccess?:DigitalAccessOptions}={}) {
   const [section,setSection]=useState(new URLSearchParams(window.location.search).get('workspace')==='preparation'?'bulk':['bulk','legacy'].includes(new URLSearchParams(window.location.search).get('section')??'')?new URLSearchParams(window.location.search).get('section')!:'development');
   const [bulkOrder,setBulkOrder]=useState<string|null>(new URLSearchParams(window.location.search).get('bulkOrder')??(new URLSearchParams(window.location.search).get('workspace')==='preparation'?new URLSearchParams(window.location.search).get('selected'):null));
   const [search, setSearch] = useState(initialFilter().search);
@@ -56,22 +56,22 @@ export function DigitalPatternWorkspace({selectedOnly=false}:{selectedOnly?:bool
   };
   useEffect(() => {
     let live=true;
-    void digitalRequest<DigitalAccessOptions>("access/options").then(access=>{if(live){
+    void (initialAccess?Promise.resolve(initialAccess):digitalRequest<DigitalAccessOptions>("access/options")).then(access=>{if(live){
       if(!new URLSearchParams(window.location.search).has("scope"))setFilter(value=>({...value,scope:access.roles.some(role=>["root_superuser","owner_group","production_management","pattern_room_supervisor","development_clerk"].includes(role))?"all":"mine"}));
       setOptions(access);
     }}).catch(reason=>{if(live)setError(reason.message);});
     return()=>{live=false;};
-  },[]);
+  },[initialAccess]);
   useEffect(() => {
-    let live = true; setError("");
-    if(section!=="development"||!options)return()=>{live=false;};
+    let live = true; const controller=new AbortController();setError("");
+    if(selectedOnly||section!=="development"||!options)return()=>{live=false;};
     const query = new URLSearchParams(Object.entries({...filter,business:"development"}).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]));
-    void digitalRequest<PatternWorkspaceResult>(`workspaces/pattern?${query}`).then(data=>{if(live)setResult(data);}).catch(reason=>{if(live){setResult(null);setError(reason.message);}});
-    return () => {live = false;};
-  }, [filter, refresh,section,options]);
+    void digitalRequest<PatternWorkspaceResult>(`workspaces/pattern?${query}`,"GET",undefined,undefined,{signal:controller.signal}).then(data=>{if(live)setResult(data);}).catch(reason=>{if(live){setResult(null);setError(reason.message);}});
+    return () => {live = false;controller.abort();};
+  }, [filter, refresh,section,options,selectedOnly]);
   useEffect(() => {
     let live = true; setSelected(null); setSheet(null); setPatternOrderId(null); setSuggestedWorker(null); setDetailError("");
-    if (selectedId) void digitalRequest<DigitalTask>(`tasks/${selectedId}`).then(async task => {
+    if (selectedId) void (refresh===0&&initialTask?.taskId===selectedId?Promise.resolve(initialTask):digitalRequest<DigitalTask>(`tasks/${selectedId}`)).then(async task => {
       if (!live) return;
       // A direct query cannot turn a non-development task into a board operation.
       if(task.taskKind==='bulk_pattern'&&task.orderId){setSelected(task);setBulkOrder(task.orderId);setSection('bulk');return;}
@@ -80,7 +80,7 @@ export function DigitalPatternWorkspace({selectedOnly=false}:{selectedOnly?:bool
       if (task.sourceId) {const document = await digitalRequest<DevelopmentSheet>(`sources/${task.sourceId}/development?round=${task.routeVersion}`); if (live) setSheet(document);}
     }).catch(reason => {if (live) {setSelected(null); setSheet(null); setDetailError(reason.message);}});
     return () => {live = false;};
-  }, [selectedId, refresh]);
+  }, [selectedId, refresh,initialTask]);
   const update = (patch: Partial<PatternWorkspaceFilter>) => {const next = PatternWorkspaceFilterSchema.parse({...filter, page: 1, ...patch,business:"development"}); setFilter(next); setResult(null); setSelectedId(null); persist(next, null);};
   const changed = (confirmation?:string) => {if(confirmation)setNotice(confirmation);setRefresh(value => value + 1);};
   const choose = (id: string) => {setSelectedId(id); setTab("当前办理"); setCollapsed(false); persist(filter,id);};
@@ -141,7 +141,7 @@ export function DigitalPatternWorkspace({selectedOnly=false}:{selectedOnly?:bool
         {tab === '当前办理' && view === 'handle' && selected.sourceId && sheet?.status === 'published' && selected.routeVersion === (sheet.latestRoundNumber ?? 1) && <Surface><DevelopmentExecutionPanel key={`${selected.taskId}:${refresh}`} sourceId={selected.sourceId} materialRevision={sheet.materialEvents.length} taskId={selected.taskId} onChanged={changed} workspace prioritizeMaterialCheck onPatternOrderLoaded={setPatternOrderId} onPreassignedSewingLoaded={setSuggestedWorker}/></Surface>}
 
         {view!=="handle"&&sheet&&<section className="development-task-basis"><h3>本轮材料事实（只读）</h3><div className="development-table-scroll"><BusinessMaterials sheet={sheet}/></div><p>打板数量：{sheet.document?.quantity??"未登记"} · 打样尺码：{sheet.document?.sampleSize||"未登记"}</p></section>}
-        <div className="pattern-original-task-record"><DigitalTasksPanel key={`${selected.taskId}:${refresh}:${tab}`} options={options} taskId={selected.taskId} compact embeddedBusiness feedbackOnly={["development_materials","development_material_recheck"].includes(selected.taskKind)} view={tab === '历史记录' && view === 'handle' ? 'read' : view} onChanged={changed}/></div>
+        <div className="pattern-original-task-record"><DigitalTasksPanel key={`${selected.taskId}:${refresh}:${tab}`} initialTask={selected} options={options} taskId={selected.taskId} compact embeddedBusiness feedbackOnly={["development_materials","development_material_recheck"].includes(selected.taskKind)} view={tab === '历史记录' && view === 'handle' ? 'read' : view} onChanged={changed}/></div>
       </div></div>}
 
       </>}

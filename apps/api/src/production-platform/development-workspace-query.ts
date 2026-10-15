@@ -46,7 +46,7 @@ export class DevelopmentWorkspaceQuery {
     if(filter.scope==="unassigned"&&!manager)digitalForbidden();
     if(filter.scope==="dispatch"&&!isRootActor(actor)&&!actor.actorRoles.includes("pattern_room_supervisor"))digitalForbidden();
     // Board cards contain read-only facts. Handling always re-reads the actual task.
-    const result = await this.journeys.list(actor, JourneyFilterSchema.parse({}), true,undefined,{details:false});
+    const result = await this.journeys.list(actor, JourneyFilterSchema.parse({}), true,undefined,{details:false,patternBusiness:filter.business});
     const journeys=new Map(result.items.map(item=>[item.id,item])),search=filter.search.toLocaleLowerCase();
     const all = patternTasks(result.items).filter(task => filter.business === "all" || (task.node.key === "bulk_pattern" ? filter.business === "bulk" : filter.business === "development"));
     const assignments=filter.scope==="dispatch"?await this.journeys.pendingPatternAssignments(actor,[...new Set(all.flatMap(task=>task.sourceId?[task.sourceId]:[]))]):[];

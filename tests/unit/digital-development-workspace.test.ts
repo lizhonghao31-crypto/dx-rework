@@ -73,7 +73,7 @@ describe("development workspaces preserve original business facts", () => {
   it("matches the single keyword against current owner names without broadening task scope, including duplicate names",async()=>{
     const own={id:actor.actorId,name:"TEST 同名主办"},other={id:randomUUID(),name:own.name};
     const tasks=[node("development_pattern","active",{owner:own}),node("development_cutting","active",{owner:other})];
-    const query=new DevelopmentWorkspaceQuery({list:async(_actor,_filter,_all,_page,options)=>{expect(options).toEqual({details:false});return{asOf:"TEST",items:[journey(tasks)]};}} as unknown as DigitalJourneyQuery);
+    const query=new DevelopmentWorkspaceQuery({list:async(_actor,_filter,_all,_page,options)=>{expect(options).toEqual({details:false,patternBusiness:"development"});return{asOf:"TEST",items:[journey(tasks)]};}} as unknown as DigitalJourneyQuery);
     const worker=await query.pattern({...actor,actorRoles:["pattern_room_worker"]},PatternWorkspaceFilterSchema.parse({search:"同名主办"}));
     expect(worker.items.map(item=>item.node.owner?.id)).toEqual([own.id]);
     const manager=await query.pattern({...actor,actorRoles:["development_clerk"]},PatternWorkspaceFilterSchema.parse({scope:"all",search:"同名主办"}));

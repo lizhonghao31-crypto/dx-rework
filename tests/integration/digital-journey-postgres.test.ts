@@ -367,4 +367,30 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     await expect(journeys.read(workerContext,visibleBeforeRevocation.id)).rejects.toMatchObject({statusCode:404});
   },120000);
 
+  it("R2 board summary preserves complete task counts while avoiding downstream full-domain reads",async()=>{
+    const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:input("R2-PERF").designStyleNo,temporaryStyleNo:input("R2-PERF").temporaryStyleNo,customerCode:"PD"},randomUUID());
+    await publishSource(source.sourceId);
+    await identity.createOrder(actor(),input("R2-PERF"),randomUUID(),source.sourceId);
+    const statements:string[]=[];
+    const measured={connect:async()=>{
+      const client=await db.connect();
+      return new Proxy(client,{get(target,key){
+        if(key==='query')return (...args:unknown[])=>{if(typeof args[0]==='string')statements.push(args[0]);return Reflect.apply(target.query,target,args);};
+        const value=Reflect.get(target,key,target);return typeof value==='function'?value.bind(target):value;
+      }});
+    }} as unknown as pg.Pool;
+    const measuredJourneys=new DigitalJourneyQuery(measured),context=actor(root,["root_superuser"]);
+    const baseline=await measuredJourneys.list(context,JourneyFilterSchema.parse({}),true,undefined,{details:false});
+    const baselineCount=statements.length;statements.length=0;
+    const filter=PatternWorkspaceFilterSchema.parse({business:'all',scope:'all',state:'all'});
+    const expected=await new DevelopmentWorkspaceQuery({list:async()=>baseline} as unknown as DigitalJourneyQuery).pattern(context,filter);
+    const actual=await new DevelopmentWorkspaceQuery(measuredJourneys).pattern(context,filter);
+    expect(actual.total).toBe(expected.total);expect(actual.counts).toEqual(expected.counts);expect(actual.riskCounts).toEqual(expected.riskCounts);expect(actual.owners).toEqual(expected.owners);
+    expect(actual.items.map(row=>row.node.instanceId)).toEqual(expected.items.map(row=>row.node.instanceId));
+    expect(statements.length).toBeLessThan(baselineCount);
+    expect(statements.some(sql=>sql.includes('FROM digital_budget_documents')||sql.includes('FROM digital_order_closures'))).toBe(false);
+    expect(statements.some(sql=>sql.includes('board_task.task_kind=ANY($5::text[])'))).toBe(true);
+    console.info(JSON.stringify({evidence:'R2 board SQL count',baseline:baselineCount,optimized:statements.length,cards:actual.total}));
+  },120000);
+
 });

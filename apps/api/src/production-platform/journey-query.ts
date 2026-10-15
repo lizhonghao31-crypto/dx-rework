@@ -1,3 +1,4 @@
+import {PATTERN_GROUPS} from "@dx-rework/contracts/digital-development-workspace";
 import {materialReadiness} from "./development-material-readiness.js";
 import {reuseJourneySnapshotReads} from "./journey-snapshot-reads.js";
 import {journeyTaskSummaries} from './journey-task-summary.js';
@@ -42,7 +43,7 @@ export class DigitalJourneyQuery {
       const result=await work(reuseJourneySnapshotReads(db),asOf);await db.query("COMMIT");return result;
     } catch(error) { await db.query("ROLLBACK");throw error; } finally {db.release();}
   }
-  private async candidates(db:PoolClient,actor:TrustedActorContext,id:string|null=null):Promise<Candidate[]> {
+  private async candidates(db:PoolClient,actor:TrustedActorContext,id:string|null=null,patternKinds:string[]|null=null):Promise<Candidate[]> {
     const leader=isDigitalLeader(actor)||isDigitalTechnicalManager(actor);
     // Only current live roles and legitimate task assignments add scope. No style-string join.
     return (await db.query(`WITH live_roles AS (
@@ -52,22 +53,24 @@ export class DigitalJourneyQuery {
       AND a.role_code=ANY($2::text[]) AND EXISTS(SELECT 1 FROM identity_mappings m WHERE m.user_id=u.id AND m.active AND m.employed)
     ) SELECT row_to_json(s) AS source,row_to_json(o) AS "order"
     FROM digital_production_sources s FULL JOIN digital_production_orders o ON o.source_id=s.source_id
-    WHERE ($4::uuid IS NULL OR s.source_id=$4 OR o.production_order_id=$4) AND ($3
+    WHERE ($4::uuid IS NULL OR s.source_id=$4 OR o.production_order_id=$4)
+      AND ($5::text[] IS NULL OR EXISTS(SELECT 1 FROM digital_production_task_access board_task WHERE (board_task.source_id=s.source_id OR board_task.production_order_id=o.production_order_id) AND board_task.task_kind=ANY($5::text[]))) AND ($3
       OR ('sample_designer' IN (SELECT role_code FROM live_roles) AND $1 IN (s.created_by,o.created_by))
       OR ('order_merchandiser' IN (SELECT role_code FROM live_roles) AND o.primary_merchandiser_id=$1)
       OR ('development_clerk' IN (SELECT role_code FROM live_roles) AND (o.source_id IS NOT NULL OR EXISTS(SELECT 1 FROM digital_production_task_access a WHERE a.source_id=s.source_id AND a.task_kind LIKE 'development_%')))
       OR EXISTS(SELECT 1 FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id)
         WHERE (a.source_id=s.source_id OR a.production_order_id=o.production_order_id) AND a.assignee_id=$1 AND (a.required_role IN (SELECT role_code FROM live_roles) OR a.required_role='warehouse_receiver' AND 'warehouse_supervisor' IN (SELECT role_code FROM live_roles)))
 )
-    ORDER BY coalesce(s.created_at,o.created_at) DESC,coalesce(s.source_id,o.production_order_id) DESC`,[actor.actorId,actor.actorRoles,leader,id])).rows;
+    ORDER BY coalesce(s.created_at,o.created_at) DESC,coalesce(s.source_id,o.production_order_id) DESC`,[actor.actorId,actor.actorRoles,leader,id,patternKinds])).rows;
   }
-  async list(actor:TrustedActorContext,filter:JourneyFilter,exportAll=false,selectPage?: (items:OrderJourney[])=>OrderJourney[],options:{details?:boolean}={}) {
+  async list(actor:TrustedActorContext,filter:JourneyFilter,exportAll=false,selectPage?: (items:OrderJourney[])=>OrderJourney[],options:{details?:boolean;patternBusiness?:"development"|"bulk"|"all"}={}) {
     assertIdentityActor(actor);
     return this.snapshot(async(db,asOf)=>{
       // Internal workspace selection runs after all authorized facts, before detail hydration.
       const summaryOnly=options.details===false||!exportAll||Boolean(selectPage);
       const items:OrderJourney[]=[],candidates=new Map<string,Candidate>();
-      for(const row of await this.candidates(db,actor)) { const item=await this.project(db,actor,row,asOf,undefined,summaryOnly);if(item){items.push(item);candidates.set(item.id,row);} }
+      const patternKinds=options.patternBusiness?PATTERN_GROUPS.flatMap(group=>[...group.nodes]).filter(kind=>options.patternBusiness==="all"||(options.patternBusiness==="bulk"?kind==="bulk_pattern":kind!=="bulk_pattern")):null;
+      for(const row of await this.candidates(db,actor,null,patternKinds)) { const item=await this.project(db,actor,row,asOf,undefined,summaryOnly,patternKinds);if(item){items.push(item);candidates.set(item.id,row);} }
       const facets = {
         customers: [...new Set(items.map(item=>item.customer).filter((value):value is string=>Boolean(value)))].sort(),
         categories: [...new Set(items.map(item=>item.category).filter((value):value is string=>Boolean(value)))].sort(),
@@ -110,7 +113,7 @@ export class DigitalJourneyQuery {
           AND o.status='pending_assignment' AND r.status='pending_assignment'`,[authorized])).rows;
     });
   }
-  private async project(db:PoolClient,actor:TrustedActorContext,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false):Promise<OrderJourney|null> {
+  private async project(db:PoolClient,actor:TrustedActorContext,row:Candidate,asOf:string,selectedRound?:number,summaryOnly=false,patternKinds:string[]|null=null):Promise<OrderJourney|null> {
     const policy=new DigitalProductionAccessPolicy(db),source=row.source,order=row.order;
     const sid=source?.source_id??null,oid=order?.production_order_id??null;
     const attached=Boolean(sid&&oid&&(await db.query("SELECT 1 FROM audit_events WHERE entity_type='digital_production' AND entity_id=$1 AND action='digital_source_attached' AND after_state->>'sourceId'=$2 LIMIT 1",[oid,sid])).rowCount);
@@ -128,6 +131,7 @@ export class DigitalJourneyQuery {
       WHERE a.source_id=$1 OR a.production_order_id=$2 ORDER BY t.route_version,t.created_at,t.task_id`,[sid,oid])).rows;
     const visibleTasks: typeof tasks=[];
     for(const task of tasks) {
+      if(patternKinds&&!patternKinds.includes(task.task_kind))continue;
       const direct=task.assignee_id===actor.actorId&&await policy.activeRole(actor.actorId,task.required_role);
       if((task.source_id?sourceAccess:fullOrder)||direct)visibleTasks.push(task);
     }
@@ -293,6 +297,13 @@ export class DigitalJourneyQuery {
           else links.push(record(child.module,child.child_id,url));
         }
       }
+      // Search/owner facets still use the same authorized linking facts. Board
+      // cards do not consume budgets, closure detail or downstream domain gates.
+      if(sourcingFields){
+        styleName=sourcingFields.style_name_snapshot??null;if(sourcingFields.erp_order_no)orderNumbers.push(sourcingFields.erp_order_no);
+        if(sourcingFields.additional_merchandiser_user_id)merchandisers.push({id:sourcingFields.additional_merchandiser_user_id,name:(await db.query("SELECT display_name FROM app_users WHERE id=$1",[sourcingFields.additional_merchandiser_user_id])).rows[0]?.display_name??null});
+      }
+      if(!patternKinds){
       const bulk=await new BulkPreparationService(this.database).read(actor,oid,db);
       const gates=await new BulkPreparationService(this.database).gates(db,oid);
       const bulkUrl=`/ui/digital-production?bulk=${oid}`;
@@ -323,8 +334,6 @@ export class DigitalJourneyQuery {
       else replace("budget",emptyNode("budget","unavailable"));
       if(sourcing&&!sourcingAllowed)for(const key of ["sourcing_ie","sourcing_director","sourcing_owner"])replace(key,emptyNode(key,"unavailable"));
       if(sourcing&&sourcingFields) {
-        const fields=sourcingFields;styleName=fields.style_name_snapshot??null;if(fields.erp_order_no)orderNumbers.push(fields.erp_order_no);
-        if(fields?.additional_merchandiser_user_id)merchandisers.push({id:fields.additional_merchandiser_user_id,name:(await db.query("SELECT display_name FROM app_users WHERE id=$1",[fields.additional_merchandiser_user_id])).rows[0]?.display_name??null});
         setFact("sourcing_preparation","completed",[record("sourcing",sourcing.child_id,`/ui/sourcing/orders/${sourcing.child_id}`)]);
         const target=record("sourcing",sourcing.child_id,`/ui/sourcing/orders/${sourcing.child_id}`,gates.approval?.decision_version??null);
         const decision=gates.approval?.sourcing_decision_id;
@@ -332,7 +341,7 @@ export class DigitalJourneyQuery {
           WHERE q.sourcing_case_id=$1 AND ($2::uuid IS NULL OR q.sourcing_ie_quote_id=(SELECT source_ie_quote_id FROM sourcing_decisions WHERE sourcing_decision_id=$2)) ORDER BY quote_version DESC LIMIT 1`,[sourcing.child_id,decision??null])).rows[0];
         setFact("sourcing_ie",ie?"completed":"pending",[{...target,version:ie?.quote_version??null,url:ie?`${target.url}?view=node-history&node=ie_quote&entryId=${ie.sourcing_ie_quote_id}`:target.url}],iso(ie?.quoted_at),ie?{id:ie.quoted_by,name:null}:null);
         const management=(await db.query("SELECT sourcing_decision_id,decision_version,decided_at,decided_by FROM sourcing_decisions WHERE sourcing_case_id=$1 AND ($2::uuid IS NULL OR sourcing_decision_id=$2) ORDER BY decision_version DESC LIMIT 1",[sourcing.child_id,decision??null])).rows[0];
-        const managementCompleted=Boolean(management&&fields.status!=="pending_management_decision");
+        const managementCompleted=Boolean(management&&sourcingFields.status!=="pending_management_decision");
         setFact("sourcing_director",managementCompleted?"completed":"pending",[{...target,version:management?.decision_version??null,url:management?`${target.url}?view=node-history&node=management&entryId=${management.sourcing_decision_id}`:target.url}],managementCompleted?iso(management?.decided_at):null,managementCompleted?{id:management!.decided_by,name:null}:null);
         const ownerDecision=management?(await db.query("SELECT sourcing_owner_decision_id,decision,decision_reason,decided_at,decided_by FROM sourcing_owner_decisions WHERE sourcing_decision_id=$1",[management.sourcing_decision_id])).rows[0]:null;
         const ownerRecord={...target,version:management?.decision_version??null,url:ownerDecision?`${target.url}?view=node-history&node=owner&entryId=${ownerDecision.sourcing_owner_decision_id}`:target.url};
@@ -388,6 +397,7 @@ export class DigitalJourneyQuery {
         if(value.state==="completed")value.risks.push("unknown");
       } else if(native) replace("production_reporting",emptyNode("production_reporting","unavailable"));
     }
+    }
     const linkedNode:Record<string,string>={cutting:"bulk_cutting",receiving:"receipts",rework:"rework",sourcing:"sourcing_preparation"};
     for(const link of links) {
       const node=baseNodes.find(node=>node.current&&node.key===linkedNode[link.domain]);
@@ -407,18 +417,18 @@ export class DigitalJourneyQuery {
       }
     }
     // Mutated nodes remain in the shared base list; all seven stages are always returned.
-    const poDeliveryDates=orderAccess&&oid?await readOrderPoDeliveryDates(db,oid,lines.map(line=>line.id)):[];
+    const poDeliveryDates=!patternKinds&&orderAccess&&oid?await readOrderPoDeliveryDates(db,oid,lines.map(line=>line.id)):[];
     const finalClosed=baseNodes.some(node=>node.current&&['packing','special_closure'].includes(node.key)&&node.state==='completed');
-    const terminal=orderAccess&&oid&&(await db.query("SELECT 1 WHERE EXISTS(SELECT 1 FROM digital_order_closures WHERE production_order_id=$1) OR EXISTS(SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1 AND state='cancelled')",[oid])).rowCount;
+    const terminal=!patternKinds&&orderAccess&&oid&&(await db.query("SELECT 1 WHERE EXISTS(SELECT 1 FROM digital_order_closures WHERE production_order_id=$1) OR EXISTS(SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1 AND state='cancelled')",[oid])).rowCount;
     const promiseDay=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(asOf));
     // A hidden reporting node cannot stand in for the whole order's authoritative completion.
     // Read only this boolean for an already authorized mother; retain all reporting visibility gates.
-    const factoryFinished=Boolean(orderAccess&&oid&&(await db.query(`SELECT coalesce(bool_and(sourcing_factory_order_status(p.production_order_id) IN ('production_completed','shipped')),false) AS finished
+    const factoryFinished=Boolean(!patternKinds&&orderAccess&&oid&&(await db.query(`SELECT coalesce(bool_and(sourcing_factory_order_status(p.production_order_id) IN ('production_completed','shipped')),false) AS finished
       FROM digital_production_child_links l JOIN sourcing_production_orders p ON p.production_order_id=l.child_id
       WHERE l.production_order_id=$1 AND l.module='production'`,[oid])).rows[0]?.finished);
     const deliveryRisks=poDeliveryRisks(poDeliveryDates,promiseDay,{finished:finalClosed||Boolean(terminal),factoryFinished,sampleFinished:baseNodes.some(node=>node.current&&node.key==='bulk_ship_sample'&&node.state==='completed')});
-    const sourceImage=sourceAccess?currentDocument?.document?.files?.find((file:{kind:string})=>file.kind==='款图'):null;
-    const instructionImages=!sourceImage&&orderAccess?(await db.query(`SELECT v.document->'images' AS images FROM digital_instruction_documents d JOIN digital_instruction_versions v ON v.production_order_id=d.production_order_id AND v.version=d.published_version WHERE d.production_order_id=$1`,[oid])).rows[0]?.images:null;
+    const sourceImage=!patternKinds&&sourceAccess?currentDocument?.document?.files?.find((file:{kind:string})=>file.kind==='款图'):null;
+    const instructionImages=!patternKinds&&!sourceImage&&orderAccess?(await db.query(`SELECT v.document->'images' AS images FROM digital_instruction_documents d JOIN digital_instruction_versions v ON v.production_order_id=d.production_order_id AND v.version=d.published_version WHERE d.production_order_id=$1`,[oid])).rows[0]?.images:null;
     const instructionImage=instructionImages?.find((file:{kind:string})=>file.kind==='款图');
     const styleImageUrl=sourceImage&&sid?`/api/digital-production/sources/${sid}/development/attachments/${sourceImage.attachmentId}`:instructionImage&&oid?`/api/digital-production/orders/${oid}/instruction/attachments/${instructionImage.attachmentId}`:null;
     return {asOf,styleImageUrl,developmentType:sourceAccess?source?.development_type??null:null,requiredCompletionDate:sourceAccess?currentDocument?.document?.returnDate??null:null,id:canonicalId,sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosenIdentity.design_style_no,temporaryStyleNo:chosenIdentity.temporary_style_no,customer:chosenIdentity.customer_code,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages:journeyStages(baseNodes),progress,hitReasons:[]};
