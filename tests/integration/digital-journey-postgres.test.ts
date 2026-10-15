@@ -346,13 +346,18 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
         expect({...normalize(actual),items:cardFacts(actual.items),risks:cardFacts(actual.risks??[])}).toEqual({...normalize(expected),items:cardFacts(expected.items),risks:cardFacts(expected.risks??[])});
       }
     }
+    const workerContext=actor(worker,["pattern_room_worker"]);
+    const visibleBeforeRevocation=(await journeys.list(workerContext,JourneyFilterSchema.parse({search:'TEST-PR12-PAGE'}))).items[0]!;
+    expect(visibleBeforeRevocation).toBeDefined();
+    expect((await journeys.read(workerContext,visibleBeforeRevocation.id)).id).toBe(visibleBeforeRevocation.id);
     const client=await db.connect();try{await client.query('BEGIN');
       await client.query("INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','TEST') ON CONFLICT DO NOTHING");
       await client.query("SELECT set_config('dx_rework.role_revoke_event_id',$1,true),set_config('dx_rework.role_revoke_request_id','TEST-PR12-revoke',true)",[randomUUID()]);
       await client.query("UPDATE user_role_assignments SET revoked_at=CURRENT_TIMESTAMP,revoked_by=$2,revoke_reason='TEST PR12 live role withdrawal' WHERE user_id=$1 AND role_code='pattern_room_worker' AND revoked_at IS NULL",[worker,root]);
       await client.query('COMMIT');
     }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
-    expect((await journeys.list(actor(worker,["pattern_room_worker"]),JourneyFilterSchema.parse({search:'TEST-PR12-PAGE'}))).total).toBe(0);
+    expect((await journeys.list(workerContext,JourneyFilterSchema.parse({search:'TEST-PR12-PAGE'}))).total).toBe(0);
+    await expect(journeys.read(workerContext,visibleBeforeRevocation.id)).rejects.toMatchObject({statusCode:404});
   },120000);
 
 });
