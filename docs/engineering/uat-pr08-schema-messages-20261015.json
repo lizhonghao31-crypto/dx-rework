@@ -1,0 +1,450 @@
+[
+  {
+    "file": "packages/contracts/src/external-responsibility.ts",
+    "lineBefore": 12,
+    "before": "attachmentIds cannot contain duplicates",
+    "after": "附件不能重复选择",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/external-responsibility.ts",
+    "lineBefore": 21,
+    "before": "IDs cannot contain duplicates",
+    "after": "关联记录不能重复",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/external-responsibility.ts",
+    "lineBefore": 82,
+    "before": "An external item can only be assigned once",
+    "after": "同一外部责任明细只能分派一次",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/external-responsibility.ts",
+    "lineBefore": 127,
+    "before": "A deduction must be a positive new entry",
+    "after": "新增扣款金额必须大于0",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/external-responsibility.ts",
+    "lineBefore": 134,
+    "before": "An adjustment or reversal must reference an entry",
+    "after": "调整或冲回必须关联原记录",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/external-responsibility.ts",
+    "lineBefore": 155,
+    "before": "A full deduction cannot provide failure evidence or a remaining-difference disposition",
+    "after": "全额扣款不能同时填写未扣凭证或剩余差额处理方式",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/external-responsibility.ts",
+    "lineBefore": 169,
+    "before": "Partial and failed deductions require a reason, ready evidence, and a remaining-difference disposition",
+    "after": "部分扣款或未扣款须填写原因、已就绪凭证及剩余差额处理方式",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/external-responsibility.ts",
+    "lineBefore": 214,
+    "before": "Responsibility shares must total 10000 bps",
+    "after": "责任分摊比例合计必须为100%",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/external-responsibility.ts",
+    "lineBefore": 224,
+    "before": "Responsibility types cannot repeat",
+    "after": "责任类型不能重复选择",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 240,
+    "before": "Global scope must omit scopeId; non-global scope must provide it",
+    "after": "全局范围不能指定关联对象，其他范围须选择关联对象",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 243,
+    "before": "validUntil must be later than validFrom",
+    "after": "有效结束时间必须晚于开始时间",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 335,
+    "before": "attachmentIds cannot contain duplicates",
+    "after": "附件不能重复选择",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 362,
+    "before": "Measurement parts cannot contain duplicates",
+    "after": "测量部位不能重复",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 416,
+    "before": "Required",
+    "after": "请填写此项",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 419,
+    "before": "Required",
+    "after": "请填写此项",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 422,
+    "before": "Required",
+    "after": "请填写此项",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 425,
+    "before": "Required",
+    "after": "请填写此项",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 428,
+    "before": "At least one size sample is required",
+    "after": "至少填写一条抽检尺码记录",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 436,
+    "before": "Actual and deviation are required unless the part is not applicable",
+    "after": "除不适用部位外，须填写实测值和偏差",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 452,
+    "before": "Reason is required when a document is missing",
+    "after": "资料缺失时须填写原因",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 455,
+    "before": "Required",
+    "after": "请填写此项",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 457,
+    "before": "Required",
+    "after": "请填写此项",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 459,
+    "before": "Required",
+    "after": "请填写此项",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 460,
+    "before": "Required",
+    "after": "请填写此项",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 462,
+    "before": "Required",
+    "after": "请填写此项",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 465,
+    "before": "At least one issue is required",
+    "after": "至少填写一条问题记录",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 468,
+    "before": "Required",
+    "after": "请填写此项",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 469,
+    "before": "Required",
+    "after": "请填写此项",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 471,
+    "before": "Issue count must be greater than zero",
+    "after": "问题数量必须大于0",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 646,
+    "before": "Piece-based planned quantity must be an integer",
+    "after": "按件计价的计划数量必须为整数",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 662,
+    "before": "A process can appear only once in one configuration",
+    "after": "同一配置中每道工序只能出现一次",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 678,
+    "before": "Rejection reason is required",
+    "after": "退回时须填写原因",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 762,
+    "before": "Each process may be counted once",
+    "after": "每道工序只能计算一次",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 766,
+    "before": "Process count cannot exceed returned quantity",
+    "after": "工序数量不能超过回货数量",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 791,
+    "before": "Task members cannot contain duplicates",
+    "after": "任务成员不能重复",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 794,
+    "before": "An individual task has exactly one worker",
+    "after": "个人任务只能指定一名工人",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 803,
+    "before": "Work task members cannot contain duplicates",
+    "after": "工作任务成员不能重复",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 848,
+    "before": "Work tasks cannot be reported more than once per batch",
+    "after": "同一批次中每个工作任务只能报数一次",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 939,
+    "before": "Work reports cannot be corrected twice in one batch",
+    "after": "同一批次中每条报数记录只能修正一次",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 956,
+    "before": "Non-default multiplier requires a reason",
+    "after": "使用非默认倍数时须填写原因",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 962,
+    "before": "Process prices cannot contain duplicates",
+    "after": "工序单价不能重复配置",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 966,
+    "before": "Temporary worker coefficients cannot contain duplicates",
+    "after": "临时工系数不能重复配置",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 975,
+    "before": "Rejection reason is required",
+    "after": "退回时须填写原因",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 1003,
+    "before": "Rejection reason is required",
+    "after": "退回时须填写原因",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 1013,
+    "before": "Rejection reason is required",
+    "after": "退回时须填写原因",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 1157,
+    "before": "The retired responsibility coefficient must remain 1",
+    "after": "已停用的责任系数必须保持为1",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 1160,
+    "before": "The retired responsibility coefficient reason is not accepted",
+    "after": "已停用的责任系数不接受原因填写",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 1164,
+    "before": "Responsibility shares must total 100%",
+    "after": "责任分摊比例合计必须为100%",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 1169,
+    "before": "A responsibility type can only be selected once per process",
+    "after": "每道工序的同一责任类型只能选择一次",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 1174,
+    "before": "Own-factory responsibility multiplier must be 1",
+    "after": "本厂承担的责任倍数必须为1",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 1175,
+    "before": "Own-factory responsibility cannot carry a supplier",
+    "after": "本厂承担不能关联外部供应商",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 1177,
+    "before": "External deduction multiplier cannot be lower than 1.2",
+    "after": "外部扣款倍数不能低于1.2",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 1178,
+    "before": "External responsibility requires the actual supplier",
+    "after": "外部责任须选择实际供应商",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/process-worker-plan.ts",
+    "lineBefore": 28,
+    "before": "Workers cannot contain duplicates",
+    "after": "工人不能重复选择",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/process-worker-plan.ts",
+    "lineBefore": 40,
+    "before": "Each process can be assigned once",
+    "after": "每道工序只能分派一次",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/reporting.ts",
+    "lineBefore": 46,
+    "before": "to must not be earlier than from",
+    "after": "结束日期不能早于开始日期",
+    "change": "仅固定文案和原path字段名；规则/条件/枚举/边界保持"
+  },
+  {
+    "file": "packages/contracts/src/business-person-id.ts",
+    "lineBefore": 5,
+    "before": "Expected a PostgreSQL UUID value",
+    "after": "请选择已有的有效人员",
+    "change": "Review补齐位置参数中的固定文案；schema谓词/regex/精度/范围/金额规则保持"
+  },
+  {
+    "file": "packages/contracts/src/external-responsibility.ts",
+    "lineBefore": 7,
+    "before": "Amount must be a 2-decimal string",
+    "after": "金额须填写两位小数",
+    "change": "Review补齐位置参数中的固定文案；schema谓词/regex/精度/范围/金额规则保持"
+  },
+  {
+    "file": "packages/contracts/src/external-responsibility.ts",
+    "lineBefore": 113,
+    "before": "Amount must be non-zero",
+    "after": "金额不能为0",
+    "change": "Review补齐位置参数中的固定文案；schema谓词/regex/精度/范围/金额规则保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 346,
+    "before": "Measurement must use 0.1 cm precision",
+    "after": "测量值须精确到0.1厘米",
+    "change": "Review补齐位置参数中的固定文案；schema谓词/regex/精度/范围/金额规则保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 948,
+    "before": "Unit price keeps at most three decimals",
+    "after": "单价最多保留三位小数",
+    "change": "Review补齐位置参数中的固定文案；schema谓词/regex/精度/范围/金额规则保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 953,
+    "before": "Multiplier keeps at most three decimals",
+    "after": "倍数最多保留三位小数",
+    "change": "Review补齐位置参数中的固定文案；schema谓词/regex/精度/范围/金额规则保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 1131,
+    "before": "Multiplier exceeds database numeric(8,3) range",
+    "after": "责任倍数不能超过99999.999",
+    "change": "Review补齐位置参数中的固定文案；schema谓词/regex/精度/范围/金额规则保持"
+  },
+  {
+    "file": "packages/contracts/src/index.ts",
+    "lineBefore": 1130,
+    "before": "Multiplier must be between 1 and 99999.999 with at most 3 places",
+    "after": "责任倍数须在1至99999.999之间，最多保留三位小数",
+    "change": "Review补齐位置参数中的固定文案；schema谓词/regex/精度/范围/金额规则保持"
+  }
+]

@@ -1,3 +1,4 @@
+import { requestValidationMessage } from "@dx-rework/contracts/validation-language";
 import { IdempotencyKeySchema } from "@dx-rework/contracts";
 import {
   AllocateExternalSuppliersSchema,
@@ -32,7 +33,7 @@ import type { ExternalResponsibilityApplicationService } from "./external-respon
 
 type HttpService = Pick<ExternalResponsibilityApplicationService, "listQueue" | "listSupplierOptions" | "createTemporarySupplier" | "get" | "getCase" | "allocateSuppliers" | "submit" | "payablesAccept" | "payablesReturn" | "followUp" | "recordDeduction" | "close" | "requestSpecialApproval" | "approveSpecialApproval" | "returnSpecialApproval" | "requestRevision" | "approveRevision" | "rejectRevision">;
 const token = (request: FastifyRequest): string | undefined => request.headers.cookie?.split(";").map((value) => value.trim()).find((value) => value.startsWith("dx_rework_session="))?.slice(18);
-const parse = <T>(schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } }, value: unknown): T => { const result = schema.safeParse(value); if (!result.success) throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400); return result.data; };
+const parse = <T>(schema: { safeParse(value: unknown): { success: true; data: T } | { success: false; error?: { issues?: readonly { path?: readonly PropertyKey[]; message?: string }[] } } }, value: unknown): T => { const result = schema.safeParse(value); if (!result.success) throw new ApplicationError("VALIDATION_ERROR", requestValidationMessage(result), 400); return result.data; };
 
 export type ExternalResponsibilityHttpDependencies = Readonly<{
   authenticate(value: string | undefined): Promise<AuthUser>;

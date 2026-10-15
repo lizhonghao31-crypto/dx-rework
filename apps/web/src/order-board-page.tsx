@@ -194,7 +194,7 @@ const uploadReplacementImage = async (source: File): Promise<string> => {
   try {
     return await upload(prepared);
   } catch (error) {
-    if (!(error instanceof Error) || error.message !== "Uploaded object is not a valid file of the declared type") {
+    if (!(error instanceof Error) || !["Uploaded object is not a valid file of the declared type", "附件内容与申报文件类型不一致，请重新选择有效原文件"].includes(error.message)) {
       throw error;
     }
     return upload(await normalizeReceivingImageForUpload(source));

@@ -31,13 +31,13 @@ export class DevelopmentWorkspaceQuery {
     let selectionFacts:OrderJourney[]|undefined;
     const result = await this.journeys.list(actor, JourneyFilterSchema.parse({ search: filter.search, ...(filter.customer ? {customer: filter.customer} : {}), startDate: filter.startDate, endDate: filter.endDate }), true,items=>{
       selectionFacts=items;
-      return items.filter(item=>(!filter.designer||item.designer===filter.designer)&&(filter.view==='all'||developmentView(item)===filter.view)).slice((filter.page-1)*20,filter.page*20);
+      return items.filter(item=>(!filter.designer||item.designer===filter.designer)&&(filter.view==='all'||developmentView(item)===filter.view)).slice((filter.page-1)*15,filter.page*15);
     });
     const facts=selectionFacts??result.items,details=new Map(result.items.map(item=>[item.id,item]));
     const all = facts.filter(item => !filter.designer || item.designer === filter.designer).map(journey => ({journey, view: developmentView(journey), canConfirm: !journey.orderId && Boolean(journey.sourceId) && (isRootActor(actor) || journey.stages.flatMap(stage => stage.nodes).some(node => node.key === "product_development" && node.owner?.id === actor.actorId))}));
     const counts = Object.fromEntries(DEVELOPMENT_VIEWS.map(view => [view.key, view.key === "all" ? all.length : all.filter(item => item.view === view.key).length])) as DevelopmentWorkspaceResult["counts"];
     const filtered = filter.view === "all" ? all : all.filter(item => item.view === filter.view);
-    return {asOf: result.asOf, page: filter.page, pageSize: 20, total: filtered.length, counts, designers: [...new Set(facts.flatMap(item => item.designer ? [item.designer] : []))].sort(), customers: [...new Set(facts.flatMap(item => item.customer ? [item.customer] : []))].sort(), items: filtered.slice((filter.page - 1) * 20, filter.page * 20).map(item=>({...item,journey:details.get(item.journey.id)!}))};
+    return {asOf: result.asOf, page: filter.page, pageSize: 15, total: filtered.length, counts, designers: [...new Set(facts.flatMap(item => item.designer ? [item.designer] : []))].sort(), customers: [...new Set(facts.flatMap(item => item.customer ? [item.customer] : []))].sort(), items: filtered.slice((filter.page - 1) * 15, filter.page * 15).map(item=>({...item,journey:details.get(item.journey.id)!}))};
   }
   async pattern(actor: TrustedActorContext, filter: PatternWorkspaceFilter): Promise<PatternWorkspaceResult> {
     const manager=isRootActor(actor)||actor.actorRoles.some(role=>["owner_group","production_management","pattern_room_supervisor"].includes(role));

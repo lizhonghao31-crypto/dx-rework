@@ -89,7 +89,7 @@ export class DigitalAnalysisQuery{
     summary:summarizeAnalysis(selectedRows,window.from,window.to),people,overview:analysisWorkspaceOverview(scopedRows,window.from,window.to,asOf),rounds,rows:selectedRows,notes};
  }
  private async read<T>(action:(db:PoolClient)=>Promise<T>){const db=await this.database.connect();try{await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');const result=await action(db);await db.query('COMMIT');return result;}catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}}
- async list(actor:TrustedActorContext,filters:DigitalAnalysisFilters):Promise<DigitalAnalysisResult>{return this.read(async db=>{const all=await this.snapshot(db,actor,filters);return {...all,rows:all.rows.slice((filters.page-1)*50,filters.page*50)};});}
+ async list(actor:TrustedActorContext,filters:DigitalAnalysisFilters):Promise<DigitalAnalysisResult>{return this.read(async db=>{const all=await this.snapshot(db,actor,filters);return {...all,rows:all.rows.slice((filters.page-1)*15,filters.page*15)};});}
  async export(actor:TrustedActorContext,filters:DigitalAnalysisFilters){
   if(!this.exportAllowed(actor))digitalForbidden();
   const result=await this.read(db=>this.snapshot(db,actor,filters));

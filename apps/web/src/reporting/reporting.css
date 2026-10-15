@@ -38,3 +38,7 @@
   .reporting-summary>div:last-child{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;overflow:visible}
   .reporting-summary>div:last-child>*{justify-content:center;min-width:0;white-space:normal;text-align:center;overflow-wrap:anywhere}
 }
+/* Only node queues: long cards scroll within the list, keeping its pager reachable. */
+.workflow-order-grid{max-height:max(240px,calc(100dvh - 460px));overflow:auto;overscroll-behavior:contain;align-content:start;padding:2px}
+.workflow-order-card strong,.workflow-order-card small{overflow-wrap:anywhere}
+@media(min-width:981px){.workflow-order-grid{max-height:max(180px,calc(100dvh - 620px))}}

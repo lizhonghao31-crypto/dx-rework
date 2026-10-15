@@ -26,6 +26,10 @@ export function SearchSelect({
   onChange: (value: string) => void;
   onSearchChange?: (query: string) => void;
 }) {
+  const listId = useId();
+  const input = useRef<HTMLInputElement>(null);
+  const composing = useRef(false);
+  const [active, setActive] = useState(-1);
   const selectedLabel = options.find((option) => option.value === value)?.label ?? "";
   const [query, setQuery] = useState(selectedLabel);
   const [open, setOpen] = useState(false);
@@ -50,7 +54,26 @@ export function SearchSelect({
   return (
     <div className="search-select">
       <input
+        ref={input}
         type="search"
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-autocomplete="list"
+        aria-activedescendant={open && active >= 0 && matches[active] ? `${listId}-${active}` : undefined}
+        onCompositionStart={() => { composing.current = true; }}
+        onCompositionEnd={() => { composing.current = false; }}
+        onKeyDown={event => {
+          if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) { if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); } return; }
+          if (event.key === "Escape") { if (open) { event.preventDefault(); event.stopPropagation(); setOpen(false); } return; }
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault(); setOpen(true);
+            setActive(index => !matches.length ? -1 : index < 0 ? (event.key === "ArrowDown" ? 0 : matches.length - 1) : (index + (event.key === "ArrowDown" ? 1 : -1) + matches.length) % matches.length);
+          } else if (event.key === "Enter" && open) {
+            event.preventDefault();
+            const option = matches[active]; if (option) choose(option);
+          }
+        }}
         value={open ? query : selectedLabel}
         placeholder={placeholder}
         aria-label={ariaLabel}
@@ -61,6 +84,7 @@ export function SearchSelect({
           setOpen(true);
         }}
         onChange={(event) => {
+          setActive(-1);
           setQuery(event.target.value);
           onSearchChange?.(event.target.value);
           onChange("");
@@ -68,12 +92,18 @@ export function SearchSelect({
         }}
         onBlur={() => window.setTimeout(() => setOpen(false), 120)}
       />
+      <button className="search-select__toggle" type="button" disabled={disabled} tabIndex={-1}
+        aria-label={open ? "收起已有选项" : "展开已有选项"} aria-expanded={open}
+        onMouseDown={event => event.preventDefault()}
+        onClick={() => { input.current?.focus(); setOpen(!open); setQuery(""); setActive(-1); }}>▾</button>
       {open && !disabled ? (
-        <div className="search-select__results" role="listbox" aria-label={ariaLabel ? `${ariaLabel}搜索结果` : undefined}>
-          {matches.length ? matches.map((option) => (
+        <div id={listId} className="search-select__results" role="listbox" aria-label={ariaLabel ? `${ariaLabel}搜索结果` : undefined}>
+          {matches.length ? matches.map((option, index) => (
             <button
               type="button"
               role="option"
+              id={`${listId}-${index}`}
+              data-active={index === active || undefined}
               aria-selected={option.value === value}
               key={option.value}
               onMouseDown={(event) => event.preventDefault()}
@@ -92,6 +122,7 @@ export function SearchSelect({
  * The native control remains responsible for FormData, required, and change events.
  */
 export function SearchableSelect({ children, onSearchChange, ...props }: SelectHTMLAttributes<HTMLSelectElement> & { onSearchChange?: (query: string) => void }) {
+  const composing = useRef(false);
   const native = useRef<HTMLSelectElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const listId = useId();
@@ -129,7 +160,10 @@ export function SearchableSelect({ children, onSearchChange, ...props }: SelectH
       value={open ? query : selected} placeholder={selected || "输入关键词选择"}
       onClick={() => { if (!open) { setOpen(true); setQuery(""); setActive(-1); } }}
       onChange={event => { setQuery(event.target.value); setOpen(true); setActive(-1); onSearchChange?.(event.target.value); }}
+      onCompositionStart={() => { composing.current = true; }}
+      onCompositionEnd={() => { composing.current = false; }}
       onKeyDown={event => {
+        if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) { if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); } return; }
         if (event.key === "Escape") { if (open) { event.preventDefault(); event.stopPropagation(); close(); } return; }
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
           event.preventDefault(); setOpen(true);
@@ -151,7 +185,7 @@ export function SearchableSelect({ children, onSearchChange, ...props }: SelectH
       onChange={event => { const value = event.currentTarget.value; setSnapshot(previous => ({ ...previous, value })); props.onChange?.(event); }}>
       {children}
     </select>
-    <button className="native-search-select__toggle" type="button" disabled={props.disabled} tabIndex={-1} aria-label="展开已有选项" onClick={() => { setOpen(!open); setQuery(""); setActive(-1); input.current?.focus(); }}>▾</button>
+    <button className="native-search-select__toggle" type="button" disabled={props.disabled} tabIndex={-1} aria-label={open ? "收起已有选项" : "展开已有选项"} aria-expanded={open} onClick={() => { setOpen(!open); setQuery(""); setActive(-1); input.current?.focus(); }}>▾</button>
     {open && !props.disabled && <div className="search-select__results" role="listbox" id={listId}>
       {matches.length ? matches.map((row, index) => <button type="button" role="option" id={`${listId}-${index}`} tabIndex={-1} key={`${index}:${row.value}`} disabled={row.disabled} aria-selected={row.value === snapshot.value} data-active={index === active || undefined} onMouseDown={event => event.preventDefault()} onClick={() => choose(row.value)}>{row.label}</button>) : <span>没有匹配的已有选项</span>}
     </div>}

@@ -117,7 +117,7 @@ const uploadPreparedReceivingImage = async (file: File, sourceName: string): Pro
 };
 
 const hasInvalidDeclaredImageError = (error: unknown): boolean =>
-  error instanceof Error && error.message === INVALID_DECLARED_IMAGE_MESSAGE;
+  error instanceof Error && [INVALID_DECLARED_IMAGE_MESSAGE, "附件内容与申报文件类型不一致，请重新选择有效原文件"].includes(error.message);
 
 const uploadReceivingImage = async (source: File): Promise<string> => {
   const prepared = isImageAttachment(source)

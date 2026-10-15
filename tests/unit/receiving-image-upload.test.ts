@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   INVALID_DECLARED_IMAGE_MESSAGE,
+  INVALID_DECLARED_IMAGE_MESSAGE_ZH,
   isReceivingImageCandidate,
   normalizeReceivingImageForUpload,
   uploadImageWithNormalizationRetry,
@@ -63,7 +64,7 @@ describe("receiving image normalization", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
-  it("retries a MIME-mismatched QC image with normalized WebP bytes", async () => {
+  it.each([INVALID_DECLARED_IMAGE_MESSAGE, INVALID_DECLARED_IMAGE_MESSAGE_ZH])("retries a MIME-mismatched QC image with normalized WebP bytes (%s)", async message => {
     const canvas = {
       width: 0,
       height: 0,
@@ -84,7 +85,7 @@ describe("receiving image normalization", () => {
       type: "image/jpeg",
     }) as File;
     const upload = vi.fn()
-      .mockRejectedValueOnce(new Error(INVALID_DECLARED_IMAGE_MESSAGE))
+      .mockRejectedValueOnce(new Error(message))
       .mockResolvedValueOnce("attachment-1");
 
     await expect(uploadImageWithNormalizationRetry(source, source, upload))
@@ -94,5 +95,11 @@ describe("receiving image normalization", () => {
       name: "微信群图片.webp",
       type: "image/webp",
     });
+    const invalid = vi.fn().mockRejectedValue(new Error(message));
+    await expect(uploadImageWithNormalizationRetry(source, source, invalid)).rejects.toThrow("图片格式无法识别，请重新选择图片");
+    expect(invalid).toHaveBeenCalledTimes(2);
+    const denied = vi.fn().mockRejectedValue(new Error("FORBIDDEN"));
+    await expect(uploadImageWithNormalizationRetry(source, source, denied)).rejects.toThrow("FORBIDDEN");
+    expect(denied).toHaveBeenCalledOnce();
   });
 });

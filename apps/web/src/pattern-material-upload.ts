@@ -1,4 +1,4 @@
-import { INVALID_DECLARED_IMAGE_MESSAGE, normalizeOriginalImageForUpload } from "./attachment-upload.js";
+import { hasInvalidDeclaredImageError, normalizeOriginalImageForUpload } from "./attachment-upload.js";
 
 export function patternMaterialMime(bytes: Uint8Array): string | null {
   const starts = (prefix: number[]) => prefix.every((value, index) => bytes[index] === value);
@@ -29,14 +29,14 @@ export async function uploadPatternMaterial<T>(file: File, upload: (prepared: Fi
   try {
     return await upload(prepared);
   } catch (error) {
-    if (!(error instanceof Error) || error.message !== INVALID_DECLARED_IMAGE_MESSAGE) throw error;
+    if (!hasInvalidDeclaredImageError(error)) throw error;
     if (prepared.type === "application/pdf") throw new Error("PDF 内容无法读取，请重新导出后上传");
     // Some phone-saved images decode successfully but fail strict container validation.
     // Retry once at full resolution within the configured cap, retaining server validation.
     try {
       return await upload(await normalizeOriginalImageForUpload(prepared, maxBytes));
     } catch (retryError) {
-      if (retryError instanceof Error && retryError.message === INVALID_DECLARED_IMAGE_MESSAGE) throw new Error("图片内容无法读取，请重新保存图片后上传");
+      if (hasInvalidDeclaredImageError(retryError)) throw new Error("图片内容无法读取，请重新保存图片后上传");
       throw retryError;
     }
   }

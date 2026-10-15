@@ -1,0 +1,1169 @@
+[
+  {
+    "id": "R01",
+    "condition": "path === \"/ui/digital-analysis\"",
+    "line": 287,
+    "components": [
+      {
+        "name": "DigitalAnalysisPage",
+        "module": "./digital-analysis-page.js"
+      }
+    ],
+    "nature": "业务任务钻取＋统计",
+    "pageSize": "50→15",
+    "queryAndException": "analysis task snapshot slice15；全量指标/导出不截断",
+    "search": "款号/PO/人员/状态/日期",
+    "controlSourceSites": [
+      "apps/web/src/digital-analysis-page.tsx:37",
+      "apps/web/src/digital-analysis-page.tsx:37"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R02",
+    "condition": "path === \"/ui/digital-cockpit\"",
+    "line": 288,
+    "components": [
+      {
+        "name": "DigitalPatternWorkspace",
+        "module": "./digital-pattern-workspace.js"
+      },
+      {
+        "name": "DigitalProductionWorkspace",
+        "module": "./digital-production-workspaces.js"
+      },
+      {
+        "name": "DigitalCockpitPage",
+        "module": "./digital-cockpit-page.js"
+      }
+    ],
+    "nature": "总座舱/Journey及兼容指挥台",
+    "pageSize": "20→15",
+    "queryAndException": "journey列表15/全匹配导出不分页；旧cockpit SQL15",
+    "search": "款号/PO/主跟单/节点/风险",
+    "controlSourceSites": [
+      "apps/web/src/digital-pattern-workspace.tsx:112",
+      "apps/web/src/digital-pattern-workspace.tsx:113",
+      "apps/web/src/digital-production-workspaces.tsx:32"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R03",
+    "condition": "path === \"/ui/digital-production\"",
+    "line": 289,
+    "components": [
+      {
+        "name": "DigitalDesignerWorkspace",
+        "module": "./digital-designer-workspace.js"
+      },
+      {
+        "name": "DevelopmentWorkspaceReturn",
+        "module": "./development-workspace-return.js"
+      },
+      {
+        "name": "DigitalProductionPage",
+        "module": "./digital-production-page.js"
+      }
+    ],
+    "nature": "开发档案列表＋选中只读档案",
+    "pageSize": "20→15",
+    "queryAndException": "designer授权集合先筛选/总数，后按15组装",
+    "search": "款号/客户/设计师/状态/日期",
+    "controlSourceSites": [
+      "apps/web/src/digital-designer-workspace.tsx:85",
+      "apps/web/src/digital-designer-workspace.tsx:85",
+      "apps/web/src/digital-designer-workspace.tsx:85",
+      "apps/web/src/digital-production-page.tsx:115"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R04",
+    "condition": "path === \"/ui/digital-pattern-room\"",
+    "line": 290,
+    "components": [
+      {
+        "name": "DigitalPatternWorkspace",
+        "module": "./digital-pattern-workspace.js"
+      }
+    ],
+    "nature": "开发任务/大货纸样唛架两视图",
+    "pageSize": "15→15",
+    "queryAndException": "pattern/bulk各原授权服务分页；PR05已完成",
+    "search": "一处提交式款号/PO/当前主办搜索",
+    "controlSourceSites": [
+      "apps/web/src/digital-pattern-workspace.tsx:112",
+      "apps/web/src/digital-pattern-workspace.tsx:113"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R05",
+    "condition": "path === \"/ui/home\"",
+    "line": 291,
+    "components": [
+      {
+        "name": "HomeLanding",
+        "module": null
+      }
+    ],
+    "nature": "详情/创建/配置/导航页",
+    "pageSize": "不适用",
+    "queryAndException": "不是可分页业务订单列表；原资料、矩阵、条款、版本选择不改",
+    "search": "原表单/配置输入",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R06",
+    "condition": "path === \"/ui/sourcing\" || path === \"/ui/sourcing/pending\"",
+    "line": 292,
+    "components": [
+      {
+        "name": "SourcingWorkspacePage",
+        "module": "./sourcing-workspace-page.js"
+      }
+    ],
+    "nature": "外发订单列表/历史或创建/详情",
+    "pageSize": "15→15（列表）",
+    "queryAndException": "原外发服务limit/offset15，详情合同/工艺明细不分页",
+    "search": "款号/客户/加工厂/状态/日期",
+    "controlSourceSites": [
+      "apps/web/src/sourcing-workspace-page.tsx:883",
+      "apps/web/src/sourcing-workspace-page.tsx:885",
+      "apps/web/src/sourcing-workspace-page.tsx:886",
+      "apps/web/src/sourcing-workspace-page.tsx:915",
+      "apps/web/src/sourcing-workspace-page.tsx:1109",
+      "apps/web/src/sourcing-workspace-page.tsx:1125",
+      "apps/web/src/sourcing-workspace-page.tsx:1148",
+      "apps/web/src/sourcing-workspace-page.tsx:1156",
+      "apps/web/src/sourcing-workspace-page.tsx:1937",
+      "apps/web/src/sourcing-workspace-page.tsx:1961",
+      "apps/web/src/sourcing-workspace-page.tsx:1965",
+      "apps/web/src/sourcing-workspace-page.tsx:2154"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R07",
+    "condition": "path === \"/ui/samples/handoff\"",
+    "line": 293,
+    "components": [
+      {
+        "name": "SampleHandoffPage",
+        "module": "./sample-workflow-page.js"
+      }
+    ],
+    "nature": "详情/创建/配置/导航页",
+    "pageSize": "不适用",
+    "queryAndException": "不是可分页业务订单列表；原资料、矩阵、条款、版本选择不改",
+    "search": "原表单/配置输入",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R08",
+    "condition": "path === \"/ui/samples\"",
+    "line": 294,
+    "components": [
+      {
+        "name": "SampleWorkspacePage",
+        "module": "./sample-workspace-page.js"
+      }
+    ],
+    "nature": "样衣主/待归还/已处置/金额分析或详情",
+    "pageSize": "15→15（业务列表）",
+    "queryAndException": "原样衣读取服务分页15；金额聚合与详情历史按原协议",
+    "search": "样衣编号/款号/年份/处置/状态",
+    "controlSourceSites": [
+      "apps/web/src/sample-workspace-page.tsx:174",
+      "apps/web/src/sample-workspace-page.tsx:175",
+      "apps/web/src/sample-workspace-page.tsx:176",
+      "apps/web/src/sample-workspace-page.tsx:177",
+      "apps/web/src/sample-workspace-page.tsx:179",
+      "apps/web/src/sample-workspace-page.tsx:183"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R09",
+    "condition": "path === \"/ui/samples/create\"",
+    "line": 295,
+    "components": [
+      {
+        "name": "SampleCreatePage",
+        "module": "./sample-create-page.js"
+      }
+    ],
+    "nature": "详情/创建/配置/导航页",
+    "pageSize": "不适用",
+    "queryAndException": "不是可分页业务订单列表；原资料、矩阵、条款、版本选择不改",
+    "search": "原表单/配置输入",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R10",
+    "condition": "path === \"/ui/samples/batch-create\"",
+    "line": 296,
+    "components": [
+      {
+        "name": "SampleCreatePage",
+        "module": "./sample-create-page.js"
+      }
+    ],
+    "nature": "详情/创建/配置/导航页",
+    "pageSize": "不适用",
+    "queryAndException": "不是可分页业务订单列表；原资料、矩阵、条款、版本选择不改",
+    "search": "原表单/配置输入",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R11",
+    "condition": "path === \"/ui/samples/pending\"",
+    "line": 297,
+    "components": [
+      {
+        "name": "SampleWorkspacePage",
+        "module": "./sample-workspace-page.js"
+      }
+    ],
+    "nature": "样衣主/待归还/已处置/金额分析或详情",
+    "pageSize": "15→15（业务列表）",
+    "queryAndException": "原样衣读取服务分页15；金额聚合与详情历史按原协议",
+    "search": "样衣编号/款号/年份/处置/状态",
+    "controlSourceSites": [
+      "apps/web/src/sample-workspace-page.tsx:174",
+      "apps/web/src/sample-workspace-page.tsx:175",
+      "apps/web/src/sample-workspace-page.tsx:176",
+      "apps/web/src/sample-workspace-page.tsx:177",
+      "apps/web/src/sample-workspace-page.tsx:179",
+      "apps/web/src/sample-workspace-page.tsx:183"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R12",
+    "condition": "path === \"/ui/samples/disposed\"",
+    "line": 298,
+    "components": [
+      {
+        "name": "SampleWorkspacePage",
+        "module": "./sample-workspace-page.js"
+      }
+    ],
+    "nature": "样衣主/待归还/已处置/金额分析或详情",
+    "pageSize": "15→15（业务列表）",
+    "queryAndException": "原样衣读取服务分页15；金额聚合与详情历史按原协议",
+    "search": "样衣编号/款号/年份/处置/状态",
+    "controlSourceSites": [
+      "apps/web/src/sample-workspace-page.tsx:174",
+      "apps/web/src/sample-workspace-page.tsx:175",
+      "apps/web/src/sample-workspace-page.tsx:176",
+      "apps/web/src/sample-workspace-page.tsx:177",
+      "apps/web/src/sample-workspace-page.tsx:179",
+      "apps/web/src/sample-workspace-page.tsx:183"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R13",
+    "condition": "path === \"/ui/samples/amounts\"",
+    "line": 299,
+    "components": [
+      {
+        "name": "SampleWorkspacePage",
+        "module": "./sample-workspace-page.js"
+      }
+    ],
+    "nature": "样衣主/待归还/已处置/金额分析或详情",
+    "pageSize": "15→15（业务列表）",
+    "queryAndException": "原样衣读取服务分页15；金额聚合与详情历史按原协议",
+    "search": "样衣编号/款号/年份/处置/状态",
+    "controlSourceSites": [
+      "apps/web/src/sample-workspace-page.tsx:174",
+      "apps/web/src/sample-workspace-page.tsx:175",
+      "apps/web/src/sample-workspace-page.tsx:176",
+      "apps/web/src/sample-workspace-page.tsx:177",
+      "apps/web/src/sample-workspace-page.tsx:179",
+      "apps/web/src/sample-workspace-page.tsx:183"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R14",
+    "condition": "sampleMatch?.[1]",
+    "line": 300,
+    "components": [
+      {
+        "name": "SampleWorkspacePage",
+        "module": "./sample-workspace-page.js"
+      }
+    ],
+    "nature": "样衣主/待归还/已处置/金额分析或详情",
+    "pageSize": "15→15（业务列表）",
+    "queryAndException": "原样衣读取服务分页15；金额聚合与详情历史按原协议",
+    "search": "样衣编号/款号/年份/处置/状态",
+    "controlSourceSites": [
+      "apps/web/src/sample-workspace-page.tsx:174",
+      "apps/web/src/sample-workspace-page.tsx:175",
+      "apps/web/src/sample-workspace-page.tsx:176",
+      "apps/web/src/sample-workspace-page.tsx:177",
+      "apps/web/src/sample-workspace-page.tsx:179",
+      "apps/web/src/sample-workspace-page.tsx:183"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R15",
+    "condition": "path === \"/ui/sourcing/create\"",
+    "line": 301,
+    "components": [
+      {
+        "name": "SourcingWorkspacePage",
+        "module": "./sourcing-workspace-page.js"
+      }
+    ],
+    "nature": "外发订单列表/历史或创建/详情",
+    "pageSize": "15→15（列表）",
+    "queryAndException": "原外发服务limit/offset15，详情合同/工艺明细不分页",
+    "search": "款号/客户/加工厂/状态/日期",
+    "controlSourceSites": [
+      "apps/web/src/sourcing-workspace-page.tsx:883",
+      "apps/web/src/sourcing-workspace-page.tsx:885",
+      "apps/web/src/sourcing-workspace-page.tsx:886",
+      "apps/web/src/sourcing-workspace-page.tsx:915",
+      "apps/web/src/sourcing-workspace-page.tsx:1109",
+      "apps/web/src/sourcing-workspace-page.tsx:1125",
+      "apps/web/src/sourcing-workspace-page.tsx:1148",
+      "apps/web/src/sourcing-workspace-page.tsx:1156",
+      "apps/web/src/sourcing-workspace-page.tsx:1937",
+      "apps/web/src/sourcing-workspace-page.tsx:1961",
+      "apps/web/src/sourcing-workspace-page.tsx:1965",
+      "apps/web/src/sourcing-workspace-page.tsx:2154"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R16",
+    "condition": "path === \"/ui/sourcing/history\"",
+    "line": 302,
+    "components": [
+      {
+        "name": "SourcingWorkspacePage",
+        "module": "./sourcing-workspace-page.js"
+      }
+    ],
+    "nature": "外发订单列表/历史或创建/详情",
+    "pageSize": "15→15（列表）",
+    "queryAndException": "原外发服务limit/offset15，详情合同/工艺明细不分页",
+    "search": "款号/客户/加工厂/状态/日期",
+    "controlSourceSites": [
+      "apps/web/src/sourcing-workspace-page.tsx:883",
+      "apps/web/src/sourcing-workspace-page.tsx:885",
+      "apps/web/src/sourcing-workspace-page.tsx:886",
+      "apps/web/src/sourcing-workspace-page.tsx:915",
+      "apps/web/src/sourcing-workspace-page.tsx:1109",
+      "apps/web/src/sourcing-workspace-page.tsx:1125",
+      "apps/web/src/sourcing-workspace-page.tsx:1148",
+      "apps/web/src/sourcing-workspace-page.tsx:1156",
+      "apps/web/src/sourcing-workspace-page.tsx:1937",
+      "apps/web/src/sourcing-workspace-page.tsx:1961",
+      "apps/web/src/sourcing-workspace-page.tsx:1965",
+      "apps/web/src/sourcing-workspace-page.tsx:2154"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R17",
+    "condition": "sourcingOrderMatch?.[1]",
+    "line": 303,
+    "components": [
+      {
+        "name": "SourcingWorkspacePage",
+        "module": "./sourcing-workspace-page.js"
+      }
+    ],
+    "nature": "外发订单列表/历史或创建/详情",
+    "pageSize": "15→15（列表）",
+    "queryAndException": "原外发服务limit/offset15，详情合同/工艺明细不分页",
+    "search": "款号/客户/加工厂/状态/日期",
+    "controlSourceSites": [
+      "apps/web/src/sourcing-workspace-page.tsx:883",
+      "apps/web/src/sourcing-workspace-page.tsx:885",
+      "apps/web/src/sourcing-workspace-page.tsx:886",
+      "apps/web/src/sourcing-workspace-page.tsx:915",
+      "apps/web/src/sourcing-workspace-page.tsx:1109",
+      "apps/web/src/sourcing-workspace-page.tsx:1125",
+      "apps/web/src/sourcing-workspace-page.tsx:1148",
+      "apps/web/src/sourcing-workspace-page.tsx:1156",
+      "apps/web/src/sourcing-workspace-page.tsx:1937",
+      "apps/web/src/sourcing-workspace-page.tsx:1961",
+      "apps/web/src/sourcing-workspace-page.tsx:1965",
+      "apps/web/src/sourcing-workspace-page.tsx:2154"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R18",
+    "condition": "path === \"/ui/cutting\"",
+    "line": 304,
+    "components": [
+      {
+        "name": "CuttingListPage",
+        "module": "./cutting-page.js"
+      }
+    ],
+    "nature": "裁床业务订单列表",
+    "pageSize": "15→15",
+    "queryAndException": "原裁床服务15；选中裁床明细不是业务列表",
+    "search": "款号/加工厂/状态",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R19",
+    "condition": "cuttingOrderMatch?.[1]",
+    "line": 305,
+    "components": [
+      {
+        "name": "CuttingDetailPage",
+        "module": "./cutting-page.js"
+      }
+    ],
+    "nature": "详情/创建/配置/导航页",
+    "pageSize": "不适用",
+    "queryAndException": "不是可分页业务订单列表；原资料、矩阵、条款、版本选择不改",
+    "search": "原表单/配置输入",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R20",
+    "condition": "path === \"/ui/admin\" || path === \"/ui/audit\"",
+    "line": 306,
+    "components": [
+      {
+        "name": "AdminConsolePage",
+        "module": "./admin-console-page.js"
+      }
+    ],
+    "nature": "系统审计/异常/授权队列",
+    "pageSize": "15→15",
+    "queryAndException": "审计SQL limit15；授权/异常全授权数组UI15，保留运维协议",
+    "search": "动作/用户/异常状态/时间",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R21",
+    "condition": "path === \"/ui/employee-access\"",
+    "line": 313,
+    "components": [
+      {
+        "name": "EmployeeAccessPage",
+        "module": "./employee-access-page.js"
+      }
+    ],
+    "nature": "人员开通与角色管理",
+    "pageSize": "15→15",
+    "queryAndException": "原全授权人员读取、UI分页15；不改角色写入",
+    "search": "姓名/手机号/角色",
+    "controlSourceSites": [
+      "apps/web/src/employee-access-page.tsx:246",
+      "apps/web/src/employee-access-page.tsx:254",
+      "apps/web/src/employee-access-page.tsx:373"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R22",
+    "condition": "path === \"/ui/contract-template\"",
+    "line": 314,
+    "components": [
+      {
+        "name": "ContractTemplateSettingsPage",
+        "module": "./contract-template-settings-page.js"
+      }
+    ],
+    "nature": "详情/创建/配置/导航页",
+    "pageSize": "不适用",
+    "queryAndException": "不是可分页业务订单列表；原资料、矩阵、条款、版本选择不改",
+    "search": "原表单/配置输入",
+    "controlSourceSites": [
+      "apps/web/src/contract-template-settings-page.tsx:67"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R23",
+    "condition": "path === \"/ui/production-dashboard\" || /^\\/ui\\/production-dashboard\\/[0-9a-f-]+$/i.test(path)",
+    "line": 315,
+    "components": [
+      {
+        "name": "ProductionDisplayWorkspace",
+        "module": "./production-display-workspace.js"
+      },
+      {
+        "name": "ProductionDashboardPage",
+        "module": "./production-dashboard-page.js"
+      }
+    ],
+    "nature": "生产工作台订单列表＋选中只读事实",
+    "pageSize": "15→15",
+    "queryAndException": "原生产服务15，动态/明细不机械分页",
+    "search": "工厂/生产状态/进度/风险",
+    "controlSourceSites": [
+      "apps/web/src/production-dashboard-page.tsx:119",
+      "apps/web/src/production-dashboard-page.tsx:120",
+      "apps/web/src/production-dashboard-page.tsx:121",
+      "apps/web/src/production-dashboard-page.tsx:122",
+      "apps/web/src/production-display-workspace.tsx:33",
+      "apps/web/src/production-display-workspace.tsx:33",
+      "apps/web/src/production-display-workspace.tsx:33",
+      "apps/web/src/production-display-workspace.tsx:33"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R24",
+    "condition": "path === \"/ui/production-reporting\" || /^\\/ui\\/production-reporting\\/[0-9a-f-]+$/i.test(path)",
+    "line": 316,
+    "components": [
+      {
+        "name": "ProductionReportingPage",
+        "module": "./production-reporting-page.js"
+      }
+    ],
+    "nature": "生产填报订单列表/详情",
+    "pageSize": "15→15（订单）",
+    "queryAndException": "原生产服务15；逐PO填报/修正保留原流程",
+    "search": "款号/工厂/状态",
+    "controlSourceSites": [
+      "apps/web/src/production-reporting-page.tsx:90",
+      "apps/web/src/production-reporting-page.tsx:91",
+      "apps/web/src/production-reporting-page.tsx:139",
+      "apps/web/src/production-reporting-page.tsx:140"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R25",
+    "condition": "path === \"/ui/suppliers/requests\"",
+    "line": 317,
+    "components": [
+      {
+        "name": "SupplierOnboardingPage",
+        "module": "./supplier-onboarding-page.js"
+      }
+    ],
+    "nature": "供应商申请列表或申请表/版本",
+    "pageSize": "15→15（申请列表）",
+    "queryAndException": "授权申请集合客户端15；版本/资料表不分页",
+    "search": "名称/状态",
+    "controlSourceSites": [
+      "apps/web/src/supplier-onboarding-page.tsx:166",
+      "apps/web/src/supplier-onboarding-page.tsx:181"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R26",
+    "condition": "/^\\/ui\\/suppliers\\/requests\\/(new|[0-9a-f-]{36})$/i.test(path)",
+    "line": 318,
+    "components": [
+      {
+        "name": "SupplierOnboardingPage",
+        "module": "./supplier-onboarding-page.js"
+      }
+    ],
+    "nature": "供应商申请列表或申请表/版本",
+    "pageSize": "15→15（申请列表）",
+    "queryAndException": "授权申请集合客户端15；版本/资料表不分页",
+    "search": "名称/状态",
+    "controlSourceSites": [
+      "apps/web/src/supplier-onboarding-page.tsx:166",
+      "apps/web/src/supplier-onboarding-page.tsx:181"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R27",
+    "condition": "path === \"/ui/suppliers\"",
+    "line": 319,
+    "components": [
+      {
+        "name": "SupplierDirectoryPage",
+        "module": "./supplier-center-page.js"
+      }
+    ],
+    "nature": "供应商目录",
+    "pageSize": "12→15",
+    "queryAndException": "原完整授权目录先筛选再客户端15；不截断工艺选项",
+    "search": "名称/类型/工艺/状态/完整度",
+    "controlSourceSites": [
+      "apps/web/src/supplier-center-page.tsx:284",
+      "apps/web/src/supplier-center-page.tsx:288",
+      "apps/web/src/supplier-center-page.tsx:291",
+      "apps/web/src/supplier-center-page.tsx:293"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R28",
+    "condition": "path === \"/ui/suppliers/manage\"",
+    "line": 320,
+    "components": [
+      {
+        "name": "SupplierMaintenancePage",
+        "module": "./supplier-center-page.js"
+      }
+    ],
+    "nature": "供应商资料维护列表",
+    "pageSize": "12→15",
+    "queryAndException": "共用供应商目录分页；权限及修改流程保留",
+    "search": "名称/类型/工艺/状态",
+    "controlSourceSites": [
+      "apps/web/src/supplier-center-page.tsx:284",
+      "apps/web/src/supplier-center-page.tsx:288",
+      "apps/web/src/supplier-center-page.tsx:291",
+      "apps/web/src/supplier-center-page.tsx:293"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R29",
+    "condition": "path === \"/ui/master-data\"",
+    "line": 321,
+    "components": [
+      {
+        "name": "MasterDataPage",
+        "module": "./master-data-page.js"
+      },
+      {
+        "name": "LegacySupplierCenterRedirect",
+        "module": null
+      }
+    ],
+    "nature": "款式/工艺/供应商主数据及导入",
+    "pageSize": "15→15（目录）",
+    "queryAndException": "款式服务15；工艺/供应商完整集合UI15；导入预览不分页",
+    "search": "款号/名称/类型",
+    "controlSourceSites": [
+      "apps/web/src/master-data-page.tsx:736",
+      "apps/web/src/master-data-page.tsx:807"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R30",
+    "condition": "path === \"/ui/people\"",
+    "line": 330,
+    "components": [
+      {
+        "name": "WorkforceMasterDataPage",
+        "module": "./workforce-master-data-page.js"
+      }
+    ],
+    "nature": "内部/临时人员目录",
+    "pageSize": "15→15",
+    "queryAndException": "原授权集合UI15；人员候选不截断",
+    "search": "姓名/手机号",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R31",
+    "condition": "path === \"/ui/frontline\"",
+    "line": 331,
+    "components": [
+      {
+        "name": "FrontlineLandingPage",
+        "module": "./frontline-landing-page.js"
+      }
+    ],
+    "nature": "详情/创建/配置/导航页",
+    "pageSize": "不适用",
+    "queryAndException": "不是可分页业务订单列表；原资料、矩阵、条款、版本选择不改",
+    "search": "原表单/配置输入",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R32",
+    "condition": "path === \"/ui/frontline/tasks\"",
+    "line": 332,
+    "components": [
+      {
+        "name": "FrontlineTaskPage",
+        "module": "./frontline-task-page.js"
+      }
+    ],
+    "nature": "本人一线任务列表",
+    "pageSize": "15→15",
+    "queryAndException": "本人授权集合UI15；先搜索再分页，不截断后台办理集合",
+    "search": "款号/单号/任务",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R33",
+    "condition": "path === \"/ui/my-tasks\"",
+    "line": 333,
+    "components": [
+      {
+        "name": "MyTodosPage",
+        "module": "./my-todos-page.js"
+      }
+    ],
+    "nature": "本人待办业务列表",
+    "pageSize": "15→15",
+    "queryAndException": "原todos/mine授权页15；指示器独立不截断",
+    "search": "关键词/分类/状态",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R34",
+    "condition": "path.startsWith(\"/ui/my-tasks/\")",
+    "line": 334,
+    "components": [
+      {
+        "name": "ResponsibilityTaskPage",
+        "module": "./responsibility-task-page.js"
+      }
+    ],
+    "nature": "详情/创建/配置/导航页",
+    "pageSize": "不适用",
+    "queryAndException": "不是可分页业务订单列表；原资料、矩阵、条款、版本选择不改",
+    "search": "原表单/配置输入",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R35",
+    "condition": "path === \"/ui/receiving\"",
+    "line": 335,
+    "components": [
+      {
+        "name": "ReceivingPage",
+        "module": "./receiving-page.js"
+      }
+    ],
+    "nature": "回货批次业务列表/录入/详情",
+    "pageSize": "15→15（列表）",
+    "queryAndException": "原回货服务15；装箱/尺码/原始附件不机械分页",
+    "search": "订单/款号/加工厂/日期",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R36",
+    "condition": "path === \"/ui/orders\"",
+    "line": 336,
+    "components": [
+      {
+        "name": "OrderBoardPage",
+        "module": "./order-board-page.js"
+      }
+    ],
+    "nature": "订单回货列表与选中明细",
+    "pageSize": "15→15",
+    "queryAndException": "原回货订单服务15；尺码/装箱/合同详情按原协议",
+    "search": "全局款号/工厂/状态/日期",
+    "controlSourceSites": [
+      "apps/web/src/order-board-page.tsx:714",
+      "apps/web/src/order-board-page.tsx:986"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R37",
+    "condition": "path === \"/ui/supervisor\"",
+    "line": 337,
+    "components": [
+      {
+        "name": "ManagementDashboardPage",
+        "module": "./reporting/management-dashboard-page.js"
+      }
+    ],
+    "nature": "管理指标/节点汇总/最近订单摘要",
+    "pageSize": "不适用",
+    "queryAndException": "指标卡、队列计数及有限最近记录摘要；完整列表入口另页",
+    "search": "原日期/聚合筛选",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R38",
+    "condition": "path === \"/ui/responsibility\"",
+    "line": 338,
+    "components": [
+      {
+        "name": "ResponsibilityQueuePage",
+        "module": "./responsibility-queue-page.js"
+      }
+    ],
+    "nature": "责任判定队列",
+    "pageSize": "15→15",
+    "queryAndException": "旧全授权集合UI15；后台统计和办理依赖完整集合，保留协议",
+    "search": "款号/单号/当前状态",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R39",
+    "condition": "path === \"/ui/own-factory-approvals\"",
+    "line": 339,
+    "components": [
+      {
+        "name": "OwnFactoryApprovalQueuePage",
+        "module": "./own-factory-approval-queue-page.js"
+      }
+    ],
+    "nature": "本厂承担审批队列",
+    "pageSize": "15→15",
+    "queryAndException": "旧全授权集合UI15；原审批统计保留",
+    "search": "款号/单号/责任状态",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R40",
+    "condition": "path === \"/ui/external-responsibilities\"",
+    "line": 340,
+    "components": [
+      {
+        "name": "ExternalResponsibilityQueuePage",
+        "module": "./external-responsibility-queue-page.js"
+      }
+    ],
+    "nature": "外部扣款队列",
+    "pageSize": "15→15",
+    "queryAndException": "旧全授权集合UI15；原财务统计保留",
+    "search": "款号/单号/责任方",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R41",
+    "condition": "path === \"/ui/pattern-room\"",
+    "line": 341,
+    "components": [
+      {
+        "name": "PatternRoomPage",
+        "module": "./pattern-room-page.js"
+      }
+    ],
+    "nature": "板房旧入口/杂事看板",
+    "pageSize": "15→15",
+    "queryAndException": "PR06杂事列表kind=misc，历史原单详情保留",
+    "search": "款号/申请人/主办/状态",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R42",
+    "condition": "path === \"/ui/pattern-room/orders\"",
+    "line": 342,
+    "components": [
+      {
+        "name": "PatternRoomOrdersPage",
+        "module": "./pattern-room-orders-page.js"
+      }
+    ],
+    "nature": "历史打板/杂事业务列表",
+    "pageSize": "15→15",
+    "queryAndException": "PR06原查询pageSize15；历史角色scope保留",
+    "search": "关键词/类型/状态",
+    "controlSourceSites": [
+      "apps/web/src/pattern-room-orders-page.tsx:61",
+      "apps/web/src/pattern-room-orders-page.tsx:62",
+      "apps/web/src/pattern-room-orders-page.tsx:63",
+      "apps/web/src/pattern-room-orders-page.tsx:64",
+      "apps/web/src/pattern-room-orders-page.tsx:159"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R43",
+    "condition": "path === \"/ui/pattern-room/create\"",
+    "line": 343,
+    "components": [
+      {
+        "name": "PatternOrderCreatePage",
+        "module": "./pattern-order-create-page.js"
+      }
+    ],
+    "nature": "详情/创建/配置/导航页",
+    "pageSize": "不适用",
+    "queryAndException": "不是可分页业务订单列表；原资料、矩阵、条款、版本选择不改",
+    "search": "原表单/配置输入",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R44",
+    "condition": "/^\\/ui\\/pattern-room\\/orders\\/[^/]+$/.test(path)",
+    "line": 344,
+    "components": [
+      {
+        "name": "PatternRoomOrderDetailPage",
+        "module": "./pattern-room-orders-page.js"
+      }
+    ],
+    "nature": "详情/创建/配置/导航页",
+    "pageSize": "不适用",
+    "queryAndException": "不是可分页业务订单列表；原资料、矩阵、条款、版本选择不改",
+    "search": "原表单/配置输入",
+    "controlSourceSites": [
+      "apps/web/src/pattern-room-orders-page.tsx:61",
+      "apps/web/src/pattern-room-orders-page.tsx:62",
+      "apps/web/src/pattern-room-orders-page.tsx:63",
+      "apps/web/src/pattern-room-orders-page.tsx:64",
+      "apps/web/src/pattern-room-orders-page.tsx:159"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R45",
+    "condition": "path === \"/ui/pattern-room/prices\"",
+    "line": 345,
+    "components": [
+      {
+        "name": "PatternRoomPricesPage",
+        "module": "./pattern-room-prices-page.js"
+      }
+    ],
+    "nature": "详情/创建/配置/导航页",
+    "pageSize": "不适用",
+    "queryAndException": "不是可分页业务订单列表；原资料、矩阵、条款、版本选择不改",
+    "search": "原表单/配置输入",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R46",
+    "condition": "path === \"/ui/finance\" || path === \"/ui/wages\" || path.startsWith(\"/ui/wages/\")",
+    "line": 346,
+    "components": [
+      {
+        "name": "WagePage",
+        "module": "./wages/wage-page.js"
+      }
+    ],
+    "nature": "工资明细/个人/结算批次",
+    "pageSize": "15→15（业务列表）",
+    "queryAndException": "原工资分页15，结算集合、金额汇总和导出保留完整协议",
+    "search": "人员/单号/状态/月份",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R47",
+    "condition": "path === \"/ui/tasks\"",
+    "line": 347,
+    "components": [
+      {
+        "name": "ReworkQueryPage",
+        "module": "./reporting/rework-query-page.js"
+      }
+    ],
+    "nature": "返工统一业务查询",
+    "pageSize": "15→15",
+    "queryAndException": "原management rework显式limit15；默认25补为15",
+    "search": "单号/款号/责任/状态/日期",
+    "controlSourceSites": [
+      "apps/web/src/reporting/rework-query-page.tsx:102",
+      "apps/web/src/reporting/rework-query-page.tsx:103",
+      "apps/web/src/reporting/rework-query-page.tsx:104",
+      "apps/web/src/reporting/rework-query-page.tsx:108",
+      "apps/web/src/reporting/rework-query-page.tsx:110"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R48",
+    "condition": "path === \"/ui/reports\"",
+    "line": 348,
+    "components": [
+      {
+        "name": "ReportCenterPage",
+        "module": "./reporting/report-center-page.js"
+      }
+    ],
+    "nature": "报表预览＋全量统计/导出",
+    "pageSize": "预览UI15（保留）",
+    "queryAndException": "快照预览原limit100且标明预览；不是订单分页接口；完整指标及独立导出不改",
+    "search": "报表/状态/日期/关键词",
+    "controlSourceSites": [
+      "apps/web/src/reporting/report-center-page.tsx:46",
+      "apps/web/src/reporting/report-center-page.tsx:49"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R49",
+    "condition": "path.startsWith(\"/ui/tasks/\")",
+    "line": 349,
+    "components": [
+      {
+        "name": "ReworkDetailPage",
+        "module": "./rework-detail-page.js"
+      }
+    ],
+    "nature": "详情/创建/配置/导航页",
+    "pageSize": "不适用",
+    "queryAndException": "不是可分页业务订单列表；原资料、矩阵、条款、版本选择不改",
+    "search": "原表单/配置输入",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R50",
+    "condition": "path === \"/ui/qc/new\"",
+    "line": 350,
+    "components": [
+      {
+        "name": "ReworkInitiationV2Form",
+        "module": "./rework-v2-form.js"
+      },
+      {
+        "name": "ReceivingReworkEntryRedirect",
+        "module": null
+      }
+    ],
+    "nature": "详情/创建/配置/导航页",
+    "pageSize": "不适用",
+    "queryAndException": "不是可分页业务订单列表；原资料、矩阵、条款、版本选择不改",
+    "search": "原表单/配置输入",
+    "controlSourceSites": [
+      "apps/web/src/rework-v2-form.tsx:747",
+      "apps/web/src/rework-v2-form.tsx:762",
+      "apps/web/src/rework-v2-form.tsx:763",
+      "apps/web/src/rework-v2-form.tsx:764",
+      "apps/web/src/rework-v2-form.tsx:765"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R51",
+    "condition": "path === \"/ui/process-configuration\"",
+    "line": 353,
+    "components": [
+      {
+        "name": "ProcessConfigurationForm",
+        "module": "./process-configuration-form.js"
+      },
+      {
+        "name": "WorkflowQueuePage",
+        "module": "./reporting/workflow-queue-page.js"
+      }
+    ],
+    "nature": "返工工序配置/IE审核/报数节点队列",
+    "pageSize": "前100条客户端15→服务端15",
+    "queryAndException": "每状态原授权查询limit15/page，真实totalCount；106条可达",
+    "search": "当前节点一次关键词/逾期/异常/日期",
+    "controlSourceSites": [
+      "apps/web/src/reporting/workflow-queue-page.tsx:235",
+      "apps/web/src/reporting/workflow-queue-page.tsx:236"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R52",
+    "condition": "path === \"/ui/work-reporting\" || path === \"/ui/piecework/collective\"",
+    "line": 356,
+    "components": [
+      {
+        "name": "WorkReportingForm",
+        "module": "./work-reporting-form.js"
+      },
+      {
+        "name": "WorkflowQueuePage",
+        "module": "./reporting/workflow-queue-page.js"
+      }
+    ],
+    "nature": "返工工序配置/IE审核/报数节点队列",
+    "pageSize": "前100条客户端15→服务端15",
+    "queryAndException": "每状态原授权查询limit15/page，真实totalCount；106条可达",
+    "search": "当前节点一次关键词/逾期/异常/日期",
+    "controlSourceSites": [
+      "apps/web/src/reporting/workflow-queue-page.tsx:235",
+      "apps/web/src/reporting/workflow-queue-page.tsx:236"
+    ],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  },
+  {
+    "id": "R53",
+    "condition": "path === \"/system/foundation\"",
+    "line": 359,
+    "components": [
+      {
+        "name": "Foundation",
+        "module": "./pages.js"
+      }
+    ],
+    "nature": "详情/创建/配置/导航页",
+    "pageSize": "不适用",
+    "queryAndException": "不是可分页业务订单列表；原资料、矩阵、条款、版本选择不改",
+    "search": "原表单/配置输入",
+    "controlSourceSites": [],
+    "validation": "只读/配置不新增必填；现有required/条件约束保留；共享原生/Zod/API中文反馈，业务错误按原流程显示",
+    "evidence": "源代码核验；共享控件隔离浏览器/相关既有业务链回归；非逐角色线上实测"
+  }
+]

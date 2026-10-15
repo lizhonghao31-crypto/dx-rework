@@ -1,3 +1,4 @@
+import { requestValidationMessage } from "@dx-rework/contracts/validation-language";
 import { FinanceNodeParamsSchema } from "@dx-rework/contracts/reporting";
 import {
   AddIePrecountSchema,
@@ -39,14 +40,14 @@ type CreateReworkDraftWithReceivingBatch = CreateReworkDraft & Readonly<{ receiv
 const CreateReworkDraftWithReceivingBatchSchema = {
   safeParse(value: unknown):
     | { success: true; data: CreateReworkDraftWithReceivingBatch }
-    | { success: false } {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return { success: false };
+    | { success: false; error?: { issues?: readonly { path?: readonly PropertyKey[]; message?: string }[] } } {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return { success: false, error: { issues: [{ path: ["receivingBatchId"], message: "请选择有效收货批次" }] } };
     const { receivingBatchId, ...draft } = value as Record<string, unknown>;
     if (typeof receivingBatchId !== "string" || !UUID_PATTERN.test(receivingBatchId)) {
-      return { success: false };
+      return { success: false, error: { issues: [{ path: ["receivingBatchId"], message: "请选择有效收货批次" }] } };
     }
     const parsed = CreateReworkDraftSchema.safeParse(draft);
-    if (!parsed.success) return { success: false };
+    if (!parsed.success) return parsed;
     return {
       success: true,
       data: {
@@ -65,11 +66,11 @@ const cookieToken = (request: FastifyRequest): string | undefined =>
     ?.slice("dx_rework_session=".length);
 
 const parse = <T>(
-  schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } },
+  schema: { safeParse(value: unknown): { success: true; data: T } | { success: false; error?: { issues?: readonly { path?: readonly PropertyKey[]; message?: string }[] } } },
   value: unknown,
 ): T => {
   const result = schema.safeParse(value);
-  if (!result.success) throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400);
+  if (!result.success) throw new ApplicationError("VALIDATION_ERROR", requestValidationMessage(result), 400);
   return result.data;
 };
 const idempotencyKey = (request: FastifyRequest): string => parse(IdempotencyKeySchema, request.headers["idempotency-key"]);
@@ -244,7 +245,7 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     "/rework-orders/finishing/receiving-entry/:receivingBatchId",
     async (request) => {
       const trustedActor = await finishingActor(request);
-      if (!UUID_PATTERN.test(request.params.receivingBatchId)) throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400);
+      if (!UUID_PATTERN.test(request.params.receivingBatchId)) throw new ApplicationError("VALIDATION_ERROR", "提交资料格式不正确，请检查关联记录和填写内容", 400);
       return dependencies.service.getReceivingEntry(request.params.receivingBatchId, trustedActor);
     },
   );
@@ -272,7 +273,7 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
     async (request) => {
       await actor(request);
       if (!UUID_PATTERN.test(request.params.receivingBatchId)) {
-        throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400);
+        throw new ApplicationError("VALIDATION_ERROR", "提交资料格式不正确，请检查关联记录和填写内容", 400);
       }
       return dependencies.service.getReceivingEntry(request.params.receivingBatchId);
     },

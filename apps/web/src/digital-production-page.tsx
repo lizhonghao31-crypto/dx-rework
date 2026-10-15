@@ -112,10 +112,10 @@ function HistoricalSourceAttach({ order, onAttached }: { order: DigitalOrder; on
   return <Surface><h2>关联开发来源</h2><p>此历史单尚无开发来源，可按原规则补关联。</p>{error && <p role="alert">{error}</p>}
     <form onSubmit={event => { event.preventDefault(); void attach(); }}><fieldset disabled={busy}>
       <label>搜索开发来源<input value={search} maxLength={100} onChange={event => { setSearch(event.target.value); setPage(1); }} /></label>
-      <label>开发来源<select aria-label="开发来源" required value={selected?.sourceId ?? ""} onChange={event => setSelected(displayed.find(source => source.sourceId === event.target.value) ?? null)}><option value="">请选择</option>{displayed.map(source => <option key={source.sourceId} value={source.sourceId}>{source.designStyleNo} · {source.developmentType}</option>)}</select></label>
+      <label>开发来源 *<select aria-label="开发来源" required value={selected?.sourceId ?? ""} onChange={event => setSelected(displayed.find(source => source.sourceId === event.target.value) ?? null)}><option value="">请选择</option>{displayed.map(source => <option key={source.sourceId} value={source.sourceId}>{source.designStyleNo} · {source.developmentType}</option>)}</select></label>
       {loading && <p role="status">正在读取开发来源…</p>}
       {!loading && !candidates.length && <p>本页没有符合原关联规则的开发来源</p>}
-      <div className="pattern-actions"><Button type="button" disabled={page === 1 || loading} onClick={() => setPage(value => value - 1)}>上一页</Button><span>{page}</span><Button type="button" disabled={sources.length < 20 || loading} onClick={() => setPage(value => value + 1)}>下一页</Button><Button type="submit" disabled={!selected || loading}>关联</Button></div>
+      <div className="pattern-actions"><Button type="button" disabled={page === 1 || loading} onClick={() => setPage(value => value - 1)}>上一页</Button><span>{page}</span><Button type="button" disabled={sources.length < 15 || loading} onClick={() => setPage(value => value + 1)}>下一页</Button><Button type="submit" disabled={!selected || loading}>关联</Button></div>
     </fieldset></form></Surface>;
 }
 

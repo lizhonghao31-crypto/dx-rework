@@ -1,3 +1,4 @@
+import { requestValidationMessage } from "@dx-rework/contracts/validation-language";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { AttachmentParamsSchema, CreateExportJobSchema, CreateUploadIntentSchema, ExportJobParamsSchema } from "@dx-rework/contracts";
 import { assertBusinessExportAllowed } from "../access/export-authority.js";
@@ -6,7 +7,7 @@ import { ApplicationError } from "../platform/errors.js";
 import type { AttachmentService } from "./attachments.js";
 import type { ExportJobService } from "./exports.js";
 const cookieToken=(request:FastifyRequest):string|undefined=>request.headers.cookie?.split(";").map(v=>v.trim()).find(v=>v.startsWith("dx_rework_session="))?.slice("dx_rework_session=".length);
-const parse=<T>(schema:{safeParse(value:unknown):{success:true;data:T}|{success:false}},value:unknown):T=>{const result=schema.safeParse(value);if(!result.success)throw new ApplicationError("VALIDATION_ERROR","Request validation failed",400);return result.data;};
+const parse=<T>(schema:{safeParse(value:unknown):{success:true;data:T}|{success:false;error?:{issues?:readonly {path?:readonly PropertyKey[];message?:string}[]}}},value:unknown):T=>{const result=schema.safeParse(value);if(!result.success)throw new ApplicationError("VALIDATION_ERROR",requestValidationMessage(result),400);return result.data;};
 const attachmentDeliveryMode=(request:FastifyRequest):"attachment"|"inline"|null=>{const mode=(request.query as {mode?:unknown}).mode;return mode==="preview"?"inline":mode==="download"?"attachment":null;};
 export type ToolsHttpDependencies=Readonly<{
  authenticate(token:string|undefined):Promise<AuthUser>;

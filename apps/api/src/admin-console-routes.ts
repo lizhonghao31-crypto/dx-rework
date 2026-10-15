@@ -1,3 +1,4 @@
+import { requestValidationMessage } from "@dx-rework/contracts/validation-language";
 import { AdminAttachmentsPageSchema, AdminAttachmentsQuerySchema, AdminDelegationsPageSchema, AdminDelegationsQuerySchema, AdminExceptionRetryBodySchema, AdminExceptionRetryParamsSchema, AdminExceptionRetryResponseSchema, AdminExceptionsPageSchema, AdminExceptionsQuerySchema } from "@dx-rework/contracts/admin-console";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
@@ -8,7 +9,7 @@ import type { AdminConsoleService } from "./admin-console-service.js";
 import type { TrustedActorContext } from "./tools/repositories.js";
 
 const cookieToken = (request: FastifyRequest): string | undefined => request.headers.cookie?.split(";").map((value) => value.trim()).find((value) => value.startsWith("dx_rework_session="))?.slice("dx_rework_session=".length);
-const parse = <T>(schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } }, value: unknown): T => { const result = schema.safeParse(value); if (!result.success) throw new ApplicationError("VALIDATION_ERROR", "Request validation failed", 400); return result.data; };
+const parse = <T>(schema: { safeParse(value: unknown): { success: true; data: T } | { success: false; error?: { issues?: readonly { path?: readonly PropertyKey[]; message?: string }[] } } }, value: unknown): T => { const result = schema.safeParse(value); if (!result.success) throw new ApplicationError("VALIDATION_ERROR", requestValidationMessage(result), 400); return result.data; };
 
 export type AdminConsoleHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;

@@ -227,12 +227,12 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         <label>客户下单日期（必填）<input required type="date" value={form.orderDate} onChange={event => setForm({...form, orderDate: event.target.value})}/></label>
 </div>
 </>}</section>
-    {withOrder && <section className="development-create-card development-create-details"><h3>客户订单明细</h3><p>客户侧交期默认沿用首个 PO，可分别修改；首次确认须为 {dateMinimum} 或之后。</p><p>默认主跟单：{customers.find(customer => customer.code === form.customerCode)?.defaultMerchandiserName ?? "未配置，待主管指派"}</p>
+    {withOrder && <section className="development-create-card development-create-details"><h3>客户订单明细</h3><p>颜色、尺码、订购数量及客户交期在正式提交客户订单时必填；保存开发草稿后可继续补齐。</p><p>客户侧交期默认沿用首个 PO，可分别修改；首次确认须为 {dateMinimum} 或之后。</p><p>默认主跟单：{customers.find(customer => customer.code === form.customerCode)?.defaultMerchandiserName ?? "未配置，待主管指派"}</p>
       <div className="development-table-scroll" role="region" aria-label="PO 明细，可左右滑动查看全部列" tabIndex={0}>
         <table className="development-create-po-table"><thead><tr>
-          <th className="development-po-index">PO</th><th className="development-po-number">正式款号 / PO</th><th className="development-po-color">颜色</th>
+          <th className="development-po-index">PO</th><th className="development-po-number">正式款号 / PO</th><th className="development-po-color">颜色 *</th>
           {form.lines[0]?.sizes.map((size, sizeIndex) => <th className="development-size-column" key={sizeIndex}>
-            <span className="development-size-label">尺码</span>
+            <span className="development-size-label">尺码 *</span>
             <input aria-label={`尺码列 ${sizeIndex + 1}`} placeholder="如 S / M / 36" required maxLength={100} value={size.size} onChange={event => setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: row.sizes.map((item, i) => i === sizeIndex ? {...item, size: event.target.value} : item)}))}))}/>
             {form.lines[0]!.sizes.length > 1 && <button type="button" aria-label={`删除尺码列 ${sizeIndex + 1}`} onClick={async () => {if (await confirmInApp("删除这个尺码列及所有 PO 对应订购数量？") && !writing.current) setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: row.sizes.filter((_, i) => i !== sizeIndex)}))}));}}>×</button>}
           </th>)}
@@ -243,7 +243,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
           <td className="development-po-color"><input aria-label={`PO ${index + 1} 颜色`} placeholder="颜色（必填）" required maxLength={100} value={value.color} onChange={event => line(index, {color: event.target.value})}/><input aria-label={`PO ${index + 1} 颜色外文`} placeholder="颜色外文（选填）" maxLength={100} value={value.colorForeign ?? ""} onChange={event => line(index, {colorForeign: event.target.value || null})}/></td>
           {value.sizes.map((size, sizeIndex) => {
             const quantityError = developmentQuantityError(size.quantity), errorId = `development-quantity-error-${index}-${sizeIndex}`;
-            return <td className="development-size-column" key={sizeIndex}><label className="development-quantity-field"><span>数量（件）</span>
+            return <td className="development-size-column" key={sizeIndex}><label className="development-quantity-field"><span>数量（件）*</span>
               <input aria-label={`PO ${index + 1} 订购数量 ${sizeIndex + 1}`} type="text" inputMode="numeric" maxLength={8} placeholder="件数" value={size.quantity} aria-invalid={quantityError !== null} aria-describedby={quantityError ? errorId : undefined} onChange={event => line(index, {sizes: value.sizes.map((item, i) => i === sizeIndex ? {...item, quantity: event.target.value} : item)})}/>
               {quantityError && <small className="development-quantity-error" id={errorId} role="alert">{quantityError}</small>}
             </label></td>;

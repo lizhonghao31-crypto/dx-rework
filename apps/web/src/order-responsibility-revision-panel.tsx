@@ -97,7 +97,7 @@ export function OrderResponsibilityRevisionPanel({
     </div> : null}
     {error ? <p role="alert">{error}</p> : null}
     {open ? <form onSubmit={(event) => { event.preventDefault(); void reopen(); }} className="rework-responsibility-result__form">
-      <label>重判原因<textarea required maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} /></label>
+      <label>重判原因 *<textarea required maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} /></label>
       <p>回到责任判定，由原处理人调整后提交老板确认。原工资与已扣款记录保留，新责任继续处理剩余金额。</p>
       <Button type="submit" disabled={busy || !reason.trim()}>{busy ? "正在创建新责任版本…" : "确认重新判责"}</Button>
       <Button type="button" disabled={busy} onClick={() => setOpen(false)}>取消</Button>

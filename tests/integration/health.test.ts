@@ -130,7 +130,7 @@ describe("platform health contract", () => {
     const response = await app.inject({ method: "GET", url: "/missing", headers: { "x-request-id": "uat-123" } });
     expect(response.statusCode).toBe(404);
     expect(ErrorResponseSchema.parse(response.json())).toEqual({
-      error: { code: "NOT_FOUND", message: "Resource not found", requestId: "uat-123" },
+      error: { code: "NOT_FOUND", message: "请求的资料不存在", requestId: "uat-123" },
     });
     expect(response.headers["x-request-id"]).toBe("uat-123");
   });
@@ -146,7 +146,7 @@ describe("platform health contract", () => {
     });
     expect(response.statusCode).toBe(400);
     expect(ErrorResponseSchema.parse(response.json())).toMatchObject({
-      error: { code: "VALIDATION_ERROR", message: "Request validation failed" },
+      error: { code: "VALIDATION_ERROR", message: "请求格式不正确，请检查填写内容" },
     });
   });
 });

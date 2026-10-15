@@ -19,7 +19,7 @@ export const DevelopmentWorkspaceFilterSchema = z.object({
 export type DevelopmentWorkspaceFilter = z.infer<typeof DevelopmentWorkspaceFilterSchema>;
 export type DevelopmentWorkspaceItem = { journey: OrderJourney; view: DevelopmentView; canConfirm: boolean };
 export type DevelopmentWorkspaceResult = {
-  asOf: string; page: number; pageSize: 20; total: number;
+  asOf: string; page: number; pageSize: 15; total: number;
   counts: Record<DevelopmentWorkspaceFilter["view"], number>;
   customers: string[]; designers?: string[]; items: DevelopmentWorkspaceItem[];
 };
