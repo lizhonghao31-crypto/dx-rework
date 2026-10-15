@@ -21,3 +21,6 @@ export type DigitalTask = {
   timeQuality: DigitalTimeQuality; blockedReason: string | null; canExecute: boolean;
 };
 export type DigitalDeadlinePolicy = { nodeKey: string; label: string; version: number; slaHours: number | null; warningRatio: number; changedAt: string; changedBy: string | null; note: string };
+
+export type DigitalTaskDocumentReference = {state:"unavailable"|"not_applicable"|"missing"|"draft"} | {state:"published";id:string;version:number;label:"本次采用"|"当前有效"};
+export type DigitalTaskDocuments = {development:DigitalTaskDocumentReference;instruction:DigitalTaskDocumentReference;budget:DigitalTaskDocumentReference};

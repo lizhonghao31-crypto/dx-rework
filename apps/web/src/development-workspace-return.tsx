@@ -17,6 +17,8 @@ export function developmentWorkspaceReturnUrl(value: string | null, base: string
   return null;
 }
 export function DevelopmentWorkspaceReturn() {
-  const target = developmentWorkspaceReturnUrl(new URLSearchParams(window.location.search).get("returnTo"));
+  const query=new URLSearchParams(window.location.search);
+  if(query.get("workbench")==="sample"&&query.has("task"))return null;
+  const target = developmentWorkspaceReturnUrl(query.get("returnTo"));
   return target ? <a className="dx-button dx-button--secondary" href={target}>{target.startsWith(createWebUrls(import.meta.env.BASE_URL).pageUrl('ui/digital-analysis'))?'返回板房沙盘':'返回开发工作台'}</a> : null;
 }

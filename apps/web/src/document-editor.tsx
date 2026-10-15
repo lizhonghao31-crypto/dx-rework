@@ -1,14 +1,23 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@dx-rework/ui";
+import { flushSync } from "react-dom";
 import { NavigationIcon } from "./navigation-icons.js";
 import "./document-editor.css";
 
+const DocumentChapterContext=createContext<string|null>(null);
+export function DocumentChapterScope({chapter,children}:{chapter:string;children:ReactNode}){
+  const [printing,setPrinting]=useState(false);
+  useEffect(()=>{const before=()=>flushSync(()=>setPrinting(true)),after=()=>setPrinting(false);window.addEventListener('beforeprint',before);window.addEventListener('afterprint',after);return()=>{window.removeEventListener('beforeprint',before);window.removeEventListener('afterprint',after);};},[]);
+  return <DocumentChapterContext.Provider value={printing?null:chapter}>{children}</DocumentChapterContext.Provider>;
+}
 export type DocumentIssue = { id: string; label: string; message: string };
 export function DocumentToolbar({ title, status, children }: { title: string; status: string; children: ReactNode }) {
   return <div className="dx-doc-toolbar"><div><NavigationIcon name="FileText" size="title" /><h1>{title}</h1><span className="dx-doc-status" role="status">{status}</span></div><div className="dx-doc-actions">{children}</div></div>;
 }
 export function DocumentAnchors({ sections }: { sections: Array<{ id: string; label: string }> }) {
+  const chapter=useContext(DocumentChapterContext);
   const [active, setActive] = useState(sections[0]?.id);
+  if(chapter)return null;
   return <nav className="dx-doc-anchors" aria-label="单据章节">{sections.map(section => <button key={section.id} type="button" aria-current={active === section.id ? "location" : undefined} onClick={() => { setActive(section.id); document.getElementById(section.id)?.scrollIntoView({ block: "start", behavior: "smooth" }); }}>{section.label}</button>)}</nav>;
 }
 export function DocumentErrors({ issues, error }: { issues: DocumentIssue[]; error?: string }) {
@@ -41,6 +50,8 @@ export function DocumentField({ id, label, value, onValue, readonly, disabled, n
   return <span className="dx-doc-field">{readonly ? <span id={id} className="dx-doc-readonly" tabIndex={-1}>{value || "—"}</span> : multiline ? <textarea {...shared} /> : <input {...shared} type={type} inputMode={numeric ? "decimal" : undefined} data-doc-column={column} />}{!readonly&&type==="date"&&<span className="dx-doc-date-value" aria-hidden="true">{value||"请选择日期"}</span>}<span className="dx-doc-print-value">{column ? value : value || "—"}</span>{issue && <small id={`${id}-error`} className="dx-doc-field-error">{issue}</small>}</span>;
 }
 export function DocumentSection({ id, title, detail, children }: { id: string; title: string; detail?: string; children: ReactNode }) {
+  const chapter=useContext(DocumentChapterContext);
+  if(chapter&&chapter!==id)return null;
   return <section id={id} className="dx-doc-card dx-doc-section"><h2>{title}{detail && <small>{detail}</small>}</h2>{children}</section>;
 }
 export function DocumentTableScroll({ children, className = "" }: { children: ReactNode; className?: string }) {

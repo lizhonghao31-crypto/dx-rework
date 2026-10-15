@@ -22,7 +22,7 @@ const initial = (): BudgetDocument => ({ fabricType: "", productCategory: "", mo
     ...[...Array<string>(6).fill("通用物料"), ...Array<string>(3).fill("拉链"), ...Array<string>(3).fill("扣类"), ...Array<string>(3).fill("橡筋类"), ...Array<string>(3).fill("装饰牌标"), ...Array<string>(4).fill("花边/织带"), ...Array<string>(3).fill("其它")].map(category => newRow("辅料", category)),
     ...Array.from({ length: 4 }, () => newRow("外发工序"))] });
 
-export function DigitalBudgetPanel({ order, onClose, initialVersion }: { order: DigitalOrder; onClose: () => void; initialVersion?: number | undefined }) {
+export function DigitalBudgetPanel({ order, onClose, initialVersion, embedded=false }: { order: DigitalOrder; onClose: () => void; initialVersion?: number | undefined; embedded?:boolean }) {
   const [sheet, setSheet] = useState<BudgetSheet | null>(null), [doc, setDoc] = useState<BudgetDocument>(initial);
   const [busy, setBusy] = useState(false), [dirty, setDirty] = useState(false), [error, setError] = useState("");
   const writing = useRef(false), operation = useRef<{ payload: string; key: string } | null>(null);
@@ -92,7 +92,7 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion }: { order: 
   };
   const valid = BudgetDocumentSchema.safeParse(doc), totals = valid.success ? calculateBudget(valid.data) : null;
   const amount = (value: string | null | undefined) => value == null ? "—" : budgetDisplayAmount(value);
-  const readonly=!sheet?.canEdit||sheet.status==="published", issues=validationMode?budgetIssues(doc,validationMode==="publish"):[];
+  const readonly=embedded||!sheet?.canEdit||sheet.status==="published", issues=validationMode?budgetIssues(doc,validationMode==="publish"):[];
   const issue=(id:string)=>issues.find(item=>item.id===id)?.message;
   const field = (key: keyof typeof budgetFieldLabels, numeric=false) => {const id=`budget-${key}`,label=budgetFieldLabels[key]!;return <label>{label}<DocumentField id={id} label={label} value={readonly&&numeric&&doc[key as keyof BudgetDocument]?budgetDisplayAmount(String(doc[key as keyof BudgetDocument])):String(doc[key as keyof BudgetDocument]??"")} onValue={value=>edit({[key]:key==="date"?(value||null):value})} readonly={readonly} disabled={busy} numeric={numeric} multiline={key==="outsourcingScope"} type={key==="date"?"date":"text"} maxLength={numeric?21:key==="outsourcingScope"?1000:100} issue={issue(id)} onBlur={numeric?()=>setValidationMode("save"):undefined}/></label>;};
   const unused=(row:BudgetRow)=>templateDefaults.current.has(row.rowId)&&row.category===templateDefaults.current.get(row.rowId)&&!activated.has(row.rowId)&&[row.name,row.specification,row.unit,row.supplier,row.consumption,row.unitPrice].every(value=>value==="");
@@ -101,7 +101,7 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion }: { order: 
   const reload=async()=>{if(writing.current||dirty&&!await confirmInApp("重新载入将丢弃未保存修改，确定继续？"))return;setBusy(true);try{install(await digitalRequest<BudgetSheet>(`${base}${initialVersion?`?version=${initialVersion}`:""}`));setError("");}catch(reason){setError(reason instanceof Error?reason.message:"读取失败");}finally{setBusy(false);}};
   return <><Surface><section ref={root} className="budget-editor dx-doc-budget">
     <DocumentToolbar title="成本预算表" status={busy?"保存中":error&&dirty?"保存失败，修改未保存":dirty?"未保存修改":`${initialVersion?"历史版本":sheet?.status==="published"?"已发布 · 当前有效版本":sheet?.version?"已保存":"草稿"}${sheet?.version?` · 版本 ${sheet.version}`:""}`}>
-      <Button disabled={busy} onClick={onClose}>返回</Button>
+      {!embedded&&<Button disabled={busy} onClick={onClose}>返回</Button>}
       {sheet?.canEdit&&sheet.status==="published"&&sheet.document&&initialVersion===undefined&&<Button disabled={busy} onClick={()=>void copyPublished()}>另存为新草稿</Button>}
       {!readonly&&<><Button disabled={busy} onClick={()=>void run(false)}>保存预算</Button><Button variant="primary" disabled={busy} onClick={()=>void run(true)}>发布预算</Button></>}
       <Button disabled={!sheet?.document||dirty||busy} onClick={()=>window.print()}>打印 / 保存 PDF</Button>

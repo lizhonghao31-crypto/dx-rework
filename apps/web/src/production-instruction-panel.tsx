@@ -19,7 +19,7 @@ const urls = createWebUrls(import.meta.env.BASE_URL);
 const kinds = ["款图", "主唛", "腰卡", "吊牌", "洗水唛", "二维码唛", "包装辅料", "其它工艺"] as const;
 const tabKeys = Object.keys(instructionTabs) as InstructionTab[];
 
-export function ProductionInstructionPanel({ orderId, initialVersion, onClose }: { orderId: string; initialVersion?: number | undefined; onClose: () => void }) {
+export function ProductionInstructionPanel({ orderId, initialVersion, onClose, embedded=false }: { orderId: string; initialVersion?: number | undefined; onClose: () => void; embedded?:boolean }) {
   const [sheet, setSheet] = useState<InstructionSheet | null>(null), [doc, setDoc] = useState<InstructionDocument | null>(null), [version, setVersion] = useState<number | undefined>(initialVersion);
   const [busy, setBusy] = useState(false), [saving, setSaving] = useState(false), [dirty, setDirty] = useState(false), [error, setError] = useState("");
   const [sourceReviewOpen,setSourceReviewOpen]=useState(false);
@@ -66,7 +66,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose }:
     void act("", "PUT", { expectedVersion: sheet.version, orderVersion: sheet.order.version, sourceRound:sheet.sourceRound, document: doc });
   };
   useEffect(() => {
-    if (!dirty || busy || error || saveBlocked || confirming || sourceReviewOpen || !sheet?.canEdit || sheet.cutStarted || !doc) return;
+    if (embedded || !dirty || busy || error || saveBlocked || confirming || sourceReviewOpen || !sheet?.canEdit || sheet.cutStarted || !doc) return;
     const timer = window.setTimeout(save, 1200); return () => window.clearTimeout(timer);
   }, [doc, dirty, busy, error, saveBlocked, confirming, sourceReviewOpen, sheet]);
   const discard = async (message: string) => {
@@ -76,6 +76,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose }:
     try { return await confirmInApp(message) && !writing.current; } finally { setConfirming(false); }
   };
   const chooseVersion = async (next: number | undefined) => {
+    if (embedded) return;
     if (!await discard("切换版本将丢弃未保存修改，确定继续？")) return;
     setDirty(false); setVersion(next); setValidationMode(null);
     const url = new URL(window.location.href); if (next) url.searchParams.set("instructionVersion", String(next)); else url.searchParams.delete("instructionVersion"); window.history.replaceState(null, "", url);
@@ -102,11 +103,11 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose }:
     } catch (e) { setError(e instanceof Error ? e.message : "上传失败"); setSaveBlocked(true); }
     finally { writing.current = false; setBusy(false); }
   };
-  if (!sheet || !doc) return <Surface>{error ? <p role="alert">{error}</p> : <p role="status">正在读取制单…</p>}<Button onClick={onClose}>返回</Button></Surface>;
+  if (!sheet || !doc) return <Surface>{error ? <p role="alert">{error}</p> : <p role="status">正在读取制单…</p>}{!embedded&&<Button onClick={onClose}>返回</Button>}</Surface>;
   if (!sheet.canEdit && !sheet.isPublishedSnapshot && sheet.publishedVersion === null) {
-    return <Surface className="dx-doc-instruction"><DocumentToolbar title="大货制单" status="尚未发布有效制单"><Button onClick={onClose}>返回</Button></DocumentToolbar><DocumentSection id="instruction-unpublished" title="尚未发布有效制单"><p>该母单尚无已发布的有效制单。请联系订单跟单发布后查看。</p></DocumentSection><PoCustomerDates sheet={sheet} busy={busy} dirty={dirty} historical={Boolean(version)} onAct={act}/>{error&&<p role="alert">{error}</p>}</Surface>;
+    return <Surface className="dx-doc-instruction"><DocumentToolbar title="大货制单" status="尚未发布有效制单">{!embedded&&<Button onClick={onClose}>返回</Button>}</DocumentToolbar><DocumentSection id="instruction-unpublished" title="尚未发布有效制单"><p>该母单尚无已发布的有效制单。请联系订单跟单发布后查看。</p></DocumentSection><PoCustomerDates sheet={sheet} busy={busy} dirty={dirty} historical={embedded||Boolean(version)} onAct={act}/>{error&&<p role="alert">{error}</p>}</Surface>;
   }
-  const order = sheet.order, readonly = !sheet.canEdit || sheet.cutStarted, inputDisabled = busy && !saving || sourceReviewOpen;
+  const order = sheet.order, readonly = embedded || !sheet.canEdit || sheet.cutStarted, inputDisabled = busy && !saving || sourceReviewOpen;
   const total = order.lines.reduce((n, line) => n + line.sizes.reduce((m, size) => m + size.quantity, 0), 0);
   const orderSizes = [...new Set(order.lines.flatMap(line => line.sizes.map(size => size.size)))];
   const issues = validationMode ? instructionIssues(doc, order, validationMode === "publish") : [];
@@ -147,7 +148,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose }:
   return <Surface><article className="dx-doc-instruction">
     <div className="instruction-screen">
       <DocumentToolbar title="大货制单" status={status}>
-        <Button type="button" disabled={busy} onClick={onClose}>返回</Button>
+        {!embedded&&<Button type="button" disabled={busy} onClick={onClose}>返回</Button>}
         {!readonly && <><Button type="button" disabled={busy} onClick={save}>保存草稿</Button><Button type="button" disabled={busy || sheet.publishedVersion === sheet.version && !dirty} onClick={publish}>发布有效制单</Button></>}
         <Button type="button" disabled={!printable} title={!printable ? "请先保存并打开已发布版本后打印" : "打印当前已发布快照的全部六类内容"} onClick={() => window.print()}>打印 / 保存 PDF</Button>
       </DocumentToolbar>
@@ -181,10 +182,10 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose }:
           {tab === "measurements" && <DocumentSection id="instruction-measurements" title="大货齐码尺寸表" detail={`${doc.measurements.length} / 200 个部位 · ${doc.sizes.length} / 50 尺码`}>{select("unit", "尺寸单位", [{ value: "inch", label: "英寸" }, { value: "cm", label: "厘米" }])}<DocumentTableScroll><table className="instruction-measurement-table"><thead><tr><th>部位</th><th>＋－公差</th><th>量法 / 备注</th>{doc.sizes.map(size => <th key={size}>{size}</th>)}{!readonly && <th>操作</th>}</tr></thead><tbody>{doc.measurements.map(row => <tr key={row.id} data-doc-row>{(["name", "tolerance", "method"] as const).map(key => <td key={key}>{cell(`instruction-measurement-${row.id}-${key}`, `${row.name || "尺寸项目"} · ${key === "name" ? "部位" : key === "tolerance" ? "公差" : "量法"}`, row[key], sheet.document.measurements.find(item => item.id === row.id)?.[key] ?? "", value => change({ measurements: doc.measurements.map(item => item.id === row.id ? { ...item, [key]: value } : item) }), key, key === "method")}</td>)}{doc.sizes.map((size, index) => <td key={size}>{cell(`instruction-measurement-${row.id}-value-${index}`, `${row.name || "尺寸项目"} ${size}`, row.values[index] ?? "", sheet.document.measurements.find(item => item.id === row.id)?.values[index] ?? "", value => change({ measurements: doc.measurements.map(item => item.id === row.id ? { ...item, values: item.values.map((previous, column) => column === index ? value : previous) } : item) }), `value-${index}`)}</td>)}{!readonly && <td><Button type="button" disabled={busy} onClick={() => void remove(`删除${row.name || "测量部位"}？`, Boolean(row.name || row.tolerance || row.method || row.values.some(Boolean)), () => change({ measurements: doc.measurements.filter(item => item.id !== row.id) }))}>删除</Button></td>}</tr>)}</tbody></table></DocumentTableScroll>{!doc.measurements.length && <p className="instruction-empty">暂无测量部位</p>}{!readonly && <DocumentAddRow label="添加测量部位" disabled={inputDisabled || doc.measurements.length >= 200} onClick={() => { const id = createClientRequestId(); change({ measurements: [...doc.measurements, { id, name: "", tolerance: "", method: "", values: doc.sizes.map(() => "") }] }); setFocusId(`instruction-measurement-${id}-name`); }} />}</DocumentSection>}
         </div>
       </form><aside className="instruction-document-side">
-        <DocumentSection id="instruction-versions" title="版本与状态"><label>查看版本<select id="instruction-version" aria-label="查看版本" value={version ?? ""} disabled={busy} onChange={event => void chooseVersion(event.target.value ? Number(event.target.value) : undefined)}><option value="">{sheet.canEdit ? "当前草稿" : "当前有效版本"}</option>{sheet.versions.map(value => <option key={value} value={value}>已发布版本 {value}</option>)}</select></label><dl><div><dt>当前资料</dt><dd>{mode}</dd></div><div><dt>已发布</dt><dd>{sheet.publishedVersion ? `版本 ${sheet.publishedVersion}` : "尚未发布"}</dd></div><div><dt>采用开发资料</dt><dd>{sheet.sourceRound ? `第 ${sheet.sourceRound} 轮` : "无开发来源"}</dd></div></dl>{!sheet.isPublishedSnapshot && sheet.publishedVersion && <Button type="button" disabled={busy} onClick={() => void chooseVersion(sheet.publishedVersion!)}>查看已发布版本</Button>}{!readonly && <p className="instruction-note">空闲1200ms自动保存，或使用保存草稿；发布需单独操作。</p>}</DocumentSection>
+        <DocumentSection id="instruction-versions" title="版本与状态"><label>查看版本<select id="instruction-version" aria-label="查看版本" value={version ?? ""} disabled={busy||embedded} onChange={event => void chooseVersion(event.target.value ? Number(event.target.value) : undefined)}>{!embedded&&<option value="">{sheet.canEdit ? "当前草稿" : "当前有效版本"}</option>}{sheet.versions.map(value => <option key={value} value={value}>已发布版本 {value}</option>)}</select></label><dl><div><dt>当前资料</dt><dd>{mode}</dd></div><div><dt>已发布</dt><dd>{sheet.publishedVersion ? `版本 ${sheet.publishedVersion}` : "尚未发布"}</dd></div><div><dt>采用开发资料</dt><dd>{sheet.sourceRound ? `第 ${sheet.sourceRound} 轮` : "无开发来源"}</dd></div></dl>{!sheet.isPublishedSnapshot && sheet.publishedVersion && <Button type="button" disabled={busy} onClick={() => void chooseVersion(sheet.publishedVersion!)}>查看已发布版本</Button>}{!readonly && <p className="instruction-note">空闲1200ms自动保存，或使用保存草稿；发布需单独操作。</p>}</DocumentSection>
         <DocumentSection id="instruction-files" title="相关图片" detail={`${doc.images.length} 张`}><ul className="instruction-file-list">{doc.images.map((image, index) => <li key={image.attachmentId}>{publishedImage(image.attachmentId) ? <a href={imageUrl(image.attachmentId)} target="_blank" rel="noreferrer">{image.kind} · 图片 {index + 1}</a> : <span>{image.kind} · 保存后可查看</span>}</li>)}</ul>{!doc.images.length && <p className="instruction-empty">暂无图片</p>}<Button type="button" onClick={() => focus("images", readonly ? "instruction-images" : "instruction-upload")}>{readonly ? "查看工艺图文" : "上传图片 / 编辑说明"}</Button></DocumentSection>
         <DocumentSection id="instruction-notes" title="关键备注">{field("remarks", true)}</DocumentSection>
-        <PoCustomerDates sheet={sheet} busy={busy} dirty={dirty} historical={Boolean(version)} onAct={act}/>
+        <PoCustomerDates sheet={sheet} busy={busy} dirty={dirty} historical={embedded||Boolean(version)} onAct={act}/>
       </aside></div>
     </div>
     {printable ? <ProductionInstructionPrint sheet={sheet} imageUrl={imageUrl} /> : <p className="instruction-print-warning">请先保存当前修改，并打开已发布版本后打印。</p>}

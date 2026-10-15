@@ -18,6 +18,7 @@ export function registerDigitalTaskRoutes(app: FastifyInstance, dependencies: Di
   app.post("/digital-production/tasks/:taskId/priority", async request => service.prioritize(await actor(request), id(request), parse(z.object({ priority: z.enum(["normal", "urgent"]) }).strict(), request.body).priority, key(request)));
   app.get("/digital-production/tasks", async request => service.list(await actor(request), parse(z.object({ page: z.coerce.number().int().min(1).max(100000).default(1) }).strict(), request.query).page));
   app.get("/digital-production/tasks/:taskId", async request => service.read(await actor(request), id(request)));
+  app.get("/digital-production/tasks/:taskId/documents", async request => service.documents(await actor(request), id(request)));
   app.get("/digital-production/tasks/:taskId/history", async request => service.history(await actor(request), id(request)));
   app.post("/digital-production/tasks/:taskId/complete", async request => service.complete(await actor(request), id(request), parse(DigitalTaskCompleteSchema, request.body), key(request)));
   app.post("/digital-production/tasks/:taskId/handover", async request => service.handover(await actor(request), id(request), parse(DigitalTaskCompleteSchema, request.body), key(request)));
