@@ -7,6 +7,8 @@ const main:Entry[]=JSON.parse(readFileSync("apps/api/src/platform/migration-mani
 const branches:{main:Entry[];digital:Entry[]}=JSON.parse(readFileSync("scripts/migration-branches.json","utf8"));
 const extension:Entry[]=JSON.parse(readFileSync("scripts/migration-main-extensions.json","utf8"));
 const common=main.slice(0,217);
+// This fixture models the approved 0218..0225 reconciliation, not future main migrations.
+const reconciledMain=main.filter(row=>Number(row.version.slice(0,4))<=225);
 const sorted=(rows:Entry[])=>[...rows].sort((a,b)=>a.version.localeCompare(b.version));
 const markers=[{version:"0232_reconcile_contract_and_digital_histories",checksum:"a".repeat(64)},
   {version:"0233_manual_contract_template_provenance",checksum:"b".repeat(64)}];
@@ -21,8 +23,10 @@ describe("explicit main extension alongside the existing release migration ident
     expect(()=>assertMigrationSequence(main.filter(r=>!r.version.startsWith("0210_")))).toThrow("sequence gap");
   });
   it("accepts both complete histories and releases upgraded before the new main extension",()=>{
-    for(const applied of [main,release,merged])expect(()=>assertAppliedMigrationHistory(applied,merged)).not.toThrow();
+    for(const applied of [reconciledMain,release,merged])expect(()=>assertAppliedMigrationHistory(applied,merged)).not.toThrow();
     expect(()=>assertMigrationSequence(merged)).not.toThrow();
+    // A later main-only migration must not be silently treated as integrated into release.
+    if(main.length>reconciledMain.length) expect(()=>assertAppliedMigrationHistory(main,merged)).toThrow("absent from Head manifest");
     expect(merged.filter(r=>r.version.startsWith("0221_"))).toHaveLength(2);
     expect(merged.filter(r=>r.version.startsWith("0222_"))).toHaveLength(2);
     expect(merged.filter(r=>r.version.startsWith("0223_"))).toHaveLength(2);

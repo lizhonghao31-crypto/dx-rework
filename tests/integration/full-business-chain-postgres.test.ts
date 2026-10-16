@@ -1,3 +1,4 @@
+import { exerciseRevisionApproval } from "./helpers/revision-approval-scenario.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
 import { exerciseReceivingDifferenceAuthority } from "./helpers/receiving-difference-authority-scenario.js";
@@ -1519,12 +1520,23 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
       status: "pending",
     })));
 
+    // Current-schema responsibility-card approvals must not transfer the handler.
+    const cardRevision = async (reviewer: TrustedActorContext, paidAmount: string) => {
+      await exerciseRevisionApproval({database, external, responsibility,
+        orderId:submitted.value.reworkOrderId, configurationItemId:approvedItem.configurationItemId,
+        requester:actor(ids.merchandiser,["order_merchandiser"],"external_responsibility:view","external_responsibility:request_revision","external_responsibility:sign"),
+        reviewer, handler:production(), unauthorized:qc(),
+        signer:actor(ids.ownerOne,["owner_group"],"responsibility:owner_sign","responsibility:determine"), paidAmount});
+    };
+    await cardRevision(actor(ids.ownerOne,["owner_group"],"responsibility:determine","external_responsibility:approve_revision"),"0");
+    await cardRevision(actor(ids.patternRoot,["root_superuser"],"access:admin","responsibility:determine","external_responsibility:approve_revision"),"0");
+
     // Reopen an unpaid external determination: retire its active ledger and reuse N07/N09.
     const unpaidActor=actor(ids.production,["production_management"],"responsibility:determine","external_responsibility:approve_revision");
     const unpaidBefore=await responsibility.revisions.get(unpaidActor,submitted.value.reworkOrderId);
     const unpaid=await responsibility.revisions.reopen(unpaidActor,submitted.value.reworkOrderId,{expectedOrderVersion:unpaidBefore.orderVersion,expectedDeterminationVersion:unpaidBefore.currentVersion!,reason:"未扣款前更正责任资料"},randomUUID());
     expect(unpaid.value.paidAmount).toBe("0");
-    expect((await database.query("SELECT count(*)::int count FROM rework_external_responsibility_cases WHERE rework_order_id=$1 AND status='superseded'",[submitted.value.reworkOrderId])).rows[0].count).toBe(2);
+    expect((await database.query("SELECT count(*)::int count FROM rework_external_responsibility_cases WHERE rework_order_id=$1 AND status='superseded'",[submitted.value.reworkOrderId])).rows[0].count).toBe(6);
     const unpaidFinal=await responsibility.finalize(production(),submitted.value.reworkOrderId,{expectedOrderVersion:unpaid.value.orderVersion,expectedCurrentDeterminationVersion:unpaid.value.currentVersion!},randomUUID());
     // Real pending N08 cutover: existing legal recipients survive, Wu cannot sign even from a stale actor.
     const memberBindings = { li_zhonghao: ids.ownerOne, wu_yunfeng: ids.ownerTwo, li_junyue: ids.patternRoot };
@@ -2033,6 +2045,8 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     await expect(work.list(basicQuality,submitted.value.reworkOrderId)).rejects.toMatchObject({statusCode:403});
     await expect(wholeOrder.get(basicQuality,submitted.value.reworkOrderId)).rejects.toMatchObject({statusCode:403});
     await expect(responsibility.get(basicQuality,submitted.value.reworkOrderId)).rejects.toMatchObject({statusCode:403});
+
+    await cardRevision(actor(ids.patternRoot,["root_superuser"],"access:admin","responsibility:determine","external_responsibility:approve_revision"),"119.60");
 
     // B PR08: completed/partially-paid orders reopen without rewriting wage or paid facts.
     const revisionActor = actor(ids.production,["production_management"],"responsibility:determine","external_responsibility:approve_revision");

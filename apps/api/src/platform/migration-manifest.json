@@ -224,7 +224,8 @@
     {"version": "0222_sourcing_cutting_approved_line_identity", "checksum": "b0bc27988643de5583e8aeb0901bf3879bdd8babe46fca9c40b9368fc3c3555a"},
     {"version": "0223_sourcing_factory_change_craft_names", "checksum": "a374629a47ed1c233816ad98083f6de924f0964eb7c3ef2dbca184dc1d8b44d0"},
     {"version": "0224_contract_version_review_transfer_delivery", "checksum": "c1005533652409d4b8b912b7399490b7926af417ce3eaf3b9388b46fc424bc53"},
-    {"version": "0225_warehouse_supervisor_cutting_read", "checksum": "85ce0adb63cdba755011a53455bd9f7c762d9e5f0d5dd0157111c375b1d0d4b1"}
+    {"version": "0225_warehouse_supervisor_cutting_read", "checksum": "85ce0adb63cdba755011a53455bd9f7c762d9e5f0d5dd0157111c375b1d0d4b1"},
+    {"version": "0226_external_revision_preserve_handler", "checksum": "fe2f6270307f7e80c47dfde4df1d8260b5166432a39256875b675e7444364a9e"}
   ]
 }
 
