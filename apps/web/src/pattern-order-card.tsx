@@ -6,10 +6,11 @@ import { patternTime } from "./pattern-order-client.js";
 
 // Keep the live ManagementOrderCard DOM and CSS contract. Only business fields differ.
 // App already loads the rework styles; do not change their global cascade order here.
-export function PatternOrderCard({ order, href, canDelete, busy, onDeleted }: {
-  order: PatternOrderSummary; href: string; canDelete: boolean; busy: boolean; onDeleted(): void;
+export function PatternOrderCard({ order, href, canDelete, busy, onDeleted, compact=false }: {
+  compact?:boolean; order: PatternOrderSummary; href: string; canDelete: boolean; busy: boolean; onDeleted(): void;
 }) {
   const tone = order.status === "cancelled" ? "danger" : order.status === "completed" ? "success" : "info";
+  if(compact)return <article className="pattern-compact-record"><a href={href}><strong>{order.kind==='misc'?order.taskName:order.styleNo}</strong><small>{order.orderNo}</small><span>关联款号：{order.kind==='misc'?order.styleNo||'不关联订单':'历史独立打板'}</span><StatusBadge tone={tone}>{PATTERN_ORDER_STATUS_LABELS[order.status]}</StatusBadge><span>申请人：{order.creatorName}</span><span>执行人：{order.currentWorkerName??'待分配'}</span><span>要求完成：{order.requiredDate??'未登记'}</span><span className="pattern-task-action">查看</span></a>{canDelete&&<PatternOrderDelete orderId={order.orderId} version={order.version} label={order.orderNo} disabled={busy} onDeleted={onDeleted}/>}</article>;
   return <Surface className="reporting-order-card">
     <a className="reporting-order-card__main" href={href}>
       <div className="reporting-order-card__heading">

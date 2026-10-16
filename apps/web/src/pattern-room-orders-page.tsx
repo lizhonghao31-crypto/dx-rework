@@ -28,15 +28,15 @@ import "./pattern-governed.css";
 const { pageUrl } = patternUrls;
 const assignmentMoney = (value:string|number):string => {const [whole,fraction=""] = formatBusinessDecimal(value,2).split(".");return `${whole}.${fraction.padEnd(2,"0")}`;};
 
-export function PatternRoomOrdersPage({embedded=false,miscOnly=false,onListPathChange}:{embedded?:boolean;miscOnly?:boolean;onListPathChange?:(path:string)=>void}={}) {
+export function PatternRoomOrdersPage({embedded=false,miscOnly=false,standaloneOnly=false,onListPathChange}:{embedded?:boolean;miscOnly?:boolean;standaloneOnly?:boolean;onListPathChange?:(path:string)=>void}={}) {
   const [initial] = useState(() => readPatternListQuery(window.location.search));
   const [data, setData] = useState<z.infer<typeof PatternOrderListSchema> | null>(null), [error, setError] = useState("");
   const [q, setQ] = useState(initial.q), [status, setStatus] = useState(initial.status), [creatorId, setCreatorId] = useState(initial.creatorId), [workerId, setWorkerId] = useState(initial.workerId), [page, setPage] = useState(initial.page);
-  const [kind, setKind] = useState(miscOnly?"misc":initial.kind);
+  const [kind, setKind] = useState(miscOnly?"misc":standaloneOnly?"pattern":initial.kind);
   const [people, setPeople] = useState<z.infer<typeof PatternPeopleFiltersSchema> | null>(null), [refresh, setRefresh] = useState(0), [loading, setLoading] = useState(true);
   const search = useDebouncedValue(q.trim(), 250);
-  const nativeListPath = patternListPath({ q: search, kind, status, creatorId, workerId, page });
-  const listPath=embedded?`/ui/digital-pattern-room?section=legacy&${nativeListPath.split("?")[1]??""}`:nativeListPath;
+  const nativeListPath = patternListPath({ q: search, kind, status, creatorId, workerId, page, ...(standaloneOnly?{origin:"standalone" as const}:initial.origin?{origin:initial.origin}:{}) });
+  const listPath=embedded?`/ui/digital-pattern-room?${standaloneOnly?"section=development&source=standalone":"section=legacy"}&${nativeListPath.split("?")[1]??""}`:nativeListPath;
   const detailHref = (id: string) => `${pageUrl(`ui/pattern-room/orders/${id}`)}?${new URLSearchParams({ returnTo: listPath })}`;
   useEffect(() => { window.history.replaceState(window.history.state, "", pageUrl(listPath)); onListPathChange?.(listPath); }, [listPath,onListPathChange]);
   useInternalReturnScroll(!loading && data !== null);
@@ -45,9 +45,10 @@ export function PatternRoomOrdersPage({embedded=false,miscOnly=false,onListPathC
     const params = new URLSearchParams({ page: String(page), q: search });
     if (status) params.set("status", status); if (creatorId) params.set("creatorId", creatorId); if (workerId) params.set("workerId", workerId);
     if (kind) params.set("kind", kind);
+    if(standaloneOnly||initial.origin)params.set("origin","standalone");
     void patternRequest(`orders?${params}`, PatternOrderListSchema, { signal: abort.signal }).then(result => { if (!abort.signal.aborted) setData(result); }).catch(e => { if (!abort.signal.aborted) { setError(e.message); setData(null); } }).finally(() => { if (!abort.signal.aborted) setLoading(false); });
     return () => abort.abort();
-  }, [search, kind, status, creatorId, workerId, page, refresh]);
+  }, [search, kind, status, creatorId, workerId, page, refresh, standaloneOnly, initial.origin]);
   useEffect(() => {
     if (!data?.canFilterPeople) { setPeople(null); return; }
     const abort = new AbortController();
@@ -59,14 +60,14 @@ export function PatternRoomOrdersPage({embedded=false,miscOnly=false,onListPathC
     {data ? <>
       <Surface>
       <div className="pattern-fields pattern-filters"><InsetField label="搜索款号、订单号或任务名称" placeholder="款号 / 订单号 / 任务名称" value={q} onChange={e => { setQ(e.target.value); setPage(1); }} />
-        {!miscOnly&&<label>订单类型<select value={kind} onChange={e => { setKind(e.target.value); setPage(1); }}><option value="">全部</option><option value="pattern">打板</option><option value="misc">杂事</option></select></label>}
+        {!miscOnly&&!standaloneOnly&&<label>订单类型<select value={kind} onChange={e => { setKind(e.target.value); setPage(1); }}><option value="">全部</option><option value="pattern">打板</option><option value="misc">杂事</option></select></label>}
         <label>订单状态<select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="">全部状态</option>{Object.entries(PATTERN_ORDER_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         {people ? <><label>创建人<SearchableSelect value={creatorId} onChange={e => { setCreatorId(e.target.value); setPage(1); }}><option value="">全部创建人</option>{people.creators.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</SearchableSelect></label>
           <label>板房师傅<SearchableSelect value={workerId} onChange={e => { setWorkerId(e.target.value); setPage(1); }}><option value="">全部师傅</option>{people.workers.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</SearchableSelect></label></> : null}
       </div>
       </Surface>
-      <div className="reporting-order-grid" aria-busy={loading}>
-        {data.items.map(order => <PatternOrderCard key={order.orderId} order={order} href={detailHref(order.orderId)} canDelete={data.canDelete} busy={loading} onDeleted={() => {
+      <div className={embedded?"pattern-compact-records":"reporting-order-grid"} aria-busy={loading}>
+        {data.items.map(order => <PatternOrderCard compact={embedded} key={order.orderId} order={order} href={detailHref(order.orderId)} canDelete={data.canDelete} busy={loading} onDeleted={() => {
           setData(current => current ? { ...current, items: current.items.filter(item => item.orderId !== order.orderId) } : current);
           setPage(1); setRefresh(value => value + 1);
         }} />)}
