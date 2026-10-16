@@ -64,5 +64,22 @@
     ],
     "onlineCompatible": false,
     "rollback": "restart-previous-only-if-entire-history-unchanged"
+  },
+  {
+    "version": "0226_external_revision_preserve_handler",
+    "checksum": "fe2f6270307f7e80c47dfde4df1d8260b5166432a39256875b675e7444364a9e",
+    "strategy": "quiesce-backup-transactional-ddl",
+    "tables": [],
+    "triggerTables": [],
+    "schema": "public",
+    "functions": [
+      "public.guard_determination_insert()"
+    ],
+    "languages": [
+      "sql",
+      "plpgsql"
+    ],
+    "onlineCompatible": false,
+    "rollback": "restart-previous-only-if-entire-history-unchanged"
   }
 ]

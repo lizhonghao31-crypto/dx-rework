@@ -6,6 +6,8 @@ export DX_REWORK_ROOT=/opt/dx-rework
 tool="$(cd "$(dirname "$0")/../.." && pwd -P)"
 [[ "$tool" == /opt/dx-rework-release-tools/* && "$(stat -c %U "$tool")" == root ]]
 source "$tool/scripts/deploy/lib.sh"
+expected_sha="${DX_REWORK_EXPECTED_MAIN_SHA:-}"
+[[ -z "$expected_sha" ]] || require_sha "$expected_sha"
 state=/opt/dx-rework-release-state
 [[ -d "$state" && ! -L "$state" && "$(stat -c %U "$state")" == root && "$(stat -c %a "$state")" == 700 ]]
 node_binary="$(cat "$state/node-binary")"
@@ -18,7 +20,7 @@ config="$(cat "$state/nginx-config")"
 exec 9>"$DX_ROOT/locks/release.lock"
 flock -n 9 || die 'deployment lock is held; maintenance did not start'
 worker() {
-  (cd /; runuser -u dxrework -- env -i HOME=/home/dxrework USER=dxrework PATH="$PATH" DX_REWORK_LOCK_FD=9 \
+  (cd /; runuser -u dxrework -- env -i HOME=/home/dxrework USER=dxrework PATH="$PATH" DX_REWORK_LOCK_FD=9 DX_REWORK_EXPECTED_MAIN_SHA="$expected_sha" \
     bash "$tool/scripts/deploy/$1" "${@:2}")
 }
 phase() { printf '%s\n' "$1" > "$state/phase.tmp"; mv -Tf "$state/phase.tmp" "$state/phase"; }
@@ -88,6 +90,7 @@ if [[ "$resume" != true ]]; then
 else
   candidate_sha="$(cat "$state/candidate-sha")"
   require_sha "$candidate_sha"
+  [[ -z "$expected_sha" || "$candidate_sha" == "$expected_sha" ]] || die 'frozen candidate differs from expected main SHA; maintenance retained'
 fi
 
 if [[ "$(cat "$state/phase")" == maintenance-prepared ]]; then

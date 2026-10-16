@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 const plans = JSON.parse(readFileSync("scripts/deploy/main-maintenance-plans.json", "utf8"));
 const manifest = JSON.parse(readFileSync("apps/api/src/platform/migration-manifest.json", "utf8"));
-const versions = ["0223_sourcing_factory_change_craft_names","0224_contract_version_review_transfer_delivery","0225_warehouse_supervisor_cutting_read"] as const;
+const versions = ["0223_sourcing_factory_change_craft_names","0224_contract_version_review_transfer_delivery","0225_warehouse_supervisor_cutting_read","0226_external_revision_preserve_handler"] as const;
 
 function check(version: string, mode = "allowed", oldPlans = false, drift = false) {
   const selectedManifest={...manifest,migrations:manifest.migrations.filter((row: {version:string})=>row.version<=version)};
@@ -27,14 +27,14 @@ function check(version: string, mode = "allowed", oldPlans = false, drift = fals
       const data=JSON.parse(readFileSync(process.env.PLAN_FIXTURE+'/data.json'));
       export default {Client:class {
         async connect() {} async end() {}
-        async query(sql) {
+        async query(sql, params) {
           appendFileSync(process.env.PLAN_FIXTURE+'/queries.jsonl',JSON.stringify(sql)+'\\n');
           if(sql.includes('FROM schema_migrations')) return {rows:data.history};
           if(sql.includes('FROM pg_class')) return {rows:[{owns:data.mode!=='table'}]};
           if(sql.includes('has_table_privilege')) return {rows:[{allowed:data.mode!=='trigger'}]};
           if(sql.includes('current_schema()')) return {rows:[{allowed:!['schema','shadow-schema'].includes(data.mode)}]};
           if(sql.includes('FROM pg_proc')) return {rows:data.mode==='missing-function'?[]:[{allowed:data.mode!=='function'}]};
-          if(sql.includes('has_language_privilege')) return {rows:[{allowed:data.mode!=='language'}]};
+          if(sql.includes('has_language_privilege')) return {rows:[{allowed:data.mode!=='language' && !(data.mode==='plpgsql' && params[0]==='plpgsql')}]};
           return {rows:[]};
         }
       }};
@@ -59,15 +59,16 @@ describe.each(versions)("%s main maintenance admission", version => {
   const run=(mode="allowed",oldPlans=false,drift=false)=>check(version,mode,oldPlans,drift);
   const current=version.startsWith("0224");
   const warehouse=version.startsWith("0225");
+  const revision=version.startsWith("0226");
   it("admits the exact plan while retaining maintenance-only routing", () => {
     const result = run();
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({ pending: [version], onlineAllowed: false });
     expect(plans.find((p: { version: string }) => p.version === version)).toMatchObject({
       checksum: manifest.migrations.find((row: {version:string})=>row.version===version).checksum,
-      tables: warehouse ? ["public.business_roles","public.role_capabilities"] : current ? ["public.sourcing_case_transitions"] : ["public.craft_catalog_versions"], schema: "public",
-      triggerTables: warehouse ? ["public.business_roles","public.role_capabilities"] : current ? ["public.sourcing_factory_change_requests","public.sourcing_approval_snapshots"] : ["public.craft_catalog_versions"],
-      functions: warehouse ? ["public.receiving_authorized_board_operator(uuid,text)","public.cutting_authorized_roles(uuid,text)"] : current ? ["public.guard_sourcing_contract_content_creation()","public.guard_sourcing_transition_insert()","public.sourcing_effective_delivery_date(uuid,date,timestamp with time zone)"] : ["public.guard_craft_catalog_version_creation()"], languages: ["plpgsql"],
+      tables: revision ? [] : warehouse ? ["public.business_roles","public.role_capabilities"] : current ? ["public.sourcing_case_transitions"] : ["public.craft_catalog_versions"], schema: "public",
+      triggerTables: revision ? [] : warehouse ? ["public.business_roles","public.role_capabilities"] : current ? ["public.sourcing_factory_change_requests","public.sourcing_approval_snapshots"] : ["public.craft_catalog_versions"],
+      functions: revision ? ["public.guard_determination_insert()"] : warehouse ? ["public.receiving_authorized_board_operator(uuid,text)","public.cutting_authorized_roles(uuid,text)"] : current ? ["public.guard_sourcing_contract_content_creation()","public.guard_sourcing_transition_insert()","public.sourcing_effective_delivery_date(uuid,date,timestamp with time zone)"] : ["public.guard_craft_catalog_version_creation()"], languages: revision ? ["sql","plpgsql"] : ["plpgsql"],
       onlineCompatible: false,
     });
   });
@@ -82,10 +83,11 @@ describe.each(versions)("%s main maintenance admission", version => {
     ["trigger", warehouse ? "table public.business_roles TRIGGER" : current ? "table public.sourcing_factory_change_requests TRIGGER" : "table public.craft_catalog_versions TRIGGER"],
     ["schema", "schema public USAGE/CREATE/current_schema"],
     ["shadow-schema", "schema public USAGE/CREATE/current_schema"],
-    ["function", warehouse ? "function public.receiving_authorized_board_operator(uuid,text) owner" : current ? "function public.guard_sourcing_contract_content_creation() owner" : "function public.guard_craft_catalog_version_creation() owner"],
-    ["missing-function", warehouse ? "function public.receiving_authorized_board_operator(uuid,text) owner" : current ? "function public.guard_sourcing_contract_content_creation() owner" : "function public.guard_craft_catalog_version_creation() owner"],
-    ["language", "language plpgsql USAGE"],
-  ])("rejects insufficient %s permission without writes", (mode, object) => {
+    ["function", revision ? "function public.guard_determination_insert() owner" : warehouse ? "function public.receiving_authorized_board_operator(uuid,text) owner" : current ? "function public.guard_sourcing_contract_content_creation() owner" : "function public.guard_craft_catalog_version_creation() owner"],
+    ["missing-function", revision ? "function public.guard_determination_insert() owner" : warehouse ? "function public.receiving_authorized_board_operator(uuid,text) owner" : current ? "function public.guard_sourcing_contract_content_creation() owner" : "function public.guard_craft_catalog_version_creation() owner"],
+    ["language", revision ? "language sql USAGE" : "language plpgsql USAGE"],
+    ...(revision ? [["plpgsql", "language plpgsql USAGE"]] : []),
+  ].filter(([mode])=>!revision || !["table","trigger"].includes(mode!)))("rejects insufficient %s permission without writes", (mode, object) => {
     const result = run(mode);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain(`MIGRATION_PERMISSION_REQUIRED: ${object}`);
