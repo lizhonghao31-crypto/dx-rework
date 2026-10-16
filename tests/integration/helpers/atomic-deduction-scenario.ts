@@ -100,9 +100,19 @@ export async function exerciseAtomicOverDeduction(input: {
     expect((await app.inject({url:`/external-responsibility-cases/${caseId}`})).json().canDecideSpecialApproval).toBe(true);
   } finally {await app.close();}
   await expect(external.close(payables,caseId,{expectedCaseVersion:recorded.value.caseVersion,result:"full",evidenceAttachmentIds:[]},randomUUID())).rejects.toThrow();
-  const returned=await external.returnSpecialApproval(director,caseId,{expectedCaseVersion:recorded.value.caseVersion,expectedRequestVersion:1,reason:"请补充超扣说明"},randomUUID());
+  const returnKey=randomUUID();
+  const returned=await external.returnSpecialApproval(director,caseId,{expectedCaseVersion:recorded.value.caseVersion,expectedRequestVersion:1,reason:"请补充超扣说明"},returnKey);
   expect(returned.value).toMatchObject({status:"deduction_follow_up",actualDeductedAmount:"80.00",remainingAmount:"68.10",closure:null});
   expect(returned.value.deductions).toEqual(recorded.value.deductions);
+  const afterReturn=await snapshot();
+  const repeatReturn=await external.returnSpecialApproval(director,caseId,{expectedCaseVersion:recorded.value.caseVersion,expectedRequestVersion:1,reason:"请补充超扣说明"},returnKey);
+  expect(repeatReturn.reused).toBe(true);
+  await expect(external.returnSpecialApproval(director,caseId,{expectedCaseVersion:recorded.value.caseVersion,expectedRequestVersion:1,reason:"请补充超扣说明"},randomUUID())).rejects.toMatchObject({statusCode:409});
+  expect(await snapshot()).toEqual(afterReturn);
+  expect((await database.query("SELECT status FROM rework_orders WHERE rework_order_id=$1",[currentCase.reworkOrderId])).rows[0].status).toBe("completed");
+  expect((await database.query("SELECT status FROM rework_todos WHERE dedupe_key=$1",[`external-special:${caseId}:${firstRequestId}`])).rows[0].status).toBe("completed");
+  expect((await database.query("SELECT status FROM rework_todos WHERE dedupe_key=$1",[`external-special-return:${caseId}:${firstRequestId}`])).rows[0].status).toBe("pending");
+
 
   // Simulate an old, real pending request whose projection was missing. The
   // repair must reconstruct only its todo, without inserting ledger/request facts.
@@ -110,6 +120,16 @@ export async function exerciseAtomicOverDeduction(input: {
   let resubmitted;
   try {resubmitted=await external.requestSpecialApproval(payables,caseId,{...command,expectedCaseVersion:returned.value.caseVersion,reason:"补充说明后重新申请",attachmentIds:[]},randomUUID());}
   finally {absent.mockRestore();}
+
+  const readAfterResubmit=await external.getCase(director,caseId);
+  expect(readAfterResubmit.status).toBe("pending_special_approval");
+  expect(readAfterResubmit.specialApproval!.requestVersion).toBe(2);
+  expect(readAfterResubmit.specialApprovalHistory!.map(r=>({version:r.requestVersion,amount:r.requestedAmount,decision:r.decision?.decision??"pending"}))).toEqual([
+    {version:2,amount:"69.10",decision:"pending"}, {version:1,amount:"69.10",decision:"returned"}
+  ]);
+  expect(new Set(readAfterResubmit.specialApprovalHistory!.map(r=>r.requestId)).size).toBe(2);
+  expect((await database.query("SELECT status FROM rework_todos WHERE dedupe_key=$1",[`external-special-return:${caseId}:${firstRequestId}`])).rows[0].status).toBe("completed");
+  expect((await snapshot()).ledger).toEqual(before.ledger);
   const repair=new TodoBackfillService(database);
   const repairKey=`external-special:${caseId}:${resubmitted.value.specialApproval!.requestId}`;
   const financeFacts=await snapshot();

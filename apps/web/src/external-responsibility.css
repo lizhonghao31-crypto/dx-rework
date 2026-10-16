@@ -212,3 +212,24 @@
 .external-saved-evidence > div:not(.rework-image-modal) { max-width: 100%; overflow-wrap: anywhere; }
 .external-saved-evidence .rework-detail-image-card { width: 96px; max-width: 100%; }
 .external-saved-evidence .rework-detail-image-card img { width: 100%; height: 72px; object-fit: cover; }
+
+.external-special-history { min-width: 0; border-top: 1px solid var(--color-border); padding-top: 12px; }
+.external-special-record { display: grid; gap: 8px; min-width: 0; }
+.external-special-heading, .external-special-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; }
+.external-special-meta { color: var(--color-muted); font-size: 12px; }
+.external-special-meta time { display: inline-block; white-space: nowrap; }
+.external-special-record p, .external-special-record dl { margin: 0; }
+.external-special-record dl { display: grid; grid-template-columns: 5em minmax(0, 1fr); gap: 6px 12px; }
+.external-special-record dt { color: var(--color-muted); }
+.external-special-record dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.external-special-history > details { margin-top: 12px; }
+.external-special-history > details > summary { cursor: pointer; color: var(--color-muted); padding: 8px 0; }
+.external-special-older > .external-special-record { border-top: 1px solid var(--color-border); padding: 12px 0; }
+@media (max-width: 480px) {
+  .external-special-record dl { grid-template-columns: 4.5em minmax(0, 1fr); gap: 6px 8px; }
+  .external-special-meta { display: grid; gap: 4px; }
+}
+
+.external-special-explanation summary { cursor: pointer; overflow-wrap: anywhere; }
+.external-special-explanation summary span { color: var(--color-muted); white-space: nowrap; }
+.external-special-explanation[open] summary { margin-bottom: 8px; }
