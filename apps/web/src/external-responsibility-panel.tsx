@@ -1,3 +1,4 @@
+import { ExternalSpecialHistory } from "./external-special-history.js";
 import { currentModuleCanWrite } from "./member-module-policy.js";
 import {
   ExternalResponsibilityBatchResponseSchema,
@@ -79,7 +80,6 @@ const parseMoneyToCents = (value: string): bigint | null => {
   return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0"));
 };
 
-const moneyFromCents = (value: bigint): string => `${value / 100n}.${(value % 100n).toString().padStart(2,"0")}`;
 
 const requestError = async (response: Response): Promise<string> => {
   try {
@@ -631,8 +631,8 @@ export function ExternalResponsibilityPanel({
 
           <div className="external-finance-summary">
             <div><span>应扣金额</span><strong>{formatBusinessCurrency(caseItem.proposedDeductionAmount)}</strong></div>
-            <div><span>累计已扣</span><strong>{formatBusinessCurrency(caseItem.actualDeductedAmount)}</strong></div>
-            <div><span>{caseItem.remainingAmount.startsWith("-") ? "超出拟扣" : "剩余"}</span><strong>{formatBusinessCurrency(caseItem.remainingAmount.replace(/^-/u,""))}</strong></div>
+            <div><span>{caseItem.status === "closed" ? "实际已扣" : "累计已扣"}</span><strong>{formatBusinessCurrency(caseItem.actualDeductedAmount)}</strong></div>
+            <div><span>{caseItem.status === "closed" ? "结案差额" : caseItem.remainingAmount.startsWith("-") ? "超出拟扣" : "剩余"}</span><strong>{formatBusinessCurrency(caseItem.remainingAmount.replace(/^-/u,""))}</strong></div>
           </div>
 
           {!caseReadOnly && (canRecordDeduction || canRequestSpecialApproval || canDecideSpecialApproval || canRequestRevision || canLegacySubmit || recoveryClose || canApproveRevision) && <div className="external-finance-operation">
@@ -669,6 +669,8 @@ export function ExternalResponsibilityPanel({
             {canRecordDeduction && !inputState.valid && amount[caseItem.caseId]?.trim() && <small role="status">请输入大于 0、最多两位小数的本次金额。</small>}
           </div>}
 
+          <ExternalSpecialHistory caseItem={caseItem} />
+
           {caseItem.deductions.length > 0 && <div className="external-ledger-list external-deduction-history">
             <h4>{historical ? "历史台账扣款记录" : "扣款记录"}</h4>
             {caseItem.deductions.map((entry) => <div key={entry.deductionEntryId}>
@@ -677,13 +679,6 @@ export function ExternalResponsibilityPanel({
               <ExternalEvidenceView attachmentIds={entry.attachmentIds} files={caseItem.evidenceAttachments ?? []} />
             </div>)}
           </div>}
-
-          {(caseItem.specialApprovalHistory ?? (caseItem.specialApproval ? [caseItem.specialApproval] : [])).map(request => <div className="external-special-approval" key={request.requestId}>
-            <b>财务特批：{request.reason}</b>
-            {request.requestMode==="proposed_entry" ? <span>申请金额 {formatBusinessCurrency(request.requestedAmount??"0.00")}，批准后累计 {formatBusinessCurrency(moneyFromCents((parseMoneyToCents(request.actualDeductedAmount)??0n)+(parseMoneyToCents(request.requestedAmount??"0.00")??0n)))} · {request.decision?"总监处理结果如下":"待财务总监审批"}</span> : <span>申请时累计已扣 {formatBusinessCurrency(request.actualDeductedAmount)}，差额 {formatBusinessCurrency(request.remainingAmount)}</span>}
-            {request.decision && <span>结果：{request.decision.decision === "approved" ? "已确认（不可修改）" : "已退回"}</span>}
-            <ExternalEvidenceView attachmentIds={request.attachmentIds} files={caseItem.evidenceAttachments ?? []} />
-          </div>)}
 
           {caseItem.closure && caseItem.closure.evidenceAttachmentIds.length > 0 && <div className="external-special-approval">
             <b>结案凭证{caseItem.closure.reason ? `：${caseItem.closure.reason}` : ""}</b>
