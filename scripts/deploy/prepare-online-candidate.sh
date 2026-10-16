@@ -22,6 +22,10 @@ git -C "$repository" remote add origin git@github.com:lizhonghao31-crypto/dx-rew
 timeout 180 git -C "$repository" fetch --quiet --no-tags origin refs/heads/main:refs/remotes/origin/main
 sha="${requested:-$(git -C "$repository" rev-parse refs/remotes/origin/main)}"
 require_sha "$sha"
+if [[ "$mode" != recovery && -n "${DX_REWORK_EXPECTED_MAIN_SHA:-}" ]]; then
+  require_sha "$DX_REWORK_EXPECTED_MAIN_SHA"
+  [[ "$sha" == "$DX_REWORK_EXPECTED_MAIN_SHA" ]] || die 'remote main differs from approved target SHA; running service untouched'
+fi
 git -C "$repository" merge-base --is-ancestor "$sha" refs/remotes/origin/main
 git -C "$repository" fsck --full --no-reflogs >/dev/null
 git -C "$repository" archive "$sha" | tar -x -C "$out"
