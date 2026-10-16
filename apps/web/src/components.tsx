@@ -23,6 +23,7 @@ import "./digital-workspace.css";
 import "./unified-shell.css";
 import "@dx-rework/ui/production.css";
 import { digitalWorkspaceActive } from "./digital-workspace-navigation.js";
+import { digitalDetailRoute } from "./digital-detail-route.js";
 import { cockpitReturnPath } from "./digital-journey-cockpit-model.js";
 import { canAccessSupplierMaintenance } from "./supplier-onboarding-model.js";
 import { canAccessDigitalProduction, canAccessSourcing, canAccessSupplierCenter, canAccessProduction, canAccessProductionReporting, canAccessSamples } from "./platform-modules.js";
@@ -660,7 +661,7 @@ export function Shell({
         />
       ) : null}
 
-      <main>{cockpitReturnPath(window.location.search) && <a className="dx-button dx-button--secondary journey-return-link" href={basePath+cockpitReturnPath(window.location.search)}>返回生产管理座舱</a>}{children}</main>
+      <main>{!(window.location.pathname === basePath + "/ui/digital-production" && digitalDetailRoute(window.location.search).kind !== "landing") && cockpitReturnPath(window.location.search) && <a className="dx-button dx-button--secondary journey-return-link" href={basePath+cockpitReturnPath(window.location.search)}>返回生产管理座舱</a>}{children}</main>
       {currentUser?.capabilities.includes("todo:view") && <DigitalNotificationToast key={currentUser.id} userId={currentUser.id} />}
     </div>
   );

@@ -76,6 +76,7 @@ export async function workbenchBrowser({database,attachments,storage,root,worker
   const {documentBrowser}=await import('./r2-documents-browser.mjs');await documentBrowser({page,context,origin,database,root,worker,taskId,sewingTaskId,checks,out,requests});
   if(processActors){const {processBrowser}=await import('./r2-processes-browser.mjs');await processBrowser({page,context,origin,database,root,actors:processActors,sourceId:processSourceId,bulkTaskId,checks,out});}
   const {createBrowser}=await import('./r2-create-browser.mjs');await createBrowser({page,context,origin,database,root,checks,out,requests});
+  const {cockpitBrowser}=await import('./r2-cockpit-browser.mjs');await cockpitBrowser({page,context,origin,root,taskId,checks,out});
   assert.deepEqual(errors,[]);
  }catch(error){await page.screenshot({path:`${out}/failure.png`});errors.push(String(error));errors.push((await page.locator('body').innerText()).slice(0,4000));throw error;}finally{await writeFile(`${out}/result.json`,JSON.stringify({checks,errors,requests,limitations:['isolated PostgreSQL fixtures; local storage transport emulation','no ECS or production access','PR03 approved shell; process adapters use synthetic tasks; ordered transitions covered separately by PostgreSQL tests']},null,2));await context.close();await browser.close();await vite.close();await api.close();}
 }

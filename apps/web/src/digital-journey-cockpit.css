@@ -87,22 +87,11 @@
  :is(.digital-journey-cockpit,.production-workspace-page) .journey-po-order-facts td:first-child{grid-column:1/-1;position:static;background:transparent;}
  :is(.digital-journey-cockpit,.production-workspace-page) .journey-po-order-facts td::before{content:attr(data-label);display:block;margin-bottom:3px;font-size:12px;color:#637a99;}
 }
-/* Additional preparation facts retain their original data below the approved cockpit panels. */
-.journey-preparation-reference h2{font-size:17px;margin:0 0 12px}
-.journey-preparation-reference-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.journey-preparation-reference-grid>section{min-width:0;border:1px solid #dce5f0;border-radius:6px;padding:12px;background:#f8fbff}
-.journey-preparation-reference-grid h3{font-size:14px;margin:0 0 10px}
-.journey-preparation-reference-grid p{font-size:12px;line-height:1.6;margin:8px 0;overflow-wrap:anywhere}
-.journey-preparation-reference-grid a{display:inline-block;margin-right:10px;font-size:13px}
-.journey-preparation-reference-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
-.journey-preparation-group{min-width:0;border:1px solid #dce5f0;border-radius:6px;padding:12px;background:#f8fbff}
-.journey-preparation-group.is-conditions,.journey-preparation-group.is-gate{grid-column:1/-1}
-.journey-preparation-group>div{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.journey-preparation-group.is-preshrink>div,.journey-preparation-group.is-gate>div{grid-template-columns:1fr}
-.journey-preparation-group>h3{font-weight:600;color:#274e80}
-.journey-preparation-group h4{font-size:14px;margin:0 0 8px}
-.journey-preparation-group section{min-width:0;border:1px solid #dce5f0;border-radius:5px;padding:10px;background:#fff}
-@media(max-width:520px){.journey-preparation-group,.journey-preparation-group>div{grid-column:1/-1;grid-template-columns:1fr}}
+/* The scope label stays inside the approved bounded node panel. */
+.digital-journey-cockpit .journey-node-panel{display:flex;flex-direction:column}
+.digital-journey-cockpit .journey-node-panel>.journey-muted{font-size:10px;line-height:1.4}
+.digital-journey-cockpit .journey-node-panel .journey-node-viewport{height:auto;flex:1;min-height:0}
+.digital-journey-cockpit .journey-node-panel .journey-node-tabs{flex-shrink:0}
 
 .digital-journey-cockpit .journey-order-heading{height:auto;min-height:63px}
 .digital-journey-cockpit .journey-order-heading .journey-style-image{width:56px;height:56px}
@@ -110,6 +99,5 @@
 .digital-journey-cockpit .journey-current-panel{overflow:auto}
 .digital-journey-cockpit .journey-current-panel:has(.journey-current-primary-actions) .journey-current-body{height:72px}
 .digital-journey-cockpit .journey-activity-empty{display:block}
-.digital-journey-cockpit .journey-preparation-reference{padding:12px}
 @media(max-width:800px){.digital-journey-cockpit .journey-order-heading{height:auto;flex-wrap:wrap}.digital-journey-cockpit .journey-order-heading h1{flex-wrap:wrap}.digital-journey-cockpit .journey-current-panel:has(.journey-current-primary-actions) .journey-current-body{height:auto}}
 @media(min-width:801px){.digital-journey-cockpit .journey-flow-panel:not(.is-collapsed){height:auto;min-height:194px}.digital-journey-cockpit .journey-flow-panel:not(.is-collapsed) .dx-production-stage{height:auto;min-height:112px}}
