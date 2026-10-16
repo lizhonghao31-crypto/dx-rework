@@ -454,3 +454,20 @@
 .development-selected .development-order-archive h4{font-size:16px;margin:0 0 10px}
 .development-selected .order-archive-summary dd{font-size:14px;font-weight:400;line-height:1.5}
 .development-golden .development-list-panel .native-search-select__native{left:0;top:0}
+/* R2 PR08: one horizontal board surface; current-page records remain fully reachable. */
+.dx-production-ui .pattern-golden .pattern-task-list{height:auto}
+.pattern-golden .pattern-board-scroll{max-height:none;overflow-x:auto;overflow-y:hidden}
+.pattern-golden .pattern-board-column{height:auto;min-height:303px}
+.pattern-golden .pattern-lane-cards{overflow:visible;flex:1}
+.dx-production-ui .pattern-golden .pattern-board-column h3.pattern-lane-heading{grid-template-columns:17px minmax(0,1fr) auto}
+.pattern-golden .pattern-lane-heading .pattern-lane-more{grid-column:2/-1;justify-self:end;font-size:10px;white-space:nowrap;padding:0;border:0;background:none;color:var(--lane-color)}
+.dx-production-ui .pattern-golden .bulk-pattern-columns{grid-template-columns:repeat(4,minmax(220px,1fr))}
+.pattern-golden .pattern-source-filter{display:flex;gap:8px;align-items:center;margin:8px 0;font-size:13px}
+.pattern-golden .pattern-compact-records{display:grid;gap:8px;margin-top:12px}
+.pattern-golden .pattern-compact-record{padding:10px 12px;background:#fff;border:1px solid #dceafa;border-radius:5px;display:flex;gap:10px;align-items:center}
+.pattern-golden .pattern-compact-record>a{display:grid;grid-template-columns:1.3fr 1fr 1.4fr 1fr;gap:6px 12px;flex:1;min-width:0;color:inherit;font-size:13px;text-decoration:none}
+.pattern-golden .pattern-compact-record>a>*{min-width:0;overflow-wrap:anywhere}
+.pattern-golden .pattern-compact-record .dx-badge{justify-self:start}
+@media(max-width:800px){.pattern-golden .pattern-compact-record>a{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.pattern-golden .pattern-compact-record .reporting-order-delete{position:static;transform:none;flex-shrink:0}

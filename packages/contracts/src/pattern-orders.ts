@@ -78,7 +78,7 @@ export const CancelPatternOrderSchema = PatternRoundActionSchema.extend({ segmen
 export type PatternRoundAction = z.infer<typeof PatternRoundActionSchema>;
 export const PatternOrderQuerySchema = z.object({
   q: z.string().trim().max(100).optional(), status: PatternOrderStatusSchema.optional(),
-  kind: z.enum(["pattern", "misc"]).optional(),
+  kind: z.enum(["pattern", "misc"]).optional(), origin: z.literal("standalone").optional(),
   creatorId: z.string().uuid().optional(), workerId: z.string().uuid().optional(),
   page: z.coerce.number().int().min(1).max(100_000).default(1), limit: z.coerce.number().int().min(1).max(100).default(15),
 }).strict();

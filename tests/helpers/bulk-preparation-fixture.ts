@@ -20,6 +20,8 @@ import { DigitalProductionTaskService } from "../../apps/api/src/production-plat
 import { CuttingService } from "../../apps/api/src/cutting/cutting-source-service.js";
 export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrder;designer:TrustedActorContext;document:BudgetDocument;budget:DigitalBudgetService},service:SourcingService,attachments:AttachmentService,actors:{primary:TrustedActorContext;manager:TrustedActorContext;owner:TrustedActorContext;ie:TrustedActorContext;root:TrustedActorContext},factoryId:string,craftId:string,mode:'none'|'pattern-first'|'preshrink-first'|'concurrent',options?:{cuttingProcess:'in_house'|'outsourced';stopAtReady:boolean;secondaryCraft?:'无'|'印花';warehouseRole?:'warehouse_receiver'|'warehouse_supervisor'}){
  const primary=actors.primary,designer=fixture.designer,id=fixture.order.productionOrderId,bulk=new BulkPreparationService(db),identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),instruction=new ProductionInstructionService(db,true),execution=new DevelopmentExecutionService(db,true),tasks=new DigitalProductionTaskService(db),cutting=new CuttingService(db);
+ const beforeRecords=await bulk.workroom(actors.root,{page:1,search:fixture.order.designStyleNo,scope:"all"});
+ expect(beforeRecords.items.some(item=>item.orderId===id)).toBe(false);
  const people:Record<string,TrustedActorContext>={};
  for(const role of ['development_clerk','pattern_room_worker','warehouse_receiver','cutting_worker','embroidery_washing_merchandiser','quality_control','pattern_room_tail_inspector']){
   const actualRole=role==='warehouse_receiver'?options?.warehouseRole??role:role;

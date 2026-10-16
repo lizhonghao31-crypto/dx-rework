@@ -1,3 +1,4 @@
+import {PatternBoardLane,PatternBoardCard} from "./pattern-board-parts.js";
 import {TaskWorkbenchSample} from "./task-workbench-sample.js";
 import {LegacyPatternWorkspace} from "./legacy-pattern-workspace.js";
 import "./digital-kpi-density.css";
@@ -15,7 +16,7 @@ import type { DigitalAccessOptions } from "./digital-production-access-panel.js"
 import { digitalTaskView } from "./digital-task-view.js";
 import { createWebUrls } from "../url-contract.js";
 import "./digital-development-workspace.css";
-import { PatternRoomAssignmentWorkspace } from "./pattern-room-orders-page.js";
+import { PatternRoomOrdersPage, PatternRoomAssignmentWorkspace } from "./pattern-room-orders-page.js";
 import { BulkPatternWorkspace } from "./bulk-pattern-workspace.js";
 import { patternTaskAction } from "./pattern-task-action.js";
 
@@ -44,7 +45,8 @@ export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialA
   const [tab, setTab] = useState(new URLSearchParams(window.location.search).get("taskView") === "correct" ? "历史记录" : "当前办理"), [collapsed, setCollapsed] = useState(false);
   const [suggestedWorker,setSuggestedWorker]=useState<{id:string;name:string}|null>(null);
   const [patternOrderId,setPatternOrderId]=useState<string|null>(null);
-  const board=useRef<HTMLDivElement>(null);
+  const paths=useRef<Record<string,string>>({});
+  const [historical,setHistorical]=useState(new URLSearchParams(window.location.search).get("source")==="standalone");
   const canViewAll=Boolean(options?.roles.some(role=>["root_superuser","owner_group","production_management","pattern_room_supervisor","development_clerk"].includes(role)));
   const showBoard=filter.scope!=="dispatch";
   const urls = createWebUrls(import.meta.env.BASE_URL);
@@ -65,11 +67,11 @@ export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialA
   },[initialAccess]);
   useEffect(() => {
     let live = true; const controller=new AbortController();setError("");
-    if(selectedOnly||section!=="development"||!options)return()=>{live=false;};
+    if(selectedOnly||section!=="development"||historical||!options)return()=>{live=false;};
     const query = new URLSearchParams(Object.entries({...filter,business:"development"}).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]));
     void digitalRequest<PatternWorkspaceResult>(`workspaces/pattern?${query}`,"GET",undefined,undefined,{signal:controller.signal}).then(data=>{if(live)setResult(data);}).catch(reason=>{if(live){setResult(null);setError(reason.message);}});
     return () => {live = false;controller.abort();};
-  }, [filter, refresh,section,options,selectedOnly]);
+  }, [filter, refresh,section,options,selectedOnly,historical]);
   useEffect(() => {
     let live = true; setSelected(null); setSheet(null); setPatternOrderId(null); setSuggestedWorker(null); setDetailError("");
     if (selectedId) void (refresh===0&&initialTask?.taskId===selectedId?Promise.resolve(initialTask):digitalRequest<DigitalTask>(`tasks/${selectedId}`)).then(async task => {
@@ -84,18 +86,21 @@ export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialA
   }, [selectedId, refresh,initialTask]);
   const update = (patch: Partial<PatternWorkspaceFilter>) => {const next = PatternWorkspaceFilterSchema.parse({...filter, page: 1, ...patch,business:"development"}); setFilter(next); setResult(null); setSelectedId(null); persist(next, null);};
   const changed = (confirmation?:string) => {if(confirmation)setNotice(confirmation);setRefresh(value => value + 1);};
-  const choose = (id: string) => {setSelectedId(id); setTab("当前办理"); setCollapsed(false); persist(filter,id);};
+  const choose = (id: string) => {window.location.assign(`${urls.pageUrl("ui/digital-production")}?task=${id}&returnTo=${encodeURIComponent(window.location.pathname+window.location.search)}`);};
   const selectedNode = [...(result?.items ?? []), ...(result?.risks ?? [])].find(item => item.node.instanceId === selectedId);
   const waitingFor=selectedNode?.node.blockers.map(item=>item.label).join("、")||selected?.blockedReason||"前置工序完成";
   const requestedView = digitalTaskView(window.location.search);
   const view = requestedView === "correct" ? "correct" : requestedView === "read" ? "read" : selected && ["completed","cancelled"].includes(selected.state) ? "read" : "handle";
   const taskUrl = selected ? `${urls.pageUrl("ui/digital-production")}?task=${selected.taskId}&taskView=${view}&returnTo=${encodeURIComponent(window.location.pathname+window.location.search)}` : "";
   const sections=<nav className="development-tabs pattern-business-tabs" aria-label="板房业务">{[['development','开发岗位任务'],['bulk','大货纸样与唛架'],['legacy','杂事看板']].map(([key,label])=><button key={key} aria-pressed={section===key} onClick={()=>{
-    setSection(key!);setSelectedId(null);setSelected(null);setSheet(null);setBulkOrder(null);setDetailError('');setResult(null);setSearch('');
-    const next=PatternWorkspaceFilterSchema.parse({scope:canViewAll?'all':'mine',business:'development'});setFilter(next);
-    const query=new URLSearchParams({section:key!,scope:next.scope});
-    window.history.replaceState(window.history.state,'',`${urls.pageUrl("ui/digital-pattern-room")}?${query}`);
+    paths.current[section]=window.location.search;
+    const target=paths.current[key!]??`?section=${key}&scope=${canViewAll?'all':'mine'}`;
+    window.history.replaceState(window.history.state,'',`${urls.pageUrl("ui/digital-pattern-room")}${target}`);
+    setSection(key!);setSelectedId(null);setSelected(null);setSheet(null);setBulkOrder(null);setDetailError('');setResult(null);
+    const next=initialFilter();setFilter(next);setSearch(next.search);setHistorical(new URLSearchParams(target).get('source')==='standalone');
   }}>{label}</button>)}</nav>;
+  const sourceFilter=<label className="pattern-source-filter">任务来源<select aria-label="任务来源" value={historical?'standalone':'development'} onChange={event=>{const legacy=event.target.value==='standalone';setHistorical(legacy);setResult(null);setSelectedId(null);window.history.replaceState(window.history.state,'',urls.pageUrl('ui/digital-pattern-room')+(legacy?'?section=development&source=standalone&kind=pattern&origin=standalone':`?section=development&scope=${canViewAll?'all':'mine'}`));if(!legacy){const next=initialFilter();setFilter(next);setSearch(next.search);}}}><option value="development">开发单工序</option><option value="standalone">历史独立打板</option></select></label>;
+  if(section==='development'&&historical&&!selectedOnly)return <div className="pattern-workspace pattern-golden dx-production-refined">{sections}<PageHeader title="板房管理台"/>{sourceFilter}<PatternRoomOrdersPage embedded standaloneOnly/></div>;
   if(selected?.sourceId&&selected.taskKind.startsWith('development_')&&view!=='correct')return <TaskWorkbenchSample key={selected.taskId} task={selected} onClose={()=>{setSelectedId(null);setSelected(null);persist(filter,null);}} onChanged={()=>changed()}/>;
   if(section==='legacy')return <div className="pattern-workspace pattern-golden dx-production-refined">{sections}<LegacyPatternWorkspace/></div>;
   if(section==='bulk')return <div className="pattern-workspace pattern-golden dx-production-refined">
@@ -107,30 +112,28 @@ export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialA
     {sections}<div className="development-breadcrumb"><a href={urls.pageUrl('ui/digital-cockpit')}>生产管理座舱</a> › <strong>板房管理台</strong></div>
     <PageHeader title="板房管理台" actions={<Button onClick={()=>changed()}>刷新</Button>}/>
     {error && <p role="alert">{error}</p>}{notice&&<p role="status" className="pattern-submit-notice">{notice}</p>}
-    {showBoard&&<div className="pattern-group-cards">{PATTERN_LANES.map((lane,index) => <KpiCard key={lane.key} icon={<NavigationIcon name={(["FileText","Shirt","Scissors","Settings","Shirt","ClipboardCheck","PackageCheck"] as const)[index]??"FileText"} />} className={`pattern-lane-kpi lane-${index}`} label={lane.label} value={result ? lane.groups.reduce((total,group) => total+result.counts[group],0) : "—"} detail={result?.riskCounts?`临期 ${lane.groups.reduce((total,group)=>total+result.riskCounts[group].dueSoon,0)} / 逾期 ${lane.groups.reduce((total,group)=>total+result.riskCounts[group].overdue,0)}`:"临期 / 逾期读取中"} selected={filter.lane === lane.key} onClick={() => update({lane:filter.lane === lane.key ? undefined : lane.key,group:undefined})}/>)}</div>}
+    {sourceFilter}{showBoard&&<div className="pattern-group-cards">{PATTERN_LANES.map((lane,index) => <KpiCard key={lane.key} icon={<NavigationIcon name={(["FileText","Shirt","Scissors","Settings","Shirt","ClipboardCheck","PackageCheck"] as const)[index]??"FileText"} />} className={`pattern-lane-kpi lane-${index}`} label={lane.label} value={result ? lane.groups.reduce((total,group) => total+result.counts[group],0) : "—"} detail={result?.riskCounts?`临期 ${lane.groups.reduce((total,group)=>total+result.riskCounts[group].dueSoon,0)} / 逾期 ${lane.groups.reduce((total,group)=>total+result.riskCounts[group].overdue,0)}`:"临期 / 逾期读取中"} selected={filter.lane === lane.key} onClick={() => update({lane:filter.lane === lane.key ? undefined : lane.key,group:undefined})}/>)}</div>}
 
     <div className="pattern-workspace-body"><section className="dx-production-panel pattern-task-list" data-layout={showBoard?"board":"tasks"}><div className="pattern-board-title"><h2>{showBoard?"岗位进度看板":filter.scope==="dispatch"?"待确认派工":filter.scope==="personnel"?"人员安排":"岗位任务"}</h2><span>{result ? `${result.archiveTotal} 款 · ${result.total} 项任务` : "读取中…"}</span>{(filter.lane || filter.group) && <Button onClick={() => update({lane:undefined,group:undefined})}>显示全部环节</Button>}</div>
     <div className="pattern-board-filters"><nav className="development-tabs" aria-label="岗位任务范围">{([[canViewAll?"all":"mine","全部进度"],...(options?.roles.some(role=>["pattern_room_supervisor","root_superuser","owner_group","production_management"].includes(role))?[["unassigned","待分派"]]:[]),...(options?.roles.some(role=>["pattern_room_supervisor","root_superuser"].includes(role))?[["dispatch","正式派工"]]:[])]).map(([scope,label])=><button key={scope} aria-pressed={filter.scope===scope} onClick={()=>update({scope:scope as PatternWorkspaceFilter["scope"],owner:undefined})}>{label}</button>)}</nav><FilterBar as="div"><form className="pattern-keyword-search" onSubmit={event=>{event.preventDefault();update({search:search.trim(),owner:undefined});}}><label>关键词<input placeholder="款号 / PO / 客户 / 当前主办人" maxLength={100} value={search} onChange={event=>setSearch(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&event.nativeEvent.isComposing)event.preventDefault();}}/></label><Button type="submit">查询</Button></form>
       <label>任务状态<select value={filter.state} onChange={event => update({state: event.target.value as PatternWorkspaceFilter["state"]})}>{Object.entries({ongoing: "在办与待启动", all: "全部当前任务", pending: "等待前置", active: "办理中", blocked: "暂时办不了", completed: "已完成"}).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
       <label>风险<select value={filter.risk ?? ""} onChange={event => update({risk: (event.target.value || undefined) as PatternWorkspaceFilter["risk"]})}><option value="">全部风险</option><option value="overdue">超时</option><option value="due_soon">临期</option><option value="blocked">受阻</option><option value="unknown">时间待核实</option></select></label>
     </FilterBar><p>{result ? `${result.archiveTotal} 个开发档案 · ${result.total} 项真实任务` : "正在读取授权任务…"}</p></div>
-      {showBoard?<>      <div className="pattern-board-scroll-controls"><Button onClick={()=>board.current?.scrollBy({left:-320,behavior:"smooth"})}>向左查看环节</Button><Button onClick={()=>board.current?.scrollBy({left:320,behavior:"smooth"})}>向右查看环节</Button></div>
-      <div ref={board} className="pattern-board-scroll" role="region" aria-label="开发环节看板，可横向滚动查看全部环节" tabIndex={0}><div className={`pattern-board-columns ${filter.lane || filter.group ? "is-filtered" : ""}`}>{PATTERN_LANES.filter(lane => (!filter.lane || lane.key === filter.lane) && (!filter.group || (lane.groups as readonly string[]).includes(filter.group))).map(lane => <section className={`pattern-board-column lane-${lane.key}`} key={lane.key}><h3><i aria-hidden="true"><NavigationIcon name={({materials:'FileText',pattern:'Shirt',cutting:'Scissors',craft:'Settings',sewing:'Shirt',check:'ClipboardCheck',shipping:'PackageCheck'} as const)[lane.key]} /></i>{lane.label} <span>{result ? lane.groups.reduce((total,group) => total+result.counts[group],0) : "—"}</span></h3>
-      <div className="pattern-lane-cards">{result?.items.filter(task => (lane.groups as readonly string[]).includes(task.group)).map(task => <button type="button" key={task.node.instanceId} aria-pressed={selectedId === task.node.instanceId} className={`pattern-task-card ${task.node.risks.includes("overdue") ? "is-overdue" : ""}`} onClick={() => choose(task.node.instanceId)}>
+      {showBoard?<>      <div className="pattern-board-scroll" role="region" aria-label="开发环节看板，可横向滚动查看全部环节" tabIndex={0}><div className={`pattern-board-columns ${filter.lane || filter.group ? "is-filtered" : ""}`}>{PATTERN_LANES.filter(lane => (!filter.lane || lane.key === filter.lane) && (!filter.group || (lane.groups as readonly string[]).includes(filter.group))).map(lane => <PatternBoardLane lane={lane.key} title={lane.label} key={lane.key} count={result ? lane.groups.reduce((total,group) => total+result.counts[group],0) : "—"} icon={<NavigationIcon name={({materials:'FileText',pattern:'Shirt',cutting:'Scissors',craft:'Settings',sewing:'Shirt',check:'ClipboardCheck',shipping:'PackageCheck'} as const)[lane.key]}/>} onAll={()=>update({lane:lane.key,group:undefined})}>
+      {result?.items.filter(task => (lane.groups as readonly string[]).includes(task.group)).map(task => <PatternBoardCard key={task.node.instanceId} overdue={task.node.risks.includes("overdue")} onClick={() => choose(task.node.instanceId)}>
         <strong>{task.designStyleNo}</strong><small>{task.customer ?? "通用开发"} · 第 {task.node.round ?? 1} 轮</small><small>{task.node.label}</small><small>当前主办：{task.node.owner?.name ?? "待派工"}</small>
         <StatusBadge tone={task.node.risks.includes("overdue") || task.node.state === "blocked" ? "danger" : task.node.state === "completed" ? "success" : "info"}>{task.node.risks.includes("overdue") ? "超时" : states[task.node.state]}</StatusBadge>
-        <small>{result ? stay(task,result.asOf) : '计时读取中'}</small>
+        <small>{task.node.blockers.map(blocker=>blocker.label).join("；")||"无已记录阻断"}</small><small>{result ? stay(task,result.asOf) : '计时读取中'}</small>
         <small title={task.node.expectedAt ?? undefined}>截止 {deadline(task)}</small><span className="pattern-task-action">{task.nativeAssignment?"分派师傅":patternTaskAction(task.node)}</span>
-      </button>)}</div>
+      </PatternBoardCard>)}
       {result && !result.items.some(task => (lane.groups as readonly string[]).includes(task.group)) && <p>{lane.groups.some(group => result.counts[group] > 0) ? "本页无此环节任务" : "暂无任务"}</p>}
-      {!filter.lane && <button className="development-text-action pattern-lane-more" onClick={() => update({lane:lane.key,group:undefined})}>查看全部</button>}
-      </section>)}</div></div>{!filter.lane && !filter.group && <p className="pattern-board-scroll-hint">横向滚动看板可查看全部七个环节</p>}
+      </PatternBoardLane>)}</div></div>{!filter.lane && !filter.group && <p className="pattern-board-scroll-hint">横向滚动看板可查看全部七个环节</p>}
 </>:      <div className="development-table-scroll pattern-role-task-table"><table><thead><tr><th>款号</th><th>客户 / 轮次</th><th>当前任务</th><th>主办人</th><th>状态</th><th>要求完成</th><th>停留</th><th>操作</th></tr></thead><tbody>{result?.items.map(task=><tr key={task.node.instanceId} className={selectedId===task.node.instanceId?"is-selected":""}><td><strong>{task.designStyleNo}</strong></td><td>{task.customer??"通用开发"} · 第{task.node.round??1}轮</td><td>{task.node.label}</td><td>{task.node.owner?.name??"待派工"}</td><td><StatusBadge tone={task.node.state==="blocked"||task.node.risks.includes("overdue")?"danger":task.node.state==="completed"?"success":"info"}>{states[task.node.state]}</StatusBadge></td><td>{deadline(task)}</td><td>{result?stay(task,result.asOf):"—"}</td><td><Button type="button" variant="primary" onClick={()=>choose(task.node.instanceId)}>{task.nativeAssignment?"分派师傅":patternTaskAction(task.node)}</Button></td></tr>)}</tbody></table></div>}
       {!result && !error && <p role="status">正在读取授权任务…</p>}{result && !result.items.length && <p>当前筛选暂无真实任务</p>}
       <Pagination page={filter.page} pageSize={15} total={result?.total ?? null} onPage={page => update({page})}/>
     </section></div>
     </>}
-    <section className="dx-production-panel pattern-task-detail" aria-label="选中任务详情">
+    {(selectedOnly||selectedId)&&<section className="dx-production-panel pattern-task-detail" aria-label="选中任务详情">
       {!selectedId && <p className="development-empty">选择任务，下方直接办理当前工作，并可查看资料与历史。</p>}
       {detailError && <p role="alert">{detailError}</p>}
       {selectedId && !selected && !detailError && <p role="status">正在读取任务…</p>}
@@ -148,7 +151,7 @@ export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialA
 
       </>}
       </>}
-    </section>
+    </section>}
   </div>;
 }
 function BusinessMaterials({sheet}: {sheet: DevelopmentSheet | null}) {

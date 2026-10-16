@@ -1,3 +1,4 @@
+import {createHistoricalPatternFixture} from "../helpers/historical-pattern-fixture.js";
 import { resolveMiscAssociation } from "../../apps/api/src/pattern-room/misc-associations.js";
 import {PatternRoomPriceService,PATTERN_HOURLY_PRICE_ID} from "../../apps/api/src/pattern-room/price-service.js";
 import {randomUUID} from 'node:crypto';
@@ -47,6 +48,21 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   try{const response=await app.inject({method:'POST',url:'/pattern-room/orders',payload:{},headers:{cookie:'dx_rework_session=TEST','idempotency-key':randomUUID()}});expect(response.statusCode).toBe(403);expect(response.json().error.message).toContain('开发单发布');}finally{await app.close();}
   expect((await service.list(actor(),{page:1,limit:15})).canCreate).toBe(false);
  });
+ it('filters standalone history by stable source link without merging same-name records or widening worker scope',async()=>{
+  const rootActor=actor(root,['root_superuser']),style='TEST-R2-PR08-SAME-NAME',orders=[];
+  for(let index=0;index<2;index++){
+   const attachmentId=randomUUID();await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST history.pdf','application/pdf',10,$3,$4,'ready',CURRENT_TIMESTAMP)",[attachmentId,'tests/'+attachmentId,'a'.repeat(64),root]);
+   orders.push(await createHistoricalPatternFixture(service,rootActor,{styleNo:style,categoryId:'92000000-0000-4000-8000-000000000002',priceVersion:1,quantity:1,attachmentIds:[attachmentId]},randomUUID()));
+  }
+  const source=await identity.createSource(rootActor,{developmentType:'头版',designStyleNo:style,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+  await db.query('INSERT INTO digital_development_pattern_links(source_id,order_id,linked_by) VALUES($1,$2,$3)',[source.sourceId,orders[1]!.orderId,root]);
+  const filtered=await service.list(rootActor,{q:style,page:1,limit:15,kind:'pattern',origin:'standalone'});
+  expect(filtered.totalCount).toBe(1);expect(filtered.items.map(order=>order.orderId)).toEqual([orders[0]!.orderId]);
+  expect((await service.list(rootActor,{q:style,page:1,limit:15,kind:'pattern'})).totalCount).toBe(2);
+  expect((await service.list(actor(worker,['pattern_room_worker']),{q:style,page:1,limit:15,origin:'standalone'})).totalCount).toBe(0);
+  expect((await service.get(rootActor,orders[0]!.orderId)).status).toBe('pending_assignment');
+  if(process.env.R2_MISC_EVIDENCE){const {miscBoardBrowser}=await import('../acceptance/r2-misc-board-browser.mjs');await miscBoardBrowser({database:db,service,root:rootActor,sourceId:source.sourceId,style,historyOrder:orders[0],linkedOrder:orders[1]});}
+ },120000);
  it('allows empty association, saves authorized source/PO IDs and canonical snapshots and replays without duplicates',async()=>{
   const foreign=(await identity.createSource(actor(other),{developmentType:'头版',designStyleNo:'TEST-MISC-FOREIGN',temporaryStyleNo:null,customerCode:'FL'},randomUUID())).sourceId;
   const options=await service.miscAssociations(actor(),'TEST-MISC');expect(options.map(item=>item.id)).toContain(foreign);expect(options.map(item=>item.id)).toEqual(expect.arrayContaining([sourceId,poId]));

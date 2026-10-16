@@ -56,7 +56,10 @@ export class PatternOrderReader {
     return this.read(actor, async (client, effective) => {
       const input = parsed.data, broad = canReadAllPatternOrders(effective);
       if (!broad && (input.creatorId || input.workerId)) throw new ApplicationError("FORBIDDEN", "当前账号不能筛选其他人员", 403);
-      const where = `${patternOrderScopeSql} AND ($5::text IS NULL OR strpos(upper(orders.style_no),upper($5))>0 OR strpos(upper(orders.order_no),upper($5))>0 OR strpos(upper(COALESCE(orders.task_name,'')),upper($5))>0)
+      const standalone = input.origin === 'standalone';
+      const linksExist = standalone && (await client.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation;
+      const originScope = standalone ? `AND orders.kind='pattern' ${linksExist ? 'AND NOT EXISTS(SELECT 1 FROM digital_development_pattern_links linked WHERE linked.order_id=orders.order_id)' : ''}` : '';
+      const where = `${patternOrderScopeSql} ${originScope} AND ($5::text IS NULL OR strpos(upper(orders.style_no),upper($5))>0 OR strpos(upper(orders.order_no),upper($5))>0 OR strpos(upper(COALESCE(orders.task_name,'')),upper($5))>0)
         AND ($6::text IS NULL OR orders.status=$6) AND ($7::uuid IS NULL OR orders.created_by=$7)
         AND ($8::uuid IS NULL OR EXISTS(SELECT 1 FROM pattern_room_segments filtered_worker WHERE filtered_worker.round_id=orders.current_round_id AND filtered_worker.person_id=$8)) AND ($9::text IS NULL OR orders.kind=$9)`;
       const values = [...patternOrderScopeValues(effective), input.q || null, input.status ?? null, input.creatorId ?? null, input.workerId ?? null, input.kind ?? null];

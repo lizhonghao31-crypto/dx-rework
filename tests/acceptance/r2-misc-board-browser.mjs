@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import {mkdir,writeFile} from 'node:fs/promises';
+import Fastify from 'fastify';
+import {createServer} from 'vite';
+import react from '@vitejs/plugin-react';
+import {registerPatternRoomOrderRoutes} from '../../apps/api/src/pattern-room/order-routes.js';
+import {registerPatternRoomPriceRoutes} from '../../apps/api/src/pattern-room/price-routes.js';
+import {PatternRoomPriceService} from '../../apps/api/src/pattern-room/price-service.js';
+import {PATTERN_ORDER_ROLES} from '@dx-rework/contracts/pattern-orders';
+import {DigitalProductionAccessService} from '../../apps/api/src/production-platform/access-service.js';
+export async function miscBoardBrowser({database,service,root,sourceId,style,historyOrder,linkedOrder}){
+ const out=process.env.R2_MISC_EVIDENCE;await mkdir(out,{recursive:true});const {chromium}=await import('/opt/codex/cua_node/lib/node_modules/playwright/index.mjs');
+ const user={id:root.actorId,displayName:'TEST 原板房 Root',isRoot:true,businessRoles:['root_superuser'],capabilities:[...Object.keys(PATTERN_ORDER_ROLES),'digital_production:view','pattern_room:catalog:read','pattern_room:misc:quote']};
+ const app=Fastify();app.setErrorHandler((e,_req,reply)=>reply.code(e.statusCode??500).send({error:{message:e.message}}));const authenticate=async token=>{assert.equal(token,root.actorId);return user;};
+ app.get('/auth/me',async()=>({status:'authorized',user}));app.get('/digital-production/access/options',async()=>new DigitalProductionAccessService(database).options(root));
+ registerPatternRoomOrderRoutes(app,{authenticate,service,attachments:{}});registerPatternRoomPriceRoutes(app,{authenticate,service:new PatternRoomPriceService(database)});
+ await app.listen({host:'127.0.0.1',port:0});const vite=await createServer({configFile:false,root:new URL('../../apps/web',import.meta.url).pathname,plugins:[react()],server:{host:'127.0.0.1',port:0,proxy:{'/api':{target:'http://127.0.0.1:'+app.server.address().port,rewrite:path=>path.replace(/^\/api/,'')}}}});await vite.listen();const origin='http://127.0.0.1:'+vite.httpServer.address().port;
+ const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true}),context=await browser.newContext({viewport:{width:1440,height:900}}),page=await context.newPage(),checks=[],errors=[];
+ page.on('pageerror',e=>errors.push(e.message));await context.addCookies([{name:'dx_rework_session',value:root.actorId,url:origin}]);
+ try{
+  await page.goto(origin+'/ui/digital-pattern-room?section=development&source=standalone&kind=pattern&origin=standalone&q='+encodeURIComponent(style));await page.locator('.pattern-compact-record').filter({hasText:historyOrder.orderNo}).waitFor();assert.equal(await page.locator('.pattern-compact-record').count(),1);assert.equal(await page.getByText(linkedOrder.orderNo,{exact:true}).count(),0);const returnPath=new URL(page.url()).pathname+new URL(page.url()).search;await page.locator('.pattern-compact-record>a').click();await page.getByLabel('节点办理区').waitFor();assert.equal(new URL(page.url()).searchParams.get('returnTo'),returnPath);await page.screenshot({path:out+'/pr08-history-detail.png'});await page.goto(origin+returnPath);await page.locator('.pattern-compact-record').waitFor();checks.push('same-name unlinked history visible, linked record excluded, native detail and exact return retained');
+  await page.getByRole('button',{name:'杂事看板',exact:true}).click();await page.getByRole('link',{name:'申请杂事',exact:true}).waitFor();await page.getByRole('link',{name:'申请杂事',exact:true}).click();await page.getByLabel('任务名称 *',{exact:true}).waitFor();
+  const keyword=page.locator('#misc-association').locator('..').locator('input[role=combobox]');
+  const combo=page.getByRole('combobox',{name:'关联款号 / PO（选填）',exact:true});
+  const field=await combo.count()?combo:keyword;await field.fill(style);await page.getByRole('option').filter({hasText:style}).first().click();await field.fill('TEST 无匹配新文本');await page.getByLabel('任务名称 *',{exact:true}).fill('TEST PR08 杂事');await page.getByRole('button',{name:'提交杂事',exact:true}).click();await page.getByText('关联款号请选择命中的已有档案或PO，或明确选择不关联订单',{exact:true}).waitFor();assert.equal(await page.getByLabel('任务名称 *',{exact:true}).inputValue(),'TEST PR08 杂事');
+  await field.fill(style);await page.getByRole('option').filter({hasText:style}).first().click();await page.getByRole('button',{name:'提交杂事',exact:true}).click();await page.getByLabel('节点办理区').waitFor();const detailId=new URL(page.url()).pathname.split('/').at(-1);const created=await service.get(root,detailId);assert.equal(created.association.id,sourceId);assert.equal(created.taskName,'TEST PR08 杂事');checks.push('selected association cleared on edited text; failed submit preserves task input; valid existing source saved with stable ID');
+  await page.goto(origin+'/ui/digital-pattern-room?section=legacy');await page.locator('.pattern-compact-record').filter({hasText:'TEST PR08 杂事'}).waitFor();assert.equal(await page.locator('.reporting-order-card').count(),0);for(const label of ['关联款号','申请人','执行人','要求完成'])assert((await page.locator('.pattern-compact-record').filter({hasText:'TEST PR08 杂事'}).innerText()).includes(label));await page.screenshot({path:out+'/pr08-misc.png'});checks.push('misc-only compact rows show association/requester/worker/date and native detail action');
+  await page.goto(origin+'/ui/pattern-room/create?kind=pattern');await page.getByText('已停止无来源独立打板新建；请从开发单发布生成打板执行单。',{exact:true}).waitFor();assert.equal(await page.locator('.pattern-order-form').count(),0);checks.push('legacy standalone creation URL renders no form');assert.deepEqual(errors,[]);
+ }catch(e){errors.push(String(e));errors.push((await page.locator('body').innerText()).slice(-3000));await page.screenshot({path:out+'/failure.png'});throw e;}finally{await writeFile(out+'/result.json',JSON.stringify({checks,errors,limitations:['isolated test identities/database; no production or OSS writes']},null,2));await context.close();await browser.close();await vite.close();await app.close();}
+}
