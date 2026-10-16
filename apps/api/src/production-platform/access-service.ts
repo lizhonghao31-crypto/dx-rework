@@ -103,7 +103,7 @@ export class DigitalProductionAccessService {
   async requestDelivery(actor: TrustedActorContext, id: string, input: { deliveryDate: string; expectedVersion: number; reason: string }) {
     await new DigitalProductionAccessPolicy(this.database).assert(actor,"order",id,"technical");
     void input;
-    conflict("请从制单交期区域选择明确 PO 申请客户仓到货日变更");
+    conflict("请从制单交期区域选择明确 PO 申请出货日期变更");
   }
   async deliveryRequests(actor:TrustedActorContext,id:string){
     const dates=await new PoCustomerDateService(this.database).read(actor,id);

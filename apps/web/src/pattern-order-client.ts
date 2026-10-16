@@ -1,3 +1,4 @@
+import {requestFailureMessage,transportFailure} from "./request-failure-message.js";
 import { z } from "zod";
 import { AttachmentResponseSchema, UploadIntentResponseSchema } from "@dx-rework/contracts";
 import { createWebUrls } from "../url-contract.js";
@@ -9,10 +10,12 @@ export class PatternRequestError extends Error {
   constructor(message: string, readonly code: string, readonly status: number) { super(message); }
 }
 export async function patternRequest<T>(path: string, schema: z.ZodType<T>, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(patternUrls.apiUrl(`pattern-room/${path}`), { ...init, credentials: "include", cache: "no-store", headers: { "content-type": "application/json", ...init.headers } });
-  const body = await response.json();
-  if (!response.ok) throw new PatternRequestError(body?.error?.message ?? "操作未完成，请重试", body?.error?.code ?? "UNKNOWN", response.status);
-  return schema.parse(body);
+  const response = await fetch(patternUrls.apiUrl(`pattern-room/${path}`), { ...init, credentials: "include", cache: "no-store", headers: { "content-type": "application/json", ...init.headers } }).catch(error=>{if(error?.name==="AbortError")throw error;throw transportFailure(init.method??"GET");});
+  const body = await response.json().catch(()=>null);
+  if (!response.ok) throw new PatternRequestError(requestFailureMessage(response.status,body?.error?.message), body?.error?.code ?? "UNKNOWN", response.status);
+  const parsed=schema.safeParse(body);
+  if(!parsed.success)throw new Error("返回资料格式异常，请刷新重试；不要重复提交");
+  return parsed.data;
 }
 export function readPatternUploadLimits(kind: "pattern" | "misc", purpose: "create" | "rework", signal?: AbortSignal) {
   return patternRequest(`attachments/upload-limits?kind=${kind}&purpose=${purpose}`, z.object({ maxUploadBytes: z.number().int().positive() }), { signal: signal ?? null });

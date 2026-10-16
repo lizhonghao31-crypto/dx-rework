@@ -40,3 +40,5 @@ createRoot(root).render(
     {page}
   </StrictMode>,
 );
+
+import "./scoped-select-arrow.css";

@@ -124,7 +124,7 @@ export class DigitalProductionIdentityService {
     for (const line of input.lines) if (new Set([line.formalPoNo,line.formalStyleNo,line.poNumber].map(digitalPoKey).filter(Boolean)).size > 1)
       fail("正式款号（PO）只能有一个有效值",400);
     for (const line of input.lines) if (line.customerWarehouseArrivalDate!==undefined && line.deliveryDate!==undefined && line.deliveryDate!==null
-      && line.customerWarehouseArrivalDate!==line.deliveryDate) fail("客户仓到货日不能互相矛盾",400);
+      && line.customerWarehouseArrivalDate!==line.deliveryDate) fail("出货日期不能互相矛盾",400);
     return this.command(actor, sourceId ? `confirm-source:${sourceId}` : "direct-order", key, input, async client => {
       await this.customer(client, input.customerCode, input.productGroup);
       let createdBy = actor.actorId;
