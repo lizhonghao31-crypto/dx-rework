@@ -222,10 +222,14 @@
 .external-special-record dl { display: grid; grid-template-columns: 5em minmax(0, 1fr); gap: 6px 12px; }
 .external-special-record dt { color: var(--color-muted); }
 .external-special-record dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.external-special-history details { margin-top: 12px; }
-.external-special-history summary { cursor: pointer; color: var(--color-muted); padding: 8px 0; }
-.external-special-history details .external-special-record { border-top: 1px solid var(--color-border); padding: 12px 0; }
+.external-special-history > details { margin-top: 12px; }
+.external-special-history > details > summary { cursor: pointer; color: var(--color-muted); padding: 8px 0; }
+.external-special-older > .external-special-record { border-top: 1px solid var(--color-border); padding: 12px 0; }
 @media (max-width: 480px) {
   .external-special-record dl { grid-template-columns: 4.5em minmax(0, 1fr); gap: 6px 8px; }
   .external-special-meta { display: grid; gap: 4px; }
 }
+
+.external-special-explanation summary { cursor: pointer; overflow-wrap: anywhere; }
+.external-special-explanation summary span { color: var(--color-muted); white-space: nowrap; }
+.external-special-explanation[open] summary { margin-bottom: 8px; }

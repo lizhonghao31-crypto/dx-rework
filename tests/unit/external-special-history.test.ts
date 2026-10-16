@@ -18,7 +18,7 @@ const render = (latest: Request | null, history?: Request[], status = "pending_s
 describe("special approval current result and collapsed history", () => {
   it("separates identical-amount rounds and keeps historical return inside closed details", () => {
     const html = render(request(2, "approved"), [request(1, "returned"), request(2, "approved")], "closed");
-    const [current, history] = html.split("<details>");
+    const [current, history] = html.split('<details class="external-special-older">');
     expect(current).toContain("最新特批 · 第 2 轮");
     expect(current).toContain("已批准");
     expect(current).not.toContain("已退回");
@@ -35,7 +35,10 @@ describe("special approval current result and collapsed history", () => {
     expect(render(request(1, "returned", "  "))).toContain("未记录退回原因");
     expect(render(request(1, "approved", null))).not.toContain("批准说明");
     const long = "补充正确数据与凭证。".repeat(100);
-    expect(render(request(1, "returned", long))).toContain(long);
+    const html = render(request(1, "returned", long));
+    expect(html).toContain(long);
+    expect(html).toContain("展开全文");
+    expect(html).toContain('<details class="external-special-explanation">');
   });
   it("supports single, legacy and absent histories without an empty disclosure", () => {
     expect(render(request(1, null))).not.toContain("<details");

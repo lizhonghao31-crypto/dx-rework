@@ -8,6 +8,10 @@ const dateFormat = new Intl.DateTimeFormat("zh-CN", {
   hour: "2-digit", minute: "2-digit", hourCycle: "h23",
 });
 
+function Explanation({ text }: { text: string }) {
+  return text.length > 160 ? <details className="external-special-explanation"><summary>{text.slice(0, 80)}… <span>展开全文</span></summary><p>{text}</p></details> : <>{text}</>;
+}
+
 export function ExternalSpecialHistory({ caseItem }: { caseItem: ExternalResponsibilityCaseResponse }) {
   const requests = [...new Map([
     ...(caseItem.specialApprovalHistory ?? []),
@@ -25,15 +29,15 @@ export function ExternalSpecialHistory({ caseItem }: { caseItem: ExternalRespons
     </div>
     {!(current && caseItem.status === "closed") && <p>{request.requestMode === "proposed_entry" ? "申请金额" : "申请时累计已扣"} <b>{formatBusinessCurrency(request.requestMode === "proposed_entry" ? request.requestedAmount ?? "0.00" : request.actualDeductedAmount)}</b></p>}
     <dl>
-      <dt>申请说明</dt><dd>{request.reason.trim() || "未填写"}</dd>
-      {request.decision?.decision === "returned" && <><dt>退回原因</dt><dd>{request.decision.reason?.trim() || "未记录退回原因"}</dd></>}
-      {request.decision?.decision === "approved" && request.decision.reason?.trim() && <><dt>批准说明</dt><dd>{request.decision.reason}</dd></>}
+      <dt>申请说明</dt><dd><Explanation text={request.reason.trim() || "未填写"} /></dd>
+      {request.decision?.decision === "returned" && <><dt>退回原因</dt><dd><Explanation text={request.decision.reason?.trim() || "未记录退回原因"} /></dd></>}
+      {request.decision?.decision === "approved" && request.decision.reason?.trim() && <><dt>批准说明</dt><dd><Explanation text={request.decision.reason} /></dd></>}
     </dl>
     <ExternalEvidenceView attachmentIds={request.attachmentIds} files={caseItem.evidenceAttachments ?? []} />
   </div>;
   return <section className="external-special-history" aria-label="财务特批记录">
     {record(latest, true)}
-    {requests.length > 1 && <details><summary>历史申请（{requests.length - 1}）</summary>
+    {requests.length > 1 && <details className="external-special-older"><summary>历史申请（{requests.length - 1}）</summary>
       {requests.slice(1).map(request => record(request, false))}
     </details>}
   </section>;
