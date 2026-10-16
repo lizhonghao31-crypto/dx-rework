@@ -1167,7 +1167,7 @@ function OrderDetailPage({
   const contractFileInput=useRef<HTMLInputElement | null>(null);
   const [contractReturnError,setContractReturnError] = useState("");
   const contractPendingUpload = useRef<ContractReturnUpload | null>(null);
-  const [contractPendingSubmission,setContractPendingSubmission] = useState<{attachmentIds:string[];key:string}|null>(null);
+  const [contractPendingSubmission,setContractPendingSubmission] = useState<{attachmentIds:string[];key:string;expectedContractDocumentId?:string|null}|null>(null);
   useEffect(()=>{
     contractPendingUpload.current=null;
     setContractPendingSubmission(null);
@@ -1342,9 +1342,9 @@ function OrderDetailPage({
 
   const canEditStyles = moduleWritable && !!item?.approvalSnapshot && ["pending_finance_reconciliation", "closed"].includes(item.status) && contract?.status === "ready" && !!contract.pdfAttachmentId
     && (user?.isRoot === true || canManage || (canAct(user,"order_merchandiser","sourcing:inquiry:create") && item?.createdBy === user?.id));
-  const saveContractReturn = async (submission: {attachmentIds:string[];key:string}):Promise<void> => {
+  const saveContractReturn = async (submission: {attachmentIds:string[];key:string;expectedContractDocumentId?:string|null}):Promise<void> => {
     const result=await requestSubmission(`sourcing/cases/${sourcingCaseId}/contract-return`,SourcingContractReturnResponseSchema,{
-      method:"POST",headers:{"idempotency-key":submission.key},body:JSON.stringify({attachmentIds:submission.attachmentIds}),
+      method:"POST",headers:{"idempotency-key":submission.key},body:JSON.stringify({attachmentIds:submission.attachmentIds,expectedContractDocumentId:submission.expectedContractDocumentId}),
     });
     setContractReturn(result);
     contractPendingUpload.current=null;
@@ -1388,7 +1388,7 @@ function OrderDetailPage({
     const error=contractReturnFileError(chosen,contractReturn.uploadedFileCount ?? contractReturn.attachments.length,contractReturn.uploadedTotalBytes ?? contractReturn.attachments.reduce((total,file)=>total+file.sizeBytes,0));
     if (error) {setContractReturnError(error);return;}
     setContractPendingSubmission(null);
-    contractPendingUpload.current={files:chosen,attachmentIds:[],key:createClientRequestId()};
+    contractPendingUpload.current={files:chosen,attachmentIds:[],key:createClientRequestId(),expectedContractDocumentId:contractReturn.currentContractDocumentId};
     await continueContractReturnUpload();
   };
   const retryContractReturn=async():Promise<void>=>{
@@ -1892,15 +1892,16 @@ function OrderDetailPage({
               {contractReturn?.contractReturnMonitoring ? <>
                 {contractReturn.contractReturnedAt ? <p>{contractReturn.currentContractReturned && contractReturn.currentContractDocumentId === contract.sourcingContractDocumentId ? `本版本 V${contract.contractVersion} 已回签` : `本版本 V${contract.contractVersion} 无回签记录`}</p> : null}
                 <div ref={contractReturnSectionRef} tabIndex={-1} className="sourcing-contract-bar__actions sourcing-contract-return-actions">
+                  {new URLSearchParams(window.location.search).get("contractDocumentId") && new URLSearchParams(window.location.search).get("contractDocumentId") !== contractReturn.currentContractDocumentId ? <p role="status">该待办对应的合同已换版。下方显示当前合同，请核对版本后下载及回传。</p> : null}
                   {contractReturn.canUpload ? <>
                     <input ref={contractFileInput} type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" multiple hidden
                       onChange={event=>{void uploadContractReturn(event.target.files);event.target.value="";}} />
                     <button className="dx-button dx-button--secondary" type="button" disabled={contractUploading || busy}
                       onClick={()=>contractFileInput.current?.click()}>
-                      {contractUploading?"正在上传…":contractReturn.attachments.length?"补传回签合同":"上传回签合同"}
+                      {contractUploading?"正在上传…":contractReturn.uploadedFileCount?"补传回签合同":"上传回签合同"}
                     </button>
                   </> : null}
-                  {(contractReturn.uploadedFileCount ?? contractReturn.attachments.length)>=2 ? <span>已达累计文件上限，已保存附件及历史记录保留</span> : null}
+                  {(contractReturn.uploadedFileCount ?? contractReturn.attachments.length)>=2 ? <span>当前合同版本已达文件上限，已保存附件及历史记录保留</span> : null}
                   {contractReturn.attachments.length ? <div className="sourcing-contract-return-links" aria-label="回签附件，可左右滑动查看更多">
                     {contractReturn.attachments.map((file,index)=>
                       <a className="dx-button dx-button--secondary" key={file.attachmentId}

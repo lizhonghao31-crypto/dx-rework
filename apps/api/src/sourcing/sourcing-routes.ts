@@ -572,7 +572,7 @@ export function registerSourcingRoutes(
           : (() => { throw new ApplicationError("FORBIDDEN","当前账号无权回传合同",403); })();
         return SourcingContractReturnResponseSchema.parse(
           await dependencies.contractReturns!.submit({...actor,authorizationCapability:capability},
-            caseId(request.params.sourcingCaseId),input.attachmentIds,idempotencyKey(request)),
+            caseId(request.params.sourcingCaseId),input.attachmentIds,idempotencyKey(request),input.expectedContractDocumentId),
         );
       },
     );

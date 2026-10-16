@@ -1,3 +1,4 @@
+import { todoHref } from "../../apps/web/src/my-todos-page.js";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -38,6 +39,17 @@ describe("todo deep links", () => {
       todoId,
       tab: "contract_return",
     })).toBe(`/ui/sourcing/orders/${entityId}?todo=${todoId}&section=contract-return`);
+  });
+
+  it("binds transfer return links to the exact document version", () => {
+    expect(todoHref({todoId,route:{routeName:"sourcing_detail",entityId,todoId,tab:"contract_return",
+      transferContract:{documentId:entityId,version:2,supplierName:"新工厂"}}}))
+      .toBe(`/ui/sourcing/orders/${entityId}?todo=${todoId}&section=contract-return&contractDocumentId=${entityId}`);
+    expect(todoHref({todoId,route:{routeName:"sourcing_detail",entityId,todoId}}))
+      .toBe(`/ui/sourcing/orders/${entityId}?todo=${todoId}`);
+    expect(buildTodoDeepLink("/", {routeName:"sourcing_detail",entityId,todoId,tab:"contract_return",
+      transferContract:{documentId:entityId,version:2,supplierName:"新工厂"}}))
+      .toBe(`/ui/sourcing/orders/${entityId}?todo=${todoId}&section=contract-return&contractDocumentId=${entityId}`);
   });
 
   it("opens whole-order review todos directly in the N05 workspace", () => {
