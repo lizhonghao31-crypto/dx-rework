@@ -42,10 +42,15 @@ warm() {
   done
   return 1
 }
+static_readable() {
+  python3 "$tool/scripts/deploy/static-release.py" readable "$DX_ROOT/frontend/releases/$1"
+}
 public_verify() {
   local version i
   for i in {1..5}; do
-    if version="$(curl --noproxy '*' --connect-timeout 2 --max-time 5 -fsS --resolve dxerp.org.cn:443:127.0.0.1 https://dxerp.org.cn/version)" && node -e 'if(JSON.parse(process.argv[1]).gitSha!==process.argv[2])process.exit(1)' "$version" "$1"; then return 0; fi
+    if version="$(curl --noproxy '*' --connect-timeout 2 --max-time 5 -fsS --resolve dxerp.org.cn:443:127.0.0.1 https://dxerp.org.cn/version)" && node -e 'if(JSON.parse(process.argv[1]).gitSha!==process.argv[2])process.exit(1)' "$version" "$1"; then
+      static_readable "$1" && python3 "$tool/scripts/deploy/static-release.py" http "$DX_ROOT/frontend/releases/$1" dxerp.org.cn && return 0
+    fi
     sleep 1
   done
   return 1
@@ -79,6 +84,8 @@ if [[ "$resume" != true ]]; then
   # Reconstruct the EXACT served previous SHA from a full independent fetch,
   # not the possibly reset/mutated production source checkout.
   worker prepare-online-candidate.sh "$recovery" recovery "$active_sha"
+  static_readable "$candidate_sha"
+  static_readable "$active_sha"
   worker check-main-layout.sh "$active_sha"
   printf '%s\n' "$candidate_sha" > "$state/candidate-sha"
   printf '%s\n' "$active_port" > "$state/candidate-port"
@@ -93,6 +100,13 @@ else
   [[ -z "$expected_sha" || "$candidate_sha" == "$expected_sha" ]] || die 'frozen candidate differs from expected main SHA; maintenance retained'
 fi
 
+if ! static_readable "$candidate_sha"; then
+  if [[ "$(cat "$state/phase")" == maintenance-activating ]]; then
+    link_config "$state/maintenance.conf"
+    nginx -t && nginx -s reload || die 'static preflight failed; maintenance routing recovery needs inspection'
+  fi
+  die 'candidate static preflight failed; no migration or activation attempted'
+fi
 if [[ "$(cat "$state/phase")" == maintenance-prepared ]]; then
   [[ -f "$state/maintenance-workers.json" ]] || die 'original maintenance drain receipt is missing; service retained'
   link_config "$state/maintenance.conf"

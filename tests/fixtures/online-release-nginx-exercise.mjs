@@ -102,7 +102,9 @@ try {
     writeFileSync(`${api}/package.json`, '{"type":"module"}\n');
     const lastMigration = JSON.parse(readFileSync(`${artifactSource}/apps/api/src/platform/migration-manifest.json`)).migrations.at(-1);
     writeFileSync(`${api}/release-manifest.json`, JSON.stringify({ gitSha: generation, buildTime: 'isolated', releaseProtocol: 2, schemaVersion: lastMigration.version, schemaChecksum: lastMigration.checksum }));
-    writeFileSync(`${web}/index.html`, `<html>${generation}</html>`);
+    mkdirSync(`${web}/assets`);
+    writeFileSync(`${web}/assets/app.js`, `console.log('${generation}');`);
+    writeFileSync(`${web}/index.html`, `<html>${generation}<script src="/assets/app.js"></script></html>`);
     writeFileSync(`${web}/release-manifest.json`, JSON.stringify({ gitSha: generation }));
     run('bash', ['-c', 'find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS'], { cwd: api });
     run('bash', ['-c', 'find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS'], { cwd: web });

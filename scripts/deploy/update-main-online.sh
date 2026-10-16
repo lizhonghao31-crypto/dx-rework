@@ -40,10 +40,15 @@ warm() {
   for i in {1..20}; do if verify "$1" "$2"; then return 0; fi; sleep 1; done
   return 1
 }
+static_readable() {
+  python3 "$tool/scripts/deploy/static-release.py" readable "$DX_ROOT/frontend/releases/$1"
+}
 public_verify() {
   local version i
   for i in {1..5}; do
-    if version="$(curl --noproxy '*' --connect-timeout 2 --max-time 5 -fsS --resolve "$DX_REWORK_SERVER_NAME:443:127.0.0.1" "https://$DX_REWORK_SERVER_NAME/version")" && node -e 'if(JSON.parse(process.argv[1]).gitSha!==process.argv[2])process.exit(1)' "$version" "$1"; then return 0; fi
+    if version="$(curl --noproxy '*' --connect-timeout 2 --max-time 5 -fsS --resolve "$DX_REWORK_SERVER_NAME:443:127.0.0.1" "https://$DX_REWORK_SERVER_NAME/version")" && node -e 'if(JSON.parse(process.argv[1]).gitSha!==process.argv[2])process.exit(1)' "$version" "$1"; then
+      static_readable "$1" && python3 "$tool/scripts/deploy/static-release.py" http "$DX_ROOT/frontend/releases/$1" dxerp.org.cn && return 0
+    fi
     sleep 1
   done
   return 1
@@ -95,6 +100,13 @@ else
   cp "$state/active.json" "$state/previous-active.json"
   phase prepared
 fi
+# Do not gate an interrupted rollback on the rejected candidate's readability.
+case "$(cat "$state/phase")" in
+  prepared|switching)
+    static_readable "$candidate_sha"
+    static_readable "$active_sha"
+    ;;
+esac
 if [[ "$(cat "$state/phase")" == prepared ]]; then
   worker start-online-slot.sh start "$candidate_sha" "$candidate_port"
   if ! warm "$candidate_port" "$candidate_sha"; then

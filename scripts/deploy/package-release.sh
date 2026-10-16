@@ -22,4 +22,5 @@ fs.writeFileSync(path.join(root,'release-manifest.json'),JSON.stringify({...comm
 JS
 for d in "$stage/api" "$stage/frontend"; do (cd "$d" && find . -type f ! -name SHA256SUMS -print0|LC_ALL=C sort -z|xargs -0 sha256sum > SHA256SUMS && sha256sum -c --strict SHA256SUMS >/dev/null); done
 (cd "$stage" && find api frontend -type f -print0|LC_ALL=C sort -z|xargs -0 sha256sum > SHA256SUMS && sha256sum release-manifest.json >> SHA256SUMS && sha256sum -c --strict SHA256SUMS >/dev/null)
+python3 "$(dirname "$0")/static-release.py" normalize "$stage/frontend"
 mv "$stage" "$out"; trap - EXIT; safe_log pass "packaged immutable release $sha"
