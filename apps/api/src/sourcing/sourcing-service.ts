@@ -2847,7 +2847,9 @@ export class SourcingService {
             "SELECT contract_returned_at FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1",
             [sourcingCaseId],
           );
-          if (returnFact.rows[0]?.contract_returned_at === null) {
+          const transferDecision = await client.query<{is_transfer:boolean}>(
+            "SELECT source_change_request_id IS NOT NULL AS is_transfer FROM sourcing_decisions WHERE sourcing_decision_id=$1", [source.sourcing_decision_id]);
+          if (returnFact.rows[0]?.contract_returned_at === null && !transferDecision.rows[0]?.is_transfer) {
             await this.todoProjection?.completeOpenByDedupePrefix(
               client, actor, `sourcing:${sourcingCaseId}:return:`, "选厂批准版本已更新",
             );
@@ -3280,45 +3282,7 @@ export class SourcingService {
         policyKey: "general",
         dedupeKey: `sourcing:${source.sourcing_case_id}:finance:${nextDecisionVersion}:${Number(source.reconciliation_version)+1}`,
       });
-      if (actor.authorizationCapability === OWNER_DECISION_CAPABILITY) {
-        const returnFact = await client.query<{ created_by: string; additional_merchandiser_user_id: string | null; contract_returned_at: Date | null }>(
-          `SELECT source_case.created_by,
-             nullif(to_jsonb(source_case)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id,
-             monitor.contract_returned_at
-           FROM sourcing_cases source_case
-           JOIN sourcing_contract_return_monitors monitor
-             ON monitor.sourcing_case_id=source_case.sourcing_case_id
-           WHERE source_case.sourcing_case_id=$1 AND monitor.contract_return_monitor_enabled`,
-          [source.sourcing_case_id],
-        );
-        const pending = returnFact.rows[0];
-        if (pending?.contract_returned_at === null) {
-          await this.todoProjection?.completeOpenByDedupePrefix(
-            client, actor, `sourcing:${source.sourcing_case_id}:return:`, "选厂批准版本已更新",
-          );
-          await this.todoProjection?.actionableForNamedRecipient?.(client, actor, {
-            category: "sourcing_contract_return",
-            sourceEventId: eventId,
-            sourceAction: "sourcing.factory_change.effective",
-            entityType: "sourcing_case",
-            entityId: source.sourcing_case_id,
-            recipientUserId: pending.created_by,
-            requiredRole: CONTRACT_ROLE,
-            requiredCapability: CONTRACT_CAPABILITY,
-            route: { routeName: "sourcing_detail", entityId: source.sourcing_case_id, tab: "contract_return" },
-            policyKey: "sourcing_contract_return",
-            dedupeKey: `sourcing:${source.sourcing_case_id}:return:${nextDecisionVersion}`,
-          });
-          if (pending.additional_merchandiser_user_id) await this.todoProjection?.actionableForNamedRecipient?.(client,actor,{
-            category:"sourcing_contract_return",sourceEventId:eventId,sourceAction:"sourcing.factory_change.effective",
-            entityType:"sourcing_case",entityId:source.sourcing_case_id,recipientUserId:pending.additional_merchandiser_user_id,
-            requiredRole:CONTRACT_ROLE,requiredCapability:CONTRACT_CAPABILITY,
-            route:{routeName:"sourcing_detail",entityId:source.sourcing_case_id,tab:"contract_return"},
-            policyKey:"sourcing_contract_return",
-            dedupeKey:`sourcing:${source.sourcing_case_id}:return:${nextDecisionVersion}:${pending.additional_merchandiser_user_id}`,
-          });
-        }
-      }
+      // Current transfer contract tasks are projected only after the new PDF is ready.
     }
   }
 

@@ -195,14 +195,14 @@ describe("sourcing contract return routes", () => {
       headers:{cookie:"dx_rework_session=trusted","idempotency-key":"return-b"},
       payload:{attachmentIds:[attachmentId]}})).statusCode).toBe(200);
     expect(owner.contractReturns.submit).toHaveBeenCalledWith(
-      expect.objectContaining({authorizationCapability:"sourcing:owner:approve"}),id,[attachmentId],"return-b",
+      expect.objectContaining({authorizationCapability:"sourcing:owner:approve"}),id,[attachmentId],"return-b",undefined,
     );
     const manager=create(["sourcing:view","sourcing:decision:record"],["production_management"]);
     expect((await manager.app.inject({method:"POST",url:`/sourcing/cases/${id}/contract-return`,
       headers:{cookie:"dx_rework_session=trusted","idempotency-key":"return-c"},
       payload:{attachmentIds:[attachmentId]}})).statusCode).toBe(200);
     expect(manager.contractReturns.submit).toHaveBeenCalledWith(
-      expect.objectContaining({authorizationCapability:"sourcing:decision:record"}),id,[attachmentId],"return-c",
+      expect.objectContaining({authorizationCapability:"sourcing:decision:record"}),id,[attachmentId],"return-c",undefined,
     );
   });
 });

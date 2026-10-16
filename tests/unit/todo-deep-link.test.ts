@@ -40,6 +40,12 @@ describe("todo deep links", () => {
     })).toBe(`/ui/sourcing/orders/${entityId}?todo=${todoId}&section=contract-return`);
   });
 
+  it("binds transfer return links to the exact document version", () => {
+    expect(buildTodoDeepLink("/", {routeName:"sourcing_detail",entityId,todoId,tab:"contract_return",
+      transferContract:{documentId:entityId,version:2,supplierName:"新工厂"}}))
+      .toBe(`/ui/sourcing/orders/${entityId}?todo=${todoId}&section=contract-return&contractDocumentId=${entityId}`);
+  });
+
   it("opens whole-order review todos directly in the N05 workspace", () => {
     expect(buildTodoDeepLink("/", {
       routeName: "whole_order_review",

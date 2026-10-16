@@ -19,6 +19,13 @@ describe("contract return two-file upload", () => {
     expect(contractReturnFileError([pdf()], 2)).toBeTruthy();
     expect(contractReturnFileError([pdf()], 1, 20 * 1024 * 1024)).toBeTruthy();
   });
+  it("keeps the selected contract version through upload retries", async () => {
+    const pending={files:[pdf()],attachmentIds:[] as string[],key:"version-key",expectedContractDocumentId:ids[2]};
+    const upload=vi.fn().mockResolvedValue(ids[0]);
+    expect(await finishContractReturnUpload(pending,upload)).toEqual({attachmentIds:[ids[0]],key:"version-key",expectedContractDocumentId:ids[2]});
+    expect(contractReturnFileError([pdf(),pdf()],0,0)).toBeNull();
+    expect(contractReturnFileError([pdf()],2,128)).toContain("当前合同版本");
+  });
   it("retains the first ready file, retries only the failed file and returns one stable submission", async () => {
     const pending = { files: [pdf(), pdf()], attachmentIds: [] as string[], key: "stable-key" };
     const upload = vi.fn().mockResolvedValueOnce(ids[0]).mockRejectedValueOnce(new Error("second failed")).mockResolvedValueOnce(ids[1]);

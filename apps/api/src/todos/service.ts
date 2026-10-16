@@ -1266,6 +1266,8 @@ export class TodoService {
     operationRequestId: string,
     deliveryKind: "create" | "complete" | "reminder" | "escalation" | "information",
   ): Promise<void> {
+    // Version-bound transfer contract tasks (including their routing exceptions) are in-system only.
+    if (todo.route_descriptor.transferContract) return;
     const outboxEventId = await this.outbox.enqueue(client, {
       topic: TODO_DELIVERY_TOPIC,
       aggregateType: "rework_todo",

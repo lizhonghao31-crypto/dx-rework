@@ -1,3 +1,4 @@
+import type { SourcingTransferContractReconciliation } from "../sourcing/sourcing-transfer-contract-reconciliation.js";
 import {
   TodoListResponseSchema,
   TodoMineParamsSchema,
@@ -40,6 +41,7 @@ const parse = <T>(
 export type TodoHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   root?: RootAuthority;
+  transferContractReconciliation?: SourcingTransferContractReconciliation;
   sourcingReconciliation?: SourcingTodoReconciliationService;
   service: Pick<TodoService,
     "getForActor" | "listForActor" | "countIndicatorForActor"
@@ -71,6 +73,26 @@ export function registerTodoRoutes(
       const key = parse(z.string().min(1).max(128).regex(/^[A-Za-z0-9._:-]+$/),request.headers["idempotency-key"]);
       reply.header("cache-control","no-store");
       return dependencies.sourcingReconciliation!.apply(current,input.selected,input.reason,key);
+    });
+  }
+  if (dependencies.transferContractReconciliation) {
+    const operator = async (request: FastifyRequest) => {
+      const user=await dependencies.authenticate(cookieToken(request));
+      if (!await isRootUser(dependencies.root,user.id)) throw new ApplicationError("FORBIDDEN","仅 Root 可盘点或补录转厂合同待签回",403);
+      return businessActor(dependencies.root,user,request.id,"todo:routing_exception_manage");
+    };
+    app.post("/todos/transfer-contract-reconciliation/preview",async(request,reply)=>{
+      const current=await operator(request);
+      const input=parse(z.object({caseIds:z.array(z.string().uuid()).max(100).default([]),limit:z.number().int().min(1).max(500).default(200)}).strict(),request.body??{});
+      reply.header("cache-control","no-store");
+      return dependencies.transferContractReconciliation!.preview(current,input.caseIds,input.limit);
+    });
+    app.post("/todos/transfer-contract-reconciliation/apply",async(request,reply)=>{
+      const current=await operator(request);
+      const input=parse(z.object({selected:z.array(z.object({caseId:z.string().uuid(),documentId:z.string().uuid()}).strict()).min(1).max(100),reason:z.string().trim().min(1).max(300)}).strict(),request.body);
+      const key=parse(z.string().min(1).max(128).regex(/^[A-Za-z0-9._:-]+$/),request.headers["idempotency-key"]);
+      reply.header("cache-control","no-store");
+      return dependencies.transferContractReconciliation!.apply(current,input.selected,input.reason,key);
     });
   }
   const actor = async (

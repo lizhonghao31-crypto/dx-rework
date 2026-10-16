@@ -1,3 +1,4 @@
+import { SourcingTransferContractReconciliation } from "./sourcing/sourcing-transfer-contract-reconciliation.js";
 import { SupplierOnboardingService } from "./access/supplier-onboarding-service.js";
 import { BackgroundLease } from "./platform/background-lease.js";
 import { PatternRoomPriceService } from "./pattern-room/price-service.js";
@@ -403,6 +404,7 @@ const app = buildApp({
     root: rootAuthority,
   },
   todos: { authenticate: (token) => auth.authenticate(token), service: todoService,root:rootAuthority,
+    transferContractReconciliation:new SourcingTransferContractReconciliation(database),
     sourcingReconciliation:new SourcingTodoReconciliationService(database,todoService) },
   reporting: {
     authenticate: (token) => auth.authenticate(token),
