@@ -21,6 +21,7 @@ describe("additional merchandiser contract scope",()=>{
       if (sql.includes("FROM sourcing_cases source_case")) return {rows:[{
         sourcing_case_id:caseId,created_by:creator,additional_merchandiser_user_id:additional,
         contract_return_monitor_enabled:true,contract_return_catchup:false,
+        current_contract_accepts_upload:true,
         contract_generated_at:null,contract_return_due_at:null,
         contract_returned_at:returned ? "2026-09-26T00:00:00.000Z" : null,
         contract_return_uploaded_by:null,contract_return_overdue_seconds:null,
