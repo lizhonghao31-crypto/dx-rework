@@ -5,6 +5,8 @@ export DX_REWORK_ROOT=/opt/dx-rework
 tool="$(cd "$(dirname "$0")/../.." && pwd -P)"
 [[ "$tool" == /opt/dx-rework-release-tools/* && "$(stat -c %U "$tool")" == root ]]
 source "$tool/scripts/deploy/lib.sh"
+expected_sha="${DX_REWORK_EXPECTED_MAIN_SHA:-}"
+[[ -z "$expected_sha" ]] || require_sha "$expected_sha"
 state=/opt/dx-rework-release-state
 [[ -d "$state" && ! -L "$state" && "$(stat -c %U "$state")" == root && "$(stat -c %a "$state")" == 700 ]]
 DX_REWORK_NODE_BIN="$(cat "$state/node-binary")"
@@ -25,7 +27,7 @@ fi
 [[ ! -e "$DX_ROOT/shared/release-switch.lock" ]] || die 'existing maintenance state must be resolved before online release'
 
 worker() {
-  (cd /; runuser -u dxrework -- env -i HOME=/home/dxrework USER=dxrework PATH="$PATH" DX_REWORK_LOCK_FD=9 \
+  (cd /; runuser -u dxrework -- env -i HOME=/home/dxrework USER=dxrework PATH="$PATH" DX_REWORK_LOCK_FD=9 DX_REWORK_EXPECTED_MAIN_SHA="$expected_sha" \
     bash "$tool/scripts/deploy/$1" "${@:2}")
 }
 verify() {
@@ -40,10 +42,15 @@ warm() {
   for i in {1..20}; do if verify "$1" "$2"; then return 0; fi; sleep 1; done
   return 1
 }
+static_readable() {
+  python3 "$tool/scripts/deploy/static-release.py" readable "$DX_ROOT/frontend/releases/$1"
+}
 public_verify() {
   local version i
   for i in {1..5}; do
-    if version="$(curl --noproxy '*' --connect-timeout 2 --max-time 5 -fsS --resolve "$DX_REWORK_SERVER_NAME:443:127.0.0.1" "https://$DX_REWORK_SERVER_NAME/version")" && node -e 'if(JSON.parse(process.argv[1]).gitSha!==process.argv[2])process.exit(1)' "$version" "$1"; then return 0; fi
+    if version="$(curl --noproxy '*' --connect-timeout 2 --max-time 5 -fsS --resolve "$DX_REWORK_SERVER_NAME:443:127.0.0.1" "https://$DX_REWORK_SERVER_NAME/version")" && node -e 'if(JSON.parse(process.argv[1]).gitSha!==process.argv[2])process.exit(1)' "$version" "$1"; then
+      static_readable "$1" && python3 "$tool/scripts/deploy/static-release.py" http "$DX_ROOT/frontend/releases/$1" dxerp.org.cn && return 0
+    fi
     sleep 1
   done
   return 1
@@ -74,6 +81,7 @@ require_sha "$active_sha"
 if [[ "$resume" == true ]]; then
   candidate_sha="$(cat "$state/candidate-sha")"; candidate_port="$(cat "$state/candidate-port")"
   require_sha "$candidate_sha"
+  [[ -z "$expected_sha" || "$candidate_sha" == "$expected_sha" ]] || die 'frozen candidate differs from expected main SHA; routing unchanged'
   [[ "$candidate_port" == 3201 || "$candidate_port" == 3203 ]]
 else
   verify "$active_port" "$active_sha" || die 'BOOTSTRAP_REQUIRED: active runtime must support background lease and unchanged full schema'
@@ -95,6 +103,13 @@ else
   cp "$state/active.json" "$state/previous-active.json"
   phase prepared
 fi
+# Do not gate an interrupted rollback on the rejected candidate's readability.
+case "$(cat "$state/phase")" in
+  prepared|switching)
+    static_readable "$candidate_sha"
+    static_readable "$active_sha"
+    ;;
+esac
 if [[ "$(cat "$state/phase")" == prepared ]]; then
   worker start-online-slot.sh start "$candidate_sha" "$candidate_port"
   if ! warm "$candidate_port" "$candidate_sha"; then

@@ -137,14 +137,14 @@ describe("PR-17 executable release lifecycle", () => {
     for (const kind of ["api", "frontend"]) {
       mkdirSync(join(bundle, kind), { recursive: true });
       writeFileSync(join(bundle, kind, "release-manifest.json"), JSON.stringify({ gitSha: sha }));
-      writeFileSync(join(bundle, kind, kind), kind);
-      bash(`cd '${join(bundle, kind)}'; sha256sum release-manifest.json '${kind}' > SHA256SUMS`);
+      writeFileSync(join(bundle, kind, kind === "frontend" ? "index.html" : kind), kind);
+      bash(`cd '${join(bundle, kind)}'; sha256sum release-manifest.json '${kind === "frontend" ? "index.html" : kind}' > SHA256SUMS`);
     }
     expect(
       bash(`scripts/deploy/install-release.sh '${sha}' '${bundle}'`, { DX_REWORK_ROOT: deploymentRoot }).status,
     ).toBe(0);
     expect(readFileSync(join(deploymentRoot, "releases", sha, "api"), "utf8")).toBe("api");
-    expect(readFileSync(join(deploymentRoot, "frontend", "releases", sha, "frontend"), "utf8")).toBe(
+    expect(readFileSync(join(deploymentRoot, "frontend", "releases", sha, "index.html"), "utf8")).toBe(
       "frontend",
     );
   });
@@ -156,7 +156,8 @@ describe("PR-17 executable release lifecycle", () => {
     for (const kind of ["api", "frontend"]) {
       mkdirSync(join(bundle, kind), { recursive: true });
       writeFileSync(join(bundle, kind, "release-manifest.json"), JSON.stringify({ gitSha: sha }));
-      bash(`cd '${join(bundle, kind)}'; sha256sum release-manifest.json > SHA256SUMS`);
+      if (kind === "frontend") writeFileSync(join(bundle, kind, "index.html"), "synthetic frontend");
+      bash(`cd '${join(bundle, kind)}'; sha256sum release-manifest.json ${kind === "frontend" ? "index.html" : ""} > SHA256SUMS`);
     }
     expect(
       bash(
@@ -173,7 +174,8 @@ describe("PR-17 executable release lifecycle", () => {
     for (const kind of ["api", "frontend"]) {
       mkdirSync(join(bundle, kind), { recursive: true });
       writeFileSync(join(bundle, kind, "release-manifest.json"), JSON.stringify({ gitSha: sha }));
-      bash(`cd '${join(bundle, kind)}'; sha256sum release-manifest.json > SHA256SUMS`);
+      if (kind === "frontend") writeFileSync(join(bundle, kind, "index.html"), "synthetic frontend");
+      bash(`cd '${join(bundle, kind)}'; sha256sum release-manifest.json ${kind === "frontend" ? "index.html" : ""} > SHA256SUMS`);
     }
     expect(
       bash(`scripts/deploy/install-release.sh '${sha}' '${bundle}'`, { DX_REWORK_ROOT: deploymentRoot }).status,

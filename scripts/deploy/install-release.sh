@@ -13,15 +13,19 @@ api="$(assert_safe_path "$DX_ROOT/releases/$sha")"
 web="$(assert_safe_path "$DX_ROOT/frontend/releases/$sha")"
 acquire_lock "$DX_ROOT/locks/release.lock"
 
+python3 "$(dirname "$0")/static-release.py" validate "$source_dir/frontend"
+
 install_one() {
   local src="$1" dst="$2" tmp
   if [[ -d "$dst" ]]; then
     diff -qr --no-dereference "$src" "$dst" >/dev/null || die 'existing release differs'
+    if [[ "$dst" == "$web" ]]; then python3 "$(dirname "$0")/static-release.py" normalize "$dst"; fi
     return
   fi
   tmp="${dst}.tmp.$$"
   mkdir -p "$tmp"
   cp -a "$src/." "$tmp/"
+  if [[ "$dst" == "$web" ]]; then python3 "$(dirname "$0")/static-release.py" normalize "$tmp"; fi
   mv "$tmp" "$dst"
 }
 
