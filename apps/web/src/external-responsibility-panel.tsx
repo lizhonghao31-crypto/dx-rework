@@ -1,4 +1,4 @@
-import { ExternalSpecialHistory } from "./external-special-history.js";
+import { deductionDifferenceLabel, ExternalSpecialHistory } from "./external-special-history.js";
 import { currentModuleCanWrite } from "./member-module-policy.js";
 import {
   ExternalResponsibilityBatchResponseSchema,
@@ -632,7 +632,7 @@ export function ExternalResponsibilityPanel({
           <div className="external-finance-summary">
             <div><span>应扣金额</span><strong>{formatBusinessCurrency(caseItem.proposedDeductionAmount)}</strong></div>
             <div><span>{caseItem.status === "closed" ? "实际已扣" : "累计已扣"}</span><strong>{formatBusinessCurrency(caseItem.actualDeductedAmount)}</strong></div>
-            <div><span>{caseItem.status === "closed" ? "结案差额" : caseItem.remainingAmount.startsWith("-") ? "超出拟扣" : "剩余"}</span><strong>{formatBusinessCurrency(caseItem.remainingAmount.replace(/^-/u,""))}</strong></div>
+            <div><span>{deductionDifferenceLabel(caseItem.remainingAmount, caseItem.status === "closed")}</span><strong>{formatBusinessCurrency(caseItem.remainingAmount.replace(/^-/u,""))}</strong></div>
           </div>
 
           {!caseReadOnly && (canRecordDeduction || canRequestSpecialApproval || canDecideSpecialApproval || canRequestRevision || canLegacySubmit || recoveryClose || canApproveRevision) && <div className="external-finance-operation">

@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { ExternalResponsibilityCaseResponse } from "@dx-rework/contracts/external-responsibility";
-import { ExternalSpecialHistory } from "../../apps/web/src/external-special-history.js";
+import { deductionDifferenceLabel, ExternalSpecialHistory } from "../../apps/web/src/external-special-history.js";
 
 type Request = NonNullable<ExternalResponsibilityCaseResponse["specialApproval"]>;
 const request = (version: number, decision: "approved" | "returned" | null, reason: string | null = "数据有误"): Request => ({
@@ -39,6 +39,20 @@ describe("special approval current result and collapsed history", () => {
     expect(html).toContain(long);
     expect(html).toContain("展开全文");
     expect(html).toContain('<details class="external-special-explanation">');
+  });
+  it("preserves closed balance direction and frozen historical monetary context", () => {
+    expect(deductionDifferenceLabel("-0.56", true)).toBe("结案超扣");
+    expect(deductionDifferenceLabel("191.04", true)).toBe("结案少扣");
+    expect(deductionDifferenceLabel("0.00", true)).toBe("结案差额");
+    expect(deductionDifferenceLabel("-0.56", false)).toBe("超出拟扣");
+    const previous = { ...request(1, "returned"), actualDeductedAmount: "80.00" };
+    expect(render(request(2, "approved"), [previous])).toContain("459.2");
+    const legacy = { ...previous, requestMode: undefined, remainingAmount: "-0.56" };
+    const html = render(request(2, "approved"), [legacy]);
+    expect(html).toContain("申请时超扣");
+    expect(html).toContain("0.56");
+    expect(render(request(2, "approved"), [{...legacy, remainingAmount:"68.10"}])).toContain("申请时未扣差额");
+    expect(render(request(2, "approved"), [request(1, "returned")])).toContain("申请时尚未扣款");
   });
   it("supports single, legacy and absent histories without an empty disclosure", () => {
     expect(render(request(1, null))).not.toContain("<details");

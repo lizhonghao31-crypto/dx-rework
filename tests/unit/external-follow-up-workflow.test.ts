@@ -1,3 +1,4 @@
+import { deductionDifferenceLabel } from "../../apps/web/src/external-special-history.js";
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
@@ -9,7 +10,8 @@ describe("external deduction finance UI", () => {
     expect(source).toContain('label="本次扣款金额"');
     expect(source).toContain("应扣金额");
     expect(source).toContain("累计已扣");
-    expect(source).toContain("剩余");
+    expect(source).toContain("deductionDifferenceLabel(caseItem.remainingAmount, caseItem.status === \"closed\")");
+    expect(deductionDifferenceLabel("12.00", false)).toBe("剩余");
     expect(source).not.toContain('label="供应商反馈（选填）"');
     expect(source).not.toContain('label="下次跟进时间（选填）"');
     expect(source).not.toContain("新增跟进");
