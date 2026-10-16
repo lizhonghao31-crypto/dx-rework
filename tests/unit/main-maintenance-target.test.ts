@@ -9,6 +9,20 @@ const run=(mode:string,sha:string,expected:string)=>spawnSync('bash',['-c',
   'source scripts/deploy/lib.sh; mode="$1"; sha="$2"; export DX_REWORK_EXPECTED_MAIN_SHA="$3"; '+block,
   'fixture',mode,sha,expected],{encoding:'utf8'});
 describe('maintenance exact approved target',()=>{
+  it('freezes the fetched tree and reverifies it before Root code execution',()=>{
+    const script=readFileSync('docs/operations/main-0226-update.sh','utf8');
+    const freeze=script.indexOf('chown -R root:root "$repository"');
+    const verify=script.indexOf('git_verified fsck --full --no-reflogs');
+    const execute=script.indexOf('source "$repository/scripts/deploy/lib.sh"');
+    expect(freeze).toBeGreaterThan(script.indexOf('git_remote checkout --quiet --detach "$target"'));
+    expect(script.indexOf('chmod -R u=rwX,go=rX "$repository"')).toBeGreaterThan(freeze);
+    expect(verify).toBeGreaterThan(freeze);
+    expect(execute).toBeGreaterThan(verify);
+    expect(script).toContain('git_verified status --porcelain --untracked-files=all');
+    const delegated=script.slice(script.indexOf("<<'WORK_PREFLIGHT'"),script.indexOf('\nWORK_PREFLIGHT'));
+    expect(delegated).not.toContain('ln -s');
+    expect(delegated).not.toContain('unlink');
+  });
   it('checks the fetched revision before archive, build, DDL or routing',()=>{
     expect(block).toContain('require_sha "$DX_REWORK_EXPECTED_MAIN_SHA"');
     expect(prepare.indexOf(block)).toBeLessThan(prepare.indexOf('git -C "$repository" archive'));

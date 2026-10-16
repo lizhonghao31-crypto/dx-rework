@@ -13,7 +13,7 @@
 `docs/operations/main-0226-update.sh APPROVED_MERGED_MAIN_SHA` 由用户保存为独立脚本后 sudo bash 执行，不 source。
 
 1. 核对已安装state目录、phase=completed、active/current=8c2beb55且port3203；保留独立日志。
-2. 使用既有dxrework SSH身份完整fetch main，拒绝与用户批准SHA不符；清洁固定检出。
+2. 使用既有dxrework SSH身份完整fetch main，拒绝与用户批准SHA不符；清洁固定检出；随后递归转为Root持有并移除其他用户写权限，在Root执行任何检出代码前再次验证目标SHA、完整git对象及干净状态。
 3. 从已安装state读取两项安装参数，不猜Node/nginx路径。校验root持有Node22，dxrework配置Node一致、npm10、pm2路径，PostgreSQL客户端同major且pg_dump不旧于服务端。
 4. 以dxrework读取既有配置；只读核对完整0225历史、0226准入权限、数据库备份空间。使用临时依赖链接加载已有pg，退出前解除该临时链接；不打印配置凭据。
 5. 只调用main的install-online-entry.sh，两个参数为已核验Node二进制和现有nginx配置。未调用双环境安装器，不安装Acceptance工具。

@@ -19,6 +19,9 @@ logdir="$(mktemp -d /var/tmp/dx-main-0226.XXXXXX)"
 exec > >(tee "$logdir/update.log") 2>&1
 on_exit() {
   local rc=$?
+  if [[ -n "${repository:-}" && -L "$repository/node_modules" && "$(readlink "$repository/node_modules")" == /opt/dx-rework/current/node_modules ]]; then
+    unlink "$repository/node_modules"
+  fi
   if (( rc != 0 )); then
     printf 'MAIN_0226_UPDATE_FAILED rc=%s evidence=%s\n' "$rc" "$logdir"
     for name in phase candidate-sha candidate-port active.json previous-active.json; do
@@ -48,10 +51,19 @@ timeout 180 runuser -u dxrework -- git -C "$repository" fetch --quiet --no-tags 
 git_remote checkout --quiet --detach "$target"
 git_remote fsck --full --no-reflogs
 [[ -z "$(git_remote status --porcelain)" ]]
+# Freeze ownership before any Root execution; reverify after the trust boundary.
+chown -R root:root "$repository"
+chmod -R u=rwX,go=rX "$repository"
+git_verified() { git -C "$repository" "$@"; }
+[[ "$(git_verified rev-parse HEAD)" == "$target" ]]
+git_verified fsck --full --no-reflogs
+[[ -z "$(git_verified status --porcelain --untracked-files=all)" ]]
 source "$repository/scripts/deploy/lib.sh"
 assert_root_node "$node_binary"
 [[ "$nginx_config" == /etc/nginx/* && "$nginx_config" != *..* && -f "$nginx_config" ]]
 nginx -t
+# Only the delegated dxrework preflight loads these existing runtime dependencies.
+ln -s /opt/dx-rework/current/node_modules "$repository/node_modules"
 # Only read-only SQL/config probes before installing tools or entering maintenance.
 (cd /; runuser -u dxrework -- env -i HOME=/home/dxrework USER=dxrework PATH="$(dirname "$node_binary"):/usr/local/bin:/usr/bin:/bin" \
   bash -s -- "$repository" "$node_binary" "$base" <<'WORK_PREFLIGHT'
@@ -64,10 +76,6 @@ load_database_tool_config
 [[ "$(node_exec -p 'process.versions.node.split(".")[0]')" == 22 && "$(npm --version | cut -d. -f1)" == 10 ]]
 command -v pm2 >/dev/null
 assert_postgres_toolchain "$DATABASE_URL"
-# The fresh checkout has no dependencies. Use the existing pg loader via a
-# disposable symlink, removed before the installer's clean-checkout assertion.
-ln -s /opt/dx-rework/current/node_modules "$repository/node_modules"
-trap 'unlink "$repository/node_modules"' EXIT
 node_exec "$repository/scripts/deploy/database-state.mjs" verify-current "/opt/dx-rework/releases/$base/apps/api/src/platform/migration-manifest.json"
 node_exec "$repository/scripts/deploy/check-main-maintenance-plan.mjs" "$repository"
 [[ "$(node_exec -p "JSON.parse(require('fs').readFileSync('$repository/apps/api/src/platform/migration-manifest.json')).migrations.at(-1).version")" == 0226_external_revision_preserve_handler ]]
@@ -79,7 +87,8 @@ printf 'PRECHECK_PASSED Node=%s npm=%s pg_dump=%s\n' "$(node_exec --version)" "$
 df -h /opt/dx-rework /tmp
 WORK_PREFLIGHT
 )
-[[ -z "$(git_remote status --porcelain)" ]]
+unlink "$repository/node_modules"
+[[ -z "$(git_verified status --porcelain --untracked-files=all)" ]]
 # Refresh main tools only. Do not invoke install-update-entries.sh/Acceptance install.
 bash "$repository/scripts/deploy/install-online-entry.sh" "$node_binary" "$nginx_config"
 export DX_REWORK_EXPECTED_MAIN_SHA="$target"
