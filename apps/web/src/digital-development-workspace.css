@@ -62,7 +62,7 @@
 .development-golden .development-kpi-2 .dx-production-kpi-icon{color:#8b39ff;background:#f1e8ff}
 .development-golden .development-kpi-3 .dx-production-kpi-icon{color:#ff8b00;background:#fff2e5}
 .dx-production-ui .development-golden .development-kpi strong{font-size:25px;font-weight:650;line-height:1.2}
-.development-golden .development-list-viewport{height:270px;overflow:auto;overscroll-behavior:contain}
+.development-golden .development-list-viewport{height:auto;overflow:auto;overscroll-behavior:contain}
 .development-golden .dx-production-table{table-layout:fixed}
 .dx-production-ui .development-golden .dx-production-table th{position:sticky;top:0;z-index:1;font-weight:600;font-size:13px;height:33px;padding:6px 7px}
 .development-golden .dx-production-table th:nth-child(1){width:5%}

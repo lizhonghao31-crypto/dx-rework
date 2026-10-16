@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { JOURNEY_STAGES, JourneyReturnContextSchema, type JourneyNode, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
-import { cockpitContext, cockpitQuery, cockpitReturnPath, journeyRecordHref, journeyTime, nodeStatus, orderStatus, stageTimes, journeyDocumentGroups } from "../../apps/web/src/digital-journey-cockpit-model.js";
+import { cockpitContext, cockpitQuery, cockpitReturnPath, journeyRecordHref, journeyTime, nodeStatus, orderStatus, stageTimes, journeyDocumentGroups, journeyDetailSelection } from "../../apps/web/src/digital-journey-cockpit-model.js";
 import { DigitalJourneyCockpit } from "../../apps/web/src/digital-journey-cockpit.js";
 import { canWriteDigitalTask, digitalTaskView } from "../../apps/web/src/digital-task-view.js";
 import type { DigitalTask } from "@dx-rework/contracts/digital-production-tasks";
@@ -89,5 +89,53 @@ describe("formal Journey cockpit", () => {
   it("does not label complete mixed-precision targets as missing or invent a phase date", () => {
     const stage = order([node("日期计划", {expectedAt: "2026-10-03", expectedPrecision: "date"}), node("办理时限", {expectedAt: "2026-10-03T08:30:00Z", expectedPrecision: "instant"})]).stages[1]!;
     expect(stageTimes(stage).expected).toBe("见各节点目标");
+  });
+});
+
+describe("R2 PR07 stage display scope", () => {
+  const context = (patch = {}) => JourneyReturnContextSchema.parse({selected: id, ...patch});
+  it("defaults to real current work rather than the first lifecycle placeholder", () => {
+    const item = order([node("placeholder", {stage: "creation", state: "uncreated"}), node("development_sewing", {stage: "development"}), node("paper", {stage: "preparation"})]);
+    const result = journeyDetailSelection(item, context());
+    expect(result.stages).toEqual(["development"]);expect(result.selected?.key).toBe("development_sewing");expect(result.nodes.map(n=>n.key)).toEqual(["development_sewing"]);
+    expect(journeyDetailSelection(item,context({expanded:"preparation"})).selected?.key).toBe("paper");
+    expect(journeyDetailSelection(item,context({expanded:"preparation",node:"development_sewing"})).selected?.key).toBe("paper");
+  });
+  it("honors exact historic focus, explicit phase, round and all-phase requests", () => {
+    const item = order([node("old", {current:false, state:"cancelled"}),node("sewing", {stage:"preparation"})]);
+    expect(journeyDetailSelection(item,context({focus:"old"})).selected?.key).toBe("old");
+    expect(journeyDetailSelection(item,context({focus:"old",expanded:"development,preparation"})).stages).toEqual(["development","preparation"]);
+    expect(journeyDetailSelection(item,context({stage:"development"})).stages).toEqual(["development"]);
+    expect(journeyDetailSelection(item,context({round:1})).stages).toEqual(["development"]);
+    expect(journeyDetailSelection(item,context({expanded:""})).nodes).toHaveLength(2);
+  });
+  it("keeps row expansion separate from the current task and can locate a historical row on entry", () => {
+    const item=order([node("old",{state:"cancelled",current:false}),node("current")]);
+    expect(journeyDetailSelection(item,context({row:"old",expanded:"development"})).selected?.key).toBe("current");
+    expect(journeyDetailSelection(item,context({row:"old"})).nodes.map(n=>n.key)).toContain("old");
+  });
+  it("hides only not-applicable nodes, preserves unfinished and inherited facts, and never mutates progress", () => {
+    const item=order([node("work"),node("no-wash",{state:"not_applicable"}),node("future",{state:"uncreated"}),node("old",{state:"inherited",current:false})]);
+    const original=structuredClone(item);
+    expect(journeyDetailSelection(item,context()).nodes.map(n=>n.key)).toEqual(["work","future","old"]);
+    expect(journeyDetailSelection(item,context({focus:"no-wash"})).selected?.state).toBe("not_applicable");
+    expect(item).toEqual(original);
+  });
+  it("uses the applicable ending phase after completion even when later placeholders exist", () => {
+    const item=order([node("start",{state:"completed",stage:"creation"}),node("done",{state:"completed",stage:"receiving"}),node("unused",{state:"not_applicable",stage:"receiving"})]);
+    expect(journeyDetailSelection(item,context()).selected?.key).toBe("done");
+    expect(journeyDetailSelection(item,context()).stages).toEqual(["receiving"]);
+  });
+  it("uses real blocking work and retains all simultaneous tasks", () => {
+    const item=order([node("placeholder",{state:"pending",stage:"creation"}),node("blocked",{state:"blocked",stage:"preparation"}),node("parallel",{stage:"preparation"})]);
+    expect(journeyDetailSelection(item,context()).selected?.key).toBe("blocked");
+    expect(journeyDetailSelection(item,context()).nodes.map(n=>n.key)).toEqual(["blocked","parallel"]);
+  });
+  it("removes only the added preparation block and exposes document directory in the existing region", () => {
+    const record={domain:"development",id,url:"/ui/digital-production?development="+id+"&round=1",mode:"read" as const,version:1,lineId:null};
+    const item=order([node("paper",{stage:"preparation",records:[record]})]);
+    const html=renderToStaticMarkup(createElement(DigitalJourneyCockpit,{data:null,detail:item,context:context(),error:"",detailError:"",detailLoading:false,onChange(){},actions:null}));
+    expect(html).not.toContain('class="journey-node-expanded"');expect(html).not.toContain('journey-preparation-reference');expect(html).toContain('本单资料');expect(html).toContain('全单范围');expect(html).toContain('统计范围');
+    expect(html).toContain('round=1');expect(html).toContain('returnTo=');
   });
 });

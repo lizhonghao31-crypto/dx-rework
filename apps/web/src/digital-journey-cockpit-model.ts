@@ -132,3 +132,27 @@ export function matchingPoDeliveryRisks(order:OrderJourney,context:CockpitContex
     &&(!context.risk||risk.risk===context.risk)
     &&order.stages.flatMap(stage=>stage.nodes).some(node=>node.current&&node.key===risk.nodeKey&&(!context.stage||node.stage===context.stage)&&(!context.node||node.key===context.node)&&(!context.state||node.state===context.state)));
 }
+
+/** Display scope only: never feed this selection back into whole-order progress or KPI counts. */
+export function journeyDetailSelection(order: OrderJourney, context: CockpitContext) {
+  const nodes = order.stages.flatMap(stage => stage.nodes);
+  const explicitNode = nodes.find(node => node.instanceId === context.focus)
+    ?? (context.expanded === undefined ? nodes.find(node => node.key === context.node && node.current) : undefined);
+  const historicalRow = nodes.find(node => node.instanceId === context.row);
+  const requested = (context.expanded ?? "").split(",").filter(key => order.stages.some(stage => stage.key === key));
+  const current = nodes.filter(node => node.current && node.state !== "not_applicable");
+  const working = current.filter(node => node.state === "active" || node.state === "blocked");
+  const completed = current.filter(node => node.state === "completed");
+  const fallback = working[0] ?? current.find(node => node.state === "pending" && node.records.length > 0)
+    ?? completed.at(-1) ?? current.find(node => node.state !== "unavailable");
+  const stages = explicitNode ? requested.includes(explicitNode.stage) ? requested : [explicitNode.stage] : requested.length ? requested
+    : context.expanded === "" ? [] : context.stage ? [context.stage]
+    : context.round ? ["development"] : historicalRow ? [historicalRow.stage] : fallback ? [fallback.stage] : [];
+  const inScope = nodes.filter(node => !stages.length || stages.includes(node.stage));
+  const visible = inScope.filter(node => node.state !== "not_applicable" || node === explicitNode || node === historicalRow);
+  const selected = explicitNode ?? visible.find(node => node.current && ["active", "blocked"].includes(node.state))
+    ?? visible.find(node => node.current && node.state === "pending" && node.records.length > 0)
+    ?? visible.filter(node => node.current && node.state === "completed").at(-1)
+    ?? visible.find(node => node.current && node.state !== "unavailable");
+  return { stages, nodes: visible, selected };
+}
