@@ -66,3 +66,7 @@ PR04入口E01首次创建保留唯一源头；E02—E07开发/制单/预算/任�
 验证日志/tmp/r2-pr09-*，本机证据/workspace/r2-pr09-evidence。默认2369项通过/562条件跳过；随后增加畸形成功响应测试，最终错误/缓存定向18项通过；初轮定向42项。日期与杂事DB40、收货DB36、现行业务链/工资权限/结算DB59，共135项通过。真实工作台浏览器46项、控件浏览器4项，errors=[]；200%低视口原工具栏按钮trial click通过（只检验可点击，不触发打印或业务写入）。最终类型/lint/build/migration/secret/diff通过。无生产或Acceptance运行态读取/写入，无OSS/钉钉操作；未执行全系统每张表单每一种失败的人工矩阵，旧模块采用原测试/源码审计，具体组合仍需父窗口E01—E16综合验收。低视口/200%通过不等于全部移动端验收；本轮不新增业务规则。
 
 旧夹具限制：额外尝试management-reporting-postgres及wage-workflow-postgres，两套旧夹具初始化分别断言末迁移0053、缺temporary_code而失败，未执行的7项不计通过；不为本轮扩改历史夹具。替代使用现行full-business-chain-postgres、finance-wage-access-postgres、wage-settlement-postgres，59项通过；相关原报表/工资主操作仍需综合验收。
+
+## 唯一Review修复
+
+GitHub Review指出杂事成功响应schema异常时读写提示未区分（P2）。按实际method区分：GET提示返回格式异常；POST/DELETE等明确结果未确认，先核对原记录避免重复提交。新增三种method回归；保留原状态/权限原因，不改变业务命令、重试key或输入。最终Head重新跑Full Gate，不重复Review。

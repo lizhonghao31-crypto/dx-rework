@@ -14,7 +14,7 @@ export async function patternRequest<T>(path: string, schema: z.ZodType<T>, init
   const body = await response.json().catch(()=>null);
   if (!response.ok) throw new PatternRequestError(requestFailureMessage(response.status,body?.error?.message), body?.error?.code ?? "UNKNOWN", response.status);
   const parsed=schema.safeParse(body);
-  if(!parsed.success)throw new Error("返回资料格式异常，请刷新重试；不要重复提交");
+  if(!parsed.success)throw new Error((init.method??"GET").toUpperCase()==="GET"?"返回资料格式异常，请刷新重试":"未收到可确认的提交结果，请先核对原记录，避免重复提交");
   return parsed.data;
 }
 export function readPatternUploadLimits(kind: "pattern" | "misc", purpose: "create" | "rework", signal?: AbortSignal) {

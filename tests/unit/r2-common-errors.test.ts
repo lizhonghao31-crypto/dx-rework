@@ -23,3 +23,7 @@ it('handles an HTML gateway response without exposing a JSON parser error',async
 it('does not treat a malformed successful write response as a definite rejection',async()=>{
  vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,status:200,json:async()=>{throw new SyntaxError('Unexpected token');}}));const {digitalRequest}=await import('../../apps/web/src/digital-production-api.js');await expect(digitalRequest('test','POST',{})).rejects.toThrow('先核对原记录');await expect(digitalRequest('test')).rejects.toThrow('返回资料格式异常');
 });
+
+it.each(['GET','POST','DELETE'])('classifies a malformed successful pattern %s response without implying rejection',async method=>{
+ vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,status:200,json:async()=>({unexpected:true})}));const {patternRequest}=await import('../../apps/web/src/pattern-order-client.js');const request=patternRequest('orders',z.object({orderId:z.string()}),{method});await expect(request).rejects.toThrow(method==='GET'?'返回资料格式异常':'先核对原记录');
+});
