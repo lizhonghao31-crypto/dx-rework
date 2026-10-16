@@ -4106,6 +4106,22 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     } finally {await app.close();}
   });
 
+  it("hides transfer uploads until the current PDF is ready and rejects all unfinished generation states",async()=>{
+    await ensureReturnTodoRecipient();
+    const id=await reviewedContractCase("TRANSFER-PDF-READINESS");
+    await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"15.5",changeReason:"TEST-ready-contract"},randomUUID());
+    const draft=await contractService.content.get(rootActor(),id);
+    const documentId=await contractService.content.save(rootActor(),id,{...draft,content:{...draft.content,deliveryDate:"2026-11-10"}},randomUUID());
+    const read=()=>contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id);
+    for(const status of ['generation_pending','generating','generation_failed']) {
+      await database.query("UPDATE sourcing_contract_documents SET status=$2 WHERE sourcing_contract_document_id=$1",[documentId,status]);
+      expect(await read()).toMatchObject({canUpload:false,currentContractDocumentId:documentId});
+      await expect(contractReturns.submit(rootActor(),id,[randomUUID()],randomUUID(),documentId)).rejects.toMatchObject({statusCode:409});
+    }
+    await contractService.generateIfReady(rootActor(),id,documentId);
+    expect(await read()).toMatchObject({canUpload:true,currentContractDocumentId:documentId});
+  });
+
   it("allocates two files and 20 MB per contract version without rewriting signed history",async()=>{
     await ensureReturnTodoRecipient();
     const id=await reviewedContractCase("VERSION-RETURN-QUOTA");

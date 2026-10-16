@@ -111,7 +111,7 @@ const categoryLabel = (todo: TodoResponse): string => {
   return labels[todo.category] ?? taskTitle(todo);
 };
 
-const todoHref = (todo: TodoResponse): string => {
+export const todoHref = (todo: Pick<TodoResponse,"route"|"todoId">): string => {
   const route = todo.route;
   const orderId = route.reworkOrderId ?? route.entityId;
   const query = new URLSearchParams({ todo: todo.todoId });
@@ -143,6 +143,8 @@ const todoHref = (todo: TodoResponse): string => {
       break;
     case "sourcing_detail":
       target = `ui/sourcing/orders/${route.entityId}`;
+      if (route.tab === "contract_return") query.set("section", "contract-return");
+      if (route.transferContract) query.set("contractDocumentId", route.transferContract.documentId);
       break;
     case "responsibility_detail":
     case "own_factory_approval":

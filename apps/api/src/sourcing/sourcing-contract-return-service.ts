@@ -30,6 +30,7 @@ type MonitorRow = {
   contract_return_uploaded_by: string | null;
   uploader_name: string | null;
   current_contract_returned: boolean;
+  current_contract_accepts_upload: boolean;
   current_contract_document_id: string | null;
   as_of: Date | string;
 };
@@ -71,6 +72,11 @@ export class SourcingContractReturnService {
       sourcing_contract_return_elapsed_seconds(monitor.contract_return_due_at,
         COALESCE(monitor.contract_returned_at,CURRENT_TIMESTAMP)) AS contract_return_overdue_seconds,
       uploader.display_name AS uploader_name,CURRENT_TIMESTAMP AS as_of,
+      COALESCE((SELECT decision.source_change_request_id IS NULL OR document.status='ready'
+        FROM sourcing_contract_documents document
+        JOIN sourcing_decisions decision ON decision.sourcing_decision_id=document.sourcing_decision_id
+        WHERE document.sourcing_case_id=source_case.sourcing_case_id
+        ORDER BY document.contract_version DESC LIMIT 1),true) AS current_contract_accepts_upload,
       (SELECT document.sourcing_contract_document_id FROM sourcing_contract_documents document
         WHERE document.sourcing_case_id=source_case.sourcing_case_id
         ORDER BY document.contract_version DESC LIMIT 1) AS current_contract_document_id,
@@ -132,7 +138,7 @@ export class SourcingContractReturnService {
       currentContractDocumentId:row.current_contract_document_id,
       signedContractDocumentId:current?.signedContractDocumentId ?? null,
       signedContractVersion:current?.signedContractVersion ?? null,signedContractNumber:current?.signedContractNumber ?? null,
-      canUpload: status.contractReturnMonitoring
+      canUpload: status.contractReturnMonitoring && row.current_contract_accepts_upload
         && totals.count < 2 && Number(totals.bytes) < MAX_UPLOAD_BYTES && await this.canUpload(actor,row.created_by,row.additional_merchandiser_user_id),
       uploadedFileCount:totals.count,uploadedTotalBytes:Number(totals.bytes),
       attachments:currentFiles,history };
