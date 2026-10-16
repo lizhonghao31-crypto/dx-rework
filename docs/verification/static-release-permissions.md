@@ -10,7 +10,7 @@ This change only touches deployment tools and synthetic regression fixtures. No 
 
 ## Gates
 
-- `static-release.py` uses Python 3.6+ standard library. Validate the whole public tree before chmod; directories 755, files 644, owner unchanged. Only index, Vite assets and generated release metadata are allowed. Reject hidden files, private configuration formats, symlinks, hard links, special entries and ancestor symlinks.
+- `static-release.py` uses Python 3.6+ standard library. Validate the whole public tree before chmod; directories 755, files 644, owner unchanged. Only index, Vite assets and generated release metadata are allowed. Vite enables sourcemaps: allow only `.js.map`/`.css.map` with an existing corresponding JS/CSS file, not arbitrary map/config files. Reject hidden files, private configuration formats, symlinks, hard links, special entries and ancestor symlinks.
 - Package after all metadata/checksums are written. Install validates source, normalizes destination before publishing, and normalizes an identical existing release rather than returning early. Content differences remain errors. Reused candidates still pass installation. API trees remain untouched.
 - Main online/maintenance controllers discover live nginx workers from `/proc`, verify their nginx master, and read index plus referenced JS/CSS using each worker's effective UID/GID and supplementary groups. No candidate code is executed. No worker or inability to assume its identity is a failure, not a skipped check.
 - Check both candidate and recovery frontend before entering maintenance; check the candidate again on maintenance resume. Check online candidate/recovery trees before candidate startup/routing. An unreadable rejected candidate must not prevent an interrupted rollback from proceeding.
@@ -26,6 +26,7 @@ Shared packaging/install protection applies to both main and Acceptance bundles.
 
 ## Regression evidence
 
+- Real Vite build: validate and normalize the full emitted tree under both umasks, including paired sourcemaps, with unchanged content hashes.
 - Python fixture: both umasks; actual package/install invocation; reused restrictive release; owner/content invariance; private API file retained 600; no active alias during register-only; changed content rejected; injected normalization failure leaves no published frontend/generation/active; forbidden file rejected before API installation.
 - Real disposable nginx fixture: reproduced permission denied under 700/600; verified main and Acceptance TLS content after normalization; denied private tree stays private; unreadable resource, missing asset returning SPA HTML, wrong-generation bytes and unreadable root fail; re-normalization restores checks.
 - Controller tests execute the real preflight blocks under synthetic failure: prepared/switching stop; rolling-back is not blocked by the rejected candidate; resumed maintenance activation restores maintenance routing and fails without success.

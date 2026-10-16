@@ -33,6 +33,8 @@ class StaticReleaseTests(unittest.TestCase):
             (root / 'index.html').write_text('<script type="module" src="' + base + 'assets/app.js"></script><link rel="stylesheet" href="' + base + 'assets/app.css">')
             (root / 'assets/app.js').write_text('console.log("synthetic")')
             (root / 'assets/app.css').write_text('body{color:blue}')
+            (root / 'assets/app.js.map').write_text('{"version":3,"sources":[],"mappings":""}')
+            (root / 'assets/app.css.map').write_text('{"version":3,"sources":[],"mappings":""}')
             (root / 'release-manifest.json').write_text(json.dumps({'viteBasePath': base}))
             return root
         finally:
@@ -139,7 +141,7 @@ class StaticReleaseTests(unittest.TestCase):
             subprocess.check_call(['sha256sum', '-c', '--strict', 'SHA256SUMS'], cwd=str(output), stdout=subprocess.DEVNULL)
 
     def test_rejects_before_any_permission_change(self):
-        for bad in ('.env', 'config.json', 'assets/private.key', 'assets/config.json', 'assets/extra.html'):
+        for bad in ('.env', 'config.json', 'assets/private.key', 'assets/config.json', 'assets/extra.html', 'assets/private.map', 'assets/missing.js.map'):
             root = self.bundle('bad-' + bad.replace('/', '-').replace('.', '-'))
             (root / bad).write_text('synthetic confidential value')
             with self.assertRaises(ValueError): module.normalize(root)

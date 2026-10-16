@@ -36,8 +36,9 @@ def tree(root):
                 require(not rel.parts or rel.parts[0] == 'assets', 'unexpected static directory: ' + str(rel))
             else:
                 require(info.st_nlink == 1, 'hard-linked static file: ' + str(rel))
+                source_map = path.name.endswith(('.js.map', '.css.map')) and path.with_suffix('').is_file()
                 require(str(rel) in ('index.html', 'favicon.ico', 'release-manifest.json', 'SHA256SUMS') or
-                        (len(rel.parts) > 1 and rel.parts[0] == 'assets' and path.suffix.lower() in extensions),
+                        (len(rel.parts) > 1 and rel.parts[0] == 'assets' and (path.suffix.lower() in extensions or source_map)),
                         'non-public static file: ' + str(rel))
             entries.append((path, info))
             if path != directory and stat.S_ISDIR(info.st_mode):
