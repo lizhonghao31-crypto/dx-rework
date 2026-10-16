@@ -14,6 +14,12 @@ describe('public static release permissions and gates', () => {
     expect(source.indexOf('if ! static_readable "$candidate_sha"; then')).toBeLessThan(source.indexOf('link_config "$state/maintenance.conf"'));
     expect(source).toContain('maintenance retained, no old-schema rollback');
   });
+  it('preserves the approved SHA across the clean worker environment and resumed updates', () => {
+    const source = readFileSync('scripts/deploy/update-main-online.sh', 'utf8');
+    expect(source).toContain('DX_REWORK_EXPECTED_MAIN_SHA="$expected_sha"');
+    expect(source).toContain('frozen candidate differs from expected main SHA; routing unchanged');
+    expect(source.indexOf('frozen candidate differs')).toBeLessThan(source.indexOf('worker start-online-slot.sh start "$candidate_sha"'));
+  });
   it('checks online candidate before start/switch and gates success and recovery on static HTTP', () => {
     const source = readFileSync('scripts/deploy/update-main-online.sh', 'utf8');
     expect(source.indexOf('static_readable "$candidate_sha"')).toBeLessThan(source.indexOf('worker start-online-slot.sh start "$candidate_sha"'));

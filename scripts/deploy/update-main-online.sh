@@ -5,6 +5,8 @@ export DX_REWORK_ROOT=/opt/dx-rework
 tool="$(cd "$(dirname "$0")/../.." && pwd -P)"
 [[ "$tool" == /opt/dx-rework-release-tools/* && "$(stat -c %U "$tool")" == root ]]
 source "$tool/scripts/deploy/lib.sh"
+expected_sha="${DX_REWORK_EXPECTED_MAIN_SHA:-}"
+[[ -z "$expected_sha" ]] || require_sha "$expected_sha"
 state=/opt/dx-rework-release-state
 [[ -d "$state" && ! -L "$state" && "$(stat -c %U "$state")" == root && "$(stat -c %a "$state")" == 700 ]]
 DX_REWORK_NODE_BIN="$(cat "$state/node-binary")"
@@ -25,7 +27,7 @@ fi
 [[ ! -e "$DX_ROOT/shared/release-switch.lock" ]] || die 'existing maintenance state must be resolved before online release'
 
 worker() {
-  (cd /; runuser -u dxrework -- env -i HOME=/home/dxrework USER=dxrework PATH="$PATH" DX_REWORK_LOCK_FD=9 \
+  (cd /; runuser -u dxrework -- env -i HOME=/home/dxrework USER=dxrework PATH="$PATH" DX_REWORK_LOCK_FD=9 DX_REWORK_EXPECTED_MAIN_SHA="$expected_sha" \
     bash "$tool/scripts/deploy/$1" "${@:2}")
 }
 verify() {
@@ -79,6 +81,7 @@ require_sha "$active_sha"
 if [[ "$resume" == true ]]; then
   candidate_sha="$(cat "$state/candidate-sha")"; candidate_port="$(cat "$state/candidate-port")"
   require_sha "$candidate_sha"
+  [[ -z "$expected_sha" || "$candidate_sha" == "$expected_sha" ]] || die 'frozen candidate differs from expected main SHA; routing unchanged'
   [[ "$candidate_port" == 3201 || "$candidate_port" == 3203 ]]
 else
   verify "$active_port" "$active_sha" || die 'BOOTSTRAP_REQUIRED: active runtime must support background lease and unchanged full schema'
