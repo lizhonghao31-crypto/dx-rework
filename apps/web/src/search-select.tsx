@@ -95,7 +95,7 @@ export function SearchSelect({
       <button className="search-select__toggle" type="button" disabled={disabled} tabIndex={-1}
         aria-label={open ? "收起已有选项" : "展开已有选项"} aria-expanded={open}
         onMouseDown={event => event.preventDefault()}
-        onClick={() => { input.current?.focus(); setOpen(!open); setQuery(""); setActive(-1); }}>▾</button>
+        onClick={() => { input.current?.focus(); setOpen(!open); setQuery(""); setActive(-1); }}></button>
       {open && !disabled ? (
         <div id={listId} className="search-select__results" role="listbox" aria-label={ariaLabel ? `${ariaLabel}搜索结果` : undefined}>
           {matches.length ? matches.map((option, index) => (
@@ -185,7 +185,7 @@ export function SearchableSelect({ children, onSearchChange, ...props }: SelectH
       onChange={event => { const value = event.currentTarget.value; setSnapshot(previous => ({ ...previous, value })); props.onChange?.(event); }}>
       {children}
     </select>
-    <button className="native-search-select__toggle" type="button" disabled={props.disabled} tabIndex={-1} aria-label={open ? "收起已有选项" : "展开已有选项"} aria-expanded={open} onClick={() => { setOpen(!open); setQuery(""); setActive(-1); input.current?.focus(); }}>▾</button>
+    <button className="native-search-select__toggle" type="button" disabled={props.disabled} tabIndex={-1} aria-label={open ? "收起已有选项" : "展开已有选项"} aria-expanded={open} onClick={() => { setOpen(!open); setQuery(""); setActive(-1); input.current?.focus(); }}></button>
     {open && !props.disabled && <div className="search-select__results" role="listbox" id={listId}>
       {matches.length ? matches.map((row, index) => <button type="button" role="option" id={`${listId}-${index}`} tabIndex={-1} key={`${index}:${row.value}`} disabled={row.disabled} aria-selected={row.value === snapshot.value} data-active={index === active || undefined} onMouseDown={event => event.preventDefault()} onClick={() => choose(row.value)}>{row.label}</button>) : <span>没有匹配的已有选项</span>}
     </div>}

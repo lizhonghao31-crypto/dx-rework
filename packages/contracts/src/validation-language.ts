@@ -2,6 +2,7 @@ import { z } from "zod";
 import { zhCN } from "zod/locales";
 
 const labels: Record<string, string> = {
+  customerWarehouseArrivalDate:"出货日期",factoryDeliveryDate:"加工厂交货日",deliveryDate:"交货日期",designStyleNo:"开发款号",customerCode:"客户",orderDate:"下单日期",association:"关联款号/PO",taskName:"杂事名称",materialId:"材料",attachmentIds:"附件",lineItems:"订单明细",
   inspectionLocation: "验货地点", inspectionStage: "验货阶段", inspectionDate: "验货日期", sampleQuantity: "抽检数量",
   nonconformanceCause: "不合格原因", sizeSamples: "抽检尺码", measurements: "测量记录", actualCm: "实测值", deviationCm: "偏差",
   documentChecks: "资料核对", exceptionReason: "缺少资料原因", physicalPerformance: "物理性能",

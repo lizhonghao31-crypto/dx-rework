@@ -9,6 +9,7 @@ import "../../packages/ui/src/tokens.css";
 import "../../packages/ui/src/components.css";
 import "../../apps/web/src/styles.css";
 import "../../apps/web/src/workflow-shell.css";
+import "../../apps/web/src/scoped-select-arrow.css";
 configureChineseValidation();
 installChineseNativeValidation(document);
 function Controls() {
@@ -17,8 +18,8 @@ function Controls() {
   const [submits, setSubmits] = useState(0);
   const [needsReason, setNeedsReason] = useState(true);
   const [phaseSubmits, setPhaseSubmits] = useState(0);
-  return <main style={{ maxWidth: 500, padding: 16, boxSizing: "border-box" }}>
-    <h1>TEST 原有约束与选择控件</h1>
+  return <main className="app-shell" style={{ maxWidth: 500, padding: 16, boxSizing: "border-box" }}>
+    <h1>TEST 原有约束与选择控件</h1><label>固定状态<select aria-label="固定状态"><option>待办理</option><option>已完成</option></select></label><select aria-label="多选原控件" multiple><option>甲</option><option>乙</option></select>
     <form onSubmit={event => { event.preventDefault(); setSubmits(n => n + 1); }}>
       <label htmlFor="factory">加工厂 *</label>
       <SearchableSelect id="factory" name="factory" required value={value} onChange={event => setValue(event.target.value)}>

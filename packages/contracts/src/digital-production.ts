@@ -31,7 +31,7 @@ export const DigitalPoInputSchema = z.object({
 }).strict().superRefine((value, context) => {
   validatePoIdentity(value, context);
   if (value.customerWarehouseArrivalDate !== undefined && value.deliveryDate !== null && value.customerWarehouseArrivalDate !== value.deliveryDate)
-    context.addIssue({ code: "custom", path: ["customerWarehouseArrivalDate"], message: "客户仓到货日不能互相矛盾" });
+    context.addIssue({ code: "custom", path: ["customerWarehouseArrivalDate"], message: "出货日期不能互相矛盾" });
   if (new Set(value.sizes.map(item => item.size)).size !== value.sizes.length)
     context.addIssue({ code: "custom", path: ["sizes"], message: "尺码不能重复" });
   if (value.sizes.reduce((sum, item) => sum + item.quantity, 0) > 10000000)

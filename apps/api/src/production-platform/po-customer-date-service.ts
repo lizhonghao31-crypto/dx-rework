@@ -46,7 +46,7 @@ export class PoCustomerDateService {
       return stored.map(change=>{
         const line=lines.find(line=>line.line_id===change.line_id);
         if(!line||line.customer_date_version!==change.expected_version||line.registered!==change.old_date)fail("申请中的 PO 交期已更新，请驳回后重新申请");
-        if(line.factory&&line.factory>change.date)fail("客户仓到货日不能早于加工厂交货日");
+        if(line.factory&&line.factory>change.date)fail("出货日期不能早于加工厂交货日");
         return {lineId:line.line_id,date:change.date,expectedVersion:change.expected_version,oldDate:line.registered};
       });
     }
@@ -56,7 +56,7 @@ export class PoCustomerDateService {
     if(!lines.length||legacy!==row.old_date||!(lines.every(line=>line.effective===row.old_date)||lines.every(line=>line.effective===null)))fail("历史整单申请与逐 PO 交期不一致，请驳回后选择明确 PO 重新申请");
     return lines.map(line=>{
       if(line.registered===row.date)fail("历史申请无需重复变更，请驳回后核对当前 PO");
-      if(line.factory&&line.factory>row.date)fail("客户仓到货日不能早于加工厂交货日");
+      if(line.factory&&line.factory>row.date)fail("出货日期不能早于加工厂交货日");
       return {lineId:line.line_id,date:row.date,expectedVersion:line.customer_date_version,oldDate:line.registered};
     });
   }
@@ -130,15 +130,15 @@ export class PoCustomerDateService {
       const changes=input.changes.map(change=>{
         const line=lines.find(line=>line.line_id===change.lineId);
         if(!line||line.customer_date_version!==change.expectedVersion)fail("PO 已更新或不属于本母单");
-        if(change.date<orderDate)fail("客户仓到货日不能早于下单日期");
-        if(line.effective===change.date)fail("新客户仓到货日须与当前日期不同");
-        if(line.factory&&line.factory>change.date)fail("客户仓到货日不能早于加工厂交货日");
+        if(change.date<orderDate)fail("出货日期不能早于下单日期");
+        if(line.effective===change.date)fail("新出货日期须与当前日期不同");
+        if(line.factory&&line.factory>change.date)fail("出货日期不能早于加工厂交货日");
         return {...change,oldDate:line.registered,oldEffectiveDate:line.effective};
       });
       const auditId=await this.audit(db,actor,id,"digital_po_customer_dates_requested",{requestId,...input,changes});
       await db.query("INSERT INTO digital_po_customer_requests(request_id,production_order_id,order_version,reason,requested_by,audit_event_id) VALUES($1,$2,$3,$4,$5,$6)",[requestId,id,version,input.reason,actor.actorId,auditId]);
       for(const change of changes)await db.query("INSERT INTO digital_po_customer_request_lines(request_id,production_order_id,line_id,old_date,old_effective_date,new_date,expected_version) VALUES($1,$2,$3,$4,$5,$6,$7)",[requestId,id,change.lineId,change.oldDate,change.oldEffectiveDate,change.date,change.expectedVersion]);
-      await this.notice(db,actor,id,"PO 客户仓到货日变更待批准",`po-customer-request:${requestId}`,true);
+      await this.notice(db,actor,id,"PO 出货日期变更待批准",`po-customer-request:${requestId}`,true);
       return {requestId};
     });
   }
@@ -156,7 +156,7 @@ export class PoCustomerDateService {
       if(row.source==="po")await db.query("INSERT INTO digital_po_customer_decisions(request_id,approved,decided_by,audit_event_id) VALUES($1,$2,$3,$4)",[requestId,approved,actor.actorId,auditId]);
       else if(row.source==="instruction")await db.query("INSERT INTO digital_instruction_date_decisions(request_id,approved,decided_by) VALUES($1,$2,$3)",[requestId,approved,actor.actorId]);
       else await db.query("INSERT INTO digital_production_delivery_decisions(request_id,decision,decided_by) VALUES($1,$2,$3)",[requestId,approved?"approved":"rejected",actor.actorId]);
-      await this.notice(db,actor,id,approved?"PO 客户仓到货日变更已批准":"PO 客户仓到货日变更已驳回",`po-customer-decision:${requestId}`);
+      await this.notice(db,actor,id,approved?"PO 出货日期变更已批准":"PO 出货日期变更已驳回",`po-customer-decision:${requestId}`);
       return {requestId,approved};
     });
   }

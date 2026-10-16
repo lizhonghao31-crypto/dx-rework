@@ -41,7 +41,7 @@ export function validateFactoryInputs(lines:readonly {line_id:string;color:strin
       conflict("补号不能改变原 PO 身份、颜色或数量");
     if(!entered.factoryDeliveryDate || !z.iso.date().safeParse(entered.factoryDeliveryDate).success
       || entered.factoryDeliveryDate<input.estimatedCutPieceSendDate || row.customer && entered.factoryDeliveryDate>row.customer)
-      conflict("请逐 PO 填写合法加工厂交货日，不能早于裁片发出或晚于客户仓到货");
+      conflict("请逐 PO 填写合法加工厂交货日，不能早于裁片发出或晚于出货日期");
     if(correcting && !entered.styleNo && !entered.alternateStyleNo)conflict("正式号与代用号不能同时为空");
   }
 }
@@ -79,7 +79,7 @@ export async function approveFactoryPoDates(db:Db,actor:TrustedActorContext,case
   const changes=[];
   for(const row of lines){const date=proposals[row.position-1]?.factoryDeliveryDate;
     if(!date || !z.iso.date().safeParse(date).success || send && date<send || row.customer && date>row.customer)
-      conflict("逐 PO 工厂交期缺失或已与当前客户仓日期冲突，请按原退回改正流程处理");
+      conflict("逐 PO 工厂交期缺失或已与当前出货日期冲突，请按原退回改正流程处理");
     if(date!==row.factory)changes.push({lineId:row.line_id,date,expectedVersion:Number(row.factory_date_version),oldDate:row.factory});
   }
   await activate(db,actor,caseId,eventId,reason,changes);
@@ -117,7 +117,7 @@ export async function normalizeFactoryContract(db:Db,caseId:string,input:SaveCon
     if(!entered || entered.expectedVersion!==Number(row.factory_date_version) || entered.position!==row.position)conflict("PO 工厂交期已更新，请重新打开合同");
     const date=entered.factoryDeliveryDate;
     if(date!==row.factory){
-      if(!date || !z.iso.date().safeParse(date).success || send && date<send || row.customer && date>row.customer)conflict("工厂交期不能早于原裁片发出或晚于客户仓到货");
+      if(!date || !z.iso.date().safeParse(date).success || send && date<send || row.customer && date>row.customer)conflict("工厂交期不能早于原裁片发出或晚于出货日期");
       changes.push({lineId:row.line_id,date,expectedVersion:Number(row.factory_date_version),oldDate:row.factory});
     }
     dates.set(row.line_id,date);
@@ -153,7 +153,7 @@ export async function prepareTransferPoDates(db:Db,caseId:string,date:string,pos
   const send=(await db.query("SELECT estimated_cut_piece_send_date::text AS send FROM sourcing_case_facts_at($1)",[caseId])).rows[0]?.send;
   if(!selected.length)conflict("转入款色缺少 PO 关联");
   for(const row of selected)if(!z.iso.date().safeParse(date).success || send && date<send || row.customer && date>row.customer)
-    conflict("转厂工厂交期不能早于裁片发出或晚于对应客户仓到货");
+    conflict("转厂工厂交期不能早于裁片发出或晚于对应出货日期");
   return selected.map(row=>({lineId:row.line_id,position:row.position,date,expectedVersion:Number(row.factory_date_version),oldDate:row.factory}));
 }
 export async function approveTransferPoDates(db:Db,actor:TrustedActorContext,caseId:string,requestId:string,eventId:string,reason:string) {
@@ -171,7 +171,7 @@ export async function approveTransferPoDates(db:Db,actor:TrustedActorContext,cas
     if(!frozen || frozen.position!==row.position || frozen.expectedVersion!==Number(row.factory_date_version) || frozen.oldDate!==row.factory)
       conflict("PO 工厂交期已变化，请驳回后重新发起转厂");
     if(frozen.date!==basis.deliveryDate || !z.iso.date().safeParse(frozen.date).success || send && frozen.date<send || row.customer && frozen.date>row.customer)
-      conflict("转厂交期已与当前裁片发出或客户仓日期冲突，请驳回后重新申请");
+      conflict("转厂交期已与当前裁片发出或出货日期冲突，请驳回后重新申请");
     if(frozen.date!==row.factory)changes.push({...frozen});
   }
   await activate(db,actor,caseId,eventId,reason,changes);
