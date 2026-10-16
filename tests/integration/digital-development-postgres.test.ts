@@ -79,9 +79,12 @@ run("P05 development forms PostgreSQL", () => {
     const minimum=minimumInitialCustomerDate(),prior=new Date(`${minimum}T00:00:00Z`);prior.setUTCDate(prior.getUTCDate()-1);
     order.lines[0]!.customerWarehouseArrivalDate=prior.toISOString().slice(0,10);
     saved=await development.save(actor(),id,{expectedVersion:saved.version,document},randomUUID());
-    await expect(development.publish(actor(),id,saved.version,randomUUID())).rejects.toMatchObject({statusCode:400,message:expect.stringContaining("客户侧交期")});
+    await expect(development.publish(actor(),id,saved.version,randomUUID())).rejects.toMatchObject({statusCode:400,message:expect.stringContaining("出货日期")});
     expect(await count()).toBe(0);
-    order.lines[0]!.customerWarehouseArrivalDate=minimum;order.designStyleNo="TEST-TAMPERED";
+    order.lines[0]!.customerWarehouseArrivalDate=minimum;order.orderDate='2099-01-01';
+    saved=await development.save(actor(),id,{expectedVersion:saved.version,document},randomUUID());
+    await expect(development.publish(actor(),id,saved.version,randomUUID())).rejects.toMatchObject({statusCode:400,message:expect.stringContaining('客户下单日期')});expect(await count()).toBe(0);
+    order.orderDate='2026-10-15';order.designStyleNo="TEST-TAMPERED";
     saved=await development.save(actor(),id,{expectedVersion:saved.version,document},randomUUID());
     await expect(development.publish(actor(),id,saved.version,randomUUID())).rejects.toMatchObject({statusCode:400,message:expect.stringContaining("当前开发来源一致")});
     expect(await count()).toBe(0);

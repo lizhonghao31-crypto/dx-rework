@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises";
 import pg from "pg";
 import Fastify from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { DigitalOrderCreateSchema, DigitalSourceCreateSchema } from "@dx-rework/contracts/digital-production";
+import { beijingCalendarDate, DigitalOrderCreateSchema, DigitalSourceCreateSchema } from "@dx-rework/contracts/digital-production";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { registerDigitalIdentityRoutes } from "../../apps/api/src/production-platform/identity-routes.js";
 import { linkNewDigitalChild, resolveDigitalChild } from "../../apps/api/src/production-platform/child-link-repository.js";
@@ -30,7 +30,7 @@ run("digital production P01 identities", () => {
   const service = new DigitalProductionIdentityService(database, true, undefined, () => today);
   let style="";
   beforeEach(()=>{style=`TEST-STYLE-${randomUUID()}`;today=new Date("2026-09-01T00:00:00Z");});
-  const input = (designStyleNo=style) => DigitalOrderCreateSchema.parse({ customerCode: "PD", productGroup: "男装", designStyleNo, temporaryStyleNo: "TEST-TEMP", orderDate: "2026-09-29", lines: [
+  const input = (designStyleNo=style) => DigitalOrderCreateSchema.parse({ customerCode: "PD", productGroup: "男装", designStyleNo, temporaryStyleNo: "TEST-TEMP", orderDate: beijingCalendarDate(today), lines: [
     { color: "黑", sizes: [{ size: "M", quantity: 2000 }, { size: "L", quantity: 1000 }], deliveryDate: "2026-10-10" },
     { color: "白", poNumber: "PO-2", sizes: [{ size: "M", quantity: 2000 }], deliveryDate: "2026-10-12" },
   ] });
@@ -151,6 +151,13 @@ run("digital production P01 identities", () => {
     const source=await service.createSource(actor(),sourceInput(),randomUUID());
     await expect(service.createOrder(actor(),input(),randomUUID(),source.sourceId)).rejects.toMatchObject({statusCode:409,message:"请先发布开发单，再正式确认客户订单"});
     expect((await database.query("SELECT count(*)::int n FROM digital_production_orders WHERE source_id=$1",[source.sourceId])).rows[0].n).toBe(0);
+  });
+  it("rejects future order dates on the server while allowing today/past and each PO boundary",async()=>{
+    today=new Date('2026-10-14T16:00:00Z');
+    const request={...input(),lines:input().lines.map(l=>({...l,deliveryDate:'2026-11-15'}))};
+    await expect(service.createOrder(actor(),{...request,orderDate:'2026-10-16'},randomUUID())).rejects.toMatchObject({statusCode:400,message:expect.stringContaining('服务器北京时间今日')});
+    await expect(service.createOrder(actor(),{...request,orderDate:'2000-01-01',lines:request.lines.map((l,i)=>({...l,deliveryDate:i===1?'2026-11-14':l.deliveryDate}))},randomUUID())).rejects.toMatchObject({statusCode:400,message:expect.stringContaining('PO 2')});
+    for(const date of ['2026-10-14','2026-10-15'])expect((await service.createOrder(actor(),{...request,designStyleNo:`${style}-${date}`,orderDate:date},randomUUID())).orderDate).toBe(date);
   });
   it("enforces every initial PO date, accepts the natural-month boundary and replays success after the calendar advances",async()=>{
     today=new Date("2026-01-31T01:00:00Z");

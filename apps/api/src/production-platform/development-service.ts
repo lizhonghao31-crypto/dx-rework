@@ -1,5 +1,5 @@
 import {materialReadiness} from "./development-material-readiness.js";
-import { DigitalOrderCreateSchema, initialCustomerOrderInput, initialCustomerDateErrors } from "@dx-rework/contracts/digital-production";
+import { DigitalOrderCreateSchema, beijingCalendarDate, customerOrderDateError, minimumInitialCustomerDate, initialCustomerOrderInput, initialCustomerDateErrors } from "@dx-rework/contracts/digital-production";
 import {developmentDocumentRow,developmentRoundsAvailable} from "./development-round-repository.js";
 import {DevelopmentRouteService} from "./development-route-service.js";
 import type {PatternRoomOrderService} from "../pattern-room/order-service.js";
@@ -15,7 +15,7 @@ import { DigitalProductionTaskService } from "./task-service.js";
 type Database = Pick<Pool | PoolClient, "query">;
 const conflict = (message: string): never => { throw new ApplicationError("DEVELOPMENT_CONFLICT", message, 409); };
 export class DigitalDevelopmentService {
-  constructor(private readonly database: Pool, private readonly creationEnabled: boolean, private readonly patternOrders?:PatternRoomOrderService) {}
+  constructor(private readonly database: Pool, private readonly creationEnabled: boolean, private readonly patternOrders?:PatternRoomOrderService, private readonly now:()=>Date=()=>new Date()) {}
   private async source(db: Database, actor: TrustedActorContext, sourceId: string, write = false) {
     const source = (await db.query("SELECT s.*,u.display_name AS designer_name FROM digital_production_sources s JOIN app_users u ON u.id=s.created_by WHERE s.source_id=$1", [sourceId])).rows[0] ?? digitalNotFound();
     const owner = isRootActor(actor) || (actor.actorRoles.includes("sample_designer") && source.created_by === actor.actorId && (actor.authorizationCapabilities ?? []).includes("pattern_room:orders:create"));
@@ -106,7 +106,9 @@ export class DigitalDevelopmentService {
         const source=(await db.query("SELECT design_style_no,temporary_style_no,customer_code FROM digital_production_sources WHERE source_id=$1",[sourceId])).rows[0];
         if(source.design_style_no!==parsed.data.designStyleNo||(source.temporary_style_no??"")!==(parsed.data.temporaryStyleNo??"")||(source.customer_code&&source.customer_code!==parsed.data.customerCode))
           throw new ApplicationError("VALIDATION_ERROR","订购草稿的款号、代用款号及客户须与当前开发来源一致",400);
-        const dateErrors=initialCustomerDateErrors(parsed.data.lines);
+        const now=this.now(),orderDateError=customerOrderDateError(parsed.data.orderDate,beijingCalendarDate(now));
+        if(orderDateError)throw new ApplicationError("VALIDATION_ERROR",orderDateError,400);
+        const dateErrors=initialCustomerDateErrors(parsed.data.lines,minimumInitialCustomerDate(now));
         if(dateErrors.length)throw new ApplicationError("VALIDATION_ERROR",dateErrors.join("；"),400);
       }
       if(this.patternOrders&&!patternOrder)conflict("请先选择有效打板品类与执行价，再正式提交开发单");

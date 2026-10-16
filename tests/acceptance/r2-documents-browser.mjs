@@ -27,9 +27,10 @@ export async function documentBrowser({page,context,origin,database,root,worker,
   await page.locator('#development-upload').setInputFiles({name,mimeType,buffer});
   await page.waitForFunction(()=>!document.querySelector('#development-upload')?.disabled);
  }
+ assert.equal(requests.filter(item=>item.method==='POST'&&item.url.endsWith('/upload-intents')).length-before,0);
+ await page.locator('.order-document-container>footer').getByRole('button',{name:'保存开发资料草稿',exact:true}).click();
+ await page.getByText('开发资料与订购草稿已保存，重开可继续；尚未发布或创建客户订单。',{exact:true}).waitFor();
  assert.equal(requests.filter(item=>item.method==='POST'&&item.url.endsWith('/upload-intents')).length-before,4);
- await page.locator('.order-document-container>footer').getByRole('button',{name:'保存草稿',exact:true}).click();
- await page.waitForFunction(()=>document.querySelector('.order-document-container>footer')?.textContent.includes('草稿 · 版本 2'));
  const saved=await forms.read(root,draft.sourceId);assert.equal(saved.document.instructions,'TEST PR04 跨章节保留');assert.equal(saved.document.quantity,7);assert.deepEqual(saved.document.files.map(file=>file.kind),['款图','局部图','菲林','工艺开发板']);
  await page.screenshot({path:`${out}/pr04-draft-saved.png`});checks.push('PR04 legacy development entry: one container, chapter state preserved, four original upload purposes and save');
  await page.goto(`${origin}/ui/digital-production?development=${original.sourceId}&round=1`);await page.getByRole('heading',{name:'本单资料',exact:true}).waitFor();await page.locator('.development-picture-layout').waitFor();assert.equal(await page.getByRole('button',{name:'保存草稿',exact:true}).count(),0);checks.push('PR04 historic development URL remains immutable');

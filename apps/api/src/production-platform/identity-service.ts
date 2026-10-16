@@ -1,7 +1,7 @@
 import type { SourcingService } from "../sourcing/sourcing-service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { DigitalOrderCreateSchema, initialCustomerOrderInput, digitalFormalPoNo, digitalPoKey, initialCustomerDateErrors, minimumInitialCustomerDate } from "@dx-rework/contracts/digital-production";
+import { DigitalOrderCreateSchema, beijingCalendarDate, customerOrderDateError, initialCustomerOrderInput, digitalFormalPoNo, digitalPoKey, initialCustomerDateErrors, minimumInitialCustomerDate } from "@dx-rework/contracts/digital-production";
 import {developmentDocumentRow} from "./development-round-repository.js";
 import { DigitalPoDateRepository } from "./po-date-repository.js";
 import type { DigitalCustomer, DigitalOrder, DigitalOrderInput, DigitalSource, DigitalSourceInput, DigitalNumberCorrection } from "@dx-rework/contracts/digital-production";
@@ -147,7 +147,9 @@ export class DigitalProductionIdentityService {
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [JSON.stringify(["digital-order-style",styleKey])]);
       if ((await client.query("SELECT 1 FROM digital_production_orders WHERE translate(btrim(design_style_no),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz')=$1 LIMIT 1", [styleKey])).rowCount)
         fail("该编号已有客户订单，请打开原档案继续办理");
-      const dateErrors = initialCustomerDateErrors(input.lines,minimumInitialCustomerDate(this.now()));
+      const now=this.now(),orderDateError=customerOrderDateError(input.orderDate,beijingCalendarDate(now));
+      if(orderDateError)fail(orderDateError,400);
+      const dateErrors = initialCustomerDateErrors(input.lines,minimumInitialCustomerDate(now));
       if (dateErrors.length) fail(dateErrors.join("；"),400);
       let merchandiserId = input.primaryMerchandiserId;
       const defaultMerchandiserId = (await client.query("SELECT default_merchandiser_id FROM digital_production_customers WHERE code=$1 FOR SHARE", [input.customerCode])).rows[0]?.default_merchandiser_id ?? null;
