@@ -100,6 +100,8 @@ export type ReworkBusinessDetail = Readonly<{
   problemDescription: string | null;
   reworkQuantity: number | null;
   tailInspectionRequired: boolean;
+  specialProcessType?: "none" | "inspection" | "other_craft" | null;
+  otherCraftDescription?: string | null;
   singlePieceReworkTotal: number | null;
   inspectionReport: InspectionReportDraft | null;
   createdBy: Readonly<{ userId: string; displayName: string }>;
@@ -197,6 +199,8 @@ type DetailRow = Readonly<{
   problem_description: string | null;
   rework_quantity: string | null;
   tail_inspection_required: boolean;
+  special_process_type?: "none" | "inspection" | "other_craft" | null;
+  other_craft_description?: string | null;
   single_piece_rework_total: string | null;
   inspection_report: InspectionReportDraft | null;
   created_by: string;
@@ -266,7 +270,7 @@ export class ReworkBusinessDetailService {
          to_jsonb(orders)->>'rework_reason' rework_reason,
          COALESCE(NULLIF(latest_configuration.process_names,''),to_jsonb(orders)->>'rework_process') rework_process,
          orders.problem_part,orders.problem_description,orders.rework_quantity::text,
-         orders.tail_inspection_required,
+         orders.tail_inspection_required,orders.special_process_type,orders.other_craft_description,
          latest_configuration.single_piece_rework_total,
          COALESCE(ie_precounts.processes,'[]'::jsonb) ie_precount_processes,
          COALESCE(ie_precounts.entries,'[]'::jsonb) ie_precount_entries,
@@ -552,6 +556,8 @@ export class ReworkBusinessDetailService {
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity === null ? null : Number(row.rework_quantity),
       tailInspectionRequired: row.tail_inspection_required,
+      specialProcessType: row.special_process_type ?? null,
+      otherCraftDescription: row.other_craft_description ?? null,
       singlePieceReworkTotal: !fullBusinessAccess || row.single_piece_rework_total === null ? null : Number(row.single_piece_rework_total),
       inspectionReport: fullBusinessAccess ? row.inspection_report : null,
       createdBy: { userId: row.created_by, displayName: row.creator_name },

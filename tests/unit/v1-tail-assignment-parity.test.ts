@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 describe("V1 tail assignment parity", () => {
   it("reuses the normal formal/temporary worker picker for tail inspection", async () => {
     const source = await readFile("apps/web/src/process-worker-assignment-form.tsx", "utf8");
-    expect(source).toContain('<div className="process-worker-picker__heading"><b>整查人员 *</b>');
+    expect(source).toContain('<div className="process-worker-picker__heading"><b>{specialLabel}人员 *</b>');
     expect(source).toContain("onClick={openMobileTailAssignment}>选择本单工人</Button>");
     expect(source).toContain('placeholder="搜索正式工或临时工"');
     expect(source).toContain('{ label: "正式工", people:');

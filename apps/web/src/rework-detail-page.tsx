@@ -1,3 +1,4 @@
+import { specialProcessLabel, specialProcessName } from "@dx-rework/contracts";
 import { FinanceNodeKeySchema } from "@dx-rework/contracts/reporting";
 import { ReworkNodeHistoryPage, reworkHistoryHref } from "./rework-node-history-page.js";
 import { moduleCanWrite } from "./member-module-policy.js";
@@ -122,6 +123,8 @@ export type ReworkBusinessDetail = Readonly<{
   problemDescription: string | null;
   reworkQuantity: number | null;
   tailInspectionRequired: boolean;
+  specialProcessType?: "none" | "inspection" | "other_craft" | null;
+  otherCraftDescription?: string | null;
   canReadBusinessDetails?: boolean;
   singlePieceReworkTotal: number | null;
   inspectionReport: InspectionReportDraft | null;
@@ -327,7 +330,7 @@ const buildWorkflow = (
       title: "发起、配置与核价",
       nodes: [
         node("initiation", "01", detail.reworkKind === "inhouse_finishing" ? "本厂做尾" : "发起返工", detail.reworkKind === "inhouse_finishing" ? "尾部主管" : "质检", detail.createdBy.displayName, detail.reworkKind === "inhouse_finishing" ? "沿用来源款图、加工厂与跟单资料发起做尾。" : "登记数字化验货单和纸质报告附件后提交返工单。"),
-        node("process_configuration", "02", "分配工序 &工人", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", detail.tailInspectionRequired ? "一次完成返工工序、候选单价、返工人员与整查分配；不再设置独立人员分配节点。" : "一次完成返工工序、候选单价与返工人员分配；本单无需整查。"),
+        node("process_configuration", "02", "分配工序 &工人", "尾部主管", detail.processConfigurationCreatedBy?.displayName ?? "待提交后分配", detail.tailInspectionRequired ? `一次完成返工工序、候选单价、返工人员与${specialProcessLabel(detail)}分配；不再设置独立人员分配节点。` : `一次完成返工工序、候选单价与返工人员分配；本单无需${specialProcessLabel(detail)}。`),
         node("ie_review", "03", "IE 核价", "IE", "待尾部提交", "IE 只核准工序单价；通过后预分配工人自动生效并进入返工执行。"),
       ],
     },
@@ -335,14 +338,14 @@ const buildWorkflow = (
       key: "execution",
       title: "返工执行",
       nodes: [
-        node("work_reporting", "04", "返工执行报数", detail.tailInspectionRequired ? "返工人员 / 整查" : "返工人员", "待 IE 核价通过并自动激活任务", detail.tailInspectionRequired ? "返工人员与整查都在同一执行节点提交本人实际件数；临时工由尾部主管代录。" : "返工人员在执行节点提交本人实际件数；临时工由尾部主管代录。"),
+        node("work_reporting", "04", "返工执行报数", detail.tailInspectionRequired ? `返工人员 / ${specialProcessLabel(detail)}` : "返工人员", "待 IE 核价通过并自动激活任务", detail.tailInspectionRequired ? `返工人员与${specialProcessLabel(detail)}都在同一执行节点提交本人实际件数；临时工由尾部主管代录。` : "返工人员在执行节点提交本人实际件数；临时工由尾部主管代录。"),
       ],
     },
     {
       key: "responsibility",
       title: detail.reworkKind === "inhouse_finishing" ? "最终确认与计薪" : "责任与结算",
       nodes: [
-        node("whole_order_review", "05", "尾部最终数量确认", "尾部主管", "待全部执行报数完成", detail.tailInspectionRequired ? "逐工序对照工人原报数与整查数，提交最终确认数量并保留每版审计。" : "系统按工人有效上数生成最终数量，并保留每版审计。"),
+        node("whole_order_review", "05", "尾部最终数量确认", "尾部主管", "待全部执行报数完成", detail.tailInspectionRequired ? `逐工序对照工人原报数与${specialProcessLabel(detail)}数，提交最终确认数量并保留每版审计。` : "系统按工人有效上数生成最终数量，并保留每版审计。"),
         node("final_quantity_ie_review", "06", "IE 最终数量复核", "IE", "待 N05 提交", "只复核数量与质量事实；通过后生成正式工资，退回则回到 N05。"),
         ...(detail.reworkKind === "inhouse_finishing" ? [] : [
         node("responsibility", "07", "责任判定", "生产管理", "待 N06 通过", "每道工序只选一个主责任方；外部扣款倍率默认且最低 1.2，可向上调整。"),
@@ -563,6 +566,7 @@ function CurrentReworkDetailPage({
     { label: "订单号", value: detail.orderNo },
     { label: "订单数量", value: detail.orderQuantity === null ? null : `${formatBusinessDecimal(detail.orderQuantity)} 件` },
     { label: "返工原因", value: detail.reworkReason },
+    ...(detail.specialProcessType === "other_craft" ? [{ label: "其他工艺", value: specialProcessName(detail) }] : []),
     { label: "问题部位", value: detail.problemPart },
     { label: "问题描述", value: detail.problemDescription },
     { label: "返工数量", value: detail.reworkQuantity === null ? null : `${formatBusinessDecimal(detail.reworkQuantity)} 件` },
@@ -572,7 +576,8 @@ function CurrentReworkDetailPage({
     { label: "印绣花跟单", value: detail.supplyContext.embroideryMerchandiserName },
   ].filter((fact): fact is { label: string; value: string } => Boolean(fact.value));
   const visibleImageAttachments = imageAttachments;
-  const meta = statusMeta[detail.status];
+  const baseMeta = statusMeta[detail.status];
+  const meta = { ...baseMeta, next: baseMeta.next.replaceAll("整查", specialProcessLabel(detail)) };
   const stages = buildWorkflow(detail, currentUser, returnToTodos ? focusedNode : undefined);
   const workflowNodes = stages.flatMap((stage) => stage.nodes);
   const activeNode = workflowNodes.find((node) => node.state === "current" || node.state === "followup")?.key
@@ -894,9 +899,9 @@ function TailInspectionWaiverAction({
 
   const waive = async (): Promise<void> => {
     const reason = (await promptInApp(
-      "请输入改为无需整查的原因。若已经上过整查数，该记录会保留但作废，不计入最终数量、工资或责任。",
+      `请输入改为无需${specialProcessLabel(detail)}的原因。若已经上过${specialProcessLabel(detail)}数，该记录会保留但作废，不计入最终数量、工资或责任。`,
       "",
-      { title: "改为无需整查", confirmLabel: "确认免整查" },
+      { title: `改为无需${specialProcessLabel(detail)}`, confirmLabel: `确认免${specialProcessLabel(detail)}` },
     ))?.trim();
     if (!reason) return;
     setBusy(true);
@@ -914,12 +919,12 @@ function TailInspectionWaiverAction({
       });
       if (!response.ok) {
         const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-        throw new Error(body?.error?.message ?? "免整查失败");
+        throw new Error(body?.error?.message ?? `免${specialProcessLabel(detail)}失败`);
       }
-      setMessage("已改为无需整查；原整查报数已保留为历史并从结算中作废。");
+      setMessage(`已改为无需${specialProcessLabel(detail)}；原${specialProcessLabel(detail)}报数已保留为历史并从结算中作废。`);
       await onChanged();
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "免整查失败");
+      setMessage(error instanceof Error ? error.message : `免${specialProcessLabel(detail)}失败`);
     } finally {
       setBusy(false);
     }
@@ -927,9 +932,9 @@ function TailInspectionWaiverAction({
 
   return <Surface className="rework-detail-node-preview">
     <StatusBadge tone="info">旧订单纠正</StatusBadge>
-    <h2>改为无需整查</h2>
-    <p>仅老板、生产管理和超级用户可操作。已上报的整查数会保留审计记录，但不再计入最终数量、工资和责任。</p>
-    <Button disabled={busy} onClick={() => { void waive(); }}>{busy ? "处理中…" : "改为无需整查"}</Button>
+    <h2>改为无需{specialProcessLabel(detail)}</h2>
+    <p>仅老板、生产管理和超级用户可操作。已上报的{specialProcessLabel(detail)}数会保留审计记录，但不再计入最终数量、工资和责任。</p>
+    <Button disabled={busy} onClick={() => { void waive(); }}>{busy ? "处理中…" : `改为无需${specialProcessLabel(detail)}`}</Button>
     {message ? <p role="status">{message}</p> : null}
   </Surface>;
 }

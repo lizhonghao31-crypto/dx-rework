@@ -43,6 +43,7 @@ type ItemRow = Readonly<{
   configuration_item_id: string;
   process_name: string;
   execution_kind: "worker" | "tail_inspection";
+  special_process_type?: "inspection" | "other_craft" | null;
 }>;
 type PersonRow = Readonly<{
   person_id: string;
@@ -437,7 +438,7 @@ export class ProcessWorkerPlanService {
 
   private async items(client: Pick<Pool, "query"> | PoolClient, configurationId: string): Promise<ItemRow[]> {
     return (await client.query<ItemRow>(
-      `SELECT configuration_item_id,process_name,execution_kind
+      `SELECT configuration_item_id,process_name,execution_kind,special_process_type
        FROM rework_process_configuration_items
        WHERE configuration_id=$1 ORDER BY position,configuration_item_id`,
       [configurationId],
@@ -472,7 +473,7 @@ export class ProcessWorkerPlanService {
     const members = plan ? await this.planMembers(client, plan.plan_id) : [];
     const assignments = items.map((item) => ({
       configurationItemId: item.configuration_item_id,
-      processName: item.execution_kind === "tail_inspection" ? "整查" : item.process_name,
+      processName: item.execution_kind === "tail_inspection" && item.special_process_type !== "other_craft" ? "整查" : item.process_name,
       executionKind: item.execution_kind,
       members: members.filter((member) => member.configuration_item_id === item.configuration_item_id).map((member) => ({
         personId: member.person_id,

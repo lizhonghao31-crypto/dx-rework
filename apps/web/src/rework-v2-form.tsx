@@ -7,6 +7,8 @@ import {
   ReworkInitiationOptionsResponseSchema,
   ReworkOrderResponseSchema,
   UploadIntentResponseSchema,
+  specialProcessLabel,
+  type SpecialProcessType,
   type CreateReworkDraft,
   type ReworkInitiationOptionsResponse,
   type ReworkOrderResponse,
@@ -78,6 +80,8 @@ type V2FormState = Readonly<{
   factory: string;
   merchandiserUserId: string;
   tailInspectionRequired: boolean;
+  specialProcessType: SpecialProcessType;
+  otherCraftDescription: string;
   tailInspectionCostBearer: "" | "own_factory" | "processing_factory";
   washingSupplierId: string;
   embroiderySupplierId: string;
@@ -102,6 +106,8 @@ const emptyForm = (): V2FormState => ({
   factory: "",
   merchandiserUserId: "",
   tailInspectionRequired: true,
+  specialProcessType: "inspection",
+  otherCraftDescription: "",
   tailInspectionCostBearer: "",
   washingSupplierId: "",
   embroiderySupplierId: "",
@@ -122,6 +128,8 @@ const isFormState = (value: unknown): value is V2FormState => {
     "embroideryMerchandiserUserId",
   ].every((key) => typeof row[key] === "string");
   return stringFieldsValid
+    && (row.specialProcessType === undefined || ["none", "inspection", "other_craft"].includes(String(row.specialProcessType)))
+    && (row.otherCraftDescription === undefined || (typeof row.otherCraftDescription === "string" && row.otherCraftDescription.length <= 100))
     && (row.tailInspectionRequired === undefined || typeof row.tailInspectionRequired === "boolean")
     && (row.tailInspectionCostBearer === undefined
       || row.tailInspectionCostBearer === ""
@@ -163,6 +171,8 @@ const readLocalN01Draft = (): LocalN01Draft | null => {
       form: {
         ...(parsed.form as V2FormState),
         tailInspectionRequired: (parsed.form as Record<string, unknown>).tailInspectionRequired !== false,
+        specialProcessType: parsed.form.specialProcessType ?? (parsed.form.tailInspectionRequired === false ? "none" : "inspection"),
+        otherCraftDescription: parsed.form.otherCraftDescription ?? "",
         tailInspectionCostBearer: (
           (parsed.form as Record<string, unknown>).tailInspectionCostBearer === "own_factory"
           || (parsed.form as Record<string, unknown>).tailInspectionCostBearer === "processing_factory"
@@ -334,6 +344,8 @@ export function ReworkInitiationV2Form({
           factory: factoryValue(draft),
           merchandiserUserId: draft.merchandiserUserId ?? "",
           tailInspectionRequired: draft.tailInspectionRequired,
+          specialProcessType: draft.specialProcessType ?? (draft.tailInspectionRequired ? "inspection" : "none"),
+          otherCraftDescription: draft.otherCraftDescription ?? "",
           tailInspectionCostBearer: draft.tailInspectionCostBearer ?? "",
           washingSupplierId: context.washingSupplier?.supplierId ?? "",
           embroiderySupplierId: context.embroiderySupplier?.supplierId ?? "",
@@ -399,14 +411,26 @@ export function ReworkInitiationV2Form({
   const availableImageCount = reworkOrderId
     ? order?.attachmentIds.length ?? existingAttachmentCount
     : images.length;
+  const historicalValue=(label:string)=>history?.find(field=>field.label===label)?.value ?? "—";
+  const canUseOtherCraft = !isFinishing && ((!reworkOrderId && !order) || order?.specialProcessType != null);
+  const displayedMode = history
+    ? historicalValue("工艺类型") === "其他工艺" ? "other_craft" : historicalValue("需要整查") === "是" ? "inspection" : "none"
+    : form.specialProcessType;
+  const specialLabel = specialProcessLabel({ specialProcessType: displayedMode });
+  const specialFields = canUseOtherCraft ? {
+    specialProcessType: form.specialProcessType,
+    otherCraftDescription: form.specialProcessType === "other_craft" ? form.otherCraftDescription.trim() || null : null,
+  } : {};
   const submissionIssue = !form.styleNo.trim()
     ? "请填写款号。"
     : !form.factory
       ? "请选择加工厂。"
       : !form.merchandiserUserId
         ? "请选择订单跟单。"
+        : !isFinishing && form.specialProcessType === "other_craft" && !form.otherCraftDescription.trim()
+          ? "请填写其他工艺内容。"
         : !isFinishing && form.tailInspectionRequired && !form.tailInspectionCostBearer
-          ? "请选择整查费用承担方。"
+          ? `请选择${specialLabel}费用承担方。`
           : !isFinishing && availableImageCount <= 0
             ? "请至少上传 1 张返工报告图片。"
             : null;
@@ -428,6 +452,7 @@ export function ReworkInitiationV2Form({
     factory: form.factory,
     merchandiserUserId: form.merchandiserUserId,
     tailInspectionRequired: form.tailInspectionRequired,
+    ...specialFields,
     tailInspectionCostBearer: form.tailInspectionRequired ? form.tailInspectionCostBearer : null,
     attachmentIds: images.map((image) => image.attachmentId),
   });
@@ -476,6 +501,7 @@ export function ReworkInitiationV2Form({
             merchandiserUserId: form.merchandiserUserId || null,
             processingFactory: processingFactory ?? null,
             tailInspectionRequired: form.tailInspectionRequired,
+            ...specialFields,
             tailInspectionCostBearer: form.tailInspectionRequired
               ? form.tailInspectionCostBearer || null
               : null,
@@ -487,6 +513,7 @@ export function ReworkInitiationV2Form({
         styleNo: form.styleNo.trim() || null,
         merchandiserUserId: form.merchandiserUserId || null,
         tailInspectionRequired: isFinishing ? false : form.tailInspectionRequired,
+        ...specialFields,
         tailInspectionCostBearer: isFinishing ? null : form.tailInspectionRequired
           ? form.tailInspectionCostBearer || null
           : null,
@@ -725,7 +752,6 @@ export function ReworkInitiationV2Form({
     label: supplier.supplierName,
   })), [supplyOptions.fabricSuppliers]);
 
-  const historicalValue=(label:string)=>history?.find(field=>field.label===label)?.value ?? "—";
   if (!history && moduleWritable !== true) return <Surface><p>{moduleWritable === null ? "正在读取操作权限…" : "当前账号仅可查看返工订单。"}</p>{reworkOrderId ? <a href={pageUrl(`ui/tasks/${reworkOrderId}`)}>查看订单详情</a> : null}</Surface>;
   return <div data-dx-ui="governed" className={`rework-v2-page rework-governed${embedded ? " is-embedded" : ""}`}>
     {!embedded ? <div className="rework-v2-heading">
@@ -747,11 +773,13 @@ export function ReworkInitiationV2Form({
         <label><span>订单跟单 <b>*</b></span><div className="rework-v2-control">{history ? <input readOnly value={historicalValue("订单跟单")} /> : <SearchSelect options={options.merchandisers.map((item) => ({ value: item.userId, label: item.displayName }))} value={form.merchandiserUserId} placeholder="搜索订单跟单" emptyText="没有匹配的订单跟单" disabled={busy} onChange={(merchandiserUserId) => { setForm({ ...form, merchandiserUserId }); pendingSubmit.current = null; }} />}</div></label>
         {!isFinishing ? <fieldset className="rework-v2-tail-choice" disabled={busy || Boolean(history)}>
           <legend>是否需要整查？</legend>
-          <label><input type="radio" name="tailInspectionRequired" checked={history ? historicalValue("需要整查")==="是" : form.tailInspectionRequired} onChange={() => { setForm({ ...form, tailInspectionRequired: true }); pendingSubmit.current = null; }} />是</label>
-          <label><input type="radio" name="tailInspectionRequired" checked={history ? historicalValue("需要整查")==="否" : !form.tailInspectionRequired} onChange={() => { setForm({ ...form, tailInspectionRequired: false, tailInspectionCostBearer: "" }); pendingSubmit.current = null; }} />否</label>
+          <label><input type="radio" name="tailInspectionRequired" checked={displayedMode === "inspection"} onChange={() => { setForm({ ...form, specialProcessType: "inspection", tailInspectionRequired: true }); pendingSubmit.current = null; }} />是</label>
+          <label><input type="radio" name="tailInspectionRequired" checked={displayedMode === "none"} onChange={() => { setForm({ ...form, specialProcessType: "none", tailInspectionRequired: false, tailInspectionCostBearer: "" }); pendingSubmit.current = null; }} />否</label>
+          {canUseOtherCraft || displayedMode === "other_craft" ? <label><input type="radio" name="tailInspectionRequired" checked={displayedMode === "other_craft"} onChange={() => { setForm({ ...form, specialProcessType: "other_craft", tailInspectionRequired: true }); pendingSubmit.current = null; }} />其他工艺</label> : null}
         </fieldset> : null}
+        {!isFinishing && displayedMode === "other_craft" ? <label className="rework-v2-other-craft"><span>其他工艺内容 <b>*</b></span><textarea maxLength={100} value={history ? historicalValue("其他工艺内容") : form.otherCraftDescription} disabled={busy || Boolean(history)} placeholder="请输入需要完成的工艺，最多100字" onChange={(event) => { setForm({ ...form, otherCraftDescription: event.target.value }); pendingSubmit.current = null; }} /></label> : null}
         {!isFinishing && (history ? historicalValue("需要整查")==="是" : form.tailInspectionRequired) ? <fieldset className="rework-v2-tail-choice" disabled={busy || Boolean(history)}>
-          <legend>谁承担整查费用？ <b>*</b></legend>
+          <legend>谁承担{specialLabel}费用？ <b>*</b></legend>
           <label><input type="radio" name="tailInspectionCostBearer" checked={(history ? historicalValue("整查费用承担方") : form.tailInspectionCostBearer) === "own_factory"} onChange={() => { setForm({ ...form, tailInspectionCostBearer: "own_factory" }); pendingSubmit.current = null; }} />本厂</label>
           <label><input type="radio" name="tailInspectionCostBearer" checked={(history ? historicalValue("整查费用承担方") : form.tailInspectionCostBearer) === "processing_factory"} disabled={form.factory === "own_factory"} onChange={() => { setForm({ ...form, tailInspectionCostBearer: "processing_factory" }); pendingSubmit.current = null; }} />加工厂</label>
         </fieldset> : null}

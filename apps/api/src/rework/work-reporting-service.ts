@@ -30,11 +30,13 @@ import type { TodoProjectionService } from "../todos/projection-service.js";
 type WorkTaskRow = Readonly<{
   work_task_id: string; rework_order_id: string; configuration_item_id: string;
   task_version: number; assignment_mode: "individual" | "collective"; status: "active" | "superseded";
+  special_process_type?: "inspection" | "other_craft" | null;
   process_name: string; execution_kind: "worker" | "tail_inspection"; pricing_unit: "piece" | "hour"; planned_quantity: string; unit_price: string | null;
 }>;
 type PersonRow = Readonly<{ person_id: string; person_type: "internal" | "temporary"; display_name: string; app_user_id: string | null }>;
 type OrderRow = Readonly<{
   rework_order_id: string; rework_no: string | null; status: string; version: number;
+  special_process_type?: "none" | "inspection" | "other_craft" | null; other_craft_description?: string | null;
   style_no: string | null; order_no: string | null; merchandiser_user_id: string | null;
   processing_factory_type: "own_factory" | "supplier" | null; processing_factory_supplier_id: string | null;
   processing_factory_supplier_version: number | null; problem_part: string | null;
@@ -118,7 +120,7 @@ export class WorkReportingService {
   async list(actor: TrustedActorContext, reworkOrderId: string): Promise<ReworkWorkTasksResponse> {
     const order = await this.order(this.database, reworkOrderId, false);
     const tasks = await this.tasks(this.database, reworkOrderId, actor);
-    return { reworkOrderId, reworkStatus: order.status as ReworkWorkTasksResponse["reworkStatus"], orderVersion: order.version, tasks };
+    return { reworkOrderId, reworkStatus: order.status as ReworkWorkTasksResponse["reworkStatus"], orderVersion: order.version, specialProcessType: order.special_process_type ?? null, otherCraftDescription: order.other_craft_description ?? null, tasks };
   }
 
   async listFrontlineTasks(actor: TrustedActorContext, kind: FrontlineTaskKind): Promise<FrontlineTasksResponse> {
@@ -1086,12 +1088,12 @@ export class WorkReportingService {
   }
 
   private async order(client: Pick<Pool, "query"> | PoolClient, id: string, locked: boolean): Promise<OrderRow> {
-    const result = await client.query<OrderRow>(`SELECT rework_order_id,rework_no,status,version,style_no,order_no,merchandiser_user_id,processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,problem_part,problem_description,rework_quantity FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'${locked ? " FOR UPDATE" : ""}`, [id]);
+    const result = await client.query<OrderRow>(`SELECT rework_order_id,rework_no,status,version,style_no,order_no,merchandiser_user_id,processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,problem_part,problem_description,rework_quantity,special_process_type,other_craft_description FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'${locked ? " FOR UPDATE" : ""}`, [id]);
     return result.rows[0] ?? error("返工单不存在", 404, "NOT_FOUND");
   }
 
   private async task(client: PoolClient, id: string, locked: boolean): Promise<WorkTaskRow> {
-    const result = await client.query<WorkTaskRow>(`SELECT task.work_task_id,task.rework_order_id,task.configuration_item_id,task.task_version,task.assignment_mode,task.status,item.process_name,item.execution_kind,item.pricing_unit,COALESCE((SELECT adjustment.requested_planned_quantity FROM rework_process_quantity_adjustments adjustment WHERE adjustment.configuration_item_id=item.configuration_item_id AND adjustment.status='effective' ORDER BY adjustment.adjustment_version DESC LIMIT 1),item.planned_quantity) AS planned_quantity,item.unit_price FROM rework_work_tasks task JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id WHERE task.work_task_id=$1${locked ? " FOR UPDATE OF task" : ""}`, [id]);
+    const result = await client.query<WorkTaskRow>(`SELECT task.work_task_id,task.rework_order_id,task.configuration_item_id,task.task_version,task.assignment_mode,task.status,item.process_name,item.execution_kind,item.special_process_type,item.pricing_unit,COALESCE((SELECT adjustment.requested_planned_quantity FROM rework_process_quantity_adjustments adjustment WHERE adjustment.configuration_item_id=item.configuration_item_id AND adjustment.status='effective' ORDER BY adjustment.adjustment_version DESC LIMIT 1),item.planned_quantity) AS planned_quantity,item.unit_price FROM rework_work_tasks task JOIN rework_process_configuration_items item ON item.configuration_item_id=task.configuration_item_id WHERE task.work_task_id=$1${locked ? " FOR UPDATE OF task" : ""}`, [id]);
     return result.rows[0] ?? error("返工任务不存在", 404, "NOT_FOUND");
   }
 
@@ -1205,7 +1207,7 @@ export class WorkReportingService {
     const visibleMembers = personalView ? members.filter((person) => person.app_user_id === actor.actorId) : members;
     return {
       workTaskId: task.work_task_id, reworkOrderId: task.rework_order_id, configurationItemId: task.configuration_item_id,
-      processName: task.execution_kind === "tail_inspection" ? "整查" : task.process_name, executionKind: task.execution_kind, pricingUnit: task.pricing_unit, plannedQuantity: numberValue(task.planned_quantity),
+      processName: task.execution_kind === "tail_inspection" && task.special_process_type !== "other_craft" ? "整查" : task.process_name, executionKind: task.execution_kind, pricingUnit: task.pricing_unit, plannedQuantity: numberValue(task.planned_quantity),
       unitPrice: task.unit_price === null ? null : numberValue(task.unit_price), mode: task.assignment_mode, version: task.task_version, status: task.status,
       canSubmitReport: this.canSubmitReport(actor, task, members) && submittedQuantity === 0,
       members: visibleMembers.map(({ person_id, display_name, person_type }) => ({ personId: person_id, displayName: display_name, personType: person_type })),

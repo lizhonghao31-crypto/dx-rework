@@ -4,6 +4,7 @@ import type { ReworkOrderResponse, SubmitReworkOrder } from "@dx-rework/contract
 import type { Pool, PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
+import { ensureOtherCraftComplete } from "./special-process.js";
 import {
   IdempotencyService,
   MessageOutboxRepository,
@@ -33,6 +34,8 @@ type OrderRow = Readonly<{
   problem_description: string | null;
   rework_quantity: number | null;
   tail_inspection_required: boolean;
+  special_process_type?: "none" | "inspection" | "other_craft" | null;
+  other_craft_description?: string | null;
   tail_inspection_cost_bearer: "own_factory" | "processing_factory" | null;
   tail_inspection_cost_bearer_source: "legacy_default" | "quality_inspection" | "production_override" | null;
   inspection_report: ReworkOrderResponse["inspectionReport"];
@@ -143,6 +146,7 @@ export class ReworkV2SubmissionService {
     kind: "qc_rework" | "inhouse_finishing",
   ): Promise<ReworkOrderResponse> {
     const current = await this.lockOwnedDraft(client, actor, reworkOrderId);
+    ensureOtherCraftComplete(current);
     if (current.rework_kind !== kind) {
       throw new ApplicationError("FORBIDDEN", "返工类别与提交入口不一致", 403);
     }
@@ -352,6 +356,8 @@ export class ReworkV2SubmissionService {
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
       tailInspectionRequired: row.tail_inspection_required,
+      specialProcessType: row.special_process_type ?? null,
+      otherCraftDescription: row.other_craft_description ?? null,
       tailInspectionCostBearer: row.tail_inspection_cost_bearer,
       tailInspectionCostBearerSource: row.tail_inspection_cost_bearer_source,
       inspectionReport: row.inspection_report,
@@ -388,6 +394,8 @@ export class ReworkV2SubmissionService {
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
       tailInspectionRequired: row.tail_inspection_required,
+      specialProcessType: row.special_process_type ?? null,
+      otherCraftDescription: row.other_craft_description ?? null,
       tailInspectionCostBearer: row.tail_inspection_cost_bearer,
       tailInspectionCostBearerSource: row.tail_inspection_cost_bearer_source,
       inspectionReport: row.inspection_report,
