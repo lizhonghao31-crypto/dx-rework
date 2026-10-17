@@ -10,12 +10,12 @@
 | 上传/业务提交 | 已上传但待引用的附件显示尚未随本次办理提交；命令被拒时原输入/附件保持，成功提交后才清引用 |
 | 完成与下一项 | 只有原返回同一taskId已completed才说完成；仅显示同轮当前身份可执行的ready任务，不把别轮/他人任务说成本人下一项，也不从pending推断时钟尚未开始 |
 | 特定登记与辅助动作 | 预派、报告、补料复核、客户样板确认、接收、改派、优先级及业务状态沿原端点分别回执，不泛称工序完成 |
-| 写成功/刷新失败 | 说明本次办理已提交但最新状态未确认；原幂等键保留，先读取核对。读取的loading/权限/重试机制仍归PR06 |
+| 写成功/刷新失败 | 说明本次办理已提交但最新状态未确认；原幂等键和原离开保护保留，先读取核对。读取的loading/权限/重试机制仍归PR06 |
 | 制单 | 保存草稿、发布有效版本、核对采用资料分别回执；发布回执要求返回publishedVersion与当前version相等。原编辑稿与已发布快照共存，版本选择规则保持 |
 
 `digital-operation-feedback.ts`是本次三个宿主的私有显示函数，没有新增全局状态/通知平台。产品改动在原execution、task-workbench及其辅助动作、instruction组件；命令字段、端点、权限、前置、状态机、工资、历史和Root能力均沿原实现。
 
-验证：7项新反馈规则单元及既有制单采用/校验共17项通过。实际 `TaskWorkbenchSample`、`ProductionInstructionPanel` 本地Chromium在1440×900、390×844各8类行为通过，覆盖完成页重开、业务拒绝保留输入/已上传附件、旧辅助回执清除、上传待引用→提交→完成、写成功刷新失败→重开核实且不重复提交、制单保存/发布与失败回执。全部响应由合成fixture拦截，0页面异常、0外部业务请求，不使用旧设计样板作产品证据。
+验证：7项新反馈规则单元及既有制单采用/校验共17项通过。实际 `TaskWorkbenchSample`、`ProductionInstructionPanel` 本地Chromium在1440×900、390×844各8类行为通过，覆盖完成页重开、业务拒绝保留输入/已上传附件、旧辅助回执清除、上传待引用→提交→完成、写成功刷新失败保留离开确认→重开核实且不重复提交、制单保存/发布与失败回执。全部响应由合成fixture拦截，0页面异常、0外部业务请求，不使用旧设计样板作产品证据。
 
 命令：`npm run build:packages`；`npx vitest run tests/unit/digital-operation-feedback.test.ts tests/unit/instruction-source-review.test.ts tests/unit/doc03-instruction-validation.test.ts`；设置已安装的PLAYWRIGHT_IMPORT/CHROMIUM_PATH后执行 `node tests/acceptance/digital-operation-feedback-browser.mjs`，可用OPERATION_FEEDBACK_EVIDENCE保存结果/截图。另完成改动ESLint、Web typecheck/build、secret scan和diff检查。
 

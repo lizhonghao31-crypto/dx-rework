@@ -2,6 +2,7 @@
 import {useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {TaskWorkbenchSample} from '../../apps/web/src/task-workbench-sample.js';
+import {canLeaveInternalPage} from '../../apps/web/src/internal-navigation.js';
 import {ProductionInstructionPanel} from '../../apps/web/src/production-instruction-panel.js';
 import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
 import {initialInstruction,type InstructionSheet} from '@dx-rework/contracts/production-instruction';
@@ -19,6 +20,7 @@ const order:DigitalOrder={...DigitalOrderCreateSchema.parse({customerCode:'PD',p
 const instruction:InstructionSheet={order,currentOrderVersion:1,currentDeliveryDate:null,version:1,publishedVersion:null,versions:[],isPublishedSnapshot:false,canEdit:true,cutStarted:false,merchandiserName:'TEST 跟单',sourceRound:1,latestSourceRound:1,canApproveDate:false,printedBy:'TEST',dateRequests:[],document:{...initialInstruction(),styleName:'TEST 款名',category:'上衣',date:'2026-10-17',preshrink:'无需预缩',sizes:['M'],measurements:[{id:id(7),name:'胸围',tolerance:'',method:'',values:['60']}],images:[{attachmentId:id(8),kind:'款图',description:'TEST'}]}};
 const state={task,development,instruction,requests:[] as {path:string;method:string;body:unknown}[],failNextWrite:false,failNextExecutionRead:false,uploadCount:0,completionCount:0};
 Reflect.set(window,'operationFeedbackFixture',state);
+Object.assign(window,{feedbackLeaveResult:null,checkFeedbackLeave:async()=>{Reflect.set(window,'feedbackLeaveResult',await canLeaveInternalPage());}});
 const execution=()=>({sheet:state.development,tasks:[state.task,...(state.task.state==='completed'?[{...state.task,taskId:id(9),taskKind:'development_cutting',label:'裁板',state:'pending',canExecute:false,assigneeName:null,enteredAt:null,completedAt:null}]:[])],patternOrder:null,routeFacts:[],dispatch:null,facts:state.completionCount?[{factId:id(10),taskId:id(1),kind:'纸样完成',payload:{attachmentIds:[id(4)]},recordedAt:'2026-10-17T01:00:00Z'}]:[],canReportFabric:false,canDispatch:false,canDecideFabric:false,qrAvailable:false});
 window.fetch=async(input,init)=>{
  const path=String(input),method=init?.method??'GET';
