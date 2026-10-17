@@ -103,7 +103,7 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
   const removeRow=async(row:BudgetRow)=>{if(!unused(row)&&Object.keys(columns).some(key=>Boolean(row[key as keyof typeof columns]))&&!await confirmInApp("删除这条预算明细？已保存的历史版本不受影响。"))return;edit({rows:doc.rows.filter(item=>item.rowId!==row.rowId)});};
   const reload=async()=>{if(writing.current||dirty&&!await confirmInApp("重新载入将丢弃未保存修改，确定继续？"))return;setBusy(true);try{install(await digitalRequest<BudgetSheet>(`${base}${initialVersion?`?version=${initialVersion}`:""}`));setError("");}catch(reason){setError(reason instanceof Error?reason.message:"读取失败");}finally{setBusy(false);}};
   return <><Surface><section ref={root} className="budget-editor dx-doc-budget">
-    <DocumentToolbar title="成本预算表" status={busy?"保存中":error&&dirty?"保存失败，修改未保存":dirty?"未保存修改":`${initialVersion?"历史版本":sheet?.status==="published"?"已发布 · 当前有效版本":sheet?.version?"已保存":"草稿"}${sheet?.version?` · 版本 ${sheet.version}`:""}`}>
+    <DocumentToolbar title="成本预算表" status={busy?"保存中":error&&dirty?"保存失败，修改未保存":dirty?"未保存修改":sheet?`${initialVersion?"历史已发布预算":sheet.status==="published"?"已发布预算":sheet.version?"预算草稿 · 已保存":"预算草稿"} · 预算版本 ${sheet.version} · ${readonly?"只读":"可编辑"}`:"待读取预算"}>
       {!embedded&&!contained&&<Button disabled={busy} onClick={onClose}>返回</Button>}
       {!embedded&&sheet?.canEdit&&sheet.status==="published"&&sheet.document&&initialVersion===undefined&&<Button disabled={busy} onClick={()=>void copyPublished()}>另存为新草稿</Button>}
       {!readonly&&<><Button disabled={busy} onClick={()=>void run(false)}>保存预算</Button><Button variant="primary" disabled={busy} onClick={()=>void run(true)}>发布预算</Button></>}
@@ -113,7 +113,7 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
     {sheet&&<label>查看预算版本<select aria-label="查看预算版本" disabled={busy||embedded} value={initialVersion??''} onChange={async event=>{const version=event.target.value?Number(event.target.value):undefined;if(writing.current||dirty&&!await confirmInApp('切换版本将丢弃未保存修改，确定继续？'))return;setInitialVersion(version);const url=new URL(window.location.href);if(version)url.searchParams.set('budgetVersion',String(version));else url.searchParams.delete('budgetVersion');window.history.replaceState(window.history.state,'',url);}}>{!embedded&&<option value="">当前资料</option>}{sheet.versions?.map(version=><option key={version} value={version}>已发布版本 {version}</option>)}</select></label>}
     {previews.view}<DocumentErrors issues={issues} error={error}/>
     {error&&/更新|版本|冲突/.test(error)&&<Button disabled={busy} onClick={()=>void reload()}>重新载入最新版本</Button>}
-    {sheet?.canSubmitSourcing&&initialVersion===undefined&&!dirty&&<a className="dx-button dx-button--secondary budget-controls" href={`${urls.pageUrl("ui/sourcing/create")}?budget=${order.productionOrderId}&budgetVersion=${sheet.version}`}>核实并发起外发</a>}
+    {sheet?.canSubmitSourcing&&initialVersion===undefined&&!dirty&&<a className="dx-button dx-button--secondary budget-controls" href={`${urls.pageUrl("ui/sourcing/create")}?budget=${order.productionOrderId}&budgetVersion=${sheet.version}`}>核实预算并进入外发申请</a>}
     {sheet?.sourcingCaseId&&<a className="dx-button dx-button--secondary budget-controls" href={urls.pageUrl(`ui/sourcing/orders/${sheet.sourcingCaseId}`)}>查看外发订单</a>}
     {sheet&&<form onSubmit={event=>{event.preventDefault();void run(false);}}><fieldset disabled={busy}>
       <header className="budget-print-header"><h2>广州市达兴制衣有限公司</h2><h3>成本预算表</h3></header>
