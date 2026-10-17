@@ -57,7 +57,7 @@ function WagePeriodDetailContent({ periodId }: { periodId: string }) {
 
   if (!detail) {
     return (
-      <div className="wage-page">
+      <div className="wage-page wage-period-detail">
         <header className="page-heading"><div><h1>工资详情</h1></div></header>
         <Surface><p>{message || "正在加载工资月份…"}</p></Surface>
       </div>
@@ -66,7 +66,7 @@ function WagePeriodDetailContent({ periodId }: { periodId: string }) {
 
   const { period, items } = detail;
   return (
-    <div className="wage-page">
+    <div className="wage-page wage-period-detail">
       <header className="page-heading">
         <div>
           <h1>返工工资对数明细</h1>

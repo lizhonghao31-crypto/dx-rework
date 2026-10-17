@@ -1,0 +1,51 @@
+// Actual application routes; every response is synthetic and stays in this browser.
+import {createRoot} from "react-dom/client";
+import {App} from "../../apps/web/src/App.js";
+import {verifySession} from "../../apps/web/src/auth.js";
+import {ReportPreviewResponseSchema, type ReportType} from "@dx-rework/contracts/reporting";
+import {WagePeriodDetailSchema} from "@dx-rework/contracts/wages";
+import {BUSINESS_TIME_ZONE} from "@dx-rework/contracts/business-display";
+import "@dx-rework/ui/tokens.css";
+import "@dx-rework/ui/components.css";
+import "../../apps/web/src/styles.css";
+import "../../apps/web/src/responsibility-determination.css";
+import "../../apps/web/src/workflow-shell.css";
+import "../../apps/web/src/dialog-visual-system.css";
+import "../../apps/web/src/workflow-state-visual.css";
+import "../../apps/web/src/ui-polish.css";
+const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,"0")}`;
+const params=new URLSearchParams(location.search),scenario=params.get("fixtureState")??"normal",role=params.get("fixtureRole")??"finance",now="2026-10-17T00:00:00Z";
+const requests:{path:string;method:string}[]=[];
+const columnSets:Record<ReportType,readonly (readonly [string,string])[]>={
+ rework_overview:[["reworkNo","返工单号"],["styleNo","款号"],["orderNo","订单号"],["status","状态"],["node","当前节点"],["nodeEnteredAt","节点进入时间"],["wageAmount","工资金额"],["responsibilityAmount","责任金额"],["ownFactoryAmount","本厂承担"],["externalProposedAmount","外部拟扣"],["externalDeductedAmount","累计实扣"],["externalRemainingAmount","未扣差额"],["overdue","是否逾期"],["exceptionCount","异常数"]],
+ wages:[["periodMonth","工资月份"],["personName","人员"],["personType","人员类型"],["wageSource","工资来源"],["wageKind","业务类型"],["orderNo","订单号"],["styleNo","款号"],["taskName","杂事名称"],["processName","工序/品类"],["roundIndex","打板轮次（0为首次）"],["segmentIndex","执行段"],["quantity","数量（板房为整轮数量）"],["actualHours","本人工时"],["unit","单位"],["unitPrice","单价快照"],["sourceAmount","执行段计薪原值"],["roundAmount","整轮计薪原值"],["wageAmount","工资金额"],["completedDate","劳动完成日期"],["releasedAt","工资放行时间"],["releaseBasis","放行依据"],["cancellation","取消费用"],["settlementStatus","工资结算"],["markedByName","结算标记人"],["markedAt","结算标记时间"]],
+ responsibilities:[["reworkNo","返工单号"],["styleNo","款号"],["determinationVersion","责任版本"],["processName","工序"],["multiplier","倍率"],["responsibilityType","责任类型"],["shareBps","责任比例(bps)"],["amount","责任金额"]],
+ own_factory:[["reworkNo","返工单号"],["styleNo","款号"],["determinationVersion","责任版本"],["status","审批状态"],["amount","本厂承担金额"],["decision","决定"],["actedBy","处理人ID"],["decidedAt","处理时间"]],
+ external_deductions:[["reworkNo","返工单号"],["styleNo","款号"],["responsibilityType","责任类型"],["supplierName","供应商"],["status","台账状态"],["proposedAmount","拟扣金额"],["actualAmount","累计实扣"],["remainingAmount","未扣差额"],["result","最终结果"],["closedAt","关闭时间"]],
+ exceptions:[["exceptionType","异常类型"],["label","异常说明"],["reworkOrderId","返工单ID"],["occurredAt","发生/到期时间"],["deepLink","下钻地址"]],
+};
+const wageRow=(i:number)=>({lineId:id(1800+i),roundId:i%3?id(1900+i):null,segmentId:i%3?id(2000+i):null,periodMonth:"2026-10",personId:id(100+i),personName:`TEST 制作师傅-${i+1}`,personType:i%2?"temporary":"internal",wageSource:i%3?"pattern_room":"order_rework",wageKind:i%3===1?"pattern_rework":i%3===2?"misc":"order_rework",orderNo:`TEST-ORDER-${i+1}`,styleNo:`TEST-2026-秋冬连帽长款外套-${i+1}`,taskName:i%3===2?"TEST 整理秋冬原资料与附件清单":"",processName:"TEST 后中拼缝与袖口整烫",roundIndex:2,segmentIndex:1,quantity:"100.00",actualHours:"2.500",unit:"piece",unitPrice:"12.345",sourceAmount:"1234.567",roundAmount:"2469.134",wageAmount:i===0?"0.00":i===1?"-12.34":"1234.56",completedDate:"2026-10-16",releasedAt:now,releaseBasis:"TEST 已完成劳动登记",cancellation:null,settlementStatus:i%2?"settled":"unsettled",markedByName:i%2?"TEST 财务":null,markedAt:i%2?now:null,sourceStatus:"available",sourceOrderId:id(300+i),reworkOrderId:id(400+i),sourceRoundId:id(500+i)});
+function report(type:ReportType,url:URL){
+ const empty=scenario==="empty",page=Number(url.searchParams.get("page")??1),paged=url.searchParams.has("page");
+ const all=Array.from({length:24},(_,i)=>({...wageRow(i),reworkNo:`TEST-REWORK-${i+1}`,node:"上数中",nodeEnteredAt:now,status:type==="rework_overview"?"in_progress":"approved",determinationVersion:2,multiplier:"1.500",responsibilityType:"own_factory",shareBps:10000,amount:i===0?"0.00":i===1?"-12.34":"1234.56",responsibilityAmount:"1234.56",ownFactoryAmount:"0.00",externalProposedAmount:"1234.56",externalDeductedAmount:"123.45",externalRemainingAmount:"1111.11",overdue:false,exceptionCount:0,supplierName:"TEST 服装加工厂（合成资料）",proposedAmount:"1234.56",actualAmount:"123.45",remainingAmount:"1111.11",result:"partial",closedAt:null,decision:null,actedBy:id(1),decidedAt:now,exceptionType:"overdue_todo",label:"TEST 接收资料待处理，保留原记录",reworkOrderId:id(400+i),occurredAt:now,deepLink:`/ui/rework-orders/${id(400+i)}`}));
+ const rows=empty?[]:paged?all.slice((page-1)*15,page*15):all;
+ const value=ReportPreviewResponseSchema.parse({reportType:type,asOf:now,range:{from:url.searchParams.get("from")??"2026-10-01",to:url.searchParams.get("to")??"2026-10-17",timezone:BUSINESS_TIME_ZONE},rowCount:empty?0:24,truncated:false,canExport:params.get("fixtureExport")!=="0",canSettleWages:params.get("fixtureSettle")==="1",columns:columnSets[type].filter(([key])=>role!=="report-reader"||key!=="wageAmount").map(([key,label])=>({key,label})),rows,totals:empty?{}:type==="wages"?{wageAmount:"27147.98",unsettledWageAmount:"13580.16",settledWageAmount:"13567.82"}:type==="exceptions"?{exceptionCount:"24"}:type==="rework_overview"?{wageAmount:"27147.98",responsibilityAmount:"29629.44",ownFactoryAmount:"0.00",externalProposedAmount:"29629.44",externalDeductedAmount:"2962.80",externalRemainingAmount:"26666.64"}:type==="external_deductions"?{proposedAmount:"29629.44",actualAmount:"2962.80",remainingAmount:"26666.64"}:{amount:"27147.98"},...(paged?{pagination:{page,pageSize:15,totalCount:empty?0:24,totalPages:empty?1:2}}:{}),...(type==="wages"?{wageSummary:{rowCount:empty?0:24,pendingLineCount:empty?0:12,pendingPersonCount:empty?0:12,personCount:empty?0:24,orderCount:empty?0:24,roundCount:empty?0:16,people:empty?[]:all.map((r,i)=>({personId:id(100+i),name:r.personName,orderCount:1,amount:r.wageAmount,lineCount:1,roundCount:i%3?1:0,sources:[{source:r.wageSource,kind:r.wageKind,amount:r.wageAmount,lineCount:1}]}))}}:{})});
+ if(role==="report-reader"){delete value.totals.wageAmount;for(const row of value.rows)delete row.wageAmount;}
+ return value;
+}
+const detail=WagePeriodDetailSchema.parse({period:{periodId:id(900),periodMonth:"2026-10-01",timezone:"Asia/Singapore",status:"locked",periodVersion:1,sourceItemCount:18,personCount:18,totalAmount:"22221.00",lockedBy:id(1),lockedAt:now,lockNote:null,canLock:false,canExport:true},items:Array.from({length:18},(_,i)=>({wageItemId:id(1000+i),periodId:id(900),orderReviewId:id(1100+i),reworkOrderId:id(1200+i),configurationItemId:id(1300+i),workTaskId:id(1400+i),workReportId:id(1500+i),personId:id(1600+i),personNameSnapshot:`TEST 工人-${i+1}`,personTypeSnapshot:"temporary",supplierNameSnapshot:"TEST 加工厂（长名称与原工资事实核对）",temporaryWageMultiplier:"1.500",reworkNoSnapshot:`TEST-REWORK-${i+1}`,styleNoSnapshot:`TEST-2026-秋冬长款外套-${i+1}`,processNameSnapshot:"TEST 袖口整烫与后中拼缝",pricingUnitSnapshot:i%2?"hour":"piece",unitPriceSnapshot:"12.345",actualQuantitySnapshot:"100.00",assignmentMode:i<6?"individual":"collective",groupAmount:"1851.75000000",exactPersonShare:i<6?"1851.75000000":"925.87500000",payableAmount:i<6?"1851.75":i%2?"925.87":"925.88",fractionalRemainder:i<6?"0.00000000":"0.00500000",remainderRank:i<6?1:i%2+1,memberCount:i<6?1:2,memberSnapshot:[]}))});
+Object.assign(window,{reportWageFixture:{requests,role,scenario}});
+window.fetch=async(input,init)=>{
+ const path=String(input),method=init?.method??"GET",url=new URL(path,location.origin);requests.push({path,method});
+ if(method!=="GET")return Response.json({error:{message:"隔离场景，未写入业务数据"}},{status:403});
+ if(url.pathname.endsWith("auth/me"))return Response.json({status:"authorized",user:{id:id(1),displayName:role==="worker"?"TEST 工人":"TEST 财务",isRoot:role==="root",businessRoles:role==="worker"?["pattern_room_worker"]:role==="report-reader"?[]:["finance_read"],capabilities:role==="worker"?[]:role==="report-reader"?["report:view"]:["wage:view","wage:export","report:view","report:export",...(params.has("fixtureSettle")?["wage:settlement_mark"]:[])]}});
+ if(url.pathname.endsWith("pattern-room/prices"))return Response.json({categories:Array.from({length:4},(_,i)=>({priceId:id(3000+i),kind:"category",name:`TEST 打板品类-${i+1}`,unit:"件",amount:"12.345",enabled:true,version:1,updatedBy:"TEST 维护人",updatedAt:now})),hourly:{priceId:id(3100),kind:"hourly",name:"TEST 杂事小时价",unit:"小时",amount:"20.000",enabled:true,version:1,updatedBy:"TEST 维护人",updatedAt:now},canWriteCategories:false,canWriteHourly:false});
+ if(url.pathname.endsWith("management/rework-orders"))return Response.json({asOf:now,items:Array.from({length:3},(_,i)=>({reworkOrderId:id(3200+i),reworkKind:"qc_rework",reworkNo:`TEST-QUEUE-${i+1}`,styleNo:`TEST-2026-长款外套-${i+1}`,orderNo:`TEST-ORDER-${i+1}`,status:url.searchParams.get("status"),node:"N02",nodeLabel:"TEST 工序配置",nodeEnteredAt:now,agingSeconds:3600,currentHandlerUserId:id(1),plannedQuantity:"100.00",reportedQuantity:"0.00",wageAmount:"0.00",responsibilityAmount:"0.00",ownFactoryAmount:"0.00",externalProposedAmount:"0.00",externalDeductedAmount:"0.00",externalRemainingAmount:"0.00",deductionStatus:"not_started",overdue:false,exceptionCount:0,attachmentCount:0,deepLink:`/ui/tasks/${id(3200+i)}`,updatedAt:now})),page:1,pageSize:15,totalCount:3,totalPages:1,canViewReports:true});
+ if(url.pathname.includes("management/reports/")){
+  if(scenario==="failure")return Response.json({error:{message:"TEST 本地合成报表读取失败"}},{status:503});
+  return Response.json(report(url.pathname.split('/').at(-1) as ReportType,url));
+ }
+ if(url.pathname.endsWith(`wage-periods/${id(900)}`))return scenario==="failure"?Response.json({error:{message:"TEST 本地合成工资详情读取失败"}},{status:503}):Response.json(scenario==="empty"?{...detail,period:{...detail.period,sourceItemCount:0,personCount:0,totalAmount:"0.00"},items:[]}:detail);
+ throw new Error(`Unexpected synthetic read: ${path}`);
+};
+void verifySession().then(()=>createRoot(document.getElementById("root")!).render(<App/>));
