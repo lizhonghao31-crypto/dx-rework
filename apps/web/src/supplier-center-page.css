@@ -102,4 +102,4 @@
 
 /* Read-only structured values remain intact in a keyboard-scrollable local cell. */
 .supplier-profile__sections dd.supplier-structured-value { max-width:100%;overflow-x:auto;white-space:nowrap;word-break:normal;overflow-wrap:normal; }
-.supplier-profile__sections dd.supplier-structured-value:focus-visible { outline:3px solid var(--dx-v2-color-focus);outline-offset:2px; }
+.supplier-profile__sections dd.supplier-structured-value:focus-visible { outline:3px solid var(--dx-v2-color-focus);outline-offset:-2px; }

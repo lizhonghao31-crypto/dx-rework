@@ -18,3 +18,12 @@
 命令：安装既有Playwright/Chromium后运行`node tests/acceptance/erp-control-layout-browser.mjs`；CONTROL_LAYOUT_EVIDENCE保存证据，CONTROL_LAYOUT_BASELINE=1从固定release读取旧实现验证反例。Web类型/构建、改动ESLint、secret/diff检查通过；本地全量2373项通过/562项条件跳过。非真实设备触控、真人可用性或部署后Acceptance证据。价格历史弹窗及其它未命中宿主不归同根因结论。
 
 回退仅撤局部选择器、值span和只读滚动属性；不修改业务事实。焦点轮廓沿用现有token，无全局nowrap、色盘/字号体系/公共组件库变更。
+
+
+本轮唯一Review P2（4302481167）：原dd固定aria-label遮蔽实际值。已沿原权限渲染边界把字段和值共同纳入可访问名称，使用Chromium Accessibility树核全值；未声称真实屏幕阅读器通过。被审Head bbab9770在同一AX断言上失败，修复后重验。
+
+父监工指出方向键证据缺口，已补实际scrollLeft增长、持续键盘滚动达到maxScroll、末尾字符Range进入单元可视区的断言。两个长值分别在两视口执行，不能只按键计通过。补截图与几何核对同时发现原外扩焦点轮廓与标签边界约1.75px重叠，仅把这两个只读值的outline-offset改为-2px，保留原3px/token色；新增轮廓与标签不相交断言。其余字段/页面焦点不套用。
+
+截图复查范围：开发品类仅一个清晰焦点轮廓；杂事同排控件起点对齐、帮助文字保留，不用占位撑高；预算标签与checkbox同行且文字可点；供应商长值在局部完整读取、页面无新增横向溢出；外发日期本体连续。密度仅评价上述控件/字段：供应商目录/详情仍有既有分组卡片、外发仍有较长页高，归对应PR09宿主，不将本包宣称为整页紧凑验收。
+
+修复后实际键盘结果：1440视口合同/账号scrollLeft分别达到1085/741，390视口达到1034/690，均等于各自maxScroll；末尾字符可视断言通过。四次Chromium AX名称均含对应完整值；焦点轮廓与标签的几何净距从-1.75px变为+2.25px，实际viewport截图复查无该重叠。供应商页面scrollWidth不超过viewport，长值仅在本单元滚动。六组页面/控件回归通过，0页面异常/外部请求。
