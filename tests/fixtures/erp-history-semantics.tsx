@@ -1,0 +1,53 @@
+// Actual task, historical misc and rework hosts; synthetic owned TEST facts and intercepted commands only.
+import '../../apps/web/src/App.js';
+import {createRoot} from 'react-dom/client';
+import {ProductionWorkspace} from '@dx-rework/ui/production';
+import {TaskWorkbenchSample} from '../../apps/web/src/task-workbench-sample.js';
+import {BulkTaskWorkbench} from '../../apps/web/src/bulk-task-workbench.js';
+import {PatternRoomOrderDetailPage} from '../../apps/web/src/pattern-room-orders-page.js';
+import {ReworkDetailPage,type ReworkBusinessDetail} from '../../apps/web/src/rework-detail-page.js';
+import {initialDevelopmentDocument} from '../../apps/web/src/digital-development-editing.js';
+import {Shell} from '../../apps/web/src/components.js';
+import {AuthGate,verifySession} from '../../apps/web/src/auth.js';
+import type {DigitalTask} from '@dx-rework/contracts/digital-production-tasks';
+import {PatternOrderDetailSchema,type PatternOrderDetail} from '@dx-rework/contracts/pattern-orders';
+import type {BulkPreparationSheet} from '@dx-rework/contracts/bulk-preparation';
+import '@dx-rework/ui/tokens.css';
+import '@dx-rework/ui/components.css';
+import '../../apps/web/src/styles.css';
+import '../../apps/web/src/workflow-shell.css';
+import '../../apps/web/src/dialog-visual-system.css';
+import '../../apps/web/src/workflow-state-visual.css';
+import '../../apps/web/src/ui-polish.css';
+const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,now='2026-10-17T00:00:00Z',scenario=new URLSearchParams(location.search).get('fixtureScenario')??'history-development',requests:{path:string;method:string;body:unknown}[]=[],unexpected:string[]=[];
+const bulk=scenario==='history-bulk',misc=scenario.startsWith('misc'),rework=scenario.startsWith('rework'),historical=scenario==='misc-history';
+const task:DigitalTask={taskId:id(10),sourceId:bulk?null:id(11),orderId:bulk?id(12):null,taskKind:bulk?'bulk_pattern':'development_pattern',label:bulk?'大货纸样':'开发纸样',identity:{designStyleNo:'TEST-HISTORY-原款号',customerCode:'TEST'},assigneeId:id(1),assigneeName:'TEST师傅',state:'completed',routeVersion:1,occurrence:1,enteredAt:now,recordedAt:now,completedAt:now,paused:false,dueAt:null,warningAt:null,slaHours:null,policyVersion:1,routeProgress:{applicable:1,completed:1,cancelled:0},requiredRole:'pattern_room_worker',hasHandover:false,canManage:false,canCorrect:false,canControl:false,timeQuality:'现场登记',blockedReason:null,canExecute:false,unmetConditions:[]};
+const events=Array.from({length:12},(_,i)=>({eventId:id(50+i),kind:i===0?'created':i===1?'time_corrected':i===10?'future_unrecognized_event':i===11?'system_route':'condition',occurredAt:i===0?'2026-10-16T01:00:00Z':i===1?'2026-10-15T01:00:00Z':i===2?null:now,recordedAt:`2026-10-17T${String(i+1).padStart(2,'0')}:00:00Z`,actorName:`TEST原记录人${i+1}`,payload:i===3?{reason:'new_development_round',note:'TEST 原复版说明'}:{reason:`TEST 原原因${i+1}`,note:i===1?'constructor':`TEST 原说明${i+1}`}}));
+const sheet={sourceId:id(11),designStyleNo:'TEST-HISTORY-原款号',temporaryStyleNo:null,customerCode:'TEST',developmentType:'头版',designerName:'TEST设计师',version:5,status:'published',document:initialDevelopmentDocument(),publishedAt:now,taskId:task.taskId,canEdit:false,materialEvents:[],roundNumber:1,latestRoundNumber:1};
+const bulkSheet={reference:{designStyleNo:'TEST-HISTORY-原款号',customerCode:'TEST',styleImageUrl:null,instructionVersion:4,sourceRound:1},cutting:{mode:'in_house',completed:false,lines:[]},orderId:id(12),instructionVersion:4,sourceRound:1,adoptedRound:1,customerConfirmed:true,ownerApproved:true,instructionValid:true,reasons:[],preparationId:id(13),preshrink:'无需预缩',dispatch:{version:1,patternWorkerId:id(1),warehouseWorkerId:null,cuttingWorkerId:null},canDispatchPattern:false,canDispatchWarehouse:false,facts:[],tasks:[task]} as BulkPreparationSheet;
+const pending=scenario==='misc-reported'||scenario==='misc-creator',initialStatus=historical?'completed':pending?'pending_confirmation':'in_progress';
+const actualHours=historical?'1.0':['misc-worker','misc-creator','misc-ineligible'].includes(scenario)?'1.5':null;
+let order:PatternOrderDetail={orderId:id(20),orderNo:'BF-TEST-MISC',kind:'misc',taskName:'TEST 杂事原任务',status:initialStatus,version:3,styleNo:'',creatorId:id(2),creatorName:'TEST原发起人',currentWorkerName:'TEST师傅',requiredDate:'2026-10-20',reworkCount:0,submittedAt:now,updatedAt:now,currentRoundId:id(21),customer:null,sizeColor:null,referenceStyleNo:null,variant:null,note:'TEST 原任务说明',rounds:[{roundId:id(21),index:0,roundType:'initial',requestedBy:id(2),requestReason:null,status:initialStatus,categoryName:'杂事',unit:'小时',quantity:null,actualHours,unitPrice:'10.000',agreedAmount:historical?'10.000':actualHours?'15.000':null,assignedAt:now,completedAt:pending||historical?now:null,handedOverAt:historical?now:null,stoppedAt:null,cancelledAt:null,cancelledAmount:null,feeConfirmedAt:null,segments:[{segmentId:id(22),personId:id(23),workerUserId:id(1),workerName:'TEST师傅',amount:historical?'10.000':actualHours?'15.000':null,actualHours,startedAt:now,endedAt:pending||historical?now:null,wageEligible:scenario==='misc-creator'||historical}],nodes:[{stage:'pending_assignment',enteredAt:now,exitedAt:now,exitReason:'completed',elapsedSeconds:60},{stage:'in_progress',enteredAt:now,exitedAt:pending||historical?now:null,exitReason:pending||historical?'completed':null,elapsedSeconds:3600},...(pending||historical?[{stage:'pending_confirmation' as const,enteredAt:now,exitedAt:historical?now:null,exitReason:historical?'completed':null,elapsedSeconds:1800}]:[])]}],attachments:[],history:[],actions:{delete:false,assign:false,complete:scenario==='misc-worker',handoff:scenario==='misc-creator',edit:false,hours:scenario==='misc-hours'||scenario==='misc-reported',rework:false,transfer:false,cancel:false,cancelFees:false},...(historical||scenario==='misc-ineligible'?{historicalView:{node:historical?'completed' as const:'in_progress' as const,at:now,actorName:historical?'TEST原确认人':'TEST原师傅',currentRoundId:id(21),missingFacts:false}}:{})};
+PatternOrderDetailSchema.parse(order);
+const detail:ReworkBusinessDetail={reworkOrderId:id(30),reworkNo:'RW-TEST-HISTORY',reworkKind:scenario==='rework-finishing'?'inhouse_finishing':'qc_rework',status:'pending_process_configuration',version:1,styleNo:'TEST-REWORK-原款号',customerSupplyCode:null,factoryStyleNo:null,orderNo:'TEST-ONLY',orderQuantity:10,sourceReceivingActualQuantity:10,defectiveQuantity:{receiving:2,receivingLinked:true,tail:0,total:2,canAddTail:false,tailEntries:[]},supplyContext:{washingSupplierName:null,embroiderySupplierName:null,fabricSupplierName:null,embroideryMerchandiserName:null},merchandiser:null,processingFactory:{type:'own_factory',supplierId:null,displayName:'TEST本厂'},reworkReason:'TEST原原因',reworkProcess:'TEST原工序',problemPart:null,problemDescription:null,reworkQuantity:2,tailInspectionRequired:false,canReadBusinessDetails:true,singlePieceReworkTotal:1,inspectionReport:null,createdBy:{userId:id(2),displayName:'TEST发起人'},processConfigurationCreatedBy:null,createdAt:now,updatedAt:now,submittedAt:now,cancelledAt:null,cancelReason:null,settlementStatus:'not_required',wageSettlementStatus:'not_required',unsettledWagePeriods:[],attachments:[],workflowHistory:[]};
+const fixture={requests,unexpected,events,get order(){return order;}};Object.assign(window,{historySemanticsFixture:fixture});
+window.fetch=async(input,init)=>{
+ await new Promise(resolve=>window.setTimeout(resolve,0));const url=new URL(String(input),location.origin),method=init?.method??'GET',body=init?.body?JSON.parse(String(init.body)):null;requests.push({path:url.pathname+url.search,method,body});
+ if(url.pathname.endsWith('/auth/me'))return Response.json({status:'authorized',user:{id:scenario==='misc-creator'?id(2):id(1),displayName:'TEST当前岗位',businessRoles:[rework?'production_management':misc?scenario==='misc-worker'?'pattern_room_worker':scenario==='misc-creator'?'sample_designer':'pattern_room_supervisor':'pattern_room_worker'],capabilities:misc?['pattern_room:orders:view']:rework?['rework:read']:[],isRoot:false}});
+ if(url.pathname.endsWith('/history'))return Response.json({events,revisions:[]});
+ if(url.pathname.endsWith('/execution'))return Response.json({sheet,tasks:[task],patternOrder:null,routeFacts:[],dispatch:null,facts:[],canReportFabric:false,canDispatch:false,canDecideFabric:false,qrAvailable:false});
+ if(url.pathname.endsWith('/bulk-preparation'))return Response.json(bulkSheet);
+ if(url.pathname.endsWith('/business-detail'))return Response.json(detail);
+ if(url.pathname.includes('/pattern-room/orders/'+id(20))){
+  if(method==='POST'){
+   const round=order.rounds[0]!;if(url.pathname.endsWith('/hours')){round.actualHours='1.5';round.agreedAmount='15.000';round.segments[0]!.actualHours='1.5';round.segments[0]!.amount='15.000';round.segments[0]!.wageEligible=scenario==='misc-reported';order.actions.hours=false;}
+   else if(url.pathname.endsWith('/complete')){order.status='pending_confirmation';round.status='pending_confirmation';round.completedAt=now;const active=round.nodes.find(node=>node.stage==='in_progress');if(active){active.exitedAt=now;active.exitReason='completed';}round.segments[0]!.endedAt=now;round.segments[0]!.wageEligible=true;order.actions.complete=false;round.nodes.push({stage:'pending_confirmation',enteredAt:now,exitedAt:null,exitReason:null,elapsedSeconds:0});}
+   else if(url.pathname.endsWith('/confirm')){order.status='completed';round.status='completed';round.handedOverAt=now;const active=round.nodes.find(node=>node.stage==='pending_confirmation');if(active){active.exitedAt=now;active.exitReason='completed';}order.actions.handoff=false;}
+   else{unexpected.push(method+' '+url.pathname);throw Error('Unmapped misc command');}
+   order={...order,version:order.version+1};
+  }return Response.json(PatternOrderDetailSchema.parse(order));
+ }
+ unexpected.push(method+' '+url.pathname);throw Error('Unexpected history fixture request '+url.pathname);
+};
+const view=rework?<ReworkDetailPage reworkOrderId={id(30)}/>:<Shell active={misc?'杂事看板':'digital-pattern'} appearance={misc?undefined:'digital'}><ProductionWorkspace>{misc?<PatternRoomOrderDetailPage orderId={id(20)}/>:bulk?<BulkTaskWorkbench task={task} onClose={()=>undefined}/>:<TaskWorkbenchSample task={task} onClose={()=>undefined}/>}</ProductionWorkspace></Shell>;
+void verifySession().then(()=>createRoot(window.document.getElementById('root')!).render(<AuthGate requiredAnyOf={['pattern_room_worker','pattern_room_supervisor','sample_designer','production_management'].map(requiredRole=>({requiredRole}))}>{view}</AuthGate>));

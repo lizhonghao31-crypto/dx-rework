@@ -54,7 +54,7 @@ describe("PR-04 unified rework execution", () => {
 
   it("removes the independent tail node from the current flow", async () => {
     const detail = await read("apps/web/src/rework-detail-page.tsx");
-    expect(detail).toContain('node("work_reporting", "04", "返工执行报数"');
+    expect(detail).toContain('node("work_reporting", "04", detail.reworkKind === "inhouse_finishing" ? "本厂做尾报数" : "返工执行报数"');
     expect(detail).not.toContain('node("tail_inspection"');
     expect(detail).not.toContain("<TailInspectionPanel");
     expect(detail).not.toContain('if (value === "tail_inspection")');

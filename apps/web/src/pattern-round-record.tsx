@@ -20,7 +20,7 @@ export function PatternRoundRecord({ round, misc, idPrefix = "", summaryOnly = f
       </>}
     </dl>
     {!summaryOnly && round.segments.length > 0 && <div className="pattern-segments">{round.segments.map(segment => <section className="pattern-segment" id={`${idPrefix}segment-${segment.segmentId}`} key={segment.segmentId}>
-      <div className="pattern-section-heading"><strong>{segment.workerName}</strong><StatusBadge tone={segment.wageEligible ? "success" : "info"}>{segment.wageEligible ? "可计薪" : misc && segment.actualHours === null ? "工时待填写" : "待计薪"}</StatusBadge></div>
+      <div className="pattern-section-heading"><strong>{segment.workerName}</strong><StatusBadge tone={segment.wageEligible ? "success" : "info"}>{segment.wageEligible ? "可计薪" : misc && segment.actualHours === null ? "工时待填写" : misc ? "计薪条件未齐" : "待计薪"}</StatusBadge></div>
       <dl className="pattern-facts">
         <div><dt>开始</dt><dd>{patternTime(segment.startedAt)}</dd></div>
         <div><dt>结束</dt><dd>{segment.endedAt ? patternTime(segment.endedAt) : "进行中"}</dd></div>
@@ -35,7 +35,7 @@ export function PatternNodeRecord({ round, misc, stage }: { round: PatternRound;
   const item = patternWorkflow(round, misc).find(value => value.stage === stage)!;
   return <section className="pattern-node-record" aria-label={`${item.label}记录`}>
     <div className="pattern-section-heading"><h3>{item.label}</h3><StatusBadge tone={item.state === "cancelled" || item.state === "stopped" ? "danger" : "info"}>{item.status}</StatusBadge></div>
-    {item.node ? <dl className="pattern-facts"><div><dt>进入时间</dt><dd>{patternTime(item.node.enteredAt)}</dd></div><div><dt>结束时间</dt><dd>{item.node.exitedAt ? patternTime(item.node.exitedAt) : "进行中"}</dd></div><div><dt>节点用时</dt><dd>{elapsedText(item.node.elapsedSeconds)}</dd></div></dl>
+    {item.node ? <dl className="pattern-facts"><div><dt>进入时间</dt><dd>{patternTime(item.node.enteredAt)}</dd></div><div><dt>结束时间</dt><dd>{item.node.exitedAt ? patternTime(item.node.exitedAt) : "进行中"}</dd></div><div><dt>流转用时</dt><dd>{elapsedText(item.node.elapsedSeconds)}</dd></div></dl>
       : <p>{stage === "completed" && round.status === "completed" ? `完成时间：${patternTime(round.handedOverAt)}` : stage === "cancelled" ? `取消时间：${patternTime(round.cancelledAt)}` : "尚未到达此节点"}</p>}
   </section>;
 }
@@ -43,6 +43,6 @@ export function PatternNodeRecord({ round, misc, stage }: { round: PatternRound;
 export function PatternNodeHistory({ round, misc }: { round: PatternRound; misc: boolean }) {
   return <ol className="pattern-nodes">{patternWorkflow(round, misc).filter(item => item.node).map(item => <li key={item.stage}>
     <strong>{PATTERN_ORDER_STATUS_LABELS[item.node!.stage]}</strong><span>{item.status}</span>
-    <span>{patternTime(item.node!.enteredAt)} → {item.node!.exitedAt ? patternTime(item.node!.exitedAt) : "当前"}</span><span>{elapsedText(item.node!.elapsedSeconds)}</span>
+    <span>{patternTime(item.node!.enteredAt)} → {item.node!.exitedAt ? patternTime(item.node!.exitedAt) : "当前"}</span><span>流转用时：{elapsedText(item.node!.elapsedSeconds)}</span>
   </li>)}</ol>;
 }
