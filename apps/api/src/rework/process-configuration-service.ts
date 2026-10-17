@@ -10,6 +10,7 @@ import type {
 } from "@dx-rework/contracts";
 import type { ReworkOrderStatus } from "@dx-rework/domain";
 import type { Pool, PoolClient } from "pg";
+import { specialProcessLabel, specialProcessName } from "@dx-rework/contracts";
 
 import { isRootActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
@@ -38,6 +39,8 @@ type OrderRow = Readonly<{
   problem_description: string | null;
   rework_quantity: number | null;
   tail_inspection_required: boolean;
+  special_process_type?: "none" | "inspection" | "other_craft" | null;
+  other_craft_description?: string | null;
   created_by: string;
   updated_by: string;
   version: number;
@@ -64,6 +67,7 @@ type ConfigurationItemRow = Readonly<{
   catalog_process_version: number | null;
   process_name: string;
   execution_kind: "worker" | "tail_inspection";
+  special_process_type?: "inspection" | "other_craft" | null;
   pricing_unit: "piece" | "hour";
   planned_quantity: string | number;
   unit_price: string | number | null;
@@ -77,6 +81,7 @@ type PreparedItem = Readonly<{
   customProcessName: string | null;
   processName: string;
   executionKind: "worker" | "tail_inspection";
+  specialProcessType: "inspection" | "other_craft" | null;
   pricingUnit: "piece" | "hour";
   plannedQuantity: number;
   unitPrice: number;
@@ -236,9 +241,9 @@ export class ProcessConfigurationService {
       const current = await this.latestConfiguration(client, reworkOrderId, true);
       const unifiedExecutionRequired = true;
       const workerPreassignmentRequired = true;
-      const items = await this.prepareItems(client, input.items, order.tail_inspection_required);
+      const items = await this.prepareItems(client, input.items, order.tail_inspection_required, order);
       await ensureWithinSourceReceivingActualQuantity(client, reworkOrderId, items.map((item) => ({
-        label: item.executionKind === "tail_inspection" ? "整查数量" : `${item.processName}工序数量`,
+        label: item.executionKind === "tail_inspection" ? `${item.processName}数量` : `${item.processName}工序数量`,
         quantity: item.plannedQuantity,
       })));
       const configurationId = randomUUID();
@@ -283,11 +288,11 @@ export class ProcessConfigurationService {
       );
       for (const [index, item] of items.entries()) {
         await client.query(
-          "INSERT INTO rework_process_configuration_items(configuration_item_id,configuration_id,position,source,catalog_process_id,catalog_process_version,custom_process_name,process_name,execution_kind,pricing_unit,planned_quantity,unit_price) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+          "INSERT INTO rework_process_configuration_items(configuration_item_id,configuration_id,position,source,catalog_process_id,catalog_process_version,custom_process_name,process_name,execution_kind,pricing_unit,planned_quantity,unit_price,special_process_type) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
           [
             item.configurationItemId, configurationId, index + 1, item.source, item.processId,
             item.processVersion, item.customProcessName, item.processName, item.executionKind, item.pricingUnit,
-            item.plannedQuantity, item.unitPrice,
+            item.plannedQuantity, item.unitPrice, item.specialProcessType,
           ],
         );
       }
@@ -324,7 +329,7 @@ export class ProcessConfigurationService {
       if (order.tail_inspection_required ? tailItemCount !== 1 : tailItemCount !== 0) {
         throw new ApplicationError(
           "VALIDATION_ERROR",
-          order.tail_inspection_required ? "必须且只能包含一道整查特殊工序" : "本单不需要整查，不能配置整查工序",
+          order.tail_inspection_required ? `必须且只能包含一道${specialProcessLabel({ specialProcessType: order.special_process_type })}特殊工序` : "本单不需要整查，不能配置整查工序",
           400,
         );
       }
@@ -556,12 +561,13 @@ export class ProcessConfigurationService {
     client: PoolClient,
     input: readonly ProcessConfigurationItem[],
     tailInspectionRequired: boolean,
+    order: Pick<OrderRow, "special_process_type" | "other_craft_description">,
   ): Promise<PreparedItem[]> {
     const tailItems = input.filter((item) => item.executionKind === "tail_inspection");
     if (tailInspectionRequired ? tailItems.length !== 1 : tailItems.length !== 0) {
       throw new ApplicationError(
         "VALIDATION_ERROR",
-        tailInspectionRequired ? "必须且只能配置一道整查特殊工序" : "本单不需要整查，不能配置整查工序",
+        tailInspectionRequired ? `必须且只能配置一道${specialProcessLabel({ specialProcessType: order.special_process_type })}特殊工序` : "本单不需要整查，不能配置整查工序",
         400,
       );
     }
@@ -570,8 +576,11 @@ export class ProcessConfigurationService {
     for (const item of input) {
       const executionKind = item.executionKind ?? "worker";
       const submittedProcessName = item.source === "custom" ? item.customProcessName.trim() : "";
-      if (executionKind === "tail_inspection" && (item.source !== "custom" || !["整查", "尾查"].includes(submittedProcessName))) {
-        throw new ApplicationError("VALIDATION_ERROR", "整查特殊工序必须使用系统固定名称“整查”", 400);
+      const otherCraft = order.special_process_type === "other_craft";
+      const specialName = specialProcessName({ specialProcessType: order.special_process_type, otherCraftDescription: order.other_craft_description });
+      if (executionKind === "tail_inspection" && (item.source !== "custom"
+        || (otherCraft ? submittedProcessName !== order.other_craft_description : !["整查", "尾查"].includes(submittedProcessName)))) {
+        throw new ApplicationError("VALIDATION_ERROR", otherCraft ? "其他工艺内容必须与质检提交的内容一致" : "整查特殊工序必须使用系统固定名称“整查”", 400);
       }
       const plannedQuantity = item.plannedQuantity;
       const unitPrice = truncateDecimal(item.unitPrice, 3);
@@ -605,8 +614,8 @@ export class ProcessConfigurationService {
         processVersion = row.version;
         processName = row.process_name;
       } else {
-        customProcessName = executionKind === "tail_inspection" ? "整查" : submittedProcessName;
-        processName = customProcessName;
+        customProcessName = executionKind === "tail_inspection" && !otherCraft ? "整查" : submittedProcessName;
+        processName = executionKind === "tail_inspection" ? specialName : customProcessName;
       }
       const key = processName.toLocaleLowerCase("zh-CN");
       if (names.has(key)) throw new ApplicationError("VALIDATION_ERROR", "同一配置不能重复出现相同工序", 400);
@@ -619,6 +628,7 @@ export class ProcessConfigurationService {
         customProcessName,
         processName,
         executionKind,
+        specialProcessType: executionKind === "tail_inspection" && order.special_process_type !== "none" ? order.special_process_type ?? null : null,
         pricingUnit: item.pricingUnit,
         plannedQuantity,
         unitPrice,
@@ -634,7 +644,8 @@ export class ProcessConfigurationService {
     const customItems = items.filter((item) => item.source === "custom" && item.execution_kind === "worker");
     for (const lockKey of customPromotionLockKeys(customItems.map((item) => ({
       source: item.source,
-      processName: item.process_name,
+      processName: item.execution_kind === "tail_inspection" && item.special_process_type !== "other_craft" ? "整查" : item.process_name,
+          specialProcessType: item.special_process_type ?? null,
       pricingUnit: item.pricing_unit,
     })))) {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [lockKey]);
@@ -740,7 +751,7 @@ export class ProcessConfigurationService {
 
   private async items(client: Pick<PoolClient, "query">, configurationId: string): Promise<ConfigurationItemRow[]> {
     const result = await client.query<ConfigurationItemRow>(
-      "SELECT item.configuration_item_id,item.source,item.catalog_process_id,item.catalog_process_version,item.process_name,item.execution_kind,item.pricing_unit,item.planned_quantity,item.unit_price,promotion.process_id AS promoted_process_id FROM rework_process_configuration_items item LEFT JOIN rework_custom_process_promotions promotion ON promotion.configuration_item_id=item.configuration_item_id WHERE item.configuration_id=$1 ORDER BY item.position,item.configuration_item_id",
+      "SELECT item.configuration_item_id,item.source,item.catalog_process_id,item.catalog_process_version,item.process_name,item.execution_kind,item.special_process_type,item.pricing_unit,item.planned_quantity,item.unit_price,promotion.process_id AS promoted_process_id FROM rework_process_configuration_items item LEFT JOIN rework_custom_process_promotions promotion ON promotion.configuration_item_id=item.configuration_item_id WHERE item.configuration_id=$1 ORDER BY item.position,item.configuration_item_id",
       [configurationId],
     );
     return result.rows;
@@ -754,6 +765,8 @@ export class ProcessConfigurationService {
       reworkStatus: order.status,
       orderVersion: order.version,
       tailInspectionRequired: order.tail_inspection_required,
+      specialProcessType: order.special_process_type ?? null,
+      otherCraftDescription: order.other_craft_description ?? null,
       configuration: configuration ? {
         configurationId: configuration.configuration_id,
         configurationVersion: configuration.configuration_version,
@@ -770,7 +783,8 @@ export class ProcessConfigurationService {
           source: item.source,
           processId: item.catalog_process_id,
           processVersion: item.catalog_process_version,
-          processName: item.execution_kind === "tail_inspection" ? "整查" : item.process_name,
+          processName: item.execution_kind === "tail_inspection" && item.special_process_type !== "other_craft" ? "整查" : item.process_name,
+          specialProcessType: item.special_process_type ?? null,
           executionKind: item.execution_kind,
           pricingUnit: item.pricing_unit,
           plannedQuantity: numberValue(item.planned_quantity),
@@ -799,7 +813,8 @@ export class ProcessConfigurationService {
         source: item.source,
         processId: item.catalog_process_id,
         processVersion: item.catalog_process_version,
-        processName: item.process_name,
+        processName: item.execution_kind === "tail_inspection" && item.special_process_type !== "other_craft" ? "整查" : item.process_name,
+          specialProcessType: item.special_process_type ?? null,
         executionKind: item.execution_kind,
         pricingUnit: item.pricing_unit,
         plannedQuantity: numberValue(item.planned_quantity),
@@ -817,6 +832,7 @@ export class ProcessConfigurationService {
       processVersion: item.processVersion,
       processName: item.processName,
       executionKind: item.executionKind,
+      specialProcessType: item.specialProcessType,
       pricingUnit: item.pricingUnit,
       plannedQuantity: item.plannedQuantity,
       unitPrice: item.unitPrice,

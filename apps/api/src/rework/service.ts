@@ -30,6 +30,7 @@ import {
 } from "../tools/repositories.js";
 import type { TodoProjectionService } from "../todos/projection-service.js";
 import type { TodoService } from "../todos/service.js";
+import { ensureOtherCraftComplete, resolveSpecialProcess } from "./special-process.js";
 
 type DatabaseError = Readonly<{ code?: string }>;
 type FactoryState = Readonly<{
@@ -72,6 +73,8 @@ type ReworkOrderRow = Readonly<{
   problem_description: string | null;
   rework_quantity: number | null;
   tail_inspection_required: boolean;
+  special_process_type?: "none" | "inspection" | "other_craft" | null;
+  other_craft_description?: string | null;
   tail_inspection_cost_bearer: "own_factory" | "processing_factory" | null;
   tail_inspection_cost_bearer_source: "legacy_default" | "quality_inspection" | "production_override" | null;
   inspection_report: InspectionReportDraft | null;
@@ -238,6 +241,7 @@ export class ReworkInitiationService {
         throw new ApplicationError("VALIDATION_ERROR", "本厂做尾无需整查和QC报告", 400);
       }
       const reworkOrderId = randomUUID();
+      const specialProcess = resolveSpecialProcess(input, undefined, kind === "inhouse_finishing");
       const sourceReceivingBatch = await this.resolveSourceReceivingBatch(
         client,
         input.receivingBatchId,
@@ -266,11 +270,11 @@ export class ReworkInitiationService {
         problemPart: input.problemPart ?? null,
         problemDescription: input.problemDescription ?? null,
         reworkQuantity: input.reworkQuantity ?? null,
-        tailInspectionRequired: input.tailInspectionRequired ?? true,
-        tailInspectionCostBearer: input.tailInspectionRequired === false
+        ...specialProcess,
+        tailInspectionCostBearer: !specialProcess.tailInspectionRequired
           ? null
           : input.tailInspectionCostBearer ?? null,
-        tailInspectionCostBearerSource: input.tailInspectionRequired !== false
+        tailInspectionCostBearerSource: specialProcess.tailInspectionRequired
           && input.tailInspectionCostBearer
           ? "quality_inspection" as const
           : null,
@@ -293,8 +297,8 @@ export class ReworkInitiationService {
            processing_factory_supplier_version,rework_reason,rework_process,
            problem_part,problem_description,rework_quantity,tail_inspection_required,
            tail_inspection_cost_bearer,tail_inspection_cost_bearer_source,inspection_report,
-           source_receiving_batch_id,created_by,updated_by${kind === "inhouse_finishing" ? ",rework_kind" : ""}
-         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$21${kind === "inhouse_finishing" ? ",$22" : ""})`,
+           source_receiving_batch_id,created_by,updated_by,special_process_type,other_craft_description${kind === "inhouse_finishing" ? ",rework_kind" : ""}
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$21,$22,$23${kind === "inhouse_finishing" ? ",$24" : ""})`,
         [
           reworkOrderId,
           next.styleNo,
@@ -317,6 +321,8 @@ export class ReworkInitiationService {
           next.inspectionReport,
           sourceReceivingBatch.receivingBatchId,
           actor.actorId,
+          next.specialProcessType,
+          next.otherCraftDescription,
           ...(kind === "inhouse_finishing" ? [kind] : []),
         ],
       );
@@ -426,8 +432,8 @@ export class ReworkInitiationService {
         nextStyleNo = legacySource.styleNo;
       }
       const nextVersion = current.version + 1;
-      const nextTailInspectionRequired = input.tailInspectionRequired
-        ?? current.tail_inspection_required;
+      const specialProcess = resolveSpecialProcess(input, current, current.rework_kind === "inhouse_finishing");
+      const nextTailInspectionRequired = specialProcess.tailInspectionRequired;
       const nextTailInspectionCostBearer = nextTailInspectionRequired
         ? (input.tailInspectionCostBearer === undefined
             ? current.tail_inspection_cost_bearer
@@ -471,6 +477,8 @@ export class ReworkInitiationService {
           ? current.rework_quantity
           : input.reworkQuantity,
         tailInspectionRequired: nextTailInspectionRequired,
+        specialProcessType: specialProcess.specialProcessType,
+        otherCraftDescription: specialProcess.otherCraftDescription,
         tailInspectionCostBearer: nextTailInspectionCostBearer,
         tailInspectionCostBearerSource: nextTailInspectionCostBearerSource,
         inspectionReport: input.inspectionReport === undefined
@@ -497,7 +505,7 @@ export class ReworkInitiationService {
              rework_quantity=$15,tail_inspection_required=$16,
              tail_inspection_cost_bearer=$17,tail_inspection_cost_bearer_source=$18,
              inspection_report=$19,updated_by=$20,version=$21,source_receiving_batch_id=$22,
-             updated_at=CURRENT_TIMESTAMP
+             special_process_type=$23,other_craft_description=$24,updated_at=CURRENT_TIMESTAMP
          WHERE rework_order_id=$1`,
         [
           reworkOrderId,
@@ -522,6 +530,8 @@ export class ReworkInitiationService {
           actor.actorId,
           nextVersion,
           sourceReceivingBatchId,
+          next.specialProcessType,
+          next.otherCraftDescription,
         ],
       );
       if (input.attachmentIds !== undefined) {
@@ -726,6 +736,8 @@ export class ReworkInitiationService {
           ...before,
           status: nextStatus,
           tailInspectionRequired: false,
+          specialProcessType: current.special_process_type == null ? null : "none",
+          otherCraftDescription: null,
           tailInspectionCostBearer: null,
           tailInspectionCostBearerSource: null,
           version: nextVersion,
@@ -781,6 +793,8 @@ export class ReworkInitiationService {
         await client.query(
           `UPDATE rework_orders
            SET tail_inspection_required=false,tail_inspection_cost_bearer=NULL,
+               special_process_type=CASE WHEN special_process_type IS NULL THEN NULL ELSE 'none' END,
+               other_craft_description=NULL,
                tail_inspection_cost_bearer_source=NULL,status=$2,updated_by=$3,
                version=$4,updated_at=CURRENT_TIMESTAMP
            WHERE rework_order_id=$1`,
@@ -1339,6 +1353,7 @@ export class ReworkInitiationService {
   }
 
   private ensureComplete(row: ReworkOrderRow): void {
+    ensureOtherCraftComplete(row);
     if (
       !row.style_no
       || !row.processing_factory_type
@@ -1717,6 +1732,8 @@ export class ReworkInitiationService {
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
       tailInspectionRequired: row.tail_inspection_required,
+      specialProcessType: row.special_process_type ?? null,
+      otherCraftDescription: row.other_craft_description ?? null,
       tailInspectionCostBearer: row.tail_inspection_cost_bearer,
       tailInspectionCostBearerSource: row.tail_inspection_cost_bearer_source,
       inspectionReport: row.inspection_report,
@@ -1785,6 +1802,8 @@ export class ReworkInitiationService {
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
       tailInspectionRequired: row.tail_inspection_required,
+      specialProcessType: row.special_process_type ?? null,
+      otherCraftDescription: row.other_craft_description ?? null,
       tailInspectionCostBearer: row.tail_inspection_cost_bearer,
       tailInspectionCostBearerSource: row.tail_inspection_cost_bearer_source,
       inspectionReport: row.inspection_report,

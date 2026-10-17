@@ -51,7 +51,7 @@ describe("business-chain UI handoff contracts", () => {
     expect(detail).toContain('hasRole(user, "tail_inspector") && hasCapability(user, "tail_inspection:report")');
     expect(detail).toContain('hasRole(user, "ie_reviewer") && hasCapability(user, "process:review")');
     expect(reporting).toContain('task.executionKind === "tail_inspection"');
-    expect(reporting).toContain("整查完成&报数");
+    expect(reporting).toContain("${task.processName}完成&报数");
   });
 
   it("keeps responsibility party facts valid while the primary UI records the current actor automatically", async () => {

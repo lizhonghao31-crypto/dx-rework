@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { OtherCraftDescriptionSchema, SpecialProcessTypeSchema } from "./rework-special-process.js";
 
 const IdSchema = z.string().uuid();
 
@@ -49,6 +50,8 @@ export const SaveReworkV2DraftSchema = z.object({
   merchandiserUserId: IdSchema.nullable(),
   processingFactory: ReworkV2ProcessingFactoryInputSchema.nullable(),
   tailInspectionRequired: z.boolean(),
+  specialProcessType: SpecialProcessTypeSchema.optional(),
+  otherCraftDescription: OtherCraftDescriptionSchema,
   tailInspectionCostBearer: z.enum(["own_factory", "processing_factory"]).nullable(),
 }).strict();
 

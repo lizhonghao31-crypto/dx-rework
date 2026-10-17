@@ -93,6 +93,8 @@ type OrderRow = Readonly<{
   processing_factory_supplier_id: string | null;
   processing_factory_supplier_version: number | null;
   tail_inspection_required: boolean;
+  special_process_type?: "none" | "inspection" | "other_craft" | null;
+  other_craft_description?: string | null;
   tail_inspection_cost_bearer: "own_factory" | "processing_factory" | null;
   tail_inspection_cost_bearer_source:
     | "legacy_default"
@@ -199,7 +201,7 @@ export class ResponsibilityDeterminationService {
       `SELECT rework_order_id,rework_no,status,version,style_no,order_no,
               merchandiser_user_id,processing_factory_type,
               processing_factory_supplier_id,processing_factory_supplier_version,
-              tail_inspection_required,tail_inspection_cost_bearer,
+              tail_inspection_required,special_process_type,other_craft_description,tail_inspection_cost_bearer,
               tail_inspection_cost_bearer_source,
               problem_part,problem_description,rework_quantity
        FROM rework_orders
@@ -402,6 +404,8 @@ export class ResponsibilityDeterminationService {
             }
           : null,
       tailInspectionRequired: order.tail_inspection_required,
+      specialProcessType: order.special_process_type ?? null,
+      otherCraftDescription: order.other_craft_description ?? null,
       tailInspectionCostBearer: order.tail_inspection_cost_bearer,
       tailInspectionCostBearerSource:
         order.tail_inspection_cost_bearer_source ?? null,
@@ -1160,7 +1164,7 @@ export class ResponsibilityDeterminationService {
               merchandiser_user_id,processing_factory_type,
               processing_factory_supplier_id,
               processing_factory_supplier_version,
-              tail_inspection_required,tail_inspection_cost_bearer,
+              tail_inspection_required,special_process_type,other_craft_description,tail_inspection_cost_bearer,
               tail_inspection_cost_bearer_source,problem_part,
               problem_description,rework_quantity
        FROM rework_orders
@@ -1199,6 +1203,8 @@ export class ResponsibilityDeterminationService {
                   order.processing_factory_supplier_version,
               },
       tailInspectionRequired: order.tail_inspection_required,
+      specialProcessType: order.special_process_type ?? null,
+      otherCraftDescription: order.other_craft_description ?? null,
       tailInspectionCostBearer: order.tail_inspection_cost_bearer,
       tailInspectionCostBearerSource:
         order.tail_inspection_cost_bearer_source ?? null,
