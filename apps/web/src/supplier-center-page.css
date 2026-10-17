@@ -99,3 +99,16 @@
   .supplier-records td[data-label]::before{content:attr(data-label);display:block;margin-bottom:4px;color:var(--dx-v2-color-text-secondary);font-size:13px}
 }
 @media(max-width:520px){.supplier-directory__filters{grid-template-columns:repeat(2,minmax(0,1fr))}.supplier-directory__filters select:last-child{grid-column:1/-1}}
+
+/* ERP PR09e: readonly groups share one outer surface; maintenance is unchanged. */
+[data-supplier-layout="directory"] .supplier-profile__sections { gap:20px 24px; }
+[data-supplier-layout="directory"] .supplier-profile__sections > section:not(.production-analysis) { padding:0 0 12px; border:0; border-radius:0; background:transparent; }
+[data-supplier-layout="directory"] .supplier-profile__sections dl { gap:8px 16px; }
+[data-supplier-layout="directory"] .supplier-profile__sections dd { font-size:16px; line-height:24px; font-weight:500; }
+[data-supplier-layout="directory"] .supplier-profile__sections > :is(.production-analysis,details) { grid-column:1 / -1; }
+@media(max-width:800px) {
+  [data-supplier-layout="directory"] .supplier-profile__heading { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; }
+  [data-supplier-layout="directory"] .supplier-profile__back { grid-column:1 / -1; justify-self:start; }
+  [data-supplier-layout="directory"] .supplier-profile__heading > div:first-of-type { min-width:0; grid-column:1; }
+  [data-supplier-layout="directory"] .supplier-profile__sections dt { font-size:16px; line-height:24px; }
+}

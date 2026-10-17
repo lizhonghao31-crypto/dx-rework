@@ -273,7 +273,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       {mode === "manage" && !identityLoading && !identityError && !canWrite ? (
         <div className="supplier-center-notice" role="status">当前账号为只读，可查看资料与变更历史。</div>
       ) : null}
-      {batchOpen && canMaintain ? <SupplierBatchPanel onClose={() => setBatchOpen(false)} onChanged={async () => { setSuppliers(await json<SupplierSummary[]>("master-data/suppliers?includeInactive=true")); }} /> : <div className={`supplier-center-workspace${selectedId||creating ? " has-selection" : ""}`}>
+      {batchOpen && canMaintain ? <SupplierBatchPanel onClose={() => setBatchOpen(false)} onChanged={async () => { setSuppliers(await json<SupplierSummary[]>("master-data/suppliers?includeInactive=true")); }} /> : <div data-supplier-layout={mode} className={`supplier-center-workspace${selectedId||creating ? " has-selection" : ""}`}>
         <Surface className="supplier-directory">
           <div className="supplier-directory__heading">
             <div><h2>{mode === "manage" ? "供应商资料" : "供应商列表"}</h2><p>共 {filtered.length} 家</p></div>
