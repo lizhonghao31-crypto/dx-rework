@@ -4,3 +4,24 @@
 
 /* Reflow by the card width, including narrow desktop split panels. */
 @container analysis-node-bars (max-width:440px){.analysis-node-bars button{grid-template-columns:minmax(0,1fr) 9em;row-gap:4px}.analysis-node-bars small{grid-column:1/-1}}
+
+/* ERP PR09c: primary filters/results stay visible; secondary analysis expands in normal page flow. */
+.dx-production-ui .digital-analysis.analysis-workspace .analysis-heading { align-items:flex-start; flex-wrap:wrap; }
+.dx-production-ui .digital-analysis.analysis-workspace .analysis-heading > div { flex:1 1 240px; min-width:0; }
+.dx-production-ui .digital-analysis.analysis-workspace .digital-analysis-filters { align-items:start; gap:10px 12px; }
+.dx-production-ui .digital-analysis.analysis-workspace .digital-analysis-filters label { display:grid; align-content:start; align-items:start; flex:1 1 150px; min-width:0; gap:4px; line-height:20px; }
+.dx-production-ui .digital-analysis.analysis-workspace .digital-analysis-filters :is(input,select,.search-select) { width:100%; max-width:none; min-width:0; box-sizing:border-box; }
+.dx-production-ui .digital-analysis.analysis-workspace .analysis-context { margin:0 0 12px; border:0; background:var(--dx-v2-color-surface,#fff); border-radius:6px; }
+.dx-production-ui .digital-analysis.analysis-workspace .analysis-context > summary { padding:10px 12px; cursor:pointer; font-size:14px; line-height:24px; font-weight:600; }
+.dx-production-ui .digital-analysis.analysis-workspace .analysis-context > summary:focus-visible { outline:2px solid var(--dx-v2-color-primary); outline-offset:-2px; }
+.dx-production-ui .digital-analysis.analysis-workspace .analysis-insights { padding:0 12px 12px; margin:0; align-items:start; }
+.dx-production-ui .digital-analysis.analysis-workspace .analysis-insights > section { height:auto; min-height:0; max-height:none; overflow:visible; }
+.dx-production-ui .digital-analysis.analysis-workspace .digital-analysis-table { height:auto; max-height:none; overflow-x:auto; }
+@media(max-width:800px) {
+  .dx-production-ui .digital-analysis.analysis-workspace .analysis-heading > div { flex-basis:100%; }
+  .dx-production-ui .digital-analysis.analysis-workspace .analysis-heading h1 { white-space:normal; }
+  .dx-production-ui .digital-analysis.analysis-workspace .digital-analysis-filters label { flex-basis:145px; }
+  .dx-production-ui .digital-analysis.analysis-workspace .analysis-tabs { gap:4px 12px; }
+  .dx-production-ui .digital-analysis.analysis-workspace .analysis-tabs button { min-height:44px; }
+}
+.dx-production-ui .digital-analysis.analysis-workspace .digital-analysis-table:focus-visible { outline:2px solid var(--dx-v2-color-primary); outline-offset:-2px; }

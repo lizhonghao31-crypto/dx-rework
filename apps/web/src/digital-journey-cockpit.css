@@ -101,3 +101,21 @@
 .digital-journey-cockpit .journey-activity-empty{display:block}
 @media(max-width:800px){.digital-journey-cockpit .journey-order-heading{height:auto;flex-wrap:wrap}.digital-journey-cockpit .journey-order-heading h1{flex-wrap:wrap}.digital-journey-cockpit .journey-current-panel:has(.journey-current-primary-actions) .journey-current-body{height:auto}}
 @media(min-width:801px){.digital-journey-cockpit .journey-flow-panel:not(.is-collapsed){height:auto;min-height:194px}.digital-journey-cockpit .journey-flow-panel:not(.is-collapsed) .dx-production-stage{height:auto;min-height:112px}}
+
+/* ERP PR09c: each parallel owner remains readable; current work and records use natural height. */
+.dx-production-ui .digital-journey-cockpit .journey-three-columns { grid-template-rows:auto auto; align-items:start; }
+.dx-production-ui .digital-journey-cockpit .journey-three-columns > div > section { height:auto; }
+.dx-production-ui .digital-journey-cockpit .journey-current-panel { height:auto; min-height:0; max-height:none; overflow:visible; }
+.dx-production-ui .digital-journey-cockpit .journey-current-panel .journey-current-body { height:auto; max-height:none; overflow:visible; }
+.dx-production-ui .digital-journey-cockpit .journey-parallel-nodes { flex-wrap:wrap; overflow:visible; gap:6px; font-size:12px; line-height:18px; }
+.dx-production-ui .digital-journey-cockpit .journey-parallel-nodes > button { flex:0 1 auto; min-width:0; max-width:100%; padding:4px 6px; white-space:normal; overflow-wrap:anywhere; text-align:left; }
+.dx-production-ui .digital-journey-cockpit :is(.journey-documents-viewport,.journey-activities) { height:auto; min-height:0; max-height:none; overflow:visible; }
+.dx-production-ui .digital-journey-cockpit .journey-activities li { font-size:12px; line-height:18px; }
+.dx-production-ui .digital-journey-cockpit .journey-activities :is(time,button) { font-size:12px; line-height:18px; }
+@media(max-width:800px) {
+  .dx-production-ui .digital-journey-cockpit .journey-parallel-nodes > button { flex:1 1 180px; min-height:44px; font-size:16px; line-height:24px; }
+  .dx-production-ui .digital-journey-cockpit .journey-risk-viewport { height:auto; max-height:none; overflow:visible; }
+  .dx-production-ui .digital-journey-cockpit .journey-node-tabs { height:auto; min-height:44px; max-height:none; padding-block:2px; align-items:center; }
+  .dx-production-ui .digital-journey-cockpit .journey-activities :is(li,time,button) { font-size:16px; line-height:24px; }
+  .dx-production-ui .digital-journey-cockpit .journey-activities button { min-height:44px; }
+}
