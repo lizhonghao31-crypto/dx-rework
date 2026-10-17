@@ -1,6 +1,6 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
-import {bulkCuttingDetailHref,digitalChildDetailHref,digitalDetailClosePath,digitalDetailReturnUrl,productionWorkspaceDomainHref} from '../../apps/web/src/digital-detail-route.js';
-import {readDocumentVersion,readDigitalDetailContext,rememberDigitalDetailContext} from '../../apps/web/src/digital-detail-context.js';
+import {bulkCuttingDetailHref,digitalChildDetailHref,digitalDetailClosePath,digitalDetailReturnUrl,digitalDetailRoute,productionWorkspaceDomainHref} from '../../apps/web/src/digital-detail-route.js';
+import {isCurrentDocumentVersion,readDocumentKind,readDocumentVersion,readDigitalDetailContext,rememberDigitalDetailContext} from '../../apps/web/src/digital-detail-context.js';
 import {cuttingReturnPath} from '../../apps/web/src/cutting-query.js';
 import {sourcingNavigationView,sourcingReturnPath,withSourcingOrigin} from '../../apps/web/src/sourcing-list-query.js';
 const order='00000000-0000-4000-8000-000000000001',line='00000000-0000-4000-8000-000000000002',task='00000000-0000-4000-8000-000000000003',history='00000000-0000-4000-8000-000000000004';
@@ -23,6 +23,15 @@ describe('existing source and presentation context survive native detail hops',(
   const returned=url(digitalDetailClosePath(parent.search,base)!);expect(returned.pathname).toBe(base+'ui/digital-cockpit');expect(returned.searchParams.get('page')).toBe('2');
   const again=bulkCuttingDetailHref(base+'ui/cutting/orders/'+history,order,line,parent.search,base,base+'ui/digital-production');
   expect(url(url(again).searchParams.get('returnTo')!).searchParams.get('returnTo')).toBe(parent.searchParams.get('returnTo'));
+ });
+ it.each(['/','/acceptance/'])('preserves legal compound sources by the existing active-domain priority: %s',base=>{
+  const source=detail('development',order,{round:'2',task,taskView:'read'});
+  const back=digitalDetailReturnUrl(source,base);expect(back).not.toBeNull();expect(digitalDetailRoute(url(back!).search)).toEqual({kind:'development',id:order,version:2});
+  const child=url(productionWorkspaceDomainHref(`/ui/digital-production?task=${history}&taskView=read`,url(source).search,base,base+'ui/digital-production'));
+  expect(digitalDetailClosePath(child.search,base)).toBe(back);expect(digitalDetailRoute(url(digitalDetailClosePath(url(back!).search,base)!).search)).toEqual({kind:'task',id:task});
+  expect(digitalDetailReturnUrl(detail('development',order,{round:'2',task:'bad'}),base)).toBeNull();
+  expect(digitalDetailReturnUrl(source+'&task='+history,base)).toBeNull();
+  expect(digitalDetailReturnUrl(detail('development',order,{round:'2',task,returnTo:source}),base)).toBeNull();
  });
  it('keeps bulk, factory PO/action, instruction version and exact parent through a second hop',()=>{
   const factory=detail('factory',order,{factoryAction:'qc',line,returnTo:'/ui/my-tasks?page=2'});
@@ -52,6 +61,11 @@ describe('existing source and presentation context survive native detail hops',(
   for(const value of ['https://outside.test/ui/digital-production?order='+order,'//outside.test/','/\\outside.test',detail('bulk','bad'),detail('factory',order,{factoryAction:'write'}),detail('task',task,{taskTab:'toString'}),detail('task',task,{round:'0'}),detail('budget',order,{budgetVersion:'0'}),detail('bulk',order,{line:'bad'}),detail('task',task,{taskView:'handle',returnTo:detail('task',history)}),detail('order',order)+'&order='+line,detail('order',order,{extra:'unexpected'})])expect(digitalDetailReturnUrl(value,'/')).toBeNull();
   let nested='/ui/my-tasks';for(let i=0;i<5;i++)nested=detail('budget',order,{budgetVersion:String(i+1),returnTo:nested});expect(digitalDetailReturnUrl(nested,'/')).toBeNull();
   expect(digitalChildDetailHref('https://outside.test/','/ui/my-tasks','/')).toBe('');
+ });
+ it('keeps explicit current document context separate from adopted/history versions',()=>{
+  const current=detail('task',task,{taskTab:'documents',documentKind:'budget',documentCategory:'materials',budgetVersion:'current',round:'1'});
+  expect(digitalDetailReturnUrl(current,'/')).toBe(current);expect(readDocumentKind(url(current).search)).toBe('budget');expect(isCurrentDocumentVersion('budget',url(current).search)).toBe(true);expect(readDocumentVersion('development',url(current).search)).toBe(1);
+  expect(digitalDetailReturnUrl(detail('budget',order,{budgetVersion:'current'}),'/')).toBeNull();expect(digitalDetailReturnUrl(detail('task',task,{documentKind:'toString'}),'/')).toBeNull();
  });
  it('remembers only presentation without losing router state or unrelated current identity',()=>{
   let href='https://local.invalid/acceptance/ui/digital-production?task='+task+'&taskView=read&todo='+history;

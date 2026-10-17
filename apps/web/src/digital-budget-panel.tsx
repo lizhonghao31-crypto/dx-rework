@@ -24,7 +24,7 @@ const initial = (): BudgetDocument => ({ fabricType: "", productCategory: "", mo
     ...[...Array<string>(6).fill("通用物料"), ...Array<string>(3).fill("拉链"), ...Array<string>(3).fill("扣类"), ...Array<string>(3).fill("橡筋类"), ...Array<string>(3).fill("装饰牌标"), ...Array<string>(4).fill("花边/织带"), ...Array<string>(3).fill("其它")].map(category => newRow("辅料", category)),
     ...Array.from({ length: 4 }, () => newRow("外发工序"))] });
 
-export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVersion, embedded=false,contained=false }: { order: DigitalOrder; onClose: () => void; initialVersion?: number | undefined; contained?:boolean;embedded?:boolean }) {
+export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVersion, embedded=false,contained=false,onVersionChange }: { order: DigitalOrder; onClose: () => void; onVersionChange?:((version:number|undefined)=>void)|undefined; initialVersion?: number | undefined; contained?:boolean;embedded?:boolean }) {
   const previews=useDocumentUploadPreviews();
   const [initialVersion,setInitialVersion]=useState(requestedVersion);
   const [sheet, setSheet] = useState<BudgetSheet | null>(null), [doc, setDoc] = useState<BudgetDocument>(initial);
@@ -111,7 +111,7 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
       <Button disabled={!sheet?.document||dirty||busy} onClick={()=>window.print()}>打印 / 保存 PDF</Button>
     </DocumentToolbar>
     <p className="budget-mobile-overview">{order.designStyleNo} · {order.customerCode} · 成本 {amount(totals?.cost)} · 利润 {amount(totals?.profit)}</p>
-    {sheet&&<label>查看预算版本<select aria-label="查看预算版本" disabled={busy||embedded} value={initialVersion??''} onChange={async event=>{const version=event.target.value?Number(event.target.value):undefined;if(writing.current||dirty&&!await confirmInApp('切换版本将丢弃未保存修改，确定继续？'))return;setInitialVersion(version);const url=new URL(window.location.href);if(version)url.searchParams.set('budgetVersion',String(version));else url.searchParams.delete('budgetVersion');window.history.replaceState(window.history.state,'',url);}}>{!embedded&&<option value="">当前资料</option>}{sheet.versions?.map(version=><option key={version} value={version}>已发布版本 {version}</option>)}</select></label>}
+    {sheet&&<label>查看预算版本<select aria-label="查看预算版本" disabled={busy||embedded} value={initialVersion??''} onChange={async event=>{const version=event.target.value?Number(event.target.value):undefined;if(writing.current||dirty&&!await confirmInApp('切换版本将丢弃未保存修改，确定继续？'))return;setInitialVersion(version);const url=new URL(window.location.href);if(version)url.searchParams.set('budgetVersion',String(version));else url.searchParams.delete('budgetVersion');window.history.replaceState(window.history.state,'',url);onVersionChange?.(version);}}>{!embedded&&<option value="">当前资料</option>}{sheet.versions?.map(version=><option key={version} value={version}>已发布版本 {version}</option>)}</select></label>}
     {previews.view}<DocumentErrors issues={issues} error={error}/>
     {error&&/更新|版本|冲突/.test(error)&&<Button disabled={busy} onClick={()=>void reload()}>重新载入最新版本</Button>}
     {sheet?.canSubmitSourcing&&initialVersion===undefined&&!dirty&&<a className="dx-button dx-button--secondary budget-controls" href={productionWorkspaceDomainHref(`${urls.pageUrl("ui/sourcing/create")}?budget=${order.productionOrderId}&budgetVersion=${sheet.version}`,window.location.search)}>核实并发起外发</a>}
