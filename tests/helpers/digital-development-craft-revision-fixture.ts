@@ -22,6 +22,7 @@ export async function exerciseGarmentCraftRevision(db:Pool,execution:Development
  const input=(taskId:string,kind:string)=>({taskId,result:'通过' as const,note:'TEST按本轮持久化路线办理',craftExecution:kind==='development_craft_dispatch'?'内部' as const:null,nextAssigneeId:kind==='development_craft_dispatch'?workerId:null,sentDate:kind==='development_shipping'?'2026-09-30':null,trackingNo:kind==='development_shipping'?'TEST-CRAFT-REVISION':null});
  for(const kind of ['development_craft_dispatch','development_printing'])await execution.route(root,sourceId,input((await task(kind)).taskId,kind),randomUUID());
  const confirmation=await task('development_craft_confirmation'),body=input(confirmation.taskId,confirmation.taskKind),key=randomUUID();
+ expect((await execution.read(root,sourceId)).nextSteps?.find(step=>step.taskId===confirmation.taskId)?.label).toBe('派工/转交车板');
  await expect(execution.route(outsider,sourceId,body,randomUUID())).rejects.toMatchObject({statusCode:404});
  await Promise.all([execution.route(root,sourceId,body,key),execution.route(root,sourceId,body,key)]);
  const current=await tasks();
