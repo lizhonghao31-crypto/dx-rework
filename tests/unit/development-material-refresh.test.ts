@@ -1,4 +1,5 @@
 import type * as ReactModule from "react";
+import type * as NavigationGuardModule from "../../apps/web/src/use-digital-detail-navigation-guard.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const harness = vi.hoisted(() => ({ dependencies: [] as (unknown[] | undefined)[], effects: [] as (() => void)[], states: [] as unknown[], refs: [] as {current: unknown}[], refIndex: 0, effectIndex: 0, cleanups: [] as ((() => void) | undefined)[] }));
 vi.mock("react", async original => ({
@@ -12,6 +13,8 @@ vi.mock("react", async original => ({
     harness.dependencies[effectIndex] = dependencies;
   },
 }));
+// This direct-call harness isolates loading; real navigation guards run in the browser fixture.
+vi.mock("../../apps/web/src/use-digital-detail-navigation-guard.js", async original => ({...await original<typeof NavigationGuardModule>(),useDigitalDetailNavigationGuard:vi.fn()}));
 vi.mock("../../apps/web/src/digital-production-api.js", () => ({ digitalRequest: vi.fn() }));
 import { digitalRequest } from "../../apps/web/src/digital-production-api.js";
 import { DevelopmentExecutionPanel } from "../../apps/web/src/digital-development-execution-panel.js";

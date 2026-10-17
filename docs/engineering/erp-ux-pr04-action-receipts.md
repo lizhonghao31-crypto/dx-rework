@@ -22,3 +22,5 @@
 对应候选未部署，真实账号、上传服务、审计及跨角色交接为POST_DEPLOY_PENDING；自然故障、真人/真机不由受控fixture冒认。回退只撤显示映射和临时回执，不撤销已发生的业务提交、附件引用或发布；不清理真实数据。
 
 一次GitHub Codex Review在原Head `844641be2457c8ddd2a5f64e466c9addefb6d717` 提出P1（discussion_r4302200159）。同一无编辑送洗反例在修复前确实无法出现离开确认。当前修复另取新Head Full Gate并交父窗口核diff/证据；不将旧Head Gate或旧Review冒作已审新增差异，不自行追加Review次数。
+
+P1接入导航hook后，既有development-material-refresh直接调用组件的React测试桩在Full Gate出现4项useContext错误。仅为该加载边界测试显式模拟导航hook，原4项加载/候选断言全部保留；导航保护由上述实际浏览器覆盖。随后本地全量458文件、2380项通过，62文件/562项按无运行数据库条件跳过；未修改CI或产品逻辑绕过检查。
