@@ -14,6 +14,7 @@ import { budgetColumns as columns, budgetFieldLabels, budgetIssues } from "./dig
 import { DigitalBudgetPrint } from "./digital-budget-print.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { useDigitalDetailNavigationGuard } from "./use-digital-detail-navigation-guard.js";
+import {productionWorkspaceDomainHref} from "./digital-detail-route.js";
 import "./digital-budget.css";
 
 const urls = createWebUrls(import.meta.env.BASE_URL);
@@ -113,8 +114,8 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
     {sheet&&<label>查看预算版本<select aria-label="查看预算版本" disabled={busy||embedded} value={initialVersion??''} onChange={async event=>{const version=event.target.value?Number(event.target.value):undefined;if(writing.current||dirty&&!await confirmInApp('切换版本将丢弃未保存修改，确定继续？'))return;setInitialVersion(version);const url=new URL(window.location.href);if(version)url.searchParams.set('budgetVersion',String(version));else url.searchParams.delete('budgetVersion');window.history.replaceState(window.history.state,'',url);}}>{!embedded&&<option value="">当前资料</option>}{sheet.versions?.map(version=><option key={version} value={version}>已发布版本 {version}</option>)}</select></label>}
     {previews.view}<DocumentErrors issues={issues} error={error}/>
     {error&&/更新|版本|冲突/.test(error)&&<Button disabled={busy} onClick={()=>void reload()}>重新载入最新版本</Button>}
-    {sheet?.canSubmitSourcing&&initialVersion===undefined&&!dirty&&<a className="dx-button dx-button--secondary budget-controls" href={`${urls.pageUrl("ui/sourcing/create")}?budget=${order.productionOrderId}&budgetVersion=${sheet.version}`}>核实并发起外发</a>}
-    {sheet?.sourcingCaseId&&<a className="dx-button dx-button--secondary budget-controls" href={urls.pageUrl(`ui/sourcing/orders/${sheet.sourcingCaseId}`)}>查看外发订单</a>}
+    {sheet?.canSubmitSourcing&&initialVersion===undefined&&!dirty&&<a className="dx-button dx-button--secondary budget-controls" href={productionWorkspaceDomainHref(`${urls.pageUrl("ui/sourcing/create")}?budget=${order.productionOrderId}&budgetVersion=${sheet.version}`,window.location.search)}>核实并发起外发</a>}
+    {sheet?.sourcingCaseId&&<a className="dx-button dx-button--secondary budget-controls" href={productionWorkspaceDomainHref(urls.pageUrl(`ui/sourcing/orders/${sheet.sourcingCaseId}`),window.location.search)}>查看外发订单</a>}
     {sheet&&<form onSubmit={event=>{event.preventDefault();void run(false);}}><fieldset disabled={busy}>
       <header className="budget-print-header"><h2>广州市达兴制衣有限公司</h2><h3>成本预算表</h3></header>
       <div className="budget-document-layout">

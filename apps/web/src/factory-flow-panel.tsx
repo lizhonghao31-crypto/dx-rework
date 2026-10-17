@@ -2,7 +2,7 @@ import {DocumentEntryScope,DocumentEntry} from "./document-entry-scope.js";
 import { SearchableSelect } from "./search-select.js";
 import { customerPoDateLabel } from "./digital-workspace-copy.js";
 import "./factory-flow-panel.css";
-import { productionWorkspaceDomainHref } from "./digital-journey-cockpit-model.js";
+import { productionWorkspaceDomainHref } from "./digital-detail-route.js";
 import {useEffect,useRef,useState} from 'react';
 import {Button,Surface} from '@dx-rework/ui';
 import type {FactoryFlowSheet} from '@dx-rework/contracts/factory-flow';

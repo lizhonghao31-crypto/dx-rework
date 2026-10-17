@@ -32,14 +32,6 @@ export function journeyRecordHref(url: string, context: CockpitContext, mode?: J
   parsed.searchParams.set("returnTo", journeyReturnUrl(context));
   return parsed.pathname + parsed.search + parsed.hash;
 }
-/** Original panels retain the new workbench only when entered with a validated local context. */
-export function productionWorkspaceDomainHref(url: string, search: string): string {
-  const returnTo = cockpitReturnPath(search);
-  if (!returnTo || !new URL(returnTo, "https://local.invalid").searchParams.has("workspace")) return url;
-  const parsed = new URL(url, "https://local.invalid");
-  parsed.searchParams.set("returnTo", returnTo);
-  return parsed.pathname + parsed.search + parsed.hash;
-}
 export function journeyTime(value: string | null, precision: JourneyNode["expectedPrecision"] = "instant", missing = "未登记"): string {
   if (!value) return missing;
   if (precision === "date") return value;

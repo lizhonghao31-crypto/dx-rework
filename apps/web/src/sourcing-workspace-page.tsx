@@ -86,7 +86,8 @@ import {
   readSourcingListQuery,
   sourcingListPath,
   sourcingReturnPath,
-  withSourcingReturn,
+  sourcingNavigationView,
+  withSourcingOrigin,
   type SourcingGenderFilter,
   type SourcingContractReturnFilter,
   type SourcingListQuery,
@@ -349,11 +350,7 @@ const detailHref = (
 ): string => {
   const target = pageUrl(`ui/sourcing/orders/${item.sourcingCaseId}`);
   if (!returnTo) return target;
-  return withSourcingReturn(
-    target,
-    returnTo.startsWith("/ui/sourcing/history") ? "history" : "pending",
-    readSourcingListQuery(returnTo.slice(returnTo.indexOf("?") + 1)),
-  );
+  return withSourcingOrigin(target,returnTo);
 };
 
 function sourcingPoDates(item:Pick<SourcingCaseSummary,"lineItems">):PoDeliveryDate[]|undefined {
@@ -449,11 +446,11 @@ export function SourcingWorkspacePage({
     return () => { mounted = false; };
   }, []);
 
-  const mobileActiveView = view === "detail" ? "pending" : view;
+  const mobileActiveView = sourcingNavigationView(view,window.location.search);
   const canCreateOrder = canAct(user, "order_merchandiser", "sourcing:inquiry:create");
 
   return (
-    <Shell active={ACTIVE_NAVIGATION[view]}>
+    <Shell active={ACTIVE_NAVIGATION[mobileActiveView]}>
       <div data-dx-ui="governed" className="sourcing-governed">
       <nav className="sourcing-mobile-navigation" aria-label="外发业务页面">
         {canCreateOrder ? <a
@@ -857,7 +854,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
       feedback.confirmed();budgetGuard.current.confirmed=true;
       // A local storage failure after a confirmed write must never invite another submission.
       try { if (!correction && user?.id) {if(budgetPreparation)clearBudgetSourcingDraft(window.localStorage,{userId:user.id,productionOrderId:budgetPreparation.productionOrderId,budgetVersion:budgetPreparation.budgetVersion});else clearLocalSourcingDraft(user.id);} } catch { /* Navigation still proceeds. */ }
-      window.location.assign(detailHref(created));
+      window.location.assign(detailHref(created,sourcingReturnPath(window.location.search)??undefined));
     });
   };
 
@@ -869,6 +866,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
         badge="外发定价&选厂"
       />
       {budgetPreparation&&<section aria-label="本单预算来源"><p>客户：{budgetPreparation.customerCode??"未登记"} · 有效预算第{budgetPreparation.budgetVersion}版 · 母单版本{budgetPreparation.orderVersion}</p><p role="status">{budgetDraftStatus}</p>{budgetNeedsReview&&<Button onClick={acceptBudgetReview} disabled={busy||uploading}>已核对当前来源，沿用合法补填</Button>}{budgetPreparation.budgetRows&&<details onToggle={event=>setBudgetSourceOpen(event.currentTarget.open)}><summary>查看设计师预算项</summary>{budgetSourceOpen&&budgetPreparation.budgetRows.map(row=><p key={row.rowId}>{row.section} · {row.category} · {row.name} {row.specification} · 单耗：{row.consumption||"未填"} · 单价：{row.unitPrice||"未填"} 元/{row.unit||"未填单位"}</p>)}</details>}</section>}
+      {!correction&&budgetOrderId&&sourcingReturnPath(window.location.search)&&<a className="dx-button dx-button--secondary" href={pageUrl(sourcingReturnPath(window.location.search)!)}>返回来源</a>}
       {correction ? <p role="status">退回原因：{correction.item.correctionReason}<a href={detailHref(correction.item)}>返回订单</a></p> : null}
       <SubmissionFeedback feedback={feedback} busy={busy} />
       <Surface className="sourcing-create-card">
@@ -1797,7 +1795,7 @@ function OrderDetailPage({
         subtitle={`${item.gender ?? "历史未维护"} · ${item.styleName ?? "历史未维护"}`}
         badge={STATUS_LABELS[item.status]}
         badgePlacement="subtitle"
-        action={todoBackPath ? "返回我的待办" : "返回订单列表"}
+        action={todoBackPath ? "返回我的待办" : listBackPath?.startsWith("/ui/digital-production?")?"返回来源":"返回订单列表"}
         actionHref={detailReturnPath ?? (item.status === "closed" ? "/ui/sourcing/history" : "/ui/sourcing/pending")}
       />
       {canReturn ? <button type="button" className="dx-button dx-button--secondary" disabled={busy} onClick={()=>{setReturnOpen(true);setReturnError("");}}>退回跟单修改</button> : null}
