@@ -65,3 +65,6 @@
   .report-center-layout .reporting-table-wrap tr { display:table-row; padding:0; }
   .report-center-layout .reporting-table-wrap :is(th,td) { display:table-cell; padding:10px 12px; border-bottom:1px solid var(--dx-v2-color-border); white-space:nowrap; font-size:16px; line-height:24px; }
 }
+@media(max-width:360px) {
+  .report-center-layout .report-center-filters { grid-template-columns:minmax(0,1fr); }
+}

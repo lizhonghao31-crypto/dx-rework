@@ -189,3 +189,6 @@
   .wage-management .wage-detail-table :is(th,td) { display:table-cell; padding:10px 12px; border-bottom:1px solid var(--dx-v2-color-border); white-space:nowrap; font-size:16px; line-height:24px; }
   .wage-management .wage-detail-table td:last-child { white-space:normal; }
 }
+@media(max-width:360px) {
+  .wage-management .wage-query-grid { grid-template-columns:minmax(0,1fr); }
+}
