@@ -15,10 +15,12 @@
 
 私有DigitalRequestError仅携带原HTTP/网络边界，保留原业务原因、AbortError及写结果未知消息，不改缓存/自动重试策略。DigitalReadFailure用于这些已知读取宿主，区分登录、无权、安全的不存在或不可见、版本变化、服务及连接失败；原服务业务原因保持，通用原因不重复展示。不新建全局请求/消息平台，不从错误推断对象存在性或授予权限，不自动重发写命令。
 
-本地定向12项通过、全量2381项通过/562项按环境条件跳过；Web类型/构建、改动ESLint、secret scan和diff检查通过。本地验证含HTTP原因、中止/未知写结果、原材料刷新/候选竞态及“主办理事实已确认、候选人失败”的边界；实际组件在1440×900、390×844覆盖12类读取/恢复/空态/竞态，0页面异常/外部请求。固定旧岗位组件的同一刷新用例因未再次调用access/options而失败。故障响应是受控fixture，不冒认自然故障、真人或部署后Acceptance。
+本地定向12项通过、全量2381项通过/562项按环境条件跳过；Web类型/构建、改动ESLint、secret scan和diff检查通过。本地验证含HTTP原因、中止/未知写结果、原材料刷新/候选竞态及“主办理事实已确认、候选人失败”的边界；实际组件在1440×900、390×844覆盖13类读取/恢复/空态/竞态，0页面异常/外部请求。固定旧岗位组件的同一刷新用例因未再次调用access/options而失败。故障响应是受控fixture，不冒认自然故障、真人或部署后Acceptance。
 
-与冻结PR04 Head1782b7b8和PR05 Head383f5030，在单独目录合成前端源文件，保留提交结果未确认保护、已选历史/当前版本、复合来源与原离开检查；组合类型及三组实际组件回归通过：回执/保护两视口各11类，来源/版本两路径×两视口各7类，本包读取恢复两视口各12类。没有合并实际分支；共享处仍须在实际接续Head核diff并重新取得所需Gate。
+与冻结PR04 Head1782b7b8和PR05 Head383f5030，在单独目录合成前端源文件，保留提交结果未确认保护、已选历史/当前版本、复合来源与原离开检查；组合类型及三组实际组件回归通过：回执/保护两视口各11类，来源/版本两路径×两视口各7类，本包读取恢复两视口各13类。没有合并实际分支；共享处仍须在实际接续Head核diff并重新取得所需Gate。
 
 命令：`npx vitest run tests/unit/digital-read-recovery.test.ts tests/unit/development-material-refresh.test.ts`；已安装Playwright/Chromium后`node tests/acceptance/digital-read-recovery-browser.mjs`，READ_RECOVERY_EVIDENCE保存结果，READ_RECOVERY_BASELINE=1加载固定旧岗位组件反例。另按实际Head记录改动ESLint、Web类型/构建、全量回归、secret scan、Full Gate和必要Review结果。
 
 回退只撤请求边界/显示/读取重试，不撤销真实业务事实，不自动重复或补写业务命令。自然网络故障、真实岗位授权和当前部署候选仍是POST_DEPLOY_PENDING。
+
+唯一一次Review P2（4302441495）确认：列表失败时详情仍可编辑，新重试按钮若共用refresh会重建详情、丢失三项预派选择。固定被审Head add259f7的实际组件用例复现为三个选择均被清空；修复只新增listRetry代次给列表请求使用，不触及原显式全页刷新/详情key和业务保存。新增回归同时断言三项选择、详情GET次数和零写入，两视口通过；原12类一并回归。新Head重新取得Full Gate，按一次Review→修复/回归→父核diff闭环，不请求第二次。

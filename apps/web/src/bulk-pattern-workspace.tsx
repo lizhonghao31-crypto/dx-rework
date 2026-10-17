@@ -18,12 +18,12 @@ function initialFilter(canViewAll:boolean):BulkWorkroomFilter {
 const taskState={ready:'可办理',completed:'已完成',pending:'等待前置',blocked:'受阻',cancelled:'已取消'};
 export function BulkPatternWorkspace({orderId,canViewAll,onOrderChange}:{orderId:string|null;canViewAll:boolean;onOrderChange?:(orderId:string|null)=>void}){
  const [selected,setSelected]=useState(orderId),[filter,setFilter]=useState(()=>initialFilter(canViewAll));
- const [search,setSearch]=useState(filter.search),[data,setData]=useState<BulkWorkroomResult|null>(null),[error,setError]=useState<Error|null>(null),[refresh,setRefresh]=useState(0);
+ const [search,setSearch]=useState(filter.search),[data,setData]=useState<BulkWorkroomResult|null>(null),[error,setError]=useState<Error|null>(null),[refresh,setRefresh]=useState(0),[listRetry,setListRetry]=useState(0);
  useEffect(()=>setSelected(orderId),[orderId]);
  useEffect(()=>{let live=true;setData(null);setError(null);
   void digitalRequest<BulkWorkroomResult>(`workspaces/bulk-pattern?${new URLSearchParams({scope:filter.scope,page:String(filter.page),search:filter.search})}`).then(value=>{if(live)setData(value);}).catch(reason=>{if(live)setError(reason);});
   return()=>{live=false;};
- },[filter,refresh]);
+ },[filter,refresh,listRetry]);
  const persist=(next:BulkWorkroomFilter,id:string|null)=>{
   const query=new URLSearchParams({section:'bulk',scope:next.scope,page:String(next.page),search:next.search});if(id)query.set('bulkOrder',id);
   window.history.replaceState(window.history.state,'',`${createWebUrls(import.meta.env.BASE_URL).pageUrl('ui/digital-pattern-room')}?${query}`);
@@ -34,7 +34,7 @@ export function BulkPatternWorkspace({orderId,canViewAll,onOrderChange}:{orderId
   <header className="pattern-board-title"><h2>大货纸样与唛架</h2><span>{data?`${data.total} 张大货订单`:error?'读取失败':'读取中…'}</span><Button type="button" onClick={()=>setRefresh(value=>value+1)}>刷新</Button></header>
   <nav className="development-tabs" aria-label="大货任务范围"><button aria-pressed={filter.scope==='mine'} onClick={()=>update({scope:'mine'})}>我的大货任务</button>{canViewAll&&<button aria-pressed={filter.scope==='all'} onClick={()=>update({scope:'all'})}>全部进度</button>}</nav>
   <form className="pattern-keyword-search" onSubmit={event=>{event.preventDefault();update({search:search.trim()});}}><label>关键词<input placeholder="款号 / PO / 客户 / 当前主办人" maxLength={100} value={search} onChange={event=>setSearch(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&event.nativeEvent.isComposing)event.preventDefault();}}/></label><Button type="submit">查询</Button></form>
-  {error&&<DigitalReadFailure error={error} onRetry={()=>setRefresh(value=>value+1)} retryLabel="重试读取大货任务"/>}{!data&&!error&&<p role="status">读取真实大货任务…</p>}{data&&!data.items.length&&<p>当前范围暂无大货任务</p>}
+  {error&&<DigitalReadFailure error={error} onRetry={()=>setListRetry(value=>value+1)} retryLabel="重试读取大货任务"/>}{!data&&!error&&<p role="status">读取真实大货任务…</p>}{data&&!data.items.length&&<p>当前范围暂无大货任务</p>}
   <p className="journey-muted">分栏数量为本页记录；办理中表示已派交，不代表已实际开工。纸样与唛架两项完成不等于整单完成。</p>
   <div className="pattern-board-scroll" role="region" aria-label="大货纸样与唛架看板" tabIndex={0}><div className="pattern-board-columns bulk-pattern-columns">{bulkPatternLanes.map(lane=><PatternBoardLane key={lane.key} lane={lane.color} title={lane.label} count={data?data.items.filter(item=>bulkPatternLane(item.sheet)===lane.key).length:'—'}>{data?.items.filter(item=>bulkPatternLane(item.sheet)===lane.key).map(item=>{
    const task=item.sheet.tasks.find(t=>t.taskKind==='bulk_pattern');
