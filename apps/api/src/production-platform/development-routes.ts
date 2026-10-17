@@ -34,6 +34,11 @@ export function registerDevelopmentRoutes(app: FastifyInstance, dependencies: Di
     const trusted = await actor(request); await service.authorizeUpload(trusted,id(request,"sourceId"));
     return attachments.finalize(trusted,id(request,"attachmentId"));
   });
+  app.get(`${base}/attachments/:attachmentId/metadata`, async request => {
+    const trusted=await actor(request),sourceId=id(request,"sourceId"),attachmentId=id(request,"attachmentId");
+    await service.read(trusted,sourceId);
+    return attachments.readIdentity(trusted,attachmentId,async row=>row.entityType==="digital_development"&&row.entityId===sourceId&&service.canDownload(trusted,sourceId,attachmentId));
+  });
   app.get(`${base}/attachments/:attachmentId`, async (request,reply) => {
     const trusted = await actor(request), sourceId = id(request,"sourceId"), attachmentId = id(request,"attachmentId");
     // Includes source scope even for unbound drafts owned by the same uploader.

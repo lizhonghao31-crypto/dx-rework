@@ -1,3 +1,4 @@
+import {AttachmentIdentity,type AttachmentIdentityData} from './attachment-identity.js';
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { Button } from "@dx-rework/ui";
 import { DEVELOPMENT_MEASUREMENTS, type DevelopmentDocument, type DevelopmentMaterial } from "@dx-rework/contracts/digital-development";
@@ -12,13 +13,14 @@ type Props = {
  writing:{current:boolean};quantityInput:string;setQuantityInput:(value:string)=>void;
  measurementIds:{current:string[]};successfulUploads:{current:Map<string,string>};
  imageUrl:(id:string)=>string;upload:(files:File[])=>Promise<void>;fileKind:FileKind;setFileKind:(value:FileKind)=>void;
+ fileIdentity?:((id:string)=>AttachmentIdentityData|undefined)|undefined;metadataPath?:((id:string)=>string|undefined)|undefined;
  issue:(id:string)=>string|undefined;patternSection?:ReactNode;uploadHelp?:string;templateResetKey?:string|number;attachmentPageSize?:number;
 };
 const material = (category: DevelopmentMaterial["category"], label: string): DevelopmentMaterial => ({materialId:createClientRequestId(),category,label,supplier:"",name:"",width:"",weight:"",composition:"",consumption:"",color:"",specification:"",quantity:"",requiredThisRound:true,available:false,expectedDate:null});
 const fileKinds=["款图","局部图","菲林","工艺开发板"] as const;
 const fileLabels:Record<FileKind,string>={款图:"主款图",局部图:"局部图",菲林:"菲林图",工艺开发板:"工艺开发板"};
 const labels = {interlining:"朴号",placketInterlining:"门筒朴",sewingThread:"车缝线",buttonholeThread:"纽门线",stitchDensity:"针距",washingMethod:"洗水方法",ironing:"整烫方法",packaging:"包装方法",formalSizes:"正装尺码",casualSizes:"休闲尺码",mainLabelMethod:"主唛车法",instructions:"制作说明"} as const;
-export function DevelopmentDocumentFields({document,edit,readonly,busy,writing,quantityInput,setQuantityInput,measurementIds,successfulUploads,imageUrl,upload,fileKind,setFileKind,issue,patternSection,uploadHelp,templateResetKey,attachmentPageSize}:Props){
+export function DevelopmentDocumentFields({document,edit,readonly,busy,writing,quantityInput,setQuantityInput,measurementIds,successfulUploads,imageUrl,upload,fileKind,setFileKind,issue,patternSection,uploadHelp,templateResetKey,attachmentPageSize,fileIdentity,metadataPath}:Props){
   const removeSize=async(index:number)=>{
     const filled=Boolean(document.sizes[index]?.trim())||document.measurements.some(row=>row.values[index]?.trim());
     if(filled&&!await confirmInApp("删除这个尺码列及对应的尺寸值？"))return;
@@ -71,7 +73,7 @@ export function DevelopmentDocumentFields({document,edit,readonly,busy,writing,q
             </div></div>
             {!readonly&&<><input id="development-upload" className="development-native-upload" disabled={busy||document.files.length>=30} type="file" multiple accept={fileKind==="款图"||fileKind==="局部图"?"image/jpeg,image/png,image/webp":"image/jpeg,image/png,image/webp,application/pdf"} onChange={event=>{const files=Array.from(event.currentTarget.files??[]);event.currentTarget.value="";void upload(files);}}/><span className="development-upload-help">{uploadHelp??"选择后立即上传；成功文件显示在下方。"}菲林图及工艺开发板支持 PDF。</span></>}
             {attachmentPageSize&&pictures.length>pageSize&&<nav aria-label="附件分页"><Button type="button" disabled={currentPage===1} onClick={()=>setPicturePage(currentPage-1)}>上一组附件</Button><span>第 {currentPage} / {Math.ceil(pictures.length/pageSize)} 组</span><Button type="button" disabled={currentPage*pageSize>=pictures.length} onClick={()=>setPicturePage(currentPage+1)}>下一组附件</Button></nav>}
-            <div className="development-file-list">{visiblePictures.map((file,index)=><div key={file.attachmentId}><a href={imageUrl(file.attachmentId)} target="_blank" rel="noreferrer">{fileLabels[fileKind]} {(currentPage-1)*pageSize+index+1}</a>{!readonly&&<Button type="button" disabled={busy} onClick={()=>{for(const [key,id]of successfulUploads.current)if(id===file.attachmentId)successfulUploads.current.delete(key);edit({files:document.files.filter(item=>item.attachmentId!==file.attachmentId)});}}>移除</Button>}</div>)}</div>
+            <div className="development-file-list">{visiblePictures.map((file,index)=><div key={file.attachmentId}><a href={imageUrl(file.attachmentId)} target="_blank" rel="noreferrer">查看原附件</a><AttachmentIdentity label={`${fileLabels[fileKind]} ${(currentPage-1)*pageSize+index+1}`} local={fileIdentity?.(file.attachmentId)} metadataPath={metadataPath?.(file.attachmentId)}/>{!readonly&&<Button type="button" disabled={busy} onClick={()=>{for(const [key,id]of successfulUploads.current)if(id===file.attachmentId)successfulUploads.current.delete(key);edit({files:document.files.filter(item=>item.attachmentId!==file.attachmentId)});}}>移除</Button>}</div>)}</div>
             {field("instructions","制作说明（选填）",1000,true)}
           </DocumentSection>
 <DocumentSection id="development-basic" title="打板信息"><div className="development-basic-grid">
