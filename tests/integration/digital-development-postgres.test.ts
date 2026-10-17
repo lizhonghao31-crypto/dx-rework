@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalDevelopmentService } from "../../apps/api/src/production-platform/development-service.js";
 import { DigitalProductionNotificationService } from "../../apps/api/src/production-platform/notification-service.js";
-import { DevelopmentDocumentSchema, type DevelopmentDocument } from "@dx-rework/contracts/digital-development";
+import { DevelopmentDocumentSchema, SaveDevelopmentSchema, type DevelopmentDocument } from "@dx-rework/contracts/digital-development";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
@@ -65,6 +65,21 @@ run("P05 development forms PostgreSQL", () => {
     await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$4,'test.png','image/png',100,$2,$3,'ready',CURRENT_TIMESTAMP)`,[id,"a".repeat(64),designer,`test/${id}`]);
     return {...doc,quantity:1,sampleSize:"M",orderDate:"2026-09-30",files:[{attachmentId:id,kind:"款图" as const}]};
   };
+  it("persists and clears the draft pattern category through the save contract without storing a price or creating tasks",async()=>{
+    const id=await source(),categoryId=randomUUID(),document=draft();
+    const input=SaveDevelopmentSchema.parse({expectedVersion:0,document:{...document,patternCategoryId:categoryId}});
+    const saved=await development.save(actor(),id,input,randomUUID());
+    expect(saved.document).toEqual({...document,patternCategoryId:categoryId});
+    const reopened=await new DigitalDevelopmentService(database,true).read(actor(),id);
+    expect(reopened.document).toEqual(saved.document);
+    await expect(development.save(actor(other),id,{expectedVersion:1,document:{...document,patternCategoryId:null}},randomUUID())).rejects.toMatchObject({statusCode:403});
+    expect((await database.query("SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1",[id])).rows[0].n).toBe(0);
+    const cleared=await development.save(actor(),id,SaveDevelopmentSchema.parse({expectedVersion:1,document:{...document,patternCategoryId:null}}),randomUUID());
+    expect(cleared.document?.patternCategoryId).toBeNull();
+    expect(SaveDevelopmentSchema.safeParse({expectedVersion:2,document:{...document,patternCategoryId:"invalid"}}).success).toBe(false);
+    expect(SaveDevelopmentSchema.safeParse({expectedVersion:2,document:{...document,patternPrice:"40.000"}}).success).toBe(false);
+    expect((await development.read(actor(),await source())).document).toBeNull();
+  });
   it("persists incomplete customer PO drafts, rejects invalid initial publication without tasks, and hides PO drafts from technical readers",async()=>{
     const id=await source(),identity=await development.read(actor(),id);
     const document:DevelopmentDocument=await ready();

@@ -18,6 +18,8 @@ export const DevelopmentMaterialSchema = z.object({
 });
 export const DevelopmentDocumentSchema = z.object({
   customerOrderDraft: z.object({withOrder:z.boolean(),order:InitialCustomerOrderDraftSchema}).strict().optional(),
+  // Draft selection only. Publication still obtains and validates the current price quote.
+  patternCategoryId: z.string().uuid().nullable().optional(),
   template: z.enum(["上衣", "裤子"]), quantity: z.number().int().min(1).max(100000).nullable(),
   sampleSize: short, orderDate: z.iso.date().nullable(), returnDate: z.iso.date().nullable(),
   unit: z.enum(["cm", "inch"]), sizes: z.array(short).max(20),
