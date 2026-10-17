@@ -56,3 +56,26 @@
 @media(max-width:1200px) { .sample-analysis .analysis-filter-main { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 @media(max-width:800px) { .sample-analysis .analysis-filter-main { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:480px) { .sample-analysis .analysis-filter-main { grid-template-columns:minmax(0,1fr); } }
+
+/* ERP PR09f: all twelve existing filters stay visible in this sample host. */
+.sample-analysis-workspace .sample-analysis > .sample-amount-filters { padding:12px!important; }
+.sample-analysis-workspace .sample-analysis .analysis-filter-main { gap:8px 12px; align-items:end; }
+.sample-analysis-workspace .sample-analysis .analysis-filter-main > label { gap:4px; line-height:20px; }
+.sample-analysis-workspace .sample-analysis .analysis-filter-main > label > :is(input,select,.native-search-select) { min-height:40px; width:100%; min-width:0; box-sizing:border-box; font-size:14px; }
+.sample-analysis-workspace .sample-analysis .analysis-filter-main .native-search-select input { min-height:38px; height:38px; font-size:14px; }
+.sample-analysis-workspace .sample-analysis .analysis-form-actions { margin-top:8px; gap:8px; }
+.sample-analysis-workspace .sample-analysis .analysis-form-actions .dx-button { min-height:40px; }
+.sample-analysis-workspace .sample-analysis .analysis-tabs { margin:0; gap:8px; }
+@media(max-width:600px) {
+  .sample-analysis-workspace .sample-analysis .analysis-filter-main { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .sample-analysis-workspace .sample-analysis .analysis-filter-main > label { font-size:16px; line-height:24px; }
+  .sample-analysis-workspace .sample-analysis .analysis-filter-main > label > :is(input,select,.native-search-select) { min-height:44px; font-size:16px; }
+  .sample-analysis-workspace .sample-analysis .analysis-filter-main .native-search-select input { min-height:44px; height:44px; font-size:16px; }
+  .sample-analysis-workspace .sample-analysis :is(.analysis-form-actions,.analysis-tabs) .dx-button { min-height:44px; font-size:16px; }
+  .sample-analysis-workspace .sample-analysis :is(.analysis-scope,.analysis-metrics dt,.analysis-rank button,.analysis-rank small) { font-size:16px; line-height:24px; }
+  .sample-analysis-workspace .sample-analysis .analysis-rank button > span:nth-child(2) { overflow-wrap:anywhere; }
+  .sample-analysis-workspace .sample-analysis .analysis-rank strong { white-space:nowrap; }
+}
+@media(max-width:360px) {
+  .sample-analysis-workspace .sample-analysis .analysis-filter-main { grid-template-columns:minmax(0,1fr); }
+}
