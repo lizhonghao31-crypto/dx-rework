@@ -1,3 +1,4 @@
+import {execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 import {build} from 'vite';
 import {mkdtemp,readFile,readdir,rm,mkdir,writeFile} from 'node:fs/promises';
@@ -6,22 +7,27 @@ import {join,resolve} from 'node:path';
 import {createServer} from 'node:http';
 const {chromium}=await import(process.env.PLAYWRIGHT_IMPORT||'playwright');
 const output=await mkdtemp(join(tmpdir(),'dx-todo-transfer-')),directory=process.env.TODO_TRANSFER_EVIDENCE,results=[],errors=[],external=[];
-const cases=['success','root','wrong-role','forbidden','conflict','unknown','unknown-gone','invalid-json','viewer','role-forbidden','other-manager','read-failure','empty-candidates','inactive-recipient','identity-change'];
+const cases=['success','root','wrong-role','forbidden','conflict','unknown','unknown-gone','invalid-json','viewer','role-forbidden','other-manager','read-failure','empty-candidates','inactive-recipient','identity-change','digital-assignment','digital-assignment-viewer','digital-action','routing-read-denied'];
 let browser,server,deadline;
 try{
- await build({configFile:false,esbuild:{jsx:'automatic'},define:{'import.meta.env.BASE_URL':'"/"','process.env.NODE_ENV':'"production"'},build:{outDir:output,lib:{entry:resolve('tests/fixtures/erp-todo-transfer.tsx'),name:'TodoTransfer',formats:['iife']}}});
+ await build({configFile:false,plugins:process.env.TODO_TRANSFER_REVIEW_BASELINE?[{name:'reviewed-entry-classification',load(id){if(id===resolve('apps/web/src/my-todos-page.tsx'))return execFileSync('git',['show','d1c23ea712046512901340a7e15e6c542b298aee:apps/web/src/my-todos-page.tsx'],{encoding:'utf8'});}}]:[],esbuild:{jsx:'automatic'},define:{'import.meta.env.BASE_URL':'"/"','process.env.NODE_ENV':'"production"'},build:{outDir:output,lib:{entry:resolve('tests/fixtures/erp-todo-transfer.tsx'),name:'TodoTransfer',formats:['iife']}}});
  const names=await readdir(output),js=await readFile(join(output,names.find(n=>n.endsWith('.js'))),'utf8'),css=await readFile(join(output,names.find(n=>n.endsWith('.css'))),'utf8');const html=`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script>${js.replace(/<\/script/gi,'<\\/script')}</script></html>`;
  server=createServer((_request,response)=>{response.setHeader('content-type','text/html;charset=utf-8');response.end(html);});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',args:['--no-sandbox']});if(directory)await mkdir(directory,{recursive:true});
  for(const viewport of [{width:1440,height:900},{width:375,height:812}])for(const name of cases){
   if(process.env.TODO_TRANSFER_ONLY_CASE&&name!==process.env.TODO_TRANSFER_ONLY_CASE)continue;
   const key=`${name}-${viewport.width}`;console.log('START '+key);deadline=setTimeout(()=>void browser.close(),30000);const page=await browser.newPage({viewport}),navigations=[];page.on('framenavigated',frame=>{if(frame===page.mainFrame())if(navigations.length<12)navigations.push(frame.url());});page.on('pageerror',e=>errors.push({key,message:e.message}));
   try{
-   await page.route('**/*',route=>{if(route.request().isNavigationRequest()&&new URL(route.request().url()).hostname==='127.0.0.1')return route.continue();external.push(route.request().url());return route.abort();});await page.addInitScript(value=>sessionStorage.setItem('dx-erp:todo-test-scenario',value),name==='wrong-role'?'success':name);await page.goto(`http://127.0.0.1:${server.address().port}/ui/my-tasks?module=rework`);await page.getByRole('heading',{name:'待办接手安排',exact:true}).waitFor({timeout:10000});
+   await page.route('**/*',route=>{if(route.request().isNavigationRequest()&&new URL(route.request().url()).hostname==='127.0.0.1')return route.continue();external.push(route.request().url());return route.abort();});await page.addInitScript(value=>sessionStorage.setItem('dx-erp:todo-test-scenario',value),name==='wrong-role'?'success':name);await page.goto(`http://127.0.0.1:${server.address().port}/ui/my-tasks?module=${name.startsWith('digital-')?'digital_production':'rework'}`);
    const requests=()=>page.evaluate(()=>window.todoTransferFixture.requests),posts=async()=>(await requests()).filter(r=>r.method==='POST'&&r.path.includes('/todos/routing-exceptions/'));
-   if(['viewer','role-forbidden'].includes(name)){assert.equal(await page.locator('.todo-routing-transfer').count(),0);await page.getByText('此项转交由当前指定的管理人办理。',{exact:true}).waitFor();}
+   if(name.startsWith('digital-')){
+    if(process.env.TODO_TRANSFER_REVIEW_BASELINE){await page.getByRole('heading',{name:'待办接手安排',exact:true}).waitFor();await page.locator('.todo-routing-transfer summary').click();await page.getByText(/当前待处理列表中未找到|已处理或当前不在/).waitFor();assert.ok((await requests()).some(r=>r.path.includes('/routing-exceptions/mine')));assert.ok((await requests()).some(r=>r.path.includes('/access/candidates')));results.push({key,baselineWrongEntry:true,requests:await requests()});continue;}
+    assert.equal(await page.locator('.todo-routing-transfer').count(),0);await page.getByRole('heading',{name:name==='digital-action'?'TEST 数字任务办理':'TEST 数字任务待指派',exact:true}).waitFor();if(name==='digital-action'){const href=await page.getByRole('link',{name:/TEST 数字任务办理/}).getAttribute('href');const url=new URL(href,page.url());assert.equal(url.pathname,'/ui/digital-production');assert.equal(url.searchParams.get('task'),'00000000-0000-4000-8000-000000000013');}else{await page.getByText('主办缺失或已失效，请重新分配',{exact:true}).waitFor();assert.equal(await page.locator('.my-todo-card a').count(),0);}assert.equal((await requests()).filter(r=>r.path.includes('/routing-exceptions/')||r.path.includes('/access/candidates')).length,0);assert.doesNotMatch(await page.locator('.my-todo-card').innerText(),/已处理|已转交给/);
+   }else if(['viewer','role-forbidden'].includes(name)){assert.equal(await page.locator('.todo-routing-transfer').count(),0);await page.getByText('此项转交由当前指定的管理人办理。',{exact:true}).waitFor();}
    else{
+    await page.getByRole('heading',{name:'待办接手安排',exact:true}).waitFor({timeout:10000});
     const details=page.locator('.todo-routing-transfer'),summary=details.locator('summary');await summary.focus();await summary.press('Space');
-    if(name==='other-manager'){await page.getByText('这项转交已处理或当前不在你的待处理范围，请刷新待办核对。',{exact:true}).waitFor();assert.equal(await details.locator('form').count(),0);}
+    if(name==='routing-read-denied'){await details.getByRole('alert').waitFor();assert.equal(await details.locator('form').count(),0);assert.doesNotMatch(await details.innerText(),/已处理|已转交给/);}
+    else if(name==='other-manager'){await page.getByText('当前待处理列表中未找到这项转交，请刷新待办并从原单核对。',{exact:true}).waitFor();assert.equal(await details.locator('form').count(),0);}
     else{
      if(name==='read-failure'){await details.getByRole('alert').waitFor();await page.getByRole('button',{name:'重读转交事项与人员',exact:true}).click();}
      await details.locator('form').waitFor();const choose=async text=>{const input=details.getByRole('combobox');await input.fill(text);await input.press('ArrowDown');await input.press('Enter');await input.press('Escape');};

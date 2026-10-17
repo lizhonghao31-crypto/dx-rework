@@ -52,7 +52,7 @@ export function TodoRoutingTransfer({todo,canManage,onChanged}:{todo:TodoRespons
    {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}{loading&&<p role="status">正在读取转交事项…</p>}
    {uncertain?<Button type="button" disabled={loading||busy} onClick={()=>void recheck()}>重新读取转交事项</Button>:!accepted&&<>
     {error&&<Button type="button" disabled={loading||busy} onClick={()=>setRetry(value=>value+1)}>重读转交事项与人员</Button>}
-    {!loading&&!error&&!exception?<p>这项转交已处理或当前不在你的待处理范围，请刷新待办核对。</p>:null}
+    {!loading&&!error&&!exception?<p>当前待处理列表中未找到这项转交，请刷新待办并从原单核对。</p>:null}
     {exception&&<form onSubmit={event=>{event.preventDefault();void submit();}}><fieldset disabled={loading||busy||!readReady||accepted}>
      <label>接手人<SearchableSelect value={recipient} required onChange={event=>setRecipient(event.target.value)}><option value="">请选择在职接手人</option>{people.map(person=><option key={person.id} value={person.id}>{person.displayName} · {[...new Set(person.roles.map(code=>roleLabel(code)===code?'已登记岗位':roleLabel(code)))].join('、')}</option>)}</SearchableSelect></label>
      {!loading&&!people.length?<p>当前名单中暂无可选人员，请核对人员任职情况。</p>:null}

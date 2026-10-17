@@ -31,3 +31,7 @@
 全量测试、类型/构建、静态门禁、当前Head Gate及唯一GitHub Codex Review分别记录；跳过不算通过。真实M01/A01、真实人员权限及可用性、真实实物交接和发厂事实均留待已授权Acceptance验收。
 
 最终本地全量为458文件、2378通过、565跳过；初次受限沙箱的10项失败已保留，精确复现为spawnSync子进程EPERM，在所需沙箱权限下同一断言全量通过，不是改业务或跳过失败测试。当前源码类型检查、完整构建/业务静态门禁、最终Web构建、lint、migration lint、secret scan和diff检查通过。原数据库缺少所需条件而跳过的565项不列为通过；上述真实隔离PG结果单列。
+
+唯一Review P2修复：真实数字缺指派通知与持久化受控转交同用todoType，但原category/sourceAction不同。实际App旧Head两宽复现误分类并发出无结果的异常/候选读取；现入口同时核todoType、category=recipient_routing_exception和sourceAction=todo.recipient_blocked。数字缺指派保留原任务标题/阻断原因，不发起转交相关读取；普通数字任务的原合法链接不变。未在当前pending列表找到异常只描述读取事实，不称已处理或成功。当前原生及含10b组合各38个转交/数字通知场景通过，43项定向测试通过；无权限、异常读取403、当前异常缺失和未知结果分支均不误报处理成功。此为唯一Review后的P2修复，不请求第二次Review，改后Head重新Full Gate。
+
+裁后暂停与Root另经源码核对：BulkPreparationService.gates以现有非active生命周期形成原因，FactoryFlowService.command在原work前统一拒绝该原因、没有Root例外；本UI只禁用对应业务fieldset。原Root管理、改派和状态管理分支未修改，不外推其它资料或旧合同停写。

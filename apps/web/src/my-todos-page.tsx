@@ -345,7 +345,7 @@ export function MyTodosPage() {
                   : "返工单关联信息待读取";
             return (
               <div className="my-todo-card" key={todo.todoId}>
-                {todo.todoType==='recipient_routing_exception' ? <div className="my-todo-row"><b className="my-todo-index">{String((page-1)*pageSize+index+1).padStart(2,'0')}</b><div className="my-todo-primary"><div className="my-todo-title"><h2>待办接手安排</h2><StatusBadge tone="warning">需要转交</StatusBadge></div><p>{orderSummary}</p><TodoRoutingTransfer key={`${queryOwner}:${todo.todoId}`} todo={todo} canManage={routingAccess.manage} onChanged={()=>setRefresh(value=>value+1)}/></div></div> : blocked ? (
+                {todo.todoType==='recipient_routing_exception'&&todo.category==='recipient_routing_exception'&&todo.sourceAction==='todo.recipient_blocked' ? <div className="my-todo-row"><b className="my-todo-index">{String((page-1)*pageSize+index+1).padStart(2,'0')}</b><div className="my-todo-primary"><div className="my-todo-title"><h2>待办接手安排</h2><StatusBadge tone="warning">需要转交</StatusBadge></div><p>{orderSummary}</p><TodoRoutingTransfer key={`${queryOwner}:${todo.todoId}`} todo={todo} canManage={routingAccess.manage} onChanged={()=>setRefresh(value=>value+1)}/></div></div> : blocked ? (
                   <div className="my-todo-row my-todo-row--blocked">
                     <b className="my-todo-index">{String((page - 1) * pageSize + index + 1).padStart(2, "0")}</b>
                     <div className="my-todo-primary">
