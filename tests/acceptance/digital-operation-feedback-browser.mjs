@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict';
+import {build} from 'vite';
+import {mkdtemp,readFile,readdir,rm,mkdir,writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join,resolve} from 'node:path';
+import {createServer} from 'node:http';
+const {chromium}=await import(process.env.PLAYWRIGHT_IMPORT||'playwright'),output=await mkdtemp(join(tmpdir(),'dx-operation-feedback-'));
+const directory=process.env.OPERATION_FEEDBACK_EVIDENCE,results=[],errors=[],external=[];
+let browser,server;
+try{
+ await build({configFile:false,esbuild:{jsx:'automatic'},define:{'import.meta.env.BASE_URL':'"/"','process.env.NODE_ENV':'"production"'},build:{outDir:output,lib:{entry:resolve('tests/fixtures/digital-operation-feedback.tsx'),name:'OperationFeedback',formats:['iife']}}});
+ const names=await readdir(output),js=await readFile(join(output,names.find(name=>name.endsWith('.js'))),'utf8'),css=await readFile(join(output,names.find(name=>name.endsWith('.css'))),'utf8');
+ const html=`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script>${js.replace(/<\/script/gi,'<\\/script')}</script></html>`;
+ server=createServer((_request,response)=>{response.setHeader('content-type','text/html;charset=utf-8');response.end(html);});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',args:['--no-sandbox']});if(directory)await mkdir(directory,{recursive:true});
+ for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
+  const page=await browser.newPage({viewport});page.on('pageerror',error=>errors.push(error.message));
+  await page.route('**/*',route=>{const url=new URL(route.request().url());if(route.request().isNavigationRequest()&&url.hostname==='127.0.0.1')return route.continue();if(url.hostname==='127.0.0.1'&&url.pathname.includes('/attachments/'))return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'});external.push(url.href);return route.abort();});
+  const goto=query=>page.goto(`http://127.0.0.1:${server.address().port}/${query??''}`);
+  const footer=page.locator('.task-workbench-sample > footer');
+  await goto('?completed=1');await footer.getByText('本任务已完成，办理记录已保存',{exact:true}).waitFor();assert.equal(await page.getByText('未提交业务变化',{exact:true}).count(),0);
+  await goto();await page.getByRole('textbox',{name:'办理备注',exact:true}).fill('TEST 输入保留');
+  await page.evaluate(()=>{window.operationFeedbackFixture.failNextWrite=true;});await page.getByRole('button',{name:'纸样完成，交给下一位',exact:true}).click();await page.getByRole('alert').first().waitFor();
+  assert.equal(await page.getByRole('textbox',{name:'办理备注',exact:true}).inputValue(),'TEST 输入保留');assert.equal(await page.evaluate(()=>window.operationFeedbackFixture.completionCount),0);
+  await goto();await page.getByText('报告问题 / 恢复办理',{exact:true}).click();await page.getByRole('textbox',{name:'原因',exact:true}).fill('TEST 问题');await page.getByRole('button',{name:'报告问题',exact:true}).click();await footer.getByText('问题已记录',{exact:true}).waitFor();
+  await page.getByRole('textbox',{name:'原因',exact:true}).fill('TEST 新的恢复说明');await footer.getByText('办理输入尚未提交，切换页签会保留',{exact:true}).waitFor();assert.equal(await footer.getByText('问题已记录',{exact:true}).count(),0);
+  await goto();await page.getByRole('button',{name:'本单资料 · 工序成果上传',exact:true}).click();
+  const file=page.getByLabel('纸样成果（工艺开发板 / 照片）',{exact:true});await file.setInputFiles({name:'TEST-paper.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4\nTEST synthetic material')});await page.getByText('已上传 1 份，返回当前办理提交后正式引用。',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'当前办理',exact:true}).click();await footer.getByText('附件已上传，尚未随本次办理提交',{exact:true}).waitFor();assert.equal(await page.evaluate(()=>window.operationFeedbackFixture.completionCount),0);
+  await page.evaluate(()=>{window.operationFeedbackFixture.failNextWrite=true;});await page.getByRole('button',{name:'纸样完成，交给下一位',exact:true}).click();await footer.getByRole('alert').waitFor();assert.equal(await page.evaluate(()=>window.operationFeedbackFixture.completionCount),0);await page.getByText('本次已上传 1 个文件',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'纸样完成，交给下一位',exact:true}).click();await footer.getByText(/纸样已完成。/).waitFor();assert.equal(await page.evaluate(()=>window.operationFeedbackFixture.completionCount),1);assert.equal(await footer.getByText(/尚未随本次办理提交/).count(),0);
+  await page.getByRole('button',{name:'TEST 重新打开',exact:true}).click();await footer.getByText('本任务已完成，办理记录已保存',{exact:true}).waitFor();
+  if(directory)await page.screenshot({path:join(directory,`completed-${viewport.width}.png`),fullPage:true});
+  await goto();await page.getByRole('textbox',{name:'办理备注',exact:true}).fill('TEST 已提交但刷新失败');await page.evaluate(()=>{window.operationFeedbackFixture.failNextExecutionRead=true;});await page.getByRole('button',{name:'纸样完成，交给下一位',exact:true}).click();await footer.getByText(/本次办理已提交，但未能确认最新状态/).waitFor();assert.equal(await page.evaluate(()=>window.operationFeedbackFixture.completionCount),1);assert.equal(await footer.getByText(/原输入已保留/).count(),0);
+  await page.getByRole('button',{name:'TEST 重新打开',exact:true}).click();await footer.getByText('本任务已完成，办理记录已保存',{exact:true}).waitFor();assert.equal(await page.evaluate(()=>window.operationFeedbackFixture.completionCount),1);
+  await goto('?mode=instruction');const style=page.locator('#instruction-styleName');await style.fill('TEST 修改款名');await page.getByRole('button',{name:'保存草稿',exact:true}).click();await page.getByRole('status').filter({hasText:'制单草稿已保存。当前草稿尚未发布。'}).waitFor();assert.equal(await page.evaluate(()=>window.operationFeedbackFixture.instruction.publishedVersion),null);
+  await page.getByRole('button',{name:'发布有效制单',exact:true}).click();await page.getByRole('status').filter({hasText:/有效制单版本 \d+ 已发布。/}).waitFor();assert.equal(await page.evaluate(()=>window.operationFeedbackFixture.instruction.publishedVersion),2);
+  await style.fill('TEST 再修改');assert.equal(await page.getByRole('status').filter({hasText:/有效制单版本 \d+ 已发布。/}).count(),0);await page.evaluate(()=>{window.operationFeedbackFixture.failNextWrite=true;});await page.getByRole('button',{name:'保存草稿',exact:true}).click();await page.getByRole('alert').first().waitFor();assert.equal(await style.inputValue(),'TEST 再修改');assert.equal(await page.getByRole('status').filter({hasText:'制单草稿已保存'}).count(),0);
+  results.push({viewport,checks:['persisted completion survives reopen','write rejection preserves input','new input clears older auxiliary receipt','uploaded reference stays pending until business submit','successful submit and reopen show completion','accepted write with failed refresh remains uncertain without resubmitting','instruction draft save and publication stay separate','new edits/failed save invalidate old receipt']});await page.close();
+ }
+ assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
+}finally{
+ if(directory)await writeFile(join(directory,'result.json'),JSON.stringify({results,errors,external,limitations:['Local actual product components with synthetic intercepted responses; not live API or deployed Acceptance.','Original business/state/permission adapters unchanged; this checks feedback only.']},null,2));await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));await rm(output,{recursive:true,force:true});
+}
+console.log(JSON.stringify({passed:results.length,checksPerViewport:results[0]?.checks.length,errors,external}));
