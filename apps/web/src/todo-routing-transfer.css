@@ -1,0 +1,10 @@
+.todo-routing-transfer { min-width:0; }
+.todo-routing-transfer summary { min-height:44px; display:flex; align-items:center; cursor:pointer; font-weight:600; }
+.todo-routing-transfer fieldset { display:grid; gap:12px; border:0; padding:0; margin:8px 0; min-width:0; }
+.todo-routing-transfer label { display:grid; gap:8px; min-width:0; }
+.todo-routing-transfer textarea { width:100%; min-height:88px; box-sizing:border-box; font:inherit; }
+.todo-routing-transfer p { overflow-wrap:anywhere; }
+@media(max-width:600px) {
+ .todo-routing-transfer :is(label,textarea,p,.dx-button) { font-size:16px; line-height:24px; }
+ .todo-routing-transfer .dx-button { min-height:44px; }
+}
