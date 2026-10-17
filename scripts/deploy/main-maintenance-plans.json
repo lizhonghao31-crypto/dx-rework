@@ -81,5 +81,17 @@
     ],
     "onlineCompatible": false,
     "rollback": "restart-previous-only-if-entire-history-unchanged"
+  },
+  {
+    "version": "0227_qc_other_craft",
+    "checksum": "2b4ee5e688926de2d9195e762140fe80ef6dba2ccdaa0cae6575c321426b0748",
+    "strategy": "quiesce-backup-transactional-ddl",
+    "tables": ["public.rework_orders", "public.rework_process_configuration_items"],
+    "triggerTables": ["public.rework_orders", "public.rework_process_configuration_items"],
+    "schema": "public",
+    "functions": ["public.guard_rework_order_write()"],
+    "languages": ["plpgsql"],
+    "onlineCompatible": false,
+    "rollback": "restart-previous-only-if-entire-history-unchanged"
   }
 ]
