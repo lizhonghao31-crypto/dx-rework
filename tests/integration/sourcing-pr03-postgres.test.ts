@@ -3916,6 +3916,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await exerciseInstructions(database,fixture.order,merchandiserActor(),fixture.designer,managerActor("TEST P10"),fixture.imageId);
   });
 
+  it("ERP V3-039 searches and displays the order customer when its development source has no customer",async()=>{
+    await exerciseBulkPreparation(database,await budgetFixture(),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()},factoryId,craftId("净色车缝"),'none',{cuttingProcess:'in_house',stopAtReady:true,sourceCustomerCode:null});
+  });
   it.each(['none','pattern-first','preshrink-first','concurrent'] as const)("P11 releases exactly one whole-order cutting task with %s preparation",async mode=>{
     await exerciseBulkPreparation(database,await budgetFixture(),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()},factoryId,craftId("净色车缝"),mode);
   });

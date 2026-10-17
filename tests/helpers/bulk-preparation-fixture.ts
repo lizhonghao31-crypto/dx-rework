@@ -1,6 +1,8 @@
 import {DigitalJourneyQuery} from "../../apps/api/src/production-platform/journey-query.js";
+import {DigitalCockpitQuery} from "../../apps/api/src/production-platform/cockpit-query.js";
 import { DevelopmentRoundService } from "../../apps/api/src/production-platform/development-round-service.js";
 import { randomUUID } from "node:crypto";
+import {writeFile} from "node:fs/promises";
 import type { Pool } from "pg";
 import { expect } from "vitest";
 import type { DigitalOrder } from "@dx-rework/contracts/digital-production";
@@ -18,7 +20,7 @@ import { ProductionInstructionService } from "../../apps/api/src/production-plat
 import { BulkPreparationService } from "../../apps/api/src/production-platform/bulk-preparation-service.js";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { CuttingService } from "../../apps/api/src/cutting/cutting-source-service.js";
-export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrder;designer:TrustedActorContext;document:BudgetDocument;budget:DigitalBudgetService},service:SourcingService,attachments:AttachmentService,actors:{primary:TrustedActorContext;manager:TrustedActorContext;owner:TrustedActorContext;ie:TrustedActorContext;root:TrustedActorContext},factoryId:string,craftId:string,mode:'none'|'pattern-first'|'preshrink-first'|'concurrent',options?:{cuttingProcess:'in_house'|'outsourced';stopAtReady:boolean;secondaryCraft?:'无'|'印花';warehouseRole?:'warehouse_receiver'|'warehouse_supervisor'}){
+export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrder;designer:TrustedActorContext;document:BudgetDocument;budget:DigitalBudgetService},service:SourcingService,attachments:AttachmentService,actors:{primary:TrustedActorContext;manager:TrustedActorContext;owner:TrustedActorContext;ie:TrustedActorContext;root:TrustedActorContext},factoryId:string,craftId:string,mode:'none'|'pattern-first'|'preshrink-first'|'concurrent',options?:{cuttingProcess:'in_house'|'outsourced';stopAtReady:boolean;secondaryCraft?:'无'|'印花';warehouseRole?:'warehouse_receiver'|'warehouse_supervisor';sourceCustomerCode?:string|null}){
  const primary=actors.primary,designer=fixture.designer,id=fixture.order.productionOrderId,bulk=new BulkPreparationService(db),identity=new DigitalProductionIdentityService(db,true),forms=new DigitalDevelopmentService(db,true),instruction=new ProductionInstructionService(db,true),execution=new DevelopmentExecutionService(db,true),tasks=new DigitalProductionTaskService(db),cutting=new CuttingService(db);
  const beforeRecords=await bulk.workroom(actors.root,{page:1,search:fixture.order.designStyleNo,scope:"all"});
  expect(beforeRecords.items.some(item=>item.orderId===id)).toBe(false);
@@ -34,7 +36,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
   people[role]={actorId:person,actorRoles:[actualRole],authorizationCapability:'digital_production:view',authorizationCapabilities:['digital_production:view'],requestId:randomUUID()};
  }
  const worker=people.pattern_room_worker!,warehouse=people.warehouse_receiver!,clerk=people.development_clerk!;
- const source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:fixture.order.designStyleNo,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+ const source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:fixture.order.designStyleNo,temporaryStyleNo:null,customerCode:options?.sourceCustomerCode===undefined?'PD':options.sourceCustomerCode},randomUUID());
  await identity.attachSource(designer,id,source.sourceId,randomUUID());
  const image=randomUUID();await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-bulk.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/bulk/${image}`,'a'.repeat(64),designer.actorId]);
  const development=DevelopmentDocumentSchema.parse({template:'上衣',quantity:1,sampleSize:'M',orderDate:'2026-09-30',returnDate:null,unit:'inch',sizes:['M'],measurements:[{name:'袖长',values:['6 1/8']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'',craft:'无',washing:'免洗',materials:[],files:[{attachmentId:image,kind:'款图'}]});
@@ -81,6 +83,23 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  const rootWorkroom=await bulk.workroom(actors.root,{page:1,search:fixture.order.designStyleNo,scope:'all'});
  expect(rootWorkroom.items.some(item=>item.orderId===id)).toBe(true);expect(rootWorkroom.pageSize).toBe(15);
  expect(rootWorkroom.items.find(item=>item.orderId===id)?.sheet.adoptedRound).toBe(1);
+ if(options?.sourceCustomerCode!==undefined){
+  const customer=fixture.order.customerCode;
+  expect(rootWorkroom.items.find(item=>item.orderId===id)?.customer).toBe(customer);
+  const byCustomer=await bulk.workroom(actors.root,{page:1,search:customer.toLowerCase(),scope:'all'});
+  expect(byCustomer.items.find(item=>item.orderId===id)?.customer).toBe(customer);
+  expect(byCustomer.total).toBeGreaterThanOrEqual(1);
+  expect((await bulk.workroom(actors.root,{page:byCustomer.page+100,search:customer.toLowerCase(),scope:'all'})).total).toBe(byCustomer.total);
+  const ownCustomer=await bulk.workroom(worker,{page:1,search:customer.toLowerCase(),scope:'mine'});
+  expect(ownCustomer.items.map(item=>item.orderId)).toContain(id);
+  expect((await bulk.workroom(actors.root,{page:1,search:`TEST-NO-CUSTOMER-${randomUUID()}`,scope:'all'}))).toMatchObject({total:0,items:[]});
+  const cockpit=await new DigitalCockpitQuery(db).list(actors.root,{page:1,search:fixture.order.designStyleNo,stage:'bulk'});
+  expect(cockpit.items.find(item=>item.orderId===id)?.customer).toBe(customer);
+  expect(rootWorkroom.items.find(item=>item.orderId===id)?.sheet.reference.customerCode).toBe(customer);
+  expect((await db.query('SELECT customer_code FROM digital_production_sources WHERE source_id=$1',[source.sourceId])).rows[0].customer_code).toBe(options.sourceCustomerCode);
+  expect((await db.query('SELECT order_snapshot FROM digital_instruction_versions WHERE production_order_id=$1 AND version=1',[id])).rows[0].order_snapshot.customerCode).toBe(customer);
+  if(process.env.ERP_BULK_CUSTOMER_EVIDENCE)await writeFile(process.env.ERP_BULK_CUSTOMER_EVIDENCE,JSON.stringify({customer,style:fixture.order.designStyleNo,orderId:id,styleSearch:rootWorkroom,customerSearch:byCustomer},null,2));
+ }
  expect((await bulk.workroom(actors.root,{page:1,search:'TEST P11 pattern_room_worker',scope:'all'})).items.some(item=>item.orderId===id)).toBe(true);
  await expect(bulk.workroom(actors.primary,{page:1,search:'',scope:'all'})).rejects.toMatchObject({statusCode:403});
  const ownWorkroom=await bulk.workroom(worker,{page:1,search:fixture.order.designStyleNo,scope:'mine'});
