@@ -13,6 +13,7 @@ import { ProcessConfigurationService } from "../../apps/api/src/rework/process-c
 import { ProcessWorkerPlanService } from "../../apps/api/src/rework/process-worker-plan-service.js";
 import { ReworkV2DraftService } from "../../apps/api/src/rework/v2-draft-service.js";
 import { ResponsibilityDeterminationService } from "../../apps/api/src/rework/responsibility-determination-service.js";
+import { ReworkBusinessDetailService } from "../../apps/api/src/rework/rework-business-detail-service.js";
 import { OperationEventRepository } from "../../apps/api/src/tools/repositories.js";
 import { ReworkInitiationService } from "../../apps/api/src/rework/service.js";
 import { ReworkV2SubmissionService } from "../../apps/api/src/rework/v2-submission-service.js";
@@ -341,5 +342,19 @@ runWithPostgres("QC other craft PostgreSQL closure", () => {
       FROM rework_process_configuration_items item JOIN rework_work_reports report USING(configuration_item_id)
       WHERE report.rework_order_id=$1 AND item.execution_kind='tail_inspection'`, [id])).rows)
       .toEqual([{ process_name: "其他工艺：拆线重新包边", special_process_type: "other_craft", rejected: true }]);
+    const historyService = new ReworkBusinessDetailService(database);
+    const historical = await historyService.history(tailAssign(), id, "work_reporting");
+    expect(historical.fields.find(field => field.label === "工艺类型")?.value).toBe("其他工艺");
+    expect(historical.fields.find(field => field.label === "其他工艺内容")?.value).toBe("拆线重新包边");
+    expect(historical.fields.find(field => field.label === "需要整查")?.value).toBe("否");
+    expect(historical.notices).toContain("已撤销其他工艺：拆线重新包边；原工艺报数保留为历史，不计入最终数量、工资和责任。");
+    expect(historical.page?.workTasks).toMatchObject({ specialProcessType: "other_craft", otherCraftDescription: "拆线重新包边" });
+    const reportEntry = (await database.query("SELECT event_id FROM operation_events WHERE entity_id=$1 AND action='rework.work_report.submit' ORDER BY created_at DESC LIMIT 1", [id])).rows[0].event_id;
+    const beforeWaiver = await historyService.history(tailAssign(), id, "work_reporting", reportEntry);
+    expect(beforeWaiver.fields.find(field => field.label === "其他工艺内容")?.value).toBe("拆线重新包边");
+    expect(beforeWaiver.fields.find(field => field.label === "需要整查")?.value).toBe("是");
+    expect(beforeWaiver.notices.some(notice => notice.includes("已撤销其他工艺"))).toBe(false);
+    expect((await database.query("SELECT special_process_type,other_craft_description FROM rework_orders WHERE rework_order_id=$1", [id])).rows)
+      .toEqual([{ special_process_type: "none", other_craft_description: null }]);
   });
 });
