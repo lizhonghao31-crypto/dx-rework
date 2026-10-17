@@ -85,17 +85,23 @@ export function ReworkNodeHistoryView({data,currentHref,onVersion,onImage}:{data
   <Header title={data.fields.find(field=>field.label==='款号')?.value??'返工历史'} subtitle={data.entry.label} badge="历史节点 · 只读" badgePlacement="subtitle" />
   <div className="rework-history-navigation"><span>{display(data.entry.at)} · {data.entry.actor}</span>{data.versions.length>1?<label>历史版本<select value={data.entry.id} onChange={event=>onVersion(event.target.value)}>{data.versions.map((entry,index)=><option key={entry.id} value={entry.id}>第 {index+1} 次 · {display(entry.at)}</option>)}</select></label>:null}<a className="dx-button" href={currentHref}>返回当前节点</a></div>
   <Surface className="rework-detail-target-layout">
-   <dl className="rework-detail-core-facts" aria-label="历史订单信息">{data.fields.filter(field=>['加工厂','返工工序','发起时间','发起人','订单跟单','订单数量','返工数量'].includes(field.label)&&field.value!==null).map(field=><div className="rework-detail-core-fact" key={field.label}><dt>{field.label}</dt><dd>{display(field.value)}</dd></div>)}</dl>
-   <div className="rework-detail-overview-grid order-overview--compact">
-    <section className="rework-detail-images"><div className="section-title rework-detail-panel-title rework-governed-image-heading"><h2>订单图片</h2><span className="rework-governed-image-count">{data.attachments.length} 张</span></div><div className="rework-detail-image-grid">{data.attachments.map(attachment=>attachment.mimeType.startsWith('image/')?<button className="rework-detail-image-card" type="button" key={attachment.attachmentId} onClick={()=>onImage(attachment)}><img src={apiUrl(`tools/attachments/${attachment.attachmentId}/download?mode=preview`)} alt={attachment.filename} loading="lazy" /><span className="rework-detail-image-card__filename">{attachment.filename}</span></button>:<a key={attachment.attachmentId} href={apiUrl(`tools/attachments/${attachment.attachmentId}/download`)}>{attachment.filename}</a>)}</div></section>
-    <section className="rework-workflow" aria-label="订单流程">
-     <div className="rework-workflow__heading rework-detail-panel-title"><h2>订单流程</h2><span>历史节点 · 只读</span></div>
-     <button className="rework-detail-mobile-workflow-toggle" type="button" aria-expanded={expanded} onClick={()=>setExpanded(!expanded)}><strong>订单流程</strong><span>{data.entry.label} {expanded?'−':'+'}</span></button>
-     <div className={`rework-detail-mobile-collapsible${expanded?' is-expanded':''}`}><WorkflowRail className="rework-workflow__desktop-grid" aria-label="电脑端流程节点">{nodes.map(renderNode)}</WorkflowRail><WorkflowRail ref={mobileRail} className="rework-workflow__mobile-rail" aria-label="移动端流程节点">{nodes.map(renderNode)}</WorkflowRail></div>
-    </section>
-   </div>
-   {data.notices.map(notice=><p key={notice} role="status">{notice}</p>)}
-   {content}
+    <dl className="rework-detail-core-facts" aria-label="历史订单信息">{data.fields.filter(field=>['加工厂','返工工序','发起时间','发起人','订单跟单','订单数量','返工数量'].includes(field.label)&&field.value!==null).map(field=><div className="rework-detail-core-fact" key={field.label}><dt>{field.label}</dt><dd>{display(field.value)}</dd></div>)}</dl>
+    <div className="order-layout-workspace">
+      <div className="order-layout-main">
+        {data.notices.map(notice=><p key={notice} role="status">{notice}</p>)}
+        {content}
+        <div className="rework-detail-overview-grid order-overview--compact order-layout-flow">
+          <section className="rework-workflow" aria-label="订单流程">
+           <div className="rework-workflow__heading rework-detail-panel-title"><h2>订单流程</h2><span>历史节点 · 只读</span></div>
+           <button className="rework-detail-mobile-workflow-toggle" type="button" aria-expanded={expanded} onClick={()=>setExpanded(!expanded)}><strong>订单流程</strong><span>{data.entry.label} {expanded?'−':'+'}</span></button>
+           <div className={`rework-detail-mobile-collapsible${expanded?' is-expanded':''}`}><WorkflowRail className="rework-workflow__desktop-grid" aria-label="电脑端流程节点">{nodes.map(renderNode)}</WorkflowRail><WorkflowRail ref={mobileRail} className="rework-workflow__mobile-rail" aria-label="移动端流程节点">{nodes.map(renderNode)}</WorkflowRail></div>
+          </section>
+        </div>
+      </div>
+      <aside className="order-layout-aside">
+        <div className="rework-detail-overview-grid order-overview--compact"><section className="rework-detail-images"><div className="section-title rework-detail-panel-title rework-governed-image-heading"><h2>订单图片</h2><span className="rework-governed-image-count">{data.attachments.length} 张</span></div><div className="rework-detail-image-grid">{data.attachments.map(attachment=>attachment.mimeType.startsWith('image/')?<button className="rework-detail-image-card" type="button" key={attachment.attachmentId} onClick={()=>onImage(attachment)}><img src={apiUrl(`tools/attachments/${attachment.attachmentId}/download?mode=preview`)} alt={attachment.filename} loading="lazy" /><span className="rework-detail-image-card__filename">{attachment.filename}</span></button>:<a key={attachment.attachmentId} href={apiUrl(`tools/attachments/${attachment.attachmentId}/download`)}>{attachment.filename}</a>)}</div></section></div>
+      </aside>
+    </div>
   </Surface>
  </>;
 }
