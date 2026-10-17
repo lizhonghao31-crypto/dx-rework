@@ -1,6 +1,7 @@
 import {taskResult} from "./development-task-result-fixture.js";
 import {DigitalProductionTaskService} from "../../apps/api/src/production-platform/task-service.js";
 import {exerciseDevelopmentRounds} from "./digital-development-round-fixture.js";
+import {exerciseGarmentCraftRevision} from "./digital-development-craft-revision-fixture.js";
 import {randomUUID} from 'node:crypto';
 import type {Pool} from 'pg';
 import {expect} from 'vitest';
@@ -131,6 +132,7 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
   await execution.customerSample(root,sourceId,{routeVersion:1,note:'客户明确确认本轮样板'},randomUUID());
   expect((await execution.read(root,sourceId)).routeFacts.filter(f=>f.kind==='客户样板确认')).toHaveLength(1);
   if(craft==='无')await exerciseDevelopmentRounds(db,execution,root,sourceId,workerId,order.currentRoundId,qc);
+  if(craft==='印花')await exerciseGarmentCraftRevision(db,execution,root,sourceId,workerId,order.currentRoundId,qc);
   if(craft==='印绣花'){
     const confirmed=await native.get(root,order.orderId);
     const before={roundId:confirmed.currentRoundId,version:confirmed.version,reason:'车板局部返工',reasonCategory:'other' as const};
