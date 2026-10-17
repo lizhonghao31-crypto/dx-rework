@@ -20,7 +20,7 @@ export function validateSourcingCreate(input: {
     if (!line.styleNo.trim() && !line.alternateStyleNo.trim()) add(`style-${index}`, `第 ${index + 1} 行须填写正式款号或代用款号`);
     if(input.digitalPo && (!line.factoryDeliveryDate || !sourcingDatesValid(input.estimatedCutPieceSendDate,line.factoryDeliveryDate)
       || line.customerWarehouseArrivalDate && line.factoryDeliveryDate>line.customerWarehouseArrivalDate))
-      add(`factory-date-${index}`,`第 ${index+1} 个 PO 请填写合法工厂交货日，不能早于裁片发出或晚于出货日期`);
+      add(`factory-date-${index}`,`第 ${index+1} 个 PO 请填写合法工厂交货日，不能早于裁片发出或晚于客户仓到货日`);
     if (!line.color.trim()) add(`color-${index}`, `第 ${index + 1} 行请填写颜色`);
     if (!/^\d+$/.test(line.quantity) || Number(line.quantity) < 1 || Number(line.quantity) > 10_000_000) {
       add(`quantity-${index}`, `第 ${index + 1} 行数量必须是1至10000000之间的整数`);
