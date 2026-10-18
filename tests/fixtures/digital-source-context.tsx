@@ -1,4 +1,9 @@
-// Actual detail components and router, with synthetic intercepted responses only.
+// Actual detail components/router and designer Shell, with synthetic intercepted responses only.
+import "../../apps/web/src/App.js";
+import {ProductionWorkspace} from "@dx-rework/ui/production";
+import {Shell} from "../../apps/web/src/components.js";
+import {verifySession} from "../../apps/web/src/auth.js";
+import {DigitalDesignerWorkspace} from "../../apps/web/src/digital-designer-workspace.js";
 import {useEffect,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {initialInstruction} from '@dx-rework/contracts/production-instruction';
@@ -15,27 +20,36 @@ import '../../packages/ui/src/components.css';
 import '../../apps/web/src/styles.css';
 import '../../apps/web/src/workflow-shell.css';
 const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,now='2026-10-17T00:00:00.000Z';
+const initialQuery=new URLSearchParams(location.search),designerScenario=initialQuery.get('workspace')==='designer',layoutScenario=designerScenario&&(initialQuery.get('search')??'').startsWith('TEST-ATTACHMENT'),editableLayout=layoutScenario&&initialQuery.get('view')==='draft';
+const longFilename='TEST-仅验收附件长文件名可读性-20261017-中文与English混合-ABCDEFGHIJKLMNOPQRSTUVWXYZ-0123456789-不得用于真实生产.png';
 const task:DigitalTask={taskId:id(1),orderId:null,sourceId:id(2),taskKind:'development_sewing',label:'车板',identity:{designStyleNo:'TEST-CONTEXT',customerCode:'TEST'},assigneeId:id(3),assigneeName:'TEST 师傅',state:'completed',routeVersion:2,occurrence:1,enteredAt:now,recordedAt:now,completedAt:now,paused:false,dueAt:null,warningAt:null,slaHours:48,policyVersion:1,routeProgress:{applicable:2,completed:2,cancelled:0},requiredRole:'pattern_room_worker',hasHandover:false,canManage:false,canCorrect:false,canControl:false,timeQuality:'现场登记',blockedReason:null,canExecute:false,unmetConditions:[]};
-const oldTask={...task,taskId:id(4),routeVersion:1};
+const oldTask={...task,taskId:id(4),routeVersion:designerScenario?2:1};
 const sheet={sourceId:id(2),designStyleNo:'TEST-CONTEXT',temporaryStyleNo:null,customerCode:'TEST',developmentType:'头版',designerName:'TEST 设计师',version:2,status:'published',document:{...initialDevelopmentDocument(),quantity:1,sampleSize:'M',instructions:'TEST 制作说明'},publishedAt:now,taskId:id(1),canEdit:false,canRevise:false,materialEvents:[],roundNumber:2,latestRoundNumber:2};
+if(designerScenario){Object.assign(sheet,{designStyleNo:layoutScenario?'TEST-ATTACHMENT-LAYOUT':'TEST-DESIGNER-CONTEXT',version:5,status:editableLayout?'draft':'published',publishedAt:editableLayout?null:now,canEdit:editableLayout,taskId:null,roundNumber:3,latestRoundNumber:3});task.routeVersion=3;if(layoutScenario)sheet.document.files=[{attachmentId:id(8),kind:'款图'}];}
+const archiveJourney={id:id(2),sourceId:id(2),orderId:null,designStyleNo:sheet.designStyleNo,temporaryStyleNo:null,customer:'TEST',category:'上衣',designer:'TEST 设计师',styleName:'TEST 款名',merchandisers:[],orderNumbers:[],createdAt:now,deliveryDate:null,requiredCompletionDate:null,developmentType:'头版',selectedRound:3,adoptedRound:null,sourceVersion:5,instructionVersion:null,lines:[],poDeliveryDates:[],links:[],stages:[],progress:{development:{completed:4,applicable:5},bulk:{completed:0,applicable:0}},hitReasons:[]};
 const order={...DigitalOrderCreateSchema.parse({customerCode:'PD',productGroup:'男装',designStyleNo:'TEST-CONTEXT',orderDate:'2026-10-17',lines:[{color:'黑',sizes:[{size:'M',quantity:100}],customerWarehouseArrivalDate:'2099-12-31'}]}),productionOrderId:id(5),sourceId:id(2),createdBy:id(3),createdAt:now,version:1,lines:[{lineId:id(6),color:'黑',colorForeign:null,poNumber:'TEST-PO',formalStyleNo:'TEST-PO',temporaryStyleNo:null,deliveryDate:'2099-12-31',sizes:[{size:'M',quantity:100}]}]};
 const budgetDocument={fabricType:'针织',productCategory:'上衣',monthSeries:'',date:null,currency:'人民币',rows:[],freight:'',cm:'',salePrice:'',outsourcingScope:'',outsourcingUnitPrice:'10',imageAttachmentIds:[]};
 const budget={productionOrderId:id(5),version:3,versions:[3,2],status:'published',document:budgetDocument,totals:null,canEdit:false,canSubmitSourcing:true,sourcingCaseId:null,publishedAt:now,designerName:'TEST 设计师',merchandiserName:'TEST 跟单'};
 const instruction={order,currentOrderVersion:1,currentDeliveryDate:null,version:3,publishedVersion:3,versions:[3,2],isPublishedSnapshot:true,canEdit:false,cutStarted:false,merchandiserName:'TEST 跟单',sourceRound:2,latestSourceRound:2,canApproveDate:false,printedBy:'TEST',dateRequests:[],document:initialInstruction()};
 const bulk={reference:{designStyleNo:'TEST-CONTEXT',customerCode:'TEST',styleImageUrl:null,instructionVersion:3,sourceRound:2},orderId:id(5),instructionVersion:3,sourceRound:2,adoptedRound:2,customerConfirmed:true,ownerApproved:true,instructionValid:true,reasons:[],preparationId:id(7),preshrink:'无需预缩',dispatch:{version:1,patternWorkerId:null,warehouseWorkerId:null,cuttingWorkerId:null},canDispatchPattern:false,canDispatchWarehouse:false,facts:[],tasks:[],cutting:{mode:'in_house',completed:false,lines:[{lineId:id(6),poNumber:'TEST-PO',formalStyleNo:'TEST-PO',temporaryStyleNo:null,color:'黑',cuttingOrderId:id(11),orderQuantity:100,actualCutCount:null,pieceCount:null,corrected:false}]}};
 const sourcing=SourcingCaseSummarySchema.parse({sourcingCaseId:id(100),erpOrderId:'TEST',erpOrderNo:'TEST',styleNo:'TEST-CONTEXT',laneKey:'garment_processing',gender:'男装',styleName:'TEST 款名',orderQuantity:100,lineItems:[{position:1,styleNo:'TEST-PO',alternateStyleNo:null,color:'黑',quantity:100,externalUnitPrice:null,legacy:false}],daxingUnitPrice:'10',estimatedCutPieceSendDate:'2026-09-01',deliveryDate:'2026-09-10',processDescription:null,processes:[],status:'closed',version:1,createdBy:id(3),createdAt:now,updatedAt:now,ieQuote:null,decision:null,ownerDecision:null});
-const state={requests:[] as {path:string;method:string}[],unexpected:[] as string[]};Reflect.set(window,'sourceContextFixture',state);
+const state={metadataFailed:false,requests:[] as {path:string;method:string}[],unexpected:[] as string[]};Reflect.set(window,'sourceContextFixture',state);
 window.fetch=async(input,init)=>{
  const path=new URL(String(input),location.href),method=init?.method??'GET';state.requests.push({path:path.pathname+path.search,method});const name=path.pathname;
- if(name.endsWith('/auth/me'))return Response.json({status:'authorized',user:{id:id(3),displayName:'TEST Root',isRoot:true,businessRoles:[],capabilities:[]}});
+ if(name.endsWith('/auth/me'))return Response.json({status:'authorized',user:{id:id(3),displayName:designerScenario?'TEST UAT设计师':'TEST Root',isRoot:!designerScenario,businessRoles:designerScenario?['sample_designer']:[],capabilities:designerScenario?['pattern_room:orders:create']:[]}});
  if(name.endsWith('/todos/mine/indicator'))return Response.json({count:0});
- if(name.endsWith('/access/options'))return Response.json({manage:true,customers:true,approveDelivery:true,create:true,actorId:id(3),roles:[]});
+ if(name.endsWith('/access/options'))return Response.json({manage:!designerScenario,customers:!designerScenario,approveDelivery:!designerScenario,create:true,actorId:id(3),roles:designerScenario?['sample_designer']:[]});
+ if(name.endsWith('/options'))return Response.json({creationEnabled:true,customers:[],serverToday:'2026-10-18'});
+ if(name.endsWith('/customers'))return Response.json([]);
+ if(name.endsWith('/category-options'))return Response.json([]);
+ if(name.endsWith('/workspaces/designer'))return Response.json({asOf:now,page:Number(path.searchParams.get('page')??1),pageSize:15,total:1,counts:{all:1,draft:editableLayout?1:0,developing:editableLayout?0:1,awaiting_order:0,ordered:0},customers:['TEST'],designers:['TEST 设计师'],items:[{journey:archiveJourney,view:editableLayout?'draft':'developing',canConfirm:false}]});
+ if(name.endsWith('/metadata')){if(initialQuery.get('customer')==='FAIL-FIRST'&&!state.metadataFailed){state.metadataFailed=true;return Response.json({error:{message:'TEST metadata denied'}},{status:403});}return Response.json({attachmentId:id(8),filename:longFilename,mimeType:'image/png',sizeBytes:1234});}
  if(name.endsWith(`/tasks/${id(1)}`))return Response.json(task);if(name.endsWith(`/tasks/${id(4)}`))return Response.json(oldTask);
  if(name.endsWith('/execution'))return Response.json({sheet,tasks:[task],patternOrder:null,routeFacts:[],dispatch:null,facts:[],canReportFabric:false,canDispatch:false,canDecideFabric:false,qrAvailable:false});
  if(name.endsWith('/history')&&name.includes('/tasks/'))return Response.json({events:[]});
  if(name.endsWith('/documents'))return Response.json({development:{state:'published',id:id(2),version:2,label:'本次采用'},instruction:{state:'published',id:id(5),version:3,label:'本次采用'},budget:{state:'published',id:id(5),version:3,label:'本次采用'}});
  if(name.endsWith('/document-directory/order/'+id(5))||name.endsWith('/document-directory/source/'+id(2)))return Response.json({development:{state:'available',id:id(2),version:2},instruction:{state:'available',id:id(5),version:3},budget:{state:'available',id:id(5),version:3}});
- if(name.endsWith('/development/rounds'))return Response.json({rounds:[{roundNumber:2,origin:'TEST 工艺修改',customerComment:'',internalProblem:'TEST 原问题',explanation:'TEST 沿用记录',affectedNodes:['印花'],inherited:{development_sewing:{taskId:id(4),roundNumber:1}}}],draft:null});
+ if(name.endsWith('/development/rounds'))return Response.json({rounds:[{roundNumber:designerScenario?3:2,origin:'TEST 工艺修改',customerComment:'',internalProblem:'TEST 原问题',explanation:'TEST 沿用记录',affectedNodes:['印花'],inherited:{development_sewing:{taskId:id(4),roundNumber:designerScenario?2:1}}}],draft:null});
  if(name.endsWith('/development'))return Response.json({...sheet,roundNumber:Number(path.searchParams.get('round')??2)});
  if(name.endsWith('/bulk-preparation'))return Response.json(bulk);
  if(name.endsWith('/orders/'+id(5)))return Response.json(order);
@@ -52,5 +66,5 @@ window.fetch=async(input,init)=>{
  if(name.includes('/sourcing/styles')||name.includes('/master-data/crafts'))return Response.json([]);
  state.unexpected.push(method+' '+name);return Response.json({error:{message:'TEST 未配置请求'}},{status:404});
 };
-function Fixture(){const [,setRevision]=useState(0);useEffect(()=>installInternalNavigation(import.meta.env.BASE_URL.replace(/\/$/,''),()=>setRevision(value=>value+1)),[]);const prefix=import.meta.env.BASE_URL.replace(/\/$/,''),path=location.pathname.slice(prefix.length),key=location.pathname+location.search;return path==='/ui/digital-production'?<DigitalProductionPage key={key}/>:path.startsWith('/ui/cutting/orders/')?<CuttingDetailPage key={key} cuttingOrderId={id(11)}/>:path.startsWith('/ui/sourcing/orders/')?<SourcingWorkspacePage key={key} view="detail" sourcingCaseId={id(100)}/>:path==='/ui/sourcing/create'?<SourcingWorkspacePage key={key} view="create"/>:<p role="status">TEST 来源列表定位：{location.search}</p>;}
-createRoot(document.getElementById('root')!).render(<Fixture/>);
+function Fixture(){const [,setRevision]=useState(0);useEffect(()=>installInternalNavigation(import.meta.env.BASE_URL.replace(/\/$/,''),()=>setRevision(value=>value+1)),[]);const prefix=import.meta.env.BASE_URL.replace(/\/$/,''),path=location.pathname.slice(prefix.length),key=location.pathname+location.search;const content=path==='/ui/digital-production'?(new URLSearchParams(location.search).get('workspace')==='designer'?<DigitalDesignerWorkspace key={key}/>:<DigitalProductionPage key={key}/>):path.startsWith('/ui/cutting/orders/')?<CuttingDetailPage key={key} cuttingOrderId={id(11)}/>:path.startsWith('/ui/sourcing/orders/')?<SourcingWorkspacePage key={key} view="detail" sourcingCaseId={id(100)}/>:path==='/ui/sourcing/create'?<SourcingWorkspacePage key={key} view="create"/>:<p role="status">TEST 来源列表定位：{location.search}</p>;return designerScenario?<Shell active="digital-designer" appearance="digital"><ProductionWorkspace>{content}</ProductionWorkspace></Shell>:content;}
+void verifySession().then(()=>createRoot(document.getElementById('root')!).render(<Fixture/>));

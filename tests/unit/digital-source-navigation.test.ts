@@ -8,6 +8,17 @@ const url=(value:string)=>new URL(value,'https://local.invalid');
 const detail=(kind:string,id:string,extra:Record<string,string>={})=>'/ui/digital-production?'+new URLSearchParams({[kind]:id,...extra});
 afterEach(()=>vi.unstubAllGlobals());
 describe('existing source and presentation context survive native detail hops',()=>{
+ it.each(['/','/acceptance/'])('returns an inherited record to the exact designer editor and filtered archive: %s',base=>{
+  const current=base+'ui/digital-production?'+new URLSearchParams({workspace:'designer',page:'2',search:'TEST-CUSTOMER-FALLBACK',view:'all',selected:order,development:order,round:'3',documentChapter:'development-handling'});
+  const child=url(productionWorkspaceDomainHref('/ui/digital-production?'+new URLSearchParams({task:history,taskView:'read'}),url(current).search,base,base+'ui/digital-production'));
+  expect(child.searchParams.get('taskView')).toBe('read');expect(child.searchParams.get('returnTo')).toBe(current);
+  expect(digitalDetailClosePath(child.search,base)).toBe(current);expect(digitalDetailReturnUrl(current,base)).toBe(current);
+  for(const [key,value]of [['development','bad'],['round','0'],['round','3e0'],['round','3.5'],['documentChapter','unknown'],['selected','bad'],['extra','unknown'],['returnTo',current]]){
+   const bad=url(current);bad.searchParams.set(key,value);expect(digitalDetailReturnUrl(bad.pathname+bad.search,base)).toBeNull();
+  }
+  expect(digitalDetailReturnUrl(current+'&round=3',base)).toBeNull();
+  const orphan=url(current);orphan.searchParams.delete('development');expect(digitalDetailReturnUrl(orphan.pathname+orphan.search,base)).toBeNull();
+ });
  it.each(['/','/acceptance/'])('keeps an ordinary filtered cockpit without workspace and prefixes base once: %s',base=>{
   const current=`/ui/digital-cockpit?search=TEST&page=3&selected=${order}&stage=preparation`;
   const next=url(productionWorkspaceDomainHref(`/ui/digital-production?bulk=${order}`,url(current).search,base,base+'ui/digital-cockpit'));
