@@ -43,7 +43,7 @@ describe("tail inspection cost bearer", () => {
     expect(provenanceMigration).toContain(
       "guard_source := replace(guard_source,old_fields,new_fields)",
     );
-    expect(form).toContain("谁承担整查费用？");
+    expect(form).toContain("谁承担{specialLabel}费用？");
     expect(form).toContain('tailInspectionCostBearer: ""');
     expect(contracts).toContain("TailInspectionCostBearerSchema = z.enum([");
     expect(contracts).toContain('"processing_factory",');

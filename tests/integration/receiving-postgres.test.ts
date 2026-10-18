@@ -309,6 +309,10 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     await migration("0140_receiving_packing_difference_direction.sql");
     await migration("0169_receiving_difference_evidence.sql");
     await migration("0190_receiving_difference_authority.sql");
+    // This deliberately partial fixture tests receiving, not the QC state
+    // machine. Match the additive write columns used by the current initiator;
+    // the dedicated other-craft suite exercises all real 0227 guards.
+    await database.query("ALTER TABLE rework_orders ADD COLUMN special_process_type text, ADD COLUMN other_craft_description text");
     // PR04 board reads the latest schema's optional cutting identity. This partial-migration
     // fixture stays intentionally legacy, so add only the nullable projection surface it needs.
     await database.query("ALTER TABLE receiving_batches ADD COLUMN cutting_order_id uuid");

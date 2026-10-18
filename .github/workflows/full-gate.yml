@@ -76,6 +76,15 @@ jobs:
           git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" > "$RUNNER_TEMP/full-gate-changed-files.txt"
           node scripts/ci/full-gate-risk-map.mjs --github-env "$GITHUB_ENV" "$RUNNER_TEMP/full-gate-changed-files.txt"
 
+      - name: Compare exact candidate with current remote main migration history
+        if: github.base_ref == 'release/digital-production-v1'
+        shell: bash
+        env:
+          COMPAT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          node scripts/check-main-release-compat.mjs --candidate-ref "$GIT_SHA" --tool-ref "$GIT_SHA" --baseline-ref "$COMPAT_BASE_SHA" --output "$RUNNER_TEMP/main-release-compat.json"
+
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund --prefer-offline
 
@@ -219,6 +228,12 @@ jobs:
           node scripts/ci/acceptance-maintenance-drill.mjs 13
           node scripts/ci/acceptance-maintenance-drill.mjs 15
           node scripts/ci/acceptance-maintenance-drill.mjs 16
+
+      - name: Main and existing release histories through low-privilege Acceptance maintenance
+        if: github.base_ref == 'release/digital-production-v1' && env.DEPLOYMENT_SENSITIVE == 'true'
+        run: |
+          node scripts/ci/main-release-history-drill.mjs 13 "$RUNNER_TEMP/main-release-compat.json"
+          node scripts/ci/main-release-history-drill.mjs 16 "$RUNNER_TEMP/main-release-compat.json"
 
       - name: PR-17 exact-head acceptance and lifecycle
         if: env.DEPLOYMENT_SENSITIVE == 'true'

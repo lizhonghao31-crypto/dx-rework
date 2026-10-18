@@ -1,3 +1,4 @@
+import { specialProcessLabel } from "@dx-rework/contracts";
 import { currentModuleCanWrite } from "./member-module-policy.js";
 import {
   ResponsibilityDeterminationResponseSchema,
@@ -201,6 +202,7 @@ const processValidationIssue = (process: ProcessForm): string | null => {
 
 export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged, embedded = false, history }: { reworkOrderId: string | null; history?: ResponsibilityDeterminationResponse; onOrderChanged?: () => void; embedded?: boolean }) {
   const [response, setResponse] = useState<ResponsibilityDeterminationResponse | null>(history ?? null);
+  const specialLabel = specialProcessLabel(response ?? {});
   const [processes, setProcesses] = useState<ProcessForm[]>(history ? formsFromResponse(history) : []);
   const [tailCostBearer, setTailCostBearer] = useState<TailInspectionCostBearer | null>(history?.tailInspectionCostBearer ?? null);
   const [tailBearerEditing, setTailBearerEditing] = useState(false);
@@ -318,7 +320,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
   const submissionIssue = !handlerUserId
     ? "无法确认当前责任处理人，请刷新页面后重试。"
     : !tailBearerValid
-      ? "请先选择整查费用承担方。"
+      ? `请先选择${specialLabel}费用承担方。`
       : processes.length === 0
         ? "当前没有可提交的返工工序。"
         : invalidProcessIssue;
@@ -520,7 +522,7 @@ export function ResponsibilityDeterminationPanel({ reworkOrderId, onOrderChanged
     {response?.tailInspectionRequired ? <section className="responsibility-tail-review">
       <div className="responsibility-process__title">
         <div>
-          <h3>整查费用承担</h3>
+          <h3>{specialLabel}费用承担</h3>
           <p>{response.tailInspectionCostBearerSource === "legacy_default"
             ? "历史订单未记录质检判断；系统按安全口径预置，生产主管须在本节点确认。"
             : "质检发起返工时完成初判；生产主管在本节点复核并确认。"}</p>

@@ -42,8 +42,8 @@ describe("N04-N05 quantity information hierarchy", () => {
     expect(processToolbar).toContain('className="quantity-process-save"');
     expect(processToolbar).not.toContain("quantity-report-actions quantity-process-save");
     expect(review).toContain("<small>工人合计</small>");
-    expect(review).toContain("<small>整查</small>");
-    expect(review).toContain("<small>整查余量</small>");
+    expect(review).toContain("<small>{specialLabel}</small>");
+    expect(review).toContain("<small>{specialLabel}余量</small>");
     expect(review).toContain("主管修改，原值");
     expect(review).toContain('process.pricingUnit === "piece" ? "件" : "小时"');
     expect(review).toContain("formatBusinessDecimal(value, history ? 2 : 3)");
