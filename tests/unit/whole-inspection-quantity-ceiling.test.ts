@@ -28,12 +28,12 @@ describe("whole-inspection quantity ceiling", () => {
       read("packages/contracts/src/business-display.ts"),
     ]);
 
-    expect(panel).toContain("整查余量");
+    expect(panel).toContain("{specialLabel}余量");
     expect(panel).toContain("✓ 可确认");
     expect(panel).toContain("⚠ 工序超数");
     expect(panel).not.toContain("完全一致");
     expect(configuration).toContain('["整查", "尾查"].includes(submittedProcessName)');
-    expect(configuration).toContain('executionKind === "tail_inspection" ? "整查"');
+    expect(configuration).toContain('executionKind === "tail_inspection" ? specialName');
     expect(contracts).toContain('tail_inspector: "整查"');
     expect(contracts).toContain('"tail_inspection:report": "整查报数"');
   });

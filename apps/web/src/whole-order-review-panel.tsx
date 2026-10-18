@@ -1,5 +1,6 @@
 import { moduleCanWrite } from "./member-module-policy.js";
 import { verifySession } from "./auth.js";
+import { specialProcessLabel } from "@dx-rework/contracts";
 import {
   TailInspectionResponseSchema,
   WholeOrderReviewResponseSchema,
@@ -103,6 +104,7 @@ export function WholeOrderReviewPanel({
   const formatUnitPrice = (value:number|null) => value === null ? "—" : `¥${formatBusinessDecimal(value, history ? 2 : 3)}`;
   const [moduleWritable, setModuleWritable] = useState(false);
   const [data, setData] = useState<WholeOrderReviewResponse | null>(history?.data ?? null);
+  const specialLabel = specialProcessLabel(data ?? {});
   const [tailData, setTailData] = useState<TailInspectionResponse | null>(history?.tail ?? null);
   const [message, setMessage] = useState(history ? historyMessage : "正在加载数量确认状态…");
   const [busy, setBusy] = useState(false);
@@ -186,9 +188,9 @@ export function WholeOrderReviewPanel({
           : null;
         setMessage(rejected
           ? `IE 已退回上一版：${rejected}。请修正报数并重新提交。`
-          : overview.tailInspectionRequired ? "逐工序核对工序与整查有效数量；工序数量不超过整查即可提交。" : "本单无需整查；逐工序核对工人有效数量后提交。");
+          : overview.tailInspectionRequired ? `逐工序核对工序与${specialLabel}有效数量；工序数量不超过${specialLabel}即可提交。` : `本单无需${specialLabel}；逐工序核对工人有效数量后提交。`);
       } else if (overview.reworkStatus === "in_progress") {
-        setMessage(overview.tailInspectionRequired ? "返工人员与整查全部完成报数后进入尾部确认。" : "返工人员全部完成报数后进入尾部确认。");
+        setMessage(overview.tailInspectionRequired ? `返工人员与${specialLabel}全部完成报数后进入尾部确认。` : "返工人员全部完成报数后进入尾部确认。");
       } else setMessage("");
     } finally {
       if (requestInFlight.current === reworkOrderId) requestInFlight.current = null;
@@ -237,7 +239,7 @@ export function WholeOrderReviewPanel({
   ) => {
     if (!data || data.reworkStatus !== "pending_order_review") return;
     const reason = await promptInApp(
-      executionKind === "tail_inspection" ? "请填写驳回这条整查报数的原因" : "请填写驳回这条上数的原因",
+      executionKind === "tail_inspection" ? `请填写驳回这条${specialLabel}报数的原因` : "请填写驳回这条上数的原因",
       "",
       executionKind === "worker" ? { requiredMessage: "驳回原因必填" } : {},
     );
@@ -324,7 +326,7 @@ export function WholeOrderReviewPanel({
       );
       setMessage(`已驳回 ${inspectorName} 的整查报数；原记录保留，整查可重新报数。`);
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "整查报数驳回失败");
+      setMessage(cause instanceof Error ? cause.message : `${specialLabel}报数驳回失败`);
     }
   };
 
@@ -367,7 +369,7 @@ export function WholeOrderReviewPanel({
       return;
     }
     if (!(await confirmInApp(data.tailInspectionRequired
-      ? "确认各工序有效数量均未超过整查，且最终价格无误，并提交 IE 复核？"
+      ? `确认各工序有效数量均未超过${specialLabel}，且最终价格无误，并提交 IE 复核？`
       : "确认各工序工人有效数量与最终价格无误，并提交 IE 复核？"))) return;
     try {
       await call(
@@ -576,8 +578,8 @@ export function WholeOrderReviewPanel({
               <span><small>工人合计</small><strong>{formatBusinessDecimal(process.completedQuantity)}</strong></span>
               {iePrecounts ? <span><small>IE预核</small><strong>{iePrecount ? formatBusinessDecimal(iePrecount.quantity) : "—"}</strong></span> : null}
               {data.tailInspectionRequired ? <>
-                <span><small>整查</small><strong>{formatBusinessDecimal(process.tailCheckedQuantity)}</strong></span>
-                <span><small>整查余量</small><strong>{formatBusinessDecimal(process.tailCheckedQuantity - process.completedQuantity)}</strong></span>
+                <span><small>{specialLabel}</small><strong>{formatBusinessDecimal(process.tailCheckedQuantity)}</strong></span>
+                <span><small>{specialLabel}余量</small><strong>{formatBusinessDecimal(process.tailCheckedQuantity - process.completedQuantity)}</strong></span>
               </> : null}
               <span className="quantity-process-outcome"><StatusBadge tone={process.complete ? "success" : "danger"}>
                 {data.tailInspectionRequired
@@ -653,7 +655,7 @@ export function WholeOrderReviewPanel({
             {open && <div className="quantity-process-detail">
               {reports.length ? reports.map(reportRow) : <p>暂无有效工人报数。</p>}
               {data.tailInspectionRequired ? <div className="quantity-report-row quantity-tail-summary">
-                <div className="quantity-report-person"><b>整查</b><span>有效合计</span></div>
+                <div className="quantity-report-person"><b>{specialLabel}</b><span>有效合计</span></div>
                 <div className="quantity-report-value"><strong>{formatBusinessDecimal(process.tailCheckedQuantity)} 件</strong></div>
               </div> : null}
             </div>}
@@ -669,7 +671,7 @@ export function WholeOrderReviewPanel({
         aria-expanded={tailExpanded}
         onClick={() => setTailExpanded((value) => !value)}
       >
-        <span><b>整查报数</b><small>{formatBusinessDecimal(tailReports.length)} 人/条记录</small></span>
+        <span><b>{specialLabel}报数</b><small>{formatBusinessDecimal(tailReports.length)} 人/条记录</small></span>
         <strong>{formatBusinessDecimal(data.processes[0]?.tailCheckedQuantity ?? 0)} 件</strong>
         <b>{tailExpanded ? "−" : "+"}</b>
       </button>
@@ -678,7 +680,7 @@ export function WholeOrderReviewPanel({
           <strong>{formatBusinessDecimal(data.processes[0]?.tailCheckedQuantity ?? 0)} 件</strong>
           <Button
             disabled={busy || !tailReports.some(hasChangedCorrection)}
-            onClick={() => void correctProcess(tailReports[0]!.configurationItemId, tailReports, "整查报数")}
+            onClick={() => void correctProcess(tailReports[0]!.configurationItemId, tailReports, `${specialLabel}报数`)}
           >保存修正</Button>
         </div>}
         {tailReports.map(reportRow)}
@@ -768,7 +770,7 @@ export function WholeOrderReviewPanel({
       <div className="quantity-submit-row">
         <div>
           <h2>提交 IE 复核</h2>
-          <p>{data.tailInspectionRequired ? "系统按各工序有效数量生成最终数量；价格提案与数量一并交 IE 复核。" : "本单无需整查；工人有效数量与价格提案一并交 IE 复核。"}</p>
+          <p>{data.tailInspectionRequired ? "系统按各工序有效数量生成最终数量；价格提案与数量一并交 IE 复核。" : `本单无需${specialLabel}；工人有效数量与价格提案一并交 IE 复核。`}</p>
         </div>
         <Button variant="primary" data-ready={ready ? "true" : "false"} onClick={() => void confirmQuantities()} disabled={busy || Boolean(history)}>
           {busy ? "提交中…" : data.tailInspectionRequired ? "确认数量并提交 IE" : "确认数量并提交 IE"}

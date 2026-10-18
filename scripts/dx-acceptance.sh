@@ -146,6 +146,19 @@ if [[ "$command" == update && "$sha" != "$(cat "$tool_root/TOOL_SHA")" ]]; then
   tool_root="$target"
   echo "ACCEPTANCE_TOOL_REFRESH_OK sha=$sha"
 fi
+# MAIN_RELEASE_COMPAT_START: source-only; before DB export, build, backup or stop.
+if ! runuser -u dxrework -- env -i HOME=/home/dxrework USER=dxrework PATH="$PATH" \
+  bash -c '
+    set -euo pipefail
+    source "$1/scripts/deploy/lib.sh"
+    load_node_config
+    node_exec "$1/scripts/check-main-release-compat.mjs" --repo "$2" --candidate-ref "$3" --tool-ref "$4"
+  ' _ "$tool_root" "$src" "$sha" "$(cat "$tool_root/TOOL_SHA")" > "$snapshot/main-release-compat.json"; then
+  cat "$snapshot/main-release-compat.json" >&2
+  exit 1
+fi
+cat "$snapshot/main-release-compat.json"
+# MAIN_RELEASE_COMPAT_END
 # Root-owned, immutable identity shared with the unprivileged verifier.
 printf '%s\n' "$production_guard" > "$snapshot/production-runtime.json"
 chmod 0444 "$snapshot/production-runtime.json"

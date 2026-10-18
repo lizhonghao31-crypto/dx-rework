@@ -9,7 +9,7 @@ import type { TrustedActorContext } from '../tools/repositories.js';
 import type { ReworkBusinessDetail } from './rework-business-detail-service.js';
 
 type Snapshot = Record<string, unknown>;
-type HistoryEvent = { id: string; action: string; at: string; actor: string; reason: string | null; after: Snapshot };
+type HistoryEvent = { id: string; action: string; at: string; actor: string; reason: string | null; before: Snapshot; after: Snapshot };
 const object = (value: unknown): Snapshot => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Snapshot : {};
 const array = (value: unknown): Snapshot[] => Array.isArray(value) ? value.map(object) : [];
 const value = (v: unknown): string | null => v == null ? null : v instanceof Date ? v.toISOString() : typeof v === 'boolean' ? v ? '是' : '否' : typeof v === 'string' || typeof v === 'number' ? String(v) : null;
@@ -51,7 +51,7 @@ export async function readReworkNodeHistory(db: Pool, actor: TrustedActorContext
  const client = await db.connect();
  try {
   await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-  const events = (await client.query<HistoryEvent>(`SELECT event.event_id id,event.action,event.created_at::text AS at,COALESCE(person.display_name,'历史未记录') actor,event.reason,event.after_state AS after
+  const events = (await client.query<HistoryEvent>(`SELECT event.event_id AS id,event.action,event.created_at::text AS "at",COALESCE(person.display_name,'历史未记录') AS actor,event.reason,event.before_state AS "before",event.after_state AS "after"
     FROM operation_events event LEFT JOIN app_users person ON person.id=event.actor_id
     WHERE (event.entity_type='rework_order' AND event.entity_id=$1) OR event.after_state->>'reworkOrderId'=$1
     ORDER BY event.created_at,COALESCE((event.after_state->>'version')::int,(event.after_state->>'orderVersion')::int,0),event.event_id`,[detail.reworkOrderId])).rows;
@@ -66,28 +66,37 @@ export async function readReworkNodeHistory(db: Pool, actor: TrustedActorContext
   const finishing=detail.reworkKind==='inhouse_finishing';
   if(finishing && !finishingNodes.includes(node)) throw new ApplicationError('NOT_FOUND','本厂做尾没有该历史节点',404);
   if(finishing) source.receivingBatchId ??= latest('receivingBatchId');
-  for(const key of ['tailInspectionRequired','tailInspectionCostBearer','tailInspectionCostBearerSource']) {
+  for(const key of ['tailInspectionRequired','tailInspectionCostBearer','tailInspectionCostBearerSource','specialProcessType','otherCraftDescription']) {
    const recorded=latest(key);if(recorded!==undefined) source[key]=recorded;
+  }
+  // The live decision is still "none" after waiver. Its historical display
+  // must retain the actual pre-waiver work, without restoring it to settlement.
+  const waivedCraft=selected.action==='rework.tail_inspection.waive'
+    && object(selected.before).specialProcessType==='other_craft' ? object(selected.before) : null;
+  if(waivedCraft) {
+    source.specialProcessType=waivedCraft.specialProcessType;
+    source.otherCraftDescription=waivedCraft.otherCraftDescription;
   }
   const factory = object(source.processingFactory);
   let factoryName: string | null = factory.type==='own_factory' ? '本厂' : null;
-  if (factory.supplierId && factory.supplierVersion) factoryName=(await client.query<{name:string}>('SELECT supplier_name AS name FROM supplier_catalog_versions WHERE supplier_id=$1 AND version=$2',[factory.supplierId,factory.supplierVersion])).rows[0]?.name ?? null;
-  const fields: ReworkNodeHistory['fields'] = [{label:'加工厂',value:factoryName},...Object.entries({styleNo:'款号',customerSupplyCode:'客供款号',factoryStyleNo:'工厂款号',orderNo:'订单号',orderQuantity:'订单数量',reworkQuantity:'返工数量',reworkProcess:'返工工序',reworkReason:'返工原因',problemPart:'问题部位',problemDescription:'问题描述',tailInspectionRequired:'需要整查',tailInspectionCostBearer:'整查费用承担方'}).map(([key,label])=>({label,value:value(source[key])}))];
+  if (factory.supplierId && factory.supplierVersion) factoryName=(await client.query<{name:string}>('SELECT supplier_name AS "name" FROM supplier_catalog_versions WHERE supplier_id=$1 AND version=$2',[factory.supplierId,factory.supplierVersion])).rows[0]?.name ?? null;
+  const fields: ReworkNodeHistory['fields'] = [{label:'加工厂',value:factoryName},...Object.entries({styleNo:'款号',customerSupplyCode:'客供款号',factoryStyleNo:'工厂款号',orderNo:'订单号',orderQuantity:'订单数量',reworkQuantity:'返工数量',reworkProcess:'返工工序',reworkReason:'返工原因',problemPart:'问题部位',problemDescription:'问题描述',specialProcessType:'工艺类型',otherCraftDescription:'其他工艺内容',tailInspectionRequired:'需要整查',tailInspectionCostBearer:'整查费用承担方'}).map(([key,label])=>({label,value:key==='specialProcessType' ? ({none:'否',inspection:'整查',other_craft:'其他工艺'}[String(source[key]) as 'none'|'inspection'|'other_craft']??null) : value(source[key])}))];
   const created=past.find(event=>['rework.draft.create','rework.finishing.draft.create'].includes(event.action));
   if(created) fields.push({label:'发起时间',value:created.at},{label:'发起人',value:created.actor});
   const supply = [...past].reverse().find(event=>event.action==='rework.supply_context.save')?.after ?? {};
   for (const [key,label] of [['washingSupplier','洗水厂'],['embroiderySupplier','印绣花厂'],['fabricSupplier','面辅料供应商']] as const) {
     const supplier=object(supply[key]);
-    const name=supplier.supplierId && supplier.supplierVersion ? (await client.query<{name:string}>('SELECT supplier_name AS name FROM supplier_catalog_versions WHERE supplier_id=$1 AND version=$2',[supplier.supplierId,supplier.supplierVersion])).rows[0]?.name : null;
+    const name=supplier.supplierId && supplier.supplierVersion ? (await client.query<{name:string}>('SELECT supplier_name AS "name" FROM supplier_catalog_versions WHERE supplier_id=$1 AND version=$2',[supplier.supplierId,supplier.supplierVersion])).rows[0]?.name : null;
     fields.push({label,value:name??null});
   }
   for (const [id,label] of [[source.merchandiserUserId,'订单跟单'],[supply.embroideryMerchandiserUserId,'印绣花跟单']] as const) {
-    const name=id?(await client.query<{name:string}>('SELECT display_name AS name FROM app_users WHERE id=$1',[id])).rows[0]?.name:null;
+    const name=id?(await client.query<{name:string}>('SELECT display_name AS "name" FROM app_users WHERE id=$1',[id])).rows[0]?.name:null;
     fields.push({label,value:name??null});
   }
   const page: NonNullable<ReworkNodeHistory['page']>={iePrecounts:{entries:[]},tailInspection:null,workTasks:null,configuration:null,workerPlan:null,wholeOrderReview:null,responsibility:null};
   const sections: ReworkNodeHistory['sections']=[];
   const notices: string[]=[];
+  if(waivedCraft) notices.push(`已撤销其他工艺：${String(waivedCraft.otherCraftDescription)}；原工艺报数保留为历史，不计入最终数量、工资和责任。`);
   if (!Object.keys(source).length) notices.push('早期发起资料未保存完整历史快照，缺失字段显示“历史未记录”。');
   const configuration = object(selected.after.configuration ?? latest('configuration'));
   const configItems = array(configuration.items);
@@ -99,14 +108,14 @@ export async function readReworkNodeHistory(db: Pool, actor: TrustedActorContext
    for(const key of ['submittedAt','reviewedAt']) configuration[key]=configuration[key]?new Date(String(configuration[key])).toISOString():null;
   }
   const historicalStatus=selected.after.status ?? selected.after.reworkStatus;
-  const configurationResult=ProcessConfigurationResponseSchema.safeParse({reworkOrderId:detail.reworkOrderId,reworkNo:source.reworkNo??detail.reworkNo,reworkStatus:historicalStatus,orderVersion:selected.after.version??selected.after.orderVersion,tailInspectionRequired:source.tailInspectionRequired,configuration});
+  const configurationResult=ProcessConfigurationResponseSchema.safeParse({reworkOrderId:detail.reworkOrderId,reworkNo:source.reworkNo??detail.reworkNo,reworkStatus:historicalStatus,orderVersion:selected.after.version??selected.after.orderVersion,tailInspectionRequired:source.tailInspectionRequired,specialProcessType:source.specialProcessType,otherCraftDescription:source.otherCraftDescription,configuration});
   if(configurationResult.success && ['process_configuration','ie_review','task_assignment','whole_order_review','final_quantity_ie_review'].includes(node)) {
    page.configuration=configurationResult.data;
    if(['process_configuration','ie_review','task_assignment'].includes(node)) {
     const members=(await client.query(`SELECT member.configuration_item_id,member.person_id,member.display_name_snapshot,member.person_type_snapshot FROM rework_process_worker_plans plan JOIN rework_process_worker_plan_members member USING(plan_id) WHERE plan.rework_order_id=$1 AND plan.configuration_id=$2 AND plan.created_at <= $3::timestamptz ORDER BY member.created_at,member.person_id`,[detail.reworkOrderId,configuration.configurationId,selected.at])).rows;
     page.workerPlan=ProcessWorkerPlanResponseSchema.parse({reworkOrderId:detail.reworkOrderId,reworkStatus:configurationResult.data.reworkStatus,orderVersion:configurationResult.data.orderVersion,required:Boolean(configuration.workerPreassignmentRequired),configurationId:configuration.configurationId,configurationVersion:configuration.configurationVersion,configurationStatus:configuration.status,complete:configItems.every(item=>members.some(m=>m.configuration_item_id===item.configurationItemId)),assignments:configItems.map(item=>({configurationItemId:item.configurationItemId,processName:item.processName,executionKind:item.executionKind??'worker',members:members.filter(m=>m.configuration_item_id===item.configurationItemId).map(m=>({personId:m.person_id,displayName:m.display_name_snapshot,personType:m.person_type_snapshot}))}))});
    }
-   if(['whole_order_review','final_quantity_ie_review'].includes(node) && configurationResult.data.configuration) page.wholeOrderReview=await readHistoricalReview(client,detail.reworkOrderId,selected.at,configurationResult.data.configuration,configurationResult.data.tailInspectionRequired,configurationResult.data.orderVersion);
+   if(['whole_order_review','final_quantity_ie_review'].includes(node) && configurationResult.data.configuration) page.wholeOrderReview=await readHistoricalReview(client,detail.reworkOrderId,selected.at,configurationResult.data.configuration,configurationResult.data.tailInspectionRequired,configurationResult.data.orderVersion,configurationResult.data);
    if(page.wholeOrderReview) page.iePrecounts.entries=(await client.query(`SELECT entry.configuration_item_id AS "configurationItemId",entry.quantity::float8 quantity,entry.note,person.display_name AS "recordedBy",entry.recorded_at AS "recordedAt" FROM rework_ie_precount_entries entry JOIN app_users person ON person.id=entry.recorded_by WHERE entry.rework_order_id=$1 AND entry.recorded_at <= $2::timestamptz ORDER BY entry.recorded_at DESC`,[detail.reworkOrderId,selected.at])).rows.map(row=>({...row,recordedAt:row.recordedAt.toISOString()}));
    if(page.wholeOrderReview && configurationResult.data.configuration && !configurationResult.data.configuration.unifiedExecutionRequired) page.tailInspection=await readHistoricalTailInspection(client,detail.reworkOrderId,selected.at,configurationResult.data.configuration.items);
   }
@@ -126,13 +135,13 @@ export async function readReworkNodeHistory(db: Pool, actor: TrustedActorContext
    await querySection('工人报数',['工序','工人','提交数量','有效数量','完工时间','备注','报数状态'],`SELECT item.process_name,COALESCE(person.display_name,member.display_name_snapshot),report.actual_quantity,COALESCE((SELECT revision.effective_quantity FROM rework_work_report_quantity_revisions revision WHERE revision.work_report_id=report.work_report_id AND revision.corrected_at <= $2::timestamptz ORDER BY revision.revision_version DESC LIMIT 1),report.actual_quantity),report.completed_at,report.remark,CASE WHEN EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id AND rejection.rejected_at <= $2::timestamptz) THEN '已驳回' ELSE '已提交' END
     FROM rework_work_reports report JOIN rework_process_configuration_items item USING(configuration_item_id) JOIN rework_work_task_members member USING(work_task_id) JOIN business_people person ON person.person_id=member.person_id
     WHERE report.rework_order_id=$1 AND report.created_at <= $2::timestamptz AND (NOT $3::boolean OR (person.app_user_id=$4 AND ((item.execution_kind='worker' AND $5::boolean) OR (item.execution_kind='tail_inspection' AND $6::boolean))) OR ($7::boolean AND member.person_type_snapshot='temporary')) ORDER BY item.position,report.created_at`,[detail.reworkOrderId,selected.at,ownOnly,actor.actorId,actor.actorRoles.includes('worker')&&caps.includes('work:report'),actor.actorRoles.some(role=>['worker','tail_inspector'].includes(role))&&caps.includes('tail_inspection:report'),caps.includes('work:report_for_worker')]);
-   const tasks=(await client.query(`SELECT task.work_task_id AS "workTaskId",task.rework_order_id AS "reworkOrderId",task.configuration_item_id AS "configurationItemId",item.process_name AS "processName",item.execution_kind AS "executionKind",item.pricing_unit AS "pricingUnit",item.planned_quantity::float8 AS "plannedQuantity",NULL::float8 AS "unitPrice",task.assignment_mode AS mode,task.task_version AS version,'active' status,false AS "canSubmitReport",
+   const tasks=(await client.query(`SELECT task.work_task_id AS "workTaskId",task.rework_order_id AS "reworkOrderId",task.configuration_item_id AS "configurationItemId",item.process_name AS "processName",item.execution_kind AS "executionKind",item.pricing_unit AS "pricingUnit",item.planned_quantity::float8 AS "plannedQuantity",NULL::float8 AS "unitPrice",task.assignment_mode AS "mode",task.task_version AS "version",'active' AS "status",false AS "canSubmitReport",
     (SELECT json_agg(json_build_object('personId',member.person_id,'displayName',member.display_name_snapshot,'personType',member.person_type_snapshot) ORDER BY member.person_id) FROM rework_work_task_members member WHERE member.work_task_id=task.work_task_id) members,
     COALESCE((SELECT sum(report.actual_quantity)::float8 FROM rework_work_reports report WHERE report.work_task_id=task.work_task_id AND report.created_at <= $2::timestamptz AND NOT EXISTS(SELECT 1 FROM rework_work_report_rejections rejection WHERE rejection.work_report_id=report.work_report_id AND rejection.rejected_at <= $2::timestamptz)),0) AS "submittedQuantity"
     FROM rework_work_tasks task JOIN rework_process_configuration_items item USING(configuration_item_id)
     WHERE task.rework_order_id=$1 AND task.created_at <= $2::timestamptz AND (task.superseded_at IS NULL OR task.superseded_at > $2::timestamptz)
     AND (NOT $3::boolean OR EXISTS(SELECT 1 FROM rework_work_task_members member JOIN business_people person USING(person_id) WHERE member.work_task_id=task.work_task_id AND ((person.app_user_id=$4 AND ((item.execution_kind='worker' AND $5::boolean) OR (item.execution_kind='tail_inspection' AND $6::boolean))) OR ($7::boolean AND member.person_type_snapshot='temporary')))) ORDER BY item.position,task.created_at`,[detail.reworkOrderId,selected.at,ownOnly,actor.actorId,actor.actorRoles.includes('worker')&&caps.includes('work:report'),actor.actorRoles.some(role=>['worker','tail_inspector'].includes(role))&&caps.includes('tail_inspection:report'),caps.includes('work:report_for_worker')])).rows;
-   page.workTasks=ReworkWorkTasksResponseSchema.parse({reworkOrderId:detail.reworkOrderId,reworkStatus:'in_progress',orderVersion:Number(selected.after.version??selected.after.orderVersion??latest('version')),tasks:tasks.map(task=>({...task,remainingQuantity:task.submittedQuantity>0?0:task.plannedQuantity}))});
+   page.workTasks=ReworkWorkTasksResponseSchema.parse({reworkOrderId:detail.reworkOrderId,reworkStatus:'in_progress',specialProcessType:source.specialProcessType,otherCraftDescription:source.otherCraftDescription,orderVersion:Number(selected.after.version??selected.after.orderVersion??latest('version')),tasks:tasks.map(task=>({...task,remainingQuantity:task.submittedQuantity>0?0:task.plannedQuantity}))});
    // Reporting rows retain the viewer's own/authorized temporary-worker scope.
    if (ownOnly) notices.push('按原有权限显示本人及获授权代报的临时工明细。');
   }

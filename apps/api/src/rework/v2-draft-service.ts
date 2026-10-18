@@ -5,6 +5,7 @@ import type { SaveReworkV2Draft } from "@dx-rework/contracts/rework-supply-conte
 import type { Pool, PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
+import { resolveSpecialProcess } from "./special-process.js";
 import {
   IdempotencyService,
   OperationEventRepository,
@@ -38,6 +39,8 @@ type OrderRow = Readonly<{
   problem_description: string | null;
   rework_quantity: number | null;
   tail_inspection_required: boolean;
+  special_process_type?: "none" | "inspection" | "other_craft" | null;
+  other_craft_description?: string | null;
   tail_inspection_cost_bearer: "own_factory" | "processing_factory" | null;
   tail_inspection_cost_bearer_source: "legacy_default" | "quality_inspection" | "production_override" | null;
   inspection_report: ReworkOrderResponse["inspectionReport"];
@@ -155,14 +158,17 @@ export class ReworkV2DraftService {
     const nextFactory = await this.resolveFactory(client, input.processingFactory);
     const currentFactory = factoryFromRow(current);
     const nextStyleNo = input.styleNo?.trim() || null;
-    const nextTailCostBearer = input.tailInspectionRequired ? input.tailInspectionCostBearer : null;
+    const specialProcess = resolveSpecialProcess(input, current, current.rework_kind === "inhouse_finishing");
+    const nextTailCostBearer = specialProcess.tailInspectionRequired ? input.tailInspectionCostBearer : null;
     const nextTailCostBearerSource = nextTailCostBearer ? "quality_inspection" as const : null;
     const unchanged = current.style_no === nextStyleNo
       && current.merchandiser_user_id === input.merchandiserUserId
       && currentFactory?.type === nextFactory?.type
       && currentFactory?.supplierId === nextFactory?.supplierId
       && currentFactory?.supplierVersion === nextFactory?.supplierVersion
-      && current.tail_inspection_required === input.tailInspectionRequired
+      && current.tail_inspection_required === specialProcess.tailInspectionRequired
+      && (current.special_process_type ?? null) === specialProcess.specialProcessType
+      && (current.other_craft_description ?? null) === specialProcess.otherCraftDescription
       && current.tail_inspection_cost_bearer === nextTailCostBearer
       && current.tail_inspection_cost_bearer_source === nextTailCostBearerSource;
     if (unchanged) return this.dto(client, current);
@@ -174,7 +180,7 @@ export class ReworkV2DraftService {
       styleNo: nextStyleNo,
       merchandiserUserId: input.merchandiserUserId,
       processingFactory: nextFactory,
-      tailInspectionRequired: input.tailInspectionRequired,
+      ...specialProcess,
       tailInspectionCostBearer: nextTailCostBearer,
       tailInspectionCostBearerSource: nextTailCostBearerSource,
       version: nextVersion,
@@ -196,7 +202,7 @@ export class ReworkV2DraftService {
            processing_factory_supplier_version=$6,
            tail_inspection_required=$7,tail_inspection_cost_bearer=$8,
            tail_inspection_cost_bearer_source=$9,
-           updated_by=$10,version=$11,updated_at=CURRENT_TIMESTAMP
+           updated_by=$10,version=$11,special_process_type=$12,other_craft_description=$13,updated_at=CURRENT_TIMESTAMP
        WHERE rework_order_id=$1`,
       [
         reworkOrderId,
@@ -205,11 +211,13 @@ export class ReworkV2DraftService {
         nextFactory?.type ?? null,
         nextFactory?.supplierId ?? null,
         nextFactory?.supplierVersion ?? null,
-        input.tailInspectionRequired,
+        specialProcess.tailInspectionRequired,
         nextTailCostBearer,
         nextTailCostBearerSource,
         actor.actorId,
         nextVersion,
+        specialProcess.specialProcessType,
+        specialProcess.otherCraftDescription,
       ],
     );
     const saved = await this.getAccessible(client, actor, reworkOrderId);
@@ -343,6 +351,8 @@ export class ReworkV2DraftService {
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
       tailInspectionRequired: row.tail_inspection_required,
+      specialProcessType: row.special_process_type ?? null,
+      otherCraftDescription: row.other_craft_description ?? null,
       tailInspectionCostBearer: row.tail_inspection_cost_bearer,
       tailInspectionCostBearerSource: row.tail_inspection_cost_bearer_source,
       inspectionReport: row.inspection_report,
@@ -382,6 +392,8 @@ export class ReworkV2DraftService {
       problemDescription: row.problem_description,
       reworkQuantity: row.rework_quantity,
       tailInspectionRequired: row.tail_inspection_required,
+      specialProcessType: row.special_process_type ?? null,
+      otherCraftDescription: row.other_craft_description ?? null,
       tailInspectionCostBearer: row.tail_inspection_cost_bearer,
       tailInspectionCostBearerSource: row.tail_inspection_cost_bearer_source,
       inspectionReport: row.inspection_report,
