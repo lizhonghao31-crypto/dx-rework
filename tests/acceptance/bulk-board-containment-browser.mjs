@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import {build} from 'vite';
 import {execFileSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {mkdtemp,readFile,readdir,writeFile,mkdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
@@ -11,6 +12,9 @@ const baseline=process.argv.includes('--baseline'),composed=process.argv.include
 assert.ok(process.argv.slice(2).every(x=>['--baseline','--composed-795'].includes(x))&&!(baseline&&composed));
 const base='3a5605cc65b3e39e8b281bb79feeed0a1598ea1b',pr795='8c96b71a4ccc132b2cf6c18b988cd2f0bfb7c83d';
 const mode=baseline?'baseline':composed?'composed-795':'candidate';
+const frozenGit=(...args)=>execFileSync('git',args,{encoding:'utf8'}).trim();
+const provenance={startedAtUtc:new Date().toISOString(),head:frozenGit('rev-parse','HEAD'),tree:frozenGit('rev-parse','HEAD^{tree}'),dirtyPaths:frozenGit('status','--porcelain').split('\n').filter(Boolean),productDiffSha256:createHash('sha256').update(frozenGit('diff','HEAD','--','apps','packages')).digest('hex')};
+if(process.env.EXPECTED_HEAD_SHA){assert.equal(provenance.head,process.env.EXPECTED_HEAD_SHA);assert.deepEqual(provenance.dirtyPaths,[]);}
 const directory=process.env.BULK_CARD_EVIDENCE;
 const reference=process.env.BULK_CARD_COMPARE?JSON.parse(await readFile(process.env.BULK_CARD_COMPARE,'utf8')):null;
 const {chromium}=await import(process.env.PLAYWRIGHT_IMPORT||'playwright');
@@ -91,6 +95,7 @@ try{
      assert.equal(await card.locator('.bulk-pattern-card__deadline').count(),item.task?.dueAt&&!terminal?1:0);
      if(item.task?.state==='cancelled')assert.ok(text.includes('已取消')&&!text.includes('当前：制作'));
      if(item.task?.state==='blocked')assert.ok(text.includes(item.task.blockedReason));
+     if(item.reasons.includes('母单已特殊结案，原实绩及历史继续保留')){assert.ok(text.includes('已特殊结案')&&text.includes('原实绩及历史继续保留'));for(const action of ['当前：','待处理：','核对大货准备条件','负责人：','截止：'])assert.ok(!text.includes(action),'closed order is not actionable: '+action);}
      const disclosure=card.locator('details.bulk-pattern-card__po'),clicked=await page.evaluate(()=>window.boardContainmentFixture.clicked.length);
      if(item.poNumbers.length>1){
       const summary=disclosure.locator('summary');assert.equal(await disclosure.evaluate(e=>e.open),false);await summary.focus();await summary.press('Enter');assert.equal(await disclosure.evaluate(e=>e.open),true);
@@ -137,7 +142,7 @@ try{
  assert.deepEqual(pageErrors,[]);assert.deepEqual(external,[]);
  if(failures.length){console.error(`CARD_CONTAINMENT_FAILED ${failures.length} cards; first=${JSON.stringify(failures[0])}`);process.exitCode=1;}
 }finally{
- if(directory)await writeFile(join(directory,'result.json'),JSON.stringify({mode,base,pr795:composed?pr795:null,results,failures,pageErrors,external,navigations,limits:['Synthetic intercepted GETs and local aborted navigation use actual product components/CSS, not deployed Acceptance or real orders.','Composition loads frozen PR795 modules only into this test bundle; no branch merge or product source copy.']},null,2));
+ if(directory)await writeFile(join(directory,'result.json'),JSON.stringify({mode,base,provenance:{...provenance,finishedAtUtc:new Date().toISOString()},pr795:composed?pr795:null,results,failures,pageErrors,external,navigations,limits:['Synthetic intercepted GETs and local aborted navigation use actual product components/CSS, not deployed Acceptance or real orders.','Composition loads frozen PR795 modules only into this test bundle; no branch merge or product source copy.']},null,2));
  await browser?.close();if(server)await new Promise(done=>server.close(done));await rm(output,{recursive:true,force:true});
 }
 console.log(JSON.stringify({mode,frames:results.length,checkedCards:results.filter(r=>r.host==='bulk').reduce((n,r)=>n+r.cards.length,0),clicks:results.reduce((n,r)=>n+r.clicks,0),containmentFailures:failures.length,pageErrors,external}));
