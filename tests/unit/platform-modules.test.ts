@@ -108,14 +108,14 @@ describe("thin platform module routing", () => {
     expect(sourcingCss).toContain(".sourcing-order-detail .rework-detail-core-facts");
     expect(sourcingCss).toContain("grid-template-columns: repeat(7, minmax(0, 1fr))");
     expect(sourcingCss).toContain("grid-column: 1 / -1");
-    // PR09b keeps the approved narrow reading order: facts, work, then supporting photos.
+    // Main work stays before the optional context and photos in narrow reading order.
     const regions = [
       '<KeyFacts className="sourcing-key-facts"',
-      'className="order-layout-main"',
-      '<DecisionSummary title=',
-      '<ResponsiveFactsTable caption="款式明细"',
+      'order-layout-main${',
+      '{!financialReadView ? orderLineItems : null}',
       '<ActionBar className="sourcing-owner-actions"',
-      'className="sourcing-supporting-overview order-layout-flow"',
+      '<details className="sourcing-order-context"',
+      '<DecisionSummary title=',
       'className="order-layout-aside"',
     ].map(marker => sourcingPage.indexOf(marker));
     expect(regions.every(index => index >= 0)).toBe(true);

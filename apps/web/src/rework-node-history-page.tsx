@@ -55,6 +55,7 @@ const finishingHistoryNodes=[
 ] as const;
 export function ReworkNodeHistoryView({data,currentHref,onVersion,onImage}:{data:ReworkNodeHistory;currentHref:string;onVersion:(id:string)=>void;onImage:(image:ReworkNodeHistory['attachments'][number])=>void}) {
  const [expanded,setExpanded]=useState(false);
+ const [readingFilename,setReadingFilename]=useState<string | null>(null);
  const mobileRail=useRef<HTMLDivElement>(null);
  useEffect(()=>{if(expanded) mobileRail.current?.querySelector<HTMLElement>('[aria-current="page"]')?.scrollIntoView({block:'nearest',inline:'center'});},[expanded,data.node]);
  const orderId=data.orderId ?? currentHref.split('/').at(-1)?.split('?')[0] ?? '';
@@ -86,22 +87,19 @@ export function ReworkNodeHistoryView({data,currentHref,onVersion,onImage}:{data
   <div className="rework-history-navigation"><span>{display(data.entry.at)} · {data.entry.actor}</span>{data.versions.length>1?<label>历史版本<select value={data.entry.id} onChange={event=>onVersion(event.target.value)}>{data.versions.map((entry,index)=><option key={entry.id} value={entry.id}>第 {index+1} 次 · {display(entry.at)}</option>)}</select></label>:null}<a className="dx-button" href={currentHref}>返回当前节点</a></div>
   <Surface className="rework-detail-target-layout">
     <dl className="rework-detail-core-facts" aria-label="历史订单信息">{data.fields.filter(field=>['加工厂','返工工序','发起时间','发起人','订单跟单','订单数量','返工数量'].includes(field.label)&&field.value!==null).map(field=><div className="rework-detail-core-fact" key={field.label}><dt>{field.label}</dt><dd>{display(field.value)}</dd></div>)}</dl>
-    <div className="order-layout-workspace">
-      <div className="order-layout-main">
-        {data.notices.map(notice=><p key={notice} role="status">{notice}</p>)}
-        {content}
-        <div className="rework-detail-overview-grid order-overview--compact order-layout-flow">
+    <div className="order-layout-workspace"><div className="rework-order-support"><aside className="order-layout-aside">
+        <div className="rework-detail-overview-grid order-overview--compact"><section className="rework-detail-images"><div className="section-title rework-detail-panel-title rework-governed-image-heading"><h2>订单图片</h2><span className="rework-governed-image-count">{data.attachments.length} 张</span></div><div className="rework-detail-image-grid">{data.attachments.map(attachment=>attachment.mimeType.startsWith('image/')?<button className="rework-detail-image-card" type="button" key={attachment.attachmentId} aria-label={`放大查看 ${attachment.filename}`} onClick={()=>onImage(attachment)} title={attachment.filename} onMouseEnter={() => setReadingFilename(attachment.filename)} onMouseLeave={() => setReadingFilename(null)} onFocus={() => setReadingFilename(attachment.filename)} onBlur={() => setReadingFilename(null)}><img src={apiUrl(`tools/attachments/${attachment.attachmentId}/download?mode=preview`)} alt={attachment.filename} loading="lazy" /><span className="rework-detail-image-card__filename">{attachment.filename}</span></button>:<a key={attachment.attachmentId} href={apiUrl(`tools/attachments/${attachment.attachmentId}/download`)}>{attachment.filename}</a>)}</div>{readingFilename ? <p className="rework-order-filename" role="status">{readingFilename}</p> : null}</section></div>
+      </aside><div className="rework-detail-overview-grid order-overview--compact order-layout-flow">
           <section className="rework-workflow" aria-label="订单流程">
            <div className="rework-workflow__heading rework-detail-panel-title"><h2>订单流程</h2><span>历史节点 · 只读</span></div>
-           <button className="rework-detail-mobile-workflow-toggle" type="button" aria-expanded={expanded} onClick={()=>setExpanded(!expanded)}><strong>订单流程</strong><span>{data.entry.label} {expanded?'−':'+'}</span></button>
-           <div className={`rework-detail-mobile-collapsible${expanded?' is-expanded':''}`}><WorkflowRail className="rework-workflow__desktop-grid" aria-label="电脑端流程节点">{nodes.map(renderNode)}</WorkflowRail><WorkflowRail ref={mobileRail} className="rework-workflow__mobile-rail" aria-label="移动端流程节点">{nodes.map(renderNode)}</WorkflowRail></div>
+           <button className="rework-detail-mobile-panel-toggle rework-detail-mobile-workflow-toggle" type="button" aria-expanded={expanded} onClick={()=>setExpanded(!expanded)}><strong>订单流程</strong><span>{data.entry.label} {expanded?'−':'+'}</span></button>
+           <div className={`rework-detail-mobile-collapsible${expanded?' is-expanded':''}`}><WorkflowRail className="rework-workflow__desktop-grid" data-node-count={nodes.length} aria-label="电脑端流程节点">{nodes.map(renderNode)}{nodes.length > 5 ? <span className="rework-workflow-row-bridge" aria-hidden="true" /> : null}</WorkflowRail><WorkflowRail ref={mobileRail} className="rework-workflow__mobile-rail" aria-label="移动端流程节点">{nodes.map(renderNode)}</WorkflowRail></div>
           </section>
-        </div>
-      </div>
-      <aside className="order-layout-aside">
-        <div className="rework-detail-overview-grid order-overview--compact"><section className="rework-detail-images"><div className="section-title rework-detail-panel-title rework-governed-image-heading"><h2>订单图片</h2><span className="rework-governed-image-count">{data.attachments.length} 张</span></div><div className="rework-detail-image-grid">{data.attachments.map(attachment=>attachment.mimeType.startsWith('image/')?<button className="rework-detail-image-card" type="button" key={attachment.attachmentId} onClick={()=>onImage(attachment)}><img src={apiUrl(`tools/attachments/${attachment.attachmentId}/download?mode=preview`)} alt={attachment.filename} loading="lazy" /><span className="rework-detail-image-card__filename">{attachment.filename}</span></button>:<a key={attachment.attachmentId} href={apiUrl(`tools/attachments/${attachment.attachmentId}/download`)}>{attachment.filename}</a>)}</div></section></div>
-      </aside>
-    </div>
+        </div></div><div className="order-layout-main">
+        {data.notices.map(notice=><p key={notice} role="status">{notice}</p>)}
+        {content}
+
+      </div></div>
   </Surface>
  </>;
 }

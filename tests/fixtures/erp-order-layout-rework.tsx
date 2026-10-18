@@ -12,7 +12,7 @@ import "../../apps/web/src/ui-polish.css";
 
 const id = (suffix: string) => `00000000-0000-4000-8000-${suffix.padStart(12, "0")}`;
 const params = new URLSearchParams(location.search);
-const stage = "N04";
+const stage = params.get("stage") ?? "N04";
 const role = params.get("role") ?? "root";
 const readOnly = params.get("readonly") === "1";
 const processId = id("1"), orderId = id("2"), userId = id("3");

@@ -1,7 +1,8 @@
+import { SourcingOrderPhotos } from "./sourcing-order-photos.js";
 import { useEffect, useState } from "react";
 import { SourcingNodeHistorySchema, type SourcingNodeHistory, type SourcingHistoryNode, type SourcingAttachment } from "@dx-rework/contracts";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
-import { DecisionSummary, ImageStrip, KeyFacts, ResponsiveFactsTable, Surface, WorkflowRail } from "@dx-rework/ui";
+import { DecisionSummary, KeyFacts, ResponsiveFactsTable, Surface, WorkflowRail } from "@dx-rework/ui";
 import { Header } from "./components.js";
 import { ImageViewer } from "./image-viewer.js";
 import { createWebUrls } from "../url-contract.js";
@@ -80,7 +81,7 @@ export function SourcingNodeHistoryView({ history, currentHref, nodeHref, expand
       </select></label> : null}
     </div>
     {notices.map(notice => <p key={notice} role="status">{notice}</p>)}
-    <div className="sourcing-detail-layout">
+    <div className="sourcing-detail-layout sourcing-reference-layout">
       <KeyFacts className="sourcing-key-facts" aria-label="历史节点订单核心信息">
         <div className="sourcing-key-facts__factory"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "当时未选厂"}</dd></div>
         <div><dt>总数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
@@ -91,8 +92,8 @@ export function SourcingNodeHistoryView({ history, currentHref, nodeHref, expand
         <div className="sourcing-key-facts__date"><dt>要求交货日期</dt><dd>{item.deliveryDate ?? "历史未维护"}</dd></div>
       </KeyFacts>
       <div className="order-layout-workspace">
-        <div className="order-layout-main">
-          {node === "owner" && item.decision ? <DecisionSummary title="审批摘要"><p>加工厂：<strong>{item.decision.supplierName}</strong>；数量：{formatBusinessDecimal(item.orderQuantity)} 件；生产总额：<strong>{formatBusinessCurrency(item.decision.totalAmount)}</strong>。</p><p>工艺及承包范围：{item.processes.join("、") || "历史未填写"}；裁床工序：{cutting || "历史未填写"}。</p><p>{item.decision.decisionReason}</p></DecisionSummary> : null}
+        <div className={`order-layout-main${node === "owner" ? " sourcing-owner-workspace" : ""}`}>{node === "owner" ? <header className="sourcing-order-workspace-heading"><h2>审批资料</h2><p>此处展示该次审批时保存的资料。</p></header> : null}
+
           <div className="order-layout-line-items" tabIndex={0} role="group" aria-label="款式明细横向滚动">
             <ResponsiveFactsTable caption="款式明细" mobileLayout="compact" rows={item.lineItems} rowKey={line => line.position}
             totals={{ style: "合计", quantity: `${formatBusinessDecimal(item.orderQuantity)} 件`, amount: prices ? formatBusinessCurrency(prices.totalAmount) : "—" }}
@@ -123,7 +124,7 @@ export function SourcingNodeHistoryView({ history, currentHref, nodeHref, expand
               {node === "finance" ? <>{field("对应合同", history.contractReference)}{field("批准加工厂", item.decision?.supplierName)}{field("批准数量", `${formatBusinessDecimal(item.orderQuantity)} 件`)}{field("批准总额", item.decision ? formatBusinessCurrency(item.decision.totalAmount) : null)}{field("核对结果", entry.result === "match" ? "确认与合同一致" : "发现不一致")}{entry.differenceFields.length ? field("不一致项目", entry.differenceFields.map(value => ({ supplier: "加工厂", unit_price: "单价", quantity: "数量", total_amount: "总额" })[value]).join("、")) : null}<label className="sourcing-form-wide"><span>核对说明</span><textarea readOnly value={entry.reason} /></label></> : null}
             </div>
           </Surface>
-          <div className="sourcing-supporting-overview order-layout-flow">
+          <details className="sourcing-order-context" onToggle={event => { if(event.currentTarget.open !== expanded) onToggle(); }}><summary>订单流程与已提交记录</summary><div className="sourcing-order-context__body">
             <section className="sourcing-workflow-section" aria-label="订单流程">
               <div className="rework-workflow__heading rework-detail-panel-title rework-detail-desktop-panel-heading"><h2>订单流程</h2><span>正在回看：{labels[node]}</span></div>
               <button type="button" className="rework-detail-mobile-panel-toggle rework-detail-mobile-workflow-toggle" aria-expanded={expanded} onClick={onToggle}><span><strong>订单流程</strong><small>{labels[node]} · 只读</small></span><b>{expanded ? "−" : "+"}</b></button>
@@ -131,13 +132,9 @@ export function SourcingNodeHistoryView({ history, currentHref, nodeHref, expand
                 {nodes.map(([key, label], position) => position <= index ? <a key={key} className={`sourcing-workflow-step is-${key === node ? "current" : "completed"}`} href={nodeHref(key)} aria-current={key === node ? "page" : undefined}><b>{position + 1}</b><span><strong>{label}</strong></span><em>{key === node ? "正在回看" : "查看历史"}</em></a> : <div key={key} className="sourcing-workflow-step is-future"><b>{position + 1}</b><span><strong>{label}</strong></span><em>后续节点</em></div>)}
               </WorkflowRail></div>
             </section>
-          </div>
+          {node === "owner" && item.decision ? <DecisionSummary title="审批摘要"><p>加工厂：<strong>{item.decision.supplierName}</strong>；数量：{formatBusinessDecimal(item.orderQuantity)} 件；生产总额：<strong>{formatBusinessCurrency(item.decision.totalAmount)}</strong>。</p><p>工艺及承包范围：{item.processes.join("、") || "历史未填写"}；裁床工序：{cutting || "历史未填写"}。</p><p>{item.decision.decisionReason}</p></DecisionSummary> : null}</div></details>
         </div>
-        <aside className="order-layout-aside">
-          <div className="sourcing-supporting-overview"><section className="sourcing-photo-section" aria-label="订单图片"><div className="section-title rework-detail-panel-title"><h2>订单图片</h2><span>{attachments.length} 张</span></div>
-            <ImageStrip aria-label="历史订单图片">{attachments.map(image => <button type="button" className="sourcing-photo" key={image.attachmentId} onClick={() => onImage(image)}><img src={pictureUrl(image.attachmentId)} alt={image.filename} loading="lazy" /><span className="sourcing-photo__filename">{image.filename}</span></button>)}</ImageStrip>
-          </section></div>
-        </aside>
+        <aside className="order-layout-aside"><SourcingOrderPhotos attachments={attachments} previewUrl={image => pictureUrl(image.attachmentId)} onPreview={onImage} /></aside>
       </div>
     </div>
     {relatedEntries.length ? <section className="sourcing-history-related" aria-label="订单相关处理记录">
