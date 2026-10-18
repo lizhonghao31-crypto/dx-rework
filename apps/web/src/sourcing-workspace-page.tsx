@@ -1829,7 +1829,7 @@ function OrderDetailPage({
               <StatusBadge tone="info">{formatBusinessDecimal(attachments.length)} 张</StatusBadge>
             </div>
             {attachments.length > 0 ? <ImageStrip aria-label="订单照片，可横向滚动">
-              {attachments.map((attachment) => <button className="sourcing-photo" type="button" key={attachment.attachmentId} onClick={() => setSelectedImage(attachment)}>
+              {attachments.map((attachment) => <button className="sourcing-photo" type="button" title={attachment.filename} key={attachment.attachmentId} onClick={() => setSelectedImage(attachment)}>
                 <img src={attachmentUrl(attachment.attachmentId, "preview")} alt={attachment.filename} loading="lazy" />
                 <span className="sourcing-photo__filename">{attachment.filename}</span>
               </button>)}
