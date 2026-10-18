@@ -23,4 +23,11 @@ describe('revision work versus inherited facts',()=>{
   expect(plan.route).not.toContain('development_sewing');expect(plan.route).not.toContain('development_tail_check');expect(plan.route).not.toContain('development_washing');
   expect(plan.inherited).toEqual({});
  });
+ it('keeps a missing transfer in the saved garment craft route while inheriting already completed sewing',()=>{
+  const completed=allCompleted();delete completed.development_sewing_transfer;
+  const plan=developmentRevisionPlan(input('整件样板',['工艺']),completed);
+  expect(plan.route).toEqual(['development_craft_dispatch','development_printing','development_craft_confirmation','development_sewing_transfer','development_tail_check','development_confirmation','development_shipping']);
+  expect(plan.inherited.development_sewing).toEqual({taskId:'prior-development_sewing',roundNumber:1});
+  expect(plan.inherited.development_washing).toBeDefined();
+ });
 });

@@ -250,3 +250,9 @@
 .sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-contract-return-facts .sourcing-finance-reference>div{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;min-width:0;align-content:start}
 .sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-contract-return-facts .sourcing-finance-reference :is(dt,dd){margin:0;font-size:14px;line-height:20px;text-align:left}
 .sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-contract-return-facts .sourcing-finance-reference>div:nth-child(-n+3) dd{white-space:nowrap}
+
+/* Only date values in sourcing detail rows; the table/cards keep their own overflow. */
+.sourcing-order-detail .sourcing-date-token { display:inline-block;white-space:nowrap;font-variant-numeric:tabular-nums; }
+/* Existing preview remains the keyboard/touch full-name action. */
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-photo__filename {white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;}
+.sourcing-workspace .rework-image-modal__heading strong {min-width:0;overflow-wrap:anywhere;white-space:normal;}

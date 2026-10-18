@@ -58,7 +58,8 @@ export class DevelopmentRouteService {
    const index=route.indexOf(task.task_kind==='development_material_recheck'?'development_materials':task.task_kind);
    if(index<0||index===route.length-1)return null;
    let nextKind=route[index+1]!,requireActualReceipt=false;
-   if(task.task_kind==='development_craft_confirmation'&&nextKind==='development_sewing_transfer'){
+   // Only bypass the transfer when sewing is the saved successor. Revisions may inherit sewing.
+   if(task.task_kind==='development_craft_confirmation'&&nextKind==='development_sewing_transfer'&&route[index+2]==='development_sewing'){
      const existing=(await db.query("SELECT 1 FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id) WHERE a.source_id=$1 AND t.route_version=$2 AND a.task_kind='development_sewing_transfer'",[sourceId,task.route_version])).rowCount;
      if(!existing){
        nextKind='development_sewing';requireActualReceipt=true;

@@ -86,7 +86,8 @@ import {
   readSourcingListQuery,
   sourcingListPath,
   sourcingReturnPath,
-  withSourcingReturn,
+  sourcingNavigationView,
+  withSourcingOrigin,
   type SourcingGenderFilter,
   type SourcingContractReturnFilter,
   type SourcingListQuery,
@@ -349,11 +350,7 @@ const detailHref = (
 ): string => {
   const target = pageUrl(`ui/sourcing/orders/${item.sourcingCaseId}`);
   if (!returnTo) return target;
-  return withSourcingReturn(
-    target,
-    returnTo.startsWith("/ui/sourcing/history") ? "history" : "pending",
-    readSourcingListQuery(returnTo.slice(returnTo.indexOf("?") + 1)),
-  );
+  return withSourcingOrigin(target,returnTo);
 };
 
 function sourcingPoDates(item:Pick<SourcingCaseSummary,"lineItems">):PoDeliveryDate[]|undefined {
@@ -449,11 +446,11 @@ export function SourcingWorkspacePage({
     return () => { mounted = false; };
   }, []);
 
-  const mobileActiveView = view === "detail" ? "pending" : view;
+  const mobileActiveView = sourcingNavigationView(view,window.location.search);
   const canCreateOrder = canAct(user, "order_merchandiser", "sourcing:inquiry:create");
 
   return (
-    <Shell active={ACTIVE_NAVIGATION[view]}>
+    <Shell active={ACTIVE_NAVIGATION[mobileActiveView]}>
       <div data-dx-ui="governed" className="sourcing-governed">
       <nav className="sourcing-mobile-navigation" aria-label="外发业务页面">
         {canCreateOrder ? <a
@@ -857,7 +854,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
       feedback.confirmed();budgetGuard.current.confirmed=true;
       // A local storage failure after a confirmed write must never invite another submission.
       try { if (!correction && user?.id) {if(budgetPreparation)clearBudgetSourcingDraft(window.localStorage,{userId:user.id,productionOrderId:budgetPreparation.productionOrderId,budgetVersion:budgetPreparation.budgetVersion});else clearLocalSourcingDraft(user.id);} } catch { /* Navigation still proceeds. */ }
-      window.location.assign(detailHref(created));
+      window.location.assign(detailHref(created,sourcingReturnPath(window.location.search)??undefined));
     });
   };
 
@@ -869,6 +866,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
         badge="外发定价&选厂"
       />
       {budgetPreparation&&<section aria-label="本单预算来源"><p>客户：{budgetPreparation.customerCode??"未登记"} · 有效预算第{budgetPreparation.budgetVersion}版 · 母单版本{budgetPreparation.orderVersion}</p><p role="status">{budgetDraftStatus}</p>{budgetNeedsReview&&<Button onClick={acceptBudgetReview} disabled={busy||uploading}>已核对当前来源，沿用合法补填</Button>}{budgetPreparation.budgetRows&&<details onToggle={event=>setBudgetSourceOpen(event.currentTarget.open)}><summary>查看设计师预算项</summary>{budgetSourceOpen&&budgetPreparation.budgetRows.map(row=><p key={row.rowId}>{row.section} · {row.category} · {row.name} {row.specification} · 单耗：{row.consumption||"未填"} · 单价：{row.unitPrice||"未填"} 元/{row.unit||"未填单位"}</p>)}</details>}</section>}
+      {!correction&&budgetOrderId&&sourcingReturnPath(window.location.search)&&<a className="dx-button dx-button--secondary" href={pageUrl(sourcingReturnPath(window.location.search)!)}>返回来源</a>}
       {correction ? <p role="status">退回原因：{correction.item.correctionReason}<a href={detailHref(correction.item)}>返回订单</a></p> : null}
       <SubmissionFeedback feedback={feedback} busy={busy} />
       <Surface className="sourcing-create-card">
@@ -1797,7 +1795,7 @@ function OrderDetailPage({
         subtitle={`${item.gender ?? "历史未维护"} · ${item.styleName ?? "历史未维护"}`}
         badge={STATUS_LABELS[item.status]}
         badgePlacement="subtitle"
-        action={todoBackPath ? "返回我的待办" : "返回订单列表"}
+        action={todoBackPath ? "返回我的待办" : listBackPath?.startsWith("/ui/digital-production?")?"返回来源":"返回订单列表"}
         actionHref={detailReturnPath ?? (item.status === "closed" ? "/ui/sourcing/history" : "/ui/sourcing/pending")}
       />
       {canReturn ? <button type="button" className="dx-button dx-button--secondary" disabled={busy} onClick={()=>{setReturnOpen(true);setReturnError("");}}>退回跟单修改</button> : null}
@@ -1831,7 +1829,7 @@ function OrderDetailPage({
               <StatusBadge tone="info">{formatBusinessDecimal(attachments.length)} 张</StatusBadge>
             </div>
             {attachments.length > 0 ? <ImageStrip aria-label="订单照片，可横向滚动">
-              {attachments.map((attachment) => <button className="sourcing-photo" type="button" key={attachment.attachmentId} onClick={() => setSelectedImage(attachment)}>
+              {attachments.map((attachment) => <button className="sourcing-photo" type="button" title={attachment.filename} key={attachment.attachmentId} onClick={() => setSelectedImage(attachment)}>
                 <img src={attachmentUrl(attachment.attachmentId, "preview")} alt={attachment.filename} loading="lazy" />
                 <span className="sourcing-photo__filename">{attachment.filename}</span>
               </button>)}
@@ -1899,7 +1897,7 @@ function OrderDetailPage({
               {canCorrectBudget && line.position === item.lineItems[0]?.position ? <button type="button" className="sourcing-budget-price-correct"
                 onClick={() => { budgetCorrectionKey.current = null; setBudgetCorrectionError(""); setBudgetCorrectionOpen(true); }}>更正</button> : null}
             </span> : "历史未维护" }] : []),
-            ...(item.lineItems.some(line=>line.lineId)?[{key:"customerDate",label:item.approvalSnapshot?"客户仓到货日":customerPoDateLabel,render:(line:SourcingCaseSummary["lineItems"][number])=>line.customerWarehouseArrivalDate ?? "未登记"},{key:"factoryDate",label:"加工厂交货日",render:(line:SourcingCaseSummary["lineItems"][number])=><>{line.factoryDeliveryDate ?? "尚未生效"}{line.proposedFactoryDeliveryDate && line.proposedFactoryDeliveryDate!==line.factoryDeliveryDate?<small>{item.approvalSnapshot?"原申请日期：":"审批提议："}{line.proposedFactoryDeliveryDate}</small>:null}</>}]:[]),
+            ...(item.lineItems.some(line=>line.lineId)?[{key:"customerDate",label:item.approvalSnapshot?"客户仓到货日":customerPoDateLabel,render:(line:SourcingCaseSummary["lineItems"][number])=><span className="sourcing-date-token">{line.customerWarehouseArrivalDate ?? "未登记"}</span>},{key:"factoryDate",label:"加工厂交货日",render:(line:SourcingCaseSummary["lineItems"][number])=><><span className="sourcing-date-token">{line.factoryDeliveryDate ?? "尚未生效"}</span>{line.proposedFactoryDeliveryDate && line.proposedFactoryDeliveryDate!==line.factoryDeliveryDate?<small>{item.approvalSnapshot?"原申请日期：":"审批提议："}<span className="sourcing-date-token">{line.proposedFactoryDeliveryDate}</span></small>:null}</>}]:[]),
             { key: "ie", label: "IE 单价", render: line => { const price = sourcingLinePricing(item.ieQuote, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
             { key: "production", label: "生产单价", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price ? historicalSourcingPrice(price.unitPrice) : "—"; } },
             { key: "amount", label: "本款金额", render: line => { const price = sourcingLinePricing(item.decision, line.position, item.lineItems.length); return price?.totalAmount ? fixedBusinessCurrency(price.totalAmount) : "—"; } },
