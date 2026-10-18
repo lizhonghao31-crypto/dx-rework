@@ -268,6 +268,7 @@ export function MyTodosPage() {
     : todoModules.filter((module) => module.id === "digital_production" ? moduleCounts.digital_production !== undefined : accessibleTodoModules.has(module.id));
 
   const openModule = (module: TodoModule): void => {
+    setSearchQuery("");
     setRequestedModule(module);
     setRequestedPage(1);
   };
@@ -278,7 +279,23 @@ export function MyTodosPage() {
         <header className="page-heading my-todos-hero">
           <div className="my-todos-hero__title">
             <h1><NavigationIcon route="/ui/my-tasks" size="title" />我的待办</h1>
-            <p>这里只显示现在轮到你处理的事项。</p>
+            <div className="my-todos-intro"><p>这里只显示现在轮到你处理的事项。</p>
+          <label className="my-todos-search" htmlFor="my-todos-search">
+            <input
+              id="my-todos-search"
+              type="search"
+              value={searchQuery}
+              maxLength={100}
+              aria-label="搜索全部待办"
+              placeholder="搜索全部待办：款号、供应商、跟单或事项"
+              autoComplete="off"
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+                setRequestedPage(1);
+              }}
+            />
+          </label>
+</div>
           </div>
           <StatusBadge tone="info">个人任务</StatusBadge>
         </header>
@@ -295,33 +312,19 @@ export function MyTodosPage() {
           <div className="my-todos-modules" role="group" aria-label="待办模块">
             {visibleTodoModules.map((module) => <button
               type="button"
-              className={module.id === activeModule ? "is-active" : ""}
-              aria-pressed={module.id === activeModule}
+              className={!activeQuery && module.id === activeModule ? "is-active" : ""}
+              aria-pressed={!activeQuery && module.id === activeModule}
               disabled={busy}
               onClick={() => openModule(module.id)}
               key={module.id}
             ><span>{module.label}</span><strong>{formatBusinessDecimal(moduleCounts[module.id] ?? 0)}件</strong></button>)}
           </div>
-          <label className="my-todos-search" htmlFor="my-todos-search">
-            <input
-              id="my-todos-search"
-              type="search"
-              value={searchQuery}
-              maxLength={100}
-              aria-label="搜索待办"
-              placeholder="输入供应商、款号或跟单姓名，自动筛选"
-              autoComplete="off"
-              onChange={(event) => {
-                setSearchQuery(event.target.value);
-                setRequestedPage(1);
-              }}
-            />
-          </label>
+
         </div>
       {todos.length === 0 && (
         <div className="my-todos-state my-todos-module-empty">
           <p>{activeQuery
-            ? "未找到匹配的待办，请检查供应商、款号或跟单姓名。"
+            ? "未找到匹配的待办，请检查款号、供应商、跟单或事项名称。"
             : totalActionable === 0
               ? "您当前的任务已全部完成。有新的事项轮到你处理时，会出现在这里。"
               : "该模块当前没有待处理事项。"}</p>
