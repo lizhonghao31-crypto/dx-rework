@@ -22,6 +22,7 @@ const exportCell = (
   key: string,
   value: string | number | boolean | null,
 ): WorkbookCell => {
+  if (["temporaryWageMultiplier","groupAmount","exactPersonShare"].includes(key) && (typeof value === "string" || typeof value === "number")) return workbookNumberCell(value,"precise");
   if (
     (typeof value === "string" || typeof value === "number")
     && (isBusinessMoneyField(key) || isBusinessNumberField(key))

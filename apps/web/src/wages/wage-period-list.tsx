@@ -1,3 +1,4 @@
+import { wageBasis, wageBasisFields, wageBasisValue } from "./wage-basis.js";
 import { readWageListQuery,wageListPath,wageSourcePath } from "./wage-query-state.js";
 import { createWebUrls } from "../../url-contract.js";
 import { NavigationIcon } from "../navigation-icons.js";
@@ -31,17 +32,9 @@ const monthEnd = (year: number, month: number): string =>
   `${year}-${pad(month)}-${pad(new Date(Date.UTC(year, month, 0)).getUTCDate())}`;
 
 const mainFields=new Set(["personName","wageSource","wageKind","orderNo","styleNo","taskName","processName","wageAmount","completedDate","settlementStatus"]);
-const basisFields=new Set(["unitPrice","sourceAmount","roundAmount","actualHours"]);
 const wageCell=(key:string,value:string|number|boolean|null|undefined):string =>
-  basisFields.has(key) && value != null ? formatBusinessDecimal(String(value),3) : value != null && isBusinessMoneyField(key) ? formatBusinessCurrency(String(value)) : businessValue(key,value);
+  wageBasisFields.has(key) && value != null ? wageBasisValue(value) : value != null && isBusinessMoneyField(key) ? formatBusinessCurrency(String(value)) : businessValue(key,value);
 
-const wageBasis=(row:ReportPreviewResponse["rows"][number]):string => {
-  const number=(key:string) => row[key] == null ? "—" : formatBusinessDecimal(String(row[key]),3);
-  if(row.wageKind === "pattern_rework") return `本段 ${number("sourceAmount")} 元 / 整轮 ${number("roundAmount")} 元`;
-  if(row.wageKind === "misc") return `${number("actualHours")} 小时 × ${number("unitPrice")} 元/小时`;
-  const unit=businessValue("unit",row.unit);
-  return `${row.wageSource === "pattern_room" ? "整轮 " : ""}${number("quantity")} ${unit} × ${number("unitPrice")} 元/${unit}${row.wageSource === "pattern_room" ? `；本段 ${number("sourceAmount")} 元` : ""}`;
-};
 
 export function WagePeriodList() {
   const today = reportingBusinessDate();
