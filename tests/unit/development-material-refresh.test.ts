@@ -17,7 +17,7 @@ vi.mock("react", async original => ({
 vi.mock("../../apps/web/src/use-digital-detail-navigation-guard.js", async original => ({...await original<typeof NavigationGuardModule>(),useDigitalDetailNavigationGuard:vi.fn()}));
 vi.mock("../../apps/web/src/digital-production-api.js", () => ({ digitalRequest: vi.fn() }));
 import { digitalRequest } from "../../apps/web/src/digital-production-api.js";
-import { DevelopmentExecutionPanel } from "../../apps/web/src/digital-development-execution-panel.js";
+import { DevelopmentExecutionPanel,useDevelopmentExecution } from "../../apps/web/src/digital-development-execution-panel.js";
 
 beforeEach(() => { harness.dependencies = []; harness.effects = []; harness.states = []; harness.refs = []; harness.refIndex = 0; harness.effectIndex = 0; harness.cleanups = []; vi.mocked(digitalRequest).mockReset(); });
 describe("material events refresh current execution conditions", () => {
@@ -53,7 +53,7 @@ describe("execution and candidate loading boundaries", () => {
     vi.mocked(digitalRequest).mockResolvedValueOnce(snapshot).mockRejectedValueOnce(new Error("candidate failure"));
     await renderRevision(1);
     expect(harness.states).toContain(snapshot);
-    expect(harness.states).toContain("candidate failure");
+    expect(harness.states.some(value=>value instanceof Error&&value.message==="candidate failure")).toBe(true);
     expect(harness.states).not.toContain("test-source:0");
   });
   it("ignores an older execution response after a newer material refresh", async () => {
@@ -81,4 +81,13 @@ describe("execution and candidate loading boundaries", () => {
     expect(harness.states).not.toContain(oldPeople);
     expect(harness.states.filter(value => value === old || value === fresh)).toEqual([old, fresh]);
   });
+});
+
+it('confirms an accepted command from execution facts even when candidate options fail',async()=>{
+ const snapshot={sheet:{canEdit:false},canDispatch:true,tasks:[]};const changed=vi.fn();
+ vi.mocked(digitalRequest).mockResolvedValueOnce({taskId:'TEST'}).mockResolvedValueOnce(snapshot).mockRejectedValueOnce(new Error('candidate failure'));
+ harness.refIndex=0;harness.effectIndex=0;const controller=useDevelopmentExecution({sourceId:'test-source',workspace:true,onChanged:changed});
+ expect(await controller.run('send-washing',{taskId:'TEST'})).toBe(snapshot);expect(changed).toHaveBeenCalledTimes(1);
+ expect(vi.mocked(digitalRequest).mock.calls.filter(call=>call[1]&&call[1]!=='GET')).toHaveLength(1);
+ expect(digitalRequest).toHaveBeenNthCalledWith(2,'sources/test-source/execution');expect(digitalRequest).toHaveBeenLastCalledWith('access/candidates');
 });
