@@ -13,6 +13,8 @@ const nodes=[
 ];
 const overview={period:{newStyles:18,shippedRounds:11,completed:1,slaDenominator:1,onTime:1,measurable:1,missingTime:0,unverifiedTime:0,handlingSeconds:14400,waitingSeconds:3600,unknownWaiting:0,cycleBuckets:[]},snapshot:{active:12,pending:2,unassigned:2,blocked:0,overdue:140,materialPending:0,handoverPending:0,otherBlocked:0},nodes};
 async function assertNodeAlignment(page){
+ const context=page.locator('.analysis-context');
+ if(await context.count()&&!await context.evaluate(element=>element.open))await context.locator('summary').click();
  const cells=await page.locator('.analysis-node-bars>button').evaluateAll(buttons=>buttons.map(button=>{
   const rect=element=>{const {x,y,width,height}=element.getBoundingClientRect();return {x,y,width,height};};
   const text=element=>{const range=document.createRange();range.selectNodeContents(element);return rect(range);};
