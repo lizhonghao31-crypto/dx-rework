@@ -321,7 +321,7 @@
 
 /* Respond to the actual content width after navigation, preserving the wide reference. */
 .sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-reference-layout { container: sourcing-order / inline-size; }
-@container sourcing-order (max-width:1040px) {
+@container sourcing-order (max-width:1140px) {
  .sourcing-workspace[data-legacy-ui="sourcing"] .order-layout-workspace { grid-template-columns:minmax(0,1fr); }
  .sourcing-workspace[data-legacy-ui="sourcing"] .order-layout-aside { grid-column:1; grid-row:1; }
  .sourcing-workspace[data-legacy-ui="sourcing"] .order-layout-main { grid-column:1; grid-row:2; }

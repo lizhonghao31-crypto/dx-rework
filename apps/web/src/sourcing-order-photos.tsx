@@ -19,7 +19,7 @@ export function SourcingOrderPhotos<T extends Photo>({ attachments, previewUrl, 
   useEffect(() => {
     const container = panel.current?.closest('.sourcing-reference-layout');
     if (!container) return;
-    const update = () => setCompact(window.matchMedia('(min-width:801px)').matches && container.getBoundingClientRect().width <= 1040);
+    const update = () => setCompact(window.matchMedia('(min-width:801px)').matches && container.getBoundingClientRect().width <= 1140);
     update();
     const observer = new ResizeObserver(update);
     observer.observe(container);
