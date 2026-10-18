@@ -17,6 +17,8 @@
 .receiving-governed .receiving-form-card h1 { font-size: 22px; }
 .receiving-governed .receiving-field { gap: 6px; }
 .receiving-governed .receiving-field > span { font-size: 14px; font-weight: 600; }
+.receiving-governed .receiving-quantity-label { display: flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+.receiving-governed .receiving-quantity-label small { font-size: 11px; font-weight: 400; color: var(--dx-v2-color-text-secondary); }
 .receiving-governed .receiving-field input { min-height: 44px; font-size: 16px; border-radius: 10px; padding: 8px 10px; }
 .receiving-governed .receiving-style-menu button { padding: 10px; font-size: 15px; }
 .receiving-governed .receiving-repeat-option { flex-wrap: wrap; gap: 4px; }

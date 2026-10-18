@@ -546,7 +546,7 @@ export function ReceivingPage() {
             <input type="number" min="1" step="1" inputMode="numeric" placeholder="0" value={documentQuantity} disabled={busy} onChange={(event) => { setDocumentQuantity(event.target.value); pendingKey.current = null; }} />
           </label> : null}
           <label className="receiving-field">
-            <span>实际收货数量</span>
+            <span className="receiving-quantity-label"><span>实际收货数量</span><small>含次品数</small></span>
             <input type="number" min="0" step="1" inputMode="numeric" placeholder="0" value={actualQuantity} disabled={busy} onChange={(event) => { setActualQuantity(event.target.value); pendingKey.current = null; }} />
           </label>
           <label className="receiving-field">
@@ -624,7 +624,7 @@ export function ReceivingPage() {
             <input type="number" min="1" step="1" inputMode="numeric" placeholder="0" value={documentQuantity} disabled={busy} onChange={(event) => { setDocumentQuantity(event.target.value); pendingKey.current = null; }} />
           </label>
           <label className="receiving-field">
-            <span>实际收货数量</span>
+            <span className="receiving-quantity-label"><span>实际收货数量</span><small>含次品数</small></span>
             <input type="number" min="0" step="1" inputMode="numeric" placeholder="0" value={actualQuantity} disabled={busy} onChange={(event) => { setActualQuantity(event.target.value); pendingKey.current = null; }} />
           </label>
           <label className="receiving-field">
