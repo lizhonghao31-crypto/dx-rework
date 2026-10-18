@@ -273,6 +273,13 @@ export const businessEntityLabel = (value: string): string =>
 export const businessExceptionLabel = (value: string): string =>
   EXCEPTION_LABELS[value] ?? "系统异常";
 
+/** Existing exception prefixes and task labels, without exposing stored category codes. */
+export const businessExceptionDescription = (value: string): string => {
+  const labels:Readonly<Record<string,string>>={sourcing_finance_reconcile:"财务核对",sourcing_ie_quote:"IE 给价",sourcing_management_decision:"供应链总监调价选厂",sourcing_owner_approval:"老板最终审批",sourcing_contract_return:"回传合同",process_configuration:"配置返工工序",ie_review:"IE 审核",task_assignment:"分配返工人员",work_reporting:"登记返工完成",whole_order_review:"整单审核",quantity_adjustment:"数量调整审核",responsibility_determination:"责任判定与资料核验",owner_signature:"老板确认签字",external_responsibility:"供应商实际扣款",wage_review:"返工工资核对"};
+  const match=value.match(/^(待办逾期|接收人失效|钉钉投递永久失败)：([a-z][a-z0-9_]+)$/);
+  return match?`${match[1]}：${labels[match[2]!]??"事项类别待核实"}`:value;
+};
+
 export const businessActionLabel = (value: string): string =>
   ACTION_LABELS[value] ?? (value.startsWith("rework.") ? "返工业务操作" : "系统操作");
 

@@ -1,3 +1,4 @@
+import { businessExceptionLabel, businessExceptionDescription } from "@dx-rework/contracts/business-display";
 import type { ReportQuery } from "@dx-rework/contracts/reporting";
 
 import { type Queryable, type Range, type ReportRow, type ReportData } from "./management-reporting-shared.js";
@@ -8,8 +9,8 @@ export async function exceptionReport(source: Queryable, query: ReportQuery, ran
     from:range.from,to:range.to,
     ...(query.q?{q:query.q}:{}),
     ...(query.status?{status:query.status}:{}),
-  })).map((item)=>({exceptionType:item.exceptionType,entityId:item.entityId,reworkOrderId:item.reworkOrderId,label:item.label,occurredAt:item.occurredAt,deepLink:item.deepLink}));
-  return {columns:[{key:"exceptionType",label:"异常类型"},{key:"label",label:"异常说明"},{key:"reworkOrderId",label:"返工单ID"},{key:"occurredAt",label:"发生/到期时间"},{key:"deepLink",label:"下钻地址"}],rows,totals:{exceptionCount:String(rows.length)}};
+  })).map((item)=>({exceptionType:businessExceptionLabel(item.exceptionType),entityId:item.entityId,reworkOrderId:item.reworkOrderId,label:businessExceptionDescription(item.label),occurredAt:item.occurredAt,deepLink:item.deepLink}));
+  return {columns:[{key:"exceptionType",label:"异常类型"},{key:"label",label:"异常说明"},{key:"reworkOrderId",label:"返工单ID"},{key:"occurredAt",label:"发生/到期时间"},{key:"deepLink",label:"业务记录"}],rows,totals:{exceptionCount:String(rows.length)}};
 }
 
 export function recalculateDisplayedTotals(rows: ReportRow[], original: Record<string, string>): Record<string, string> {

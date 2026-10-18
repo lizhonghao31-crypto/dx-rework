@@ -102,16 +102,25 @@ export function matchingNodes(order: OrderJourney, kpi: CockpitContext["kpi"]): 
 
 
 /** Deduplicate the same exact destination, retaining historical versions and PO lines. */
+/** Identical destinations share a record; explicit versions, lines and action modes remain distinct. */
+export function journeyRecordIdentity(record: JourneyRecord): string {
+  return [record.domain,record.url || record.id,record.version,record.lineId,record.mode].join(":");
+}
+export function uniqueJourneyEntries<T extends {record:JourneyRecord}>(entries: readonly T[]): T[] {
+  const seen=new Set<string>();
+  return entries.filter(entry=>{const key=journeyRecordIdentity(entry.record);if(seen.has(key))return false;seen.add(key);return true;});
+}
+
 export function journeyDocumentGroups(order: OrderJourney) {
   const entries = new Map<string, { key: string; record: JourneyRecord; label: string }>();
   for (const { record, node } of [
     ...order.stages.flatMap(stage => stage.nodes.flatMap(node => node.records.map(record => ({ record, node })))),
     ...order.links.map(record => ({ record, node: null })),
   ]) {
-    const key = [record.domain, record.id, record.url, record.version, record.lineId].join(":");
+    const key = journeyRecordIdentity(record);
     if (entries.has(key)) continue;
     const label = [node?.subject || node?.label || "订单档案", node?.round ? `第 ${node.round} 轮` : null, node?.occurrence && node.occurrence > 1 ? `第 ${node.occurrence} 次` : null, record.version ? `v${record.version}` : null, record.lineId ? `明细 ${record.lineId.slice(-8)}` : null].filter(Boolean).join(" · ");
-    const documentLabel=record.domain==='development'?`开发单 · 第 ${node?.round??new URL(record.url??'/', 'https://local.invalid').searchParams.get('round')??1} 轮`:record.domain==='budget'?`预算${record.version?` · 第 ${record.version} 版`:''}`:record.domain==='instruction'?`大货制单${record.version?` · 第 ${record.version} 版`:''}`:record.domain==='cutting'?`${order.lines.find(line=>line.id===record.lineId)?.po??'对应PO'} · 裁床单`:record.domain==='sourcing'?'外发审批 / 合同':label;
+    const documentLabel=record.domain==='development'?`开发单 · 第 ${node?.round??new URL(record.url??'/', 'https://local.invalid').searchParams.get('round')??1} 轮`:record.domain==='budget'?`预算${record.version?` · 第 ${record.version} 版`:''}`:record.domain==='instruction'?`大货制单${record.version?` · 第 ${record.version} 版`:''}`:record.domain==='cutting'?`${order.lines.find(line=>line.id===record.lineId)?.po??'对应PO'} · 裁床单`:record.domain==='sourcing'?`外发审批 / 合同${record.version?` · 第 ${record.version} 版`:''}`:label;
     entries.set(key, {key, record, label:documentLabel});
   }
   const groups = new Map<string, Array<{ key: string; record: JourneyRecord; label: string }>>();

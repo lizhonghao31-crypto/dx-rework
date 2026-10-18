@@ -141,3 +141,23 @@
   .dx-production-ui .digital-journey-cockpit .journey-activities :is(li,time,button) { font-size:16px; line-height:24px; }
   .dx-production-ui .digital-journey-cockpit .journey-activities button { min-height:44px; }
 }
+
+/* Stage names may wrap as content narrows; keep the complete business label visible. */
+.digital-journey-cockpit .journey-flow .dx-production-stage h2 { font-size:13px; text-wrap:balance; white-space:normal; overflow:visible; overflow-wrap:anywhere; line-height:1.4; min-height:2.8em; }
+.digital-journey-cockpit .journey-flow-panel.is-collapsed .dx-production-stage { height:auto; min-height:78px; }
+
+/* Keep the original record command visible while the complete node facts scroll. */
+.digital-journey-cockpit .journey-node-viewport{overflow:auto;scrollbar-width:thin;scrollbar-color:#7186a6 #edf2f8}
+.digital-journey-cockpit .journey-node-viewport:focus-visible{outline:2px solid var(--production-primary);outline-offset:-2px}
+.digital-journey-cockpit .journey-node-table{min-width:640px}
+.digital-journey-cockpit .journey-node-table .node-name{width:18%}
+.digital-journey-cockpit .journey-node-table .node-owner{width:14%}
+.digital-journey-cockpit .journey-node-table .node-status{width:16%}
+.digital-journey-cockpit .journey-node-table .node-time{width:17%}
+.digital-journey-cockpit .journey-node-table .node-record{width:18%}
+.digital-journey-cockpit .journey-node-table th:last-child,.digital-journey-cockpit .journey-node-table td:last-child:not([colspan]){position:sticky;right:0;background:#fff;box-shadow:-1px 0 #dce5f1;overflow:visible;white-space:nowrap}
+.digital-journey-cockpit .journey-node-table th:last-child{z-index:3}
+.digital-journey-cockpit .journey-node-table td:last-child:not([colspan]){z-index:1}
+.digital-journey-cockpit .journey-node-table .is-focused td:last-child{background:#edf5ff}
+.digital-journey-cockpit .journey-node-table a,.digital-journey-cockpit .journey-node-table .journey-text-action{text-decoration:underline;text-underline-offset:2px}
+.digital-journey-cockpit .journey-node-table :is(a,button):focus-visible{outline:2px solid var(--production-primary);outline-offset:1px}
