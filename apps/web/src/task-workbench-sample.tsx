@@ -15,13 +15,14 @@ import {digitalTaskStateLabels} from './digital-workspace-copy.js';
 import {roleLabel} from './components.js';
 import {useDigitalDetailNavigationGuard} from './use-digital-detail-navigation-guard.js';
 import {digitalTaskView} from './digital-task-view.js';
+import {readDigitalDetailContext,rememberDigitalDetailContext,taskTabLabels} from './digital-detail-context.js';
 import './task-workbench-sample.css';
 const tabs=['当前办理','本单资料','操作记录'] as const;
 const date=(value:string|null)=>value?new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'未登记';
 type History={events:Array<{eventId:string;kind:string;occurredAt:string|null;recordedAt:string;actorName:string;payload:{note?:string;reason?:string}}>};
 /** Confirmed PR03 shell, now using the original taskKind-specific command adapters. */
 export function TaskWorkbenchSample({task:initialTask,onClose,onChanged}:{task:DigitalTask;onClose:()=>void;onChanged?:()=>void}){
- const [tab,setTab]=useState<typeof tabs[number]>('当前办理'),[category,setCategory]=useState<DocumentCategory>('development');
+ const [tab,setTab]=useState<typeof tabs[number]>(()=>readDigitalDetailContext(window.location.search).tab),[category,setCategory]=useState<DocumentCategory>(()=>readDigitalDetailContext(window.location.search).category);
  const [notice,setNotice]=useState(''),[dirty,setDirty]=useState(false),[revision,setRevision]=useState(0),[history,setHistory]=useState<History|null>(null),[historyError,setHistoryError]=useState(''),[page,setPage]=useState(1);
  const [targets,setTargets]=useState<Partial<Record<DocumentCategory,HTMLElement>>>({}),[footer,setFooter]=useState<HTMLElement|null>(null),[historical,setHistorical]=useState<DevelopmentSheet|null>(null);
  const root=useRef<HTMLDivElement>(null),documentLeave=useRef<(()=>Promise<boolean>)|null>(null);
@@ -35,6 +36,7 @@ export function TaskWorkbenchSample({task:initialTask,onClose,onChanged}:{task:D
  useDigitalDetailNavigationGuard(!controller.uncertainWrite&&(dirty||Boolean(controller.craftFiles.length||controller.sewingFiles.length||controller.reportFiles.length)),busy,controller.writing,'有未提交的办理输入或成果，确定离开？');
  const changeTab=async(value:typeof tabs[number])=>{if(tab==='本单资料'&&documentLeave.current&&!await documentLeave.current())return;setTab(value);};
  const documents=(value:DocumentCategory)=>{setCategory(value);void changeTab('本单资料');};
+ useEffect(()=>{const current=readDigitalDetailContext(window.location.search);if(current.tab!==tab||current.category!==category)rememberDigitalDetailContext({taskTab:(Object.keys(taskTabLabels) as Array<keyof typeof taskTabLabels>).find(key=>taskTabLabels[key]===tab)!,documentCategory:category});},[tab,category]);
  useEffect(()=>{const size=()=>{if(root.current)root.current.style.setProperty('--task-workbench-top',`${Math.max(0,root.current.getBoundingClientRect().top+window.scrollY)}px`);};size();window.addEventListener('resize',size);return()=>window.removeEventListener('resize',size);},[]);
  useEffect(()=>{let live=true;if(!current)void digitalRequest<DevelopmentSheet>(`sources/${initialTask.sourceId}/development?round=${task.routeVersion}`).then(v=>{if(live)setHistorical(v);}).catch(e=>{if(live)setNotice(e.message);});return()=>{live=false;};},[current,task.routeVersion,initialTask.sourceId]);
  useEffect(()=>{let live=true;if(tab==='操作记录'){setHistory(null);setHistoryError('');void digitalRequest<History>(`tasks/${task.taskId}/history`).then(v=>{if(live)setHistory(v);}).catch(e=>{if(live)setHistoryError(e.message);});}return()=>{live=false;};},[tab,task.taskId,revision]);

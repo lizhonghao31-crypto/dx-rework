@@ -21,7 +21,7 @@ const urls = createWebUrls(import.meta.env.BASE_URL);
 const kinds = ["款图", "主唛", "腰卡", "吊牌", "洗水唛", "二维码唛", "包装辅料", "其它工艺"] as const;
 const tabKeys = Object.keys(instructionTabs) as InstructionTab[];
 
-export function ProductionInstructionPanel({ orderId, initialVersion, onClose, embedded=false,contained=false }: { orderId: string; initialVersion?: number | undefined; onClose: () => void; contained?:boolean;embedded?:boolean }) {
+export function ProductionInstructionPanel({ orderId, initialVersion, onClose, embedded=false,contained=false,onVersionChange }: { orderId: string; initialVersion?: number | undefined; onClose: () => void; onVersionChange?:((version:number|undefined)=>void)|undefined; contained?:boolean;embedded?:boolean }) {
   const previews=useDocumentUploadPreviews();
   const [sheet, setSheet] = useState<InstructionSheet | null>(null), [doc, setDoc] = useState<InstructionDocument | null>(null), [version, setVersion] = useState<number | undefined>(initialVersion);
   const [busy, setBusy] = useState(false), [saving, setSaving] = useState(false), [dirty, setDirty] = useState(false), [error, setError] = useState("");
@@ -83,7 +83,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
     if (embedded) return;
     if (!await discard("切换版本将丢弃未保存修改，确定继续？")) return;
     setDirty(false); setVersion(next); setValidationMode(null);
-    const url = new URL(window.location.href); if (next) url.searchParams.set("instructionVersion", String(next)); else url.searchParams.delete("instructionVersion"); window.history.replaceState(null, "", url);
+    const url = new URL(window.location.href); if (next) url.searchParams.set("instructionVersion", String(next)); else url.searchParams.delete("instructionVersion"); window.history.replaceState(window.history.state, "", url);onVersionChange?.(next);
   };
   const reload = async () => { if (await discard("重新载入将丢弃未保存修改，确定继续？")) { setDirty(false); setReloadCount(value => value + 1); } };
   const upload = async (files: File[]) => {

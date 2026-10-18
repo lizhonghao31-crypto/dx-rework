@@ -1,3 +1,5 @@
+import {digitalDetailReturnUrl} from './digital-detail-route.js';
+import {createWebUrls} from '../url-contract.js';
 export type SourcingListMode = "pending" | "history";
 export type SourcingStageFilter =
   | "all"
@@ -57,14 +59,23 @@ export function sourcingListPath(mode: SourcingListMode, value: SourcingListQuer
   return `/ui/sourcing/${mode}${params.size ? `?${params}` : ""}`;
 }
 
-export function sourcingReturnPath(search: string): string | null {
-  const target = new URLSearchParams(search).get("returnTo");
-  if (!target || target.includes("\\")) return null;
-  const [pathname, rawQuery = ""] = target.split("?", 2);
+export function sourcingReturnPath(search: string,base=import.meta.env.BASE_URL): string | null {
+  const query=new URLSearchParams(search);
+  const target = query.getAll('returnTo').length===1?query.get("returnTo"):null;
+  if (!target || target.includes("\\")||target.includes('#')) return null;
+  const [pathname = "", rawQuery = ""] = target.split("?", 2);
   const mode = pathname === "/ui/sourcing/pending"
     ? "pending"
     : pathname === "/ui/sourcing/history" ? "history" : null;
-  return mode ? sourcingListPath(mode, readSourcingListQuery(rawQuery)) : null;
+  if(mode)return sourcingListPath(mode,readSourcingListQuery(rawQuery));
+  const urls=createWebUrls(base);
+  if(!['/ui/digital-production',urls.pageUrl('ui/digital-production')].includes(pathname))return null;
+  const digital=digitalDetailReturnUrl(target,base),prefix=urls.base==='/'?'':urls.base.slice(0,-1);
+  return digital?(prefix&&digital.startsWith(prefix+'/')?digital.slice(prefix.length):digital):null;
+}
+
+export function sourcingNavigationView(view:'create'|'pending'|'history'|'detail',search:string):'create'|'pending'|'history'{
+  return view==='detail'?(sourcingReturnPath(search)?.split('?')[0]==='/ui/sourcing/history'?'history':'pending'):view;
 }
 
 export function withSourcingReturn(
@@ -74,4 +85,10 @@ export function withSourcingReturn(
 ): string {
   const separator = target.includes("?") ? "&" : "?";
   return `${target}${separator}returnTo=${encodeURIComponent(sourcingListPath(mode, value))}`;
+}
+
+/** Reuse only a validated list/detail origin; never propagate arbitrary returnTo input. */
+export function withSourcingOrigin(target:string,returnTo:string|undefined,base=import.meta.env.BASE_URL):string{
+ const back=returnTo?sourcingReturnPath('?'+new URLSearchParams({returnTo}),base):null;
+ return back?target+(target.includes('?')?'&':'?')+new URLSearchParams({returnTo:back}):target;
 }
