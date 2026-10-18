@@ -23,6 +23,9 @@ export function gitSnapshot(repo,sha) {
   if(!shaPattern.test(sha))throw Error('A full immutable Git SHA is required');
   return {sha,read:path=>git(repo,['show',`${sha}:${path}`]),paths:()=>git(repo,['ls-tree','-r','--name-only',sha,'--','apps/api/migrations']).trim().split('\n').filter(x=>sqlPattern.test(x))};
 }
+export function readComparedHistories(repo,proof) {
+  return [['main',proof.mainSha],['release',proof.baselineSha]].map(([label,sha])=>({label,sha,rows:JSON.parse(gitSnapshot(repo,sha).read(manifestPath)).migrations}));
+}
 export function worktreeSnapshot(repo) {
   return {sha:git(repo,['rev-parse','HEAD']).trim(),mode:'WORKTREE_NOT_DELIVERY',read:path=>readFileSync(join(repo,path),'utf8'),paths:()=>readdirSync(join(repo,'apps/api/migrations')).map(x=>'apps/api/migrations/'+x).filter(x=>sqlPattern.test(x))};
 }

@@ -11,7 +11,7 @@ import {setTimeout} from 'node:timers/promises';
 import pg from 'pg';
 import {discoverValidatedMigrations} from '../migration-lib.mjs';
 import {migrationExecutionSql} from '../deploy/migration-execution-compatibility.mjs';
-import {gitSnapshot} from '../check-main-release-compat.mjs';
+import {readComparedHistories} from '../check-main-release-compat.mjs';
 
 const repo=resolve(fileURLToPath(new URL('../..',import.meta.url)));
 const major=process.argv[2]??'16',proofPath=process.argv[3];
@@ -19,9 +19,9 @@ assert.ok(process.argv.length===4&&['13','16'].includes(major),'Usage: main-rele
 const proof=JSON.parse(readFileSync(proofPath,'utf8'));
 assert.equal(proof.passed,true);assert.equal(proof.toolSha,proof.candidateSha);assert.ok(proof.baselineSha);
 assert.equal(proof.candidateSha,execFileSync('git',['-C',repo,'rev-parse','HEAD'],{encoding:'utf8'}).trim());
-const legacyReleaseSha='90673b6342dafcd9130a5939f4c4a81f7cb84121';
-const sourceHistories=[['main',proof.mainSha],['release',legacyReleaseSha]].map(([label,sha])=>({label,sha,rows:JSON.parse(gitSnapshot(repo,sha).read('apps/api/src/platform/migration-manifest.json')).migrations}));
-assert.equal(sourceHistories[0].rows.length,proof.mainCount);assert.equal(sourceHistories[1].rows.length,253);
+const sourceHistories=readComparedHistories(repo,proof);
+assert.equal(sourceHistories[1].sha,proof.baselineSha);
+assert.equal(sourceHistories[0].rows.length,proof.mainCount);assert.ok(sourceHistories[1].rows.length>0&&sourceHistories[1].rows.length<=proof.candidateCount);
 const scratch=mkdtempSync(join(tmpdir(),'dx-main-release-history-'));
 const container='dx-main-release-history-'+randomUUID(),password=randomUUID(),owner='dx_rework_acceptance',app='dx_rework_acceptance_app',database='dx_rework_acceptance';
 const docker=args=>execFileSync('docker',args,{encoding:'utf8',stdio:['pipe','pipe','pipe'],maxBuffer:20*1024*1024});
@@ -45,15 +45,19 @@ try{
   for(const {name} of(await db.query("SELECT relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p','v')")).rows)await db.query(`GRANT SELECT,INSERT,UPDATE,DELETE ON "${name}" TO ${app}`);
   await db.query(`GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO ${app}`);await db.query('RESET ROLE');
   const before=await history(db),path=join(scratch,source.label);mkdirSync(path);
+  assert.deepEqual(before.map(({version,checksum})=>({version,checksum})),[...source.rows].sort((a,b)=>a.version.localeCompare(b.version)));
   const identity=(await db.query("SELECT current_database() AS database,current_setting('port')::int AS port,(SELECT oid::bigint FROM pg_database WHERE datname=current_database()) AS oid")).rows[0];identity.oid=Number(identity.oid);identity.address='127.0.0.1';writeFileSync(join(path,'identity.json'),JSON.stringify(identity));
   const generate=(mode,tool=repo)=>{const file=join(path,mode+'-'+(tool===repo?'canonical':'negative')+'.sql');execFileSync('python3',[join(repo,'scripts/deploy/prepare-acceptance-migration.py'),repo,join(path,'identity.json'),'/usr/local/bin/node',join(path,'history.json'),file,mode,tool],{encoding:'utf8',stdio:['ignore','pipe','pipe']});return file;};
   const execute=(file,label,success=true)=>{const r=spawnSync('docker',['exec',container,'psql','-XqAt','-U','postgres','-d',database,'-f',file],{encoding:'utf8',maxBuffer:20*1024*1024});writeFileSync(join(path,label+'.log'),r.stdout+r.stderr);if(success)assert.equal(r.status,0,(r.stderr+r.stdout).slice(-6000));else assert.notEqual(r.status,0,'Expected fail-closed maintenance rejection');return r;};
   if(source.label==='release'){
+   const pending=new Set(catalog.filter(row=>!source.rows.some(old=>old.version===row.version)).map(row=>row.version));
+   if(pending.has('0226_external_revision_preserve_handler')||pending.has('0227_qc_other_craft')){
    await db.query(`ALTER FUNCTION guard_determination_insert() OWNER TO ${app}; ALTER TABLE rework_orders OWNER TO ${app}`);
-   const rejected=execute(generate('preflight'),'missing-owner',false);assert.match(rejected.stdout,/guard_determination_insert/);assert.match(rejected.stdout,/rework_orders/);assert.deepEqual(await history(db),before);
+   const rejected=execute(generate('preflight'),'missing-owner',false);if(pending.has('0226_external_revision_preserve_handler'))assert.match(rejected.stdout,/guard_determination_insert/);if(pending.has('0227_qc_other_craft'))assert.match(rejected.stdout,/rework_orders/);assert.deepEqual(await history(db),before);
    await db.query(`ALTER FUNCTION guard_determination_insert() OWNER TO ${owner}; ALTER TABLE rework_orders OWNER TO ${owner}`);
+   }
    const altered=join(path,'altered-tool');cpSync(join(repo,'scripts'),join(altered,'scripts'),{recursive:true});const requirementPath=join(altered,'scripts/deploy/acceptance-migration-requirements.json'),original=JSON.parse(readFileSync(requirementPath,'utf8'));
-   for(const kind of ['missing','checksum']){const changed=structuredClone(original);if(kind==='missing')delete changed['0227_qc_other_craft'];else changed['0226_external_revision_preserve_handler'].checksum='f'.repeat(64);writeFileSync(requirementPath,JSON.stringify(changed));const rejected=execute(generate('preflight',altered),'inventory-'+kind,false);assert.match(rejected.stdout,/CHECKSUM_BOUND_INVENTORY/);assert.deepEqual(await history(db),before);}
+   for(const [kind,version] of [['missing','0227_qc_other_craft'],['checksum','0226_external_revision_preserve_handler']]){if(!pending.has(version))continue;const changed=structuredClone(original);if(kind==='missing')delete changed[version];else changed[version].checksum='f'.repeat(64);writeFileSync(requirementPath,JSON.stringify(changed));const rejected=execute(generate('preflight',altered),'inventory-'+kind,false);assert.match(rejected.stdout,/CHECKSUM_BOUND_INVENTORY/);assert.deepEqual(await history(db),before);}
   }
   const oldRelations=(await db.query("SELECT relname,relowner,relacl FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p','S') ORDER BY relname")).rows;
   const preflight=execute(generate('preflight'),'valid-preflight');assert.match(preflight.stdout,/acceptance_permissions|permissions_ok|maintenance_role/);assert.deepEqual(await history(db),before);

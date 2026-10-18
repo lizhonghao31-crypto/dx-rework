@@ -4,7 +4,7 @@ import {join,resolve,dirname} from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {describe,it,expect} from 'vitest';
-import {inspectCompatibility} from '../../scripts/check-main-release-compat.mjs';
+import {inspectCompatibility,readComparedHistories} from '../../scripts/check-main-release-compat.mjs';
 
 type Entry={version:string;checksum:string};
 const manifestPath='apps/api/src/platform/migration-manifest.json';
@@ -27,6 +27,18 @@ function snapshot(catalog:Entry[],id:string){
 function fixtures(){return {main:snapshot(mainRows,'a'.repeat(40)),candidate:snapshot(rows,'b'.repeat(40)),baseline:snapshot(originalRelease,'c'.repeat(40))};}
 const has=(report:{issues:{kind:string;version?:string}[]},kind:string,version?:string)=>report.issues.some(x=>x.kind===kind&&(version===undefined||x.version===version));
 describe('actual main/candidate migration source compatibility',()=>{
+ it('follows an advanced actual release Git baseline and rejects an unreadable baseline without fallback',()=>{
+  const repo=mkdtempSync(join(tmpdir(),'dx-release-baseline-'));
+  const git=(...args:string[])=>execFileSync('git',['-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+  const commit=(catalog:Entry[])=>{mkdirSync(dirname(join(repo,manifestPath)),{recursive:true});writeFileSync(join(repo,manifestPath),JSON.stringify({migrations:catalog}));git('add','.');git('commit','-m','TEST release baseline');return git('rev-parse','HEAD');};
+  try{
+   git('init');git('config','user.name','TEST');git('config','user.email','test@example.invalid');
+   const old=commit(rows.slice(0,1)),advanced=commit(rows.slice(0,2));
+   expect(readComparedHistories(repo,{mainSha:advanced,baselineSha:old})[1]).toEqual({label:'release',sha:old,rows:rows.slice(0,1)});
+   expect(readComparedHistories(repo,{mainSha:advanced,baselineSha:advanced})[1]).toEqual({label:'release',sha:advanced,rows:rows.slice(0,2)});
+   expect(()=>readComparedHistories(repo,{mainSha:advanced,baselineSha:'f'.repeat(40)})).toThrow();
+  }finally{rmSync(repo,{recursive:true,force:true});}
+ });
  it('accepts the complete reviewed union and preserves both original history paths',async()=>{const d=fixtures(),r=await inspectCompatibility(d);expect(r.passed).toBe(true);expect(r.mainCount).toBe(227);expect(r.candidateCount).toBe(255);});
  it.each(late)('rejects missing main identity %s before deployment',async version=>{const d=fixtures();d.candidate.files.set(manifestPath,JSON.stringify({migrations:rows.filter(r=>r.version!==version)}));d.candidate.files.delete(`apps/api/migrations/${version}.sql`);expect(has(await inspectCompatibility(d),'MISSING_MAIN_IDENTITY',version)).toBe(true);});
  it('rejects unchanged-name checksum drift and actual SQL drift',async()=>{const d=fixtures(),version=late[0]!;d.candidate.files.set(manifestPath,JSON.stringify({migrations:rows.map(r=>r.version===version?{...r,checksum:'f'.repeat(64)}:r)}));const r=await inspectCompatibility(d);expect(has(r,'MAIN_CHECKSUM_DRIFT',version)).toBe(true);expect(has(r,'SQL_CHECKSUM_DRIFT',version)).toBe(true);});
