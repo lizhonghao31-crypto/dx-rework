@@ -123,6 +123,9 @@
   .order-board-difference-snapshot{grid-template-columns:1fr 1fr}
 }
 
+.receiving-dialog .order-board-edit-actual-label{display:flex;align-items:baseline;gap:4px;white-space:nowrap}
+.receiving-dialog .order-board-edit-actual-label small{font-size:11px;font-weight:400;color:var(--dx-v2-color-text-secondary)}
+
 /* PR01: evidence stays inside the existing difference dialog. */
 .order-board-difference-evidence{display:grid;gap:8px;min-width:0}
 .order-board-difference-evidence input[type=file]{max-width:100%;min-width:0}
