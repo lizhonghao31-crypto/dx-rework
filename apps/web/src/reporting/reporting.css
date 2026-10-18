@@ -42,3 +42,29 @@
 .workflow-order-grid{max-height:max(240px,calc(100dvh - 460px));overflow:auto;overscroll-behavior:contain;align-content:start;padding:2px}
 .workflow-order-card strong,.workflow-order-card small{overflow-wrap:anywhere}
 @media(min-width:981px){.workflow-order-grid{max-height:max(180px,calc(100dvh - 620px))}}
+
+/* ERP PR09d: keep native report rows/headers together inside this host only. */
+.report-center-layout { min-width:0; }
+.report-center-layout .report-center-filters { grid-template-columns:repeat(4,minmax(110px,1fr)) minmax(180px,1.4fr) auto; }
+.report-center-layout .report-center-filters > * { min-width:0; }
+.report-center-layout .reporting-table-wrap { min-width:0; max-height:none; overflow:auto; }
+.report-center-layout .reporting-table-wrap:focus-visible { outline:2px solid var(--dx-v2-color-primary); outline-offset:-2px; }
+.report-center-layout .reporting-table-wrap th { position:static; }
+.report-center-layout .reporting-table-wrap .reporting-money { text-align:right; font-variant-numeric:tabular-nums; }
+@media(max-width:1100px) {
+  .report-center-layout .report-center-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:520px) {
+  .report-center-layout .report-center-filters > :first-child,
+  .report-center-layout .report-center-filters > .dx-field,
+  .report-center-layout .report-center-filters > a { grid-column:1 / -1; }
+  .report-center-layout .report-center-filters :is(input,select,button) { min-height:44px; font-size:16px; }
+  .report-center-layout .reporting-table-wrap table { display:table; min-width:900px; }
+  .report-center-layout .reporting-table-wrap thead { display:table-header-group; }
+  .report-center-layout .reporting-table-wrap tbody { display:table-row-group; }
+  .report-center-layout .reporting-table-wrap tr { display:table-row; padding:0; }
+  .report-center-layout .reporting-table-wrap :is(th,td) { display:table-cell; padding:10px 12px; border-bottom:1px solid var(--dx-v2-color-border); white-space:nowrap; font-size:16px; line-height:24px; }
+}
+@media(max-width:360px) {
+  .report-center-layout .report-center-filters { grid-template-columns:minmax(0,1fr); }
+}

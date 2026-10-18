@@ -108,13 +108,15 @@ describe("thin platform module routing", () => {
     expect(sourcingCss).toContain(".sourcing-order-detail .rework-detail-core-facts");
     expect(sourcingCss).toContain("grid-template-columns: repeat(7, minmax(0, 1fr))");
     expect(sourcingCss).toContain("grid-column: 1 / -1");
-    // UI-01 replaces the old fact-card order with the approved task hierarchy.
+    // PR09b keeps the approved narrow reading order: facts, work, then supporting photos.
     const regions = [
       '<KeyFacts className="sourcing-key-facts"',
-      'className="sourcing-supporting-overview"',
+      'className="order-layout-main"',
       '<DecisionSummary title=',
       '<ResponsiveFactsTable caption="款式明细"',
       '<ActionBar className="sourcing-owner-actions"',
+      'className="sourcing-supporting-overview order-layout-flow"',
+      'className="order-layout-aside"',
     ].map(marker => sourcingPage.indexOf(marker));
     expect(regions.every(index => index >= 0)).toBe(true);
     expect(regions).toEqual([...regions].sort((left, right) => left - right));
