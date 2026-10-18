@@ -42,9 +42,9 @@ describe("receiving defective quantity", () => {
     expect(routes).toContain("body.defectiveQuantity === undefined ? 0");
     expect(service).toContain("defectiveQuantity: input.defectiveQuantity");
     expect(service).toContain("sum(r.defective_quantity)+batch.defective_quantity_adjustment");
-    expect(receivingPage.indexOf("<span>次品数量</span>")).toBeGreaterThan(
-      receivingPage.indexOf("<span>实际收货数量</span>"),
-    );
+    const actualQuantityInput = receivingPage.indexOf("value={actualQuantity}");
+    expect(actualQuantityInput).toBeGreaterThan(-1);
+    expect(receivingPage.indexOf("<span>次品数量</span>")).toBeGreaterThan(actualQuantityInput);
     expect(receivingPage.indexOf("<span>次品数量</span>")).toBeLessThan(
       receivingPage.indexOf("<span>送货单图片</span>"),
     );
