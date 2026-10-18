@@ -1,6 +1,6 @@
-import {PatternBoardLane,PatternBoardCard} from "./pattern-board-parts.js";
+import {PatternBoardLane} from "./pattern-board-parts.js";
 import {bulkPatternLane,bulkPatternLanes} from "./bulk-pattern-model.js";
-import {StatusBadge} from "@dx-rework/ui";
+import {BulkPatternCard} from "./bulk-pattern-card.js";
 import {useEffect,useState} from "react";
 import {Button} from "@dx-rework/ui";
 import {Pagination} from "@dx-rework/ui/production";
@@ -14,7 +14,6 @@ function initialFilter(canViewAll:boolean):BulkWorkroomFilter {
  const parsed=BulkWorkroomFilterSchema.safeParse({page:query.get('page')??1,search:query.get('search')??'',scope:query.get('scope')??(canViewAll?'all':'mine')});
  return parsed.success?parsed.data:BulkWorkroomFilterSchema.parse({scope:canViewAll?'all':'mine'});
 }
-const taskState={ready:'可办理',completed:'已完成',pending:'等待前置',blocked:'受阻',cancelled:'已取消'};
 export function BulkPatternWorkspace({orderId,canViewAll,onOrderChange}:{orderId:string|null;canViewAll:boolean;onOrderChange?:(orderId:string|null)=>void}){
  const [selected,setSelected]=useState(orderId),[filter,setFilter]=useState(()=>initialFilter(canViewAll));
  const [search,setSearch]=useState(filter.search),[data,setData]=useState<BulkWorkroomResult|null>(null),[error,setError]=useState(''),[refresh,setRefresh]=useState(0);
@@ -37,16 +36,7 @@ export function BulkPatternWorkspace({orderId,canViewAll,onOrderChange}:{orderId
   <p className="journey-muted">分栏数量为本页记录；办理中表示已派交，不代表已实际开工。纸样与唛架两项完成不等于整单完成。</p>
   <div className="pattern-board-scroll" role="region" aria-label="大货纸样与唛架看板" tabIndex={0}><div className="pattern-board-columns bulk-pattern-columns">{bulkPatternLanes.map(lane=><PatternBoardLane key={lane.key} lane={lane.color} title={lane.label} count={data?data.items.filter(item=>bulkPatternLane(item.sheet)===lane.key).length:'—'}>{data?.items.filter(item=>bulkPatternLane(item.sheet)===lane.key).map(item=>{
    const task=item.sheet.tasks.find(t=>t.taskKind==='bulk_pattern');
-   return <PatternBoardCard key={item.orderId} onClick={()=>{window.location.assign(`${createWebUrls(import.meta.env.BASE_URL).pageUrl('ui/digital-production')}?${task?`task=${task.taskId}`:`bulk=${item.orderId}`}&returnTo=${encodeURIComponent(window.location.pathname+window.location.search)}`);}}>
-    <strong>{item.designStyleNo}</strong><small>{item.customer||'客户未登记'} · 母单 {item.orderId}</small>
-    <small>{item.sheet.cutting.lines.map(line=>`${line.poNumber||line.formalStyleNo||line.temporaryStyleNo||'PO未登记'} · ${line.color}`).join('；')}</small>
-    <small>采用开发：{item.sheet.adoptedRound==null?'未登记':`第 ${item.sheet.adoptedRound} 轮`} · 制单：{item.sheet.instructionVersion?`V${item.sheet.instructionVersion}${item.sheet.instructionValid?'':'（当前失效）'}`:'未发布'}</small>
-    <small>当前主办：{task?.assigneeName||'待派交'}</small><StatusBadge>{task?taskState[task.state]:'尚无当前纸样任务'}</StatusBadge>
-    <small>{task?.enteredAt?`进入办理：${new Date(task.enteredAt).toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'})}`:'尚未进入办理计时'}</small>
-    <small>截止：{task?.dueAt?new Date(task.dueAt).toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'}):'未设时限'}</small>
-    {['纸样完成','唛架完成'].map(kind=><small key={kind}>{kind}：{item.sheet.facts.some(f=>f.kind===kind)?'已登记':'未登记'}</small>)}
-    <small>{item.sheet.reasons.join('；')||task?.blockedReason||(!item.sheet.facts.some(f=>f.kind==='纸样派交')?'等待实际派交':'无已记录阻断')}</small><span className="pattern-task-action">查看 / 办理原任务</span>
-   </PatternBoardCard>;
+   return <BulkPatternCard key={item.orderId} item={item} href={`${createWebUrls(import.meta.env.BASE_URL).pageUrl('ui/digital-production')}?${task?`task=${task.taskId}`:`bulk=${item.orderId}`}&returnTo=${encodeURIComponent(window.location.pathname+window.location.search)}`}/>;
   })}{data&&!data.items.some(item=>bulkPatternLane(item.sheet)===lane.key)&&<p>本页无此类记录</p>}</PatternBoardLane>)}</div></div>
   <Pagination page={filter.page} pageSize={15} total={data?.total??null} onPage={page=>update({page})}/>
   {selected&&<section className="bulk-workroom-detail"><a href={`${createWebUrls(import.meta.env.BASE_URL).pageUrl('ui/digital-cockpit')}?selected=${selected}`}>查看这张订单的七大阶段</a><BulkPreparationPanel key={`${selected}:${refresh}`} orderId={selected} onClose={()=>{choose(null);setRefresh(value=>value+1);}}/></section>}
