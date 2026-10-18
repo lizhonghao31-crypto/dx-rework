@@ -107,3 +107,7 @@
  .dx-doc-budget.budget-editor #budget-summary label:has(.dx-doc-readonly) .dx-doc-field{min-width:0;text-align:right}
  .dx-doc-budget.budget-editor #budget-summary label:has(.dx-doc-readonly) .dx-doc-readonly{text-align:right;min-height:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 }
+
+/* Keep the existing semantic label clickable; text can wrap beside the checkbox. */
+.dx-doc-budget.budget-editor label.budget-template-toggle { display:flex;flex-direction:row;align-items:flex-start;gap:var(--dx-v2-space-2); }
+.dx-doc-budget.budget-editor .budget-template-toggle > input[type=checkbox] { flex:0 0 auto;width:auto;min-height:0;margin:3px 0 0; }

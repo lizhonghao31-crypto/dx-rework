@@ -99,3 +99,7 @@
   .supplier-records td[data-label]::before{content:attr(data-label);display:block;margin-bottom:4px;color:var(--dx-v2-color-text-secondary);font-size:13px}
 }
 @media(max-width:520px){.supplier-directory__filters{grid-template-columns:repeat(2,minmax(0,1fr))}.supplier-directory__filters select:last-child{grid-column:1/-1}}
+
+/* Read-only structured values remain intact in a keyboard-scrollable local cell. */
+.supplier-profile__sections dd.supplier-structured-value { max-width:100%;overflow-x:auto;white-space:nowrap;word-break:normal;overflow-wrap:normal; }
+.supplier-profile__sections dd.supplier-structured-value:focus-visible { outline:3px solid var(--dx-v2-color-focus);outline-offset:-2px; }
