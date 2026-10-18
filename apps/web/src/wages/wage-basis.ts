@@ -6,7 +6,7 @@ type Row = ReportPreviewResponse["rows"][number];
 export const wageBasisFields = new Set(["unitPrice", "sourceAmount", "roundAmount", "actualHours", "temporaryWageMultiplier", "groupAmount", "exactPersonShare"]);
 export function wageBasisValue(value: string | number | boolean | null | undefined): string {
   if(value == null) return "—";
-  const text=String(value),digits=text.match(/\.(\d+)$/)?.[1].length ?? 0;
+  const text=String(value),digits=text.match(/\.(\d+)$/)?.[1]?.length ?? 0;
   return formatBusinessDecimal(text,Math.min(20,digits));
 }
 export function wageBasis(row: Row): string {
