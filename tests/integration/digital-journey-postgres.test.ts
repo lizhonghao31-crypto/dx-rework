@@ -117,6 +117,37 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect(history.find(item=>item.eventId===eventId)).toMatchObject({assessment:"late",overdueSeconds:7200,deadline:"2026-10-02T00:00:00.000Z"});
     expect(history.find(item=>item.eventId===missingId)).toMatchObject({assessment:"insufficient",overdueSeconds:null});
   });
+  it("retains authorized sourcing-task events when a sourcing case replaces its display node, including between cursor pages",async()=>{
+    const rootActor=actor(root,["root_superuser"]);
+    const order=await identity.createOrder(rootActor,{...input("SOURCING-LOG"),primaryMerchandiserId:merchandiser},randomUUID());
+    const task=await createTask({resource:{kind:"order",id:order.productionOrderId},kind:"sourcing_preparation",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:merchandiser});
+    const reassigned=randomUUID(),completed=randomUUID();
+    await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,recorded_at,time_quality) SELECT gen_random_uuid(),$1,'order',$2,'condition',$3,'2026-10-01T12:01:00.000001Z','缺失' FROM generate_series(1,43)",[task.taskId,order.productionOrderId,root]);
+    await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,recorded_at,time_quality) VALUES($1,$3,'order',$4,'reassigned',$5,'2026-10-01T11:59:00Z','2026-10-01T11:59:00Z','现场登记'),($2,$3,'order',$4,'completed',$5,'2026-10-01T12:00:00Z','2026-10-01T12:00:00Z','现场登记')",[reassigned,completed,task.taskId,order.productionOrderId,root]);
+    const first=(await journeys.read(rootActor,order.productionOrderId,undefined,true)).operationLog!;
+    expect(first.items).toHaveLength(5);expect(first.nextCursor).not.toBeNull();
+    const expected=(await db.query("SELECT e.event_id FROM digital_production_task_events e JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1",[order.productionOrderId])).rows.map(row=>`task:${row.event_id}`).sort();
+    const caseId=randomUUID(),operation=randomUUID();
+    const seed=await db.connect();
+    try{await seed.query("BEGIN");
+    await seed.query("INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id,reason) VALUES($1,'TEST-cockpit-case',$2,ARRAY['root_superuser'],'sourcing:inquiry:create','sourcing.case.create','sourcing_case',$3,'TEST')",[operation,root,caseId]);
+    await seed.query("INSERT INTO sourcing_cases(sourcing_case_id,erp_order_id,erp_order_no,style_no,lane_key,order_quantity,created_by,operation_event_id,request_id,creation_reason,workflow_generation) VALUES($1,$1::uuid::text,'TEST','TEST-SOURCING-LOG','garment_processing',300,$2,$3,'TEST-cockpit-case','TEST','digital_production_v1')",[caseId,root,operation]);
+    await seed.query("INSERT INTO sourcing_case_transitions(sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,business_action,transition_reason,actor_id,operation_event_id,request_id) VALUES($1,$2,1,NULL,'pending_ie_quote','created','TEST',$3,$4,'TEST-cockpit-case')",[randomUUID(),caseId,root,operation]);
+    await seed.query("INSERT INTO digital_production_child_links(module,child_id,production_order_id) VALUES('sourcing',$1,$2)",[caseId,order.productionOrderId]);
+    await seed.query("UPDATE digital_production_tasks SET state='completed',entered_at='2026-10-01T00:00:00Z',completed_at='2026-10-01T12:00:00Z',completed_quality='现场登记' WHERE task_id=$1",[task.taskId]);
+      await seed.query("COMMIT");
+    }catch(error){await seed.query("ROLLBACK");throw error;}finally{seed.release();}
+    const replaced=await journeys.read(rootActor,order.productionOrderId,undefined,true);
+    expect(replaced.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='sourcing_preparation')?.records.map(record=>record.domain)).toEqual(['sourcing']);
+    expect(replaced.riskHistory?.some(item=>item.eventId===completed)).toBe(true);
+    const seen=first.items.map(item=>item.id);let cursor=first.nextCursor;
+    while(cursor){const page=await journeys.logs(rootActor,order.productionOrderId,cursor);expect(page.asOf).toBe(first.asOf);seen.push(...page.items.map(item=>item.id));cursor=page.nextCursor;}
+    expect([...seen].sort()).toEqual(expected);expect(new Set(seen).size).toBe(seen.length);expect(seen).toContain(`task:${reassigned}`);expect(seen).toContain(`task:${completed}`);
+    const refreshed=replaced.operationLog!,all=refreshed.items.map(item=>item.id);cursor=refreshed.nextCursor;
+    while(cursor){const page=await journeys.logs(rootActor,order.productionOrderId,cursor);all.push(...page.items.map(item=>item.id));cursor=page.nextCursor;}
+    expect(all.sort()).toEqual(expected);
+    await expect(journeys.logs(actor(stranger),order.productionOrderId)).rejects.toMatchObject({statusCode:404});
+  });
   it("allows Root JSON all-match export but rejects an ordinary merchandiser with legitimate list access",{timeout:60_000},async()=>{
     const search="TEST-J-EXPORT-SCOPE";
     for(let index=0;index<21;index++)await identity.createOrder(actor(root,["root_superuser"]),{...input(`EXPORT-SCOPE-${index}`),primaryMerchandiserId:merchandiser},randomUUID());

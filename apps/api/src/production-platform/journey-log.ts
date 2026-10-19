@@ -2,6 +2,7 @@ import type {PoolClient} from "pg";
 import {z} from "zod";
 import {JOURNEY_NODES,type JourneyLogEntry,type JourneyLogPage,type OrderJourney} from "@dx-rework/contracts/digital-production-journey";
 import {ApplicationError} from "../platform/errors.js";
+import type {JourneyAuthorizedTask} from "./journey-read-scope.js";
 
 const cursorSchema=z.object({v:z.literal(1),order:z.string(),actor:z.string(),asOf:z.iso.datetime({precision:null}),at:z.iso.datetime({precision:null}),id:z.string().regex(/^(task|assignment):[0-9a-f-]{36}$/)}).strict();
 const coverage=["数字生产节点事件（按登记时间）","节点改派审计（未重复登记为节点事件的记录）"] as const;
@@ -13,11 +14,11 @@ export function parseJourneyLogCursor(value:string,order:string,asOf:string,acto
     return parsed;
   }catch{throw new ApplicationError("INVALID_JOURNEY_CURSOR","记录页已失效，请重新打开操作记录",400);}
 }
-/** Only task IDs already authorized by the Journey projection enter this query. No payload/price leakage. */
-export async function readJourneyLog(db:Pick<PoolClient,"query">,order:OrderJourney,asOf:string,actor:string,cursor?:string,limit:5|20=20):Promise<JourneyLogPage>{
+/** Use the authorized original scope, independent of replaceable display records. No payload/price leakage. */
+export async function readJourneyLog(db:Pick<PoolClient,"query">,order:OrderJourney,asOf:string,actor:string,authorized:readonly JourneyAuthorizedTask[],cursor?:string,limit:5|20=20):Promise<JourneyLogPage>{
   const after=cursor?parseJourneyLogCursor(cursor,order.id,asOf,actor):null;
   const cutoff=after?.asOf??asOf;
-  const taskIds=[...new Set(order.stages.flatMap(stage=>stage.nodes.flatMap(node=>node.records.filter(record=>record.domain==="task").map(record=>record.id))))];
+  const taskIds=[...new Set(authorized.map(task=>task.id))];
   const cte=`WITH authorized_events AS (
     SELECT 'task:'||e.event_id::text id,e.recorded_at at,e.actor_id,u.display_name actor_name,e.event_kind action,t.node_key,'task_event' source
     FROM digital_production_task_events e JOIN digital_production_tasks t USING(task_id) LEFT JOIN app_users u ON u.id=e.actor_id

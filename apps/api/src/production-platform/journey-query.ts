@@ -24,6 +24,7 @@ import { assertBusinessExportAllowed } from "../access/export-authority.js";
 import {journeyDisplay} from "./journey-display.js";
 import {readJourneyLog} from "./journey-log.js";
 import {readJourneyRiskHistory} from "./journey-risk-history.js";
+import type {JourneyAuthorizedTask} from "./journey-read-scope.js";
 
 const iso = (value: Date|string|null|undefined) => value == null ? null : new Date(value).toISOString();
 type Candidate = { source: {development_type:string;source_id:string;created_by:string;design_style_no:string;temporary_style_no:string|null;customer_code:string|null;created_at:string}|null;
@@ -38,6 +39,7 @@ const emptyNode = (key:string,state:JourneyState,round:number|null=null):Journey
 
 /** Additive query API. No writes, new lifecycle, quantities or wage materialization. */
 export class DigitalJourneyQuery {
+  private readonly authorizedTasks=new WeakMap<OrderJourney,readonly JourneyAuthorizedTask[]>();
   constructor(private readonly database:Pool) {}
   private async snapshot<T>(work:(db:PoolClient,asOf:string)=>Promise<T>) {
     const db=await this.database.connect();
@@ -103,8 +105,9 @@ export class DigitalJourneyQuery {
         if(current.display)item.display=current.display;
         item.currentRiskNodes=current.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&!["completed","cancelled","inherited","not_applicable"].includes(node.state)&&(node.risks.length>0||node.state==="blocked"));
         item.currentDeliveryRisks=current.deliveryRisks??[];
-        item.riskHistory=await readJourneyRiskHistory(db,current);
-        item.operationLog=await readJourneyLog(db,current,asOf,actor.actorId,undefined,5);
+        const authorized=this.authorizedTasks.get(current)??[];
+        item.riskHistory=await readJourneyRiskHistory(db,authorized);
+        item.operationLog=await readJourneyLog(db,current,asOf,actor.actorId,authorized,undefined,5);
       }
       return item;
     });
@@ -115,7 +118,7 @@ export class DigitalJourneyQuery {
       const row=(await this.candidates(db,actor,id))[0]??digitalNotFound();
       const current=await this.project(db,actor,row,asOf,undefined,true);
       if(!current)return digitalNotFound();
-      return readJourneyLog(db,current,asOf,actor.actorId,cursor,20);
+      return readJourneyLog(db,current,asOf,actor.actorId,this.authorizedTasks.get(current)??[],cursor,20);
     });
   }
   /** Read the original pending assignment fact without exposing its prices or altering digital tasks. */
@@ -466,6 +469,7 @@ export class DigitalJourneyQuery {
     const item:OrderJourney={asOf,styleImageUrl,developmentType:sourceAccess?source?.development_type??null:null,requiredCompletionDate:sourceAccess?currentDocument?.document?.returnDate??null:null,id:canonicalId,sourceId:sid,orderId:orderAccess?oid:null,designStyleNo:chosenIdentity.design_style_no,temporaryStyleNo:chosenIdentity.temporary_style_no,customer:chosenIdentity.customer_code,category:currentDocument?.document.template??(orderAccess?order?.product_group:null)??null,styleName,designer,merchandisers,orderNumbers,createdAt:iso(sourceAccess?source!.created_at:orderAccess?order!.created_at:(source?.created_at??order!.created_at))!,deliveryDate:orderAccess?digitalDateText(order?.contract_delivery_date??null):null,poDeliveryDates,deliveryRisks,selectedRound:round,adoptedRound:instruction?.source_round??null,sourceVersion:currentDocument?.version??currentDocument?.document_version??null,instructionVersion:instruction?.version??null,lines,links,stages,progress,hitReasons:[]};
     const cancelled=Boolean(!patternKinds&&orderAccess&&oid&&(await db.query("SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1 AND state='cancelled'",[oid])).rowCount);
     item.display=journeyDisplay(item,asOf,{cancelled,closedAt:baseNodes.find(node=>node.current&&node.key==='special_closure'&&node.state==='completed')?.actualAt??null});
+    this.authorizedTasks.set(item,visibleTasks.map(task=>({id:task.task_id,key:journeyDefinition(task.task_kind)?.key??task.task_kind,label:journeyDefinition(task.task_kind)?.label??"业务节点",round:task.route_version})));
     return item;
   }
 }
