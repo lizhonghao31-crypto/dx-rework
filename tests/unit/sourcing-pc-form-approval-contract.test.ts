@@ -35,7 +35,7 @@ describe("sourcing PC form and owner approval finish", () => {
       "＋ 新增工艺",
       "按合同乙方负责的内容顺序登记",
       "最终审批",
-      "供应链总监建议由",
+      "生产管理建议由",
       "相对 IE 总额变化",
       "款式明细",
       "批准方案",

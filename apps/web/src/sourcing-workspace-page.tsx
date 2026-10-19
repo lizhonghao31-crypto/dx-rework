@@ -1288,11 +1288,6 @@ function OrderDetailPage({
   const [transferFormOpen, setTransferFormOpen] = useState(false);
   const [exceptionReason, setExceptionReason] = useState("");
   const [selectedImage, setSelectedImage] = useState<SourcingAttachment | null>(null);
-  const [mobileWorkflowExpanded, setMobileWorkflowExpanded] = useState(false);
-  const workflowRailRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (mobileWorkflowExpanded) workflowRailRef.current?.querySelector('[aria-current="step"]')?.scrollIntoView({ block: "nearest", inline: "center" });
-  }, [mobileWorkflowExpanded]);
   const [busy, setBusy] = useState(false);
   const feedback = useSubmissionFeedback(setBusy);
   const [message, setMessage] = useState("正在加载订单…");
@@ -1776,6 +1771,7 @@ function OrderDetailPage({
   const canReturn = canAct(user,"owner_group","sourcing:owner:approve") && !item.approvalSnapshot
     && ["pending_ie_quote","pending_management_decision","pending_owner_approval"].includes(item.status);
   const financialReadView = item.status === "pending_finance_reconciliation" && selectedNode === "finance";
+  const quoteEntryView = item.status === "pending_ie_quote" && selectedNode === "ie_quote" && canQuote;
   const orderLineItems = (<div className="order-layout-line-items" tabIndex={0} role="group" aria-label="款式明细横向滚动">
               <ResponsiveFactsTable caption="款式明细" mobileLayout="compact" rows={item.lineItems} rowKey={line => line.position}
               totals={{ style: "合计", quantity: `${formatBusinessDecimal(item.orderQuantity)} 件`, amount: item.decision ? fixedBusinessCurrency(item.decision.totalAmount) : "—" }}
@@ -1810,7 +1806,7 @@ function OrderDetailPage({
               ]} />
             </div>);
   return (
-    <div className="sourcing-workspace sourcing-order-detail" data-legacy-ui="sourcing">
+    <div className="sourcing-workspace sourcing-order-detail sourcing-module-layout" data-legacy-ui="sourcing">
       {returnOpen ? <SourcingReturnDialog busy={busy} error={returnError} onClose={()=>{setReturnOpen(false);returnKey.current=null;}} onSubmit={reason=>void submitReturn(reason)} /> : null}
       {budgetCorrectionOpen && item?.daxingUnitPrice ? <SourcingBudgetPriceCorrectionDialog
         currentPrice={item.daxingUnitPrice}
@@ -1845,24 +1841,56 @@ function OrderDetailPage({
       <div className="sourcing-detail-layout sourcing-reference-layout">
         <KeyFacts className="sourcing-key-facts" aria-label="外发定价选厂订单核心信息">
           <div><dt>跟单</dt><dd>{item.merchandiserName ?? "历史未维护"}</dd></div>
-          <div className="sourcing-key-facts__factory"><dt>加工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
-          <div><dt>总数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
-          <div><dt>生产总额</dt><dd>{item.decision ? fixedBusinessCurrency(item.decision.totalAmount) : "—"}</dd></div>
+          <div className="sourcing-key-facts__factory"><dt>当前方案工厂</dt><dd>{item.decision?.supplierName ?? "待选厂"}</dd></div>
+          <div><dt>订单总数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
+          <div><dt>当前方案生产总额</dt><dd>{item.decision ? fixedBusinessCurrency(item.decision.totalAmount) : "—"}</dd></div>
           <div><dt>IE 总额</dt><dd>{item.ieQuote ? fixedBusinessCurrency(item.ieQuote.totalAmount) : "—"}</dd></div>
           <div><dt>较 IE 总额变化</dt><dd className={ownerTotalDelta?.startsWith("-") ? "sourcing-price-lower" : undefined}>{ownerTotalDelta ?? "—"}</dd></div>
           <div className="sourcing-key-facts__date"><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
           {sourcingPoDates(item)?<div className="sourcing-key-facts__date"><dt>PO 双交期</dt><dd><PoDateSummary lines={sourcingPoDates(item)}/></dd></div>:<div className="sourcing-key-facts__date"><dt>要求交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>}
         </KeyFacts>
-        <div className="order-layout-workspace">
-          <div className={`order-layout-main${selectedNode === "owner" ? " sourcing-owner-workspace" : ""}`}>{selectedNode === "owner" ? <header className="sourcing-order-workspace-heading"><h2>老板审批</h2><p>请核对价格、加工厂及交期，确认后审批。</p></header> : null}
+        <div className="sourcing-supporting-overview">
+          <SourcingOrderPhotos attachments={attachments} previewUrl={attachment => attachmentUrl(attachment.attachmentId, "preview")} onPreview={setSelectedImage} uploadControl={canSupplementImages ? <SourcingImageSupplementUploader sourcingCaseId={sourcingCaseId} currentAttachmentCount={attachments.length} onUploaded={load} /> : null} />
+          <section className="sourcing-workflow-section" aria-label="订单流程">
+                <div className="sourcing-order-panel-heading">
+                  <h2>订单流程</h2><span className="rework-workflow__step-count">{hideFinanceForMerchandiser ? "审批环节" : "当前步骤"} {Math.min(step + 1, visibleWorkflow.length)} / {visibleWorkflow.length}</span>
+                </div>
 
-            {!financialReadView ? orderLineItems : null}{item.decision ? <div className="sourcing-order-craft"><p>{ownerCraftSummary}</p>{item.decision.decisionReason ? <p>供应链总监说明：{item.decision.decisionReason}</p> : null}{item.decision.sourceType === "factory_change" || item.decision.quantity !== item.orderQuantity ? <p>本次方案：{item.decision.supplierName} · {formatBusinessDecimal(item.decision.quantity)} 件 · {fixedBusinessCurrency(item.decision.totalAmount)}</p> : null}</div> : null}
+                <div className="sourcing-workflow-content">
+                  <WorkflowRail className="sourcing-workflow-rail">
+                  {visibleWorkflow.map((node, index) => {
+                    const state: SourcingWorkflowNodeState = item.status === "closed" || index < step ? "completed" : index === step ? "current" : "future";
+                    const content = <>
+                      <b aria-hidden="true">{state === "completed" ? "✓" : index + 1}</b>
+                      <span><strong>{node.label}</strong><small>{node.role}</small></span>
+                      <em>{state === "completed" ? "已完成" : state === "current" ? "处理中" : "未开始"}</em>
+                    </>;
+                    return state === "future"
+                      ? <div className="sourcing-workflow-step is-future" aria-disabled="true" key={node.key}>{content}</div>
+                      : <a className={`sourcing-workflow-step is-${state}`} href={sourcingWorkflowNodeHref(item.sourcingCaseId, node.key, detailReturnPath, state === "completed")} aria-current={state === "current" ? "step" : undefined} key={node.key}>{content}</a>;
+                  })}
+                  </WorkflowRail>
+                </div>
+              </section>
+        </div>
+        <div className="order-layout-workspace">
+          <div className={`order-layout-main${selectedNode === "owner" ? " sourcing-owner-workspace" : ""}`}>{selectedNode === "owner" ? <header className="sourcing-order-workspace-heading"><h2>老板审批</h2>{!item.decision ? <p>请核对价格、加工厂及交期，确认后审批。</p> : null}</header> : null}
+
+            {item.decision ? <DecisionSummary title={selectedNode === "owner" ? "审批摘要" : "选厂摘要"}>
+              <p className="sourcing-owner-decision__lead">生产管理建议由 <strong>{item.decision.supplierName}</strong> 承接 <strong>{formatBusinessDecimal(item.decision.quantity)} 件</strong>，生产总额 <strong>{fixedBusinessCurrency(item.decision.totalAmount)}</strong>，相对 IE 总额变化{item.decision.sourceType==='factory_change'?'（按转入同份额）':''} <strong>{ownerTotalDelta ?? "—"}</strong>。</p>
+              <p>{ownerCraftSummary}</p>
+              {item.decision.sourceType === "factory_change" || item.decision.quantity !== item.orderQuantity ? <p>主订单共 {formatBusinessDecimal(item.orderQuantity)} 件；本次方案涉及 {formatBusinessDecimal(item.decision.quantity)} 件{item.decision.sourceType === "factory_change" ? "（转厂方案）" : ""}。</p> : null}
+              {item.decision.decisionReason ? <p>生产管理说明：{item.decision.decisionReason}</p> : null}
+              {selectedNode === "owner" && selectedState === "current" ? <p>请核对价格、加工厂及交期，确认后审批。</p> : null}
+            </DecisionSummary> : null}
+            {!financialReadView && !quoteEntryView ? orderLineItems : null}
             {item.decision?.sourceType === "factory_change" && item.lineItems.length > 1 && item.lineItems.some(line => !item.decision?.linePrices.some(price => price.position === line.position)) ? <p className="sourcing-price-note">转厂后按统一生产单价执行，部分款式缺少逐款金额记录，生产总额见合计。</p> : null}
             <section id="node-workspace" className="sourcing-node-workspace" aria-label="节点办理区">
                 <SubmissionFeedback feedback={feedback} busy={busy} />
                 {item.status === "pending_ie_quote" && selectedNode === "ie_quote" ? <Surface className="rework-detail-node-preview">
                   <h2>IE 给价</h2>
                   <p>逐款核定加工单价；每行金额独立四舍五入到分后汇总。</p>
+                  {quoteEntryView ? <details className="sourcing-order-original-facts sourcing-quote-context"><summary>查看订单款式、交期与预算</summary>{orderLineItems}</details> : null}
                   {canQuote ? <fieldset className="sourcing-submission-fields sourcing-form-grid" disabled={busy || feedback.uncertain}>
                     <div className="sourcing-line-price-table sourcing-form-wide" role="table" aria-label="IE逐款价格">
                       {item.lineItems.map((line) => {
@@ -2120,44 +2148,12 @@ function OrderDetailPage({
               </> : <p>当前账号可查看转厂记录，但不能在本节点发起。</p>}
             </section> : null}
             {item.status === "pending_owner_approval" && selectedNode === "owner" && canOwner ? <ActionBar className="sourcing-owner-actions" aria-label="老板审批操作">
-              <button className="dx-button dx-button--secondary sourcing-owner-reject" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "rejected" }, "已驳回供应链总监重新调整")}>驳回并退回供应链总监</button>
+              <button className="dx-button dx-button--secondary sourcing-owner-reject" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "rejected" }, "已驳回供应链总监重新调整")} aria-label="驳回并退回供应链总监">驳回并退回<span className="sourcing-owner-reject__target">供应链总监</span></button>
               <button className="dx-button dx-button--primary" type="button" disabled={busy} onClick={() => void submit(`sourcing/cases/${item.sourcingCaseId}/owner-decisions`, { decision: "approved" }, "老板已批准")}>批准方案</button>
             </ActionBar> : null}
-            <details className="sourcing-order-context" onToggle={event => { setMobileWorkflowExpanded(event.currentTarget.open); }}><summary>订单流程与已提交记录</summary><div className="sourcing-order-context__body">{financialReadView ? <details className="sourcing-order-original-facts"><summary>订单款式与原报价</summary>{orderLineItems}</details> : null}
-              <section className="sourcing-workflow-section" aria-label="订单流程">
-                <div className="rework-workflow__heading rework-detail-panel-title rework-detail-desktop-panel-heading">
-                  <h2>订单流程</h2><span className="rework-workflow__step-count">{hideFinanceForMerchandiser ? "审批环节" : "当前步骤"} {Math.min(step + 1, visibleWorkflow.length)} / {visibleWorkflow.length}</span>
-                </div>
-                <button className="rework-detail-mobile-panel-toggle rework-detail-mobile-workflow-toggle" type="button"
-                  aria-controls="sourcing-workflow-content" aria-expanded={mobileWorkflowExpanded}
-                  onClick={() => setMobileWorkflowExpanded(value => !value)}>
-                  <span><strong>订单流程</strong><small>{hideFinanceForMerchandiser && step>=4 ? STATUS_LABELS[item.status] : WORKFLOW[Math.min(step, WORKFLOW.length - 1)]?.label}</small></span>
-                  <span><small>{Math.min(step + 1, visibleWorkflow.length)}/{visibleWorkflow.length}</small><b aria-hidden="true">{mobileWorkflowExpanded ? "−" : "+"}</b></span>
-                </button>
-                <div id="sourcing-workflow-content" className={`rework-detail-mobile-collapsible${mobileWorkflowExpanded ? " is-expanded" : ""}`}>
-                  <WorkflowRail className="sourcing-workflow-rail" ref={workflowRailRef}>
-                  {visibleWorkflow.map((node, index) => {
-                    const state: SourcingWorkflowNodeState = item.status === "closed" || index < step ? "completed" : index === step ? "current" : "future";
-                    const content = <>
-                      <b aria-hidden="true">{state === "completed" ? "✓" : index + 1}</b>
-                      <span><strong>{node.label}</strong><small>{node.role}</small></span>
-                      <em>{state === "completed" ? "已完成" : state === "current" ? "处理中" : "未开始"}</em>
-                    </>;
-                    return state === "future"
-                      ? <div className="sourcing-workflow-step is-future" aria-disabled="true" key={node.key}>{content}</div>
-                      : <a className={`sourcing-workflow-step is-${state}`} href={sourcingWorkflowNodeHref(item.sourcingCaseId, node.key, detailReturnPath, state === "completed")} aria-current={state === "current" ? "step" : undefined} key={node.key}>{content}</a>;
-                  })}
-                  </WorkflowRail>
-                </div>
-              </section>
-            {item.decision ? <DecisionSummary title={selectedNode === "owner" ? "审批摘要" : "选厂摘要"}>
-              <p className="sourcing-owner-decision__lead">供应链总监建议由 <strong>{item.decision.supplierName}</strong> 承接 <strong>{formatBusinessDecimal(item.decision.quantity)} 件</strong>，生产总额 <strong>{fixedBusinessCurrency(item.decision.totalAmount)}</strong>，相对 IE 总额变化{item.decision.sourceType==='factory_change'?'（按转入同份额）':''} <strong>{ownerTotalDelta ?? "—"}</strong>。</p>
-              <p>{ownerCraftSummary}</p>
-              {item.decision.decisionReason ? <p>供应链总监说明：{item.decision.decisionReason}</p> : null}
-              {selectedNode === "owner" && selectedState === "current" ? <p>请核对价格、加工厂及交期，确认后审批。</p> : null}
-            </DecisionSummary> : null}</div></details>
+            {financialReadView ? <details className="sourcing-order-original-facts"><summary>订单款式与原报价</summary>{orderLineItems}</details> : null}
           </div>
-          <aside className="order-layout-aside"><SourcingOrderPhotos attachments={attachments} previewUrl={attachment => attachmentUrl(attachment.attachmentId, "preview")} onPreview={setSelectedImage} uploadControl={canSupplementImages ? <SourcingImageSupplementUploader sourcingCaseId={sourcingCaseId} currentAttachmentCount={attachments.length} onUploaded={load} /> : null} /></aside>
+
         </div>
       </div>
 
