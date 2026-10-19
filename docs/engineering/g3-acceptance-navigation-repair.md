@@ -10,5 +10,7 @@
 
 独立于外发视觉 PR。搜索500只在隔离PG13按下述证据修复，不改数据库权限、迁移、状态或业务数据，不部署。
 
+既有report-exception-captions-postgres轻量SQL夹具同步增加可空route_descriptor，并为原INSERT显式列出字段。原三项回归与下述两份套件合跑，在PG13/16各14项通过；覆盖全部显示类别、未知类别、筛选/范围/绑定文本及扣款case精确入口。未以无数据库时的跳过代替执行。
+
 
 搜索500另已在相同release编译HTTP/test链路、完整迁移和非所有者只读角色下用PG13.23复现：空搜索200，所有非空搜索500，底层42601定位to_jsonb(todo_view)后省略AS的value别名。PG16.14同样7条HTTP通过。最小修正仅增加显式AS，不改变别名、授权、匹配、计数、排序或分页。保留原有todo-global-search-postgres数据库回归，并在完整迁移的digital-my-todo-context-postgres套件补真实buildApp/TodoService/响应校验的7条HTTP请求，覆盖Root无module、普通角色suppliers、中文搜索、清空和无结果；同一套件在PG13及PG16执行。无需先改变Acceptance日志配置或重启。日志关闭是已确认的诊断缺口，与本次SQL语法根因分开，不将其混称为根因。线上仍需用户更新后复核，隔离复现不等于已在线核销。
