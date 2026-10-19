@@ -1,6 +1,7 @@
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, Surface } from "@dx-rework/ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ReceivedQuantityLabel } from "./received-quantity-label.js";
 
 import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
@@ -160,7 +161,7 @@ export function ReceivingPage() {
   const [images, setImages] = useState<readonly SelectedImage[]>([]);
   const [styleMenuOpen, setStyleMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState<ReactNode>("");
   const pendingKey = useRef<string | null>(null);
   const submitting = useRef(false);
   const uploadedIds = useRef(new Map<string, string>());
@@ -332,7 +333,7 @@ export function ReceivingPage() {
         }),
       });
       pendingKey.current = null;
-      setMessage(`多次收货成功 · ${receipt.styleNo} · 实收 ${formatBusinessDecimal(receipt.actualQuantity)} 件 · 次品 ${formatBusinessDecimal(receipt.defectiveQuantity)} 件`);
+      setMessage(<>多次收货成功 · {receipt.styleNo} · <ReceivedQuantityLabel>实收</ReceivedQuantityLabel> {formatBusinessDecimal(receipt.actualQuantity)} 件 · 次品 {formatBusinessDecimal(receipt.defectiveQuantity)} 件</>);
       setRepeatQuery("");
       setRepeatOrders([]);
       setSelectedRepeatOrder(null);
@@ -546,7 +547,7 @@ export function ReceivingPage() {
             <input type="number" min="1" step="1" inputMode="numeric" placeholder="0" value={documentQuantity} disabled={busy} onChange={(event) => { setDocumentQuantity(event.target.value); pendingKey.current = null; }} />
           </label> : null}
           <label className="receiving-field">
-            <span>实际收货数量</span>
+            <span><ReceivedQuantityLabel>实际收货数量</ReceivedQuantityLabel></span>
             <input type="number" min="0" step="1" inputMode="numeric" placeholder="0" value={actualQuantity} disabled={busy} onChange={(event) => { setActualQuantity(event.target.value); pendingKey.current = null; }} />
           </label>
           <label className="receiving-field">
@@ -624,7 +625,7 @@ export function ReceivingPage() {
             <input type="number" min="1" step="1" inputMode="numeric" placeholder="0" value={documentQuantity} disabled={busy} onChange={(event) => { setDocumentQuantity(event.target.value); pendingKey.current = null; }} />
           </label>
           <label className="receiving-field">
-            <span>实际收货数量</span>
+            <span><ReceivedQuantityLabel>实际收货数量</ReceivedQuantityLabel></span>
             <input type="number" min="0" step="1" inputMode="numeric" placeholder="0" value={actualQuantity} disabled={busy} onChange={(event) => { setActualQuantity(event.target.value); pendingKey.current = null; }} />
           </label>
           <label className="receiving-field">

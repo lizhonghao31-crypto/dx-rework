@@ -16,6 +16,7 @@ import {
 import { verifySession } from "./auth.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { ReceivingDialog } from "./receiving-dialog.js";
+import { ReceivedQuantityLabel } from "./received-quantity-label.js";
 import { ImageViewer } from "./image-viewer.js";
 import { ListPagination } from "./list-pagination.js";
 import { alertInApp } from "./system-dialog.js";
@@ -735,7 +736,7 @@ export function OrderBoardPage() {
         tone="info"
       />
       <KpiInstrument
-        label={searchMode ? "搜索结果累计实收" : "期间实收数量"}
+        label={<ReceivedQuantityLabel>{searchMode ? "搜索结果累计实收" : "期间实收数量"}</ReceivedQuantityLabel>}
         value={`${quantity(kpis.receivedQuantity)}件`}
         detail={searchMode ? kpiRangeLabel : `${kpiRangeLabel} · 本期实收`}
         tone="info"
@@ -809,7 +810,7 @@ export function OrderBoardPage() {
                 >查看{row.attachments.length > 1 ? `(${row.attachments.length})` : ""}</button> : null}
               </div>
             </div>
-            <div className="order-board-row__actual"><span>实收</span><strong>{quantity(row.cumulativeActualQuantity)}件</strong></div>
+            <div className="order-board-row__actual"><span><ReceivedQuantityLabel>实收</ReceivedQuantityLabel></span><strong>{quantity(row.cumulativeActualQuantity)}件</strong></div>
             <div className="order-board-row__defective"><span>次品</span><strong>{quantity(row.defectiveQuantity)}件</strong></div>
             <div className="order-board-operation order-board-row__difference">
               <span>收货差异</span>
@@ -854,8 +855,8 @@ export function OrderBoardPage() {
                   ? "嘉顺"
                   : "来源待确认"}</span>
               <span>本次送货单 <strong>{quantity(item.receiptDocumentQuantity)}件</strong></span>
-              <span>本次实收 <strong>{quantity(item.actualQuantity)}件</strong></span>
-              <span>累计实收 {quantity(item.cumulativeActualQuantity)}件</span>
+              <span><ReceivedQuantityLabel>本次实收</ReceivedQuantityLabel> <strong>{quantity(item.actualQuantity)}件</strong></span>
+              <span><ReceivedQuantityLabel>累计实收</ReceivedQuantityLabel> <span className="received-quantity-value">{quantity(item.cumulativeActualQuantity)}件</span></span>
               <span className="order-board-history__status">{historyStatus}</span>
               <span>收货人 {item.receiverName}</span>
               <time dateTime={item.receivedAt}>{historyDateTime(item.receivedAt)}</time>
@@ -926,7 +927,7 @@ export function OrderBoardPage() {
         <h2>{differenceEditing.type === "receiving" ? "收货差异" : "装箱差异"}{differenceEditing.resolution ? "处理结果" : "去处理"}</h2>
         <dl className="order-board-difference-snapshot">
           <div><dt>款号</dt><dd>{differenceEditing.row.styleNo}</dd></div>
-          <div><dt>实收数量</dt><dd>{quantity(differenceEditing.row.cumulativeActualQuantity)}件</dd></div>
+          <div><dt><ReceivedQuantityLabel>实收数量</ReceivedQuantityLabel></dt><dd>{quantity(differenceEditing.row.cumulativeActualQuantity)}件</dd></div>
           {differenceEditing.type === "receiving"
             ? <div><dt>送货单数量</dt><dd>{quantity(differenceEditing.row.documentQuantity)}件</dd></div>
             : <div><dt>装箱数量</dt><dd>{differenceEditing.row.packingQuantity === null ? "-" : `${quantity(differenceEditing.row.packingQuantity)}件`}</dd></div>}
@@ -981,7 +982,7 @@ export function OrderBoardPage() {
         </select></label>
         <div className="order-board-dialog__quantity-grid">
           <label>本次送货单数量<input type="number" min="1" max="10000000" step="1" inputMode="numeric" value={receiptDocumentQuantity} disabled={mutationBusy} onChange={(event) => setReceiptDocumentQuantity(event.target.value)} /></label>
-          <label>本次实际收货数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={receiptActualQuantity} disabled={mutationBusy} onChange={(event) => setReceiptActualQuantity(event.target.value)} /></label>
+          <label className="order-board-receipt-actual"><ReceivedQuantityLabel>本次实际收货数量</ReceivedQuantityLabel><input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={receiptActualQuantity} disabled={mutationBusy} onChange={(event) => setReceiptActualQuantity(event.target.value)} /></label>
           <label>本次次品数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={receiptDefectiveQuantity} disabled={mutationBusy} onChange={(event) => setReceiptDefectiveQuantity(event.target.value)} /></label>
         </div>
         {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}</p> : null}
@@ -1001,7 +1002,7 @@ export function OrderBoardPage() {
         <label>款号<input value={editStyleNo} maxLength={100} disabled={mutationBusy} onChange={(event) => setEditStyleNo(event.target.value.toUpperCase())} /></label>
         <div className="order-board-dialog__quantity-grid">
           <label>送货单数量<input type="number" min="1" max="10000000" step="1" inputMode="numeric" value={editDocumentQuantity} disabled={mutationBusy} onChange={(event) => setEditDocumentQuantity(event.target.value)} /></label>
-          <label>实际收货数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={editActualQuantity} disabled={mutationBusy} onChange={(event) => setEditActualQuantity(event.target.value)} /></label>
+          <label><ReceivedQuantityLabel>实际收货数量</ReceivedQuantityLabel><input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={editActualQuantity} disabled={mutationBusy} onChange={(event) => setEditActualQuantity(event.target.value)} /></label>
           <label>次品数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={editDefectiveQuantity} disabled={mutationBusy} onChange={(event) => setEditDefectiveQuantity(event.target.value)} /></label>
         </div>
         {editing.rootDeletable ? <label>替换送货单图片（可选，1–3张）

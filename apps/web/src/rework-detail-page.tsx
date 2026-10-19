@@ -1,4 +1,5 @@
 import { specialProcessLabel, specialProcessName } from "@dx-rework/contracts";
+import { ReceivedQuantityLabel } from "./received-quantity-label.js";
 import { FinanceNodeKeySchema } from "@dx-rework/contracts/reporting";
 import { ReworkNodeHistoryPage, reworkHistoryHref } from "./rework-node-history-page.js";
 import { moduleCanWrite } from "./member-module-policy.js";
@@ -751,7 +752,7 @@ function CurrentReworkDetailPage({
           <div className="rework-detail-core-fact"><dt>发起时间</dt><dd>{formatTime(detail.createdAt)}</dd></div>
           <div className="rework-detail-core-fact"><dt>发起人</dt><dd>{detail.createdBy.displayName}</dd></div>
           <div className="rework-detail-core-fact rework-detail-core-fact--merchandiser"><dt>订单跟单</dt><dd>{detail.merchandiser?.displayName ?? "—"}</dd></div>
-          <div className="rework-detail-core-fact rework-detail-core-fact--received"><dt>实收数量</dt><dd>{detail.sourceReceivingActualQuantity === null ? "—" : `${formatBusinessDecimal(detail.sourceReceivingActualQuantity)} 件`}</dd></div>
+          <div className="rework-detail-core-fact rework-detail-core-fact--received"><dt><ReceivedQuantityLabel>实收数量</ReceivedQuantityLabel></dt><dd>{detail.sourceReceivingActualQuantity === null ? "—" : `${formatBusinessDecimal(detail.sourceReceivingActualQuantity)} 件`}</dd></div>
           <div className="rework-detail-core-fact rework-detail-core-fact--defective"><dt>次品数量</dt><dd><button type="button" onClick={() => { setTailDefectMessage(""); setDefectDialogOpen(true); }}>{formatBusinessDecimal(detail.defectiveQuantity.total)} 件 · 查看</button></dd></div>
         </dl>
 

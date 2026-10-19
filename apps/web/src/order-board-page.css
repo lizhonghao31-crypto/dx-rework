@@ -124,6 +124,10 @@
 }
 
 /* PR01: evidence stays inside the existing difference dialog. */
+@media(max-width:380px){.receiving-dialog .order-board-dialog__quantity-grid>.order-board-receipt-actual{grid-column:1/-1}}
+.order-board-history__entry>span:has(>.received-quantity-label){overflow:visible;text-overflow:clip;white-space:normal;flex-wrap:wrap}
+.order-board-history__entry>span:has(>.received-quantity-label)>strong,.order-board-history__entry .received-quantity-value{white-space:nowrap;flex:none}
+
 .order-board-difference-evidence{display:grid;gap:8px;min-width:0}
 .order-board-difference-evidence input[type=file]{max-width:100%;min-width:0}
 .order-board-difference-evidence__images{display:flex;flex-wrap:wrap;gap:8px}

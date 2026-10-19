@@ -1,0 +1,2 @@
+.received-quantity-label{display:inline-flex;align-items:baseline;gap:4px;white-space:nowrap;max-width:100%}
+span.received-quantity-label>small.received-quantity-note{flex:none;font-size:min(1em,max(10px,calc(1em - 3px)));font-weight:400;line-height:inherit;color:#70757e}

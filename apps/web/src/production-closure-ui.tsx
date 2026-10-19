@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ReceivedQuantityLabel } from "./received-quantity-label.js";
 import { z } from "zod";
 import { ProductionPilotListSchema,ProductionExpectedReceiptsSchema,ProductionReceivingSummarySchema,type ProductionReceivingSummary } from "@dx-rework/contracts";
 import { Button, Surface } from "@dx-rework/ui";
@@ -47,7 +48,7 @@ export function ProductionReceiptSummary({productionOrderId,refreshKey}:{product
  if(error)return <p role="alert">{error}</p>;if(!data)return null;
  return <Surface className="sourcing-list-card"><h2>发货与实际回货</h2><p>{data.shippedOn} 已发货 · 首款 {data.firstStyleNo} · 预计 {data.expectedQuantity} 件</p>
   <p>发货不代表仓库已收货。以下为仓库关联的实收记录；批次汇总调整仍以订单回货页面为准。</p>
-  {data.receipts.length?data.receipts.map(r=><p key={r.receiptId}>{new Date(r.receivedAt).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai"})} · 实收 {r.actualQuantity} 件{r.archived?" · 批次已归档":""}</p>):<p>尚无关联的实际收货记录。</p>}
+  {data.receipts.length?data.receipts.map(r=><p key={r.receiptId}>{new Date(r.receivedAt).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai"})} · <ReceivedQuantityLabel>实收</ReceivedQuantityLabel> {r.actualQuantity} 件{r.archived?" · 批次已归档":""}</p>):<p>尚无关联的实际收货记录。</p>}
  </Surface>;
 }
 

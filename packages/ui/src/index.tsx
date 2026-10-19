@@ -17,7 +17,7 @@ export function NavigationItem({ active = false, icon, children }: { active?: bo
   return <span className={`dx-nav-item${active ? " is-active" : ""}`}><b aria-hidden="true">{icon}</b>{children}</span>;
 }
 
-export function KpiInstrument({ label, value, detail, tone = "info" }: { label: string; value: string | number; detail: string; tone?: Tone }) {
+export function KpiInstrument({ label, value, detail, tone = "info" }: { label: ReactNode; value: string | number; detail: string; tone?: Tone }) {
   return <article className="dx-kpi"><span>{label}</span><strong>{value}</strong><small>{detail}</small><i aria-hidden="true" className={`dx-meter dx-meter--${tone}`} /></article>;
 }
 
