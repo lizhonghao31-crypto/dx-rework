@@ -63,6 +63,7 @@
 .digital-journey-cockpit .cockpit-detail .journey-node-table .node-time {width:100px}
 .digital-journey-cockpit .cockpit-detail .journey-node-table .node-record {width:78px}
 .digital-journey-cockpit .cockpit-detail .journey-node-table td:nth-child(3) .dx-badge {display:inline-block;max-width:100%;white-space:normal}
+.digital-journey-cockpit .cockpit-detail .journey-node-table .cockpit-state-part,.digital-journey-cockpit .cockpit-detail .journey-node-table .cockpit-node-round {display:inline-block;white-space:nowrap;word-break:normal;overflow-wrap:normal}
 .digital-journey-cockpit .cockpit-compact-date {display:inline-flex;flex-direction:column;white-space:nowrap;font-variant-numeric:tabular-nums;gap:2px}
 .digital-journey-cockpit .cockpit-detail .journey-node-table .journey-node-toggle {min-height:40px;text-align:left}
 .digital-journey-cockpit .cockpit-detail .journey-node-table a {display:inline-block;min-height:40px;overflow-wrap:anywhere}
