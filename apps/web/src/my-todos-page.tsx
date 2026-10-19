@@ -1,3 +1,4 @@
+import {TodoRoutingTransfer} from './todo-routing-transfer.js';
 import { todoTaskTitle } from "@dx-rework/contracts";
 import { todoRouteHref } from "./todo-route-link.js";
 import { NavigationIcon } from "./navigation-icons.js";
@@ -129,6 +130,7 @@ export function MyTodosPage() {
   const [requestedPage, setRequestedPage] = useState(initial.page);
   const [queryOwner,setQueryOwner] = useState<string | null>(null);
   const [refresh,setRefresh] = useState(0);
+  const [routingAccess,setRoutingAccess]=useState({manage:false});
   const [busy, setBusy] = useState(false);
   const [accessibleTodoModules, setAccessibleTodoModules] = useState<ReadonlySet<TodoModule> | null>(null);
   const loadVersion = useRef(0);
@@ -184,6 +186,7 @@ export function MyTodosPage() {
       if(session !== "denied" && session.status === "authorized") {
         const savedOwner=window.history.state?.dxTodoQueryUser;
         if(savedOwner && savedOwner!==session.user.id){setSearchQuery("");setRequestedModule(undefined);setRequestedPage(1);}
+        setRoutingAccess({manage:session.user.businessRoles?.includes('production_management')===true&&session.user.capabilities.includes('todo:routing_exception_manage')});
         setQueryOwner(session.user.id);
       }
     });
@@ -216,6 +219,7 @@ export function MyTodosPage() {
           window.location.replace(pageUrl("/ui/my-tasks"));return;
         }
         setAccessibleTodoModules(new Set(todoModuleIdsForUser(session.user)));
+        setRoutingAccess({manage:session.user.businessRoles?.includes('production_management')===true&&session.user.capabilities.includes('todo:routing_exception_manage')});
         setQueryOwner(session.user.id);setRefresh(n=>n+1);
       });
     };
@@ -316,7 +320,7 @@ export function MyTodosPage() {
                   : "返工单关联信息待读取";
             return (
               <div className="my-todo-card" key={todo.todoId}>
-                {blocked ? (
+                {todo.todoType==='recipient_routing_exception'&&todo.category==='recipient_routing_exception'&&todo.sourceAction==='todo.recipient_blocked' ? <div className="my-todo-row"><b className="my-todo-index">{String((page-1)*pageSize+index+1).padStart(2,'0')}</b><div className="my-todo-primary"><div className="my-todo-title"><h2>待办接手安排</h2><StatusBadge tone="warning">需要转交</StatusBadge></div><p>{orderSummary}</p><TodoRoutingTransfer key={`${queryOwner}:${todo.todoId}`} todo={todo} canManage={routingAccess.manage} onChanged={()=>setRefresh(value=>value+1)}/></div></div> : blocked ? (
                   <div className="my-todo-row my-todo-row--blocked">
                     <b className="my-todo-index">{String((page - 1) * pageSize + index + 1).padStart(2, "0")}</b>
                     <div className="my-todo-primary">
