@@ -15,7 +15,7 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     await admin.query(`CREATE SCHEMA ${schema}`);
     await db.query(`
       CREATE TABLE rework_orders(rework_order_id uuid,status text);
-      CREATE TABLE rework_todos(todo_id uuid,entity_type text,entity_id text,category text,status text,due_at timestamptz,blocked_at timestamptz);
+      CREATE TABLE rework_todos(todo_id uuid,entity_type text,entity_id text,category text,status text,due_at timestamptz,blocked_at timestamptz,route_descriptor jsonb);
       CREATE TABLE rework_own_factory_approvals(approval_id uuid,rework_order_id uuid);
       CREATE TABLE rework_external_responsibility_cases(case_id uuid,rework_order_id uuid,supplier_name_snapshot text,status text);
       CREATE TABLE rework_responsibility_determinations(determination_id uuid,rework_order_id uuid);
@@ -25,10 +25,10 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     await db.query("INSERT INTO rework_orders VALUES($1,'completed'),($2,'deleted')", [orderId, deletedOrderId]);
     for (const category of [...Object.keys(BUSINESS_TODO_CATEGORY_LABELS), 'unknown_private_category']) {
       const todoId = randomUUID();
-      await db.query("INSERT INTO rework_todos VALUES($1,'rework_order',$2,$3,'pending','2026-10-01T00:00:00Z',NULL)", [todoId, orderId, category]);
+      await db.query("INSERT INTO rework_todos(todo_id,entity_type,entity_id,category,status,due_at,blocked_at) VALUES($1,'rework_order',$2,$3,'pending','2026-10-01T00:00:00Z',NULL)", [todoId, orderId, category]);
     }
     const failedId = randomUUID();
-    await db.query("INSERT INTO rework_todos VALUES($1,'rework_order',$2,'external_deduction_follow_up','blocked_recipient',NULL,'2026-10-02T00:00:00Z'),($3,'rework_order',$4,'sourcing_finance_reconcile','pending','2026-10-01T00:00:00Z',NULL)", [failedId, orderId, randomUUID(), deletedOrderId]);
+    await db.query("INSERT INTO rework_todos(todo_id,entity_type,entity_id,category,status,due_at,blocked_at) VALUES($1,'rework_order',$2,'external_deduction_follow_up','blocked_recipient',NULL,'2026-10-02T00:00:00Z'),($3,'rework_order',$4,'sourcing_finance_reconcile','pending','2026-10-01T00:00:00Z',NULL)", [failedId, orderId, randomUUID(), deletedOrderId]);
     await db.query("INSERT INTO dingtalk_todo_external_bindings VALUES($1,$2,'permanent_failed','2026-10-03T00:00:00Z')", [randomUUID(), failedId]);
     await db.query("INSERT INTO rework_external_responsibility_cases VALUES($1,$2,'TEST exact supplier','deduction_follow_up')", [caseId, orderId]);
     // Only the latest follow-up is an exception; older history must not duplicate it.

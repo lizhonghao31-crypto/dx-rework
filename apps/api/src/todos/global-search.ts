@@ -10,7 +10,7 @@ export async function globalTodoSearch(database:Pool,contextSql:string,actorId:s
    todoSearchLabels[module],todoSearchLabels[todo.category],todoTaskTitle(todo),todo.taskTitle,todo.category==='production_stale'?`已 ${todo.daysWithoutUpdate??0} 天未更新`:null,todo.orderContext?.styleNo,todo.orderContext?.supplierName,todo.orderContext?.merchandiserName,todo.orderContext?.orderNo,todo.orderContext?.reworkNo,
  ].some(value=>value?.toUpperCase().includes(upper))).map(({todo})=>todo);
  const result=await database.query<{total_count:string|number;total_pages:number;page:number;items:Item[]}>(`WITH todo_view AS (${contextSql}), candidates AS (
-   SELECT todo_id,status_rank,due_at,created_at,'database'::text kind,to_jsonb(todo_view) value,1 priority
+   SELECT todo_id,status_rank,due_at,created_at,'database'::text kind,to_jsonb(todo_view) AS value,1 priority
    FROM todo_view
    WHERE recipient_user_id=$1 AND todo_type<>'information' AND status IN ('pending','blocked_recipient')
      AND category<>'wage_month_close' AND (rework_status IS NULL OR rework_status<>'deleted') AND pattern_deleted_at IS NULL

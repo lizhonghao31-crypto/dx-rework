@@ -101,9 +101,11 @@ export function matchingNodes(order: OrderJourney, kpi: CockpitContext["kpi"]): 
 }
 
 
-/** Deduplicate the same exact destination, retaining historical versions and PO lines. */
-/** Identical destinations share a record; explicit versions, lines and action modes remain distinct. */
+/** Shared document pages expose one destination; history and task modes remain in their actual URL. */
 export function journeyRecordIdentity(record: JourneyRecord): string {
+  if (record.url && ["development", "sourcing"].includes(record.domain)) {
+    return [record.domain, journeyRecordHref(record.url, {page:1,search:"",kpi:"all"}, record.mode)].join(":");
+  }
   return [record.domain,record.url || record.id,record.version,record.lineId,record.mode].join(":");
 }
 export function uniqueJourneyEntries<T extends {record:JourneyRecord}>(entries: readonly T[]): T[] {

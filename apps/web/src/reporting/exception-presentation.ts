@@ -5,7 +5,12 @@ export function exceptionRecordHref(value: unknown, base: string): string | null
   if(typeof value!=='string'||!value.startsWith('/ui/')||value.includes('\\'))return null;
   const url=new URL(value,'https://local.invalid');
   if(url.origin!=='https://local.invalid'||url.hash||url.pathname!==value.split(/[?#]/)[0])return null;
-  if(new RegExp(`^/ui/tasks(?:/${uuid})?$`,'i').test(url.pathname)&&!url.search)return createWebUrls(base).pageUrl(url.pathname);
+  if(new RegExp(`^/ui/tasks/${uuid}$`,'i').test(url.pathname)&&!url.search)return createWebUrls(base).pageUrl(url.pathname);
+  if(new RegExp(`^/ui/sourcing/orders/${uuid}$`,'i').test(url.pathname)
+    &&new RegExp(`^${uuid}$`,'i').test(url.searchParams.get('todo')??'')
+    &&[...url.searchParams.keys()].length===new Set(url.searchParams.keys()).size
+    &&[...url.searchParams.keys()].every(key=>['todo','section'].includes(key))
+    &&(!url.searchParams.has('section')||url.searchParams.get('section')==='contract-return'))return createWebUrls(base).pageUrl(url.pathname)+url.search;
   if(new RegExp(`^/ui/tasks/${uuid}$`,'i').test(url.pathname)&&[...url.searchParams.keys()].length===2&&url.searchParams.get('node')==='settlement_followup'&&new RegExp(`^${uuid}$`,'i').test(url.searchParams.get('case')??''))return createWebUrls(base).pageUrl(url.pathname)+url.search;
   return null;
 }

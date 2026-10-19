@@ -1,5 +1,7 @@
 import type { ManagementDashboardResponse } from "@dx-rework/contracts/reporting";
 import { BUSINESS_EXCEPTION_LABELS, BUSINESS_TODO_CATEGORY_LABELS } from "@dx-rework/contracts/business-display";
+import { TodoRouteDescriptorSchema } from "@dx-rework/contracts";
+import { todoDestination } from "@dx-rework/contracts/todo-destination";
 
 import { TIMEZONE, type Queryable, type ExceptionRow } from "./management-reporting-shared.js";
 
@@ -45,26 +47,26 @@ export async function exceptions(
      ), exceptions AS (
        SELECT 'overdue_todo'::text exception_type,todo.todo_id::text entity_id,
          mapped.rework_order_id,('待办逾期：'||todo.category)::text AS label,
-         todo.due_at occurred_at,
+         todo.due_at occurred_at,todo.route_descriptor,
          CASE WHEN mapped.rework_order_id IS NULL THEN '/ui/tasks' ELSE '/ui/tasks/'||mapped.rework_order_id::text END deep_link
        FROM rework_todos todo JOIN todo_order mapped USING(todo_id)
        WHERE todo.status='pending' AND todo.due_at<CURRENT_TIMESTAMP
        UNION ALL
        SELECT 'blocked_recipient',todo.todo_id::text,mapped.rework_order_id,
-         ('接收人失效：'||todo.category),todo.blocked_at,
+         ('接收人失效：'||todo.category),todo.blocked_at,todo.route_descriptor,
          CASE WHEN mapped.rework_order_id IS NULL THEN '/ui/tasks' ELSE '/ui/tasks/'||mapped.rework_order_id::text END
        FROM rework_todos todo JOIN todo_order mapped USING(todo_id)
        WHERE todo.status='blocked_recipient'
        UNION ALL
        SELECT 'todo_delivery_failed',binding.binding_id::text,mapped.rework_order_id,
-         ('钉钉投递永久失败：'||todo.category),binding.updated_at,
+         ('钉钉投递永久失败：'||todo.category),binding.updated_at,todo.route_descriptor,
          CASE WHEN mapped.rework_order_id IS NULL THEN '/ui/tasks' ELSE '/ui/tasks/'||mapped.rework_order_id::text END
        FROM dingtalk_todo_external_bindings binding
        JOIN rework_todos todo USING(todo_id) JOIN todo_order mapped USING(todo_id)
        WHERE binding.provider_state='permanent_failed'
        UNION ALL
        SELECT 'deduction_follow_up_overdue',follow_up.follow_up_id::text,case_record.rework_order_id,
-         ('扣款跟进逾期：'||case_record.supplier_name_snapshot),follow_up.next_follow_up_at,
+         ('扣款跟进逾期：'||case_record.supplier_name_snapshot),follow_up.next_follow_up_at,NULL::jsonb,
          '/ui/tasks/'||case_record.rework_order_id::text||'?node=settlement_followup&case='||case_record.case_id::text
        FROM rework_external_deduction_follow_ups follow_up
        JOIN rework_external_responsibility_cases case_record USING(case_id)
@@ -75,19 +77,22 @@ export async function exceptions(
            WHERE newer.case_id=follow_up.case_id AND (newer.created_at,newer.follow_up_id)>(follow_up.created_at,follow_up.follow_up_id)
          )
      )
-     SELECT exception_type,entity_id,exceptions.rework_order_id,label,occurred_at,deep_link
+     SELECT exception_type,entity_id,exceptions.rework_order_id,label,occurred_at,deep_link,route_descriptor
      FROM exceptions
      LEFT JOIN rework_orders order_record ON order_record.rework_order_id=exceptions.rework_order_id
      WHERE (exceptions.rework_order_id IS NULL OR order_record.status<>'deleted')
        AND ${where.join(" AND ")} ORDER BY occurred_at,entity_id LIMIT ${limitParameter}`,
     values,
   );
-  return result.rows.map((row) => ({
+  return result.rows.map((row) => {
+    const route = TodoRouteDescriptorSchema.safeParse(row.route_descriptor);
+    return {
     exceptionType: row.exception_type,
     entityId: row.entity_id,
     reworkOrderId: row.rework_order_id,
     label: row.label,
     occurredAt: row.occurred_at.toISOString(),
-    deepLink: row.deep_link,
-  }));
+    deepLink: route.success && route.data.routeName === "sourcing_detail" ? todoDestination(route.data) : row.deep_link,
+  };
+  });
 }
