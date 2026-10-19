@@ -33,10 +33,21 @@ const baseItem = SourcingCaseSummarySchema.parse({
 });
 
 const partial = params.get("variant") === "partial";
-const item = SourcingCaseSummarySchema.parse({...baseItem,merchandiserName:"TEST 主跟单",status:historical?({created:"pending_ie_quote",ie_quote:"pending_management_decision",management:"pending_owner_approval",owner:"pending_finance_reconciliation",finance:"closed"} as const)[node]:currentStatus[node],correctionReason:node==="created"?"TEST 合成退回说明":null,
+const defaultItem = SourcingCaseSummarySchema.parse({...baseItem,merchandiserName:"TEST 主跟单",status:historical?({created:"pending_ie_quote",ie_quote:"pending_management_decision",management:"pending_owner_approval",owner:"pending_finance_reconciliation",finance:"closed"} as const)[node]:currentStatus[node],correctionReason:node==="created"?"TEST 合成退回说明":null,
  ieQuote:nodeIndex===0||nodeIndex===1&&!historical?null:baseItem.ieQuote,
  decision:nodeIndex<3&&!historical||nodeIndex<2?null:partial?{...baseItem.decision!,sourceType:"factory_change",quantity:450,totalAmount:"16900.00",linePrices:productionPrices.slice(0,2)}:baseItem.decision,
 });
+// Visible fields mirror the supplied screenshot; undisclosed fields remain valid synthetic TEST data.
+const deployed = params.get("variant") === "deployed";
+const comparisonLines = [{ ...baseItem.lineItems[0]!, styleNo:"TEST-PO-C01-P01", quantity:5, customerWarehouseArrivalDate:"2026-12-01", factoryDeliveryDate:"2026-11-20", proposedFactoryDeliveryDate:"2026-11-20" }];
+const comparisonPrices = [{ ...prices[0]!, quantity:5, unitPrice:"10.0000", totalAmount:"50.00" }];
+const item = deployed ? SourcingCaseSummarySchema.parse({ ...defaultItem,
+  styleNo:"TEST-UX-20261016-V3-C01-P01", gender:"男装", styleName:"TEST 单PO基础T恤", merchandiserName:"[UAT] 订单跟单",
+  orderQuantity:5, estimatedCutPieceSendDate:"2026-10-20", deliveryDate:"2026-11-20", lineItems:comparisonLines,
+  ieQuote:{...baseItem.ieQuote!,quantity:5,totalAmount:"50.00",linePrices:comparisonPrices},
+  decision:{...baseItem.decision!,supplierName:"TEST-UAT-1006-FACTORY2",quantity:5,totalAmount:"50.00",linePrices:comparisonPrices},
+  approvalSnapshot:baseItem.approvalSnapshot?{...baseItem.approvalSnapshot,quantity:5,totalAmount:"50.00",linePrices:comparisonPrices.map((price,i)=>({...price,styleNo:comparisonLines[i]!.styleNo,color:comparisonLines[i]!.color,alternateStyleNo:null}))}:null,
+}) : defaultItem;
 
 const requests:{path:string;method:string;body:unknown}[]=[];
 const role=params.get("role")??({created:"merchandiser",ie_quote:"ie",management:"management",owner:"owner",finance:"finance"})[node];
@@ -50,7 +61,7 @@ const rolePolicy:Record<string,{role:string;capabilities:string[]}>= {
 const policy=rolePolicy[role]!;
 const user={id:id(1),displayName:`TEST ${role}`,isRoot:role==="root",businessRoles:[policy.role],capabilities:policy.capabilities,...(role==="readonly"?{readOnlyModules:["sourcing"]}:{})};
 
-const attachments=Array.from({length:reference?3:6},(_,i)=>({attachmentId:id(200+i),filename:`TEST-合成款式原始长文件名-秋季外套-${i+1}.png`,mimeType:"image/png"}));
+const attachments=Array.from({length:deployed?1:reference?3:6},(_,i)=>({attachmentId:id(200+i),filename:`TEST-合成款式原始长文件名-秋季外套-${i+1}.png`,mimeType:"image/png"}));
 const kind={created:"created",ie_quote:"ie_quote",management:"management_decision",owner:"owner_decision",finance:"finance_reconciliation"} as const;
 const entry={entryId:id(400),kind:kind[node],version:2,handledBy:`TEST 当时${node}`,handledAt:now,reason:"TEST 合成历史办理说明",unitPrice:null,totalAmount:null,supplierName:null,decision:node==="owner"?"approved":null,contractReference:null,signedOn:null,quantity:null,differenceFields:[],result:node==="finance"?"match":null,resolution:null};
 const oldEntry={...entry,entryId:id(401),version:1,handledBy:"TEST 历史办理人V1",reason:"TEST 旧版本办理说明"};
@@ -62,7 +73,7 @@ if(path.endsWith("auth/me"))return Response.json({status:"authorized",user});
 if(path.includes("/history/")){
  if(params.get("variant")==="missing"||role==="denied")return Response.json({error:{message:"TEST no historical access"}},{status:params.get("variant")==="missing"?404:403});
  const older=new URL(path,location.origin).searchParams.get("entryId")===oldEntry.entryId;
- const snapshot={...item,styleNo:older?"TEST 历史款号V1":item.styleNo,decision:item.decision?{...item.decision,supplierName:older?"TEST 历史加工厂V1":"TEST 当时加工厂"}:null};
+ const snapshot={...item,lineItems:item.lineItems.map(line=>{const historicalLine={...line};delete historicalLine.customerWarehouseArrivalDate;return historicalLine;}),styleNo:older?"TEST 历史款号V1":item.styleNo,decision:item.decision?{...item.decision,supplierName:older?"TEST 历史加工厂V1":"TEST 当时加工厂"}:null};
  return Response.json(SourcingNodeHistorySchema.parse({item:snapshot,node,entry:older?oldEntry:entry,versions:[oldEntry,entry],relatedEntries:[],attachments,notices:[],contractReference:node==="finance"?"TEST-HISTORY-CONTRACT":null}));
 }
 if(path.endsWith("/attachments"))return Response.json({items:attachments});
