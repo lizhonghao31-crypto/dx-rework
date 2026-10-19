@@ -1,0 +1,86 @@
+.digital-journey-cockpit[data-view="overview"] {font-size:14px}
+.digital-journey-cockpit[data-view="overview"] .journey-kpis {gap:10px}
+.digital-journey-cockpit[data-view="overview"] .journey-filters input,.digital-journey-cockpit[data-view="overview"] .journey-filters select {min-height:40px;font-size:16px}
+.digital-journey-cockpit[data-view="overview"] .journey-filters label {font-size:14px}
+.digital-journey-cockpit[data-view="overview"] .dx-button {min-height:40px}
+.digital-journey-cockpit .cockpit-scope-tabs {display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.digital-journey-cockpit .cockpit-scope-tabs button {border:0;border-bottom:3px solid transparent;background:transparent;font:inherit;color:#405980;padding:8px 10px;min-height:40px;cursor:pointer}
+.digital-journey-cockpit .cockpit-scope-tabs button[aria-pressed="true"] {border-color:#0065ff;color:#0065ff;font-weight:700}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home .journey-section-title {flex-wrap:wrap;gap:10px;font-size:13px;color:#6a7e9b}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-scroll {overflow-x:auto;max-width:100%}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table {table-layout:fixed;min-width:1040px;width:100%;font-size:14px}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table th:nth-child(1) {width:74px}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table th:nth-child(2) {width:17%}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table th:nth-child(3) {width:12%}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table th:nth-child(4) {width:21%}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table th:nth-child(5) {width:17%}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table th:nth-child(6) {width:16%}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table th:nth-child(7) {width:116px}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home td {vertical-align:middle;padding:6px 8px;overflow-wrap:anywhere}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home small {font-size:14px;line-height:1.3;color:#637b9d;margin-top:2px}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home .journey-order-select {font-weight:700;min-height:40px;text-align:left}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-task {display:grid;gap:4px;background:transparent;border:0;font:inherit;text-align:left;color:inherit;padding:0;cursor:pointer;min-height:44px;width:100%}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-task .dx-badge {justify-self:start}
+.digital-journey-cockpit .cockpit-double-progress {display:grid;gap:7px}
+.digital-journey-cockpit .cockpit-double-progress>div {display:grid;grid-template-columns:28px minmax(40px,1fr) minmax(62px,max-content);gap:5px;align-items:center;font-size:13px}
+.digital-journey-cockpit .cockpit-double-progress small {margin:0;font-size:12px;min-width:62px;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.digital-journey-cockpit .cockpit-double-progress i {height:8px;border-radius:8px;background:#e1e8f2;overflow:hidden}
+.digital-journey-cockpit .cockpit-double-progress b {display:block;height:100%;background:#0065ff;border-radius:8px}
+.digital-journey-cockpit .cockpit-order-state {display:inline-block;border-radius:5px;padding:7px 10px;background:#edf0f5;color:#687b98;font-size:14px;font-weight:600}
+.digital-journey-cockpit .cockpit-order-state.is-active {color:#0065ff;background:#e6f1ff}
+.digital-journey-cockpit .cockpit-order-state.is-overdue {color:#ce2437;background:#ffe8eb}
+.digital-journey-cockpit .cockpit-order-state.is-due_soon {color:#a16400;background:#fff2d9}
+.digital-journey-cockpit .cockpit-order-state.is-completed {color:#00815f;background:#dff8ee}
+.digital-journey-cockpit .cockpit-photo-trigger {position:relative;display:block;border:0;padding:0;background:#f2f5f9;cursor:zoom-in;overflow:hidden;border-radius:5px}
+.digital-journey-cockpit .cockpit-photo-trigger img {display:block;width:100%;height:100%;object-fit:contain;position:relative;z-index:1;background:#f2f5f9}
+.digital-journey-cockpit .cockpit-photo-fallback {position:absolute;inset:0;display:grid;place-items:center;font-size:12px;color:#7183a0}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-photo {width:58px;height:76px}
+.digital-journey-cockpit .cockpit-photo-empty {display:grid;place-items:center;background:#f2f5f9;color:#7183a0;font-size:12px;text-align:center}
+.digital-journey-cockpit .cockpit-photo-dialog {width:min(960px,94vw);max-height:92dvh;border:0;border-radius:10px;padding:20px;color:#203756;background:white;box-shadow:0 16px 80px #12233b55}
+.digital-journey-cockpit .cockpit-photo-dialog::backdrop {background:#14243b88}
+.digital-journey-cockpit .cockpit-photo-dialog header,.digital-journey-cockpit .cockpit-photo-dialog footer {display:flex;align-items:center;gap:10px;justify-content:space-between}
+.digital-journey-cockpit .cockpit-photo-dialog h2 {margin:0;font-size:22px}
+.digital-journey-cockpit .cockpit-photo-dialog p {font-size:14px}
+.digital-journey-cockpit .cockpit-photo-dialog button {font:inherit;border:1px solid #cddcf0;background:white;color:#2460a0;border-radius:5px;min-height:40px;min-width:40px;padding:6px 12px;cursor:pointer}
+.digital-journey-cockpit .cockpit-photo-dialog button:disabled {opacity:.5;cursor:default}
+.digital-journey-cockpit .cockpit-photo-stage {height:min(64dvh,620px);overflow:auto;background:#eef2f7;margin:14px 0;text-align:center}
+.digital-journey-cockpit .cockpit-photo-stage img {display:block;max-width:none;height:auto;margin:auto;object-fit:contain}
+.digital-journey-cockpit .cockpit-photo-dialog footer {justify-content:flex-end}
+@media(max-width:650px){
+  .digital-journey-cockpit[data-view="overview"] {font-size:16px}
+  .digital-journey-cockpit[data-view="overview"] .journey-kpis {grid-template-columns:repeat(2,minmax(0,1fr))}
+  .digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table {font-size:16px}
+  .digital-journey-cockpit[data-view="overview"] .cockpit-home small {font-size:14px}
+  .digital-journey-cockpit .cockpit-photo-dialog {padding:12px}
+  .digital-journey-cockpit .cockpit-photo-dialog button,.digital-journey-cockpit[data-view="overview"] .dx-button {min-height:44px}
+}
+
+.digital-journey-cockpit[data-view="overview"] .cockpit-home .dx-production-table th {font-size:14px;line-height:1.4}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home td small>span {color:#243c61}
+.digital-journey-cockpit .cockpit-photo-trigger img[hidden] {display:none}
+.digital-journey-cockpit .cockpit-order-state {white-space:nowrap}
+.digital-journey-cockpit[data-view="overview"] .dx-production-kpi>span {font-size:14px}
+.digital-journey-cockpit[data-view="overview"] .dx-production-kpi.is-warning .dx-production-kpi-icon {color:#a16400;background:#fff3d9}
+.digital-journey-cockpit[data-view="overview"] .dx-production-kpi.is-danger .dx-production-kpi-icon {color:#d2293d;background:#ffe8ed}
+.digital-journey-cockpit[data-view="overview"] .dx-production-kpi.is-success .dx-production-kpi-icon {color:#008b67;background:#def7ed}
+.digital-journey-cockpit[data-view="overview"] .dx-production-kpi.is-neutral .dx-production-kpi-icon {color:#71829c;background:#edf0f5}
+
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-identity-extra {overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home-identity-extra:focus {white-space:normal;outline:2px solid #a6caff;outline-offset:2px}
+.digital-journey-cockpit[data-view="overview"] .cockpit-home td small>span {white-space:nowrap}
+.digital-journey-cockpit[data-view="overview"] .journey-filter-actions {display:contents}
+@media(max-width:650px){
+ .dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis {grid-template-columns:repeat(3,minmax(0,1fr))}
+ .dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi-icon {display:none}
+ .dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi:has(.dx-production-kpi-icon)>span,
+ .dx-production-ui .digital-journey-cockpit[data-view="overview"] .journey-kpis .dx-production-kpi:has(.dx-production-kpi-icon)>strong {padding-left:0}
+ .digital-journey-cockpit[data-view="overview"] .journey-filters {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .digital-journey-cockpit[data-view="overview"] .journey-filters .journey-search {grid-column:1/-1}
+ .digital-journey-cockpit[data-view="overview"] .journey-filters .journey-category-filter {display:none}
+ .digital-journey-cockpit[data-view="overview"] .journey-filters.is-expanded .journey-category-filter,
+ .digital-journey-cockpit[data-view="overview"] .journey-filters .journey-category-filter.is-applied {display:grid;grid-column:1/-1}
+ .digital-journey-cockpit[data-view="overview"] .journey-filter-actions {display:flex;gap:8px;grid-column:1/-1;flex-wrap:wrap}
+ .digital-journey-cockpit[data-view="overview"] .journey-filter-actions>.dx-button {flex:1}
+ .digital-journey-cockpit[data-view="overview"] .journey-more-filters {grid-column:1/-1}
+}
+.cockpit-home .cockpit-home-blocker{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}.cockpit-home-task:focus .cockpit-home-blocker,.cockpit-home-task:hover .cockpit-home-blocker{white-space:normal;overflow-wrap:anywhere}.cockpit-home-delivery{color:#536176;font-size:14px;line-height:1.5;margin-top:6px}.cockpit-home-delivery-line{display:block;white-space:normal;font-size:inherit}.cockpit-home-delivery summary{cursor:pointer;min-height:36px;padding-top:6px;color:#77501b}.cockpit-home-delivery details{margin-top:4px}@media(max-width:600px){.cockpit-home-delivery{font-size:16px}}

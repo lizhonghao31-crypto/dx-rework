@@ -1,4 +1,4 @@
-import { JourneyReturnContextSchema, journeyReturnUrl, type JourneyNode, type JourneyRecord, type JourneyState, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
+import { JOURNEY_NODES,JourneyReturnContextSchema, journeyReturnUrl, type JourneyNode, type JourneyRecord, type JourneyState, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 
 export type CockpitContext = ReturnType<typeof JourneyReturnContextSchema.parse>;
 export const journeyStateLabels: Record<JourneyState, string> = { uncreated: "未启动", pending: "待前置", active: "进行中", blocked: "受阻", completed: "已完成", cancelled: "已取消", not_applicable: "不适用", unavailable: "无可见事实", inherited: "沿用前轮" };
@@ -92,6 +92,18 @@ export function orderStatus(order: OrderJourney): string {
   if (nodes.some(node => node.state === "blocked")) return "受阻";
   if (nodes.some(node => ["active", "pending"].includes(node.state))) return "进行中";
   return "未启动";
+}
+/** One compact representative; every parallel node remains reachable in the detail work area. */
+export function representativeCockpitNodes(order:OrderJourney):JourneyNode[]{
+  const stages=new Map(order.stages.map((stage,index)=>[stage.key,index]));
+  const nodeOrder=new Map(JOURNEY_NODES.map((node,index)=>[node.key,index]));
+  const candidates=order.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&node.stage!=="creation"&&!["completed","cancelled","inherited","not_applicable","unavailable"].includes(node.state));
+  const working=candidates.filter(node=>["active","blocked"].includes(node.state)||node.risks.includes("overdue")||node.risks.includes("due_soon"));
+  const rank=(node:JourneyNode)=>node.risks.includes("overdue")?0:node.risks.includes("due_soon")?1:2;
+  const deadline=(node:JourneyNode)=>node.expectedAt?Date.parse(node.expectedPrecision==="date"?`${node.expectedAt}T00:00:00+08:00`:node.expectedAt):Infinity;
+  const waiting=candidates.filter(node=>node.state==="pending"||node.records.length>0);
+  const result=(working.length?working:waiting.length?waiting:candidates).sort((a,b)=>rank(a)-rank(b)||(rank(a)<2?deadline(a)-deadline(b):0)||(stages.get(a.stage)??99)-(stages.get(b.stage)??99)||(nodeOrder.get(a.key)??99)-(nodeOrder.get(b.key)??99)||a.key.localeCompare(b.key)||a.instanceId.localeCompare(b.instanceId));
+  return !working.length&&!waiting.length?result.slice(0,1):result;
 }
 export function matchingNodes(order: OrderJourney, kpi: CockpitContext["kpi"]): JourneyNode[] {
   const nodes = order.stages.flatMap(stage => stage.nodes);
