@@ -72,7 +72,7 @@ describe("optional tail inspection", () => {
       read("apps/web/src/process-worker-assignment-form.tsx"),
       read("apps/api/src/rework/rework-business-detail-service.ts"),
     ]);
-    expect(detail).toContain('detail.tailInspectionRequired ? `返工人员 / ${specialProcessLabel(detail)}` : "返工人员"');
+    expect(detail).toContain('detail.tailInspectionRequired ? `返工人员 / ${specialProcessLabel(detail)}` : detail.reworkKind === "inhouse_finishing" ? "做尾人员" : "返工人员"');
     expect(detail).toContain("系统按工人有效上数生成最终数量");
     expect(assignment).toContain("assignmentOptionsLoading && editable ? []");
     expect(assignment).toContain("正在加载默认名单…");

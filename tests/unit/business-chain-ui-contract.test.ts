@@ -90,12 +90,12 @@ describe("business-chain UI handoff contracts", () => {
     expect(shell).not.toContain('name: "返工上数"');
     expect(shell).not.toContain("flow-navigation__arrow");
     expect(detail).toContain('title: "发起、配置与核价"');
-    expect(detail).toContain('title: "返工执行"');
+    expect(detail).toContain('title: detail.reworkKind === "inhouse_finishing" ? "本厂做尾执行" : "返工执行"');
     expect(detail).toContain('title: detail.reworkKind === "inhouse_finishing" ? "最终确认与计薪" : "责任与结算"');
     expect(detail).toContain('node("initiation", "01"');
     expect(detail).toContain('node("process_configuration", "02", "分配工序 &工人"');
     expect(detail).toContain('node("ie_review", "03", "IE 核价"');
-    expect(detail).toContain('node("work_reporting", "04", "返工执行报数"');
+    expect(detail).toContain('node("work_reporting", "04", detail.reworkKind === "inhouse_finishing" ? "本厂做尾报数" : "返工执行报数"');
     expect(detail).not.toContain('node("tail_inspection"');
     expect(detail).toContain('node("whole_order_review", "05", "尾部最终数量确认"');
     expect(detail).toContain('node("final_quantity_ie_review", "06", "IE 最终数量复核"');

@@ -23,3 +23,17 @@ export function digitalTaskDisplayStatus(task:Pick<DigitalTask,'state'|'paused'>
 export function digitalTaskObjectLabel(task:Pick<DigitalTask,'orderId'|'sourceId'>):string {
   return task.orderId?'大货任务':task.sourceId?'开发任务':'数字生产任务';
 }
+
+/** Display existing history kinds only; unknown events keep their saved facts and order. */
+export function digitalTaskHistoryKindLabel(kind:string):string {
+  const names:Record<string,string>={created:'创建任务',ready:'进入任务',completed:'完成任务',condition:'前置条件登记',time_corrected:'时间核实',policy_changed:'时效调整',pause:'暂停',resume:'恢复',cancel:'取消后续任务',cancelled:'任务已取消',blocked:'问题登记',unblocked:'解除问题登记',reassigned:'改派任务',priority_changed:'优先级调整',system_route:'系统路由',material_returned:'缺项退回'};
+  return Object.hasOwn(names,kind)?names[kind]!:'任务记录';
+}
+
+/** Only the existing reason-only system cancellation shape may name its internal code. */
+export function digitalTaskHistoryText(kind:string,payload:Readonly<{reason?:string;note?:string;[key:string]:unknown}>,field:'reason'|'note'):string {
+  const value=payload[field]??'';
+  if(kind!=='cancelled'||field!=='reason'||!Object.hasOwn(payload,'reason')||Object.keys(payload).length!==1)return value;
+  const names:Record<string,string>={bulk_requirements_changed:'批准或技术要求已变更，保留原办理记录',new_development_round:'已由新修改轮次接续，保留原办理记录'};
+  return Object.hasOwn(names,value)?names[value]!:value;
+}

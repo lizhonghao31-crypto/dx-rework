@@ -181,7 +181,7 @@ const statusMeta: Record<ReworkStatus, { label: string; next: string }> = {
   pending_order_review: { label: "待尾部确认最终数量", next: "核对工人上数与整查数量，提交每道工序最终确认数量" },
   pending_final_quantity_ie_review: { label: "最终数量待 IE 复核", next: "IE 核对数量与质量事实；通过后生成正式工资并进入责任判定" },
   pending_quantity_adjustment_ie_review: { label: "数量调整待 IE", next: "异常数量增加申请等待 IE 复核" },
-  pending_responsibility_determination: { label: "待责任判定", next: "返工已完成整单确认，正在选择主责任方和外部扣款倍率" },
+  pending_responsibility_determination: { label: "待责任判定", next: "返工已完成整单确认，正在核对各工序责任方、承担比例和外部扣款倍率" },
   pending_owner_signature: { label: "待老板签字", next: "供应链总监资料已齐全，等待老板确认同意或驳回" },
   pending_responsibility_action: { label: "责任处理中", next: "责任已判定，正在完成本厂审批或外部责任结算" },
   completed: { label: "已完成", next: "订单完成即进入扣款；工资金额仅供财务查询与对数" },
@@ -338,9 +338,9 @@ const buildWorkflow = (
     },
     {
       key: "execution",
-      title: "返工执行",
+      title: detail.reworkKind === "inhouse_finishing" ? "本厂做尾执行" : "返工执行",
       nodes: [
-        node("work_reporting", "04", "返工执行报数", detail.tailInspectionRequired ? `返工人员 / ${specialProcessLabel(detail)}` : "返工人员", "待 IE 核价通过并自动激活任务", detail.tailInspectionRequired ? `返工人员与${specialProcessLabel(detail)}都在同一执行节点提交本人实际件数；临时工由尾部主管代录。` : "返工人员在执行节点提交本人实际件数；临时工由尾部主管代录。"),
+        node("work_reporting", "04", detail.reworkKind === "inhouse_finishing" ? "本厂做尾报数" : "返工执行报数", detail.tailInspectionRequired ? `返工人员 / ${specialProcessLabel(detail)}` : detail.reworkKind === "inhouse_finishing" ? "做尾人员" : "返工人员", "待 IE 核价通过并自动激活任务", detail.tailInspectionRequired ? `返工人员与${specialProcessLabel(detail)}都在同一执行节点提交本人实际件数；临时工由尾部主管代录。` : detail.reworkKind === "inhouse_finishing" ? "做尾人员在执行节点提交本人实际件数；临时工由尾部主管代录。" : "返工人员在执行节点提交本人实际件数；临时工由尾部主管代录。"),
       ],
     },
     {
@@ -348,11 +348,11 @@ const buildWorkflow = (
       title: detail.reworkKind === "inhouse_finishing" ? "最终确认与计薪" : "责任与结算",
       nodes: [
         node("whole_order_review", "05", "尾部最终数量确认", "尾部主管", "待全部执行报数完成", detail.tailInspectionRequired ? `逐工序对照工人原报数与${specialProcessLabel(detail)}数，提交最终确认数量并保留每版审计。` : "系统按工人有效上数生成最终数量，并保留每版审计。"),
-        node("final_quantity_ie_review", "06", "IE 最终数量复核", "IE", "待 N05 提交", "只复核数量与质量事实；通过后生成正式工资，退回则回到 N05。"),
+        node("final_quantity_ie_review", "06", "IE 最终数量复核", "IE", "待 N05 提交", detail.reworkKind === "inhouse_finishing" ? "IE 复核通过后按原上数计薪并完成本厂做尾，不进入责任判定或老板签字；退回则回到 N05。" : "只复核数量与质量事实；通过后生成正式工资，退回则回到 N05。"),
         ...(detail.reworkKind === "inhouse_finishing" ? [] : [
-        node("responsibility", "07", "责任判定", "供应链总监", "待 N06 通过", "每道工序只选一个主责任方；外部扣款倍率默认且最低 1.2，可向上调整。"),
-        node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "老板直接确认或驳回已锁定的责任方与外部扣款倍率。"),
-        node("settlement_followup", "09", "返工业务完成", "系统", "N08 同意后完成", "订单完成即进入供应商扣款；工资金额仅供财务查询与对数。"),
+        node("responsibility", "07", "责任判定", "供应链总监", "待 N06 通过", "每道工序可登记多个责任方，比例合计为100%；外部扣款倍率默认且最低1.2，可按原规则上调。"),
+        node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "按原责任分支由老板确认或驳回；首次纯外部判责可跳过老板确认，直接生成供应商扣款台账。"),
+        node("settlement_followup", "09", "返工业务完成", "系统", "按原责任分支完成", "本厂责任按原老板签字办理，首次纯外部判责可直接生成扣款台账；订单完成即进入扣款，工资金额仅供授权财务查询与对数。"),
         ]),
       ],
     },
@@ -976,4 +976,3 @@ function OrderCompletionAndSettlementSummary({ detail }: { detail: ReworkBusines
     <p>扣款状态：{followUpStatusLabel(detail)}</p>
   </Surface>;
 }
-
