@@ -1,4 +1,5 @@
 import {createHistoricalPatternFixture} from "../helpers/historical-pattern-fixture.js";
+import {AccessMasterDataService} from "../../apps/api/src/access/service.js";
 import { resolveMiscAssociation } from "../../apps/api/src/pattern-room/misc-associations.js";
 import {PatternRoomPriceService,PATTERN_HOURLY_PRICE_ID} from "../../apps/api/src/pattern-room/price-service.js";
 import {randomUUID} from 'node:crypto';
@@ -21,7 +22,7 @@ import type {ApplicationError} from '../../apps/api/src/platform/errors.js';
 const databaseUrl=process.env.TEST_DATABASE_URL;
 (databaseUrl?describe:describe.skip)('misc stable references and closed standalone creation',()=>{
  const schema=ownedPostgresSchema('misc_association'),admin=new pg.Pool({connectionString:databaseUrl}),db=new pg.Pool({connectionString:databaseUrl,options:`-c search_path=${schema}`});
- const root=randomUUID(),designer=randomUUID(),other=randomUUID(),merch=randomUUID(),worker=randomUUID(),supervisor=randomUUID(),caps=Object.keys(PATTERN_ORDER_ROLES);
+ const root=randomUUID(),designer=randomUUID(),other=randomUUID(),merch=randomUUID(),worker=randomUUID(),scopedWorker=randomUUID(),supervisor=randomUUID(),caps=Object.keys(PATTERN_ORDER_ROLES);
  const actor=(id=designer,roles=['sample_designer']):TrustedActorContext=>({actorId:id,actorRoles:roles,authorizationCapability:'pattern_room:misc:create',authorizationCapabilities:caps,requestId:'TEST-MISC-ASSOCIATION'});
  const service=new PatternRoomOrderService(db,new TodoProjectionService(new TodoService(db)),{ordersEnabled:true}),identity=new DigitalProductionIdentityService(db,true,undefined,()=>new Date('2026-09-01T00:00:00Z'));
  let sourceId:string,poId:string,orderId:string,hourlyVersion=1;
@@ -30,10 +31,11 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   await admin.query(`CREATE SCHEMA ${schema}`);const manifest=JSON.parse(await readFile(new URL('../../apps/api/src/platform/migration-manifest.json',import.meta.url),'utf8')),serverVersion=Number((await db.query('SHOW server_version_num')).rows[0].server_version_num);
   await db.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64),applied_at timestamptz DEFAULT CURRENT_TIMESTAMP)');
   for(const migration of manifest.migrations){const sql=await readFile(new URL(`../../apps/api/migrations/${migration.version}.sql`,import.meta.url),'utf8');await db.query(migrationExecutionSql({...migration,sql},serverVersion));await db.query('INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)',[migration.version,migration.checksum]);}
-  for(const [id,role]of [[root,'owner_group'],[designer,'sample_designer'],[other,'sample_designer'],[merch,'order_merchandiser'],[worker,'pattern_room_worker'],[supervisor,'pattern_room_supervisor']]){
+  for(const [id,role]of [[root,'owner_group'],[designer,'sample_designer'],[other,'sample_designer'],[merch,'order_merchandiser'],[worker,'pattern_room_worker'],[scopedWorker,'pattern_room_worker'],[supervisor,'pattern_room_supervisor']]){
    await db.query('INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)',[id,`TEST ${role}`]);await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','TEST',$2::uuid::text,$2::uuid::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id]);await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$4,'TEST misc fixture')",[randomUUID(),id,role,root]);
   }
   await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'production_management',$3,'TEST mixed creator/read authority')",[randomUUID(),designer,root]);
+  await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'sample_designer',$3,'TEST directory source owner and pattern worker')",[randomUUID(),scopedWorker,root]);
   await db.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) VALUES(true,$1,$1::uuid::text,'TEST')",[root]);
   await db.query("INSERT INTO access_security_policy(policy_key,dingtalk_corp_id) VALUES('primary','TEST') ON CONFLICT(policy_key) DO UPDATE SET dingtalk_corp_id='TEST'");
   hourlyVersion=(await new PatternRoomPriceService(db).change(actor(root,["root_superuser"]),"hourly",PATTERN_HOURLY_PRICE_ID,{version:1,amount:"12.000",enabled:true,reason:"TEST misc price fixture"},randomUUID())).version;
@@ -55,6 +57,27 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   const po=(await service.miscAssociations(rootActor,'PO-MISC-1')).find(item=>item.id===poId)!;const poMisc=await service.createMisc(rootActor,input('TEST related PO',{kind:'po',id:poId},po.styleNo),randomUUID());
   expect((await service.related(rootActor,{orderId,page:1})).items.map(item=>item.orderId)).toContain(poMisc.orderId);
  });
+ it('keeps directory round metadata inside the original current-worker and participant visibility',async()=>{
+  const rootActor=actor(root,['root_superuser']),workerActor=actor(scopedWorker,['pattern_room_worker','sample_designer']);
+  const source=await identity.createSource(workerActor,{developmentType:'头版',designStyleNo:'TEST-DIR-ROUND-SCOPE',temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+  const people=new AccessMasterDataService(db,'TEST'),masterActor={...rootActor,actorRoles:(await db.query("SELECT access_authorized_actor_roles($1,'master_data:manage') roles",[root])).rows[0].roles,authorizationCapability:'master_data:manage',authorizationCapabilities:[...caps,'master_data:manage']};
+  const rootPerson=await people.createPerson(masterActor,{personType:'internal',appUserId:root,displayName:'TEST root historical worker',aliases:[],reason:'TEST original assignment fixture'}),workerPerson=await people.createPerson(masterActor,{personType:'internal',appUserId:scopedWorker,displayName:'TEST current board worker',aliases:[],reason:'TEST original assignment fixture'});
+  const fileId=randomUUID();await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST scoped rounds.pdf','application/pdf',10,$3,$4,'ready',CURRENT_TIMESTAMP)",[fileId,'tests/'+fileId,'a'.repeat(64),root]);
+  let pattern=await createHistoricalPatternFixture(service,rootActor,{styleNo:'TEST-DIR-ROUND-SCOPE',categoryId:'92000000-0000-4000-8000-000000000002',priceVersion:1,quantity:1,attachmentIds:[fileId]},randomUUID());
+  const action=()=>({version:pattern.version,roundId:pattern.currentRoundId}),hidden=pattern.currentRoundId;
+  pattern=await service.assign(rootActor,pattern.orderId,{...action(),personId:rootPerson.personId},randomUUID());pattern=await service.complete(rootActor,pattern.orderId,action(),randomUUID());
+  pattern=await service.requestRework(rootActor,pattern.orderId,{...action(),reason:'TEST participant round',reasonCategory:'workmanship'},randomUUID());const participated=pattern.currentRoundId;
+  pattern=await service.assign(rootActor,pattern.orderId,{...action(),personId:workerPerson.personId,amount:'0'},randomUUID());pattern=await service.complete(rootActor,pattern.orderId,action(),randomUUID());
+  pattern=await service.requestRework(rootActor,pattern.orderId,{...action(),reason:'TEST current round',reasonCategory:'workmanship'},randomUUID());pattern=await service.assign(rootActor,pattern.orderId,{...action(),personId:workerPerson.personId,amount:'0'},randomUUID());const current=pattern.currentRoundId;
+  await db.query('INSERT INTO digital_development_pattern_links(source_id,order_id,linked_by) VALUES($1,$2,$3)',[source.sourceId,pattern.orderId,root]);
+  const directory=await service.related(workerActor,{sourceId:source.sourceId,page:1}),visible=directory.items.find(item=>item.orderId===pattern.orderId)!;
+  expect(visible.rounds.map((round:{roundId:string})=>round.roundId).sort()).toEqual([participated,current].sort());expect(JSON.stringify(visible)).not.toContain(hidden);
+  expect(visible.rounds.map((round:{roundId:string})=>round.roundId).sort()).toEqual((await service.get(workerActor,pattern.orderId)).rounds.map(round=>round.roundId).sort());
+  expect((await service.related(rootActor,{sourceId:source.sourceId,page:1})).items.find(item=>item.orderId===pattern.orderId)?.rounds).toHaveLength(3);
+  await expect(service.get(workerActor,pattern.orderId,{round:hidden})).rejects.toMatchObject({statusCode:404});
+  pattern=await service.transfer(rootActor,pattern.orderId,{...action(),segmentId:pattern.rounds.find(round=>round.roundId===current)!.segments.at(-1)!.segmentId,personId:rootPerson.personId,amount:'0',reason:'TEST original current-assignment scope ends'},randomUUID());
+  expect((await service.related(workerActor,{sourceId:source.sourceId,page:1})).items.map(item=>item.orderId)).not.toContain(pattern.orderId);
+ },120000);
  it('rejects standalone new pattern for Root/designer/other roles and the old POST, while advertising no create action',async()=>{
   for(const context of [actor(),actor(root,['root_superuser']),actor(merch,['order_merchandiser']),actor(worker,['pattern_room_worker']),actor(supervisor,['pattern_room_supervisor'])])await expect(service.create(context,{},randomUUID())).rejects.toMatchObject({statusCode:403});
   const app=Fastify();app.setErrorHandler((error,_req,reply)=>reply.code((error as ApplicationError).statusCode??500).send({error:{message:error.message}}));

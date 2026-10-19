@@ -36,10 +36,12 @@ export class PatternOrderReader {
   async related(actor:TrustedActorContext,input:{sourceId?:string|undefined;orderId?:string|undefined;page:number}){
     return this.read(actor,async(client,effective)=>{
       const policy=new DigitalProductionAccessPolicy(client);
-      if(input.sourceId)await policy.assert(actor,"source",input.sourceId,"technical");
-      if(input.orderId){await policy.assert(actor,"order",input.orderId,"technical");if(input.sourceId&&!(await client.query("SELECT 1 FROM digital_production_orders WHERE production_order_id=$1 AND source_id=$2",[input.orderId,input.sourceId])).rowCount)digitalNotFound();}
+      if(input.sourceId)await policy.assert(effective,"source",input.sourceId,"technical");
+      if(input.orderId){await policy.assert(effective,"order",input.orderId,"technical");if(input.sourceId&&!(await client.query("SELECT 1 FROM digital_production_orders WHERE production_order_id=$1 AND source_id=$2",[input.orderId,input.sourceId])).rowCount)digitalNotFound();}
       const rows=(await client.query(`SELECT orders.order_id AS "orderId",orders.order_no AS "orderNo",orders.kind,orders.submitted_at AS "createdAt",person.display_name AS "createdBy",
-        COALESCE((SELECT jsonb_agg(jsonb_build_object('roundId',r.round_id,'roundIndex',r.round_index,'roundType',r.round_type,'requestedAt',r.requested_at) ORDER BY r.requested_at,r.round_id) FROM pattern_room_rounds r WHERE r.order_id=orders.order_id),'[]') AS rounds
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('roundId',r.round_id,'roundIndex',r.round_index,'roundType',r.round_type,'requestedAt',r.requested_at) ORDER BY r.requested_at,r.round_id) FROM pattern_room_rounds r WHERE r.order_id=orders.order_id
+          AND ($2::boolean OR (orders.created_by=$1::uuid AND ('sample_designer'=ANY($3::text[]) OR orders.kind='misc' AND 'order_merchandiser'=ANY($3::text[])))
+            OR r.round_id=orders.current_round_id OR EXISTS(SELECT 1 FROM pattern_room_segments own_segment WHERE own_segment.round_id=r.round_id AND own_segment.worker_user_id=$1::uuid))),'[]') AS rounds
         FROM pattern_room_orders orders LEFT JOIN app_users person ON person.id=orders.created_by
         WHERE ${patternOrderScopeSql} AND (
           orders.kind='pattern' AND EXISTS(SELECT 1 FROM digital_development_pattern_links l WHERE l.order_id=orders.order_id AND l.source_id=$5::uuid)

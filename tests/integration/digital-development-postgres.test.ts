@@ -8,6 +8,9 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalDevelopmentService } from "../../apps/api/src/production-platform/development-service.js";
+import {DevelopmentRoundService} from "../../apps/api/src/production-platform/development-round-service.js";
+import {loadCockpitDocumentCategory,loadCockpitDocumentEntry,type CockpitDocumentReader} from "../../apps/web/src/cockpit-documents-model.js";
+import type {OrderJourney} from "@dx-rework/contracts/digital-production-journey";
 import { DigitalProductionNotificationService } from "../../apps/api/src/production-platform/notification-service.js";
 import { DevelopmentDocumentSchema, SaveDevelopmentSchema, type DevelopmentDocument } from "@dx-rework/contracts/digital-development";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
@@ -210,6 +213,21 @@ run("P05 development forms PostgreSQL", () => {
     expect(row.styleImageId).toBe(updated.files[0]!.attachmentId);expect(row.styleImageId).not.toBe(original.files[0]!.attachmentId);
     expect(row.flow?.map(node=>node.key)).toEqual(['development_materials','development_pattern']);
     expect((await development.read(actor(),id,database,1)).document!.files[0]!.attachmentId).toBe(original.files[0]!.attachmentId);
+    const rounds=new DevelopmentRoundService(database,true),signal=new AbortController().signal;
+    const read=(context:TrustedActorContext,sourceId:string):CockpitDocumentReader=>async path=>{
+      if(path.endsWith('/rounds'))return rounds.read(context,sourceId);
+      // This document-only fixture has no execution domain; attachment data is read from the real authorized sheet.
+      if(path.endsWith('/execution'))return {tasks:[],facts:[],routeFacts:[]};
+      const selected=new URL(path,'https://TEST.invalid').searchParams.get('round');return development.read(context,sourceId,database,selected?Number(selected):undefined);
+    };
+    const directoryOrder={sourceId:id,orderId:null} as OrderJourney;
+    const directory=await loadCockpitDocumentCategory(directoryOrder,'development',read(actor(),id),signal);
+    expect(directory.entries.map(entry=>entry.load?.version)).toEqual([2,1]);
+    const initial=await loadCockpitDocumentEntry(directory.entries[1]!,read(actor(),id),signal);
+    expect(initial.files?.map(file=>file.id)).toContain(original.files[0]!.attachmentId);expect(initial.files?.map(file=>file.id)).not.toContain(updated.files[0]!.attachmentId);
+    expect(await development.canDownload(actor(),id,original.files[0]!.attachmentId)).toBe(true);
+    await expect(loadCockpitDocumentCategory(directoryOrder,'development',read(actor(other),id),signal)).rejects.toMatchObject({statusCode:404});
+    const emptyId=await source();expect(await loadCockpitDocumentCategory({sourceId:emptyId,orderId:null} as OrderJourney,'development',read(actor(),emptyId),signal)).toMatchObject({state:'missing',entries:[]});
   });
 
 });
