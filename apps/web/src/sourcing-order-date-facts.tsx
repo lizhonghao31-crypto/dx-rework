@@ -9,7 +9,13 @@ function DateValue({ value }: { value: string }) {
 /** Each date keeps its existing meaning and snapshot source; no current data fills historical gaps. */
 export function SourcingOrderDateFacts({ item, historical = false }: { item: Pick<SourcingCaseSummary, "lineItems" | "deliveryDate">; historical?: boolean }) {
   const hasPoDates = item.lineItems.length > 0 && item.lineItems.every(line => Boolean(line.lineId));
-  const customer = hasPoDates ? poDateSummary(item.lineItems.map(line => line.customerWarehouseArrivalDate ?? null)) : "历史未维护";
+  const customerDates = item.lineItems.map(line => line.customerWarehouseArrivalDate);
+  const providedHistory = customerDates.filter((date): date is string | null => date !== undefined);
+  const unavailableHistory = historical ? customerDates.length - providedHistory.length : 0;
+  const customer = !hasPoDates ? "历史未维护" : unavailableHistory
+    ? [providedHistory.length ? poDateSummary(providedHistory) : null,
+      `当时日期不详${providedHistory.length ? `（${unavailableHistory}/${customerDates.length}）` : ""}`].filter(Boolean).join(" · ")
+    : poDateSummary(customerDates.map(date => date ?? null));
   const factory = hasPoDates ? poDateSummary(item.lineItems.map(line => line.factoryDeliveryDate ?? null)) : item.deliveryDate ?? "历史未维护";
   return <>
     <div className="sourcing-key-facts__date"><dt>PO / {customerPoDateLabel}</dt><dd><DateValue value={customer} /></dd></div>
