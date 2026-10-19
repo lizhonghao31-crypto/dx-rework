@@ -2,7 +2,7 @@ import { beijingCalendarDate, minimumInitialCustomerDate } from "@dx-rework/cont
 import type { DigitalJourneyQuery } from "./journey-query.js";
 import { DevelopmentWorkspaceQuery } from "./development-workspace-query.js";
 import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "@dx-rework/contracts/digital-development-workspace";
-import { JourneyFilterSchema } from "@dx-rework/contracts/digital-production-journey";
+import { JourneyFilterSchema,JourneyLogFilterSchema } from "@dx-rework/contracts/digital-production-journey";
 import { registerDigitalAnalysisRoutes } from "./reporting-routes.js";
 import type { DigitalAnalysisQuery } from "./reporting-query.js";
 import type { DigitalCockpitQuery } from "./cockpit-query.js";
@@ -94,9 +94,13 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
     app.get("/digital-production/workspaces/pattern", async request => workspaces.pattern(await actor(request), parse(PatternWorkspaceFilterSchema, request.query)));
     app.get("/digital-production/journeys", async request => dependencies.journeys!.list(await actor(request), parse(JourneyFilterSchema, request.query)));
     app.get("/digital-production/journeys/export", async request => dependencies.journeys!.export(await actor(request), parse(JourneyFilterSchema, request.query)));
+    app.get("/digital-production/journeys/:id/logs", async request => {
+      const query=parse(JourneyLogFilterSchema,request.query);
+      return dependencies.journeys!.logs(await actor(request),id(request,"id"),query.cursor);
+    });
     app.get("/digital-production/journeys/:id", async request => {
-      const query = parse(cockpitZ.object({ round: cockpitZ.coerce.number().int().positive().max(10000).optional() }).strict(), request.query);
-      return dependencies.journeys!.read(await actor(request), id(request, "id"), query.round);
+      const query = parse(cockpitZ.object({ round: cockpitZ.coerce.number().int().positive().max(10000).optional(),view:cockpitZ.literal("cockpit").optional() }).strict(), request.query);
+      return dependencies.journeys!.read(await actor(request), id(request, "id"), query.round,query.view==="cockpit");
     });
   }
   if (dependencies.cockpit) app.get("/digital-production/cockpit", async request => dependencies.cockpit!.list(await actor(request), parse(cockpitZ.object({ page: cockpitZ.coerce.number().int().min(1).max(100000).default(1), search: cockpitZ.string().trim().max(100).default(""), stage: cockpitZ.enum(["development", "bulk"]).default("development"), workload: cockpitZ.enum(["all","unassigned","blocked","urgent"]).default("all") }).strict(), request.query)));

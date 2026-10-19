@@ -32,7 +32,7 @@ describe("current PO promises without manufactured production or SLA",()=>{
  it("renders full date names, per-PO targets, missing dates and no added per-PO production fields",()=>{
   const lines=[line(1),line(2,{customerWarehouseArrivalDate:'2026-10-23',factoryDeliveryDate:'2026-10-13',sampleTargetDate:'2026-10-13'}),line(3,{customerWarehouseArrivalDate:null,factoryDeliveryDate:null,sampleTargetDate:null})];
   const html=renderToStaticMarkup(createElement(PoDateDetails,{lines}));
-  for(const value of ['客户仓到货日','加工厂交货日','船样目标日','TEST-PO-1','TEST-PO-2','TEST-PO-3','客户日期待补'])expect(html).toContain(value);
+  for(const value of ['出货日期','加工厂交货日','船样目标日','TEST-PO-1','TEST-PO-2','TEST-PO-3','客户日期待补'])expect(html).toContain(value);
   expect(html).not.toContain('%');expect(html).not.toContain('实绩');expect(html).not.toContain('完成率');
   const summary=renderToStaticMarkup(createElement(PoDateSummary,{lines,legacy:'1999-01-01'}));
   expect(summary).toContain('多交期');expect(summary).toContain('有 PO 日期待补');expect(summary).not.toContain('1999-01-01');

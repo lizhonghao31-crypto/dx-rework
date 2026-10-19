@@ -64,6 +64,24 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     await app.ready();
   },120000);
   afterAll(async()=>{await app.close();await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+  it("reads five real log events first and cursor-pages every scoped event without ties, new events or foreign cursors leaking",async()=>{
+    const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-COCKPIT-LOG",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+    const task=await createTask({resource:{kind:"source",id:sourceId},kind:"development_materials",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:clerk});
+    for(let i=0;i<43;i++)await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,recorded_at,time_quality) VALUES($1,$2,'source',$3,'condition',$4,'2026-10-01T12:00:00.000001Z','缺失')",[randomUUID(),task.taskId,sourceId,clerk]);
+    const expected=Number((await db.query("SELECT count(*) FROM digital_production_task_events WHERE task_id=$1",[task.taskId])).rows[0].count);
+    const read=await journeys.read(actor(),sourceId),summary=read.operationLog!;
+    expect(summary.items).toHaveLength(5);expect(summary.nextCursor).not.toBeNull();
+    const inserted=randomUUID();await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,time_quality) VALUES($1,$2,'source',$3,'condition',$4,'缺失')",[inserted,task.taskId,sourceId,clerk]);
+    const seen=summary.items.map(item=>item.id);let cursor=summary.nextCursor;
+    while(cursor){const page=await journeys.logs(actor(),sourceId,cursor);expect(page.asOf).toBe(summary.asOf);seen.push(...page.items.map(item=>item.id));cursor=page.nextCursor;}
+    expect(seen).toHaveLength(expected);expect(new Set(seen).size).toBe(expected);expect(seen).not.toContain(`task:${inserted}`);
+    const other=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-COCKPIT-OTHER",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+    await expect(journeys.logs(actor(),other,summary.nextCursor!)).rejects.toMatchObject({statusCode:400});
+    await expect(journeys.logs(actor(stranger),sourceId,summary.nextCursor!)).rejects.toMatchObject({statusCode:404});
+    await expect(journeys.logs(actor(root,["root_superuser"]),sourceId,summary.nextCursor!)).rejects.toMatchObject({statusCode:400});
+    const response=await app.inject({url:`/digital-production/journeys/${sourceId}/logs`,headers:{cookie:`dx_rework_session=${designer}`}});
+    expect(response.statusCode,response.body).toBe(200);expect(response.json().items).toHaveLength(20);expect(response.headers["cache-control"]).toBe("no-store");
+  });
   it("reads only pending original assignment facts and never starts its digital sewing context",async()=>{
     const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-J-NATIVE-ASSIGN",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
     const task=await createTask({resource:{kind:"source",id:sourceId},kind:"development_sewing_transfer",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:clerk});
@@ -85,6 +103,19 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     await db.query("UPDATE pattern_room_rounds SET status='in_progress' WHERE round_id=$1",[roundId]);
     expect(await journeys.pendingPatternAssignments(rootActor,[sourceId])).toEqual([]);
     expect((await tasks.read(rootActor,task.taskId)).state).toBe(before.state);
+  });
+  it("evaluates history from the completion-linked deadline, and reports missing original evidence",async()=>{
+    const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-COCKPIT-HISTORY",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+    const task=await createTask({resource:{kind:"source",id:sourceId},kind:"development_materials",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:clerk});
+    const eventId=randomUUID(),missingId=randomUUID();
+    await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality) VALUES($1,$2,'source',$3,'completed',$4,'2026-10-02T02:00:00Z','现场登记'),($5,$2,'source',$3,'completed',$4,NULL,'缺失')",[eventId,task.taskId,sourceId,clerk,missingId]);
+    const version=(await db.query("SELECT max(version) AS version FROM digital_production_deadline_policies WHERE node_key='development_materials'")).rows[0].version;
+    await db.query("INSERT INTO digital_production_deadline_revisions(task_id,policy_node_key,policy_version,entered_at,warning_at,due_at,reason,event_id,changed_by) VALUES($1,'development_materials',$2,'2026-10-01T00:00:00Z','2026-10-01T18:00:00Z','2026-10-02T00:00:00Z','completion',$3,$4)",[task.taskId,version,eventId,root]);
+    // A later revision cannot rewrite the historical completed event's evaluation.
+    await db.query("INSERT INTO digital_production_deadline_revisions(task_id,policy_node_key,policy_version,entered_at,warning_at,due_at,reason,changed_by) VALUES($1,'development_materials',$2,'2026-10-01T00:00:00Z','2026-10-03T00:00:00Z','2026-10-04T00:00:00Z','policy',$3)",[task.taskId,version,root]);
+    const history=(await journeys.read(actor(),sourceId,undefined,true)).riskHistory!;
+    expect(history.find(item=>item.eventId===eventId)).toMatchObject({assessment:"late",overdueSeconds:7200,deadline:"2026-10-02T00:00:00.000Z"});
+    expect(history.find(item=>item.eventId===missingId)).toMatchObject({assessment:"insufficient",overdueSeconds:null});
   });
   it("allows Root JSON all-match export but rejects an ordinary merchandiser with legitimate list access",{timeout:60_000},async()=>{
     const search="TEST-J-EXPORT-SCOPE";

@@ -28,6 +28,7 @@ export const JourneyStateSchema = z.enum(["uncreated", "pending", "active", "blo
 export type JourneyState = z.infer<typeof JourneyStateSchema>;
 export const JourneyFilterSchema = z.object({
   page: z.coerce.number().int().min(1).max(100000).default(1),
+  scope: z.enum(["production", "development"]).optional(),
   search: z.string().trim().max(100).default(""),
   customer: z.string().trim().max(100).optional(),
   merchandiserId: z.string().uuid().optional(),
@@ -36,7 +37,7 @@ export const JourneyFilterSchema = z.object({
   node: z.string().trim().max(100).refine(value=>JOURNEY_NODES.some(node=>node.key===value),"未知流程节点").optional(),
   state: JourneyStateSchema.optional(),
   risk: z.enum(["overdue", "due_soon", "blocked", "unknown"]).optional(),
-  kpi: z.enum(["all", "active", "due_soon", "overdue", "blocked", "completed"]).default("all"),
+  kpi: z.enum(["all", "active", "not_started", "due_soon", "overdue", "blocked", "completed"]).default("all"),
   startDate: z.iso.date().optional(), endDate: z.iso.date().optional(),
 }).strict().superRefine((value, context) => {
   if (value.startDate && value.endDate && value.startDate > value.endDate) context.addIssue({code:"custom", message:"开始日期不能晚于结束日期", path:["endDate"]});
@@ -44,6 +45,8 @@ export const JourneyFilterSchema = z.object({
 export type JourneyFilter = z.infer<typeof JourneyFilterSchema>;
 export type JourneyRecord = { domain: string; id: string; url: string | null; mode: "read" | "handle"; version: number | null; lineId: string | null };
 export type JourneyNode = {
+  /** Read-only applicability evidence; unknown never supplies a progress denominator. */
+  progressApplicability?: "applicable" | "not_applicable" | "unknown";
   key: string; instanceId: string; label: string; stage: JourneyStageKey; state: JourneyState;
   round: number | null; occurrence: number | null; current: boolean;
   owner: { id: string; name: string | null } | null;
@@ -62,6 +65,11 @@ export type JourneyNode = {
   countsInProgress: boolean; unavailableReason: "permission" | "fact_not_recorded" | null;
 };
 export type OrderJourney = {
+  display?: JourneyDisplay;
+  operationLog?: JourneyLogPage;
+  currentRiskNodes?: JourneyNode[];
+  currentDeliveryRisks?: PoDeliveryRisk[];
+  riskHistory?: JourneyRiskHistory[];
   asOf?: string; styleImageUrl?: string | null;
   developmentType?: string | null; requiredCompletionDate?: string | null;
   id: string; sourceId: string | null; orderId: string | null; designStyleNo: string;
@@ -79,7 +87,21 @@ export type OrderJourney = {
 };
 export type JourneyResult = { ruleVersion: "journey-v2.0"; asOf: string; page: number; pageSize: 15; total: number; canManagePolicies?: boolean;
   facets?: { customers: string[]; categories: string[]; merchandisers: Array<{id:string;name:string|null}> };
-  summary: {all:number;active:number;dueSoon:number;overdue:number;blocked:number;completed:number}; items: OrderJourney[] };
+  summary: {all:number;active:number;dueSoon:number;overdue:number;blocked:number;completed:number;notStarted?:number};
+  scopeCounts?: {production:number;development:number;cancelled:number}; items: OrderJourney[] };
+
+export type JourneyDisplay = {
+  ruleVersion: "cockpit-display-v1";
+  mainState: "completed" | "overdue" | "due_soon" | "active" | "not_started" | "cancelled";
+  earliestShipmentDate: string | null; missingShipmentDates: number; closedAt: string | null;
+  actualRatio: number | null; actualLabel: string; awaitingClosure: boolean;
+  stages: Array<{key:JourneyStageKey;ratio:number|null;applicable:number|null;completed:number|null;notApplicable:boolean;risk:"overdue"|"due_soon"|"normal"|"unknown"}>;
+  timeRatio: null; timeLabel: "时间规则待完善";
+};
+export type JourneyLogEntry = {id:string;at:string;actor:{id:string;name:string|null}|null;action:string;object:string;nodeKey:string|null;source:"task_event"|"task_assignment"};
+export type JourneyLogPage = {items:JourneyLogEntry[];nextCursor:string|null;asOf:string;coverage:readonly string[]};
+export type JourneyRiskHistory={eventId:string;nodeId:string;label:string;round:number|null;at:string|null;deadline:string|null;assessment:"late"|"not_late"|"insufficient";overdueSeconds:number|null;record:JourneyRecord|null};
+export const JourneyLogFilterSchema=z.object({cursor:z.string().min(1).max(2048).optional()}).strict();
 
 /** Stable, local-only return context. Consumers restore these values after domain handling. */
 export const JourneyReturnContextSchema = JourneyFilterSchema.safeExtend({ selected: z.string().uuid().optional(), flow: z.enum(["collapsed", "expanded"]).optional(), expanded: z.string().max(100).optional(), focus: z.string().max(100).optional(), row: z.string().max(100).optional(), round: z.coerce.number().int().positive().max(10000).optional() });
