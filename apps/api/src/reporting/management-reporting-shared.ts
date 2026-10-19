@@ -53,6 +53,7 @@ export type ExceptionRow = {
   label: string;
   occurred_at: Date;
   deep_link: string;
+  route_descriptor?: unknown;
 };
 export type ReportColumn = { key: string; label: string };
 export type ReportRow = Record<string, string | number | boolean | null>;
