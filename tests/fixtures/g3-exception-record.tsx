@@ -1,0 +1,24 @@
+// Actual App/detail/panel with synthetic API responses only. No online requests or writes.
+import {createRoot} from 'react-dom/client';
+import {App} from '../../apps/web/src/App.js';
+import {verifySession} from '../../apps/web/src/auth.js';
+import type {ReworkBusinessDetail} from '../../apps/web/src/rework-detail-page.js';
+import {ExternalResponsibilityBatchResponseSchema} from '@dx-rework/contracts/external-responsibility';
+import '@dx-rework/ui/tokens.css';
+import '@dx-rework/ui/components.css';
+import '../../apps/web/src/styles.css';
+import '../../apps/web/src/workflow-shell.css';
+import '../../apps/web/src/workflow-state-visual.css';
+const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,at='2026-10-17T00:00:00.000Z';
+const detail:ReworkBusinessDetail={reworkOrderId:id(500),reworkNo:'TEST-WAGE-1',reworkKind:'qc_rework',status:'completed',version:7,styleNo:'TEST-合成款-1',customerSupplyCode:null,factoryStyleNo:null,orderNo:'TEST-ORDER-1',orderQuantity:1001,sourceReceivingActualQuantity:1001,iePrecounts:{canRecord:false,processes:[],entries:[]},defectiveQuantity:{receiving:0,receivingLinked:false,tail:0,total:0,canAddTail:false,tailEntries:[]},supplyContext:{washingSupplierName:null,embroiderySupplierName:null,fabricSupplierName:null,embroideryMerchandiserName:null},merchandiser:{userId:id(1),displayName:'TEST 跟单'},processingFactory:{type:'own_factory',supplierId:null,displayName:'TEST 本厂'},reworkReason:null,reworkProcess:'TEST 整烫',problemPart:null,problemDescription:null,reworkQuantity:1001,tailInspectionRequired:false,canReadBusinessDetails:true,singlePieceReworkTotal:0.01,inspectionReport:null,createdBy:{userId:id(1),displayName:'TEST 尾部主管'},processConfigurationCreatedBy:null,createdAt:at,updatedAt:at,submittedAt:at,cancelledAt:null,cancelReason:null,settlementStatus:'not_required',wageSettlementStatus:'not_required',unsettledWagePeriods:[],attachments:[],workflowHistory:[]};
+const batch=ExternalResponsibilityBatchResponseSchema.parse({batchId:id(700),reworkOrderId:id(500),finalizedDeterminationId:id(701),finalizedDeterminationVersion:1,batchVersion:1,status:'active',sourceSnapshot:{},items:[],canAllocateSuppliers:false,cases:[800,801].map(n=>({caseId:id(n),batchId:id(700),reworkOrderId:id(500),responsibilityType:'processing_factory',supplier:{supplierId:id(n+100),version:1,code:`TEST-${n}`,name:`TEST exact case ${n}`,type:'factory'},businessHandlerUserId:id(1),payablesHandlerRole:'factory_payables',proposedDeductionAmount:'100.00',actualDeductedAmount:'10.00',remainingAmount:'90.00',caseVersion:1,status:'deduction_follow_up',submittedAt:at,payablesConfirmedAt:at,canSign:false,canPayablesConfirm:false,canFollowUp:false,canRecordDeduction:false,canClose:false,canRequestSpecialApproval:false,canDecideSpecialApproval:false,canRequestRevision:false,canApproveRevision:false,items:[],deductions:[],followUps:[],closure:null,specialApproval:null,revisionRequests:[]}))});
+const requests:{path:string;method:string}[]=[];Object.assign(window,{exceptionRecordFixture:{requests}});
+window.fetch=async(input,init)=>{const path=String(input),method=init?.method??'GET';requests.push({path,method});if(method!=='GET')throw Error('No writes in exception record fixture');
+ const mode=sessionStorage.getItem('g3-case-mode');
+ if(path.endsWith('auth/me'))return Response.json({status:'authorized',user:{id:id(1),displayName:'TEST read-only finance',isRoot:mode==='root',businessRoles:mode==='root'?['root_superuser']:['finance_read'],capabilities:['external_responsibility:view','rework:basic:view'],readOnlyModules:['rework']}});
+ if(path.includes('todos/')&&path.includes('count'))return Response.json({pendingCount:0});
+ if(path.endsWith('/business-detail'))return mode==='order403'?Response.json({error:{message:'TEST order denied'}},{status:403}):Response.json(detail);
+ if(path.endsWith('/external-responsibilities'))return mode==='case403'?Response.json({error:{message:'TEST case denied'}},{status:403}):Response.json(batch);
+ throw Error('Unexpected synthetic read: '+path);
+};
+void verifySession().then(()=>createRoot(document.getElementById('root')!).render(<App/>));

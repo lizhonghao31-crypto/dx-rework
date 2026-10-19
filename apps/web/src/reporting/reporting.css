@@ -68,3 +68,6 @@
 @media(max-width:360px) {
   .report-center-layout .report-center-filters { grid-template-columns:minmax(0,1fr); }
 }
+
+.reporting-table-surface .reporting-exception-link{color:#0759bb;text-decoration:underline;text-underline-offset:3px;font-weight:600}
+.reporting-table-surface .reporting-exception-link:focus-visible{outline:2px solid #0759bb;outline-offset:3px;border-radius:2px}

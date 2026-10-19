@@ -1,4 +1,5 @@
 import type { ManagementDashboardResponse } from "@dx-rework/contracts/reporting";
+import { BUSINESS_EXCEPTION_LABELS, BUSINESS_TODO_CATEGORY_LABELS } from "@dx-rework/contracts/business-display";
 
 import { TIMEZONE, type Queryable, type ExceptionRow } from "./management-reporting-shared.js";
 
@@ -12,7 +13,16 @@ export async function exceptions(
   const where = ["1=1"];
   if (filters.from) where.push(`(occurred_at AT TIME ZONE '${TIMEZONE}')::date>=${bind(filters.from)}::date`);
   if (filters.to) where.push(`(occurred_at AT TIME ZONE '${TIMEZONE}')::date<=${bind(filters.to)}::date`);
-  if (filters.q) { const keyword=bind(`%${filters.q}%`); where.push(`(label ILIKE ${keyword} OR entity_id ILIKE ${keyword})`); }
+  if (filters.q) {
+    const keyword = bind(`%${filters.q}%`);
+    const categories = bind(JSON.stringify(BUSINESS_TODO_CATEGORY_LABELS));
+    const types = bind(JSON.stringify(BUSINESS_EXCEPTION_LABELS));
+    const displayedLabel = `CASE WHEN label ~ '^(待办逾期|接收人失效|钉钉投递永久失败)：[a-z][a-z0-9_]+$'
+      THEN split_part(label,'：',1)||'：'||COALESCE(${categories}::jsonb->>split_part(label,'：',2),'事项类别待核实') ELSE label END`;
+    where.push(`(label ILIKE ${keyword} OR entity_id ILIKE ${keyword}
+      OR (${displayedLabel}) ILIKE ${keyword}
+      OR COALESCE(${types}::jsonb->>exception_type,'系统异常') ILIKE ${keyword})`);
+  }
   if (filters.status) where.push(`exception_type=${bind(filters.status)}`);
   const limitParameter=bind(limit);
   const result = await source.query<ExceptionRow>(
@@ -55,7 +65,7 @@ export async function exceptions(
        UNION ALL
        SELECT 'deduction_follow_up_overdue',follow_up.follow_up_id::text,case_record.rework_order_id,
          ('扣款跟进逾期：'||case_record.supplier_name_snapshot),follow_up.next_follow_up_at,
-         '/ui/external-responsibilities?case='||case_record.case_id::text
+         '/ui/tasks/'||case_record.rework_order_id::text||'?node=settlement_followup&case='||case_record.case_id::text
        FROM rework_external_deduction_follow_ups follow_up
        JOIN rework_external_responsibility_cases case_record USING(case_id)
        WHERE follow_up.next_follow_up_at<CURRENT_TIMESTAMP

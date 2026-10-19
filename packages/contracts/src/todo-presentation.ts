@@ -60,6 +60,11 @@ const fallback: TodoPresentation = {
   action: "请进入返工系统查看并处理。",
 };
 
+/** Existing notification titles, also used to identify the same categories in reports/search. */
+export const todoCategoryTitles: Readonly<Record<string, string>> = Object.fromEntries(
+  Object.entries(catalog).map(([category, presentation]) => [category, presentation.title]),
+);
+
 export const todoPresentationForCategory = (category: string): TodoPresentation =>
   catalog[category] ?? fallback;
 
