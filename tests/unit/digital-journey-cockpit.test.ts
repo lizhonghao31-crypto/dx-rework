@@ -135,7 +135,7 @@ describe("R2 PR07 stage display scope", () => {
     const record={domain:"development",id,url:"/ui/digital-production?development="+id+"&round=1",mode:"read" as const,version:1,lineId:null};
     const item=order([node("paper",{stage:"preparation",records:[record]})]);
     const html=renderToStaticMarkup(createElement(DigitalJourneyCockpit,{data:null,detail:item,context:context(),error:"",detailError:"",detailLoading:false,onChange(){},actions:null}));
-    expect(html).not.toContain('class="journey-node-expanded"');expect(html).not.toContain('journey-preparation-reference');expect(html).toContain('本单资料');expect(html).toContain('全单范围');expect(html).toContain('统计范围');
+    expect(html).not.toContain('class="journey-node-expanded"');expect(html).not.toContain('journey-preparation-reference');expect(html).not.toContain('本单资料');expect(html).toContain('class="journey-document"');expect(html).toContain('全单范围');expect(html).toContain('统计范围');
     expect(html).toContain('round=1');expect(html).toContain('returnTo=');
   });
 });

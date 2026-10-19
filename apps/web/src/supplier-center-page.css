@@ -115,3 +115,21 @@
   [data-supplier-layout="directory"] .supplier-profile__heading > div:first-of-type { min-width:0; grid-column:1; }
   [data-supplier-layout="directory"] .supplier-profile__sections dt { font-size:16px; line-height:24px; }
 }
+
+/* Directory-only legal-name disclosure; the maintenance form keeps its original fields. */
+[data-supplier-layout="directory"] .supplier-directory-name { min-width:0; }
+[data-supplier-layout="directory"] .supplier-directory-name > summary { display:flex; align-items:center; min-height:32px; gap:8px; list-style:none; cursor:pointer; }
+[data-supplier-layout="directory"] .supplier-directory-name > summary::-webkit-details-marker { display:none; }
+[data-supplier-layout="directory"] .supplier-directory-name > summary h2 { min-width:0; margin:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:18px; line-height:26px; }
+[data-supplier-layout="directory"] .supplier-directory-name > summary > span { flex-shrink:0; color:var(--dx-v2-color-primary); font-size:12px; }
+[data-supplier-layout="directory"] .supplier-directory-name__full { margin:6px 0; font-size:14px; font-weight:400; line-height:22px; overflow-wrap:anywhere; }
+@media(max-width:800px) { [data-supplier-layout="directory"] .supplier-directory-name > summary { min-height:44px; } }
+
+[data-supplier-layout="directory"] .supplier-profile__sections dd.supplier-structured-value:has(.supplier-directory-value) { white-space:normal; overflow:visible; }
+[data-supplier-layout="directory"] .supplier-directory-value { min-width:0; }
+[data-supplier-layout="directory"] .supplier-directory-value > summary { display:flex; align-items:center; gap:8px; min-height:28px; list-style:none; cursor:pointer; }
+[data-supplier-layout="directory"] .supplier-directory-value > summary::-webkit-details-marker { display:none; }
+[data-supplier-layout="directory"] .supplier-directory-value > summary > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+[data-supplier-layout="directory"] .supplier-directory-value > summary > small { flex-shrink:0; color:var(--dx-v2-color-primary); font-size:12px; }
+[data-supplier-layout="directory"] .supplier-directory-value > p { white-space:normal; overflow-wrap:anywhere; margin:6px 0; font-size:16px; line-height:24px; }
+@media(max-width:800px) { [data-supplier-layout="directory"] .supplier-directory-value > summary { min-height:44px; } }

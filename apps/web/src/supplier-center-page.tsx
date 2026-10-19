@@ -306,7 +306,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
             <>
               <div className="supplier-profile__heading">
                 <Button className="supplier-profile__back" disabled={busy || refreshing} onClick={() => void selectSupplier("")}>返回目录</Button>
-                <div><h2>{profile.supplierName}</h2><p>{profile.supplierCode} · 版本 {profile.version}</p></div>
+                <div>{mode === "directory" ? <details className="supplier-directory-name"><summary title={profile.supplierName}><h2>{profile.supplierName}</h2><span>完整名称</span></summary><p className="supplier-directory-name__full">{profile.supplierName}</p></details> : <h2>{profile.supplierName}</h2>}<p>{profile.supplierCode} · 版本 {profile.version}</p></div>
                 <StatusBadge tone={profile.active ? "success" : "warning"}>{profile.active ? "启用" : "停用"}</StatusBadge>
                 {canMaintain ? <div className="supplier-profile__actions">
                   <Button disabled={busy || !detailReady} onClick={() => {
@@ -324,7 +324,7 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
                   <section><h3>基础与联系</h3><dl><div><dt>联系人</dt><dd>{profile.contactPerson || "—"}</dd></div><div><dt>联系电话</dt><dd>{profile.contactPhone || "—"}</dd></div><div className="is-wide"><dt>地址</dt><dd>{profile.address || "—"}</dd></div><div className="is-wide"><dt>备注</dt><dd>{profile.notes || "—"}</dd></div></dl></section>
                   <section><h3>合同与收款</h3>
                     {missingLabels.length ? <div className="supplier-contract-warning"><b>合同资料缺项</b><p>{missingLabels.join("、")}</p></div> : <div className="supplier-contract-complete">合同资料完整</div>}
-                    {contractVisible ? <dl><div><dt>合同主体</dt><dd className="supplier-structured-value" tabIndex={0} aria-label={`合同主体：${profile.contractEntityName || "—"}`}>{profile.contractEntityName || "—"}</dd></div><div><dt>乙方代表</dt><dd>{profile.partyBRepresentative || "—"}</dd></div><div><dt>收款人</dt><dd>{profile.payeeName || "—"}</dd></div><div><dt>收款账号</dt><dd className="supplier-bank-account supplier-structured-value" tabIndex={0} aria-label={`收款账号：${profile.bankAccount || "—"}`}>{profile.bankAccount || "—"}</dd></div><div className="is-wide"><dt>开户行</dt><dd>{profile.bankName || "—"}</dd></div></dl> : <p className="supplier-profile__restricted">当前账号无权查看合同与收款字段。</p>}
+                    {contractVisible ? <dl><div><dt>合同主体</dt><dd className="supplier-structured-value" tabIndex={0} aria-label={`合同主体：${profile.contractEntityName || "—"}`}>{mode === "directory" ? <SupplierDirectoryValue value={profile.contractEntityName} /> : profile.contractEntityName || "—"}</dd></div><div><dt>乙方代表</dt><dd>{profile.partyBRepresentative || "—"}</dd></div><div><dt>收款人</dt><dd>{profile.payeeName || "—"}</dd></div><div><dt>收款账号</dt><dd className="supplier-bank-account supplier-structured-value" tabIndex={0} aria-label={`收款账号：${profile.bankAccount || "—"}`}>{mode === "directory" ? <SupplierDirectoryValue value={profile.bankAccount} /> : profile.bankAccount || "—"}</dd></div><div className="is-wide"><dt>开户行</dt><dd>{profile.bankName || "—"}</dd></div></dl> : <p className="supplier-profile__restricted">当前账号无权查看合同与收款字段。</p>}
                   </section>
                   <section><h3>工艺与产能</h3><dl><div className="is-wide"><dt>可承接工艺</dt><dd>{profile.supportedCrafts.length ? profile.supportedCrafts.join("、") : "尚未维护"}</dd></div><div><dt>常规日产能</dt><dd>{profile.dailyCapacity === null ? "尚未维护" : `${profile.dailyCapacity.toLocaleString("zh-CN")} 件 / 日`}</dd></div></dl></section>
                   <ProductionAnalysisPanel key={profile.supplierId} supplierId={profile.supplierId} view="supplier"/>
@@ -337,6 +337,11 @@ export function SupplierCenterPage({ mode = "directory" }: { mode?: "directory" 
       </div>}
     </Shell>
   );
+}
+
+function SupplierDirectoryValue({value}:{value:string|null|undefined}) {
+ if(!value)return <>—</>;
+ return <details className="supplier-directory-value"><summary title={value} aria-label={`展开完整内容：${value}`}><span>{value}</span><small>展开</small></summary><p>{value}</p></details>;
 }
 
 function SupplierVersionHistory({supplierId}:{supplierId:string}){
