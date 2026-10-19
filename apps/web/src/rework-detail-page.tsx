@@ -348,7 +348,7 @@ const buildWorkflow = (
       title: detail.reworkKind === "inhouse_finishing" ? "最终确认与计薪" : "责任与结算",
       nodes: [
         node("whole_order_review", "05", "尾部最终数量确认", "尾部主管", "待全部执行报数完成", detail.tailInspectionRequired ? `逐工序对照工人原报数与${specialProcessLabel(detail)}数，提交最终确认数量并保留每版审计。` : "系统按工人有效上数生成最终数量，并保留每版审计。"),
-        node("final_quantity_ie_review", "06", "IE 最终数量复核", "IE", "待 N05 提交", "只复核数量与质量事实；通过后生成正式工资，退回则回到 N05。"),
+        node("final_quantity_ie_review", "06", "IE 最终数量复核", "IE", "待 N05 提交", detail.reworkKind === "inhouse_finishing" ? "IE 复核通过后按原上数计薪并完成本厂做尾，不进入责任判定或老板签字；退回则回到 N05。" : "只复核数量与质量事实；通过后生成正式工资，退回则回到 N05。"),
         ...(detail.reworkKind === "inhouse_finishing" ? [] : [
         node("responsibility", "07", "责任判定", "供应链总监", "待 N06 通过", "每道工序可登记多个责任方，比例合计为100%；外部扣款倍率默认且最低1.2，可按原规则上调。"),
         node("owner_signature", "08", "老板确认签字", "老板", "待 N07 提交", "按原责任分支由老板确认或驳回；首次纯外部判责可跳过老板确认，直接生成供应商扣款台账。"),
