@@ -19,6 +19,9 @@ describe("saved wage basis and completed history return", () => {
   it("keeps exact stored shares, collective and board/misc bases distinct", () => {
     expect(wageBasisValue("0.01234567")).toBe("0.01234567");
     expect(wageBasis({wageSource:"order_rework",assignmentMode:"collective",groupAmount:"30.01000000",memberCount:3,exactPersonShare:"10.00333333"})).toContain("组总额 30.01 元，3 人；个人份额 10.00333333 元");
+    const collective={wageSource:"order_rework",assignmentMode:"collective",personType:"temporary",groupAmount:"30.01000000",memberCount:3,exactPersonShare:"10.00333333",wageAmount:"10.00"};
+    expect(wageBasis({...collective,temporaryWageMultiplier:null})).toContain("临时工系数历史未记录");
+    expect(wageBasis({...collective,temporaryWageMultiplier:"1.200"})).toContain("临时工系数 1.2");
     expect(wageBasis({wageSource:"pattern_room",wageKind:"misc",actualHours:"1.250",unitPrice:"12.345"})).toBe("1.25 小时 × 12.345 元/小时");
     expect(wageBasis({wageSource:"pattern_room",wageKind:"pattern_rework",sourceAmount:"12.123",roundAmount:"36.369"})).toBe("本段 12.123 元 / 整轮 36.369 元");
   });

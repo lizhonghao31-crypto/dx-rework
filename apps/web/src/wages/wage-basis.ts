@@ -16,6 +16,6 @@ export function wageBasis(row: Row): string {
   const unit=businessValue("unit",row.unit);
   if(row.wageSource === "pattern_room") return `整轮 ${number("quantity")} ${unit} × ${number("unitPrice")} 元/${unit}；本段 ${number("sourceAmount")} 元`;
   const multiplier=row.personType === "temporary" ? row.temporaryWageMultiplier == null ? "；临时工系数历史未记录" : ` × 临时工系数 ${number("temporaryWageMultiplier")}` : "";
-  if(row.assignmentMode === "collective") return `集体计薪：组总额 ${number("groupAmount")} 元，${number("memberCount")} 人；个人份额 ${number("exactPersonShare")} 元${row.personType === "temporary" ? `；临时工系数 ${number("temporaryWageMultiplier")}` : ""}；工资以已保存金额为准`;
+  if(row.assignmentMode === "collective") return `集体计薪：组总额 ${number("groupAmount")} 元，${number("memberCount")} 人；个人份额 ${number("exactPersonShare")} 元${row.personType === "temporary" ? row.temporaryWageMultiplier == null ? "；临时工系数历史未记录" : `；临时工系数 ${number("temporaryWageMultiplier")}` : ""}；工资以已保存金额为准`;
   return `${number("quantity")} ${unit} × ${number("unitPrice")} 元/${unit}${multiplier}；工资以已保存金额为准`;
 }

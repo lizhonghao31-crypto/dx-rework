@@ -24,7 +24,7 @@ export function reworkHistoryHref(orderId:string,node?:string,entryId?:string) {
  if(entryId)query.set('entryId',entryId);
  return `${pageUrl(`ui/tasks/${orderId}`)}${query.size?`?${query}`:''}`;
 }
-export function ReworkNodeHistoryPage({orderId,node}:{orderId:string;node:FinanceNodeKey}) {
+export function ReworkNodeHistoryPage({orderId,node,canReturnToCurrentOnError=false}:{orderId:string;node:FinanceNodeKey;canReturnToCurrentOnError?:boolean}) {
  const [data,setData]=useState<ReworkNodeHistory|null>(null);const [error,setError]=useState('');
  const [image,setImage]=useState<ReworkNodeHistory['attachments'][number]|null>(null);
  const motherReturn=digitalDetailReturnUrl(new URLSearchParams(window.location.search).get("returnTo"),import.meta.env.BASE_URL);
@@ -33,14 +33,14 @@ export function ReworkNodeHistoryPage({orderId,node}:{orderId:string;node:Financ
  useEffect(()=>{const controller=new AbortController();setData(null);setError('');
   const query=entryId?`?${new URLSearchParams({entryId})}`:'';
   void fetch(apiUrl(`rework-orders/${orderId}/history/${node}${query}`),{credentials:'include',signal:controller.signal,cache:'no-store'})
-   .then(async response=>{if(!response.ok){const body=await response.json().catch(()=>null) as {error?:{message?:string}}|null;throw new Error(body?.error?.message??'历史页面加载失败');}return ReworkNodeHistorySchema.parse(await response.json());})
+   .then(async response=>{if(!response.ok){const body=await response.json().catch(()=>null) as {error?:{message?:string}}|null;throw new Error(body?.error?.message??'历史页面加载失败');}const parsed=ReworkNodeHistorySchema.safeParse(await response.json());if(!parsed.success)throw new Error('历史资料加载失败，请稍后重试');return parsed.data;})
    .then(value=>{if(!controller.signal.aborted)setData(value);}).catch((reason:unknown)=>{if(!controller.signal.aborted)setError(reason instanceof Error?reason.message:'历史页面加载失败');});
   return()=>controller.abort();
  },[orderId,node,entryId]);
  useEffect(()=>{if(!image)return;const close=(event:KeyboardEvent)=>{if(event.key==='Escape')setImage(null);};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close);},[image]);
  return <Shell active="全部订单"><div className="rework-governed rework-history rework-history-readonly" data-dx-ui="governed">
   {motherReturn?<a className="dx-button" href={motherReturn}>返回这张订单</a>:<a className="dx-button" href={pageUrl(sourceBack.path)}>{sourceBack.label}</a>}
-  {!data?<div aria-busy={!error}><p role="status">{error||'正在加载历史页面…'}</p>{error?<a className="dx-button" href={reworkHistoryHref(orderId)}>返回当前节点</a>:null}</div>:<>
+  {!data?<div aria-busy={!error}><p role="status">{error||'正在加载历史页面…'}</p>{error&&canReturnToCurrentOnError?<a className="dx-button" href={reworkHistoryHref(orderId)}>返回当前节点</a>:null}</div>:<>
    <ReworkNodeHistoryView key={data.entry.id} data={data} currentHref={reworkHistoryHref(orderId)} onVersion={id=>{window.location.href=reworkHistoryHref(orderId,node,id);}} onImage={setImage} />
    {image?<div className="rework-image-modal"><section className="rework-image-modal__content" role="dialog" aria-modal="true" aria-label={image.filename}><div className="rework-image-modal__heading"><strong>{image.filename}</strong><button type="button" onClick={()=>setImage(null)}>关闭</button></div><ImageViewer src={apiUrl(`tools/attachments/${image.attachmentId}/download?mode=preview`)} alt={image.filename} /></section></div>:null}
   </>}
