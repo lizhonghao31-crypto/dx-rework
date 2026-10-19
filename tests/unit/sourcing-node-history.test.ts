@@ -53,4 +53,15 @@ describe("historical sourcing node pages", () => {
     expect(facts).toContain('当时要求交货：<span class="sourcing-date-token">2026-10-20</span>');
     expect(facts).not.toContain("2026-11-19");
   });
+  it("does not describe unavailable historical customer dates as PO dates awaiting entry", () => {
+    const historicalLine = { ...item.lineItems[0]!, lineId:id, factoryDeliveryDate:"2026-10-19" };
+    expect(Object.hasOwn(historicalLine, "customerWarehouseArrivalDate")).toBe(false);
+    const html = renderToStaticMarkup(createElement(SourcingNodeHistoryView, {
+      history:{...history,item:{...item,lineItems:[historicalLine]}}, currentHref:"/current",nodeHref:key=>`/history/${key}`,onImage:()=>{},
+    }));
+    const customer = html.match(/<dt>PO \/ [^<]+<\/dt><dd>([\s\S]*?)<\/dd>/)?.[1];
+    expect(customer).toBe("当时日期不详");
+    expect(customer).not.toContain("待补");
+    expect(html).toContain('2026-10-19');
+  });
 });
