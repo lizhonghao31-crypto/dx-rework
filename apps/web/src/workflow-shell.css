@@ -369,7 +369,7 @@
   }
 }
 
-/* The logout command sits below the brand without becoming a navigation card. */
+/* Shared logout behavior; the public desktop shell places it beside the brand. */
 .session-logout {
   display: inline-flex;
   align-items: center;
@@ -401,3 +401,5 @@ html[data-session-suspended="true"] #root { visibility: hidden; }
 .auth-shell .session-logout-error { color: #b44545; }
 
 .frontline-session-exit{display:flex;justify-content:flex-end;margin-bottom:8px}
+
+@media(max-width:800px) { .session-logout--mobile { min-height:44px; font-size:13px; } }

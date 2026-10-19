@@ -15,7 +15,7 @@ export function LoginLanding({ message, qr, action }: {
 }) {
   return (
     <main className="dx-login-landing">
-      <header className="dx-login-brand" aria-label="DX 达兴服装">
+      <header className="dx-login-brand" aria-label="DX 达兴制衣">
         <svg viewBox="0 0 92 45" aria-hidden="true">
           <path fill="#f4f7ff" fillRule="evenodd" d="M10 5h21c18 0 21 10 16 25-3 8-10 12-21 12H1L10 5Zm9 8-5 21h13c6 0 10-4 12-10 2-8-1-11-9-11H19Z" />
           <path fill="#77b9fb" d="m43 5 15 17-19 20h15l11-12 10 12h15L72 21 88 2H72L62 14 54 5Z" />
