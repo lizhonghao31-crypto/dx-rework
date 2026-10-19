@@ -26,9 +26,19 @@
   .sourcing-order-photo-file__full .dx-button { min-height:44px; }
 }
 
-.sourcing-order-photos__body[hidden] { display:none; }
-.sourcing-order-photos[data-compact="true"] { padding:8px 12px; }
-.sourcing-order-photos[data-compact="true"] .sourcing-order-photos__heading { margin:0; }
-.sourcing-order-photos__toggle { min-height:32px; padding:4px 8px; border:0; border-radius:6px; background:transparent; color:var(--dx-v2-color-primary); font-size:13px; line-height:20px; }
-.sourcing-order-photos[data-compact="true"] .sourcing-order-photos__body:not([hidden]) { display:grid; grid-template-columns:200px minmax(0,1fr); gap:14px; padding-top:10px; }
-.sourcing-order-photos[data-compact="true"] .sourcing-order-photos__files { margin:0; }
+/* Local photo panel is visible beside the workflow at every desktop width. */
+.sourcing-module-layout .sourcing-order-photos { padding:12px 14px; }
+.sourcing-module-layout .sourcing-order-photos__heading { min-height:28px; margin-bottom:10px; }
+.sourcing-module-layout .sourcing-order-photos__heading h2 { font-size:16px; line-height:24px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-order-photos__heading button { min-height:28px; padding:4px 8px; font-size:12px; line-height:20px; box-shadow:none; }
+.sourcing-module-layout .sourcing-order-photos__body { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,3fr); gap:12px; align-items:start; }
+.sourcing-module-layout .sourcing-order-photos__files { margin:0; max-height:156px; overflow:auto; overscroll-behavior:contain; }
+.sourcing-module-layout .sourcing-order-photos__files:focus-visible { outline:2px solid var(--dx-v2-color-primary); outline-offset:2px; }
+.sourcing-module-layout .sourcing-order-photos__preview { height:126px; }
+@media(max-width:800px) {
+ .sourcing-module-layout .sourcing-order-photos { padding:12px; }
+ .sourcing-module-layout .sourcing-order-photos__body { grid-template-columns:minmax(80px,1fr) minmax(0,2fr); }
+ .sourcing-module-layout .sourcing-order-photos__preview { height:110px; }
+ .sourcing-module-layout .sourcing-order-photos__files { max-height:180px; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-order-photos__heading button { min-height:44px; font-size:14px; }
+}

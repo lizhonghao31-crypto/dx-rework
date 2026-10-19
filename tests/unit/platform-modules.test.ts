@@ -108,15 +108,17 @@ describe("thin platform module routing", () => {
     expect(sourcingCss).toContain(".sourcing-order-detail .rework-detail-core-facts");
     expect(sourcingCss).toContain("grid-template-columns: repeat(7, minmax(0, 1fr))");
     expect(sourcingCss).toContain("grid-column: 1 / -1");
-    // Main work stays before the optional context and photos in narrow reading order.
+    // The approved sourcing layout keeps real workflow above the full-width work area.
     const regions = [
       '<KeyFacts className="sourcing-key-facts"',
+      'className="sourcing-supporting-overview"',
+      '<SourcingOrderPhotos',
+      '<WorkflowRail className="sourcing-workflow-rail"',
+      'className="order-layout-workspace"',
       'order-layout-main${',
-      '{!financialReadView ? orderLineItems : null}',
-      '<ActionBar className="sourcing-owner-actions"',
-      '<details className="sourcing-order-context"',
       '<DecisionSummary title=',
-      'className="order-layout-aside"',
+      '{!financialReadView && !quoteEntryView ? orderLineItems : null}',
+      '<ActionBar className="sourcing-owner-actions"',
     ].map(marker => sourcingPage.indexOf(marker));
     expect(regions.every(index => index >= 0)).toBe(true);
     expect(regions).toEqual([...regions].sort((left, right) => left - right));
