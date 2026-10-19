@@ -4,7 +4,8 @@ export const COCKPIT_DOCUMENT_CATEGORIES=[
 ] as const;
 export type CockpitDocumentCategory=typeof COCKPIT_DOCUMENT_CATEGORIES[number]["key"];
 export type CockpitDocumentFile={id:string;name:string;path:string|null;note?:string|undefined;at?:string|undefined;by?:string|undefined};
-export type CockpitDocumentEntry={id:string;label:string;url?:string;note?:string|undefined;at?:string|undefined;by?:string|undefined;files?:CockpitDocumentFile[];children?:CockpitDocumentEntry[];load?:{kind:string;path:string;id:string;version?:number|undefined;round?:string|undefined}};
+export type CockpitDocumentMetadataFact={label:string;at:string;by:string};
+export type CockpitDocumentEntry={id:string;label:string;url?:string;note?:string|undefined;at?:string|undefined;by?:string|undefined;metadata?:CockpitDocumentMetadataFact[];files?:CockpitDocumentFile[];children?:CockpitDocumentEntry[];load?:{kind:string;path:string;id:string;version?:number|undefined;round?:string|undefined}};
 export type CockpitDocumentResult={state:"created"|"missing"|"not_applicable"|"unknown";entries:CockpitDocumentEntry[];note?:string;nextPage?:number|null};
 export type CockpitDocumentReader=(path:string,signal:AbortSignal)=>Promise<unknown>;
 type Row=Record<string,unknown>;
@@ -32,7 +33,7 @@ export async function loadCockpitDocumentCategory(order:OrderJourney,key:Cockpit
   // The authorized reader requires the base document before returning a revision; the revisions table starts at round 2.
   requireFields(sheet,["sourceId","version","document"]);requireFields(roundsResult,["rounds"]);const rounds=rows(roundsResult.rounds),numbers=[...new Set([...(sheet.document?[1]:[]),num(sheet.roundNumber)||1,...rounds.map(item=>num(item.roundNumber))])].filter(Boolean).sort((a,b)=>b-a);
   if(!sheet.document&&!rounds.length)return result([]);
-  return result(numbers.map(roundNumber=>{const metadata=rounds.find(item=>item.roundNumber===roundNumber);return {id:`round:${roundNumber}`,label:`第 ${roundNumber} 轮${roundNumber===sheet.roundNumber?` · 单据 v${sheet.version} · ${sheet.status==="published"?"已发布":"草稿"}`:""}`,url:original("development",sid,roundNumber),at:str(metadata?.publishedAt),load:{kind:"development",path:`digital-production/sources/${sid}/development?round=${roundNumber}`,id:sid,version:roundNumber}};}),"展开轮次查看对应资料与成果。");
+  return result(numbers.map(roundNumber=>{const metadata=rounds.find(item=>item.roundNumber===roundNumber);return {id:`round:${roundNumber}`,label:`第 ${roundNumber} 轮${roundNumber===sheet.roundNumber?` · 单据 v${sheet.version} · ${sheet.status==="published"?"已发布":"草稿"}`:""}`,url:original("development",sid,roundNumber),at:str(metadata?.publishedAt),load:{kind:"development",path:`digital-production/sources/${sid}/development?round=${roundNumber}`,id:sid,version:roundNumber}};}));
  }
  if(key==="pattern"||key==="misc"){
   if(!sid&&!oid)return na();const query=new URLSearchParams({...(sid?{sourceId:sid}:{}),...(oid?{orderId:oid}:{}),page:String(page)}),data=row(await read(`pattern-room/related-orders?${query}`,signal));
@@ -49,7 +50,7 @@ export async function loadCockpitDocumentCategory(order:OrderJourney,key:Cockpit
   requireFields(sheet,["version","versions"]);const versions=values(sheet.versions),current=num(sheet.version);
   const entries:CockpitDocumentEntry[]=versions.map(version=>({id:`published:${version}`,label:`已发布 v${version}`,url:original(key,oid,version),load:{kind:key,path:`${path}?version=${version}`,id:oid,version}}));
   if(current&&!versions.includes(current))entries.unshift({id:`draft:${current}`,label:`当前草稿 v${current}`,url:original(key,oid),load:{kind:key,path,id:oid}});
-  return result(entries,key==="instruction"?"每版采用的开发轮次和图片在该版展开后读取。":"展开版本查看预算与图片。");
+  return result(entries);
  }
  if(key==="contract"){
   const sources=records(order,"sourcing");if(!sources.length)return {state:"unknown",entries:[],note:"暂无可读取的合同关联。"};
@@ -75,7 +76,7 @@ export async function loadCockpitDocumentCategory(order:OrderJourney,key:Cockpit
  const closure=row(await read(`digital-production/orders/${oid}/closure`,signal)),lines=rows(closure.lines),ids=[...new Set(lines.map(line=>str(line.receivingBatchId)).filter(Boolean))];
  requireFields(closure,["orderId","lines","closed"]);if(closure.orderId!==oid)throw new Error("订单资料不匹配，请返回来源核对");const entries:CockpitDocumentEntry[]=ids.map(id=>({id,label:lines.filter(line=>line.receivingBatchId===id).map(line=>`${str(line.poNumber)||"PO待补"} · ${str(line.color)}`).join(" / "),url:original("closure",oid),load:{kind:"receiving",path:`receiving/batches/${id}/document-history`,id}}));
  if(closure.closed){const closed=row(closure.closed);entries.push({id:"special-closure",label:"特殊结案记录",url:original("closure",oid),at:str(closed.closedAt),by:str(closed.closedBy),note:str(closed.reason),children:strings(closed.outstanding).map((label,index)=>({id:`outstanding:${index}`,label}))});}
- return result(entries,"各批原件、实收订正、装箱历次修订和差异处理在对应批次展开后读取。");
+ return result(entries);
 }
 
 export async function loadCockpitDocumentEntry(entry:CockpitDocumentEntry,read:CockpitDocumentReader,signal:AbortSignal):Promise<CockpitDocumentEntry>{
@@ -84,13 +85,13 @@ export async function loadCockpitDocumentEntry(entry:CockpitDocumentEntry,read:C
   if(num(data.roundNumber)!==version)throw new Error("找不到所选开发轮次，请返回原单核对");
   const execution=row(await read(`digital-production/sources/${id}/execution`,signal)),tasks=rows(execution.tasks),taskIds=new Set(tasks.filter(task=>task.routeVersion===version).map(task=>str(task.taskId)));
   const facts=rows(execution.facts).filter(fact=>taskIds.has(str(fact.taskId))),unbound=rows(execution.facts).filter(fact=>!fact.taskId);
-  const doc=row(data.document);return {...entry,note:`单据 v${data.version} · ${data.status==="published"?"已发布":"草稿"}`,at:str(data.publishedAt),files:rows(doc.files).filter(item=>item.kind!=="工艺开发板"||doc.craft!=="无").map(item=>file(str(item.attachmentId),`${item.kind}原件`,`digital-production/sources/${id}/development/attachments/${item.attachmentId}`)),children:[...metadataEntries(data),...rows(data.materialEvents).map(fact=>({id:str(fact.eventId),label:`材料 · ${str(fact.action)}`,at:str(fact.createdAt),note:str(fact.note)})),...facts.map(fact=>developmentFact(fact,id)),...rows(execution.routeFacts).filter(fact=>fact.routeVersion===version).map(fact=>({id:str(fact.factId),label:str(fact.kind),at:str(fact.recordedAt),note:str(row(fact.payload).note)})),...(unbound.length?[{id:"unbound-facts",label:"未记录轮次的开发资料",note:"保留来源，不能归入某一历史轮。",children:unbound.map(fact=>developmentFact(fact,id))}]:[])]};
+  const doc=row(data.document);return {...entry,note:`单据 v${data.version} · ${data.status==="published"?"已发布":"草稿"}`,at:str(data.publishedAt),metadata:metadataFacts(data),files:rows(doc.files).filter(item=>item.kind!=="工艺开发板"||doc.craft!=="无").map(item=>file(str(item.attachmentId),`${item.kind}原件`,`digital-production/sources/${id}/development/attachments/${item.attachmentId}`)),children:[...rows(data.materialEvents).map(fact=>({id:str(fact.eventId),label:`材料 · ${str(fact.action)}`,at:str(fact.createdAt),note:str(fact.note)})),...facts.map(fact=>developmentFact(fact,id)),...rows(execution.routeFacts).filter(fact=>fact.routeVersion===version).map(fact=>({id:str(fact.factId),label:str(fact.kind),at:str(fact.recordedAt),note:str(row(fact.payload).note)})),...(unbound.length?[{id:"unbound-facts",label:"未记录轮次的开发资料",note:"保留来源，不能归入某一历史轮。",children:unbound.map(fact=>developmentFact(fact,id))}]:[])]};
  }
  if(kind==="pattern"){if(data.orderId!==id||!rows(data.rounds).some(item=>item.roundId===round))throw new Error("找不到所选打板轮次，请返回原单核对");return {...entry,files:rows(data.attachments).filter(item=>item.roundId===round).map(item=>file(str(item.attachmentId),str(item.filename),item.active?`pattern-room/attachments/${item.attachmentId}/download?mode=preview`:null,item.active?undefined:"原件已停用")),note:data.canReadMaterials===false?"当前身份无权读取此轮制作资料。":undefined};}
  if(kind==="budget"||kind==="instruction"){
   if(version&&num(data.version)!==version)throw new Error("找不到所选历史版本，请返回原单核对");
   const doc=row(data.document),files=kind==="budget"?strings(doc.imageAttachmentIds).map((attachmentId,index)=>file(attachmentId,`预算图片 ${index+1}`,`digital-production/orders/${id}/budget/attachments/${attachmentId}`)):rows(doc.images).map(image=>file(str(image.attachmentId),str(image.kind)||"制单原图",`digital-production/orders/${id}/instruction/attachments/${image.attachmentId}`));
-  return {...entry,at:str(data.publishedAt),files,children:metadataEntries(data),note:kind==="instruction"?`采用开发第 ${data.sourceRound??"未核实"} 轮 · 图文、工艺、尺寸见此版原单。`:"该版预算与图片。"};
+  return {...entry,at:str(data.publishedAt),files,metadata:metadataFacts(data),note:kind==="instruction"?`采用开发第 ${data.sourceRound??"未核实"} 轮`:undefined};
  }
  if(kind==="cutting"){
   const record=row(data.record);return {...entry,at:str(record.recordedAt),by:str(record.recordedByName),note:record.version?`实裁 v${record.version} · 裁数 ${record.actualCutCount}`:"尚未登记实裁",files:rows(record.cuttingSheetPhotos??data.photos).map(image=>file(str(image.attachmentId),str(image.filename),`cutting/attachments/${image.attachmentId}/download?mode=preview`)),children:rows(record.corrections).map(correction=>({id:str(correction.correctionId),label:`实裁订正 v${correction.version??""}`,at:str(correction.correctedAt),by:str(correction.correctedByName),note:str(correction.reason)}))};
@@ -105,6 +106,6 @@ function developmentFact(fact:Row,sourceId:string):CockpitDocumentEntry{
 }
 function receivingFile(item:Row):CockpitDocumentFile{return {...apiFile(str(item.id),str(item.filename)),path:item.retiredAt||item.status!=="ready"?null:`tools/attachments/${item.id}/download?mode=preview`,note:item.retiredAt?"原件已停用":item.status!=="ready"?"原件暂不可用":undefined,at:str(item.at),by:str(item.by)};}
 
-function metadataEntries(data:Row):CockpitDocumentEntry[]{
- const metadata=row(data.metadata);return ([['created','创建'],['edited','修改'],['published','发布']] as const).map(([key,label])=>{const fact=row(metadata[key]);return {id:`metadata:${key}`,label:`${label}：${str(fact.by)||'原人名未记录'}`,at:str(fact.at),note:fact.at?undefined:'原时间未记录'};});
+function metadataFacts(data:Row):CockpitDocumentMetadataFact[]{
+ const metadata=row(data.metadata);return ([['created','创建'],['edited','修改'],['published','发布']] as const).map(([key,label])=>{const fact=row(metadata[key]);return {label,at:str(fact.at)||(key==='published'?str(data.publishedAt):''),by:str(fact.by)};});
 }
