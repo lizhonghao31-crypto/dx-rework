@@ -1,12 +1,13 @@
 import type { Pool } from 'pg';
 import type { TodoResponse } from '@dx-rework/contracts';
+import { todoTaskTitle } from '@dx-rework/contracts';
 import { todoSearchLabels } from './todo-search-labels.js';
 
 type Item={kind:'database'|'provider';value:Record<string,unknown>};
 export async function globalTodoSearch(database:Pool,contextSql:string,actorId:string,query:string,requestedPage:number,providers:readonly {module:string;todo:TodoResponse}[]) {
  const upper=query.toUpperCase();
  const matches=providers.filter(({module,todo})=>todo.recipientUserId===actorId&&todo.todoType!=='information'&&['pending','blocked_recipient'].includes(todo.status)&&todo.category!=='wage_month_close'&&[
-   todoSearchLabels[module],todoSearchLabels[todo.category],todo.taskTitle,todo.category==='production_stale'?`已 ${todo.daysWithoutUpdate??0} 天未更新`:null,todo.orderContext?.styleNo,todo.orderContext?.supplierName,todo.orderContext?.merchandiserName,todo.orderContext?.orderNo,todo.orderContext?.reworkNo,
+   todoSearchLabels[module],todoSearchLabels[todo.category],todoTaskTitle(todo),todo.taskTitle,todo.category==='production_stale'?`已 ${todo.daysWithoutUpdate??0} 天未更新`:null,todo.orderContext?.styleNo,todo.orderContext?.supplierName,todo.orderContext?.merchandiserName,todo.orderContext?.orderNo,todo.orderContext?.reworkNo,
  ].some(value=>value?.toUpperCase().includes(upper))).map(({todo})=>todo);
  const result=await database.query<{total_count:string|number;total_pages:number;page:number;items:Item[]}>(`WITH todo_view AS (${contextSql}), candidates AS (
    SELECT todo_id,status_rank,due_at,created_at,'database'::text kind,to_jsonb(todo_view) value,1 priority
@@ -20,6 +21,7 @@ export async function globalTodoSearch(database:Pool,contextSql:string,actorId:s
        OR strpos(upper(COALESCE(merchandiser_name,'')),upper($2))>0
        OR strpos(upper(concat_ws(' ',rework_no,order_no,sourcing_order_no)),upper($2))>0
        OR strpos(upper(COALESCE($5::jsonb->>category,'')),upper($2))>0
+       OR strpos(upper(COALESCE($5::jsonb->>('heading:'||category),$5::jsonb->>('route:'||(route_descriptor->>'routeName')),'')),upper($2))>0
        OR strpos(upper(COALESCE($5::jsonb->>todo_module,'')),upper($2))>0)
    UNION ALL
    SELECT (item->>'todoId')::uuid,CASE item->>'status' WHEN 'pending' THEN 0 ELSE 1 END,

@@ -1,3 +1,4 @@
+import { todoTaskTitle } from "@dx-rework/contracts";
 import { todoRouteHref } from "./todo-route-link.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
@@ -46,36 +47,7 @@ const todoModules: readonly Readonly<{ id: TodoModule; label: string }>[] = [
   { id: "suppliers", label: "供应商中心" },
 ];
 
-const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
-  rework_detail: "查看返工单",
-  process_configuration: "配置或审核返工工序",
-  whole_order_review: "审核整张返工单",
-  responsibility_detail: "处理责任判定",
-  own_factory_approval: "查看历史本厂审批",
-  external_responsibility_detail: "记录供应商实际扣款",
-  wage_period_detail: "核对返工工资",
-  sourcing_detail: "处理外发定价选厂订单",
-  digital_production_instruction: "大货制单",
-  digital_development: "查看开发单",
-  digital_production_task: "办理数字生产任务",
-  production_detail: "查看生产风险",
-  sample_detail: "处理样衣事项",
-  pattern_room_order: "处理板房订单",
-  supplier_onboarding: "处理供应商申请",
-};
-
-const taskTitle = (todo: TodoResponse): string =>
-  todo.route.routeName === "digital_production_task" && todo.taskTitle
-    ? todo.taskTitle
-    : todo.category === "sourcing_contract_return"
-    ? "回传合同"
-    : todo.category === "owner_signature"
-      ? "老板确认签字"
-    : todo.category === "tail_inspection"
-      ? "历史整查报数"
-    : todo.category === "external_supplier_selection"
-      ? "历史供应商选择"
-      : taskLabel[todo.route.routeName];
+const taskTitle = todoTaskTitle;
 
 const categoryLabel = (todo: TodoResponse): string => {
   const labels: Record<string, string> = {
