@@ -64,6 +64,24 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     await app.ready();
   },120000);
   afterAll(async()=>{await app.close();await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+  it("reads five real log events first and cursor-pages every scoped event without ties, new events or foreign cursors leaking",async()=>{
+    const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-COCKPIT-LOG",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+    const task=await createTask({resource:{kind:"source",id:sourceId},kind:"development_materials",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:clerk});
+    for(let i=0;i<43;i++)await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,recorded_at,time_quality) VALUES($1,$2,'source',$3,'condition',$4,'2026-10-01T12:00:00.000001Z','缺失')",[randomUUID(),task.taskId,sourceId,clerk]);
+    const expected=Number((await db.query("SELECT count(*) FROM digital_production_task_events WHERE task_id=$1",[task.taskId])).rows[0].count);
+    const read=await journeys.read(actor(),sourceId),summary=read.operationLog!;
+    expect(summary.items).toHaveLength(5);expect(summary.nextCursor).not.toBeNull();
+    const inserted=randomUUID();await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,time_quality) VALUES($1,$2,'source',$3,'condition',$4,'缺失')",[inserted,task.taskId,sourceId,clerk]);
+    const seen=summary.items.map(item=>item.id);let cursor=summary.nextCursor;
+    while(cursor){const page=await journeys.logs(actor(),sourceId,cursor);expect(page.asOf).toBe(summary.asOf);seen.push(...page.items.map(item=>item.id));cursor=page.nextCursor;}
+    expect(seen).toHaveLength(expected);expect(new Set(seen).size).toBe(expected);expect(seen).not.toContain(`task:${inserted}`);
+    const other=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-COCKPIT-OTHER",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+    await expect(journeys.logs(actor(),other,summary.nextCursor!)).rejects.toMatchObject({statusCode:400});
+    await expect(journeys.logs(actor(stranger),sourceId,summary.nextCursor!)).rejects.toMatchObject({statusCode:404});
+    await expect(journeys.logs(actor(root,["root_superuser"]),sourceId,summary.nextCursor!)).rejects.toMatchObject({statusCode:400});
+    const response=await app.inject({url:`/digital-production/journeys/${sourceId}/logs`,headers:{cookie:`dx_rework_session=${designer}`}});
+    expect(response.statusCode,response.body).toBe(200);expect(response.json().items).toHaveLength(20);expect(response.headers["cache-control"]).toBe("no-store");
+  });
   it("reads only pending original assignment facts and never starts its digital sewing context",async()=>{
     const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-J-NATIVE-ASSIGN",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
     const task=await createTask({resource:{kind:"source",id:sourceId},kind:"development_sewing_transfer",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:clerk});
@@ -85,6 +103,58 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     await db.query("UPDATE pattern_room_rounds SET status='in_progress' WHERE round_id=$1",[roundId]);
     expect(await journeys.pendingPatternAssignments(rootActor,[sourceId])).toEqual([]);
     expect((await tasks.read(rootActor,task.taskId)).state).toBe(before.state);
+  });
+  it("shows a cancelled pure-development source as cancelled without manufacturing completion",async()=>{
+    const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-CANCELLED-SOURCE",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+    await tasks.controlResource(actor(),{kind:"source",id:sourceId},"cancel","TEST取消纯开发",randomUUID());
+    expect((await journeys.read(actor(),sourceId)).display).toMatchObject({mainState:"cancelled",awaitingClosure:false});
+    const list=await journeys.list(actor(),JourneyFilterSchema.parse({scope:"development",search:"TEST-CANCELLED-SOURCE"}));
+    expect(list.items).toHaveLength(1);expect(list.items[0]?.display?.mainState).toBe("cancelled");expect(list.summary).toMatchObject({completed:0,active:0,notStarted:0});
+    await expect(journeys.read(actor(stranger),sourceId)).rejects.toMatchObject({statusCode:404});
+  });
+  it("evaluates history from the completion-linked deadline, and reports missing original evidence",async()=>{
+    const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-COCKPIT-HISTORY",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+    const task=await createTask({resource:{kind:"source",id:sourceId},kind:"development_materials",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:clerk});
+    const eventId=randomUUID(),missingId=randomUUID();
+    await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality) VALUES($1,$2,'source',$3,'completed',$4,'2026-10-02T02:00:00Z','现场登记'),($5,$2,'source',$3,'completed',$4,NULL,'缺失')",[eventId,task.taskId,sourceId,clerk,missingId]);
+    const version=(await db.query("SELECT max(version) AS version FROM digital_production_deadline_policies WHERE node_key='development_materials'")).rows[0].version;
+    await db.query("INSERT INTO digital_production_deadline_revisions(task_id,policy_node_key,policy_version,entered_at,warning_at,due_at,reason,event_id,changed_by) VALUES($1,'development_materials',$2,'2026-10-01T00:00:00Z','2026-10-01T18:00:00Z','2026-10-02T00:00:00Z','completion',$3,$4)",[task.taskId,version,eventId,root]);
+    // A later revision cannot rewrite the historical completed event's evaluation.
+    await db.query("INSERT INTO digital_production_deadline_revisions(task_id,policy_node_key,policy_version,entered_at,warning_at,due_at,reason,changed_by) VALUES($1,'development_materials',$2,'2026-10-01T00:00:00Z','2026-10-03T00:00:00Z','2026-10-04T00:00:00Z','policy',$3)",[task.taskId,version,root]);
+    const history=(await journeys.read(actor(),sourceId,undefined,true)).riskHistory!;
+    expect(history.find(item=>item.eventId===eventId)).toMatchObject({assessment:"late",overdueSeconds:7200,deadline:"2026-10-02T00:00:00.000Z"});
+    expect(history.find(item=>item.eventId===missingId)).toMatchObject({assessment:"insufficient",overdueSeconds:null});
+  });
+  it("retains authorized sourcing-task events when a sourcing case replaces its display node, including between cursor pages",async()=>{
+    const rootActor=actor(root,["root_superuser"]);
+    const order=await identity.createOrder(rootActor,{...input("SOURCING-LOG"),primaryMerchandiserId:merchandiser},randomUUID());
+    const task=await createTask({resource:{kind:"order",id:order.productionOrderId},kind:"sourcing_preparation",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:merchandiser});
+    const reassigned=randomUUID(),completed=randomUUID();
+    await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,recorded_at,time_quality) SELECT gen_random_uuid(),$1,'order',$2,'condition',$3,'2026-10-01T12:01:00.000001Z','缺失' FROM generate_series(1,43)",[task.taskId,order.productionOrderId,root]);
+    await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,recorded_at,time_quality) VALUES($1,$3,'order',$4,'reassigned',$5,'2026-10-01T11:59:00Z','2026-10-01T11:59:00Z','现场登记'),($2,$3,'order',$4,'completed',$5,'2026-10-01T12:00:00Z','2026-10-01T12:00:00Z','现场登记')",[reassigned,completed,task.taskId,order.productionOrderId,root]);
+    const first=(await journeys.read(rootActor,order.productionOrderId,undefined,true)).operationLog!;
+    expect(first.items).toHaveLength(5);expect(first.nextCursor).not.toBeNull();
+    const expected=(await db.query("SELECT e.event_id FROM digital_production_task_events e JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1",[order.productionOrderId])).rows.map(row=>`task:${row.event_id}`).sort();
+    const caseId=randomUUID(),operation=randomUUID();
+    const seed=await db.connect();
+    try{await seed.query("BEGIN");
+    await seed.query("INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id,reason) VALUES($1,'TEST-cockpit-case',$2,ARRAY['root_superuser'],'sourcing:inquiry:create','sourcing.case.create','sourcing_case',$3,'TEST')",[operation,root,caseId]);
+    await seed.query("INSERT INTO sourcing_cases(sourcing_case_id,erp_order_id,erp_order_no,style_no,lane_key,order_quantity,created_by,operation_event_id,request_id,creation_reason,workflow_generation) VALUES($1,$1::uuid::text,'TEST','TEST-SOURCING-LOG','garment_processing',300,$2,$3,'TEST-cockpit-case','TEST','digital_production_v1')",[caseId,root,operation]);
+    await seed.query("INSERT INTO sourcing_case_transitions(sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,business_action,transition_reason,actor_id,operation_event_id,request_id) VALUES($1,$2,1,NULL,'pending_ie_quote','created','TEST',$3,$4,'TEST-cockpit-case')",[randomUUID(),caseId,root,operation]);
+    await seed.query("INSERT INTO digital_production_child_links(module,child_id,production_order_id) VALUES('sourcing',$1,$2)",[caseId,order.productionOrderId]);
+    await seed.query("UPDATE digital_production_tasks SET state='completed',entered_at='2026-10-01T00:00:00Z',completed_at='2026-10-01T12:00:00Z',completed_quality='现场登记' WHERE task_id=$1",[task.taskId]);
+      await seed.query("COMMIT");
+    }catch(error){await seed.query("ROLLBACK");throw error;}finally{seed.release();}
+    const replaced=await journeys.read(rootActor,order.productionOrderId,undefined,true);
+    expect(replaced.stages.flatMap(stage=>stage.nodes).find(node=>node.key==='sourcing_preparation')?.records.map(record=>record.domain)).toEqual(['sourcing']);
+    expect(replaced.riskHistory?.some(item=>item.eventId===completed)).toBe(true);
+    const seen=first.items.map(item=>item.id);let cursor=first.nextCursor;
+    while(cursor){const page=await journeys.logs(rootActor,order.productionOrderId,cursor);expect(page.asOf).toBe(first.asOf);seen.push(...page.items.map(item=>item.id));cursor=page.nextCursor;}
+    expect([...seen].sort()).toEqual(expected);expect(new Set(seen).size).toBe(seen.length);expect(seen).toContain(`task:${reassigned}`);expect(seen).toContain(`task:${completed}`);
+    const refreshed=replaced.operationLog!,all=refreshed.items.map(item=>item.id);cursor=refreshed.nextCursor;
+    while(cursor){const page=await journeys.logs(rootActor,order.productionOrderId,cursor);all.push(...page.items.map(item=>item.id));cursor=page.nextCursor;}
+    expect(all.sort()).toEqual(expected);
+    await expect(journeys.logs(actor(stranger),order.productionOrderId)).rejects.toMatchObject({statusCode:404});
   });
   it("allows Root JSON all-match export but rejects an ordinary merchandiser with legitimate list access",{timeout:60_000},async()=>{
     const search="TEST-J-EXPORT-SCOPE";

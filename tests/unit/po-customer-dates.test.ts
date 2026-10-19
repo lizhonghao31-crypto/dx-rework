@@ -45,10 +45,10 @@ describe('explicit PO customer promises and UI authority',()=>{
  });
  it('shows only one formal PO field and customer promise in confirmed-order creation',()=>{
   const create=renderToStaticMarkup(createElement(DevelopmentCreateForm,{intent:'certain_order',customers:[],onCancel:()=>undefined,onCreated:()=>undefined}));
-  expect(create).toContain('正式款号 / PO');expect(create).toContain('客户仓到货日');
+  expect(create).toContain('正式款号 / PO');expect(create).toContain('出货日期');
   expect(create).not.toContain('客户合同交付日期');expect(create).not.toContain('工厂交货日');expect(create).not.toContain('明细约定交期');
   const development=renderToStaticMarkup(createElement(DevelopmentCreateForm,{intent:'development',customers:[],onCancel:()=>undefined,onCreated:()=>undefined}));
-  expect(development).not.toContain('客户仓到货日');
+  expect(development).not.toContain('出货日期');
   expect(development).toContain('aria-pressed="true"');expect(development).toContain('无确定客户订单');expect(development).toContain('有确定客户订单');
   expect(development).not.toMatch(/<select[^>]*aria-label="确定客户订单"/);
  });

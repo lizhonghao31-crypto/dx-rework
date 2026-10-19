@@ -19,7 +19,7 @@ export function PoCustomerDates({sheet,busy,dirty,historical,onAct}:{sheet:Instr
   const [selected,setSelected]=useState<string[]>([]),[date,setDate]=useState(""),[reason,setReason]=useState("");
   const lines=sheet.customerPoDates??[];
   return <DocumentSection id="instruction-delivery" title={`PO 当前${customerPoDateLabel}`} detail={historical?"当前日期用于对照；打印保留该版原快照":"变更仅作用于选中的 PO；加工厂交货日及历史计时不自动改变"}>
-    {sheet.cutStarted&&<p className="instruction-note">已经开裁。按原主跟单申请、供应链总监批准流程变更所选 PO 的客户仓到货日；制单内容仍冻结。</p>}
+    {sheet.cutStarted&&<p className="instruction-note">已经开裁。按原主跟单申请、供应链总监批准流程变更所选 PO 的出货日期；制单内容仍冻结。</p>}
     <div className="instruction-po-dates-scroll"><table className="instruction-po-dates-table"><thead><tr><th>PO / 颜色</th><th>{historical?"客户仓到货日":customerPoDateLabel}</th><th>登记来源</th></tr></thead><tbody>{lines.map(line=><tr key={line.lineId}>
       <td>{!historical&&sheet.canRequestDate&&<input aria-label={`选择 ${line.poNumber||"待补 PO"} ${line.color}`} type="checkbox" disabled={busy||dirty} checked={selected.includes(line.lineId)} onChange={e=>setSelected(current=>e.target.checked?[...current,line.lineId]:current.filter(id=>id!==line.lineId))}/>} {line.poNumber||"待补 PO"} / {line.color}</td><td>{line.date||"未登记"}</td><td>{line.source==="legacy_unregistered"?"历史约定，待逐 PO 登记":line.source==="initial_po"?"设计师登记":line.source==="approved_customer_change"?"已批准变更":"未登记"}</td></tr>)}</tbody></table></div>
     {!historical&&sheet.canRequestDate&&<div className="instruction-date-request"><p>已选择 {selected.length} 个 PO。新日期统一应用于本次选中的 PO。</p>
