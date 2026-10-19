@@ -2414,6 +2414,16 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     } finally { await app.close(); }
   });
 
+  it("projects immutable rework wage inputs without altering saved amounts", async () => {
+    const reporting=new ManagementReportingService(database);
+    const before=(await database.query("SELECT wage_item_id,unit_price_snapshot::text,group_amount::text,exact_person_share::text,member_count,payable_amount::text FROM rework_wage_items ORDER BY wage_item_id")).rows;
+    const result=await reporting.report(financeWages(),"wages",{...allWageDates,wageSource:"order_rework",limit:500});
+    expect(result.rows.length).toBeGreaterThan(0);
+    const facts=new Map(before.map(row=>[row.wage_item_id,row]));
+    for(const row of result.rows){const fact=facts.get(row.lineId);if(!fact)continue;expect(row).toMatchObject({unitPrice:fact.unit_price_snapshot,groupAmount:fact.group_amount,exactPersonShare:fact.exact_person_share,memberCount:fact.member_count});}
+    expect((await database.query("SELECT wage_item_id,unit_price_snapshot::text,group_amount::text,exact_person_share::text,member_count,payable_amount::text FROM rework_wage_items ORDER BY wage_item_id")).rows).toEqual(before);
+  });
+
   it.each([200, 180])("recovers a required-tail order only after every unified worker and tail task has a valid report (%i pieces)", async (reportedQuantity) => {
     const imageId = randomUUID();
     await database.query(

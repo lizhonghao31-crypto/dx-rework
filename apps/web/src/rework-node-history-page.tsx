@@ -1,3 +1,4 @@
+import { reworkHistorySource } from "./rework-return-path.js";
 import {digitalDetailReturnUrl} from "./digital-detail-route.js";
 import { ProcessWorkerAssignmentForm } from './process-worker-assignment-form.js';
 import { WholeOrderReviewPanel } from './whole-order-review-panel.js';
@@ -23,22 +24,23 @@ export function reworkHistoryHref(orderId:string,node?:string,entryId?:string) {
  if(entryId)query.set('entryId',entryId);
  return `${pageUrl(`ui/tasks/${orderId}`)}${query.size?`?${query}`:''}`;
 }
-export function ReworkNodeHistoryPage({orderId,node}:{orderId:string;node:FinanceNodeKey}) {
+export function ReworkNodeHistoryPage({orderId,node,canReturnToCurrentOnError=false}:{orderId:string;node:FinanceNodeKey;canReturnToCurrentOnError?:boolean}) {
  const [data,setData]=useState<ReworkNodeHistory|null>(null);const [error,setError]=useState('');
  const [image,setImage]=useState<ReworkNodeHistory['attachments'][number]|null>(null);
  const motherReturn=digitalDetailReturnUrl(new URLSearchParams(window.location.search).get("returnTo"),import.meta.env.BASE_URL);
+ const sourceBack=reworkHistorySource(window.location.search,window.history.state?.dxReworkReturnTo);
  const entryId=new URLSearchParams(window.location.search).get('entryId');
  useEffect(()=>{const controller=new AbortController();setData(null);setError('');
   const query=entryId?`?${new URLSearchParams({entryId})}`:'';
   void fetch(apiUrl(`rework-orders/${orderId}/history/${node}${query}`),{credentials:'include',signal:controller.signal,cache:'no-store'})
-   .then(async response=>{if(!response.ok){const body=await response.json().catch(()=>null) as {error?:{message?:string}}|null;throw new Error(body?.error?.message??'历史页面加载失败');}return ReworkNodeHistorySchema.parse(await response.json());})
+   .then(async response=>{if(!response.ok){const body=await response.json().catch(()=>null) as {error?:{message?:string}}|null;throw new Error(body?.error?.message??'历史页面加载失败');}const parsed=ReworkNodeHistorySchema.safeParse(await response.json());if(!parsed.success)throw new Error('历史资料加载失败，请稍后重试');return parsed.data;})
    .then(value=>{if(!controller.signal.aborted)setData(value);}).catch((reason:unknown)=>{if(!controller.signal.aborted)setError(reason instanceof Error?reason.message:'历史页面加载失败');});
   return()=>controller.abort();
  },[orderId,node,entryId]);
  useEffect(()=>{if(!image)return;const close=(event:KeyboardEvent)=>{if(event.key==='Escape')setImage(null);};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close);},[image]);
  return <Shell active="全部订单"><div className="rework-governed rework-history rework-history-readonly" data-dx-ui="governed">
-  {motherReturn&&<a className="dx-button" href={motherReturn}>返回这张订单</a>}
-  {!data?<div aria-busy={!error}><p role="status">{error||'正在加载历史页面…'}</p>{error?<a className="dx-button" href={reworkHistoryHref(orderId)}>返回当前节点</a>:null}</div>:<>
+  {motherReturn?<a className="dx-button" href={motherReturn}>返回这张订单</a>:<a className="dx-button" href={pageUrl(sourceBack.path)}>{sourceBack.label}</a>}
+  {!data?<div aria-busy={!error}><p role="status">{error||'正在加载历史页面…'}</p>{error&&canReturnToCurrentOnError?<a className="dx-button" href={reworkHistoryHref(orderId)}>返回当前节点</a>:null}</div>:<>
    <ReworkNodeHistoryView key={data.entry.id} data={data} currentHref={reworkHistoryHref(orderId)} onVersion={id=>{window.location.href=reworkHistoryHref(orderId,node,id);}} onImage={setImage} />
    {image?<div className="rework-image-modal"><section className="rework-image-modal__content" role="dialog" aria-modal="true" aria-label={image.filename}><div className="rework-image-modal__heading"><strong>{image.filename}</strong><button type="button" onClick={()=>setImage(null)}>关闭</button></div><ImageViewer src={apiUrl(`tools/attachments/${image.attachmentId}/download?mode=preview`)} alt={image.filename} /></section></div>:null}
   </>}
@@ -84,7 +86,7 @@ export function ReworkNodeHistoryView({data,currentHref,onVersion,onImage}:{data
  };
  return <>
   <Header title={data.fields.find(field=>field.label==='款号')?.value??'返工历史'} subtitle={data.entry.label} badge="历史节点 · 只读" badgePlacement="subtitle" />
-  <div className="rework-history-navigation"><span>{display(data.entry.at)} · {data.entry.actor}</span>{data.versions.length>1?<label>历史版本<select value={data.entry.id} onChange={event=>onVersion(event.target.value)}>{data.versions.map((entry,index)=><option key={entry.id} value={entry.id}>第 {index+1} 次 · {display(entry.at)}</option>)}</select></label>:null}<a className="dx-button" href={currentHref}>返回当前节点</a></div>
+  <div className="rework-history-navigation"><span>{display(data.entry.at)} · {data.entry.actor}</span>{data.versions.length>1?<label>历史版本<select value={data.entry.id} onChange={event=>onVersion(event.target.value)}>{data.versions.map((entry,index)=><option key={entry.id} value={entry.id}>第 {index+1} 次 · {display(entry.at)}</option>)}</select></label>:null}{data.currentStatus==='completed'&&data.reworkKind==='inhouse_finishing'?<span role="status">本单已完成，当前为历史资料</span>:<a className="dx-button" href={currentHref}>{data.currentStatus==='completed'?'查看业务完成资料':'返回当前节点'}</a>}</div>
   <Surface className="rework-detail-target-layout">
     <dl className="rework-detail-core-facts" aria-label="历史订单信息">{data.fields.filter(field=>['加工厂','返工工序','发起时间','发起人','订单跟单','订单数量','返工数量'].includes(field.label)&&field.value!==null).map(field=><div className="rework-detail-core-fact" key={field.label}><dt>{field.label}</dt><dd>{display(field.value)}</dd></div>)}</dl>
     <div className="order-layout-workspace"><div className="rework-order-support"><aside className="order-layout-aside">

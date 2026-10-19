@@ -1,0 +1,35 @@
+// Actual application routes, wholly synthetic wage/finishing data, no native API fetch.
+import {createRoot} from 'react-dom/client';
+import {App} from '../../apps/web/src/App.js';
+import {verifySession} from '../../apps/web/src/auth.js';
+import {BUSINESS_TIME_ZONE} from '@dx-rework/contracts/business-display';
+import {ReportPreviewResponseSchema} from '@dx-rework/contracts/reporting';
+import type {ReworkBusinessDetail} from '../../apps/web/src/rework-detail-page.js';
+import '@dx-rework/ui/tokens.css';
+import '@dx-rework/ui/components.css';
+import '../../apps/web/src/styles.css';
+import '../../apps/web/src/workflow-shell.css';
+import '../../apps/web/src/workflow-state-visual.css';
+import '../../apps/web/src/ui-polish.css';
+const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,at='2026-10-17T00:00:00.000Z';
+const rows=[{personName:'TEST 合成临时工',personType:'temporary',quantity:'1001.00',temporaryWageMultiplier:'1.200',exactPersonShare:'12.01200000',wageAmount:'12.01'},{personName:'TEST 合成正式工',personType:'internal',quantity:'1000.00',temporaryWageMultiplier:'1.000',exactPersonShare:'10.00000000',wageAmount:'10.00'}].map((r,i)=>({...r,lineId:id(100+i),personId:id(200+i),periodMonth:'2026-10',wageSource:'order_rework',wageKind:'inhouse_finishing',assignmentMode:'individual',unit:'piece',unitPrice:'0.010',groupAmount:r.exactPersonShare,memberCount:1,orderNo:`TEST-WAGE-${i+1}`,styleNo:`TEST-合成款-${i+1}`,processName:'TEST 合成整烫',completedDate:'2026-10-16',settlementStatus:'unsettled',sourceStatus:'available',sourceOrderId:id(500+i),reworkOrderId:id(500+i)}));
+const columns=[['personName','人员'],['wageSource','工资来源'],['wageKind','业务类型'],['orderNo','订单号'],['styleNo','款号'],['processName','工序'],['wageAmount','工资金额'],['completedDate','劳动完成日期'],['settlementStatus','工资结算'],['quantity','数量'],['unitPrice','基础单价'],['temporaryWageMultiplier','临时工系数'],['assignmentMode','计薪方式'],['groupAmount','组总额原值'],['memberCount','组内人数'],['exactPersonShare','个人份额原值']].map(([key,label])=>({key:key!,label:label!}));
+const wage=ReportPreviewResponseSchema.parse({reportType:'wages',asOf:at,range:{from:'2026-10-01',to:'2026-10-19',timezone:BUSINESS_TIME_ZONE},rowCount:2,truncated:false,canExport:false,canSettleWages:false,columns,rows,totals:{wageAmount:'22.01',unsettledWageAmount:'22.01',settledWageAmount:'0.00'},pagination:{page:1,pageSize:15,totalCount:2,totalPages:1},wageSummary:{rowCount:2,pendingLineCount:2,pendingPersonCount:2,personCount:2,orderCount:2,roundCount:0,people:rows.map(r=>({personId:r.personId,name:r.personName,orderCount:1,amount:r.wageAmount,lineCount:1,roundCount:0,sources:[{source:r.wageSource,kind:r.wageKind,amount:r.wageAmount,lineCount:1}]}))}});
+const detail:ReworkBusinessDetail={reworkOrderId:id(500),reworkNo:'TEST-WAGE-1',reworkKind:'inhouse_finishing',status:sessionStorage.getItem('g3-history-failure')==='unfinished403'?'pending_final_quantity_ie_review':'completed',version:7,styleNo:'TEST-合成款-1',customerSupplyCode:null,factoryStyleNo:null,orderNo:'TEST-ORDER-1',orderQuantity:1001,sourceReceivingActualQuantity:1001,iePrecounts:{canRecord:false,processes:[],entries:[]},defectiveQuantity:{receiving:0,receivingLinked:false,tail:0,total:0,canAddTail:false,tailEntries:[]},supplyContext:{washingSupplierName:null,embroiderySupplierName:null,fabricSupplierName:null,embroideryMerchandiserName:null},merchandiser:{userId:id(1),displayName:'TEST 跟单'},processingFactory:{type:'own_factory',supplierId:null,displayName:'TEST 本厂'},reworkReason:null,reworkProcess:'TEST 整烫',problemPart:null,problemDescription:null,reworkQuantity:1001,tailInspectionRequired:false,canReadBusinessDetails:true,singlePieceReworkTotal:0.01,inspectionReport:null,createdBy:{userId:id(1),displayName:'TEST 尾部主管'},processConfigurationCreatedBy:null,createdAt:at,updatedAt:at,submittedAt:at,cancelledAt:null,cancelReason:null,settlementStatus:'not_required',wageSettlementStatus:'not_required',unsettledWagePeriods:[],attachments:[],workflowHistory:[]};
+const history={currentStatus:'completed',reworkKind:'inhouse_finishing',orderId:id(500),node:'final_quantity_ie_review',entry:{id:id(600),label:'TEST IE 最终数量复核',at,actor:'TEST IE'},versions:[],inspectionReport:null,sections:[],notices:['TEST 合成历史未提供完整办理快照；此场景仅核对返回路径。'],attachments:[],fields:[{label:'款号',value:'TEST-合成款-1'},{label:'加工厂',value:'TEST 本厂'},{label:'返工工序',value:'TEST 整烫'},{label:'订单数量',value:'1001'}]};
+const requests:{path:string;method:string}[]=[];Object.assign(window,{wageBasisFixture:{requests}});
+window.fetch=async(input,init)=>{const path=String(input),method=init?.method??'GET';requests.push({path,method});if(method!=='GET')throw Error('No writes in wage basis fixture');
+ if(path.endsWith('auth/me'))return Response.json({status:'authorized',user:{id:id(1),displayName:'TEST 工资核对',isRoot:false,businessRoles:['finance_read'],capabilities:['wage:view','todo:view','rework:finance_nodes:read','rework:finance_orders:read']}});
+ if(path.includes('todos/')&&path.includes('count'))return Response.json({pendingCount:0});
+ if(path.includes('management/reports/wages'))return Response.json(wage);
+ if(path.endsWith('business-detail'))return Response.json(detail);
+ if(path.includes('/history/')){
+  const failure=sessionStorage.getItem('g3-history-failure');
+  if(failure==='network')throw new Error('TEST 隔离历史读取失败');
+  if(['403','503','unfinished403','direct403'].includes(failure??''))return Response.json({error:{message:'TEST 隔离历史读取失败'}},{status:failure==='503'?503:403});
+  if(failure==='invalid')return Response.json({...history,node:'INVALID_TEST_NODE'});
+  return Response.json(history);
+ }
+ throw Error('Unexpected synthetic read: '+path);
+};
+void verifySession().then(()=>createRoot(document.getElementById('root')!).render(<App/>));

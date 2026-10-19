@@ -276,6 +276,7 @@ export type ReportPreviewResponse = z.infer<typeof ReportPreviewResponseSchema>;
 
 const ReworkHistoryEntrySchema = z.object({ id: z.string().uuid(), label: z.string(), at: z.string(), actor: z.string() }).strict();
 export const ReworkNodeHistorySchema = z.object({
+  currentStatus: ReportingReworkStatusSchema.optional(),
   reworkKind: z.enum(["qc_rework", "inhouse_finishing"]).optional(),
   navigation: z.array(z.object({node: FinanceNodeKeySchema, available:z.boolean(), completed:z.boolean()}).strict()).optional(),
   orderId: z.string().uuid().optional(),

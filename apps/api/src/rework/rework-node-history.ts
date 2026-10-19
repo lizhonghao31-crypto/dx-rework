@@ -185,6 +185,6 @@ export async function readReworkNodeHistory(db: Pool, actor: TrustedActorContext
   const report=InspectionReportDraftSchema.safeParse(source.inspectionReport);
   await client.query('COMMIT');
   const entry=(event:HistoryEvent)=>({id:event.id,label:finishing&&node==='initiation'?'本厂做尾':labels[node],at:event.at,actor:event.actor});
-  return ReworkNodeHistorySchema.parse({reworkKind:detail.reworkKind,orderId:detail.reworkOrderId,navigation:(finishing?finishingNodes:Object.keys(labels) as FinanceNodeKey[]).map(key=>({node:key,completed:events.some(event=>reworkHistoryNode(event.action)===key),available:canReadReworkHistoryNode(actor,key)&&events.some(event=>reworkHistoryNode(event.action)===key)})),page,node,entry:entry(selected),versions:versions.map(entry),fields,sections,attachments,notices,inspectionReport:report.success?report.data:null});
+  return ReworkNodeHistorySchema.parse({currentStatus:detail.status,reworkKind:detail.reworkKind,orderId:detail.reworkOrderId,navigation:(finishing?finishingNodes:Object.keys(labels) as FinanceNodeKey[]).map(key=>({node:key,completed:events.some(event=>reworkHistoryNode(event.action)===key),available:canReadReworkHistoryNode(actor,key)&&events.some(event=>reworkHistoryNode(event.action)===key)})),page,node,entry:entry(selected),versions:versions.map(entry),fields,sections,attachments,notices,inspectionReport:report.success?report.data:null});
  } catch(error) {await client.query('ROLLBACK').catch(()=>undefined);throw error;} finally {client.release();}
 }

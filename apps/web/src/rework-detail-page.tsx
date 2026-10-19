@@ -666,7 +666,7 @@ function CurrentReworkDetailPage({
 
   if (selected?.state === "completed" && !["settlement_ledger", "archive", "settlement_followup"].includes(selected.key)) {
     const historyKey = FinanceNodeKeySchema.safeParse(selected.key);
-    if (historyKey.success) return <ReworkNodeHistoryPage orderId={detail.reworkOrderId} node={historyKey.data} />;
+    if (historyKey.success) return <ReworkNodeHistoryPage orderId={detail.reworkOrderId} node={historyKey.data} canReturnToCurrentOnError={detail.reworkKind!=="inhouse_finishing"||detail.status!=="completed"} />;
   }
 
   const scopedFinanceOrderReader = hasCapability(currentUser,"rework:finance_orders:read") && !elevated(currentUser) && !hasCapability(currentUser,"rework:finance_nodes:read");
