@@ -443,6 +443,7 @@ function CurrentReworkDetailPage({
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [currentUser, setCurrentUser] = useState<AuthorizedUser | null>(null);
   const [selectedImage, setSelectedImage] = useState<ReworkAttachment | null>(null);
+ const [readingFilename, setReadingFilename] = useState<string | null>(null);
   const [defectDialogOpen, setDefectDialogOpen] = useState(false);
   const [tailDefectQuantity, setTailDefectQuantity] = useState("");
   const [tailDefectMessage, setTailDefectMessage] = useState("");
@@ -768,47 +769,7 @@ function CurrentReworkDetailPage({
             </div>)}
           </dl> : null}
         </Surface>
-        <div className="order-layout-workspace">
-          <div className="order-layout-main">
-            {detail.inspectionReport ? <InspectionReportReadonly report={detail.inspectionReport} /> : null}
-            <section id="node-workspace" className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
-              <div className="rework-detail-task__heading"><h2>办理区<span className="rework-mobile-current-node"> · {selected?.number} {selected?.label}</span></h2>{detail.canReadBusinessDetails !== false && <span className="rework-detail-single-piece-total">单件返工总价：{detail.singlePieceReworkTotal === null ? "待核价" : formatBusinessCurrency(detail.singlePieceReworkTotal)}</span>}</div>
-              {detail.status === "pending_process_configuration" && canHandleInitiation ? <InitiationFollowUpActions detail={detail} statusLabel={statusMeta[detail.status].label} canHandleInitiation={initiationAccess.canWithdraw} ownershipNotice={initiationOwnershipNotice} onChanged={syncAfterNodeAction} /> : null}
-              {canWaiveTailInspection ? <TailInspectionWaiverAction detail={detail} onChanged={syncAfterNodeAction} /> : null}
-              {invalidSelectedNode?<p role="alert">该业务没有此办理节点，请选择本单已有节点查看。</p>:renderSelectedTask()}
-            </section>
-            <div className="rework-detail-overview-grid order-overview--compact order-layout-flow">
-              <section className="rework-workflow" key={detail.status} aria-label="订单流程">
-                <div className="rework-workflow__heading rework-detail-panel-title rework-detail-desktop-panel-heading">
-                  <h2>订单流程</h2>
-                  <span className="rework-workflow__step-count">当前步骤 {activeStepIndex} / {workflowNodes.length}</span>
-                </div>
-                <button
-                  className="rework-detail-mobile-panel-toggle rework-detail-mobile-workflow-toggle"
-                  type="button"
-                  aria-controls="order-workflow-content"
-                  aria-expanded={mobileWorkflowExpanded}
-                  onClick={() => setMobileWorkflowExpanded((value) => !value)}
-                >
-                  <span>
-                    <strong>订单流程</strong>
-                    {activeWorkflowNode ? <small>{activeWorkflowNode.number} · {activeWorkflowNode.label} · {nodeStatusLabel(activeWorkflowNode, detail)}</small> : null}
-                  </span>
-                  <span><small>{activeStepIndex}/{workflowNodes.length}</small><b aria-hidden="true">{mobileWorkflowExpanded ? "−" : "+"}</b></span>
-                </button>
-                <div id="order-workflow-content" className={`rework-detail-mobile-collapsible${mobileWorkflowExpanded ? " is-expanded" : ""}`}>
-                  <WorkflowRail className="rework-workflow__desktop-grid" aria-label="电脑端流程节点">
-                    {workflowNodes.map(renderWorkflowNode)}
-                    {workflowNodes.length > 5 ? <span className="rework-workflow-row-bridge" aria-hidden="true" /> : null}
-                  </WorkflowRail>
-                  <WorkflowRail className="rework-workflow__mobile-rail" ref={mobileWorkflowRailRef} aria-label="移动端流程节点">
-                    {workflowNodes.map(renderWorkflowNode)}
-                  </WorkflowRail>
-                </div>
-              </section>
-            </div>
-          </div>
-          <aside className="order-layout-aside">
+        <div className="order-layout-workspace"><div className="rework-order-support"><aside className="order-layout-aside">
             <div className="rework-detail-overview-grid order-overview--compact"><section className="rework-detail-images" aria-label="订单图片">
               <div className="section-title rework-detail-panel-title rework-governed-image-heading">
                 <h2>订单图片</h2>
@@ -829,18 +790,55 @@ function CurrentReworkDetailPage({
                       className="rework-detail-image-card"
                       type="button"
                       key={attachment.attachmentId}
-                      onClick={() => setSelectedImage(attachment)}
+                      onClick={() => setSelectedImage(attachment)} title={attachment.filename} onMouseEnter={() => setReadingFilename(attachment.filename)} onMouseLeave={() => setReadingFilename(null)} onFocus={() => setReadingFilename(attachment.filename)} onBlur={() => setReadingFilename(null)}
                       aria-label={`放大查看 ${attachment.filename}`}
                     >
                       <img src={attachmentUrl(attachment.attachmentId, "preview")} alt={attachment.filename} loading="lazy" />
                       <span className="rework-detail-image-card__filename">{attachment.filename}</span>
                     </button>
                   ))}
-                </div> : null}
+                </div> : null}{readingFilename ? <p className="rework-order-filename" role="status">{readingFilename}</p> : null}
               </div>
             </section></div>
-          </aside>
-        </div>
+          </aside><div className="rework-detail-overview-grid order-overview--compact order-layout-flow">
+              <section className="rework-workflow" key={detail.status} aria-label="订单流程">
+                <div className="rework-workflow__heading rework-detail-panel-title rework-detail-desktop-panel-heading">
+                  <h2>订单流程</h2>
+                  <span className="rework-workflow__step-count">当前步骤 {activeStepIndex} / {workflowNodes.length}</span>
+                </div>
+                <button
+                  className="rework-detail-mobile-panel-toggle rework-detail-mobile-workflow-toggle"
+                  type="button"
+                  aria-controls="order-workflow-content"
+                  aria-expanded={mobileWorkflowExpanded}
+                  onClick={() => setMobileWorkflowExpanded((value) => !value)}
+                >
+                  <span>
+                    <strong>订单流程</strong>
+                    {activeWorkflowNode ? <small>{activeWorkflowNode.number} · {activeWorkflowNode.label} · {nodeStatusLabel(activeWorkflowNode, detail)}</small> : null}
+                  </span>
+                  <span><small>{activeStepIndex}/{workflowNodes.length}</small><b aria-hidden="true">{mobileWorkflowExpanded ? "−" : "+"}</b></span>
+                </button>
+                <div id="order-workflow-content" className={`rework-detail-mobile-collapsible${mobileWorkflowExpanded ? " is-expanded" : ""}`}>
+                  <WorkflowRail className="rework-workflow__desktop-grid" data-node-count={workflowNodes.length} aria-label="电脑端流程节点">
+                    {workflowNodes.map(renderWorkflowNode)}
+                    {workflowNodes.length > 5 ? <span className="rework-workflow-row-bridge" aria-hidden="true" /> : null}
+                  </WorkflowRail>
+                  <WorkflowRail className="rework-workflow__mobile-rail" ref={mobileWorkflowRailRef} aria-label="移动端流程节点">
+                    {workflowNodes.map(renderWorkflowNode)}
+                  </WorkflowRail>
+                </div>
+              </section>
+            </div></div><div className="order-layout-main">
+            {detail.inspectionReport ? <InspectionReportReadonly report={detail.inspectionReport} /> : null}
+            <section id="node-workspace" className="rework-detail-task rework-detail-workspace" aria-label="节点任务">
+              <div className="rework-detail-task__heading"><h2>办理区<span className="rework-mobile-current-node"> · {selected?.number} {selected?.label}</span></h2>{detail.canReadBusinessDetails !== false && <span className="rework-detail-single-piece-total">单件返工总价：{detail.singlePieceReworkTotal === null ? "待核价" : formatBusinessCurrency(detail.singlePieceReworkTotal)}</span>}</div>
+              {detail.status === "pending_process_configuration" && canHandleInitiation ? <InitiationFollowUpActions detail={detail} statusLabel={statusMeta[detail.status].label} canHandleInitiation={initiationAccess.canWithdraw} ownershipNotice={initiationOwnershipNotice} onChanged={syncAfterNodeAction} /> : null}
+              {canWaiveTailInspection ? <TailInspectionWaiverAction detail={detail} onChanged={syncAfterNodeAction} /> : null}
+              {invalidSelectedNode?<p role="alert">该业务没有此办理节点，请选择本单已有节点查看。</p>:renderSelectedTask()}
+            </section>
+
+          </div></div>
       </div>
 
       <dialog ref={defectDialogRef} className="rework-defect-dialog" onCancel={() => setDefectDialogOpen(false)} onClose={() => setDefectDialogOpen(false)}>
