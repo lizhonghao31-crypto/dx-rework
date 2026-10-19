@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type {JourneyDocumentMetadata} from "./digital-production-journey.js";
 import type { DigitalOrder } from "./digital-production.js";
 const short = z.string().trim().max(200), text = z.string().trim().max(5000);
 export const SEWING_REQUIREMENTS = [
@@ -87,6 +88,7 @@ export function instructionErrors(doc: InstructionDocument, order: DigitalOrder)
   return errors;
 }
 export type InstructionSheet = {
+  metadata?:JourneyDocumentMetadata;
   order: DigitalOrder; currentOrderVersion: number; currentDeliveryDate: string | null; document: InstructionDocument; version: number; publishedVersion: number | null;
   versions: number[]; isPublishedSnapshot: boolean; canEdit: boolean; cutStarted: boolean; merchandiserName: string | null;
   sourceRound: number | null; latestSourceRound: number | null; canApproveDate: boolean; printedBy: string;

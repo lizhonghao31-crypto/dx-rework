@@ -40,6 +40,10 @@ export function registerPatternRoomOrderRoutes(app: FastifyInstance, dependencie
     reply.header("cache-control", "no-store");
     return dependencies.service.peopleFilters(await actor(request, "pattern_room:orders:view"));
   });
+  app.get("/pattern-room/related-orders",async(request,reply)=>{
+    const query=parse(z.object({sourceId:z.string().uuid().optional(),orderId:z.string().uuid().optional(),page:z.coerce.number().int().min(1).max(100000).default(1)}).strict().refine(value=>Boolean(value.sourceId||value.orderId)),request.query);
+    reply.header("cache-control","no-store");return dependencies.service.related(await actor(request,"pattern_room:orders:view"),query);
+  });
   app.get("/pattern-room/orders/:orderId", async (request, reply) => {
     reply.header("cache-control", "no-store");
     return dependencies.service.get(await actor(request, "pattern_room:orders:view"), parse(orderParams, request.params).orderId, parse(z.object({ round: z.string().uuid().optional(), node: PatternOrderStatusSchema.optional() }), request.query));

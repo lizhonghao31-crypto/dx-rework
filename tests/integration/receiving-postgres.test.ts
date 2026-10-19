@@ -858,6 +858,14 @@ runWithPostgres("receiving fact PostgreSQL contracts", () => {
     }, randomUUID())).rejects.toThrow("该订单已不可追加收货，请重新搜索选择");
   });
 
+  it('reads exact receipt and packing history without joining another same-text batch',async()=>{
+    const first=await service.create(receiver(),{styleNo:'TEST-DIR-RECEIVING',documentQuantity:10,actualQuantity:10,attachmentIds:[await readyImage()]},randomUUID());
+    const unrelated=await service.create(receiver(),{styleNo:'TEST-DIR-UNRELATED',documentQuantity:20,actualQuantity:20,attachmentIds:[await readyImage()]},randomUUID());
+    const original=(await service.board(businessDate(),businessDate(),'TEST-DIR-RECEIVING')).rows[0]!;
+    await service.recordPacking(packingRecorder(),{receivingBatchId:first.value.receivingBatchId,expectedVersion:original.version,expectedPackingRevisionId:null,packingQuantity:9},randomUUID());
+    const history=await service.documentHistory(first.value.receivingBatchId);expect(history.batchIds).toEqual([first.value.receivingBatchId]);expect(history.receipts.map(item=>item.receiptId)).toContain(first.value.receiptId);expect(history.receipts.map(item=>item.receiptId)).not.toContain(unrelated.value.receiptId);expect(history.packing).toHaveLength(1);expect(history.files).toHaveLength(1);expect(history.files[0]?.filename).toBeTruthy();
+    await expect(service.documentHistory(randomUUID())).rejects.toMatchObject({statusCode:404});
+  });
   it('serializes stale difference submissions and allows a new quantity episode even when values return',async()=>{
     const created=await service.create(receiver(),{styleNo:'TEST-R3-STALE',documentQuantity:10,actualQuantity:11,attachmentIds:[await readyImage()]},randomUUID());
     const board=async()=>(await service.board(businessDate(),businessDate(),'TEST-R3-STALE')).rows[0]!;

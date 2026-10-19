@@ -4237,6 +4237,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
       VALUES($1,$2,'新版回签.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[newFile,`contract-info-new-return/${newFile}`,"f".repeat(64),rootActor().actorId]);
     const resign=await contractReturns.submit(rootActor(),id,[newFile],randomUUID());
+    const directory=await service.contractDirectory({...rootActor(),authorizationCapability:"sourcing:view"},id);
+    expect(directory.versions.map(version=>[version.signedContractDocumentId,version.attachments.map(file=>file.attachmentId)])).toEqual(expect.arrayContaining([[withStyle.sourcingContractDocumentId,[attachmentId]],[rootDocument,[newFile]]]));
+    expect(directory.contracts.map(item=>item.entryId)).toEqual(expect.arrayContaining([withStyle.sourcingContractDocumentId,rootDocument]));
+    await expect(service.contractDirectory({...readerActor(),authorizationCapabilities:["sourcing:view"]},id)).rejects.toMatchObject({statusCode:403});
+
     expect(resign).toMatchObject({currentContractReturned:true,signedContractDocumentId:rootDocument,
       contractReturnedAt:returned.contractReturnedAt,contractReturnDueAt:returned.contractReturnDueAt,
       contractReturnStatus:returned.contractReturnStatus});

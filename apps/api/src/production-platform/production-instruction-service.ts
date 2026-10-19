@@ -1,3 +1,4 @@
+import {documentMetadata} from "./document-metadata.js";
 import { instructionNotice } from "./instruction-notice.js";
 import { PoCustomerDateService } from "./po-customer-date-service.js";
 import type { InstructionDateRequest } from "@dx-rework/contracts/production-instruction";
@@ -63,7 +64,7 @@ export class ProductionInstructionService {
     }
     const review=(await db.query("SELECT a.after_state,a.created_at,u.display_name FROM audit_events a LEFT JOIN app_users u ON u.id=a.actor_id WHERE a.entity_type='digital_instruction' AND a.entity_id=$1 AND a.action='instruction_source_decisions' AND (a.after_state->>'version')::int<=$2 ORDER BY a.created_at DESC LIMIT 1",[id,row?.version??0])).rows[0];
     const sourceReview:InstructionSheet["sourceReview"]=review?{sourceRound:review.after_state.sourceRound,instructionVersion:review.after_state.version,decisions:review.after_state.decisions,reviewedAt:new Date(review.created_at).toISOString(),reviewedBy:review.display_name??"",...(review.after_state.priorMeasurements?{priorMeasurements:review.after_state.priorMeasurements}:{})}:undefined;
-    return { order: selectedVersion ? {...row.order_snapshot,lines:(row.order_snapshot as DigitalOrder).lines.map(line=>{const current=order.lines.find(l=>l.lineId===line.lineId);return current?{...line,poNumber:current.poNumber,formalStyleNo:current.formalStyleNo,temporaryStyleNo:current.temporaryStyleNo}:line;})} : order, currentOrderVersion:order.version,currentDeliveryDate:order.contractDeliveryDate, document: seeded.document, version: row?.version ?? 0,
+    return { metadata:await documentMetadata(db,row), order: selectedVersion ? {...row.order_snapshot,lines:(row.order_snapshot as DigitalOrder).lines.map(line=>{const current=order.lines.find(l=>l.lineId===line.lineId);return current?{...line,poNumber:current.poNumber,formalStyleNo:current.formalStyleNo,temporaryStyleNo:current.temporaryStyleNo}:line;})} : order, currentOrderVersion:order.version,currentDeliveryDate:order.contractDeliveryDate, document: seeded.document, version: row?.version ?? 0,
       publishedVersion: selectedVersion ?? published, isPublishedSnapshot:Boolean(selectedVersion), sourceRound: seeded.sourceRound, latestSourceRound, ...(sourceComparison?{sourceComparison}:{}),...(sourceReview?{sourceReview}:{}),
       versions: (await db.query("SELECT version FROM digital_instruction_versions WHERE production_order_id=$1 ORDER BY version DESC", [id])).rows.map(r => r.version),
       canEdit: draftAccess && !version && (Boolean(row) || this.creationEnabled), cutStarted, merchandiserName: name,

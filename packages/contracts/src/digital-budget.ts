@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type {JourneyDocumentMetadata} from "./digital-production-journey.js";
 
 const short = z.string().trim().max(100);
 const decimal = z.string().regex(/^(?:0|[1-9]\d{0,9})(?:\.\d{1,6})?$/, "请输入最多六位小数的非负数字");
@@ -79,6 +80,7 @@ export function budgetPublishErrors(document: BudgetDocument): string[] {
   return errors;
 }
 export type BudgetSheet = {
+  metadata?:JourneyDocumentMetadata;
   versions?:number[];
   productionOrderId: string; version: number; status: "draft" | "published";
   document: BudgetDocument | null; totals: ReturnType<typeof calculateBudget> | null;

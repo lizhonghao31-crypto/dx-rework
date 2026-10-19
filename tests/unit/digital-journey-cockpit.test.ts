@@ -135,7 +135,7 @@ describe("R2 PR07 stage display scope", () => {
     const record={domain:"development",id,url:"/ui/digital-production?development="+id+"&round=1",mode:"read" as const,version:1,lineId:null};
     const item=order([node("paper",{stage:"preparation",records:[record]})]);
     const html=renderToStaticMarkup(createElement(DigitalJourneyCockpit,{data:null,detail:item,context:context(),error:"",detailError:"",detailLoading:false,onChange(){},actions:null}));
-    expect(html).not.toContain('class="journey-node-expanded"');expect(html).not.toContain('journey-preparation-reference');expect(html).not.toContain('本单资料');expect(html).toContain('class="cockpit-related-documents"');expect(html).not.toContain('订单进度 · 全单范围');expect(html).toContain('适用节点');
-    expect(html).toContain('round=1');expect(html).toContain('returnTo=');
+    expect(html).not.toContain('class="journey-node-expanded"');expect(html).not.toContain('journey-preparation-reference');expect(html).not.toContain('本单资料');expect(html).toContain('class="cockpit-document-directory"');expect(html).not.toContain('订单进度 · 全单范围');expect(html).toContain('适用节点');
+    expect(html).toContain('样衣打板执行单');expect(html).toContain('回货与装箱资料');expect(html).toContain('待判断');
   });
 });

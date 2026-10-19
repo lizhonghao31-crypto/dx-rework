@@ -5,6 +5,7 @@ import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { authorizePatternOrder, canReadAllPatternOrders, canReadAllPatternTechnicalOrders, isPatternRoot, patternActorCapabilities, patternOrderScopeSql, patternOrderScopeValues } from "./order-authority.js";
 import { patternReworkCutBlocked, PATTERN_REWORK_CUT_BLOCK } from "./order-rework-boundary.js";
+import {DigitalProductionAccessPolicy,digitalNotFound} from "../production-platform/access-policy.js";
 
 export type PatternOrderRow = {
   order_id: string; order_no: string; kind: "pattern" | "misc"; task_name: string | null; creator_role: "sample_designer" | "order_merchandiser"; status: PatternOrderSummary["status"]; version: number; current_round_id: string;
@@ -31,6 +32,23 @@ export async function scopedPatternOrder(client: PoolClient, actor: TrustedActor
 
 export class PatternOrderReader {
   constructor(private readonly db: Pool, private readonly enabled: boolean, private readonly transactionClient?: PoolClient) {}
+  /** Explicit source/PO relationships only, inside the original persisted pattern read scope. */
+  async related(actor:TrustedActorContext,input:{sourceId?:string|undefined;orderId?:string|undefined;page:number}){
+    return this.read(actor,async(client,effective)=>{
+      const policy=new DigitalProductionAccessPolicy(client);
+      if(input.sourceId)await policy.assert(actor,"source",input.sourceId,"technical");
+      if(input.orderId){await policy.assert(actor,"order",input.orderId,"technical");if(input.sourceId&&!(await client.query("SELECT 1 FROM digital_production_orders WHERE production_order_id=$1 AND source_id=$2",[input.orderId,input.sourceId])).rowCount)digitalNotFound();}
+      const rows=(await client.query(`SELECT orders.order_id AS "orderId",orders.order_no AS "orderNo",orders.kind,orders.submitted_at AS "createdAt",person.display_name AS "createdBy",
+        COALESCE((SELECT jsonb_agg(jsonb_build_object('roundId',r.round_id,'roundIndex',r.round_index,'roundType',r.round_type,'requestedAt',r.requested_at) ORDER BY r.requested_at,r.round_id) FROM pattern_room_rounds r WHERE r.order_id=orders.order_id),'[]') AS rounds
+        FROM pattern_room_orders orders LEFT JOIN app_users person ON person.id=orders.created_by
+        WHERE ${patternOrderScopeSql} AND (
+          orders.kind='pattern' AND EXISTS(SELECT 1 FROM digital_development_pattern_links l WHERE l.order_id=orders.order_id AND l.source_id=$5::uuid)
+          OR orders.kind='misc' AND (orders.misc_association->>'kind'='source' AND orders.misc_association->>'id'=$5::text
+            OR orders.misc_association->>'kind'='po' AND EXISTS(SELECT 1 FROM digital_production_po_lines po WHERE po.production_order_id=$6::uuid AND po.line_id::text=orders.misc_association->>'id')))
+        ORDER BY orders.submitted_at DESC,orders.order_id LIMIT 21 OFFSET $7`,[...patternOrderScopeValues(effective),input.sourceId??null,input.orderId??null,(input.page-1)*20])).rows;
+      return {items:rows.slice(0,20),nextPage:rows.length>20?input.page+1:null};
+    });
+  }
   async peopleFilters(actor: TrustedActorContext) {
     return this.read(actor, async (client, effective) => {
       if (!canReadAllPatternOrders(effective)) throw new ApplicationError("FORBIDDEN", "当前账号不能筛选其他人员", 403);

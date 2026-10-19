@@ -1,4 +1,5 @@
 import { InitialCustomerOrderDraftSchema } from "./digital-production.js";
+import type {JourneyDocumentMetadata} from "./digital-production-journey.js";
 import { z } from "zod";
 
 const text = z.string().trim().max(1000);
@@ -68,6 +69,7 @@ export function developmentPublishErrors(document: DevelopmentDocument): string[
   return errors;
 }
 export type DevelopmentSheet = {
+  metadata?:JourneyDocumentMetadata;
   materialReadiness?:Array<{materialId:string;available:boolean;verified:boolean;missing:string[];evidenceId:string|null}>;
   productionOrderId?:string|null;
   sourceId: string; designStyleNo: string; temporaryStyleNo: string | null; customerCode: string | null;

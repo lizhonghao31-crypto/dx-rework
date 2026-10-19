@@ -1,3 +1,4 @@
+import {documentMetadata} from "./document-metadata.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { budgetPublishErrors, calculateBudget, type BudgetDocument, type BudgetSheet, type BudgetSourcingPreparation } from "@dx-rework/contracts/digital-budget";
@@ -40,7 +41,7 @@ export class DigitalBudgetService {
     const linked = (await db.query("SELECT child_id FROM digital_production_child_links WHERE module='sourcing' AND production_order_id=$1", [orderId])).rows[0];
     const row = (await db.query(version === undefined ? "SELECT * FROM digital_budget_documents WHERE production_order_id=$1" : "SELECT *, 'published' AS status FROM digital_budget_versions WHERE production_order_id=$1 AND version=$2", version === undefined ? [orderId] : [orderId, version])).rows[0];
     if (version !== undefined && !row) digitalNotFound();
-    return { versions:(await db.query("SELECT version FROM digital_budget_versions WHERE production_order_id=$1 ORDER BY version DESC",[orderId])).rows.map(item=>item.version), productionOrderId: orderId, version: row?.version ?? 0, status: row?.status ?? "draft", document: row?.document ?? null,
+    return { metadata:await documentMetadata(db,row), versions:(await db.query("SELECT version FROM digital_budget_versions WHERE production_order_id=$1 ORDER BY version DESC",[orderId])).rows.map(item=>item.version), productionOrderId: orderId, version: row?.version ?? 0, status: row?.status ?? "draft", document: row?.document ?? null,
       totals: row ? calculateBudget(row.document) : null, canEdit: order.canEdit && !linked && version === undefined && (Boolean(row) || this.creationEnabled),
       canSubmitSourcing: !linked && row?.status === "published" && (isRootActor(actor) || actor.actorRoles.includes("order_merchandiser") && order.primary_merchandiser_id === actor.actorId),
       sourcingCaseId: linked?.child_id ?? null, publishedAt: row?.published_at ? new Date(row.published_at).toISOString() : null,

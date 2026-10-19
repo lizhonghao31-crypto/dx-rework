@@ -41,6 +41,20 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   const order=await identity.createOrder(actor(),DigitalOrderCreateSchema.parse({designStyleNo:'TEST-MISC-MOTHER',temporaryStyleNo:null,customerCode:'PD',productGroup:'男装',orderDate:'2026-09-01',lines:[{poNumber:'PO-MISC-1',color:'蓝',sizes:[{size:'M',quantity:10}],deliveryDate:'2026-12-01'}]}),randomUUID());orderId=order.productionOrderId;poId=order.lines[0]!.lineId;
  },120000);
  afterAll(async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+ it('reads only explicit related pattern/source and PO associations with persisted original scope',async()=>{
+  const rootActor=actor(root,['root_superuser']);
+  const source=await identity.createSource(rootActor,{developmentType:'头版',designStyleNo:'TEST-DIR-LINK',temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+  const fileId=randomUUID();await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST related.pdf','application/pdf',10,$3,$4,'ready',CURRENT_TIMESTAMP)",[fileId,'tests/'+fileId,'a'.repeat(64),root]);
+  const pattern=await createHistoricalPatternFixture(service,rootActor,{styleNo:'TEST-DIR-LINK',categoryId:'92000000-0000-4000-8000-000000000002',priceVersion:1,quantity:1,attachmentIds:[fileId]},randomUUID());
+  await db.query('INSERT INTO digital_development_pattern_links(source_id,order_id,linked_by) VALUES($1,$2,$3)',[source.sourceId,pattern.orderId,root]);
+  const misc=await service.createMisc(rootActor,input('TEST related source',{kind:'source',id:source.sourceId},'TEST-DIR-LINK'),randomUUID());
+  const textOnly=await service.createMisc(rootActor,input('TEST directory legacy text'),randomUUID());await db.query("UPDATE pattern_room_orders SET style_no='TEST-DIR-LINK' WHERE order_id=$1",[textOnly.orderId]);
+  const linked=await service.related(rootActor,{sourceId:source.sourceId,page:1});expect(linked.items.map(item=>item.orderId)).toEqual(expect.arrayContaining([pattern.orderId,misc.orderId]));expect(linked.items.map(item=>item.orderId)).not.toContain(textOnly.orderId);expect(linked.items.find(item=>item.orderId===pattern.orderId)?.rounds[0].roundId).toBe(pattern.currentRoundId);expect(JSON.stringify(linked)).not.toContain('unitPrice');
+  await expect(service.related(actor(other),{sourceId:source.sourceId,page:1})).rejects.toMatchObject({statusCode:404});
+  await expect(service.related(rootActor,{sourceId:source.sourceId,orderId,page:1})).rejects.toMatchObject({statusCode:404});
+  const po=(await service.miscAssociations(rootActor,'PO-MISC-1')).find(item=>item.id===poId)!;const poMisc=await service.createMisc(rootActor,input('TEST related PO',{kind:'po',id:poId},po.styleNo),randomUUID());
+  expect((await service.related(rootActor,{orderId,page:1})).items.map(item=>item.orderId)).toContain(poMisc.orderId);
+ });
  it('rejects standalone new pattern for Root/designer/other roles and the old POST, while advertising no create action',async()=>{
   for(const context of [actor(),actor(root,['root_superuser']),actor(merch,['order_merchandiser']),actor(worker,['pattern_room_worker']),actor(supervisor,['pattern_room_supervisor'])])await expect(service.create(context,{},randomUUID())).rejects.toMatchObject({statusCode:403});
   const app=Fastify();app.setErrorHandler((error,_req,reply)=>reply.code((error as ApplicationError).statusCode??500).send({error:{message:error.message}}));

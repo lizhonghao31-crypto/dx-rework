@@ -343,6 +343,9 @@ export function registerSourcingRoutes(
     ),
   );
 
+  app.get<{Params:{sourcingCaseId:string}}>("/sourcing/cases/:sourcingCaseId/contract-directory",async(request,reply)=>{
+    reply.header("cache-control","no-store");return dependencies.service.contractDirectory(await readActor(request),caseId(request.params.sourcingCaseId));
+  });
   app.get<{ Params: { sourcingCaseId: string; node: string }; Querystring: { entryId?: string } }>(
     "/sourcing/cases/:sourcingCaseId/history/:node",
     async (request) => {
