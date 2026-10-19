@@ -1,0 +1,147 @@
+.digital-journey-cockpit .cockpit-detail {display:grid;gap:12px;font-size:14px;min-width:0}
+.digital-journey-cockpit .cockpit-detail h1 {display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:25px;margin:0 0 8px}
+.digital-journey-cockpit .cockpit-detail h2 {font-size:16px;margin:0 0 8px}
+.digital-journey-cockpit .cockpit-detail p,.digital-journey-cockpit .cockpit-detail small {font-size:14px;line-height:1.4}
+.digital-journey-cockpit .cockpit-detail-toolbar,.digital-journey-cockpit .cockpit-detail-toolbar>div {display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.digital-journey-cockpit .cockpit-detail-toolbar .pattern-actions {margin:0}
+.digital-journey-cockpit .cockpit-detail-toolbar button {min-height:40px}
+.digital-journey-cockpit .cockpit-detail-identity {display:grid;grid-template-columns:150px minmax(0,1fr);gap:16px;align-items:start}
+.digital-journey-cockpit .cockpit-detail-photo {width:150px;height:170px}
+.digital-journey-cockpit .cockpit-identity-facts {display:flex;gap:4px 14px;flex-wrap:wrap;color:#48617f;line-height:1.5;margin-bottom:8px}
+.digital-journey-cockpit .cockpit-detail .journey-po-order-facts {margin:0}
+.digital-journey-cockpit .cockpit-detail .journey-po-order-facts table {min-width:560px;width:100%}
+.digital-journey-cockpit .cockpit-detail .journey-po-order-facts th,.digital-journey-cockpit .cockpit-detail .journey-po-order-facts td {font-size:14px;padding:5px 8px;color:#243c61}
+.digital-journey-cockpit .cockpit-round-select {display:flex;gap:8px;align-items:center;margin-top:8px}
+.digital-journey-cockpit .cockpit-round-select select {font:inherit;min-height:40px;max-width:100%}
+.digital-journey-cockpit .cockpit-flow-panel .journey-section-title {justify-content:space-between;gap:10px;flex-wrap:wrap}
+.digital-journey-cockpit .cockpit-flow-panel h2 strong {color:#0065ff;margin-left:8px}
+.digital-journey-cockpit .cockpit-flow-legend {font-size:13px;color:#6e829f}
+.digital-journey-cockpit .cockpit-flow-scroll {overflow-x:auto;overflow-y:visible;padding-bottom:8px}
+.digital-journey-cockpit .cockpit-stages {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;min-width:960px}
+.digital-journey-cockpit .cockpit-stage {position:relative;min-width:0;text-align:center}
+.digital-journey-cockpit .cockpit-stage:not(:last-child)::after {content:"";position:absolute;top:45px;height:2px;background:#bdcbe0;left:calc(50% + 48px);width:calc(100% - 88px);pointer-events:none}
+.digital-journey-cockpit .cockpit-stage-select {position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;background:transparent;border:0;padding:0 4px;width:100%;font:inherit;color:#213959;cursor:pointer;min-height:118px}
+.digital-journey-cockpit .cockpit-stage-select:focus-visible {outline:2px solid #2681fa;outline-offset:2px;border-radius:5px}
+.digital-journey-cockpit .cockpit-stage-select>strong {font-size:14px;line-height:1.35}
+.digital-journey-cockpit .cockpit-stage-select>strong small {display:inline;margin-left:3px;font-size:12px}
+.digital-journey-cockpit .cockpit-stage-rings {display:block;position:relative;width:90px;height:90px}
+.digital-journey-cockpit .cockpit-stage-rings svg {width:100%;height:100%}
+.digital-journey-cockpit .cockpit-stage-check {position:absolute;right:8px;bottom:11px;border:2px solid white;border-radius:50%;width:20px;height:20px;color:white;background:#00a981;font-size:13px;line-height:16px}
+.digital-journey-cockpit .cockpit-stage.is-selected .cockpit-stage-rings {filter:drop-shadow(0 0 4px #0065ff50)}
+.digital-journey-cockpit .cockpit-stage-tooltip {display:none;position:absolute;z-index:4;top:0;left:50%;transform:translateX(-50%);padding:7px 9px;background:#203957;color:white;border-radius:5px;min-width:150px;font-size:13px;text-align:left;pointer-events:none}
+.digital-journey-cockpit .cockpit-stage-select:hover .cockpit-stage-tooltip,.digital-journey-cockpit .cockpit-stage-select:focus .cockpit-stage-tooltip {display:block}
+.digital-journey-cockpit .cockpit-stage:first-child .cockpit-stage-tooltip {left:0;transform:none}
+.digital-journey-cockpit .cockpit-stage:last-child .cockpit-stage-tooltip {left:auto;right:0;transform:none}
+.digital-journey-cockpit .cockpit-stage-dates {display:grid;gap:5px;text-align:left;font-size:13px;color:#2d4460;margin-top:5px}
+.digital-journey-cockpit .cockpit-stage-dates>div {display:flex;gap:3px;white-space:nowrap}
+.digital-journey-cockpit .cockpit-stage-dates>div>span:first-child {color:#7084a3;flex:none}
+.digital-journey-cockpit .cockpit-detail-columns {grid-template-columns:minmax(0,2.65fr) minmax(0,1fr) minmax(0,1.2fr);grid-template-rows:auto auto;gap:10px;align-items:stretch}
+.digital-journey-cockpit .cockpit-detail-columns .journey-current-panel {grid-area:1/1}
+.digital-journey-cockpit .cockpit-detail-columns .journey-node-panel {grid-area:2/1}
+.digital-journey-cockpit .cockpit-detail-columns .journey-documents-panel {grid-area:1/2/3/3}
+.digital-journey-cockpit .cockpit-detail-columns .journey-risk-panel {grid-area:1/3}
+.digital-journey-cockpit .cockpit-detail-columns .journey-activity-panel {grid-area:2/3}
+.digital-journey-cockpit .cockpit-detail .journey-three-columns>.dx-production-panel {padding:10px;min-width:0}
+.digital-journey-cockpit .cockpit-node-current {display:flex;justify-content:space-between;gap:12px}
+.digital-journey-cockpit .cockpit-node-current dl {display:grid;gap:5px;margin:0;flex:1;min-width:0}
+.digital-journey-cockpit .cockpit-node-current dl>div {display:grid;grid-template-columns:7.2em minmax(0,1fr);gap:8px}
+.digital-journey-cockpit .cockpit-node-current dt {color:#7084a3;font-weight:400;white-space:nowrap;word-break:normal;overflow-wrap:normal}
+.digital-journey-cockpit .cockpit-node-current dd {margin:0;overflow-wrap:anywhere}
+.digital-journey-cockpit .cockpit-node-primary {max-width:45%;align-self:center}
+.digital-journey-cockpit .cockpit-node-primary>a {display:inline-flex;align-items:center;justify-content:center;padding:9px 12px;min-height:40px;background:#0065ff;color:white;text-decoration:none;border-radius:5px}
+.digital-journey-cockpit .cockpit-node-blockers {padding-top:6px;max-height:110px;overflow:auto;color:#7a5023}
+.digital-journey-cockpit .cockpit-detail .journey-node-tabs {height:auto;min-height:40px;gap:10px;overflow-x:auto}
+.digital-journey-cockpit .cockpit-detail .journey-node-tabs button {font-size:14px;min-height:40px;white-space:nowrap}
+.digital-journey-cockpit .cockpit-detail .journey-node-viewport {height:340px;max-height:50dvh;overflow:auto}
+.digital-journey-cockpit .cockpit-detail .journey-node-table {min-width:568px;font-size:14px}
+.digital-journey-cockpit .cockpit-detail .journey-node-table :is(th,td,button,.dx-badge,small) {font-size:14px;line-height:1.4}
+.digital-journey-cockpit .cockpit-detail .journey-node-table th,.digital-journey-cockpit .cockpit-detail .journey-node-table td {padding:8px 6px;vertical-align:top}
+.digital-journey-cockpit .cockpit-detail .journey-node-table th {white-space:nowrap;border-right:1px solid #e1e8f2}
+.digital-journey-cockpit .cockpit-detail .journey-node-table .node-name {width:110px}
+.digital-journey-cockpit .cockpit-detail .journey-node-table .node-owner {width:80px}
+.digital-journey-cockpit .cockpit-detail .journey-node-table .node-status {width:100px}
+.digital-journey-cockpit .cockpit-detail .journey-node-table .node-time {width:100px}
+.digital-journey-cockpit .cockpit-detail .journey-node-table .node-record {width:78px}
+.digital-journey-cockpit .cockpit-detail .journey-node-table td:nth-child(3) .dx-badge {display:inline-block;max-width:100%;white-space:normal}
+.digital-journey-cockpit .cockpit-detail .journey-node-table .cockpit-state-part,.digital-journey-cockpit .cockpit-detail .journey-node-table .cockpit-node-round {display:inline-block;white-space:nowrap;word-break:normal;overflow-wrap:normal}
+.digital-journey-cockpit .cockpit-compact-date {display:inline-flex;flex-direction:column;white-space:nowrap;font-variant-numeric:tabular-nums;gap:2px}
+.digital-journey-cockpit .cockpit-detail .journey-node-table .journey-node-toggle {min-height:40px;text-align:left}
+.digital-journey-cockpit .cockpit-detail .journey-node-table a {display:inline-block;min-height:40px;overflow-wrap:anywhere}
+.digital-journey-cockpit .cockpit-related-documents {max-height:540px;overflow:auto;overflow-wrap:anywhere}
+.digital-journey-cockpit .cockpit-related-documents>div {padding:7px 0;border-bottom:1px solid #e7eef8}
+.digital-journey-cockpit .cockpit-related-documents a {display:block;min-height:32px}
+.digital-journey-cockpit .cockpit-risk-tabs {display:flex;gap:8px;align-items:center;border-bottom:1px solid #dce8fa;margin-bottom:8px}
+.digital-journey-cockpit .cockpit-risk-tabs button {border:0;border-bottom:2px solid transparent;background:none;font:inherit;padding:5px 0;min-height:40px;color:#7182a0;cursor:pointer}
+.digital-journey-cockpit .cockpit-risk-tabs button[aria-pressed="true"] {color:#0065ff;border-color:#0065ff;font-weight:700}
+.digital-journey-cockpit .cockpit-risk-list {max-height:240px;overflow:auto;overflow-wrap:anywhere}
+.digital-journey-cockpit .cockpit-risk-list article {padding:7px 0;border-bottom:1px solid #e6edf7}
+.digital-journey-cockpit .cockpit-risk-list article>div {display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.digital-journey-cockpit .cockpit-risk-list button,.digital-journey-cockpit .cockpit-risk-list a {display:inline-flex;align-items:center;min-height:40px}
+.digital-journey-cockpit .cockpit-detail .po-date-risk {font-size:14px;color:#3e526f}
+.digital-journey-cockpit .cockpit-log-summary {list-style:none;padding:0;margin:0}
+.digital-journey-cockpit .cockpit-log-summary li {display:grid;grid-template-columns:minmax(5em,8em) minmax(0,1fr);gap:3px 10px;border-bottom:1px solid #e7eef7;padding:7px 0;overflow-wrap:break-word}
+.digital-journey-cockpit .cockpit-log-summary time {grid-column:1/-1;white-space:nowrap;font-size:13px;color:#7183a0}
+.digital-journey-cockpit .cockpit-log-summary li>span {min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.digital-journey-cockpit .cockpit-log-summary li>span:hover,.digital-journey-cockpit .cockpit-log-summary li>span:focus {white-space:normal;overflow-wrap:break-word}
+.digital-journey-cockpit .cockpit-log-summary strong {font-size:14px;font-weight:400}
+.digital-journey-cockpit .cockpit-log-dialog {border:0;border-radius:10px;padding:20px;width:min(900px,94vw);max-height:90dvh;color:#243c61;background:white}
+.digital-journey-cockpit .cockpit-log-dialog:not([open]) {display:none}
+.digital-journey-cockpit .cockpit-log-dialog::backdrop {background:#14243b88}
+.digital-journey-cockpit .cockpit-log-dialog header,.digital-journey-cockpit .cockpit-log-dialog footer {display:flex;justify-content:space-between;gap:12px;align-items:center}
+.digital-journey-cockpit .cockpit-log-dialog button {font:inherit;min-height:40px;padding:7px 12px;border:1px solid #c6d8ef;border-radius:5px;background:white;color:#125cb8;cursor:pointer}
+.digital-journey-cockpit .cockpit-log-dialog button:disabled {opacity:.5;cursor:default}
+.digital-journey-cockpit .cockpit-log-scroll {max-height:60dvh;overflow:auto;margin:10px 0}
+.digital-journey-cockpit .cockpit-log-scroll table {width:100%;min-width:550px;border-collapse:collapse;font-size:14px}
+.digital-journey-cockpit .cockpit-log-scroll th,.digital-journey-cockpit .cockpit-log-scroll td {padding:9px 8px;text-align:left;vertical-align:top;border-bottom:1px solid #e1ebf8}
+.digital-journey-cockpit .cockpit-log-scroll th {background:#eff5ff;position:sticky;top:0}
+@media(max-width:800px){
+ .digital-journey-cockpit .cockpit-detail {font-size:16px}
+ .digital-journey-cockpit .cockpit-detail p,.digital-journey-cockpit .cockpit-detail small {font-size:16px}
+ .digital-journey-cockpit .cockpit-detail-identity {grid-template-columns:80px minmax(0,1fr);gap:10px}
+ .digital-journey-cockpit .cockpit-detail-photo {width:80px;height:110px}
+ .digital-journey-cockpit .cockpit-detail h1 {font-size:22px}
+ .digital-journey-cockpit .cockpit-detail-columns {grid-template-columns:minmax(0,1fr);grid-template-rows:none}
+ .digital-journey-cockpit .cockpit-detail-columns>.dx-production-panel {grid-area:auto}
+ .digital-journey-cockpit .cockpit-detail-columns .journey-current-panel {order:1}
+ .digital-journey-cockpit .cockpit-detail-columns .journey-node-panel {order:2}
+ .digital-journey-cockpit .cockpit-detail-columns .journey-documents-panel {order:3}
+ .digital-journey-cockpit .cockpit-detail-columns .journey-risk-panel {order:4}
+ .digital-journey-cockpit .cockpit-detail-columns .journey-activity-panel {order:5}
+ .digital-journey-cockpit .cockpit-node-current {flex-direction:column}
+ .digital-journey-cockpit .cockpit-node-primary {max-width:none;align-self:start}
+ .digital-journey-cockpit .cockpit-detail .journey-node-table :is(th,td,button,.dx-badge,small) {font-size:16px}
+ .digital-journey-cockpit .cockpit-detail button,.digital-journey-cockpit .cockpit-detail a {min-height:44px}
+ .digital-journey-cockpit .cockpit-related-documents {max-height:400px}
+ .digital-journey-cockpit .cockpit-detail .journey-node-viewport {height:360px;max-height:60dvh}
+ .digital-journey-cockpit .cockpit-log-dialog {padding:12px}
+}
+
+.digital-journey-cockpit .cockpit-detail-identity>div {min-width:0}
+.digital-journey-cockpit .cockpit-detail h1,.digital-journey-cockpit .cockpit-identity-facts>span {overflow-wrap:anywhere;max-width:100%}
+.dx-production-ui .digital-journey-cockpit .cockpit-detail .cockpit-detail-columns {align-items:stretch}
+.dx-production-ui .digital-journey-cockpit .cockpit-detail .journey-documents-panel {align-self:stretch}
+.dx-production-ui .digital-journey-cockpit .cockpit-detail .journey-activity-panel {align-self:start;height:auto;min-height:0}
+.dx-production-ui .digital-journey-cockpit .cockpit-detail .cockpit-node-current dd {font-size:14px;font-weight:400;line-height:1.5}
+.dx-production-ui .digital-journey-cockpit .cockpit-detail .journey-risk-panel {max-height:220px}
+.dx-production-ui .digital-journey-cockpit .cockpit-detail .cockpit-risk-list {max-height:160px;overflow:auto}
+.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .journey-node-table td {white-space:normal;overflow:visible;text-overflow:clip;height:auto;max-height:none;overflow-wrap:anywhere}
+@media(max-width:800px){
+ .dx-production-ui .digital-journey-cockpit .cockpit-detail .cockpit-node-current dd {font-size:16px}
+ .dx-production-ui .digital-journey-cockpit .cockpit-detail .journey-risk-panel {max-height:320px}
+ .dx-production-ui .digital-journey-cockpit .cockpit-detail .cockpit-risk-list {max-height:250px}
+}
+
+.digital-journey-cockpit .cockpit-identity-heading {display:flex;justify-content:space-between;align-items:start;gap:10px;flex-wrap:wrap}
+.digital-journey-cockpit .cockpit-identity-heading .cockpit-round-select {margin:0;font-size:14px}
+@media(max-width:600px){
+ .digital-journey-cockpit .cockpit-detail .journey-po-order-facts {overflow-x:auto;max-width:100%;width:100%}
+ .digital-journey-cockpit .cockpit-detail .journey-po-order-facts table {min-width:0;width:100%}
+ .digital-journey-cockpit .cockpit-detail .journey-po-order-facts td::before {font-size:14px}
+}
+
+.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .journey-node-table th:last-child{right:auto;box-shadow:none;z-index:2}
+.dx-production-ui .digital-journey-cockpit[data-view="order"] .cockpit-detail .journey-node-table td:last-child:not([colspan]){position:static;right:auto;box-shadow:none;white-space:normal}
+@media(max-width:800px){
+ .digital-journey-cockpit .cockpit-detail .journey-node-table{min-width:592px}
+ .digital-journey-cockpit .cockpit-detail .journey-node-table .node-time{width:112px}
+}

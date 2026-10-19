@@ -82,6 +82,22 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     const response=await app.inject({url:`/digital-production/journeys/${sourceId}/logs`,headers:{cookie:`dx_rework_session=${designer}`}});
     expect(response.statusCode,response.body).toBe(200);expect(response.json().items).toHaveLength(20);expect(response.headers["cache-control"]).toBe("no-store");
   });
+  it("keeps compact flow dates and current risks on the effective round while reading an older round",async()=>{
+    const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-FLOW-CURRENT-ROUND",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+    await publishSource(sourceId);
+    const published=(await db.query("SELECT document FROM digital_development_documents WHERE source_id=$1",[sourceId])).rows[0].document;
+    const routeId=randomUUID();
+    await db.query("INSERT INTO digital_development_rounds(source_id,round_number,based_on_round,document_version,document,origin,customer_comment,internal_problem,explanation,categories,affected_nodes,output_kind,route_nodes,inherited,route_id,created_by) VALUES($1,2,1,2,$2,'客户新增要求','TEST第二轮','','TEST当前有效轮',ARRAY['纸样'],ARRAY['development_pattern'],'整件样板',ARRAY['development_pattern'],'{}',$3,$4)",[sourceId,JSON.stringify(published),routeId,designer]);
+    const task=await createTask({resource:{kind:"source",id:sourceId},kind:"development_pattern",routeId,routeVersion:2,occurrence:1,assigneeId:worker});
+    const activate=await db.connect();try{await activate.query("BEGIN");await tasks.setConditionWithClient(activate,actor(root,["root_superuser"]),task.taskId,"materials_ready",true);await tasks.setConditionWithClient(activate,actor(root,["root_superuser"]),task.taskId,"handover_received",true);await activate.query("COMMIT");}catch(error){await activate.query("ROLLBACK");throw error;}finally{activate.release();}
+    const current=await journeys.read(actor(),sourceId,undefined,true),older=await journeys.read(actor(),sourceId,1,true);
+    const flowNode=older.flowStages?.flatMap(stage=>stage.nodes).find(node=>node.instanceId===task.taskId);
+    expect(older.selectedRound).toBe(1);expect(flowNode).toMatchObject({round:2,current:true});expect(flowNode?.expectedAt).toBeTruthy();
+    expect(flowNode?.expectedAt).toBe(current.flowStages?.flatMap(stage=>stage.nodes).find(node=>node.instanceId===task.taskId)?.expectedAt);
+    expect(older.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===task.taskId)?.current).toBe(false);
+    expect(older.display).toEqual(current.display);expect(older.currentRiskNodes?.every(node=>node.stage!=="development"||node.round===2)).toBe(true);
+    await expect(journeys.read(actor(stranger),sourceId,1,true)).rejects.toMatchObject({statusCode:404});
+  });
   it("reads only pending original assignment facts and never starts its digital sewing context",async()=>{
     const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-J-NATIVE-ASSIGN",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
     const task=await createTask({resource:{kind:"source",id:sourceId},kind:"development_sewing_transfer",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:clerk});
