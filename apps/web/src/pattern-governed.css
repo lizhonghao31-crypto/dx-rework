@@ -149,3 +149,6 @@
 .pattern-form-page .misc-association-field{display:grid;gap:5px;min-width:0}
 .pattern-form-page .misc-association-field .native-search-select__native{left:0;top:0;width:1px!important;height:1px!important;min-height:0!important;padding:0!important}
 .pattern-form-page .misc-association-field small{overflow-wrap:anywhere}
+
+/* Misc association is a field, not a bottom-aligned status/help block. */
+.pattern-form-page .pattern-form-primary:has(> .misc-association-field) { align-items:start; }

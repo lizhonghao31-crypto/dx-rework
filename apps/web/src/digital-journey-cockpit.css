@@ -71,7 +71,29 @@
 .journey-stage-time>span{white-space:nowrap}
 
 .journey-order-heading .journey-style-image {width:100px;height:100px;object-fit:contain;flex-shrink:0;border-radius:8px;}
-.bulk-pattern-workspace .pattern-lane-cards {display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;}
+.bulk-pattern-workspace .bulk-pattern-columns .pattern-lane-cards {display:grid;grid-template-columns:minmax(0,1fr);min-width:0;align-content:start;gap:10px;}
+.dx-production-ui .bulk-pattern-workspace .bulk-pattern-columns .bulk-pattern-card {display:block;position:relative;min-width:0;max-width:100%;width:100%;margin:0;text-align:left;cursor:default;}
+.bulk-pattern-workspace .bulk-pattern-card > * {min-width:0;max-width:100%;overflow-wrap:anywhere;}
+.bulk-pattern-workspace .bulk-pattern-card__identity {display:flex;align-items:flex-start;justify-content:space-between;gap:6px;}
+.bulk-pattern-workspace .bulk-pattern-card__link {display:grid;gap:4px;min-width:0;color:inherit;text-decoration:none;}
+.bulk-pattern-workspace .bulk-pattern-card__link::after {content:"";position:absolute;inset:0;z-index:1;border-radius:inherit;cursor:pointer;}
+.bulk-pattern-workspace .bulk-pattern-card__link strong {font-size:14px;line-height:1.4;overflow-wrap:anywhere;}
+.bulk-pattern-workspace .bulk-pattern-card__link:hover strong {text-decoration:underline;}
+.bulk-pattern-workspace .bulk-pattern-card__link:focus-visible {outline:none;}
+.bulk-pattern-workspace .bulk-pattern-card:has(.bulk-pattern-card__link:focus-visible) {outline:2px solid var(--dx-v2-color-primary);outline-offset:2px;}
+.bulk-pattern-workspace .bulk-pattern-card__customer {font-size:12px;color:var(--dx-v2-color-text-secondary);}
+.bulk-pattern-workspace .bulk-pattern-card__status {flex:0 0 auto;max-width:100%;}
+.bulk-pattern-workspace .bulk-pattern-card :is(.bulk-pattern-card__single-po,.bulk-pattern-card__current,.bulk-pattern-card__deadline,.bulk-pattern-card__reason) {margin:7px 0 0;font-size:13px;line-height:1.5;overflow-wrap:anywhere;}
+.bulk-pattern-workspace .bulk-pattern-card__po {position:relative;z-index:2;margin-top:7px;font-size:13px;line-height:1.5;}
+.bulk-pattern-workspace .bulk-pattern-card__po summary {min-height:40px;padding:4px 0;cursor:pointer;overflow-wrap:anywhere;}
+.bulk-pattern-workspace .bulk-pattern-card__po summary:focus-visible {outline:2px solid var(--dx-v2-color-primary);outline-offset:1px;}
+.bulk-pattern-workspace .bulk-pattern-card__po ul {margin:4px 0 0;padding-left:18px;}
+.bulk-pattern-workspace .bulk-pattern-card__po li {margin:0 0 5px;overflow-wrap:anywhere;}
+.bulk-pattern-workspace .bulk-pattern-card__deadline.is-overdue {color:var(--dx-status-danger);}
+.bulk-preparation-reference .bulk-preparation-identifiers {margin-top:12px;}
+.bulk-preparation-reference .bulk-preparation-identifiers summary {cursor:pointer;min-height:40px;padding-block:8px;}
+.bulk-preparation-reference .bulk-preparation-identifiers dd {margin:0;overflow-wrap:anywhere;}
+@media(max-width:800px){.bulk-pattern-workspace .bulk-pattern-card__link strong,.bulk-pattern-workspace .bulk-pattern-card__customer,.bulk-pattern-workspace .bulk-pattern-card :is(.bulk-pattern-card__single-po,.bulk-pattern-card__current,.bulk-pattern-card__deadline,.bulk-pattern-card__reason,.bulk-pattern-card__po){font-size:16px;}.bulk-pattern-workspace .bulk-pattern-card__po summary,.bulk-preparation-reference .bulk-preparation-identifiers summary{min-height:44px;}}
 @media(max-width:480px){.journey-order-heading .journey-style-image{width:72px;height:72px;}.bulk-pattern-workspace .pattern-lane-cards{grid-template-columns:1fr;}}
 
 .journey-current-primary-actions{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}.journey-current-primary-actions a{display:inline-flex;align-items:center;min-height:32px;padding:4px 10px;border:1px solid #b7d5ff;border-radius:4px;background:#fbfdff;}
@@ -101,3 +123,41 @@
 .digital-journey-cockpit .journey-activity-empty{display:block}
 @media(max-width:800px){.digital-journey-cockpit .journey-order-heading{height:auto;flex-wrap:wrap}.digital-journey-cockpit .journey-order-heading h1{flex-wrap:wrap}.digital-journey-cockpit .journey-current-panel:has(.journey-current-primary-actions) .journey-current-body{height:auto}}
 @media(min-width:801px){.digital-journey-cockpit .journey-flow-panel:not(.is-collapsed){height:auto;min-height:194px}.digital-journey-cockpit .journey-flow-panel:not(.is-collapsed) .dx-production-stage{height:auto;min-height:112px}}
+
+/* ERP PR09c: each parallel owner remains readable; current work and records use natural height. */
+.dx-production-ui .digital-journey-cockpit .journey-three-columns { grid-template-rows:auto auto; align-items:start; }
+.dx-production-ui .digital-journey-cockpit .journey-three-columns > div > section { height:auto; }
+.dx-production-ui .digital-journey-cockpit .journey-current-panel { height:auto; min-height:0; max-height:none; overflow:visible; }
+.dx-production-ui .digital-journey-cockpit .journey-current-panel .journey-current-body { height:auto; max-height:none; overflow:visible; }
+.dx-production-ui .digital-journey-cockpit .journey-parallel-nodes { flex-wrap:wrap; overflow:visible; gap:6px; font-size:12px; line-height:18px; }
+.dx-production-ui .digital-journey-cockpit .journey-parallel-nodes > button { flex:0 1 auto; min-width:0; max-width:100%; padding:4px 6px; white-space:normal; overflow-wrap:anywhere; text-align:left; }
+.dx-production-ui .digital-journey-cockpit :is(.journey-documents-viewport,.journey-activities) { height:auto; min-height:0; max-height:none; overflow:visible; }
+.dx-production-ui .digital-journey-cockpit .journey-activities li { font-size:12px; line-height:18px; }
+.dx-production-ui .digital-journey-cockpit .journey-activities :is(time,button) { font-size:12px; line-height:18px; }
+@media(max-width:800px) {
+  .dx-production-ui .digital-journey-cockpit .journey-parallel-nodes > button { flex:1 1 180px; min-height:44px; font-size:16px; line-height:24px; }
+  .dx-production-ui .digital-journey-cockpit .journey-risk-viewport { height:auto; max-height:none; overflow:visible; }
+  .dx-production-ui .digital-journey-cockpit .journey-node-tabs { height:auto; min-height:44px; max-height:none; padding-block:2px; align-items:center; }
+  .dx-production-ui .digital-journey-cockpit .journey-activities :is(li,time,button) { font-size:16px; line-height:24px; }
+  .dx-production-ui .digital-journey-cockpit .journey-activities button { min-height:44px; }
+}
+
+/* Stage names may wrap as content narrows; keep the complete business label visible. */
+.digital-journey-cockpit .journey-flow .dx-production-stage h2 { font-size:13px; text-wrap:balance; white-space:normal; overflow:visible; overflow-wrap:anywhere; line-height:1.4; min-height:2.8em; }
+.digital-journey-cockpit .journey-flow-panel.is-collapsed .dx-production-stage { height:auto; min-height:78px; }
+
+/* Keep the original record command visible while the complete node facts scroll. */
+.digital-journey-cockpit .journey-node-viewport{overflow:auto;scrollbar-width:thin;scrollbar-color:#7186a6 #edf2f8}
+.digital-journey-cockpit .journey-node-viewport:focus-visible{outline:2px solid var(--production-primary);outline-offset:-2px}
+.digital-journey-cockpit .journey-node-table{min-width:640px}
+.digital-journey-cockpit .journey-node-table .node-name{width:18%}
+.digital-journey-cockpit .journey-node-table .node-owner{width:14%}
+.digital-journey-cockpit .journey-node-table .node-status{width:16%}
+.digital-journey-cockpit .journey-node-table .node-time{width:17%}
+.digital-journey-cockpit .journey-node-table .node-record{width:18%}
+.digital-journey-cockpit .journey-node-table th:last-child,.digital-journey-cockpit .journey-node-table td:last-child:not([colspan]){position:sticky;right:0;background:#fff;box-shadow:-1px 0 #dce5f1;overflow:visible;white-space:nowrap}
+.digital-journey-cockpit .journey-node-table th:last-child{z-index:3}
+.digital-journey-cockpit .journey-node-table td:last-child:not([colspan]){z-index:1}
+.digital-journey-cockpit .journey-node-table .is-focused td:last-child{background:#edf5ff}
+.digital-journey-cockpit .journey-node-table a,.digital-journey-cockpit .journey-node-table .journey-text-action{text-decoration:underline;text-underline-offset:2px}
+.digital-journey-cockpit .journey-node-table :is(a,button):focus-visible{outline:2px solid var(--production-primary);outline-offset:1px}

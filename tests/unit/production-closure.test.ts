@@ -55,12 +55,16 @@ describe("production closure recipient and observation boundaries",()=>{
   expect(todoModuleIdsForUser({isRoot:true,capabilities:[]})).toContain("production");
  });
  it("keeps search/pagination over active risks while the header counts only production unread",async()=>{
-  const todos=Array.from({length:17},(_,i)=>todo(i,i<2)),query=vi.fn(async(sql:string)=>({rows:sql.includes("pending_count")?[{pending_count:"3"}]:[]})),adapter={todos:vi.fn(async()=>todos)};
+  const todos=Array.from({length:17},(_,i)=>todo(i,i<2)),query=vi.fn(async(sql:string,args:unknown[]=[])=>{
+   if(sql.includes("pending_count"))return {rows:[{pending_count:"3"}]};
+   if(sql.includes("unique_candidates")){const records=JSON.parse(String(args[2])) as Record<string,unknown>[];return {rows:[{total_count:records.length,total_pages:records.length?1:0,page:1,items:records.map(value=>({kind:"provider",value}))}]};}
+   return {rows:[]};
+  }),adapter={todos:vi.fn(async()=>todos)};
   const service=new TodoService({query} as unknown as Pool,undefined,undefined,adapter);
   const page=await service.listForActor(actor(["owner_group"]),{module:"production",page:2});
   expect(page).toMatchObject({page:2,pageSize:15,totalCount:17,totalPages:2,moduleCounts:{production:17}});expect(page.todos).toHaveLength(2);
   const selected=await service.listForActor(actor(["owner_group"]),{module:"production",query:"STYLE-16",page:9});
-  expect(selected).toMatchObject({page:1,totalCount:1});expect(selected.todos[0]!.orderContext?.styleNo).toBe("STYLE-16");
+  expect(selected).toMatchObject({page:1,totalCount:1,searchScope:"all"});expect(selected.todos[0]!.orderContext?.styleNo).toBe("STYLE-16");
   expect(await service.countIndicatorForActor(actor(["owner_group"]))).toEqual({pendingCount:5});
  });
  it("builds a base-path-aware risk deep link and rejects price-bearing receipt DTOs",()=>{

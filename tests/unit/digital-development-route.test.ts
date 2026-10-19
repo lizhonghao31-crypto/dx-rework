@@ -28,3 +28,12 @@ it("keeps the clerk handover after craft confirmation",()=>{
     expect(route[route.indexOf("development_sewing_transfer")+1]).toBe("development_sewing");
   }
 });
+it("predicts the saved transfer when a garment craft revision inherits sewing",()=>{
+  const route=['development_craft_confirmation','development_sewing_transfer','development_tail_check'];
+  const confirmation={taskId:'confirm',taskKind:'development_craft_confirmation',routeVersion:2};
+  expect(developmentNextSteps(route,[confirmation],2)).toEqual([{taskId:'confirm',label:'派工/转交车板'}]);
+  const transfer={taskId:'transfer',taskKind:'development_sewing_transfer',routeVersion:2};
+  expect(developmentNextSteps(route,[confirmation,transfer],2)).toEqual([{taskId:'confirm',label:'派工/转交车板'},{taskId:'transfer',label:'尾查'}]);
+  const fullRoute=['development_craft_confirmation','development_sewing_transfer','development_sewing','development_tail_check'];
+  expect(developmentNextSteps(fullRoute,[confirmation],2)).toEqual([{taskId:'confirm',label:'车板'}]);
+});

@@ -341,6 +341,28 @@
     ],
     "sequences": []
   },
+  "0224_contract_version_review_transfer_delivery": {
+    "checksum": "c1005533652409d4b8b912b7399490b7926af417ce3eaf3b9388b46fc424bc53",
+    "tables": [
+      "sourcing_case_transitions",
+      "sourcing_factory_change_requests",
+      "sourcing_approval_snapshots"
+    ],
+    "functions": [
+      "guard_sourcing_contract_content_creation",
+      "guard_sourcing_transition_insert",
+      "sourcing_effective_delivery_date"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [
+      "guard_sourcing_transfer_delivery_request",
+      "guard_sourcing_transfer_delivery_approval"
+    ],
+    "sequences": []
+  },
   "0224_digital_development_route": {
     "checksum": "5f57dc1202b50b172f2db8347647dfcda4c8c76c9ed17b634cf11a2799871244",
     "tables": [
@@ -397,6 +419,26 @@
     ],
     "sequences": []
   },
+  "0225_warehouse_supervisor_cutting_read": {
+    "checksum": "85ce0adb63cdba755011a53455bd9f7c762d9e5f0d5dd0157111c375b1d0d4b1",
+    "tables": [
+      "business_roles",
+      "role_capabilities"
+    ],
+    "functions": [
+      "receiving_authorized_board_operator",
+      "cutting_authorized_roles"
+    ],
+    "references": [],
+    "insert": [
+      "business_roles",
+      "role_capabilities"
+    ],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
+  },
   "0226_digital_production_budgets": {
     "checksum": "83432181bd2ee6d48ce44abb854edc554d4a0213a4a2b95301243226b35bd144",
     "tables": [
@@ -429,6 +471,20 @@
     ],
     "sequences": []
   },
+  "0226_external_revision_preserve_handler": {
+    "checksum": "fe2f6270307f7e80c47dfde4df1d8260b5166432a39256875b675e7444364a9e",
+    "tables": [],
+    "functions": [
+      "external_revision_can_seed_draft",
+      "guard_determination_insert"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
+  },
   "0227_digital_production_instructions": {
     "checksum": "bd40ce060768ee0449d9178113e4673002cdee6bf7c8ffd58cdca354ce0ca685",
     "tables": [
@@ -459,6 +515,24 @@
     "execute": [
       "guard_production_order_root_immutable"
     ],
+    "sequences": []
+  },
+  "0227_qc_other_craft": {
+    "checksum": "2b4ee5e688926de2d9195e762140fe80ef6dba2ccdaa0cae6575c321426b0748",
+    "tables": [
+      "rework_orders",
+      "rework_process_configuration_items"
+    ],
+    "functions": [
+      "guard_rework_order_write",
+      "guard_rework_special_process",
+      "guard_rework_special_process_item"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
     "sequences": []
   },
   "0228_digital_bulk_preparation": {
@@ -762,28 +836,6 @@
     ],
     "sequences": []
   },
-  "0224_contract_version_review_transfer_delivery": {
-    "checksum": "c1005533652409d4b8b912b7399490b7926af417ce3eaf3b9388b46fc424bc53",
-    "tables": [
-      "sourcing_case_transitions",
-      "sourcing_factory_change_requests",
-      "sourcing_approval_snapshots"
-    ],
-    "functions": [
-      "guard_sourcing_contract_content_creation",
-      "guard_sourcing_transition_insert",
-      "sourcing_effective_delivery_date"
-    ],
-    "references": [],
-    "insert": [],
-    "update": [],
-    "creates": [],
-    "execute": [
-      "guard_sourcing_transfer_delivery_request",
-      "guard_sourcing_transfer_delivery_approval"
-    ],
-    "sequences": []
-  },
   "0241_contract_version_review_transfer_delivery": {
     "checksum": "70761c9c3011af9660d2a7bac0434eb862d907404de2a68ff6386c632eb9230e",
     "tables": [
@@ -809,26 +861,6 @@
       "sourcing_authorized_transfer_po_snapshot",
       "sourcing_po_factory_date_locked"
     ],
-    "sequences": []
-  },
-  "0225_warehouse_supervisor_cutting_read": {
-    "checksum": "85ce0adb63cdba755011a53455bd9f7c762d9e5f0d5dd0157111c375b1d0d4b1",
-    "tables": [
-      "business_roles",
-      "role_capabilities"
-    ],
-    "functions": [
-      "receiving_authorized_board_operator",
-      "cutting_authorized_roles"
-    ],
-    "references": [],
-    "insert": [
-      "business_roles",
-      "role_capabilities"
-    ],
-    "update": [],
-    "creates": [],
-    "execute": [],
     "sequences": []
   },
   "0242_warehouse_supervisor_digital_dispatch": {

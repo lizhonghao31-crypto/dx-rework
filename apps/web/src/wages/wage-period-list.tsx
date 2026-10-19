@@ -1,3 +1,4 @@
+import { wageBasis, wageBasisFields, wageBasisValue } from "./wage-basis.js";
 import { readWageListQuery,wageListPath,wageSourcePath } from "./wage-query-state.js";
 import { createWebUrls } from "../../url-contract.js";
 import { NavigationIcon } from "../navigation-icons.js";
@@ -31,17 +32,9 @@ const monthEnd = (year: number, month: number): string =>
   `${year}-${pad(month)}-${pad(new Date(Date.UTC(year, month, 0)).getUTCDate())}`;
 
 const mainFields=new Set(["personName","wageSource","wageKind","orderNo","styleNo","taskName","processName","wageAmount","completedDate","settlementStatus"]);
-const basisFields=new Set(["unitPrice","sourceAmount","roundAmount","actualHours"]);
 const wageCell=(key:string,value:string|number|boolean|null|undefined):string =>
-  basisFields.has(key) && value != null ? formatBusinessDecimal(String(value),3) : value != null && isBusinessMoneyField(key) ? formatBusinessCurrency(String(value)) : businessValue(key,value);
+  wageBasisFields.has(key) && value != null ? wageBasisValue(value) : value != null && isBusinessMoneyField(key) ? formatBusinessCurrency(String(value)) : businessValue(key,value);
 
-const wageBasis=(row:ReportPreviewResponse["rows"][number]):string => {
-  const number=(key:string) => row[key] == null ? "—" : formatBusinessDecimal(String(row[key]),3);
-  if(row.wageKind === "pattern_rework") return `本段 ${number("sourceAmount")} 元 / 整轮 ${number("roundAmount")} 元`;
-  if(row.wageKind === "misc") return `${number("actualHours")} 小时 × ${number("unitPrice")} 元/小时`;
-  const unit=businessValue("unit",row.unit);
-  return `${row.wageSource === "pattern_room" ? "整轮 " : ""}${number("quantity")} ${unit} × ${number("unitPrice")} 元/${unit}${row.wageSource === "pattern_room" ? `；本段 ${number("sourceAmount")} 元` : ""}`;
-};
 
 export function WagePeriodList() {
   const today = reportingBusinessDate();
@@ -213,11 +206,11 @@ export function WagePeriodList() {
 
           <Surface className="wage-detail-table">
             <div className="wage-section-heading"><div><h2>逐单逐人工资明细</h2><p>按本人执行段核对费用；整轮数量仅说明本轮计价依据，不代表每人重复完成该数量。</p></div></div>
-            <div className="reporting-table-wrap">
+            <div className="reporting-table-wrap" tabIndex={0} role="region" aria-label="工资明细，可横向滚动">
               <table>
-                <thead><tr>{value.columns.filter(column=>mainFields.has(column.key)).map(column=><th key={column.key}>{column.label}</th>)}<th>费用依据</th></tr></thead>
+                <thead><tr>{value.columns.filter(column=>mainFields.has(column.key)).map(column=><th key={column.key} scope="col">{column.label}</th>)}<th scope="col">费用依据</th></tr></thead>
                 <tbody>{detailPage.items.map(row=>(
-                  <tr key={String(row.lineId)}>{value.columns.filter(column=>mainFields.has(column.key)).map(column=><td key={column.key}>{column.key === "settlementStatus" ? <StatusBadge tone={row[column.key] === "settled" ? "success" : "warning"}>{row[column.key] === "settled" ? "已结算" : "未结算"}</StatusBadge> : column.key === "orderNo" ? sourceCell(row) : wageCell(column.key,row[column.key])}</td>)}
+                  <tr key={String(row.lineId)}>{value.columns.filter(column=>mainFields.has(column.key)).map(column=><td key={column.key} className={isBusinessMoneyField(column.key)?"wage-money":undefined}>{column.key === "settlementStatus" ? <StatusBadge tone={row[column.key] === "settled" ? "success" : "warning"}>{row[column.key] === "settled" ? "已结算" : "未结算"}</StatusBadge> : column.key === "orderNo" ? sourceCell(row) : wageCell(column.key,row[column.key])}</td>)}
                     <td><p>{wageBasis(row)}</p>{row.cancellation ? <p>取消部分计薪</p> : null}<details><summary>展开依据</summary><dl>{value.columns.filter(column=>!mainFields.has(column.key)).map(column=><Fragment key={column.key}><dt>{column.label}</dt><dd>{wageCell(column.key,row[column.key])}</dd></Fragment>)}</dl></details></td>
                   </tr>
                 ))}</tbody>

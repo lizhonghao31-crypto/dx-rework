@@ -1,4 +1,7 @@
 import {roleLabel} from "./components.js";
+import {useDigitalDetailNavigationGuard} from "./use-digital-detail-navigation-guard.js";
+import {developmentActionReceipt} from "./digital-operation-feedback.js";
+import {DigitalReadFailure,asDigitalReadError} from './digital-read-failure.js';
 import {DevelopmentAssignmentTable} from "./development-assignment-table.js";
 import {DevelopmentMaterialCheck} from "./development-material-check.js";
 import {WorkbenchAction} from "./workbench-action.js";
@@ -24,42 +27,50 @@ type State={materialReadiness?:Array<{materialId:string;available:boolean;verifi
 export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onChanged,workspace=false,onPatternOrderLoaded,onPreassignedSewingLoaded}:{sourceId:string;materialRevision?:number;taskId?:string|undefined;onChanged?:((notice?:string)=>void)|undefined;workspace?:boolean;prioritizeMaterialCheck?:boolean;onPatternOrderLoaded?:((id:string|null)=>void)|undefined;onPreassignedSewingLoaded?:((person:{id:string;name:string}|null)=>void)|undefined}){
   const previews=useDocumentUploadPreviews();
   const [state,setState]=useState<State|null>(null),[people,setPeople]=useState<{id:string;displayName:string;roles:string[]}[]>([]),[peopleFor,setPeopleFor]=useState<string|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false),[craftFiles,setCraftFiles]=useState<string[]>([]),[reportFiles,setReportFiles]=useState<string[]>([]),[sewingFiles,setSewingFiles]=useState<string[]>([]);
+  const [uncertainWrite,setUncertainWrite]=useState(false);
+  const uncertainWritePending=useRef(false);
+  const [readError,setReadError]=useState<Error|null>(null),[peopleError,setPeopleError]=useState<Error|null>(null),[reading,setReading]=useState(false),[peopleReading,setPeopleReading]=useState(false);
   const [tailReturn,setTailReturn]=useState<Record<string,boolean>>({});
   const writing=useRef(false),operation=useRef<{payload:string;key:string}|null>(null),base=`sources/${sourceId}/execution`,urls=createWebUrls(import.meta.env.BASE_URL);
+  useDigitalDetailNavigationGuard(uncertainWrite,busy,writing,"本次办理已提交但最新状态未确认；离开会丢失本页未保存输入与重试记录，仍要离开？");
   const loadVersion=useRef(0);
+  const loadPeople=async(next:State,version=loadVersion.current)=>{
+    setPeopleError(null);setPeopleReading(true);
+    try{const candidates=await digitalRequest<typeof people>('access/candidates');if(version!==loadVersion.current)return;setPeople(candidates);setPeopleFor(`${sourceId}:${next.dispatch?.version??0}`);const sewing=candidates.find(person=>person.id===next.dispatch?.sewingWorkerId);onPreassignedSewingLoaded?.(sewing?{id:sewing.id,name:sewing.displayName}:null);}
+    catch(reason){if(version===loadVersion.current)setPeopleError(asDigitalReadError(reason));}
+    finally{if(version===loadVersion.current)setPeopleReading(false);}
+  };
+  const retryPeople=()=>state&&!writing.current?loadPeople(state):Promise.resolve();
   const load=async()=>{
-    const version=++loadVersion.current;
+    const version=++loadVersion.current;setReadError(null);setReading(true);setPeopleReading(false);
     try{
-      const next=await digitalRequest<State>(base);
+      const next=await digitalRequest<State>(base);if(version!==loadVersion.current)return;
+      setState(next);setReading(false);onPatternOrderLoaded?.(next.patternOrder?.orderId??null);
+      const checkingMaterials=workspace&&next.tasks.some(task=>task.taskId===taskId&&['development_materials','development_material_recheck'].includes(task.taskKind));
+      if(!checkingMaterials&&(next.canDispatch||next.sheet.canEdit))await loadPeople(next,version);else{setPeopleError(null);setPeopleReading(false);}
       if(version!==loadVersion.current)return;
-      setState(next);
-      onPatternOrderLoaded?.(next.patternOrder?.orderId??null);
-      // Only the option-dependent form waits; task facts/actions remain available.
-      const checkingMaterials=workspace&&next.tasks.some(task=>task.taskId===taskId&&["development_materials","development_material_recheck"].includes(task.taskKind));
-      if(!checkingMaterials&&(next.canDispatch||next.sheet.canEdit)){
-        const candidates=await digitalRequest<typeof people>("access/candidates");
-        if(version!==loadVersion.current)return;
-        setPeople(candidates);setPeopleFor(`${sourceId}:${next.dispatch?.version??0}`);const sewing=candidates.find(person=>person.id===next.dispatch?.sewingWorkerId);onPreassignedSewingLoaded?.(sewing?{id:sewing.id,name:sewing.displayName}:null);
-      }
+      if(uncertainWritePending.current){uncertainWritePending.current=false;setUncertainWrite(false);operation.current=null;setError("");}
       return next;
-    }catch(reason){if(version===loadVersion.current)setError(reason instanceof Error?reason.message:"读取办理记录失败");}
+    }catch(reason){if(version===loadVersion.current)setReadError(asDigitalReadError(reason));}
+    finally{if(version===loadVersion.current)setReading(false);}
   };
   useEffect(()=>{void load();return()=>{loadVersion.current++;};},[sourceId,materialRevision]);
   useEffect(()=>{if(typeof window==="undefined"||!state)return;const id=taskId??new URLSearchParams(window.location.search).get("task");if(id)document.getElementById(`development-task-${id}`)?.scrollIntoView({block:"nearest"});},[taskId,state]);
-  const run=async(path:string,body:unknown,method="POST")=>{if(writing.current)return;writing.current=true;setBusy(true);setError("");const payload=JSON.stringify([path,body,method]);if(operation.current?.payload!==payload)operation.current={payload,key:createClientRequestId()};try{await digitalRequest(`${base}/${path}`,method,body,operation.current.key);if(path==="complete"){previews.saved(craftFiles);setCraftFiles([]);}if(path==="route"){previews.saved(sewingFiles);setSewingFiles([]);}if(path==="fabric-reports"){previews.saved(reportFiles);setReportFiles([]);}const updated=await load();if(!updated){setError("已提交，但刷新失败；请重试刷新，原输入已保留。");return;}operation.current=null;const submitted=state?.tasks.find(task=>task.taskId===(body as {taskId?:string})?.taskId);const next=updated?.tasks.filter(task=>task.state==="ready"&&task.taskId!==submitted?.taskId)??[];const pending=updated?.tasks.some(task=>task.state==="pending");onChanged?.(workspace?(path==="dispatch"?"人员预派已保存；任务按原前置条件启动。":`已提交${submitted?.label??"本次办理"}；${next.length?next.map(task=>`${task.label}：${task.assigneeName??"等待主管分派"}`).join("；"):pending?"后续仍等待前置，尚未开始计时":"当前身份没有可见的下一项可办理任务"}`):undefined);return updated;}catch(reason){setError(reason instanceof Error?reason.message:"办理失败");}finally{writing.current=false;setBusy(false);}};
+  const recheck=async()=>{if(writing.current)return;writing.current=true;setBusy(true);try{return await load();}finally{writing.current=false;setBusy(false);}};
+  const run=async(path:string,body:unknown,method="POST")=>{if(writing.current)return;if(uncertainWritePending.current){setError("本次办理已提交，请先重新读取办理状态，核对后再操作。");return;}writing.current=true;setBusy(true);setError("");const payload=JSON.stringify([path,body,method]);if(operation.current?.payload!==payload)operation.current={payload,key:createClientRequestId()};try{await digitalRequest(`${base}/${path}`,method,body,operation.current.key);uncertainWritePending.current=true;setUncertainWrite(true);if(path==="complete"){previews.saved(craftFiles);setCraftFiles([]);}if(path==="route"){previews.saved(sewingFiles);setSewingFiles([]);}if(path==="fabric-reports"){previews.saved(reportFiles);setReportFiles([]);}const updated=await load();if(!updated){setError("本次办理已提交，但未能确认最新状态；请重新读取核对后再操作。");return;}operation.current=null;const submitted=state?.tasks.find(task=>task.taskId===(body as {taskId?:string})?.taskId);onChanged?.(workspace?developmentActionReceipt(path,body as {result?:unknown},submitted,updated.tasks):undefined);return updated;}catch(reason){setError(reason instanceof Error?reason.message:"办理失败");}finally{writing.current=false;setBusy(false);}};
   const upload=async(selected:File[],purpose:"工艺开发板"|"面料报告"|"车板成果"|"纸样成果")=>{if(!selected?.length||writing.current)return;previews.start(selected,purpose);writing.current=true;setBusy(true);setError("");try{const limit=await digitalRequest<{maxUploadBytes:number}>(`${base}/upload-limits`);for(const file of Array.from(selected)){try{if(file.size>limit.maxUploadBytes)throw Error("文件超过上传大小限制");const intent=await digitalRequest<UploadIntentResponse>(`${base}/upload-intents`,"POST",{filename:file.name,mimeType:file.type,sizeBytes:file.size,sha256:await sha256Hex(file),purpose,...(["车板成果","纸样成果"].includes(purpose)?{taskId}:{})});const form=new FormData();for(const [key,value]of Object.entries(intent.uploadFields))form.append(key,value);form.append("file",file);const response=await fetch(intent.uploadUrl,{method:intent.uploadMethod,body:form,credentials:"omit"});if(!response.ok)throw Error("上传失败");await digitalRequest(`${base}/attachments/${intent.attachmentId}/finalize`,"POST",{});previews.uploaded(file,intent.attachmentId);(["工艺开发板","纸样成果"].includes(purpose)?setCraftFiles:purpose==="车板成果"?setSewingFiles:setReportFiles)(current=>[...current,intent.attachmentId]);}catch(reason){const message=reason instanceof Error?reason.message:"上传失败";previews.failed(file,message);setError(message);}}}catch(reason){const message=reason instanceof Error?reason.message:"上传失败";for(const file of selected)previews.failed(file,message);setError(message);}finally{writing.current=false;setBusy(false);}};
-  return {load,previews,state,people,peopleFor,error,busy,craftFiles,reportFiles,sewingFiles,tailReturn,setTailReturn,base,urls,run,upload,writing};
+  return {load,recheck,uncertainWrite,retryPeople,reading,readError,peopleError,peopleReading,writeError:error,previews,state,people,peopleFor,error:error||(readError?.message??'')||(peopleError?.message??''),busy,craftFiles,reportFiles,sewingFiles,tailReturn,setTailReturn,base,urls,run,upload,writing};
 }
 type ExecutionProps=Parameters<typeof useDevelopmentExecution>[0];
 export function DevelopmentExecutionPanel(props:ExecutionProps){const controller=useDevelopmentExecution(props);return <DevelopmentExecutionBody {...props} controller={controller}/>;}
 export function DevelopmentExecutionBody({sourceId,taskId,workspace=false,taskOnly=false,controller}:{controller:ReturnType<typeof useDevelopmentExecution>;taskOnly?:boolean}&ExecutionProps){
-  const {state,people,error,busy,craftFiles,sewingFiles,tailReturn,setTailReturn,base,urls,run}=controller;
-  if(!state)return error?<p role="alert">{error}</p>:<p>正在读取办理记录…</p>;
+  const {state,people,error,writeError,readError,peopleError,reading,peopleReading,recheck,retryPeople,busy,uncertainWrite,craftFiles,sewingFiles,tailReturn,setTailReturn,base,urls,run}=controller;
+  if(!state)return readError?<DigitalReadFailure error={readError} onRetry={()=>void recheck()} retryLabel="重试读取办理记录" busy={reading}/>:error?<p role="alert">{error}</p>:<p role="status">正在读取办理记录…</p>;
   const selectedTask=state.tasks.find(task=>task.taskId===taskId);
   const materialCheck=workspace&&Boolean(selectedTask&&["development_materials","development_material_recheck"].includes(selectedTask.taskKind));
   const assignmentControls=<DevelopmentAssignmentTable controller={controller}/>;
   const wrap=(content:ReactNode)=>taskOnly?content:<DocumentEntryScope taskId={taskId} sourceId={sourceId} round={selectedTask?.routeVersion??state.sheet.roundNumber??1}>{content}</DocumentEntryScope>;
-  return wrap(<section className="development-controls" data-material-check={materialCheck||undefined}>{!taskOnly&&<h3>{materialCheck?"核料办理":"开发办理"}</h3>}{!taskOnly&&!materialCheck&&(state.patternPreparation?<p>原执行品类 / 价格快照：{state.patternPreparation.categorySaved&&state.patternPreparation.priceSaved?"已保存":"待补齐"}；主管正式执行归属：{state.patternPreparation.workerName??"等待主管分派"}</p>:<p>原打板执行准备：{state.patternOrder?"状态待读取":"尚未建立，请原设计师提交品类与执行价"}</p>)}{error&&<p role="alert">{error}</p>}
+  return wrap(<section className="development-controls" data-material-check={materialCheck||undefined}>{!taskOnly&&<h3>{materialCheck?"核料办理":"开发办理"}</h3>}{!taskOnly&&!materialCheck&&(state.patternPreparation?<p>原执行品类 / 价格快照：{state.patternPreparation.categorySaved&&state.patternPreparation.priceSaved?"已保存":"待补齐"}；主管正式执行归属：{state.patternPreparation.workerName??"等待主管分派"}</p>:<p>原打板执行准备：{state.patternOrder?"状态待读取":"尚未建立，请原设计师提交品类与执行价"}</p>)}{writeError&&<p role="alert">{writeError}</p>}{!taskOnly&&reading&&<p role="status">正在更新办理资料…</p>}{!taskOnly&&readError&&<><DigitalReadFailure error={readError} onRetry={()=>void recheck()} retryLabel="重试读取办理记录" busy={reading}/><p>当前显示上次成功读取的资料。</p></>}{!taskOnly&&peopleReading&&<p role="status">正在读取岗位选项…</p>}{!taskOnly&&peopleError&&<DigitalReadFailure error={peopleError} onRetry={()=>void retryPeople()} retryLabel="重试读取岗位选项" busy={peopleReading}/>}{!taskOnly&&uncertainWrite&&<Button disabled={busy} onClick={()=>void recheck()}>重新读取办理状态</Button>}
     {!taskOnly&&!workspace&&(state.patternOrder?<p><a href={urls.pageUrl(`ui/pattern-room/orders/${state.patternOrder.orderId}`)}>查看打板执行与主管派工</a></p>:state.sheet.canEdit&&<DevelopmentPatternLink busy={busy} onSubmit={input=>void run("pattern-order",input)}/>)}
     {!taskOnly&&!materialCheck&&assignmentControls}
     {taskId&&!state.tasks.some(task=>task.taskId===taskId)&&<p>该任务已转入历史。请通过任务历史或对应开发轮次查看。</p>}

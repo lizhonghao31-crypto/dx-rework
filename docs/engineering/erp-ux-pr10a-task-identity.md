@@ -35,3 +35,5 @@
 唯一Review P2修复：真实数字缺指派通知与持久化受控转交同用todoType，但原category/sourceAction不同。实际App旧Head两宽复现误分类并发出无结果的异常/候选读取；现入口同时核todoType、category=recipient_routing_exception和sourceAction=todo.recipient_blocked。数字缺指派保留原任务标题/阻断原因，不发起转交相关读取；普通数字任务的原合法链接不变。未在当前pending列表找到异常只描述读取事实，不称已处理或成功。当前原生及含10b组合各38个转交/数字通知场景通过，43项定向测试通过；无权限、异常读取403、当前异常缺失和未知结果分支均不误报处理成功。此为唯一Review后的P2修复，不请求第二次Review，改后Head重新Full Gate。
 
 裁后暂停与Root另经源码核对：BulkPreparationService.gates以现有非active生命周期形成原因，FactoryFlowService.command在原work前统一拒绝该原因、没有Root例外；本UI只禁用对应业务fieldset。原Root管理、改派和状态管理分支未修改，不外推其它资料或旧合同停写。
+
+本轮接续G4时整合已部署release55be413d。三处冲突按区域保留当前搜索标题、办理回执/未确认写入保护、来源/返回、原资料与人员读取失败恢复，仅注入本包对象/岗位/暂停/原退回依据。新组合本地lint、类型检查及Web构建通过；3份定向单测17项、任务上下文38帧、受控转交及数字通知38帧通过；完整迁移的隔离PG13 TEST执行原候选读取、门禁拒绝、合法转交、原时钟/来源保留与并发状态断言通过。没有把旧Head Gate作为新组合证据，最终Head重新Full Gate。既有唯一Review的P2与threads已闭环，不新增第二次常规Review。

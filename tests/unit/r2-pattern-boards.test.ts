@@ -5,10 +5,24 @@ import type {BulkPreparationSheet} from '@dx-rework/contracts/bulk-preparation';
 import {developmentWorkspaceReturnUrl} from '../../apps/web/src/development-workspace-return.js';
 import {bulkPatternLane} from '../../apps/web/src/bulk-pattern-model.js';
 import {PatternBoardLane,PatternBoardCard} from '../../apps/web/src/pattern-board-parts.js';
+import {BulkPatternCard} from '../../apps/web/src/bulk-pattern-card.js';
 import {patternReturnPath,patternListPath,readPatternListQuery} from '../../apps/web/src/pattern-order-query.js';
 const sheet=(patch:Partial<BulkPreparationSheet>={})=>({preparationId:'real-preparation',reasons:[],facts:[],tasks:[],...patch}) as BulkPreparationSheet;
 const fact=(kind:string)=>({kind,recordedAt:'2026-10-16T00:00:00Z'});
 describe('R2 PR08 board display boundaries',()=>{
+ it('shows the real special-closure response as terminal without changing its existing lane',()=>{
+  const value=sheet({preparationId:null,reasons:['母单已特殊结案，原实绩及历史继续保留','当前开发轮次尚未确认客户样板'],cutting:{mode:null,completed:false,lines:[]}});
+  const before=structuredClone(value);
+  const html=renderToStaticMarkup(createElement(BulkPatternCard,{item:{orderId:'closed-order',designStyleNo:'TEST-CLOSED',customer:'PD',sheet:value},href:'/ui/digital-production?bulk=closed-order'}));
+  expect(html).toContain('已特殊结案');expect(html).toContain('原实绩及历史继续保留');expect(html).toContain('href="/ui/digital-production?bulk=closed-order"');
+  for(const text of ['核对大货准备条件','待处理：','当前：','负责人：','截止：','当前开发轮次尚未确认客户样板'])expect(html).not.toContain(text);
+  expect(bulkPatternLane(value)).toBe('preparing');expect(value).toEqual(before);
+ });
+ it('keeps an active missing prerequisite actionable without inferring closure from a similar phrase',()=>{
+  const value=sheet({preparationId:null,reasons:['TEST 尚未特殊结案，需核对原资料'],cutting:{mode:null,completed:false,lines:[]}});
+  const html=renderToStaticMarkup(createElement(BulkPatternCard,{item:{orderId:'active-order',designStyleNo:'TEST-ACTIVE',customer:'PD',sheet:value},href:'/ui/digital-production?bulk=active-order'}));
+  expect(html).toContain('核对大货准备条件');expect(html).toContain('待处理：');expect(html).not.toContain('>已特殊结案<');
+ });
  it('requires both independent valid outputs for the completed lane',()=>{
   expect(bulkPatternLane(sheet({facts:[fact('纸样派交'),fact('纸样完成')]}))).toBe('handling');
   expect(bulkPatternLane(sheet({facts:[fact('纸样派交'),fact('唛架完成')]}))).toBe('handling');

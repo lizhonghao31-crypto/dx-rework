@@ -35,7 +35,7 @@
 .sourcing-owner-craft-summary { display: block; margin-top: 6px; }
 
 @media (max-width: 800px) {
-  .sourcing-order-detail > .page-heading .page-heading__actions { display: none; }
+  .sourcing-order-detail > .page-heading .page-heading__actions { display: flex; }
   .sourcing-order-detail > .page-heading { gap: 0; margin-bottom: 10px; }
   .sourcing-order-detail > .page-heading h1 { font-size: 24px; line-height: 1.3; }
   .rework-detail-target-layout .order-overview--compact {

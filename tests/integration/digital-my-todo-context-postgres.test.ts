@@ -5,12 +5,15 @@ import pg from "pg";
 import { migrationExecutionSql } from "../../scripts/deploy/migration-execution-compatibility.mjs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { TodoListResponseSchema } from "@dx-rework/contracts";
+import { loadConfig } from "@dx-rework/config";
+import { buildApp } from "../../apps/api/src/app.js";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalProductionTaskService } from "../../apps/api/src/production-platform/task-service.js";
 import { DigitalProductionNotificationService } from "../../apps/api/src/production-platform/notification-service.js";
 import { DigitalProductionAccessService } from "../../apps/api/src/production-platform/access-service.js";
 import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
+import { exceptions } from "../../apps/api/src/reporting/management-reporting-exceptions.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 
@@ -160,4 +163,54 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     await db.query("UPDATE identity_mappings SET employed=true WHERE user_id=$1", [ids.clerk]);
     expect((await list(actors.clerk!, f.style)).todos).toHaveLength(1);
   });
+  it("serves Acceptance search URLs through the real HTTP and PostgreSQL path for Root and ordinary users", async () => {
+    const config = loadConfig({
+      NODE_ENV: "test", DATABASE_URL: url!,
+      DINGTALK_CORP_ID: "OWN-TODO", DINGTALK_H5_APP_KEY: "TEST", DINGTALK_H5_APP_SECRET: "TEST",
+      DINGTALK_WEB_CLIENT_ID: "TEST", DINGTALK_WEB_CLIENT_SECRET: "TEST",
+      DINGTALK_QR_REDIRECT_URI: "https://example.test/acceptance/ui",
+      SESSION_SECRET: "TEST-only-isolated-session-key-000000",
+      ACCEPTANCE_LAB_ENABLED: "true", ACCEPTANCE_LAB_SECRET: "TEST-only-isolated-lab-key-0000000000",
+      ROOT_DINGTALK_USER_ID: "uat-root",
+      DIGITAL_PRODUCTION_ENABLED: "true", DIGITAL_PRODUCTION_CREATION_ENABLED: "true",
+    });
+    const app = buildApp({
+      config, checkDatabase: async () => { await db.query("SELECT 1"); }, getAppliedSchemaHistory: async () => [],
+      todos: {
+        service: todos,
+        authenticate: async token => {
+          const actor = token === "TEST-root" ? root : actors.manager!;
+          return { id: actor.actorId, displayName: "TEST", businessRoles: actor.actorRoles, capabilities: actor.authorizationCapabilities ?? [] };
+        },
+      },
+    });
+    try {
+      // Run this same suite on PG13 and PG16: older PG rejects the implicit `value` alias.
+      for (const [token, query] of [
+        ["TEST-root", ""], ["TEST-manager", "&module=suppliers"],
+        ["TEST-root", "&q=回传合同"], ["TEST-root", "&q=财务核对"],
+        ["TEST-manager", "&module=suppliers&q=本厂整款开裁"],
+        ["TEST-manager", "&module=suppliers&q=回传合同"],
+        ["TEST-root", "&q=TEST-NO-MATCH-" + randomUUID()],
+      ] as const) {
+        const response = await app.inject({ method: "GET", url: `/todos/mine?page=1${query}`, headers: { cookie: `dx_rework_session=${token}` } });
+        expect(response.statusCode, query).toBe(200);
+        const result = TodoListResponseSchema.parse(response.json());
+        expect(result.page).toBe(1);
+        expect(result.searchScope).toBe(query.includes("&q=") ? "all" : undefined);
+        if (query.includes("TEST-NO-MATCH-")) expect(result).toMatchObject({ todos: [], totalCount: 0, totalPages: 0 });
+      }
+    } finally { await app.close(); }
+  });
+  it("opens an overdue sourcing finance exception through its stored original route", async () => {
+    const todoId=randomUUID(),eventId=randomUUID(),caseId=randomUUID();
+    await tx(async client=>{
+      await client.query("INSERT INTO operation_events(event_id,request_id,actor_id,actor_roles,authorization_capability,action,entity_type,entity_id) VALUES($1,'TEST-exception-route',$2,ARRAY['root_superuser'],'todo:view','todo.create','sourcing_case',$3)",[eventId,ids.root,caseId]);
+      await client.query("SELECT set_config('dx_rework.todo_event_id',$1,true),set_config('dx_rework.todo_request_id','TEST-exception-route',true)",[eventId]);
+      await client.query("INSERT INTO rework_todos(todo_id,todo_type,category,source_event_id,source_action,entity_type,entity_id,recipient_user_id,required_role,required_capability,route_descriptor,policy_key,dedupe_key,created_operation_event_id,created_request_id,due_at) VALUES($1,'business_action','sourcing_finance_reconcile',$2,'todo.create','sourcing_case',$3,$4,'finance_read','todo:view',$5::jsonb,'general',$1::uuid::text,$2,'TEST-exception-route',CURRENT_TIMESTAMP-interval '1 hour')",[todoId,eventId,caseId,ids.root,JSON.stringify({routeName:'sourcing_detail',entityId:caseId,todoId})]);
+    });
+    const result=await exceptions(100,db,{q:'财务核对'});
+    expect(result.find(row=>row.entityId===todoId)).toMatchObject({exceptionType:'overdue_todo',reworkOrderId:null,deepLink:`/ui/sourcing/orders/${caseId}?todo=${todoId}`});
+  });
+
 });

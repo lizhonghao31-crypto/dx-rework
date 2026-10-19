@@ -23,7 +23,7 @@ export function SampleAnalysisView({data,legacy,busy,error,draft,onDraft,onApply
  return <div className="sample-analysis" aria-busy={busy}>
   <div className="analysis-toolbar"><p>{data?<time dateTime={data.asOf}>数据截至 {new Date(data.asOf).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}</time>:'读取采购、持有与处置事实'}</p><Button variant="secondary" disabled={busy} onClick={onRefresh}>{busy?'读取中…':'刷新'}</Button></div>
   {error?<p role="alert">{error}{data?'；以下保留上次成功结果和筛选口径。':''} <Button variant="secondary" disabled={busy} onClick={onRefresh}>重试</Button></p>:null}
-  <Surface className="rework-v2-core"><form className="analysis-filter-form is-open" onSubmit={e=>{e.preventDefault();onApply();}}><div className="analysis-filter-main">
+  <Surface className="rework-v2-core sample-amount-filters"><form className="analysis-filter-form is-open" onSubmit={e=>{e.preventDefault();onApply();}}><div className="analysis-filter-main">
    {input('purchaseFrom','采购开始日期','date')}{input('purchaseTo','采购结束日期','date')}{select('purchaserUserId','采购人',options?.people??[])}{select('holderUserId','当前持有人',options?.people??[])}
    {select('brandChoice','品牌',options?.brands??[])}{select('departmentChoice','部门',options?.departments??[])}{select('category','类别',(options?.categories??[]).map(value=>({id:value,name:value||'未记录类别'})))}
    {select('status','当前状态',Object.entries(analysisStatusLabels).map(([id,name])=>({id,name})))}{input('minPrice','最低采购单价')}{input('maxPrice','最高采购单价')}{input('eventFrom','借还 / 处置 / 回款开始','date')}{input('eventTo','借还 / 处置 / 回款结束','date')}

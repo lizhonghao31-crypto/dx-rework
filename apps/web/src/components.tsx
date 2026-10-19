@@ -630,8 +630,10 @@ export function Shell({
         </div>
       ) : null}
       <aside>
-        <a className="production-command-brand" href={basePath+(todoAccess?"/ui/my-tasks":digital?"/ui/digital-cockpit":globalNavigation[0]?.href??"/ui/orders")}><strong>DX</strong><span>达兴服装<small>数字生产平台</small></span></a>
+        <div className="shell-brand-row">
+        <a className="production-command-brand" href={basePath+(todoAccess?"/ui/my-tasks":digital?"/ui/digital-cockpit":globalNavigation[0]?.href??"/ui/orders")}><strong>DX</strong><span>达兴制衣<small>数字生产助手</small></span></a>
         <LogoutButton />
+        </div>
 
         <DesktopNavigation
           globalNavigation={globalNavigation}
