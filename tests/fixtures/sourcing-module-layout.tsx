@@ -73,7 +73,7 @@ if(path.endsWith("auth/me"))return Response.json({status:"authorized",user});
 if(path.includes("/history/")){
  if(params.get("variant")==="missing"||role==="denied")return Response.json({error:{message:"TEST no historical access"}},{status:params.get("variant")==="missing"?404:403});
  const older=new URL(path,location.origin).searchParams.get("entryId")===oldEntry.entryId;
- const snapshot={...item,styleNo:older?"TEST 历史款号V1":item.styleNo,decision:item.decision?{...item.decision,supplierName:older?"TEST 历史加工厂V1":"TEST 当时加工厂"}:null};
+ const snapshot={...item,lineItems:item.lineItems.map(line=>{const historicalLine={...line};delete historicalLine.customerWarehouseArrivalDate;return historicalLine;}),styleNo:older?"TEST 历史款号V1":item.styleNo,decision:item.decision?{...item.decision,supplierName:older?"TEST 历史加工厂V1":"TEST 当时加工厂"}:null};
  return Response.json(SourcingNodeHistorySchema.parse({item:snapshot,node,entry:older?oldEntry:entry,versions:[oldEntry,entry],relatedEntries:[],attachments,notices:[],contractReference:node==="finance"?"TEST-HISTORY-CONTRACT":null}));
 }
 if(path.endsWith("/attachments"))return Response.json({items:attachments});
