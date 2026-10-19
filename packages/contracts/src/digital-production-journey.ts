@@ -68,6 +68,8 @@ export type OrderJourney = {
   display?: JourneyDisplay;
   operationLog?: JourneyLogPage;
   currentRiskNodes?: JourneyNode[];
+  /** Current effective flow overview stays independent of the selected historical round. */
+  flowStages?: OrderJourney["stages"];
   currentDeliveryRisks?: PoDeliveryRisk[];
   riskHistory?: JourneyRiskHistory[];
   asOf?: string; styleImageUrl?: string | null;

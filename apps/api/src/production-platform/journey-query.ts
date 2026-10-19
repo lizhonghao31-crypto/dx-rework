@@ -103,6 +103,7 @@ export class DigitalJourneyQuery {
       const current=round===undefined?item:await this.project(db,actor,row,asOf,undefined,true);
       if(current){
         if(current.display)item.display=current.display;
+        if(compact)item.flowStages=current.stages.map(stage=>({...stage,nodes:stage.nodes.filter(node=>node.current)}));
         item.currentRiskNodes=current.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&!["completed","cancelled","inherited","not_applicable"].includes(node.state)&&(node.risks.length>0||node.state==="blocked"));
         item.currentDeliveryRisks=current.deliveryRisks??[];
         const authorized=this.authorizedTasks.get(current)??[];
