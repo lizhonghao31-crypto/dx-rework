@@ -1,6 +1,10 @@
 import {requestFailureMessage,transportFailure} from "./request-failure-message.js";
 import { createWebUrls } from "../url-contract.js";
 import {sessionCacheVersion,registerSessionInvalidator} from './auth-session.js';
+/** Typed read boundaries preserve original business messages and unknown write outcomes. */
+export class DigitalRequestError extends Error {
+  constructor(message:string,readonly status:number|null){super(message);this.name='DigitalRequestError';}
+}
 const urls = createWebUrls(import.meta.env.BASE_URL);
 const reads=new Map<string,Promise<unknown>>();
 let generation=0;
@@ -18,10 +22,10 @@ export async function digitalRequest<T>(path: string, method = "GET", body?: unk
   if(hit)return structuredClone(await hit) as T;
   const request=(async()=>{
     const response=await fetch(urls.apiUrl(`digital-production/${path}`),{method,credentials:'include',cache:'no-store',
-      headers:{'content-type':'application/json',...(key?{'idempotency-key':key}:{})},...(body===undefined?{}:{body:JSON.stringify(body)}),...(reading&&options?.signal?{signal:options.signal}:{})}).catch(error=>{if(error?.name==='AbortError')throw error;throw transportFailure(method);});
+      headers:{'content-type':'application/json',...(key?{'idempotency-key':key}:{})},...(body===undefined?{}:{body:JSON.stringify(body)}),...(reading&&options?.signal?{signal:options.signal}:{})}).catch(error=>{if(error?.name==='AbortError')throw error;throw new DigitalRequestError(transportFailure(method).message,null);});
     if(!response.ok){
       const data=await response.json().catch(()=>({})) as {error?:{message?:string}};
-      throw new Error(requestFailureMessage(response.status,data.error?.message));
+      throw new DigitalRequestError(requestFailureMessage(response.status,data.error?.message),response.status);
     }
     const value:unknown=await response.json().catch(()=>{throw new Error(reading?"返回资料格式异常，请刷新重试":"未收到可确认的提交结果，请先核对原记录，避免重复提交");});
     if(!reading)invalidate();

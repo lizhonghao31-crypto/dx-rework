@@ -5,6 +5,12 @@ const commonCount = 217;
 const known = [...branches.main, ...branches.digital];
 const approved = [...known,...mainExtensions];
 const knownByVersion = new Map(approved.map(row => [row.version, row.checksum]));
+const approvedByPrefix = new Map();
+for (const row of approved) {
+  const prefix = Number(row.version.slice(0, 4));
+  approvedByPrefix.set(prefix, [...(approvedByPrefix.get(prefix) ?? []), row]);
+}
+const pairedPrefixes = new Set([...approvedByPrefix].filter(([, rows]) => rows.length === 2).map(([prefix]) => prefix));
 
 function assertPrefix(applied, expected) {
   if (applied.length > expected.length) {
@@ -68,7 +74,7 @@ export function assertMigrationSequence(migrations) {
       throw new Error(`Frozen branch migration checksum drift: ${row.version}`);
     }
     if (prefix === next) next += 1;
-    else if (!(prefix === next - 1 && prefix >= 218 && prefix <= 225
+    else if (!(prefix === next - 1 && pairedPrefixes.has(prefix)
       && knownByVersion.get(row.version) === row.checksum && counts.get(prefix) === 1)) {
       throw new Error(`Migration sequence gap or unapproved duplicate: expected ${String(next).padStart(4, '0')}, found ${row.version}`);
     }

@@ -1,3 +1,5 @@
+import {TodoRoutingTransfer} from './todo-routing-transfer.js';
+import { todoTaskTitle } from "@dx-rework/contracts";
 import { todoRouteHref } from "./todo-route-link.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
@@ -46,36 +48,7 @@ const todoModules: readonly Readonly<{ id: TodoModule; label: string }>[] = [
   { id: "suppliers", label: "供应商中心" },
 ];
 
-const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
-  rework_detail: "查看返工单",
-  process_configuration: "配置或审核返工工序",
-  whole_order_review: "审核整张返工单",
-  responsibility_detail: "处理责任判定",
-  own_factory_approval: "查看历史本厂审批",
-  external_responsibility_detail: "记录供应商实际扣款",
-  wage_period_detail: "核对返工工资",
-  sourcing_detail: "处理外发定价选厂订单",
-  digital_production_instruction: "大货制单",
-  digital_development: "查看开发单",
-  digital_production_task: "办理数字生产任务",
-  production_detail: "查看生产风险",
-  sample_detail: "处理样衣事项",
-  pattern_room_order: "处理板房订单",
-  supplier_onboarding: "处理供应商申请",
-};
-
-const taskTitle = (todo: TodoResponse): string =>
-  todo.route.routeName === "digital_production_task" && todo.taskTitle
-    ? todo.taskTitle
-    : todo.category === "sourcing_contract_return"
-    ? "回传合同"
-    : todo.category === "owner_signature"
-      ? "老板确认签字"
-    : todo.category === "tail_inspection"
-      ? "历史整查报数"
-    : todo.category === "external_supplier_selection"
-      ? "历史供应商选择"
-      : taskLabel[todo.route.routeName];
+const taskTitle = todoTaskTitle;
 
 const categoryLabel = (todo: TodoResponse): string => {
   const labels: Record<string, string> = {
@@ -157,6 +130,7 @@ export function MyTodosPage() {
   const [requestedPage, setRequestedPage] = useState(initial.page);
   const [queryOwner,setQueryOwner] = useState<string | null>(null);
   const [refresh,setRefresh] = useState(0);
+  const [routingAccess,setRoutingAccess]=useState({manage:false});
   const [busy, setBusy] = useState(false);
   const [accessibleTodoModules, setAccessibleTodoModules] = useState<ReadonlySet<TodoModule> | null>(null);
   const loadVersion = useRef(0);
@@ -212,6 +186,7 @@ export function MyTodosPage() {
       if(session !== "denied" && session.status === "authorized") {
         const savedOwner=window.history.state?.dxTodoQueryUser;
         if(savedOwner && savedOwner!==session.user.id){setSearchQuery("");setRequestedModule(undefined);setRequestedPage(1);}
+        setRoutingAccess({manage:session.user.businessRoles?.includes('production_management')===true&&session.user.capabilities.includes('todo:routing_exception_manage')});
         setQueryOwner(session.user.id);
       }
     });
@@ -244,6 +219,7 @@ export function MyTodosPage() {
           window.location.replace(pageUrl("/ui/my-tasks"));return;
         }
         setAccessibleTodoModules(new Set(todoModuleIdsForUser(session.user)));
+        setRoutingAccess({manage:session.user.businessRoles?.includes('production_management')===true&&session.user.capabilities.includes('todo:routing_exception_manage')});
         setQueryOwner(session.user.id);setRefresh(n=>n+1);
       });
     };
@@ -268,6 +244,7 @@ export function MyTodosPage() {
     : todoModules.filter((module) => module.id === "digital_production" ? moduleCounts.digital_production !== undefined : accessibleTodoModules.has(module.id));
 
   const openModule = (module: TodoModule): void => {
+    setSearchQuery("");
     setRequestedModule(module);
     setRequestedPage(1);
   };
@@ -278,7 +255,23 @@ export function MyTodosPage() {
         <header className="page-heading my-todos-hero">
           <div className="my-todos-hero__title">
             <h1><NavigationIcon route="/ui/my-tasks" size="title" />我的待办</h1>
-            <p>这里只显示现在轮到你处理的事项。</p>
+            <div className="my-todos-intro"><p>这里只显示现在轮到你处理的事项。</p>
+          <label className="my-todos-search" htmlFor="my-todos-search">
+            <input
+              id="my-todos-search"
+              type="search"
+              value={searchQuery}
+              maxLength={100}
+              aria-label="搜索全部待办"
+              placeholder="搜索全部待办：款号、供应商、跟单或事项"
+              autoComplete="off"
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+                setRequestedPage(1);
+              }}
+            />
+          </label>
+</div>
           </div>
           <StatusBadge tone="info">个人任务</StatusBadge>
         </header>
@@ -295,33 +288,19 @@ export function MyTodosPage() {
           <div className="my-todos-modules" role="group" aria-label="待办模块">
             {visibleTodoModules.map((module) => <button
               type="button"
-              className={module.id === activeModule ? "is-active" : ""}
-              aria-pressed={module.id === activeModule}
+              className={!activeQuery && module.id === activeModule ? "is-active" : ""}
+              aria-pressed={!activeQuery && module.id === activeModule}
               disabled={busy}
               onClick={() => openModule(module.id)}
               key={module.id}
             ><span>{module.label}</span><strong>{formatBusinessDecimal(moduleCounts[module.id] ?? 0)}件</strong></button>)}
           </div>
-          <label className="my-todos-search" htmlFor="my-todos-search">
-            <input
-              id="my-todos-search"
-              type="search"
-              value={searchQuery}
-              maxLength={100}
-              aria-label="搜索待办"
-              placeholder="输入供应商、款号或跟单姓名，自动筛选"
-              autoComplete="off"
-              onChange={(event) => {
-                setSearchQuery(event.target.value);
-                setRequestedPage(1);
-              }}
-            />
-          </label>
+
         </div>
       {todos.length === 0 && (
         <div className="my-todos-state my-todos-module-empty">
           <p>{activeQuery
-            ? "未找到匹配的待办，请检查供应商、款号或跟单姓名。"
+            ? "未找到匹配的待办，请检查款号、供应商、跟单或事项名称。"
             : totalActionable === 0
               ? "您当前的任务已全部完成。有新的事项轮到你处理时，会出现在这里。"
               : "该模块当前没有待处理事项。"}</p>
@@ -341,7 +320,7 @@ export function MyTodosPage() {
                   : "返工单关联信息待读取";
             return (
               <div className="my-todo-card" key={todo.todoId}>
-                {blocked ? (
+                {todo.todoType==='recipient_routing_exception'&&todo.category==='recipient_routing_exception'&&todo.sourceAction==='todo.recipient_blocked' ? <div className="my-todo-row"><b className="my-todo-index">{String((page-1)*pageSize+index+1).padStart(2,'0')}</b><div className="my-todo-primary"><div className="my-todo-title"><h2>待办接手安排</h2><StatusBadge tone="warning">需要转交</StatusBadge></div><p>{orderSummary}</p><TodoRoutingTransfer key={`${queryOwner}:${todo.todoId}`} todo={todo} canManage={routingAccess.manage} onChanged={()=>setRefresh(value=>value+1)}/></div></div> : blocked ? (
                   <div className="my-todo-row my-todo-row--blocked">
                     <b className="my-todo-index">{String((page - 1) * pageSize + index + 1).padStart(2, "0")}</b>
                     <div className="my-todo-primary">

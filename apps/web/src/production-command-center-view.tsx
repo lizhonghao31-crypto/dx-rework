@@ -92,7 +92,7 @@ export function ProductionCommandCenterView({ summary, orders, selectedOrderNo }
       <aside className="production-command-sidebar" aria-label="生产管理导航">
         <div className="production-command-brand">
           <strong>DX</strong>
-          <span>达兴服装<small>数字生产平台</small></span>
+          <span>达兴制衣<small>数字生产助手</small></span>
         </div>
         <nav>
           {sideNavigation.map((label, index) => (

@@ -1,3 +1,4 @@
+import { specialProcessLabel } from "@dx-rework/contracts";
 import { createHash, randomUUID } from "node:crypto";
 
 import type {
@@ -34,6 +35,8 @@ type OrderRow = Readonly<{
   processing_factory_type: "own_factory" | "supplier" | null; processing_factory_supplier_id: string | null;
   processing_factory_supplier_version: number | null; problem_part: string | null;
   problem_description: string | null; rework_quantity: number | null; tail_inspection_required: boolean;
+  special_process_type?: "none" | "inspection" | "other_craft" | null;
+  other_craft_description?: string | null;
 }>;
 type PlanRow = Readonly<{
   configuration_item_id: string; process_name: string; pricing_unit: "piece" | "hour";
@@ -145,7 +148,7 @@ export class WholeOrderReviewService {
         { label: `工序“${plan.process_name}”有效报数合计 ${numberValue(plan.completed_quantity)} 件`, quantity: numberValue(plan.completed_quantity) },
         { label: `工序“${plan.process_name}”整查报数合计 ${numberValue(plan.tail_checked_quantity)} 件`, quantity: numberValue(plan.tail_checked_quantity) },
       ]));
-      await this.assertTailReconciliation(client, reworkOrderId, order.tail_inspection_required);
+      await this.assertTailReconciliation(client, reworkOrderId, order.tail_inspection_required, specialProcessLabel({ specialProcessType: order.special_process_type }));
       const finalQuantities = plans.map((plan) => ({
         configurationItemId: plan.configuration_item_id,
         finalConfirmedQuantity: numberValue(plan.completed_quantity),
@@ -413,7 +416,7 @@ export class WholeOrderReviewService {
         error("每道工序必须在 N03 完成 IE 核价后才能核量", 409, "INVALID_STATE_TRANSITION");
       }
       if (plans.length === 0) error("当前返工单没有 IE 已核价工序", 409, "INVALID_STATE_TRANSITION");
-      await this.assertTailReconciliation(client, reworkOrderId, order.tail_inspection_required);
+      await this.assertTailReconciliation(client, reworkOrderId, order.tail_inspection_required, specialProcessLabel({ specialProcessType: order.special_process_type }));
       const temporaryWorkers = await this.temporaryWorkers(client, reworkOrderId);
       const submittedCoefficientKeys = new Set(input.temporaryCoefficients.map((item) => `${item.configurationItemId}:${item.personId}`));
       const expectedCoefficientKeys = new Set(temporaryWorkers.map((worker) => `${worker.configuration_item_id}:${worker.person_id}`));
@@ -1061,6 +1064,8 @@ export class WholeOrderReviewService {
     return {
       reworkOrderId: order.rework_order_id, reworkStatus: order.status as WholeOrderReviewResponse["reworkStatus"], orderVersion: order.version,
       ...permissions, unifiedExecutionRequired, tailInspectionRequired: order.tail_inspection_required,
+      specialProcessType: order.special_process_type ?? null,
+      otherCraftDescription: order.other_craft_description ?? null,
       processes: plans.filter((plan) => !configurationItemId || plan.configuration_item_id === configurationItemId).map((plan) => ({
         configurationItemId: plan.configuration_item_id, processName: plan.process_name, pricingUnit: plan.pricing_unit,
         plannedQuantity: numberValue(plan.planned_quantity),
@@ -1206,7 +1211,7 @@ export class WholeOrderReviewService {
     return result.rows;
   }
 
-  private async assertTailReconciliation(client: PoolClient, reworkOrderId: string, tailInspectionRequired: boolean): Promise<void> {
+  private async assertTailReconciliation(client: PoolClient, reworkOrderId: string, tailInspectionRequired: boolean, specialLabel = "整查"): Promise<void> {
     if (!tailInspectionRequired) {
       const pendingExecution = await client.query(
         `SELECT 1 FROM rework_work_tasks task
@@ -1292,7 +1297,7 @@ export class WholeOrderReviewService {
     );
     if (!usesUnifiedTailReports) {
       if (overLimit.rows.length > 0) {
-        error(`返工上数超过整查数量：${overLimit.rows.map((row) => row.process_name).join("、")}；请驳回并调整报数`, 409, "CONFLICT");
+        error(`返工上数超过${specialLabel}数量：${overLimit.rows.map((row) => row.process_name).join("、")}；请驳回并调整报数`, 409, "CONFLICT");
       }
       return;
     }
@@ -1301,7 +1306,7 @@ export class WholeOrderReviewService {
       || numberValue(plan.tail_checked_quantity) <= 0
       || numberValue(plan.completed_quantity) > numberValue(plan.tail_checked_quantity));
     if (mismatches.length > 0) {
-      error(`工序有效数量超过整查数量或报数无效：${mismatches.map((plan) => `${plan.process_name} ${plan.completed_quantity}/${plan.tail_checked_quantity}`).join("、")}`, 409, "CONFLICT");
+      error(`工序有效数量超过${specialLabel}数量或报数无效：${mismatches.map((plan) => `${plan.process_name} ${plan.completed_quantity}/${plan.tail_checked_quantity}`).join("、")}`, 409, "CONFLICT");
     }
   }
 
@@ -1620,7 +1625,7 @@ export class WholeOrderReviewService {
 
   private async order(client: Pick<Pool, "query"> | PoolClient, reworkOrderId: string, locked: boolean): Promise<OrderRow> {
     const result = await client.query<OrderRow>(
-      `SELECT rework_order_id,rework_no,status,version,rework_kind,style_no,order_no,merchandiser_user_id,processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,problem_part,problem_description,rework_quantity,tail_inspection_required FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'${locked ? " FOR UPDATE" : ""}`,
+      `SELECT rework_order_id,rework_no,status,version,rework_kind,style_no,order_no,merchandiser_user_id,processing_factory_type,processing_factory_supplier_id,processing_factory_supplier_version,problem_part,problem_description,rework_quantity,tail_inspection_required,special_process_type,other_craft_description FROM rework_orders WHERE rework_order_id=$1 AND status<>'deleted'${locked ? " FOR UPDATE" : ""}`,
       [reworkOrderId],
     );
     return result.rows[0] ?? error("返工单不存在", 404, "NOT_FOUND");

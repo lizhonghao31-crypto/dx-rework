@@ -1,5 +1,7 @@
 import { validationFieldLabel } from "./validation-language.js";
 import { z } from "zod";
+import { OtherCraftDescriptionSchema, SpecialProcessTypeSchema } from "./rework-special-process.js";
+export * from "./rework-special-process.js";
 export * from "./supplier-batch.js";
 
 export * from "./wages.js";
@@ -490,6 +492,8 @@ const ReworkDraftFieldsSchema = z.object({
   problemDescription: DraftTextSchema(2000),
   reworkQuantity: z.number().int().positive().nullable().optional(),
   tailInspectionRequired: z.boolean().optional(),
+  specialProcessType: SpecialProcessTypeSchema.optional(),
+  otherCraftDescription: OtherCraftDescriptionSchema,
   tailInspectionCostBearer: TailInspectionCostBearerSchema.nullable().optional(),
   inspectionReport: InspectionReportDraftSchema.nullable().optional(),
   attachmentIds: ReworkAttachmentIdsSchema().optional(),
@@ -548,6 +552,8 @@ export const ReworkOrderResponseSchema = z.object({
   problemDescription: z.string().nullable(),
   reworkQuantity: z.number().int().positive().nullable(),
   tailInspectionRequired: z.boolean().default(true),
+  specialProcessType: SpecialProcessTypeSchema.nullable().optional(),
+  otherCraftDescription: OtherCraftDescriptionSchema,
   tailInspectionCostBearer: TailInspectionCostBearerSchema.nullable().default(null),
   tailInspectionCostBearerSource:
     TailInspectionCostBearerSourceSchema.nullable().default(null),
@@ -682,6 +688,7 @@ export const ReviewProcessConfigurationSchema = z.object({
 
 export const ProcessConfigurationParamsSchema = z.object({ reworkOrderId: IdSchema }).strict();
 export const ProcessConfigurationItemResponseSchema = z.object({
+  specialProcessType: SpecialProcessTypeSchema.nullable().optional(),
   configurationItemId: IdSchema,
   source: z.enum(["catalog", "custom"]),
   processId: IdSchema.nullable(),
@@ -703,6 +710,8 @@ export const ProcessConfigurationResponseSchema = z.object({
   reworkStatus: ReworkOrderStatusSchema,
   orderVersion: z.number().int().positive(),
   tailInspectionRequired: z.boolean().default(true),
+  specialProcessType: SpecialProcessTypeSchema.nullable().optional(),
+  otherCraftDescription: OtherCraftDescriptionSchema,
   configuration: z.object({
     configurationId: IdSchema,
     configurationVersion: z.number().int().positive(),
@@ -895,6 +904,8 @@ export const WorkReportsBatchResponseSchema = z.object({
   reports: z.array(WorkReportResponseSchema).min(1).max(200),
 }).strict();
 export const ReworkWorkTasksResponseSchema = z.object({
+  specialProcessType: SpecialProcessTypeSchema.nullable().optional(),
+  otherCraftDescription: OtherCraftDescriptionSchema,
   reworkOrderId: IdSchema,
   reworkStatus: ReworkOrderStatusSchema,
   orderVersion: z.number().int().positive(),
@@ -1043,6 +1054,8 @@ export const WholeOrderReviewResponseSchema = z.object({
   canReviewQuantityIncrease: z.boolean(),
   unifiedExecutionRequired: z.boolean().optional().default(false),
   tailInspectionRequired: z.boolean().default(true),
+  specialProcessType: SpecialProcessTypeSchema.nullable().optional(),
+  otherCraftDescription: OtherCraftDescriptionSchema,
   processes: z.array(z.object({
     configurationItemId: IdSchema,
     processName: z.string().min(1),
@@ -1196,6 +1209,8 @@ export const ResponsibilityDeterminationResponseSchema = z.object({
   reworkOrderId: IdSchema, reworkStatus: ReworkOrderStatusSchema, orderVersion: z.number().int().positive(),
   processingFactory: ReworkProcessingFactorySchema.nullable().optional(),
   tailInspectionRequired: z.boolean().default(true),
+  specialProcessType: SpecialProcessTypeSchema.nullable().optional(),
+  otherCraftDescription: OtherCraftDescriptionSchema,
   tailInspectionCostBearer: TailInspectionCostBearerSchema.nullable().default(null),
   tailInspectionCostBearerSource:
     TailInspectionCostBearerSourceSchema.nullable().default(null),

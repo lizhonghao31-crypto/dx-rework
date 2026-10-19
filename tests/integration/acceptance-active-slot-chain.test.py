@@ -98,6 +98,7 @@ class Fixture:
             "/usr/local/bin": str(self.launch),
             "/run/lock": str(self.directory / "lock"),
             "/tmp/dx-acceptance-source.": str(self.tmp / "dx-acceptance-source."),
+            "/tmp/dx-g1-compat.": str(self.tmp / "dx-g1-compat."),
             "/tmp/dx-update-git.": str(self.tmp / "dx-update-git."),
             "/tmp/dx-main-update.": str(self.tmp / "dx-main-update."),
             "/tmp/dx-main-git.": str(self.tmp / "dx-main-git."),
@@ -129,7 +130,10 @@ class Fixture:
                     "scripts/deploy/verify-tool-refresh.py",
                     "scripts/deploy/production-runtime-health.py",
                     "scripts/deploy/fetch-update-source.sh",
-                    "scripts/migration-history-policy.mjs", "scripts/migration-branches.json"]
+                    "scripts/deploy/inspect-acceptance-identity.sh",
+                    "scripts/migration-history-policy.mjs", "scripts/migration-branches.json",
+                    "scripts/check-main-release-compat.mjs",
+                    "docs/operations/g1-acceptance-compat-update.sh"]
         for relative in required:
             source = REPOSITORY / relative
             if not source.is_file():
@@ -142,6 +146,8 @@ class Fixture:
         write(self.repo / "apps/api/migrations" / (SCHEMA + ".sql"), sql)
         write(self.repo / "apps/api/src/platform/migration-manifest.json", json.dumps(self.manifest) + "\n")
         write(self.repo / "scripts/migration-main-extensions.json", "[]\n")
+        write(self.repo / "scripts/migration-branches.json", json.dumps({"main":[],"digital":[]})+"\n")
+        write(self.repo / "scripts/deploy/acceptance-migration-requirements.json", "{}\n")
         write(self.repo / "package.json", '{"name":"offline-slot-fixture","private":true}\n')
         write(self.repo / "package-lock.json", '{"name":"offline-slot-fixture","lockfileVersion":3}\n')
         write(self.repo / "infra/pm2/ecosystem.acceptance.config.cjs", "module.exports={}\n")
@@ -415,6 +421,7 @@ class Fixture:
         """, 0o600)
         write(self.acceptance / "shared/deploy.env",
               "DX_REWORK_NODE_BIN=" + str(self.bin / "node") + "\nDX_REWORK_PG_BIN_DIR=" + str(self.bin) + "\n", 0o600)
+        write(self.runtime / "shared/deploy.env", "DX_REWORK_NODE_BIN=" + str(self.bin / "node") + "\n", 0o600)
         self.set_production(SHA0, 3201)
         write(self.state / "node-binary", str(self.bin / "node") + "\n")
         config = self.directory / "nginx/site.conf"
@@ -444,6 +451,7 @@ class Fixture:
         command([REAL_GIT, "-C", str(self.repo), "commit", "-qm", "New audited tool fixture"])
         self.sha = command([REAL_GIT, "-C", str(self.repo), "rev-parse", "HEAD"]).stdout.strip()
         command([REAL_GIT, "-C", str(self.repo), "branch", "release/digital-production-v1"])
+        command([REAL_GIT, "-C", str(self.repo), "branch", "main"])
         command([REAL_GIT, "-C", str(self.repo), "remote", "add", "origin", str(self.repo)])
         command([REAL_GIT, "-C", str(self.repo), "fetch", "-q", "origin", "refs/heads/release/digital-production-v1:refs/remotes/origin/release/digital-production-v1"])
         self.candidate = self.acceptance / "candidates" / self.sha
@@ -531,7 +539,7 @@ class Fixture:
         write(self.launch/'dx-rework-deploy','#!/usr/bin/env bash\nexec bash '+str(kernel/'scripts/deploy/update-main-online.sh')+' "$@"\n',0o755)
         write(self.runtime/'shared/.env','DATABASE_URL=postgresql://fixture.invalid/dx_rework\nAPP_BASE_PATH=/\n',0o600)
         write(self.runtime/'shared/deploy.env','DX_REWORK_NODE_BIN='+str(self.bin/'node')+'\n',0o600)
-        command([REAL_GIT,'-C',str(self.repo),'branch','main'])
+        command([REAL_GIT,'-C',str(self.repo),'branch','-f','main'])
 
     def next_main(self, label):
         command([REAL_GIT,'-C',str(self.repo),'checkout','-q','main'])
@@ -610,10 +618,30 @@ class ActiveSlotChainTests(unittest.TestCase):
         self.assertIn('TOOL_CODE_UPGRADE_REQUIRED',result.stderr)
         self.assertEqual(old,(f.launch/'dx-acceptance').read_bytes())
         self.assertEqual(before,f.production_fingerprint())
-        f.install();self.assertEqual(before,f.production_fingerprint())
-        f.set_production(SHA1,3203);before=f.production_fingerprint()
-        self.assertIn('ACCEPTANCE_UPDATE_FINISHED',f.update().stdout)
+        handoff=f.repo/'docs/operations/g1-acceptance-compat-update.sh'
+        self.assertIn('CHECK_FINISHED',f.run(handoff,'check',f.sha).stdout)
         self.assertEqual(before,f.production_fingerprint())
+        self.assertIn('INSTALLED_TOOL_VERIFIED',f.run(handoff,'install',f.sha).stdout)
+        self.assertEqual(before,f.production_fingerprint())
+        self.assertIn('ACCEPTANCE_DIAGNOSTICS_FINISHED',f.run(handoff,'diagnose',f.sha).stdout)
+        self.assertEqual(before,f.production_fingerprint())
+        f.set_production(SHA1,3203);before=f.production_fingerprint()
+        self.assertIn('ACCEPTANCE_UPDATE_FINISHED',f.run(handoff,'update',f.sha).stdout)
+        self.assertEqual(before,f.production_fingerprint())
+
+    def test_advanced_main_source_blocks_before_database_or_worker(self):
+        f=self.fixture;f.install();before=f.production_fingerprint()
+        command([REAL_GIT,'-C',str(f.repo),'checkout','-q','main'])
+        sql='-- TEST next main migration, never executed\n'
+        checksum=hashlib.sha256(sql.encode()).hexdigest()
+        write(f.repo/'apps/api/migrations/0002_main_advanced.sql',sql)
+        write(f.repo/'apps/api/src/platform/migration-manifest.json',json.dumps({'migrations':f.manifest['migrations']+[{'version':'0002_main_advanced','checksum':checksum}]})+'\n')
+        command([REAL_GIT,'-C',str(f.repo),'add','.']);command([REAL_GIT,'-C',str(f.repo),'commit','-qm','TEST main advanced'])
+        command([REAL_GIT,'-C',str(f.repo),'checkout','-q','release/digital-production-v1'])
+        f.trace.unlink(missing_ok=True);result=f.update(check=False)
+        self.assertNotEqual(result.returncode,0);self.assertIn('MISSING_MAIN_IDENTITY',result.stderr)
+        self.assertEqual(before,f.production_fingerprint())
+        self.assertFalse(any(x['kind'] in ('database','database-state','pm2','maintenance') for x in f.calls()))
 
     def test_real_main_then_acceptance_then_main_controller_chain(self):
         f=self.fixture;f.install();f.setup_main_controller()

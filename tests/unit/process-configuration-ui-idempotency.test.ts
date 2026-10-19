@@ -25,7 +25,7 @@ describe("N02/N03 process configuration UI idempotency", () => {
     expect(source).toContain("分配工序 &工人");
     expect(source).toContain("候选单价（元/件）");
     expect(source).toContain("至少分配 1 名工人");
-    expect(source).toContain("至少分配 1 名整查");
+    expect(source).toContain("至少分配 1 名${specialLabel}");
     expect(source).toContain("提交 IE 核价");
   });
 });

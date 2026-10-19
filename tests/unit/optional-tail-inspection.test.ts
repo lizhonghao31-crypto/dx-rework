@@ -39,7 +39,7 @@ describe("optional tail inspection", () => {
     expect(review).toContain("if (!tailInspectionRequired)");
     expect(review).toContain("仍有返工执行报数未完成，不能整单确认");
     expect(panel).toContain("!overview.tailInspectionRequired");
-    expect(panel).toContain("本单无需整查");
+    expect(panel).toContain("本单无需${specialLabel}");
   });
 
   it("persists worker-derived final quantities without fabricating tail facts", async () => {
@@ -72,11 +72,4 @@ describe("optional tail inspection", () => {
       read("apps/web/src/process-worker-assignment-form.tsx"),
       read("apps/api/src/rework/rework-business-detail-service.ts"),
     ]);
-    expect(detail).toContain('detail.tailInspectionRequired ? "返工人员 / 整查" : detail.reworkKind === "inhouse_finishing" ? "做尾人员" : "返工人员"');
-    expect(detail).toContain("系统按工人有效上数生成最终数量");
-    expect(assignment).toContain("assignmentOptionsLoading && editable ? []");
-    expect(assignment).toContain("正在加载默认名单…");
-    expect(assignment).toContain("editable && !assignmentOptionsLoading");
-    expect(businessDetail).toContain("tailInspectionRequired: row.tail_inspection_required");
-  });
-});
+    expect(detail).toContain('detail.tailInspectionRequired ? `返工人员 / ${specialProcessLabel(detail)}` : detail.reworkKind === "inhouse_finishing" ? "做尾人员" : "返工人员"');

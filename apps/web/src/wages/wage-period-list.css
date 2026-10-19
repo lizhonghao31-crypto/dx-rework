@@ -157,3 +157,38 @@
 .wage-detail-table dl { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(110px, 2fr); gap: 6px 12px; }
 .wage-detail-table dd { margin: 0; overflow-wrap: anywhere; }
 .wage-person-grid details { overflow-wrap: anywhere; }
+
+/* ERP PR09d: local native table flow; unrelated reporting queues keep their CSS. */
+.wage-management .wage-detail-table .reporting-table-wrap { min-width:0; max-height:none; overflow:auto; }
+.wage-management .wage-detail-table .reporting-table-wrap:focus-visible { outline:2px solid var(--dx-v2-color-primary); outline-offset:-2px; }
+.wage-management .wage-detail-table th { position:static; }
+.wage-management .wage-detail-table .wage-money { text-align:right; font-variant-numeric:tabular-nums; }
+.wage-management .wage-detail-table td:last-child { min-width:240px; max-width:360px; white-space:normal; }
+.wage-management .wage-detail-table td:last-child p { margin:4px 0; }
+.wage-page.wage-period-detail { display:grid; min-width:0; gap:16px; }
+.wage-period-detail .wage-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr)); gap:12px; }
+.wage-period-detail .wage-item-card { min-width:0; }
+.wage-period-detail .wage-item-card h2 { margin:0 0 12px; font-size:18px; }
+.wage-period-detail .wage-item-card p { margin:8px 0; }
+.wage-period-detail .wage-item-card :is(h2,p) { overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.wage-period-detail .wage-calculation-detail summary { cursor:pointer; }
+@media(max-width:760px) {
+  .wage-management .wage-query-grid > label { min-width:0; }
+  .wage-management .wage-query-grid :is(input,select) { width:100%; min-width:0; min-height:44px; box-sizing:border-box; }
+  .wage-management .wage-query-grid :is(input,select),
+  .wage-management .wage-query-grid > label,
+  .wage-management .wage-person-grid { font-size:16px; }
+  .wage-period-detail .wage-item-card { font-size:16px; line-height:24px; }
+  .wage-period-detail .wage-calculation-detail summary { min-height:44px; padding-block:10px; box-sizing:border-box; }
+}
+@media(max-width:520px) {
+  .wage-management .wage-detail-table table { display:table; min-width:900px; }
+  .wage-management .wage-detail-table thead { display:table-header-group; }
+  .wage-management .wage-detail-table tbody { display:table-row-group; }
+  .wage-management .wage-detail-table tr { display:table-row; padding:0; }
+  .wage-management .wage-detail-table :is(th,td) { display:table-cell; padding:10px 12px; border-bottom:1px solid var(--dx-v2-color-border); white-space:nowrap; font-size:16px; line-height:24px; }
+  .wage-management .wage-detail-table td:last-child { white-space:normal; }
+}
+@media(max-width:360px) {
+  .wage-management .wage-query-grid { grid-template-columns:minmax(0,1fr); }
+}

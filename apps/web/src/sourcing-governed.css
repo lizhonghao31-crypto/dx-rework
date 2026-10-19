@@ -250,3 +250,95 @@
 .sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-contract-return-facts .sourcing-finance-reference>div{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;min-width:0;align-content:start}
 .sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-contract-return-facts .sourcing-finance-reference :is(dt,dd){margin:0;font-size:14px;line-height:20px;text-align:left}
 .sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-contract-return-facts .sourcing-finance-reference>div:nth-child(-n+3) dd{white-space:nowrap}
+
+/* Only date values in sourcing detail rows; the table/cards keep their own overflow. */
+.sourcing-order-detail .sourcing-date-token { display:inline-block;white-space:nowrap;font-variant-numeric:tabular-nums; }
+/* Existing preview remains the keyboard/touch full-name action. */
+.sourcing-workspace[data-legacy-ui="sourcing"] .sourcing-photo__filename {white-space:nowrap;overflow:hidden;text-overflow:ellipsis;overflow-wrap:normal;}
+.sourcing-workspace .rework-image-modal__heading strong {min-width:0;overflow-wrap:anywhere;white-space:normal;}
+/* Approved sourcing-only module layout; current and snapshot pages share the same hierarchy. */
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .page-heading__copy { display:grid; grid-template-columns:minmax(0,auto) max-content; align-items:center; justify-content:start; gap:3px 10px; min-width:0; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout h1 { font-size:20px; line-height:28px; overflow-wrap:anywhere; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .page-heading__subtitle-row { display:contents; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .page-heading__actions:empty { display:none; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .page-heading__subtitle { grid-column:1/-1; grid-row:2; margin:0; font-size:13px; line-height:20px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .page-heading__subtitle-row>.dx-badge { grid-column:2; grid-row:1; justify-self:start; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-reference-layout { display:grid; padding:0; border:0; background:transparent; gap:14px; min-width:0; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-key-facts { display:grid; grid-template-columns:repeat(60,minmax(0,1fr)); padding:6px 14px; gap:0; border:0; border-radius:8px; background:var(--dx-governed-surface); }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-key-facts>div { position:relative; grid-column:span 15; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:2px; min-width:0; min-height:52px; padding:7px 14px; border:0; text-align:left; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-key-facts>div:nth-child(-n+4) { border-bottom:1px solid var(--dx-governed-border); }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-key-facts>div:nth-child(n+5) { grid-column:span 10; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-key-facts>div:nth-last-child(-n+2) { grid-column:span 15; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-key-facts>div:not(:nth-child(4)):not(:last-child)::after { content:""; position:absolute; inset-block:13px; right:0; width:1px; background:var(--dx-governed-border); }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-key-facts>div:first-child { flex-direction:row; flex-wrap:wrap; align-items:center; justify-content:flex-start; gap:4px 8px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-key-facts dt { margin:0; font-size:12px; line-height:18px; font-weight:400; color:var(--dx-v2-color-text-secondary); }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-key-facts dd { margin:0; min-width:0; max-width:100%; font-size:16px; line-height:22px; font-weight:600; overflow-wrap:anywhere; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-key-facts__date dd { font-size:14px; font-weight:500; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-key-facts__date dd small { display:block; font-size:12px; line-height:18px; font-weight:400; color:var(--dx-v2-color-text-secondary); }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .po-date-summary { display:flex; flex-wrap:wrap; gap:2px 6px; font-size:13px; font-weight:500; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .po-date-summary>span { white-space:nowrap; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-supporting-overview { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,3fr); align-items:stretch; gap:14px; min-width:0; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-workflow-section { min-width:0; padding:12px 16px; border:0; border-radius:8px; background:var(--dx-governed-surface); }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-order-panel-heading { display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-height:28px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-order-panel-heading h2 { margin:0; font-size:16px; line-height:24px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-order-panel-heading>span { margin-left:auto; font-size:12px; line-height:20px; color:var(--dx-v2-color-text-secondary); }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-workflow-content { display:block; min-width:0; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-workflow-rail { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); gap:0; padding:12px 0 0; overflow:visible; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-workflow-rail>:is(a,div) { min-width:0; gap:6px; grid-template-rows:24px auto auto; align-content:start; font-size:13px; line-height:20px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-workflow-step strong { display:block; font-size:13px; line-height:20px; white-space:normal; overflow-wrap:anywhere; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-workflow-step :is(small,em) { font-size:12px; line-height:18px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-workflow-step:focus-visible { outline:2px solid var(--dx-v2-color-primary); outline-offset:2px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .order-layout-workspace { display:block; min-width:0; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .order-layout-main { display:grid; gap:14px; min-width:0; padding:16px; border:0; border-radius:8px; background:var(--dx-governed-surface); }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-order-workspace-heading h2 { margin:0; font-size:17px; line-height:26px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-order-workspace-heading p { margin:4px 0 0; font-size:14px; line-height:22px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .dx-decision-summary { grid-template-columns:minmax(0,1fr); margin:0; padding:12px 14px; gap:10px; border:0; border-left:4px solid var(--dx-v2-color-primary); border-radius:6px; background:var(--dx-v2-color-surface); }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .dx-decision-summary__icon { display:none; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .dx-decision-summary h2 { margin:0 0 5px; font-size:16px; line-height:24px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .dx-decision-summary p { margin:3px 0; font-size:14px; line-height:22px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .order-layout-main>.sourcing-owner-actions { position:static; margin:0; padding:8px 0 0; border:0; gap:10px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .order-layout-line-items { min-width:0; overflow-x:auto; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .order-layout-line-items:focus-visible { outline:2px solid var(--dx-v2-color-primary); outline-offset:-2px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .order-layout-line-items :is(.dx-responsive-facts,.dx-facts-table-scroll) { overflow:visible; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-order-original-facts { min-width:0; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-order-original-facts>summary { min-height:44px; align-content:center; cursor:pointer; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-quote-context { margin:0 0 10px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-node-workspace:empty { display:none; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-node-workspace>.sourcing-finance-panel { padding:0; border:0; border-radius:0; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-order-heading { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:4px 12px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-order-back { grid-column:1/-1; justify-self:start; min-height:24px; font-size:13px; line-height:20px; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-order-heading .page-heading { min-width:0; margin:0; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-order-return { min-height:32px; padding:4px 8px; border:0; border-radius:6px; background:transparent; color:var(--dx-v2-color-primary); font-size:13px; line-height:20px; white-space:nowrap; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .order-layout-main>.sourcing-factory-change { margin:0; padding:0; border:0; }
+.sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .order-layout-main>.sourcing-factory-change>.dx-button { min-height:36px; padding:6px 8px; background:transparent; box-shadow:none; border:0; color:var(--dx-v2-color-primary); font-size:14px; }
+@media(min-width:801px) {
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .order-layout-line-items .dx-facts-table { table-layout:auto; min-width:760px; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .order-layout-line-items .dx-facts-table :is(th,td) { height:auto; padding:10px 8px; line-height:22px; font-size:13px; vertical-align:middle; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .order-layout-line-items .dx-facts-table th { white-space:nowrap; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .order-layout-line-items .dx-facts-table td:nth-child(n+3) { white-space:nowrap; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .order-layout-line-items .dx-facts-table :is(th,td):first-child { min-width:140px; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .order-layout-line-items .dx-facts-table :is(th,td):nth-child(2) { min-width:64px; }
+}
+@media(max-width:800px) {
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .page-heading__copy { grid-template-columns:minmax(0,1fr) auto; gap:3px 8px; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .page-heading__copy h1 { grid-column:1/-1; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .page-heading__subtitle { grid-column:1; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .page-heading__subtitle-row>.dx-badge { grid-column:2; grid-row:2; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-order-heading { grid-template-columns:minmax(0,1fr) auto; gap:2px 8px; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-order-heading .sourcing-order-back { grid-column:1; grid-row:1; align-self:center; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-order-heading .page-heading { grid-column:1/-1; grid-row:2; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-order-return { grid-column:2; grid-row:1; justify-self:end; min-height:44px; padding:4px 0 4px 8px; font-size:14px; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-key-facts { grid-template-columns:repeat(2,minmax(0,1fr)); padding:8px; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-key-facts>div:nth-child(n) { grid-column:auto; padding:6px; border:0; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-key-facts>div::after { display:none; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-key-facts>div:first-child { flex-direction:column; align-items:flex-start; justify-content:center; gap:2px; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-key-facts>div:nth-child(n+7) { grid-column:1/-1; border-top:1px solid var(--dx-governed-border); }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .po-date-summary { display:grid; gap:3px; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .po-date-summary>span { white-space:normal; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-supporting-overview { grid-template-columns:minmax(0,1fr); gap:12px; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-workflow-section { padding:12px 10px; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .order-layout-main { padding:12px; gap:12px; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-node-workspace p { font-size:14px; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-owner-reject { display:block; min-height:48px; line-height:20px; text-align:center; }
+ .sourcing-workspace[data-legacy-ui="sourcing"].sourcing-module-layout .sourcing-owner-reject__target { display:block; }
+}

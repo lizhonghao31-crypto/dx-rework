@@ -246,11 +246,11 @@ export class FinalExternalResponsibilityService
     ) {
       fail("责任变更申请版本冲突");
     }
-    const permission = await client.query<{ permitted: boolean }>(
+    const permission = await client.query<{ permitted: boolean; is_root: boolean }>(
       `SELECT external_responsibility_direct_role(
          $1,'external_responsibility:approve_revision',
          ARRAY['production_management','owner_group']
-       ) permitted`,
+       ) permitted, access_is_root_actor($1) is_root`,
       [actor.actorId],
     );
     if (!permission.rows[0]?.permitted) {
@@ -303,6 +303,7 @@ export class FinalExternalResponsibilityService
       if (
         !(actor.authorizationCapabilities ?? [])
           .includes("responsibility:determine")
+        && !permission.rows[0]?.is_root
       ) {
         fail(
           "审核人缺少责任判定能力，不能生成 N07 草稿",
@@ -471,6 +472,12 @@ export class FinalExternalResponsibilityService
     revision: RevisionRow,
     reopenedOrder: OrderRow,
   ): Promise<string> {
+    const handler = await client.query<{ handler_user_id: string | null }>(
+      "SELECT responsibility_effective_handler($1) AS handler_user_id",
+      [reopenedOrder.rework_order_id],
+    );
+    const handlerId = handler.rows[0]?.handler_user_id
+      ?? fail("原判责负责人不存在，请先核对责任处理人");
     const draftEventId = await this.reviewEvents.append(
       client,
       { ...actor, authorizationCapability: "responsibility:determine" },
@@ -505,7 +512,7 @@ export class FinalExternalResponsibilityService
          calculation_total,operation_event_id,request_id,settlement_schema_version
        )
        SELECT $1,rework_order_id,determination_version+1,
-              determination_id,source_order_review_id,'draft',$2,$2,$3,
+              determination_id,source_order_review_id,'draft',$7,$2,$3,
               input_snapshot,calculation_total,$4,$5,settlement_schema_version
        FROM rework_responsibility_determinations
        WHERE determination_id=$6 AND stage='finalized'`,
@@ -516,6 +523,7 @@ export class FinalExternalResponsibilityService
         draftEventId,
         actor.requestId,
         revision.finalized_determination_id,
+        handlerId,
       ],
     );
     await client.query(
@@ -568,7 +576,7 @@ export class FinalExternalResponsibilityService
       sourceAction: "rework.responsibility.draft",
       entityType: "rework_order",
       entityId: reopenedOrder.rework_order_id,
-      recipientUserId: actor.actorId,
+      recipientUserId: handlerId,
       route: {
         routeName: "responsibility_detail",
         entityId: reopenedOrder.rework_order_id,

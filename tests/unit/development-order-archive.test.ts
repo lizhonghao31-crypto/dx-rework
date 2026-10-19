@@ -11,8 +11,8 @@ const order={lines:[{lineId:line,sizes:[{size:'M',quantity:10},{size:'L',quantit
 const render=(value=item,extra:Partial<Parameters<typeof DevelopmentOrderArchive>[0]>={})=>renderToStaticMarkup(createElement(DevelopmentOrderArchive,{item:value,sheet:undefined,order,sheetError:undefined,orderError:undefined,sourceUrl:'/ui/digital-production?workspace=designer&development=TEST&round=2',canConfirm:false,onConfirm(){},...extra}));
 describe('combined read-only development archive',()=>{
  it('shows per-size quantities and independent authoritative dates directly, without duplicate tabs or date inputs',()=>{
-  const html=render();for(const text of ['订单档案','每码数量','M：10','L：7','出货日期','加工厂交货日','船样目标日','2026-12-10','2026-12-01','2026-11-30','资料版本与采用轮次','大货采用第 1 轮'])expect(html).toContain(text);
-  expect(html).not.toContain('客户仓到货日');expect(html).toContain('本单资料');expect(html).not.toContain('<details');expect(html).not.toContain('<input');expect(html).not.toContain('<select');expect(html).not.toContain('查看完整订购信息');expect(html).toContain('round=2');
+  const html=render();for(const text of ['订单档案','每码数量','M：10','L：7','客户仓到货日','加工厂交货日','船样目标日','2026-12-10','2026-12-01','2026-11-30','资料版本与采用轮次','大货采用第 1 轮'])expect(html).toContain(text);
+  expect(html).not.toContain('出货日期');expect(html).toContain('本单资料');expect(html).not.toContain('<details');expect(html).not.toContain('<input');expect(html).not.toContain('<select');expect(html).not.toContain('查看完整订购信息');expect(html).toContain('round=2');
  });
  it('keeps three PO quantities and independent dates visible without tabs',()=>{
   const value=structuredClone(item);value.journey.lines=Array.from({length:3},(_,i)=>({...value.journey.lines[0]!,id:line+i,po:'PO-'+i,orderedQuantity:i+1}));value.journey.poDeliveryDates=value.journey.lines.map((l,i)=>({...value.journey.poDeliveryDates![0]!,lineId:l.id,customerWarehouseArrivalDate:'2026-12-'+(10+i)}));const html=render(value);for(const day of ['2026-12-10','2026-12-11','2026-12-12'])expect(html).toContain(day);expect(html.match(/<tbody>[\s\S]*<\/tbody>/)?.[0].match(/<tr>/g)).toHaveLength(3);expect(html).not.toContain('role="tab"');

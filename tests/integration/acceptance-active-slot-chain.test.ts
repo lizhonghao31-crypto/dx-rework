@@ -7,7 +7,7 @@ describe('offline Acceptance active-slot script chain', () => {
       encoding: 'utf8', timeout: 90000,
     });
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-    expect(result.stderr).toContain('Ran 6 tests');
+    expect(result.stderr).toContain('Ran 7 tests');
     expect(result.stderr).toContain('OK');
   }, 100000);
 });

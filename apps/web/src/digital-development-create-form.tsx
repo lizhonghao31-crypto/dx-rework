@@ -22,7 +22,7 @@ import { preparePatternMaterial } from "./pattern-material-upload.js";
 import { uploadDevelopmentMaterial } from "./digital-development-upload.js";
 import { verifySession } from "./auth.js";
 
-const customerPoDateLabel="出货日期";
+import {customerPoDateLabel} from "./digital-workspace-copy.js";
 
 type CreatePicture = {id: string; file: File; preview: string; kind: DevelopmentDocument["files"][number]["kind"]; attachmentId?: string; error?: string | undefined};
 
@@ -100,6 +100,9 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     return () => {unregister(); window.removeEventListener("beforeunload", unload);};
   }, []);
   const withOrder = intent !== "development";
+  const developmentPublished=published||Boolean(source);
+  const publishStatus=developmentPublished?(withOrder?"开发单已发布 · 客户订单待核对确认":"开发单已发布 · 尚无确定客户订单"):"开发草稿";
+  const submitLabel=intent==="confirm_order"?"确认下单":published?(withOrder?"确认客户订单":"返回已发布档案"):withOrder?"发布开发单并确认订单":"发布开发单";
   const title = intent === "confirm_order" ? "客户确定订单 · 补订购信息" : withOrder ? "产品开发（有确定订单）" : "产品开发（无确定订单）";
   const line = (index: number, patch: Partial<DevelopmentOrderDraft["lines"][number]>) => setForm(current => ({...current, lines: current.lines.map((value, i) => i === index ? {...value, ...patch} : value)}));
   const selectPictures = async (files: File[]) => {
@@ -207,7 +210,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
       const issue=validation.issues?.[0];
       const field=issue?.path.at(-1),labels:Record<string,string>={designStyleNo:"设计款号",customerCode:"客户",productGroup:"产品分组",orderDate:"下单日期",color:"颜色",size:"尺码",quantity:"订购数量",lines:"PO 明细"};
       const prefix=issue?.path[0]==="lines"&&typeof issue.path[1]==="number"?`PO ${issue.path[1]+1} `:"";
-      setError(issue?( /[\u3400-\u9fff]/.test(issue.message)?issue.message:`${prefix}${labels[String(field)]??"订购资料"}填写有误，请核实必填内容与允许范围`):(reason instanceof Error?reason.message:"保存失败"));
+      setError(issue?( /[\u3400-\u9fff]/.test(issue.message)?issue.message:`${prefix}${labels[String(field)]??"订购资料"}填写有误，请核实必填内容与允许范围`):(reason instanceof Error?reason.message.replaceAll("出货日期",customerPoDateLabel):"保存失败"));
       const message=reason instanceof Error?reason.message:"";
       const po=message.match(/PO (\d+)/)?.[1],index=typeof issue?.path[1]==='number'?issue.path[1]+1:null;
       const target=message.includes('客户下单日期')?'development-customer-order-date':field==='designStyleNo'||message.includes('设计款号')?'development-create-style':field==='customerCode'||message.includes('请选择客户')?'development-create-customer':po?`development-po-date-${po}`:index&&field==='color'?`development-po-color-${index}`:null;
@@ -220,13 +223,13 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     if ((!dirty.current || await confirmInApp("有未保存开发资料或订购信息，确定离开？")) && !writing.current) onCancel();
   };
   return <Surface className="development-create development-create-reference"><form id={formId} noValidate onKeyDown={event=>{if(event.key==="Enter"&&event.nativeEvent.isComposing)event.preventDefault();}} onSubmit={event => {event.preventDefault(); void save();}}>
-    {contained?<DocumentToolbar title={title} status={busy?"保存中":published?"已发布，待确认订单":"开发草稿"}>{!source && !published && <Button type="button" disabled={busy} onClick={() => void save(true)}>保存开发资料草稿</Button>}<Button form={formId} type="submit" variant="primary" disabled={busy}>{busy ? "保存中…" : intent === "confirm_order" ? "确认下单" : published ? "确认客户订单" : withOrder ? "发布开发单并确认订单" : "发布开发单"}</Button></DocumentToolbar>:<header className="development-create-heading"><div><div className="development-create-title"><h2>{intent === "confirm_order" ? title : "新建开发订单"}</h2><Button type="button" disabled={busy} onClick={() => void returnToList()}>返回列表</Button></div><p>{title}</p></div><div className="pattern-actions">{!source && !published && <Button type="button" disabled={busy} onClick={() => void save(true)}>保存开发资料草稿</Button>}<Button form={formId} type="submit" variant="primary" disabled={busy}>{busy ? "保存中…" : intent === "confirm_order" ? "确认下单" : published ? "确认客户订单" : withOrder ? "发布开发单并确认订单" : "发布开发单"}</Button></div></header>}
+    {contained?<DocumentToolbar title={title} status={busy?"保存中":publishStatus}>{!source && !published && <Button type="button" disabled={busy} onClick={() => void save(true)}>保存开发资料草稿</Button>}<Button form={formId} type="submit" variant="primary" disabled={busy}>{busy?"保存中…":submitLabel}</Button></DocumentToolbar>:<header className="development-create-heading"><div><div className="development-create-title"><h2>{intent === "confirm_order" ? title : "新建开发订单"}</h2><Button type="button" disabled={busy} onClick={() => void returnToList()}>返回列表</Button></div><p>{title}</p></div><div className="pattern-actions">{!source && !published && <Button type="button" disabled={busy} onClick={() => void save(true)}>保存开发资料草稿</Button>}<Button form={formId} type="submit" variant="primary" disabled={busy}>{busy?"保存中…":submitLabel}</Button></div></header>}
     {!source&&<div className="development-order-intent" role="group" aria-label="确定客户订单">{([['development','无确定客户订单'],['certain_order','有确定客户订单']] as const).map(([value,label])=><Button key={value} type="button" aria-pressed={intent===value} disabled={busy||published||!onIntentChange} onClick={()=>onIntentChange?.(value)}>{label}</Button>)}</div>}
     {source && <p>沿用第 {source.adoptedRound ?? source.selectedRound ?? 1} 轮开发资料；头版/开发板与已有工序保持原档案。</p>}
     {error && <DocumentErrors error={error} issues={errorField?[{id:errorField,label:"定位需核实字段",message:error}]:[]}/>}
     {duplicateSource&&<a href={createWebUrls(import.meta.env.BASE_URL).pageUrl(`ui/digital-production?development=${duplicateSource}`)}>打开已有开发档案</a>}
     {savedDraft === currentSnapshot && <p role="status">开发资料与订购草稿已保存，重开可继续；尚未发布或创建客户订单。</p>}
-    {createdSource && !source && error && <p role="status">开发档案已保存。修正订购信息后重试会沿用此档案。</p>}
+    {createdSource&&error&&<p role="status">{developmentPublished?withOrder?"开发单已发布；本次客户订单确认未取得成功回执，请先核对原档案，再继续确认。":"开发单已发布，请打开原档案核对。":"开发档案已保存。修正订购信息后重试会沿用此档案。"} <a className="dx-button dx-button--secondary" href={createWebUrls(import.meta.env.BASE_URL).pageUrl(`ui/digital-production?development=${createdSource}`)}>打开原开发档案</a></p>}
     {boundOrder&&<p role="status">订购草稿已随开发资料发布；确认与重试沿用已发布的 PO、数量和日期。</p>}
     <fieldset disabled={busy}><fieldset disabled={Boolean(boundOrder)} className="development-order-fields"><div className="development-create-layout development-create-layout-existing">
     <div className="development-create-order"><section className="development-create-card"><h3>基本资料</h3><div className="development-create-grid">
@@ -273,7 +276,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     {!source&&<div className="development-editor dx-doc-development">
       <DocumentErrors issues={issues}/>
       {pictures.filter(picture=>picture.error).map(picture=><p key={picture.id} role="alert">{picture.file.name}：{picture.error}</p>)}
-      <DevelopmentDocumentFields uploadHelp="选择后可预览，保存草稿或发布时上传；失败资料仍保留。" document={document} edit={edit} readonly={published} busy={busy} writing={writing} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} imageUrl={id=>picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id)?.preview??createWebUrls(import.meta.env.BASE_URL).apiUrl(`digital-production/sources/${createdSource}/development/attachments/${id}`)} upload={selectPictures} fileKind={fileKind} setFileKind={setFileKind} issue={id=>issues.find(value=>value.id===id)?.message} patternSection={!published?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing selectedCategoryId={document.patternCategoryId??""} onCategoryChange={categoryId=>edit({patternCategoryId:categoryId||null})} onSelection={setPatternChoice}/></div>:null}/>
+      <DevelopmentDocumentFields uploadHelp="选择后可预览，保存草稿或发布时上传；失败资料仍保留。" document={document} edit={edit} readonly={published} busy={busy} writing={writing} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={id=>{const picture=picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id);return picture?{filename:picture.file.name,mimeType:picture.file.type,sizeBytes:picture.file.size}:undefined;}} metadataPath={id=>createdSource&&!picturesRef.current.some(picture=>picture.id===id&&!picture.attachmentId)?`sources/${createdSource}/development/attachments/${id}/metadata`:undefined} imageUrl={id=>picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id)?.preview??createWebUrls(import.meta.env.BASE_URL).apiUrl(`digital-production/sources/${createdSource}/development/attachments/${id}`)} upload={selectPictures} fileKind={fileKind} setFileKind={setFileKind} issue={id=>issues.find(value=>value.id===id)?.message} patternSection={!published?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing selectedCategoryId={document.patternCategoryId??""} onCategoryChange={categoryId=>edit({patternCategoryId:categoryId||null})} onSelection={setPatternChoice}/></div>:null}/>
     </div>}
     </fieldset>
   </form></Surface>;

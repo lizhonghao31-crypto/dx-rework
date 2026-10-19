@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'none'; font-src 'none'; form-action 'none'; base-uri 'none'"><title>达兴 ERP 操作样板 · 模拟数据</title><style>body{margin:0;padding:16px;background:light-dark(#f2f5f8,#131c26);color-scheme:light dark}@media(max-width:600px){body{padding:8px}}</style></head><body>
+<style>
+#dxerp {
+  --dx-v2-color-bg-canvas: #e8edf2;
+  --dx-v2-color-control: #131c26;
+  --dx-v2-color-control-hover: #202b36;
+  --dx-v2-color-primary: #2f6bff;
+  --dx-v2-color-primary-hover: #245fe9;
+  --dx-v2-color-primary-pressed: #1c4dcc;
+  --dx-v2-color-text: #131c26;
+  --dx-v2-color-text-secondary: #526371;
+  --dx-v2-color-surface: #f2f5f8;
+  --dx-v2-color-inset: #d8e0e8;
+  --dx-v2-color-warning: #ffa91f;
+  --dx-v2-color-focus: #8eafff;
+  --dx-v2-radius-sm: 8px;
+  --dx-v2-radius-md: 10px;
+  --dx-v2-radius-lg: 16px;
+  --dx-v2-space-1: 4px;
+  --dx-v2-space-2: 8px;
+  --dx-v2-space-3: 12px;
+  --dx-v2-space-4: 14px;
+  --dx-v2-space-5: 16px;
+  --dx-v2-space-6: 20px;
+  --dx-v2-shadow-raised: 6px 6px 12px rgba(75, 90, 105, 0.2), -5px -5px 10px rgba(255, 255, 255, 0.95);
+  /* Ordinary form controls: the existing rework V2 form is authoritative. */
+  --dx-sidebar-width: 280px;
+  --dx-content-padding: 32px;
+  --dx-body-font-size: 13px;
+  --dx-body-line-height: 20px;
+  --dx-form-control-height: 42px;
+  --dx-form-control-font-size: 12px;
+  --dx-form-control-border: #c9ced6;
+  --dx-form-control-background: #fff;
+  --dx-form-label-gap: 5px;
+  --dx-form-label-size: 12px;
+  --dx-form-label-weight: 700;
+  --dx-form-section-padding: 16px;
+  --dx-button-height: 40px;
+  --dx-navigation-height: 50px;
+  --dx-navigation-icon-size: 28px;
+  --dx-status-success: #087f61;
+  --dx-status-success-bg: #dcf7ed;
+  --dx-status-danger: #c52e3d;
+  --dx-status-warning-bg: #fff0cc;
+  --dx-v2-font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+
+@media (max-width: 600px) {
+  #dxerp {
+    --dx-form-control-height: 48px;
+    --dx-form-control-font-size: 16px;
+    --dx-form-section-padding: 12px;
+  }
+}
+
+@media (max-width: 800px) {
+  #dxerp { --dx-content-padding: 16px; }
+}
+@media (max-width: 520px) {
+  #dxerp { --dx-content-padding: 12px; }
+}
+
+/* UI-01 pilot: existing palette and control scale, opt-in surface hierarchy. */
+[data-dx-ui="governed"] {
+  --dx-governed-surface: #fff;
+  --dx-governed-border: var(--dx-form-control-border);
+  --dx-governed-radius: var(--dx-v2-radius-lg);
+  --dx-governed-gap: var(--dx-v2-space-5);
+  --dx-governed-muted: var(--dx-v2-color-text-secondary);
+}
+
+
+.dx-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--dx-button-height);
+  padding: 0 20px;
+  border: 1px solid #fff;
+  border-radius: var(--dx-v2-radius-md);
+  font: inherit;
+  font-weight: 700;
+  text-align: center;
+  vertical-align: middle;
+  box-shadow: var(--dx-v2-shadow-raised);
+  cursor: pointer;
+  transition: background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+.dx-button--secondary { background: var(--dx-v2-color-surface); color: var(--dx-v2-color-text); }
+.dx-button--secondary:hover:not(:disabled) { background: #fff; }
+.dx-button--secondary:active:not(:disabled) { background: var(--dx-v2-color-inset); transform: translateY(1px); }
+.dx-button--primary { background: var(--dx-v2-color-primary); color: #fff; }
+.dx-button--primary:hover:not(:disabled) { background: var(--dx-v2-color-primary-hover); }
+.dx-button--primary:active:not(:disabled) { background: var(--dx-v2-color-primary-pressed); transform: translateY(1px); }
+.dx-button:focus-visible { outline: 3px solid var(--dx-v2-color-focus); outline-offset: 2px; }
+.dx-button:disabled { cursor: not-allowed; opacity: 0.48; box-shadow: none; }
+.dx-badge { display: inline-flex; align-items: center; min-height: 26px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+.dx-badge--neutral { background: #e0e5ea; }
+.dx-badge--info { background: #dbe6ff; color: #245fe9; }
+.dx-badge--success { background: #dcf7ed; color: #087f61; }
+.dx-badge--warning { background: #fff0cc; color: #a35e00; }
+.dx-badge--danger { background: #ffe0e0; color: #c52e3d; }
+.dx-nav-item { display: flex; align-items: center; gap: var(--dx-v2-space-3); min-height: var(--dx-navigation-height); padding: 8px 12px; border: 1px solid #394958; border-radius: var(--dx-v2-radius-md); }
+.dx-nav-item:hover { background: var(--dx-v2-color-control-hover); }
+.dx-nav-item.is-active { background: var(--dx-v2-color-primary); border-color: transparent; }
+.dx-nav-item b { display: grid; place-items: center; width: var(--dx-navigation-icon-size); height: var(--dx-navigation-icon-size); flex: 0 0 var(--dx-navigation-icon-size); border-radius: var(--dx-v2-radius-sm); background: #202d3a; }
+.dx-kpi, .dx-surface { border: 1px solid rgba(255, 255, 255, 0.8); border-radius: var(--dx-v2-radius-lg); background: var(--dx-v2-color-surface); box-shadow: var(--dx-v2-shadow-raised); }
+.dx-kpi { display: grid; padding: var(--dx-v2-space-6); min-height: 176px; }
+.dx-kpi strong { font-size: 34px; line-height: 42px; }
+.dx-kpi small { color: var(--dx-v2-color-text-secondary); }
+.dx-meter { height: 8px; border-radius: var(--dx-v2-radius-sm); background: var(--dx-v2-color-primary); }
+.dx-meter--warning { background: var(--dx-v2-color-warning); }
+.dx-surface { padding: var(--dx-v2-space-4); }
+.dx-field { display: grid; gap: 6px; min-width: 250px; }
+.dx-field__control { display: flex; align-items: center; min-height: 44px; padding: 0 12px; background: var(--dx-v2-color-inset); border: 1px solid #b9c8d6; border-radius: var(--dx-v2-radius-md); box-shadow: inset 2px 2px 5px rgba(75, 90, 105, 0.12); }
+.dx-field input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--dx-v2-color-text); font: inherit; }
+.dx-field em { font-style: normal; color: var(--dx-v2-color-text-secondary); }
+
+@media (max-width: 800px) {
+  .dx-field { min-width: 0; }
+}
+
+[data-dx-ui="governed"] .dx-key-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap: 12px; margin: 0; padding: 18px 16px; border: 1px solid var(--dx-governed-border); border-radius: 10px; background: var(--dx-governed-surface); }
+[data-dx-ui="governed"] .dx-key-facts > div { min-width: 0; padding-left: 14px; border-left: 1px solid var(--dx-governed-border); }
+[data-dx-ui="governed"] .dx-key-facts > div:first-child { padding-left: 0; border: 0; }
+[data-dx-ui="governed"] .dx-key-facts dt { color: var(--dx-governed-muted); font-size: 12px; }
+[data-dx-ui="governed"] .dx-key-facts dd { margin: 5px 0 0; font-size: 16px; font-weight: 700; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+[data-dx-ui="governed"] .dx-decision-summary { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; padding: 16px 20px; border: 1px solid #dce8fa; border-radius: 10px; background: #eaf2fd; }
+[data-dx-ui="governed"] .dx-decision-summary h2 { margin: 0 0 6px; font-size: 16px; }
+[data-dx-ui="governed"] .dx-decision-summary p { margin: 3px 0; color: #344b68; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+[data-dx-ui="governed"] .dx-disclosure { min-width: 0; padding: 0 14px; border: 1px solid var(--dx-governed-border); border-radius: 8px; background: var(--dx-governed-surface); }
+[data-dx-ui="governed"] .dx-disclosure > summary { min-height: 40px; align-content: center; cursor: pointer; font-size: 14px; font-weight: 700; }
+[data-dx-ui="governed"] .dx-disclosure p { font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+[data-dx-ui="governed"] .dx-image-strip { display: flex; gap: 8px; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; padding: 4px 0; }
+[data-dx-ui="governed"] .dx-image-strip > button { flex: 0 0 80px; min-width: 0; scroll-snap-align: start; }
+[data-dx-ui="governed"] .dx-image-strip img { display: block; width: 100%; height: 76px; object-fit: contain; }
+[data-dx-ui="governed"] .dx-workflow-rail { display: flex; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; padding: 8px 0; }
+[data-dx-ui="governed"] .dx-workflow-rail > :is(a, div) { position: relative; display: grid; flex: 1 0 84px; gap: 6px; justify-items: center; text-align: center; text-decoration: none; color: inherit; font-size: 12px; }
+[data-dx-ui="governed"] .dx-workflow-rail > :is(a, div)::before { content: ""; position: absolute; top: 11px; left: 0; right: 0; height: 2px; background: #d8e2ef; }
+[data-dx-ui="governed"] .dx-workflow-rail > :first-child::before { left: 50%; }
+[data-dx-ui="governed"] .dx-workflow-rail > :last-child::before { right: 50%; }
+[data-dx-ui="governed"] .dx-workflow-rail b { z-index: 1; display: grid; place-items: center; width: 24px; height: 24px; border: 2px solid #fff; border-radius: 50%; background: #bccbdb; color: #fff; }
+[data-dx-ui="governed"] .dx-workflow-rail .is-completed b { background: #25a6b6; }
+[data-dx-ui="governed"] .dx-workflow-rail .is-completed::before { background: #25a6b6; }
+[data-dx-ui="governed"] .dx-workflow-rail .is-current b { background: var(--dx-v2-color-primary); }
+[data-dx-ui="governed"] .dx-workflow-rail :is(small, em) { display: block; color: var(--dx-governed-muted); font-size: 11px; font-style: normal; line-height: 1.7; }
+[data-dx-ui="governed"] .dx-workflow-rail .is-current em { color: var(--dx-v2-color-primary); }
+[data-dx-ui="governed"] .dx-workflow-rail .is-future { color: var(--dx-governed-muted); }
+[data-dx-ui="governed"] .dx-action-bar { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; padding: 12px 0; border-top: 1px solid var(--dx-governed-border); background: var(--dx-governed-surface); }
+[data-dx-ui="governed"] .dx-facts-table-scroll { max-width: 100%; min-width: 0; }
+[data-dx-ui="governed"] .dx-facts-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; font-variant-numeric: tabular-nums; text-align: right; }
+[data-dx-ui="governed"] .dx-facts-table caption { padding: 0 0 10px; text-align: left; font-size: 16px; font-weight: 700; }
+[data-dx-ui="governed"] .dx-facts-table :is(th, td) { padding: 10px 8px; border-bottom: 1px solid var(--dx-governed-border); vertical-align: top; overflow-wrap: anywhere; }
+[data-dx-ui="governed"] .dx-facts-table :is(th, td):first-child { width: 20%; text-align: left; }
+[data-dx-ui="governed"] .dx-facts-table :is(th, td):nth-child(2) { text-align: left; }
+[data-dx-ui="governed"] .dx-facts-table :is(thead, tfoot) { background: #f0f5fa; }
+[data-dx-ui="governed"] .dx-facts-table tfoot { font-weight: 700; }
+[data-dx-ui="governed"] .dx-responsive-facts small { display: block; color: var(--dx-governed-muted); }
+[data-dx-ui="governed"] .dx-facts-cards { display: none; }
+[data-dx-ui="governed"] :is(.dx-workflow-rail a, .dx-disclosure > summary):focus-visible { outline: 3px solid var(--dx-v2-color-focus); outline-offset: -3px; }
+[data-dx-ui="governed"] .dx-facts-empty { padding: 12px; color: var(--dx-governed-muted); }
+@media (max-width: 800px) {
+  [data-dx-ui="governed"] .dx-key-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px; }
+  [data-dx-ui="governed"] .dx-key-facts > div { padding: 0; border: 0; }
+  [data-dx-ui="governed"] .dx-key-facts > div:first-child { grid-column: 1 / -1; padding-bottom: 12px; border-bottom: 1px solid var(--dx-governed-border); }
+  [data-dx-ui="governed"] .dx-key-facts dd { font-size: 14px; }
+  [data-dx-ui="governed"] .dx-decision-summary { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; padding: 14px; }
+  [data-dx-ui="governed"] .dx-disclosure > summary { min-height: 44px; }
+  [data-dx-ui="governed"] .dx-action-bar > .dx-button { flex: 1 1 0; min-height: 48px; }
+  [data-dx-ui="governed"] .dx-facts-table-scroll { display: none; }
+  [data-dx-ui="governed"] .dx-facts-cards { display: grid; gap: 0; }
+  [data-dx-ui="governed"] .dx-facts-cards h2 { margin: 0 0 10px; font-size: 16px; }
+  [data-dx-ui="governed"] .dx-facts-card { padding: 12px; border: 1px solid var(--dx-governed-border); background: #fff; }
+  [data-dx-ui="governed"] .dx-facts-card + .dx-facts-card { border-top: 0; }
+  [data-dx-ui="governed"] .dx-facts-card dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; margin: 0; }
+  [data-dx-ui="governed"] .dx-facts-card dt { font-size: 11px; color: var(--dx-governed-muted); }
+  [data-dx-ui="governed"] .dx-facts-card dd { margin: 4px 0 0; font-size: 13px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+  [data-dx-ui="governed"] .dx-facts-card__heading { grid-column: 1 / -1; }
+  [data-dx-ui="governed"] .dx-facts-card__heading dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  [data-dx-ui="governed"] .dx-facts-card__heading:first-child dd { font-weight: 700; }
+  [data-dx-ui="governed"] .dx-facts-card__heading + .dx-facts-card__heading { margin-top: -10px; }
+  [data-dx-ui="governed"] .dx-facts-cards__totals { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin: 0; padding: 12px; background: #f0f5fa; font-size: 13px; }
+  [data-dx-ui="governed"] .dx-facts-cards__totals dt { color: var(--dx-governed-muted); }
+  [data-dx-ui="governed"] .dx-facts-cards__totals dd { margin: 4px 0 0; font-weight: 700; }
+}
+
+[data-dx-ui="governed"] .dx-decision-summary__icon { width: 28px; height: 32px; color: var(--dx-v2-color-primary); }
+
+/* Opt-in compact cards: headings stay readable; whole metrics wrap as units. */
+@media (max-width: 800px) {
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card { padding: 10px; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card dl { display: flex; flex-wrap: wrap; gap: 8px 4px; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card dl > div { flex: 1 0 auto; min-width: 48px; max-width: 100%; text-align: center; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card dt { font-size: 12px; line-height: 1.5; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card dd { margin: 2px 0 0; font-size: 16px; line-height: 1.4; white-space: nowrap; overflow-wrap: normal; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card dl > .dx-facts-card__heading { flex: 1 0 100%; text-align: left; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card__heading dd { white-space: normal; overflow-wrap: anywhere; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card__heading + .dx-facts-card__heading { margin-top: -6px; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-card__heading + .dx-facts-card__heading dd { font-size: 14px; color: var(--dx-governed-muted); }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-cards__totals { padding: 10px; align-items: center; gap: 8px; }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-cards__total-label dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  [data-dx-ui="governed"] .dx-responsive-facts--compact .dx-facts-cards__totals dd { white-space: nowrap; font-size: 16px; }
+}
+
+
+#dxerp {
+  color-scheme: light dark;
+  --dx-v2-color-bg-canvas: light-dark(#e8edf2, #131c26);
+  --dx-v2-color-control: #131c26;
+  --dx-v2-color-control-hover: #202b36;
+  --dx-v2-color-primary: #2f6bff;
+  --dx-v2-color-primary-hover: #245fe9;
+  --dx-v2-color-primary-pressed: #1c4dcc;
+  --dx-v2-color-text: light-dark(#131c26, #f2f5f8);
+  --dx-v2-color-text-secondary: light-dark(#526371, #b8c6d2);
+  --dx-v2-color-surface: light-dark(#f2f5f8, #202b36);
+  --dx-v2-color-inset: light-dark(#d8e0e8, #293949);
+  --dx-form-control-border: light-dark(#c9ced6, #526371);
+  --dx-form-control-background: light-dark(#fff, #202b36);
+  --dx-governed-surface: var(--dx-form-control-background);
+  --dx-governed-border: var(--dx-form-control-border);
+  --dx-governed-muted: var(--dx-v2-color-text-secondary);
+  --p-paper: var(--dx-form-control-background);
+  --p-soft: var(--dx-v2-color-surface);
+  --p-line: var(--dx-form-control-border);
+  --p-blue-soft: light-dark(#dbe6ff, #203a70);
+  --p-success-bg: light-dark(#dcf7ed, #163c35);
+  --p-success-text: light-dark(#087f61, #87e0bf);
+  --p-danger-bg: light-dark(#ffe0e0, #4d2930);
+  --p-danger-text: light-dark(#c52e3d, #ffadb5);
+  --p-warning-bg: light-dark(#fff0cc, #463b21);
+  --p-warning-text: light-dark(#8b5100, #ffcf75);
+  width: 100%;
+  color: var(--dx-v2-color-text);
+  font: var(--dx-body-font-size)/var(--dx-body-line-height) var(--dx-v2-font-family);
+}
+#dxerp *, #dxerp *::before, #dxerp *::after { box-sizing: border-box; }
+#dxerp [hidden] { display: none !important; }
+#dxerp button, #dxerp input, #dxerp select, #dxerp textarea { font: inherit; }
+#dxerp :is(button, summary, select, a) { cursor: pointer; }
+#dxerp button:disabled { cursor: not-allowed; }
+#dxerp button, #dxerp a { -webkit-tap-highlight-color: transparent; }
+#dxerp :is(button, summary, input, select, textarea, a):focus-visible { outline: 3px solid var(--dx-v2-color-focus); outline-offset: 3px; }
+#dxerp h1, #dxerp h2, #dxerp h3, #dxerp p { margin: 0; }
+#dxerp h1 { font-size: 19px; line-height: 1.45; font-weight: 700; }
+#dxerp h2 { font-size: 15px; line-height: 1.5; font-weight: 700; }
+#dxerp h3 { font-size: 13px; line-height: 1.5; font-weight: 700; }
+#dxerp .p-demo-shell { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 4px 20px; margin-bottom: 12px; padding: 10px 16px; background: var(--p-soft); border-radius: var(--dx-v2-radius-md); }
+#dxerp .p-demo-label, #dxerp .p-demo-controls, #dxerp .p-demo-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+#dxerp .p-demo-label { justify-content: flex-start; }
+#dxerp .p-demo-label strong { font-size: 15px; }
+#dxerp .p-demo-label span { color: var(--p-warning-text); background: var(--p-warning-bg); padding: 2px 10px; border-radius: 6px; font-weight: 700; }
+#dxerp .p-demo-controls { margin-top: 0; justify-content: space-between; }
+#dxerp .p-demo-controls label { display: flex; align-items: center; gap: 8px; }
+#dxerp .p-demo-controls select { max-width: 100%; min-height: 36px; border: 1px solid var(--p-line); border-radius: 6px; padding: 4px 8px; background: var(--p-paper); color: inherit; }
+#dxerp .p-demo-controls fieldset { display: flex; flex-wrap: wrap; gap: 4px; border: 0; padding: 0; margin: 0; min-width: 0; align-items: center; }
+#dxerp .p-demo-controls legend { float: left; margin: 0 8px 0 0; padding: 6px 0; color: var(--dx-v2-color-text-secondary); }
+#dxerp .p-demo-controls button { min-height: 34px; border: 0; border-radius: 6px; padding: 5px 12px; background: transparent; color: inherit; }
+#dxerp .p-demo-controls button[aria-pressed="true"] { background: var(--dx-v2-color-control); color: #f2f5f8; }
+#dxerp .p-demo-meta { grid-column: 1 / -1; margin-top: 0; justify-content: space-between; color: var(--dx-v2-color-text-secondary); font-size: 12px; }
+#dxerp .p-product { background: var(--dx-v2-color-bg-canvas); border-radius: 12px; }
+#dxerp .p-appbar { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; min-height: 48px; padding: 10px 20px; border-radius: 12px 12px 0 0; background: var(--dx-v2-color-control); color: #f2f5f8; }
+#dxerp .p-appbar strong { font-size: 14px; }
+#dxerp .p-appbar > span:not(.p-role) { padding-left: 14px; border-left: 1px solid #526371; color: #cad4dd; }
+#dxerp .p-role { margin-left: auto; font-size: 12px; color: #cad4dd; }
+#dxerp .p-page { padding: 16px 20px 20px; }
+#dxerp .p-object-head { margin-bottom: 12px; }
+#dxerp .p-breadcrumb { display: flex; align-items: center; gap: 8px; color: var(--dx-v2-color-text-secondary); font-size: 12px; margin-bottom: 8px; }
+#dxerp .p-breadcrumb button { padding: 0; border: 0; background: transparent; color: var(--dx-v2-color-primary); min-height: 28px; text-align: left; }
+#dxerp .p-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+#dxerp .p-title-row > div:first-child { min-width: 0; }
+#dxerp .p-title-row h1 { display: inline; overflow-wrap: anywhere; }
+#dxerp .p-title-row .dx-badge { margin: 0 0 0 8px; vertical-align: 2px; white-space: nowrap; }
+#dxerp .p-subtitle { color: var(--dx-v2-color-text-secondary); margin-top: 4px; }
+#dxerp .p-text-button { min-height: 32px; flex-shrink: 0; border: 0; border-radius: 6px; padding: 4px 8px; background: transparent; color: var(--dx-v2-color-primary); }
+#dxerp .dx-button { border-color: transparent; box-shadow: none; }
+#dxerp .dx-button--secondary { border-color: var(--p-line); background: var(--p-paper); }
+#dxerp .dx-button--secondary:hover:not(:disabled) { background: var(--p-soft); }
+#dxerp .dx-button--primary { color: #fff; }
+#dxerp .dx-badge--neutral { background: var(--dx-v2-color-inset); color: var(--dx-v2-color-text); }
+#dxerp .dx-badge--info { background: var(--p-blue-soft); color: light-dark(#245fe9, #b3caff); }
+#dxerp .dx-badge--success { background: var(--p-success-bg); color: var(--p-success-text); }
+#dxerp .dx-badge--warning { background: var(--p-warning-bg); color: var(--p-warning-text); }
+#dxerp .dx-badge--danger { background: var(--p-danger-bg); color: var(--p-danger-text); }
+#dxerp .p-facts.dx-key-facts { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 0 20px; padding: 8px 14px; border: 0; border-radius: 8px; margin: 0 0 12px; background: var(--p-paper); }
+#dxerp .p-facts.dx-key-facts > div { min-width: 0; display: flex; align-items: baseline; gap: 8px; padding: 5px 0; border: 0; }
+#dxerp .p-facts.dx-key-facts dt { color: var(--dx-v2-color-text-secondary); font-size: 12px; white-space: nowrap; }
+#dxerp .p-facts.dx-key-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; font-size: 13px; font-weight: 500; }
+#dxerp .p-facts time { white-space: nowrap; }
+#dxerp .p-task-facts.dx-key-facts { grid-template-columns: repeat(2,minmax(0,1fr)); }
+#dxerp .p-workspace { display: grid; grid-template-columns: minmax(0,1fr) 240px; gap: 14px; align-items: start; }
+#dxerp .p-order-workspace { grid-template-columns: 240px minmax(0,1fr); }
+#dxerp .p-order-workspace > .p-aside { grid-column: 1; grid-row: 1; }
+#dxerp .p-order-workspace > .p-main { grid-column: 2; grid-row: 1; }
+#dxerp .p-main, #dxerp .p-aside { min-width: 0; }
+#dxerp .p-main { background: var(--p-paper); border-radius: 10px; padding: 16px; }
+#dxerp .p-aside { display: grid; gap: 12px; }
+#dxerp .p-aside-section { padding: 12px 14px; background: var(--p-paper); border-radius: 8px; min-width: 0; }
+#dxerp .p-section-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+#dxerp .p-section-heading > span { margin-left: auto; color: var(--dx-v2-color-text-secondary); font-size: 12px; }
+#dxerp .p-section-intro { color: var(--dx-v2-color-text-secondary); margin-bottom: 12px; }
+#dxerp .p-destination { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--dx-v2-color-text-secondary); font-size: 12px; margin: 10px 0; }
+#dxerp .p-destination strong { color: var(--dx-v2-color-text); font-weight: 500; }
+#dxerp .p-inline-note { margin: 8px 0; color: var(--dx-v2-color-text-secondary); font-size: 12px; }
+#dxerp .p-table { width: 100%; border-collapse: collapse; font-size: 12px; line-height: 18px; font-variant-numeric: tabular-nums; }
+#dxerp .p-table th, #dxerp .p-table td { padding: 6px; border-bottom: 1px solid var(--p-line); text-align: right; vertical-align: middle; }
+#dxerp .p-table th { color: var(--dx-v2-color-text-secondary); font-weight: 500; }
+#dxerp .p-table :is(th,td):first-child { text-align: left; }
+#dxerp .p-table :is(th,td):nth-child(2) { text-align: left; }
+#dxerp .p-table tbody tr:last-child td { border-bottom: 0; }
+#dxerp .p-table tfoot td { font-weight: 700; background: var(--p-soft); border: 0; }
+#dxerp .p-po-id { display: block; font-weight: 700; overflow-wrap: anywhere; }
+#dxerp .p-po-alt { display: block; color: var(--dx-v2-color-text-secondary); font-size: 11px; line-height: 15px; }
+#dxerp .p-mobile-lines { display: none; }
+#dxerp .p-action-bar.dx-action-bar { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 10px; padding: 12px 0 0; margin-top: 12px; border-top: 1px solid var(--p-line); background: var(--p-paper); }
+#dxerp .p-action-bar > div { display: flex; gap: 8px; flex-wrap: wrap; }
+#dxerp .p-action-bar > p { flex: 1 1 180px; color: var(--dx-v2-color-text-secondary); font-size: 12px; }
+#dxerp .p-workflow { list-style: none; padding: 0; margin: 0; }
+#dxerp .p-workflow li { display: flex; gap: 10px; align-items: center; padding: 9px 0; position: relative; }
+#dxerp .p-workflow li + li::before { content: ''; height: 14px; width: 1px; background: var(--p-line); position: absolute; top: -7px; left: 11px; }
+#dxerp .p-workflow b { display: inline-grid; width: 24px; height: 24px; align-items: center; text-align: center; background: var(--p-soft); border-radius: 50%; color: var(--dx-v2-color-text-secondary); flex-shrink: 0; font-weight: 500; }
+#dxerp .p-workflow li.is-current b { color: #fff; background: var(--dx-v2-color-primary); }
+#dxerp .p-workflow li.is-done b { color: var(--p-success-text); background: var(--p-success-bg); }
+#dxerp .p-workflow span { font-weight: 500; }
+#dxerp .p-workflow small { display: block; color: var(--dx-v2-color-text-secondary); font-weight: 400; font-size: 12px; }
+#dxerp .p-file-list { display: grid; gap: 2px; }
+#dxerp .p-file { position: relative; min-width: 0; border-bottom: 1px solid var(--p-line); }
+#dxerp .p-file:last-child { border-bottom: 0; }
+#dxerp .p-file summary { display: flex; align-items: center; gap: 6px; min-height: 38px; padding: 7px 0; list-style: none; }
+#dxerp .p-file summary::-webkit-details-marker { display: none; }
+#dxerp .p-file-type { flex: 0 0 29px; font-size: 10px; font-weight: 700; text-align: center; color: var(--dx-v2-color-text-secondary); padding: 1px 0; background: var(--p-soft); border-radius: 3px; }
+#dxerp .p-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1 1 auto; }
+#dxerp .p-file-toggle { font-size: 11px; color: var(--dx-v2-color-primary); flex-shrink: 0; }
+#dxerp .p-file-peek { display: none; position: absolute; z-index: 12; top: 100%; left: 0; right: 0; padding: 10px; border: 1px solid var(--p-line); border-radius: 6px; background: var(--p-paper); box-shadow: 0 5px 14px rgba(19,28,38,.12); overflow-wrap: anywhere; white-space: normal; }
+#dxerp .p-file summary:hover .p-file-peek, #dxerp .p-file summary:focus .p-file-peek { display: block; }
+#dxerp .p-file[open] .p-file-peek { display: none !important; }
+#dxerp .p-file-full { display: none; position: absolute; z-index: 12; top: 100%; left: 0; right: 0; padding: 10px; border: 1px solid var(--p-line); border-radius: 6px; background: var(--p-paper); box-shadow: 0 5px 14px rgba(19,28,38,.12); overflow-wrap: anywhere; }
+#dxerp .p-file[open] .p-file-full { display: block; position: static; margin: 0 0 8px; box-shadow: none; background: var(--p-soft); border: 0; }
+#dxerp .p-file-full button { margin-top: 8px; }
+#dxerp .p-file-more { margin-top: 6px; }
+#dxerp .p-file-more > summary { color: var(--dx-v2-color-primary); min-height: 36px; align-content: center; }
+#dxerp .p-status { border-radius: 7px; padding: 12px 14px; margin-bottom: 12px; background: var(--p-soft); }
+#dxerp .p-status strong { display: block; margin-bottom: 4px; }
+#dxerp .p-status p + p { margin-top: 4px; }
+#dxerp .p-status--warning { background: var(--p-warning-bg); color: var(--p-warning-text); }
+#dxerp .p-status--danger { background: var(--p-danger-bg); color: var(--p-danger-text); }
+#dxerp .p-status--success { background: var(--p-success-bg); color: var(--p-success-text); }
+#dxerp .p-status .dx-button { margin-top: 10px; }
+#dxerp .p-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 12px; }
+#dxerp .p-tabs button { min-height: 36px; padding: 6px 14px; border: 0; border-radius: 6px; background: transparent; color: var(--dx-v2-color-text-secondary); }
+#dxerp .p-tabs button[aria-selected="true"] { background: var(--p-paper); color: var(--dx-v2-color-primary); font-weight: 700; }
+#dxerp .p-task-layout { display: grid; grid-template-columns: 240px minmax(0,1fr); gap: 14px; }
+#dxerp .p-task-layout > .p-main { grid-column: 2; }
+#dxerp .p-task-layout > .p-aside { grid-column: 1; grid-row: 1; }
+#dxerp .p-basis { display: grid; gap: 8px; color: var(--dx-v2-color-text-secondary); margin: 10px 0; }
+#dxerp .p-basis strong { color: var(--dx-v2-color-text); font-weight: 500; }
+#dxerp .p-form-field { display: grid; gap: var(--dx-form-label-gap); min-width: 0; margin: 0 0 10px; }
+#dxerp .p-form-field > span { color: var(--dx-v2-color-text-secondary); font-size: var(--dx-form-label-size); font-weight: var(--dx-form-label-weight); }
+#dxerp .p-form-field :is(input,select,textarea) { width: 100%; min-width: 0; min-height: var(--dx-form-control-height); border: 1px solid var(--p-line); border-radius: var(--dx-v2-radius-md); background: var(--p-paper); color: var(--dx-v2-color-text); padding: 8px 12px; font-size: var(--dx-form-control-font-size); }
+#dxerp .p-form-field textarea { min-height: 76px; resize: vertical; }
+#dxerp .p-form-field [aria-invalid="true"] { border-color: var(--p-danger-text); }
+#dxerp .p-form-field small { color: var(--p-danger-text); font-size: 12px; }
+#dxerp .p-form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 14px; }
+#dxerp .p-form-grid .p-wide { grid-column: 1 / -1; }
+#dxerp .p-form-field input:disabled, #dxerp .p-form-field textarea:disabled { background: var(--p-soft); opacity: .72; }
+#dxerp .p-history { list-style: none; margin: 0; padding: 0; }
+#dxerp .p-history li { padding: 10px 0; border-bottom: 1px solid var(--p-line); }
+#dxerp .p-history li:last-child { border-bottom: 0; }
+#dxerp .p-history small { color: var(--dx-v2-color-text-secondary); font-size: 12px; }
+#dxerp .p-history p { margin-top: 4px; }
+#dxerp .p-mock-image { min-height: 120px; display: grid; place-items: center; background: var(--p-soft); color: var(--dx-v2-color-text-secondary); border-radius: 8px; margin: 10px 0; }
+#dxerp .p-preview-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+#dxerp .p-preview-grid > div { min-height: 110px; display: grid; place-items: center; background: var(--p-soft); color: var(--dx-v2-color-text-secondary); border-radius: 8px; }
+#dxerp .p-read-details { padding: 10px 0 0; margin-top: 10px; border-top: 1px solid var(--p-line); }
+#dxerp .p-read-details > summary { min-height: 32px; align-content: center; color: var(--dx-v2-color-primary); }
+#dxerp .p-read-details p { margin: 8px 0; }
+#dxerp .p-list-row { width: 100%; display: flex; gap: 12px; padding: 14px 10px; text-align: left; align-items: center; border: 0; border-bottom: 1px solid var(--p-line); background: var(--p-paper); color: inherit; }
+#dxerp .p-list-row > span:first-child { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+#dxerp .p-list-row small { display: block; margin-top: 4px; color: var(--dx-v2-color-text-secondary); }
+#dxerp .p-source-context { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 12px; color: var(--dx-v2-color-text-secondary); }
+#dxerp dialog { width: min(560px,calc(100% - 24px)); max-height: calc(100% - 32px); border: 1px solid var(--p-line); border-radius: 12px; padding: 20px; color: var(--dx-v2-color-text); background: var(--p-paper); }
+#dxerp dialog::backdrop { background: rgba(19,28,38,.48); }
+#dxerp dialog h2 { overflow-wrap: anywhere; margin-bottom: 12px; }
+#dxerp .p-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+#dxerp .p-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media(max-width:1040px) {
+  #dxerp .p-workspace { grid-template-columns: minmax(0,1fr) 214px; }
+  #dxerp .p-order-workspace { grid-template-columns: 214px minmax(0,1fr); }
+  #dxerp .p-task-layout { grid-template-columns: 214px minmax(0,1fr); }
+  #dxerp .p-facts.dx-key-facts { gap: 0 12px; }
+}
+@media(max-width:800px) {
+  #dxerp .p-demo-shell { display: block; }
+  #dxerp .p-demo-label { justify-content: space-between; }
+  #dxerp .p-demo-controls { margin-top: 8px; }
+  #dxerp .p-demo-meta { margin-top: 4px; }
+  #dxerp .p-page { padding: 12px; }
+  #dxerp .p-workspace, #dxerp .p-task-layout { display: flex; flex-direction: column; gap: 12px; }
+  #dxerp .p-workspace > *, #dxerp .p-task-layout > * { width: 100%; }
+  #dxerp .p-task-layout .p-aside { order: 1; }
+  #dxerp .p-main { padding: 14px; }
+  #dxerp .p-aside { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  #dxerp .p-facts.dx-key-facts { grid-template-columns: repeat(2,minmax(0,1fr)); padding: 8px 12px; }
+  #dxerp .p-facts.dx-key-facts > div:first-child { grid-column: auto; border: 0; padding: 5px 0; }
+  #dxerp .p-facts.dx-key-facts dd { font-size: 13px; }
+  #dxerp .p-action-bar > div { flex: 1 1 100%; }
+  #dxerp .p-action-bar .dx-button { min-height: 48px; flex: 1 1 auto; }
+}
+@media(max-width:600px) {
+  #dxerp .p-demo-shell { padding: 10px 12px; }
+  #dxerp .p-demo-controls { gap: 8px; }
+  #dxerp .p-demo-controls label { flex: 1 1 100%; }
+  #dxerp .p-demo-controls select { flex: 1; min-width: 0; font-size: 16px; min-height: 44px; }
+  #dxerp .p-demo-controls button { min-height: 44px; }
+  #dxerp .p-demo-meta { font-size: 11px; }
+  #dxerp .p-appbar { padding: 10px 12px; gap: 6px 10px; }
+  #dxerp .p-appbar strong { font-size: 13px; }
+  #dxerp .p-appbar > span:not(.p-role) { display: none; }
+  #dxerp .p-role { font-size: 11px; }
+  #dxerp .p-title-row { flex-wrap: wrap; gap: 6px; }
+  #dxerp h1 { font-size: 17px; }
+  #dxerp .p-title-row > .p-text-button { margin-left: -8px; }
+  #dxerp .p-facts.dx-key-facts > div { flex-direction: column; gap: 1px; padding: 5px 0; }
+  #dxerp .p-facts.dx-key-facts > div:first-child { padding: 5px 0; }
+  #dxerp .p-aside { grid-template-columns: 1fr; }
+  #dxerp .p-table-wrap { display: none; }
+  #dxerp .p-mobile-lines { display: grid; gap: 0; }
+  #dxerp .p-po-row { padding: 10px 0; border-bottom: 1px solid var(--p-line); }
+  #dxerp .p-po-row:last-child { border-bottom: 0; }
+  #dxerp .p-po-row > div:first-child { margin-bottom: 5px; }
+  #dxerp .p-po-values { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+  #dxerp .p-po-values dt { font-size: 11px; color: var(--dx-v2-color-text-secondary); }
+  #dxerp .p-po-values dd { margin: 1px 0 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+  #dxerp .p-form-grid { grid-template-columns: 1fr; }
+  #dxerp .p-form-field :is(input,select,textarea) { font-size: 16px; }
+  #dxerp .p-tabs button { flex: 1 1 auto; min-height: 44px; padding: 6px 10px; }
+  #dxerp .p-file summary { min-height: 44px; }
+  #dxerp .p-file-full { position: static; margin-bottom: 8px; box-shadow: none; border: 0; background: var(--p-soft); }
+  #dxerp .p-preview-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
+  #dxerp .p-preview-grid > div { min-height: 80px; text-align: center; padding: 6px; font-size: 11px; }
+  #dxerp .p-action-bar > div { display: grid; grid-template-columns: 1fr; }
+  #dxerp .p-action-bar .dx-button { padding: 8px 12px; }
+  #dxerp .p-dialog-actions > .dx-button { flex: 1 1 auto; }
+}
+@media(prefers-reduced-motion:reduce) { #dxerp * { transition: none !important; scroll-behavior: auto !important; } }
+
+</style>
+<div id="dxerp" data-dx-ui="governed">
+  <section class="p-demo-shell" aria-label="样板演示控制">
+    <div class="p-demo-label"><strong>达兴 · 操作样板</strong><span>全部为模拟数据</span></div>
+    <div class="p-demo-controls">
+      <label>场景<select id="p-scene"><option value="order">订单办理 · 老板审批</option><option value="task">板房 · 纸样当前任务</option><option value="recovery">退回 · 原跟单修正</option></select></label>
+      <fieldset id="p-state-switch"><legend>演示状态</legend><button type="button" data-state="normal" aria-pressed="true">正常</button><button type="button" data-state="returned" aria-pressed="false">退回</button><button type="button" data-state="failed" aria-pressed="false">失败</button><button type="button" data-state="complete" aria-pressed="false">完成</button></fieldset>
+    </div>
+    <div class="p-demo-meta"><span id="p-source-label">main · 外发定价与选厂</span><span>仅供设计评审</span></div>
+  </section>
+  <div class="p-product">
+    <header class="p-appbar"><strong>达兴数字生产平台</strong><span id="p-module">外发定价与选厂</span><span id="p-role" class="p-role">模拟岗位：老板</span></header>
+    <div id="p-screen"></div>
+  </div>
+  <dialog id="p-dialog" aria-labelledby="p-dialog-heading"><div id="p-dialog-content"></div></dialog>
+  <p class="p-sr" aria-live="polite" id="p-announcement"></p>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  const root = document.getElementById('dxerp');
+  if (!root) return;
+  const screen = root.querySelector('#p-screen');
+  const dialog = root.querySelector('#p-dialog');
+  const sceneSelect = root.querySelector('#p-scene');
+  const stateButtons = Array.from(root.querySelectorAll('[data-state]'));
+  const sources = {
+    order: 'main · 外发定价与选厂',
+    task: 'release/digital-production-v1 · 开发纸样任务',
+    recovery: 'main · 外发退回原跟单修正'
+  };
+  const longStyle = '模拟款号-DX秋冬轻户外双层防风长款连帽抽绳女装系列-2026-A01';
+  const taskStyle = '模拟开发款-DX宽松落肩拼接长袖双面穿连帽外套-秋冬系列第七次配色';
+  const colors = ['墨绿色', '雾霾蓝', '暖沙色', '米白色', '深石灰', '陶土棕'];
+  const lines = colors.map((color, i) => ({
+    style: `MOCK-PO-26${String(101 + i)}`,
+    alternate: `模拟代用-${String(i + 1).padStart(2, '0')}`,
+    color, quantity: 200 + i * 50,
+    ie: 36 + i, price: 37 + i
+  }));
+  const quantity = lines.reduce((sum, item) => sum + item.quantity, 0);
+  const ieTotal = lines.reduce((sum, item) => sum + item.quantity * item.ie, 0);
+  const productionTotal = lines.reduce((sum, item) => sum + item.quantity * item.price, 0);
+  const fileNames = Array.from({length: 24}, (_, i) => {
+    const prefix = ['纸样成果', '客户原始尺寸表', '本轮制作说明', '款式正背面图', '面料规格核对', '领口袖口工艺图'][i % 6];
+    return `模拟资料-${prefix}-秋冬连帽外套长中文款号-第2轮确认版-请完整核对尺寸及缝制位置-${String(i + 1).padStart(2, '0')}.${i === 0 ? 'png' : i % 3 === 0 ? 'pdf' : i % 3 === 1 ? 'xlsx' : 'png'}`;
+  });
+  const orderFileNames = ['模拟订单款图-秋冬轻户外双层防风长款连帽抽绳女装系列-正面-01.png', '模拟订单款图-秋冬轻户外双层防风长款连帽抽绳女装系列-背面-02.jpg', '模拟订单款图-秋冬轻户外双层防风长款连帽抽绳女装系列-领口细节-03.webp'];
+  const activeFiles = () => model.scene === 'task' ? fileNames : orderFileNames;
+  const model = {
+    scene: 'order', state: 'normal', phase: 'approval', linkedOrder: false, taskTab: '当前办理', sourceList: false,
+    returnedReason: '请原跟单核对本单款式数量与裁片发出安排，并补充修改说明。',
+    editing: false, recoveryReason: '', sendDate: '2026-11-02', deliveryDate: '2026-11-28',
+    taskNote: '', returnToManagement: false, validation: false,
+    orderNo: 1, notice: ''
+  };
+  const recordFields = ['state','phase','linkedOrder','taskTab','returnedReason','editing','recoveryReason','sendDate','deliveryDate','taskNote','returnToManagement','validation','notice'];
+  const mockObjects = Object.fromEntries(['order','task','recovery'].map(scene => [scene,Object.fromEntries([1,2].map(id => [id,{
+    state: scene === 'recovery' ? 'returned' : 'normal', phase: scene === 'recovery' ? 'correction' : 'approval', linkedOrder: false, taskTab: '当前办理',
+    returnedReason: '请原跟单核对本单款式数量与裁片发出安排，并补充修改说明。',
+    editing: false, recoveryReason: '', sendDate: '2026-11-02', deliveryDate: '2026-11-28',
+    taskNote: '', returnToManagement: false, validation: false, notice: ''
+  }]))]));
+  function rememberObject() {
+    recordFields.forEach(field => { mockObjects[model.scene][model.orderNo][field] = model[field]; });
+    if (model.scene === 'recovery' && model.linkedOrder) Object.assign(mockObjects.order[model.orderNo], mockObjects.recovery[model.orderNo]);
+  }
+  function showObject(id) {
+    rememberObject();
+    model.orderNo = id;
+    Object.assign(model, mockObjects[model.scene][id]);
+    model.sourceList = false;
+    render();
+  }
+  const titleForObject = id => (id > 1 ? '模拟款号-DX城市通勤短款外套-下一单' : longStyle) + (model.scene === 'recovery' && !mockObjects.recovery[id].linkedOrder ? '-修正示例' : '');
+  const currentOrderTitle = () => titleForObject(model.orderNo);
+  const listStatus = id => mockObjects[model.scene][id].phase === 'awaiting-ie' ? '待 IE 报价' : mockObjects[model.scene][id].state === 'complete' ? '已处理' : '待办理';
+  const currentLines = () => model.orderNo > 1 ? lines.map(item => ({...item,style:item.style.replace('26','27'),alternate:item.alternate.replace('代用-','代用-B-')})) : lines;
+  const esc = value => String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const currency = value => `¥${Number(value).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  const button = (text, action, primary = false, attrs = '') => `<button type="button" class="dx-button dx-button--${primary ? 'primary' : 'secondary'}" data-action="${action}" ${attrs}>${text}</button>`;
+  function announce(text) { root.querySelector('#p-announcement').textContent = text; }
+  function badge(text, tone = 'info') { return `<span class="dx-badge dx-badge--${tone}">${text}</span>`; }
+  function statusBox(title, text, tone = 'warning', extra = '') {
+    return `<div class="p-status p-status--${tone}" role="${tone === 'danger' ? 'alert' : 'status'}"><strong>${title}</strong><p>${text}</p>${extra}</div>`;
+  }
+  function facts(items, task = false) {
+    return `<dl class="dx-key-facts p-facts${task ? ' p-task-facts' : ''}" aria-label="${task ? '当前任务信息' : '外发订单核心信息'}">${items.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>`;
+  }
+  function orderFacts() {
+    const hasCurrentPricing = model.scene !== 'recovery' && model.phase === 'approval' && model.state !== 'returned';
+    return facts([
+      ['跟单', '模拟员工·陈跟单'], ['加工厂', hasCurrentPricing ? '模拟工厂·南岭制衣' : '待选厂'],
+      ['总数量', `${quantity.toLocaleString('zh-CN')} 件`], ['生产总额', hasCurrentPricing ? currency(productionTotal) : '—'],
+      ['IE 总额', hasCurrentPricing ? currency(ieTotal) : '—'], ['较 IE 总额变化', hasCurrentPricing ? `+${currency(productionTotal - ieTotal)}` : '—'],
+      ['预计裁片发出', `<time datetime="${model.sendDate}">${model.sendDate}</time>`],
+      ['要求交货日期', `<time datetime="${model.deliveryDate}">${model.deliveryDate}</time>`]
+    ]);
+  }
+  function head(title, state, subtitle, {tone = 'info', back = '返回订单列表', action = ''} = {}) {
+    return `<div class="p-object-head"><div class="p-breadcrumb"><button type="button" data-action="source-list" aria-label="${back}">‹ ${back}</button><span>／</span><span>${model.scene === 'task' ? '当前任务' : model.scene === 'recovery' ? '订单资料' : '订单详情'}</span></div><div class="p-title-row"><div><h1>${esc(title)}</h1>${badge(state, tone)}<p class="p-subtitle">${subtitle}</p></div>${action}</div></div>`;
+  }
+  function orderTable() {
+    const hasCurrentPricing = model.scene !== 'recovery' && model.phase === 'approval' && model.state !== 'returned';
+    return `<div class="p-table-wrap"><table class="p-table"><thead><tr><th scope="col">款号</th><th scope="col">颜色</th><th scope="col">数量</th><th scope="col">IE 单价</th><th scope="col">生产单价</th><th scope="col">本款金额</th></tr></thead><tbody>${currentLines().map(item => `<tr><td><span class="p-po-id">${esc(item.style)}</span><span class="p-po-alt">${esc(item.alternate)}</span></td><td>${esc(item.color)}</td><td>${item.quantity}</td><td>${hasCurrentPricing ? currency(item.ie) : '—'}</td><td>${hasCurrentPricing ? currency(item.price) : '—'}</td><td>${hasCurrentPricing ? currency(item.price * item.quantity) : '—'}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="2">合计 · 6 款色</td><td>${quantity.toLocaleString('zh-CN')}</td><td></td><td></td><td>${hasCurrentPricing ? currency(productionTotal) : '—'}</td></tr></tfoot></table></div><div class="p-mobile-lines">${currentLines().map(item => `<article class="p-po-row"><div><span class="p-po-id">${esc(item.style)} · ${esc(item.color)}</span><span class="p-po-alt">${esc(item.alternate)}</span></div><dl class="p-po-values"><div><dt>数量</dt><dd>${item.quantity} 件</dd></div><div><dt>IE 单价</dt><dd>${hasCurrentPricing ? currency(item.ie) : '—'}</dd></div><div><dt>生产单价</dt><dd>${hasCurrentPricing ? currency(item.price) : '—'}</dd></div></dl></article>`).join('')}</div>`;
+  }
+  function fileList(count, offset = 0) {
+    return `<div class="p-file-list">${activeFiles().slice(offset, offset + count).map((name, idx) => `<details class="p-file"><summary aria-label="展开完整文件名：${esc(name)}"><span class="p-file-type">${esc(name.split('.').pop().toUpperCase())}</span><span class="p-file-name">${esc(name)}</span><span class="p-file-toggle">全名</span><span class="p-file-peek" aria-hidden="true">${esc(name)}</span></summary><div class="p-file-full"><p>${esc(name)}</p>${button('查看原附件', `preview-${offset + idx}`)}</div></details>`).join('')}</div>`;
+  }
+  function fileAside() {
+    return `<section class="p-aside-section"><div class="p-section-heading"><h2>订单图片</h2><span>3 张</span></div><div class="p-mock-image">模拟款图 · 正面 / 背面 / 细节</div>${fileList(3)}</section>`;
+  }
+  function workflow(current = 3) {
+    const names = [['创建订单','跟单'],['IE 报价','IE'],['选厂调价','生产管理'],['老板审批','老板'],['财务核对','财务']];
+    return `<ol class="p-workflow">${names.map(([name, role], idx) => `<li class="${idx < current ? 'is-done' : idx === current ? 'is-current' : ''}"><b>${idx < current ? '✓' : idx + 1}</b><div><span>${name}</span><small>${role}</small></div></li>`).join('')}</ol>`;
+  }
+  function orderView() {
+    if (model.state === 'failed') {
+      return `<div class="p-page">${head(currentOrderTitle(), '读取失败', '女装 · 模拟长款连帽外套', {tone:'danger'})}${statusBox('订单读取失败', '暂时无法确认本单当前状态，请返回订单列表后再进入原单。', 'danger')}${button('返回订单列表','source-list')}</div>`;
+    }
+    const returned = model.state === 'returned';
+    const complete = model.state === 'complete';
+    const label = returned ? '待跟单修正' : complete ? (model.returnToManagement ? '待生产管理选厂' : '待财务核对') : '待老板审批';
+    const info = returned ? statusBox('资料已退回原跟单', esc(model.returnedReason), 'warning', button('修改订单资料','edit-correction',true))
+      : complete ? statusBox(model.returnToManagement ? '已驳回并退回生产管理' : '方案已批准', model.returnToManagement ? '原报价与审批记录保留，当前由生产管理接手。' : '审批记录已保留。跟单派单与财务核对按各自原流程办理。', 'success') : '';
+    return `<div class="p-page">${head(currentOrderTitle(), label, '女装 · 模拟长款连帽外套', {tone: returned ? 'warning' : complete ? 'success' : 'info', action: !returned && !complete ? '<button type="button" class="p-text-button" data-action="return-order">退回跟单修改</button>' : ''})}${orderFacts()}${info}<div class="p-workspace p-order-workspace"><div class="p-main"><div class="p-section-heading"><h2>${returned ? '原提交款式明细' : '老板审批'}</h2><span>6 款色</span></div>${!returned && !complete ? '<p class="p-section-intro">请核对价格、加工厂及交期，确认后审批。</p>' : ''}${orderTable()}<p class="p-inline-note">承包内容包括 车缝、整烫、包装；裁床工序为 本厂裁。</p><div class="p-action-bar dx-action-bar"><p>${returned ? '由原跟单修改后，重新进入 IE 报价。' : complete ? '当前办理已结束，可返回原来源继续下一单。' : '确认本单各款色的价格、工厂与交期。'}</p><div>${!returned && !complete ? button('驳回并退回生产管理','reject-management') + button('批准方案','approve',true) : button('返回订单列表','source-list')}</div></div><details class="p-read-details"><summary>订单流程与已提交记录</summary>${workflow(returned ? 0 : complete ? model.returnToManagement ? 2 : 4 : 3)}</details></div><aside class="p-aside">${fileAside()}</aside></div></div>`;
+  }
+  function taskFacts() {
+    return facts([
+      ['第几轮', '第 2 轮'], ['任务名称', '纸样'], ['当前负责人', '模拟员工·林纸样'],
+      [model.state === 'complete' ? '实际完成' : '要求完成', `<time>${model.state === 'complete' ? '2026-10-17 15:30' : '2026-10-18 17:00'}</time>`]
+    ], true);
+  }
+  function taskBody() {
+    if (model.state === 'failed') return `${statusBox('当前任务读取失败', '未能读取本轮任务条件。当前不显示可完成动作，请从来源重新进入原任务。', 'danger')}${button('返回来源','source-list')}`;
+    const complete = model.state === 'complete';
+    const returned = model.state === 'returned';
+    const header = returned ? statusBox('第 2 轮纸样待办理', '本轮制作说明已调整，请按第 2 轮资料办理；历史成果仅供查看。', 'warning') : '';
+    const finish = complete ? statusBox('纸样任务已完成', '本任务成果与完成记录已保留。后续任务按本轮实际前置启动。', 'success') : '';
+    return `${header}${finish}<div class="p-task-layout"><div class="p-main"><div class="p-section-heading"><h2>${complete ? '纸样完成记录' : '纸样办理'}</h2><span>第 2 轮</span></div><div class="p-status"><strong>本任务纸样成果</strong><p>本次已上传 1 个文件</p>${fileList(1)}</div>${complete ? `<p class="p-inline-note">办理备注：${esc(model.taskNote || '按本轮确认尺寸完成纸样。')}</p>` : `<label class="p-form-field"><span>备注（选填）</span><textarea id="p-task-note" maxlength="1000" rows="3" placeholder="填写本次办理备注">${esc(model.taskNote)}</textarea></label>`}<div class="p-destination"><span>后续任务：<strong>裁板</strong></span><span>办理人：<strong>模拟员工·周裁板</strong></span><span>按实际前置启动</span></div><div class="p-action-bar dx-action-bar"><p>${complete ? '本任务已完成，当前只读。' : '仅提交本任务的纸样成果与备注。'}</p><div>${complete ? button('返回来源','source-list') : button('纸样完成，交给下一位','complete-pattern',true)}</div></div></div><aside class="p-aside"><section class="p-aside-section"><h2>本轮制作依据</h2><div class="p-basis"><p>开发资料：<strong>第 2 轮 · v4</strong></p><p>打板数量：<strong>2 件</strong> · 尺码：<strong>M / L</strong></p><p>制作要求：<strong>肩缝顺直，领口按本轮尺寸表。</strong></p><p>工艺：<strong>拼接车缝</strong> · 洗水：<strong>免洗</strong></p></div>${button('查看完整开发单','task-documents')}</section><section class="p-aside-section"><div class="p-section-heading"><h2>本单资料</h2><span>24 份</span></div>${fileList(3)}<button type="button" class="p-text-button" data-action="task-documents">本单资料</button></section></aside></div>`;
+  }
+  function taskDocuments() {
+    return `<div class="p-main"><div class="p-section-heading"><h2>第 2 轮 · 本单资料</h2><span>开发资料 v4 · 24 份</span></div><p class="p-section-intro">本轮开发单、制作要求与成果资料。</p><div class="p-preview-grid"><div>模拟款图 · 正面</div><div>模拟款图 · 背面</div><div>模拟工艺图 · 领口</div></div>${fileList(8)}<details class="p-file-more"><summary>展开其余 16 份资料</summary>${fileList(16,8)}</details><div class="p-action-bar dx-action-bar"><p>本轮资料与当前任务同属第 2 轮。</p><div>${button('回到当前办理','task-handle',true)}</div></div></div>`;
+  }
+  function taskHistory() {
+    return `<div class="p-main"><h2>操作记录</h2><ol class="p-history">${model.state === 'complete' ? '<li><strong>纸样完成</strong><br><small>模拟员工·林纸样 · 2026-10-17 15:30</small><p>已提交本任务纸样成果。</p></li>' : ''}<li><strong>确认实际接收</strong><br><small>模拟员工·林纸样 · 2026-10-17 09:15</small><p>第 2 轮纸样任务。</p></li><li><strong>纸样任务分派</strong><br><small>模拟员工·板房主管 · 2026-10-17 09:00</small></li></ol><div class="p-action-bar dx-action-bar"><p>记录对应本任务与本轮次。</p><div>${button('回到当前办理','task-handle')}</div></div></div>`;
+  }
+  function taskView() {
+    const tabs = ['当前办理','本单资料','操作记录'];
+    return `<div class="p-page">${head(model.orderNo > 1 ? '模拟开发款-DX女式短款宽袖夹克-下一单' : taskStyle, model.state === 'failed' ? '读取失败' : model.state === 'complete' ? '已完成' : '待办理', '第 2 轮 · 纸样 · 模拟员工·林纸样', {tone:model.state === 'failed' ? 'danger' : model.state === 'complete' ? 'success' : 'info',back:'返回来源'})}${model.state === 'failed' ? '' : taskFacts()}<nav class="p-tabs" role="tablist" aria-label="任务页签">${tabs.map((tab,i) => `<button type="button" id="p-task-tab-${i}" role="tab" aria-selected="${model.taskTab === tab}" aria-controls="p-task-panel" data-tab="${tab}">${tab}</button>`).join('')}</nav><section id="p-task-panel" role="tabpanel" aria-labelledby="p-task-tab-${tabs.indexOf(model.taskTab)}">${model.state === 'failed' ? taskBody() : model.taskTab === '本单资料' ? taskDocuments() : model.taskTab === '操作记录' ? taskHistory() : taskBody()}</section></div>`;
+  }
+  function recoveryView() {
+    const uncertain = model.state === 'failed';
+    const complete = model.state === 'complete';
+    const editing = model.editing || model.state === 'normal' || uncertain;
+    const intro = complete ? statusBox('修改资料已提交', '本单已进入 IE 报价。退回事件与原提交记录保留。', 'success')
+      : uncertain ? statusBox('提交结果待确认', '本次提交可能已经成功。已保留原请求，请核对上次提交结果；不要新建重复订单。', 'warning', button('核对上次提交结果','recover-attempt',true))
+      : statusBox('退回原因', esc(model.returnedReason), 'warning');
+    return `<div class="p-page">${head(currentOrderTitle(), complete ? '待 IE 报价' : uncertain ? '提交结果待确认' : '待跟单修正', '原跟单 · 订单资料修正', {tone:complete ? 'success' : 'warning', back:'返回订单'})}${orderFacts()}${intro}<div class="p-workspace"><div class="p-main"><div class="p-section-heading"><h2>${complete ? '本次提交资料' : editing ? '修改订单资料' : '待原跟单处理'}</h2><span>订单版本 3</span></div>${editing && !complete ? `<form id="p-correction-form"><fieldset style="border:0;padding:0;margin:0;min-width:0" ${uncertain ? 'disabled' : ''}><div class="p-form-grid"><label class="p-form-field"><span>预计裁片发出（必填）</span><input type="date" id="p-send-date" value="${model.sendDate}" required></label><label class="p-form-field"><span>要求交货日期（必填）</span><input type="date" id="p-delivery-date" value="${model.deliveryDate}" required></label><label class="p-form-field p-wide"><span>修改说明（必填）</span><textarea id="p-correction-reason" maxlength="500" ${model.validation ? 'aria-invalid="true" aria-describedby="p-reason-error"' : ''}>${esc(model.recoveryReason)}</textarea>${model.validation ? '<small id="p-reason-error">请填写修改说明</small>' : ''}</label></div><details class="p-read-details"><summary>本次保留的款式明细 · 6 款色</summary>${orderTable()}</details><div class="p-action-bar dx-action-bar"><p>${uncertain ? '当前表单锁定，先核对上次提交结果。' : '修改后重新进入 IE 报价，再按原审批流程办理。'}</p><div>${button('提交并进入审批','submit-correction',true,uncertain ? 'disabled' : '')}</div></div></fieldset></form>` : complete ? `${orderTable()}<p class="p-inline-note">修改说明：${esc(model.recoveryReason || '已核对裁片发出与交货日期，并按原单修正。')}</p><div class="p-action-bar dx-action-bar"><p>由 IE 接手逐款报价，当前跟单修正已结束。</p><div>${button('返回订单列表','source-list')}</div></div>` : `<p class="p-section-intro">由原跟单修改本单资料后，再进入 IE 报价。</p>${orderTable()}<div class="p-action-bar dx-action-bar"><p>退回原因与原提交版本可在历史中查看。</p><div>${button('修改订单资料','edit-correction',true)}</div></div>`}<details class="p-read-details"><summary>退回与提交记录</summary><ol class="p-history">${complete ? '<li><strong>订单资料修正提交</strong><br><small>模拟员工·陈跟单 · 2026-10-17 15:40</small></li>' : ''}<li><strong>退回跟单修改</strong><br><small>模拟员工·老板 · 2026-10-17 14:20</small><p>${esc(model.returnedReason)}</p></li><li><strong>原订单资料提交</strong><br><small>模拟员工·陈跟单 · 2026-10-16 09:10</small></li></ol></details></div><aside class="p-aside"><section class="p-aside-section"><h2>本单接手</h2><div class="p-basis"><p>当前岗位：<strong>${complete ? 'IE' : '原跟单'}</strong></p><p>下一步：<strong>${complete ? '逐款报价' : '修正并提交资料'}</strong></p></div>${workflow(complete ? 1 : 0)}</section><section class="p-aside-section"><h2>本单附件</h2>${fileList(3)}</section></aside></div></div>`;
+  }
+  function sourceListView() {
+    const task = model.scene === 'task';
+    return `<div class="p-page"><div class="p-object-head"><h1>${task ? '我的待办 · 纸样任务' : '外发订单列表'}</h1><p class="p-subtitle">${task ? '当前岗位与原筛选' : '原筛选与页码'}</p></div><div class="p-main"><div class="p-source-context"><span>状态：${task ? '待办理' : '全部待办'}</span><span>第 2 页</span><span>筛选：模拟秋冬系列</span></div><button type="button" class="p-list-row" data-action="open-original"><span>${esc(task ? taskStyle : titleForObject(1))}<small>${task ? '第 2 轮 · 纸样 · 模拟员工·林纸样' : '6 款色 · 模拟员工·陈跟单'}</small></span>${badge(listStatus(1),mockObjects[model.scene][1].state === 'complete' ? 'success':'info')}</button><button type="button" class="p-list-row" data-action="open-next"><span>${esc(task ? '模拟开发款-DX女式短款宽袖夹克-下一单' : titleForObject(2))}<small>${task ? '第 2 轮 · 纸样 · 模拟员工·林纸样' : '6 款色 · 模拟员工·陈跟单'}</small></span>${badge(listStatus(2),mockObjects[model.scene][2].state === 'complete' ? 'success':'info')}</button><p class="p-inline-note">当前筛选与页码保持。</p></div></div>`;
+  }
+  function render() {
+    rememberObject();
+    sceneSelect.value = model.scene;
+    stateButtons.forEach(btn => btn.setAttribute('aria-pressed', String(btn.dataset.state === model.state)));
+    root.querySelector('#p-source-label').textContent = sources[model.scene];
+    root.querySelector('#p-module').textContent = model.scene === 'task' ? '板房 · 当前任务' : '外发定价与选厂';
+    root.querySelector('#p-role').textContent = `模拟岗位：${model.scene === 'task' ? '纸样师傅' : model.scene === 'recovery' || model.phase !== 'approval' || model.state === 'returned' ? '原跟单' : model.returnToManagement ? '生产管理' : '老板'}`;
+    screen.innerHTML = model.sourceList ? sourceListView() : model.scene === 'task' ? taskView() : model.scene === 'recovery' || model.phase !== 'approval' ? recoveryView() : orderView();
+  }
+  function setState(state) {
+    model.state = state;
+    model.phase = model.scene === 'recovery' ? (state === 'complete' ? 'awaiting-ie' : 'correction') : 'approval';
+    model.sourceList = false;
+    model.taskTab = '当前办理';
+    model.editing = state === 'normal' && model.scene === 'recovery';
+    model.returnToManagement = false;
+    model.validation = false;
+    if (state === 'failed' && model.scene === 'recovery' && !model.recoveryReason) model.recoveryReason = '已核对日期并修正裁片发出时间。';
+    render(); announce(`已切换${stateButtons.find(b=>b.dataset.state===state).textContent}状态`);
+  }
+  function closeDialog() { if (dialog.open) dialog.close(); }
+  function showDialog(content) { root.querySelector('#p-dialog-content').innerHTML = content; dialog.showModal(); }
+  function preview(index) {
+    const name = activeFiles()[index] || activeFiles()[0];
+    showDialog(`<h2 id="p-dialog-heading">${esc(name)}</h2><div class="p-mock-image" style="min-height:220px">模拟附件预览</div><p class="p-inline-note">${model.scene === 'task' ? '本轮资料 · 第 2 轮 · 模拟数据' : '订单图片 · 模拟数据'}</p><div class="p-dialog-actions">${button('关闭','dialog-close',true)}</div>`);
+  }
+  sceneSelect.addEventListener('change', function () {
+    rememberObject();
+    model.scene = sceneSelect.value; model.orderNo = 1;
+    Object.assign(model, mockObjects[model.scene][1]);
+    model.sourceList = false;
+    render();
+  });
+  stateButtons.forEach(btn => btn.addEventListener('click', () => setState(btn.dataset.state)));
+  root.addEventListener('input', event => {
+    if (event.target.id === 'p-task-note') model.taskNote = event.target.value;
+    if (event.target.id === 'p-correction-reason') { model.recoveryReason = event.target.value; model.validation = false; }
+    if (event.target.id === 'p-send-date') model.sendDate = event.target.value;
+    if (event.target.id === 'p-delivery-date') model.deliveryDate = event.target.value;
+  });
+  root.addEventListener('click', event => {
+    const tab = event.target.closest('[data-tab]');
+    if (tab) { model.taskTab = tab.dataset.tab; render(); const newTab = root.querySelector(`[data-tab="${model.taskTab}"]`); if (newTab) newTab.focus(); return; }
+    const control = event.target.closest('[data-action]');
+    if (!control) return;
+    const action = control.dataset.action;
+    if (action.startsWith('preview-')) { preview(Number(action.slice(8))); return; }
+    if (action === 'dialog-close') { closeDialog(); return; }
+    if (action === 'source-list') { model.sourceList = true; render(); announce('已返回原筛选与页码'); return; }
+    if (action === 'open-original') { showObject(1); return; }
+    if (action === 'open-next') { showObject(2); announce('已进入下一张模拟单'); return; }
+    if (action === 'task-documents') { model.taskTab = '本单资料'; render(); return; }
+    if (action === 'task-handle') { model.taskTab = '当前办理'; render(); return; }
+    if (action === 'approve') { model.state = 'complete'; model.returnToManagement = false; render(); announce('模拟方案已批准'); return; }
+    if (action === 'reject-management') { model.state = 'complete'; model.returnToManagement = true; render(); announce('模拟方案已退回生产管理'); return; }
+    if (action === 'complete-pattern') { model.state = 'complete'; render(); announce('模拟纸样任务已完成'); return; }
+    if (action === 'edit-correction') { rememberObject(); const original = {...mockObjects[model.scene][model.orderNo]}; const linkedOrder = model.scene === 'order' || model.linkedOrder; model.scene = 'recovery'; Object.assign(mockObjects.recovery[model.orderNo], original); Object.assign(model, original); model.state = 'normal'; model.phase = 'correction'; model.linkedOrder = linkedOrder; model.editing = true; model.sourceList = false; render(); root.querySelector('#p-correction-reason').focus(); return; }
+    if (action === 'recover-attempt') { model.state = 'complete'; model.phase = 'awaiting-ie'; model.editing = false; render(); announce('模拟核对确认原请求已提交'); return; }
+    if (action === 'submit-correction') {
+      if (!model.recoveryReason.trim()) { model.validation = true; render(); root.querySelector('#p-correction-reason').focus(); announce('请填写修改说明'); return; }
+      if (!model.sendDate || !model.deliveryDate || model.sendDate > model.deliveryDate) {
+        showDialog(`<h2 id="p-dialog-heading">请先完善以下资料</h2><p>预计裁片发出日期不得晚于要求交货日期。</p><div class="p-dialog-actions">${button('去修改','dialog-close',true)}</div>`); return;
+      }
+      model.state = 'complete'; model.phase = 'awaiting-ie'; model.editing = false; render(); announce('模拟修改资料已提交，等待IE报价'); return;
+    }
+    if (action === 'return-order') {
+      showDialog(`<h2 id="p-dialog-heading">退回跟单修改</h2><form id="p-return-form"><label class="p-form-field"><span>退回原因（必填）</span><textarea id="p-return-reason" required maxlength="500">${esc(model.returnedReason)}</textarea></label><div class="p-dialog-actions">${button('取消','dialog-close')}<button type="submit" class="dx-button dx-button--primary">确认退回</button></div></form>`); return;
+    }
+  });
+  root.addEventListener('submit', event => {
+    event.preventDefault();
+    if (event.target.id === 'p-return-form') {
+      const reason = root.querySelector('#p-return-reason').value.trim();
+      if (!reason) return;
+      model.returnedReason = reason; closeDialog(); model.state = 'returned'; model.editing = false; render(); announce('模拟订单已退回原跟单');
+    }
+  });
+  render();
+})();
+
+</script>
+
+</body></html>

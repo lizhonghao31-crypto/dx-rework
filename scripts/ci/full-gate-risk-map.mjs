@@ -45,6 +45,7 @@ const isMigration = (path) =>
     "scripts/migration-integration-check.mjs",
     "scripts/migration-history-policy.mjs",
     "scripts/migration-branches.json",
+    "scripts/migration-main-extensions.json",
     "scripts/check-migration-export.mjs",
     "scripts/check-migrations.mjs",
   ].includes(path);
@@ -53,6 +54,9 @@ const isDeployment = (path) =>
   path.startsWith("scripts/deploy/")
   || path === "scripts/dx-acceptance.sh"
   || path === "scripts/ci/acceptance-maintenance-drill.mjs"
+  || path === "scripts/ci/main-release-history-drill.mjs"
+  || path === "scripts/check-main-release-compat.mjs"
+  || path === "docs/operations/g1-acceptance-compat-update.sh"
   || path === "scripts/backup-postgres.sh"
   || path === "scripts/restore-postgres.sh"
   || path.startsWith("infra/")

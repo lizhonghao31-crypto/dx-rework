@@ -149,6 +149,7 @@ export const TodoModuleCountsSchema = z.object({
 }).strict();
 
 export const TodoListResponseSchema = z.object({
+  searchScope: z.literal("all").optional(),
   todos: z.array(TodoResponseSchema).max(15),
   activeModule: TodoModuleSchema,
   moduleCounts: TodoModuleCountsSchema,

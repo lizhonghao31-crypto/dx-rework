@@ -1,3 +1,4 @@
+import { exceptionRecordHref } from "./exception-presentation.js";
 import { canAccessFinance } from "../finance-access.js";
 import { verifySession } from "../auth.js";
 import { formatBusinessDecimal, isBusinessMoneyField } from "@dx-rework/contracts/business-display";
@@ -41,7 +42,7 @@ export function ReportCenterPage(){
   useEffect(()=>{if(type==="wages"){if(wageAccess===null)return;if(!wageAccess){setState({kind:"unavailable",message:"当前账号无权查看工资明细"});return;}}const controller=new AbortController();setState({kind:"loading"});void loadReport(type,filters,controller.signal).then(value=>setState({kind:"ready",value})).catch((error:unknown)=>{if(!(error instanceof DOMException&&error.name==="AbortError"))setState({kind:"unavailable",message:error instanceof Error?error.message:"报表加载失败"});});return()=>controller.abort();},[type,filters,wageAccess]);
   const value=state.kind==="ready"?state.value:null;
   const page=usePaginatedItems(value?.rows??[], `${type}:${from}:${to}:${q}:${status}`);
-  return <Shell active="财务报表"><Header title="财务报表" subtitle="查询返工、工资、责任和扣款明细" badge={value?`${formatBusinessDecimal(value.rowCount)} 行 · ${value.range.from} 至 ${value.range.to}`:"查询中"} />
+  return <Shell active="财务报表"><div className="report-center-layout"><Header title="财务报表" subtitle="查询返工、工资、责任和扣款明细" badge={value?`${formatBusinessDecimal(value.rowCount)} 行 · ${value.range.from} 至 ${value.range.to}`:"查询中"} />
     <Surface className="reporting-filters report-center-filters">
       <label>报表<select value={type} onChange={event=>{setType(ReportTypeSchema.parse(event.target.value));setStatus("");}}>{ReportTypeSchema.options.filter(item=>item!=="wages"||wageAccess===true).map(item=><option value={item} key={item}>{names[item]}</option>)}</select></label>
       <label>开始日期<input type="date" value={from} onChange={event=>setFrom(event.target.value)} /></label>
@@ -54,7 +55,7 @@ export function ReportCenterPage(){
     {state.kind==="unavailable"&&<Surface className="reporting-state">{state.message}</Surface>}
     {value&&<>
       <Surface className="reporting-summary"><div><h2>{names[type]}</h2><p>{formatBusinessTime(value.asOf)}</p></div><div>{Object.entries(value.totals).map(([key,total])=><StatusBadge tone="info" key={key}>{businessFieldLabel(key)}：{snapshotBusinessValue(key, total)}</StatusBadge>)}</div></Surface>
-      <Surface className="reporting-table-surface"><div className="reporting-table-wrap"><table><thead><tr>{value.columns.map(column=><th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{page.items.map((row,index)=><tr key={index}>{value.columns.map(column=><td key={column.key}>{column.key === "settlementStatus" ? (row[column.key] === "settled" ? "已结算" : "未结算") : snapshotBusinessValue(column.key, row[column.key])}</td>)}</tr>)}</tbody></table></div>{value.rows.length===0&&<p>当前筛选范围没有数据。</p>}{value.truncated&&<StatusBadge tone="warning">预览达到 100 行上限；Excel 最多可导出 50,000 行。</StatusBadge>}<ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} ariaLabel="财务报表分页" /></Surface>
+      <Surface className="reporting-table-surface"><div className="reporting-table-wrap" tabIndex={0} role="region" aria-label="财务报表明细，可横向滚动"><table><thead><tr>{value.columns.map(column=><th key={column.key} scope="col">{column.label}</th>)}</tr></thead><tbody>{page.items.map((row,index)=><tr key={index}>{value.columns.map(column=><td key={column.key} className={isBusinessMoneyField(column.key)?"reporting-money":undefined}>{column.key === "settlementStatus" ? (row[column.key] === "settled" ? "已结算" : "未结算") : type === "exceptions" && column.key === "deepLink" ? exceptionRecordHref(row[column.key],import.meta.env.BASE_URL) ? <a className="reporting-exception-link" href={exceptionRecordHref(row[column.key],import.meta.env.BASE_URL)!}>查看原记录</a> : "记录不可用" : snapshotBusinessValue(column.key, row[column.key])}</td>)}</tr>)}</tbody></table></div>{value.rows.length===0&&<p>当前筛选范围没有数据。</p>}{value.truncated&&<StatusBadge tone="warning">预览达到 100 行上限；Excel 最多可导出 50,000 行。</StatusBadge>}<ListPagination page={page.page} totalPages={page.totalPages} onPageChange={page.setPage} ariaLabel="财务报表分页" /></Surface>
     </>}
-  </Shell>;
+  </div></Shell>;
 }
