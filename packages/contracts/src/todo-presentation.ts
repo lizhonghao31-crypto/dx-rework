@@ -1,3 +1,36 @@
+import type { TodoResponse } from "./todos.js";
+
+/** The actual primary card headings; shared with search so visible text remains searchable. */
+export const todoRouteTaskLabels: Readonly<Record<TodoResponse["route"]["routeName"], string>> = {
+  rework_detail: "查看返工单",
+  process_configuration: "配置或审核返工工序",
+  whole_order_review: "审核整张返工单",
+  responsibility_detail: "处理责任判定",
+  own_factory_approval: "查看历史本厂审批",
+  external_responsibility_detail: "记录供应商实际扣款",
+  wage_period_detail: "核对返工工资",
+  sourcing_detail: "处理外发定价选厂订单",
+  digital_production_instruction: "大货制单",
+  digital_development: "查看开发单",
+  digital_production_task: "办理数字生产任务",
+  production_detail: "查看生产风险",
+  sample_detail: "处理样衣事项",
+  pattern_room_order: "处理板房订单",
+  supplier_onboarding: "处理供应商申请",
+};
+
+export const todoTaskHeadingOverrides: Readonly<Record<string, string>> = {
+  sourcing_contract_return: "回传合同",
+  owner_signature: "老板确认签字",
+  tail_inspection: "历史整查报数",
+  external_supplier_selection: "历史供应商选择",
+};
+
+export const todoTaskTitle = (todo: Pick<TodoResponse, "route" | "category" | "taskTitle">): string =>
+  todo.route.routeName === "digital_production_task" && todo.taskTitle
+    ? todo.taskTitle
+    : todoTaskHeadingOverrides[todo.category] ?? todoRouteTaskLabels[todo.route.routeName];
+
 export type TodoPresentationDeliveryKind =
   | "create"
   | "information"

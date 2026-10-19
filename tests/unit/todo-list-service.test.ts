@@ -5,12 +5,11 @@ import type { Pool } from "pg";
 import { TodoService } from "../../apps/api/src/todos/service.js";
 
 describe("todo list query", () => {
-  it("searches the rework processing supplier and serves direct numeric pages", async () => {
+  it("searches all authorized modules and preserves direct numeric pagination", async () => {
     const query = vi.fn()
       .mockResolvedValueOnce({ rows: [{ todo_module: "rework", todo_count: "16" }] })
-      .mockResolvedValueOnce({ rows: [{ total_count: "16" }] })
       .mockResolvedValueOnce({
-        rows: [{
+        rows: [{total_count:16,total_pages:2,page:2,items:[{kind:"database",value:{
           todo_id: "00000000-0000-4000-8000-000000000013",
           todo_type: "business_action",
           category: "responsibility_determination",
@@ -48,7 +47,7 @@ describe("todo list query", () => {
           updated_at: new Date("2026-09-01T00:00:00.000Z"),
           status_rank: 0,
           todo_module: "rework",
-        }],
+        }}]}],
       });
     const service = new TodoService({ query } as unknown as Pool);
 
@@ -75,24 +74,15 @@ describe("todo list query", () => {
     });
 
     const countSql = String(query.mock.calls[0]![0]);
-    const totalSql = String(query.mock.calls[1]![0]);
-    const pageSql = String(query.mock.calls[2]![0]);
+    const searchSql = String(query.mock.calls[1]![0]);
     expect(countSql).toContain("LEFT JOIN supplier_catalog_versions rework_supplier");
-    expect(countSql).toContain("rework_supplier.version=orders.processing_factory_supplier_version");
-    expect(countSql).toContain("orders.processing_factory_type='own_factory'");
-    expect(totalSql).toContain("COALESCE(supplier_name_snapshot,'')");
-    expect(query.mock.calls[1]![1]).toEqual([
-      "00000000-0000-4000-8000-000000000016",
-      "rework",
-      "嘉顺",
-    ]);
-    expect(pageSql).toContain("LIMIT $4 OFFSET $5");
-    expect(query.mock.calls[2]![1]).toEqual([
-      "00000000-0000-4000-8000-000000000016",
-      "rework",
-      "嘉顺",
-      15,
-      15,
-    ]);
+    expect(searchSql).toContain("recipient_user_id=$1");
+    expect(searchSql).toContain("COALESCE(supplier_name_snapshot,'')");
+    expect(searchSql).toContain("UNION ALL");
+    expect(searchSql).toContain("LIMIT 15 OFFSET");
+    expect(searchSql).not.toContain("todo_module=$2");
+    expect(query.mock.calls).toHaveLength(2);
+    expect(query.mock.calls[1]![1]).toEqual(["00000000-0000-4000-8000-000000000016","嘉顺","[]",2,expect.any(String)]);
+    expect(result.searchScope).toBe("all");
   });
 });
