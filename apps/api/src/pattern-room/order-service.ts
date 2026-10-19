@@ -32,6 +32,7 @@ export class PatternRoomOrderService {
     this.reader = new PatternOrderReader(db, this.enabled, options.transactionClient);
   }
   list(actor: TrustedActorContext, query: PatternOrderQuery) { return this.reader.list(actor, query); }
+  related(actor:TrustedActorContext,input:{sourceId?:string|undefined;orderId?:string|undefined;page:number}) {return this.reader.related(actor,input);}
   peopleFilters(actor: TrustedActorContext) { return this.reader.peopleFilters(actor); }
   get(actor: TrustedActorContext, orderId: string, selection?: PatternHistorySelection) { return this.reader.get(actor, orderId, selection); }
   uploadActor(actor: TrustedActorContext, kind: "pattern" | "misc" = "pattern", purpose: "create" | "rework" = "create") { return authorizePatternOrder(this.db, actor, purpose === "rework" ? "pattern_room:orders:rework" : kind === "pattern" ? "pattern_room:orders:create" : "pattern_room:misc:create", this.enabled); }

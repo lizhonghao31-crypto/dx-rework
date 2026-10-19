@@ -311,6 +311,7 @@ export const SourcingContractReturnResponseSchema = z.object({
   signedContractDocumentId: IdSchema.nullable().default(null),
   signedContractVersion: z.number().int().positive().nullable().default(null),
   signedContractNumber: z.string().nullable().default(null),
+  versions: z.array(z.object({revision:z.number().int().positive(),submittedAt:z.string().datetime(),uploadedByName:z.string(),signedContractDocumentId:IdSchema.nullable(),signedContractVersion:z.number().int().positive().nullable(),signedContractNumber:z.string().nullable(),attachments:z.array(z.object({attachmentId:IdSchema,filename:z.string(),mimeType:z.enum(["application/pdf","image/jpeg","image/png"]),sizeBytes:z.number().int().positive()}).strict())}).strict()).optional(),
   attachments: z.array(z.object({
     attachmentId: IdSchema,filename: z.string(),
     mimeType: z.enum(["application/pdf","image/jpeg","image/png"]),
