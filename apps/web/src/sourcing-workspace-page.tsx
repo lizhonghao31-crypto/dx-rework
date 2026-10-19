@@ -1,4 +1,5 @@
 import { SourcingOrderPhotos } from "./sourcing-order-photos.js";
+import { SourcingOrderDateFacts } from "./sourcing-order-date-facts.js";
 import { SearchableSelect } from "./search-select.js";
 import { customerPoDateLabel } from "./digital-workspace-copy.js";
 import { PoDateSummary } from "./po-delivery-dates.js";
@@ -1847,7 +1848,7 @@ function OrderDetailPage({
           <div><dt>IE 总额</dt><dd>{item.ieQuote ? fixedBusinessCurrency(item.ieQuote.totalAmount) : "—"}</dd></div>
           <div><dt>较 IE 总额变化</dt><dd className={ownerTotalDelta?.startsWith("-") ? "sourcing-price-lower" : undefined}>{ownerTotalDelta ?? "—"}</dd></div>
           <div className="sourcing-key-facts__date"><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
-          {sourcingPoDates(item)?<div className="sourcing-key-facts__date"><dt>PO 双交期</dt><dd><PoDateSummary lines={sourcingPoDates(item)}/></dd></div>:<div className="sourcing-key-facts__date"><dt>要求交货日期</dt><dd>{item.deliveryDate ?? "—"}</dd></div>}
+          <SourcingOrderDateFacts item={item} />
         </KeyFacts>
         <div className="sourcing-supporting-overview">
           <SourcingOrderPhotos attachments={attachments} previewUrl={attachment => attachmentUrl(attachment.attachmentId, "preview")} onPreview={setSelectedImage} uploadControl={canSupplementImages ? <SourcingImageSupplementUploader sourcingCaseId={sourcingCaseId} currentAttachmentCount={attachments.length} onUploaded={load} /> : null} />

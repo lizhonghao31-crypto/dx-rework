@@ -1,4 +1,5 @@
 import { SourcingOrderPhotos } from "./sourcing-order-photos.js";
+import { SourcingOrderDateFacts } from "./sourcing-order-date-facts.js";
 import { useEffect, useState } from "react";
 import { SourcingNodeHistorySchema, type SourcingNodeHistory, type SourcingHistoryNode, type SourcingAttachment } from "@dx-rework/contracts";
 import { formatBusinessCurrency, formatBusinessDecimal } from "@dx-rework/contracts/business-display";
@@ -82,13 +83,14 @@ export function SourcingNodeHistoryView({ history, currentHref, nodeHref, onImag
     {notices.map(notice => <p key={notice} role="status">{notice}</p>)}
     <div className="sourcing-detail-layout sourcing-reference-layout">
       <KeyFacts className="sourcing-key-facts" aria-label="历史节点订单核心信息">
+        <div><dt>跟单</dt><dd>{item.merchandiserName ?? "历史未维护"}</dd></div>
         <div className="sourcing-key-facts__factory"><dt>当时方案工厂</dt><dd>{item.decision?.supplierName ?? "当时未选厂"}</dd></div>
         <div><dt>订单总数量</dt><dd>{formatBusinessDecimal(item.orderQuantity)} 件</dd></div>
         <div><dt>当时方案生产总额</dt><dd>{item.decision ? formatBusinessCurrency(item.decision.totalAmount) : "—"}</dd></div>
         <div><dt>IE 总额</dt><dd>{item.ieQuote ? formatBusinessCurrency(item.ieQuote.totalAmount) : "—"}</dd></div>
         <div><dt>较 IE 总额变化</dt><dd>{amountDifference(item.decision?.totalAmount, item.ieQuote?.totalAmount)}</dd></div>
         <div className="sourcing-key-facts__date"><dt>预计裁片发出</dt><dd>{item.estimatedCutPieceSendDate ?? "历史未维护"}</dd></div>
-        <div className="sourcing-key-facts__date"><dt>要求交货日期</dt><dd>{item.deliveryDate ?? "历史未维护"}</dd></div>
+        <SourcingOrderDateFacts item={item} historical />
       </KeyFacts>
       <div className="sourcing-supporting-overview">
         <SourcingOrderPhotos attachments={attachments} previewUrl={image => pictureUrl(image.attachmentId)} onPreview={onImage} />
