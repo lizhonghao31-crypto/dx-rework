@@ -13,7 +13,7 @@ export function washingChoiceLabel(value: string): string {
 }
 
 /** Current-screen label only; the stored fact remains the customer-agreed warehouse arrival date. */
-export const customerPoDateLabel = "出货日期";
+export const customerPoDateLabel = "客户仓到货日";
 
 /** A resource pause does not change the persisted task state. */
 export function digitalTaskDisplayStatus(task:Pick<DigitalTask,'state'|'paused'>,readOnly=false):string {

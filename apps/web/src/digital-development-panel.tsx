@@ -97,7 +97,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
   const savedPrint=revision?rounds.draft?.payload.document:sheet?.document;
   if(!embedded&&sheet?.canEdit&&!revision&&(sheet.status==="draft"||(!showPublishedDocument&&sheet.document?.customerOrderDraft?.withOrder&&!sheet.productionOrderId)))return <ResumeDevelopmentCreateForm contained={contained} key={`${sheet.sourceId}:${sheet.version}`} sheet={sheet} onClose={onClose} onCreated={()=>void reload()} onViewPublished={()=>setShowPublishedDocument(true)}/>;
   return <Surface><section className="development-editor dx-doc-development">
-    <DocumentToolbar title={sheet?`开发单 · ${sheet.designStyleNo}`:"开发单"} status={busy?"保存中":error&&dirty?"没有保存成功，修改还在":dirty?"未保存修改":`${revision?`第${revision.basedOnRound+1}轮复版草稿`:sheet?.status==="published"?`已发布 · 第${sheet.roundNumber??1}轮${(sheet.roundNumber??1)===(sheet.latestRoundNumber??1)?" · 当前有效轮次":" · 历史轮次"}`:"草稿"} · 版本 ${revision?draftVersion:sheet?.version??0}`}>
+    <DocumentToolbar title={sheet?`开发单 · ${sheet.designStyleNo}`:"开发单"} status={busy?"保存中":error&&dirty?"没有保存成功，修改还在":dirty?"未保存修改":`${revision?`第${revision.basedOnRound+1}轮复版草稿`:sheet?.status==="published"?`已发布 · 第${sheet.roundNumber??1}轮${(sheet.roundNumber??1)===(sheet.latestRoundNumber??1)?" · 当前有效轮次":" · 历史轮次"}`:"草稿"} · ${revision?"复版草稿版本":"资料版本"} ${revision?draftVersion:sheet?.version??0}`}>
       {!embedded&&!contained&&<Button disabled={busy} onClick={onClose}>返回</Button>}
       {!readonly&&<><Button disabled={busy} onClick={save}>保存草稿</Button><Button variant="primary" disabled={busy} onClick={publish}>{revision?"正式发布本轮修改":"发布开发单"}</Button></>}
       <Button disabled={!savedPrint||dirty||busy} onClick={()=>window.print()}>打印 / 保存 PDF</Button>
