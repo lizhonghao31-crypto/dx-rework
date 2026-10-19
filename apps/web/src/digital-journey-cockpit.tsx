@@ -1,14 +1,14 @@
 import { SearchableSelect } from "./search-select.js";
-import { customerPoDateLabel } from "./digital-workspace-copy.js";
+import {CockpitHome} from "./cockpit-home.js";
 import "./digital-kpi-density.css";
 import { PoDateSummary,PoOrderFacts,PoDateRisks } from "./po-delivery-dates.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { Button, StatusBadge, type Tone } from "@dx-rework/ui";
-import { ActivityLog, BusinessTable, DocumentList, FilterBar, FlowStageCard, KpiCard, NodeTable, PageHeader, Pagination } from "@dx-rework/ui/production";
+import { ActivityLog, DocumentList, FilterBar, FlowStageCard, KpiCard, NodeTable, PageHeader } from "@dx-rework/ui/production";
 import { JOURNEY_NODES, JOURNEY_STAGES, type JourneyNode, type JourneyRecord, type JourneyResult, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
 import { createWebUrls } from "../url-contract.js";
-import { journeyRiskLabels, journeyStateLabels, journeyRecordHref, journeyTime, matchingNodes, matchingPoDeliveryRisks, nodeStatus, orderStatus, stageStatus, stageTimes, journeyDocumentGroups, journeyDetailSelection, uniqueJourneyEntries, journeyRecordIdentity, type CockpitContext } from "./digital-journey-cockpit-model.js";
+import { journeyRiskLabels, journeyStateLabels, journeyRecordHref, journeyTime, nodeStatus, orderStatus, stageStatus, stageTimes, journeyDocumentGroups, journeyDetailSelection, uniqueJourneyEntries, journeyRecordIdentity, type CockpitContext } from "./digital-journey-cockpit-model.js";
 import "./digital-journey-cockpit.css";
 
 const urls = createWebUrls(import.meta.env.BASE_URL);
@@ -21,12 +21,12 @@ function StageTime({value}: {value: string}) {
 }
 const quantity = (order: OrderJourney) => !order.orderId ? "未下单" : order.lines.length ? order.lines.reduce((sum, line) => sum + line.orderedQuantity, 0).toLocaleString() : "无可见订购量";
 const kpis = [
-  { key: "all", label: "全部订单", field: "all", detail: "当前授权范围", tone: "info" },
-  { key: "active", label: "进行中", field: "active", detail: "有在办或待前置节点", tone: "info" },
-  { key: "due_soon", label: "即将到期", field: "dueSoon", detail: "按原节点临期阈值", tone: "warning" },
-  { key: "overdue", label: "已超时", field: "overdue", detail: "未完成节点已逾期", tone: "danger" },
-  { key: "blocked", label: "受阻", field: "blocked", detail: "原业务阻断待处理", tone: "danger" },
-  { key: "completed", label: "已完成", field: "completed", detail: "原装箱或特殊结案完成", tone: "success" },
+  {key:"all",label:"全部订单",field:"all",tone:"info"},
+  {key:"active",label:"进行中",field:"active",tone:"info"},
+  {key:"not_started",label:"未启动",field:"notStarted",tone:"neutral"},
+  {key:"due_soon",label:"临期",field:"dueSoon",tone:"warning"},
+  {key:"overdue",label:"逾期",field:"overdue",tone:"danger"},
+  {key:"completed",label:"整单已完成",field:"completed",tone:"success"},
 ] as const;
 
 function RecordLink({ record, context, children }: { record: JourneyRecord; context: CockpitContext; children?: ReactNode }) {
@@ -38,13 +38,13 @@ function CockpitFilters({ context, data, onChange }: { context: CockpitContext; 
   const [draft, setDraft] = useState(context);
   useEffect(() => setDraft(context), [context]);
   const field = (key: keyof CockpitContext, value: string) => setDraft(current => ({ ...current, [key]: key === "search" ? value : value || undefined }));
-  return <FilterBar className="journey-filters" onSubmit={event => { event.preventDefault(); onChange({ ...draft, page: 1 }); }}>
+  return <FilterBar className={"journey-filters"+(more?" is-expanded":"")} onSubmit={event => { event.preventDefault(); onChange({ ...draft, page: 1 }); }}>
     <label className="journey-search">综合搜索<input maxLength={100} aria-label="综合搜索" placeholder="款号、款名、客户、PO、跟单" value={draft.search} onChange={event => field("search", event.target.value)} /></label>
     <label>客户<SearchableSelect aria-label="客户" value={draft.customer ?? ""} onChange={event => field("customer", event.target.value)}><option value="">全部客户</option>{data?.facets?.customers.map(value => <option key={value}>{value}</option>)}</SearchableSelect></label>
     <label>跟单<SearchableSelect aria-label="跟单" value={draft.merchandiserId ?? ""} onChange={event => field("merchandiserId", event.target.value)}><option value="">主 / 第二跟单</option>{data?.facets?.merchandisers.map(person => <option value={person.id} key={person.id}>{person.name ?? person.id}</option>)}</SearchableSelect></label>
-    <label>品类 / 款式<SearchableSelect aria-label="品类 / 款式" value={draft.category ?? ""} onChange={event => field("category", event.target.value)}><option value="">全部品类</option>{data?.facets?.categories.map(value => <option key={value}>{value}</option>)}</SearchableSelect></label>
-    <Button type="submit">查询</Button><Button type="button" variant="secondary" onClick={() => setMore(!more)} aria-expanded={more}>更多筛选</Button>
-    <Button type="button" variant="secondary" onClick={() => onChange({ page: 1, search: "", kpi: "all", customer: undefined, merchandiserId: undefined, category: undefined, stage: undefined, node: undefined, state: undefined, risk: undefined, startDate: undefined, endDate: undefined })}>重置筛选</Button>
+    <label className={"journey-category-filter"+(context.category?" is-applied":"")}>品类 / 款式<SearchableSelect aria-label="品类 / 款式" value={draft.category ?? ""} onChange={event => field("category", event.target.value)}><option value="">全部品类</option>{data?.facets?.categories.map(value => <option key={value}>{value}</option>)}</SearchableSelect></label>
+    <div className="journey-filter-actions"><Button type="submit">查询</Button><Button type="button" variant="secondary" onClick={() => setMore(!more)} aria-expanded={more}>更多筛选</Button>
+    <Button type="button" variant="secondary" onClick={() => onChange({ page: 1, search: "", kpi: "all", customer: undefined, merchandiserId: undefined, category: undefined, stage: undefined, node: undefined, state: undefined, risk: undefined, startDate: undefined, endDate: undefined })}>重置筛选</Button></div>
     {more && <div className="journey-more-filters">
       <label>大流程<select aria-label="大流程" value={draft.stage ?? ""} onChange={event => field("stage", event.target.value)}><option value="">全部流程</option>{JOURNEY_STAGES.map(stage => <option key={stage.key} value={stage.key}>{stage.label}</option>)}</select></label>
       <label>小流程<SearchableSelect aria-label="小流程" value={draft.node ?? ""} onChange={event => field("node", event.target.value)}><option value="">全部节点</option>{JOURNEY_NODES.map(node => <option key={node.key} value={node.key}>{node.label}</option>)}</SearchableSelect></label>
@@ -150,10 +150,10 @@ function JourneyDetail({ order, context, onChange, asOf, actions }: { order: Ord
 type Props = { data: JourneyResult | null; error: string; detail: OrderJourney | null; detailError: string; detailLoading: boolean; context: CockpitContext; onChange: (patch: Partial<CockpitContext>, preserveSelection?: boolean) => void; actions: ReactNode };
 export function DigitalJourneyCockpit({ data, error, detail, detailError, detailLoading, context, onChange, actions }: Props) {
   if (context.selected) return <div className="digital-journey-cockpit dx-production-refined" data-view="order" aria-busy={detailLoading}>{detail && !detailError ? <JourneyDetail order={detail} asOf={detail.asOf??data?.asOf} context={{ ...context, selected: detail.id }} onChange={patch => onChange(patch, true)} actions={actions}/> : <section className="dx-production-panel"><button className="journey-text-action" onClick={() => onChange({selected: undefined, expanded: undefined, focus: undefined, row: undefined, round: undefined}, true)}>‹ 返回订单总览</button>{detailError ? <p role="alert">{detailError}</p> : <p role="status">正在读取订单全景…</p>}</section>}</div>;
-  return <div className="digital-journey-cockpit dx-production-refined" data-view="overview"><PageHeader title="生产管理座舱" description="订单全生命周期" actions={actions}/>
-    <section className="journey-kpis" aria-label="订单筛选 KPI">{kpis.map((kpi,index) => <KpiCard key={kpi.key} icon={<NavigationIcon name={(["List","Activity","Clock","TriangleAlert","CirclePause","CircleCheck"] as const)[index]??"List"} />} label={kpi.label} value={data?.summary[kpi.field] ?? "—"} detail={kpi.detail} tone={kpi.tone} selected={context.kpi === kpi.key} onClick={() => onChange({ kpi: kpi.key })}/>)}</section>
-    <CockpitFilters context={context} data={data} onChange={onChange}/>{error && <p role="alert">{error}</p>}
-    <section className="dx-production-panel journey-orders" aria-label="订单列表" aria-busy={!data && !error}><div className="journey-section-title"><h2>订单总览</h2><span className="journey-muted">{data ? `${data.total} 个授权订单 · 同单异常不重复计数` : "正在读取…"}</span></div><div className="journey-orders-viewport"><BusinessTable><thead><tr><th>款号 / 款名</th><th>客户 / 类型</th><th>订购量 / 交期</th><th>当前任务 / 等待原因</th><th>状态</th></tr></thead><tbody>{data?.items.map(order => <tr key={order.id}><td><button className="journey-order-select" onClick={() => onChange({ selected: order.id, round: undefined, expanded: undefined, focus: undefined, row: undefined }, true)}>{order.designStyleNo}</button><small>{order.styleName ?? "款名未登记"}</small></td><td>{order.customer ?? "客户未登记"}<small>{order.orderId ? "大货订单" : "产品开发"}</small></td><td>{quantity(order)}<PoDateSummary lines={order.poDeliveryDates??[]}/></td><td><div className="journey-hits">{matchingPoDeliveryRisks(order,context).map(risk=><button className="journey-hit" key={risk.lineId+risk.kind} onClick={()=>onChange({selected:order.id,expanded:undefined,focus:undefined,row:undefined},true)}>{risk.poNumber||"待补 PO"} · {risk.kind==="factory"?"加工厂交货日":risk.kind==="customer"?customerPoDateLabel:"船样目标日"}<small>{risk.date} · {risk.risk==="overdue"?"约定日期已过":"今天到期"}</small></button>)}{[...new Map([...order.stages.flatMap(stage=>stage.nodes).filter(node=>node.current&&["active","blocked"].includes(node.state)),...matchingNodes(order, context.kpi)].map(node=>[node.instanceId,node])).values()].map(node => <button className="journey-hit" key={node.instanceId} onClick={() => onChange({ selected: order.id, expanded: node.stage, focus: node.instanceId, row: node.instanceId, round: undefined }, true)}>{node.label} · {who(node.owner)}<small>{node.blockers.map(blocker=>blocker.label).join("；") || nodeStatus(node)} · {node.risks.map(risk => journeyRiskLabels[risk]).join(" / ") || nodeStatus(node)}</small></button>)}</div></td><td><StatusBadge tone={tone(orderStatus(order) === "受阻" ? "blocked" : orderStatus(order) === "整单已完成" ? "completed" : "active")}>{orderStatus(order)}</StatusBadge></td></tr>)}</tbody></BusinessTable></div>
-      {!data && !error && <p role="status">正在读取订单…</p>}{data?.items.length === 0 && <p role="status">当前授权和筛选范围没有订单。</p>}<Pagination page={context.page} pageSize={15} total={data?.total ?? null} onPage={page => onChange({ page })}/></section>
+  return <div className="digital-journey-cockpit dx-production-refined" data-view="overview"><PageHeader title="生产管理座舱" actions={actions}/>
+    <div className="cockpit-scope-tabs" role="group" aria-label="订单范围"><button type="button" aria-pressed={(context.scope??"production")==="production"} onClick={()=>onChange({scope:"production",kpi:"all"})}>生产订单{data?.scopeCounts?`（${data.scopeCounts.production}）`:""}</button><button type="button" aria-pressed={context.scope==="development"} onClick={()=>onChange({scope:"development",kpi:"all"})}>纯开发未下单{data?.scopeCounts?`（${data.scopeCounts.development}）`:""}</button></div>
+    <section className="journey-kpis" aria-label="订单筛选 KPI">{kpis.map((kpi,index)=><KpiCard key={kpi.key} icon={<NavigationIcon name={(["List","Activity","Clock","TriangleAlert","TriangleAlert","CircleCheck"] as const)[index]??"List"}/>} label={kpi.label} value={data?.summary[kpi.field]??"—"} tone={kpi.tone} selected={context.kpi===kpi.key} onClick={()=>onChange({kpi:kpi.key})}/>)}</section>
+    <CockpitFilters context={context} data={data} onChange={onChange}/>{error&&<p role="alert">{error}</p>}
+    <CockpitHome data={data} error={error} context={context} onChange={onChange}/>
   </div>;
 }
