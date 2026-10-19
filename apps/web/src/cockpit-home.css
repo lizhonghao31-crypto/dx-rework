@@ -22,8 +22,8 @@
 .digital-journey-cockpit[data-view="overview"] .cockpit-home-task {display:grid;gap:4px;background:transparent;border:0;font:inherit;text-align:left;color:inherit;padding:0;cursor:pointer;min-height:44px;width:100%}
 .digital-journey-cockpit[data-view="overview"] .cockpit-home-task .dx-badge {justify-self:start}
 .digital-journey-cockpit .cockpit-double-progress {display:grid;gap:7px}
-.digital-journey-cockpit .cockpit-double-progress>div {display:grid;grid-template-columns:28px minmax(40px,1fr) 46px;gap:5px;align-items:center;font-size:13px}
-.digital-journey-cockpit .cockpit-double-progress small {margin:0;font-size:12px;text-align:right}
+.digital-journey-cockpit .cockpit-double-progress>div {display:grid;grid-template-columns:28px minmax(40px,1fr) minmax(62px,max-content);gap:5px;align-items:center;font-size:13px}
+.digital-journey-cockpit .cockpit-double-progress small {margin:0;font-size:12px;min-width:62px;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .digital-journey-cockpit .cockpit-double-progress i {height:8px;border-radius:8px;background:#e1e8f2;overflow:hidden}
 .digital-journey-cockpit .cockpit-double-progress b {display:block;height:100%;background:#0065ff;border-radius:8px}
 .digital-journey-cockpit .cockpit-order-state {display:inline-block;border-radius:5px;padding:7px 10px;background:#edf0f5;color:#687b98;font-size:14px;font-weight:600}
