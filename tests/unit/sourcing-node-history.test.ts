@@ -41,4 +41,16 @@ describe("historical sourcing node pages", () => {
     expect(html).not.toMatch(/type="(?:submit|file)"|<form\b/);
     for (const text of ["提交 IE", "提交调价", "同意并提交", "发起转厂", "补充图片", "保存草稿", "处理历史"]) expect(html).not.toContain(text);
   });
+  it("keeps independent customer and effective factory dates from the selected historical snapshot", () => {
+    const html = renderToStaticMarkup(createElement(SourcingNodeHistoryView, {
+      history: { ...history, item: { ...item, merchandiserName:"当时跟单", lineItems:[{...item.lineItems[0]!,lineId:id,customerWarehouseArrivalDate:"2026-10-03",factoryDeliveryDate:null,proposedFactoryDeliveryDate:"2026-11-19"}] } },
+      currentHref:"/current", nodeHref:key=>`/history/${key}`, onImage:()=>{},
+    }));
+    const facts = html.match(/<dl[^>]*sourcing-key-facts[\s\S]*?<\/dl>/)?.[0] ?? "";
+    expect(facts).toContain("当时跟单");
+    expect(facts).toMatch(/<dt>PO \/ [^<]+<\/dt><dd>[\s\S]*?2026-10-03/);
+    expect(facts).toMatch(/<dt>加工厂交货日<\/dt><dd>有 PO 日期待补（1\/1）/);
+    expect(facts).toContain('当时要求交货：<span class="sourcing-date-token">2026-10-20</span>');
+    expect(facts).not.toContain("2026-11-19");
+  });
 });
