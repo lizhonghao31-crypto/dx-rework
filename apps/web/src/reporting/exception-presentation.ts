@@ -6,6 +6,6 @@ export function exceptionRecordHref(value: unknown, base: string): string | null
   const url=new URL(value,'https://local.invalid');
   if(url.origin!=='https://local.invalid'||url.hash||url.pathname!==value.split(/[?#]/)[0])return null;
   if(new RegExp(`^/ui/tasks(?:/${uuid})?$`,'i').test(url.pathname)&&!url.search)return createWebUrls(base).pageUrl(url.pathname);
-  if(url.pathname==='/ui/external-responsibilities'&&[...url.searchParams.keys()].length===1&&new RegExp(`^${uuid}$`,'i').test(url.searchParams.get('case')??''))return createWebUrls(base).pageUrl(url.pathname)+url.search;
+  if(new RegExp(`^/ui/tasks/${uuid}$`,'i').test(url.pathname)&&[...url.searchParams.keys()].length===2&&url.searchParams.get('node')==='settlement_followup'&&new RegExp(`^${uuid}$`,'i').test(url.searchParams.get('case')??''))return createWebUrls(base).pageUrl(url.pathname)+url.search;
   return null;
 }

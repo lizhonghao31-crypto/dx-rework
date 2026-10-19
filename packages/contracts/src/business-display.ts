@@ -1,3 +1,5 @@
+import { todoCategoryTitles } from "./todo-presentation.js";
+
 export const BUSINESS_TIME_ZONE = "Asia/Shanghai";
 
 const VALUE_LABELS: Readonly<Record<string, string>> = {
@@ -198,7 +200,7 @@ const ENTITY_LABELS: Readonly<Record<string, string>> = {
   export_job: "导出任务",
 };
 
-const EXCEPTION_LABELS: Readonly<Record<string, string>> = {
+export const BUSINESS_EXCEPTION_LABELS: Readonly<Record<string, string>> = {
   attachment_upload_not_completed: "附件上传未完成",
   overdue_todo: "待办逾期",
   blocked_recipient: "接收人失效",
@@ -271,13 +273,60 @@ export const businessEntityLabel = (value: string): string =>
   ENTITY_LABELS[value] ?? "业务对象";
 
 export const businessExceptionLabel = (value: string): string =>
-  EXCEPTION_LABELS[value] ?? "系统异常";
+  BUSINESS_EXCEPTION_LABELS[value] ?? "系统异常";
+
+/** Existing card captions take precedence; remaining notification categories retain their titles. */
+export const BUSINESS_TODO_CATEGORY_LABELS: Readonly<Record<string, string>> = {
+  ...todoCategoryTitles,
+  supplier_onboarding_approval: "新增供应商审批",
+  supplier_onboarding_return: "修改供应商申请",
+  pattern_room_assignment: "分配板房工人",
+  pattern_room_execution: "板房制作与报完工",
+  pattern_room_handoff: "确认收到样板",
+  pattern_room_misc_confirmation: "确认杂事完成",
+  pattern_room_hours: "填写杂事实际工时",
+  pattern_room_cancel_fees: "确认打板取消费用",
+  pattern_room_completion_notice: "板房完工通知",
+  pattern_room_material_notice: "板房资料更新通知",
+  sample_borrow_confirm: "确认样衣借出",
+  sample_return_confirm: "确认样衣归还",
+  production_behind: "进度落后",
+  production_high_risk: "进度高风险",
+  production_stale: "生产未更新",
+  process_configuration: "配置返工工序",
+  process_configuration_return: "退回重新配置工序",
+  process_configuration_rejection_notice: "工序审核退回通知",
+  ie_review: "IE 审核",
+  task_assignment: "分配返工人员",
+  work_reporting: "登记返工完成",
+  tail_inspection: "历史整查报数",
+  whole_order_review: "整单审核",
+  quantity_adjustment: "数量调整审核",
+  responsibility_determination: "责任判定与资料核验",
+  owner_signature: "老板确认签字",
+  own_factory_approval: "历史本厂金额审批",
+  external_supplier_selection: "历史供应商选择",
+  external_responsibility: "供应商实际扣款",
+  wage_review: "返工工资核对",
+  wage_tail_review: "工资初核",
+  wage_administrative_review: "工资行政复核",
+  wage_adjustment_approval: "工资调整审批",
+  sourcing_ie_quote: "IE 给价",
+  sourcing_management_decision: "供应链总监调价选厂",
+  sourcing_owner_approval: "老板最终审批",
+  sourcing_finance_reconcile: "财务核对",
+  sourcing_contract_return: "回传合同",
+  sourcing_merchandiser_correction: "修改外发订单资料",
+  sourcing_exception_verify: "核验财务差异",
+  sourcing_finance_difference_notice: "财务差异通知",
+  sourcing_factory_change_verify: "核验转厂申请",
+  sourcing_factory_change_owner_approve: "批准转厂申请",
+};
 
 /** Existing exception prefixes and task labels, without exposing stored category codes. */
 export const businessExceptionDescription = (value: string): string => {
-  const labels:Readonly<Record<string,string>>={sourcing_finance_reconcile:"财务核对",sourcing_ie_quote:"IE 给价",sourcing_management_decision:"供应链总监调价选厂",sourcing_owner_approval:"老板最终审批",sourcing_contract_return:"回传合同",process_configuration:"配置返工工序",ie_review:"IE 审核",task_assignment:"分配返工人员",work_reporting:"登记返工完成",whole_order_review:"整单审核",quantity_adjustment:"数量调整审核",responsibility_determination:"责任判定与资料核验",owner_signature:"老板确认签字",external_responsibility:"供应商实际扣款",wage_review:"返工工资核对"};
   const match=value.match(/^(待办逾期|接收人失效|钉钉投递永久失败)：([a-z][a-z0-9_]+)$/);
-  return match?`${match[1]}：${labels[match[2]!]??"事项类别待核实"}`:value;
+  return match?`${match[1]}：${BUSINESS_TODO_CATEGORY_LABELS[match[2]!]??"事项类别待核实"}`:value;
 };
 
 export const businessActionLabel = (value: string): string =>

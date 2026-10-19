@@ -425,7 +425,14 @@ export function ReworkDetailPage(props: { reworkOrderId?: string; focusedNode?: 
   const node = FinanceNodeKeySchema.safeParse(query.get("node"));
   const orderId = props.reworkOrderId ?? orderIdFromLocation();
   if (orderId && query.get("view") === "node-history" && node.success) return <ReworkNodeHistoryPage orderId={orderId} node={node.data} />;
-  return <CurrentReworkDetailPage {...props} />;
+  const caseId = query.get("case");
+  const focusedCase = props.focusedExternalCaseId ?? (
+    caseId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(caseId) ? caseId : undefined
+  );
+  return <CurrentReworkDetailPage {...props} {...(focusedCase ? {
+    focusedExternalCaseId: focusedCase,
+    focusedNode: props.focusedNode ?? "settlement_followup",
+  } : {})} />;
 }
 
 function CurrentReworkDetailPage({
