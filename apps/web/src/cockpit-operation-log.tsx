@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from "react";
+import {CockpitDate} from "./cockpit-date.js";
 import type {JourneyLogPage,OrderJourney} from "@dx-rework/contracts/digital-production-journey";
 import {digitalRequest} from "./digital-production-api.js";
 import {journeyTime} from "./digital-journey-cockpit-model.js";
@@ -28,7 +29,7 @@ export function CockpitOperationLog({order}:{order:OrderJourney}){
     finally{if(request.current===controller){loading.current=false;if(live.current&&!controller.signal.aborted)setBusy(false);}}
   };
   return <section className="dx-production-panel journey-activity-panel"><div className="journey-section-title"><h2>操作记录</h2>{summary&&<button type="button" className="journey-text-action" ref={trigger} onClick={()=>{setPage(summary);setError("");setOpen(true);}}>查看更多</button>}</div>
-    <ol className="cockpit-log-summary">{summary?.items.map(item=><li key={item.id}><time>{journeyTime(item.at)}</time><span>{item.actor?.name??"姓名未登记"}</span><strong>{item.object} · {item.action}</strong></li>)}</ol>
+    <ol className="cockpit-log-summary">{summary?.items.map(item=><li key={item.id}><CockpitDate value={item.at}/><span title={item.actor?.name??"姓名未登记"} tabIndex={0}>{item.actor?.name??"姓名未登记"}</span><strong>{item.object} · {item.action}</strong></li>)}</ol>
     {!summary?<p className="journey-muted">操作记录暂不可用。</p>:!summary.items.length?<p className="journey-muted">暂无可查节点操作记录。</p>:null}
     <dialog ref={dialog} className="cockpit-log-dialog" aria-label="操作记录" onClose={()=>{live.current=false;request.current?.abort();loading.current=false;setBusy(false);setOpen(false);}} onKeyDown={trapCockpitDialogFocus}>
       <header><div><h2>操作记录</h2><p>订单：{order.designStyleNo}</p></div><button type="button" autoFocus aria-label="关闭操作记录" onClick={()=>dialog.current?.close()}>×</button></header>
