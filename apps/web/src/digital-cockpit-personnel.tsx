@@ -7,7 +7,7 @@ import {digitalRequest} from "./digital-production-api.js";
 
 type Candidate={id:string;displayName:string;roles:string[]};
 type PersonnelDialog={kind:"customer";customers:DigitalCustomer[]}|{kind:"order";order:DigitalOrder};
-export function DigitalCockpitPersonnel({orderId,onChanged}:{orderId:string|null;onChanged():void}){
+export function DigitalCockpitPersonnel({orderId,onChanged,showCustomer=true}:{orderId:string|null;onChanged():void;showCustomer?:boolean}){
   const [access,setAccess]=useState<DigitalAccessOptions|null>(null),[dialog,setDialog]=useState<PersonnelDialog|null>(null);
   const [people,setPeople]=useState<Candidate[]>([]),[customerCode,setCustomerCode]=useState(""),[personId,setPersonId]=useState("");
   const [busy,setBusy]=useState(false),[error,setError]=useState("");const writing=useRef(false),currentOrder=useRef(orderId);currentOrder.current=orderId;
@@ -40,7 +40,7 @@ export function DigitalCockpitPersonnel({orderId,onChanged}:{orderId:string|null
     }catch(reason){setError(reason instanceof Error?reason.message:"保存失败");}finally{writing.current=false;setBusy(false);}
   };
   const invalidPerson=personId&&!people.some(person=>person.id===personId);
-  return <>{access?.customers&&<Button variant="secondary" disabled={busy} onClick={()=>void open("customer")}>客户跟单配置</Button>}
+  return <>{showCustomer&&access?.customers&&<Button variant="secondary" disabled={busy} onClick={()=>void open("customer")}>客户跟单配置</Button>}
     {access?.manage&&orderId&&<Button variant="secondary" disabled={busy} onClick={()=>void open("order")}>调整主跟单</Button>}
     {error&&!dialog&&<small role="alert">{error}</small>}
     {dialog&&<div className="digital-cockpit-dialog-backdrop"><section className="digital-cockpit-dialog digital-personnel-dialog" role="dialog" aria-modal="true" aria-label={dialog.kind==="customer"?"客户跟单配置":"调整主跟单"}>

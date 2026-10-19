@@ -569,11 +569,13 @@ export function Shell({
   ];
   const preparationNavigation: NavigationEntry[] = [];
   const factoryNavigation: NavigationEntry[] = digital ? [{ name: "裁后工艺与发厂", description: "工艺、QC与实际发厂", href: "/ui/digital-cockpit?stage=post_cutting&workspace=factory", activeKey: "digital-factory" }] : [];
+  const cockpitSettingsNavigation: NavigationEntry[] = digital && (isRoot || hasRole("owner_group") || hasRole("production_management")) ? [{name:"生产管理设置",description:"客户跟单与节点时效",href:"/ui/digital-cockpit?workspace=settings",activeKey:"digital-settings"}] : [];
   const navigation: NavigationEntry[] = [
     ...creationNavigation,
     ...developmentNavigation.filter(entry => !patternRoomNavigation.includes(entry)),
     ...preparationNavigation,
     ...factoryNavigation,
+    ...cockpitSettingsNavigation,
     ...globalNavigation,
     ...reworkNavigation,
     ...mobileSourcingNavigation,
@@ -583,6 +585,7 @@ export function Shell({
     ...platformNavigation,
   ];
   const desktopNavigationGroups: NavigationGroup[] = [
+    {name:"生产管理座舱",description:"生产管理配置",entries:cockpitSettingsNavigation},
     { name: "设计师创建订单", description: "产品开发源头", entries: creationNavigation },
     { name: "产品开发打板", description: "开发、打板与分析", entries: developmentNavigation },
     { name: "大货产前准备", description: "生产前置汇合", entries: preparationNavigation },
