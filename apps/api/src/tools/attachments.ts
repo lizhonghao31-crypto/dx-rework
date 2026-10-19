@@ -346,6 +346,17 @@ export class AttachmentService {
     }
   }
 
+  /** Read-only identity, behind the same ownership/binding check as downloading. */
+  async readIdentity(
+    actor: TrustedActorContext,
+    attachmentId: string,
+    authorizeBound?: (row: Readonly<{ attachmentId: string; entityType: string; entityId: string; uploadedBy: string; mimeType: string }>) => Promise<boolean>,
+  ): Promise<Pick<AttachmentResponse,"attachmentId"|"filename"|"mimeType"|"sizeBytes">> {
+    const row=await this.ownedOrBound(attachmentId,actor.actorId,authorizeBound);
+    if(row.status!=="ready")throw new ApplicationError("ATTACHMENT_NOT_READY","Attachment is not ready",409);
+    return {attachmentId:row.attachment_id,filename:row.original_filename,mimeType:row.mime_type,sizeBytes:Number(row.size_bytes)};
+  }
+
   async createDownloadIntent(
     actor: TrustedActorContext,
     attachmentId: string,

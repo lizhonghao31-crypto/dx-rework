@@ -10,3 +10,10 @@
 .search-select:focus-within{outline:2px solid var(--dx-v2-color-primary,#1677ff);outline-offset:1px;border-radius:var(--dx-v2-radius-md,10px)}
 .search-select__results button[data-active=true]{background:var(--dx-v2-color-inset)}
 @media(max-width:600px){.search-select input{font-size:16px}}
+
+/* One control owns the boundary. Nested legacy fields retain their outer ring. */
+.search-select.native-search-select > input { border:0; box-shadow:none; }
+.search-select > input:focus-visible, .search-select.native-search-select > input:focus-visible { outline:0; box-shadow:none; }
+.dx-field__control.search-select-control > .search-select { border:0; box-shadow:none; }
+.dx-field__control.search-select-control > .search-select:focus-within { outline:0; }
+.dx-field__control.search-select-control > .search-select > input:focus-visible, .search-select.native-search-select > input:focus-visible { outline:0; box-shadow:none; }

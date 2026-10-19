@@ -14,6 +14,7 @@ import { budgetColumns as columns, budgetFieldLabels, budgetIssues } from "./dig
 import { DigitalBudgetPrint } from "./digital-budget-print.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { useDigitalDetailNavigationGuard } from "./use-digital-detail-navigation-guard.js";
+import {productionWorkspaceDomainHref} from "./digital-detail-route.js";
 import "./digital-budget.css";
 
 const urls = createWebUrls(import.meta.env.BASE_URL);
@@ -23,7 +24,7 @@ const initial = (): BudgetDocument => ({ fabricType: "", productCategory: "", mo
     ...[...Array<string>(6).fill("通用物料"), ...Array<string>(3).fill("拉链"), ...Array<string>(3).fill("扣类"), ...Array<string>(3).fill("橡筋类"), ...Array<string>(3).fill("装饰牌标"), ...Array<string>(4).fill("花边/织带"), ...Array<string>(3).fill("其它")].map(category => newRow("辅料", category)),
     ...Array.from({ length: 4 }, () => newRow("外发工序"))] });
 
-export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVersion, embedded=false,contained=false }: { order: DigitalOrder; onClose: () => void; initialVersion?: number | undefined; contained?:boolean;embedded?:boolean }) {
+export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVersion, embedded=false,contained=false,onVersionChange }: { order: DigitalOrder; onClose: () => void; onVersionChange?:((version:number|undefined)=>void)|undefined; initialVersion?: number | undefined; contained?:boolean;embedded?:boolean }) {
   const previews=useDocumentUploadPreviews();
   const [initialVersion,setInitialVersion]=useState(requestedVersion);
   const [sheet, setSheet] = useState<BudgetSheet | null>(null), [doc, setDoc] = useState<BudgetDocument>(initial);
@@ -110,46 +111,8 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
       <Button disabled={!sheet?.document||dirty||busy} onClick={()=>window.print()}>打印 / 保存 PDF</Button>
     </DocumentToolbar>
     <p className="budget-mobile-overview">{order.designStyleNo} · {order.customerCode} · 成本 {amount(totals?.cost)} · 利润 {amount(totals?.profit)}</p>
-    {sheet&&<label>查看预算版本<select aria-label="查看预算版本" disabled={busy||embedded} value={initialVersion??''} onChange={async event=>{const version=event.target.value?Number(event.target.value):undefined;if(writing.current||dirty&&!await confirmInApp('切换版本将丢弃未保存修改，确定继续？'))return;setInitialVersion(version);const url=new URL(window.location.href);if(version)url.searchParams.set('budgetVersion',String(version));else url.searchParams.delete('budgetVersion');window.history.replaceState(window.history.state,'',url);}}>{!embedded&&<option value="">当前资料</option>}{sheet.versions?.map(version=><option key={version} value={version}>已发布版本 {version}</option>)}</select></label>}
+    {sheet&&<label>查看预算版本<select aria-label="查看预算版本" disabled={busy||embedded} value={initialVersion??''} onChange={async event=>{const version=event.target.value?Number(event.target.value):undefined;if(writing.current||dirty&&!await confirmInApp('切换版本将丢弃未保存修改，确定继续？'))return;setInitialVersion(version);const url=new URL(window.location.href);if(version)url.searchParams.set('budgetVersion',String(version));else url.searchParams.delete('budgetVersion');window.history.replaceState(window.history.state,'',url);onVersionChange?.(version);}}>{!embedded&&<option value="">当前资料</option>}{sheet.versions?.map(version=><option key={version} value={version}>已发布版本 {version}</option>)}</select></label>}
     {previews.view}<DocumentErrors issues={issues} error={error}/>
     {error&&/更新|版本|冲突/.test(error)&&<Button disabled={busy} onClick={()=>void reload()}>重新载入最新版本</Button>}
-    {sheet?.canSubmitSourcing&&initialVersion===undefined&&!dirty&&<a className="dx-button dx-button--secondary budget-controls" href={`${urls.pageUrl("ui/sourcing/create")}?budget=${order.productionOrderId}&budgetVersion=${sheet.version}`}>核实预算并进入外发申请</a>}
-    {sheet?.sourcingCaseId&&<a className="dx-button dx-button--secondary budget-controls" href={urls.pageUrl(`ui/sourcing/orders/${sheet.sourcingCaseId}`)}>查看外发订单</a>}
-    {sheet&&<form onSubmit={event=>{event.preventDefault();void run(false);}}><fieldset disabled={busy}>
-      <header className="budget-print-header"><h2>广州市达兴制衣有限公司</h2><h3>成本预算表</h3></header>
-      <div className="budget-document-layout">
-        <div className="budget-document-main" id="budget-rows" tabIndex={-1}>
-          <DocumentSection id="budget-basic" title="基本信息">
-            <div className="budget-basic-body"><div className="budget-heading">
-              <label>设计款号<span className="dx-doc-readonly">{order.designStyleNo}</span></label><label>客户<span className="dx-doc-readonly">{order.customerCode}</span></label>
-              {field("productCategory")}{field("fabricType")}<label>产品性别<span className="dx-doc-readonly">{order.productGroup}</span></label><label>设计师<span className="dx-doc-readonly">{sheet.designerName}</span></label>
-              {field("monthSeries")}<label>产品摘要<span className="dx-doc-readonly">{order.productGroup}{doc.fabricType}{doc.productCategory}</span></label>
-            </div><div className="budget-images" id="budget-imageAttachmentIds" tabIndex={-1}>
-              {!doc.imageAttachmentIds.length&&<div className="budget-image-empty"><NavigationIcon name="Shirt" size="title"/><span>暂无款图</span></div>}
-              {doc.imageAttachmentIds.map(id=><div key={id}>{sheet.document?.imageAttachmentIds.includes(id)?<a href={urls.apiUrl(`digital-production/${base}/attachments/${id}`)} target="_blank" rel="noreferrer"><img alt="预算款图" src={urls.apiUrl(`digital-production/${base}/attachments/${id}`)}/></a>:<span>图片已上传，保存后预览</span>}{!readonly&&<Button className="budget-controls" type="button" disabled={busy} onClick={()=>{for(const [key,value] of completedUploads.current)if(value===id)completedUploads.current.delete(key);edit({imageAttachmentIds:doc.imageAttachmentIds.filter(item=>item!==id)});}}>移除</Button>}</div>)}
-              {!readonly&&<label className="budget-controls budget-upload">上传图片<input disabled={busy} type="file" multiple accept="image/jpeg,image/png,image/webp" onChange={event=>{const files=Array.from(event.currentTarget.files??[]);event.currentTarget.value="";void upload(files);}}/></label>}
-            </div></div>
-            <details className="budget-po-summary" open={order.lines.length>0}><summary>款色 / PO · {order.lines.length} 行</summary><DocumentTableScroll><table><thead><tr><th>款号</th><th>PO号</th><th>颜色</th><th>件数</th></tr></thead><tbody>{order.lines.map(line=><tr key={line.lineId}><td>{line.formalStyleNo||line.temporaryStyleNo||order.temporaryStyleNo||order.designStyleNo}</td><td>{line.poNumber||"—"}</td><td>{line.color}</td><td>{line.sizes.reduce((sum,size)=>sum+size.quantity,0).toLocaleString()}</td></tr>)}</tbody></table></DocumentTableScroll></details>
-          </DocumentSection>
-          <DocumentAnchors sections={[{id:"budget-basic",label:"基本资料"},...BUDGET_SECTIONS.map((section,index)=>({id:`budget-section-${index}`,label:section})),{id:"budget-summary",label:"费用与报价"}]}/>
-          {templateDefaults.current.size>0&&<label className="budget-template-toggle budget-controls"><input type="checkbox" checked={showTemplates} onChange={event=>setShowTemplates(event.target.checked)}/>显示未使用模板行（完整保存）</label>}
-          {BUDGET_SECTIONS.map((section,index)=>{const visible=doc.rows.filter(row=>row.section===section&&(showTemplates||!unused(row)));return <DocumentSection key={section} id={`budget-section-${index}`} title={section} detail={`共 ${visible.length} 行`}>
-            <DocumentTableScroll className="budget-table-scroll"><table className="budget-detail-table"><thead><tr>{Object.values(columns).map(label=><th key={label}>{label}</th>)}<th>金额</th>{!readonly&&<th className="budget-controls">操作</th>}</tr></thead><tbody>
-              {doc.rows.filter(row=>row.section===section).map(row=><tr key={row.rowId} data-doc-row={row.rowId} className={!showTemplates&&unused(row)?"budget-template-row":undefined}>{(Object.keys(columns) as Array<keyof typeof columns>).map(key=>{const id=`budget-${row.rowId}-${key}`;return <td key={key}><DocumentField id={id} label={`${section} ${columns[key]}`} value={readonly&&key==="unitPrice"&&row[key]?budgetDisplayAmount(row[key]):row[key]} onValue={value=>changeRow(row.rowId,{[key]:value})} readonly={readonly} disabled={busy} numeric={key==="consumption"||key==="unitPrice"} column={key} maxLength={key==="consumption"||key==="unitPrice"?21:100} issue={issue(id)} onBlur={key==="consumption"||key==="unitPrice"?()=>setValidationMode("save"):undefined}/></td>;})}<td className="budget-money">{amount(totals?.rows.find(item=>item.rowId===row.rowId)?.amount)}</td>{!readonly&&<td className="budget-controls"><Button type="button" disabled={busy} aria-label={`删除${section} ${row.name||row.category||"未命名行"}`} onClick={()=>void removeRow(row)}>删除</Button></td>}</tr>)}
-              {!visible.length&&<tr><td colSpan={readonly?8:9} className="budget-empty budget-screen-empty">暂无使用明细，可添加{section}。</td></tr>}
-            </tbody><tfoot><tr><th colSpan={7}>{section}合计</th><td className="budget-money">{amount(totals?.[section==="主料"?"main":section==="辅料"?"accessories":"processes"])}</td>{!readonly&&<td className="budget-controls"/>}</tr></tfoot></table></DocumentTableScroll>
-            {!readonly&&<DocumentAddRow label={`添加${section}`} disabled={busy||doc.rows.length>=300&&!doc.rows.some(row=>row.section===section&&unused(row))} onClick={()=>addRow(section)}/>}
-          </DocumentSection>;})}
-        </div>
-        <div className={`budget-document-summary${summaryFits?" is-sticky":""}`} role="complementary" aria-label="预算汇总">
-          <DocumentSection id="budget-summary" title="成本汇总">
-            <dl className="budget-totals"><div><dt>主料合计</dt><dd>{amount(totals?.main)}</dd></div><div><dt>辅料合计</dt><dd>{amount(totals?.accessories)}</dd></div><div><dt>外发工序合计</dt><dd>{amount(totals?.processes)}</dd></div></dl>
-            {field("freight",true)}{field("cm",true)}<p className="budget-total-highlight">成本合计（不含税）<strong>{amount(totals?.cost)}</strong></p>{field("salePrice",true)}<p className="budget-total-highlight">利润<strong>{amount(totals?.profit)}</strong></p><p className="budget-currency">币种：{doc.currency}</p>
-            {!valid.success&&<p className="budget-preview-unavailable">当前输入未通过校验，合计预览不可用。</p>}
-          </DocumentSection>
-          <DocumentSection id="budget-outsourcing" title="其他信息">{field("outsourcingScope")}{field("outsourcingUnitPrice",true)}<footer><label>业务跟单<span className="dx-doc-readonly">{sheet.merchandiserName||"待指派"}</span></label>{field("date")}</footer></DocumentSection>
-        </div>
-      </div>
-    </fieldset></form>}
-  </section></Surface><DigitalBudgetPrint order={order} sheet={sheet} permitted={Boolean(sheet?.document)&&!dirty&&!busy}/></>;
-}
+    {sheet?.canSubmitSourcing&&initialVersion===undefined&&!dirty&&<a className="dx-button dx-button--secondary budget-controls" href={productionWorkspaceDomainHref(`${urls.pageUrl("ui/sourcing/create")}?budget=${order.productionOrderId}&budgetVersion=${sheet.version}`,window.location.search)}>核实预算并进入外发申请</a>}
+    {sheet?.sourcingCaseId&&<a className="dx-button dx-button--secondary budget-controls" href={productionWorkspaceDomainHref(urls.pageUrl(`ui/sourcing/orders/${sheet.sourcingCaseId}`),window.location.search)}>查看外发订单</a>}

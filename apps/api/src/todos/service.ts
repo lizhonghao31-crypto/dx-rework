@@ -1,3 +1,4 @@
+import { globalTodoSearch } from "./global-search.js";
 import { digitalTodoTarget } from "../production-platform/notification-policy.js";
 import type { ProductionClosureService } from "../sourcing/production-closure-service.js";
 import { memberCanReceiveFact } from "../access/member-module-policy.js";
@@ -5,6 +6,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   TodoRouteDescriptorSchema,
+  TodoResponseSchema,
   type TodoListResponse,
   type TodoModule,
   type TodoModuleCounts,
@@ -326,6 +328,18 @@ export class TodoService {
     const activeModule = options.module
       ?? TODO_MODULES.find((module) => (moduleCounts[module] ?? 0) > 0)
       ?? "rework";
+    if(normalizedQuery){
+      const result=await globalTodoSearch(this.database,TODO_WITH_CONTEXT_SQL,actor.actorId,normalizedQuery,requestedPage,[
+        ...productionTodos.map(todo=>({module:"production",todo})),...digitalTodos.map(todo=>({module:"digital_production",todo})),
+      ]);
+      const todos=result.items.map(item=>{
+        if(item.kind==="provider")return TodoResponseSchema.parse(item.value);
+        const row={...item.value};
+        for(const key of ["due_at","created_at","updated_at","rework_updated_at","sourcing_updated_at","sample_updated_at","pattern_updated_at","supplier_request_updated_at"]){if(row[key]!=null)row[key]=new Date(String(row[key]));}
+        return todoResponse(row as unknown as TodoRow);
+      });
+      return {todos,activeModule,moduleCounts,searchScope:"all",page:result.page,pageSize:15,totalCount:Number(result.total_count),totalPages:result.total_pages};
+    }
     if (activeModule === "production" || activeModule === "digital_production") {
       const filtered = (activeModule === "production" ? productionTodos : digitalTodos).filter(todo => !normalizedQuery ||
         [todo.orderContext?.styleNo, todo.orderContext?.supplierName, todo.orderContext?.merchandiserName].some(value => value?.toUpperCase().includes(normalizedQuery.toUpperCase())));

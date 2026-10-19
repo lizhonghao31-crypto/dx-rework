@@ -3,7 +3,7 @@ import type { PoolClient } from 'pg';
 
 type Item = {configurationItemId:string;processName:string;pricingUnit:'piece'|'hour';plannedQuantity:number;unitPrice:number|null;executionKind:'worker'|'tail_inspection'};
 /** Read the same review model as the live page, with every mutable fact bounded by the selected submission. */
-export async function readHistoricalReview(client:PoolClient, orderId:string, at:string, configuration:{items:Item[];unifiedExecutionRequired:boolean}, tailRequired:boolean, orderVersion:number):Promise<WholeOrderReviewResponse> {
+export async function readHistoricalReview(client:PoolClient, orderId:string, at:string, configuration:{items:Item[];unifiedExecutionRequired:boolean}, tailRequired:boolean, orderVersion:number, special?:Pick<WholeOrderReviewResponse,'specialProcessType'|'otherCraftDescription'>):Promise<WholeOrderReviewResponse> {
  const reports=(await client.query(`SELECT report.work_report_id AS "workReportId",report.work_task_id AS "workTaskId",report.configuration_item_id AS "configurationItemId",
  report.actual_quantity::float8 AS "actualQuantity",COALESCE(correction.effective_quantity,report.actual_quantity)::float8 AS "effectiveQuantity",
  correction.revision_version IS NOT NULL AS corrected,correction.revision_version AS "correctionVersion",correction.corrected_by AS "correctedBy",correction.corrected_at AS "correctedAt",
@@ -42,7 +42,7 @@ export async function readHistoricalReview(client:PoolClient, orderId:string, at
    originalTailCheckedQuantity:frozen?.tailOriginalQuantity??tail?.processes.find(p=>p.configurationItemId===item.configurationItemId)?.inspectedQuantity??sum('tail_inspection','actualQuantity'),tailCheckedQuantity,
    countGap:tailRequired?completedQuantity-tailCheckedQuantity:0,complete:completedQuantity>0&&(!tailRequired||tailCheckedQuantity>=completedQuantity),finalUnitPrice:item.unitPrice};
  });
- return WholeOrderReviewResponseSchema.parse({reworkOrderId:orderId,reworkStatus:'pending_order_review',orderVersion,canReview:false,canIeReview:false,canAdjustQuantity:false,canConfirmQuantity:false,canReviewQuantityIncrease:false,unifiedExecutionRequired:configuration.unifiedExecutionRequired,tailInspectionRequired:tailRequired,processes,reports,adjustments:[],temporaryWorkers,reviewId:null,finalConfirmation});
+ return WholeOrderReviewResponseSchema.parse({reworkOrderId:orderId,reworkStatus:'pending_order_review',orderVersion,canReview:false,canIeReview:false,canAdjustQuantity:false,canConfirmQuantity:false,canReviewQuantityIncrease:false,unifiedExecutionRequired:configuration.unifiedExecutionRequired,tailInspectionRequired:tailRequired,specialProcessType:special?.specialProcessType??null,otherCraftDescription:special?.otherCraftDescription??null,processes,reports,adjustments:[],temporaryWorkers,reviewId:null,finalConfirmation});
 }
 
 export async function readHistoricalTailInspection(client:PoolClient,orderId:string,at:string,items:Item[]):Promise<TailInspectionResponse> {

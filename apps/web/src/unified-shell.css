@@ -5,7 +5,7 @@
 .unified-shell > aside .production-command-brand > strong { font-size: 39px; }
 .unified-shell > aside .production-command-brand > span { font-size: 17px; }
 .unified-shell > aside .production-command-brand small { font-size: 11px; letter-spacing: .2em; }
-.unified-shell > aside .desktop-navigation { flex: 1; gap: 8px; overflow-y: auto; scrollbar-width: thin; }
+.unified-shell > aside .desktop-navigation { flex: 1; gap: 8px; overflow-y: auto; scrollbar-width: thin; align-content: start; }
 .unified-shell > aside .primary-navigation { overflow: visible; max-height: none; padding: 0; margin: 0; }
 .unified-shell > aside .primary-navigation__copy small,
 .unified-shell > aside .desktop-navigation__group > summary small { display: none; }
@@ -25,3 +25,12 @@
   .app-shell.unified-shell { display: block; }
   .app-shell.unified-shell > aside { display: none; }
 }
+
+/* The existing logout command shares the brand row; navigation and authority are unchanged. */
+.unified-shell > aside .shell-brand-row { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:6px; padding:0 0 12px; }
+.unified-shell > aside .shell-brand-row .production-command-brand { min-width:0; padding:0; gap:6px; }
+.unified-shell > aside .shell-brand-row .production-command-brand > span { font-size:16px; }
+.unified-shell > aside .shell-brand-row .production-command-brand small { font-size:10px; letter-spacing:0; }
+.unified-shell > aside .shell-brand-row .session-logout { align-self:center; width:auto; min-height:32px; margin:0; padding:4px 0; gap:4px; font-size:11px; white-space:nowrap; }
+.unified-shell > aside .shell-brand-row .session-logout-error { grid-column:1/-1; margin:0; }
+.unified-shell > aside > .desktop-navigation { margin-top:0; }

@@ -45,12 +45,12 @@ describe("my todos first-entry navigation", () => {
     expect(page).toContain('<div className="my-todos-toolbar">');
     expect(page).toContain('<div className="my-todos-modules" role="group"');
     expect(page).not.toContain('<nav className="my-todos-modules"');
-    expect(page).toContain("aria-pressed={module.id === activeModule}");
+    expect(page).toContain("aria-pressed={!activeQuery && module.id === activeModule}");
     expect(page.indexOf('{ id: "sourcing", label: "外发定价&选厂" }')).toBeLessThan(
       page.indexOf('{ id: "rework", label: "订单返工" }'),
     );
     expect(page).not.toContain("<span>搜索待办</span>");
-    expect(page).toContain('aria-label="搜索待办"');
+    expect(page).toContain('aria-label="搜索全部待办"');
     expect(page).toContain("todoModuleIdsForUser(session.user)");
     expect(page).toContain("visibleTodoModules.map");
   });

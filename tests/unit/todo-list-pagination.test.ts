@@ -65,21 +65,21 @@ describe("my todo pagination", () => {
       .mockResolvedValueOnce({ rows: [row(16)] });
     const service = new TodoService({ query } as unknown as Pool);
 
-    const first = await service.listForActor(actor, { module: "rework", query: "STYLE" });
+    const first = await service.listForActor(actor, { module: "rework", query: "" });
     expect(first.todos).toHaveLength(15);
     expect(first.moduleCounts).toEqual({ rework: 16, sourcing: 0 });
     expect(first).toMatchObject({ page: 1, pageSize: 15, totalCount: 16, totalPages: 2 });
     expect(query.mock.calls[2]?.[0]).toContain("LIMIT $4 OFFSET $5");
-    expect(query.mock.calls[2]?.[1]).toEqual([actor.actorId, "rework", "STYLE", 15, 0]);
+    expect(query.mock.calls[2]?.[1]).toEqual([actor.actorId, "rework", "", 15, 0]);
 
     const second = await service.listForActor(actor, {
       module: "rework",
-      query: "STYLE",
+      query: "",
       page: 2,
     });
     expect(second.todos).toHaveLength(1);
     expect(second).toMatchObject({ page: 2, pageSize: 15, totalCount: 16, totalPages: 2 });
-    expect(query.mock.calls[5]?.[1]).toEqual([actor.actorId, "rework", "STYLE", 15, 15]);
+    expect(query.mock.calls[5]?.[1]).toEqual([actor.actorId, "rework", "", 15, 15]);
   });
 
   it("rejects invalid numeric pages before loading data", async () => {

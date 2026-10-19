@@ -47,13 +47,29 @@ export const wageSelection = `WITH unlocked_lines AS (
    w.task_name,w.segment_amount,w.round_amount,w.actual_hours,w.released_at,w.release_basis,w.cancellation
  FROM pattern_room_wage_items w JOIN pattern_room_orders live_order ON live_order.order_id=w.order_id AND live_order.deleted_at IS NULL
 ), filtered AS (
- SELECT lines.*,mark.marked_by,mark.marked_at,(SELECT display_name FROM app_users WHERE id=mark.marked_by) marked_by_name
- FROM lines LEFT JOIN rework_wage_settlement_marks mark USING(line_id)
- WHERE completed_date BETWEEN $1::date AND $2::date
-   AND ($3::text IS NULL OR person_name_snapshot ILIKE $3 OR rework_no_snapshot ILIKE $3 OR style_no_snapshot ILIKE $3 OR task_name ILIKE $3)
-   AND ($4::text IS NULL OR person_type_snapshot=$4)
-   AND ($6::text IS NULL OR wage_source=$6)
-   AND ($7::text IS NULL OR wage_kind=$7)
+ SELECT lines.*,basis.group_amount::text,basis.exact_person_share::text,basis.member_count,
+   CASE WHEN lines.wage_source<>'order_rework' THEN NULL
+     WHEN lines.person_type_snapshot<>'temporary' THEN '1.000'
+     ELSE coefficient.multiplier END temporary_wage_multiplier,
+   mark.marked_by,mark.marked_at,(SELECT display_name FROM app_users WHERE id=mark.marked_by) marked_by_name
+ FROM lines
+ LEFT JOIN rework_wage_items basis ON basis.wage_item_id=lines.wage_item_id
+ LEFT JOIN LATERAL (
+   SELECT COALESCE(multiplier.multiplier,1)::numeric(8,3)::text multiplier
+   FROM rework_tail_completion_confirmations confirmation
+   LEFT JOIN rework_tail_completion_coefficients multiplier
+     ON multiplier.confirmation_id=confirmation.confirmation_id
+    AND multiplier.configuration_item_id=basis.configuration_item_id AND multiplier.person_id=basis.person_id
+   WHERE confirmation.rework_order_id=basis.rework_order_id
+     AND confirmation.confirmed_at<=basis.created_at
+   ORDER BY confirmation.confirmed_at DESC,confirmation.confirmation_id DESC LIMIT 1
+ ) coefficient ON lines.wage_source='order_rework' AND lines.person_type_snapshot='temporary'
+ LEFT JOIN rework_wage_settlement_marks mark USING(line_id)
+ WHERE lines.completed_date BETWEEN $1::date AND $2::date
+   AND ($3::text IS NULL OR lines.person_name_snapshot ILIKE $3 OR lines.rework_no_snapshot ILIKE $3 OR lines.style_no_snapshot ILIKE $3 OR lines.task_name ILIKE $3)
+   AND ($4::text IS NULL OR lines.person_type_snapshot=$4)
+   AND ($6::text IS NULL OR lines.wage_source=$6)
+   AND ($7::text IS NULL OR lines.wage_kind=$7)
    AND ($5::text IS NULL OR ($5='settled' AND marked_at IS NOT NULL) OR ($5='unsettled' AND marked_at IS NULL))
 )`;
 
