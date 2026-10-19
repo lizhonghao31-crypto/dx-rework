@@ -29,7 +29,8 @@ export async function loadCockpitDocumentCategory(order:OrderJourney,key:Cockpit
  if(key==="development"){
   if(!sid)return na();
   const sheet=row(await read(`digital-production/sources/${sid}/development`,signal)),roundsResult=row(await read(`digital-production/sources/${sid}/development/rounds`,signal));
-  requireFields(sheet,["sourceId","version"]);requireFields(roundsResult,["rounds"]);const rounds=rows(roundsResult.rounds),numbers=[...new Set([num(sheet.roundNumber)||1,...rounds.map(item=>num(item.roundNumber))])].filter(Boolean).sort((a,b)=>b-a);
+  // The authorized reader requires the base document before returning a revision; the revisions table starts at round 2.
+  requireFields(sheet,["sourceId","version","document"]);requireFields(roundsResult,["rounds"]);const rounds=rows(roundsResult.rounds),numbers=[...new Set([...(sheet.document?[1]:[]),num(sheet.roundNumber)||1,...rounds.map(item=>num(item.roundNumber))])].filter(Boolean).sort((a,b)=>b-a);
   if(!sheet.document&&!rounds.length)return result([]);
   return result(numbers.map(roundNumber=>{const metadata=rounds.find(item=>item.roundNumber===roundNumber);return {id:`round:${roundNumber}`,label:`第 ${roundNumber} 轮${roundNumber===sheet.roundNumber?` · 单据 v${sheet.version} · ${sheet.status==="published"?"已发布":"草稿"}`:""}`,url:original("development",sid,roundNumber),at:str(metadata?.publishedAt),load:{kind:"development",path:`digital-production/sources/${sid}/development?round=${roundNumber}`,id:sid,version:roundNumber}};}),"展开轮次查看对应资料与成果。");
  }
