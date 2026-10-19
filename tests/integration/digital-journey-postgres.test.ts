@@ -120,6 +120,14 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect(await journeys.pendingPatternAssignments(rootActor,[sourceId])).toEqual([]);
     expect((await tasks.read(rootActor,task.taskId)).state).toBe(before.state);
   });
+  it("shows a cancelled pure-development source as cancelled without manufacturing completion",async()=>{
+    const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-CANCELLED-SOURCE",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+    await tasks.controlResource(actor(),{kind:"source",id:sourceId},"cancel","TEST取消纯开发",randomUUID());
+    expect((await journeys.read(actor(),sourceId)).display).toMatchObject({mainState:"cancelled",awaitingClosure:false});
+    const list=await journeys.list(actor(),JourneyFilterSchema.parse({scope:"development",search:"TEST-CANCELLED-SOURCE"}));
+    expect(list.items).toHaveLength(1);expect(list.items[0]?.display?.mainState).toBe("cancelled");expect(list.summary).toMatchObject({completed:0,active:0,notStarted:0});
+    await expect(journeys.read(actor(stranger),sourceId)).rejects.toMatchObject({statusCode:404});
+  });
   it("evaluates history from the completion-linked deadline, and reports missing original evidence",async()=>{
     const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-COCKPIT-HISTORY",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
     const task=await createTask({resource:{kind:"source",id:sourceId},kind:"development_materials",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:clerk});
