@@ -17,7 +17,7 @@ export class AuxiliaryCatalogService{
  private readonly idem=new IdempotencyService();private readonly events=new OperationEventRepository();
  constructor(private readonly database:Pool,private readonly root:Pick<RootAuthority,'isRootUser'>){}
  private async authorize(db:PoolClient,actor:TrustedActorContext,write:boolean,lock=write){
-  if(isRootActor(actor)&&await this.root.isRootUser(actor.actorId))return;
+  if(isRootActor(actor)&&await this.root.isRootUser(actor.actorId,db,lock))return;
   const capability=`auxiliary_catalog:${write?'write':'read'}`,caps=actor.authorizationCapabilities??[actor.authorizationCapability];
   if(!caps.includes(capability))fail('当前账号无共享辅料目录权限，请由设计师、订单跟单、供应链总监或老板处理',403);
   const policy=new DigitalProductionAccessPolicy(db);

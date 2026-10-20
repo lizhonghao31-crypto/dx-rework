@@ -90,6 +90,34 @@ const url=process.env.TEST_DATABASE_URL;
   const employees=new EmployeeAccessService(db,'TEST',new AccessMasterDataService(db,'TEST'),undefined as never,undefined as never,{enabled:false,dingtalkUserId:undefined,secret:undefined},`TEST-${ids.get('root_superuser')}`);
   await employees.disableAccess(actor('root_superuser'),ids.get('sample_designer')!,'TEST停用后拒绝');try{await expect(service.create(actor(),value(),randomUUID())).rejects.toMatchObject({statusCode:403});}finally{await employees.restoreAccess(actor('root_superuser'),ids.get('sample_designer')!,'TEST恢复测试夹具');}
  });
+ it('serializes Root catalog commands with actual employment deactivation in the command transaction',async()=>{
+  const root=actor('root_superuser'),rootId=root.actorId;
+  const blocked=async(pid:number,waiter?:number)=>{for(let i=0;i<100;i++){const found=await db.query(waiter?'SELECT cardinality(pg_blocking_pids($1))>0 AS blocked':"SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)) AND pid<>pg_backend_pid()) AS blocked",[waiter??pid]);if(found.rows[0].blocked)return;await new Promise(resolve=>setTimeout(resolve,20));}throw Error('TEST expected actual PostgreSQL lock wait');};
+  for(const field of ['active','employed'] as const){
+   const table='identity_mappings',key='user_id';
+   const change=(client:pg.PoolClient,enabled:boolean)=>client.query(`UPDATE ${table} SET ${field}=$2 WHERE ${key}=$1`,[rootId,enabled]);
+   const before=Number((await db.query('SELECT count(*) n FROM auxiliary_catalog_versions')).rows[0].n),revoker=await db.connect();
+   let pending:Promise<{value?:AuxiliaryItem;error?:unknown}>|undefined;
+   try{
+    await revoker.query('BEGIN');const pid=Number((await revoker.query('SELECT pg_backend_pid() pid')).rows[0].pid);await change(revoker,false);
+    pending=service.create(root,value(),randomUUID()).then(value=>({value}),error=>({error}));await blocked(pid);await revoker.query('COMMIT');expect((await pending).error).toMatchObject({statusCode:403});expect(Number((await db.query('SELECT count(*) n FROM auxiliary_catalog_versions')).rows[0].n)).toBe(before);
+   }finally{await revoker.query('ROLLBACK');await change(revoker,true);revoker.release();await pending;}
+   // A command that already holds eligibility may finish first; directory
+   // synchronization must wait until that same command transaction commits.
+   const gate=await db.connect(),sync=await db.connect();let writing:Promise<AuxiliaryItem>|undefined,stopping:Promise<unknown>|undefined;
+   try{
+    await gate.query('BEGIN');const gatePid=Number((await gate.query('SELECT pg_backend_pid() pid')).rows[0].pid);await gate.query("SELECT pg_advisory_xact_lock(hashtextextended('shared-auxiliary-catalog-v1',0))");
+    writing=service.create(root,value(),randomUUID());await blocked(gatePid);await sync.query('BEGIN');const syncPid=Number((await sync.query('SELECT pg_backend_pid() pid')).rows[0].pid);stopping=change(sync,false);await blocked(0,syncPid);await gate.query('COMMIT');const written=await writing;await stopping;await sync.query('COMMIT');expect(written.active).toBe(true);
+    await expect(service.create(root,value(),randomUUID())).rejects.toMatchObject({statusCode:403});expect(Number((await db.query('SELECT count(*) n FROM auxiliary_catalog_versions')).rows[0].n)).toBe(before+1);
+   }finally{await gate.query('ROLLBACK');await sync.query('ROLLBACK');await writing?.catch(()=>undefined);await stopping?.catch(()=>undefined);await change(sync,true);gate.release();sync.release();}
+  }
+  // Root's protected enabled state must not be falsified to build a fixture.
+  await expect(db.query('UPDATE app_users SET enabled=false WHERE id=$1',[rootId])).rejects.toThrow();
+  expect((await db.query('SELECT enabled FROM app_users WHERE id=$1',[rootId])).rows[0].enabled).toBe(true);
+  const gate=await db.connect(),sync=await db.connect();let writing:Promise<AuxiliaryItem>|undefined,changing:Promise<unknown>|undefined;
+  try{await gate.query('BEGIN');const gatePid=Number((await gate.query('SELECT pg_backend_pid() pid')).rows[0].pid);await gate.query("SELECT pg_advisory_xact_lock(hashtextextended('shared-auxiliary-catalog-v1',0))");writing=service.create(root,value(),randomUUID());await blocked(gatePid);await sync.query('BEGIN');const pid=Number((await sync.query('SELECT pg_backend_pid() pid')).rows[0].pid);changing=sync.query('UPDATE app_users SET display_name=display_name WHERE id=$1',[rootId]);await blocked(0,pid);await gate.query('COMMIT');await writing;await changing;await sync.query('COMMIT');expect(await rootAuthority.isRootUser(rootId)).toBe(true);
+  }finally{await gate.query('ROLLBACK');await sync.query('ROLLBACK');await writing?.catch(()=>undefined);await changing?.catch(()=>undefined);gate.release();sync.release();}
+ },15000);
  it('exposes the same schemas and persisted authorization through real Fastify routes; no restore command',async()=>{
   const app=Fastify();app.setErrorHandler((error,_request,reply)=>{const e=error as Error&{statusCode?:number};void reply.status(e.statusCode??500).send({error:{message:e.message}});});
   registerAuxiliaryCatalogRoutes(app,{root:rootAuthority,service,authenticate:async token=>{const who=token==='clerk'?actor('development_clerk'):actor();return {id:who.actorId,businessRoles:who.actorRoles,capabilities:who.authorizationCapabilities} as AuthUser;}});
