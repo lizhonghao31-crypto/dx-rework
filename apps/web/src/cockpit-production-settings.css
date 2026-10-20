@@ -1,0 +1,68 @@
+.cockpit-settings{font-size:14px;max-width:1280px;margin:0 auto;padding:16px;color:#26384c}
+.cockpit-settings-overview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:18px 0 12px}
+.cockpit-settings-overview>article{display:flex;align-items:center;gap:13px;padding:18px;border:1px solid #dfebfa;border-radius:9px;background:#fff;min-width:0}
+.cockpit-settings-overview h2{font-size:17px;margin:0 0 5px}
+.cockpit-settings-overview p{margin:0;color:#687c99;line-height:1.5}
+.cockpit-settings-overview>article>div{flex:1;min-width:0}
+.cockpit-setting-symbol{display:grid;place-items:center;flex:0 0 44px;height:44px;border-radius:50%;background:#eaf2ff;color:#0878ff;font-size:28px;line-height:1}
+.cockpit-setting-symbol svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.cockpit-setting-symbol.is-policy{background:#e9f5ff}
+.cockpit-settings-stages,.cockpit-settings-node-section{background:white;border:1px solid #dfebfa;border-radius:9px;padding:16px;margin-top:12px;min-width:0}
+.cockpit-settings-section-title{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+.cockpit-settings-section-title h2{font-size:18px;margin:0;padding-left:9px;border-left:4px solid #0878ff;line-height:1.35}
+.cockpit-settings-section-title>span{color:#7182a0}
+.cockpit-policy-stage-scroll{overflow:auto;max-width:100%;scrollbar-gutter:stable}
+.cockpit-policy-stages{display:grid;grid-template-columns:repeat(7,minmax(100px,1fr));list-style:none;padding:6px 0 4px;margin:0;min-width:750px}
+.cockpit-policy-stages li{position:relative;min-width:0}
+.cockpit-policy-stages li:not(:last-child)::after{content:"";position:absolute;left:calc(50% + 35px);right:calc(-50% + 35px);top:40px;height:1px;background:#c7dbf5;pointer-events:none}
+.cockpit-policy-stages button{display:flex;flex-direction:column;align-items:center;gap:7px;border:0;background:transparent;color:#334b6f;padding:0 4px 7px;width:100%;font:inherit;cursor:pointer}
+.cockpit-policy-stage-ring{display:block;width:68px;height:68px;position:relative}
+.cockpit-policy-stage-ring svg{width:100%;height:100%;fill:none;stroke:#e4ebf5;stroke-width:4}
+.cockpit-policy-stage-ring b{position:absolute;inset:0;display:grid;place-items:center;font-size:22px;font-weight:600;color:#485c7b}
+.cockpit-policy-stages button[aria-pressed=true] .cockpit-policy-stage-ring svg circle:last-child{stroke:#0878ff}
+.cockpit-policy-stages button[aria-pressed=true] .cockpit-policy-stage-ring b,.cockpit-policy-stages button[aria-pressed=true]>strong{color:#0878ff}
+.cockpit-policy-stages button>strong{font-size:14px;font-weight:600;line-height:1.4;text-align:center}
+.cockpit-policy-stages button>small{font-size:14px;color:#7d8ca6;white-space:nowrap}
+.cockpit-policy-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;list-style:none;padding:0;margin:0}
+.cockpit-policy-cards>li{display:flex;align-items:center;gap:9px;min-width:0;border:1px solid #e0eafa;border-radius:7px;padding:13px 11px;background:#fff}
+.cockpit-policy-card-icon{flex:0 0 30px;display:grid;place-items:center;height:36px;color:#0878ff;background:#eef5ff;border-radius:8px}
+.cockpit-policy-card-icon svg{height:23px;width:23px;stroke:currentColor;stroke-width:1.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.cockpit-policy-cards>li>div{flex:1;min-width:0}
+.cockpit-policy-cards h3{font-size:14px;line-height:1.45;margin:0 0 3px;overflow-wrap:anywhere}
+.cockpit-policy-cards li>div>strong{display:block;font-size:15px;font-weight:600;color:#0878ff}
+.cockpit-policy-cards small{display:block;font-size:13px;color:#7182a0;margin-top:3px}
+.cockpit-policy-cards .dx-button{border:0;background:transparent;padding:5px;min-width:36px;color:#0878ff;box-shadow:none}
+.cockpit-policy-empty{margin:12px 0;color:#7182a0}
+.cockpit-settings-footnote{font-size:13px;color:#7182a0;margin:14px 0 0}
+.cockpit-policy-dialog{max-width:520px;width:calc(100% - 32px);border:1px solid #dce7f7;border-radius:12px;padding:0;font-size:14px;color:#26384c;max-height:85dvh;overflow:auto;box-shadow:0 20px 70px #102b5c33}
+.cockpit-policy-dialog>div{padding:22px}
+.cockpit-policy-dialog::backdrop{background:#12213999}
+.cockpit-policy-dialog header{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.cockpit-policy-dialog h2{font-size:20px;margin:0}
+.cockpit-policy-impact{color:#65758a;line-height:1.6;margin:12px 0 16px}
+.cockpit-policy-dialog fieldset{display:grid;gap:14px;border:0;padding:0;margin:0}
+.cockpit-policy-dialog .dx-field{margin:0}
+.cockpit-policy-dialog .dx-field input{min-height:42px;font-size:inherit;box-sizing:border-box;width:100%}
+.cockpit-policy-baseline{color:#7182a0;font-size:13px;line-height:1.5}
+.cockpit-policy-dialog [role=alert],.cockpit-settings [role=alert]{color:#b42335}
+.cockpit-policy-dialog [role=alert]{border-radius:6px;background:#fff1f2;padding:9px 11px;line-height:1.5}
+.cockpit-settings [role=status]{color:#12634e}
+@media(min-width:1500px){.cockpit-policy-cards{grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media(max-width:1150px){.cockpit-policy-cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:800px){
+ .cockpit-settings,.cockpit-policy-dialog{font-size:16px}
+ .cockpit-settings{padding:12px}
+ .cockpit-settings-overview{grid-template-columns:minmax(0,1fr);margin-top:14px}
+ .cockpit-settings-overview>article{padding:14px;gap:10px}
+ .cockpit-settings-stages,.cockpit-settings-node-section{padding:14px}
+ .cockpit-settings-section-title{gap:7px}
+ .cockpit-settings-section-title h2{font-size:18px}
+ .cockpit-settings-section-title>span{font-size:14px}
+ .cockpit-policy-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .cockpit-policy-cards h3,.cockpit-policy-cards small,.cockpit-policy-stage-scroll small{font-size:16px}
+ .cockpit-policy-cards>li{padding:12px}
+ .cockpit-settings-footnote{font-size:14px;line-height:1.6}
+ .cockpit-policy-dialog>div{padding:18px}
+ .cockpit-policy-dialog .dx-field input{min-height:44px}
+}
+@media(max-width:600px){.cockpit-policy-cards{grid-template-columns:minmax(0,1fr)}.cockpit-setting-symbol{flex-basis:36px;height:36px;font-size:24px}.cockpit-settings-overview h2{font-size:16px}}
