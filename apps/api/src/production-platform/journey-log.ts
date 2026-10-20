@@ -20,7 +20,7 @@ export async function readJourneyLog(db:Pick<PoolClient,"query">,order:OrderJour
   const cutoff=after?.asOf??asOf;
   const taskIds=[...new Set(authorized.map(task=>task.id))];
   const cte=`WITH authorized_events AS (
-    SELECT 'task:'||e.event_id::text id,e.recorded_at at,e.actor_id,u.display_name actor_name,e.event_kind action,t.node_key,'task_event' source
+    SELECT 'task:'||e.event_id::text AS id,e.recorded_at AS event_at,e.actor_id,u.display_name AS actor_name,e.event_kind AS "action",t.node_key,'task_event' AS source
     FROM digital_production_task_events e JOIN digital_production_tasks t USING(task_id) LEFT JOIN app_users u ON u.id=e.actor_id
     WHERE e.task_id=ANY($1::uuid[]) AND e.recorded_at<=$2::timestamptz
     UNION ALL
@@ -30,10 +30,10 @@ export async function readJourneyLog(db:Pick<PoolClient,"query">,order:OrderJour
       AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='reassigned' AND e.recorded_at=a.created_at AND e.actor_id=a.actor_id)
   )`;
   const args=[taskIds,cutoff,after?.at??null,after?.id??null];
-  const rows=(await db.query(`${cte} SELECT *,to_char(at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') stamp FROM authorized_events
-    WHERE ($3::timestamptz IS NULL OR (at,id)<($3::timestamptz,$4::text)) ORDER BY at DESC,id DESC LIMIT ${limit}`,args)).rows;
+  const rows=(await db.query(`${cte} SELECT *,to_char(event_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS stamp FROM authorized_events
+    WHERE ($3::timestamptz IS NULL OR (event_at,id)<($3::timestamptz,$4::text)) ORDER BY event_at DESC,id DESC LIMIT ${limit}`,args)).rows;
   const last=rows.at(-1);
-  const more=last?Boolean((await db.query(`${cte} SELECT EXISTS(SELECT 1 FROM authorized_events WHERE (at,id)<($3::timestamptz,$4::text)) more`,[taskIds,cutoff,last.stamp,last.id])).rows[0]?.more):false;
+  const more=last?Boolean((await db.query(`${cte} SELECT EXISTS(SELECT 1 FROM authorized_events WHERE (event_at,id)<($3::timestamptz,$4::text)) AS more`,[taskIds,cutoff,last.stamp,last.id])).rows[0]?.more):false;
   const items:JourneyLogEntry[]=rows.map(row=>({id:row.id,at:row.stamp,actor:row.actor_id?{id:row.actor_id,name:row.actor_name}:null,action:labels[row.action]??"更新节点记录",object:JOURNEY_NODES.find(node=>node.key===row.node_key)?.label??"业务节点",nodeKey:row.node_key,source:row.source}));
   return {items,asOf:cutoff,coverage,nextCursor:more&&last?Buffer.from(JSON.stringify({v:1,order:order.id,actor,asOf:cutoff,at:last.stamp,id:last.id})).toString("base64url"):null};
 }

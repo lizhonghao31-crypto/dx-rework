@@ -174,6 +174,10 @@ jobs:
             }
           done
 
+      - name: Run PostgreSQL 13 Journey read compatibility
+        if: env.JOURNEY_PG13_COMPAT == 'true'
+        run: node scripts/ci/journey-pg13-regression.mjs
+
       - name: Run PostgreSQL Root audit control-boundary regressions for migration changes
         if: env.MIGRATION_SENSITIVE == 'true'
         run: npx vitest run tests/integration/root-self-system-admin-postgres.test.ts
@@ -280,5 +284,6 @@ jobs:
             echo "- Deployment-sensitive: ${DEPLOYMENT_SENSITIVE:-false}"
             echo "- Sensitive domains: ${FULL_GATE_DOMAINS:-none}"
             echo "- Mapped PostgreSQL suites: ${MAPPED_POSTGRES_TESTS:-none}"
+            echo "- Journey PostgreSQL 13 compatibility required: ${JOURNEY_PG13_COMPAT:-false}"
             echo "- PostgreSQL business chain runs for business, migration, or deployment-sensitive exact diffs"
           } >> "${GITHUB_STEP_SUMMARY}"
