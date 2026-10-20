@@ -1,3 +1,4 @@
+import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
 import {createHash,randomUUID} from "node:crypto";
 import {isDeepStrictEqual} from "node:util";
 import type {Pool,PoolClient} from "pg";
@@ -63,9 +64,10 @@ export class DevelopmentAmendmentService{
  }
  async save(actor:TrustedActorContext,sourceId:string,input:SaveDevelopmentAmendment,key:string){
   return this.command(actor,sourceId,"save",key,input,async(db,current)=>{
-   const draft=(await db.query("SELECT version FROM digital_development_amendment_drafts WHERE task_id=$1 FOR UPDATE",[input.taskId])).rows[0];
+   const draft=(await db.query("SELECT version,document FROM digital_development_amendment_drafts WHERE task_id=$1 FOR UPDATE",[input.taskId])).rows[0];
    if((draft?.version??0)!==input.expectedDraftVersion)fail("补正草稿已由另一窗口更新，请保留输入后核对；没有覆盖原草稿");
    const errors=developmentAmendmentErrors(current.sheet.document!,input.document);if(errors.length)fail(errors.join("；"));
+   await validateAuxiliaryReferences(db,input.document,draft?.document??current.sheet.document!);
    await this.forms().bindFiles(db,actor,sourceId,input.document);
    await db.query(`INSERT INTO digital_development_amendment_drafts(task_id,source_id,round_number,version,base_document_version,document,reason,updated_by)
     VALUES($1,$2,$3,1,$4,$5,$6,$7) ON CONFLICT(task_id) DO UPDATE SET version=digital_development_amendment_drafts.version+1,document=$5,reason=$6,updated_by=$7,updated_at=CURRENT_TIMESTAMP`,[input.taskId,sourceId,input.roundNumber,current.sheet.version,JSON.stringify(input.document),input.reason,actor.actorId]);

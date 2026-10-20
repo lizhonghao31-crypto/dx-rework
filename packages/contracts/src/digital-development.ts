@@ -1,6 +1,7 @@
 import { InitialCustomerOrderDraftSchema } from "./digital-production.js";
 import type {JourneyDocumentMetadata} from "./digital-production-journey.js";
 import { z } from "zod";
+import {AuxiliaryReferenceSchema} from "./auxiliary-catalog.js";
 
 const text = z.string().trim().max(1000);
 const short = z.string().trim().max(100);
@@ -9,12 +10,14 @@ export const DEVELOPMENT_MEASUREMENTS = {
   裤子: ["腰围（自然平放腰顶直量）", "坐围（浪上2 1/2度）", "坐围（浪上2 3/4度）", "坐围（浪上3 1/4度）", "脾围（浪下0）", "脚口", "前浪（连腰）", "后浪（连腰）", "裤长（连腰）"],
 } as const;
 export const DevelopmentMaterialSchema = z.object({
+  auxiliaryCatalog:AuxiliaryReferenceSchema.optional(),
   materialId: z.string().uuid(), category: z.enum(["主布", "配布", "辅料"]), label: short,
   auxiliaryKind: z.enum(["普通辅料", "拉链", "扁机"]).optional(),
   supplier: short, name: short, width: short, weight: short, composition: short, consumption: short,
   color: short, specification: short, quantity: short, requiredThisRound: z.boolean(),
   available: z.boolean(), expectedDate: z.iso.date().nullable(),
 }).strict().superRefine((value, context) => {
+  if(value.auxiliaryCatalog&&value.category!=="辅料")context.addIssue({code:"custom",path:["auxiliaryCatalog"],message:"仅辅料可以引用共享辅料目录"});
   if (value.auxiliaryKind && value.category !== "辅料") context.addIssue({code:"custom",path:["auxiliaryKind"],message:"仅辅料可以设置辅料类型"});
 });
 export const DevelopmentDocumentSchema = z.object({
