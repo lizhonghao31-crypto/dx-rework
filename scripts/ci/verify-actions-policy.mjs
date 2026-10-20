@@ -88,6 +88,8 @@ assert(full.includes("Classify Full Gate risk from exact PR diff"), "Full Gate m
 assert(full.includes("full-gate-risk-map.mjs --github-env"), "Full Gate must use the shared sensitive-path classifier");
 assert(full.includes("Run mapped PostgreSQL sensitive-domain regressions"), "Full Gate must execute mapped PostgreSQL suites");
 assert(full.includes("Mapped PostgreSQL suite executed no passing tests"), "Mapped PostgreSQL suites must fail when nothing actually runs");
+assert(stepBlock(full, "Run PostgreSQL 13 Journey read compatibility").includes("if: env.JOURNEY_PG13_COMPAT == 'true'"), "Journey PostgreSQL 13 compatibility must use the exact-diff classifier");
+assert(stepBlock(full, "Run PostgreSQL 13 Journey read compatibility").includes("node scripts/ci/journey-pg13-regression.mjs"), "Journey changes must execute the real PostgreSQL 13 read regression");
 assert(full.includes("DB_REQUIRED"), "Full Gate must retain conditional PostgreSQL escalation");
 assert(full.includes("if: env.DB_REQUIRED == 'true'"), "PostgreSQL work must remain conditional");
 assert(full.includes("if: env.DEPLOYMENT_SENSITIVE == 'true'"), "release and backup work must remain conditional");

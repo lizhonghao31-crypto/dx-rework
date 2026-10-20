@@ -37,6 +37,19 @@ it("does not round unfinished progress to 100 or equate progress with business c
   nodes(o).find(node=>node.key==="packing")!.state="not_applicable";nodes(o).find(node=>node.key==="special_closure")!.state="not_applicable";
   expect(journeyDisplay(o,asOf)).toMatchObject({actualRatio:1,awaitingClosure:true});
 });
+it("does not turn unused production stages into progress for an unstarted development archive",()=>{
+  const o=order();o.orderId=null;o.sourceId=o.id;
+  nodes(o).forEach(node=>{node.state=node.stage==="development"?"uncreated":node.stage==="creation"?"completed":"not_applicable";});
+  expect(journeyDisplay(o,asOf)).toMatchObject({mainState:"not_started",actualRatio:0,actualLabel:"0.0%",awaitingClosure:false});
+  nodes(o).filter(node=>node.stage==="development").forEach(node=>node.state="completed");
+  expect(journeyDisplay(o,asOf)).toMatchObject({actualRatio:1,actualLabel:"100.0%",awaitingClosure:false});
+});
+it("retains unknown production progress and identifies its stages even after authoritative closure",()=>{
+  const o=order();nodes(o).find(node=>node.key==="packing")!.state="completed";
+  nodes(o).find(node=>node.key==="rework_review")!.progressApplicability="unknown";
+  const display=journeyDisplay(o,asOf);expect(display).toMatchObject({mainState:"completed",actualRatio:null,awaitingClosure:false});
+  expect(display.actualLabel).toContain("回货与装箱");expect(display.stages[0]?.ratio).toBe(1);
+});
 it("uses only shipment H for mutually exclusive order states; node risk remains separate",()=>{
   const overdue=date(order("overdue"),"2026-10-19"),due=date(order("due"),"2026-10-20"),active=date(order("active"),"2026-10-21"),notStarted=date(order("waiting"),null),closed=order("closed");
   nodes(active).find(node=>node.key==="development_pattern")!.enteredAt=asOf;
