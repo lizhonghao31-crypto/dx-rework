@@ -208,7 +208,10 @@ export class DigitalProductionTaskService {
         const task = await this.task(client, id, true);
         if (task.state === "completed") return { taskId: id, state: "completed" };
         await this.active(client, this.resource(task));
-        if (task.state !== "ready" || !await this.conditionsReady(client, id, true)) fail("任务尚不具备完成条件");
+        if (task.state !== "ready" || !await this.conditionsReady(client, id, true)) {
+          const blockers=await developmentTaskBlockers(client,task,false,true);
+          fail(blockers.length?blockers.map(item=>`${item.name}：${item.missing}。${item.action??'请本任务负责岗位在当前办理页核对'}`).join('；'):task.state==='cancelled'?'本任务已取消，不能提交完成；请从我的待办打开当前有效任务':task.blocked_reason&&task.blocked_reason!=='前置条件未满足'?`本任务已登记问题：${task.blocked_reason}。请在当前办理页处理问题并解除登记后再提交`:'尚未取得本任务可完成的状态，具体原因未能确认；请重新读取当前办理页，仍未恢复时将任务链接交给本单管理人员核查');
+        }
         const occurredAt = input.occurredAt === undefined ? new Date().toISOString() : input.occurredAt;
         if (occurredAt && (new Date(occurredAt).getTime() > Date.now() || (task.entered_at && new Date(occurredAt) < new Date(task.entered_at)))) fail("发生时间不能晚于当前或早于任务进入");
         const quality: TimeQuality = occurredAt === null ? "缺失" : input.occurredAt === undefined ? "现场登记" : "补报未核实";
@@ -427,7 +430,7 @@ export class DigitalProductionTaskService {
     }
     const handover = await db.query("SELECT 1 FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='handover_received'", [id]);
     const priority = (await db.query("SELECT payload->>'priority' AS priority FROM digital_production_task_events WHERE task_id=$1 AND event_kind='priority_changed' ORDER BY recorded_at DESC,event_id DESC LIMIT 1",[id])).rows[0]?.priority === "urgent" ? "urgent" as const : "normal" as const;
-    const unmetConditions=task.source_id?await developmentTaskBlockers(db,task,canManage):[];
+    const unmetConditions=await developmentTaskBlockers(db,task,canManage);
     if(paused)unmetConditions.push({condition:'paused',name:'业务暂停',missing:'当前业务已暂停，须先由有权人员恢复',responsibleRole:'业务负责人',action:canControl?'恢复业务':null,evidenceId:null,verified:true});
     if(task.state==='blocked'&&task.blocked_reason&&task.blocked_reason!=='前置条件未满足')unmetConditions.push({condition:'manual_block',name:'任务阻断',missing:task.blocked_reason,responsibleRole:task.required_role,action:canManage?'处理阻断原因':null,evidenceId:null,verified:true});
     return { unmetConditions, identity, priority, taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: currentPolicy.label as string,

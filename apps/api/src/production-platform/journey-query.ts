@@ -1,3 +1,5 @@
+import {digitalConditionGuidance} from "@dx-rework/contracts/digital-production-tasks";
+import {businessRoleLabel} from "@dx-rework/contracts/business-display";
 import {PATTERN_GROUPS} from "@dx-rework/contracts/digital-development-workspace";
 import {materialReadiness} from "./development-material-readiness.js";
 import {reuseJourneySnapshotReads} from "./journey-snapshot-reads.js";
@@ -234,16 +236,15 @@ export class DigitalJourneyQuery {
       node.owner=ownerId?{id:ownerId,name:ownerId===task.assigneeId?task.assigneeName:summaryOnly||compact?taskSummary?.previousOwnerName??null:(await db.query("SELECT display_name FROM app_users WHERE id=$1",[ownerId])).rows[0]?.display_name??null}:null;
       node.records=[{...record("task",task.taskId,taskUrl(task.taskId),task.routeVersion),mode:task.canExecute&&!["completed","cancelled"].includes(task.state)?"handle":"read"}];
       const conditions=summaryOnly?(taskSummary?.conditionKeys??[]).map(condition_key=>({condition_key})):(await db.query("SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1 AND NOT satisfied",[task.taskId])).rows;
-      const labels:Record<string,string>={business_recorded:"尚缺原业务完成事实",handover_received:"尚未收到实物/资料交接",materials_ready:"物料尚未齐备",owner_approved:"原外发老板批准尚未通过",pattern_ready:"纸样/唛架尚未完成",pattern_assignment_ready:"等待主管确认原打板正式派工",preshrink_ready:"预缩条件尚未齐备",craft_returned:"工艺尚未回仓",qc_approved:"整款工艺QC尚未通过",customer_confirmed:"客户样板尚未确认",all_po_complete:"全部PO/颜色尚未完成",washing_finished:"洗水尚未完成",factory_arrived:"尚缺工厂到料事实"};
-      node.blockers=conditions.map(condition=>({key:condition.condition_key,label:labels[condition.condition_key]??condition.condition_key,ownerId:null,record:node.records[0]!}));
+      node.blockers=conditions.map(condition=>{const detail=digitalConditionGuidance(condition.condition_key,raw.required_role);return {key:condition.condition_key,label:`${detail.missing}；负责岗位：${businessRoleLabel(detail.responsibleRole)}；${detail.action}`,ownerId:null,record:node.records[0]!};});
       if(raw.source_id&&['development_pattern','development_cutting','development_sewing'].includes(raw.task_kind)&&!['completed','cancelled'].includes(task.state)){
         const materialState=await materialsFor(raw.route_version),missing=raw.task_kind==='development_sewing'?materialState.sewingMissing:materialState.earlyMissing;
         node.blockers=node.blockers.filter(blocker=>blocker.key!=='materials_ready');
         for(const item of missing)node.blockers.push({key:`materials_ready:${item.materialId}`,label:`${item.name}：${item.missing.join('、')}`,ownerId:null,record:node.records[0]!});
-        for(const issue of materialState.quality)node.blockers.push({key:`fabric_quality:${issue.id}`,label:'面料停用／质量决定待处理：须供应链总监决定',ownerId:null,record:node.records[0]!});
+        for(const issue of materialState.quality)node.blockers.push({key:`fabric_quality:${issue.id}`,label:'问题面料尚未允许使用：请供应链总监在本单核料／开发办理页「问题面料报告与决定」明确处理；到料不能解除质量阻断',ownerId:null,record:node.records[0]!});
       }
       if(task.paused)node.blockers.push({key:"resource_paused",label:"原业务已暂停",ownerId:null,record:node.records[0]!});
-      if(task.blockedReason)node.blockers.push({key:"recorded_block",label:task.blockedReason,ownerId:task.assigneeId,record:node.records[0]!});
+      if(task.blockedReason&&task.blockedReason!=='前置条件未满足')node.blockers.push({key:"recorded_block",label:task.blockedReason,ownerId:task.assigneeId,record:node.records[0]!});
       if(["active","blocked"].includes(state)) {
         if(task.dueAt&&Date.parse(task.dueAt)<=Date.parse(asOf)){node.risks.push("overdue");node.overdueSeconds=(Date.parse(asOf)-Date.parse(task.dueAt))/1000;}
         else if(task.warningAt&&Date.parse(task.warningAt)<=Date.parse(asOf))node.risks.push("due_soon");

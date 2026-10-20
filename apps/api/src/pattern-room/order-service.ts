@@ -5,7 +5,7 @@ import {DigitalProductionTaskService} from "../production-platform/task-service.
 import {DigitalDevelopmentService} from "../production-platform/development-service.js";
 import type { PatternHistorySelection } from "./order-history.js";
 import { createHash, randomUUID } from "node:crypto";
-import { DeletePatternOrderSchema, AssignPatternOrderSchema, CancelPatternOrderSchema, CreatePatternOrderSchema, CreateMiscOrderSchema, PATTERN_ROOM_ORDERS_ENABLED, PatternRoundActionSchema, RecordPatternHoursSchema, RequestPatternReworkSchema, TransferPatternOrderSchema, UpdateMiscMaterialsSchema, UpdatePatternMaterialsSchema, type PatternOrderCapability, type PatternOrderQuery, type PatternRoundAction } from "@dx-rework/contracts/pattern-orders";
+import { PATTERN_ORDER_STATUS_LABELS, DeletePatternOrderSchema, AssignPatternOrderSchema, CancelPatternOrderSchema, CreatePatternOrderSchema, CreateMiscOrderSchema, PATTERN_ROOM_ORDERS_ENABLED, PatternRoundActionSchema, RecordPatternHoursSchema, RequestPatternReworkSchema, TransferPatternOrderSchema, UpdateMiscMaterialsSchema, UpdatePatternMaterialsSchema, type PatternOrderCapability, type PatternOrderQuery, type PatternRoundAction } from "@dx-rework/contracts/pattern-orders";
 import type { Pool, PoolClient } from "pg";
 import type { z } from "zod";
 import { ApplicationError } from "../platform/errors.js";
@@ -97,9 +97,9 @@ export class PatternRoomOrderService {
   private async target(client: PoolClient, actor: TrustedActorContext, orderId: string, input: PatternRoundAction, status: PatternOrderRow["status"] | readonly PatternOrderRow["status"][]) {
     const order = await scopedPatternOrder(client, actor, orderId, true);
     if (order.version !== input.version || order.current_round_id !== input.roundId) throw new ApplicationError("CONFLICT", "订单或轮次已变化，请刷新当前订单后再操作", 409);
-    if (!(Array.isArray(status) ? status : [status]).includes(order.status)) throw new ApplicationError("INVALID_STATE_TRANSITION", "当前状态不能执行此操作", 409);
+    if (!(Array.isArray(status) ? status : [status]).includes(order.status)) throw new ApplicationError("INVALID_STATE_TRANSITION", `本轮当前为「${PATTERN_ORDER_STATUS_LABELS[order.status]}」，此操作仅适用于${(Array.isArray(status)?status:[status]).map(value=>`「${PATTERN_ORDER_STATUS_LABELS[value as PatternOrderRow["status"]]}」`).join("或")}。请返回本单当前办理页核对轮次及负责岗位，不要重复提交旧页面操作。`, 409);
     const round = (await client.query<PatternRoundRow>("SELECT * FROM pattern_room_rounds WHERE round_id=$1 FOR UPDATE", [input.roundId])).rows[0]!;
-    if (round.status !== order.status) throw new ApplicationError("CONFLICT", "当前轮次状态不一致，请刷新后重试", 409);
+    if (round.status !== order.status) throw new ApplicationError("CONFLICT", "订单与当前轮次的状态不一致，本次未提交；请重新读取本单，仍不一致时将订单链接交给管理员核查", 409);
     return { order, round };
   }
   private projection(orderId: string, roundId: string, eventId: string, action: string, task: string) {

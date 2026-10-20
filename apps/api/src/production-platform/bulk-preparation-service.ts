@@ -32,10 +32,10 @@ export class BulkPreparationService {
   const lifecycle=(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE (resource_kind='order' AND resource_id=$1) OR (resource_kind='source' AND resource_id=$2)",[id,order.source_id])).rows;
   const reasons:string[]=[];
   if((await db.query("SELECT to_regclass('digital_order_closures') AS relation")).rows[0]?.relation&&(await db.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1',[id])).rowCount)reasons.push('母单已特殊结案，原实绩及历史继续保留');
-  if(!customerConfirmed)reasons.push('当前开发轮次尚未确认客户样板');
-  if(ownerApproved&&!['in_house','outsourced'].includes(approval.cutting_process))reasons.push('请在原外发选厂审批中明确本厂裁或外厂裁');
-  if(!ownerApproved)reasons.push('原外发老板批准尚未通过或已换版');
-  if(!instructionValid)reasons.push('请核对当前开发资料并发布有效大货制单');
+  if(!customerConfirmed)reasons.push('当前开发轮次尚未确认客户样板：请设计师取得客户确认后，在本单开发办理页登记客户样板确认');
+  if(ownerApproved&&!['in_house','outsourced'].includes(approval.cutting_process))reasons.push('当前选厂方案缺裁剪方式：请主跟单在本单原外发选厂方案明确本厂裁或外厂裁，再按原审批流程办理');
+  if(!ownerApproved)reasons.push('当前选厂方案尚无有效老板批准：请主跟单在本单原外发选厂页核对当前方案，由老板按原审批流程办理');
+  if(!instructionValid)reasons.push('当前大货制单未发布、与开发轮次不符或缺预缩选择：请主跟单在本单大货制单核对当前资料及预缩要求后发布');
   if(lifecycle.some(r=>r.state!=='active'))reasons.push('母单或开发来源已暂停/取消');
   return {order,source,instruction,approval,customerConfirmed,ownerApproved,instructionValid,reasons};
  }
@@ -143,7 +143,7 @@ export class BulkPreparationService {
    for(const [person,role] of [[input.patternWorkerId,'pattern_room_worker'],[warehouse,'warehouse_receiver'],[cutting,'cutting_worker']] as const)if(person&&!await new DigitalProductionAccessPolicy(db).activeRole(person,role))fail('主办人必须为在职有效对应岗位');
    await db.query(`INSERT INTO digital_bulk_dispatch(production_order_id,pattern_worker_id,warehouse_worker_id,cutting_worker_id,changed_by) VALUES($1,$2,$3,$4,$5) ON CONFLICT(production_order_id) DO UPDATE SET version=digital_bulk_dispatch.version+1,pattern_worker_id=$2,warehouse_worker_id=$3,cutting_worker_id=$4,changed_by=$5,changed_at=CURRENT_TIMESTAMP`,[id,input.patternWorkerId,warehouse,cutting,actor.actorId]);
    await this.sync(db,actor,id);const g=await this.gates(db,id),prep=await this.current(db,id,g);
-   if(input.deliverPattern&&(!prep||!input.patternWorkerId))fail('三项前置通过并指定纸样师后才能派交');
+   if(input.deliverPattern&&(!prep||!input.patternWorkerId))fail([...g.reasons,...(!input.patternWorkerId?['尚未选择大货纸样师：请文员在本页预派与交付选择有效纸样师']:[])].join('；')||'本轮产前准备尚未生成：请刷新本页核对客户样板、当前选厂批准及有效制单；仍未生成时联系本单管理人员');
    if(!prep)return;
    const tasks=await this.routeTasks(db,prep.preparation_id);
    for(const t of tasks){

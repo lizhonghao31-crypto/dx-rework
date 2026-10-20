@@ -24,3 +24,24 @@ export type DigitalDeadlinePolicy = { nodeKey: string; label: string; version: n
 
 export type DigitalTaskDocumentReference = {state:"unavailable"|"not_applicable"|"missing"|"draft"} | {state:"published";id:string;version:number;label:"本次采用"|"当前有效"};
 export type DigitalTaskDocuments = {development:DigitalTaskDocumentReference;instruction:DigitalTaskDocumentReference;budget:DigitalTaskDocumentReference};
+
+/** Explanations of existing gates, never additional prerequisites or approvals. */
+export function digitalConditionGuidance(condition:string,requiredRole:string):Pick<DigitalTaskBlocker,'name'|'missing'|'responsibleRole'|'action'> {
+ const known:Record<string,[string,string,string,string]>={
+  business_recorded:['办理结果','本次业务结果尚未提交',requiredRole,'在本任务「当前办理」填写实际结果并提交'],
+  handover_received:['实际交接','尚无本任务的实际接收记录',requiredRole,'实际收到实物或资料后，在本任务「确认实际接收」登记；提前安排不能代替接收'],
+  materials_ready:['材料核验','本轮材料可用条件尚未满足','development_clerk','在本单核料／复核任务查看逐项缺料或质量原因，完成实际核验'],
+  pattern_assignment_ready:['车板执行衔接','本轮车板执行记录尚未就绪','development_clerk','在本单总委派核对人员与执行资料；正常首轮前置齐备后自动衔接，返工金额由技术主管在原执行单核定'],
+  washing_finished:['洗水完成','尚无本轮洗水完成记录','development_clerk','在本轮洗水任务登记实际完成结果'],
+  owner_approved:['原外发批准','当前选厂方案尚无有效老板批准','owner_group','在本单原外发选厂审批核对当前方案并办理；旧版批准不能替代当前方案'],
+  pattern_ready:['纸样／唛架','本轮纸样或唛架尚未完成','pattern_room_worker','在本单大货纸样任务完成实际纸样和唛架记录'],
+  preshrink_ready:['预缩','本轮预缩条件尚未满足','warehouse_receiver','在本单预缩任务按有效制单登记实际预缩结果'],
+  craft_returned:['工艺回仓','尚无本轮工艺回仓事实','embroidery_washing_merchandiser','在本单工艺物流登记实际回仓'],
+  qc_approved:['工艺QC','本轮整款工艺QC尚未通过','quality_control','在本单工艺QC处理待检项目并记录实际结果'],
+  customer_confirmed:['客户样板','当前开发轮次尚无客户确认记录','sample_designer','取得客户实际确认后，在本单开发办理页登记客户样板确认'],
+  all_po_complete:['PO／颜色汇合','仍有PO或颜色未完成','order_merchandiser','在本单生产进度逐项核对未完成PO／颜色，并由对应工序岗位办理'],
+  factory_arrived:['工厂到料','尚无所需的工厂到料事实','order_merchandiser','在本单工厂材料记录核对实际到料并登记'],
+ };
+ const row=known[condition];
+ return row?{name:row[0],missing:row[1],responsibleRole:row[2],action:row[3]}:{name:'条件待核实',missing:'系统尚未提供这项条件的具体业务原因，不能据此判断为缺料或未安排',responsibleRole:'系统管理员',action:'请重新读取本任务；仍存在时提供任务链接给管理员核查'};
+}
