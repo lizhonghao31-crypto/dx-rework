@@ -36,6 +36,7 @@ export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onCh
   const previews=useDocumentUploadPreviews();
   const [state,setState]=useState<State|null>(null),[people,setPeople]=useState<{id:string;displayName:string;roles:string[]}[]>([]),[peopleFor,setPeopleFor]=useState<string|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false),[craftFiles,setCraftFiles]=useState<string[]>([]),[reportFiles,setReportFiles]=useState<string[]>([]),[sewingFiles,setSewingFiles]=useState<string[]>([]);
   const [uncertainWrite,setUncertainWrite]=useState(false),[committedWrite,setCommittedWrite]=useState<{path:string;key:string}|null>(null);
+  const [writeOutcome,setWriteOutcome]=useState<{path:string;phase:'writing'|'committed'|'complete'|'unknown'|'rejected'}|null>(null);
   const [checkReceipt,setCheckReceipt]=useState<{round:number;target:string}|null>(null),[navigationFailed,setNavigationFailed]=useState(false);
   useEffect(()=>{if(!checkReceipt||busy)return;void navigateInternalPage(checkReceipt.target).then(ok=>{if(!ok)setNavigationFailed(true);}).catch(()=>setNavigationFailed(true));},[checkReceipt,busy]);
   const uncertainWritePending=useRef(false),unresolvedWrite=useRef(false);
@@ -66,17 +67,17 @@ export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onCh
   };
   useEffect(()=>{void load();return()=>{loadVersion.current++;};},[sourceId,materialRevision]);
   useEffect(()=>{if(typeof window==="undefined"||!state)return;const id=taskId??new URLSearchParams(window.location.search).get("task");if(id)document.getElementById(`development-task-${id}`)?.scrollIntoView({block:"nearest"});},[taskId,state]);
-  const recheck=async()=>{if(writing.current)return;if(unresolvedWrite.current&&operation.current){const prior=operation.current;return run(prior.path,prior.body,prior.method,true);}writing.current=true;setBusy(true);try{return await load();}finally{writing.current=false;setBusy(false);}};
+  const recheck=async()=>{if(writing.current)return;if(unresolvedWrite.current&&operation.current){const prior=operation.current;return run(prior.path,prior.body,prior.method,true);}writing.current=true;setBusy(true);try{const prior=operation.current,updated=await load();if(updated&&prior?.path==='material-verification'){setWriteOutcome({path:prior.path,phase:'complete'});onChanged?.(workspace?developmentActionReceipt(prior.path,prior.body as {result?:unknown},undefined,updated.tasks):undefined);}return updated;}finally{writing.current=false;setBusy(false);}};
   const run=async(path:string,body:unknown,method="POST",retry=false):Promise<State|undefined>=>{
     if(writing.current)return;
     if(unresolvedWrite.current&&!retry){setError("上次提交结果尚未确认，请先核对并重试原提交；不会重复产生业务记录。");return;}
     if(uncertainWritePending.current){setError("本次办理已提交，请先重新读取办理状态。");return;}
-    writing.current=true;setBusy(true);setError("");
+    writing.current=true;setBusy(true);setError("");setWriteOutcome({path,phase:"writing"});
     const payload=JSON.stringify([path,body,method]);
     if(operation.current?.payload!==payload)operation.current={payload,key:createClientRequestId(),path,body,method};
     try{
       await digitalRequest(`${base}/${path}`,method,body,operation.current.key);
-      setCommittedWrite({path,key:operation.current.key});
+      setCommittedWrite({path,key:operation.current.key});setWriteOutcome({path,phase:"committed"});
       unresolvedWrite.current=false;uncertainWritePending.current=true;setUncertainWrite(true);
       if(path==="complete"){previews.saved(craftFiles);setCraftFiles([]);}
       if(path==="route"){previews.saved(sewingFiles);setSewingFiles([]);}
@@ -91,16 +92,16 @@ export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onCh
       }
       const updated=await load();
       if(!updated){setError(completedCheck?"核料已完成，正在打开本轮委派页。":"本次办理已提交，但最新资料暂未读取到，请重新读取；不要重复提交。");return;}
-      operation.current=null;
+      operation.current=null;setWriteOutcome({path,phase:"complete"});
       onChanged?.(workspace?developmentActionReceipt(path,body as {result?:unknown},submitted,updated.tasks):undefined);
       return updated;
     }catch(reason){
-      if(!(reason instanceof DigitalRequestError)||reason.status===null||reason.status>=500){unresolvedWrite.current=true;setUncertainWrite(true);setError("尚未确认本次提交是否成功。请核对并重试原提交，系统沿用同一操作标识，避免重复保存。");}
-      else{unresolvedWrite.current=false;setUncertainWrite(false);operation.current=null;setError(reason.message);}
+      if(!(reason instanceof DigitalRequestError)||reason.status===null||reason.status>=500){setWriteOutcome({path,phase:"unknown"});unresolvedWrite.current=true;setUncertainWrite(true);setError("尚未确认本次提交是否成功。请核对并重试原提交，系统沿用同一操作标识，避免重复保存。");}
+      else{setWriteOutcome({path,phase:"rejected"});unresolvedWrite.current=false;setUncertainWrite(false);operation.current=null;setError(reason.message);}
     }finally{writing.current=false;setBusy(false);}
   };
   const upload=async(selected:File[],purpose:"工艺开发板"|"面料报告"|"车板成果"|"纸样成果")=>{if(!selected?.length||writing.current)return;previews.start(selected,purpose);writing.current=true;setBusy(true);setError("");try{const limit=await digitalRequest<{maxUploadBytes:number}>(`${base}/upload-limits`);for(const file of Array.from(selected)){try{if(file.size>limit.maxUploadBytes)throw Error("文件超过上传大小限制");const intent=await digitalRequest<UploadIntentResponse>(`${base}/upload-intents`,"POST",{filename:file.name,mimeType:file.type,sizeBytes:file.size,sha256:await sha256Hex(file),purpose,...(["车板成果","纸样成果"].includes(purpose)?{taskId}:{})});const form=new FormData();for(const [key,value]of Object.entries(intent.uploadFields))form.append(key,value);form.append("file",file);const response=await fetch(intent.uploadUrl,{method:intent.uploadMethod,body:form,credentials:"omit"});if(!response.ok)throw Error("上传失败");await digitalRequest(`${base}/attachments/${intent.attachmentId}/finalize`,"POST",{});previews.uploaded(file,intent.attachmentId);(["工艺开发板","纸样成果"].includes(purpose)?setCraftFiles:purpose==="车板成果"?setSewingFiles:setReportFiles)(current=>[...current,intent.attachmentId]);}catch(reason){const message=reason instanceof Error?reason.message:"上传失败";previews.failed(file,message);setError(message);}}}catch(reason){const message=reason instanceof Error?reason.message:"上传失败";for(const file of selected)previews.failed(file,message);setError(message);}finally{writing.current=false;setBusy(false);}};
-  return {committedWrite,checkReceipt,navigationFailed,load,recheck,uncertainWrite,retryPeople,reading,readError,peopleError,peopleReading,writeError:error,previews,state,people,peopleFor,error:error||(readError?.message??'')||(peopleError?.message??''),busy,craftFiles,reportFiles,sewingFiles,tailReturn,setTailReturn,base,urls,run,upload,writing};
+  return {writeOutcome,committedWrite,checkReceipt,navigationFailed,load,recheck,uncertainWrite,retryPeople,reading,readError,peopleError,peopleReading,writeError:error,previews,state,people,peopleFor,error:error||(readError?.message??'')||(peopleError?.message??''),busy,craftFiles,reportFiles,sewingFiles,tailReturn,setTailReturn,base,urls,run,upload,writing};
 }
 type ExecutionProps=Parameters<typeof useDevelopmentExecution>[0];
 export function DevelopmentExecutionPanel(props:ExecutionProps){const controller=useDevelopmentExecution(props);return <DevelopmentExecutionBody {...props} controller={controller}/>;}

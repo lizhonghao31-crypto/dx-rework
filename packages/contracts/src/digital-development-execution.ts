@@ -2,19 +2,27 @@ import {DevelopmentMakingUpgradeSchema} from './digital-development.js';
 import {DevelopmentReturnIssueSchema,type DevelopmentReturnIssue} from "./digital-development-amendments.js";
 import {DEVELOPMENT_REVISION_NODES,DEVELOPMENT_PROBLEM_CATEGORIES} from "./digital-development-rounds.js";
 import { z } from "zod";
+export const MATERIAL_CHECK_FIELDS=["physical","quantity","color","specification"] as const;
+export type MaterialCheckField=typeof MATERIAL_CHECK_FIELDS[number];
+export const MATERIAL_CHECK_LABELS={physical:"实物已到",quantity:"数量相符",color:"颜色相符",specification:"规格相符"} as const;
+export type MaterialCheckRule={canSelect:boolean;reason:string|null;knownConflict:boolean};
+export type MaterialBulkRules=Array<{materialId:string;checks:Record<MaterialCheckField,MaterialCheckRule>}>;
+const MaterialBulkCheckSchema=z.object({materialId:z.string().uuid(),field:z.enum(MATERIAL_CHECK_FIELDS)}).strict();
 export const MaterialVerificationEntrySchema=z.object({
  materialId:z.string().uuid(),usage:z.enum(["pending","use","unused"]),
  physical:z.boolean(),quantity:z.boolean(),color:z.boolean(),specification:z.boolean(),
  note:z.string().trim().max(1000),confirmedWith:z.string().trim().max(100),
 }).strict();
 export const SaveMaterialVerificationSchema=z.object({
+ bulkChecks:z.array(MaterialBulkCheckSchema).max(400).optional(),
  returnIssues:z.array(DevelopmentReturnIssueSchema).max(100).optional(),
  note:z.string().trim().max(1000).default(""),result:z.enum(["通过","缺项退回"]).default("通过"),
  taskId:z.string().uuid(),expectedDocumentVersion:z.number().int().positive(),
  expectedVersion:z.number().int().nonnegative(),entries:z.array(MaterialVerificationEntrySchema).max(100),
-}).strict().superRefine((v,c)=>{if(new Set(v.entries.map(r=>r.materialId)).size!==v.entries.length)c.addIssue({code:"custom",message:"材料确认行不能重复"});});
+}).strict().superRefine((v,c)=>{if(new Set(v.entries.map(r=>r.materialId)).size!==v.entries.length)c.addIssue({code:"custom",message:"材料确认行不能重复"});if(new Set(v.bulkChecks?.map(r=>`${r.materialId}:${r.field}`)).size!==(v.bulkChecks?.length??0))c.addIssue({code:"custom",message:"批量核对项不能重复"});});
 export type MaterialVerificationEntry=z.infer<typeof MaterialVerificationEntrySchema>;
-export type MaterialVerification={returnIssues?:DevelopmentReturnIssue[];note:string;result:"通过"|"缺项退回";version:number;documentVersion:number;taskId:string|null;entries:Array<MaterialVerificationEntry&{changedBy:string|null;changedAt:string|null;invalidated:string[]}>};
+export type SaveMaterialVerification=z.infer<typeof SaveMaterialVerificationSchema>;
+export type MaterialVerification={bulkRules?:MaterialBulkRules;returnIssues?:DevelopmentReturnIssue[];note:string;result:"通过"|"缺项退回";version:number;documentVersion:number;taskId:string|null;entries:Array<MaterialVerificationEntry&{invalidatedChecks?:MaterialCheckField[];changedBy:string|null;changedAt:string|null;invalidated:string[]}>};
 export const DevelopmentDispatchSchema=z.object({expectedVersion:z.number().int().nonnegative(),patternWorkerId:z.string().uuid(),cuttingWorkerId:z.string().uuid(),sewingWorkerId:z.string().uuid(),reassignExisting:z.boolean().optional(),confirmExecution:z.object({roundId:z.string().uuid(),version:z.number().int().positive(),amount:z.string().regex(/^(?:0|[1-9]\d{0,16})(?:\.\d{1,3})?$/).optional()}).strict().optional()}).strict();
 export const DevelopmentCheckSchema=z.object({returnIssues:z.array(DevelopmentReturnIssueSchema).max(100).optional(),expectedVerificationVersion:z.number().int().positive().optional(),taskId:z.string().uuid(),result:z.enum(["通过","缺项退回"]),note:z.string().trim().max(1000),items:z.array(z.object({materialId:z.string().uuid(),physical:z.boolean(),quantity:z.boolean(),color:z.boolean(),specification:z.boolean()}).strict()).max(100)}).strict().superRefine((value,ctx)=>{if(value.result==="缺项退回"&&!value.note&&!value.returnIssues?.length)ctx.addIssue({code:"custom",path:["note"],message:"请说明缺项"});if(new Set(value.items.map(item=>item.materialId)).size!==value.items.length)ctx.addIssue({code:"custom",path:["items"],message:"核配物料不能重复"});});
 export const DevelopmentWorkSchema=z.object({taskId:z.string().uuid(),note:z.string().trim().max(1000),attachmentIds:z.array(z.string().uuid()).max(20)}).strict();

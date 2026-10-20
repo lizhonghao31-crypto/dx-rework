@@ -1,15 +1,8 @@
-import {DevelopmentMaterialVerification} from "./development-material-verification.js";
-import {useState} from 'react';
 import type {DigitalTask} from '@dx-rework/contracts/digital-production-tasks';
 import {Button} from '@dx-rework/ui';
-import {WorkbenchAction} from './workbench-action.js';
 import type {useDevelopmentExecution} from './digital-development-execution-panel.js';
-export function DevelopmentMaterialCheck({controller,task}:{controller:ReturnType<typeof useDevelopmentExecution>;task:DigitalTask}){return controller.state?.materialVerification?<DevelopmentMaterialVerification controller={controller} task={task}/>:<LegacyMaterialCheck controller={controller} task={task}/>;}
-function LegacyMaterialCheck({controller,task}:{controller:ReturnType<typeof useDevelopmentExecution>;task:DigitalTask}){
- const {state,busy,run}=controller,materials=state?.sheet.document?.materials??[];
- const fields=['physical','quantity','color','specification'] as const;
- const previous=state?.facts.filter(f=>f.kind==='缺项退回'&&state.tasks.some(t=>t.taskId===f.taskId&&t.routeVersion===task.routeVersion)).at(-1)?.payload.items??[];
- const [values,setValues]=useState(()=>Object.fromEntries(previous.map(row=>[row.materialId,row]))),[page,setPage]=useState(1),[note,setNote]=useState(''),[result,setResult]=useState('通过');
- if(controller.checkReceipt)return <p role="status">核料已完成。{controller.navigationFailed?'委派页暂未打开，请重新打开；无需再次提交核料。':'正在打开本轮总委派页…'}<a href={controller.checkReceipt.target}>重新打开本轮委派页</a></p>;
- return <form className="development-material-check-form" onSubmit={event=>{event.preventDefault();void run('check',{taskId:task.taskId,result,note,items:materials.filter(m=>m.requiredThisRound).map(m=>({materialId:m.materialId,...Object.fromEntries(fields.map(field=>[field,values[m.materialId]?.[field]??false]))}))});}}><fieldset disabled={busy}><table><thead><tr><th>材料 / 规格 / 数量</th>{['实物已到','数量相符','颜色相符','规格相符'].map(label=><th key={label}>{label}</th>)}</tr></thead><tbody>{materials.slice((page-1)*6,page*6).map(item=><tr key={item.materialId}><th>{item.name||item.label}<small>{item.category}{item.label&&item.label!==item.name?` · ${item.label}`:''} · {item.specification||'规格未登记'} · {item.quantity||'未登记'}</small></th>{item.requiredThisRound?fields.map((field,index)=><td key={field}><input type="checkbox" aria-label={`${item.name||item.label} ${['实物已到','数量相符','颜色相符','规格相符'][index]}`} checked={values[item.materialId]?.[field]??false} onChange={event=>setValues(current=>({...current,[item.materialId]:{materialId:item.materialId,physical:false,quantity:false,color:false,specification:false,...current[item.materialId],[field]:event.target.checked}}))}/></td>):<td colSpan={4}>本轮不需核对</td>}</tr>)}</tbody></table><Button type="button" disabled={page===1} onClick={()=>setPage(p=>p-1)}>上一页材料</Button><span>第 {page} 页</span><Button type="button" disabled={page*6>=materials.length} onClick={()=>setPage(p=>p+1)}>下一页材料</Button><label>核对结果<select value={result} onChange={e=>setResult(e.target.value)}><option>通过</option><option>缺项退回</option></select></label><label>缺项 / 备注<textarea value={note} onChange={e=>setNote(e.target.value)} maxLength={1000}/></label><WorkbenchAction type="submit" variant="primary" disabled={busy}>提交面辅料核对结果</WorkbenchAction></fieldset></form>;
+import {DevelopmentMaterialVerification} from './development-material-verification.js';
+export function DevelopmentMaterialCheck({controller,task}:{controller:ReturnType<typeof useDevelopmentExecution>;task:DigitalTask}){
+ if(controller.state?.materialVerification)return <DevelopmentMaterialVerification controller={controller} task={task}/>;
+ return <section role="status"><h3>核料输入功能尚未就绪</h3><p>未取得本轮文员确认资料，当前不能保存或提交。请重新读取；仍未恢复时，请管理员核实 API 与材料确认数据库版本。旧资料里的“不需”不代表文员确认不用。</p><Button type="button" disabled={controller.busy||controller.reading} onClick={()=>void controller.recheck()}>重新读取核料资料</Button></section>;
 }

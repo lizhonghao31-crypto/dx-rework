@@ -1,10 +1,10 @@
 import {developmentAmendmentsAvailable} from "./development-amendment-repository.js";
-import type {DevelopmentReturnIssue} from "@dx-rework/contracts/digital-development-amendments";
 import {isDeepStrictEqual} from "node:util";
 import {randomUUID} from "node:crypto";
 import type {Pool,PoolClient} from "pg";
 import {isDevelopmentMaterialPlaceholder,type DevelopmentDocument,type DevelopmentMaterial} from "@dx-rework/contracts/digital-development";
-import type {MaterialVerification,MaterialVerificationEntry} from "@dx-rework/contracts/digital-development-execution";
+import {MATERIAL_CHECK_FIELDS,type MaterialVerification,type MaterialVerificationEntry,type SaveMaterialVerification} from "@dx-rework/contracts/digital-development-execution";
+import {readMaterialBulkRules} from "./development-material-check-rules.js";
 import type {TrustedActorContext} from "../tools/repositories.js";
 import {ApplicationError} from "../platform/errors.js";
 type DB=Pick<Pool|PoolClient,"query">;
@@ -25,28 +25,31 @@ export async function readMaterialVerification(db:DB,sourceId:string,round:numbe
  }
  const people=(await db.query("SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])",[entries.map(e=>e.changedBy).filter(Boolean)])).rows;
  for(const entry of entries)entry.changedBy=people.find(p=>p.id===entry.changedBy)?.display_name??entry.changedBy;
- return {returnIssues:saved?.draft_return_issues??[],version:saved?.version??0,documentVersion,taskId:saved?.task_id??null,note:saved?.draft_note??"",result:saved?.draft_result??"通过",entries};
+ const bulkRules=(await readMaterialBulkRules(db,sourceId,round,document)).filter(row=>entries.some(entry=>entry.materialId===row.materialId));
+ for(const entry of entries)for(const field of entry.invalidatedChecks??[]){const rule=bulkRules.find(row=>row.materialId===entry.materialId)?.checks[field];if(rule){rule.canSelect=false;rule.reason="对应资料已变更，请先逐项重新核实并保存；本次全选不代替复核";}}
+ return {bulkRules,returnIssues:saved?.draft_return_issues??[],version:saved?.version??0,documentVersion,taskId:saved?.task_id??null,note:saved?.draft_note??"",result:saved?.draft_result??"通过",entries};
 }
 export function verificationRows(document:DevelopmentDocument,old:Stored[]){
  return document.materials.filter(m=>!isDevelopmentMaterialPlaceholder(m)||old.some(r=>r.materialId===m.materialId)).map(m=>{
   const prior=old.find(r=>r.materialId===m.materialId);
   const invalidated:string[]=[];
   const sameIdentity=prior&&["name","category","supplier","composition","width","weight","auxiliaryKind"].every(k=>prior.basis[k as keyof DevelopmentMaterial]===m[k as keyof DevelopmentMaterial]);
-  const value:MaterialVerification["entries"][number]={materialId:m.materialId,usage:sameIdentity?prior.usage:"pending",physical:sameIdentity?prior.physical:false,quantity:sameIdentity?prior.quantity:false,color:sameIdentity?prior.color:false,specification:sameIdentity?prior.specification:false,note:sameIdentity?prior.note:"",confirmedWith:sameIdentity?prior.confirmedWith:"",changedBy:prior?.changedBy??null,changedAt:prior?.changedAt??null,invalidated};
+  const value:MaterialVerification["entries"][number]={materialId:m.materialId,usage:sameIdentity?prior.usage:"pending",physical:sameIdentity?prior.physical:false,quantity:sameIdentity?prior.quantity:false,color:sameIdentity?prior.color:false,specification:sameIdentity?prior.specification:false,note:sameIdentity?prior.note:"",confirmedWith:sameIdentity?prior.confirmedWith:"",changedBy:prior?.changedBy??null,changedAt:prior?.changedAt??null,invalidated,invalidatedChecks:[]};
   if(prior&&!sameIdentity)invalidated.push("材料已变更，请重新确认本轮使用情况及四项核验");
   if(sameIdentity){
-   for(const key of ["quantity","color","specification"] as const)if(prior.basis[key]!==m[key]){value[key]=false;invalidated.push(`${{quantity:"数量",color:"颜色",specification:"规格"}[key]}资料已变更，须重新核验`);}
-   if(prior.basis.available!==m.available){value.physical=false;invalidated.push("实物资料已变更，须重新核验");}
+   for(const key of ["quantity","color","specification"] as const)if(prior.basis[key]!==m[key]){value[key]=false;value.invalidatedChecks!.push(key);invalidated.push(`${{quantity:"数量",color:"颜色",specification:"规格"}[key]}资料已变更，须重新核验`);}
+   if(prior.basis.available!==m.available){value.physical=false;value.invalidatedChecks!.push('physical');invalidated.push("实物资料已变更，须重新核验");}
   }
   return value;
  });
 }
-export async function saveMaterialVerification(db:PoolClient,actor:TrustedActorContext,sourceId:string,round:number,document:DevelopmentDocument,documentVersion:number,input:{taskId:string;expectedVersion:number;expectedDocumentVersion:number;entries:MaterialVerificationEntry[];note?:string;result?:string;returnIssues?:DevelopmentReturnIssue[]|undefined}){
+export async function saveMaterialVerification(db:PoolClient,actor:TrustedActorContext,sourceId:string,round:number,document:DevelopmentDocument,documentVersion:number,input:Omit<SaveMaterialVerification,"note"|"result">&{note?:string;result?:string}){
  const current=await readMaterialVerification(db,sourceId,round,document,documentVersion);
  const fail=(text:string):never=>{throw new ApplicationError("DEVELOPMENT_CONFLICT",text,409);};
  if(!current)fail("材料确认功能尚未就绪，请联系管理员核实版本");
  if(input.expectedVersion!==current!.version||input.expectedDocumentVersion!==documentVersion)fail("材料资料或文员确认已更新，请重新读取后核对，未覆盖已有记录");
  if(input.entries.length!==current!.entries.length||input.entries.some(r=>!current!.entries.some(m=>m.materialId===r.materialId)))fail("材料清单已变化，请重新读取当前核料页");
+ assertMaterialChecks(current!,input.entries,input.bulkChecks??[]);
  const now=new Date().toISOString();
  const old=(await db.query("SELECT entries FROM digital_development_material_verifications WHERE source_id=$1 AND round_number=$2 FOR UPDATE",[sourceId,round])).rows[0]?.entries??[];
  const entries=input.entries.map(row=>{
@@ -61,6 +64,17 @@ export async function saveMaterialVerification(db:PoolClient,actor:TrustedActorC
  if(await developmentAmendmentsAvailable(db))await db.query("UPDATE digital_development_material_verifications SET draft_return_issues=$3 WHERE source_id=$1 AND round_number=$2",[sourceId,round,JSON.stringify(input.returnIssues??[])]);
  await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state) VALUES($1,$2,$3,'development_material_verification','digital_development',$4,$5,$6)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify({round,entries:old}),JSON.stringify({round,documentVersion,entries})]);
  return {version:current!.version+1};
+}
+export function assertMaterialChecks(verification:MaterialVerification,entries:MaterialVerificationEntry[],bulkChecks:NonNullable<SaveMaterialVerification['bulkChecks']>=[]){
+ const fail=(message:string):never=>{throw new ApplicationError('DEVELOPMENT_CONFLICT',message,409);};
+ for(const row of entries)if(row.usage==='use')for(const field of MATERIAL_CHECK_FIELDS){
+  const rule=verification.bulkRules?.find(item=>item.materialId===row.materialId)?.checks[field];
+  if(row[field]&&rule?.knownConflict)fail(rule.reason??'该项有未解决事实，请重新读取核料页核实');
+ }
+ for(const bulk of bulkChecks){
+  const row=entries.find(item=>item.materialId===bulk.materialId),rule=verification.bulkRules?.find(item=>item.materialId===bulk.materialId)?.checks[bulk.field];
+  if(!row||row.usage!=='use'||!row[bulk.field]||!rule?.canSelect)fail(rule?.reason??'批量范围已变化，请重新读取本轮核料页；未自动确认其他材料');
+ }
 }
 export async function appliedVerification(db:DB,sourceId:string,round:number,document:DevelopmentDocument){
  if(!await verificationAvailable(db))return null;

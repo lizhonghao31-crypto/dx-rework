@@ -1,10 +1,9 @@
 import {developmentAutomaticRoundDocument} from './development-document-format.js';
-import type {DevelopmentReturnIssue} from "@dx-rework/contracts/digital-development-amendments";
 import {developmentAmendmentsAvailable} from "./development-amendment-repository.js";
 import {validateDevelopmentReturn,recordDevelopmentReturn,submitDevelopmentSupply} from "./development-supply.js";
 import {fabricCases} from "./development-fabric-cases.js";
-import {readMaterialVerification,saveMaterialVerification} from "./development-material-verification.js";
-import type {MaterialVerificationEntry} from "@dx-rework/contracts/digital-development-execution";
+import {assertMaterialChecks,readMaterialVerification,saveMaterialVerification} from "./development-material-verification.js";
+import type {SaveMaterialVerification} from "@dx-rework/contracts/digital-development-execution";
 import type {DevelopmentArrangementInput} from "@dx-rework/contracts/development-arrangement";
 import {readArrangement,saveArrangement,arrangementsAvailable} from "./development-arrangement.js";
 import {reuseJourneySnapshotReads} from "./journey-snapshot-reads.js";
@@ -125,7 +124,7 @@ export class DevelopmentExecutionService {
       if(decision?.payload.decision!=="允许使用")fail(`问题面料：${report.payload.note}。${decision?.payload.decision==="停止使用"?"已决定停止使用，不能以核料勾选或到料放行":"尚未作出使用决定"}。请供应链总监或 Root 在本页“问题面料报告与决定”核实并记录明确决定；文员随后继续核料。`);
     }
   }
-  async saveMaterials(actor:TrustedActorContext,sourceId:string,input:{taskId:string;expectedVersion:number;expectedDocumentVersion:number;entries:MaterialVerificationEntry[];note?:string;result?:string;returnIssues?:DevelopmentReturnIssue[]|undefined},key:string){
+  async saveMaterials(actor:TrustedActorContext,sourceId:string,input:Omit<SaveMaterialVerification,"note"|"result">&{note?:string;result?:string},key:string){
     return this.command(actor,sourceId,"material-verification",key,input,async db=>{
       await new DigitalProductionAccessPolicy(db).assert(actor,"task",input.taskId,"execute");
       const task=await this.task(db,sourceId,input.taskId),sheet=await this.forms().read(actor,sourceId,db);
@@ -141,6 +140,7 @@ export class DevelopmentExecutionService {
       const sheet=await this.forms().read(actor,sourceId,db,task.route_version),document=sheet.document!;
       const verification=await readMaterialVerification(db,sourceId,task.route_version,document,sheet.version);
       if(verification){
+        assertMaterialChecks(verification,verification.entries);
         if(!verification.version||input.expectedVerificationVersion!==verification.version)fail("请先保存本轮材料使用确认，再提交核料结果；已有记录不会被覆盖");
         if(verification.taskId!==input.taskId)fail("请在当前复核任务保存确认结果后再提交");
         if(verification.entries.some(row=>row.usage==="pending"||row.invalidated.length))fail("尚有材料使用情况或变更项待文员确认，请在本页逐项核实并保存");

@@ -19,13 +19,15 @@ export function effectiveMaterials(document:DevelopmentDocument,evidence:readonl
     const row=check?.items?.find(item=>item.materialId===material.materialId);
     const arrival=facts.filter(f=>f.kind==='到货'||(material.category==='辅料'&&f.kind==='确认代用')).at(-1);
     const arrived=Boolean(arrival&&(!check||new Date(arrival.at).getTime()>new Date(check.at).getTime()));
-    const verified=Boolean(row&&dimensions.every(key=>row[key]));
+    const passed=check?.kind==='核配通过';
+    const verified=Boolean(passed&&row&&dimensions.every(key=>row[key]));
     const earlyException=isEarlyMaterialException(material);
     // An arrival can resolve an explicitly recorded missing exception. It cannot
     // certify omitted ordinary checks or overrule an actual quality mismatch.
-    const resolvedException=Boolean(row&&!row.physical&&earlyException&&arrived);
+    const resolvedException=Boolean(passed&&row&&!row.physical&&earlyException&&arrived);
     const available=verified||resolvedException;
     const missing=!material.requiredThisRound||available?[]:!row?['尚未逐项核验']:dimensions.filter(key=>!row[key]).map(key=>`${labels[key]}未核实`);
+    if(material.requiredThisRound&&check?.kind==='缺项退回')missing.push('核料已退回，尚未复核通过；设计师处理本单补正／补料待办后，由开发文员在我的待办复核');
     const earlyAllowed=earlyException&&Boolean(row&&!row.physical&&check?.kind==='核配通过');
     const supplyAvailable=row?row.physical||arrived:material.available||arrived;
     return {materialId:material.materialId,name:material.label||material.name||'未命名物料',required:material.requiredThisRound,earlyException,earlyAllowed,verified,available,supplyAvailable,missing,evidenceId:(resolvedException?arrival?.id:check?.id)??null};

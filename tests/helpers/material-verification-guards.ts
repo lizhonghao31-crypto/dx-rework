@@ -8,13 +8,17 @@ import type {DevelopmentExecutionService} from "../../apps/api/src/production-pl
 import {fabricDecisionTodos} from "../../apps/api/src/production-platform/development-fabric-cases.js";
 import {materialReadiness} from "../../apps/api/src/production-platform/development-material-readiness.js";
 export async function exerciseMaterialVerification(db:Pool,execution:DevelopmentExecutionService,clerk:TrustedActorContext,root:TrustedActorContext,sourceId:string,taskId:string,items:Array<{materialId:string;physical:boolean;quantity:boolean;color:boolean;specification:boolean}>,guards:boolean){
- const initial=(await execution.read(clerk,sourceId)).materialVerification!;
+ const loaded=await execution.read(clerk,sourceId),initial=loaded.materialVerification!;
  expect(initial.entries.every(row=>row.usage==="pending")).toBe(true);
+ expect(initial.bulkRules).toHaveLength(initial.entries.length);
  const input={taskId,expectedDocumentVersion:initial.documentVersion,expectedVersion:0,note:"TEST已与设计师核实使用材料",result:"通过",entries:initial.entries.map(row=>({materialId:row.materialId,usage:"use" as const,physical:false,quantity:false,color:false,specification:false,note:"",confirmedWith:"",...items.find(m=>m.materialId===row.materialId)}))};
  const check={taskId,result:"通过" as const,note:"TEST拉链缺料按原例外跟进",items};
  if(guards){
   await expect(execution.check(clerk,sourceId,check,randomUUID())).rejects.toThrow("先保存");
   await expect(execution.saveMaterials(clerk,sourceId,{...input,entries:input.entries.map((row,i)=>i?row:{...row,usage:"unused",note:"",confirmedWith:""})},randomUUID())).rejects.toThrow("设计师");
+  expect((await execution.read(clerk,sourceId)).materialVerification!.version).toBe(0);
+  const missingId=loaded.sheet.document!.materials.find(material=>!material.available)!.materialId;
+  await expect(execution.saveMaterials(clerk,sourceId,{...input,entries:input.entries.map(row=>row.materialId===missingId?{...row,physical:true}:row),bulkChecks:[{materialId:missingId,field:"physical"}]},randomUUID())).rejects.toThrow("实物");
   expect((await execution.read(clerk,sourceId)).materialVerification!.version).toBe(0);
  }
  if(guards){
@@ -26,8 +30,9 @@ export async function exerciseMaterialVerification(db:Pool,execution:Development
   expect((await execution.read(clerk,sourceId)).materialVerification!.version).toBe(0);
  }
  const key=randomUUID();
- await execution.saveMaterials(clerk,sourceId,input,key);
- await execution.saveMaterials(clerk,sourceId,input,key);
+ const bulkInput={...input,bulkChecks:[{materialId:items[0]!.materialId,field:"quantity" as const}]};
+ await execution.saveMaterials(clerk,sourceId,bulkInput,key);
+ await execution.saveMaterials(clerk,sourceId,bulkInput,key);
  let saved=(await execution.read(clerk,sourceId)).materialVerification!;
  expect(saved.version).toBe(1);expect(saved.entries.every(row=>row.changedBy&&row.changedAt)).toBe(true);
  expect((await materialReadiness(db,sourceId,1)).earlyReady).toBe(false); // Draft does not certify checks.
@@ -40,6 +45,8 @@ export async function exerciseMaterialVerification(db:Pool,execution:Development
   const fileId=randomUUID();await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-quality.pdf','application/pdf',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[fileId,`test-quality/${fileId}`,'d'.repeat(64),root.actorId]);
   await execution.recordUploadPurpose(root,sourceId,fileId,"面料报告");
   const report=await execution.report(root,sourceId,{recommendation:"建议停用",note:"TEST质量风险，不能由到料解除",attachmentIds:[fileId],materialIds:[items[0]!.materialId]},randomUUID()) as {reportId:string};
+  await expect(execution.saveMaterials(clerk,sourceId,{...input,expectedVersion:saved.version,bulkChecks:[{materialId:items[0]!.materialId,field:"quantity"}]},randomUUID())).rejects.toThrow("质量报告");
+  expect((await execution.read(clerk,sourceId)).materialVerification!.version).toBe(saved.version);
   const directorId=(await db.query("SELECT user_id FROM user_role_assignments WHERE role_code='production_management' AND revoked_at IS NULL LIMIT 1")).rows[0].user_id;
   const director={...clerk,actorId:directorId,actorRoles:['production_management']};
   const noticeClient=await db.connect();try{await projectDevelopmentNotices(noticeClient,[director,clerk]);await projectDevelopmentNotices(noticeClient,[director,clerk]);}finally{noticeClient.release();}

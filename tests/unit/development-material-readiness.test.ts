@@ -29,7 +29,17 @@ describe('R2 material evidence',()=>{
   it('does not let a later arrival erase a known specification defect',()=>{
     const row=material({category:'辅料',auxiliaryKind:'拉链'}),items=[{...checked(row),specification:false}];
     expect(materialCheckError(row,items[0],'规格不符',null)).toContain('规格');
-    expect(effectiveMaterials(doc(row),[{id:'check',kind:'缺项退回',items,at:'2026-10-15T01:00:00Z'},{id:'arrival',kind:'到货',materialId:row.materialId,at:'2026-10-15T02:00:00Z'}])[0]).toMatchObject({available:false,evidenceId:'check',missing:['规格未核实']});
+    expect(effectiveMaterials(doc(row),[{id:'check',kind:'缺项退回',items,at:'2026-10-15T01:00:00Z'},{id:'arrival',kind:'到货',materialId:row.materialId,at:'2026-10-15T02:00:00Z'}])[0]).toMatchObject({available:false,evidenceId:'check',missing:['规格未核实','核料已退回，尚未复核通过；设计师处理本单补正／补料待办后，由开发文员在我的待办复核']});
+  });
+  it('does not treat all checked returned data as an approved check',()=>{
+    const row=material({available:true}),returned={id:'returned',kind:'缺项退回',items:[checked(row)],at:'2026-10-15T01:00:00Z'};
+    expect(effectiveMaterials(doc(row),[returned])[0]).toMatchObject({verified:false,available:false,supplyAvailable:true,earlyAllowed:false});
+    const rechecked={id:'recheck',kind:'核配通过',items:[checked(row)],at:'2026-10-15T03:00:00Z'};
+    expect(effectiveMaterials(doc(row),[returned,rechecked])[0]).toMatchObject({verified:true,available:true,evidenceId:'recheck',missing:[]});
+  });
+  it.each(['拉链','扁机'] as const)('keeps a returned missing %s blocked after arrival until the existing clerk recheck',auxiliaryKind=>{
+    const row=material({category:'辅料',auxiliaryKind}),returned={id:'returned',kind:'缺项退回',items:[{...checked(row,false),color:false}],at:'2026-10-15T01:00:00Z'},arrival={id:'arrival',kind:'到货',materialId:row.materialId,at:'2026-10-15T02:00:00Z'};
+    expect(effectiveMaterials(doc(row),[returned,arrival])[0]).toMatchObject({available:false,verified:false,earlyAllowed:false,supplyAvailable:true,evidenceId:'returned'});
   });
   it('matches stable IDs rather than identical material names',()=>{
     const old=material(),current=material({materialId:'00000000-0000-4000-8000-000000000002'});
