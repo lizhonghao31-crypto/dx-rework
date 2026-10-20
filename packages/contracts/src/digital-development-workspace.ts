@@ -67,6 +67,8 @@ export type PatternWorkspaceResult = {
   asOf: string; page: number; pageSize: 15; total: number; archiveTotal: number;
   counts: Record<typeof PATTERN_GROUPS[number]["key"], number>;
   owners: Array<{id: string; name: string | null}>; items: PatternWorkspaceTask[];
+  /** Three recent existing tasks per lane, selected before list pagination. */
+  boardPreview?: PatternWorkspaceTask[];
   risks?: PatternWorkspaceTask[];
   riskCounts: Record<typeof PATTERN_GROUPS[number]["key"], {dueSoon: number; overdue: number}>;
 };

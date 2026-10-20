@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { JOURNEY_NODES, JOURNEY_STAGES, type JourneyNode, type OrderJourney } from "@dx-rework/contracts/digital-production-journey";
-import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema } from "@dx-rework/contracts/digital-development-workspace";
+import { DevelopmentWorkspaceFilterSchema, PatternWorkspaceFilterSchema,PATTERN_GROUPS,PATTERN_LANES } from "@dx-rework/contracts/digital-development-workspace";
 import { DevelopmentWorkspaceQuery, developmentView, patternTasks } from "../../apps/api/src/production-platform/development-workspace-query.js";
 import type { DigitalJourneyQuery } from "../../apps/api/src/production-platform/journey-query.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
@@ -16,6 +16,22 @@ const journey = (nodes: JourneyNode[], patch: Partial<OrderJourney> = {}): Order
 const actor: TrustedActorContext = {actorId: randomUUID(), actorRoles: ["sample_designer"], authorizationCapability: "pattern_room:orders:create", authorizationCapabilities: ["pattern_room:orders:create"], requestId: "TEST-workspace"};
 
 describe("bulk paper tasks share the read-only workroom projection", () => {
+  it("previews three recent tasks in every full-range lane without changing totals or full-lane paging",async()=>{
+    const items=Array.from({length:19},(_,index)=>journey(PATTERN_LANES.map(lane=>node(PATTERN_GROUPS.find(group=>group.key===lane.groups[0])!.nodes[0],"active",{owner:{id:actor.actorId,name:"TEST师傅"}})),{designStyleNo:`TEST-newest-${index}`}));
+    const query=new DevelopmentWorkspaceQuery({list:async()=>({asOf:"TEST",items})} as unknown as DigitalJourneyQuery);
+    const manager={...actor,actorRoles:["development_clerk"]};
+    const overview=await query.pattern(manager,PatternWorkspaceFilterSchema.parse({scope:"all"}));
+    expect(overview.total).toBe(19*7);expect(overview.archiveTotal).toBe(19);expect(overview.items).toHaveLength(15);expect(overview.boardPreview).toHaveLength(21);
+    for(const lane of PATTERN_LANES){
+      const preview=overview.boardPreview!.filter(task=>(lane.groups as readonly string[]).includes(task.group));
+      expect(preview.map(task=>task.designStyleNo)).toEqual(["TEST-newest-0","TEST-newest-1","TEST-newest-2"]);
+      expect(lane.groups.reduce((total,group)=>total+overview.counts[group],0)).toBe(19);
+      const page2=await query.pattern(manager,PatternWorkspaceFilterSchema.parse({scope:"all",lane:lane.key,page:2}));
+      expect(page2.total).toBe(19);expect(page2.items).toHaveLength(4);expect(page2.items[0]?.designStyleNo).toBe("TEST-newest-15");
+    }
+    const mine=await query.pattern({...actor,actorRoles:["pattern_room_worker"]},PatternWorkspaceFilterSchema.parse({search:"newest-0"}));
+    expect(mine.total).toBe(7);expect(mine.boardPreview).toHaveLength(7);expect(mine.boardPreview!.every(task=>task.node.owner?.id===actor.actorId)).toBe(true);
+  });
   it("keeps development defaults, counts authorized bulk task IDs before paging, and omits fact-only markers", async () => {
     const owner = {id:actor.actorId,name:"TEST师傅"};
     const paper=node("development_pattern","active",{owner});

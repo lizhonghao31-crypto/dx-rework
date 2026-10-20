@@ -68,6 +68,7 @@ export class DevelopmentWorkspaceQuery {
       counts: Object.fromEntries(PATTERN_GROUPS.map(group => [group.key, filtered.filter(task => task.group === group.key).length])) as PatternWorkspaceResult["counts"], owners,
       riskCounts:Object.fromEntries(PATTERN_GROUPS.map(group=>[group.key,{dueSoon:filtered.filter(task=>task.group===group.key&&task.node.risks.includes("due_soon")).length,overdue:filtered.filter(task=>task.group===group.key&&task.node.risks.includes("overdue")).length}])) as PatternWorkspaceResult["riskCounts"],
       risks: visible.filter(task => task.node.risks.length > 0).slice(0, 15),
+      boardPreview:PATTERN_LANES.flatMap(lane=>visible.filter(task=>(lane.groups as readonly string[]).includes(task.group)).slice(0,3)),
       items: visible.slice((filter.page - 1) * 15, filter.page * 15)};
   }
 }

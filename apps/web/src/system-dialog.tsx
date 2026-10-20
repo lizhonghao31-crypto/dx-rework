@@ -68,7 +68,8 @@ const mountNextDialog = (): void => {
   const request = queue.shift()!;
   const host = document.createElement("div");
   host.dataset.systemDialogHost = "true";
-  document.body.append(host);
+  // A native modal makes body siblings inert. Keep its confirmation usable in the same top layer.
+  ([...document.querySelectorAll<HTMLDialogElement>("dialog:modal")].at(-1) ?? document.body).append(host);
   const root = createRoot(host);
   let completed = false;
   const finish = (value: boolean | string | null): void => {
