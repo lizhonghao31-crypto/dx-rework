@@ -246,7 +246,10 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     const before=(await db.query("SELECT count(*)::int n FROM digital_production_deadline_revisions")).rows[0].n;
     await node();expect((await db.query("SELECT count(*)::int n FROM digital_production_deadline_revisions")).rows[0].n).toBe(before);
     const execution=new DevelopmentExecutionService(db,true),rootActor=actor(root,["root_superuser"]);
-    await execution.check(rootActor,source.sourceId,{taskId:published.taskId!,result:"缺项退回",note:"TEST 物料补齐接续",items:[]},randomUUID());
+    const initialVerification=(await execution.read(rootActor,source.sourceId)).materialVerification!;
+    const initialEntries=initialVerification.entries.map(row=>({materialId:row.materialId,usage:'use' as const,physical:false,quantity:false,color:false,specification:false,note:'',confirmedWith:''}));
+    await execution.saveMaterials(rootActor,source.sourceId,{taskId:published.taskId!,expectedDocumentVersion:published.version,expectedVersion:0,entries:initialEntries},randomUUID());
+    await execution.check(rootActor,source.sourceId,{taskId:published.taskId!,expectedVerificationVersion:1,result:"缺项退回",note:"TEST 物料补齐接续",items:initialEntries.map(({materialId,physical,quantity,color,specification})=>({materialId,physical,quantity,color,specification}))},randomUUID());
     const supply=(await execution.read(rootActor,source.sourceId)).tasks.find(task=>task.taskKind==="development_material_supply")!;
     expect((await tasks.read(actor(), supply.taskId)).identity).toEqual({designStyleNo:"TEST-MATERIAL-PLAN",customerCode:"PD"});
     await expect(tasks.read(actor(stranger), supply.taskId)).rejects.toMatchObject({statusCode:404});
@@ -257,7 +260,8 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect(await node()).toMatchObject({state:"pending",actualAt:null});
     await forms.materialEvent(actor(),source.sourceId,mainId,{expectedVersion:published.version,expectedMaterialRevision:0,action:"到货",expectedDate:null,note:"TEST 主布到货"},randomUUID());
     const recheck=await execution.resubmit(actor(),source.sourceId,supply.taskId,randomUUID()) as {taskId:string};
-    await execution.check(rootActor,source.sourceId,{taskId:recheck.taskId,result:"通过",note:"实际核验普通辅料和主布",items:[mainId,materialId].map(materialId=>({materialId,physical:true,quantity:true,color:true,specification:true}))},randomUUID());
+    await execution.saveMaterials(rootActor,source.sourceId,{taskId:recheck.taskId,expectedDocumentVersion:published.version,expectedVersion:1,entries:initialEntries.map(row=>({...row,physical:true,quantity:true,color:true,specification:true}))},randomUUID());
+    await execution.check(rootActor,source.sourceId,{taskId:recheck.taskId,expectedVerificationVersion:2,result:"通过",note:"实际核验普通辅料和主布",items:[mainId,materialId].map(materialId=>({materialId,physical:true,quantity:true,color:true,specification:true}))},randomUUID());
     expect(await node()).toMatchObject({state:"completed",actualAt:null,completionResult:"unknown"});
     const summary=await journeys.list(rootActor,JourneyFilterSchema.parse({search:"TEST-MATERIAL-PLAN"}),true,undefined,{details:false});
     expect(summary.items.find(item=>item.sourceId===source.sourceId)?.stages.flatMap(stage=>stage.nodes).find(item=>item.instanceId===`material:${materialId}:1`)?.state).toBe("completed");
@@ -334,7 +338,10 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   it("resolves names only on visible task reassignment facts while preserving stable IDs",async()=>{
     const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-J-NAMED-HISTORY",temporaryStyleNo:null,customerCode:"PD"},randomUUID());
     const {taskId}=await createTask({resource:{kind:"source",id:source.sourceId},kind:"development_cutting",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:null,conditions:["handover_received"]});
-    await tasks.reassign(actor(root,["root_superuser"]),taskId,worker,randomUUID());
+    await expect(tasks.reassign(actor(root,["root_superuser"]),taskId,worker,randomUUID())).rejects.toThrow('总委派');
+    // Seed a real reassignment event via the transaction adapter used by total arrangement;
+    // this test covers authorized history projection, not a second dispatch entry.
+    const client=await db.connect();try{await client.query('BEGIN');await tasks.reassignWithClient(client,actor(root,["root_superuser"]),taskId,worker);await client.query('COMMIT');}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
     const item=await journeys.read(actor(),source.sourceId);
     const node=item.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===taskId)!;
     expect(node.assignmentHistory).toContainEqual(expect.objectContaining({actorId:root,actorName:"TEST-J owner_group",from:null,fromName:null,to:worker,toName:"TEST-J pattern_room_worker"}));

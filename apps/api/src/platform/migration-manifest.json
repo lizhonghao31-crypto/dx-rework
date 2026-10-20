@@ -1023,6 +1023,10 @@
     {
       "version": "0246_development_round_arrangements",
       "checksum": "13abe894f8ca7ddb532565cd939a591d6e6dc7e79db802157764c486a761dfd6"
+    },
+    {
+      "version": "0247_development_material_verification",
+      "checksum": "2b70ce27f139d95597ca06cad847e419f56e856a7fcaf8c1fe8ed80a8a3b3577"
     }
   ]
 }

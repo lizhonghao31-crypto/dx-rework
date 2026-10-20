@@ -262,7 +262,7 @@ export class DigitalJourneyQuery {
         "SELECT material_id,action,expected_date::text FROM digital_development_material_events WHERE source_id=$1 AND route_version=$2 ORDER BY sequence", [sid, round ?? 1])).rows;
       const effectiveMaterials=(await materialsFor(round??1)).materials;
       const today = new Intl.DateTimeFormat("en-CA", {timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(asOf));
-      const materials = (currentDocument.document as DevelopmentDocument).materials.filter(material => material.requiredThisRound);
+      const materials = (currentDocument.document as DevelopmentDocument).materials.filter(material => effectiveMaterials.some(item=>item.materialId===material.materialId&&item.required));
       const supplyPlaceholder = baseNodes.findIndex(value => value.key === "development_material_supply" && value.instanceId === `development_material_supply:${value.round ?? 0}`);
       if (!materials.length && supplyPlaceholder >= 0) baseNodes[supplyPlaceholder] = emptyNode("development_material_supply", "not_applicable", round);
       materials.forEach((material, index) => {

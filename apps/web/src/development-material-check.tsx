@@ -1,9 +1,11 @@
+import {DevelopmentMaterialVerification} from "./development-material-verification.js";
 import {useState} from 'react';
 import type {DigitalTask} from '@dx-rework/contracts/digital-production-tasks';
 import {Button} from '@dx-rework/ui';
 import {WorkbenchAction} from './workbench-action.js';
 import type {useDevelopmentExecution} from './digital-development-execution-panel.js';
-export function DevelopmentMaterialCheck({controller,task}:{controller:ReturnType<typeof useDevelopmentExecution>;task:DigitalTask}){
+export function DevelopmentMaterialCheck({controller,task}:{controller:ReturnType<typeof useDevelopmentExecution>;task:DigitalTask}){return controller.state?.materialVerification?<DevelopmentMaterialVerification controller={controller} task={task}/>:<LegacyMaterialCheck controller={controller} task={task}/>;}
+function LegacyMaterialCheck({controller,task}:{controller:ReturnType<typeof useDevelopmentExecution>;task:DigitalTask}){
  const {state,busy,run}=controller,materials=state?.sheet.document?.materials??[];
  const fields=['physical','quantity','color','specification'] as const;
  const previous=state?.facts.filter(f=>f.kind==='缺项退回'&&state.tasks.some(t=>t.taskId===f.taskId&&t.routeVersion===task.routeVersion)).at(-1)?.payload.items??[];

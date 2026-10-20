@@ -1,3 +1,4 @@
+import {fabricDecisionTodos} from "./development-fabric-cases.js";
 import {arrangementTodos,hiddenNativeDevelopmentTodo} from "./development-arrangement-todos.js";
 import {arrangementsAvailable} from "./development-arrangement.js";
 import {DEVELOPMENT_ARRANGEABLE_KINDS} from "@dx-rework/contracts/development-arrangement";
@@ -151,7 +152,7 @@ export class DigitalProductionNotificationService {
     if(!people.some(p=>p.actorId===actor.actorId))return [];
     const tasks=(await this.database.query<Task>(`${TASKS} WHERE ${ACTIVE} ORDER BY d.due_at NULLS LAST,t.created_at,t.task_id`)).rows;
     const unified=await arrangementsAvailable(this.database);
-    const result:TodoResponse[]=unified?await arrangementTodos(this.database,actor):[];
+    const result:TodoResponse[]=unified?[...await arrangementTodos(this.database,actor),...await fabricDecisionTodos(this.database,actor)]:[];
     for(const task of tasks){
       const missing=!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role));
       if(unified&&missing&&task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind))continue;

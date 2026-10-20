@@ -1,3 +1,4 @@
+import {effectiveVerificationDocument} from "./development-material-verification.js";
 import {documentMetadata} from "./document-metadata.js";
 import {materialReadiness} from "./development-material-readiness.js";
 import { DigitalOrderCreateSchema, beijingCalendarDate, customerOrderDateError, minimumInitialCustomerDate, initialCustomerOrderInput, initialCustomerDateErrors } from "@dx-rework/contracts/digital-production";
@@ -132,7 +133,7 @@ export class DigitalDevelopmentService {
       const rounds=await developmentRoundsAvailable(db);
       const revision=Number((await db.query(`SELECT count(*) AS revision FROM digital_development_material_events WHERE source_id=$1 AND material_id=$2 ${rounds?"AND route_version=$3":""}`,[sourceId,materialId,...(rounds?[row.round_number??1]:[])])).rows[0].revision);
       if(revision!==input.expectedMaterialRevision)conflict("物料记录已更新，请刷新后重新确认");
-      const material = (row.document as DevelopmentDocument).materials.find(item => item.materialId === materialId);
+      const material = (await effectiveVerificationDocument(db,sourceId,row.round_number??1,row.document as DevelopmentDocument)).materials.find(item => item.materialId === materialId);
       if (!material || !material.requiredThisRound) conflict("该物料不属于本轮所需");
       if (input.action === "确认代用" && material!.category !== "辅料") conflict("设计师代用确认仅适用于辅料；问题面料须供应链总监决定");
       const eventId = randomUUID();

@@ -936,5 +936,26 @@
       "guard_production_order_root_immutable"
     ],
     "sequences": []
+  },
+  "0247_development_material_verification": {
+    "checksum": "2b70ce27f139d95597ca06cad847e419f56e856a7fcaf8c1fe8ed80a8a3b3577",
+    "tables": [
+      "digital_development_material_verifications"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "digital_production_sources",
+      "digital_production_tasks"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_development_material_verifications"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }

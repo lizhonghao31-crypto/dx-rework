@@ -10,14 +10,14 @@ const extensions = JSON.parse(readFileSync("scripts/migration-main-extensions.js
 const frozenMain225Extensions = extensions.filter((row: {version:string})=>Number(row.version.slice(0,4))<=225);
 const newlyReconciledMain = ["0226_external_revision_preserve_handler", "0227_qc_other_craft"];
 const production = [...manifest.migrations.slice(0, 217), ...branches.main, ...frozenMain225Extensions].sort((a, b) => a.version.localeCompare(b.version));
-const added = ["0225_warehouse_supervisor_cutting_read", "0242_warehouse_supervisor_digital_dispatch", "0243_misc_order_stable_association", "0244_development_sewing_result_attachments", "0245_development_pattern_result_attachments", "0246_development_round_arrangements"];
+const added = ["0225_warehouse_supervisor_cutting_read", "0242_warehouse_supervisor_digital_dispatch", "0243_misc_order_stable_association", "0244_development_sewing_result_attachments", "0245_development_pattern_result_attachments", "0246_development_round_arrangements", "0247_development_material_verification"];
 const acceptance = manifest.migrations.filter((row: { version: string }) => !added.includes(row.version) && !newlyReconciledMain.includes(row.version));
 
 describe("main 0225 and Acceptance 248 compatible sync", () => {
   it("admits both exact histories without rewriting applied rows", () => {
     expect(production).toHaveLength(225);
     expect(acceptance).toHaveLength(248);
-    expect(checkHistory({ database: "dx_rework", migrations: production }, manifest, "production").pending).toHaveLength(31);
+    expect(checkHistory({ database: "dx_rework", migrations: production }, manifest, "production").pending).toHaveLength(32);
     expect(checkHistory({ database: "dx_rework_acceptance", migrations: acceptance }, manifest, "acceptance").pending).toEqual([...added,...newlyReconciledMain].sort((a,b)=>a.localeCompare(b)));
     expect(frozenMain225Extensions.at(-1)).toEqual({ version: added[0], checksum: "85ce0adb63cdba755011a53455bd9f7c762d9e5f0d5dd0157111c375b1d0d4b1" });
     expect(() => assertMigrationSequence(manifest.migrations)).not.toThrow();

@@ -52,6 +52,11 @@ export function isEarlyMaterialException(material: DevelopmentMaterial): boolean
   return material.category === "辅料" && (material.auxiliaryKind === "拉链" || material.auxiliaryKind === "扁机");
 }
 export type DevelopmentMaterialEvent = z.infer<typeof DevelopmentMaterialEventSchema>;
+/** Empty template slots are not a declaration that a material is unused. */
+export function isDevelopmentMaterialPlaceholder(item:DevelopmentMaterial):boolean {
+  return ["","主布 A","配布 B","配布 C"].includes(item.label)&&
+    ![item.name,item.supplier,item.width,item.weight,item.composition,item.consumption,item.color,item.specification,item.quantity,item.expectedDate].some(Boolean)&&!item.available;
+}
 export function developmentPublishErrors(document: DevelopmentDocument): string[] {
   const errors: string[] = [];
   if (!document.quantity) errors.push("请填写本轮打板数量");
@@ -70,7 +75,7 @@ export function developmentPublishErrors(document: DevelopmentDocument): string[
 }
 export type DevelopmentSheet = {
   metadata?:JourneyDocumentMetadata;
-  materialReadiness?:Array<{materialId:string;available:boolean;verified:boolean;missing:string[];evidenceId:string|null}>;
+  materialReadiness?:Array<{required?:boolean;materialId:string;available:boolean;verified:boolean;missing:string[];evidenceId:string|null}>;
   productionOrderId?:string|null;
   sourceId: string; designStyleNo: string; temporaryStyleNo: string | null; customerCode: string | null;
   developmentType: string; designerName: string; version: number; status: "draft" | "published";

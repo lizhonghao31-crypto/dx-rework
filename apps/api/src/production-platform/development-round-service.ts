@@ -1,3 +1,5 @@
+import {verificationAvailable} from "./development-material-verification.js";
+import {isDevelopmentMaterialPlaceholder} from "@dx-rework/contracts/digital-development";
 import {authorizePatternOrder} from "../pattern-room/order-authority.js";
 import { BulkPreparationService } from "./bulk-preparation-service.js";
 import {isDeepStrictEqual} from "node:util";
@@ -74,8 +76,10 @@ export class DevelopmentRoundService {
   if(input.affectedNodes.includes('工艺')&&input.document.craft==='无')fail('本轮没有印绣花工艺');
   if(input.affectedNodes.includes('洗水')&&input.document.washing==='免洗')fail('本轮为免洗，请核对受影响节点');
   const document=structuredClone(input.document),affectedNodes=[...input.affectedNodes];
+  const clerkVerification=await verificationAvailable(db);
   // A changed material gets its own identity; old arrivals never certify a replacement.
-  for(const material of document.materials){const old=sheet.document!.materials.find(item=>item.materialId===material.materialId);if(!old||!isDeepStrictEqual(old,material)){if(old)material.materialId=randomUUID();if(material.requiredThisRound&&!affectedNodes.includes('核配'))affectedNodes.push('核配');}}
+  for(const material of document.materials){const old=sheet.document!.materials.find(item=>item.materialId===material.materialId);if(!old||!isDeepStrictEqual(old,material)){if(old)material.materialId=randomUUID();if((clerkVerification?!isDevelopmentMaterialPlaceholder(material):material.requiredThisRound)&&!affectedNodes.includes('核配'))affectedNodes.push('核配');}}
+  if(clerkVerification&&sheet.document!.materials.some(old=>!isDevelopmentMaterialPlaceholder(old)&&!input.document.materials.some(m=>m.materialId===old.materialId))&&!affectedNodes.includes('核配'))affectedNodes.push('核配');
   const completed:Record<string,{taskId:string;roundNumber:number}>={};
   const tasks=(await db.query("SELECT t.task_id,t.route_version,a.task_kind FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.state='completed' AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') ORDER BY t.route_version DESC,t.completed_at DESC,t.task_id",[sourceId])).rows;
   for(const task of tasks){const kind=task.task_kind==='development_material_recheck'?'development_materials':task.task_kind;if(!completed[kind])completed[kind]={taskId:task.task_id,roundNumber:task.route_version};}
