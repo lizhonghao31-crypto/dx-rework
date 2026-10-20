@@ -6,6 +6,7 @@ on:
       - main
       - release/digital-production-v1
       - feat/digital-production-a4
+      - unified-p*
     types:
       - opened
       - synchronize

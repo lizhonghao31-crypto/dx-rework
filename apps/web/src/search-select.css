@@ -17,3 +17,8 @@
 .dx-field__control.search-select-control > .search-select { border:0; box-shadow:none; }
 .dx-field__control.search-select-control > .search-select:focus-within { outline:0; }
 .dx-field__control.search-select-control > .search-select > input:focus-visible, .search-select.native-search-select > input:focus-visible { outline:0; box-shadow:none; }
+
+/* Opt-in assignment menu; native controls and all other hosts remain in place. */
+.search-select__results--viewport{box-sizing:border-box;z-index:1000;min-height:0;overscroll-behavior:contain;font:inherit}
+.search-select__results--viewport button{min-width:0;overflow-wrap:anywhere}
+.search-select__results--viewport button:disabled{opacity:.5;cursor:default}

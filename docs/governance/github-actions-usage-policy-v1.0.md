@@ -40,3 +40,7 @@ Weakening or bypassing this policy requires explicit business-owner approval.
 ## Digital production integration branch
 
 PRs targeting `release/digital-production-v1` use the same title-selected, exact-Head Quick/Full Gates as PRs targeting `main`. This exact branch is explicitly allowed; unrelated release branches are not enabled. Gate classification continues to use the event's actual base and head SHA. This does not enable deployment, Preview or extra runners.
+
+## Approved unified-plan stacked PR bases (2026-10-21)
+
+The authorized P01—P15 implementation keeps every PR unmerged until group release approval. `unified-p*` base branches therefore use the same exact-Head title-selected gates. This adds only the planned stacked base namespace: no deployment, Preview, additional runner, permission or sensitive-domain exemption is enabled. The first PR still targets `release/digital-production-v1`; subsequent PRs target their dependency branch. Group candidate boundaries remain P06, P12 and P15. When a dependency is repaired or rebased, downstream Heads must be synchronized and retested.
