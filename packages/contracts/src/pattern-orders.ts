@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {DevelopmentMakingUpgradeSchema,DevelopmentMakingBasisSchema} from './digital-development.js';
 import {DEVELOPMENT_REVISION_NODES,DEVELOPMENT_PROBLEM_CATEGORIES} from "./digital-development-rounds.js";
 
 // Switched on only when the six-PR wage closure is complete. Root can verify each increment.
@@ -62,11 +63,14 @@ export const PatternWorkAmountSchema = z.string().regex(/^(?:0|[1-9]\d{0,16})(?:
 });
 export const AssignPatternOrderSchema = PatternRoundActionSchema.extend({ personId: z.string().uuid(), amount: PatternWorkAmountSchema.optional() }).strict();
 export const UpdatePatternMaterialsSchema = PatternRoundActionSchema.extend({ ...materials, reason: z.string().trim().min(1).max(500) }).strict();
+/** Transport compatibility only: server permits long text solely when unchanged on a linked generated order. */
+export const UpdateLinkedPatternMaterialsSchema=UpdatePatternMaterialsSchema.extend({sizeColor:optionalText(2400)}).strict();
 export const UpdateMiscMaterialsSchema = CreateMiscOrderSchema.omit({ priceVersion: true }).extend({ version: z.number().int().positive(), roundId: z.string().uuid(), reason: z.string().trim().min(1).max(500) }).strict();
 export const PatternHoursSchema = z.string().regex(/^(?:0|[1-9]\d{0,5})(?:\.\d)?$/, "工时须为0.1小时的整数倍").refine(value => /^\d+(?:\.\d)?$/.test(value) && BigInt(value.replace(".", "")) > 0n, "工时须大于0").transform(value => value.includes(".") ? value : `${value}.0`);
 export const RecordPatternHoursSchema = PatternRoundActionSchema.extend({ hours: PatternHoursSchema }).strict();
 export const PatternStoppedHoursSchema = z.string().regex(/^(?:0|[1-9]\d{0,5})(?:\.\d)?$/, "工时须为0.1小时的整数倍，可明确填0").transform(value => value.includes(".") ? value : `${value}.0`);
 export const RequestPatternReworkSchema = PatternRoundActionSchema.extend({
+  developmentMaking:DevelopmentMakingUpgradeSchema.optional(),
   reason: z.string().trim().min(1, "请填写返工内容或原因").max(2000), reasonCategory: z.enum(["customer_change", "workmanship", "other"]),
   attachmentIds: z.array(z.string().uuid()).max(20).default([]).refine(ids => new Set(ids).size === ids.length, "附件不能重复"),
   retainedAttachmentIds: z.array(z.string().uuid()).max(20).refine(ids => new Set(ids).size === ids.length, "附件不能重复").optional(),
@@ -94,6 +98,7 @@ export const PatternWorkerOptionsSchema = z.array(z.object({ personId: z.string(
 export const PatternPeopleFiltersSchema = z.object({ creators: z.array(z.object({ id: z.string().uuid(), name: z.string() })), workers: z.array(z.object({ id: z.string().uuid(), name: z.string() })) });
 export const PatternAttachmentSchema = z.object({ attachmentId: z.string().uuid(), roundId: z.string().uuid(), filename: z.string(), mimeType: z.string(), sizeBytes: z.number(), active: z.boolean(), addedAt: z.string(), reason: z.string() });
 export const PatternOrderDetailSchema = PatternOrderSummarySchema.extend({
+  developmentMakingBasis:DevelopmentMakingBasisSchema.optional(),
   association:MiscAssociationSnapshotSchema.nullable().optional(),
   developmentSourceId:z.string().uuid().optional(),
   currentRoundId: z.string().uuid(), customer: z.string().nullable(), sizeColor: z.string().nullable(), referenceStyleNo: z.string().nullable(), variant: z.string().nullable(), note: z.string().nullable(),

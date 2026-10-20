@@ -50,6 +50,11 @@ export const DevelopmentMaterialEventSchema = z.object({ expectedMaterialRevisio
   if (value.action === "确认代用" && !value.note) context.addIssue({code:"custom",path:["note"],message:"请填写代用说明"});
 });
 export type DevelopmentDocument = z.infer<typeof DevelopmentDocumentSchema>;
+export const DevelopmentMakingUpgradeSchema=z.object({expectedDocumentVersion:z.number().int().positive(),quantities:z.array(z.number().int().min(0).max(100000)).min(1).max(20)}).strict();
+export type DevelopmentMakingUpgrade=z.infer<typeof DevelopmentMakingUpgradeSchema>;
+export const DevelopmentMakingBasisSchema=z.object({documentVersion:z.number().int().positive(),quantity:z.number().int().positive().nullable(),sizes:z.array(short).max(20),needsUpgrade:z.boolean()}).strict();
+export type DevelopmentMakingBasis=z.infer<typeof DevelopmentMakingBasisSchema>;
+export function developmentMakingBasis(document:DevelopmentDocument,documentVersion:number):DevelopmentMakingBasis{return {documentVersion,quantity:document.quantity,sizes:document.sizes,needsUpgrade:developmentSizeQuantityIssues(document).length>0};}
 export type DevelopmentMaterial = z.infer<typeof DevelopmentMaterialSchema>;
 /** Legacy/unclassified auxiliaries remain ordinary; never infer exceptions from a name. */
 export function isEarlyMaterialException(material: DevelopmentMaterial): boolean {

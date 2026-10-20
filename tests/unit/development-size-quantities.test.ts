@@ -1,3 +1,4 @@
+import {CreatePatternOrderSchema,UpdatePatternMaterialsSchema,UpdateLinkedPatternMaterialsSchema} from "@dx-rework/contracts/pattern-orders";
 import {describe,it,expect} from "vitest";
 import {randomUUID} from "node:crypto";
 import {createElement} from "react";
@@ -7,7 +8,7 @@ import {DevelopmentDocumentSchema,developmentPublishErrors,developmentMakingSize
 import {developmentAmendmentErrors} from "@dx-rework/contracts/digital-development-amendments";
 import {initialDevelopmentDocument,removeDevelopmentSize,moveDevelopmentSize,developmentSizeQuantityInputs,developmentOrderInput} from "../../apps/web/src/digital-development-editing.js";
 import {developmentIssues} from "../../apps/web/src/digital-development-validation.js";
-import {developmentDraftForSave,developmentRevisionForSave,legacyAmendmentPublicationOptions} from "../../apps/api/src/production-platform/development-document-format.js";
+import {developmentAutomaticRoundDocument,developmentDraftForSave,developmentRevisionForSave,legacyAmendmentPublicationOptions} from "../../apps/api/src/production-platform/development-document-format.js";
 const document=()=>({...initialDevelopmentDocument(),quantity:3,sizes:["M","L","XL"],sizeQuantities:[2,1,0],measurements:[{name:"胸围",values:["90","94","98"]}],orderDate:"2026-10-20",files:[{attachmentId:randomUUID(),kind:"款图" as const}],materials:[]});
 describe("P03 per-size making quantities and frozen development date",()=>{
  it("uses one size matrix for making and keeps PO order quantities independent",()=>{
@@ -39,6 +40,21 @@ describe("P03 per-size making quantities and frozen development date",()=>{
   const corrected={...legacy,instructions:"资料澄清"},options=legacyAmendmentPublicationOptions(legacy,corrected);expect(developmentPublishErrors(corrected,options)).toEqual([]);expect(legacy.orderDate).toBeNull();
   expect(developmentAmendmentErrors(legacy,{...corrected,quantity:4}).length).toBeGreaterThan(0);expect(legacyAmendmentPublicationOptions(document(),legacy).allowLegacySizeQuantities).toBe(false);
   expect(developmentPublishErrors(developmentRevisionForSave(legacy,legacy),{allowMissingOrderDate:true}).join()).toContain("制作数量");expect(()=>developmentRevisionForSave({...document(),orderDate:"2026-10-21"},document())).toThrow("首次");
+ });
+ it("requires explicit automatic-round upgrades with a matching basis and never mutates frozen making facts",()=>{
+  const legacy=document();delete legacy.documentFormatVersion;delete legacy.sizeQuantities;legacy.orderDate=null;
+  const frozen=structuredClone(legacy);expect(()=>developmentAutomaticRoundDocument(legacy,4,undefined)).toThrow('历史资料缺少');
+  for(const quantities of [[1,1,0],[0,0,0],[-1,4,0],[1.5,1.5,0],[3]])expect(()=>developmentAutomaticRoundDocument(legacy,4,{expectedDocumentVersion:4,quantities})).toThrow();
+  expect(()=>developmentAutomaticRoundDocument(legacy,4,{expectedDocumentVersion:3,quantities:[2,1,0]})).toThrow('依据已更新');
+  const upgraded=developmentAutomaticRoundDocument(legacy,4,{expectedDocumentVersion:4,quantities:[0,3,0]});expect(upgraded).toMatchObject({documentFormatVersion:2,sizeQuantities:[0,3,0],orderDate:null});expect(legacy).toEqual(frozen);
+  expect(developmentPublishErrors(upgraded,{allowMissingOrderDate:true})).toEqual([]);
+  expect(()=>developmentAutomaticRoundDocument(document(),4,{expectedDocumentVersion:4,quantities:[0,3,0]})).toThrow('已有有效');
+ });
+ it("keeps standalone free text at 200 while linked update transport preserves a generated summary",()=>{
+  const input={styleNo:'TEST',requiredDate:null,customer:null,sizeColor:'码'.repeat(250),referenceStyleNo:null,variant:null,note:'TEST',attachmentIds:[randomUUID()],reason:'TEST更新无关字段',version:1,roundId:randomUUID()};
+  expect(UpdatePatternMaterialsSchema.safeParse(input).success).toBe(false);expect(UpdateLinkedPatternMaterialsSchema.safeParse(input).success).toBe(true);
+  const {version:_v,roundId:_r,reason:_why,...materials}=input;void _v;void _r;void _why;
+  expect(CreatePatternOrderSchema.safeParse({...materials,categoryId:randomUUID(),quantity:1,priceVersion:1}).success).toBe(false);
  });
  it("prints the same positive making summary and zero columns without substituting PO counts",()=>{
   const value=document(),sheet={sourceId:randomUUID(),designStyleNo:"TEST",temporaryStyleNo:null,customerCode:null,developmentType:"头版",designerName:"TEST设计师",version:2,status:"published" as const,document:value,publishedAt:null,taskId:null,canEdit:false,materialEvents:[]};

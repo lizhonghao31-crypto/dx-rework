@@ -103,7 +103,7 @@ const url=process.env.TEST_DATABASE_URL;
   expect((await execution.read(actor("designer"),f.sourceId)).tasks.filter(task=>task.taskKind==="development_material_recheck")).toHaveLength(0);
  });
  it("P03 creates native execution from all 20 positive making sizes without truncating names or changing price rules",async()=>{
-  const designerActor={...actor("designer"),authorizationCapabilities:[...actor("designer").authorizationCapabilities??[],"pattern_room:orders:view"]};
+  const designerActor={...actor("designer"),authorizationCapabilities:[...actor("designer").authorizationCapabilities??[],"pattern_room:orders:view","pattern_room:orders:edit"]};
   const source=await identity.createSource(designerActor,{designStyleNo:`TEST-P03-${randomUUID()}`,temporaryStyleNo:null,customerCode:null,developmentType:"头版"},randomUUID()),attachmentId=randomUUID();
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[attachmentId,`TEST/${attachmentId}`,"a".repeat(64),ids.designer]);
   const native=new PatternRoomOrderService(db,new TodoProjectionService(new TodoService(db)),{ordersEnabled:true}),linkedForms=new DigitalDevelopmentService(db,true,native);
@@ -113,6 +113,15 @@ const url=process.env.TEST_DATABASE_URL;
   const published=await linkedForms.publish(designerActor,source.sourceId,saved.version,randomUUID(),{categoryId:price.price_id,priceVersion:price.version});
   const link=(await db.query("SELECT order_id FROM digital_development_pattern_links WHERE source_id=$1",[source.sourceId])).rows[0];
   const order=await native.get(designerActor,link.order_id);expect(order.sizeColor).toBe(developmentMakingSizes(published.document));expect(order.sizeColor!.length).toBeGreaterThan(200);expect(order.rounds[0]!.quantity).toBe(20);
+  const extra=randomUUID();await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-extra.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[extra,`TEST/${extra}`,"b".repeat(64),ids.designer]);
+  const change={version:order.version,roundId:order.currentRoundId,styleNo:order.styleNo,requiredDate:'2026-12-01',customer:order.customer,sizeColor:order.sizeColor,referenceStyleNo:order.referenceStyleNo,variant:order.variant,note:'TEST只更新附件日期备注',attachmentIds:[attachmentId,extra],reason:'TEST保留长系统摘要'},key=randomUUID();
+  await expect(native.updateMaterials({...actor('worker'),authorizationCapabilities:['pattern_room:orders:view','pattern_room:orders:edit']},order.orderId,change,randomUUID())).rejects.toMatchObject({statusCode:403});
+  const changed=await native.updateMaterials(designerActor,order.orderId,change,key);await native.updateMaterials(designerActor,order.orderId,change,key);
+  expect(changed).toMatchObject({sizeColor:order.sizeColor,requiredDate:'2026-12-01',note:change.note,version:order.version+1});expect(changed.attachments.filter(file=>file.active)).toHaveLength(2);
+  for(const sizeColor of [order.sizeColor+'TEST伪造','TEST短文本',null])await expect(native.updateMaterials(designerActor,order.orderId,{...change,version:changed.version,sizeColor},randomUUID())).rejects.toMatchObject({statusCode:400});
+  expect((await native.get(designerActor,order.orderId)).version).toBe(changed.version);
+  expect((await linkedForms.read(designerActor,source.sourceId)).document).toEqual(published.document);
+
  });
 
  it("P03 reads and corrects a pre-upgrade frozen legacy snapshot without inventing counts or its missing date",async()=>{

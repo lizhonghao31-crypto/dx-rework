@@ -1,3 +1,4 @@
+import {DevelopmentMakingUpgradeSchema} from './digital-development.js';
 import {DevelopmentReturnIssueSchema,type DevelopmentReturnIssue} from "./digital-development-amendments.js";
 import {DEVELOPMENT_REVISION_NODES,DEVELOPMENT_PROBLEM_CATEGORIES} from "./digital-development-rounds.js";
 import { z } from "zod";
@@ -22,6 +23,6 @@ export const DevelopmentFabricDecisionSchema=z.object({expectedDecisionId:z.stri
 export type DevelopmentDispatch=z.infer<typeof DevelopmentDispatchSchema>;
 export type DevelopmentCheck=z.infer<typeof DevelopmentCheckSchema>;
 export type DevelopmentWork=z.infer<typeof DevelopmentWorkSchema>;
-export const DevelopmentRouteActionSchema=z.object({attachmentIds:z.array(z.string().uuid()).max(20).optional(),returnNodes:z.array(z.enum(DEVELOPMENT_REVISION_NODES)).max(6).optional(),problemCategories:z.array(z.enum(DEVELOPMENT_PROBLEM_CATEGORIES)).max(8).optional(),craftExecution:z.enum(["内部","外发"]).nullable(),taskId:z.string().uuid(),note:z.string().trim().max(2000),result:z.enum(["通过","退回"]),nextAssigneeId:z.string().uuid().nullable(),sentDate:z.iso.date().nullable(),trackingNo:z.string().trim().max(100).nullable()}).strict();
+export const DevelopmentRouteActionSchema=z.object({making:DevelopmentMakingUpgradeSchema.optional(),attachmentIds:z.array(z.string().uuid()).max(20).optional(),returnNodes:z.array(z.enum(DEVELOPMENT_REVISION_NODES)).max(6).optional(),problemCategories:z.array(z.enum(DEVELOPMENT_PROBLEM_CATEGORIES)).max(8).optional(),craftExecution:z.enum(["内部","外发"]).nullable(),taskId:z.string().uuid(),note:z.string().trim().max(2000),result:z.enum(["通过","退回"]),nextAssigneeId:z.string().uuid().nullable(),sentDate:z.iso.date().nullable(),trackingNo:z.string().trim().max(100).nullable()}).strict();
 export const DevelopmentPatternOrderSchema=z.object({categoryId:z.string().uuid(),priceVersion:z.number().int().positive()}).strict();
 export const DevelopmentCustomerSampleSchema=z.object({routeVersion:z.number().int().positive(),note:z.string().trim().min(1).max(2000)}).strict();

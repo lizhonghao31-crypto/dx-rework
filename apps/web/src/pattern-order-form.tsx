@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { z } from "zod";
 import { Button, Surface } from "@dx-rework/ui";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
-import { CreatePatternOrderSchema, CreateMiscOrderSchema, UpdateMiscMaterialsSchema, UpdatePatternMaterialsSchema, PatternOrderDetailSchema, type PatternOrderDetail, type MiscAssociationSnapshot } from "@dx-rework/contracts/pattern-orders";
+import { CreatePatternOrderSchema, CreateMiscOrderSchema, UpdateMiscMaterialsSchema, UpdatePatternMaterialsSchema, UpdateLinkedPatternMaterialsSchema, PatternOrderDetailSchema, type PatternOrderDetail, type MiscAssociationSnapshot } from "@dx-rework/contracts/pattern-orders";
 import { PatternCategoryOptionsSchema } from "@dx-rework/contracts/pattern-room";
 import { createClientRequestId } from "./client-request-id.js";
 import { patternRequest, PatternRequestError, uploadPatternOriginal } from "./pattern-order-client.js";
@@ -55,7 +55,7 @@ export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSav
     const { reason, taskName, ...fields } = values;
     const common = { styleNo: fields.styleNo, requiredDate: fields.requiredDate || null, note: fields.note, attachmentIds: files.map(file => file.attachmentId) };
     const materials = misc ? { ...common, taskName,...(!legacyAssociation?{association:association?{kind:association.kind,id:association.id}:null}:{}) } : { ...fields, ...common, variant: fields.variant || null };
-    const input = order ? (misc ? UpdateMiscMaterialsSchema : UpdatePatternMaterialsSchema).safeParse({ ...materials, reason, version: order.version, roundId: order.currentRoundId })
+    const input = order ? (misc ? UpdateMiscMaterialsSchema : order.developmentSourceId?UpdateLinkedPatternMaterialsSchema:UpdatePatternMaterialsSchema).safeParse({ ...materials, reason, version: order.version, roundId: order.currentRoundId })
       : misc ? CreateMiscOrderSchema.safeParse({ ...materials, priceVersion: quote?.version }) : CreatePatternOrderSchema.safeParse({ ...materials, categoryId, quantity: Number(quantity), priceVersion: quote?.version });
     if (!input.success) { setError(input.error.issues[0]?.message ?? "请补充必填信息"); return; }
     const body = JSON.stringify(input.data);
@@ -84,7 +84,7 @@ export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSav
       {!misc && <InsetField label="客户" value={values.customer} maxLength={100} onChange={e => setValues({ ...values, customer: e.target.value })} disabled={disabled} />}
     </div>
     {!misc ? <div className="pattern-fields pattern-form-secondary">
-      <InsetField label="尺码与颜色" value={values.sizeColor} maxLength={200} onChange={e => setValues({ ...values, sizeColor: e.target.value })} disabled={disabled} />
+      {order?.developmentSourceId&&values.sizeColor.length>200?<section aria-label="系统制作摘要"><strong>各码制作（系统生成）</strong><p style={{overflowWrap:"anywhere"}}>{values.sizeColor}</p><small>更新附件、日期或备注会保留此摘要；制作数量请从开发资料的实际复版办理。</small></section>:<InsetField label="尺码与颜色" value={values.sizeColor} maxLength={200} onChange={e => setValues({ ...values, sizeColor: e.target.value })} disabled={disabled} />}
       <label>版型<select className="rework-v2-control" value={values.variant} onChange={e => setValues({ ...values, variant: e.target.value })} disabled={disabled}><option value="">未指定</option>{["初版", "复版", "齐色版"].map(value => <option key={value}>{value}</option>)}</select></label>
       <InsetField label="参考款号" value={values.referenceStyleNo} maxLength={100} onChange={e => setValues({ ...values, referenceStyleNo: e.target.value })} disabled={disabled} /></div> : null}
     <label className="pattern-form-note">备注<textarea rows={2} className="rework-v2-control" value={values.note} maxLength={2000} onChange={e => setValues({ ...values, note: e.target.value })} disabled={disabled} /></label>

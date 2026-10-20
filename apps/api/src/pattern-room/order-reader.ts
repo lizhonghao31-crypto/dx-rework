@@ -1,3 +1,5 @@
+import {developmentMakingBasis} from '@dx-rework/contracts/digital-development';
+import {developmentDocumentRow} from '../production-platform/development-round-repository.js';
 import { patternOrderAtNode, type PatternHistorySelection, type PatternHistoryEvent } from "./order-history.js";
 import { PatternOrderDetailSchema, PatternOrderListSchema, PatternOrderQuerySchema, canUsePatternOrder, type MiscAssociationSnapshot, type PatternOrderCapability, type PatternOrderDetail, type PatternOrderQuery, type PatternOrderSummary } from "@dx-rework/contracts/pattern-orders";
 import type { Pool, PoolClient } from "pg";
@@ -122,7 +124,8 @@ export class PatternOrderReader {
       const mayRework = order.kind === "pattern" && ["pending_confirmation", "completed"].includes(order.status) && !!currentRound?.completed_at && available("pattern_room:orders:rework") && (creator || effective.actorRoles.includes("pattern_room_supervisor"));
       const reworkCutBlocked = mayRework && await patternReworkCutBlocked(client, orderId);
       const developmentSource=allMaterials&&(await client.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation?(await client.query("SELECT source_id FROM digital_development_pattern_links WHERE order_id=$1",[orderId])).rows[0]:null;
-      const detail = PatternOrderDetailSchema.parse({ ...patternSummary(order), association:order.misc_association??null,...(developmentSource?{developmentSourceId:developmentSource.source_id}:{}), currentRoundId: order.current_round_id, customer: order.customer, sizeColor: order.size_color,
+      const makingDocument=developmentSource&&mayRework&&!reworkCutBlocked&&(!selection.round||selection.round===order.current_round_id)&&(!selection.node||selection.node===order.status)&&await new DigitalProductionAccessPolicy(client).allowed(effective,'source',developmentSource.source_id,'technical')?await developmentDocumentRow(client,developmentSource.source_id):null;
+      const detail = PatternOrderDetailSchema.parse({ ...patternSummary(order),...(makingDocument?{developmentMakingBasis:developmentMakingBasis(makingDocument.document,makingDocument.version)}:{}), association:order.misc_association??null,...(developmentSource?{developmentSourceId:developmentSource.source_id}:{}), currentRoundId: order.current_round_id, customer: order.customer, sizeColor: order.size_color,
         reworkBlockedReason: reworkCutBlocked ? PATTERN_REWORK_CUT_BLOCK : null,
         referenceStyleNo: order.reference_style_no, variant: order.variant, note: allMaterials || currentWorkerAccess ? order.note : null,
         rounds: rounds.filter(round => allCosts || round.round_id === order.current_round_id || segments.some(segment => segment.round_id === round.round_id && segment.worker_user_id === effective.actorId)).map(round => ({
