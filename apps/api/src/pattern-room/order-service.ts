@@ -1,5 +1,6 @@
 import {developmentAutomaticRoundDocument} from '../production-platform/development-document-format.js';
 import {developmentMakingSizes} from "@dx-rework/contracts/digital-development";
+import {syncLinkedExecutionTransfer,linkedAssignmentContext} from '../production-platform/development-execution-transfer.js';
 import {listMiscAssociations,resolveMiscAssociation} from "./misc-associations.js";
 import {DevelopmentRoundService} from "../production-platform/development-round-service.js";
 import {DigitalProductionAccessPolicy} from "../production-platform/access-policy.js";
@@ -195,6 +196,7 @@ export class PatternRoomOrderService {
         WHERE person_id=$1 AND active AND person_type='internal' AND app_user_id IS NOT NULL
           AND (todo_user_has_direct_role(app_user_id,'pattern_room_worker','pattern_room:orders:complete') OR ($2 AND app_user_id=$3)) FOR SHARE`, [parsed.personId, isPatternRoot(effective), effective.actorId])).rows[0];
       if (!person) throw new ApplicationError("VALIDATION_ERROR", "请选择有有效账号的板房工人", 400);
+      const linkedAssignment=round.round_type==='rework'?await linkedAssignmentContext(client,effective,orderId,person.app_user_id,isPatternRoot(effective)):null;
       const segmentId = randomUUID(), supervisorId = await this.supervisor(client, effective.actorId);
       await client.query(`INSERT INTO pattern_room_segments(segment_id,round_id,segment_index,person_id,worker_user_id,worker_name,person_type,amount)
         VALUES($1,$2,1,$3,$4,$5,'internal',$6)`, [segmentId, round.round_id, person.person_id, person.app_user_id, person.display_name, parsed.amount ?? round.agreed_amount]);
@@ -202,9 +204,10 @@ export class PatternRoomOrderService {
       await client.query("UPDATE pattern_room_rounds SET status='in_progress',assigned_at=CURRENT_TIMESTAMP,assigned_by=$2,supervisor_user_id=$3,round_index=$4,agreed_amount=COALESCE($5::numeric,agreed_amount) WHERE round_id=$1", [round.round_id, effective.actorId, supervisorId, index, parsed.amount ?? null]);
       await client.query("UPDATE pattern_room_orders SET status='in_progress',version=version+1,updated_at=CURRENT_TIMESTAMP,rework_count=GREATEST(rework_count,$2) WHERE order_id=$1", [orderId, index]);
       await this.moveNode(client, round.round_id, "in_progress");
+      const integratedAssignment=linkedAssignment?linkedAssignment.workerId===person.app_user_id?linkedAssignment.plan.readyToArrange:await syncLinkedExecutionTransfer(client,this.db,effective,orderId,linkedAssignment.workerId??person.app_user_id,person.app_user_id,'主管核定本轮返工执行归属'):false;
       const eventId = await this.event(client, effective, action, orderId, round.round_id, { segmentId, personId: person.person_id, workerUserId: person.app_user_id, roundIndex: index, agreedAmount: parsed.amount ?? round.agreed_amount });
       await this.todos.completeOpenByDedupeKey(client, effective, patternTodoKey(orderId, round.round_id, "assignment"), "已分配工人");
-      if (this.enabled) await this.todos.actionableForRecipient(client, effective, { ...this.projection(orderId, round.round_id, eventId, action, `execution:${segmentId}`), category: "pattern_room_execution",
+      if (this.enabled&&!integratedAssignment) await this.todos.actionableForRecipient(client, effective, { ...this.projection(orderId, round.round_id, eventId, action, `execution:${segmentId}`), category: "pattern_room_execution",
         recipientUserId: person.app_user_id, requiredRole: "pattern_room_worker", requiredCapability: "pattern_room:orders:complete" });
       if((await client.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation){
         const waiting=(await client.query(`SELECT t.task_id FROM digital_development_pattern_links l
@@ -451,11 +454,12 @@ export class PatternRoomOrderService {
         await client.query("UPDATE pattern_room_rounds SET actual_hours=NULL,agreed_amount=NULL,hours_confirmed_by=NULL,hours_confirmed_at=NULL WHERE round_id=$1", [round.round_id]);
       }
       await client.query("UPDATE pattern_room_orders SET version=version+1,updated_at=CURRENT_TIMESTAMP WHERE order_id=$1", [orderId]);
+      const integrated=await syncLinkedExecutionTransfer(client,this.db,effective,orderId,segment.worker_user_id,person.app_user_id,parsed.reason);
       const eventId = await this.event(client, effective, action, orderId, round.round_id, { previousSegmentId: segment.segment_id, segmentId, personId: person.person_id, amount: parsed.amount, hours: parsed.hours }, undefined, parsed.reason);
       await this.todos.completeOpenByDedupeKey(client, effective, patternTodoKey(orderId, round.round_id, `execution:${segment.segment_id}`), "主管已原单转交其他工人");
-      if (this.enabled) await this.todos.actionableForRecipient(client, effective, { ...this.projection(orderId, round.round_id, eventId, action, `execution:${segmentId}`), category: "pattern_room_execution", recipientUserId: person.app_user_id, requiredRole: "pattern_room_worker", requiredCapability: "pattern_room:orders:complete" });
+      if (this.enabled&&!integrated) await this.todos.actionableForRecipient(client, effective, { ...this.projection(orderId, round.round_id, eventId, action, `execution:${segmentId}`), category: "pattern_room_execution", recipientUserId: person.app_user_id, requiredRole: "pattern_room_worker", requiredCapability: "pattern_room:orders:complete" });
       return orderId;
-    });
+    },true);
   }
 
   async cancel(actor: TrustedActorContext, orderId: string, input: unknown, key: string) {

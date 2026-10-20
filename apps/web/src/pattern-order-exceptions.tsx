@@ -1,3 +1,8 @@
+import {DevelopmentExecutionTransferSchema,type DevelopmentArrangement} from '@dx-rework/contracts/development-arrangement';
+import {digitalRequest,DigitalRequestError} from './digital-production-api.js';
+import {useDigitalDetailNavigationGuard} from './use-digital-detail-navigation-guard.js';
+import {confirmInApp} from './system-dialog.js';
+export type DevelopmentTransferContext={sourceId:string;plan:DevelopmentArrangement};
 import {DevelopmentMakingUpgradeFields,makingUpgradeFromForm} from './development-making-upgrade.js';
 import {DEVELOPMENT_REVISION_NODES,DEVELOPMENT_PROBLEM_CATEGORIES,type DevelopmentRevision} from "@dx-rework/contracts/digital-development-rounds";
 import { PatternDialog } from "./pattern-dialog.js";
@@ -16,17 +21,21 @@ import { PatternMaterialInput, PATTERN_MATERIAL_LIMIT } from "./pattern-material
 
 export type PatternExceptionAction = "rework" | "transfer" | "cancel" | "cancel-fees";
 const titles = { rework: "发起原单返工", transfer: "原单换人", cancel: "取消本次任务", "cancel-fees": "确认取消费用" };
-export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, onSaved }: { order: PatternOrderDetail; active: PatternExceptionAction | null; onActive(action: PatternExceptionAction | null): void; busy: boolean; onBusy(value: boolean): void; onSaved(order: PatternOrderDetail): void }) {
+export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, onSaved,developmentContext }: { developmentContext?:DevelopmentTransferContext|undefined;order: PatternOrderDetail; active: PatternExceptionAction | null; onActive(action: PatternExceptionAction | null): void; busy: boolean; onBusy(value: boolean): void; onSaved(order: PatternOrderDetail): void }) {
   const [reason, setReason] = useState(""), [category, setCategory] = useState("customer_change"), [amount, setAmount] = useState(""), [hours, setHours] = useState("");
   const [personId, setPersonId] = useState(""), [searchText, setSearchText] = useState(""), [workers, setWorkers] = useState<z.infer<typeof PatternWorkerOptionsSchema>>([]);
   const [files, setFiles] = useState<PatternMaterial[]>([]), [uploading, setUploading] = useState(false), [error, setError] = useState("");
-  const disabled = busy || uploading;
+  const [transferReceiptNotice,setTransferReceiptNotice]=useState('');
+  const [uncertainTransfer,setUncertainTransfer]=useState(false),writing=useRef(false);
+  const disabled = busy || uploading||uncertainTransfer;
+  useDigitalDetailNavigationGuard(uncertainTransfer,busy||uploading,writing,'原换人提交结果尚未确认，离开不会撤销已发出的操作，且会丢失本页重试记录。仍要离开？');
   const [developmentNodes,setDevelopmentNodes]=useState<DevelopmentRevision["affectedNodes"]>([]),[developmentProblems,setDevelopmentProblems]=useState<DevelopmentRevision["categories"]>([]);
   const [retained, setRetained] = useState<PatternMaterial[]>([]);
   const attempt = useRef<{ body: string; action: string; key: string } | null>(null), search = useDebouncedValue(searchText.trim(), 250);
   const round = order.rounds.find(item => item.roundId === order.currentRoundId)!, segment = round.segments.at(-1);
   const pending = order.status === "pending_assignment", fixedMisc = order.kind === "misc" && round.completedAt !== null && round.actualHours != null;
   useEffect(() => {
+    if(uncertainTransfer)return;
     setRetained(order.attachments.filter(file => file.roundId === order.currentRoundId && file.active));
     setDevelopmentNodes([]);setDevelopmentProblems([]);setReason(""); setAmount(""); setHours(""); setPersonId(""); setSearchText(""); setFiles([]); setError(""); attempt.current = null;
   }, [active, order.currentRoundId, order.attachments]);
@@ -48,6 +57,31 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
     } catch (e) { setError(e instanceof Error ? e.message : "附件上传失败"); }
     finally { setUploading(false); onBusy(false); }
   };
+  const close=async()=>{if(uncertainTransfer&&!await confirmInApp('换人提交结果尚未确认，关闭不会撤销操作。可稍后重新打开本页核对，仍要关闭？'))return;onActive(null);};
+  const recoverTransfer=async(retry=false)=>{
+    if(writing.current||!developmentContext||!attempt.current)return;
+    writing.current=true;onBusy(true);setError('');
+    const prior=attempt.current,path=`sources/${developmentContext.sourceId}/execution/transfer-execution`;
+    try{
+      const found=await digitalRequest<{receipt:unknown|null;committedVersion?:number|null}>(`${path}/receipt?key=${encodeURIComponent(prior.key)}`);
+      if(found.receipt){const current=PatternOrderDetailSchema.parse(found.receipt);setTransferReceiptNotice(found.committedVersion!==null&&found.committedVersion!==undefined&&found.committedVersion!==current.version?'本次换人已有回执，之后又有新的办理；当前显示最新人员和执行段。':'本次换人已确认，人员安排和执行段已同步。');setUncertainTransfer(false);onSaved(current);onActive(null);return;}
+      if(!retry){setError('尚未查到本次换人回执，结果仍未确认；请稍后核对，或沿原标识重试本次提交。');return;}
+      const result=PatternOrderDetailSchema.parse(await digitalRequest(path,'POST',JSON.parse(prior.body),prior.key));
+      setUncertainTransfer(false);onSaved(result);onActive(null);
+    }catch(reason){setError(`原换人结果仍未确认；本次核对／重试提示：${reason instanceof Error?reason.message:'服务暂未响应'}。请保留本页操作标识核对，不要换内容重复提交。`);}
+    finally{writing.current=false;onBusy(false);}
+  };
+  const sendDevelopmentTransfer=async(input:unknown)=>{
+    if(writing.current||!developmentContext)return;
+    const row=developmentContext.plan.rows.find(row=>row.kind==='development_sewing');
+    const parsed=DevelopmentExecutionTransferSchema.safeParse({...input as object,orderId:order.orderId,roundNumber:developmentContext.plan.roundNumber,expectedDocumentVersion:developmentContext.plan.documentVersion,expectedArrangementVersion:developmentContext.plan.version,expectedTask:row?.taskId?{taskId:row.taskId,state:row.state,assigneeId:row.assigneeId}:null});
+    if(!parsed.success){setError(parsed.error.issues[0]?.message??'请核对本轮换人资料');return;}
+    const body=JSON.stringify(parsed.data);if(attempt.current?.body!==body||attempt.current.action!=='transfer')attempt.current={body,action:'transfer',key:createClientRequestId()};
+    writing.current=true;onBusy(true);setError('');
+    try{const result=PatternOrderDetailSchema.parse(await digitalRequest(`sources/${developmentContext.sourceId}/execution/transfer-execution`,'POST',parsed.data,attempt.current.key));onSaved(result);onActive(null);}
+    catch(reason){const unknown=!(reason instanceof DigitalRequestError)||reason.status===null||reason.status>=500;setUncertainTransfer(unknown);setError(unknown?'尚未确认换人是否成功。本页已保留原请求和操作标识，请先核对回执；不会把未知结果当成未换人。':reason.message);}
+    finally{writing.current=false;onBusy(false);}
+  };
   const submit = async (event: FormEvent) => {
     event.preventDefault(); if (!active || busy || uploading) return;
     const basis = { version: order.version, roundId: order.currentRoundId };
@@ -56,6 +90,7 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
       : active === "cancel" ? CancelPatternOrderSchema.safeParse({ ...basis, reason, ...(!pending ? { segmentId: segment?.segmentId, ...(order.kind === "pattern" ? { amount } : fixedMisc ? {} : { hours }) } : {}) })
       : PatternRoundActionSchema.safeParse(basis);
     if (!input.success) { setError(input.error.issues[0]?.message ?? "请填写必要信息"); return; }
+    if(active==='transfer'&&developmentContext){await sendDevelopmentTransfer(input.data);return;}
     const body = JSON.stringify(input.data);
     if (attempt.current?.body !== body || attempt.current.action !== active) attempt.current = { body, action: active, key: createClientRequestId() };
     onBusy(true); setError("");
@@ -65,13 +100,14 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
     } catch (e) { setError(e instanceof Error ? e.message : "操作失败"); }
     finally { onBusy(false); }
   };
-  if (!active) return <div className="pattern-actions">
+  if(!active&&uncertainTransfer)return <section role="status"><p>原换人结果尚未确认，暂不开始另一笔执行操作。</p><Button type="button" disabled={busy||uploading} onClick={()=>onActive('transfer')}>核对未确认换人</Button></section>;
+  if (!active) return <div className="pattern-actions">{transferReceiptNotice&&<p role="status">{transferReceiptNotice}</p>}
     {order.actions.rework ? <Button disabled={disabled} onClick={() => onActive("rework")}>发起原单返工</Button> : null}
     {order.actions.transfer ? <Button disabled={disabled} onClick={() => onActive("transfer")}>原单换人</Button> : null}
     {order.actions.cancel ? <Button disabled={disabled} onClick={() => onActive("cancel")}>取消任务</Button> : null}
     {order.actions.cancelFees ? <Button disabled={disabled} onClick={() => onActive("cancel-fees")}>确认取消费用</Button> : null}
   </div>;
-  return <PatternDialog title={titles[active]} busy={disabled} onClose={() => onActive(null)}><form className="pattern-exception pattern-order-form" onSubmit={event => void submit(event)}><h3>{titles[active]}</h3>
+  return <PatternDialog title={titles[active]} busy={busy||uploading} onClose={()=>void close()}><form className="pattern-exception pattern-order-form" onSubmit={event => void submit(event)}><h3>{titles[active]}</h3>
     {active === "rework" ? <>
       <label>返工原因分类<select className="rework-v2-control" disabled={disabled} value={category} onChange={e => setCategory(e.target.value)}><option value="customer_change">客户修改要求</option><option value="workmanship">制作不符合要求</option><option value="other">其他</option></select></label>
 
@@ -89,7 +125,7 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
     {active === "cancel" ? <p>{pending ? "取消未派工请求，保留历史轮次。" : "确认工作已经停止。打板有费用时，仍由原设计师确认取消费用。"}</p> : null}
     {active === "cancel-fees" ? <><p>请核对以下取消费用，确认后计入工资，订单仍为已取消。</p>{order.rounds.filter(item => item.cancelledAmount != null && /[1-9]/.test(item.cancelledAmount) && item.feeConfirmedAt === null).map(item => <p key={item.roundId}>{item.index === 0 ? "首次打板" : `第${item.index}次返工`}：{formatBusinessDecimal(item.cancelledAmount!, 2)} 元</p>)}</>
       : <label>{active === "rework" ? "返工内容 / 原因（必填）" : "操作说明（必填）"}<textarea className="rework-v2-control" required maxLength={active === "rework" ? 2000 : 500} disabled={disabled} value={reason} onChange={e => setReason(e.target.value)} /></label>}
-    {error ? <p role="alert">{error}</p> : null}{uploading ? <p role="status">正在上传原始资料…</p> : null}
-    <div className="rework-v2-action-area"><div className="rework-v2-actions"><Button type="button" disabled={disabled} onClick={() => onActive(null)}>暂不提交</Button><Button type="submit" variant="primary" disabled={disabled}>{busy ? "提交中…" : titles[active]}</Button></div></div>
+    {error ? <p role="alert">{error}</p> : null}{uncertainTransfer&&<section><p>请保留原请求：{attempt.current?.key}</p><Button type="button" disabled={busy||uploading} onClick={()=>void recoverTransfer()}>核对原换人回执</Button><Button type="button" disabled={busy||uploading} onClick={()=>void recoverTransfer(true)}>沿原标识重试换人</Button></section>}{uploading ? <p role="status">正在上传原始资料…</p> : null}
+    <div className="rework-v2-action-area"><div className="rework-v2-actions"><Button type="button" disabled={busy||uploading} onClick={()=>void close()}>{uncertainTransfer?"关闭，结果待核对":"暂不提交"}</Button><Button type="submit" variant="primary" disabled={disabled}>{busy ? "提交中…" : titles[active]}</Button></div></div>
   </form></PatternDialog>;
 }

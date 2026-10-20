@@ -40,7 +40,10 @@ try{
     await page.goto(`http://127.0.0.1:${server.address().port}${base}ui/digital-production?${query}`);
     await page.locator('.desktop-navigation').waitFor({state:'attached'});
     if(scenario.kind==='context'){
-     await page.getByRole('link',{name:'本单资料 · 开发单 / 附件',exact:true}).click();
+     const open=page.getByRole('link',{name:'打开开发单',exact:true});assert.equal(await open.count(),1);
+     await open.focus();await page.keyboard.press('Enter');
+     await page.waitForFunction(id=>new URLSearchParams(location.search).get('development')===id,id(2));
+     assert.equal(new URL(page.url()).searchParams.get('round'),'3');assert.equal(new URL(page.url()).searchParams.get('search'),search);
      await page.getByRole('button',{name:'轮次与记录',exact:true}).click();
      const current=new URL(page.url()),link=page.getByRole('link',{name:'车板 · 第2轮原记录',exact:true});await link.waitFor();
      record.inheritedHref=await link.getAttribute('href');

@@ -3456,6 +3456,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect((await wholeOrder.reviewFinalQuantity(ie(), fixture.orderId, ieInput, ieKey)).reused).toBe(true);
     expect((await database.query("SELECT work_report_id,person_id,payable_amount::text amount FROM rework_wage_items WHERE rework_order_id=$1 ORDER BY person_id", [fixture.orderId])).rows).toEqual(wageRows);
   });
+  it("P05 linked execution transfer keeps segments, digital assignment and todos atomic",async()=>{await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker,undefined,true);});
   it("P03 legacy tail return collects new-round counts without rewriting frozen data",async()=>{await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker,"tail");});
   it("P03 legacy linked rework collects new-round counts atomically",async()=>{await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker,"native");});
 

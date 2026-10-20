@@ -1,7 +1,7 @@
 import {ReopenDevelopmentMaterialsSchema,SaveMaterialVerificationSchema} from "@dx-rework/contracts/digital-development-execution";
 import type {FastifyInstance,FastifyRequest} from "fastify";
 import {z} from "zod";
-import {DevelopmentArrangementSchema} from "@dx-rework/contracts/development-arrangement";
+import {DevelopmentArrangementSchema,DevelopmentExecutionTransferSchema} from "@dx-rework/contracts/development-arrangement";
 import QRCode from "qrcode";
 import {CreateUploadIntentSchema} from "@dx-rework/contracts";
 import {DevelopmentRouteActionSchema,DevelopmentPatternOrderSchema,DevelopmentCustomerSampleSchema,DevelopmentDispatchSchema,DevelopmentCheckSchema,DevelopmentWorkSchema,DevelopmentFabricReportSchema,DevelopmentFabricDecisionSchema} from "@dx-rework/contracts/digital-development-execution";
@@ -19,6 +19,9 @@ export function registerDevelopmentExecutionRoutes(app:FastifyInstance,dependenc
   app.get(base,async request=>({...await service.read(await actor(request),id(request)),qrAvailable:Boolean(dependencies.developmentQrBase)}));
   app.put(`${base}/dispatch`,async request=>service.dispatch(await actor(request),id(request),parse(DevelopmentDispatchSchema,request.body),key(request)));
   app.put(`${base}/arrangement`,async request=>service.arrange(await actor(request),id(request),parse(DevelopmentArrangementSchema,request.body),key(request)));
+  app.get(`${base}/native-execution`,async request=>service.readNativeExecution(await actor(request),id(request)));
+  app.post(`${base}/transfer-execution`,async request=>service.transferExecution(await actor(request),id(request),parse(DevelopmentExecutionTransferSchema,request.body),key(request)));
+  app.get(`${base}/transfer-execution/receipt`,async request=>service.transferExecutionReceipt(await actor(request),id(request),parse(z.object({key:z.string().min(1).max(128)}).strict(),request.query).key));
   app.post(`${base}/material-verification`,async request=>service.saveMaterials(await actor(request),id(request),parse(SaveMaterialVerificationSchema,request.body),key(request)));
   app.post(`${base}/check`,async request=>service.check(await actor(request),id(request),parse(DevelopmentCheckSchema,request.body),key(request)));
   app.post(`${base}/supplement-check`,async request=>service.supplementCheck(await actor(request),id(request),parse(z.object({taskId:z.string().uuid()}).strict(),request.body).taskId,key(request)));

@@ -1,3 +1,5 @@
+import {digitalDetailReturnUrl} from './digital-detail-route.js';
+import {createWebUrls} from '../url-contract.js';
 import { PatternOrderQuerySchema } from "@dx-rework/contracts/pattern-orders";
 import { wageReturnPath } from "./wages/wage-query-state.js";
 import { todoReturnPath } from "./todo-query-state.js";
@@ -20,11 +22,23 @@ export function patternListPath(query: PatternListQuery): string {
   return `/ui/pattern-room/orders${params.size ? `?${params}` : ""}`;
 }
 export function patternReturnPath(search: string): string {
-  const target = new URLSearchParams(search).get("returnTo");
+  const query=new URLSearchParams(search),target=query.getAll("returnTo").length===1?query.get("returnTo"):null;
   return validPatternReturnPath(target) ?? "/ui/pattern-room/orders";
 }
-export function validPatternReturnPath(target: string | null): string | null {
+export function validPatternReturnPath(target: string | null,base=import.meta.env.BASE_URL): string | null {
   if (!target || target.includes("\\") || target.includes("#")) return null;
+  const digital=digitalDetailReturnUrl(target,base);
+  if(digital){
+    const urls=createWebUrls(base),prefix=urls.base==='/'?'':urls.base.slice(0,-1);
+    const relative=(value:string,depth=0):string|null=>{
+      if(depth>3)return null;const url=new URL(value,'https://local.invalid');
+      if(url.origin!=='https://local.invalid')return null;
+      const path=prefix&&url.pathname.startsWith(prefix+'/')?url.pathname.slice(prefix.length):url.pathname;
+      if(url.searchParams.has('returnTo')){const nested=relative(url.searchParams.get('returnTo')!,depth+1);if(!nested)return null;url.searchParams.set('returnTo',nested);}
+      return path+url.search;
+    };
+    return relative(digital);
+  }
   const todo = todoReturnPath(`?${new URLSearchParams({ returnTo: target })}`); if (todo) return todo;
   const wage=wageReturnPath(target);if(wage)return wage;
   if(target.startsWith("/ui/digital-pattern-room?")) {
