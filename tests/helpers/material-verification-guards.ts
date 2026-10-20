@@ -30,6 +30,7 @@ export async function exerciseMaterialVerification(db:Pool,execution:Development
  let saved=(await execution.read(clerk,sourceId)).materialVerification!;
  expect(saved.version).toBe(1);expect(saved.entries.every(row=>row.changedBy&&row.changedAt)).toBe(true);
  expect((await materialReadiness(db,sourceId,1)).earlyReady).toBe(false); // Draft does not certify checks.
+ expect((await materialReadiness(db,sourceId,1)).materials.every(row=>row.usage===undefined)).toBe(true);
  if(guards){
   await expect(execution.saveMaterials(clerk,sourceId,{...input,expectedVersion:0},randomUUID())).rejects.toThrow("已更新");
   const results=await Promise.allSettled([1,2].map(()=>execution.saveMaterials(clerk,sourceId,{...input,expectedVersion:1},randomUUID())));
@@ -46,6 +47,7 @@ export async function exerciseMaterialVerification(db:Pool,execution:Development
   expect((await fabricDecisionTodos(db,root)).filter(t=>t.todoId===report.reportId)).toHaveLength(1);
   expect((await fabricDecisionTodos(db,clerk)).filter(t=>t.todoId===report.reportId)).toHaveLength(0);
   await expect(execution.check(clerk,sourceId,{...check,expectedVerificationVersion:saved.version},randomUUID())).rejects.toThrow("供应链总监");
+  expect((await materialReadiness(db,sourceId,1)).materials.every(row=>row.usage===undefined)).toBe(true);
   await expect(execution.decideFabric(clerk,sourceId,{reportId:report.reportId,expectedDecisionId:null,decision:"允许使用",note:"TEST越权"},randomUUID())).rejects.toMatchObject({statusCode:403});
   const stopped=await execution.decideFabric(root,sourceId,{reportId:report.reportId,expectedDecisionId:null,decision:"停止使用",note:"TEST停止并保留质量事实"},randomUUID()) as {factId:string};
   expect((await fabricDecisionTodos(db,root)).filter(t=>t.todoId===report.reportId)).toHaveLength(0);
@@ -58,6 +60,7 @@ export async function exerciseMaterialVerification(db:Pool,execution:Development
   await execution.saveMaterials(clerk,sourceId,{...input,expectedVersion:saved.version,entries:missingEntries,note:'TEST颜色待复核',result:'缺项退回'},randomUUID());
   saved=(await execution.read(clerk,sourceId)).materialVerification!;
   await execution.check(clerk,sourceId,{...check,expectedVerificationVersion:saved.version,result:'缺项退回',note:'TEST颜色待复核',items:items.map((row,i)=>i?row:{...row,color:false})},randomUUID());
+  expect((await materialReadiness(db,sourceId,1)).materials.every(row=>row.usage==='use')).toBe(true);
   const supply=(await execution.read(root,sourceId)).tasks.find(t=>t.taskKind==='development_material_supply'&&t.state==='ready')!;
   const recheck=await execution.resubmit(root,sourceId,supply.taskId,randomUUID()) as {taskId:string};
   const restored=(await execution.read(clerk,sourceId)).materialVerification!;
@@ -66,6 +69,7 @@ export async function exerciseMaterialVerification(db:Pool,execution:Development
   await execution.saveMaterials(clerk,sourceId,{...input,taskId:recheck.taskId,expectedVersion:restored.version,entries:input.entries.map(row=>({...row,usage:'unused',confirmedWith:'TEST设计师',note:'TEST不能无主布通过'}))},randomUUID());
   saved=(await execution.read(clerk,sourceId)).materialVerification!;
   await expect(execution.check(clerk,sourceId,{...check,taskId:recheck.taskId,expectedVerificationVersion:saved.version,items:[]},randomUUID())).rejects.toThrow('不能无主料通过');
+  expect((await materialReadiness(db,sourceId,1)).materials.every(row=>row.usage==='use')).toBe(true); // Rejected draft must not replace submitted use.
   await execution.saveMaterials(clerk,sourceId,{...input,taskId:recheck.taskId,expectedVersion:saved.version},randomUUID());
   saved=(await execution.read(clerk,sourceId)).materialVerification!;
   return {taskId:recheck.taskId,expectedVerificationVersion:saved.version};

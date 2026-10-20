@@ -1,3 +1,4 @@
+import {fabricDecisionTodos} from "../../apps/api/src/production-platform/development-fabric-cases.js";
 import {exerciseMaterialVerification} from "./material-verification-guards.js";
 import {TodoService} from "../../apps/api/src/todos/service.js";
 import {DigitalProductionNotificationService} from "../../apps/api/src/production-platform/notification-service.js";
@@ -165,6 +166,18 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
   expect((await execution.read(root,sourceId)).routeFacts.some(f=>f.kind==='客户样板确认')).toBe(false);
   await execution.customerSample(root,sourceId,{routeVersion:1,note:'客户明确确认本轮样板'},randomUUID());
   expect((await execution.read(root,sourceId)).routeFacts.filter(f=>f.kind==='客户样板确认')).toHaveLength(1);
+  if(craft==='绣花'){
+   expect((await execution.read(root,sourceId)).tasks.every(t=>['completed','cancelled'].includes(t.state))).toBe(true);
+   const reportFile=randomUUID();await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-after-completion.pdf','application/pdf',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[reportFile,`test-completed/${reportFile}`,'d'.repeat(64),root.actorId]);
+   await execution.recordUploadPurpose(root,sourceId,reportFile,'面料报告');
+   const report=await execution.report(root,sourceId,{recommendation:'建议停用',note:'TEST完工后发现质量风险',attachmentIds:[reportFile],materialIds:[mainId]},randomUUID()) as {reportId:string};
+   const directorId=(await db.query("SELECT user_id FROM user_role_assignments WHERE role_code='production_management' AND revoked_at IS NULL LIMIT 1")).rows[0].user_id;
+   const director={...root,actorId:directorId,actorRoles:['production_management']};
+   for(const actor of [root,director])expect((await fabricDecisionTodos(db,actor)).filter(t=>t.todoId===report.reportId)).toMatchObject([{entityType:'digital_development',entityId:sourceId,route:{routeName:'digital_development',entityId:sourceId,todoId:report.reportId}}]);
+   expect((await execution.read(director,sourceId)).fabricCases).toMatchObject([{reportId:report.reportId,decisionId:null}]);
+   await execution.decideFabric(director,sourceId,{reportId:report.reportId,expectedDecisionId:null,decision:'停止使用',note:'TEST完工后仍须明确决定'},randomUUID());
+   expect((await fabricDecisionTodos(db,director)).filter(t=>t.todoId===report.reportId)).toHaveLength(0);
+  }
   if(craft==='无')await exerciseDevelopmentRounds(db,execution,root,sourceId,workerId,order.currentRoundId,qc);
   if(craft==='印花')await exerciseGarmentCraftRevision(db,execution,root,sourceId,workerId,order.currentRoundId,qc);
   if(craft==='印绣花'){

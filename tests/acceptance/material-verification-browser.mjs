@@ -29,6 +29,10 @@ try{
   await page.reload();await form.waitFor();assert.equal(await page.getByLabel('TEST 配布使用情况',{exact:true}).inputValue(),'unused');assert.equal(await page.getByLabel('缺项 / 备注',{exact:true}).inputValue(),'TEST 保存四项与备注');
   for(const field of ['实物已到','数量相符','颜色相符','规格相符'])assert.equal(await page.getByRole('checkbox',{name:`TEST 深蓝弹力牛仔布 ${field}`,exact:true}).isChecked(),true);
   await page.getByRole('button',{name:'保存并提交核料结果',exact:true}).click();await page.getByText('问题面料尚未允许使用，请供应链总监或 Root 在本页决定',{exact:true}).waitFor();assert.equal(await page.getByText('问题面料尚未允许使用，请供应链总监或 Root 在本页决定',{exact:true}).count(),1);
+  await page.goto(url('clerk')+'&fixtureBasis=1');
+  const facts=page.locator('.development-task-material-facts');
+  assert.doesNotMatch(await facts.innerText(),/已提交核料：使用|已提交核料：不用/);
+  assert.match(await facts.innerText(),/保存草稿不生效/);
   await page.goto(url('root'));await page.getByRole('button',{name:'确认面料决定',exact:true}).waitFor();await page.goto(url('director'));
   const decisions=page.locator('[aria-label="问题面料报告与决定"]');await decisions.getByLabel('本次明确决定').selectOption('停止使用');await decisions.getByLabel('决定依据与说明').fill('TEST 明确停用');await decisions.getByRole('button',{name:'确认面料决定'}).click();await page.getByRole('heading',{name:'已决定停止使用，不能以核料勾选放行'}).waitFor();
   await decisions.getByLabel('本次明确决定').selectOption('允许使用');await decisions.getByLabel('决定依据与说明').fill('TEST 总监复核明确允许');await decisions.getByRole('button',{name:'确认面料决定'}).click();await page.getByRole('heading',{name:'已明确允许使用，仍须完成实际核料'}).waitFor();
@@ -36,7 +40,7 @@ try{
   if(evidence)await page.screenshot({path:join(evidence,`material-${viewport.width}.png`),fullPage:true});
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1);assert.equal(overflow,false);
   await page.getByRole('button',{name:'保存并提交核料结果',exact:true}).click();await page.waitForURL(/arrangement=/);
-  results.push({viewport,checks:['clerk confirmation pending despite legacy false','unused reason required','four checks and note survive reload','one error only','root/director decision in same material page','explicit stop then allow','clerk resumes and navigates to arrangement','no page overflow']});await context.close();
+  results.push({viewport,checks:['clerk confirmation pending despite legacy false','unused reason required','four checks and note survive reload','saved and rejected drafts never appear as applied facts','one error only','root/director decision in same material page','explicit stop then allow','clerk resumes and navigates to arrangement','no page overflow']});await context.close();
  }
  assert.deepEqual(errors,[]);
 }finally{if(evidence)await writeFile(join(evidence,'result.json'),JSON.stringify({results,errors,limits:['Actual components with synthetic TEST responses; API/transactions/notifications verified separately in isolated PostgreSQL. No real orders or deployment.']},null,2));await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));await rm(out,{recursive:true,force:true});}

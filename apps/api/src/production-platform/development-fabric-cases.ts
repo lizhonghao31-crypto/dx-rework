@@ -32,11 +32,10 @@ export async function fabricDecisionTodos(db:DB,actor:TrustedActorContext):Promi
   const task=(await db.query(`SELECT t.task_id,t.route_version FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
    WHERE a.source_id=$1 AND t.state IN ('ready','pending','blocked')
    ORDER BY t.route_version DESC,(a.task_kind IN ('development_materials','development_material_recheck')) DESC,t.created_at DESC LIMIT 1`,[source.source_id])).rows[0];
-  if(!task)continue;
   for(const report of await fabricCases(db,source.source_id)){
    if(report.decisionId)continue;
    const at=new Date(report.reportedAt).toISOString(),id=report.reportId;
-   result.push({todoId:id,taskTitle:"决定问题面料是否使用",todoType:"business_action",category:"digital_fabric_decision",sourceEventId:id,sourceAction:"development_fabric_report",entityType:"digital_task",entityId:task.task_id,recipientUserId:actor.actorId,requiredRole:"production_management",requiredCapability:null,route:{routeName:"digital_production_task",entityId:task.task_id,todoId:id},policyKey:null,dueAt:null,reminderCount:0,status:"pending",blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:source.design_style_no,supplierName:null,status:"问题面料等待明确决定",updatedAt:at},unread:true,version:1,createdAt:at,updatedAt:at});
+   result.push({todoId:id,taskTitle:"决定问题面料是否使用",todoType:"business_action",category:"digital_fabric_decision",sourceEventId:id,sourceAction:"development_fabric_report",entityType:task?"digital_task":"digital_development",entityId:task?.task_id??source.source_id,recipientUserId:actor.actorId,requiredRole:"production_management",requiredCapability:null,route:{routeName:task?"digital_production_task":"digital_development",entityId:task?.task_id??source.source_id,todoId:id},policyKey:null,dueAt:null,reminderCount:0,status:"pending",blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:source.design_style_no,supplierName:null,status:"问题面料等待明确决定",updatedAt:at},unread:true,version:1,createdAt:at,updatedAt:at});
   }
  }
  return result;

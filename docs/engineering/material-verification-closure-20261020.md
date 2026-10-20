@@ -2,7 +2,7 @@
 
 ## 授权与一次预检
 
-用户明确要求“两个问题一起修”“这两个可以在一起修吗”，说明同一补修 PR 后回复“好”。父线程最新原始交接明确覆盖此前仅方案限制。本次只补修材料使用确认和问题面料决定两个闭环，不进入原 PR2。
+用户明确要求“两个问题一起修”“这两个可以在一起修吗”，说明同一补修 PR 后回复“好”。父线程最新原始交接明确覆盖此前仅方案限制。本 PR 只补修材料使用确认和问题面料决定两个闭环。2026-10-20 后续原话“直接把5个pr做完吧”及对连续修复、测试、合并 release 的明确确认，授权本 PR 收口合并后按原 PR2—5 顺序继续；不部署。
 
 - repository: lizhonghao31-crypto/dx-rework
 - base branch: release/digital-production-v1
@@ -10,8 +10,8 @@
 - working branch: fix-material-verification-closure
 - scope: 核料/复核同页文员材料确认与总监质量决定、必要待办通知、历史兼容
 - allowed files: 对应开发服务、任务读取、核料页面/契约、0247 增量迁移及校验库存、相关测试与规则
-- forbidden: 真实订单/数据库、部署/重启、模型设置、原PR2、设计师全单可见和时间设置专项
-- gate class: FULL；最终 intended Head Full Gate 后一次 GitHub Codex Review；仅 draft PR，禁止合并
+- forbidden: 真实订单/数据库、部署/重启、模型设置、本PR范围外改动、设计师全单可见和时间设置专项
+- gate class: FULL；最终 intended Head Full Gate 后一次 GitHub Codex Review；Review 修复后最终 Head 重新过 Gate，可合并 release
 
 ## 业务与兼容边界
 
@@ -36,3 +36,9 @@
 - 新闭环浏览器：1440×900和390×844两帧通过；原工作台38帧通过，无页面错误。
 - migration lint、secret scan、lint、typecheck、workspace build通过；git diff --check通过。构建仅有既有大chunk提示。
 - 最终远端Full Gate、一次Codex Review及PR链接以PR实时证据为准；本地通过不等于部署或用户业务验收。
+
+## 唯一一次 Review 的两项修复
+
+- 所有任务结束后提交的问题面料报告仍保留报告级待办，安全回到该开发单同页决定，不因没有活动任务而漏办。隔离 PostgreSQL 完成四路线后实际报告、总监读取和决定关闭验证。
+- 只读材料使用状态取提交后的 applied_entries 对应 readiness；草稿保存和质量阻断拒绝不能显示为已生效。覆盖保存、质量拒绝、缺项提交、另一份无主布草稿拒绝仍保留原提交结果；桌面/手机断言草稿没有已提交标签。
+- 不重复请求 Codex Review；修复后的最终 Head Full Gate 是合并证据。

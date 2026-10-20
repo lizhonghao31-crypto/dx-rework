@@ -75,7 +75,7 @@ export function developmentPublishErrors(document: DevelopmentDocument): string[
 }
 export type DevelopmentSheet = {
   metadata?:JourneyDocumentMetadata;
-  materialReadiness?:Array<{required?:boolean;materialId:string;available:boolean;verified:boolean;missing:string[];evidenceId:string|null}>;
+  materialReadiness?:Array<{usage?:"use"|"unused"|"pending";required?:boolean;materialId:string;available:boolean;verified:boolean;missing:string[];evidenceId:string|null}>;
   productionOrderId?:string|null;
   sourceId: string; designStyleNo: string; temporaryStyleNo: string | null; customerCode: string | null;
   developmentType: string; designerName: string; version: number; status: "draft" | "published";
