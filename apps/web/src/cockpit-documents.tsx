@@ -10,7 +10,7 @@ const urls=createWebUrls(import.meta.env.BASE_URL);
 class DocumentReadError extends Error{constructor(message:string,readonly status:number){super(message);}}
 const read:CockpitDocumentReader=async(path,signal)=>{
  const response=await fetch(urls.apiUrl(path),{credentials:"include",cache:"no-store",signal}).catch(reason=>{if(reason.name==="AbortError")throw reason;throw new Error("资料读取失败，请检查连接后重试");});
- if(!response.ok){const data=await response.json().catch(()=>({}));throw new DocumentReadError(requestFailureMessage(response.status,data.error?.message),response.status);}
+ if(!response.ok){const data=await response.json().catch(()=>({}));throw new DocumentReadError(requestFailureMessage(response.status,data.error?.message,"GET"),response.status);}
  return response.json().catch(()=>{throw new Error("资料返回异常，请重试");});
 };
 function MetadataSummary({facts}:{facts:CockpitDocumentMetadataFact[]}){

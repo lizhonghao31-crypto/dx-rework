@@ -1,4 +1,4 @@
-import {requestFailureMessage,transportFailure} from "./request-failure-message.js";
+import {feedbackFetch,feedbackJson,isReadRequest} from "./request-response-feedback.js";
 import { createWebUrls } from "../url-contract.js";
 import {sessionCacheVersion,registerSessionInvalidator} from './auth-session.js';
 /** Typed read boundaries preserve original business messages and unknown write outcomes. */
@@ -13,7 +13,7 @@ registerSessionInvalidator(invalidate);
 /** Only concurrent task/candidate reads are shared. No settled data, budget,
  * attachment link, write or identity survives in this request map. */
 export async function digitalRequest<T>(path: string, method = "GET", body?: unknown, key?: string,options?:{signal?:AbortSignal}): Promise<T> {
-  const reading=method==='GET';
+  const reading=isReadRequest(method);
   if(!reading)invalidate();
   const identity=sessionCacheVersion(),revision=generation;
   const cacheKey=`${identity}:${revision}:${path}`;
@@ -21,13 +21,9 @@ export async function digitalRequest<T>(path: string, method = "GET", body?: unk
   const hit=share?reads.get(cacheKey):undefined;
   if(hit)return structuredClone(await hit) as T;
   const request=(async()=>{
-    const response=await fetch(urls.apiUrl(`digital-production/${path}`),{method,credentials:'include',cache:'no-store',
-      headers:{'content-type':'application/json',...(key?{'idempotency-key':key}:{})},...(body===undefined?{}:{body:JSON.stringify(body)}),...(reading&&options?.signal?{signal:options.signal}:{})}).catch(error=>{if(error?.name==='AbortError')throw error;throw new DigitalRequestError(transportFailure(method).message,null);});
-    if(!response.ok){
-      const data=await response.json().catch(()=>({})) as {error?:{message?:string}};
-      throw new DigitalRequestError(requestFailureMessage(response.status,data.error?.message),response.status);
-    }
-    const value:unknown=await response.json().catch(()=>{throw new Error(reading?"返回资料格式异常，请刷新重试":"未收到可确认的提交结果，请先核对原记录，避免重复提交");});
+    const response=await feedbackFetch(urls.apiUrl(`digital-production/${path}`),{method,credentials:'include',cache:'no-store',
+      headers:{'content-type':'application/json',...(key?{'idempotency-key':key}:{})},...(body===undefined?{}:{body:JSON.stringify(body)}),...(reading&&options?.signal?{signal:options.signal}:{})}).catch(error=>{if(error?.name==='AbortError')throw error;throw new DigitalRequestError(error.message,null);});
+    const value=await feedbackJson(response,method,value=>value,(message,_code,status)=>new DigitalRequestError(message,status));
     if(!reading)invalidate();
     if(reading&&(identity!==sessionCacheVersion()||revision!==generation))throw new Error('读取条件已变化，请重试刷新');
     return value;

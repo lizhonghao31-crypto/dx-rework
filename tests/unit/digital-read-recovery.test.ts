@@ -3,7 +3,7 @@ import {DigitalRequestError,digitalRequest} from '../../apps/web/src/digital-pro
 import {digitalReadFailureInfo} from '../../apps/web/src/digital-read-failure.js';
 afterEach(()=>vi.unstubAllGlobals());
 describe('safe read failures preserve original business reasons',()=>{
- it.each([[401,'登录已失效'],[403,'当前身份无权查看'],[404,'原记录不存在或当前不可见'],[409,'资料状态已变化'],[503,'服务暂时不可用']] as const)('classifies %s without losing the server reason',async(status,title)=>{
+ it.each([[401,'登录已失效'],[403,'当前身份无权查看'],[404,'原记录不存在或当前不可见'],[409,'读取请求未被接受'],[503,'服务暂时不可用']] as const)('classifies %s without losing the server reason',async(status,title)=>{
   const fetch=vi.fn().mockResolvedValue(Response.json({error:{message:'TEST 原业务原因'}},{status}));vi.stubGlobal('fetch',fetch);const error=await digitalRequest('sources/TEST/execution').catch(error=>error);expect(error).toBeInstanceOf(DigitalRequestError);expect(digitalReadFailureInfo(error)).toMatchObject({title,detail:'TEST 原业务原因'});expect(fetch).toHaveBeenCalledTimes(1);
  });
  it('distinguishes a failed connection from an empty successful read',async()=>{

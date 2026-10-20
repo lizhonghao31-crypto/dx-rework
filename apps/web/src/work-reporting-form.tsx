@@ -1,3 +1,4 @@
+import {feedbackFetch,feedbackJson,feedbackNoContent} from "./request-response-feedback.js";
 import { specialProcessLabel } from "@dx-rework/contracts";
 import { moduleCanWrite } from "./member-module-policy.js";
 import {
@@ -45,26 +46,19 @@ export type FrontlineWorkContext = Readonly<{
 }>;
 
 const request = async <T,>(path: string, parse: (value: unknown) => T, init?: RequestInit): Promise<T> => {
-  const response = await fetch(apiUrl(path), {
+  const response = await feedbackFetch(apiUrl(path), {
     credentials: "include", ...init,
     headers: { accept: "application/json", ...(init?.body ? { "content-type": "application/json" } : {}), ...init?.headers },
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-    throw new Error(body?.error?.message ?? "请求未完成，请稍后重试");
-  }
-  return parse(await response.json());
+  return feedbackJson(response,init?.method??'GET',parse);
 };
 
 const requestNoContent = async (path: string, init?: RequestInit): Promise<void> => {
-  const response = await fetch(apiUrl(path), {
+  const response = await feedbackFetch(apiUrl(path), {
     credentials: "include", ...init,
     headers: { accept: "application/json", ...(init?.body ? { "content-type": "application/json" } : {}), ...init?.headers },
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-    throw new Error(body?.error?.message ?? "请求未完成，请稍后重试");
-  }
+  await feedbackNoContent(response,init?.method??'GET');
 };
 
 const canReviewOrder = (user: WorkReportingUser): boolean => user.isRoot === true || [
@@ -768,3 +762,5 @@ export function WorkReportingForm({
     {reportTasks && workReportingWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="返工执行报数"><h2>{isRoot ? "请输入代报数的实际件数" : canAssign ? "请输入临时工的实际件数" : reportTasks.every((task) => task.executionKind === "tail_inspection") ? `请输入您的实际${reportTasks[0]?.processName ?? "整查"}件数` : "请输入您的实际完工件数"}</h2>{reportTasks.map((task) => <div key={task.workTaskId}><ReturnedReportContext task={task} /><InsetField label={`${task.members.map((member) => member.displayName).join("、")} · ${task.processName}（件）`} type="number" min="1" step="1" inputMode="numeric" value={reportQuantities[task.workTaskId] ?? ""} disabled={busy} onChange={(event) => setReportQuantities((current) => ({ ...current, [task.workTaskId]: event.target.value }))} /></div>)}{!reportsReady && <p role="status">请把每项实际完工件数填写为大于 0 的整数。</p>}{busy && <p role="status">正在提交 {formatBusinessDecimal(reportTasks.length)} 项报数，请勿关闭页面或重复操作。</p>}<div className="mobile-actions work-reporting-actions"><Button onClick={() => setReportTasks(null)} disabled={busy}>返回返工</Button><Button variant="primary" data-ready={reportsReady ? "true" : "false"} onClick={() => void submitReports()} disabled={busy}>{busy ? reportTasks.length > 1 ? `批量提交中（${formatBusinessDecimal(reportTasks.length)} 项）…` : "提交中…" : "确认"}</Button></div>{message ? <p role="status">{message}</p> : null}</div></Surface></div>}
   </div>;
 }
+
+export {request as workReportingRequest,requestNoContent as workReportingNoContent};

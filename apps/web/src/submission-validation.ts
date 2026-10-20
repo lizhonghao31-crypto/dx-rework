@@ -13,7 +13,7 @@ export function submissionFailure(error: unknown): { title: string; message: str
   }
   if (error instanceof SubmissionRequestError && error.status >= 400 && error.status < 500 && error.status !== 408) {
     return {
-      title: error.status === 401 ? "登录已失效" : error.status === 403 ? "无权执行此操作" : error.status === 409 ? "资料或状态已变化" : "未能提交",
+      title: error.status === 401 ? "登录已失效" : error.status === 403 ? "无权执行此操作" : error.status === 409 ? "提交未被接受" : "未能提交",
       message: error.message, uncertain: false, cancelled: false,
     };
   }

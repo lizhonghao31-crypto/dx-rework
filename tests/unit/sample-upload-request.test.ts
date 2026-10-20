@@ -42,8 +42,8 @@ describe("sample upload HTTP boundary", () => {
 
   it("handles non-JSON and incomplete responses with a readable retry message", async () => {
     vi.stubGlobal("fetch", async () => new Response("unavailable", { status: 502 }));
-    await expect(sampleRequest("/intent", z.object({ id: z.string() }))).rejects.toThrow("服务响应异常");
+    await expect(sampleRequest("/intent", z.object({ id: z.string() }))).rejects.toThrow("未能读取原资料");
     vi.stubGlobal("fetch", async () => new Response("{}"));
-    await expect(sampleRequest("/intent", z.object({ id: z.string() }))).rejects.toThrow("服务返回的资料不完整");
+    await expect(sampleRequest("/intent", z.object({ id: z.string() }))).rejects.toThrow("返回资料不完整或格式异常");
   });
 });

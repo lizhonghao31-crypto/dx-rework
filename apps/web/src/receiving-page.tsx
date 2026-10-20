@@ -1,3 +1,4 @@
+import {feedbackFetch,feedbackJson} from "./request-response-feedback.js";
 import { LogoutButton } from "./session-exit.js";
 import {FactoryReceiptSelector} from "./production-closure-ui.js";
 import type {ProductionReceivingSummary} from "@dx-rework/contracts";
@@ -72,13 +73,8 @@ type UploadIntent = Readonly<{
 type FinalizedAttachment = Readonly<{ attachmentId: string }>;
 type SelectedImage = Readonly<{ file: File; previewUrl: string }>;
 
-const errorMessage = async (response: Response): Promise<string> => {
-  const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-  return body?.error?.message ?? "提交失败，请稍后重试";
-};
-
 const requestJson = async <T,>(path: string, init: RequestInit): Promise<T> => {
-  const response = await fetch(apiUrl(path), {
+  const response = await feedbackFetch(apiUrl(path), {
     credentials: "include",
     ...init,
     headers: {
@@ -87,9 +83,14 @@ const requestJson = async <T,>(path: string, init: RequestInit): Promise<T> => {
       ...(init.headers ?? {}),
     },
   });
-  if (!response.ok) throw new Error(await errorMessage(response));
-  return response.json() as Promise<T>;
+  return feedbackJson(response,init.method??'GET',value=>value as T);
 };
+
+export async function receivingReceiptRequest(input:unknown,key:string):Promise<Receipt>{
+ const response=await feedbackFetch(apiUrl("receiving/receipts"),{method:"POST",credentials:"include",headers:{"content-type":"application/json","idempotency-key":key},body:JSON.stringify(input)});
+ return feedbackJson(response,"POST",value=>{if(!value||typeof value!=="object")throw Error("invalid receipt");const receipt=value as Receipt;
+  if(![receipt.receiptId,receipt.receivingBatchId,receipt.styleNo,receipt.receivedAt].every(item=>typeof item==='string'&&item.length>0)||![receipt.documentQuantity,receipt.actualQuantity,receipt.defectiveQuantity,receipt.differenceQuantity].every(Number.isFinite))throw Error("invalid receipt");return receipt;});
+}
 
 const INVALID_DECLARED_IMAGE_MESSAGE = "Uploaded object is not a valid file of the declared type";
 
@@ -417,11 +418,7 @@ export function ReceivingPage() {
 
       const key = pendingKey.current ?? createClientRequestId();
       pendingKey.current = key;
-      const response = await fetch(apiUrl("receiving/receipts"), {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json", "idempotency-key": key },
-        body: JSON.stringify({
+      const receipt = await receivingReceiptRequest({
           ...factoryInput,
           ...(selectedCutting
             ? { cuttingOrderId: selectedCutting.cuttingOrderId }
@@ -431,11 +428,8 @@ export function ReceivingPage() {
           defectiveQuantity: defectiveCount,
           attachmentIds,
           ...(backfill ? { receivedDate } : {}),
-        }),
-      });
-      if (!response.ok) throw new Error(await errorMessage(response));
-      const receipt = await response.json() as Receipt;
-      
+        },key);
+
       pendingKey.current = null;
       const sign = receipt.differenceQuantity > 0 ? "+" : "";
       setMessage(`${backfill ? "补录" : "收货"}成功 · 次品 ${formatBusinessDecimal(receipt.defectiveQuantity)} 件 · 差异 ${sign}${formatBusinessDecimal(receipt.differenceQuantity)} 件`);
@@ -679,3 +673,5 @@ export function ReceivingPage() {
     </section>
   </main>;
 }
+
+export {requestJson as receivingRequestJson};

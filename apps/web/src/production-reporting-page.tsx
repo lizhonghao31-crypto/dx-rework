@@ -1,3 +1,4 @@
+import {feedbackFetch,feedbackJson,unknownWriteResult} from "./request-response-feedback.js";
 import { SearchableSelect } from "./search-select.js";
 import { shanghaiBusinessTime } from "./business-date.js";
 import { productionDisplayReturnUrl } from "./production-display-context.js";
@@ -23,11 +24,14 @@ const {apiUrl,pageUrl}=createWebUrls(import.meta.env.BASE_URL);
 const labels={in_production:"生产中",production_completed:"生产完成",shipped:"已发货"} as const;
 const today=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
 async function request<T>(path:string,schema:z.ZodType<T>,init:RequestInit={}) {
-  const response=await fetch(apiUrl(`production-reporting${path}`),{credentials:"include",cache:"no-store",...init,
+  const response=await feedbackFetch(apiUrl(`production-reporting${path}`),{credentials:"include",cache:"no-store",...init,
     headers:{accept:"application/json",...(init.body?{"content-type":"application/json"}:{}),...init.headers}});
-  const body=await response.json();if(!response.ok)throw new Error(body?.error?.message??"操作失败，请重试");
-  return schema.parse(body);
+  return feedbackJson(response,init.method??'GET',value=>schema.parse(value));
 }
+export async function saveProductionScope(input:ProductionScopeInput,key:string){
+ const response=await feedbackFetch(apiUrl("production-reporting/scopes"),{method:"POST",credentials:"include",headers:{"content-type":"application/json","idempotency-key":key},body:JSON.stringify(input)});await feedbackJson(response,"POST",value=>{if(!value||typeof value!=="object"||!("saved"in value)||value.saved!==true)throw Error("invalid scope receipt");return value;});
+}
+
 export function ProductionReportingPage({productionOrderId}:{productionOrderId?:string|undefined}) {
   const factoryDecisionId=new URLSearchParams(window.location.search).get('factoryDecisionId');
   const factoryQuery=factoryDecisionId?'?'+new URLSearchParams({factoryDecisionId}):'';
@@ -41,7 +45,7 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
   const [correctionQuantity,setCorrectionQuantity]=useState(""),[correctionDate,setCorrectionDate]=useState(today),[reason,setReason]=useState("");
   const [directory,setDirectory]=useState<z.infer<typeof ProductionScopeDirectorySchema>|null>(null);
   const [scopeUser,setScopeUser]=useState(""),[scopeSupplier,setScopeSupplier]=useState("");
-  const mutation=useRef(false), retry=useRef<{payload:string;key:string}|null>(null),version=useRef(0);
+  const mutation=useRef(false), retry=useRef<{payload:string;key:string;uncertain?:boolean}|null>(null),scopeRetry=useRef<{payload:string;key:string;uncertain?:boolean}|null>(null),version=useRef(0);
   useEffect(()=>{void verifySession().then(s=>{if(s!=="denied"&&s.status==="authorized")setUser(s.user);});},[]);
   const load=async()=>{
     const current=++version.current;setLoading(true);setError("");
@@ -55,10 +59,10 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
   useEffect(()=>{const timer=setTimeout(()=>{void load();},q?250:0);return()=>{clearTimeout(timer);version.current++;};},[productionOrderId,factoryDecisionId,page,q,supplier,status]);
   const write=async(path:string,body:unknown,success:string)=>{
     if(mutation.current)return;mutation.current=true;setBusy(true);setError("");setMessage("");
-    body={...(body as Record<string,unknown>),factoryDecisionId};const payload=JSON.stringify({path,body});if(retry.current?.payload!==payload)retry.current={payload,key:createClientRequestId()};
+    body={...(body as Record<string,unknown>),factoryDecisionId};const payload=JSON.stringify({path,body});if(retry.current?.uncertain&&retry.current.payload!==payload){setError("上次提交结果尚未确认，请先刷新原订单核对；重试时须保留原内容和请求标识。");mutation.current=false;setBusy(false);return;}if(retry.current?.payload!==payload)retry.current={payload,key:createClientRequestId()};
     try {const result=await request(path,ProductionReportingDetailSchema,{method:"POST",body:JSON.stringify(body),headers:{"idempotency-key":retry.current.key}});
       setDetail(result);retry.current=null;setMessage(success);setQuantities({});setCorrecting(null);
-    }catch(e){setError(e instanceof Error?e.message:"保存失败");}finally{mutation.current=false;setBusy(false);}
+    }catch(e){if(unknownWriteResult(e)){if(retry.current)retry.current.uncertain=true;}else retry.current=null;setError(e instanceof Error?e.message:"提交结果尚未确认，请核对原订单");}finally{mutation.current=false;setBusy(false);}
   };
   const execute=async(kind:"complete"|"ship")=>{
     if(!detail||busy||selectedLine.lineId)return;
@@ -66,13 +70,14 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
       `确认已发货？款号 ${detail.order.firstStyleNo}，已登记产量 ${formatBusinessDecimal(detail.order.completedQuantity)} 件。此操作不会确认仓库收货。`;
     if(await confirmInApp(text,{confirmLabel:kind==="complete"?"确认生产完成":"确认已发货"}))await write(`/${productionOrderId}/${kind}`,{businessDate:date,confirmed:true},kind==="complete"?"已登记生产完成":"已登记发货，等待仓库实际收货");
   };
-  const loadScopes=async()=>{try{setDirectory(await request("/scopes",ProductionScopeDirectorySchema));}catch(e){setError(e instanceof Error?e.message:"加载失败");}};
+  const loadScopes=async()=>{try{setDirectory(await request("/scopes",ProductionScopeDirectorySchema));return true;}catch(e){setError(e instanceof Error?e.message:"负责范围未能读取，请重新读取");return false;}};
   const saveScope=async(input:ProductionScopeInput)=>{
     if(mutation.current)return;mutation.current=true;setBusy(true);setError("");
-    try{const response=await fetch(apiUrl("production-reporting/scopes"),{method:"POST",credentials:"include",headers:{"content-type":"application/json","idempotency-key":createClientRequestId()},body:JSON.stringify(input)});
-      if(!response.ok){const body=await response.json();throw new Error(body?.error?.message??"负责范围保存失败");}
-      await loadScopes();setMessage(input.active?"负责范围已保存":"负责范围已撤销");
-    }catch(e){setError(e instanceof Error?e.message:"保存失败");}finally{mutation.current=false;setBusy(false);}
+    const payload=JSON.stringify(input);if(scopeRetry.current?.uncertain&&scopeRetry.current.payload!==payload){setError("上次负责范围提交结果尚未确认，请先读取原范围核对；重试时须保留原内容和请求标识。");mutation.current=false;setBusy(false);return;}if(scopeRetry.current?.payload!==payload)scopeRetry.current={payload,key:createClientRequestId()};
+    try{await saveProductionScope(input,scopeRetry.current.key);scopeRetry.current=null;
+      setMessage(input.active?"负责范围已保存":"负责范围已撤销");
+      const refreshed=await loadScopes();if(!refreshed)setMessage("负责范围已保存，最新范围暂未读取；请重新读取负责范围，不要重复提交。");
+    }catch(e){if(unknownWriteResult(e)){if(scopeRetry.current)scopeRetry.current.uncertain=true;}else scopeRetry.current=null;setError(e instanceof Error?e.message:"负责范围提交结果尚未确认，请读取原范围核对");}finally{mutation.current=false;setBusy(false);}
   };
   const selectedLine=productionLineTarget(window.location.search,detail?.order.poDeliveryDates);
   const orderReturn=digitalDetailReturnUrl(new URLSearchParams(window.location.search).get("returnTo"),import.meta.env.BASE_URL);
@@ -144,3 +149,5 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
     </details></Surface>:null}
   </main></Shell>;
 }
+
+export {request as productionReportingRequest};
