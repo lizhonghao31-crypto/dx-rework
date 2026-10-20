@@ -20,18 +20,19 @@ const apiFile=(id:string,name:string)=>file(id,name,`tools/attachments/${id}/dow
 const result=(entries:CockpitDocumentEntry[],note?:string):CockpitDocumentResult=>({state:entries.length?"created":"missing",entries,...(note?{note}:{})});
 const approvalStatuses:Record<string,string>={pending:"待审批",pending_management:"待审批",approved:"已批准",rejected:"已退回",cancelled:"已取消"};
 const requireFields=(value:Row,fields:string[])=>{if(fields.some(field=>!Object.hasOwn(value,field)))throw new Error("资料返回不完整，请刷新重试");};
+const sameEntity=(value:Row,key:string,expected:string,label:string)=>{requireFields(value,[key]);if(value[key]!==expected)throw new Error(`${label}与本单不一致，本次未确认；请刷新后从原单进入`);};
 const na=():CockpitDocumentResult=>({state:"not_applicable",entries:[],note:"当前没有此类业务来源。"});
 const records=(order:OrderJourney,domain:string)=>[...new Map([...order.links,...order.stages.flatMap(stage=>stage.nodes.flatMap(node=>node.records))].filter(record=>record.domain===domain&&record.url).map(record=>[record.id,record])).values()];
 const original=(kind:string,id:string,version?:number|undefined)=>`/ui/digital-production?${kind}=${id}${version?`&${kind==="development"?"round":kind==="budget"?"budgetVersion":"instructionVersion"}=${version}`:""}`;
 
-/** Original readers authorize each request. Nothing is fetched for a collapsed category/version. */
+/** Original readers authorize each request. Directory metadata may be read ahead; versions/files remain on demand. */
 export async function loadCockpitDocumentCategory(order:OrderJourney,key:CockpitDocumentCategory,read:CockpitDocumentReader,signal:AbortSignal,page=1):Promise<CockpitDocumentResult>{
  const sid=order.sourceId,oid=order.orderId;
  if(key==="development"){
   if(!sid)return na();
   const sheet=row(await read(`digital-production/sources/${sid}/development`,signal)),roundsResult=row(await read(`digital-production/sources/${sid}/development/rounds`,signal));
   // The authorized reader requires the base document before returning a revision; the revisions table starts at round 2.
-  requireFields(sheet,["sourceId","version","document"]);requireFields(roundsResult,["rounds"]);const rounds=rows(roundsResult.rounds),numbers=[...new Set([...(sheet.document?[1]:[]),num(sheet.roundNumber)||1,...rounds.map(item=>num(item.roundNumber))])].filter(Boolean).sort((a,b)=>b-a);
+  requireFields(sheet,["sourceId","version","document"]);sameEntity(sheet,"sourceId",sid,"开发资料");requireFields(roundsResult,["rounds"]);const rounds=rows(roundsResult.rounds),numbers=[...new Set([...(sheet.document?[1]:[]),num(sheet.roundNumber)||1,...rounds.map(item=>num(item.roundNumber))])].filter(Boolean).sort((a,b)=>b-a);
   if(!sheet.document&&!rounds.length)return result([]);
   return result(numbers.map(roundNumber=>{const metadata=rounds.find(item=>item.roundNumber===roundNumber);return {id:`round:${roundNumber}`,label:`第 ${roundNumber} 轮${roundNumber===sheet.roundNumber?` · 单据 v${sheet.version} · ${sheet.status==="published"?"已发布":"草稿"}`:""}`,url:original("development",sid,roundNumber),at:str(metadata?.publishedAt),load:{kind:"development",path:`digital-production/sources/${sid}/development?round=${roundNumber}`,id:sid,version:roundNumber}};}));
  }
@@ -43,11 +44,12 @@ export async function loadCockpitDocumentCategory(order:OrderJourney,key:Cockpit
  if(!oid)return na();
  if(key==="order"){
   const sheet=row(await read(`digital-production/orders/${oid}`,signal)),instruction=row(await read(`digital-production/orders/${oid}/instruction`,signal));
+  sameEntity(sheet,"productionOrderId",oid,"订购资料");sameEntity(row(instruction.order),"productionOrderId",oid,"制单日期资料");
   return result([{id:oid,label:"订购信息与PO明细",url:original("order",oid),note:`母单 v${sheet.version??"待核实"}`,at:str(sheet.createdAt),children:rows(sheet.lines).map(line=>({id:str(line.lineId),label:`${str(line.poNumber)||"PO待补"} · ${str(line.color)}`,note:rows(line.sizes).map(size=>`${size.size}：${size.quantity}`).join("；")}))},...rows(instruction.dateRequests).map(change=>({id:str(change.requestId),label:`出货日期变更 · ${approvalStatuses[str(change.status)]??"状态待核实"}`,url:original("instruction",oid),at:str(change.requestedAt),by:str(change.requestedBy),note:[str(change.reason),change.decidedAt?`处理：${str(change.decidedBy)} · ${str(change.decidedAt)}`:""].filter(Boolean).join("；"),children:rows(change.changes).map(line=>({id:str(line.lineId),label:str(line.poNumber)||"PO待补",note:`${str(line.oldDate)||"未登记"} → ${str(line.date)}`}))}))]);
  }
  if(key==="budget"||key==="instruction"){
   const path=`digital-production/orders/${oid}/${key}`,sheet=row(await read(path,signal));
-  requireFields(sheet,["version","versions"]);const versions=values(sheet.versions),current=num(sheet.version);
+  requireFields(sheet,["version","versions"]);sameEntity(key==="budget"?sheet:row(sheet.order),"productionOrderId",oid,key==="budget"?"预算资料":"制单资料");const versions=values(sheet.versions),current=num(sheet.version);
   const entries:CockpitDocumentEntry[]=versions.map(version=>({id:`published:${version}`,label:`已发布 v${version}`,url:original(key,oid,version),load:{kind:key,path:`${path}?version=${version}`,id:oid,version}}));
   if(current&&!versions.includes(current))entries.unshift({id:`draft:${current}`,label:`当前草稿 v${current}`,url:original(key,oid),load:{kind:key,path,id:oid}});
   return result(entries);
@@ -63,14 +65,14 @@ export async function loadCockpitDocumentCategory(order:OrderJourney,key:Cockpit
   }return result(entries);
  }
  if(key==="preparation"){
-  const sheet=row(await read(`digital-production/orders/${oid}/bulk-preparation`,signal));requireFields(sheet,["preparationId"]);if(!sheet.preparationId)return result([]);
+  const sheet=row(await read(`digital-production/orders/${oid}/bulk-preparation`,signal));requireFields(sheet,["preparationId"]);sameEntity(sheet,"orderId",oid,"产前资料");if(!sheet.preparationId)return result([]);
   return result([{id:str(sheet.preparationId),label:"产前准备记录",url:original("bulk",oid),note:`制单 v${sheet.instructionVersion??"未核实"} · 开发第 ${sheet.sourceRound??"未核实"} 轮`,children:[...rows(sheet.facts).map((fact,index)=>({id:`fact:${index}`,label:str(fact.kind),at:str(fact.recordedAt)})),...rows(sheet.tasks).map(task=>({id:str(task.taskId),label:str(task.label),url:`/ui/digital-production?task=${task.taskId}&taskView=read`,note:str(task.assigneeName)||"负责人未登记"}))]}],"派工、唛架和预缩记录。");
  }
  if(key==="cutting"){
   const sources=records(order,"cutting");return sources.length?result(sources.map(source=>({id:source.id,label:"裁床单",url:`/ui/cutting/orders/${source.id}`,load:{kind:"cutting",path:`cutting/orders/${source.id}`,id:source.id}}))):{state:"unknown",entries:[],note:"裁床关联尚未确认。"};
  }
  if(key==="factory"){
-  const sheet=row(await read(`digital-production/orders/${oid}/factory-flow`,signal));requireFields(sheet,["preparationId"]);if(!sheet.preparationId)return result([]);
+  const sheet=row(await read(`digital-production/orders/${oid}/factory-flow`,signal));requireFields(sheet,["preparationId"]);sameEntity(sheet,"orderId",oid,"裁后工艺资料");if(!sheet.preparationId)return result([]);
   return result([...rows(sheet.facts).map(fact=>({id:str(fact.factId),label:str(fact.kind),url:original("factory",oid)+`#fact-${fact.factId}`,at:str(fact.recordedAt),by:str(fact.actorName),note:`发生：${str(fact.occurredAt)||"未核实"}${row(fact.payload).note?`；${row(fact.payload).note}`:""}${row(fact.payload).trackingNumber?`；快递：${row(fact.payload).trackingNumber}`:""}`})),...rows(sheet.checks).map(check=>({id:str(check.checkId),label:`工艺检查 · ${str(check.result)}`,url:original("factory",oid)+`#check-${check.checkId}`,at:str(check.checkedAt),by:str(check.checkedBy),note:[str(check.problem),str(check.treatment)].filter(Boolean).join("；"),files:strings(check.attachmentIds).map((id,index)=>file(id,`检查图片 ${index+1}`,`digital-production/orders/${oid}/factory-flow/attachments/${id}`))}))],"工艺收发、检查复查、实际发厂与寄样记录。");
  }
  const closure=row(await read(`digital-production/orders/${oid}/closure`,signal)),lines=rows(closure.lines),ids=[...new Set(lines.map(line=>str(line.receivingBatchId)).filter(Boolean))];
@@ -109,3 +111,56 @@ function receivingFile(item:Row):CockpitDocumentFile{return {...apiFile(str(item
 function metadataFacts(data:Row):CockpitDocumentMetadataFact[]{
  const metadata=row(data.metadata);return ([['created','创建'],['edited','修改'],['published','发布']] as const).map(([key,label])=>{const fact=row(metadata[key]);return {label,at:str(fact.at)||(key==='published'?str(data.publishedAt):''),by:str(fact.by)};});
 }
+
+export type CockpitDirectoryState={phase:'idle'|'loading'|'ready'|'error';data?:CockpitDocumentResult;error?:string;denied?:boolean;resume?:CockpitDocumentResult};
+export type CockpitDirectoryStates=Record<CockpitDocumentCategory,CockpitDirectoryState>;
+export const emptyCockpitDirectoryStates=():CockpitDirectoryStates=>Object.fromEntries(COCKPIT_DOCUMENT_CATEGORIES.map(category=>[category.key,{phase:'idle'}])) as CockpitDirectoryStates;
+const cancelledDirectoryRead=()=>Object.assign(new Error('本次目录读取已取消'),{name:'AbortError'});
+
+/** Same original authorized readers; bounded directory pages, never file bytes. */
+export async function loadCockpitDirectoryPages(order:OrderJourney,key:CockpitDocumentCategory,read:CockpitDocumentReader,signal:AbortSignal,budget=3,previous?:CockpitDocumentResult){
+ let page=previous?.nextPage??1,data=previous;const seen=new Set<number>();
+ for(let count=0;count<budget;count++){
+  if(signal.aborted)throw cancelledDirectoryRead();
+  if(!Number.isSafeInteger(page)||page<1||seen.has(page))throw new Error('关联目录分页异常，尚不能确认完整记录；请刷新核对');seen.add(page);
+  const next=await loadCockpitDocumentCategory(order,key,read,signal,page),entries=[...(data?.entries??[])];
+  for(const entry of next.entries)if(!entries.some(old=>old.id===entry.id))entries.push(entry);
+  if(next.nextPage!==undefined&&next.nextPage!==null&&(!Number.isSafeInteger(next.nextPage)||next.nextPage<=page))throw new Error('关联目录分页未前进，请刷新核对；未按无记录处理');
+  data={...next,entries,state:entries.length?'created':next.nextPage?'unknown':next.state};
+  if(!next.nextPage)return data;page=next.nextPage;
+ }
+ return {...data!,note:data!.entries.length?'已查到本类资料，尚有后续关联记录，可继续读取。':'尚有后续关联记录未读取，暂不能确认是否存在本类资料。请选择继续读取。'};
+}
+
+/** Cache belongs to exactly one actor/snapshot. At most three original GETs
+ * run at once; category and version readers share it, without caching denials. */
+export function createCockpitDocumentSnapshot(order:OrderJourney,reader:CockpitDocumentReader,isCurrent:()=>boolean=()=>true){
+ const snapshotOrder=structuredClone(order);
+ const controller=new AbortController(),cache=new Map<string,Promise<unknown>>(),listeners=new Set<()=>void>(),queue:Array<{start:()=>void;reject:(reason:Error)=>void}>=[];
+ let active=0,disposed=false,states=emptyCockpitDirectoryStates();
+ const live=()=>!disposed&&!controller.signal.aborted&&isCurrent();
+ const emit=()=>{for(const listener of listeners)listener();};
+ const update=(key:CockpitDocumentCategory,state:CockpitDirectoryState)=>{if(live()){states={...states,[key]:state};emit();}};
+ const pump=()=>{while(live()&&active<3&&queue.length)queue.shift()!.start();};
+ const read:CockpitDocumentReader=(path,signal)=>{
+  if(!live()||signal.aborted)return Promise.reject(cancelledDirectoryRead());
+  let pending=cache.get(path);
+  if(!pending){
+   const request=new Promise<unknown>((resolve,reject)=>{queue.push({reject,start:()=>{active++;void(async()=>{try{if(!live())throw cancelledDirectoryRead();const value=await reader(path,controller.signal);if(!live())throw cancelledDirectoryRead();resolve(value);}catch(error){reject(error);}finally{active--;pump();}})();}});pump();});
+   pending=request.catch(error=>{if(cache.get(path)===pending)cache.delete(path);if([401,403,404].includes((error as {status?:number}).status??0))cache.clear();throw error;});cache.set(path,pending);
+  }
+  return pending.then(value=>{if(!live()||signal.aborted)throw cancelledDirectoryRead();return value;});
+ };
+ const validated=async<T>(work:(tracked:CockpitDocumentReader)=>Promise<T>)=>{const used=new Set<string>();try{return await work((path,signal)=>{used.add(path);return read(path,signal);});}catch(error){for(const path of used)cache.delete(path);throw error;}};
+ const load=async(key:CockpitDocumentCategory,more=false)=>{
+  if(!live()||states[key].phase==='loading'||states[key].phase==='ready'&&!more)return;
+  const prior=more?states[key].data:states[key].resume;
+  if(more&&!prior?.nextPage)return;
+  update(key,{phase:'loading',...(prior?{data:prior}:{})});
+  try{const data=await validated(tracked=>loadCockpitDirectoryPages(snapshotOrder,key,tracked,controller.signal,3,prior));update(key,{phase:'ready',data});}
+  catch(error){if(!live()||(error as Error).name==='AbortError')return;const status=(error as {status?:number}).status,denied=status===401||status===403;
+   update(key,{phase:'error',denied,error:denied?'当前身份无权读取此类资料；未确认是否已创建。':status===404?'资料不存在或不在授权范围，无法确认是否已创建。':error instanceof Error?error.message:'目录读取失败，暂未确认原因；请重试，仍失败请管理员核对接口。',...(![401,403,404].includes(status??0)&&prior?{resume:prior}:{})});}
+ };
+ return {read,load,loadEntry:(entry:CockpitDocumentEntry,signal:AbortSignal)=>validated(tracked=>loadCockpitDocumentEntry(entry,tracked,signal)),start:()=>{for(const category of COCKPIT_DOCUMENT_CATEGORIES)void load(category.key);},getSnapshot:()=>states,subscribe:(listener:()=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};},dispose:()=>{if(disposed)return;disposed=true;controller.abort();for(const job of queue.splice(0))job.reject(cancelledDirectoryRead());cache.clear();states=emptyCockpitDirectoryStates();emit();listeners.clear();}};
+}
+export type CockpitDocumentSnapshot=ReturnType<typeof createCockpitDocumentSnapshot>;
