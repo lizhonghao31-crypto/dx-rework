@@ -1,3 +1,4 @@
+import {useTodoContentRead} from './todo-content-read.js';
 import {Entries} from "./document-entry-scope.js";
 import {rememberDigitalDetailContext} from "./digital-detail-context.js";
 import "./development-amendment.css";
@@ -65,7 +66,8 @@ export function DevelopmentAmendmentPanel({sourceId,taskId,onSubmitted}:{sourceI
   await execute(command.current);
  };
 
- return <section className="dx-doc-card development-amendment-editor"><h3>补改资料 / 补料后提交复核</h3>{error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}{!context||!document?<><p>补正资料尚未读取，请重新读取；读取成功前不能修改。</p><Button type="button" disabled={busy} onClick={()=>void load()}>重新读取补正资料</Button></>:<>
+ const readRef=useTodoContentRead({routeName:'digital_production_task',entityId:taskId,developmentRound:context?.roundNumber},Boolean(context&&document));
+ return <section ref={readRef} className="dx-doc-card development-amendment-editor"><h3>补改资料 / 补料后提交复核</h3>{error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}{!context||!document?<><p>补正资料尚未读取，请重新读取；读取成功前不能修改。</p><Button type="button" disabled={busy} onClick={()=>void load()}>重新读取补正资料</Button></>:<>
  <p>本次制作第 {context.roundNumber} 轮 · 当前资料修订 {context.documentVersion}。保存草稿不改正式资料；提交后仍由文员复核。制作数量、尺码、工艺和已执行事实不能在此覆盖，实际变更请走原复版入口。</p><p>原退回说明：{context.note}</p><ul>{context.issues.map((issue,index)=><li key={index}><a href={`#amendment-${issue.materialId?(fields.some(field=>field===issue.field)?`${issue.materialId}-${issue.field}`:issue.materialId):issue.field==="files"?"files":issue.field==="instructions"?"instructions":"reason"}`} onClick={event=>{event.preventDefault();const target=window.document.getElementById(event.currentTarget.hash.slice(1));target?.scrollIntoView({block:"center"});target?.focus({preventScroll:true});}}>{issue.materialId?context.document.materials.find(m=>m.materialId===issue.materialId)?.name||"原材料":"本单资料"} · {RETURN_FIELD_LABELS[issue.field]}</a>：{issue.reason}</li>)}</ul>
  {uncertain&&<div role="status"><p>本次操作结果未知，暂时保留输入与原操作，核对完成前不能另存或另提。</p><Button type="button" disabled={busy} onClick={()=>void recheck()}>核对本次操作回执</Button><Button type="button" disabled={busy} onClick={()=>{if(command.current)void execute(command.current);}}>使用原操作标识重试</Button></div>}
  {!submitted&&<div><p>实物到货登记位置：本任务“本单资料 → 开发单 → 轮次与记录 → 本轮物料记录”。登记后返回当前办理，再提交文员复核。</p>{documentEntries&&<Button type="button" disabled={busy||uncertain} onClick={openMaterialRecords}>打开本单物料记录</Button>}</div>}

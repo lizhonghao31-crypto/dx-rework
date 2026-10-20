@@ -34,3 +34,6 @@
 .unified-shell > aside .shell-brand-row .session-logout { align-self:center; width:auto; min-height:32px; margin:0; padding:4px 0; gap:4px; font-size:11px; white-space:nowrap; }
 .unified-shell > aside .shell-brand-row .session-logout-error { grid-column:1/-1; margin:0; }
 .unified-shell > aside > .desktop-navigation { margin-top:0; }
+
+/* The approved page hosts opt in; cockpit and all other shells keep original geometry. */
+.app-shell[data-brand-scope="approved-six"] > aside .shell-brand-row .production-command-brand { gap:var(--dx-v2-space-3,12px); }

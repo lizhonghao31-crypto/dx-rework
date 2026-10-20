@@ -14,6 +14,7 @@ import { SourcingContractService } from "../../apps/api/src/sourcing/sourcing-co
 import { SourcingProductionService } from "../../apps/api/src/sourcing/sourcing-production-service.js";
 import { ProductionReportingService } from "../../apps/api/src/sourcing/production-reporting-service.js";
 import { ProductionClosureService } from "../../apps/api/src/sourcing/production-closure-service.js";
+import {TodoService} from '../../apps/api/src/todos/service.js';
 import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
 import { CuttingSourceService } from "../../apps/api/src/cutting/cutting-source-service.js";
 import { AttachmentService } from "../../apps/api/src/tools/attachments.js";
@@ -134,6 +135,12 @@ const url=process.env.TEST_DATABASE_URL??process.env.DATABASE_URL;
   await Promise.all([closure.markRead(merch(),a[0]!.todoId),closure.markRead(merch(),a[0]!.todoId)]);
   expect((await closure.todos(merch()))[0]).toMatchObject({unread:false,status:"pending"});
   expect((await closure.todos(boss()))[0]).toMatchObject({unread:true,status:"pending"});
+  const personal=new TodoService(database,undefined,undefined,closure),legacyRead=(await closure.todos(merch()))[0]!,firstRead=legacyRead.readAt;
+  expect(firstRead).toBeTruthy();expect(legacyRead.contentToken).toMatch(/^[a-f0-9]{64}$/);
+  expect(await personal.markReadForActor({...merch(),authorizationCapability:'todo:view'},legacyRead.todoId,{contentToken:legacyRead.contentToken!,route:legacyRead.route})).toMatchObject({read:true,readAt:firstRead});
+  const bossRisk=(await closure.todos(boss()))[0]!;await personal.markReadForActor({...boss(),authorizationCapability:'todo:view'},bossRisk.todoId,{contentToken:bossRisk.contentToken!,route:bossRisk.route});
+  expect((await closure.todos(boss()))[0]).toMatchObject({unread:false,status:'pending'});
+  expect((await database.query('SELECT count(*)::int n FROM todo_content_reads WHERE todo_id=$1',[legacyRead.todoId])).rows[0].n).toBe(0); // reuse 0151, no competing read store
   const original=report.value.history[0]!;
   await reporting.correct(root(),order.productionOrderId,original.rootReportId,{expectedReportId:original.reportId,businessDate:today(),quantity:0,reason:"撤销错误首报"},randomUUID());
   expect((await database.query("SELECT 1 FROM sourcing_production_alerts WHERE production_order_id=$1 AND resolved_at IS NULL",[order.productionOrderId])).rowCount).toBe(0);

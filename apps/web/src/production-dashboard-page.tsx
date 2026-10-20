@@ -1,3 +1,4 @@
+import {TodoReadBoundary,useTodoContentRead} from './todo-content-read.js';
 import { SearchableSelect } from "./search-select.js";
 import { PoDateSummary,PoDateDetails,PoDateRisks,PoDeadline } from "./po-delivery-dates.js";
 import { shanghaiBusinessTime } from "./business-date.js";
@@ -39,10 +40,12 @@ export function ProductionProgressBars({item,motion=false}:{item:ProductionDashb
     {p.timeProgress!==null?<div className="board-track board-time" role="progressbar" aria-label="时间进度" aria-valuenow={p.timeProgress} aria-valuemin={0} aria-valuemax={100}><span style={{width:`${p.timeProgress}%`}}/></div>:null}
   </div>;
 }
-export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:string|undefined}) {
+export function ProductionDashboardPage(props:{productionOrderId?:string|undefined}){return <TodoReadBoundary><ProductionDashboardContent {...props}/></TodoReadBoundary>;}
+function ProductionDashboardContent({productionOrderId}:{productionOrderId?:string|undefined}) {
   const factoryDecisionId=new URLSearchParams(window.location.search).get('factoryDecisionId');
   const factoryQuery=factoryDecisionId?'?'+new URLSearchParams({factoryDecisionId}):'';
   const [data,setData]=useState<ProductionDashboard|null>(null),[detail,setDetail]=useState<z.infer<typeof ProductionDashboardDetailSchema>|null>(null);
+  const readRef=useTodoContentRead({routeName:'production_detail',entityId:productionOrderId??'',factoryDecisionId},Boolean(detail&&detail.detail.order.productionOrderId===productionOrderId));
   const [q,setQ]=useState(""),[supplier,setSupplier]=useState(""),[status,setStatus]=useState(""),[progressState,setProgressState]=useState("");
   const [risk,setRisk]=useState(""),[root,setRoot]=useState(false),[managementOpen,setManagementOpen]=useState(false),[deleting,setDeleting]=useState<string|null>(null);
   const [page,setPage]=useState(1),[loading,setLoading]=useState(true),[error,setError]=useState("");
@@ -55,10 +58,7 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
     const version=++sequence.current;setLoading(true);setError("");
     try{
       if(productionOrderId){const result=await request(`/${productionOrderId}${factoryQuery}`,ProductionDashboardDetailSchema);if(version===sequence.current){setDetail(result);
-        const todo=new URLSearchParams(window.location.search).get("todo");
-        if(todo){const response=await fetch(apiUrl(`production-closure/alerts/${encodeURIComponent(todo)}/read`),{method:"POST",credentials:"include"});
-          if(!response.ok&&response.status!==404)throw new Error("生产待办已读状态保存失败，请刷新重试");
-          window.dispatchEvent(new Event("dx-rework:todo-read"));}
+
       }}
       else{const params=new URLSearchParams({page:String(page)});if(q.trim())params.set("q",q.trim());if(supplier)params.set("supplierId",supplier);if(status)params.set("status",status);if(progressState)params.set("progressState",progressState);if(risk)params.set("risk",risk);
         if(manual&&last.current)params.set("previousAsOf",last.current.asOf);
@@ -85,7 +85,7 @@ export function ProductionDashboardPage({productionOrderId}:{productionOrderId?:
   const asOf=data?.asOf??detail?.asOf;
   const orderReturn=digitalDetailReturnUrl(new URLSearchParams(window.location.search).get("returnTo"),import.meta.env.BASE_URL);
   const displayReturn=productionDisplayReturnUrl(new URLSearchParams(window.location.search).get('returnTo'));
-  return <Shell active="实时看板"><div className="sourcing-workspace production-dashboard production-board">
+  return <Shell active="实时看板"><div ref={readRef} className="sourcing-workspace production-dashboard production-board">
     <Header iconRoute="/ui/production-dashboard" title="实时看板" subtitle="生产数量与工作日进度，按实际记录判断。" badge="实时生产看板"/>
     <div className="production-dashboard__toolbar">{canOpenReporting?<a href={pageUrl("ui/production-reporting")}><NavigationIcon route="/ui/production-reporting" />生产数据填报</a>:null}{productionOrderId?<a href={todoReturnPath(window.location.search)?pageUrl(todoReturnPath(window.location.search)!):orderReturn??displayReturn??pageUrl("ui/production-dashboard")}>{todoReturnPath(window.location.search) ? "返回我的待办" : orderReturn?"返回这张订单":displayReturn?"返回实时生产展示":"返回实时看板"}</a>:null}
       <span>{asOf?<time dateTime={asOf} title={timestamp(asOf)}>数据截至 {timestamp(asOf)} · 读取于{relativeProductionTime(asOf,now)}前</time>:"正在读取数据"}</span>

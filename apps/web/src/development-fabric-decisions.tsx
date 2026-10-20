@@ -1,12 +1,15 @@
+import {useTodoContentRead} from './todo-content-read.js';
 import {Button} from "@dx-rework/ui";
 import type {useDevelopmentExecution} from "./digital-development-execution-panel.js";
 import {createWebUrls} from "../url-contract.js";
 export type FabricCase={reportId:string;reportedAt:string;reportedBy:string;payload:{note:string;attachmentIds:string[]};decisionId:string|null;decision:{decision:string;note:string}|null;decidedAt:string|null;decidedBy:string|null;status:string;scope:{roundNumber:number;documentVersion:number;materials:Array<{materialId:string;name:string;label:string}>}|null;responsible:Array<{id:string;name:string}>};
 export function DevelopmentFabricDecisions({controller}:{controller:ReturnType<typeof useDevelopmentExecution>}){
  const {state,busy,run}=controller;
+ const selectedTask=state?.tasks.find(task=>task.taskId===new URLSearchParams(window.location.search).get('task'));
+ const readRef=useTodoContentRead({routeName:selectedTask?'digital_production_task':'digital_development',entityId:selectedTask?.taskId??state?.sheet.sourceId??'',developmentRound:state?.sheet.roundNumber??1,reportIds:state?.fabricCases?.map(report=>report.reportId)},Boolean(state?.fabricCases?.length&&!controller.readError));
  if(!state?.fabricCases?.length)return null;
  const urls=createWebUrls(import.meta.env.BASE_URL);
- return <section aria-label="问题面料报告与决定"><h3>问题面料报告与决定</h3>{state.fabricCases.map(report=><article key={report.reportId}>
+ return <section ref={readRef} aria-label="问题面料报告与决定"><h3>问题面料报告与决定</h3>{state.fabricCases.map(report=><article key={report.reportId}>
   <h4>{report.status==="等待决定"?"等待供应链总监决定":report.status==="停止使用"?"已决定停止使用，不能以核料勾选放行":"已明确允许使用，仍须完成实际核料"}</h4>
   <p>{report.payload.note}</p><p>报告人：{report.reportedBy} · {new Date(report.reportedAt).toLocaleString("zh-CN")}</p>
   <p>{report.scope?`报告依据：第 ${report.scope.roundNumber} 轮、资料版本 ${report.scope.documentVersion}；材料：${report.scope.materials.map(m=>m.name||m.label).join("、")}`:"历史报告未登记具体材料／轮次范围；请有权决定人对照原报告核实，不因到货或改版自动失效。"}</p>

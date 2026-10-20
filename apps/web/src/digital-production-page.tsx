@@ -1,3 +1,4 @@
+import {TodoReadBoundary} from './todo-content-read.js';
 import {DevelopmentArrangementPage} from "./development-arrangement-page.js";
 import {customerPoDateLabel} from "./digital-workspace-copy.js";
 import {BulkTaskWorkbench} from "./bulk-task-workbench.js";
@@ -130,7 +131,8 @@ function TaskDetail({ id }: { id: string }) {
 }
 
 /** Native detail consumers; no order/task list or creation state. */
-export function DigitalProductionPage() {
+export function DigitalProductionPage(){return <TodoReadBoundary><DigitalProductionPageContent/></TodoReadBoundary>;}
+function DigitalProductionPageContent() {
   const route = digitalDetailRoute(window.location.search);
   let detail;
   switch (route.kind) {

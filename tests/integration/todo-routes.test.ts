@@ -76,6 +76,7 @@ const createApp = () => {
     })),
     listRoutingExceptionsForActor: vi.fn(async () => []),
     transferRoutingException: vi.fn(async () => todo),
+    markReadForActor:vi.fn(async()=>({read:true as const,contentToken:"a".repeat(64),readAt:"2026-10-20T00:00:00.000Z"})),
   };
   const app = buildApp({
     config,
@@ -93,7 +94,7 @@ const createApp = () => {
           id: "00000000-0000-4000-8000-000000000016",
           displayName: "viewer",
           businessRoles: ["tail_supervisor"],
-          capabilities: ["todo:view"],
+          capabilities: token==="nocap"?[]:["todo:view"],
         },
       service,
     },
@@ -103,6 +104,16 @@ const createApp = () => {
 };
 
 describe("todo HTTP boundaries", () => {
+  it("P07 marks only the authenticated recipient and rejects missing capability or forged identity before calling the service",async()=>{
+    const {app,service}=createApp(),url=`/todos/mine/${todo.todoId}/read`,payload={contentToken:'a'.repeat(64),route:todo.route};
+    const allowed=await app.inject({method:'POST',url,payload,headers:{cookie:'dx_rework_session=viewer'}});expect(allowed.statusCode).toBe(200);expect(allowed.json()).toMatchObject({read:true,contentToken:payload.contentToken});
+    expect(service.markReadForActor).toHaveBeenCalledWith(expect.objectContaining({actorId:todo.recipientUserId,authorizationCapability:'todo:view'}),todo.todoId,payload);
+    service.markReadForActor.mockClear();
+    expect((await app.inject({method:'POST',url,payload,headers:{cookie:'dx_rework_session=nocap'}})).statusCode).toBe(403);
+    expect((await app.inject({method:'POST',url,payload:{...payload,recipientUserId:'00000000-0000-4000-8000-000000000099'},headers:{cookie:'dx_rework_session=viewer'}})).statusCode).toBe(400);
+    expect(service.markReadForActor).not.toHaveBeenCalled();
+  });
+
   it("accepts the pattern-room module from the shared HTTP contract", async () => {
     const { app, service } = createApp();
     const response = await app.inject({ url: "/todos/mine?module=pattern_room&q=BF-001&page=2", headers: { cookie: "dx_rework_session=viewer" } });

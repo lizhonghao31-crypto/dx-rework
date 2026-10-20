@@ -1,0 +1,10 @@
+import '../../apps/web/src/App.js';
+import '../../apps/web/src/workflow-shell.css';
+import '../../apps/web/src/workflow-state-visual.css';
+import '../../apps/web/src/ui-polish.css';
+import {createRoot} from 'react-dom/client';
+import {Shell} from '../../apps/web/src/components.js';
+import '@dx-rework/ui/tokens.css';import '@dx-rework/ui/components.css';import '../../apps/web/src/styles.css';
+const actor='00000000-0000-4000-8000-000000000001';
+window.fetch=async(input)=>{const path=String(input);if(path.endsWith('auth/me'))return Response.json({status:'authorized',user:{id:actor,displayName:'TEST主管',isRoot:false,businessRoles:['pattern_room_supervisor'],capabilities:['todo:view','digital_production:view']}});if(path.includes('/indicator'))return Response.json({pendingCount:1},{headers:{'x-dx-rework-actor-id':actor}});return Response.json({notification:null,remainingCount:0},{headers:{'x-dx-rework-actor-id':actor}});};
+createRoot(document.getElementById('root')!).render(<Shell active={location.pathname.includes('digital-cockpit')?'生产管理座舱':'开发与大货办理'} appearance="digital"><h1>TEST原业务区域</h1><p>TEST固定正文</p></Shell>);

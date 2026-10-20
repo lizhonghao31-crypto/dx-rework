@@ -1,3 +1,4 @@
+import {todoContentToken} from '../todos/content-reads.js';
 import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import { productionNotExcluded, productionMerchandiserId } from "./production-visibility.js";
 
@@ -107,7 +108,7 @@ export class ProductionClosureService {
      sourceAction:"sourcing.production.dispatch",entityType:"production_order",entityId:o.production_order_id,recipientUserId:actor.actorId,
      requiredRole:null,requiredCapability:"sourcing:view",route:{routeName:"production_detail",entityId:o.production_order_id,todoId:a.alert_id,...(o.factory_decision_id?{factoryDecisionId:o.factory_decision_id}:{})},policyKey:null,dueAt:null,reminderCount:0,
      status:"pending",blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:o.first_style_no,supplierName:o.supplier_name_snapshot,merchandiserName:o.merchandiser_name ?? null,status:a.kind,updatedAt:asOf},
-     unread:a.read_at===null,productionProgress:p.productionProgress,daysWithoutUpdate:p.daysWithoutUpdate,
+     contentToken:todoContentToken(['production-risk',a.alert_id,a.production_order_id,a.kind,iso(a.opened_at)]),readAt:a.read_at?iso(a.read_at):null,unread:a.read_at===null,productionProgress:p.productionProgress,daysWithoutUpdate:p.daysWithoutUpdate,
      version:1,createdAt:iso(a.opened_at),updatedAt:asOf})];});
    await client.query("COMMIT");return result;
   }catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}

@@ -1,5 +1,5 @@
-import {TodoService} from "../../apps/api/src/todos/service.js";
 import {TodoProjectionService} from "../../apps/api/src/todos/projection-service.js";
+import {TodoService} from "../../apps/api/src/todos/service.js";
 import {PatternRoomOrderService} from "../../apps/api/src/pattern-room/order-service.js";
 import {developmentMakingSizes} from "@dx-rework/contracts/digital-development";
 import Fastify from "fastify";
@@ -29,8 +29,8 @@ import type {TrustedActorContext} from "../../apps/api/src/tools/repositories.js
 const url=process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)("P02 same-round correction with real current schema",()=>{
  const schema=ownedPostgresSchema("development_amendment"),admin=new pg.Pool({connectionString:url!}),db=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
- const ids={designer:randomUUID(),clerk:randomUUID(),worker:randomUUID(),other:randomUUID(),supervisor:randomUUID(),root:randomUUID()};
- const actor=(who:keyof typeof ids,roles?:string[]):TrustedActorContext=>({actorId:ids[who],actorRoles:roles??[who==="root"?"root_superuser":who==="clerk"?"development_clerk":who==="supervisor"?"pattern_room_supervisor":who==="worker"?"pattern_room_worker":"sample_designer"],authorizationCapability:"digital_production:view",authorizationCapabilities:["digital_production:view","pattern_room:orders:create","todo:view"],requestId:"TEST-P02"});
+ const ids={designer:randomUUID(),clerk:randomUUID(),worker:randomUUID(),other:randomUUID(),supervisor:randomUUID(),director:randomUUID(),root:randomUUID()};
+ const actor=(who:keyof typeof ids,roles?:string[]):TrustedActorContext=>({actorId:ids[who],actorRoles:roles??[who==="root"?"root_superuser":who==="clerk"?"development_clerk":who==="supervisor"?"pattern_room_supervisor":who==="director"?"production_management":who==="worker"?"pattern_room_worker":"sample_designer"],authorizationCapability:"digital_production:view",authorizationCapabilities:["digital_production:view","pattern_room:orders:create","todo:view"],requestId:"TEST-P02"});
  const employees=new EmployeeAccessService(db,"TEST",new AccessMasterDataService(db,"TEST"),undefined as never,undefined as never,{enabled:false,dingtalkUserId:undefined,secret:undefined},`TEST-${ids.root}`);
  const forms=new DigitalDevelopmentService(db,true),execution=new DevelopmentExecutionService(db,true),amendments=new DevelopmentAmendmentService(db,true),identity=new DigitalProductionIdentityService(db,true),tasks=new DigitalProductionTaskService(db),notices=new DigitalProductionNotificationService(db);
  beforeAll(async()=>{
@@ -137,6 +137,36 @@ const url=process.env.TEST_DATABASE_URL;
   await tasks.controlResource(actor("root"),{kind:"source",id:f.sourceId},"pause","TEST暂停仍不可重核",randomUUID());await expect(execution.reopenMaterials(actor("clerk"),f.sourceId,input,randomUUID())).rejects.toThrow("暂停或取消");
   await tasks.controlResource(actor("root"),{kind:"source",id:f.sourceId},"resume","TEST恢复正常待办",randomUUID());await tasks.controlResource(actor("root"),{kind:"source",id:f.sourceId},"cancel","TEST取消轮不能重开",randomUUID());await expect(execution.reopenMaterials(actor("clerk"),f.sourceId,input,randomUUID())).rejects.toThrow("暂停或取消");
   expect((await db.query("SELECT count(*)::int n FROM audit_events WHERE entity_id=$1 AND action='development_material_reopen'",[f.sourceId])).rows[0].n).toBe(0);
+ });
+ it("P07 preserves derived arrangement reads across unrelated task changes and resets only changed remaining work",async()=>{
+  const f=await prepare(),{saved}=await save(f);await amendments.submit(actor("designer"),f.sourceId,{taskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:f.sheet.version,expectedDraftVersion:saved.draftVersion},randomUUID());
+  let state=await execution.read(actor("clerk"),f.sourceId);const task=state.tasks.find(t=>t.taskKind==="development_material_recheck")!,entries=state.materialVerification!.entries.map(row=>({materialId:row.materialId,usage:"use" as const,physical:true,quantity:true,color:true,specification:true,note:"",confirmedWith:""}));
+  const draft=await execution.saveMaterials(actor("clerk"),f.sourceId,{taskId:task.taskId,expectedDocumentVersion:state.sheet.version,expectedVersion:state.materialVerification!.version,entries},randomUUID()) as {version:number};
+  await execution.check(actor("clerk"),f.sourceId,{taskId:task.taskId,expectedVerificationVersion:draft.version,result:"通过",note:"TEST复核通过",items:entries},randomUUID());
+  const todos=new TodoService(db,undefined,undefined,undefined,notices),clerk={...actor("clerk"),authorizationCapability:"todo:view"};
+  const find=async()=> (await todos.listForActor(clerk,{module:"digital_production"})).todos.find(t=>t.category==="digital_assignment"&&t.entityId===f.sourceId)!;
+  const old=await find();expect(old.unread).toBe(true);expect(old.route.developmentRound).toBe(1);
+  await todos.markReadForActor(clerk,old.todoId,{contentToken:old.contentToken!,route:old.route});expect((await find()).unread).toBe(false);
+  state=await execution.read(actor("clerk"),f.sourceId);const plan=state.arrangement!;
+  await execution.arrange(actor("clerk"),f.sourceId,{roundNumber:plan.roundNumber,expectedDocumentVersion:plan.documentVersion,expectedVersion:plan.version,management:"keep",managementReason:"",entries:plan.rows.map(row=>({kind:row.kind,assigneeId:row.kind==="development_pattern"?ids.worker:row.assigneeId,reason:"",expectedTask:row.taskId?{taskId:row.taskId,state:row.state!,assigneeId:row.assigneeId}:null}))},randomUUID());
+  const changed=await find();expect(changed.unread).toBe(true);expect(changed.contentToken).not.toBe(old.contentToken);
+  await expect(todos.markReadForActor(clerk,old.todoId,{contentToken:old.contentToken!,route:old.route})).rejects.toMatchObject({statusCode:409});
+  await todos.markReadForActor(clerk,changed.todoId,{contentToken:changed.contentToken!,route:changed.route});
+  const paper=(await execution.read(actor("worker"),f.sourceId)).tasks.find(t=>t.taskKind==="development_pattern")!;await tasks.prioritize(actor("root"),paper.taskId,"urgent",randomUUID());
+  expect(await find()).toMatchObject({contentToken:changed.contentToken,unread:false});
+ });
+ it("P07 records a director's actual fabric report read independently and preserves immutable business facts",async()=>{
+  const f=await prepare(),file=randomUUID();await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-report.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[file,`TEST/${file}`,"b".repeat(64),ids.supervisor]);
+  await execution.recordUploadPurpose(actor("supervisor"),f.sourceId,file,"面料报告");const report=await execution.report(actor("supervisor"),f.sourceId,{materialIds:[f.materialId],recommendation:"建议停用",note:"TEST需总监明确决定",attachmentIds:[file]},randomUUID()) as {reportId:string};
+  const todos=new TodoService(db,undefined,undefined,undefined,notices),director={...actor("director"),authorizationCapability:"todo:view"};
+  const find=async()=> (await todos.listForActor(director,{module:"digital_production"})).todos.find(t=>t.todoId===report.reportId);
+  const item=(await find())!,before=(await db.query("SELECT * FROM digital_development_execution_facts WHERE fact_id=$1",[report.reportId])).rows[0];expect(item).toMatchObject({unread:true,category:"digital_fabric_decision"});
+  await todos.markReadForActor(director,item.todoId,{contentToken:item.contentToken!,route:item.route});expect(await find()).toMatchObject({unread:false});
+  await tasks.prioritize(actor("root"),f.supply.taskId,"urgent",randomUUID());expect(await find()).toMatchObject({contentToken:item.contentToken,unread:false});
+  const root={...actor("root"),authorizationCapability:"todo:view"};expect((await todos.listForActor(root,{module:"digital_production"})).todos.find(t=>t.todoId===report.reportId)).toBeUndefined();await expect(todos.markReadForActor(root,item.todoId,{contentToken:item.contentToken!,route:item.route})).rejects.toMatchObject({statusCode:404});
+  expect((await db.query("SELECT * FROM digital_development_execution_facts WHERE fact_id=$1",[report.reportId])).rows[0]).toEqual(before);
+  await execution.decideFabric(actor("director"),f.sourceId,{reportId:report.reportId,decision:"允许使用",note:"TEST按原权限明确决定",expectedDecisionId:null},randomUUID());
+  expect(await find()).toBeUndefined();expect((await db.query("SELECT count(*)::int n FROM todo_content_reads WHERE todo_id=$1",[item.todoId])).rows[0].n).toBe(1);
  });
  it("preserves pre-0248 pure replenishment, including an unchanged saved draft, without publication checks or no-op revisions",async()=>{
   for(const [index,f] of legacyReturns.slice(0,2).entries()){

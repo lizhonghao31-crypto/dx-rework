@@ -419,3 +419,7 @@
 .my-todos-intro > p { margin:0; flex:0 1 auto; }
 .my-todos-intro .my-todos-search { flex:1 1 260px; max-width:460px; min-width:0; width:auto; margin-left:auto; }
 @media(max-width:800px) { .my-todos-intro .my-todos-search { flex-basis:100%; max-width:none; margin:0; } }
+
+/* P07: approved personal list only; never applies to the cockpit. */
+.my-todos-page .my-todo-title { column-gap:10px; row-gap:8px; flex-wrap:wrap; }
+.my-todos-page .my-todos-intro .my-todos-search { order:-1; margin-left:0; }

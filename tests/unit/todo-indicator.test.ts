@@ -17,7 +17,7 @@ describe("todo count indicator", () => {
     const service = new TodoService({ query } as unknown as Pool);
 
     await expect(service.countIndicatorForActor(actor)).resolves.toEqual({
-      pendingCount: 4,
+      pendingCount: 4,unreadCount:0,
     });
     const sql = String(query.mock.calls[0]?.[0]);
     expect(sql).toContain("todos.recipient_user_id=$1");
@@ -33,7 +33,7 @@ describe("todo count indicator", () => {
     } as unknown as Pool);
 
     await expect(service.countIndicatorForActor(actor)).resolves.toEqual({
-      pendingCount: 0,
+      pendingCount: 0,unreadCount:0,
     });
   });
 });
