@@ -3,13 +3,14 @@ import type {PoolClient} from "pg";
 import type {TrustedActorContext} from "../tools/repositories.js";
 import {OperationEventRepository} from "../tools/repositories.js";
 import {DigitalProductionAccessPolicy} from "./access-policy.js";
+import type {TodoService} from "../todos/service.js";
 
 /**
  * Internal activation adapter, never an HTTP capability. A saved current-round
  * arrangement and all non-native prerequisites authorize only the initial,
  * frozen-price execution. Existing segments and rework amounts are untouched.
  */
-export async function activateInitialDevelopmentExecution(db:PoolClient,actor:TrustedActorContext,taskId:string){
+export async function activateInitialDevelopmentExecution(db:PoolClient,actor:TrustedActorContext,taskId:string,todos:Pick<TodoService,"completeOpenByDedupeKey">){
   if(!(await db.query("SELECT to_regclass('digital_development_round_arrangements') AS relation")).rows[0]?.relation)return false;
   const task=(await db.query(`SELECT t.*,a.source_id,a.assignee_id FROM digital_production_tasks t
     JOIN digital_production_task_access a USING(task_id)
@@ -39,6 +40,7 @@ export async function activateInitialDevelopmentExecution(db:PoolClient,actor:Tr
   await db.query("UPDATE pattern_room_orders SET status='in_progress',version=version+1,updated_at=CURRENT_TIMESTAMP WHERE order_id=$1",[native.order_id]);
   await db.query("UPDATE pattern_room_node_times SET exited_at=CURRENT_TIMESTAMP,exit_reason='completed' WHERE round_id=$1 AND exited_at IS NULL",[native.current_round_id]);
   await db.query("INSERT INTO pattern_room_node_times(node_id,round_id,stage) VALUES($1,$2,'in_progress')",[randomUUID(),native.current_round_id]);
+  await todos.completeOpenByDedupeKey(db,actor,`pattern-room:${native.order_id}:${native.current_round_id}:assignment`,"总委派人员及真实前置已齐备，首次车板已启动");
   await new OperationEventRepository().append(db,actor,{action:"development.initial_execution_activated",entityType:"pattern_room_order",entityId:native.order_id,
     after:{taskId,sourceId:task.source_id,roundNumber:task.route_version,nativeRoundId:native.current_round_id,segmentId,workerUserId:task.assignee_id,arrangedBy:plan.changed_by,planVersion:plan.version},
     reason:"本轮人员已安排且实际前置齐备，沿原执行价启动首次车板"});

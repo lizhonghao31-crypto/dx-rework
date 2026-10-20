@@ -1,5 +1,6 @@
 import {DEVELOPMENT_ARRANGEABLE_KINDS} from "@dx-rework/contracts/development-arrangement";
 import {activateInitialDevelopmentExecution} from "./development-native-activation.js";
+import {TodoService} from "../todos/service.js";
 import {taskDocuments,resourceDocuments} from "./task-documents.js";
 import {developmentTaskBlockers} from "./development-task-blockers.js";
 import {materialReadiness} from "./development-material-readiness.js";
@@ -92,7 +93,7 @@ export class DigitalProductionTaskService {
   private async activate(client: PoolClient, actor: TrustedActorContext, id: string, occurredAt: string | null, quality: TimeQuality) {
     const task = await this.task(client, id, true);
     if (await requiresDevelopmentAssignee(client,task) && (!task.assignee_id||(await client.query("SELECT to_regclass('digital_development_round_arrangements') AS relation")).rows[0]?.relation&&!await new DigitalProductionAccessPolicy(client).activeRole(task.assignee_id,task.required_role))) return false;
-    if(task.task_kind==="development_sewing"&&await activateInitialDevelopmentExecution(client,actor,id)){
+    if(task.task_kind==="development_sewing"&&await activateInitialDevelopmentExecution(client,actor,id,new TodoService(this.database))){
       await client.query("UPDATE digital_production_task_conditions SET satisfied=true,occurred_at=CURRENT_TIMESTAMP WHERE task_id=$1 AND condition_key='pattern_assignment_ready'",[id]);
       await this.event(client,actor,id,this.resource(task),"condition",new Date().toISOString(),"现场登记",{condition:"pattern_assignment_ready",satisfied:true,note:"本轮安排与实际前置齐备，首次执行已衔接"});
     }

@@ -67,6 +67,8 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
   await execution.arrange(clerk,sourceId,arrangement,arrangeKey);
   expect((await arrangementTodos(db,clerk)).filter(todo=>todo.entityId===sourceId)).toHaveLength(0);
   expect((await native.get(root,order.orderId)).status).toBe('pending_assignment');
+  const initialAssignmentKey=`pattern-room:${order.orderId}:${order.currentRoundId}:assignment`;
+  expect((await db.query("SELECT status FROM rework_todos WHERE dedupe_key=$1",[initialAssignmentKey])).rows).toEqual([{status:'pending'}]);
   expect((await db.query('SELECT count(*)::int n FROM pattern_room_segments WHERE round_id=$1',[order.currentRoundId])).rows[0].n).toBe(0);
   if(craft==='无')await exerciseArrangementGuards(db,execution,clerk,root,sourceId,workerId,qc);
   await work('development_pattern');await work('development_cutting');
@@ -97,9 +99,25 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
     expect(await task('development_sewing')).toMatchObject({state:'pending'});
     expect((await task('development_sewing')).unmetConditions?.some(row=>row.condition==='execution_person')).toBe(true);
     expect((await db.query('SELECT count(*)::int n FROM pattern_room_segments WHERE round_id=$1',[order.currentRoundId])).rows[0].n).toBe(0);
-    await arrangeTestRound(db,execution,clerk,sourceId,workerId);
+    const activationInput=await arrangementInput(db,execution,clerk,sourceId,workerId),activationKey=randomUUID();
+    await db.query(`CREATE FUNCTION test_reject_assignment_completion() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN IF NEW.status='completed' AND OLD.status='pending' THEN RAISE EXCEPTION 'TEST assignment closure failure'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER test_reject_assignment_completion BEFORE UPDATE ON rework_todos FOR EACH ROW EXECUTE FUNCTION test_reject_assignment_completion()`);
+    try {
+      await expect(execution.arrange(clerk,sourceId,activationInput,activationKey)).rejects.toThrow();
+    } finally {
+      await db.query("DROP TRIGGER test_reject_assignment_completion ON rework_todos; DROP FUNCTION test_reject_assignment_completion()");
+    }
+    expect((await execution.read(clerk,sourceId)).arrangement!.version).toBe(activationInput.expectedVersion);
+    expect((await native.get(root,order.orderId)).status).toBe('pending_assignment');
+    expect((await db.query('SELECT count(*)::int n FROM pattern_room_segments WHERE round_id=$1',[order.currentRoundId])).rows[0].n).toBe(0);
+    expect((await db.query("SELECT status FROM rework_todos WHERE dedupe_key=$1",[initialAssignmentKey])).rows).toEqual([{status:'pending'}]);
+    await execution.arrange(clerk,sourceId,activationInput,activationKey);
+    await execution.arrange(clerk,sourceId,activationInput,activationKey);
+    expect((await db.query("SELECT count(*)::int n FROM operation_events WHERE action='todo.complete' AND entity_id=(SELECT todo_id::text FROM rework_todos WHERE dedupe_key=$1)",[initialAssignmentKey])).rows[0].n).toBe(1);
   }
   expect(await task('development_sewing')).toMatchObject({state:'ready',slaHours:24});
+  expect((await db.query("SELECT status,completed_at IS NOT NULL AS completed,completed_operation_event_id IS NOT NULL AS audited FROM rework_todos WHERE dedupe_key=$1",[initialAssignmentKey])).rows).toEqual([{status:'completed',completed:true,audited:true}]);
   const sewing=await task('development_sewing'),digitalTasks=new DigitalProductionTaskService(db);
   const executorId=workerId;
   if(craft==='无'){
@@ -155,6 +173,9 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
     let rework=await native.requestRework(root,order.orderId,reworkInput,reworkKey);
     expect((await native.requestRework(root,order.orderId,reworkInput,reworkKey)).currentRoundId).toBe(rework.currentRoundId);
     expect((await forms.read(root,sourceId)).roundNumber).toBe(2);
+    const nativeAssignments=(await todoService.listForActor(supervisor,{query:source.designStyleNo})).todos.filter(todo=>todo.entityId===order.orderId&&todo.category==='pattern_room_assignment');
+    expect(nativeAssignments).toHaveLength(1);
+    expect(nativeAssignments[0]!.route).toMatchObject({roundId:rework.currentRoundId});
     expect((await db.query('SELECT route_nodes,inherited FROM digital_development_rounds WHERE source_id=$1',[sourceId])).rows).toMatchObject([{route_nodes:['development_sewing_transfer','development_sewing','development_tail_check','development_confirmation','development_shipping'],inherited:{development_pattern:{roundNumber:1}}}]);
     expect((await db.query('SELECT count(*)::int n FROM pattern_room_rounds WHERE order_id=$1',[order.orderId])).rows[0].n).toBe(2);
     await arrangeTestRound(db,execution,root,sourceId,workerId);

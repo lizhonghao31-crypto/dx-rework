@@ -59,6 +59,7 @@ Node 22.22.2 / npm 10.9.9，数据库为本机 Docker `dx-pr1-test-db` 的隔离
 - `tests/acceptance/development-arrangement-browser.mjs`：1440×900、390×844 两组通过；核料成功自动跳转无脏表单误拦、四行一次安排、响应丢失同键重试仅一笔提交、接管原因可输入、页面无横向溢出。实际 React 组件，合成 TEST 请求；没有接真实数据。
 - 迁移 lint、工作区 secret scan、lint、typecheck、各 workspace build 已通过；全量无数据库测试 474 个文件、2502 项通过，66 个需外部条件的文件跳过；相关数据库测试另如上执行。最终 Head 的 GitHub Full Gate/Review 以 PR 证据为准。
 - 曾遇并发全 schema 测试超出隔离 PostgreSQL 锁额度；采用串行测试后通过，没有修改业务规则或放松工资/前置断言。
+- GitHub Codex Review 指出首次车板自动启动后原派工待办只隐藏未关闭，会在后续返工时重新出现（P2）。已沿原待办完成服务在启动事务内关闭并记录审计、终态投递；完整开发路线回归验证启动前仍待办、启动后完成、返工后仅当前轮派工可见。仅修复该问题，不重复请求 Review；修复 Head 重新执行 Full Gate。
 
 ## 用户部署后验收清单（当前不部署）
 
