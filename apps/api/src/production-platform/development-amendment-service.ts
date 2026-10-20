@@ -9,7 +9,7 @@ import {ApplicationError} from "../platform/errors.js";
 import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound} from "./access-policy.js";
 import {DigitalDevelopmentService} from "./development-service.js";
 import {developmentAmendmentsAvailable} from "./development-amendment-repository.js";
-import {developmentSupplyRequirements,submitDevelopmentSupply} from "./development-supply.js";
+import {developmentDirectSupplyMode,developmentSupplyRequirements,submitDevelopmentSupply} from "./development-supply.js";
 import {DevelopmentRouteService} from "./development-route-service.js";
 const fail=(message:string):never=>{throw new ApplicationError("DEVELOPMENT_AMENDMENT_CONFLICT",message,409);};
 export class DevelopmentAmendmentService{
@@ -37,7 +37,8 @@ export class DevelopmentAmendmentService{
    await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
    const current=await this.authorize(db,actor,sourceId,taskId);this.current(current,current.task.route_version);
    const requirements=await developmentSupplyRequirements(db,sourceId,taskId),draft=(await db.query("SELECT * FROM digital_development_amendment_drafts WHERE source_id=$1 AND task_id=$2",[sourceId,taskId])).rows[0];
-   const result={sourceId,taskId,roundNumber:current.task.route_version,documentVersion:current.sheet.version,document:current.sheet.document!,issues:requirements?.issues??[],note:requirements?.note??"旧退回记录未定位字段，请按原缺项说明核实；提交时填写具体补正说明",draft:draft?{version:draft.version,document:draft.document,reason:draft.reason}:null};
+   const directSupplyMode=await developmentDirectSupplyMode(db,sourceId,taskId,requirements);
+   const result={sourceId,taskId,roundNumber:current.task.route_version,documentVersion:current.sheet.version,document:current.sheet.document!,issues:requirements?.issues??[],directSupplyMode,note:requirements?.note??"旧退回记录未分项，请核对原缺项说明；补料后仍由文员复核，不会自动确认资料已补正",draft:draft?{version:draft.version,document:draft.document,reason:draft.reason}:null};
    await db.query("COMMIT");return result;
   }catch(error){await db.query("ROLLBACK");throw error;}finally{db.release();}
  }
@@ -74,12 +75,18 @@ export class DevelopmentAmendmentService{
   return this.command(actor,sourceId,"submit",key,input,async(db,current)=>{
    const draft=(await db.query("SELECT * FROM digital_development_amendment_drafts WHERE source_id=$1 AND task_id=$2 FOR UPDATE",[sourceId,input.taskId])).rows[0];
    const requirements=await developmentSupplyRequirements(db,sourceId,input.taskId);
-   if(!draft&&input.expectedDraftVersion===0&&requirements?.issues.length&&requirements.issues.every(issue=>developmentReturnNeed(issue)==="supply")){
+   const directSupplyMode=await developmentDirectSupplyMode(db,sourceId,input.taskId,requirements);
+   if(!draft&&input.expectedDraftVersion===0&&directSupplyMode){
     const next=await submitDevelopmentSupply(db,this.database,actor,sourceId,input.taskId,key);
     return {...next,amendmentId:null,documentVersion:current.sheet.version,roundNumber:input.roundNumber};
    }
    if(!draft)fail("请先保存本任务的补正草稿；保存草稿不会改变正式资料");
    if(draft.version!==input.expectedDraftVersion||draft.base_document_version!==current.sheet.version||draft.round_number!==input.roundNumber)fail("补正草稿或资料版本已变化，请保留输入后重新核对");
+   if(directSupplyMode&&isDeepStrictEqual(draft.document,current.sheet.document)){
+    await db.query("DELETE FROM digital_development_amendment_drafts WHERE source_id=$1 AND task_id=$2",[sourceId,input.taskId]);
+    const next=await submitDevelopmentSupply(db,this.database,actor,sourceId,input.taskId,key);
+    return {...next,amendmentId:null,documentVersion:current.sheet.version,roundNumber:input.roundNumber};
+   }
    if(!draft.reason.trim())fail("请填写本次具体补正 / 澄清说明，再保存并提交");
    const before=current.sheet.document!,document=DevelopmentDocumentSchema.parse(draft.document);
    const errors=[...developmentAmendmentErrors(before,document),...developmentPublishErrors(document)];if(errors.length)fail(errors.join("；"));

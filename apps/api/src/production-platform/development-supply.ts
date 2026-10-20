@@ -30,6 +30,26 @@ export async function developmentSupplyRequirements(db:Pick<Pool|PoolClient,"que
  const row=(await db.query("SELECT recorded_at::text AS returned_at,payload->'returnRequirements' AS requirements FROM digital_development_execution_facts WHERE source_id=$1 AND task_id=$2 AND kind='补料复核' AND payload ? 'returnRequirements' ORDER BY sequence DESC LIMIT 1",[sourceId,taskId])).rows[0];
  return row?{...row.requirements,returnedAt:row.returned_at}:null;
 }
+/** Empty issues alone do not prove an old replenishment task. New returns always carry returnIssues. */
+export async function developmentDirectSupplyMode(db:Pick<Pool|PoolClient,"query">,sourceId:string,taskId:string,requirements:Awaited<ReturnType<typeof developmentSupplyRequirements>>):Promise<"legacy"|"structured"|null>{
+ if(requirements)return requirements.issues.length&&requirements.issues.every(issue=>developmentReturnNeed(issue)==="supply")?"structured":null;
+ const legacy=(await db.query(`SELECT 1 FROM digital_production_tasks supply JOIN digital_production_task_access sa ON sa.task_id=supply.task_id
+  JOIN digital_production_tasks checked ON checked.route_instance_id=supply.route_instance_id AND checked.route_version=supply.route_version
+  JOIN digital_production_task_access ca ON ca.task_id=checked.task_id AND ca.source_id=sa.source_id
+  JOIN digital_development_execution_facts f ON f.task_id=checked.task_id AND f.source_id=sa.source_id AND f.kind='缺项退回'
+  WHERE sa.source_id=$1 AND supply.task_id=$2 AND sa.task_kind='development_material_supply'
+   AND ca.task_kind IN ('development_materials','development_material_recheck') AND checked.state='completed'
+   AND f.recorded_at<=supply.created_at AND NOT(f.payload ? 'returnIssues')
+   AND EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=checked.task_id AND e.event_kind='material_returned')
+   AND NOT EXISTS(SELECT 1 FROM digital_development_execution_facts newer JOIN digital_production_tasks nt ON nt.task_id=newer.task_id
+    WHERE newer.source_id=sa.source_id AND newer.kind='缺项退回' AND nt.route_instance_id=supply.route_instance_id
+     AND nt.route_version=supply.route_version AND newer.recorded_at<=supply.created_at AND newer.sequence>f.sequence)
+   AND NOT EXISTS(SELECT 1 FROM digital_production_tasks earlier JOIN digital_production_task_access ea ON ea.task_id=earlier.task_id
+    WHERE ea.source_id=sa.source_id AND ea.task_kind='development_material_supply' AND earlier.route_instance_id=supply.route_instance_id
+     AND earlier.created_at>=f.recorded_at AND earlier.created_at<supply.created_at)
+  LIMIT 1`,[sourceId,taskId])).rowCount;
+ return legacy?"legacy":null;
+}
 /** Caller holds the existing lifecycle lock and command transaction. */
 export async function submitDevelopmentSupply(db:PoolClient,pool:Pool,actor:TrustedActorContext,sourceId:string,taskId:string,key:string){
  const policy=new DigitalProductionAccessPolicy(db);await policy.assert(actor,"task",taskId,"execute");
@@ -37,6 +57,8 @@ export async function submitDevelopmentSupply(db:PoolClient,pool:Pool,actor:Trus
  const sheet=await developmentDocumentRow(db,sourceId);
  if(!task||task.task_kind!=="development_material_supply"||task.state!=="ready"||task.route_version!==(sheet?.round_number??1))fail("请从我的待办打开当前轮有效的补正 / 补料事项，旧任务不能重复提交");
  const requirements=await developmentSupplyRequirements(db,sourceId,taskId),readiness=await materialReadiness(db,sourceId,task.route_version);
+ if(!requirements&&!await developmentDirectSupplyMode(db,sourceId,taskId,requirements))fail("未取得本任务的原退回依据，请重新读取本单并由管理人员核实任务关联；没有提交复核");
+ if(requirements&&!requirements.issues.length)fail("退回记录缺少具体问题，不能按纯补料提交；请由管理人员核实原核料记录");
  if(await developmentAmendmentsAvailable(db)){
   const amendment=(await db.query("SELECT 1 FROM digital_development_amendments WHERE source_id=$1 AND task_id=$2",[sourceId,taskId])).rowCount;
   const draft=(await db.query("SELECT 1 FROM digital_development_amendment_drafts WHERE source_id=$1 AND task_id=$2",[sourceId,taskId])).rowCount;

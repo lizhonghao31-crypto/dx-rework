@@ -31,13 +31,28 @@ const url=process.env.TEST_DATABASE_URL;
  beforeAll(async()=>{
   await admin.query(`CREATE SCHEMA ${schema}`);await db.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)");
   const manifest=JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json",import.meta.url),"utf8"));
-  for(const row of manifest.migrations){await db.query(await readFile(new URL(`../../apps/api/migrations/${row.version}.sql`,import.meta.url),"utf8"));await db.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[row.version,row.checksum]);}
+  for(const row of manifest.migrations.filter((row:{version:string})=>row.version!=="0248_development_document_amendments")){await db.query(await readFile(new URL(`../../apps/api/migrations/${row.version}.sql`,import.meta.url),"utf8"));await db.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[row.version,row.checksum]);}
   // Test-only identity bootstrap, before organization policy. All tested commands use actual service authorization.
   for(const who of Object.keys(ids) as Array<keyof typeof ids>){const id=ids[who];await db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)",[id,`TEST ${who}`]);await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','TEST',$3,$3,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id,`TEST-${id}`]);if(who!=="root")await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$2,'P02 test bootstrap')",[randomUUID(),id,actor(who).actorRoles[0]]);}
   await db.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) VALUES(true,$1,$2,'TEST')",[ids.root,`TEST-${ids.root}`]);
   await new AccessMasterDataService(db,"TEST").ensureOrganizationPolicy();
+  legacyReturns=[await prepareLegacyReturn(),await prepareLegacyReturn()];
+  const amendmentMigration=manifest.migrations.find((row:{version:string})=>row.version==="0248_development_document_amendments");
+  await db.query(await readFile(new URL(`../../apps/api/migrations/${amendmentMigration.version}.sql`,import.meta.url),"utf8"));await db.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[amendmentMigration.version,amendmentMigration.checksum]);
  },60000);
  afterAll(async()=>{await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+ let legacyReturns:Array<Awaited<ReturnType<typeof prepareLegacyReturn>>>=[];
+ const prepareLegacyReturn=async()=>{
+  const source=await identity.createSource(actor("designer"),{designStyleNo:`TEST-LEGACY-${randomUUID()}`,temporaryStyleNo:null,customerCode:null,developmentType:"头版"},randomUUID()),sourceId=source.sourceId,materialId=randomUUID(),attachmentId=randomUUID();
+  await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[attachmentId,`TEST/${attachmentId}`,"a".repeat(64),ids.designer]);
+  const document={...initialDevelopmentDocument(),quantity:1,sampleSize:"历史M",orderDate:"2026-09-01",materials:[{materialId,category:"主布" as const,label:"TEST旧主布",name:"TEST棉布",specification:"",quantity:"1",color:"黑",width:"",weight:"",composition:"",supplier:"",consumption:"",requiredThisRound:true,available:false,expectedDate:null}],files:[{attachmentId,kind:"款图" as const}]};
+  // Historical frozen-document fixture only; no schema/immutable guard is disabled. The return is made through the actual pre-0248 command below.
+  const client=await db.connect();let taskId:string;try{await client.query("BEGIN");taskId=(await tasks.createWithClient(client,actor("root"),{resource:{kind:"source",id:sourceId},kind:"development_materials",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:ids.clerk})).taskId;await forms.bindFiles(client,actor("designer"),sourceId,document);await client.query("INSERT INTO digital_development_documents(source_id,version,status,document,published_at,task_id,updated_by) VALUES($1,2,'published',$2,CURRENT_TIMESTAMP,$3,$4)",[sourceId,JSON.stringify(document),taskId,ids.designer]);await client.query("COMMIT");}catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}
+  const entry={materialId,usage:"use" as const,physical:false,quantity:true,color:true,specification:true,note:"",confirmedWith:""},draft=await execution.saveMaterials(actor("clerk"),sourceId,{taskId:taskId!,expectedVersion:0,expectedDocumentVersion:2,entries:[entry],result:"缺项退回"},randomUUID()) as {version:number};
+  await execution.check(actor("clerk"),sourceId,{taskId:taskId!,expectedVerificationVersion:draft.version,result:"缺项退回",note:"TEST旧版实物未到，补齐后文员复核",items:[entry]},randomUUID());
+  const supply=(await execution.read(actor("designer"),sourceId)).tasks.find(task=>task.taskKind==="development_material_supply"&&task.state==="ready")!;
+  return {sourceId,materialId,document,supply};
+ };
  const prepare=async(field:DevelopmentReturnIssue["field"]="specification",missing=false)=>{
   const source=await identity.createSource(actor("designer"),{designStyleNo:`TEST-P02-${randomUUID()}`,temporaryStyleNo:null,customerCode:null,developmentType:"头版"},randomUUID()),sourceId=source.sourceId,materialId=randomUUID(),attachmentId=randomUUID();
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[attachmentId,`TEST/${attachmentId}`,"a".repeat(64),ids.designer]);
@@ -54,6 +69,34 @@ const url=process.env.TEST_DATABASE_URL;
   const context=await amendments.read(actor("designer"),f.sourceId,f.supply.taskId),document=structuredClone(context.document);Object.assign(document.materials[0]!,patch);
   const input={taskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:context.documentVersion,expectedDraftVersion:context.draft?.version??0,document,reason:"TEST按原退回字段补正"};return {input,saved:await amendments.save(actor("designer"),f.sourceId,input,randomUUID())};
  };
+
+ it("preserves pre-0248 pure replenishment, including an unchanged saved draft, without publication checks or no-op revisions",async()=>{
+  for(const [index,f] of legacyReturns.entries()){
+   const context=await amendments.read(actor("designer"),f.sourceId,f.supply.taskId);expect(context).toMatchObject({directSupplyMode:"legacy",issues:[]});expect(context.document.materials[0]!.specification).toBe("");
+   const base={taskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:2,expectedDraftVersion:0};
+   await expect(amendments.submit(actor("worker"),f.sourceId,base,randomUUID())).rejects.toMatchObject({statusCode:404});
+   await expect(amendments.submit(actor("designer"),f.sourceId,base,randomUUID())).rejects.toThrow("实物尚未补齐");
+   await forms.materialEvent(actor("designer"),f.sourceId,f.materialId,{expectedMaterialRevision:0,expectedVersion:2,action:"到货",expectedDate:null,note:"TEST旧补料到货"},randomUUID());
+   let expectedDraftVersion=0;if(index===1)expectedDraftVersion=(await amendments.save(actor("designer"),f.sourceId,{...base,document:context.document,reason:""},randomUUID())).draftVersion;
+   const key=randomUUID(),input={...base,expectedDraftVersion},first=await amendments.submit(actor("designer"),f.sourceId,input,key);expect(await amendments.submit(actor("designer"),f.sourceId,input,key)).toEqual(first);expect(first.amendmentId).toBeNull();
+   const current=await forms.read(actor("designer"),f.sourceId);expect(current.version).toBe(2);expect(current.document).toEqual(f.document);
+   expect((await db.query("SELECT count(*)::int n FROM digital_development_amendments WHERE source_id=$1",[f.sourceId])).rows[0].n).toBe(0);expect((await db.query("SELECT count(*)::int n FROM digital_development_amendment_drafts WHERE source_id=$1",[f.sourceId])).rows[0].n).toBe(0);
+   const rechecks=(await execution.read(actor("clerk"),f.sourceId)).tasks.filter(task=>task.taskKind==="development_material_recheck");expect(rechecks).toHaveLength(1);expect(rechecks[0]).toMatchObject({state:"ready",assigneeId:ids.clerk});expect((await notices.todos(actor("clerk"))).filter(todo=>todo.todoId===rechecks[0]!.taskId)).toHaveLength(1);
+  }
+ });
+ it("does not treat empty structured issues or document corrections as legacy replenishment",async()=>{
+  const f=await prepare();expect((await amendments.read(actor("designer"),f.sourceId,f.supply.taskId)).directSupplyMode).toBeNull();
+  const input={taskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:f.sheet.version,expectedDraftVersion:0};
+  await expect(amendments.submit(actor("designer"),f.sourceId,input,randomUUID())).rejects.toThrow("请先保存");await expect(execution.resubmit(actor("designer"),f.sourceId,f.supply.taskId,randomUUID())).rejects.toThrow("资料补正");
+  // Malformed structured fixture remains distinct from an absent old record; no history is overwritten.
+  await db.query("INSERT INTO digital_development_execution_facts(fact_id,source_id,task_id,kind,payload,actor_id) VALUES($1,$2,$3,'补料复核',$4,$5)",[randomUUID(),f.sourceId,f.supply.taskId,JSON.stringify({returnRequirements:{checkTaskId:f.sheet.taskId,documentVersion:f.sheet.version,issues:[],note:"TEST缺问题的结构化记录"}}),ids.clerk]);
+  expect((await amendments.read(actor("designer"),f.sourceId,f.supply.taskId)).directSupplyMode).toBeNull();await expect(amendments.submit(actor("designer"),f.sourceId,input,randomUUID())).rejects.toThrow("请先保存");await expect(execution.resubmit(actor("designer"),f.sourceId,f.supply.taskId,randomUUID())).rejects.toThrow("缺少具体问题");
+  expect((await db.query("SELECT count(*)::int n FROM digital_development_amendments WHERE source_id=$1",[f.sourceId])).rows[0].n).toBe(0);expect((await execution.read(actor("designer"),f.sourceId)).tasks.filter(task=>task.taskKind==="development_material_recheck")).toHaveLength(0);
+  const client=await db.connect();let unlinkedTask:string;try{await client.query("BEGIN");unlinkedTask=(await tasks.createWithClient(client,actor("root"),{resource:{kind:"source",id:f.sourceId},kind:"development_material_supply",routeId:randomUUID(),routeVersion:1,occurrence:2,assigneeId:ids.designer})).taskId;await client.query("COMMIT");}catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}
+  const unknown=await amendments.read(actor("designer"),f.sourceId,unlinkedTask!);expect(unknown).toMatchObject({issues:[],directSupplyMode:null});
+  await expect(amendments.submit(actor("designer"),f.sourceId,{...input,taskId:unlinkedTask!},randomUUID())).rejects.toThrow("请先保存");await expect(execution.resubmit(actor("designer"),f.sourceId,unlinkedTask!,randomUUID())).rejects.toThrow("未取得本任务的原退回依据");
+  expect((await execution.read(actor("designer"),f.sourceId)).tasks.filter(task=>task.taskKind==="development_material_recheck")).toHaveLength(0);
+ });
  it("saves without changing official data, then appends one revision and one clerk recheck with identical-command retry",async()=>{
   const f=await prepare(),frozen=(await db.query("SELECT document FROM digital_development_documents WHERE source_id=$1",[f.sourceId])).rows[0].document;
   const {input,saved}=await save(f);expect((await forms.read(actor("clerk"),f.sourceId)).document?.materials[0]?.specification).toBe("40支");
