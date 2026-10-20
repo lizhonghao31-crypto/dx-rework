@@ -2,8 +2,10 @@ import type {DigitalTask} from "@dx-rework/contracts/digital-production-tasks";
 import type {InstructionSheet} from "@dx-rework/contracts/production-instruction";
 
 export function developmentActionReceipt(path:string,body:{result?:unknown},submitted:DigitalTask|undefined,tasks:DigitalTask[]):string{
- const action:Record<string,string>={dispatch:"人员预派已保存；任务按原前置条件启动。","pattern-order":"打板执行准备已提交。",resubmit:"补料已提交复核。","fabric-reports":"面料报告已提交。","fabric-decisions":"面料决定已记录。","customer-sample":"本轮客户样板确认已记录。","supplement-check":"本轮补充核验已发起。","send-washing":"实际送洗已登记。"};
+ const action:Record<string,string>={dispatch:"人员预派已保存；任务按原前置条件启动。","pattern-order":"打板执行准备已提交。",resubmit:"补料已提交复核。","fabric-reports":"面料报告已提交。","customer-sample":"本轮客户样板确认已记录。","supplement-check":"本轮补充核验已发起。","send-washing":"实际送洗已登记。"};
  if(action[path])return action[path];
+ if(path==='material-verification')return '核料输入已保存，尚未完成本次核料。';
+ if(path==='fabric-decisions')return '面料决定已保存，报告待办已处理；请核对当前质量结果，文员仍需提交核料。';
  if(path==='check'&&body.result==='缺项退回')return '面辅料缺项已记录，等待补充后复核。';
  if(body.result==='退回')return `${submitted?.label??'本任务'}退回已记录。`;
  const current=tasks.find(task=>task.taskId===submitted?.taskId);

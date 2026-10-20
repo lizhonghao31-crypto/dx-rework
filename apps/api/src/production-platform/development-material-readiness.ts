@@ -1,3 +1,4 @@
+import {appliedVerification,effectiveVerificationDocument} from "./development-material-verification.js";
 import {isEarlyMaterialException, type DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 import type {DevelopmentCheck} from '@dx-rework/contracts/digital-development-execution';
 import type {Pool, PoolClient} from 'pg';
@@ -5,7 +6,7 @@ import {developmentDocumentRow} from './development-round-repository.js';
 
 type CheckRow = DevelopmentCheck['items'][number];
 type Evidence = {id:string;kind:string;items?:CheckRow[];materialId?:string;at:string};
-export type MaterialReadiness = {materialId:string;name:string;required:boolean;earlyException:boolean;earlyAllowed:boolean;verified:boolean;available:boolean;supplyAvailable:boolean;missing:string[];evidenceId:string|null};
+export type MaterialReadiness = {materialId:string;usage?:"use"|"unused"|"pending";name:string;required:boolean;earlyException:boolean;earlyAllowed:boolean;verified:boolean;available:boolean;supplyAvailable:boolean;missing:string[];evidenceId:string|null};
 const dimensions = ['physical','quantity','color','specification'] as const;
 const labels = {physical:'实物',quantity:'数量',color:'颜色',specification:'规格'};
 
@@ -53,7 +54,9 @@ export async function materialReadiness(db:Pick<Pool|PoolClient,'query'>,sourceI
   const hasRounds=Boolean(saved.revision)||saved.latest_round_number>1||Boolean((await db.query("SELECT to_regclass('digital_development_rounds') AS relation")).rows[0]?.relation);
   const events=(await db.query(`SELECT event_id AS id,material_id AS "materialId",action AS kind,created_at AS at
     FROM digital_development_material_events WHERE source_id=$1 ${hasRounds?`AND (route_version=$2 OR route_version=(SELECT t.route_version FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.task_id=$3 AND a.source_id=$1 AND t.state='completed'))`:''} ORDER BY sequence`,hasRounds?[sourceId,roundNumber,inherited]:[sourceId])).rows;
-  const materials=effectiveMaterials(saved.document as DevelopmentDocument,[...facts.map(f=>({...f,at:new Date(f.at).toISOString(),items:f.payload.items??[]})),...events.map(e=>({...e,at:new Date(e.at).toISOString()}))]);
+  const materials=effectiveMaterials(await effectiveVerificationDocument(db,sourceId,roundNumber,saved.document as DevelopmentDocument),[...facts.map(f=>({...f,at:new Date(f.at).toISOString(),items:f.payload.items??[]})),...events.map(e=>({...e,at:new Date(e.at).toISOString()}))]);
+  const applied=await appliedVerification(db,sourceId,roundNumber,saved.document);
+  if(applied)for(const material of materials){const row=applied.find(r=>r.materialId===material.materialId);if(row)material.usage=row.invalidated.length?'pending':row.usage;if(row&&(row.usage==='pending'||row.invalidated.length)){material.available=false;material.earlyAllowed=false;material.missing.push(...(row.invalidated.length?row.invalidated:['本轮材料使用情况待文员确认']));}}
   const quality=(await db.query(`SELECT f.fact_id AS id FROM digital_development_execution_facts f
     WHERE f.source_id=$1 AND f.kind='面料报告' AND f.payload->>'recommendation'='建议停用'
       AND COALESCE((SELECT d.payload->>'decision' FROM digital_development_execution_facts d

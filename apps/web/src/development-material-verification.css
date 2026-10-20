@@ -1,0 +1,7 @@
+.development-material-verification .development-table-scroll table { min-width: 760px; table-layout: fixed; }
+.development-material-verification .development-table-scroll th:first-child { width: 180px; }
+.development-material-verification .development-table-scroll th:nth-child(2) { width: 260px; }
+.development-material-verification .development-table-scroll th { text-align: left; }
+.development-material-verification .development-table-scroll td { vertical-align: top; }
+.development-material-verification .development-table-scroll input:not([type=checkbox]),
+.development-material-verification .development-table-scroll select { width: 100%; box-sizing: border-box; }
