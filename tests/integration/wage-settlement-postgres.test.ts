@@ -47,7 +47,10 @@ const url=process.env.TEST_DATABASE_URL;
    CREATE TABLE rework_work_reports(work_report_id uuid PRIMARY KEY,completed_at timestamptz);
    CREATE TABLE rework_wage_items(wage_item_id uuid PRIMARY KEY,period_id uuid,rework_order_id uuid,work_report_id uuid,person_id uuid,
     person_name_snapshot text,person_type_snapshot text,rework_no_snapshot text,style_no_snapshot text,process_name_snapshot text,
-    actual_quantity_snapshot numeric,pricing_unit_snapshot text,unit_price_snapshot numeric,assignment_mode text,payable_amount numeric);
+    actual_quantity_snapshot numeric,pricing_unit_snapshot text,unit_price_snapshot numeric,assignment_mode text,payable_amount numeric,
+    group_amount numeric,exact_person_share numeric,member_count integer,configuration_item_id uuid,created_at timestamptz);
+   CREATE TABLE rework_tail_completion_confirmations(confirmation_id uuid PRIMARY KEY,rework_order_id uuid,confirmed_at timestamptz);
+   CREATE TABLE rework_tail_completion_coefficients(confirmation_id uuid,configuration_item_id uuid,person_id uuid,multiplier numeric);
    CREATE TABLE rework_wage_month_closures(closure_id uuid PRIMARY KEY,period_id uuid);
    CREATE TABLE rework_wage_month_close_lines(closure_line_id uuid PRIMARY KEY,closure_id uuid,wage_item_id uuid,line_type text,
     person_id uuid,person_name_snapshot text,person_type_snapshot text,rework_no_snapshot text,style_no_snapshot text,process_name_snapshot text,
