@@ -1,3 +1,4 @@
+import {arrangeTestRound} from "./development-arrangement-fixture.js";
 import {taskResult} from "./development-task-result-fixture.js";
 import {DigitalJourneyQuery} from '../../apps/api/src/production-platform/journey-query.js';
 import {randomUUID} from 'node:crypto';
@@ -30,17 +31,20 @@ export async function exerciseDevelopmentRounds(db:Pool,execution:DevelopmentExe
   expect(task,JSON.stringify({round,kind,available:available.map(t=>[t.taskKind,t.state])})).toBeDefined();
   return execution.route(root,sourceId,{...(kind==='development_sewing'?{attachmentIds:[await taskResult(db,execution,root,sourceId,task.taskId,'车板成果')]}:{}),taskId:task.taskId,result:returned?'退回':'通过',note:returned?'内部发现：领口车缝不平':'本轮完成',craftExecution:kind==='development_craft_dispatch'?'内部':null,nextAssigneeId:kind==='development_craft_dispatch'?workerId:null,sentDate:kind==='development_shipping'?'2026-09-30':null,trackingNo:kind==='development_shipping'?'P08-TEST':null,...(returned?{returnNodes:['车板' as const],problemCategories:['车缝' as const]}:{})},randomUUID());
  };
+ await arrangeTestRound(db,execution,root,sourceId,workerId);
  for(const kind of ['development_craft_dispatch','development_printing','development_craft_confirmation','development_confirmation','development_shipping'])await act(2,kind);
  expect(await wages()).toBe(before);
  const second:DevelopmentRevision={...revision,basedOnRound:2,document:current.document!,origin:'内部发现',customerComment:'',internalProblem:'调整领口车缝',categories:['车缝'],affectedNodes:['车板'],outputKind:'整件样板'};
  const draft=await rounds.save(root,sourceId,{expectedDraftVersion:0,revision:second},randomUUID());await rounds.publish(root,sourceId,{expectedDraftVersion:draft.draftVersion,basedOnRound:2},randomUUID());
  expect((await materialReadiness(db,sourceId,3)).sewingReady).toBe(true);
+ await arrangeTestRound(db,execution,root,sourceId,workerId);
  await act(3,'development_sewing_transfer');await act(3,'development_sewing');
  const oldTail=(await versionTasks(3)).find(task=>task.taskKind==='development_tail_check')!;
  await act(3,'development_tail_check',true);
  expect((await forms.read(root,sourceId)).roundNumber).toBe(4);
  const history=await rounds.read(root,sourceId);expect(history.rounds.at(-1)).toMatchObject({origin:'内部发现',customerComment:'',internalProblem:'内部发现：领口车缝不平'});
  expect(history.rounds.at(-1).inherited.development_pattern.roundNumber).toBe(1);
+ await arrangeTestRound(db,execution,root,sourceId,workerId);
  await act(4,'development_sewing_transfer');await act(4,'development_sewing');
  const newTail=(await versionTasks(4)).find(task=>task.taskKind==='development_tail_check')!;
  expect(newTail.taskId).not.toBe(oldTail.taskId);expect(newTail).toMatchObject({state:'ready',slaHours:4});

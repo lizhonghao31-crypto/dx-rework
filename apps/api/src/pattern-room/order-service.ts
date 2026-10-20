@@ -182,6 +182,9 @@ export class PatternRoomOrderService {
     const parsed = parse(AssignPatternOrderSchema, input), action = "pattern_room.order.assigned";
     return this.mutate(actor, "pattern_room:orders:assign", action, key, { orderId, ...parsed }, async (client, effective) => {
       const { order, round } = await this.target(client, effective, orderId, parsed, "pending_assignment");
+      if(round.round_type==="initial"&&!isPatternRoot(effective)&&(await client.query("SELECT to_regclass('digital_development_round_arrangements') AS relation")).rows[0]?.relation&&
+        (await client.query("SELECT 1 FROM digital_development_pattern_links WHERE order_id=$1",[orderId])).rowCount)
+        throw new ApplicationError("DEVELOPMENT_ARRANGEMENT_REQUIRED","本单首次车板由总委派安排后按真实前置自动衔接，请从我的待办打开本单总委派。",409);
       if (round.round_type === "rework" && parsed.amount === undefined) throw new ApplicationError("VALIDATION_ERROR", "请明确核定本轮返工金额，零元也须填写", 400);
       if (round.round_type === "initial" && parsed.amount !== undefined) throw new ApplicationError("VALIDATION_ERROR", "首次派工沿用本单执行价，无需另填金额", 400);
       const person = (await client.query<{ person_id: string; app_user_id: string; display_name: string }>(`SELECT person_id,app_user_id,display_name FROM business_people

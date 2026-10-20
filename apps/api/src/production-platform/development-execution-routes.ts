@@ -1,5 +1,6 @@
 import type {FastifyInstance,FastifyRequest} from "fastify";
 import {z} from "zod";
+import {DevelopmentArrangementSchema} from "@dx-rework/contracts/development-arrangement";
 import QRCode from "qrcode";
 import {CreateUploadIntentSchema} from "@dx-rework/contracts";
 import {DevelopmentRouteActionSchema,DevelopmentPatternOrderSchema,DevelopmentCustomerSampleSchema,DevelopmentDispatchSchema,DevelopmentCheckSchema,DevelopmentWorkSchema,DevelopmentFabricReportSchema,DevelopmentFabricDecisionSchema} from "@dx-rework/contracts/digital-development-execution";
@@ -16,6 +17,7 @@ export function registerDevelopmentExecutionRoutes(app:FastifyInstance,dependenc
   const base="/digital-production/sources/:sourceId/execution";
   app.get(base,async request=>({...await service.read(await actor(request),id(request)),qrAvailable:Boolean(dependencies.developmentQrBase)}));
   app.put(`${base}/dispatch`,async request=>service.dispatch(await actor(request),id(request),parse(DevelopmentDispatchSchema,request.body),key(request)));
+  app.put(`${base}/arrangement`,async request=>service.arrange(await actor(request),id(request),parse(DevelopmentArrangementSchema,request.body),key(request)));
   app.post(`${base}/check`,async request=>service.check(await actor(request),id(request),parse(DevelopmentCheckSchema,request.body),key(request)));
   app.post(`${base}/supplement-check`,async request=>service.supplementCheck(await actor(request),id(request),parse(z.object({taskId:z.string().uuid()}).strict(),request.body).taskId,key(request)));
   app.post(`${base}/resubmit`,async request=>service.resubmit(await actor(request),id(request),parse(z.object({taskId:z.string().uuid()}).strict(),request.body).taskId,key(request)));

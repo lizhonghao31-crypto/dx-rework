@@ -1,3 +1,5 @@
+import {arrangementsAvailable} from "../production-platform/development-arrangement.js";
+import {nativeDevelopmentTodoExclusion} from "../production-platform/development-arrangement-todos.js";
 import { globalTodoSearch } from "./global-search.js";
 import { digitalTodoTarget } from "../production-platform/notification-policy.js";
 import type { ProductionClosureService } from "../sourcing/production-closure-service.js";
@@ -279,6 +281,7 @@ const validateCreateInput = (input: CreateTodoInTransactionInput): void => {
 };
 
 export class TodoService {
+  private async contextSql(){return TODO_WITH_CONTEXT_SQL+(this.digital&&await arrangementsAvailable(this.database)?` WHERE ${nativeDevelopmentTodoExclusion}`:"");}
   constructor(
     private readonly database: Pool,
     private readonly events = new OperationEventRepository(),
@@ -305,7 +308,7 @@ export class TodoService {
     }
 
     const countResult = await this.database.query<TodoCountRow>(
-      `WITH todo_view AS (${TODO_WITH_CONTEXT_SQL})
+      `WITH todo_view AS (${await this.contextSql()})
        SELECT todo_module,COUNT(*) todo_count
        FROM todo_view
        WHERE recipient_user_id=$1
@@ -329,7 +332,7 @@ export class TodoService {
       ?? TODO_MODULES.find((module) => (moduleCounts[module] ?? 0) > 0)
       ?? "rework";
     if(normalizedQuery){
-      const result=await globalTodoSearch(this.database,TODO_WITH_CONTEXT_SQL,actor.actorId,normalizedQuery,requestedPage,[
+      const result=await globalTodoSearch(this.database,await this.contextSql(),actor.actorId,normalizedQuery,requestedPage,[
         ...productionTodos.map(todo=>({module:"production",todo})),...digitalTodos.map(todo=>({module:"digital_production",todo})),
       ]);
       const todos=result.items.map(item=>{
@@ -347,7 +350,7 @@ export class TodoService {
       return {todos:filtered.slice((page-1)*15,page*15),activeModule,moduleCounts,page,pageSize:15,totalCount,totalPages};
     }
     const totalResult = await this.database.query<{ total_count: number | string }>(
-      `WITH todo_view AS (${TODO_WITH_CONTEXT_SQL})
+      `WITH todo_view AS (${await this.contextSql()})
        SELECT COUNT(*) total_count
        FROM todo_view
        WHERE recipient_user_id=$1
@@ -372,7 +375,7 @@ export class TodoService {
     const page = totalPages === 0 ? 1 : Math.min(requestedPage, totalPages);
 
     const result = await this.database.query<TodoPageRow>(
-      `WITH todo_view AS (${TODO_WITH_CONTEXT_SQL})
+      `WITH todo_view AS (${await this.contextSql()})
        SELECT todo_view.*
        FROM todo_view
        WHERE recipient_user_id=$1
@@ -417,7 +420,7 @@ export class TodoService {
       throw new ApplicationError("VALIDATION_ERROR", "待办标识无效", 400);
     }
     const result = await this.database.query<TodoPageRow>(
-      `WITH todo_view AS (${TODO_WITH_CONTEXT_SQL})
+      `WITH todo_view AS (${await this.contextSql()})
        SELECT todo_view.*
        FROM todo_view
        WHERE recipient_user_id=$1
@@ -450,7 +453,8 @@ export class TodoService {
          AND todos.todo_type<>'information'
          AND todos.status IN ('pending','blocked_recipient')
          AND todos.category<>'wage_month_close'
-         AND (orders.rework_order_id IS NULL OR orders.status<>'deleted')`,
+         AND (orders.rework_order_id IS NULL OR orders.status<>'deleted')
+         ${this.digital&&await arrangementsAvailable(this.database)?`AND ${nativeDevelopmentTodoExclusion}`:''}`,
       [actor.actorId],
     );
     return {

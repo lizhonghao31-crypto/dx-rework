@@ -5,7 +5,7 @@ import { canAttachHistoricalSource, digitalDetailClosePath, digitalDetailReturnU
 const id = "b92e6815-5892-4c51-b3c9-5e70ddbd1546", other = "65566477-088c-418d-8ba2-a655394759b4";
 const user = (roles: string[], capabilities: string[] = [], isRoot = false) => ({ id, displayName: "TEST", businessRoles: roles, capabilities, isRoot });
 describe("legacy digital detail compatibility", () => {
-  it.each(["closure", "factory", "bulk", "instruction", "budget", "development", "task", "order"])("opens exact %s without a homepage", kind => {
+  it.each(["closure", "factory", "bulk", "instruction", "budget", "arrangement", "development", "task", "order"])("opens exact %s without a homepage", kind => {
     expect(digitalDetailRoute(`?${kind}=${id}`)).toEqual({ kind, id });
   });
   it("keeps domain precedence and closes compound links to their original remaining detail", () => {
@@ -17,7 +17,7 @@ describe("legacy digital detail compatibility", () => {
     expect(closed).toContain("taskView=read");
     expect(digitalDetailRoute(`?closure=${id}&budget=invalid`)).toEqual({ kind: "closure", id });
   });
-  it.each([["instruction", "instructionVersion"], ["budget", "budgetVersion"], ["development", "round"]])("preserves %s history and rejects malformed history", (kind, version) => {
+  it.each([["instruction", "instructionVersion"], ["budget", "budgetVersion"], ["development", "round"], ["arrangement", "round"]])("preserves %s history and rejects malformed history", (kind, version) => {
     expect(digitalDetailRoute(`?${kind}=${id}&${version}=2`)).toEqual({ kind, id, version: 2 });
     for (const value of ["", "0", "-1", "1.5", "abc", "9007199254740992", "1&" + version + "=2"]) expect(digitalDetailRoute(`?${kind}=${id}&${version}=${value}`).kind).toBe("invalid");
   });

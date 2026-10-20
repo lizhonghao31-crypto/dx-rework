@@ -1,3 +1,5 @@
+import {plannedRecipient,arrangementsAvailable} from "./development-arrangement.js";
+import {DEVELOPMENT_ARRANGEABLE_KINDS} from "@dx-rework/contracts/development-arrangement";
 import type {DevelopmentRevision} from "@dx-rework/contracts/digital-development-rounds";
 import type {PatternRoomOrderService} from "../pattern-room/order-service.js";
 import {randomUUID} from 'node:crypto';
@@ -15,8 +17,13 @@ export type DevelopmentRouteAction={attachmentIds?:string[]|undefined;returnNode
 export class DevelopmentRouteService {
  constructor(private readonly database:Pool,private readonly patternOrders?:PatternRoomOrderService){}
  private async task(db:PoolClient,sourceId:string,taskId:string){return (await db.query('SELECT t.*,a.task_kind,a.assignee_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.task_id=$2',[sourceId,taskId])).rows[0]??digitalNotFound();}
- private async recipient(db:PoolClient,sourceId:string,kind:DigitalTaskKind,explicit:string|null){
+ private async recipient(db:PoolClient,sourceId:string,kind:DigitalTaskKind,explicit:string|null,round:number){
    const role=DIGITAL_TASK_ROLES[kind],policy=new DigitalProductionAccessPolicy(db);
+   if((DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(kind)){
+     const saved=await plannedRecipient(db,sourceId,round,kind);
+     if(saved.planned){if(explicit&&explicit!==saved.id)fail("本轮已保存人员安排，请在总委派页明确改派。");return saved.id&&await policy.activeRole(saved.id,role)?saved.id:null;}
+     if(await arrangementsAvailable(db)&&(round>1||!["development_pattern","development_cutting","development_sewing"].includes(kind)))return null;
+   }
    if(explicit){if(!await policy.activeRole(explicit,role))fail('下一办理人不具备该节点的有效岗位');return explicit;}
    if(role==='sample_designer'){
      const id=(await db.query('SELECT created_by FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0].created_by;
@@ -33,7 +40,7 @@ export class DevelopmentRouteService {
  }
  async startRound(db:PoolClient,actor:TrustedActorContext,sourceId:string,kind:DigitalTaskKind,routeId:string,roundNumber:number,authorizingTaskId?:string,predecessorId?:string,nextAssigneeId:string|null=null,requireActualReceipt=false){
    const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,roundNumber),service=new DigitalProductionTaskService(this.database);
-   const next=await service.createWithClient(db,actor,{resource:{kind:'source',id:sourceId},...(authorizingTaskId?{authorizingTaskId}:{}),kind,routeId,routeVersion:roundNumber,occurrence:roundNumber,assigneeId:await this.recipient(db,sourceId,kind,nextAssigneeId),predecessors:predecessorId?[predecessorId]:[],conditions:kind==='development_sewing'?['pattern_assignment_ready']:kind==='development_cutting'?['materials_ready']:[]});
+   const next=await service.createWithClient(db,actor,{resource:{kind:'source',id:sourceId},...(authorizingTaskId?{authorizingTaskId}:{}),kind,routeId,routeVersion:roundNumber,occurrence:roundNumber,assigneeId:await this.recipient(db,sourceId,kind,nextAssigneeId,roundNumber),predecessors:predecessorId?[predecessorId]:[],conditions:kind==='development_sewing'?['pattern_assignment_ready']:kind==='development_cutting'?['materials_ready']:[]});
    if(!requireActualReceipt&&['development_pattern','development_cutting','development_sewing','development_washing'].includes(kind))await service.setConditionWithClient(db,actor,next.taskId,'handover_received',true,undefined,'本轮已交出');
    if(['development_pattern','development_cutting','development_sewing'].includes(kind)){
      const materialState=await materialReadiness(db,sourceId,roundNumber);
@@ -95,7 +102,14 @@ export class DevelopmentRouteService {
    if(input.result==='退回'&&!input.note.trim())fail('请填写内部尾查问题');
    if(input.nextAssigneeId&&task.task_kind!=='development_craft_dispatch')fail('本操作不能改派下一节点，请使用任务改派');
    if(task.task_kind==='development_craft_dispatch'&&!input.craftExecution)fail('请记录工艺内部制作或外发');
-   if(task.task_kind==='development_craft_dispatch'&&!input.nextAssigneeId)fail('请选择工艺办理人');
+   if(task.task_kind==='development_craft_dispatch'){
+     const sheet=await new DigitalDevelopmentService(this.database,true).read(actor,sourceId,db,task.route_version);
+     const route:DigitalTaskKind[]=task.route_version===1?developmentRoute(sheet.document!):(await db.query('SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2',[sourceId,task.route_version])).rows[0].route_nodes;
+     const nextKind=route[route.indexOf(task.task_kind)+1];
+     const recipient=nextKind?await this.recipient(db,sourceId,nextKind,input.nextAssigneeId,task.route_version):null;
+     if(!recipient)fail('本轮工艺尚无有效办理人，请开发文员在总委派页安排后再发出。');
+     input={...input,nextAssigneeId:recipient};
+   }
    if(task.task_kind==='development_shipping'&&(!input.sentDate||!input.trackingNo?.trim()))fail('请填写实际寄出日期和快递号');
    if(task.task_kind==='development_shipping'&&input.sentDate&&input.sentDate>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Shanghai'}))fail('实际寄出日期不能晚于今天');
    if(task.task_kind==='development_sewing'){
