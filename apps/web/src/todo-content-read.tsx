@@ -6,6 +6,7 @@ import {requestFailureMessage} from './request-failure-message.js';
 import {publishTodoRead} from './todo-indicator-refresh.js';
 
 export type TodoContentScope={routeName:TodoRouteDescriptor['routeName'];entityId:string;developmentRound?:number|undefined;reportIds?:string[]|undefined;factoryDecisionId?:string|null|undefined};
+class RejectedTodoRead extends Error { constructor(message:string,readonly status:number){super(message);} }
 const ReadContext=createContext<((scope:TodoContentScope)=>boolean)|null>(null),urls=createWebUrls(import.meta.env.BASE_URL);
 const sessionListeners=new Set<()=>void>();registerSessionInvalidator(()=>{for(const reset of sessionListeners)reset();});
 const activeActor=()=>{const session=cachedVerifiedSession();return session&&session!=='denied'?session.user.id:null;};
@@ -28,7 +29,7 @@ function PersonalTodoReader({children}:{children:ReactNode}){
  useEffect(()=>{alive.current=true;const reset=()=>{version.current=null;readyScope.current=null;completed.current='';setMetadata(null);setPhase('error');setError('账号状态已变化，请重新核对本人事项。');};sessionListeners.add(reset);return()=>{alive.current=false;sessionListeners.delete(reset);};},[]);
  useEffect(()=>{
   if(!todoId){setPhase('bypass');return;}
-  let live=true;const abort=new AbortController();setPhase('loading');setError('');setMetadata(null);readyScope.current=null;completed.current='';
+  let live=true;const abort=new AbortController();setPhase('loading');setError('');setSyncError('');setMetadata(null);readyScope.current=null;completed.current='';
   void(async()=>{
    const session=await verifySession();if(!live)return;if(session==='denied')throw Error('登录状态未确认，请重新登录后打开本人事项。');
    const epoch=sessionCacheVersion();version.current=epoch;
@@ -47,11 +48,11 @@ function PersonalTodoReader({children}:{children:ReactNode}){
    // Natural (person, item, token) uniqueness makes retries safe. Never abort a
    // sent write or replace its content token when the outcome is uncertain.
    const response=await fetch(urls.apiUrl(`todos/mine/${metadata.todoId}/read`),{method:'POST',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({contentToken:metadata.contentToken,route:metadata.route})});
-   const body=await response.json().catch(()=>null);if(!response.ok)throw Error(requestFailureMessage(response.status,body?.error?.message));
+   const body=await response.json().catch(()=>null);if(!response.ok){const message=requestFailureMessage(response.status,body?.error?.message);if(response.status>=400&&response.status<500&&response.status!==408)throw new RejectedTodoRead(message,response.status);throw Error(message);}
    const parsed=TodoReadReceiptSchema.safeParse(body);if(!parsed.success)throw Error('未收到有效阅读回执，结果尚未确认');const receipt=parsed.data;if(receipt.contentToken!==metadata.contentToken)throw Error('事项阅读回执不匹配，请保留当前内容后重新核对');
    if(version.current!==sessionCacheVersion()||activeActor()!==metadata.recipientUserId)return;
    completed.current=metadata.contentToken;publishTodoRead(metadata.recipientUserId);
-  }catch(reason){if(alive.current&&version.current===sessionCacheVersion())setSyncError(`阅读状态尚未确认：${reason instanceof Error?reason.message:'服务暂未响应'}。业务内容已读到，可仅重试已读同步。`);}
+  }catch(reason){if(alive.current&&version.current===sessionCacheVersion()&&activeActor()===metadata.recipientUserId){if(reason instanceof RejectedTodoRead){readyScope.current=null;completed.current='';setMetadata(null);setSyncError('');setError(`${reason.message} 本次阅读记录被拒绝，事项内容、归属或权限可能已变化；请重新核对事项并读取当前内容。`);setPhase('error');}else setSyncError(`阅读状态尚未确认：${reason instanceof Error?reason.message:'服务暂未响应'}。可仅重试当前内容的已读同步；这不代表资料仍是最新版本。`);}}
   finally{writing.current=false;if(alive.current)setSyncing(false);}
  },[metadata]);
  const contentRead=useCallback((scope:TodoContentScope)=>{if(!metadata?.contentToken||!matches(metadata,scope))return false;void mark(scope);return true;},[mark,metadata]);
