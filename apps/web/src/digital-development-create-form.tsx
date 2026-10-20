@@ -6,7 +6,7 @@ import { customerOrderDateError, initialCustomerDateErrors, minimumInitialCustom
 import { createWebUrls } from "../url-contract.js";
 import "./digital-development.css";
 import { SearchableSelect } from "./search-select.js";
-import { useEffect, useRef, useState, useId } from "react";
+import { useContext, useEffect, useRef, useState, useId } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import { DigitalOrderCreateSchema, DigitalSourceCreateSchema, type DigitalCustomer, type DigitalOrder, type DigitalOrderInput, type DigitalSource } from "@dx-rework/contracts/digital-production";
 import type { OrderJourney } from "@dx-rework/contracts/digital-production-journey";
@@ -21,6 +21,7 @@ import { developmentOrderInput, developmentQuantityError, developmentQuantityTot
 import { preparePatternMaterial } from "./pattern-material-upload.js";
 import { uploadDevelopmentMaterial } from "./digital-development-upload.js";
 import { verifySession } from "./auth.js";
+import { DocumentGuardContext } from "./use-digital-detail-navigation-guard.js";
 
 import {customerPoDateLabel} from "./digital-workspace-copy.js";
 
@@ -85,23 +86,26 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   };
   const [savedDraft, setSavedDraft] = useState<string | null>(null);
   const writing = useRef(false), sourceKey = useRef<{payload: string; key: string} | null>(null), orderKey = useRef<{payload: string; key: string} | null>(null);
-  const draftSnapshot = (items: CreatePicture[], value=document) => JSON.stringify({intent, form, developmentType, document:value, pictures: items.map(item => [item.id, item.attachmentId ?? null])});
+  const draftSnapshot = (items: CreatePicture[], value=document, order=form, quantity=quantityInput) => JSON.stringify({intent, form:order, developmentType, document:value, quantityInput:quantity, pictures: items.map(item => [item.id, item.attachmentId ?? null])});
   const currentSnapshot = draftSnapshot(pictures);
   const initial = useRef(currentSnapshot), dirty = useRef(false), completed = useRef(false);
   dirty.current = currentSnapshot !== initial.current;
+  const documentGuards = useContext(DocumentGuardContext);
   useEffect(() => {
-    const unregister = registerInternalNavigationGuard(async () => {
+    const guard = async () => {
       if (writing.current) return false;
       if (completed.current || !dirty.current) return true;
       return await confirmInApp("有未保存开发资料或订购信息，确定离开？") && !writing.current;
-    });
+    };
+    const unregister = registerInternalNavigationGuard(guard);
+    documentGuards?.add(guard);
     const unload = (event: BeforeUnloadEvent) => {if (writing.current || (!completed.current && dirty.current)) {event.preventDefault(); event.returnValue = "";}};
     window.addEventListener("beforeunload", unload);
-    return () => {unregister(); window.removeEventListener("beforeunload", unload);};
-  }, []);
+    return () => {unregister(); documentGuards?.delete(guard); window.removeEventListener("beforeunload", unload);};
+  }, [documentGuards]);
   const withOrder = intent !== "development";
   const developmentPublished=published||Boolean(source);
-  const publishStatus=developmentPublished?(withOrder?"开发单已发布 · 客户订单待核对确认":"开发单已发布 · 尚无确定客户订单"):"开发草稿";
+  const publishStatus=developmentPublished?(withOrder?"开发单已发布 · 客户订单待核对确认":"开发单已发布 · 尚无确定客户订单"):`开发草稿 · ${dirty.current?"有未保存修改":savedDraft||existingDraft?.document?"已保存，可继续填写":"尚未保存"}`;
   const submitLabel=intent==="confirm_order"?"确认下单":published?(withOrder?"确认客户订单":"返回已发布档案"):withOrder?"发布开发单并确认订单":"发布开发单";
   const title = intent === "confirm_order" ? "客户确定订单 · 补订购信息" : withOrder ? "产品开发（有确定订单）" : "产品开发（无确定订单）";
   const line = (index: number, patch: Partial<DevelopmentOrderDraft["lines"][number]>) => setForm(current => ({...current, lines: current.lines.map((value, i) => i === index ? {...value, ...patch} : value)}));
@@ -183,6 +187,14 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
             sheet=await digitalRequest<DevelopmentSheet>(base,"PUT",body,draftSaveKey.current.key);
           }
           loadedVersion.current=sheet.version;
+          if(sheet.document){
+            persistedDocument=sheet.document;
+            const savedOrder=sheet.document.customerOrderDraft?.order??form;
+            const savedQuantity=sheet.document.quantity===null?"":String(sheet.document.quantity);
+            setDocument(sheet.document);setForm(savedOrder);setQuantityInput(savedQuantity);
+            const snapshot=draftSnapshot(picturesRef.current,sheet.document,savedOrder,savedQuantity);
+            initial.current=snapshot;dirty.current=false;setSavedDraft(snapshot);
+          }
           if(!draftOnly){
             const body={expectedVersion:sheet.version,patternOrder:patternChoice},payload=JSON.stringify(body);
             if(publishKey.current?.payload!==payload)publishKey.current={payload,key:createClientRequestId()};
@@ -199,9 +211,6 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         orderId = order.productionOrderId;
       }
       if (draftOnly) {
-        const snapshot = draftSnapshot(picturesRef.current,persistedDocument);
-        initial.current = snapshot; dirty.current = false;
-        setSavedDraft(snapshot);
         return;
       }
       completed.current = true; writing.current = false; onCreated(id, orderId);
@@ -228,8 +237,8 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     {source && <p>沿用第 {source.adoptedRound ?? source.selectedRound ?? 1} 轮开发资料；头版/开发板与已有工序保持原档案。</p>}
     {error && <DocumentErrors error={error} issues={errorField?[{id:errorField,label:"定位需核实字段",message:error}]:[]}/>}
     {duplicateSource&&<a href={createWebUrls(import.meta.env.BASE_URL).pageUrl(`ui/digital-production?development=${duplicateSource}`)}>打开已有开发档案</a>}
-    {savedDraft === currentSnapshot && <p role="status">开发资料与订购草稿已保存，重开可继续；尚未发布或创建客户订单。</p>}
-    {createdSource&&error&&<p role="status">{developmentPublished?withOrder?"开发单已发布；本次客户订单确认未取得成功回执，请先核对原档案，再继续确认。":"开发单已发布，请打开原档案核对。":"开发档案已保存。修正订购信息后重试会沿用此档案。"} <a className="dx-button dx-button--secondary" href={createWebUrls(import.meta.env.BASE_URL).pageUrl(`ui/digital-production?development=${createdSource}`)}>打开原开发档案</a></p>}
+    {!busy&&!published&&savedDraft === currentSnapshot && <p role="status">开发资料与订购草稿已保存，可返回列表后继续填写；发布和确认订单分别办理。</p>}
+    {createdSource&&error&&<p role="status">{developmentPublished?withOrder?"开发单已发布；本次客户订单确认未取得成功回执，请先核对原档案，再继续确认。":"开发单已发布，请打开原档案核对。":savedDraft===currentSnapshot?"当前草稿已保存；发布尚未取得成功回执，请先核对原档案再继续。":"当前填写尚未取得保存成功回执，输入仍保留；重试会沿用此档案。"} <a className="dx-button dx-button--secondary" href={createWebUrls(import.meta.env.BASE_URL).pageUrl(`ui/digital-production?development=${createdSource}`)}>打开原开发档案</a></p>}
     {boundOrder&&<p role="status">订购草稿已随开发资料发布；确认与重试沿用已发布的 PO、数量和日期。</p>}
     <fieldset disabled={busy}><fieldset disabled={Boolean(boundOrder)} className="development-order-fields"><div className="development-create-layout development-create-layout-existing">
     <div className="development-create-order"><section className="development-create-card"><h3>基本资料</h3><div className="development-create-grid">

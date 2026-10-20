@@ -1,3 +1,4 @@
+import {useLiveSearch} from "./use-live-search.js";
 import { SearchableSelect } from "./search-select.js";
 import {CockpitHome} from "./cockpit-home.js";
 import "./digital-kpi-density.css";
@@ -22,14 +23,15 @@ const kpis = [
 function CockpitFilters({ context, data, onChange }: { context: CockpitContext; data: JourneyResult | null; onChange: (patch: Partial<CockpitContext>) => void }) {
   const [more, setMore] = useState(Boolean(context.stage || context.node || context.state || context.risk || context.startDate || context.endDate));
   const [draft, setDraft] = useState(context);
-  useEffect(() => setDraft(context), [context]);
-  const field = (key: keyof CockpitContext, value: string) => setDraft(current => ({ ...current, [key]: key === "search" ? value : value || undefined }));
+  useEffect(() => setDraft(current=>({...context,search:current.search.trim()===context.search?current.search:context.search})), [context]);
+  const liveSearch=useLiveSearch(draft.search,context.search,search=>onChange({...draft,search,page:1}));
+  const field = (key: keyof CockpitContext, value: string) => {const next={...draft,[key]:key==="search"?value:value||undefined};setDraft(next);if(key!=="search")onChange({...next,page:1});};
   return <FilterBar className={"journey-filters"+(more?" is-expanded":"")} onSubmit={event => { event.preventDefault(); onChange({ ...draft, page: 1 }); }}>
-    <label className="journey-search">综合搜索<input maxLength={100} aria-label="综合搜索" placeholder="款号、款名、客户、PO、跟单" value={draft.search} onChange={event => field("search", event.target.value)} /></label>
+    <label className="journey-search">综合搜索<input maxLength={100} aria-label="综合搜索" placeholder="款号、款名、客户、PO、跟单" value={draft.search} onCompositionStart={liveSearch.onCompositionStart} onCompositionEnd={liveSearch.onCompositionEnd} onChange={event => field("search", event.target.value)} /></label>
     <label>客户<SearchableSelect aria-label="客户" value={draft.customer ?? ""} onChange={event => field("customer", event.target.value)}><option value="">全部客户</option>{data?.facets?.customers.map(value => <option key={value}>{value}</option>)}</SearchableSelect></label>
     <label>跟单<SearchableSelect aria-label="跟单" value={draft.merchandiserId ?? ""} onChange={event => field("merchandiserId", event.target.value)}><option value="">主 / 第二跟单</option>{data?.facets?.merchandisers.map(person => <option value={person.id} key={person.id}>{person.name ?? person.id}</option>)}</SearchableSelect></label>
     <label className={"journey-category-filter"+(context.category?" is-applied":"")}>品类 / 款式<SearchableSelect aria-label="品类 / 款式" value={draft.category ?? ""} onChange={event => field("category", event.target.value)}><option value="">全部品类</option>{data?.facets?.categories.map(value => <option key={value}>{value}</option>)}</SearchableSelect></label>
-    <div className="journey-filter-actions"><Button type="submit">查询</Button><Button type="button" variant="secondary" onClick={() => setMore(!more)} aria-expanded={more}>更多筛选</Button>
+    <div className="journey-filter-actions"><Button type="button" variant="secondary" onClick={() => setMore(!more)} aria-expanded={more}>更多筛选</Button>
     <Button type="button" variant="secondary" onClick={() => onChange({ page: 1, search: "", kpi: "all", customer: undefined, merchandiserId: undefined, category: undefined, stage: undefined, node: undefined, state: undefined, risk: undefined, startDate: undefined, endDate: undefined })}>重置筛选</Button></div>
     {more && <div className="journey-more-filters">
       <label>大流程<select aria-label="大流程" value={draft.stage ?? ""} onChange={event => field("stage", event.target.value)}><option value="">全部流程</option>{JOURNEY_STAGES.map(stage => <option key={stage.key} value={stage.key}>{stage.label}</option>)}</select></label>

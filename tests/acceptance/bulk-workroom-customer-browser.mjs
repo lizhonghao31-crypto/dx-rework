@@ -28,13 +28,13 @@ try{
   const card=page.locator(".pattern-task-card").filter({hasText:evidence.style});
   await card.getByText(`${evidence.customer} · 母单 ${evidence.orderId}`,{exact:true}).waitFor();
   assert.equal(await card.getByText(/客户未登记/).count(),0);
-  const search=page.getByRole("textbox",{name:"关键词"});await search.fill(evidence.customer.toLowerCase());await page.getByRole("button",{name:"查询",exact:true}).click();
+  const search=page.getByRole("textbox",{name:"关键词"});await search.fill(evidence.customer.toLowerCase());
   await page.waitForFunction(customer=>new URL(window.bulkCustomerRequests.at(-1),location.href).searchParams.get("search")===customer,evidence.customer.toLowerCase());
   await card.getByText(`${evidence.customer} · 母单 ${evidence.orderId}`,{exact:true}).waitFor();
   assert.equal(new URL(page.url()).searchParams.get("search"),evidence.customer.toLowerCase());
-  await search.fill("TEST-NONMATCHING-CUSTOMER");await page.getByRole("button",{name:"查询",exact:true}).click();await page.getByText("当前范围暂无大货任务",{exact:true}).waitFor();
+  await search.fill("TEST-NONMATCHING-CUSTOMER");await page.getByText("当前范围暂无大货任务",{exact:true}).waitFor();
   assert.equal(await page.locator(".pattern-task-card").count(),0);
-  await search.fill(evidence.style);await page.getByRole("button",{name:"查询",exact:true}).click();await card.getByText(`${evidence.customer} · 母单 ${evidence.orderId}`,{exact:true}).waitFor();
+  await search.fill(evidence.style);await card.getByText(`${evidence.customer} · 母单 ${evidence.orderId}`,{exact:true}).waitFor();
   if(directory)await page.screenshot({path:join(directory,`customer-${viewport.width}.png`),fullPage:true});
   results.push({viewport,checks:["same TEST order renders the persisted mother customer","lowercase customer search keeps the order and current query","nonmatching customer search produces no false hit","style search restores the same customer/identity"]});await page.close();
  }

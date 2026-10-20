@@ -1,3 +1,4 @@
+import {useLiveSearch} from "./use-live-search.js";
 import {DigitalReadFailure} from './digital-read-failure.js';
 import {PatternBoardLane,PatternBoardCard} from "./pattern-board-parts.js";
 import {TaskWorkbenchSample} from "./task-workbench-sample.js";
@@ -40,6 +41,7 @@ export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialA
   const [bulkOrder,setBulkOrder]=useState<string|null>(new URLSearchParams(window.location.search).get('bulkOrder')??(new URLSearchParams(window.location.search).get('workspace')==='preparation'?new URLSearchParams(window.location.search).get('selected'):null));
   const [search, setSearch] = useState(initialFilter().search);
   const [filter, setFilter] = useState(initialFilter), [result, setResult] = useState<PatternWorkspaceResult | null>(null);
+  const liveSearch=useLiveSearch(search,filter.search,value=>update({search:value,owner:undefined}));
   const [options, setOptions] = useState<DigitalAccessOptions | null>(null), [error, setError] = useState<Error|null>(null), [refresh, setRefresh] = useState(0), [notice,setNotice]=useState("");
   const [accessError,setAccessError]=useState<Error|null>(null),[accessRevision,setAccessRevision]=useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("task"));
@@ -51,6 +53,7 @@ export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialA
   const [historical,setHistorical]=useState(new URLSearchParams(window.location.search).get("source")==="standalone");
   const canViewAll=Boolean(options?.roles.some(role=>["root_superuser","owner_group","production_management","pattern_room_supervisor","development_clerk"].includes(role)));
   const showBoard=filter.scope!=="dispatch";
+  const boardItems=(filter.lane||filter.group?result?.items:result?.boardPreview??result?.items)??[];
   const urls = createWebUrls(import.meta.env.BASE_URL);
   const persist = (next: PatternWorkspaceFilter, task: string | null) => {
     const query = new URLSearchParams(Object.entries({...next,scope:section==="bulk"?(next.scope==="all"?"all":"mine"):next.scope}).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]));
@@ -69,12 +72,12 @@ export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialA
   },[initialAccess,accessRevision]);
   useEffect(() => {
     let live = true; const controller=new AbortController();setError(null);
-    if(selectedOnly||section!=="development"||historical||!options)return()=>{live=false;};
+    if(selectedOnly||section!=="development"||historical||!options||liveSearch.pending)return()=>{live=false;};
     setResult(null);
     const query = new URLSearchParams(Object.entries({...filter,business:"development"}).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]));
     void digitalRequest<PatternWorkspaceResult>(`workspaces/pattern?${query}`,"GET",undefined,undefined,{signal:controller.signal}).then(data=>{if(live)setResult(data);}).catch(reason=>{if(live){setResult(null);setError(reason);}});
     return () => {live = false;controller.abort();};
-  }, [filter, refresh,section,options,selectedOnly,historical]);
+  }, [filter, refresh,section,options,selectedOnly,historical,liveSearch.pending]);
   useEffect(() => {
     let live = true; setSelected(null); setSheet(null); setPatternOrderId(null); setSuggestedWorker(null); setDetailError(null);
     if (selectedId) void (refresh===0&&initialTask?.taskId===selectedId?Promise.resolve(initialTask):digitalRequest<DigitalTask>(`tasks/${selectedId}`)).then(async task => {
@@ -120,22 +123,22 @@ export function DigitalPatternWorkspace({selectedOnly=false,initialTask,initialA
     {sourceFilter}{showBoard&&<div className="pattern-group-cards">{PATTERN_LANES.map((lane,index) => <KpiCard key={lane.key} icon={<NavigationIcon name={(["FileText","Shirt","Scissors","Settings","Shirt","ClipboardCheck","PackageCheck"] as const)[index]??"FileText"} />} className={`pattern-lane-kpi lane-${index}`} label={lane.label} value={result ? lane.groups.reduce((total,group) => total+result.counts[group],0) : "—"} detail={result?.riskCounts?`临期 ${lane.groups.reduce((total,group)=>total+result.riskCounts[group].dueSoon,0)} / 逾期 ${lane.groups.reduce((total,group)=>total+result.riskCounts[group].overdue,0)}`:error?"本次资料未能读取":"临期 / 逾期读取中"} selected={filter.lane === lane.key} onClick={() => update({lane:filter.lane === lane.key ? undefined : lane.key,group:undefined})}/>)}</div>}
 
     <div className="pattern-workspace-body"><section className="dx-production-panel pattern-task-list" data-layout={showBoard?"board":"tasks"}><div className="pattern-board-title"><h2>{showBoard?"岗位进度看板":filter.scope==="dispatch"?"待确认派工":filter.scope==="personnel"?"人员安排":"岗位任务"}</h2><span>{result ? `${result.archiveTotal} 款 · ${result.total} 项任务` : error ? "读取失败" : "读取中…"}</span>{(filter.lane || filter.group) && <Button onClick={() => update({lane:undefined,group:undefined})}>显示全部环节</Button>}</div>
-    <div className="pattern-board-filters"><nav className="development-tabs" aria-label="岗位任务范围">{([[canViewAll?"all":"mine","全部进度"],...(options?.roles.some(role=>["pattern_room_supervisor","root_superuser","owner_group","production_management"].includes(role))?[["unassigned","待分派"]]:[]),...(options?.roles.some(role=>["pattern_room_supervisor","root_superuser"].includes(role))?[["dispatch","正式派工"]]:[])]).map(([scope,label])=><button key={scope} aria-pressed={filter.scope===scope} onClick={()=>update({scope:scope as PatternWorkspaceFilter["scope"],owner:undefined})}>{label}</button>)}</nav><FilterBar as="div"><form className="pattern-keyword-search" onSubmit={event=>{event.preventDefault();update({search:search.trim(),owner:undefined});}}><label>关键词<input placeholder="款号 / PO / 客户 / 当前主办人" maxLength={100} value={search} onChange={event=>setSearch(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&event.nativeEvent.isComposing)event.preventDefault();}}/></label><Button type="submit">查询</Button></form>
+    <div className="pattern-board-filters"><nav className="development-tabs" aria-label="岗位任务范围">{([[canViewAll?"all":"mine","全部进度"],...(options?.roles.some(role=>["pattern_room_supervisor","root_superuser","owner_group","production_management"].includes(role))?[["unassigned","待分派"]]:[]),...(options?.roles.some(role=>["pattern_room_supervisor","root_superuser"].includes(role))?[["dispatch","正式派工"]]:[])]).map(([scope,label])=><button key={scope} aria-pressed={filter.scope===scope} onClick={()=>update({scope:scope as PatternWorkspaceFilter["scope"],owner:undefined})}>{label}</button>)}</nav><FilterBar as="div"><form className="pattern-keyword-search" onSubmit={event=>{event.preventDefault();update({search:search.trim(),owner:undefined});}}><label>关键词<input placeholder="款号 / PO / 客户 / 当前主办人" maxLength={100} value={search} onCompositionStart={liveSearch.onCompositionStart} onCompositionEnd={liveSearch.onCompositionEnd} onChange={event=>setSearch(event.target.value)} onKeyDown={event=>{if(event.key==='Enter'&&event.nativeEvent.isComposing)event.preventDefault();}}/></label></form>
       <label>任务状态<select value={filter.state} onChange={event => update({state: event.target.value as PatternWorkspaceFilter["state"]})}>{Object.entries({ongoing: "在办与待启动", all: "全部当前任务", pending: "等待前置", active: "办理中", blocked: "暂时办不了", completed: "已完成"}).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
       <label>风险<select value={filter.risk ?? ""} onChange={event => update({risk: (event.target.value || undefined) as PatternWorkspaceFilter["risk"]})}><option value="">全部风险</option><option value="overdue">超时</option><option value="due_soon">临期</option><option value="blocked">受阻</option><option value="unknown">时间待核实</option></select></label>
     </FilterBar><p>{result ? `${result.archiveTotal} 个开发档案 · ${result.total} 项真实任务` : error ? "任务资料未能读取" : "正在读取授权任务…"}</p></div>
       {showBoard?<>      <div className="pattern-board-scroll" role="region" aria-label="开发环节看板，可横向滚动查看全部环节" tabIndex={0}><div className={`pattern-board-columns ${filter.lane || filter.group ? "is-filtered" : ""}`}>{PATTERN_LANES.filter(lane => (!filter.lane || lane.key === filter.lane) && (!filter.group || (lane.groups as readonly string[]).includes(filter.group))).map(lane => <PatternBoardLane lane={lane.key} title={lane.label} key={lane.key} count={result ? lane.groups.reduce((total,group) => total+result.counts[group],0) : "—"} icon={<NavigationIcon name={({materials:'FileText',pattern:'Shirt',cutting:'Scissors',craft:'Settings',sewing:'Shirt',check:'ClipboardCheck',shipping:'PackageCheck'} as const)[lane.key]}/>} onAll={()=>update({lane:lane.key,group:undefined})}>
-      {result?.items.filter(task => (lane.groups as readonly string[]).includes(task.group)).map(task => <PatternBoardCard key={task.node.instanceId} overdue={task.node.risks.includes("overdue")} onClick={() => choose(task.node.instanceId)}>
+      {boardItems.filter(task => (lane.groups as readonly string[]).includes(task.group)).slice(0,filter.lane||filter.group?undefined:3).map(task => <PatternBoardCard key={task.node.instanceId} overdue={task.node.risks.includes("overdue")} onClick={() => choose(task.node.instanceId)}>
         <strong>{task.designStyleNo}</strong><small>{task.customer ?? "通用开发"} · 第 {task.node.round ?? 1} 轮</small><small>{task.node.label}</small><small>当前主办：{task.node.owner?.name ?? "待派工"}</small>
         <StatusBadge tone={task.node.risks.includes("overdue") || task.node.state === "blocked" ? "danger" : task.node.state === "completed" ? "success" : "info"}>{task.node.risks.includes("overdue") ? "超时" : states[task.node.state]}</StatusBadge>
         <small>{task.node.blockers.map(blocker=>blocker.label).join("；")||"无已记录阻断"}</small><small>{result ? stay(task,result.asOf) : '计时读取中'}</small>
         <small title={task.node.expectedAt ?? undefined}>截止 {deadline(task)}</small><span className="pattern-task-action">{task.nativeAssignment?"分派师傅":patternTaskAction(task.node)}</span>
       </PatternBoardCard>)}
-      {result && !result.items.some(task => (lane.groups as readonly string[]).includes(task.group)) && <p>{lane.groups.some(group => result.counts[group] > 0) ? "本页无此环节任务" : "暂无任务"}</p>}
-      </PatternBoardLane>)}</div></div>{!filter.lane && !filter.group && <p className="pattern-board-scroll-hint">横向滚动看板可查看全部七个环节</p>}
+      {result && !boardItems.some(task => (lane.groups as readonly string[]).includes(task.group)) && <p>{lane.groups.some(group => result.counts[group] > 0) ? "本页无此环节任务" : "暂无任务"}</p>}
+      </PatternBoardLane>)}</div></div>{!filter.lane && !filter.group && <p className="pattern-board-scroll-hint">每栏显示最近3项任务，查看全部可继续浏览</p>}
 </>:      <div className="development-table-scroll pattern-role-task-table"><table><thead><tr><th>款号</th><th>客户 / 轮次</th><th>当前任务</th><th>主办人</th><th>状态</th><th>要求完成</th><th>停留</th><th>操作</th></tr></thead><tbody>{result?.items.map(task=><tr key={task.node.instanceId} className={selectedId===task.node.instanceId?"is-selected":""}><td><strong>{task.designStyleNo}</strong></td><td>{task.customer??"通用开发"} · 第{task.node.round??1}轮</td><td>{task.node.label}</td><td>{task.node.owner?.name??"待派工"}</td><td><StatusBadge tone={task.node.state==="blocked"||task.node.risks.includes("overdue")?"danger":task.node.state==="completed"?"success":"info"}>{states[task.node.state]}</StatusBadge></td><td>{deadline(task)}</td><td>{result?stay(task,result.asOf):"—"}</td><td><Button type="button" variant="primary" onClick={()=>choose(task.node.instanceId)}>{task.nativeAssignment?"分派师傅":patternTaskAction(task.node)}</Button></td></tr>)}</tbody></table></div>}
       {!result && !error && <p role="status">正在读取授权任务…</p>}{result && !result.items.length && <p>当前筛选暂无真实任务</p>}
-      {!error&&<Pagination page={filter.page} pageSize={15} total={result?.total ?? null} onPage={page => update({page})}/>}
+      {!error&&(!showBoard||Boolean(filter.lane||filter.group))&&<Pagination page={filter.page} pageSize={15} total={result?.total ?? null} onPage={page => update({page})}/>}
     </section></div>
     </>}
     {(selectedOnly||selectedId)&&<section className="dx-production-panel pattern-task-detail" aria-label="选中任务详情">

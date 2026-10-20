@@ -1,3 +1,4 @@
+import {MiscOrderRows} from "./misc-order-rows.js";
 import {DevelopmentAssignmentEntry} from "./development-assignment-table.js";
 import { SearchableSelect } from "./search-select.js";
 import { PatternNodeHistory, PatternRoundRecord } from "./pattern-round-record.js";
@@ -8,7 +9,7 @@ import { ListPagination } from "./list-pagination.js";
 import { SearchSelect } from "./search-select.js";
 import { confirmInApp } from "./system-dialog.js";
 import { PatternField as InsetField, PatternProgress } from "./pattern-controls.js";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { z } from "zod";
 import { Button, Surface } from "@dx-rework/ui";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
@@ -28,7 +29,7 @@ import "./pattern-governed.css";
 const { pageUrl } = patternUrls;
 const assignmentMoney = (value:string|number):string => {const [whole,fraction=""] = formatBusinessDecimal(value,2).split(".");return `${whole}.${fraction.padEnd(2,"0")}`;};
 
-export function PatternRoomOrdersPage({embedded=false,miscOnly=false,standaloneOnly=false,onListPathChange}:{embedded?:boolean;miscOnly?:boolean;standaloneOnly?:boolean;onListPathChange?:(path:string)=>void}={}) {
+export function PatternRoomOrdersPage({embedded=false,miscOnly=false,standaloneOnly=false,onListPathChange,headerActions}:{headerActions?:ReactNode;embedded?:boolean;miscOnly?:boolean;standaloneOnly?:boolean;onListPathChange?:(path:string)=>void}={}) {
   const [initial] = useState(() => readPatternListQuery(window.location.search));
   const [data, setData] = useState<z.infer<typeof PatternOrderListSchema> | null>(null), [error, setError] = useState("");
   const [q, setQ] = useState(initial.q), [status, setStatus] = useState(initial.status), [creatorId, setCreatorId] = useState(initial.creatorId), [workerId, setWorkerId] = useState(initial.workerId), [page, setPage] = useState(initial.page);
@@ -55,23 +56,26 @@ export function PatternRoomOrdersPage({embedded=false,miscOnly=false,standaloneO
     void patternRequest("people-filters", PatternPeopleFiltersSchema, { signal: abort.signal }).then(result => { if (!abort.signal.aborted) setPeople(result); }).catch(e => { if (!abort.signal.aborted) setError(e.message); });
     return () => abort.abort();
   }, [data?.canFilterPeople, refresh]);
-  return <div className="pattern-orders rework-query-content">{!embedded&&<Header title={miscOnly?"杂事看板":"历史打板/杂事看板"} badge="订单打板" badgePlacement="subtitle" />}
+  return <div className={`pattern-orders rework-query-content${embedded&&miscOnly?" misc-workspace":""}`}>{!embedded&&<Header title={miscOnly?"杂事看板":"历史打板/杂事看板"} badge="订单打板" badgePlacement="subtitle" />}
     {error ? <Surface><p role="alert">{error}</p><Button onClick={() => setRefresh(value => value + 1)}>重新读取</Button></Surface> : null}
+    {embedded&&miscOnly&&<header className="misc-workspace-header"><h2>杂事任务</h2>{headerActions}</header>}
     {data ? <>
-      <Surface>
-      <div className="pattern-fields pattern-filters"><InsetField label="搜索款号、订单号或任务名称" placeholder="款号 / 订单号 / 任务名称" value={q} onChange={e => { setQ(e.target.value); setPage(1); }} />
+      <Surface className={embedded&&miscOnly?"misc-list-filter-surface":""}>
+      <div className="pattern-fields pattern-filters">{embedded&&miscOnly?<label className="misc-keyword-filter">搜索<input aria-label="搜索款号、订单号或任务名称" placeholder="任务名称 / 款号 / 订单号" maxLength={100} value={q} onChange={e=>{setQ(e.target.value);setPage(1);}}/></label>:<InsetField label="搜索款号、订单号或任务名称" placeholder="款号 / 订单号 / 任务名称" value={q} onChange={e => { setQ(e.target.value); setPage(1); }} />}
         {!miscOnly&&!standaloneOnly&&<label>订单类型<select value={kind} onChange={e => { setKind(e.target.value); setPage(1); }}><option value="">全部</option><option value="pattern">打板</option><option value="misc">杂事</option></select></label>}
         <label>订单状态<select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}><option value="">全部状态</option>{Object.entries(PATTERN_ORDER_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         {people ? <><label>创建人<SearchableSelect value={creatorId} onChange={e => { setCreatorId(e.target.value); setPage(1); }}><option value="">全部创建人</option>{people.creators.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</SearchableSelect></label>
           <label>板房师傅<SearchableSelect value={workerId} onChange={e => { setWorkerId(e.target.value); setPage(1); }}><option value="">全部师傅</option>{people.workers.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</SearchableSelect></label></> : null}
       </div>
       </Surface>
-      <div className={embedded?"pattern-compact-records":"reporting-order-grid"} aria-busy={loading}>
+      {embedded&&miscOnly?<MiscOrderRows items={data.items} href={detailHref} canDelete={data.canDelete} busy={loading} onDeleted={id=>{
+        setData(current=>current?{...current,items:current.items.filter(item=>item.orderId!==id)}:current);setPage(1);setRefresh(value=>value+1);
+      }}/>:<div className={embedded?"pattern-compact-records":"reporting-order-grid"} aria-busy={loading}>
         {data.items.map(order => <PatternOrderCard compact={embedded} key={order.orderId} order={order} href={detailHref(order.orderId)} canDelete={data.canDelete} busy={loading} onDeleted={() => {
           setData(current => current ? { ...current, items: current.items.filter(item => item.orderId !== order.orderId) } : current);
           setPage(1); setRefresh(value => value + 1);
         }} />)}
-      </div>
+      </div>}
       {!data.items.length ? <p className="pattern-empty">没有符合条件的订单。</p> : null}
       <div className="pattern-pagination"><span>共 {formatBusinessDecimal(data.totalCount)} 单</span><ListPagination page={data.page} totalPages={data.totalPages} busy={loading} onPageChange={setPage} ariaLabel="订单打板/杂事看板分页" /></div>
     </> : loading ? <p role="status">正在读取订单…</p> : null}

@@ -471,3 +471,47 @@
 @media(max-width:800px){.pattern-golden .pattern-compact-record>a{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 .pattern-golden .pattern-compact-record .reporting-order-delete{position:static;transform:none;flex-shrink:0}
+
+/* This UAT correction belongs to the actual pattern workspace only. */
+.pattern-golden .pattern-board-filters{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pattern-golden .pattern-board-filters>.development-tabs{flex:0 0 auto;margin:0}
+.pattern-golden .pattern-board-filters>.dx-production-filters{flex:1;min-width:0;margin:0;display:flex;align-items:center;flex-wrap:wrap}
+.pattern-golden .pattern-board-filters .pattern-keyword-search{display:flex;align-items:center;margin:0}
+.pattern-golden .pattern-board-filters label{white-space:nowrap}
+.pattern-golden .pattern-board-filters .pattern-keyword-search label{display:flex;align-items:center;gap:6px}
+.pattern-golden .misc-workspace{min-width:0}
+.pattern-golden .misc-workspace-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0}
+.pattern-golden .misc-workspace-header h2{margin:0}
+.pattern-golden .misc-workspace>.misc-list-filter-surface{padding:0;border:0;border-radius:0;box-shadow:none;background:transparent;margin:0}
+.pattern-golden .misc-workspace .pattern-filters{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:10px 12px;background:#fff;border:1px solid #dceafa;border-radius:6px;margin:0 0 10px}
+.pattern-golden .misc-workspace .pattern-filters>label{display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap}
+.pattern-golden .misc-workspace .misc-keyword-filter{flex:0 1 360px}
+.pattern-golden .misc-keyword-filter input{width:100%;min-width:0;background:#fff}
+.pattern-golden .misc-workspace .pattern-filters select{min-width:145px;max-width:210px}
+.pattern-golden .misc-record-table{overflow-x:auto;min-width:0}
+.pattern-golden .misc-record-table table{width:100%;min-width:1000px;table-layout:fixed;border-collapse:collapse;background:#fff}
+.pattern-golden .misc-record-table th,.pattern-golden .misc-record-table td{padding:9px 10px;vertical-align:middle;overflow-wrap:anywhere;border-bottom:1px solid #e2ebf5}
+.pattern-golden .misc-record-table th:first-child{width:23%}
+.pattern-golden .misc-record-table th:nth-child(2){width:16%}
+.pattern-golden .misc-record-table th:nth-child(3){width:8%}
+.pattern-golden .misc-record-table th:nth-child(4),.pattern-golden .misc-record-table th:nth-child(5){width:11%}
+.pattern-golden .misc-record-table th:nth-child(6){width:10%}
+.pattern-golden .misc-record-table th:nth-child(7){width:13%}
+.pattern-golden .misc-record-table th:last-child{width:8%}
+.pattern-golden .misc-task-identity small{display:block;color:#61768c;margin-top:3px}
+.pattern-golden .misc-record-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pattern-golden .misc-record-actions .reporting-order-delete{position:static;transform:none}
+.pattern-golden .misc-record-date{white-space:nowrap}
+.pattern-golden .misc-create-drawer>.pattern-action-dialog{position:fixed;inset:0 0 0 auto;margin:0;width:min(540px,100vw);max-width:100vw;height:100dvh;max-height:100dvh;box-sizing:border-box;border-radius:0;padding:20px;overflow-y:auto}
+.pattern-golden .misc-create-drawer .pattern-action-dialog>header{display:flex;justify-content:space-between;align-items:center;gap:12px;position:sticky;top:0;background:#fff;z-index:2}
+.pattern-golden .misc-create-drawer .pattern-action-dialog>header h2{margin:0}
+.pattern-golden .misc-create-drawer .pattern-form-page{padding:12px 0 0;border:0;border-radius:0;box-shadow:none}
+.pattern-golden .misc-create-drawer .pattern-fields{grid-template-columns:minmax(0,1fr)}
+.pattern-golden .misc-create-drawer .pattern-hourly{grid-column:auto;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pattern-golden .misc-create-drawer .rework-v2-action-area{position:sticky;bottom:-20px;padding:12px 0;background:#fff;z-index:1}
+@media(max-width:800px){
+ .pattern-golden .pattern-board-filters>.dx-production-filters{flex-basis:100%}
+ .pattern-golden .misc-workspace .pattern-filters>label{flex:1 1 100%}
+ .pattern-golden .misc-workspace .pattern-filters select,.pattern-golden .misc-workspace .pattern-filters .native-search-select{flex:1;max-width:none;min-width:0}
+ .pattern-golden .misc-create-drawer>.pattern-action-dialog{padding:14px}
+}

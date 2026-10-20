@@ -455,9 +455,16 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
       for(const patch of [{page:1},{page:2},{page:3},{search:'TEST-J pattern_room_worker',state:'all'},{search:'TEST-PR12-PAGE'},{lane:'pattern'},{risk:'blocked'},{state:'completed'}]){
         const filter=PatternWorkspaceFilterSchema.parse({...patch,scope:context.actorId===root||context.actorId===clerk?'all':'mine'});
         const expected=await reference.pattern(context,filter),actual=await workspaces.pattern(context,filter);
-        expect({...normalize(actual),items:cardFacts(actual.items),risks:cardFacts(actual.risks??[])}).toEqual({...normalize(expected),items:cardFacts(expected.items),risks:cardFacts(expected.risks??[])});
+        expect({...normalize(actual),items:cardFacts(actual.items),risks:cardFacts(actual.risks??[]),boardPreview:cardFacts(actual.boardPreview??[])}).toEqual({...normalize(expected),items:cardFacts(expected.items),risks:cardFacts(expected.risks??[]),boardPreview:cardFacts(expected.boardPreview??[])});
       }
     }
+    const previewFilter=PatternWorkspaceFilterSchema.parse({scope:'mine',search:'TEST-PR12-PAGE'});
+    const lanePreview=await workspaces.pattern(actor(worker,["pattern_room_worker"]),previewFilter);
+    expect(lanePreview.total).toBe(25);expect(lanePreview.items).toHaveLength(15);
+    expect(lanePreview.counts.pattern).toBe(25);expect(lanePreview.boardPreview).toHaveLength(3);
+    expect(lanePreview.boardPreview?.every(task=>task.node.owner?.id===worker)).toBe(true);
+    const fullLaneSecond=await workspaces.pattern(actor(worker,["pattern_room_worker"]),{...previewFilter,lane:'pattern',page:2});
+    expect(fullLaneSecond.total).toBe(25);expect(fullLaneSecond.items).toHaveLength(10);
     const workerContext=actor(worker,["pattern_room_worker"]);
     const visibleBeforeRevocation=(await journeys.list(workerContext,JourneyFilterSchema.parse({search:'TEST-PR12-PAGE'}))).items[0]!;
     expect(visibleBeforeRevocation).toBeDefined();

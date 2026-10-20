@@ -17,7 +17,7 @@ import { PatternMaterialInput, PATTERN_MATERIAL_LIMIT } from "./pattern-material
 import { usePatternQuote } from "./use-pattern-quote.js";
 import { usePatternDraftGuard } from "./use-pattern-draft-guard.js";
 
-export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSaved, onCancel }: { order?: PatternOrderDetail; kind?: "pattern" | "misc"; onSaved(order: PatternOrderDetail): void; onCancel(): void }) {
+export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSaved, onCancel,onBusyChange }: {onBusyChange?:(busy:boolean)=>void; order?: PatternOrderDetail; kind?: "pattern" | "misc"; onSaved(order: PatternOrderDetail): void; onCancel(): void }) {
   const misc = kind === "misc";
   const [values, setValues] = useState({ taskName: order?.taskName ?? "", styleNo: order?.styleNo ?? "", requiredDate: order?.requiredDate ?? "", customer: order?.customer ?? "", sizeColor: order?.sizeColor ?? "", referenceStyleNo: order?.referenceStyleNo ?? "", variant: order?.variant ?? "", note: order?.note ?? "", reason: "" });
   const [association,setAssociation]=useState<MiscAssociationSnapshot|null>(order?.association??null),[unmatchedAssociation,setUnmatchedAssociation]=useState(false);
@@ -26,6 +26,7 @@ export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSav
   const [categories, setCategories] = useState<z.infer<typeof PatternCategoryOptionsSchema>>([]), [categoryId, setCategoryId] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [error, setError] = useState(""), [busy, setBusy] = useState(false), [uploading, setUploading] = useState(false), [refreshPrice, setRefreshPrice] = useState(0);
+  useEffect(()=>{onBusyChange?.(busy||uploading);},[busy,uploading,onBusyChange]);
   const price = usePatternQuote(order ? null : misc ? "hourly-quote" : categoryId ? `category-options/${categoryId}/quote` : null, refreshPrice);
   const quote = price.quote;
   const attempt = useRef<{ body: string; key: string } | null>(null);

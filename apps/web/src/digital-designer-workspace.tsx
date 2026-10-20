@@ -1,3 +1,4 @@
+import {useLiveSearch} from "./use-live-search.js";
 import { SearchableSelect } from "./search-select.js";
 import {DevelopmentOrderArchive} from "./development-order-archive.js";
 import "./digital-kpi-density.css";
@@ -37,6 +38,7 @@ export function DigitalDesignerWorkspace() {
   const [selectedId, setSelectedId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("selected"));
   const [collapsed, setCollapsed] = useState(false), [search, setSearch] = useState(filter.search);
   const [orders,setOrders]=useState<Record<string,DigitalOrder>>({}),[orderErrors,setOrderErrors]=useState<Record<string,string>>({});
+  const liveSearch=useLiveSearch(search,filter.search,value=>update({search:value}));
   const editor = new URLSearchParams(window.location.search).get("development");
   const round = Number(new URLSearchParams(window.location.search).get("round")) || undefined;
   const contextUrl = (parameters: Record<string, string> = {}, next = filter, selected = selectedId) => {
@@ -44,12 +46,14 @@ export function DigitalDesignerWorkspace() {
     return `${urls.pageUrl("ui/digital-production")}?${query}`;
   };
   useEffect(() => {
-    let live = true; setError("");
+    let live = true; const abort=new AbortController();setError("");setResult(null);
+    if(liveSearch.pending)return()=>{live=false;abort.abort();};
+    const read={signal:abort.signal};
     const query = new URLSearchParams(Object.entries(filter).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]));
-    void Promise.all([digitalRequest<DevelopmentWorkspaceResult>(`workspaces/designer?${query}`), digitalRequest<typeof options>("options"), digitalRequest<DigitalAccessOptions>("access/options")])
+    void Promise.all([digitalRequest<DevelopmentWorkspaceResult>(`workspaces/designer?${query}`,"GET",undefined,undefined,read), digitalRequest<typeof options>("options","GET",undefined,undefined,read), digitalRequest<DigitalAccessOptions>("access/options","GET",undefined,undefined,read)])
       .then(([data, nextOptions, nextAccess]) => {if (live) {setResult(data); setOptions(nextOptions); setAccess(nextAccess);}}).catch(reason => {if (live) {setResult(null); setError(reason.message);}});
-    return () => {live = false;};
-  }, [filter, refresh]);
+    return () => {live = false;abort.abort();};
+  }, [filter, refresh,liveSearch.pending]);
   useEffect(() => {
     let live = true; setSheets({}); setSheetErrors({});setOrders({});setOrderErrors({});
     const item = result?.items.find(value => value.journey.id === selectedId);
@@ -82,7 +86,7 @@ export function DigitalDesignerWorkspace() {
     <div className="development-breadcrumb">产品开发 › <strong>设计师创建订单</strong></div>
     <section className="dx-production-panel development-list-panel">
 
-      <FilterBar as="div"><label className="development-search-field">款号 / PO<input value={search} maxLength={100} placeholder="款号、款名或 PO" onChange={event => setSearch(event.target.value)} onKeyDown={event => {if (event.key === "Enter"&&!event.nativeEvent.isComposing) update({search});}}/></label><label>客户<SearchableSelect value={filter.customer ?? ""} onChange={event => update({customer:event.target.value || undefined})}><option value="">全部客户</option>{result?.customers.map(customer => <option key={customer}>{customer}</option>)}</SearchableSelect></label><label>设计师<SearchableSelect value={filter.designer ?? ""} onChange={event => update({designer:event.target.value || undefined})}><option value="">全部设计师</option>{result?.designers?.map(designer => <option key={designer}>{designer}</option>)}</SearchableSelect></label><label>状态<select value={filter.view} onChange={event => update({view:event.target.value as DevelopmentWorkspaceFilter['view']})}>{DEVELOPMENT_VIEWS.map(view => <option key={view.key} value={view.key}>{view.label}</option>)}</select></label><label className="development-date-field">创建日期<span className="development-date-input"><input aria-label="创建开始日期" type="date" value={filter.startDate ?? ""} onChange={event => update({startDate:event.target.value || undefined})}/><span aria-hidden="true">{filter.startDate ?? "开始日期"}</span></span><span className="development-date-separator">至</span><span className="development-date-input"><input aria-label="创建结束日期" type="date" value={filter.endDate ?? ""} onChange={event => update({endDate:event.target.value || undefined})}/><span aria-hidden="true">{filter.endDate ?? "结束日期"}</span></span></label><Button className="development-filter-apply" onClick={() => update({search})}>筛选</Button>{options?.creationEnabled && access?.create && <Button className="development-create-action" variant="primary" onClick={() => {setIntent("development"); setConfirm(null);}}>新建开发订单</Button>}</FilterBar>
+      <FilterBar as="div"><label className="development-search-field">款号 / PO<input value={search} maxLength={100} onCompositionStart={liveSearch.onCompositionStart} onCompositionEnd={liveSearch.onCompositionEnd} placeholder="款号、款名或 PO" onChange={event => setSearch(event.target.value)} onKeyDown={event => {if (event.key === "Enter"&&!event.nativeEvent.isComposing) update({search});}}/></label><label>客户<SearchableSelect value={filter.customer ?? ""} onChange={event => update({customer:event.target.value || undefined})}><option value="">全部客户</option>{result?.customers.map(customer => <option key={customer}>{customer}</option>)}</SearchableSelect></label><label>设计师<SearchableSelect value={filter.designer ?? ""} onChange={event => update({designer:event.target.value || undefined})}><option value="">全部设计师</option>{result?.designers?.map(designer => <option key={designer}>{designer}</option>)}</SearchableSelect></label><label>状态<select value={filter.view} onChange={event => update({view:event.target.value as DevelopmentWorkspaceFilter['view']})}>{DEVELOPMENT_VIEWS.map(view => <option key={view.key} value={view.key}>{view.label}</option>)}</select></label><label className="development-date-field">创建日期<span className="development-date-input"><input aria-label="创建开始日期" type="date" value={filter.startDate ?? ""} onChange={event => update({startDate:event.target.value || undefined})}/><span aria-hidden="true">{filter.startDate ?? "开始日期"}</span></span><span className="development-date-separator">至</span><span className="development-date-input"><input aria-label="创建结束日期" type="date" value={filter.endDate ?? ""} onChange={event => update({endDate:event.target.value || undefined})}/><span aria-hidden="true">{filter.endDate ?? "结束日期"}</span></span></label>{options?.creationEnabled && access?.create && <Button className="development-create-action" variant="primary" onClick={() => {setIntent("development"); setConfirm(null);}}>新建开发订单</Button>}</FilterBar>
       {error && <p role="alert">{error}</p>}
       <>
       <div className="development-view-cards">{DEVELOPMENT_VIEWS.filter(view => view.key !== "all").map((view,index) => <KpiCard key={view.key} icon={<NavigationIcon name={(["FileText","History","Users","PackageCheck"] as const)[index]??"FileText"} />} className={`development-kpi development-kpi-${index}`} label={view.label} value={result?.counts[view.key] ?? "—"} detail={['待完善资料','正在开发','等待订购确认','已记录订购信息'][index]} selected={filter.view === view.key} onClick={() => update({view:filter.view === view.key ? 'all' : view.key})}/>)}</div>
