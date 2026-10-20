@@ -1,3 +1,4 @@
+import {PatternHistoryPage} from './pattern-history-page.js';
 import {CockpitProductionSettings} from "./cockpit-production-settings.js";
 import { ProductionWorkspace } from "@dx-rework/ui/production";
 import { DigitalAnalysisPage } from "./digital-analysis-page.js";
@@ -340,6 +341,7 @@ function AppRoutes() {
   else if (path === "/ui/own-factory-approvals") page = <OwnFactoryApprovalQueuePage />;
   else if (path === "/ui/external-responsibilities") page = <ExternalResponsibilityQueuePage />;
   else if (path === "/ui/pattern-room") page = <Shell active="订单打板"><PatternRoomPage /></Shell>;
+  else if (path === "/ui/pattern-room/history") page = <Shell active="pattern-room-history"><PatternHistoryPage /></Shell>;
   else if (path === "/ui/pattern-room/orders") page = <Shell active="pattern-room-orders"><PatternRoomOrdersPage /></Shell>;
   else if (path === "/ui/pattern-room/create") page = <Shell active="pattern-room-create"><PatternOrderCreatePage /></Shell>;
   else if (/^\/ui\/pattern-room\/orders\/[^/]+$/.test(path)) page = <Shell active="pattern-room-orders"><PatternRoomOrderDetailPage key={path} orderId={path.split("/").pop()!} /></Shell>;

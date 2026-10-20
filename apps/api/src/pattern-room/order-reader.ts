@@ -1,3 +1,5 @@
+import {readPatternHistory} from './pattern-history-reader.js';
+import {PatternHistoryQuerySchema,type PatternHistoryQuery} from '@dx-rework/contracts/pattern-orders';
 import {developmentMakingBasis} from '@dx-rework/contracts/digital-development';
 import {developmentDocumentRow} from '../production-platform/development-round-repository.js';
 import { patternOrderAtNode, type PatternHistorySelection, type PatternHistoryEvent } from "./order-history.js";
@@ -70,6 +72,11 @@ export class PatternOrderReader {
       const result = await work(client, effective); await client.query("COMMIT"); return result;
     } catch (error) { await client.query("ROLLBACK"); throw error; }
     finally { client.release(); }
+  }
+
+  async history(actor:TrustedActorContext,input:PatternHistoryQuery){
+    const parsed=PatternHistoryQuerySchema.safeParse(input);if(!parsed.success)throw new ApplicationError('VALIDATION_ERROR','历史筛选条件无效',400);
+    return this.read(actor,(db,effective)=>readPatternHistory(db,effective,parsed.data));
   }
 
   async list(actor: TrustedActorContext, query: PatternOrderQuery) {

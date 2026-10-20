@@ -86,7 +86,7 @@ export function PatternRoomOrderDetailPage({ orderId }: { orderId: string }) {
   const params = new URLSearchParams(window.location.search);
   // The app keeps this route mounted when SPA navigation changes only its query.
   // Reset the entire workspace, including pending requests and writable state.
-  const viewKey = JSON.stringify([orderId, params.get("round"), params.get("node")]);
+  const viewKey = JSON.stringify([orderId, params.get("round"), params.get("node"),params.get("readOnly")]);
   return <PatternRoomDetailWorkspace key={viewKey} orderId={orderId} />;
 }
 
@@ -106,6 +106,7 @@ function PatternRoomDetailWorkspace({ orderId, assignmentOnly=false, inlineExecu
   const [reworkAmount, setReworkAmount] = useState(""), [exception, setException] = useState<PatternExceptionAction | null>(null);
   const search = useDebouncedValue(workerSearch.trim(), 250), requestedRound = assignmentOnly||inlineExecution?null:new URLSearchParams(window.location.search).get("round");
   const requestedNode = assignmentOnly||inlineExecution?null:new URLSearchParams(window.location.search).get("node");
+  const historyRead=!assignmentOnly&&!inlineExecution&&new URLSearchParams(window.location.search).get('readOnly')==='history';
   const staleRound = Boolean(order && requestedRound && requestedRound !== order.currentRoundId);
   const attempt = useRef<{ body: string; action: string; key: string } | null>(null);
   useEffect(() => {
@@ -117,11 +118,11 @@ function PatternRoomDetailWorkspace({ orderId, assignmentOnly=false, inlineExecu
     return () => abort.abort();
   }, [orderId, refresh, requestedRound, requestedNode]);
   useEffect(() => {
-    if (!order?.actions.assign || staleRound) return;
+    if (historyRead || !order?.actions.assign || staleRound) return;
     const abort = new AbortController();
     void patternRequest(`workers?q=${encodeURIComponent(search)}`, PatternWorkerOptionsSchema, { signal: abort.signal }).then(result => { if (!abort.signal.aborted) setWorkers(result); }).catch(e => { if (!abort.signal.aborted) setError(e.message); });
     return () => abort.abort();
-  }, [order?.actions.assign, staleRound, search]);
+  }, [order?.actions.assign, staleRound, search,historyRead]);
   const showUpdatedOrder = (updated: PatternOrderDetail) => {
     if(assignmentOnly||inlineExecution){setOrder(updated);onChanged?.();return;}
     const params = new URLSearchParams(window.location.search);
@@ -149,8 +150,8 @@ function PatternRoomDetailWorkspace({ orderId, assignmentOnly=false, inlineExecu
   const displayRound = staleRound ? visibleRounds[0] : currentRound;
   const selectedStage = displayRound ? assignmentOnly||inlineExecution?displayRound.status:patternSelectedStage(displayRound, window.location.search) : null;
   const selectedNode = displayRound ? patternWorkflow(displayRound, order?.kind === "misc").find(item => item.stage === selectedStage) : null;
-  const currentWorkspace = !order?.historicalView && !staleRound && selectedStage === currentRound?.status;
-  const currentParams = new URLSearchParams(window.location.search); currentParams.delete("node"); currentParams.delete("round");
+  const currentWorkspace = !historyRead && !order?.historicalView && !staleRound && selectedStage === currentRound?.status;
+  const currentParams = new URLSearchParams(window.location.search); currentParams.delete("node"); currentParams.delete("round");currentParams.delete("readOnly");
   const currentHref = `${window.location.pathname}${currentParams.size ? `?${currentParams}` : ""}`;
 
   const confirmAction = async (action: "complete" | "handoff") => {
@@ -166,10 +167,11 @@ function PatternRoomDetailWorkspace({ orderId, assignmentOnly=false, inlineExecu
   },[order]);
   const assignment=order?.actions.assign&&currentWorkspace&&!editing&&!(inlineExecution&&currentRound?.roundType==='initial')?order.developmentSourceId&&currentRound?.roundType!=='rework'?<DevelopmentAssignmentEntry sourceId={order.developmentSourceId} onChanged={()=>{setRefresh(value=>value+1);onChanged?.();}}/>:<div className={`pattern-fields pattern-assignment${currentRound?.roundType === "rework" ? " has-rework-price" : ""}`}><label>板房师傅<div className="rework-v2-control"><SearchSelect options={workers.map(worker => ({ value: worker.personId, label: worker.name }))} value={personId} onChange={setPersonId} onSearchChange={setWorkerSearch} placeholder="输入姓名选择师傅" ariaLabel="板房师傅" emptyText="没有匹配的师傅" disabled={busy} /></div></label>{currentRound?.roundType === "rework" ? <InsetField label="本轮返工金额（元）" inputMode="decimal" value={reworkAmount} onChange={e => setReworkAmount(e.target.value)} disabled={busy} /> : null}<div className="rework-v2-actions pattern-single-action"><Button variant="primary" disabled={busy || !personId || (currentRound?.roundType === "rework" && !reworkAmount)} onClick={() => void act("assign")}>{busy ? "提交中…" : assignmentOnly ? "确认分派" : "确认分配"}</Button></div></div>:null;
   if(assignmentOnly)return <section className="pattern-orders pattern-assignment-workspace" aria-label="主管正式派工"><h3>主管正式派工</h3>{displayRound&&<dl className="pattern-assignment-snapshot"><div><dt>本轮品类</dt><dd>{displayRound.categoryName??"未登记"}</dd></div><div><dt>本轮数量</dt><dd>{displayRound.quantity==null?"未登记":formatBusinessDecimal(displayRound.quantity)}</dd></div><div><dt>原执行单价</dt><dd>{displayRound.unitPrice==null?"无可见价格":assignmentMoney(displayRound.unitPrice)}</dd></div><div><dt>原约定金额</dt><dd>{displayRound.agreedAmount==null?"无可见金额":assignmentMoney(displayRound.agreedAmount)}</dd></div></dl>}{error&&<p role="alert">{error}</p>}{!order&&!error&&<p>正在读取待派工资料…</p>}{assignment}{order&&!assignment&&<p>本轮没有可执行的正式派工操作。</p>}</section>;
-  return <div className="pattern-orders pattern-detail" data-dx-ui="governed">{!inlineExecution&&<Header title={order ? order.kind === "misc" ? order.taskName ?? "杂事" : order.styleNo : "板房订单"} subtitle={order?.orderNo ?? ""} badge={order?.historicalView ? "历史节点 · 只读" : order ? PATTERN_ORDER_STATUS_LABELS[order.status] : "订单打板"} badgePlacement="subtitle" backHref={patternReturnPath(window.location.search)} />}
+  return <div className="pattern-orders pattern-detail" data-dx-ui="governed">{!inlineExecution&&<Header title={order ? order.kind === "misc" ? order.taskName ?? "杂事" : order.styleNo : "板房订单"} subtitle={order?.orderNo ?? ""} badge={historyRead||order?.historicalView ? "历史节点 · 只读" : order ? PATTERN_ORDER_STATUS_LABELS[order.status] : "订单打板"} badgePlacement="subtitle" backHref={patternReturnPath(window.location.search)} />}
     {error ? <Surface><p role="alert">{error}</p><Button disabled={busy} onClick={async () => { if (await canLeaveInternalPage()) { setEditing(false); setRefresh(value => value + 1); } }}>重新读取订单</Button></Surface> : null}
     {!order && !error ? <p role="status">正在读取订单…</p> : null}
     {order ? <>
+      {historyRead&&!order.historicalView&&<div className="pattern-history-notice"><span>历史记录 · 只读</span><a href={currentHref}>返回当前订单</a></div>}
       {order.historicalView ? <div className="pattern-history-notice"><span>历史节点 · 只读 · {order.historicalView.actorName} · {patternTime(order.historicalView.at)}</span><a href={currentHref}>返回当前节点</a>{order.historicalView.missingFacts && <p>本次提交的任务资料未完整留存，缺失字段未使用当前资料补齐。</p>}</div> : null}
       <Surface className="pattern-order-summary">
         <div className="pattern-summary-core"><dl className="pattern-facts">

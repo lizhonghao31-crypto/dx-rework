@@ -1,6 +1,7 @@
+import {patternHistoryPath} from './pattern-history-query.js';
 import {digitalDetailReturnUrl} from './digital-detail-route.js';
 import {createWebUrls} from '../url-contract.js';
-import { PatternOrderQuerySchema } from "@dx-rework/contracts/pattern-orders";
+import { PatternHistoryQuerySchema, PatternOrderQuerySchema } from "@dx-rework/contracts/pattern-orders";
 import { wageReturnPath } from "./wages/wage-query-state.js";
 import { todoReturnPath } from "./todo-query-state.js";
 
@@ -46,6 +47,10 @@ export function validPatternReturnPath(target: string | null,base=import.meta.en
     const standalone=params.get("section")==="development"&&params.get("source")==="standalone";
     if((params.get("section")!=="legacy"&&!standalone)||[...params.keys()].some(key=>!["section","source","q","kind","origin","status","creatorId","workerId","page"].includes(key))||params.size!==new Set(params.keys()).size)return null;
     return `/ui/digital-pattern-room?${standalone?"section=development&source=standalone":"section=legacy"}&${patternListPath(readPatternListQuery(params.toString())).split("?")[1]??""}`;
+  }
+  if(target.split('?')[0]==='/ui/pattern-room/history'){
+    const query=new URLSearchParams(target.split('?')[1]??'');if([...query.keys()].some(key=>!['q','source','status','creatorId','workerId','page'].includes(key))||query.size!==new Set(query.keys()).size)return null;
+    const parsed=PatternHistoryQuerySchema.safeParse(Object.fromEntries(query));return parsed.success?patternHistoryPath(parsed.data):null;
   }
   if (["/ui/pattern-room", "/ui/pattern-room/prices"].includes(target)) return target;
   if (!["/ui/pattern-room/orders", "/ui/pattern-room/create"].includes(target.split("?")[0]!)) return null;
