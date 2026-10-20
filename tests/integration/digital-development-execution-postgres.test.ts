@@ -77,7 +77,7 @@ run("P06 development execution PostgreSQL", () => {
   const clerk=()=>actor(root,["development_clerk"]),worker=()=>actor(other,["pattern_room_worker"]),boss=()=>actor(root,["root_superuser"]);
   const prepare=async(missing=false,craft:"无"|"印花"="无",preassign=true,additionalMaterials:DevelopmentDocument["materials"]=[])=>{
     const id=await source(),document=await ready(),materialId=randomUUID();document.craft=craft;
-    document.materials=[{materialId,category:"主布",label:"主布A",supplier:"",name:"棉布",width:"",weight:"",composition:"",consumption:"",color:"黑",specification:"",quantity:"1",requiredThisRound:true,available:!missing,expectedDate:null},...additionalMaterials];
+    document.materials=[{materialId,category:"主布",label:"主布A",supplier:"",name:"棉布",width:"",weight:"",composition:"",consumption:"",color:"黑",specification:"TEST 40支",quantity:"1",requiredThisRound:true,available:!missing,expectedDate:null},...additionalMaterials];
     const draft=await development.save(actor(),id,{expectedVersion:0,document},randomUUID());
     const sheet=await development.publish(actor(),id,draft.version,randomUUID());
     if(preassign)await execution.dispatch(clerk(),id,{expectedVersion:0,patternWorkerId:other,cuttingWorkerId:other,sewingWorkerId:other},randomUUID());
@@ -197,7 +197,7 @@ run("P06 development execution PostgreSQL", () => {
   });
   it("requires ordinary auxiliary checks even when its free name says zipper",async()=>{
     const id=await source(),document=await ready(),main=randomUUID(),secondary=randomUUID(),accessory=randomUUID();
-    const material=(materialId:string,category:"主布"|"配布"|"辅料",label:string)=>({materialId,category,label,supplier:"",name:"测试材料",width:"",weight:"",composition:"",consumption:"",color:"黑",specification:"",quantity:"1",requiredThisRound:true,available:true,expectedDate:null});
+    const material=(materialId:string,category:"主布"|"配布"|"辅料",label:string)=>({materialId,category,label,supplier:"",name:"测试材料",width:"",weight:"",composition:"",consumption:"",color:"黑",specification:category==="主布"?"TEST 40支":"",quantity:"1",requiredThisRound:true,available:true,expectedDate:null});
     document.materials=[material(main,"主布","自定义面料"),material(secondary,"配布","罗纹"),material(accessory,"辅料","拉链")];
     const saved=await development.save(actor(),id,{expectedVersion:0,document},randomUUID());
     const sheet=await development.publish(actor(),id,saved.version,randomUUID());

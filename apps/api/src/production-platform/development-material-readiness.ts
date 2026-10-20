@@ -1,5 +1,6 @@
+import {developmentAmendmentsAvailable} from "./development-amendment-repository.js";
 import {appliedVerification,effectiveVerificationDocument} from "./development-material-verification.js";
-import {isEarlyMaterialException, type DevelopmentDocument} from '@dx-rework/contracts/digital-development';
+import {isDevelopmentMaterialPlaceholder,isEarlyMaterialException, type DevelopmentDocument} from '@dx-rework/contracts/digital-development';
 import type {DevelopmentCheck} from '@dx-rework/contracts/digital-development-execution';
 import type {Pool, PoolClient} from 'pg';
 import {developmentDocumentRow} from './development-round-repository.js';
@@ -57,6 +58,10 @@ export async function materialReadiness(db:Pick<Pool|PoolClient,'query'>,sourceI
   const materials=effectiveMaterials(await effectiveVerificationDocument(db,sourceId,roundNumber,saved.document as DevelopmentDocument),[...facts.map(f=>({...f,at:new Date(f.at).toISOString(),items:f.payload.items??[]})),...events.map(e=>({...e,at:new Date(e.at).toISOString()}))]);
   const applied=await appliedVerification(db,sourceId,roundNumber,saved.document);
   if(applied)for(const material of materials){const row=applied.find(r=>r.materialId===material.materialId);if(row)material.usage=row.invalidated.length?'pending':row.usage;if(row&&(row.usage==='pending'||row.invalidated.length)){material.available=false;material.earlyAllowed=false;material.missing.push(...(row.invalidated.length?row.invalidated:['本轮材料使用情况待文员确认']));}}
+  if(!applied&&await developmentAmendmentsAvailable(db)){
+    const amended=(await db.query("SELECT published_at FROM digital_development_amendments WHERE source_id=$1 AND round_number=$2 ORDER BY document_version DESC LIMIT 1",[sourceId,roundNumber])).rows[0];
+    if(amended)for(const material of materials)if(saved.document.materials.some((row:DevelopmentDocument["materials"][number])=>row.materialId===material.materialId&&!isDevelopmentMaterialPlaceholder(row))){material.required=true;material.usage="pending";material.available=false;material.earlyAllowed=false;material.missing.push("资料已补正，原核验缺少可沿用依据，请文员重新确认本轮使用及四项");}
+  }
   const quality=(await db.query(`SELECT f.fact_id AS id FROM digital_development_execution_facts f
     WHERE f.source_id=$1 AND f.kind='面料报告' AND f.payload->>'recommendation'='建议停用'
       AND COALESCE((SELECT d.payload->>'decision' FROM digital_development_execution_facts d

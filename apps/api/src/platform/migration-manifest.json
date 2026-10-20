@@ -1027,6 +1027,10 @@
     {
       "version": "0247_development_material_verification",
       "checksum": "2b70ce27f139d95597ca06cad847e419f56e856a7fcaf8c1fe8ed80a8a3b3577"
+    },
+    {
+      "version": "0248_development_document_amendments",
+      "checksum": "5e7181b85079649a866a962848477997874c7b86ff9e2178db0e90cf352bdd08"
     }
   ]
 }

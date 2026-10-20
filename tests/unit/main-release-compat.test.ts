@@ -14,7 +14,7 @@ const branches=JSON.parse(readFileSync('scripts/migration-branches.json','utf8')
 const extensions=JSON.parse(readFileSync('scripts/migration-main-extensions.json','utf8'));
 const mainNames=new Set([...branches.main,...extensions].map((r:Entry)=>r.version));
 const mainRows=rows.filter(r=>Number(r.version.slice(0,4))<=217||mainNames.has(r.version));
-const originalRelease=rows.filter(r=>!['0226_external_revision_preserve_handler','0227_qc_other_craft'].includes(r.version));
+const originalRelease=rows.filter(r=>Number(r.version.slice(0,4))<=247&&!['0226_external_revision_preserve_handler','0227_qc_other_craft'].includes(r.version));
 const late=['0226_external_revision_preserve_handler','0227_qc_other_craft'];
 const sha=(s:string)=>createHash('sha256').update(s).digest('hex');
 function snapshot(catalog:Entry[],id:string){
@@ -39,7 +39,7 @@ describe('actual main/candidate migration source compatibility',()=>{
    expect(()=>readComparedHistories(repo,{mainSha:advanced,baselineSha:'f'.repeat(40)})).toThrow();
   }finally{rmSync(repo,{recursive:true,force:true});}
  });
- it('accepts the complete reviewed union and preserves both original history paths',async()=>{const d=fixtures(),r=await inspectCompatibility(d);expect(r.passed).toBe(true);expect(r.mainCount).toBe(227);expect(r.candidateCount).toBe(257);});
+ it('accepts the complete reviewed union and preserves both original history paths',async()=>{const d=fixtures(),r=await inspectCompatibility(d);expect(r.passed).toBe(true);expect(r.mainCount).toBe(227);expect(r.candidateCount).toBe(rows.length);});
  it.each(late)('rejects missing main identity %s before deployment',async version=>{const d=fixtures();d.candidate.files.set(manifestPath,JSON.stringify({migrations:rows.filter(r=>r.version!==version)}));d.candidate.files.delete(`apps/api/migrations/${version}.sql`);expect(has(await inspectCompatibility(d),'MISSING_MAIN_IDENTITY',version)).toBe(true);});
  it('rejects unchanged-name checksum drift and actual SQL drift',async()=>{const d=fixtures(),version=late[0]!;d.candidate.files.set(manifestPath,JSON.stringify({migrations:rows.map(r=>r.version===version?{...r,checksum:'f'.repeat(64)}:r)}));const r=await inspectCompatibility(d);expect(has(r,'MAIN_CHECKSUM_DRIFT',version)).toBe(true);expect(has(r,'SQL_CHECKSUM_DRIFT',version)).toBe(true);});
  it.each(late)('rejects missing or incorrectly bound permission inventory %s',async version=>{const d=fixtures();const inventory=JSON.parse(d.candidate.read(inventoryPath));delete inventory[version];d.candidate.files.set(inventoryPath,JSON.stringify(inventory));expect(has(await inspectCompatibility(d),'INVENTORY_MISSING',version)).toBe(true);inventory[version]=JSON.parse(readFileSync(inventoryPath,'utf8'))[version];inventory[version].checksum='f'.repeat(64);d.candidate.files.set(inventoryPath,JSON.stringify(inventory));expect(has(await inspectCompatibility(d),'INVENTORY_CHECKSUM_DRIFT',version)).toBe(true);});

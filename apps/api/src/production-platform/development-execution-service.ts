@@ -1,3 +1,6 @@
+import type {DevelopmentReturnIssue} from "@dx-rework/contracts/digital-development-amendments";
+import {developmentAmendmentsAvailable} from "./development-amendment-repository.js";
+import {validateDevelopmentReturn,recordDevelopmentReturn,submitDevelopmentSupply} from "./development-supply.js";
 import {fabricCases} from "./development-fabric-cases.js";
 import {readMaterialVerification,saveMaterialVerification} from "./development-material-verification.js";
 import type {MaterialVerificationEntry} from "@dx-rework/contracts/digital-development-execution";
@@ -121,7 +124,7 @@ export class DevelopmentExecutionService {
       if(decision?.payload.decision!=="允许使用")fail(`问题面料：${report.payload.note}。${decision?.payload.decision==="停止使用"?"已决定停止使用，不能以核料勾选或到料放行":"尚未作出使用决定"}。请供应链总监或 Root 在本页“问题面料报告与决定”核实并记录明确决定；文员随后继续核料。`);
     }
   }
-  async saveMaterials(actor:TrustedActorContext,sourceId:string,input:{taskId:string;expectedVersion:number;expectedDocumentVersion:number;entries:MaterialVerificationEntry[];note?:string;result?:string},key:string){
+  async saveMaterials(actor:TrustedActorContext,sourceId:string,input:{taskId:string;expectedVersion:number;expectedDocumentVersion:number;entries:MaterialVerificationEntry[];note?:string;result?:string;returnIssues?:DevelopmentReturnIssue[]|undefined},key:string){
     return this.command(actor,sourceId,"material-verification",key,input,async db=>{
       await new DigitalProductionAccessPolicy(db).assert(actor,"task",input.taskId,"execute");
       const task=await this.task(db,sourceId,input.taskId),sheet=await this.forms().read(actor,sourceId,db);
@@ -146,6 +149,7 @@ export class DevelopmentExecutionService {
       if(verification&&input.items.length!==required.length)fail("请提交每一项本轮使用材料的已保存核验结果");
       let checkedItems=input.items;
       if(input.items.some(item=>!required.some(material=>material.materialId===item.materialId)))fail("核配行不属于本轮所需材料");
+      if(await developmentAmendmentsAvailable(db))validateDevelopmentReturn(document,input);
       if(input.result==="通过"){
         if(verification&&required.some(item=>!item.name.trim()))fail("本轮使用材料缺少品名，请设计师在本单资料补齐后由文员复核");
         if(!required.some(item=>item.category==="主布"))fail("请先补齐本轮主布资料，不能无主料通过");
@@ -175,6 +179,7 @@ export class DevelopmentExecutionService {
         await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,occurred_at,time_quality,payload) VALUES($1,$2,'source',$3,'material_returned',$4,CURRENT_TIMESTAMP,'现场登记',$5)",[randomUUID(),input.taskId,sourceId,actor.actorId,JSON.stringify({note:input.note})]);
         const designer=(await db.query("SELECT created_by FROM digital_production_sources WHERE source_id=$1",[sourceId])).rows[0].created_by;
         const supply=await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:input.taskId,kind:"development_material_supply",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:Number((await db.query("SELECT GREATEST(COALESCE(max(t.occurrence),0)+1,$2::integer) AS n FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_material_supply'",[sourceId,task.occurrence])).rows[0].n),assigneeId:await new DigitalProductionAccessPolicy(db).activeRole(designer,"sample_designer")?designer:null});
+        if(await developmentAmendmentsAvailable(db))await recordDevelopmentReturn(db,actor,sourceId,supply.taskId,input.taskId,sheet.version,input);
         if(supplemental)await this.fact(db,actor,sourceId,supply.taskId,"补料复核",{supplemental:true,note:"补充核验本轮材料",priorTaskId:input.taskId});
       }
       await new DevelopmentRouteService(this.database,this.patternOrders).releaseSewing(db,actor,sourceId);
@@ -200,12 +205,7 @@ export class DevelopmentExecutionService {
   }
   async resubmit(actor:TrustedActorContext,sourceId:string,taskId:string,key:string){
     return this.command(actor,sourceId,"resubmit",key,{taskId},async db=>{
-      await new DigitalProductionAccessPolicy(db).assert(actor,"task",taskId,"execute");const task=await this.task(db,sourceId,taskId);if(task.task_kind!=="development_material_supply"||task.state!=="ready")fail("当前不是补料事项");
-      const readiness=await materialReadiness(db,sourceId,task.route_version);if(readiness.supplyMissing.length)fail(`请先记录本轮所需材料实物到货：${readiness.supplyMissing.map(item=>item.name).join("、")}`);
-      const clerk=(await db.query("SELECT a.assignee_id FROM digital_production_task_access a JOIN digital_production_tasks t USING(task_id) WHERE a.source_id=$1 AND a.task_kind IN ('development_materials','development_material_recheck') ORDER BY t.created_at DESC LIMIT 1",[sourceId])).rows[0]?.assignee_id;
-      const next=await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:taskId,kind:"development_material_recheck",routeId:task.route_instance_id,routeVersion:task.route_version,occurrence:Number((await db.query("SELECT GREATEST(COALESCE(max(t.occurrence),0)+1,$2::integer) AS n FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind='development_material_recheck'",[sourceId,task.occurrence+1])).rows[0].n),assigneeId:clerk&&await new DigitalProductionAccessPolicy(db).activeRole(clerk,"development_clerk")?clerk:null});
-      if((await db.query("SELECT 1 FROM digital_development_execution_facts WHERE source_id=$1 AND task_id=$2 AND kind='补料复核' AND payload->>'supplemental'='true'",[sourceId,taskId])).rowCount)await this.fact(db,actor,sourceId,next.taskId,"补料复核",{supplemental:true,note:"补充核验本轮材料",priorTaskId:taskId});
-      await this.fact(db,actor,sourceId,taskId,"补料复核",{nextTaskId:next.taskId});await this.tasks().setConditionWithClient(db,actor,taskId,"business_recorded",true,undefined);await this.tasks().completeWithClient(db,actor,taskId,{note:"补料后提交复核"},`resubmit:${key}`);return next;
+      return submitDevelopmentSupply(db,this.database,actor,sourceId,taskId,key);
     });
   }
   async complete(actor:TrustedActorContext,sourceId:string,input:DevelopmentWork,key:string){

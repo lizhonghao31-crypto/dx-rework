@@ -957,5 +957,30 @@
       "guard_production_order_root_immutable"
     ],
     "sequences": []
+  },
+  "0248_development_document_amendments": {
+    "checksum": "5e7181b85079649a866a962848477997874c7b86ff9e2178db0e90cf352bdd08",
+    "tables": [
+      "digital_development_material_verifications"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "digital_development_documents",
+      "digital_development_rounds",
+      "digital_production_tasks"
+    ],
+    "insert": [
+      "digital_production_deadline_policies"
+    ],
+    "update": [],
+    "creates": [
+      "digital_development_amendment_drafts",
+      "digital_development_amendments"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }

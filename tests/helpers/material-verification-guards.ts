@@ -1,3 +1,4 @@
+import {DigitalDevelopmentService} from "../../apps/api/src/production-platform/development-service.js";
 import {projectDevelopmentNotices} from "../../apps/api/src/production-platform/development-notifications.js";
 import {randomUUID} from "node:crypto";
 import {expect} from "vitest";
@@ -59,9 +60,11 @@ export async function exerciseMaterialVerification(db:Pool,execution:Development
   const missingEntries=input.entries.map((row,i)=>i?row:{...row,color:false});
   await execution.saveMaterials(clerk,sourceId,{...input,expectedVersion:saved.version,entries:missingEntries,note:'TEST颜色待复核',result:'缺项退回'},randomUUID());
   saved=(await execution.read(clerk,sourceId)).materialVerification!;
-  await execution.check(clerk,sourceId,{...check,expectedVerificationVersion:saved.version,result:'缺项退回',note:'TEST颜色待复核',items:items.map((row,i)=>i?row:{...row,color:false})},randomUUID());
+  await execution.check(clerk,sourceId,{...check,expectedVerificationVersion:saved.version,result:'缺项退回',note:'TEST颜色待复核',returnIssues:[{materialId:items[0]!.materialId,field:'color',need:'supply',reason:'TEST颜色需更换实物后复核'}],items:items.map((row,i)=>i?row:{...row,color:false})},randomUUID());
   expect((await materialReadiness(db,sourceId,1)).materials.every(row=>row.usage==='use')).toBe(true);
   const supply=(await execution.read(root,sourceId)).tasks.find(t=>t.taskKind==='development_material_supply'&&t.state==='ready')!;
+  const forms=new DigitalDevelopmentService(db,true),sheet=await forms.read(root,sourceId);
+  await forms.materialEvent(root,sourceId,items[0]!.materialId,{expectedVersion:sheet.version,expectedMaterialRevision:sheet.materialEvents.filter(event=>event.materialId===items[0]!.materialId).length,action:"到货",expectedDate:null,note:"TEST退回后补齐正确颜色，仍待文员复核"},randomUUID());
   const recheck=await execution.resubmit(root,sourceId,supply.taskId,randomUUID()) as {taskId:string};
   const restored=(await execution.read(clerk,sourceId)).materialVerification!;
   expect(restored.note).toBe('TEST颜色待复核');expect(restored.entries[0]).toMatchObject({usage:'use',physical:true,quantity:true,color:false,specification:true});

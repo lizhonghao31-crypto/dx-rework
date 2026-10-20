@@ -1,3 +1,5 @@
+import {DevelopmentReturnIssues} from "./development-return-issues.js";
+import type {DevelopmentReturnIssue} from "@dx-rework/contracts/digital-development-amendments";
 import "./development-material-verification.css";
 import {useEffect,useState} from "react";
 import {Button} from "@dx-rework/ui";
@@ -8,14 +10,15 @@ import {useDigitalDetailNavigationGuard} from "./use-digital-detail-navigation-g
 import {WorkbenchAction} from "./workbench-action.js";
 export function DevelopmentMaterialVerification({controller,task}:{controller:ReturnType<typeof useDevelopmentExecution>;task:DigitalTask}){
  const {state,busy,run}=controller,verification=state!.materialVerification!;
+ const [returnIssues,setReturnIssues]=useState<DevelopmentReturnIssue[]>(verification.returnIssues??[]);
  const [entries,setEntries]=useState<MaterialVerificationEntry[]>(verification.entries),[note,setNote]=useState(verification.note),[result,setResult]=useState<string>(verification.result);
- useEffect(()=>{setEntries(verification.entries);setNote(verification.note);setResult(verification.result);},[verification.version,verification.documentVersion,task.taskId]);
+ useEffect(()=>{setReturnIssues(verification.returnIssues??[]);setEntries(verification.entries);setNote(verification.note);setResult(verification.result);},[verification.version,verification.documentVersion,task.taskId]);
  const clean=(rows:MaterialVerificationEntry[])=>rows.map(({materialId,usage,physical,quantity,color,specification,note,confirmedWith})=>({materialId,usage,physical,quantity,color,specification,note,confirmedWith}));
- const dirty=JSON.stringify([clean(entries),note,result])!==JSON.stringify([clean(verification.entries),verification.note,verification.result]);
+ const dirty=JSON.stringify([clean(entries),note,result,returnIssues])!==JSON.stringify([clean(verification.entries),verification.note,verification.result,verification.returnIssues??[]]);
  useDigitalDetailNavigationGuard(dirty&&!controller.uncertainWrite&&!controller.checkReceipt,busy,controller.writing,"核料输入尚未保存，确定离开？");
  const change=(id:string,patch:Partial<MaterialVerificationEntry>)=>setEntries(rows=>rows.map(row=>row.materialId===id?{...row,...patch}:row));
- const save=()=>run("material-verification",{note,result,taskId:task.taskId,expectedDocumentVersion:verification.documentVersion,expectedVersion:verification.version,entries:entries.map(({materialId,usage,physical,quantity,color,specification,note,confirmedWith})=>({materialId,usage,physical,quantity,color,specification,note,confirmedWith}))});
- const submit=async()=>{const saved=await save();if(!saved?.materialVerification)return;await run("check",{taskId:task.taskId,expectedVerificationVersion:saved.materialVerification.version,result,note,items:saved.materialVerification.entries.filter(row=>row.usage==="use").map(({materialId,physical,quantity,color,specification})=>({materialId,physical,quantity,color,specification}))});};
+ const save=()=>run("material-verification",{returnIssues:result==="缺项退回"?returnIssues:[],note,result,taskId:task.taskId,expectedDocumentVersion:verification.documentVersion,expectedVersion:verification.version,entries:entries.map(({materialId,usage,physical,quantity,color,specification,note,confirmedWith})=>({materialId,usage,physical,quantity,color,specification,note,confirmedWith}))});
+ const submit=async()=>{const saved=await save();if(!saved?.materialVerification)return;await run("check",{returnIssues:result==="缺项退回"?returnIssues:[],taskId:task.taskId,expectedVerificationVersion:saved.materialVerification.version,result,note,items:saved.materialVerification.entries.filter(row=>row.usage==="use").map(({materialId,physical,quantity,color,specification})=>({materialId,physical,quantity,color,specification}))});};
  if(controller.checkReceipt)return <p role="status">核料已完成。{controller.navigationFailed?"委派页暂未打开，请重新打开；无需再次提交核料。":"正在打开本轮委派页…"}<a href={controller.checkReceipt.target}>打开本轮委派页</a></p>;
  return <form className="development-material-check-form development-material-verification" onSubmit={e=>{e.preventDefault();void submit();}}>
   <p>请由文员逐项确认本轮是否使用。不使用的材料须先与设计师确认；保存保留输入，提交才完成本次核料。</p>
@@ -28,6 +31,7 @@ export function DevelopmentMaterialVerification({controller,task}:{controller:Re
     {(["physical","quantity","color","specification"] as const).map((key,index)=><td key={key}>{row.usage==="use"?<input type="checkbox" aria-label={`${m.name||m.label} ${["实物已到","数量相符","颜色相符","规格相符"][index]}`} checked={row[key]} onChange={e=>change(m.materialId,{[key]:e.target.checked})}/>:row.usage==="pending"?"待确认":"本轮不使用"}</td>)}</>}</tr>;})}</tbody></table></div>
    <Button type="button" onClick={()=>void save()}>保存核料输入</Button>
    <label>核对结果<select value={result} onChange={e=>setResult(e.target.value)}><option>通过</option><option>缺项退回</option></select></label>
+   {result==="缺项退回"&&<DevelopmentReturnIssues document={state!.sheet.document!} value={returnIssues} onChange={setReturnIssues} disabled={busy}/>}
    <label>缺项 / 备注<textarea aria-label="缺项 / 备注" value={note} onChange={e=>setNote(e.target.value)} maxLength={1000}/></label>
    <WorkbenchAction type="submit" variant="primary">保存并提交核料结果</WorkbenchAction>
   </fieldset>

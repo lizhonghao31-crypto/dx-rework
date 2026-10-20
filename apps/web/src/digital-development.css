@@ -257,3 +257,8 @@
 
 .development-create-reference .development-basic-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 @media(max-width:820px){.development-create-reference .development-basic-grid{grid-template-columns:1fr}.dx-doc-development .development-file-tabs{grid-template-columns:repeat(2,minmax(0,1fr)) auto}}
+
+.development-amendment-history{max-width:100%;overflow:auto}
+.development-amendment-history .development-print{display:block;position:static;max-width:100%;overflow-wrap:anywhere}
+.development-amendment-history .development-print img{max-width:100%;max-height:360px;object-fit:contain}
+@media print{.development-amendment-history{display:none}}
