@@ -17,7 +17,7 @@ import { registerInternalNavigationGuard } from "./internal-navigation.js";
 import { confirmInApp } from "./system-dialog.js";
 import { changePoDate, inheritPoDate, removePoDateOverride } from "./po-date-input-defaults.js";
 import type { DevelopmentSheet, DevelopmentDocument } from "@dx-rework/contracts/digital-development";
-import { developmentOrderInput, developmentQuantityError, developmentQuantityTotal, initialDevelopmentDocument, type DevelopmentOrderDraft } from "./digital-development-editing.js";
+import { editableDevelopmentDocument, developmentSizeQuantityInputs, developmentOrderInput, developmentQuantityError, developmentQuantityTotal, initialDevelopmentDocument, type DevelopmentOrderDraft } from "./digital-development-editing.js";
 import { preparePatternMaterial } from "./pattern-material-upload.js";
 import { uploadDevelopmentMaterial } from "./digital-development-upload.js";
 import { verifySession } from "./auth.js";
@@ -44,7 +44,8 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
 }) {
   const formId=useId();
   const [form, setForm] = useState(() => existingDraft?.document?.customerOrderDraft?.order ?? {...initialDevelopmentOrder(customers, source),...(serverToday?{orderDate:serverToday}:{}),...(existingDraft?{customerCode:existingDraft.customerCode??"",designStyleNo:existingDraft.designStyleNo,temporaryStyleNo:existingDraft.temporaryStyleNo}:{} )});
-  const [document,setDocument]=useState<DevelopmentDocument>(()=>existingDraft?.document??{...initialDevelopmentDocument(),orderDate:form.orderDate});
+  const [document,setDocument]=useState<DevelopmentDocument>(()=>existingDraft?.document?(existingDraft.status==="published"?existingDraft.document:{...editableDevelopmentDocument(existingDraft.document),orderDate:existingDraft.document.orderDate??existingDraft.developmentCreatedDate??null}):{...initialDevelopmentDocument(),orderDate:serverToday??null});
+  const [sizeQuantityInputs,setSizeQuantityInputs]=useState(()=>developmentSizeQuantityInputs(document));
   const [quantityInput,setQuantityInput]=useState(()=>document.quantity===null?"":String(document.quantity));
   const [validationMode,setValidationMode]=useState<"save"|"publish"|null>(null);
   const [patternChoice,setPatternChoice]=useState<DevelopmentPatternChoice|null>(null);
@@ -53,9 +54,12 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const loadedVersion=useRef<number|null>(existingDraft?.version??null);
   const [fileKind,setFileKind]=useState<DevelopmentDocument["files"][number]["kind"]>("款图");
   const measurementIds=useRef(document.measurements.map(()=>createClientRequestId()));
+  const sharedPoColumns=useRef(form.lines.every(row=>row.sizes.length===form.lines[0]!.sizes.length&&row.sizes.every((size,index)=>size.size===form.lines[0]!.sizes[index]!.size))).current;
+  const maxPoSizeCount=Math.max(...form.lines.map(row=>row.sizes.length));
+  const poSizeIds=useRef(Array.from({length:maxPoSizeCount},()=>createClientRequestId()));
   const successfulUploads=useRef(new Map<string,string>()),publishKey=useRef<{payload:string;key:string}|null>(null);
   const edit=(patch:Partial<DevelopmentDocument>)=>setDocument(current=>({...current,...patch}));
-  const issues=validationMode?developmentIssues(document,quantityInput,measurementIds.current,validationMode==="publish"):[];
+  const issues=validationMode?developmentIssues(document,quantityInput,measurementIds.current,validationMode==="publish",null,sizeQuantityInputs):[];
   const dateMinimum=minimumDate??minimumInitialCustomerDate();
   const [designerName, setDesignerName] = useState<string | null>(existingDraft?.designerName ?? source?.designer ?? null);
   useEffect(() => {
@@ -86,7 +90,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   };
   const [savedDraft, setSavedDraft] = useState<string | null>(null);
   const writing = useRef(false), sourceKey = useRef<{payload: string; key: string} | null>(null), orderKey = useRef<{payload: string; key: string} | null>(null);
-  const draftSnapshot = (items: CreatePicture[], value=document, order=form, quantity=quantityInput) => JSON.stringify({intent, form:order, developmentType, document:value, quantityInput:quantity, pictures: items.map(item => [item.id, item.attachmentId ?? null])});
+  const draftSnapshot = (items: CreatePicture[], value=document, order=form, quantity=quantityInput) => JSON.stringify({intent, form:order, developmentType, document:value, quantityInput:quantity, sizeQuantityInputs, pictures: items.map(item => [item.id, item.attachmentId ?? null])});
   const currentSnapshot = draftSnapshot(pictures);
   const initial = useRef(currentSnapshot), dirty = useRef(false), completed = useRef(false);
   dirty.current = currentSnapshot !== initial.current;
@@ -152,7 +156,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
         if(dateError)throw new Error(dateError);
         const errors=initialCustomerDateErrors(orderInput.lines,calendar.minimumInitialCustomerDate);if(errors.length)throw new Error(errors.join("；"));
       }
-      if(!source&&!published){setValidationMode(draftOnly?"save":"publish");if(developmentIssues(document,quantityInput,measurementIds.current,!draftOnly).length)return;if(!draftOnly&&!patternChoice)throw new Error("请先选择有效打板品类与执行价，再发布开发单");}
+      if(!source&&!published){setValidationMode(draftOnly?"save":"publish");if(developmentIssues(document,quantityInput,measurementIds.current,!draftOnly,null,sizeQuantityInputs).length)return;if(!draftOnly&&!patternChoice)throw new Error("请先选择有效打板品类与执行价，再发布开发单");}
       let id = createdSource;
       if (!id) {
         const payload = JSON.stringify(sourceInput);
@@ -178,7 +182,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
               }catch(reason){const message=reason instanceof Error?reason.message:"上传失败，请重试";picturesRef.current=picturesRef.current.map(item=>item.id===picture.id?{...item,error:message}:item);setPictures(picturesRef.current);throw reason;}
             }
           }
-          persistedDocument={...document,customerOrderDraft:{withOrder,order:form},files:document.files.map(file=>({ ...file,attachmentId:picturesRef.current.find(picture=>picture.id===file.attachmentId)?.attachmentId??file.attachmentId }))};
+          persistedDocument={...document,orderDate:sheet.document?.orderDate??sheet.developmentCreatedDate??document.orderDate,customerOrderDraft:{withOrder,order:form},files:document.files.map(file=>({ ...file,attachmentId:picturesRef.current.find(picture=>picture.id===file.attachmentId)?.attachmentId??file.attachmentId }))};
           setDocument(persistedDocument);
           if(loadedVersion.current!==null&&sheet.version!==loadedVersion.current&&JSON.stringify(sheet.document)!==JSON.stringify(persistedDocument))throw new Error("开发单已更新，请重新打开后再保存；当前填写仍保留");
           if(JSON.stringify(sheet.document)!==JSON.stringify(persistedDocument)){
@@ -191,7 +195,7 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
             persistedDocument=sheet.document;
             const savedOrder=sheet.document.customerOrderDraft?.order??form;
             const savedQuantity=sheet.document.quantity===null?"":String(sheet.document.quantity);
-            setDocument(sheet.document);setForm(savedOrder);setQuantityInput(savedQuantity);
+            setDocument(sheet.document);setSizeQuantityInputs(developmentSizeQuantityInputs(sheet.document));setForm(savedOrder);setQuantityInput(savedQuantity);
             const snapshot=draftSnapshot(picturesRef.current,sheet.document,savedOrder,savedQuantity);
             initial.current=snapshot;dirty.current=false;setSavedDraft(snapshot);
           }
@@ -231,8 +235,8 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
   const returnToList = async () => {
     if ((!dirty.current || await confirmInApp("有未保存开发资料或订购信息，确定离开？")) && !writing.current) onCancel();
   };
-  return <Surface className="development-create development-create-reference"><form id={formId} noValidate onKeyDown={event=>{if(event.key==="Enter"&&event.nativeEvent.isComposing)event.preventDefault();}} onSubmit={event => {event.preventDefault(); void save();}}>
-    {contained?<DocumentToolbar title={title} status={busy?"保存中":publishStatus}>{!source && !published && <Button type="button" disabled={busy} onClick={() => void save(true)}>保存开发资料草稿</Button>}<Button form={formId} type="submit" variant="primary" disabled={busy}>{busy?"保存中…":submitLabel}</Button></DocumentToolbar>:<header className="development-create-heading"><div><div className="development-create-title"><h2>{intent === "confirm_order" ? title : "新建开发订单"}</h2><Button type="button" disabled={busy} onClick={() => void returnToList()}>返回列表</Button></div><p>{title}</p></div><div className="pattern-actions">{!source && !published && <Button type="button" disabled={busy} onClick={() => void save(true)}>保存开发资料草稿</Button>}<Button form={formId} type="submit" variant="primary" disabled={busy}>{busy?"保存中…":submitLabel}</Button></div></header>}
+  return <Surface className="development-create development-create-reference dx-doc-development"><form id={formId} noValidate onKeyDown={event=>{if(event.key==="Enter"&&event.nativeEvent.isComposing)event.preventDefault();}} onSubmit={event => {event.preventDefault(); void save();}}>
+    <DocumentToolbar title={title} status={busy?"保存中":publishStatus}>{!contained&&<Button type="button" disabled={busy} onClick={()=>void returnToList()}>返回列表</Button>}{!source&&!published&&<Button type="button" disabled={busy} onClick={()=>void save(true)}>保存开发资料草稿</Button>}<Button form={formId} type="submit" variant="primary" disabled={busy}>{busy?"保存中…":submitLabel}</Button></DocumentToolbar>
     {!source&&<div className="development-order-intent" role="group" aria-label="确定客户订单">{([['development','无确定客户订单'],['certain_order','有确定客户订单']] as const).map(([value,label])=><Button key={value} type="button" aria-pressed={intent===value} disabled={busy||published||!onIntentChange} onClick={()=>onIntentChange?.(value)}>{label}</Button>)}</div>}
     {source && <p>沿用第 {source.adoptedRound ?? source.selectedRound ?? 1} 轮开发资料；头版/开发板与已有工序保持原档案。</p>}
     {error && <DocumentErrors error={error} issues={errorField?[{id:errorField,label:"定位需核实字段",message:error}]:[]}/>}
@@ -241,25 +245,22 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
     {createdSource&&error&&<p role="status">{developmentPublished?withOrder?"开发单已发布；本次客户订单确认未取得成功回执，请先核对原档案，再继续确认。":"开发单已发布，请打开原档案核对。":savedDraft===currentSnapshot?"当前草稿已保存；发布尚未取得成功回执，请先核对原档案再继续。":"当前填写尚未取得保存成功回执，输入仍保留；重试会沿用此档案。"} <a className="dx-button dx-button--secondary" href={createWebUrls(import.meta.env.BASE_URL).pageUrl(`ui/digital-production?development=${createdSource}`)}>打开原开发档案</a></p>}
     {boundOrder&&<p role="status">订购草稿已随开发资料发布；确认与重试沿用已发布的 PO、数量和日期。</p>}
     <fieldset disabled={busy}><fieldset disabled={Boolean(boundOrder)} className="development-order-fields"><div className="development-create-layout development-create-layout-existing">
-    <div className="development-create-order"><section className="development-create-card"><h3>基本资料</h3><div className="development-create-grid">
+    <div className="development-create-order"><section className="development-create-card"><h3>1 · 基本资料</h3><div className="development-create-grid">
       {intent !== "confirm_order" && <label>开发类型<select aria-label="开发类型" disabled={Boolean(createdSource)} value={developmentType} onChange={event => setDevelopmentType(event.target.value as "头版" | "开发板")}><option>头版</option><option>开发板</option></select></label>}
       <label>设计款号（必填）<input id="development-create-style" aria-label="设计款号" required maxLength={100} value={form.designStyleNo} readOnly={Boolean(createdSource)} onBlur={event=>void findExistingSource(event.target.value)} onChange={event => {sourceSearchSequence.current++;setDuplicateSource(null);setForm({...form, designStyleNo: event.target.value});}}/></label>
-      <label>设计师（只读）<input aria-label="设计师（只读）" readOnly value={designerName ?? "正在确认身份…"}/></label>
       <label>代用款号（选填）<input maxLength={100} value={form.temporaryStyleNo ?? ""} readOnly={Boolean(createdSource)} onChange={event => setForm({...form, temporaryStyleNo: event.target.value || null})}/></label>
+      <label>设计师（只读）<input aria-label="设计师（只读）" readOnly value={designerName ?? "正在确认身份…"}/></label>
+</div><div className="development-create-grid development-create-grid-secondary">
       <label>客户{withOrder ? "（必填）" : "（选填）"}<SearchableSelect id="development-create-customer" aria-label="客户" required={withOrder} disabled={Boolean(createdSource && (fixedCustomer || !withOrder))} value={form.customerCode} onChange={event => {const customer = customers.find(customer => customer.code === event.target.value); setForm({...form, customerCode: event.target.value, primaryMerchandiserId: customer?.defaultMerchandiserId ?? null, productGroup: initialDigitalProductGroup(customers, event.target.value)});}}><option value="">通用开发 / 请选择</option>{customers.map(customer => <option key={customer.code} value={customer.code}>{customer.code} · {customer.name}</option>)}</SearchableSelect></label>
-</div>{withOrder && <>      <div className="development-create-grid"><label>产品分组<select aria-label="产品分组" value={form.productGroup} onChange={event => setForm({...form, productGroup: event.target.value as DigitalOrderInput["productGroup"]})}>{(customers.find(customer => customer.code === form.customerCode)?.productGroups ?? [form.productGroup]).map(group => <option key={group}>{group}</option>)}</select></label>
+{withOrder && <><label>产品分组<select aria-label="产品分组" value={form.productGroup} onChange={event => setForm({...form, productGroup: event.target.value as DigitalOrderInput["productGroup"]})}>{(customers.find(customer => customer.code === form.customerCode)?.productGroups ?? [form.productGroup]).map(group => <option key={group}>{group}</option>)}</select></label>
         <label>客户下单日期（必填）<input id="development-customer-order-date" aria-label="客户下单日期" required max={serverToday} type="date" value={form.orderDate} onChange={event => setForm({...form, orderDate: event.target.value})}/></label>
-</div>
-</>}</section>
-    {withOrder && <section className="development-create-card development-create-details"><h3>客户订单明细</h3><p>颜色、尺码、订购数量及客户交期在正式提交客户订单时必填；保存开发草稿后可继续补齐。</p><p>客户侧交期默认沿用首个 PO，可分别修改；首次确认须为 {dateMinimum} 或之后。</p><p>默认主跟单：{customers.find(customer => customer.code === form.customerCode)?.defaultMerchandiserName ?? "未配置，待主管指派"}</p>
+</>}<label>开发下单日期（固定）<input id="development-orderDate" aria-label="开发下单日期" readOnly value={document.orderDate??(published?"历史未登记":"保存后由服务器确定")}/></label><label>工艺<select aria-label="工艺" disabled={published} value={document.craft} onChange={event=>edit({craft:event.target.value as DevelopmentDocument["craft"]})}>{["无","印花","绣花","印绣花"].map(value=><option key={value}>{value}</option>)}</select></label></div></section>
+    {withOrder && <section className="development-create-card development-create-details"><h3>2 · 客户订单明细 <small>默认主跟单：{customers.find(customer=>customer.code===form.customerCode)?.defaultMerchandiserName??"未配置，待主管指派"}</small></h3>
+      {!sharedPoColumns&&<p className="development-legacy-po-note">本草稿各 PO 原尺码不同，按原行保留；修改尺码只影响该 PO，订购数量不会并入其它尺码。</p>}
       <div className="development-table-scroll" role="region" aria-label="PO 明细，可左右滑动查看全部列" tabIndex={0}>
-        <table className="development-create-po-table"><thead><tr>
+        <table className="development-create-po-table" style={{minWidth:600+maxPoSizeCount*240+(form.lines.length>1?90:0)}}><thead><tr>
           <th className="development-po-index">PO</th><th className="development-po-number">正式款号 / PO</th><th className="development-po-color">颜色 *</th>
-          {form.lines[0]?.sizes.map((size, sizeIndex) => <th className="development-size-column" key={sizeIndex}>
-            <span className="development-size-label">尺码 *</span>
-            <input aria-label={`尺码列 ${sizeIndex + 1}`} placeholder="如 S / M / 36" required maxLength={100} value={size.size} onChange={event => setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: row.sizes.map((item, i) => i === sizeIndex ? {...item, size: event.target.value} : item)}))}))}/>
-            {form.lines[0]!.sizes.length > 1 && <button type="button" aria-label={`删除尺码列 ${sizeIndex + 1}`} onClick={async () => {if (await confirmInApp("删除这个尺码列及所有 PO 对应订购数量？") && !writing.current) setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: row.sizes.filter((_, i) => i !== sizeIndex)}))}));}}>×</button>}
-          </th>)}
+          {Array.from({length:maxPoSizeCount},(_,sizeIndex)=><th className="development-size-column" key={poSizeIds.current[sizeIndex]}><span className="development-size-label">尺码与订购数量 · {sizeIndex+1}</span>{sharedPoColumns&&form.lines[0]!.sizes.length>1&&<button type="button" aria-label={`删除尺码列 ${sizeIndex+1}`} onClick={async()=>{if(await confirmInApp("删除这个尺码列及所有 PO 对应订购数量？")&&!writing.current){poSizeIds.current.splice(sizeIndex,1);setForm(current=>({...current,lines:current.lines.map(row=>({...row,sizes:row.sizes.filter((_,i)=>i!==sizeIndex)}))}));}}}>×</button>}</th>)}
           <th className="development-row-total">合计（件）</th><th className="development-po-date">{customerPoDateLabel}</th>{form.lines.length > 1 && <th className="development-po-actions">删除 PO</th>}
         </tr></thead><tbody>{form.lines.map((value, index) => <tr key={index}>
           <th className="development-po-index">{index + 1}</th>
@@ -267,25 +268,22 @@ export function DevelopmentCreateForm({intent, source, customers, onCancel, onCr
           <td className="development-po-color"><input id={`development-po-color-${index+1}`} aria-label={`PO ${index + 1} 颜色`} placeholder="颜色（必填）" required maxLength={100} value={value.color} onChange={event => line(index, {color: event.target.value})}/><input aria-label={`PO ${index + 1} 颜色外文`} placeholder="颜色外文（选填）" maxLength={100} value={value.colorForeign ?? ""} onChange={event => line(index, {colorForeign: event.target.value || null})}/></td>
           {value.sizes.map((size, sizeIndex) => {
             const quantityError = developmentQuantityError(size.quantity), errorId = `development-quantity-error-${index}-${sizeIndex}`;
-            return <td className="development-size-column" key={sizeIndex}><label className="development-quantity-field"><span>数量（件）*</span>
-              <input aria-label={`PO ${index + 1} 订购数量 ${sizeIndex + 1}`} type="text" inputMode="numeric" maxLength={8} placeholder="件数" value={size.quantity} aria-invalid={quantityError !== null} aria-describedby={quantityError ? errorId : undefined} onChange={event => line(index, {sizes: value.sizes.map((item, i) => i === sizeIndex ? {...item, quantity: event.target.value} : item)})}/>
-              {quantityError && <small className="development-quantity-error" id={errorId} role="alert">{quantityError}</small>}
-            </label></td>;
-          })}
+            return <td className="development-size-column" key={poSizeIds.current[sizeIndex]}><div className="development-po-size-pair"><label><span>尺码</span>{(index===0||!sharedPoColumns)?<input aria-label={index===0?`尺码列 ${sizeIndex+1}`:`PO ${index+1} 尺码 ${sizeIndex+1}`} placeholder="如 M / 36" required maxLength={100} value={size.size} onChange={event=>setForm(current=>({...current,lines:current.lines.map((row,rowIndex)=>sharedPoColumns||rowIndex===index?{...row,sizes:row.sizes.map((item,i)=>i===sizeIndex?{...item,size:event.target.value}:item)}:row)}))}/>:<span className="development-po-shared-size" aria-label={`PO ${index+1} 尺码 ${sizeIndex+1}`}>{size.size||"待首行填写"}</span>}{!sharedPoColumns&&value.sizes.length>1&&<button type="button" aria-label={`删除 PO ${index+1} 尺码项 ${sizeIndex+1}`} onClick={async()=>{if(await confirmInApp(`删除 PO ${index+1} 的 ${size.size||`第${sizeIndex+1}项尺码`} 及其订购数量？`)&&!writing.current)line(index,{sizes:value.sizes.filter((_,position)=>position!==sizeIndex)});}}>×</button>}</label><label className="development-quantity-field"><span>数量</span><input aria-label={`PO ${index+1} 订购数量 ${sizeIndex+1}`} type="text" inputMode="numeric" maxLength={8} placeholder="件数" value={size.quantity} aria-invalid={quantityError!==null} aria-describedby={quantityError?errorId:undefined} onChange={event=>line(index,{sizes:value.sizes.map((item,i)=>i===sizeIndex?{...item,quantity:event.target.value}:item)})}/></label></div>{quantityError&&<small className="development-quantity-error" id={errorId} role="alert">{quantityError}</small>}</td>;
+          })}{Array.from({length:maxPoSizeCount-value.sizes.length},(_,position)=><td className="development-size-column" key={`absent-${position}`} aria-label={`PO ${index+1} 无此尺码项`}>{!sharedPoColumns&&position===0?<Button type="button" disabled={value.sizes.length>=50} onClick={()=>line(index,{sizes:[...value.sizes,{size:"",quantity:""}]})}>补充本 PO 尺码</Button>:"—"}</td>)}
           <td className="development-row-total">{rowTotals[index] === null ? <span className="development-quantity-error">请修正数量</span> : rowTotals[index]?.toLocaleString()}</td>
           <td className="development-po-date"><input id={`development-po-date-${index+1}`} aria-label={`PO ${index + 1} ${customerPoDateLabel}`} type="date" min={dateMinimum} value={value.customerWarehouseArrivalDate ?? ""} onChange={event => customerDate(index, event.target.value || null)}/></td>
           {form.lines.length > 1 && <td className="development-po-actions"><Button type="button" onClick={async () => {if (await confirmInApp("删除这个 PO 和全部订购数量？") && !writing.current) removeLine(index);}}>删除 PO</Button></td>}
         </tr>)}</tbody></table>
       </div>
       <div className="development-create-line-actions"><Button type="button" disabled={form.lines.length >= 50} onClick={() => setForm(current => ({...current, lines: [...current.lines, inheritPoDate({...newLine(), sizes: current.lines[0]!.sizes.map(size => ({size:size.size, quantity:""}))}, current.lines[0], "customerWarehouseArrivalDate")]}))}>添加款色 / PO</Button>
-        <Button type="button" disabled={form.lines[0]!.sizes.length >= 50} onClick={() => setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: [...row.sizes, {size:"", quantity:""}]}))}))}>添加尺码列</Button>
+        <Button type="button" disabled={maxPoSizeCount >= 50} onClick={() => {poSizeIds.current.push(createClientRequestId());setForm(current => ({...current, lines: current.lines.map(row => ({...row, sizes: [...row.sizes, {size:"", quantity:""}]}))}));}}>添加尺码列</Button>
         <strong className="development-total-quantity" role="status">总订购数量：{totalQuantity === null ? <span className="development-quantity-error">请修正数量</span> : `${totalQuantity.toLocaleString()} 件`}</strong>
       </div></section>}
     </div></div></fieldset>
     {!source&&<div className="development-editor dx-doc-development">
       <DocumentErrors issues={issues}/>
       {pictures.filter(picture=>picture.error).map(picture=><p key={picture.id} role="alert">{picture.file.name}：{picture.error}</p>)}
-      <DevelopmentDocumentFields uploadHelp="选择后可预览，保存草稿或发布时上传；失败资料仍保留。" document={document} edit={edit} readonly={published} busy={busy} writing={writing} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={id=>{const picture=picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id);return picture?{filename:picture.file.name,mimeType:picture.file.type,sizeBytes:picture.file.size}:undefined;}} metadataPath={id=>createdSource&&!picturesRef.current.some(picture=>picture.id===id&&!picture.attachmentId)?`sources/${createdSource}/development/attachments/${id}/metadata`:undefined} imageUrl={id=>picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id)?.preview??createWebUrls(import.meta.env.BASE_URL).apiUrl(`digital-production/sources/${createdSource}/development/attachments/${id}`)} upload={selectPictures} fileKind={fileKind} setFileKind={setFileKind} issue={id=>issues.find(value=>value.id===id)?.message} patternSection={!published?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing selectedCategoryId={document.patternCategoryId??""} onCategoryChange={categoryId=>edit({patternCategoryId:categoryId||null})} onSelection={setPatternChoice}/></div>:null}/>
+      <DevelopmentDocumentFields sectionStart={withOrder?3:2} basicDetailsExternal uploadHelp="选择后可预览，保存草稿或发布时上传；失败资料仍保留。" document={document} edit={edit} readonly={published} busy={busy} writing={writing} sizeQuantityInputs={sizeQuantityInputs} setSizeQuantityInputs={setSizeQuantityInputs} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={id=>{const picture=picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id);return picture?{filename:picture.file.name,mimeType:picture.file.type,sizeBytes:picture.file.size}:undefined;}} metadataPath={id=>createdSource&&!picturesRef.current.some(picture=>picture.id===id&&!picture.attachmentId)?`sources/${createdSource}/development/attachments/${id}/metadata`:undefined} imageUrl={id=>picturesRef.current.find(picture=>picture.id===id||picture.attachmentId===id)?.preview??createWebUrls(import.meta.env.BASE_URL).apiUrl(`digital-production/sources/${createdSource}/development/attachments/${id}`)} upload={selectPictures} fileKind={fileKind} setFileKind={setFileKind} issue={id=>issues.find(value=>value.id===id)?.message} patternSection={!published?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing selectedCategoryId={document.patternCategoryId??""} onCategoryChange={categoryId=>edit({patternCategoryId:categoryId||null})} onSelection={setPatternChoice}/></div>:null}/>
     </div>}
     </fieldset>
   </form></Surface>;

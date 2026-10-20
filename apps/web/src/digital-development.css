@@ -262,3 +262,43 @@
 .development-amendment-history .development-print{display:block;position:static;max-width:100%;overflow-wrap:anywhere}
 .development-amendment-history .development-print img{max-width:100%;max-height:360px;object-fit:contain}
 @media print{.development-amendment-history{display:none}}
+
+/* P03: approved creation/document groups, scoped to this editor only. */
+@media screen {
+ .dx-doc-development .development-document-layout--grouped{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);grid-template-areas:none;align-items:start}
+ .dx-doc-development .development-document-layout--grouped>.development-section-group{min-width:0;margin:0;padding:16px}
+ .dx-doc-development .development-document-layout--grouped>.development-section-group>h2{margin:0 0 16px;font-size:16px}
+ .dx-doc-development .development-document-layout--grouped>.development-section-group>.dx-doc-section{border:0;box-shadow:none;border-radius:0;margin:0;padding:0;min-width:0}
+ .dx-doc-development .development-document-layout--grouped>.development-section-group>.dx-doc-section+.dx-doc-section{border-top:1px solid #dce5f0;margin-top:16px;padding-top:16px}
+ .dx-doc-development .development-document-layout--grouped #development-images>h2{display:none}
+ .dx-doc-development .development-document-layout--grouped #development-craft{grid-area:auto;grid-column:1/-1}
+ .dx-doc-development .development-document-layout--grouped #development-sizes{display:block}
+ .dx-doc-development .development-document-layout--grouped #development-sizes .development-size-table{height:auto;width:max-content!important;min-width:100%}
+ .dx-doc-development .development-document-layout--grouped .development-making-quantities :is(th,td){background:#f2f6ff;text-align:center}
+ .dx-doc-development .development-document-layout--grouped .development-making-quantities small{display:block;font-size:11px;color:#64748b}
+ .dx-doc-development .development-document-layout--grouped .development-making-quantities input{text-align:center}
+ .dx-doc-development .development-document-layout--grouped .development-making-total{font-size:13px;line-height:1.6;margin:8px 0 0}
+ .dx-doc-development .development-document-layout--grouped .development-making-total [role=alert]{display:block;color:#b91c1c}
+ .dx-doc-development .development-document-layout--grouped .development-size-move{display:flex;gap:4px;margin-top:3px}
+ .dx-doc-development .development-document-layout--grouped .development-size-move button{padding:0 6px;border:1px solid #dce5f0;background:#fff;border-radius:3px;color:#475569;cursor:pointer}
+ .dx-doc-development .development-document-layout--grouped .development-visible-material-label{display:block;font-size:12px;line-height:1.4;white-space:normal}
+ .dx-doc-development .development-document-layout--grouped .development-visible-material-label+.development-visible-material-label{margin-top:8px}
+ .dx-doc-development .development-document-layout--grouped .development-technical-table{min-width:560px}
+ .dx-doc-development .development-document-layout--grouped .development-technical-table th:nth-child(2){min-width:170px}
+ @container(min-width:1120px){.dx-doc-development .development-document-layout--grouped{grid-template-columns:minmax(0,1fr) minmax(0,1.15fr)}}
+ @media(max-width:1000px){.dx-doc-development .development-document-layout--grouped{grid-template-columns:minmax(0,1fr)}}
+ @media(max-width:520px){.dx-doc-development .development-document-layout--grouped>.development-section-group{padding:12px}.dx-doc-development .development-document-layout--grouped .development-size-move button{min-height:36px}}
+}
+@media screen{
+ .dx-doc-development .development-document-layout--grouped .development-basic-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .dx-doc-development .development-document-layout--grouped .development-basic-grid>label:last-child{grid-column:1/-1}
+ .dx-doc-development .development-document-layout--grouped .development-price-quote{flex-wrap:nowrap}
+ .dx-doc-development .development-document-layout--grouped .development-price-quote>.dx-button{flex-shrink:0}
+ .dx-doc-development .development-document-layout--grouped .development-technical-table thead th{white-space:normal;overflow-wrap:anywhere}
+ .dx-doc-development .development-document-layout--grouped .development-technical-table th:nth-child(3){width:84px}
+ @media(max-width:520px){.dx-doc-development .development-document-layout--grouped .development-basic-grid{grid-template-columns:minmax(0,1fr)}}
+}
+
+@media screen{.dx-doc-development .development-document-layout--grouped :is(#development-materials,#development-sizes) .dx-doc-table-scroll{max-height:none;height:auto}}
+
+.development-print{overflow-wrap:anywhere}.development-print table{table-layout:fixed;max-width:100%}.development-print :is(th,td){overflow-wrap:anywhere}

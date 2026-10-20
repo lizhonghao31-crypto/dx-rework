@@ -1,7 +1,7 @@
 import { describe,expect,it } from "vitest";
 import { DEVELOPMENT_MEASUREMENTS, DevelopmentDocumentSchema, developmentPublishErrors } from "@dx-rework/contracts/digital-development";
 import { buildTodoDeepLink,buildTodoExternalDeepLink } from "../../apps/api/src/todos/deep-link.js";
-const document={template:"上衣",quantity:1,sampleSize:"M",orderDate:"2026-09-30",returnDate:null,unit:"cm",sizes:["M","L"],measurements:[{name:"胸围",values:["100","104"]}],interlining:"",placketInterlining:"",sewingThread:"",buttonholeThread:"",stitchDensity:"",washingIroning:"",packaging:"",formalSizes:"",casualSizes:"",mainLabel:false,mainLabelMethod:"",sizeLabel:false,careLabel:false,instructions:"",craft:"无",washing:"内洗",materials:[],files:[{attachmentId:"11111111-1111-4111-8111-111111111111",kind:"款图"}]};
+const document={documentFormatVersion:2,sizeQuantities:[1,0],template:"上衣",quantity:1,sampleSize:"M",orderDate:"2026-09-30",returnDate:null,unit:"cm",sizes:["M","L"],measurements:[{name:"胸围",values:["100","104"]}],interlining:"",placketInterlining:"",sewingThread:"",buttonholeThread:"",stitchDensity:"",washingIroning:"",packaging:"",formalSizes:"",casualSizes:"",mainLabel:false,mainLabelMethod:"",sizeLabel:false,careLabel:false,instructions:"",craft:"无",washing:"内洗",materials:[],files:[{attachmentId:"11111111-1111-4111-8111-111111111111",kind:"款图"}]};
 describe("P05 fixed development form contract",()=>{
   it("preserves both source measurement templates and permits washing without film or craft sample",()=>{
     expect(DEVELOPMENT_MEASUREMENTS.上衣).toHaveLength(11);expect(DEVELOPMENT_MEASUREMENTS.裤子).toHaveLength(9);

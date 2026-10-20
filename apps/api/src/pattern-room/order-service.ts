@@ -1,3 +1,4 @@
+import {developmentMakingSizes} from "@dx-rework/contracts/digital-development";
 import {listMiscAssociations,resolveMiscAssociation} from "./misc-associations.js";
 import {DevelopmentRoundService} from "../production-platform/development-round-service.js";
 import {DigitalProductionAccessPolicy} from "../production-platform/access-policy.js";
@@ -7,7 +8,7 @@ import type { PatternHistorySelection } from "./order-history.js";
 import { createHash, randomUUID } from "node:crypto";
 import { PATTERN_ORDER_STATUS_LABELS, DeletePatternOrderSchema, AssignPatternOrderSchema, CancelPatternOrderSchema, CreatePatternOrderSchema, CreateMiscOrderSchema, PATTERN_ROOM_ORDERS_ENABLED, PatternRoundActionSchema, RecordPatternHoursSchema, RequestPatternReworkSchema, TransferPatternOrderSchema, UpdateMiscMaterialsSchema, UpdatePatternMaterialsSchema, type PatternOrderCapability, type PatternOrderQuery, type PatternRoundAction } from "@dx-rework/contracts/pattern-orders";
 import type { Pool, PoolClient } from "pg";
-import type { z } from "zod";
+import { z } from "zod";
 import { ApplicationError } from "../platform/errors.js";
 import { IdempotencyService, OperationEventRepository, type TrustedActorContext } from "../tools/repositories.js";
 import type { TodoProjectionService } from "../todos/projection-service.js";
@@ -133,7 +134,7 @@ export class PatternRoomOrderService {
     const prior=(await client.query("SELECT order_id FROM digital_development_pattern_links WHERE source_id=$1",[sourceId])).rows[0];
     if(prior)return this.get(actor,prior.order_id);
     const doc=sheet.document!;
-    return this.createOrder(actor,"pattern",{categoryId,priceVersion,styleNo:sheet.designStyleNo??sheet.temporaryStyleNo,quantity:doc.quantity,attachmentIds:doc.files.map(file=>file.attachmentId),requiredDate:doc.returnDate,customer:sheet.customerCode,sizeColor:doc.sampleSize,referenceStyleNo:null,variant:"初版",note:doc.instructions||null},key,sourceId);
+    return this.createOrder(actor,"pattern",{categoryId,priceVersion,styleNo:sheet.designStyleNo??sheet.temporaryStyleNo,quantity:doc.quantity,attachmentIds:doc.files.map(file=>file.attachmentId),requiredDate:doc.returnDate,customer:sheet.customerCode,sizeColor:developmentMakingSizes(doc),referenceStyleNo:null,variant:"初版",note:doc.instructions||null},key,sourceId);
   }
   async create(actor: TrustedActorContext, _input: unknown, _key: string) {
     void _input;void _key;
@@ -149,7 +150,9 @@ export class PatternRoomOrderService {
   }
   createMisc(actor: TrustedActorContext, input: unknown, key: string) { return this.createOrder(actor, "misc", input, key); }
   private async createOrder(actor: TrustedActorContext, kind: "pattern" | "misc", input: unknown, key: string, developmentSourceId?:string) {
-    const parsed = kind === "pattern" ? { ...parse(CreatePatternOrderSchema, input), taskName: null }
+    // Only the private, already-authorized development adapter carries up to 20 full size names.
+    // The public legacy free-text editor retains its original 200-character limit.
+    const parsed = kind === "pattern" ? { ...parse(developmentSourceId?CreatePatternOrderSchema.extend({sizeColor:z.string().max(2400).nullable()}):CreatePatternOrderSchema, input), taskName: null }
       : { ...parse(CreateMiscOrderSchema, input), categoryId: PATTERN_HOURLY_PRICE_ID, quantity: null, customer: null, sizeColor: null, referenceStyleNo: null, variant: null };
     const action = kind === "pattern" ? "pattern_room.order.submitted" : "pattern_room.misc.submitted";
     return this.mutate(actor, kind === "pattern" ? "pattern_room:orders:create" : "pattern_room:misc:create", action, key, developmentSourceId?{parsed,developmentSourceId}:parsed, async (client, effective) => {

@@ -1,3 +1,4 @@
+import {developmentMakingSizes} from "@dx-rework/contracts/digital-development";
 import {DevelopmentAmendmentPanel} from "./development-amendment-panel.js";
 import type {MaterialVerification} from "@dx-rework/contracts/digital-development-execution";
 import {DevelopmentFabricDecisions,type FabricCase} from "./development-fabric-decisions.js";
@@ -144,7 +145,7 @@ function DevelopmentTaskBasis({state,taskId}:{state:State;taskId:string}){
  const task=state.tasks.find(item=>item.taskId===taskId),doc=state.sheet.document;
  if(!task||!doc)return null;
  const sizing=["development_pattern","development_cutting","development_sewing","development_tail_check"].includes(task.taskKind);
- return <section className="development-task-basis" aria-label="本轮办理依据"><h3>本轮办理依据</h3><div className="development-handoff-facts"><span>开发资料：第{task.routeVersion}轮 · v{state.sheet.version}</span><span>打板数量：{doc.quantity??"未登记"}</span><span>打样尺码：{doc.sampleSize||"未登记"}</span><span>要求完成：{doc.returnDate??"未登记"}</span></div>
+ return <section className="development-task-basis" aria-label="本轮办理依据"><h3>本轮办理依据</h3><div className="development-handoff-facts"><span>开发资料：第{task.routeVersion}轮 · v{state.sheet.version}</span><span>打板数量：{doc.quantity??"未登记"}</span><span>各码制作：{developmentMakingSizes(doc)}</span><span>要求完成：{doc.returnDate??"未登记"}</span></div>
  {task.taskKind==="development_sewing"&&<div className="development-sewing-prerequisites"><section><h4>裁板交入</h4><p>{state.tasks.find(item=>item.routeVersion===task.routeVersion&&item.taskKind==="development_cutting")?.state==="completed"?"本轮裁板已完成":"以实际前置状态为准"}</p></section><section><h4>面辅料核配</h4><p>{state.facts.some(fact=>fact.kind==="核配通过"&&state.tasks.some(item=>item.taskId===fact.taskId&&item.routeVersion===task.routeVersion))?"本轮核配已通过":"暂无本轮核配通过记录"}</p></section><section><h4>车板执行安排</h4><p>{state.patternPreparation?.workerName?`已指派：${state.patternPreparation.workerName}`:state.unifiedArrangement?"尚无有效车板执行安排，请文员在本单总委派核对人员及上方缺项；正常首轮无需主管另行派工":"尚无原执行单派工记录，请技术主管在原执行单核对历史安排"}</p></section></div>}
  {task.unmetConditions?.length?<ul aria-label="未满足条件">{task.unmetConditions.map((item,index)=><li key={`${item.condition}:${index}`}><strong>{item.name}</strong>：{item.missing}；负责岗位：{roleLabel(item.responsibleRole)}{item.action?`；可处理：${item.action}`:""}</li>)}</ul>:task.blockedReason&&<p role="status">前置情况：{task.blockedReason}</p>}
  {state.tasks.some(item=>item.routeVersion===task.routeVersion&&item.state==="completed")&&<p>本轮已完成：{state.tasks.filter(item=>item.routeVersion===task.routeVersion&&item.state==="completed").map(item=>item.label).join("、")}</p>}

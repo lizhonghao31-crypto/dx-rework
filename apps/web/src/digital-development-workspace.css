@@ -515,3 +515,23 @@
  .pattern-golden .misc-workspace .pattern-filters select,.pattern-golden .misc-workspace .pattern-filters .native-search-select{flex:1;max-width:none;min-width:0}
  .pattern-golden .misc-create-drawer>.pattern-action-dialog{padding:14px}
 }
+
+/* P03: creation host only; no cockpit or shared shell defaults. */
+.development-create-reference>.dx-doc-toolbar,.development-create-reference>form>.dx-doc-toolbar{position:sticky;top:var(--shell-sticky-top,0px);z-index:12;background:#fff;border-bottom:1px solid #dce5f0;padding:12px;margin-bottom:12px}
+.development-create-reference .development-create-card>h3{font-size:16px}
+.development-create-reference .development-create-card>h3 small{font-size:12px;font-weight:400;white-space:normal}
+.development-create-reference .development-create-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+.development-create-reference .development-create-grid-secondary{grid-template-columns:repeat(5,minmax(0,1fr));margin-top:12px}
+.development-create-reference .development-create-grid-secondary:has(>label:nth-child(3):last-child){grid-template-columns:2fr 1fr 1fr}
+.development-create-reference .development-create-line-actions{display:flex;gap:8px;flex-wrap:wrap}
+@media(max-width:1100px){.development-create-reference .development-create-grid,.development-create-reference .development-create-grid-secondary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.development-create-reference .development-create-grid,.development-create-reference .development-create-grid-secondary,.development-create-reference .development-create-grid-secondary:has(>label:nth-child(3):last-child){grid-template-columns:minmax(0,1fr)}.development-create-reference>form>.dx-doc-toolbar{padding:8px;gap:8px;flex-wrap:wrap}}
+/* One shared PO size column; the name and order quantity stay on the same row. */
+.development-create-reference .development-create-po-table .development-size-column{width:240px;min-width:240px}
+.development-create-reference .development-create-po-table th.development-size-column{padding-right:30px}
+.development-create-reference .development-create-po-table th.development-size-column>button{top:5px;right:5px}
+.development-create-reference .development-po-size-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:start}
+.development-create-reference .development-po-size-pair>label{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px;align-items:center;min-width:0}
+.development-create-reference .development-po-size-pair>label>span{font-size:12px;white-space:nowrap}
+.development-create-reference .development-po-size-pair input{min-width:0;width:100%;box-sizing:border-box;text-align:center}
+.development-create-reference .development-po-size-pair .development-po-shared-size{white-space:normal;overflow-wrap:anywhere;display:flex;align-items:center;justify-content:center;min-height:38px}

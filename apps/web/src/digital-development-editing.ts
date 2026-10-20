@@ -29,8 +29,18 @@ export function developmentOrderInput(draft: DevelopmentOrderDraft): DigitalOrde
 }
 export function initialDevelopmentDocument(template: DevelopmentDocument["template"] = "上衣"): DevelopmentDocument {
   const material = (category: DevelopmentMaterial["category"], label: string): DevelopmentMaterial => ({materialId:createClientRequestId(),category,label,supplier:"",name:"",width:"",weight:"",composition:"",consumption:"",color:"",specification:"",quantity:"",requiredThisRound:false,available:false,expectedDate:null});
-  return {template,quantity:null,sampleSize:"",orderDate:null,returnDate:null,unit:"cm",sizes:["M","L"],measurements:DEVELOPMENT_MEASUREMENTS[template].map(name=>({name,values:["",""]})),interlining:"",placketInterlining:"",sewingThread:"",buttonholeThread:"",stitchDensity:"",washingIroning:"",washingMethod:"",ironing:"",packaging:"",formalSizes:"",casualSizes:"",mainLabel:false,mainLabelMethod:"",sizeLabel:false,careLabel:false,instructions:"",craft:"无",washing:"免洗",materials:[material("主布","主布 A"),material("配布","配布 B"),material("配布","配布 C")],files:[]};
+  return {documentFormatVersion:2,sizeQuantities:[null,null],template,quantity:null,sampleSize:"",orderDate:null,returnDate:null,unit:"cm",sizes:["M","L"],measurements:DEVELOPMENT_MEASUREMENTS[template].map(name=>({name,values:["",""]})),interlining:"",placketInterlining:"",sewingThread:"",buttonholeThread:"",stitchDensity:"",washingIroning:"",washingMethod:"",ironing:"",packaging:"",formalSizes:"",casualSizes:"",mainLabel:false,mainLabelMethod:"",sizeLabel:false,careLabel:false,instructions:"",craft:"无",washing:"免洗",materials:[material("主布","主布 A"),material("配布","配布 B"),material("配布","配布 C")],files:[]};
 }
+export function editableDevelopmentDocument(document:DevelopmentDocument):DevelopmentDocument{
+  return {...document,documentFormatVersion:2,sizeQuantities:document.sizeQuantities??document.sizes.map(()=>null)};
+}
+export function developmentSizeQuantityInputs(document:DevelopmentDocument):string[]{return document.sizes.map((_,index)=>document.sizeQuantities?.[index]==null?"":String(document.sizeQuantities[index]));}
+export function developmentMakingQuantityError(value:string):string|null{return value!==""&&(!/^\d+$/.test(value)||Number(value)>100000)?"制作数量须为0—100000整数，或留空保存草稿":null;}
 export function removeDevelopmentSize(document: DevelopmentDocument, index: number): DevelopmentDocument {
-  return {...document, sizes: document.sizes.filter((_, position) => position !== index), measurements: document.measurements.map(row => ({...row, values: row.values.filter((_, position) => position !== index)}))};
+  return {...document, sizes: document.sizes.filter((_, position) => position !== index), ...(document.sizeQuantities?{sizeQuantities:document.sizeQuantities.filter((_,position)=>position!==index)}:{}), measurements: document.measurements.map(row => ({...row, values: row.values.filter((_, position) => position !== index)}))};
+}
+export function moveDevelopmentSize(document:DevelopmentDocument,from:number,to:number):DevelopmentDocument{
+ const move=<T,>(values:T[]):T[]=>{const next=[...values];const item=next.splice(from,1)[0]!;next.splice(to,0,item);return next;};
+ if(from<0||to<0||from>=document.sizes.length||to>=document.sizes.length)return document;
+ return {...document,sizes:move(document.sizes),...(document.sizeQuantities?{sizeQuantities:move(document.sizeQuantities)}:{}),measurements:document.measurements.map(row=>({...row,values:move(row.values)}))};
 }

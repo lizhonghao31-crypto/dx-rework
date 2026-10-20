@@ -7,7 +7,7 @@ const urls=createWebUrls(import.meta.env.BASE_URL);
 import {useContext,useEffect,useRef,useState} from "react";
 import {Button} from "@dx-rework/ui";
 import {developmentReturnNeed,developmentAmendmentErrors,type DevelopmentAmendmentContext} from "@dx-rework/contracts/digital-development-amendments";
-import {isDevelopmentMaterialPlaceholder,developmentPublishErrors,type DevelopmentDocument,type DevelopmentMaterial} from "@dx-rework/contracts/digital-development";
+import {developmentAmendmentPublicationOptions,isDevelopmentMaterialPlaceholder,developmentPublishErrors,type DevelopmentDocument,type DevelopmentMaterial} from "@dx-rework/contracts/digital-development";
 import {digitalRequest,DigitalRequestError} from "./digital-production-api.js";
 import {createClientRequestId} from "./client-request-id.js";
 import {useDigitalDetailNavigationGuard} from "./use-digital-detail-navigation-guard.js";
@@ -58,7 +58,7 @@ export function DevelopmentAmendmentPanel({sourceId,taskId,onSubmitted}:{sourceI
  const run=async(submit:boolean)=>{
   if(writing.current||uncertain||!context||!document)return;
   if(context.sourceId!==sourceId||context.taskId!==taskId){setError("办理对象已切换，请先重新读取本任务的补正资料");return;}
-  const validation=[...developmentAmendmentErrors(context.document,document),...(submit&&!quickSupply?developmentPublishErrors(document):[])];
+  const validation=[...developmentAmendmentErrors(context.document,document),...(submit&&!quickSupply?developmentPublishErrors(document,developmentAmendmentPublicationOptions(context.document,document)):[])];
   if(validation.length){setError(validation.join("；"));return;}if(submit&&dirty){setError("请先保存本页补正草稿，再提交文员复核");return;}
   const body={taskId,roundNumber:context.roundNumber,expectedDocumentVersion:context.documentVersion,expectedDraftVersion:draftVersion,...(!submit?{document,reason}:{})},payload=JSON.stringify([submit,body]);
   if(command.current?.payload!==payload)command.current={payload,key:createClientRequestId(),body:structuredClone(body),path:submit?`${base}/submit`:base,method:submit?"POST":"PUT",submit};

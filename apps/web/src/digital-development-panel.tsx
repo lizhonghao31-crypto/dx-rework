@@ -13,7 +13,7 @@ import { DevelopmentPrint } from "./digital-development-print.js";
 import { useEffect, useRef, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import { type DevelopmentDocument, type DevelopmentSheet } from "@dx-rework/contracts/digital-development";
-import { initialDevelopmentDocument } from "./digital-development-editing.js";
+import { initialDevelopmentDocument, editableDevelopmentDocument, developmentSizeQuantityInputs } from "./digital-development-editing.js";
 import { uploadDevelopmentMaterial } from "./digital-development-upload.js";
 import { digitalRequest } from "./digital-production-api.js";
 import { createClientRequestId } from "./client-request-id.js";
@@ -39,9 +39,10 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
     window.document.getElementById(anchor)?.scrollIntoView({ block: "center" });
   }, [sheet]);
   const [patternChoice,setPatternChoice]=useState<DevelopmentPatternChoice|null>(null);
+  const [sizeQuantityInputs,setSizeQuantityInputs]=useState<string[]>([]);
   const [quantityInput,setQuantityInput]=useState(""),[validationMode,setValidationMode]=useState<"save"|"publish"|null>(null);
   const measurementIds=useRef<string[]>([]),successfulUploads=useRef(new Map<string,string>());
-  const installDocument=(value:DevelopmentDocument)=>{setDocument(value);setQuantityInput(value.quantity===null?"":String(value.quantity));measurementIds.current=value.measurements.map(()=>createClientRequestId());setValidationMode(null);};
+  const installDocument=(value:DevelopmentDocument)=>{setDocument(value);setSizeQuantityInputs(developmentSizeQuantityInputs(value));setQuantityInput(value.quantity===null?"":String(value.quantity));measurementIds.current=value.measurements.map(()=>createClientRequestId());setValidationMode(null);};
   if(measurementIds.current.length!==document.measurements.length)measurementIds.current=document.measurements.map((_,index)=>measurementIds.current[index]??createClientRequestId());
   const [error,setError]=useState(""),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false);
   const [revision,setRevision]=useState<RevisionFields|null>(null),[draftVersion,setDraftVersion]=useState(0),[rounds,setRounds]=useState<Rounds>({rounds:[],draft:null}),[selectedRound,setSelectedRound]=useState<number|undefined>(initialRound);
@@ -58,7 +59,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
     catch(reason){setError(reason instanceof Error?reason.message:"操作失败");}finally{writing.current=false;setBusy(false);}
   };
   const beginRevision=()=>{
-    const draft=rounds.draft;installDocument(draft?.payload.document??sheet!.document!);
+    const draft=rounds.draft;installDocument(editableDevelopmentDocument(draft?.payload.document??sheet!.document!));
     setRevision(draft?{...draft.payload}:{basedOnRound:sheet!.latestRoundNumber??1,origin:"客户新增要求",customerComment:"",internalProblem:"",explanation:`参考第${sheet!.roundNumber??1}轮资料`,categories:["其他"],affectedNodes:["车板"],outputKind:"整件样板"});
     setDraftVersion(draft?.version??0);setDirty(!draft);
   };
@@ -89,9 +90,9 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
   };
   const readonly=embedded|| (revision?!sheet?.canRevise:!sheet?.canEdit||sheet.status==="published");
   const imageUrl=(id:string)=>previews.url(id,urls.apiUrl(`digital-production/${base}/attachments/${id}`));
-  const issues=validationMode?developmentIssues(document,quantityInput,measurementIds.current,validationMode==="publish",revision):[];
+  const issues=validationMode?developmentIssues(document,quantityInput,measurementIds.current,validationMode==="publish",revision,sizeQuantityInputs,Boolean(revision&&sheet?.document?.orderDate===null)):[];
   const issue=(id:string)=>issues.find(value=>value.id===id)?.message;
-  const validate=(publish=false)=>{setValidationMode(publish?"publish":"save");return developmentIssues(document,quantityInput,measurementIds.current,publish,revision).length===0;};
+  const validate=(publish=false)=>{setValidationMode(publish?"publish":"save");return developmentIssues(document,quantityInput,measurementIds.current,publish,revision,sizeQuantityInputs,Boolean(revision&&sheet?.document?.orderDate===null)).length===0;};
   const save=()=>{if(!validate())return;if(revision)void revisionAction(false);else void run(base,{expectedVersion:sheet!.version,document},"PUT");};
   const publish=()=>{if(!validate(true))return;if(dirty){setError("请先保存当前修改");return;}if(revision)void revisionAction(true);else{if(!patternChoice){setError("请先选择有效打板品类与执行价，再正式提交开发单");window.document.getElementById("development-pattern-preparation")?.scrollIntoView({block:"center"});return;}void run(`${base}/publish`,{expectedVersion:sheet!.version,patternOrder:patternChoice});}};
   const reload=async()=>{if(writing.current||dirty&&!await confirmInApp("重新载入将丢弃未保存修改，确定继续？"))return;setBusy(true);try{const value=await digitalRequest<DevelopmentSheet>(`${base}${selectedRound?`?round=${selectedRound}`:""}`);setSheet(value);installDocument(value.document??initial());setRevision(null);setDirty(false);setError("");if(value.status==="published")setRounds(await digitalRequest<Rounds>(`${base}/rounds`));}catch(reason){setError(reason instanceof Error?reason.message:"读取失败");}finally{setBusy(false);}};
@@ -112,7 +113,7 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
 
       <form onSubmit={event=>{event.preventDefault();save();}}>
         {revision&&<section id="development-revision" tabIndex={-1} className="dx-doc-card development-revision"><DevelopmentRevisionFields value={revision} disabled={busy} onChange={value=>{setRevision(value);setDirty(true);}}/></section>}
-        <DevelopmentDocumentFields {...((embedded||contained)?{attachmentPageSize:6}:{})} key={`${sourceId}:${revision?`revision-${revision.basedOnRound}`:"initial"}`} templateResetKey={revision?draftVersion:sheet.version} document={document} edit={edit} readonly={readonly} busy={busy} writing={writing} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={previews.identity} metadataPath={id=>`${base}/attachments/${id}/metadata`} imageUrl={imageUrl} upload={upload} fileKind={fileKind} setFileKind={setFileKind} issue={issue} patternSection={sheet.status==="draft"&&!revision&&sheet.canEdit?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing onSelection={setPatternChoice}/></div>:null}/>
+        <DevelopmentDocumentFields {...((embedded||contained)?{attachmentPageSize:6}:{})} key={`${sourceId}:${revision?`revision-${revision.basedOnRound}`:"initial"}`} templateResetKey={revision?draftVersion:sheet.version} document={document} edit={edit} readonly={readonly} busy={busy} writing={writing} sizeQuantityInputs={sizeQuantityInputs} setSizeQuantityInputs={setSizeQuantityInputs} quantityInput={quantityInput} setQuantityInput={setQuantityInput} measurementIds={measurementIds} successfulUploads={successfulUploads} fileIdentity={previews.identity} metadataPath={id=>`${base}/attachments/${id}/metadata`} imageUrl={imageUrl} upload={upload} fileKind={fileKind} setFileKind={setFileKind} issue={issue} patternSection={sheet.status==="draft"&&!revision&&sheet.canEdit?<div id="development-pattern-preparation"><DevelopmentPatternLink busy={busy} preparing onSelection={setPatternChoice}/></div>:null}/>
       </form>
       {sheet.status==="published"&&<DevelopmentAmendmentHistory key={`${sheet.sourceId}:${sheet.roundNumber}:${sheet.version}`} sheet={sheet} imageUrl={imageUrl}/>}
       {sheet.status==="published"&&<DocumentSection id="development-handling" title="办理记录">
