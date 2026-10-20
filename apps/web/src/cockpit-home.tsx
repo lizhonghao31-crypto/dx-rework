@@ -1,4 +1,4 @@
-import type {JourneyNode,JourneyResult,OrderJourney} from "@dx-rework/contracts/digital-production-journey";
+import {JOURNEY_STAGES,type JourneyNode,type JourneyResult,type OrderJourney} from "@dx-rework/contracts/digital-production-journey";
 import {StatusBadge} from "@dx-rework/ui";
 import {BusinessTable,Pagination} from "@dx-rework/ui/production";
 import {CockpitPhoto} from "./cockpit-photo-preview.js";
@@ -10,9 +10,11 @@ import "./cockpit-home.css";
 const stateLabels={completed:"整单已完成",overdue:"逾期",due_soon:"临期",active:"进行中",not_started:"未启动",cancelled:"已取消"};
 function ActualProgress({order}:{order:OrderJourney}){
   const actual=order.display?.actualRatio;
-  return <div className="cockpit-double-progress" aria-label="全单进度">
+  const stages=(order.display?.stages??[]).filter(stage=>order.orderId||stage.key==="development");
+  return <div className="cockpit-double-progress" aria-label={order.orderId?"全单进度":"开发进度"}>
     <div title="时间规则待完善"><span>时间</span><i className="is-empty"/><small>待完善</small></div>
-    <div title={order.display?.actualLabel??"进度资料暂不可用"}><span>实际</span><i>{actual!==null&&actual!==undefined&&<b style={{width:`${Math.max(0,Math.min(1,actual))*100}%`}}/>}</i><small>{actual===null||actual===undefined?"—":order.display!.actualLabel}</small></div>
+    <div title={order.display?.actualLabel??"进度资料暂不可用"}><span>实际</span><i>{actual!==null&&actual!==undefined&&<b style={{width:`${Math.max(0,Math.min(1,actual))*100}%`}}/>}</i><small>{actual===undefined?"—":actual===null?"待核":order.display!.actualLabel}</small></div>
+    {actual===null&&stages.length>0&&<details className="cockpit-progress-facts"><summary>{order.display!.actualLabel}</summary><ul>{stages.map(stage=><li key={stage.key}>{JOURNEY_STAGES.find(definition=>definition.key===stage.key)?.label}：{stage.notApplicable?"不适用":stage.ratio===null?"资料待核":`${Math.round(stage.ratio*1000)/10}%`}</li>)}</ul></details>}
     {order.display?.awaitingClosure&&<small>节点已完成，待业务收口</small>}
   </div>;
 }
@@ -28,7 +30,7 @@ export function CockpitHome({data,error,context,onChange}:{data:JourneyResult|nu
     <div className="journey-section-title"><h2>订单总览</h2><span>{data?`共 ${data.total} 个订单`:"正在读取…"}</span>{data&&<span>统计基准：{new Date(data.asOf).toLocaleString("zh-CN",{timeZone:"Asia/Shanghai",hour12:false})}</span>}<span>时间规则待完善</span></div>
     {data?.scopeCounts&&data.scopeCounts.cancelled>0&&<p className="journey-muted">已取消 {data.scopeCounts.cancelled} 单，不计入有效生产订单统计。</p>}
     <div className="cockpit-home-scroll" role="region" aria-label="订单列表，可横向滚动查看全部列" tabIndex={0}><BusinessTable>
-      <thead><tr><th>款图</th><th>款号 / 订单号</th><th>客户 / 类型</th><th>PO 与日期</th><th>当前任务 / 风险</th><th>进度（全单）</th><th>整单状态</th></tr></thead>
+      <thead><tr><th>款图</th><th>款号 / 订单号</th><th>客户 / 类型</th><th>PO 与日期</th><th>当前任务 / 风险</th><th>{context.scope==="development"?"进度（开发）":"进度（全单）"}</th><th>整单状态</th></tr></thead>
       <tbody>{data?.items.map(order=>{
         const working=representativeCockpitNodes(order),node=working[0],display=order.display,earliest=display?.earliestShipmentDate;
         const pos=(order.poDeliveryDates??[]).filter(line=>line.customerWarehouseArrivalDate===earliest);
@@ -39,7 +41,7 @@ export function CockpitHome({data,error,context,onChange}:{data:JourneyResult|nu
           <td><button type="button" className="journey-order-select" onClick={()=>enter(order)}>{order.designStyleNo}</button>{(order.orderNumbers.length>0||order.styleName)&&<small className="cockpit-home-identity-extra" tabIndex={0} title={[...order.orderNumbers,order.styleName].filter(Boolean).join(" · ")}>{[...order.orderNumbers,order.styleName].filter(Boolean).join(" · ")}</small>}<small>跟单：{order.merchandisers.map(person=>person.name??"姓名未登记").join(" / ")||"未指派"}</small></td>
           <td>{order.customer??"客户未登记"}<small>{order.orderId?"大货订单":"产品开发"}</small><small>订购量：{order.orderId?order.lines.length?order.lines.reduce((sum,line)=>sum+line.orderedQuantity,0).toLocaleString():"无可见数量":"未下单"}</small></td>
           <td><strong>{po?.poNumber??"PO 待补"}{order.lines.length>1?`，另 ${order.lines.length-1} 个 PO`:""}</strong><small>出货日期：<span>{earliest??"未登记"}</span></small><small>加工厂交货日：<span>{po?.factoryDeliveryDate??"尚未生效"}</span></small>{display?.missingShipmentDates? <small>有 {display.missingShipmentDates} 个 PO 出货日期待补</small>:null}</td>
-          <td>{node?<button type="button" className="cockpit-home-task" onClick={()=>enter(order,node)}><Task node={node}/>{working.length>1&&<small>另 {working.length-1} 项 · 查看全部</small>}</button>:<span>{display?.mainState==="completed"?"已完成":display?"尚无可见在办节点":"暂无法读取节点"}</span>}{deliveryRisks.length>0&&<div className="cockpit-home-delivery"><DeliveryRisk risk={deliveryRisks[0]!}/>{deliveryRisks.length>1&&<details><summary>另 {deliveryRisks.length-1} 项交期风险</summary>{deliveryRisks.slice(1).map(risk=><DeliveryRisk key={`${risk.lineId}:${risk.kind}`} risk={risk}/>)}</details>}</div>}</td>
+          <td>{display?.mainState==="completed"&&node&&<small className="cockpit-closed-node-context">整单已收口 · 保留的原节点状态</small>}{node?<button type="button" className="cockpit-home-task" onClick={()=>enter(order,node)}><Task node={node}/>{working.length>1&&<small>另 {working.length-1} 项 · 查看全部</small>}</button>:<span>{display?.mainState==="completed"?"已完成":display?"尚无可见在办节点":"暂无法读取节点"}</span>}{deliveryRisks.length>0&&<div className="cockpit-home-delivery"><DeliveryRisk risk={deliveryRisks[0]!}/>{deliveryRisks.length>1&&<details><summary>另 {deliveryRisks.length-1} 项交期风险</summary>{deliveryRisks.slice(1).map(risk=><DeliveryRisk key={`${risk.lineId}:${risk.kind}`} risk={risk}/>)}</details>}</div>}</td>
           <td><ActualProgress order={order}/></td><td>{display?<span className={`cockpit-order-state is-${display.mainState}`}>{stateLabels[display.mainState]}</span>:<span>暂无法读取订单状态</span>}</td>
         </tr>;
       })}</tbody>

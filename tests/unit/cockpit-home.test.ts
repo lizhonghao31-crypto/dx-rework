@@ -21,6 +21,14 @@ it("keeps a real zero distinct from unavailable progress and uses the server's m
   const html=renderToStaticMarkup(createElement(CockpitHome,{data:{ruleVersion:"journey-v2.0",asOf:"2026-10-19T00:00:00Z",page:1,pageSize:15,total:1,summary:{all:1,active:1,dueSoon:0,overdue:0,blocked:0,completed:0},items:[o]},error:"",context:JourneyReturnContextSchema.parse({scope:"production"}),onChange(){}}));
   expect(html).toContain("0.0%");expect(html).toContain("cockpit-order-state is-active");expect(html).toContain("局部逾期");expect(html).toContain("2026-11-30");expect(html).toContain("未上传款图");
 });
+it("shows known stage facts and retained original risks without turning closure into 100 percent",()=>{
+  const o=order([node("original-work",{risks:["overdue"]})]);
+  o.display={ruleVersion:"cockpit-display-v1",mainState:"completed",earliestShipmentDate:null,missingShipmentDates:0,closedAt:null,actualRatio:null,actualLabel:"回货与装箱资料待核",awaitingClosure:false,stages:[{key:"creation",ratio:1,applicable:1,completed:1,notApplicable:false,risk:"normal"},{key:"receiving",ratio:null,applicable:null,completed:null,notApplicable:false,risk:"unknown"}],timeRatio:null,timeLabel:"时间规则待完善"};
+  const html=renderToStaticMarkup(createElement(CockpitHome,{data:{ruleVersion:"journey-v2.0",asOf:"2026-10-19T00:00:00Z",page:1,pageSize:15,total:1,summary:{all:1,active:0,dueSoon:0,overdue:0,blocked:0,completed:1},items:[o]},error:"",context:JourneyReturnContextSchema.parse({scope:"production"}),onChange(){}}));
+  expect(html).toContain("整单已收口 · 保留的原节点状态");expect(html).toContain("original-work");expect(html).toContain("局部逾期");
+  expect(html).toContain("回货与装箱资料待核");expect(html).toContain("100%");expect(html).not.toContain("100.0%");
+  expect(o.display.actualRatio).toBeNull();
+});
 it("keeps independent factory/sample risks and concrete blockers visible without changing the mother state",()=>{
   const o=order([node("development_pattern",{state:"blocked",blockers:[{key:"materials",label:"本轮主布尚未齐料",ownerId:null,record:null},{key:"handover",label:"交接单尚未确认",ownerId:null,record:null}]}),node("production_reporting",{stage:"production",state:"pending"}),node("bulk_ship_sample",{stage:"production",state:"pending"})]);
   o.display={ruleVersion:"cockpit-display-v1",mainState:"active",earliestShipmentDate:"2026-11-30",missingShipmentDates:0,closedAt:null,actualRatio:0,actualLabel:"0.0%",awaitingClosure:false,stages:[],timeRatio:null,timeLabel:"时间规则待完善"};

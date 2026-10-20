@@ -108,8 +108,19 @@ export const classifyFullGatePaths = (inputPaths) => {
   let receivingSensitive = false;
   let businessChainSensitive = false;
   let deploymentSensitive = false;
+  let journeyPg13Compat = false;
 
   for (const path of paths) {
+    if (/^apps\/api\/src\/production-platform\/journey[^/]*\.ts$/.test(path)
+      || path === "apps/api/src/production-platform/identity-routes.ts"
+      || path === "packages/contracts/src/digital-production-journey.ts"
+      || path === "tests/integration/digital-journey-postgres.test.ts"
+      || path === "scripts/ci/journey-pg13-regression.mjs") {
+      journeyPg13Compat = true;
+      businessChainSensitive = true;
+      domains.add("journey-pg13");
+      mappedTests.add("tests/integration/digital-journey-postgres.test.ts");
+    }
     if (isMigration(path)) {
       migrationSensitive = true;
       businessChainSensitive = true;
@@ -185,6 +196,7 @@ export const classifyFullGatePaths = (inputPaths) => {
     receivingSensitive,
     businessChainSensitive,
     deploymentSensitive,
+    journeyPg13Compat,
     dbRequired,
     highRisk,
     domains: [...domains].sort(),
@@ -229,6 +241,7 @@ const runCli = () => {
       ["RECEIVING_SENSITIVE", result.receivingSensitive],
       ["BUSINESS_CHAIN_SENSITIVE", result.businessChainSensitive],
       ["DEPLOYMENT_SENSITIVE", result.deploymentSensitive],
+      ["JOURNEY_PG13_COMPAT", result.journeyPg13Compat],
       ["DB_REQUIRED", result.dbRequired],
       ["FULL_GATE_DOMAINS", result.domains.join(",")],
       ["MAPPED_POSTGRES_TESTS", result.mappedPostgresTests.join(",")],

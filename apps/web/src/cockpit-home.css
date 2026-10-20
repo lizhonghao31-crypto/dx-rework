@@ -1,4 +1,9 @@
 .digital-journey-cockpit[data-view="overview"] {font-size:14px}
+.cockpit-progress-facts{margin-top:4px;max-width:200px;font-size:13px;line-height:1.45}
+.cockpit-progress-facts summary{cursor:pointer;overflow-wrap:anywhere;color:#527096}
+.cockpit-progress-facts ul{padding-left:16px;margin:5px 0}
+.cockpit-progress-facts li{white-space:normal;overflow-wrap:anywhere}
+.cockpit-closed-node-context{display:block;color:#527096;font-weight:600;margin-bottom:4px}
 .digital-journey-cockpit[data-view="overview"] .journey-kpis {gap:10px}
 .digital-journey-cockpit[data-view="overview"] .journey-filters input,.digital-journey-cockpit[data-view="overview"] .journey-filters select {min-height:40px;font-size:16px}
 .digital-journey-cockpit[data-view="overview"] .journey-filters label {font-size:14px}
