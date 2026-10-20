@@ -6,7 +6,7 @@ import {join,resolve} from 'node:path';
 import {createServer} from 'node:http';
 const {chromium}=await import(process.env.PLAYWRIGHT_IMPORT||'playwright');
 const output=await mkdtemp(join(tmpdir(),'dx-task-context-')),directory=process.env.TASK_CONTEXT_EVIDENCE,results=[],errors=[],external=[];
-const cases=['ready','paused','readonly','historical','material-check','material-supply','material-records','material-basis','fabric-director','fabric-worker','fabric-readonly','round-failure','bulk','factory-dispatch','factory-readonly','factory-paused','bulk-paused','tasks-paused','waiting-material'];
+const cases=['ready','paused','readonly','historical','material-check','material-supply','material-records','material-basis','fabric-director','fabric-worker','fabric-readonly','round-failure','bulk','factory-dispatch','factory-readonly','factory-paused','bulk-paused','tasks-paused','waiting-material','bulk-blockers','multiple-blockers'];
 let browser,server,deadline;
 try{
  await build({configFile:false,esbuild:{jsx:'automatic'},define:{'import.meta.env.BASE_URL':'"/"','process.env.NODE_ENV':'"production"'},build:{outDir:output,lib:{entry:resolve('tests/fixtures/erp-task-context.tsx'),name:'TaskContext',formats:['iife']}}});
@@ -38,6 +38,7 @@ try{
     if(name==='fabric-readonly'){assert.equal(await page.getByRole('button',{name:'确认面料决定',exact:true}).count(),0);checks.push('browse/history view does not expose the director write form');}
     if(name==='fabric-worker'){await page.getByRole('button',{name:'本单资料',exact:true}).click();await page.getByRole('button',{name:'面辅料与检测报告',exact:true}).click();await page.getByRole('button',{name:'保存检测报告',exact:true}).waitFor();checks.push('existing authorised current-task report registration stays available; no report written');}
    }
+   if(['bulk-blockers','multiple-blockers'].includes(name)){const text=await page.locator('[aria-label="本轮前置条件"]').innerText();assert.match(text,/TEST 尚未安排办理人/);assert.match(text,/TEST 纸样尚未完成/);assert.match(text,/TEST 系统尚未提供具体业务原因/);assert.match(text,/本单总委派/);assert.match(text,/我的待办/);assert.doesNotMatch(text,/development_clerk|pattern_room_worker/);checks.push('all independent blockers, responsible roles, actual entries and unknown reason remain distinct');}
    const requests=await page.evaluate(()=>window.taskContextFixture.requests);assert.equal(requests.filter(r=>r.method!=='GET').length,0);if(directory)await page.screenshot({path:join(directory,key+'.png'),timeout:5000});results.push({key,viewport,checks,requests});
   }catch(error){if(directory&&!page.isClosed()){try{await writeFile(join(directory,key+'-failure.txt'),await page.locator('body').innerText({timeout:2000}));await writeFile(join(directory,key+'-requests.json'),JSON.stringify(await page.evaluate(()=>window.taskContextFixture?.requests??[]),null,2));await page.screenshot({path:join(directory,key+'-failure.png'),timeout:3000});}catch{/* Preserve failure. */}}throw error;}finally{clearTimeout(deadline);await page.close();}console.log('DONE '+key);
  }

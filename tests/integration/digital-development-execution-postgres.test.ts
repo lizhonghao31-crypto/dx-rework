@@ -219,7 +219,7 @@ run("P06 development execution PostgreSQL", () => {
     await execution.complete(worker(),id,{taskId:cutting.taskId,note:"",attachmentIds:[]},randomUUID());
     const sewing=(await execution.read(worker(),id)).tasks.find(t=>t.taskKind==="development_sewing")!;
     expect(sewing.state).toBe("pending");
-    expect(sewing.unmetConditions.map(item=>item.name)).toEqual(expect.arrayContaining([kind,"主管正式派工"]));
+    expect(sewing.unmetConditions.map(item=>item.name)).toEqual(expect.arrayContaining([kind,"车板执行衔接"]));
     const key=randomUUID(),input={expectedMaterialRevision:0,expectedVersion:version,action:"到货" as const,expectedDate:null,note:"TEST 实物到料"};
     await development.materialEvent(actor(),id,extra.materialId,input,key);
     await development.materialEvent(actor(),id,extra.materialId,input,key);
