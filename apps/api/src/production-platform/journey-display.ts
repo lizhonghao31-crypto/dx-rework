@@ -30,8 +30,13 @@ export function journeyDisplay(order:OrderJourney,asOf:string,terminal:{cancelle
     const risk=current.some(node=>node.risks.includes("overdue"))?"overdue" as const:current.some(node=>node.risks.includes("due_soon"))?"due_soon" as const:unknown||current.some(node=>node.risks.includes("unknown"))?"unknown" as const:"normal" as const;
     return {key:definition.key,ratio:unknown?null:applicable.length?completed/applicable.length:1,applicable:unknown?null:applicable.length,completed:unknown?null:completed,notApplicable:!unknown&&!applicable.length,risk};
   });
-  const actualRatio=stages.some(stage=>stage.ratio===null)?null:stages.reduce((sum,stage)=>sum+stage.ratio!,0)/7;
-  return {ruleVersion:"cockpit-display-v1",mainState,earliestShipmentDate,missingShipmentDates:Math.max(order.lines.length-dates.filter(line=>line.customerWarehouseArrivalDate).length,0),closedAt:terminal.closedAt??null,actualRatio,actualLabel:progressLabel(actualRatio),awaitingClosure:actualRatio===1&&!closed&&!terminal.cancelled,stages,timeRatio:null,timeLabel:"时间规则待完善"};
+  // A development archive has no production mother yet. Its non-applicable bulk
+  // stages cannot supply completed shares to a development progress indicator.
+  const progressStages=order.orderId?stages:stages.filter(stage=>stage.key==="development");
+  const actualRatio=progressStages.some(stage=>stage.ratio===null)?null:progressStages.reduce((sum,stage)=>sum+stage.ratio!,0)/progressStages.length;
+  const unknownLabels=progressStages.filter(stage=>stage.ratio===null).map(stage=>JOURNEY_STAGES.find(definition=>definition.key===stage.key)!.label);
+  const actualLabel=actualRatio===null?`${unknownLabels.join("、")}资料待核`:progressLabel(actualRatio);
+  return {ruleVersion:"cockpit-display-v1",mainState,earliestShipmentDate,missingShipmentDates:Math.max(order.lines.length-dates.filter(line=>line.customerWarehouseArrivalDate).length,0),closedAt:terminal.closedAt??null,actualRatio,actualLabel,awaitingClosure:Boolean(order.orderId)&&actualRatio===1&&!closed&&!terminal.cancelled,stages,timeRatio:null,timeLabel:"时间规则待完善"};
 }
 /** Explicit cockpit scope. Existing workspace consumers keep their legacy selection contract. */
 export function compareCockpitOrders(a:OrderJourney,b:OrderJourney):number {

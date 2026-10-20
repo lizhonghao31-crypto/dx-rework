@@ -6,6 +6,12 @@ import { describe, expect, it } from "vitest";
 import { assertMappedPostgresTests, classifyFullGatePaths, POSTGRES_CASE_SUITES } from "../../scripts/ci/full-gate-risk-map.mjs";
 
 describe("Full Gate sensitive path mapping", () => {
+  it("requires real PG13 Journey reads for query, route, contract and regression changes",()=>{
+    for(const path of ["apps/api/src/production-platform/journey-log.ts","apps/api/src/production-platform/journey-query.ts","apps/api/src/production-platform/identity-routes.ts","packages/contracts/src/digital-production-journey.ts","tests/integration/digital-journey-postgres.test.ts","scripts/ci/journey-pg13-regression.mjs"]){
+      const result=classifyFullGatePaths([path]);expect(result.journeyPg13Compat).toBe(true);expect(result.dbRequired).toBe(true);expect(result.mappedPostgresTests).toContain("tests/integration/digital-journey-postgres.test.ts");
+    }
+    for(const path of ["apps/web/src/cockpit-home.tsx","apps/api/src/receiving/receiving-service.ts","docs/requirements/cockpit-display-v1.0.md"])expect(classifyFullGatePaths([path]).journeyPg13Compat).toBe(false);
+  });
   it.each([
     ["apps/api/src/pattern-room/order-service.ts", "pattern-room", []],
     ["apps/api/src/access/service.ts", "access", ["tests/integration/access-postgres.test.ts"]],

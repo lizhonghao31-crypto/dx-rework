@@ -73,7 +73,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect(summary.items).toHaveLength(5);expect(summary.nextCursor).not.toBeNull();
     const inserted=randomUUID();await db.query("INSERT INTO digital_production_task_events(event_id,task_id,resource_kind,resource_id,event_kind,actor_id,time_quality) VALUES($1,$2,'source',$3,'condition',$4,'缺失')",[inserted,task.taskId,sourceId,clerk]);
     const seen=summary.items.map(item=>item.id);let cursor=summary.nextCursor;
-    while(cursor){const page=await journeys.logs(actor(),sourceId,cursor);expect(page.asOf).toBe(summary.asOf);seen.push(...page.items.map(item=>item.id));cursor=page.nextCursor;}
+    while(cursor){const page=await journeys.logs(actor(),sourceId,cursor);expect(page.asOf).toBe(summary.asOf);expect(page.items.length).toBeGreaterThan(0);expect(page.items.length).toBeLessThanOrEqual(20);if(page.nextCursor)expect(page.items).toHaveLength(20);else expect(page.items).toHaveLength(expected-seen.length);seen.push(...page.items.map(item=>item.id));cursor=page.nextCursor;}
     expect(seen).toHaveLength(expected);expect(new Set(seen).size).toBe(expected);expect(seen).not.toContain(`task:${inserted}`);
     const other=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-COCKPIT-OTHER",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
     await expect(journeys.logs(actor(),other,summary.nextCursor!)).rejects.toMatchObject({statusCode:400});
@@ -340,6 +340,25 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     expect(node.assignmentHistory).toContainEqual(expect.objectContaining({actorId:root,actorName:"TEST-J owner_group",from:null,fromName:null,to:worker,toName:"TEST-J pattern_room_worker"}));
     expect((await tasks.read(actor(),taskId)).identity).toEqual({designStyleNo:"TEST-J-NAMED-HISTORY",customerCode:"PD"});
     await expect(journeys.read(actor(stranger),source.sourceId)).rejects.toMatchObject({statusCode:404});
+  });
+  it("reads the deployed cockpit HTTP detail for Root across direct and source-linked mothers",async()=>{
+    const direct=await identity.createOrder(actor(),input("ROOT-HTTP-DIRECT"),randomUUID());
+    const linkedInput=input("ROOT-HTTP-LINKED");
+    const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:linkedInput.designStyleNo,temporaryStyleNo:linkedInput.temporaryStyleNo,customerCode:linkedInput.customerCode},randomUUID());
+    await publishSource(source.sourceId);
+    const linked=await identity.createOrder(actor(),linkedInput,randomUUID(),source.sourceId);
+    const headers={cookie:`dx_rework_session=${root}`};
+    const emptyLogs=await app.inject({url:`/digital-production/journeys/${direct.productionOrderId}/logs`,headers});
+    expect(emptyLogs.statusCode,emptyLogs.body).toBe(200);expect(emptyLogs.json()).toMatchObject({items:[],nextCursor:null});
+    for(const id of [direct.productionOrderId,linked.productionOrderId,source.sourceId]){
+      const response=await app.inject({url:`/digital-production/journeys/${id}?view=cockpit`,headers});
+      expect(response.statusCode,response.body).toBe(200);
+      expect(response.headers['cache-control']).toBe('no-store');
+      expect(response.json()).toMatchObject({display:{ruleVersion:'cockpit-display-v1'},operationLog:{items:expect.any(Array)}});
+    }
+    const list=await app.inject({url:'/digital-production/journeys?scope=production&search=ROOT-HTTP',headers});
+    expect(list.statusCode,list.body).toBe(200);expect(list.json().items).toHaveLength(2);
+    expect(list.json().items.every((item:{display?:unknown})=>item.display)).toBe(true);
   });
   it("validates read routes and preserves no-store and permission rejection",async()=>{
     const order=await identity.createOrder(actor(),input("HTTP"),randomUUID());
