@@ -1,3 +1,4 @@
+import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {createHistoricalPatternFixture} from "../helpers/historical-pattern-fixture.js";
 import {AccessMasterDataService} from "../../apps/api/src/access/service.js";
 import { resolveMiscAssociation } from "../../apps/api/src/pattern-room/misc-associations.js";
@@ -77,6 +78,23 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   await expect(service.get(workerActor,pattern.orderId,{round:hidden})).rejects.toMatchObject({statusCode:404});
   pattern=await service.transfer(rootActor,pattern.orderId,{...action(),segmentId:pattern.rounds.find(round=>round.roundId===current)!.segments.at(-1)!.segmentId,personId:rootPerson.personId,amount:'0',reason:'TEST original current-assignment scope ends'},randomUUID());
   expect((await service.related(workerActor,{sourceId:source.sourceId,page:1})).items.map(item=>item.orderId)).not.toContain(pattern.orderId);
+  // P05: association-only historical work has neither a document nor a digital
+  // task/arrangement. Preserve its real native transfer and reject non-managers.
+  expect((await db.query('SELECT count(*)::int n FROM digital_development_documents WHERE source_id=$1',[source.sourceId])).rows[0].n).toBe(0);
+  const transfer={...action(),segmentId:pattern.rounds.find(round=>round.roundId===current)!.segments.at(-1)!.segmentId,personId:workerPerson.personId,amount:'0',reason:'TEST historical native authority remains valid'};
+  await expect(service.transfer(actor(scopedWorker,['pattern_room_worker']),pattern.orderId,transfer,randomUUID())).rejects.toMatchObject({statusCode:403});
+  const version=pattern.version;pattern=await service.transfer(actor(supervisor,['pattern_room_supervisor']),pattern.orderId,transfer,randomUUID());expect(pattern.version).toBe(version+1);
+  expect((await db.query('SELECT count(*)::int n FROM digital_development_round_arrangements WHERE source_id=$1',[source.sourceId])).rows[0].n).toBe(0);
+  expect((await db.query('SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1',[source.sourceId])).rows[0].n).toBe(0);
+  // Deliberate incomplete legacy-data fixture, not a completed business step:
+  // even one real digital task makes a missing document ineligible for the skip.
+  const client=await db.connect();try{await client.query('BEGIN');await new DigitalProductionTaskService(db).createWithClient(client,rootActor,{resource:{kind:'source',id:source.sourceId},kind:'development_materials',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:null});await client.query('COMMIT');}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+  const before=await service.get(rootActor,pattern.orderId),invalidTransfer={...action(),segmentId:pattern.rounds.find(round=>round.roundId===current)!.segments.at(-1)!.segmentId,personId:rootPerson.personId,amount:'0',reason:'TEST missing published basis must roll back'};
+  await expect(service.transfer(actor(supervisor,['pattern_room_supervisor']),pattern.orderId,invalidTransfer,randomUUID())).rejects.toMatchObject({statusCode:409});
+  const withoutLiveClock=(value:typeof before)=>({...value,rounds:value.rounds.map(round=>({...round,nodes:round.nodes.map(node=>({...node,elapsedSeconds:0}))}))});
+  expect(withoutLiveClock(await service.get(rootActor,pattern.orderId))).toEqual(withoutLiveClock(before));
+
+
  },120000);
  it('rejects standalone new pattern for Root/designer/other roles and the old POST, while advertising no create action',async()=>{
   for(const context of [actor(),actor(root,['root_superuser']),actor(merch,['order_merchandiser']),actor(worker,['pattern_room_worker']),actor(supervisor,['pattern_room_supervisor'])])await expect(service.create(context,{},randomUUID())).rejects.toMatchObject({statusCode:403});
