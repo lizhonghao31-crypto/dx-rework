@@ -26,6 +26,11 @@ export function todoDestination(descriptor:TodoRouteDescriptor):string {
       query.set("instruction", route.entityId);
       if (route.developmentRound) query.set("instructionVersion", String(route.developmentRound));
       break;
+    case "digital_development_arrangement":
+      path = "/ui/digital-production";
+      query.set("arrangement", route.entityId);
+      if(route.developmentRound)query.set("round",String(route.developmentRound));
+      break;
     case "digital_development":
       path = "/ui/digital-production";
       query.set("development", route.entityId);

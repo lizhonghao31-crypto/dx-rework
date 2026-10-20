@@ -1,3 +1,6 @@
+import {arrangementTodos,hiddenNativeDevelopmentTodo} from "./development-arrangement-todos.js";
+import {arrangementsAvailable} from "./development-arrangement.js";
+import {DEVELOPMENT_ARRANGEABLE_KINDS} from "@dx-rework/contracts/development-arrangement";
 import { hasRequiredWarehouseRole } from "@dx-rework/contracts";
 import { projectDevelopmentNotices } from "./development-notifications.js";
 import { patternOrderScopeSql } from "../pattern-room/order-authority.js";
@@ -97,6 +100,7 @@ export class DigitalProductionNotificationService {
   async runOnce():Promise<void> {
     await this.transaction(async client=>{
       const people=await this.people(client);
+      const unified=await arrangementsAvailable(client);
       if ((await client.query("SELECT to_regclass('digital_development_documents') AS table_name")).rows[0]?.table_name) await projectDevelopmentNotices(client,people);
       const intents=(await client.query(`SELECT i.* FROM digital_production_event_intents i
         WHERE NOT EXISTS(SELECT 1 FROM digital_production_notification_projection p WHERE p.event_id=i.event_id)
@@ -113,7 +117,7 @@ export class DigitalProductionNotificationService {
       const tasks=(await client.query<Task>(`${TASKS} WHERE ${ACTIVE}`)).rows;
       for(const task of tasks){
         // Repair an unassigned/disabled operator as an upstream routing task; never broadcast to all craftspeople.
-        if(!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role)))
+        if(!(unified&&task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind))&&!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role)))
           await this.notice(client,{key:`missing:${task.task_id}:${task.assignee_id??'none'}`,taskId:task.task_id,kind:"created"},(await this.recipients(client,task,"created",people)).map(p=>p.actorId));
         if(task.state==="pending"||!task.due_at)continue;
         const now=Date.now(),kind=new Date(task.due_at).getTime()<=now?"overdue":task.warning_at&&new Date(task.warning_at).getTime()<=now?"warning":null;
@@ -135,6 +139,7 @@ export class DigitalProductionNotificationService {
       for(const row of development)if(!rows.some(existing=>existing.todo_id===row.todo_id))rows.push(row);
     }
     for(const row of rows){
+      if(await hiddenNativeDevelopmentTodo(client,row.route_descriptor))continue;
       const kind=row.todo_type==="information"?"information":"ready";
       await this.notice(client,{key:`child:${row.source_event_id}:${row.todo_id}`,todoId:row.todo_id,kind,sourceEventId:row.source_event_id},[row.recipient_user_id]);
       if(row.todo_type!=="information"&&row.due_at&&new Date(row.due_at).getTime()<=Date.now())
@@ -145,9 +150,11 @@ export class DigitalProductionNotificationService {
     const people=await this.people(this.database);
     if(!people.some(p=>p.actorId===actor.actorId))return [];
     const tasks=(await this.database.query<Task>(`${TASKS} WHERE ${ACTIVE} ORDER BY d.due_at NULLS LAST,t.created_at,t.task_id`)).rows;
-    const result:TodoResponse[]=[];
+    const unified=await arrangementsAvailable(this.database);
+    const result:TodoResponse[]=unified?await arrangementTodos(this.database,actor):[];
     for(const task of tasks){
       const missing=!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role));
+      if(unified&&missing&&task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind))continue;
       if(task.state==="pending"&&!missing)continue;
       if(!(await this.recipients(this.database,task,"ready",people)).some(p=>p.actorId===actor.actorId))continue;
       // An effective personal action carries only its exact parent's style identity.
@@ -189,17 +196,17 @@ export class DigitalProductionNotificationService {
       if(event.deadline_revision_id&&String(event.deadline_revision_id)!==String(task.revision_id))return null;
       if(event.event_kind==="warning"&&task.due_at&&new Date(task.due_at).getTime()<=Date.now())return null;
       const missing=!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role));
-      if(event.event_kind==="created"&&!missing)return null;
+      if(event.event_kind==="created"&&(!missing||task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind)&&await arrangementsAvailable(database)))return null;
       if(!(await this.recipients(database,task,event.event_kind,people)).some(p=>p.actorId===actor.actorId))return null;
       actionable=event.event_kind!=="completed"&&(missing||await new DigitalProductionAccessPolicy(database).allowed(actor,"task",task.task_id,"execute"));
       if(actionable&&!missing&&task.source_id&&task.task_kind.startsWith("development_"))ownDevelopmentTask=task;
       if(actionable&&!missing&&task.production_order_id)ownOrderTask=task;
       title=`${task.label} · ${missing?"待分配主办":labels[event.event_kind]??"事项更新"}`;
       contextTarget=task.production_order_id?{kind:"order",id:task.production_order_id}:task.source_id?{kind:"source",id:task.source_id}:null;
-      route={routeName:"digital_production_task",entityId:task.task_id,todoId:task.task_id};
+      route=missing&&task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind)&&await arrangementsAvailable(database)?{routeName:"digital_development_arrangement",entityId:task.source_id,todoId:task.task_id,developmentRound:(task as Task & {route_version:number}).route_version}:{routeName:"digital_production_task",entityId:task.task_id,todoId:task.task_id};
     }else{
       const row=(await database.query("SELECT * FROM rework_todos WHERE todo_id=$1 AND recipient_user_id=$2 AND status IN ('pending','blocked_recipient')",[event.todo_id,actor.actorId])).rows[0];
-      if(!row)return null;
+      if(!row||await hiddenNativeDevelopmentTodo(database,row.route_descriptor))return null;
       const parent=await digitalTodoTarget(database,row.route_descriptor);
       if(!parent)return null;
       if(row.todo_type==="information"&&!isRootActor(actor)&&!await new DigitalProductionAccessPolicy(database).allowed(people.find(p=>p.actorId===actor.actorId)!,parent.kind,parent.id,"technical"))return null;

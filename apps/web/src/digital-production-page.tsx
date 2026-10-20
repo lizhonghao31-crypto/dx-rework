@@ -1,3 +1,4 @@
+import {DevelopmentArrangementPage} from "./development-arrangement-page.js";
 import {customerPoDateLabel} from "./digital-workspace-copy.js";
 import {BulkTaskWorkbench} from "./bulk-task-workbench.js";
 import {OrderDocumentContainer} from "./order-document-container.js";
@@ -141,6 +142,7 @@ export function DigitalProductionPage() {
     case "instruction": detail = <OrderDocumentContainer key={`instruction:${route.id}:${route.version}`} initial={{kind:"instruction",id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;
     case "budget": detail = <OrderDocumentContainer key={`budget:${route.id}:${route.version}`} initial={{kind:"budget",id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;
     case "order": detail = <OrderDetail id={route.id} />; break;
+    case "arrangement": detail = <DevelopmentArrangementPage sourceId={route.id} round={route.version} onClose={() => void closeDetail()} />; break;
     case "development": detail = <OrderDocumentContainer key={`development:${route.id}:${route.version}`} initial={{kind:"development",id:route.id,version:route.version}} onClose={() => void closeDetail()} />; break;
     case "task": detail = <TaskDetail id={route.id} />; break;
   }

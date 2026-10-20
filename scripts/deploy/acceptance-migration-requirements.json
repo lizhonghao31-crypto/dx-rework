@@ -916,5 +916,25 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0246_development_round_arrangements": {
+    "checksum": "13abe894f8ca7ddb532565cd939a591d6e6dc7e79db802157764c486a761dfd6",
+    "tables": [
+      "digital_development_round_arrangements"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "digital_production_sources"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_development_round_arrangements"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }

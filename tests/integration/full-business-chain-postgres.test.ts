@@ -307,6 +307,9 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     // reviewed bootstrap path used by integration fixtures; all later actions
     // use normal production authorization functions from the current schema.
     const users = [
+      [randomUUID(), "开发文员测试", "development_clerk"],
+      [randomUUID(), "板房尾查测试", "pattern_room_tail_inspector"],
+      [randomUUID(), "TEST未映射师傅", "pattern_room_worker"],
       [ids.receivingWarehouse, "差异权限仓管", "warehouse_receiver"],
       [ids.secondOrderMerchant, "第二订单跟单", "order_merchandiser"],
       [ids.ownerOne, "老板一", "owner_group"],

@@ -1,3 +1,6 @@
+import {DEVELOPMENT_ARRANGEABLE_KINDS} from "@dx-rework/contracts/development-arrangement";
+import {activateInitialDevelopmentExecution} from "./development-native-activation.js";
+import {TodoService} from "../todos/service.js";
 import {taskDocuments,resourceDocuments} from "./task-documents.js";
 import {developmentTaskBlockers} from "./development-task-blockers.js";
 import {materialReadiness} from "./development-material-readiness.js";
@@ -18,7 +21,7 @@ type Resource = { kind: "order" | "source"; id: string };
 type TimeQuality = "现场登记" | "补报未核实" | "已核实" | "缺失";
 const fail = (message: string): never => { throw new ApplicationError("DIGITAL_TASK_CONFLICT", message, 409); };
 const iso = (value: Date | string | null) => value === null ? null : new Date(value).toISOString();
-const requiresDevelopmentAssignee = (task: { source_id: string | null; task_kind: string }) => Boolean(task.source_id) && ["development_pattern", "development_cutting", "development_sewing"].includes(task.task_kind);
+const requiresDevelopmentAssignee = async (client:PoolClient,task: { source_id: string | null; task_kind: string }) => Boolean(task.source_id) && (["development_pattern","development_cutting","development_sewing"].includes(task.task_kind)||(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind)&&Boolean((await client.query("SELECT to_regclass('digital_development_round_arrangements') AS relation")).rows[0]?.relation));
 export const DIGITAL_CONDITION_KEYS = ["customer_confirmed", "owner_approved", "materials_ready", "handover_received", "pattern_ready", "preshrink_ready", "qc_approved", "all_po_complete", "factory_arrived", "washing_finished", "pattern_assignment_ready", "business_recorded"] as const;
 const REQUIRED_ACTIVATION: Partial<Record<DigitalTaskKind, readonly typeof DIGITAL_CONDITION_KEYS[number][]>> = {
   development_pattern: ["materials_ready", "handover_received"], development_cutting: ["handover_received"], development_sewing: ["materials_ready", "handover_received"],
@@ -89,7 +92,11 @@ export class DigitalProductionTaskService {
   }
   private async activate(client: PoolClient, actor: TrustedActorContext, id: string, occurredAt: string | null, quality: TimeQuality) {
     const task = await this.task(client, id, true);
-    if (requiresDevelopmentAssignee(task) && !task.assignee_id) return false;
+    if (await requiresDevelopmentAssignee(client,task) && (!task.assignee_id||(await client.query("SELECT to_regclass('digital_development_round_arrangements') AS relation")).rows[0]?.relation&&!await new DigitalProductionAccessPolicy(client).activeRole(task.assignee_id,task.required_role))) return false;
+    if(task.task_kind==="development_sewing"&&await activateInitialDevelopmentExecution(client,actor,id,new TodoService(this.database))){
+      await client.query("UPDATE digital_production_task_conditions SET satisfied=true,occurred_at=CURRENT_TIMESTAMP WHERE task_id=$1 AND condition_key='pattern_assignment_ready'",[id]);
+      await this.event(client,actor,id,this.resource(task),"condition",new Date().toISOString(),"现场登记",{condition:"pattern_assignment_ready",satisfied:true,note:"本轮安排与实际前置齐备，首次执行已衔接"});
+    }
     const restoring=task.state==='blocked'&&task.blocked_reason==='前置条件未满足';
     if ((task.state !== "pending"&&!restoring) || !await this.conditionsReady(client, id)) return false;
     const lifecycle = (await client.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2", [this.resource(task).kind, this.resource(task).id])).rows[0]?.state;
@@ -109,7 +116,7 @@ export class DigitalProductionTaskService {
       UNION ALL SELECT p.completed_at,p.completed_quality FROM digital_production_task_dependencies d JOIN digital_production_tasks p ON p.task_id=d.predecessor_id WHERE d.task_id=$1
       UNION ALL SELECT occurred_at,time_quality FROM digital_production_task_events
         WHERE task_id=$1 AND event_kind='reassigned' AND $2::boolean
-      ) facts`, [id, requiresDevelopmentAssignee(task)])).rows[0];
+      ) facts`, [id, await requiresDevelopmentAssignee(client,task)])).rows[0];
     if (facts.has_unknown) occurredAt = null;
     else if (facts.count > 0) {occurredAt = iso(facts.latest_at);quality=facts.has_unverified?'补报未核实':facts.all_verified?'已核实':'现场登记';}
     if (occurredAt === null) quality = "缺失";
@@ -260,11 +267,8 @@ export class DigitalProductionTaskService {
   }
   async refreshBusinessConditionsWithClient(client:PoolClient,actor:TrustedActorContext,id:string){
     const task=await this.task(client,id,true);await this.active(client,this.resource(task));
-    if(task.state==='pending'){await this.activate(client,actor,id,null,'缺失');return;}
-    if(task.state==='blocked'&&task.blocked_reason==='前置条件未满足'&&(!requiresDevelopmentAssignee(task)||task.assignee_id)&&await this.conditionsReady(client,id)){
-      await client.query("UPDATE digital_production_tasks SET state='ready',blocked_reason=NULL WHERE task_id=$1",[id]);
-      await this.event(client,actor,id,this.resource(task),'unblocked',new Date().toISOString(),'现场登记',{note:'业务前置恢复，保留原进入时间'});
-    }
+    if(task.state==='pending'||task.state==='blocked'&&task.blocked_reason==='前置条件未满足'){await this.activate(client,actor,id,null,'缺失');return;}
+
   }
   async handover(actor: TrustedActorContext, id: string, input: { occurredAt?: string | null | undefined; note: string }, key: string) {
     return this.transaction(async client => {
@@ -294,19 +298,20 @@ export class DigitalProductionTaskService {
     return this.transaction(async client => {
       const task = await this.task(client, id, true);
       if (!isDigitalLeader(actor) && !isDigitalTechnicalManager(actor) && !actor.actorRoles.includes("development_clerk")) digitalForbidden();
+      if(await requiresDevelopmentAssignee(client,task)&&(await client.query("SELECT to_regclass('digital_development_round_arrangements') AS relation")).rows[0]?.relation)fail("请在本单总委派页改派，填写原因并核对当前安排。");
       return this.command(client, actor, `task-reassign:${id}`, key, { assigneeId }, async () => {
         if (['completed','cancelled'].includes(task.state)) fail("已结束任务不可日常改派");
         const result = await reassignDigitalTask(client, actor, id, assigneeId);
         await this.event(client, actor, id, this.resource(task), "reassigned", new Date().toISOString(), "现场登记", { previousAssigneeId: task.assignee_id, assigneeId });
         await this.refreshDevelopmentMaterialCondition(client,actor,id);
-        if (requiresDevelopmentAssignee(task)) await this.activate(client, actor, id, new Date().toISOString(), "现场登记");
+        if (await requiresDevelopmentAssignee(client,task)) await this.activate(client, actor, id, new Date().toISOString(), "现场登记");
         return result;
       });
     });
   }
   private async refreshDevelopmentMaterialCondition(client:PoolClient,actor:TrustedActorContext,id:string){
     const task=await this.task(client,id);
-    if(!requiresDevelopmentAssignee(task)||['completed','cancelled'].includes(task.state))return;
+    if(!['development_pattern','development_cutting','development_sewing'].includes(task.task_kind)||['completed','cancelled'].includes(task.state))return;
     if(!(await client.query("SELECT to_regclass('digital_development_execution_facts') AS relation")).rows[0]?.relation)return;
     if(!(await client.query("SELECT 1 FROM digital_development_documents WHERE source_id=$1 AND status='published'",[task.source_id])).rowCount)return;
     const readiness=await materialReadiness(client,task.source_id,task.route_version);
@@ -442,7 +447,7 @@ export class DigitalProductionTaskService {
     const task=await this.task(client,id,true);if(['completed','cancelled'].includes(task.state))fail("已结束任务不可改派");
     await reassignDigitalTask(client,actor,id,assigneeId);await this.event(client,actor,id,this.resource(task),"reassigned",new Date().toISOString(),"现场登记",{assigneeId});
     await this.refreshDevelopmentMaterialCondition(client,actor,id);
-    if (requiresDevelopmentAssignee(task)) await this.activate(client,actor,id,new Date().toISOString(),"现场登记");
+    if (await requiresDevelopmentAssignee(client,task)) await this.activate(client,actor,id,new Date().toISOString(),"现场登记");
   }
   async supersedeBulkTasksWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string){
     // Internal adapter only: the source/approval command already authorized its actor.

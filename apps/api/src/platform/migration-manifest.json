@@ -1019,6 +1019,10 @@
     {
       "version": "0245_development_pattern_result_attachments",
       "checksum": "0d0b85f6f13ba9962c9f4b6fad4bdb73bceafd5ced2202b32ae343a25083d695"
+    },
+    {
+      "version": "0246_development_round_arrangements",
+      "checksum": "13abe894f8ca7ddb532565cd939a591d6e6dc7e79db802157764c486a761dfd6"
     }
   ]
 }

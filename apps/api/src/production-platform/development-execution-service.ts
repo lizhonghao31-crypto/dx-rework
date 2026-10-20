@@ -1,3 +1,5 @@
+import type {DevelopmentArrangementInput} from "@dx-rework/contracts/development-arrangement";
+import {readArrangement,saveArrangement,arrangementsAvailable} from "./development-arrangement.js";
 import {reuseJourneySnapshotReads} from "./journey-snapshot-reads.js";
 import {materialReadiness,materialCheckError} from "./development-material-readiness.js";
 import { BulkPreparationService } from "./bulk-preparation-service.js";
@@ -46,7 +48,7 @@ export class DevelopmentExecutionService {
     const readiness=sheet.document?await materialReadiness(db,sourceId,currentRound):null;
     const supplementTask=readiness?.sewingMissing.length?tasks.filter(task=>task.routeVersion===currentRound&&task.state==="completed"&&task.canExecute&&["development_materials","development_material_recheck"].includes(task.taskKind)).at(-1):null;
 
-    return {canConfirmExecution:isRootActor(actor)||actor.actorRoles.includes("pattern_room_supervisor"),sheet,materialReadiness:readiness?.materials??[],supplementCheckTaskId:supplementTask?.taskId??null,nextSteps,dispatch,tasks,routeFacts,patternOrder,patternPreparation,facts:await this.facts(db,sourceId),canReportFabric:isRootActor(actor)||actor.actorRoles.some(role=>["pattern_room_worker","pattern_room_supervisor","order_merchandiser"].includes(role)),canDispatch:isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes("development_clerk"),canDecideFabric:isRootActor(actor)||actor.actorRoles.includes("production_management")};
+    return {unifiedArrangement:await arrangementsAvailable(db),arrangement:await readArrangement(db,actor,sourceId),canConfirmExecution:isRootActor(actor)||actor.actorRoles.includes("pattern_room_supervisor"),sheet,materialReadiness:readiness?.materials??[],supplementCheckTaskId:supplementTask?.taskId??null,nextSteps,dispatch,tasks,routeFacts,patternOrder,patternPreparation,facts:await this.facts(db,sourceId),canReportFabric:isRootActor(actor)||actor.actorRoles.some(role=>["pattern_room_worker","pattern_room_supervisor","order_merchandiser"].includes(role)),canDispatch:isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes("development_clerk"),canDecideFabric:isRootActor(actor)||actor.actorRoles.includes("production_management")};
   }
   private async command(actor:TrustedActorContext,sourceId:string,kind:string,key:string,input:unknown,action:(db:PoolClient)=>Promise<unknown>){
     if(!this.enabled)digitalForbidden();if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail("缺少操作标识");
@@ -62,7 +64,11 @@ export class DevelopmentExecutionService {
     }catch(error){await db.query("ROLLBACK");throw error;}finally{db.release();}
   }
   private async fact(db:PoolClient,actor:TrustedActorContext,sourceId:string,taskId:string|null,kind:string,payload:unknown){const id=randomUUID();await db.query("INSERT INTO digital_development_execution_facts(fact_id,source_id,task_id,kind,payload,actor_id) VALUES($1,$2,$3,$4,$5,$6)",[id,sourceId,taskId,kind,JSON.stringify(payload),actor.actorId]);return id;}
+  async arrange(actor:TrustedActorContext,sourceId:string,input:DevelopmentArrangementInput,key:string){
+    return this.command(actor,sourceId,"arrangement",key,input,db=>saveArrangement(db,this.database,actor,sourceId,input));
+  }
   async dispatch(actor:TrustedActorContext,sourceId:string,input:DevelopmentDispatch,key:string){
+    if(await arrangementsAvailable(this.database))fail("人员安排已统一到本单总委派页，请从我的待办打开“安排本轮师傅”。");
     if(!isDigitalLeader(actor)&&!isDigitalTechnicalManager(actor)&&!actor.actorRoles.includes("development_clerk"))digitalForbidden();
     return this.command(actor,sourceId,"dispatch",key,input,async db=>{
       const before=(await db.query("SELECT * FROM digital_development_dispatch WHERE source_id=$1 FOR UPDATE",[sourceId])).rows[0];if((before?.version??0)!==input.expectedVersion)fail("派工已更新，请刷新");

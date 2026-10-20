@@ -47,6 +47,7 @@ function fixture() {
     else if (sql.startsWith("SELECT 1 FROM digital_production_task_conditions")) found = [{}];
     else if (sql.startsWith("SELECT condition_key FROM digital_production_task_conditions")) found = [];
     else if (sql.startsWith("SELECT p.task_id,p.state,a.task_kind")) found = [];
+    else if (sql.includes("to_regclass('digital_development_round_arrangements')")) found = [{relation:null}];
     else if (sql.includes("to_regclass('digital_development_execution_facts')")) found = [{relation:null}];
     else if (sql.startsWith("SELECT payload->>'priority'")) found = [];
     else if (sql.startsWith("SELECT event_id AS")) found = [{ eventId: randomUUID(), kind: "ready", actorName: "TEST历史主办" }];
