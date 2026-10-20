@@ -21,7 +21,7 @@ import {digitalTodoTarget} from '../../apps/api/src/production-platform/notifica
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
 import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
 import type {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
-export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionService,root:TrustedActorContext,workerId:string,workerPersonId:string,qc:TrustedActorContext,replacementWorkerId:string,legacyMaking?:"tail"|"native",transferOnly=false){
+export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionService,root:TrustedActorContext,workerId:string,workerPersonId:string,qc:TrustedActorContext,replacementWorkerId:string,legacyMaking?:"tail"|"native",transferOnly:false|true|"authority"=false){
  const native=new PatternRoomOrderService(db,todos,{ordersEnabled:true}),execution=new DevelopmentExecutionService(db,true,native),forms=new DigitalDevelopmentService(db,true,native),identity=new DigitalProductionIdentityService(db,true);
  const routes=legacyMaking||transferOnly?([['无','免洗']] as const):([['无','免洗'],['印花','内洗'],['绣花','外洗'],['印绣花','免洗']] as const);
  for(const [craft,washing]of routes){
@@ -147,7 +147,7 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
     const change=await arrangementInput(db,execution,clerk,sourceId,workerId);change.entries.find(row=>row.kind==='development_sewing')!.assigneeId=replacementWorkerId;change.entries.find(row=>row.kind==='development_sewing')!.reason='TEST不可覆盖工资执行段';
     await expect(execution.arrange(clerk,sourceId,change,randomUUID())).rejects.toThrow('换人分段');
   }
-  if(transferOnly){await exerciseDevelopmentTransfer(db,execution,native,root,clerk,sourceId,order.orderId,workerId,replacementWorkerId);return;}
+  if(transferOnly){await exerciseDevelopmentTransfer(db,execution,native,root,clerk,sourceId,order.orderId,workerId,replacementWorkerId,transferOnly==="authority");return;}
   const executor:TrustedActorContext={actorId:executorId,actorRoles:['pattern_room_worker'],authorizationCapability:'pattern_room:orders:complete',authorizationCapabilities:['pattern_room:orders:complete','pattern_room:orders:view','digital_production:view'],requestId:randomUUID()};
   const resultId=randomUUID();
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-sewing.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[resultId,`r2-pr04/${resultId}`,'c'.repeat(64),executorId]);

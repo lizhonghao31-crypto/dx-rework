@@ -1,3 +1,4 @@
+import {isNativeRootSewingRecipient} from './development-native-recipient.js';
 import {randomUUID} from "node:crypto";
 import type {Pool,PoolClient} from "pg";
 import {DEVELOPMENT_ARRANGEABLE_KINDS,type DevelopmentArrangement,type DevelopmentArrangementInput} from "@dx-rework/contracts/development-arrangement";
@@ -51,7 +52,7 @@ export async function readArrangement(db:DB,actor:TrustedActorContext,sourceId:s
     const requiredRole=DIGITAL_TASK_ROLES[kind as DigitalTaskKind];
     const label=(await db.query("SELECT label FROM digital_production_deadline_policies WHERE node_key=$1 ORDER BY version DESC LIMIT 1",[kind])).rows[0]?.label??kind;
     const assigneeName=assigneeId?(await db.query("SELECT display_name FROM app_users WHERE id=$1",[assigneeId])).rows[0]?.display_name??null:null;
-    rows.push({kind,label,requiredRole,assigneeId,assigneeName,valid:Boolean(assigneeId&&await policy.activeRole(assigneeId,requiredRole)),taskId:task?.task_id??null,state:task?.state??null,editable:!task||!["completed","cancelled"].includes(task.state)});
+    rows.push({kind,label,requiredRole,assigneeId,assigneeName,valid:Boolean(assigneeId&&(await policy.activeRole(assigneeId,requiredRole)||kind==='development_sewing'&&await isNativeRootSewingRecipient(db,sourceId,assigneeId))),taskId:task?.task_id??null,state:task?.state??null,editable:!task||!["completed","cancelled"].includes(task.state)});
   }
   return {roundNumber:round,documentVersion:document.version,version:plan?.version??0,managerId,managerName,canEdit:Boolean(readyToArrange&&(!managerId||managerId===actor.actorId||isRootActor(actor))),canTakeOver:isRootActor(actor)||actor.actorRoles.includes("pattern_room_supervisor")&&await policy.activeRole(actor.actorId,"pattern_room_supervisor"),readyToArrange:Boolean(readyToArrange),unavailableReason,rows};
 }
@@ -82,7 +83,7 @@ export async function saveArrangement(db:PoolClient,database:Pool,actor:TrustedA
       conflict(`${row.label}已被办理或改派。本次未保存，请核对当前记录。`);
     if(!row.editable&&inputRow.assigneeId!==row.assigneeId)conflict(`${row.label}已结束，不能改写历史人员。`);
     if(input.management!=="keep"&&inputRow.assigneeId!==row.assigneeId)conflict("接管或交回不能同时改派人员，请先单独保存安排。");
-    if(input.management==="keep"&&row.editable&&inputRow.assigneeId&&!await policy.lockActiveRole(inputRow.assigneeId,row.requiredRole))
+    if(input.management==="keep"&&row.editable&&inputRow.assigneeId&&!await policy.lockActiveRole(inputRow.assigneeId,row.requiredRole)&&!(row.kind==='development_sewing'&&row.assigneeId===inputRow.assigneeId&&await isNativeRootSewingRecipient(db,sourceId,inputRow.assigneeId)))
       conflict(`${row.label}所选人员已不可安排。请重新选择有效岗位人员。`);
     if(row.taskId&&row.assigneeId!==inputRow.assigneeId&&row.assigneeId&&!inputRow.reason)
       conflict(`${row.label}已安排人员，请明确填写本次改派原因。`);

@@ -7,12 +7,40 @@ import type {PatternRoomOrderService} from '../../apps/api/src/pattern-room/orde
 import {DigitalProductionTaskService} from '../../apps/api/src/production-platform/task-service.js';
 import {DigitalProductionNotificationService} from '../../apps/api/src/production-platform/notification-service.js';
 import {TodoService} from '../../apps/api/src/todos/service.js';
-export async function exerciseDevelopmentTransfer(db:Pool,execution:DevelopmentExecutionService,native:PatternRoomOrderService,root:TrustedActorContext,clerk:TrustedActorContext,sourceId:string,orderId:string,workerId:string,replacementId:string){
+import {AccessMasterDataService} from '../../apps/api/src/access/service.js';
+import {arrangementInput} from './development-arrangement-fixture.js';
+export async function exerciseDevelopmentTransfer(db:Pool,execution:DevelopmentExecutionService,native:PatternRoomOrderService,root:TrustedActorContext,clerk:TrustedActorContext,sourceId:string,orderId:string,workerId:string,replacementId:string,authorityOnly=false){
  const initial=await execution.read(root,sourceId),plan=initial.arrangement!,sewing=plan.rows.find(row=>row.kind==='development_sewing')!;
  const order=await native.get(root,orderId),round=order.rounds.find(row=>row.roundId===order.currentRoundId)!,segment=round.segments.at(-1)!;
  const person=(await db.query('SELECT person_id FROM business_people WHERE app_user_id=$1 AND active ORDER BY person_id LIMIT 1',[replacementId])).rows[0];if(!person)throw Error('TEST replacement master-data fixture missing');
  const body={orderId,roundId:order.currentRoundId,version:order.version,segmentId:segment.segmentId,personId:person.person_id,amount:'0.000',reason:'TEST-P05实际换人，原工人无本段工作',roundNumber:plan.roundNumber,expectedDocumentVersion:plan.documentVersion,expectedArrangementVersion:plan.version,expectedTask:{taskId:sewing.taskId!,state:sewing.state!,assigneeId:sewing.assigneeId}};
  const version=async()=>(await native.get(root,orderId)).version;
+ if(authorityOnly){
+ // Native authority remains valid even while another authorized identity owns
+ // daily arrangements. Synchronization preserves that manager and other rows.
+ const takeover=await arrangementInput(db,execution,root,sourceId,workerId);
+ await execution.arrange(root,sourceId,{...takeover,management:'takeover',managementReason:'TEST Root保留安排管理，主管仍可合法原执行换人'},randomUUID());
+ const supervisorId=(await db.query("SELECT user_id FROM user_role_assignments WHERE role_code='pattern_room_supervisor' AND revoked_at IS NULL LIMIT 1")).rows[0].user_id;
+ const supervisor:TrustedActorContext={...root,actorId:supervisorId,actorRoles:['pattern_room_supervisor'],authorizationCapability:'pattern_room:orders:transfer',authorizationCapabilities:['pattern_room:orders:view','pattern_room:orders:transfer','digital_production:view','todo:view']};
+ const tasks=new DigitalProductionTaskService(db);const worker=(id:string):TrustedActorContext=>({actorId:id,actorRoles:['pattern_room_worker'],authorizationCapability:'todo:view',authorizationCapabilities:['todo:view','digital_production:view','pattern_room:orders:view','pattern_room:orders:complete'],requestId:randomUUID()});
+ const managed=await execution.read(root,sourceId),managedPlan=managed.arrangement!,managedTask=managedPlan.rows.find(r=>r.kind==='development_sewing')!,priorNative=await native.get(root,orderId),priorSegment=priorNative.rounds.find(r=>r.roundId===priorNative.currentRoundId)!.segments.at(-1)!;
+ await execution.transferExecution(supervisor,sourceId,{...body,version:priorNative.version,segmentId:priorSegment.segmentId,expectedArrangementVersion:managedPlan.version,expectedTask:{taskId:managedTask.taskId!,state:managedTask.state!,assigneeId:managedTask.assigneeId}},randomUUID());
+ const afterSupervisor=await execution.read(root,sourceId);expect(afterSupervisor.arrangement!.managerId).toBe(root.actorId);expect(afterSupervisor.arrangement!.rows.find(r=>r.kind==='development_sewing')!.assigneeId).toBe(replacementId);expect(afterSupervisor.arrangement!.rows.filter(r=>r.kind!=='development_sewing')).toEqual(managedPlan.rows.filter(r=>r.kind!=='development_sewing'));
+ // Master-data fixture only; never give Root a normal worker role to make the
+ // business test pass. The original native self-work exception is the authority.
+ const existingRoot=(await db.query('SELECT person_id FROM business_people WHERE app_user_id=$1 AND active',[root.actorId])).rows[0];
+ const rootPerson=existingRoot?.person_id??(await new AccessMasterDataService(db,'corp').createPerson({...root,authorizationCapability:'master_data:manage'},{personType:'internal',appUserId:root.actorId,displayName:'TEST P05 Root执行身份',aliases:[],reason:'TEST原有Root自接手主数据'})).personId;
+ const forbiddenPlan=await arrangementInput(db,execution,root,sourceId,workerId);forbiddenPlan.entries.find(r=>r.kind==='development_sewing')!.assigneeId=root.actorId;forbiddenPlan.entries.find(r=>r.kind==='development_sewing')!.reason='TEST不能经日常安排发明Root候选';
+ await expect(execution.arrange(root,sourceId,forbiddenPlan,randomUUID())).rejects.toMatchObject({statusCode:409});
+ const actual=await native.get(root,orderId),actualSegment=actual.rounds.find(r=>r.roundId===actual.currentRoundId)!.segments.at(-1)!,rootBody={roundId:actual.currentRoundId,version:actual.version,segmentId:actualSegment.segmentId,personId:rootPerson,amount:'0',reason:'TEST原有Root自接手特例'};
+ await expect(native.transfer(clerk,orderId,rootBody,randomUUID())).rejects.toMatchObject({statusCode:403});expect((await native.get(root,orderId)).version).toBe(actual.version);
+ await native.transfer(root,orderId,rootBody,randomUUID());
+ const rootPlan=(await execution.read(root,sourceId)).arrangement!;expect(rootPlan.managerId).toBe(root.actorId);expect(rootPlan.rows.find(r=>r.kind==='development_sewing')).toMatchObject({assigneeId:root.actorId,valid:true});expect((await tasks.read(root,sewing.taskId!)).canExecute).toBe(true);
+ expect((await db.query("SELECT count(*)::int n FROM user_role_assignments WHERE user_id=$1 AND role_code='pattern_room_worker' AND revoked_at IS NULL",[root.actorId])).rows[0].n).toBe(0);
+ expect((await db.query('SELECT sum(amount)=$2::numeric AS balanced FROM pattern_room_segments WHERE round_id=$1',[order.currentRoundId,segment.amount])).rows[0].balanced).toBe(true);
+ await expect(tasks.read(worker(replacementId),sewing.taskId!)).rejects.toMatchObject({statusCode:404});
+  return;
+ }
  await expect(execution.readNativeExecution(clerk,sourceId)).rejects.toMatchObject({statusCode:403});
  expect((await execution.transferExecutionReceipt(root,sourceId,randomUUID())).receipt).toBeNull();
  await expect(execution.transferExecutionReceipt(clerk,sourceId,randomUUID())).rejects.toMatchObject({statusCode:403});
@@ -49,4 +77,5 @@ export async function exerciseDevelopmentTransfer(db:Pool,execution:DevelopmentE
  await expect(tasks.read(worker(replacementId),sewing.taskId!)).rejects.toMatchObject({statusCode:404});
  expect((await db.query('SELECT sum(amount)=$2::numeric AS balanced FROM pattern_room_segments WHERE round_id=$1',[order.currentRoundId,segment.amount])).rows[0].balanced).toBe(true);
  expect(await execution.transferExecutionReceipt(root,sourceId,key)).toMatchObject({committedVersion:order.version+1,receipt:{version:order.version+2}});
+
 }

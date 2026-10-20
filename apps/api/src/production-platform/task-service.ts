@@ -1,4 +1,6 @@
 import {DEVELOPMENT_ARRANGEABLE_KINDS} from "@dx-rework/contracts/development-arrangement";
+import {isNativeRootSewingRecipient} from './development-native-recipient.js';
+import {authorizePatternOrder} from '../pattern-room/order-authority.js';
 import {activateInitialDevelopmentExecution} from "./development-native-activation.js";
 import {TodoService} from "../todos/service.js";
 import {taskDocuments,resourceDocuments} from "./task-documents.js";
@@ -92,7 +94,7 @@ export class DigitalProductionTaskService {
   }
   private async activate(client: PoolClient, actor: TrustedActorContext, id: string, occurredAt: string | null, quality: TimeQuality) {
     const task = await this.task(client, id, true);
-    if (await requiresDevelopmentAssignee(client,task) && (!task.assignee_id||(await client.query("SELECT to_regclass('digital_development_round_arrangements') AS relation")).rows[0]?.relation&&!await new DigitalProductionAccessPolicy(client).activeRole(task.assignee_id,task.required_role))) return false;
+    if (await requiresDevelopmentAssignee(client,task) && (!task.assignee_id||(await client.query("SELECT to_regclass('digital_development_round_arrangements') AS relation")).rows[0]?.relation&&!await new DigitalProductionAccessPolicy(client).activeRole(task.assignee_id,task.required_role)&&!(task.task_kind==='development_sewing'&&task.source_id&&await isNativeRootSewingRecipient(client,task.source_id,task.assignee_id)))) return false;
     if(task.task_kind==="development_sewing"&&await activateInitialDevelopmentExecution(client,actor,id,new TodoService(this.database))){
       await client.query("UPDATE digital_production_task_conditions SET satisfied=true,occurred_at=CURRENT_TIMESTAMP WHERE task_id=$1 AND condition_key='pattern_assignment_ready'",[id]);
       await this.event(client,actor,id,this.resource(task),"condition",new Date().toISOString(),"现场登记",{condition:"pattern_assignment_ready",satisfied:true,note:"本轮安排与实际前置齐备，首次执行已衔接"});
@@ -451,6 +453,27 @@ export class DigitalProductionTaskService {
     await reassignDigitalTask(client,actor,id,assigneeId);await this.event(client,actor,id,this.resource(task),"reassigned",new Date().toISOString(),"现场登记",{assigneeId});
     await this.refreshDevelopmentMaterialCondition(client,actor,id);
     if (await requiresDevelopmentAssignee(client,task)) await this.activate(client,actor,id,new Date().toISOString(),"现场登记");
+  }
+  /** Internal native adapter only. The already-authorized native write and this
+   * source/task's exact current segment must agree before any assignment moves. */
+  async syncNativeSewingWithClient(client:PoolClient,actor:TrustedActorContext,id:string,orderId:string,assigneeId:string,nativeAction:'assign'|'transfer'){
+    await authorizePatternOrder(client,actor,nativeAction==='assign'?'pattern_room:orders:assign':'pattern_room:orders:transfer',true);
+    const task=await this.task(client,id,true);
+    if(task.task_kind!=='development_sewing'||!task.source_id||['completed','cancelled'].includes(task.state))digitalForbidden();
+    const segment=(await client.query(`SELECT 1 FROM digital_development_pattern_links l JOIN pattern_room_orders o USING(order_id)
+      JOIN pattern_room_segments s ON s.round_id=o.current_round_id AND s.ended_at IS NULL
+      WHERE l.source_id=$1 AND o.order_id=$2 AND s.worker_user_id=$3 AND o.status='in_progress'`,[task.source_id,orderId,assigneeId])).rowCount;
+    if(!segment)digitalForbidden();
+    const policy=new DigitalProductionAccessPolicy(client);
+    if(!await policy.lockActiveRole(assigneeId,'pattern_room_worker')&&!(await isNativeRootSewingRecipient(client,task.source_id,assigneeId)))digitalForbidden();
+    if(task.assignee_id!==assigneeId){
+      await client.query('UPDATE digital_production_task_access SET assignee_id=$2 WHERE task_id=$1',[id,assigneeId]);
+      await client.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state)
+        VALUES($1,$2,$3,'digital_task_reassigned','digital_task',$4,$5,$6)`,[randomUUID(),actor.requestId,actor.actorId,id,JSON.stringify({assigneeId:task.assignee_id}),JSON.stringify({assigneeId,nativeOrderId:orderId})]);
+      await this.event(client,actor,id,this.resource(task),'reassigned',new Date().toISOString(),'现场登记',{previousAssigneeId:task.assignee_id,assigneeId,nativeOrderId:orderId});
+    }
+    await this.refreshDevelopmentMaterialCondition(client,actor,id);
+    await this.activate(client,actor,id,new Date().toISOString(),'现场登记');
   }
   async supersedeBulkTasksWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string){
     // Internal adapter only: the source/approval command already authorized its actor.
