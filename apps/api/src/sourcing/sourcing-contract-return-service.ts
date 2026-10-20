@@ -135,7 +135,7 @@ export class SourcingContractReturnService {
         && totals.count < 2 && Number(totals.bytes) < MAX_UPLOAD_BYTES
         && await this.canUpload(actor,await effectiveSourcingMerchandiser(this.database,sourcingCaseId,row.created_by),row.additional_merchandiser_user_id),
       uploadedFileCount:totals.count,uploadedTotalBytes:Number(totals.bytes),
-      attachments:currentFiles,history };
+      attachments:currentFiles,history,versions:[...versions.values()] };
   }
 
   async submit(actor: TrustedActorContext,sourcingCaseId: string,attachmentIds: readonly string[],key: string) {

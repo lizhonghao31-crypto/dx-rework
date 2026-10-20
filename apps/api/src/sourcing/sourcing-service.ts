@@ -1,4 +1,5 @@
 import {effectiveSourcingMerchandiser,lockDigitalSourcingHandover} from "./current-merchandiser.js";
+import {SourcingContractReturnService} from "./sourcing-contract-return-service.js";
 import { factoryPoLines, factoryProposals, syncFactoryPoNumbers, validateFactoryInputs, approveFactoryPoDates, prepareTransferPoDates, approveTransferPoDates } from "../production-platform/po-factory-date-adapter.js";
 import {factorySettlements,reconcileFactory} from "./factory-settlement-service.js";
 import {factoryTransferLines,transferProductionFactory} from "./factory-transfer-service.js";
@@ -1312,6 +1313,17 @@ export class SourcingService {
       contractReference: contract?.rows[0]?.reference ?? null };
   }
 
+  async contractDirectory(actor:TrustedActorContext,sourcingCaseId:string){
+    this.assertReader(actor);
+    if(!actor.actorRoles.includes(ROOT_ROLE)&&!(actor.authorizationCapabilities??[]).includes("supplier_contract_data:read")){
+      throw new ApplicationError("FORBIDDEN","当前身份无权读取合同资料",403);
+    }
+    const timeline=await this.listTimeline(actor,sourcingCaseId);
+    const returned=await new SourcingContractReturnService(this.database).get(actor,sourcingCaseId);
+    const contracts=timeline.items.filter(item=>item.kind==="contract"),ids=contracts.flatMap(item=>item.pdfAttachmentId?[item.pdfAttachmentId]:[]);
+    const files=new Map<string,{original_filename:string;status:string}>(ids.length?(await this.database.query("SELECT attachment_id,original_filename,status FROM attachments WHERE attachment_id=ANY($1::uuid[])",[ids])).rows.map(file=>[file.attachment_id,file]):[]);
+    return {contracts:contracts.map(item=>({...item,pdfFilename:item.pdfAttachmentId?files.get(item.pdfAttachmentId)?.original_filename??null:null,pdfStatus:item.pdfAttachmentId?files.get(item.pdfAttachmentId)?.status??null:null})),versions:returned.versions};
+  }
   async listTimeline(
     actor: TrustedActorContext,
     sourcingCaseId: string,

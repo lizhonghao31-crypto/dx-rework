@@ -44,6 +44,7 @@ export const JourneyFilterSchema = z.object({
 });
 export type JourneyFilter = z.infer<typeof JourneyFilterSchema>;
 export type JourneyRecord = { domain: string; id: string; url: string | null; mode: "read" | "handle"; version: number | null; lineId: string | null };
+export type JourneyDocumentMetadata={created:{at:string|null;by:string|null};edited:{at:string|null;by:string|null};published:{at:string|null;by:string|null}};
 export type JourneyNode = {
   /** Read-only applicability evidence; unknown never supplies a progress denominator. */
   progressApplicability?: "applicable" | "not_applicable" | "unknown";
@@ -106,7 +107,7 @@ export type JourneyRiskHistory={eventId:string;nodeId:string;label:string;round:
 export const JourneyLogFilterSchema=z.object({cursor:z.string().min(1).max(2048).optional()}).strict();
 
 /** Stable, local-only return context. Consumers restore these values after domain handling. */
-export const JourneyReturnContextSchema = JourneyFilterSchema.safeExtend({ selected: z.string().uuid().optional(), flow: z.enum(["collapsed", "expanded"]).optional(), expanded: z.string().max(100).optional(), focus: z.string().max(100).optional(), row: z.string().max(100).optional(), round: z.coerce.number().int().positive().max(10000).optional() });
+export const JourneyReturnContextSchema = JourneyFilterSchema.safeExtend({ selected: z.string().uuid().optional(), flow: z.enum(["collapsed", "expanded"]).optional(), documentOpen:z.string().max(3000).optional(), expanded: z.string().max(100).optional(), focus: z.string().max(100).optional(), row: z.string().max(100).optional(), round: z.coerce.number().int().positive().max(10000).optional() });
 export function journeyReturnUrl(context: z.input<typeof JourneyReturnContextSchema>): string {
   const value = JourneyReturnContextSchema.parse(context);
   const params = new URLSearchParams();

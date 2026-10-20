@@ -1,4 +1,5 @@
 import {linkDigitalReceipt} from "../production-platform/receiving-link-adapter.js";
+import {receivingDocumentHistory} from "./receiving-document-history.js";
 import { RECEIVING_BOARD_FILTERS_SQL } from "./receiving-board-filters.js";
 import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import { readReceivingAnalysis } from "./receiving-analysis.js";
@@ -2569,6 +2570,7 @@ export class ReceivingService {
     }
   }
 
+  documentHistory(batchId:string){return receivingDocumentHistory(this.database,batchId);}
   async board(
     startDateInput: string,
     endDateOrQuery = startDateInput,

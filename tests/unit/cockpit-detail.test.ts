@@ -29,3 +29,5 @@ it("shows unavailable new facts rather than falling back to old 80% or the selec
   const o=fixture();delete o.display;delete o.currentRiskNodes;delete o.currentDeliveryRisks;delete o.riskHistory;delete o.operationLog;
   const html=render(o);expect(html).toContain("进度资料暂不可用");expect(html).toContain("当前风险资料暂不可用");expect(html).toContain("操作记录暂不可用");expect(html).not.toContain("80%");
 });
+
+it.each([['rework','/ui/tasks/'],['production','/ui/production-dashboard/'],['sourcing','/ui/sourcing/orders/']])("keeps the original %s node record reachable when excluded from the directory",(domain,path)=>{const o=fixture();o.stages[1]!.nodes[0]!.records=[{domain,id:task,url:path+task,mode:"read",version:null,lineId:null}];const html=render(o);expect(html).toContain(path+task);expect(html).toContain("查看节点记录");expect(html).not.toContain("进入该节点办理");expect(html).not.toContain("当前身份暂不可办理");});

@@ -320,6 +320,9 @@ export function registerReceivingRoutes(app: FastifyInstance, dependencies: Rece
     return { styles: await dependencies.service.listStyleOptions(request.query.q ?? "") };
   });
 
+  app.get<{Params:{batchId:string}}>("/receiving/batches/:batchId/document-history",async(request,reply)=>{
+    await readUser(request);reply.header("cache-control","no-store");return dependencies.service.documentHistory(batchId(request.params.batchId));
+  });
   app.get<{ Querystring: {
     page?: string;
     date?: string;
