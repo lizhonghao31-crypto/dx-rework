@@ -6,10 +6,11 @@ import { NavigationIcon } from "./navigation-icons.js";
 import "./document-editor.css";
 
 const DocumentChapterContext=createContext<string|null>(null);
-export function DocumentChapterScope({chapter,children}:{chapter:string;children:ReactNode}){
+const DocumentFieldLocationContext=createContext<((id:string)=>void)|undefined>(undefined);
+export function DocumentChapterScope({chapter,children,onLocateField}:{chapter:string;children:ReactNode;onLocateField?:((id:string)=>void)|undefined}){
   const [printing,setPrinting]=useState(false);
   useEffect(()=>{const before=()=>flushSync(()=>setPrinting(true)),after=()=>setPrinting(false);window.addEventListener('beforeprint',before);window.addEventListener('afterprint',after);return()=>{window.removeEventListener('beforeprint',before);window.removeEventListener('afterprint',after);};},[]);
-  return <DocumentChapterContext.Provider value={printing?null:chapter}>{children}</DocumentChapterContext.Provider>;
+  return <DocumentFieldLocationContext.Provider value={onLocateField}><DocumentChapterContext.Provider value={printing?null:chapter}>{children}</DocumentChapterContext.Provider></DocumentFieldLocationContext.Provider>;
 }
 const DocumentToolbarTarget=createContext<HTMLElement|null>(null);
 export function DocumentToolbarScope({target,children}:{target:HTMLElement|null;children:ReactNode}){
@@ -27,9 +28,20 @@ export function DocumentAnchors({ sections }: { sections: Array<{ id: string; la
   if(chapter)return null;
   return <nav className="dx-doc-anchors" aria-label="单据章节">{sections.map(section => <button key={section.id} type="button" aria-current={active === section.id ? "location" : undefined} onClick={() => { setActive(section.id); document.getElementById(section.id)?.scrollIntoView({ block: "start", behavior: "smooth" }); }}>{section.label}</button>)}</nav>;
 }
+function focusDocumentField(id:string){
+  const target=document.getElementById(id),details=target?.closest("details");
+  if(details)details.open=true;
+  // The native upload input is visually hidden; focus its visible controlling button.
+  const visible=target&&target.getClientRects().length&&!(target instanceof HTMLInputElement&&target.type==="file");
+  const focusTarget=visible?target:document.querySelector<HTMLElement>(`[aria-controls="${CSS.escape(id)}"]`);
+  if(!focusTarget)return;
+  if(focusTarget.tabIndex<0)focusTarget.tabIndex=-1;
+  focusTarget.scrollIntoView({block:"center"});focusTarget.focus();
+}
 export function DocumentErrors({ issues, error }: { issues: DocumentIssue[]; error?: string }) {
+  const locate=useContext(DocumentFieldLocationContext);
   if (!issues.length && !error) return null;
-  return <div className="dx-doc-errors" role="alert"><strong>{error || "请核对以下内容"}</strong>{issues.length > 0 && <ul>{issues.map((issue, index) => <li key={`${issue.id}-${index}`}><button type="button" onClick={() => { const target = document.getElementById(issue.id); const details = target?.closest("details"); if (details) details.open = true; target?.scrollIntoView({ block: "center" }); target?.focus(); }}>{issue.label}：{issue.message}</button></li>)}</ul>}</div>;
+  return <div className="dx-doc-errors" role="alert"><strong>{error || "请核对以下内容"}</strong>{issues.length > 0 && <ul>{issues.map((issue, index) => <li key={`${issue.id}-${index}`}><button type="button" onClick={() => { if(locate)flushSync(()=>locate(issue.id)); focusDocumentField(issue.id); }}>{issue.label}：{issue.message}</button></li>)}</ul>}</div>;
 }
 export function DocumentField({ id, label, value, onValue, readonly, disabled, numeric, multiline, maxLength = 100, type = "text", column, issue, onBlur, savedValue, savedRevision }: {
   id: string; label: string; value: string; onValue?: (value: string) => void; readonly?: boolean; disabled?: boolean;
