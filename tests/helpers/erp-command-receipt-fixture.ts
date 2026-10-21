@@ -72,7 +72,7 @@ export async function exerciseErpReceipt(db:Pool,merchandiser:string,admin:Trust
  // Existing v1/schema mismatch is a separately recorded boundary: a direct
  // intake node is contract-valid but current DB requires it null. Do not relax
  // that business guard here; the existing emergency-link node remains tested.
- const nodeKey=randomUUID();await expect(service.intakeFromErp(actor,{...input,source:{...input.source,externalId:`TEST-node-${nodeKey}`,externalIdempotencyKey:nodeKey,erpNodeId:'TEST-NONNULL-NODE'}},nodeKey)).rejects.toMatchObject({statusCode:400});
+ const beforeRejectedNode=await snapshot(),nodeKey=randomUUID();await expect(service.intakeFromErp(actor,{...input,source:{...input.source,externalId:`TEST-node-${nodeKey}`,externalIdempotencyKey:nodeKey,erpNodeId:'TEST-NONNULL-NODE'}},nodeKey)).rejects.toMatchObject({statusCode:400});expect(await snapshot()).toEqual(beforeRejectedNode);expect((await db.query('SELECT count(*)::int count FROM rework_orders WHERE external_id=$1',[`TEST-node-${nodeKey}`])).rows[0].count).toBe(0);
  const badFactoryKey=randomUUID();await expect(service.intakeFromErp(actor,{...input,source:{...input.source,externalId:`TEST-invalid-factory-${badFactoryKey}`,externalIdempotencyKey:badFactoryKey},payload:{...input.payload,processingFactory:{type:'supplier',supplierId:randomUUID()}}},badFactoryKey)).rejects.toMatchObject({statusCode:404});
  expect((await db.query('SELECT count(*)::int count FROM rework_orders WHERE external_id LIKE \'TEST-invalid-%\'')).rows[0].count).toBe(0);
  }finally{await db.query('UPDATE app_users SET enabled=$2 WHERE id=$1',[ERP_INTEGRATION_SERVICE_ACTOR_ID,originalPrincipal.enabled]);}
