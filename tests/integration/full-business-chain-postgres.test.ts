@@ -3348,7 +3348,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect((await database.query("SELECT worker_reported_quantity::int AS worker,final_confirmed_quantity::int AS final FROM rework_tail_completion_quantities q JOIN rework_tail_completion_confirmations c USING(confirmation_id) WHERE c.rework_order_id=$1",[orderId])).rows).toEqual([{worker:100,final:100}]);
   });
 
-  it("P07 development routes preserve original pattern wages and final confirmation",async()=>{
+  it("P07/P08 development routes preserve wages, final confirmation and exact native history",async()=>{
     await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker);
   },30000);
 

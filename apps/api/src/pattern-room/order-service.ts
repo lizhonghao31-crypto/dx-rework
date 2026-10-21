@@ -1,3 +1,4 @@
+import type {PatternHistoryQuery} from '@dx-rework/contracts/pattern-orders';
 import {developmentAutomaticRoundDocument} from '../production-platform/development-document-format.js';
 import {developmentMakingSizes} from "@dx-rework/contracts/digital-development";
 import {syncLinkedExecutionTransfer,linkedAssignmentContext} from '../production-platform/development-execution-transfer.js';
@@ -35,6 +36,7 @@ export class PatternRoomOrderService {
     this.reader = new PatternOrderReader(db, this.enabled, options.transactionClient);
   }
   list(actor: TrustedActorContext, query: PatternOrderQuery) { return this.reader.list(actor, query); }
+  history(actor:TrustedActorContext,input:PatternHistoryQuery){return this.reader.history(actor,input);}
   related(actor:TrustedActorContext,input:{sourceId?:string|undefined;orderId?:string|undefined;page:number}) {return this.reader.related(actor,input);}
   peopleFilters(actor: TrustedActorContext) { return this.reader.peopleFilters(actor); }
   get(actor: TrustedActorContext, orderId: string, selection?: PatternHistorySelection) { return this.reader.get(actor, orderId, selection); }

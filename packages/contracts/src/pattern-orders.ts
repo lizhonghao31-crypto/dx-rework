@@ -119,3 +119,18 @@ export const PatternOrderDetailSchema = PatternOrderSummarySchema.extend({
 });
 export type PatternOrderSummary = z.infer<typeof PatternOrderSummarySchema>;
 export type PatternOrderDetail = z.infer<typeof PatternOrderDetailSchema>;
+
+export const PatternHistorySourceSchema=z.enum(['legacy_pattern','misc','development_completed']);
+export const PatternHistoryQuerySchema=z.object({
+ q:z.string().trim().max(100).default(''),source:PatternHistorySourceSchema.optional(),status:PatternOrderStatusSchema.optional(),
+ creatorId:z.string().uuid().optional(),workerId:z.string().uuid().optional(),page:z.coerce.number().int().min(1).max(100_000).default(1),limit:z.coerce.number().int().min(1).max(100).default(15),
+}).strict();
+export type PatternHistoryQuery=z.infer<typeof PatternHistoryQuerySchema>;
+export const PatternHistoryRecordSchema=z.object({
+ recordKey:z.string(),source:PatternHistorySourceSchema,grain:z.enum(['order','execution_round']),orderId:z.string().uuid(),orderNo:z.string(),kind:z.enum(['pattern','misc']),styleNo:z.string(),taskName:z.string().nullable(),
+ creatorName:z.string(),workerName:z.string().nullable(),status:PatternOrderStatusSchema,currentStatus:PatternOrderStatusSchema,nativeRoundId:z.string().uuid(),nativeRoundIndex:z.number().int().nullable(),
+ sourceId:z.string().uuid().nullable(),developmentRounds:z.array(z.number().int().positive()),associationWarning:z.string().nullable(),requiredDate:z.string().nullable(),recordedAt:z.string(),completedAt:z.string().nullable(),
+});
+export const PatternHistoryListSchema=z.object({items:z.array(PatternHistoryRecordSchema),totalCount:z.number().int().nonnegative(),page:z.number().int().positive(),pageSize:z.number().int().positive(),totalPages:z.number().int().positive(),canFilterPeople:z.boolean()});
+export type PatternHistoryRecord=z.infer<typeof PatternHistoryRecordSchema>;
+export type PatternHistoryList=z.infer<typeof PatternHistoryListSchema>;

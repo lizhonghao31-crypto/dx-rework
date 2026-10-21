@@ -8,7 +8,7 @@ import {readFile} from 'node:fs/promises';
 import pg from 'pg';
 import Fastify from 'fastify';
 import {afterAll,beforeAll,describe,expect,it} from 'vitest';
-import {PATTERN_ORDER_ROLES} from '@dx-rework/contracts/pattern-orders';
+import {PatternHistoryQuerySchema,PATTERN_ORDER_ROLES} from '@dx-rework/contracts/pattern-orders';
 import {DigitalOrderCreateSchema} from '@dx-rework/contracts/digital-production';
 import {PatternRoomOrderService} from '../../apps/api/src/pattern-room/order-service.js';
 import {registerPatternRoomOrderRoutes} from '../../apps/api/src/pattern-room/order-routes.js';
@@ -72,12 +72,14 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   pattern=await service.requestRework(rootActor,pattern.orderId,{...action(),reason:'TEST current round',reasonCategory:'workmanship'},randomUUID());pattern=await service.assign(rootActor,pattern.orderId,{...action(),personId:workerPerson.personId,amount:'0'},randomUUID());const current=pattern.currentRoundId;
   await db.query('INSERT INTO digital_development_pattern_links(source_id,order_id,linked_by) VALUES($1,$2,$3)',[source.sourceId,pattern.orderId,root]);
   const directory=await service.related(workerActor,{sourceId:source.sourceId,page:1}),visible=directory.items.find(item=>item.orderId===pattern.orderId)!;
+  const historyQuery=PatternHistoryQuerySchema.parse({q:'TEST-DIR-ROUND-SCOPE',source:'legacy_pattern'}),history=await service.history(workerActor,historyQuery);expect(history.totalCount).toBe(1);expect(history.items[0]).toMatchObject({orderId:pattern.orderId,status:'in_progress',grain:'order'});expect(history.items[0]!.associationWarning).toContain('尚无已发布资料');
   expect(visible.rounds.map((round:{roundId:string})=>round.roundId).sort()).toEqual([participated,current].sort());expect(JSON.stringify(visible)).not.toContain(hidden);
   expect(visible.rounds.map((round:{roundId:string})=>round.roundId).sort()).toEqual((await service.get(workerActor,pattern.orderId)).rounds.map(round=>round.roundId).sort());
   expect((await service.related(rootActor,{sourceId:source.sourceId,page:1})).items.find(item=>item.orderId===pattern.orderId)?.rounds).toHaveLength(3);
   await expect(service.get(workerActor,pattern.orderId,{round:hidden})).rejects.toMatchObject({statusCode:404});
   pattern=await service.transfer(rootActor,pattern.orderId,{...action(),segmentId:pattern.rounds.find(round=>round.roundId===current)!.segments.at(-1)!.segmentId,personId:rootPerson.personId,amount:'0',reason:'TEST original current-assignment scope ends'},randomUUID());
   expect((await service.related(workerActor,{sourceId:source.sourceId,page:1})).items.map(item=>item.orderId)).not.toContain(pattern.orderId);
+  expect((await service.history(workerActor,historyQuery)).totalCount).toBe(0);
   // P05: association-only historical work has neither a document nor a digital
   // task/arrangement. Preserve its real native transfer and reject non-managers.
   expect((await db.query('SELECT count(*)::int n FROM digital_development_documents WHERE source_id=$1',[source.sourceId])).rows[0].n).toBe(0);
@@ -96,6 +98,18 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
 
 
  },120000);
+ it('P08 lists old pattern and misc separately under original scopes, paginates, rejects and performs no writes',async()=>{
+  const style=`TEST-HISTORY-${randomUUID()}`,rootActor=actor(root,['root_superuser']),creator=actor(other),file=randomUUID();await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.pdf','application/pdf',10,$3,$4,'ready',CURRENT_TIMESTAMP)",[file,`TEST/${file}`,'a'.repeat(64),other]);
+  const pattern=await createHistoricalPatternFixture(service,creator,{styleNo:style,categoryId:'92000000-0000-4000-8000-000000000002',priceVersion:1,quantity:1,attachmentIds:[file]},randomUUID()),misc=await service.createMisc(actor(merch,['order_merchandiser']),input(style),randomUUID());
+  const before=(await db.query('SELECT (SELECT count(*) FROM operation_events)::int events,(SELECT count(*) FROM pattern_room_segments)::int segments,(SELECT count(*) FROM rework_todos)::int todos')).rows[0];
+  const query=PatternHistoryQuerySchema.parse({q:style,limit:1}),first=await service.history(rootActor,query),second=await service.history(rootActor,{...query,page:2});expect(first.totalCount).toBe(2);expect(first.totalPages).toBe(2);expect(second.totalCount).toBe(2);expect(new Set([...first.items,...second.items].map(row=>row.recordKey)).size).toBe(2);expect([...first.items,...second.items].map(row=>row.source).sort()).toEqual(['legacy_pattern','misc']);
+  expect((await service.history(creator,{...query,limit:15})).items.map(row=>row.orderId)).toEqual([pattern.orderId]);expect((await service.history(actor(merch,['order_merchandiser']),{...query,limit:15})).items.map(row=>row.orderId)).toEqual([misc.orderId]);expect((await service.history(actor(worker,['pattern_room_worker']),query)).totalCount).toBe(0);
+  await expect(service.history(creator,{...query,creatorId:other})).rejects.toMatchObject({statusCode:403});await expect(service.history(actor(merch,['development_clerk']),query)).rejects.toMatchObject({statusCode:403});
+  expect(JSON.stringify(first)).not.toMatch(/unitPrice|agreedAmount|actualHours|attachmentId/);
+  expect((await db.query('SELECT (SELECT count(*) FROM operation_events)::int events,(SELECT count(*) FROM pattern_room_segments)::int segments,(SELECT count(*) FROM rework_todos)::int todos')).rows[0]).toEqual(before);
+  const app=Fastify();app.setErrorHandler((error,_req,reply)=>reply.code((error as ApplicationError).statusCode??500).send({error:{message:error.message}}));registerPatternRoomOrderRoutes(app,{service,attachments:{} as AttachmentService,authenticate:async()=>({id:other,businessRoles:['sample_designer'],capabilities:caps})});
+  try{const allowed=await app.inject({url:`/pattern-room/history?q=${style}`});expect(allowed.statusCode).toBe(200);expect(allowed.json().totalCount).toBe(1);expect((await app.inject({url:'/pattern-room/history?source=all-private-data'})).statusCode).toBe(400);}finally{await app.close();}
+ });
  it('rejects standalone new pattern for Root/designer/other roles and the old POST, while advertising no create action',async()=>{
   for(const context of [actor(),actor(root,['root_superuser']),actor(merch,['order_merchandiser']),actor(worker,['pattern_room_worker']),actor(supervisor,['pattern_room_supervisor'])])await expect(service.create(context,{},randomUUID())).rejects.toMatchObject({statusCode:403});
   const app=Fastify();app.setErrorHandler((error,_req,reply)=>reply.code((error as ApplicationError).statusCode??500).send({error:{message:error.message}}));

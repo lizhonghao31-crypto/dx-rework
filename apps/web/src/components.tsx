@@ -571,6 +571,7 @@ export function Shell({
     ...(currentUser&&canManageAuxiliaryCatalog(currentUser)?[{name:"共享辅料目录",description:"新增、改名、合并重复项及停用",href:"/ui/auxiliary-catalog"}]:[]),
     ...((digital || patternRoomNavigation.length) ? [{ name: "板房管理台", description: "岗位办理、独立打板与杂事", href: digital ? "/ui/digital-pattern-room" : "/ui/digital-pattern-room?section=legacy", activeKey: "digital-pattern" }] : []),
     ...(digital ? [{ name: "板房数据沙盘", description: "同源分析与改进记录", href: "/ui/digital-analysis" }] : []),
+    ...(currentUser&&canAccessPatternRoomOrders(currentUser)?[{name:"打板/杂事历史看板",description:"旧打板、杂事与新开发已完成执行轮",href:"/ui/pattern-room/history",activeKey:"pattern-room-history"}]:[]),
     ...patternRoomNavigation.filter(entry => entry.href === "/ui/pattern-room/prices"),
   ];
   const preparationNavigation: NavigationEntry[] = [];
@@ -625,7 +626,7 @@ export function Shell({
       : activeEntry?.name ?? active;
 
   return (
-    <div data-brand-scope={['我的待办','开发与大货办理','digital-designer','digital-pattern'].includes(active)&&!window.location.pathname.endsWith('/ui/digital-cockpit')?'approved-six':undefined} className={`app-shell ui-polish unified-shell${appearance === "digital" ? " digital-workspace production-command-shell" : ""}`}>
+    <div data-brand-scope={['我的待办','开发与大货办理','digital-designer','digital-pattern','pattern-room-history'].includes(active)&&!window.location.pathname.endsWith('/ui/digital-cockpit')?'approved-six':undefined} className={`app-shell ui-polish unified-shell${appearance === "digital" ? " digital-workspace production-command-shell" : ""}`}>
       {pullDistance > 0 ? (
         <div
           className="mobile-pull-refresh"

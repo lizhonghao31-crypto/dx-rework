@@ -1,3 +1,4 @@
+import {PatternHistoryQuerySchema} from '@dx-rework/contracts/pattern-orders';
 import {exerciseDevelopmentTransfer} from './development-transfer-guards.js';
 import {fabricDecisionTodos} from "../../apps/api/src/production-platform/development-fabric-cases.js";
 import {exerciseMaterialVerification} from "./material-verification-guards.js";
@@ -23,9 +24,11 @@ import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js
 import type {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
 export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionService,root:TrustedActorContext,workerId:string,workerPersonId:string,qc:TrustedActorContext,replacementWorkerId:string,legacyMaking?:"tail"|"native",transferOnly:false|true|"authority"=false){
  const native=new PatternRoomOrderService(db,todos,{ordersEnabled:true}),execution=new DevelopmentExecutionService(db,true,native),forms=new DigitalDevelopmentService(db,true,native),identity=new DigitalProductionIdentityService(db,true);
+ const checkHistory=!legacyMaking&&!transferOnly;
  const routes=legacyMaking||transferOnly?([['无','免洗']] as const):([['无','免洗'],['印花','内洗'],['绣花','外洗'],['印绣花','免洗']] as const);
  for(const [craft,washing]of routes){
-  const source=await identity.createSource(root,{developmentType:'头版',designStyleNo:`P07-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID());
+  const sourceStyle=`P07-${randomUUID()}`;
+  const source=await identity.createSource(root,{developmentType:'头版',designStyleNo:sourceStyle,temporaryStyleNo:null,customerCode:null},randomUUID());
   const sourceId=source.sourceId,fileId=randomUUID(),mainId=randomUUID(),trimId=randomUUID();
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'款图.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[fileId,`p07/${fileId}`,'a'.repeat(64),root.actorId]);
   const material={supplier:'',width:'',weight:'',composition:'',consumption:'',color:'黑',specification:'',quantity:'1',requiredThisRound:true};
@@ -77,12 +80,12 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
   expect((await forms.read(root,sourceId)).document!.materials.find(row=>row.materialId===mainId)!.requiredThisRound).toBe(craft!=='无');
   expect((await arrangementTodos(db,clerk)).filter(todo=>todo.entityId===sourceId)).toHaveLength(1);
   const todoService=new TodoService(db,undefined,undefined,undefined,new DigitalProductionNotificationService(db));
-  const visible=await todoService.listForActor({...clerk,authorizationCapability:'todo:view'},{query:source.designStyleNo,module:'digital_production'});
+  const visible=await todoService.listForActor({...clerk,authorizationCapability:'todo:view'},{query:sourceStyle,module:'digital_production'});
   expect(visible.todos.filter(todo=>todo.entityId===sourceId)).toHaveLength(1);
   expect(visible.todos.find(todo=>todo.entityId===sourceId)?.route).toMatchObject({routeName:'digital_development_arrangement',developmentRound:1});
   const supervisorId=(await db.query("SELECT user_id FROM user_role_assignments WHERE role_code='pattern_room_supervisor' AND revoked_at IS NULL LIMIT 1")).rows[0].user_id;
   const supervisor={...root,actorId:supervisorId,actorRoles:['pattern_room_supervisor'],authorizationCapability:'todo:view',authorizationCapabilities:['todo:view']};
-  expect((await todoService.listForActor(supervisor,{query:source.designStyleNo})).todos.filter(todo=>todo.entityId===linked.orderId)).toHaveLength(0);
+  expect((await todoService.listForActor(supervisor,{query:sourceStyle})).todos.filter(todo=>todo.entityId===linked.orderId)).toHaveLength(0);
 
   const arrangement=await arrangementInput(db,execution,clerk,sourceId,workerId),arrangeKey=randomUUID();
   await execution.arrange(clerk,sourceId,arrangement,arrangeKey);
@@ -214,7 +217,16 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
   }
   await route('development_tail_check');
   const final=await task('development_confirmation'),key=randomUUID(),input={craftExecution:null,taskId:final.taskId,result:'通过' as const,note:'最终确认',nextAssigneeId:null,sentDate:null,trackingNo:null};
+  if(checkHistory)expect((await native.history(root,PatternHistoryQuerySchema.parse({q:sourceStyle,source:'development_completed'}))).totalCount).toBe(0);
   await execution.route(root,sourceId,input,key);await execution.route(root,sourceId,input,key);
+  const history=()=>native.history(root,PatternHistoryQuerySchema.parse({q:sourceStyle,source:'development_completed'}));
+  if(checkHistory){const first=await history();expect(first.totalCount).toBe(1);expect(first.items[0]).toMatchObject({nativeRoundId:order.currentRoundId,status:'completed',sourceId,developmentRounds:[1],requiredDate:null});expect(first.items[0]!.completedAt).not.toBeNull();}
+  if(checkHistory&&craft==='印花'){
+    const financeId=(await db.query("SELECT user_id FROM user_role_assignments WHERE role_code='finance_read' AND revoked_at IS NULL LIMIT 1")).rows[0].user_id,finance={...root,actorId:financeId,actorRoles:['finance_read'],authorizationCapability:'pattern_room:orders:view',authorizationCapabilities:['pattern_room:orders:view']};
+    const financial=await native.history(finance,PatternHistoryQuerySchema.parse({q:sourceStyle,source:'development_completed'}));expect(financial.totalCount).toBe(1);expect(financial.items[0]).toMatchObject({sourceId:null,developmentRounds:[],associationWarning:null});expect(JSON.stringify(financial)).not.toContain(sourceId);
+    await expect(native.history(qc,PatternHistoryQuerySchema.parse({q:sourceStyle}))).rejects.toMatchObject({statusCode:403});
+  }
+
   expect((await db.query('SELECT count(*)::int n FROM pattern_room_segments WHERE round_id=$1 AND wage_eligible_at IS NOT NULL',[order.currentRoundId])).rows[0].n).toBe(1);
   await route('development_shipping');
   expect((await execution.read(root,sourceId)).routeFacts.some(f=>f.kind==='客户样板确认')).toBe(false);
@@ -232,8 +244,9 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
    await execution.decideFabric(director,sourceId,{reportId:report.reportId,expectedDecisionId:null,decision:'停止使用',note:'TEST完工后仍须明确决定'},randomUUID());
    expect((await fabricDecisionTodos(db,director)).filter(t=>t.todoId===report.reportId)).toHaveLength(0);
   }
-  if(craft==='无')await exerciseDevelopmentRounds(db,execution,root,sourceId,workerId,order.currentRoundId,qc);
+  if(craft==='无')await exerciseDevelopmentRounds(db,execution,root,sourceId,workerId,order.currentRoundId,qc,async()=>{const result=await history();expect(result.totalCount).toBe(1);expect(result.items[0]).toMatchObject({nativeRoundId:order.currentRoundId,developmentRounds:[1]});});
   if(craft==='印花')await exerciseGarmentCraftRevision(db,execution,root,sourceId,workerId,order.currentRoundId,qc);
+  if(checkHistory&&craft==='印花'){const result=await history();expect(result.totalCount).toBe(1);expect(result.items[0]).toMatchObject({nativeRoundId:order.currentRoundId,developmentRounds:[1,2]});}
   if(craft==='印绣花'){
     const confirmed=await native.get(root,order.orderId);
     const before={roundId:confirmed.currentRoundId,version:confirmed.version,reason:'车板局部返工',reasonCategory:'other' as const};
@@ -245,7 +258,8 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
     let rework=await native.requestRework(root,order.orderId,reworkInput,reworkKey);
     expect((await native.requestRework(root,order.orderId,reworkInput,reworkKey)).currentRoundId).toBe(rework.currentRoundId);
     expect((await forms.read(root,sourceId)).roundNumber).toBe(2);
-    const nativeAssignments=(await todoService.listForActor(supervisor,{query:source.designStyleNo})).todos.filter(todo=>todo.entityId===order.orderId&&todo.category==='pattern_room_assignment');
+    if(checkHistory&&craft==='印绣花'){const prior=await history();expect(prior.totalCount).toBe(1);expect(prior.items[0]).toMatchObject({nativeRoundId:confirmed.currentRoundId,status:'completed',currentStatus:'pending_assignment',developmentRounds:[1]});}
+    const nativeAssignments=(await todoService.listForActor(supervisor,{query:sourceStyle})).todos.filter(todo=>todo.entityId===order.orderId&&todo.category==='pattern_room_assignment');
     expect(nativeAssignments).toHaveLength(1);
     expect(nativeAssignments[0]!.route).toMatchObject({roundId:rework.currentRoundId});
     expect((await db.query('SELECT route_nodes,inherited FROM digital_development_rounds WHERE source_id=$1',[sourceId])).rows).toMatchObject([{route_nodes:['development_sewing_transfer','development_sewing','development_tail_check','development_confirmation','development_shipping'],inherited:{development_pattern:{roundNumber:1}}}]);
@@ -264,6 +278,7 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
     expect((await db.query('SELECT count(*)::int n FROM pattern_room_segments WHERE round_id=$1 AND wage_eligible_at IS NOT NULL',[rework.currentRoundId])).rows[0].n).toBe(0);
     await route('development_confirmation');
     expect((await db.query('SELECT amount::numeric(12,2)::text,wage_eligible_at IS NOT NULL AS eligible FROM pattern_room_segments WHERE round_id=$1',[rework.currentRoundId])).rows).toEqual([{amount:'10.00',eligible:true}]);
+    if(checkHistory&&craft==='印绣花'){const result=await history();expect(result.totalCount).toBe(2);expect(new Set(result.items.map(row=>row.recordKey)).size).toBe(2);expect(result.items.map(row=>row.developmentRounds).sort()).toEqual([[1],[2]]);}
     expect((await db.query('SELECT count(*)::int n FROM pattern_room_segments WHERE round_id=$1 AND wage_eligible_at IS NOT NULL',[order.currentRoundId])).rows[0].n).toBe(1);
   }
 

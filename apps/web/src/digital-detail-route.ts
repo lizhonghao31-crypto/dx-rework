@@ -1,3 +1,5 @@
+import {PatternHistoryQuerySchema} from '@dx-rework/contracts/pattern-orders';
+import {patternHistoryPath} from './pattern-history-query.js';
 import { DigitalIdSchema, type DigitalOrder, type DigitalSource } from "@dx-rework/contracts/digital-production";
 import type { AuthorizedUser } from "./auth.js";
 import type { DigitalAccessOptions } from "./digital-production-access-panel.js";
@@ -54,6 +56,10 @@ function workbenchReturn(value: string | null, base: string): string | null {
     }
     const target = cockpitReturnPath(`?returnTo=${encodeURIComponent("/ui/digital-cockpit?" + url.searchParams)}`);
     return target ? urls.pageUrl(target) : null;
+  }
+  if(['/ui/pattern-room/history',urls.pageUrl('ui/pattern-room/history')].includes(url.pathname)){
+    if([...url.searchParams.keys()].some(key=>!['q','source','status','creatorId','workerId','page'].includes(key)))return null;
+    const parsed=PatternHistoryQuerySchema.safeParse(Object.fromEntries(url.searchParams));return parsed.success?urls.pageUrl(patternHistoryPath(parsed.data)):null;
   }
   const localWorkspace=url.pathname.startsWith('/ui/')?urls.pageUrl(url.pathname)+url.search:value;
   const workspace = developmentWorkspaceReturnUrl(localWorkspace, base);

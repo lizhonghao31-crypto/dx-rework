@@ -1,5 +1,5 @@
 import { AttachmentParamsSchema, CreateUploadIntentSchema } from "@dx-rework/contracts";
-import { PatternOrderStatusSchema, PatternOrderQuerySchema, type PatternOrderCapability } from "@dx-rework/contracts/pattern-orders";
+import { PatternOrderStatusSchema, PatternOrderQuerySchema, PatternHistoryQuerySchema, type PatternOrderCapability } from "@dx-rework/contracts/pattern-orders";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { businessActor } from "../access/business-authority.js";
@@ -27,6 +27,7 @@ export function registerPatternRoomOrderRoutes(app: FastifyInstance, dependencie
     reply.header("cache-control", "no-store");
     return dependencies.service.list(await actor(request, "pattern_room:orders:view"), parse(PatternOrderQuerySchema, request.query));
   });
+  app.get('/pattern-room/history',async(request,reply)=>{reply.header('cache-control','no-store');return dependencies.service.history(await actor(request,'pattern_room:orders:view'),parse(PatternHistoryQuerySchema,request.query));});
   app.get("/pattern-room/misc-associations",async(request,reply)=>{
     reply.header("cache-control","no-store");
     const query=parse(z.object({q:z.string().trim().max(100).default("")}).strict(),request.query);

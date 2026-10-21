@@ -535,3 +535,13 @@
 .development-create-reference .development-po-size-pair>label>span{font-size:12px;white-space:nowrap}
 .development-create-reference .development-po-size-pair input{min-width:0;width:100%;box-sizing:border-box;text-align:center}
 .development-create-reference .development-po-size-pair .development-po-shared-size{white-space:normal;overflow-wrap:anywhere;display:flex;align-items:center;justify-content:center;min-height:38px}
+
+/* P08: approved board information density; never enabled inside the cockpit. */
+.dx-production-ui .pattern-layout-approved .pattern-task-card{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;padding:12px 10px;border-radius:7px;margin:0 0 8px}
+.pattern-layout-approved .pattern-task-card>span{grid-column:auto;display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0}
+.pattern-layout-approved .pattern-task-card .pattern-card-identity strong{font-size:16px;line-height:1.35;overflow-wrap:anywhere}
+.pattern-layout-approved .pattern-task-card .pattern-card-business b{font-size:14px;line-height:1.4}
+.pattern-layout-approved .pattern-task-card small{font-size:12px;line-height:1.45;margin:0;overflow-wrap:anywhere;max-width:100%}
+.pattern-layout-approved .pattern-task-card .pattern-card-blockers{border-top:1px solid var(--dx-v2-color-inset);padding-top:6px}
+.pattern-layout-approved .pattern-task-card .pattern-task-action{font-size:12px;color:var(--dx-v2-color-primary);margin-top:2px}
+@media(min-width:900px){.dx-production-ui .pattern-layout-approved .pattern-board-columns.is-filtered .pattern-task-card{grid-template-columns:minmax(0,1.1fr) minmax(0,1.25fr) minmax(0,1fr);gap:10px 20px;padding:14px 16px}.pattern-layout-approved .is-filtered .pattern-task-card .pattern-card-status{align-items:flex-end;text-align:right}.pattern-layout-approved .is-filtered .pattern-task-card .pattern-card-blockers{grid-column:1/-1}}
