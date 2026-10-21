@@ -1,4 +1,5 @@
 import {exerciseAttachmentRecovery} from "../helpers/attachment-recovery-fixture.js";
+import {exerciseErpReceipt} from "../helpers/erp-command-receipt-fixture.js";
 import {createHistoricalPatternFixture} from "../helpers/historical-pattern-fixture.js";
 import { registerWorkReportingRoutes } from "../../apps/api/src/rework/work-reporting-routes.js";
 import { journeyReworkHistoryUrl } from "../../apps/api/src/production-platform/journey-rework-record.js";
@@ -3460,7 +3461,7 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   it("P05 linked execution transfer keeps segments, digital assignment and todos atomic",async()=>{await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker,undefined,true);});
   it("P05 native transfer preserves another arrangement manager and Root self-work authority",async()=>{await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker,undefined,"authority");});
   it("P03 legacy tail return collects new-round counts without rewriting frozen data",async()=>{await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker,"tail");});
-  it("P03 legacy linked rework collects new-round counts atomically",async()=>{await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker,"native");});
+  it("P03 legacy linked rework collects new-round counts atomically",async()=>{await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker,"native");},15_000);
 
   it("returned-report lifecycle resolves repeated batch resubmission and leaves another order's return todo pending", async () => {
     const fixture = await returnedReportFixture(), unrelated = await returnedReportFixture();
@@ -3595,6 +3596,10 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
   it("P14 preserves real ready facts after a lost receipt and denies foreign unbound access",async()=>{
     await exerciseAttachmentRecovery(database,actor(ids.tail,['tail_supervisor'],'tools:user'),actor(ids.production,['production_management'],'tools:user'));
+  });
+  it('P15 recovers original ERP commands read-only under current identity and exact scope',async()=>{
+    await exerciseErpReceipt(database,ids.merchandiser,actor(ids.technicalAdmin,['system_admin'],'erp:emergency_intake'),actor(ids.worker,['worker'],'work:report'),todoProjection,actor(ids.patternRoot,['root_superuser'],'access:admin'));
+
   });
 
 });

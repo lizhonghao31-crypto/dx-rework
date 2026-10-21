@@ -79,6 +79,25 @@ export const ErpEmergencyLinkResponseSchema = z.object({
   linkedAt: z.string().datetime(),
 }).strict();
 
+export const ErpReceiptQuerySchema = z.object({requestFingerprint:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
+export const ErpCommandReceiptSchema = z.discriminatedUnion('outcome',[
+  z.object({contractVersion:ContractVersionSchema,outcome:z.literal('confirmed'),receipt:z.union([ErpIntakeResponseSchema,ErpEmergencyLinkResponseSchema]),expiresAt:z.string().datetime(),message:z.string().min(1)}).strict(),
+  z.object({contractVersion:ContractVersionSchema,outcome:z.literal('unconfirmed'),reason:z.enum(['missing_or_expired','in_progress']),receipt:z.null(),message:z.string().min(1)}).strict(),
+]);
+export type ErpCommandReceipt=z.infer<typeof ErpCommandReceiptSchema>;
+export type ErpCommandScope='erp.rework.intake.v1'|'erp.rework.emergency_intake.v1'|'erp.rework.link.v1';
+/** SHA-256 this UTF-8 string after parsing the original v1 command. This keeps
+ * the existing stored request hash byte-for-byte; no submitted values belong
+ * in URLs or diagnostic output. Arrays retain their original order. */
+export function serializeErpCommandFingerprint(scope:ErpCommandScope,payload:unknown):string {
+  const canonicalize=(value:unknown):unknown=>{
+    if(Array.isArray(value))return value.map(canonicalize);
+    if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value as Record<string,unknown>).sort(([a],[b])=>a.localeCompare(b)).map(([key,child])=>[key,canonicalize(child)]));
+    return value;
+  };
+  return JSON.stringify(canonicalize({scope,payload}));
+}
+
 const WorkerWageItemSchema = z.object({
   personId: IdSchema,
   personName: z.string().min(1),
