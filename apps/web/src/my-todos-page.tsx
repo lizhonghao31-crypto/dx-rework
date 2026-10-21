@@ -1,3 +1,5 @@
+import {cachedVerifiedSession} from './auth-session.js';
+import {subscribeTodoRead} from './todo-indicator-refresh.js';
 import {TodoRoutingTransfer} from './todo-routing-transfer.js';
 import { todoTaskTitle } from "@dx-rework/contracts";
 import { todoRouteHref } from "./todo-route-link.js";
@@ -39,7 +41,7 @@ type LoadState =
   | { kind: "error"; message: string };
 
 const todoModules: readonly Readonly<{ id: TodoModule; label: string }>[] = [
-  { id: "digital_production", label: "数字生产" },
+  { id: "digital_production", label: "开发与大货" },
   { id: "sourcing", label: "外发定价&选厂" },
   { id: "rework", label: "订单返工" },
   { id: "production", label: "实时生产" },
@@ -129,7 +131,11 @@ export function MyTodosPage() {
   const [requestedModule, setRequestedModule] = useState<TodoModule | undefined>(initial.module);
   const [requestedPage, setRequestedPage] = useState(initial.page);
   const [queryOwner,setQueryOwner] = useState<string | null>(null);
+  const [readIndicator,setReadIndicator]=useState<{actorId:string;count:number}|null>(null);
+  const unreadCount=readIndicator?.actorId===queryOwner?readIndicator.count:null;
+  useEffect(()=>{const receive=(event:Event)=>{const detail=(event as CustomEvent<{actorId:string;unreadCount?:number}>).detail,session=cachedVerifiedSession();if(session&&session!=='denied'&&detail?.actorId===session.user.id)setReadIndicator(detail.unreadCount===undefined?null:{actorId:detail.actorId,count:detail.unreadCount});};window.addEventListener('dx-rework:todo-refresh',receive);return()=>window.removeEventListener('dx-rework:todo-refresh',receive);},[]);
   const [refresh,setRefresh] = useState(0);
+  useEffect(()=>subscribeTodoRead(()=>setRefresh(value=>value+1)),[]);
   const [routingAccess,setRoutingAccess]=useState({manage:false});
   const [busy, setBusy] = useState(false);
   const [accessibleTodoModules, setAccessibleTodoModules] = useState<ReadonlySet<TodoModule> | null>(null);
@@ -250,7 +256,7 @@ export function MyTodosPage() {
   };
 
   return (
-    <Shell active="我的待办">
+    <Shell key={queryOwner??"pending-personal-session"} active="我的待办">
       <div className="my-todos-page" aria-busy={busy}>
         <header className="page-heading my-todos-hero">
           <div className="my-todos-hero__title">
@@ -273,7 +279,7 @@ export function MyTodosPage() {
           </label>
 </div>
           </div>
-          <StatusBadge tone="info">个人任务</StatusBadge>
+          <div><StatusBadge tone="info">个人任务</StatusBadge>{unreadCount!==null&&<p aria-live="polite">开发与大货、生产风险未读：{formatBusinessDecimal(unreadCount)} 项</p>}</div>
         </header>
       {state.kind === "loading" && <Surface className="my-todos-state"><p>正在加载你的待办…</p></Surface>}
       {state.kind === "error" && (
@@ -335,7 +341,7 @@ export function MyTodosPage() {
                     <div className="my-todo-primary">
                       <div className="my-todo-title">
                         <h2>{taskTitle(todo)}</h2>
-                        <StatusBadge tone="warning">{todo.unread === undefined ? "待处理" : todo.unread ? "未读" : "已读 · 风险仍在"}</StatusBadge>
+                        <StatusBadge tone="warning">{todo.unread === undefined ? "待处理" : todo.unread ? "未读" : todo.entityType==="production_order" ? "已读 · 风险仍在" : "已读"}</StatusBadge>
                       </div>
                       <p>{orderSummary}</p>
                     </div>

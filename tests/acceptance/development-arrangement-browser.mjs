@@ -57,6 +57,10 @@ try{
   if(failure==='unknown'){assert.equal(state.checkRequests[0].key,state.checkRequests[1].key);assert.deepEqual(state.checkRequests[0].body,state.checkRequests[1].body);}
   results.push({failure,checks:['same source/round navigation','one formal check',...(failure==='navigation'?['navigation retry sends no write']:failure==='unknown'?['unknown retry retains original command and key']:['confirmed check navigates even readback fails'])]});await page.close();
  }
+ for(const reader of ['check','arrangement']){
+  const page=await browser.newPage({viewport:{width:1440,height:900}});page.on('pageerror',error=>errors.push(error.message));await page.goto(`http://127.0.0.1:${server.address().port}/?readFixture=${reader}&todo=00000000-0000-4000-8000-000000000055&${reader==='arrangement'?'arrangement=00000000-0000-4000-8000-000000000001&round=1':'task=00000000-0000-4000-8000-000000000002'}`);
+  await page.waitForFunction(()=>window.unifiedDispatch.reads===1);const actual=await page.evaluate(()=>structuredClone(window.unifiedDispatch));assert.equal(actual.checks,0);assert.equal(actual.materialWrites,0);assert.equal(actual.commits,0);assert.equal(actual.readBodies[0].route.routeName,reader==='check'?'digital_production_task':'digital_development_arrangement');assert.equal(actual.readBodies[0].route.developmentRound,1);if(evidence)await page.screenshot({path:join(evidence,`read-${reader}.png`),fullPage:true});results.push({reader,checks:['actual body callback records read','no business write']});await page.close();
+ }
  assert.deepEqual(errors,[]);
 }finally{if(evidence)await writeFile(join(evidence,'result.json'),JSON.stringify({results,errors,limits:'Actual React components with synthetic TEST responses; no business data or deployment.'},null,2));await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));await rm(out,{recursive:true,force:true});}
 console.log(JSON.stringify({passed:results.length,results,errors}));

@@ -1,4 +1,6 @@
 import {arrangementsAvailable} from "../production-platform/development-arrangement.js";
+import {isDeepStrictEqual} from 'node:util';
+import {MarkTodoReadSchema,type MarkTodoRead} from '@dx-rework/contracts';
 import {nativeDevelopmentTodoExclusion} from "../production-platform/development-arrangement-todos.js";
 import { globalTodoSearch } from "./global-search.js";
 import { digitalTodoTarget } from "../production-platform/notification-policy.js";
@@ -286,7 +288,7 @@ export class TodoService {
     private readonly database: Pool,
     private readonly events = new OperationEventRepository(),
     private readonly outbox = new MessageOutboxRepository(),
-    private readonly production?: Pick<ProductionClosureService,"todos">,
+    private readonly production?: Pick<ProductionClosureService,"todos"> & Partial<Pick<ProductionClosureService,'markRead'>>,
     private readonly digital?: {todos(actor:TrustedActorContext):Promise<TodoResponse[]>},
   ) {}
 
@@ -457,9 +459,41 @@ export class TodoService {
          ${this.digital&&await arrangementsAvailable(this.database)?`AND ${nativeDevelopmentTodoExclusion}`:''}`,
       [actor.actorId],
     );
+    const production=this.production?await this.production.todos(actor):[],digital=this.digital?await this.digital.todos(actor):[];
     return {
-      pendingCount: Number(result.rows[0]?.pending_count ?? 0) + (this.production ? (await this.production.todos(actor)).filter(todo=>todo.unread).length : 0) + (this.digital ? (await this.digital.todos(actor)).length : 0),
+      pendingCount:Number(result.rows[0]?.pending_count??0)+production.filter(todo=>todo.unread).length+digital.length,
+      unreadCount:[...production,...digital].filter(todo=>todo.contentToken&&todo.unread===true).length,
     };
+  }
+
+  async markReadForActor(actor:TrustedActorContext,todoId:string,input:MarkTodoRead){
+    this.requireCapability(actor,'todo:view');
+    const parsed=MarkTodoReadSchema.safeParse(input);
+    if(!TODO_ID_PATTERN.test(todoId)||!parsed.success)throw new ApplicationError('VALIDATION_ERROR','缺少有效事项、内容依据或阅读路由',400);
+    const check=(todo:TodoResponse)=>{
+      if(todo.recipientUserId!==actor.actorId||!todo.contentToken||todo.contentToken!==parsed.data.contentToken||!isDeepStrictEqual(todo.route,parsed.data.route))
+        throw new ApplicationError('TODO_CONTENT_CHANGED','事项内容、轮次或收件人已变化，本次未标读；请重新打开当前事项',409);
+      if(!['pending','blocked_recipient'].includes(todo.status))throw new ApplicationError('NOT_FOUND','事项已不在当前待办中',404);
+    };
+    const todo=await this.getForActor(actor,todoId);check(todo);
+    if(todo.route.routeName==='production_detail'){
+      if(!this.production?.markRead)throw new ApplicationError('READ_STATE_UNAVAILABLE','生产事项阅读服务尚未就绪，请管理员核实版本',503);
+      await this.production.markRead(actor,todoId);
+      const row=(await this.database.query('SELECT read_at FROM sourcing_production_alert_reads WHERE alert_id=$1 AND user_id=$2',[todoId,actor.actorId])).rows[0];
+      if(!row)throw new ApplicationError('NOT_FOUND','该风险已解除或不再属于你，本次没有新增阅读记录',404);
+      return{read:true as const,contentToken:todo.contentToken!,readAt:new Date(row.read_at).toISOString()};
+    }
+    const client=await this.database.connect();
+    try{
+      await client.query('BEGIN');await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+      // Re-resolve original provider membership after acquiring its lifecycle lock;
+      // a stale read cannot mark a new return/reassignment/round as read.
+      const current=(await this.digital?.todos(actor))?.find(item=>item.todoId===todoId);
+      if(!current)throw new ApplicationError('NOT_FOUND','事项已结束、已改派或不再属于你，本次未标读',404);check(current);
+      await client.query('INSERT INTO todo_content_reads(recipient_id,todo_id,content_token,read_route) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING',[actor.actorId,todoId,current.contentToken,JSON.stringify(current.route)]);
+      const row=(await client.query('SELECT read_at FROM todo_content_reads WHERE recipient_id=$1 AND todo_id=$2 AND content_token=$3',[actor.actorId,todoId,current.contentToken])).rows[0];
+      await client.query('COMMIT');return{read:true as const,contentToken:current.contentToken!,readAt:new Date(row.read_at).toISOString()};
+    }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
   }
 
   async listRoutingExceptionsForActor(

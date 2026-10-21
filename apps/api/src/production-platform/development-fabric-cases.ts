@@ -1,3 +1,4 @@
+import {todoContentToken} from '../todos/content-reads.js';
 import type {Pool,PoolClient} from "pg";
 import type {TodoResponse} from "@dx-rework/contracts";
 import type {TrustedActorContext} from "../tools/repositories.js";
@@ -22,7 +23,7 @@ export async function fabricDecisionTodos(db:DB,actor:TrustedActorContext):Promi
  const allowed=isRootActor(actor)||actor.actorRoles.includes("production_management")&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,"production_management");
  if(!allowed)return [];
  if(!(await db.query("SELECT to_regclass('digital_development_material_verifications') AS relation")).rows[0]?.relation)return [];
- const sources=(await db.query(`SELECT s.source_id,s.design_style_no FROM digital_production_sources s JOIN digital_development_documents d USING(source_id)
+ const sources=(await db.query(`SELECT s.source_id,s.design_style_no,coalesce((SELECT max(r.round_number) FROM digital_development_rounds r WHERE r.source_id=s.source_id),1) AS round_number FROM digital_production_sources s JOIN digital_development_documents d USING(source_id)
  LEFT JOIN digital_production_resource_lifecycle l ON l.resource_kind='source' AND l.resource_id=s.source_id
  WHERE d.status='published' AND coalesce(l.state,'active')='active'
  AND EXISTS(SELECT 1 FROM digital_development_execution_facts f WHERE f.source_id=s.source_id AND f.kind='面料报告')`)).rows;
@@ -35,7 +36,7 @@ export async function fabricDecisionTodos(db:DB,actor:TrustedActorContext):Promi
   for(const report of await fabricCases(db,source.source_id)){
    if(report.decisionId)continue;
    const at=new Date(report.reportedAt).toISOString(),id=report.reportId;
-   result.push({todoId:id,taskTitle:"决定问题面料是否使用",todoType:"business_action",category:"digital_fabric_decision",sourceEventId:id,sourceAction:"development_fabric_report",entityType:task?"digital_task":"digital_development",entityId:task?.task_id??source.source_id,recipientUserId:actor.actorId,requiredRole:"production_management",requiredCapability:null,route:{routeName:task?"digital_production_task":"digital_development",entityId:task?.task_id??source.source_id,todoId:id},policyKey:null,dueAt:null,reminderCount:0,status:"pending",blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:source.design_style_no,supplierName:null,status:"问题面料等待明确决定",updatedAt:at},unread:true,version:1,createdAt:at,updatedAt:at});
+   result.push({contentToken:todoContentToken(['fabric',id,source.round_number]),todoId:id,taskTitle:"决定问题面料是否使用",todoType:"business_action",category:"digital_fabric_decision",sourceEventId:id,sourceAction:"development_fabric_report",entityType:task?"digital_task":"digital_development",entityId:task?.task_id??source.source_id,recipientUserId:actor.actorId,requiredRole:"production_management",requiredCapability:null,route:{routeName:task?"digital_production_task":"digital_development",entityId:task?.task_id??source.source_id,todoId:id,developmentRound:source.round_number},policyKey:null,dueAt:null,reminderCount:0,status:"pending",blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:source.design_style_no,supplierName:null,status:"问题面料等待明确决定",updatedAt:at},unread:true,version:1,createdAt:at,updatedAt:at});
   }
  }
  return result;

@@ -25,7 +25,8 @@ jobs:
     name: Full Gate exact Head
     if: ${{ startsWith(github.event.pull_request.title, '[FULL]') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # This authorized stacked plan includes every heavy gate; keep finite headroom.
+    timeout-minutes: ${{ github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'unified-p') && 30 || 20 }}
     env:
       NODE_ENV: test
       GIT_SHA: ${{ github.event.pull_request.head.sha }}

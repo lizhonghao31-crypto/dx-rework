@@ -1,4 +1,5 @@
 import {createHash} from "node:crypto";
+import {todoContentToken} from '../todos/content-reads.js';
 import type {Pool,PoolClient} from "pg";
 import type {TodoResponse,TodoRouteDescriptor} from "@dx-rework/contracts";
 import type {TrustedActorContext} from "../tools/repositories.js";
@@ -20,7 +21,9 @@ export async function arrangementTodos(db:DB,actor:TrustedActorContext):Promise<
   if(!plan?.readyToArrange||!plan.rows.some(row=>row.editable&&!row.valid))continue;
   if(plan.managerId&&plan.managerId!==actor.actorId&&!plan.canTakeOver)continue;
   const id=arrangementTodoId(source.source_id,plan.roundNumber),at=new Date(source.created_at).toISOString();
-  result.push({todoId:id,taskTitle:"安排本轮师傅",todoType:"business_action",category:"digital_assignment",sourceEventId:id,sourceAction:"development_arrangement",entityType:"digital_development",entityId:source.source_id,recipientUserId:actor.actorId,requiredRole:null,requiredCapability:null,route:{routeName:"digital_development_arrangement",entityId:source.source_id,todoId:id,developmentRound:plan.roundNumber},policyKey:null,dueAt:null,reminderCount:0,status:"pending",blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:source.design_style_no,supplierName:null,status:"尚未安排完整",updatedAt:at},unread:true,version:plan.version+1,createdAt:at,updatedAt:at});
+  const check=(await db.query("SELECT f.fact_id FROM digital_development_execution_facts f JOIN digital_production_tasks t ON t.task_id=f.task_id WHERE f.source_id=$1 AND t.route_version=$2 AND f.kind='核配通过' ORDER BY f.sequence DESC LIMIT 1",[source.source_id,plan.roundNumber])).rows[0]?.fact_id??null;
+  const contentToken=todoContentToken(['arrangement',id,plan.documentVersion,check,plan.managerId,plan.rows.filter(row=>row.editable&&!row.valid).map(row=>[row.kind,row.assigneeId])]);
+  result.push({contentToken,todoId:id,taskTitle:"安排本轮师傅",todoType:"business_action",category:"digital_assignment",sourceEventId:id,sourceAction:"development_arrangement",entityType:"digital_development",entityId:source.source_id,recipientUserId:actor.actorId,requiredRole:null,requiredCapability:null,route:{routeName:"digital_development_arrangement",entityId:source.source_id,todoId:id,developmentRound:plan.roundNumber},policyKey:null,dueAt:null,reminderCount:0,status:"pending",blockedReason:null,orderContext:{reworkNo:null,orderNo:null,styleNo:source.design_style_no,supplierName:null,status:"尚未安排完整",updatedAt:at},unread:true,version:plan.version+1,createdAt:at,updatedAt:at});
  }
  return result;
 }

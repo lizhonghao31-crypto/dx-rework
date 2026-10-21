@@ -15,5 +15,5 @@ export const todoSearchLabels: Readonly<Record<string, string>> = {
   samples: '样衣管理',
   pattern_room: '订单打板',
   suppliers: '供应商中心',
-  digital_production: '数字生产',
+  digital_production: '开发与大货 数字生产',
 };

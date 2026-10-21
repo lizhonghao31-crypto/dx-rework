@@ -102,6 +102,9 @@ export const TodoResponseSchema = z.object({
   /** Minimal identity of the action's associated business resource. */
   orderContext: TodoOrderContextSchema.nullable(),
   unread: z.boolean().optional(),
+  /** Stable persisted content identity, independent of list query time. */
+  contentToken:z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  readAt:z.string().datetime().nullable().optional(),
   productionProgress: z.number().nonnegative().optional(),
   daysWithoutUpdate: z.number().int().nonnegative().nullable().optional(),
   version: z.number().int().positive(),
@@ -166,7 +169,11 @@ export const TodoMineParamsSchema = z.object({
 
 export const TodoCountIndicatorSchema = z.object({
   pendingCount: z.number().int().nonnegative(),
+  unreadCount:z.number().int().nonnegative().optional(),
 }).strict();
+
+export const MarkTodoReadSchema=z.object({contentToken:z.string().regex(/^[a-f0-9]{64}$/),route:TodoRouteDescriptorSchema}).strict();
+export const TodoReadReceiptSchema=z.object({read:z.literal(true),contentToken:z.string().regex(/^[a-f0-9]{64}$/),readAt:z.string().datetime()}).strict();
 
 export const TodoRoutingExceptionListResponseSchema = z.object({
   routingExceptions: z.array(TodoRoutingExceptionSchema),
@@ -186,6 +193,7 @@ export type TodoRouteDescriptor = z.infer<typeof TodoRouteDescriptorSchema>;
 export type TodoPolicy = z.infer<typeof TodoPolicySchema>;
 export type TodoOrderContext = z.infer<typeof TodoOrderContextSchema>;
 export type TodoResponse = z.infer<typeof TodoResponseSchema>;
+export type MarkTodoRead=z.infer<typeof MarkTodoReadSchema>;
 export type TodoModule = z.infer<typeof TodoModuleSchema>;
 export type TodoModuleCounts = z.infer<typeof TodoModuleCountsSchema>;
 export type TodoDeliveryAttempt = z.infer<typeof TodoDeliveryAttemptSchema>;

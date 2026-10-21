@@ -67,6 +67,36 @@ const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     return { style, sourceId: source.sourceId, taskId: task.taskId };
   };
   const list = async (actor: TrustedActorContext, query?: string) => TodoListResponseSchema.parse(await todos.listForActor(actor, { module: "digital_production", ...(query ? { query } : {}) }));
+  it('P07 persists one first-read receipt per person and stable content while the task stays pending',async()=>{
+    const f=await sourceTask(),item=(await list(actors.clerk!,f.style)).todos[0]!,before=await tasks.read(root,f.taskId),counts=await todos.countIndicatorForActor(actors.clerk!);
+    expect(item).toMatchObject({unread:true,readAt:null});expect(item.contentToken).toMatch(/^[a-f0-9]{64}$/);
+    const input={contentToken:item.contentToken!,route:item.route},[a,b]=await Promise.all([todos.markReadForActor(actors.clerk!,f.taskId,input),todos.markReadForActor(actors.clerk!,f.taskId,input)]);
+    expect(a).toEqual(b);expect((await list(actors.clerk!,f.style)).todos[0]).toMatchObject({unread:false,readAt:a.readAt,status:'pending',contentToken:item.contentToken});
+    expect(await todos.markReadForActor(actors.clerk!,f.taskId,input)).toEqual(a);
+    expect((await db.query('SELECT count(*)::int n FROM todo_content_reads WHERE recipient_id=$1 AND todo_id=$2',[ids.clerk,f.taskId])).rows[0].n).toBe(1);
+    const after=await todos.countIndicatorForActor(actors.clerk!);expect(after.pendingCount).toBe(counts.pendingCount);expect(after.unreadCount).toBe(counts.unreadCount!-1);expect(await tasks.read(root,f.taskId)).toEqual(before);
+    await expect(todos.markReadForActor(actors.peer!,f.taskId,input)).rejects.toMatchObject({statusCode:404});await expect(todos.markReadForActor(root,f.taskId,input)).rejects.toMatchObject({statusCode:404});
+  });
+  it('P07 rejects late tokens and old recipients after actual content change and reassignment',async()=>{
+    const f=await sourceTask(),old=(await list(actors.clerk!,f.style)).todos[0]!,oldInput={contentToken:old.contentToken!,route:old.route};
+    await tasks.prioritize(root,f.taskId,'urgent',randomUUID());
+    const changed=(await list(actors.clerk!,f.style)).todos[0]!;expect(changed.contentToken).not.toBe(old.contentToken);expect(changed.unread).toBe(true);
+    await expect(todos.markReadForActor(actors.clerk!,f.taskId,oldInput)).rejects.toMatchObject({statusCode:409});
+    expect((await db.query('SELECT count(*)::int n FROM todo_content_reads WHERE todo_id=$1',[f.taskId])).rows[0].n).toBe(0);
+    await todos.markReadForActor(actors.clerk!,f.taskId,{contentToken:changed.contentToken!,route:changed.route});
+    await tasks.reassign(root,f.taskId,ids.peer,randomUUID());await expect(todos.markReadForActor(actors.clerk!,f.taskId,{contentToken:changed.contentToken!,route:changed.route})).rejects.toMatchObject({statusCode:404});
+    const peer=(await list(actors.peer!,f.style)).todos[0]!;expect(peer).toMatchObject({unread:true,readAt:null});expect(peer.contentToken).not.toBe(changed.contentToken);
+    await todos.markReadForActor(actors.peer!,f.taskId,{contentToken:peer.contentToken!,route:peer.route});await tasks.reassign(root,f.taskId,ids.clerk,randomUUID());
+    expect((await list(actors.clerk!,f.style)).todos[0]).toMatchObject({unread:true,readAt:null});expect((await db.query('SELECT count(*)::int n FROM todo_content_reads WHERE todo_id=$1',[f.taskId])).rows[0].n).toBe(2);
+  });
+  it('P07 refuses wrong entity/round, forged recipient and capability denial without a receipt',async()=>{
+    const f=await sourceTask(),item=(await list(actors.clerk!,f.style)).todos[0]!,input={contentToken:item.contentToken!,route:item.route};
+    await expect(todos.markReadForActor(actors.clerk!,f.taskId,{...input,route:{...item.route,entityId:randomUUID()}})).rejects.toMatchObject({statusCode:409});
+    await expect(todos.markReadForActor(actors.clerk!,f.taskId,{...input,route:{...item.route,developmentRound:2}})).rejects.toMatchObject({statusCode:409});
+    const forged={...input,recipientUserId:ids.peer};await expect(todos.markReadForActor(actors.clerk!,f.taskId,forged)).rejects.toMatchObject({statusCode:400});
+    await expect(todos.markReadForActor({...actors.clerk!,authorizationCapabilities:[],authorizationCapability:'digital_production:view'},f.taskId,input)).rejects.toMatchObject({statusCode:403});
+    expect((await db.query('SELECT count(*)::int n FROM todo_content_reads WHERE todo_id=$1',[f.taskId])).rows[0].n).toBe(0);
+  });
   it("searches the actual primary merchandiser order style and keeps node title separate", async () => {
     const style = `TEST-DOC-ORDER-${randomUUID()}`;
     const order = await new DigitalProductionIdentityService(db, true).createOrder(root, { customerCode: "PD", primaryMerchandiserId: ids.merch, productGroup: "男装", designStyleNo: style, orderDate: "2026-10-06", lines: [{ color: "TEST PRIVATE COLOR", customerWarehouseArrivalDate: minimumInitialCustomerDate(), sizes: [{ size: "M", quantity: 9 }] }] }, randomUUID());

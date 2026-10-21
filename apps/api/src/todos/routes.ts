@@ -8,6 +8,7 @@ import {
   TodoRoutingExceptionListResponseSchema,
   TodoRoutingExceptionParamsSchema,
   TransferTodoRoutingExceptionSchema,
+  MarkTodoReadSchema,TodoReadReceiptSchema,
 } from "@dx-rework/contracts";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
@@ -38,7 +39,7 @@ export type TodoHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: Pick<TodoService,
     "getForActor" | "listForActor" | "countIndicatorForActor"
-      | "listRoutingExceptionsForActor" | "transferRoutingException">;
+      | "listRoutingExceptionsForActor" | "transferRoutingException"> & Partial<Pick<TodoService,'markReadForActor'>>;
 }>;
 
 export function registerTodoRoutes(
@@ -103,6 +104,12 @@ export function registerTodoRoutes(
       await actor(request, "todo:view"),
       parse(TodoMineParamsSchema, request.params).todoId,
     )));
+
+  app.post<{Params:{todoId:string}}>('/todos/mine/:todoId/read',async request=>{
+    const current=await actor(request,'todo:view');
+    if(!dependencies.service.markReadForActor)throw new ApplicationError('READ_STATE_UNAVAILABLE','事项阅读服务尚未就绪，请管理员核实前后端版本',503);
+    return TodoReadReceiptSchema.parse(await dependencies.service.markReadForActor(current,parse(TodoMineParamsSchema,request.params).todoId,parse(MarkTodoReadSchema,request.body)));
+  });
 
   app.get("/todos/routing-exceptions/mine", async (request) =>
     TodoRoutingExceptionListResponseSchema.parse({

@@ -15,7 +15,7 @@ import {
 } from "@dx-rework/ui";
 import { createWebUrls } from "../url-contract.js";
 import { hasPageAccess, verifySession, type AuthorizedUser } from "./auth.js";
-import { sessionCacheVersion } from "./auth-session.js";
+import { cachedVerifiedSession, sessionCacheVersion } from "./auth-session.js";
 import { LogoutButton } from "./session-exit.js";
 import type { Task } from "./types.js";
 import "./shell-navigation.css";
@@ -112,7 +112,7 @@ function TodoCountBadge({ count }: { count: number }) {
     <span
       className="todo-count-badge"
       role="status"
-      aria-label={`${formatBusinessDecimal(count)}项未完成待办`}
+      aria-label={`${formatBusinessDecimal(count)}项待办提示`}
     >
       {label}
     </span>
@@ -334,6 +334,7 @@ export function Shell({
 
     setPendingTodoCount(0);
     const controller = new AbortController();
+    const indicatorSessionVersion=sessionCacheVersion();
     let checking = false;
     const checkIndicator = async () => {
       if (checking) return;
@@ -351,8 +352,10 @@ export function Shell({
           return;
         }
         const indicator = TodoCountIndicatorSchema.parse(await response.json());
+        const session=cachedVerifiedSession();
+        if(controller.signal.aborted||indicatorSessionVersion!==sessionCacheVersion()||!session||session==='denied'||session.user.id!==currentUser.id)return;
         setPendingTodoCount(indicator.pendingCount);
-        window.dispatchEvent(new Event("dx-rework:todo-refresh"));
+        window.dispatchEvent(new CustomEvent("dx-rework:todo-refresh",{detail:{actorId:currentUser.id,unreadCount:indicator.unreadCount}}));
       } catch (error: unknown) {
         if (!controller.signal.aborted) console.warn("Todo indicator refresh failed", error);
       } finally {
@@ -622,7 +625,7 @@ export function Shell({
       : activeEntry?.name ?? active;
 
   return (
-    <div className={`app-shell ui-polish unified-shell${appearance === "digital" ? " digital-workspace production-command-shell" : ""}`}>
+    <div data-brand-scope={['我的待办','开发与大货办理','digital-designer','digital-pattern'].includes(active)&&!window.location.pathname.endsWith('/ui/digital-cockpit')?'approved-six':undefined} className={`app-shell ui-polish unified-shell${appearance === "digital" ? " digital-workspace production-command-shell" : ""}`}>
       {pullDistance > 0 ? (
         <div
           className="mobile-pull-refresh"

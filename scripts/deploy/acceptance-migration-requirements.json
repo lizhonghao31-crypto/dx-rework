@@ -1008,5 +1008,22 @@
       "guard_production_order_root_immutable"
     ],
     "sequences": []
+  },
+  "0250_todo_content_reads": {
+    "checksum": "146cc69ba897d7beafef88e3a4fd9d3e8411441fd672124db4c6c4576c79a038",
+    "tables": [],
+    "functions": [],
+    "references": [
+      "app_users"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "todo_content_reads"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }

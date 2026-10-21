@@ -250,7 +250,7 @@ const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
     const list = await combined.listForActor(view(ids.wu_yunfeng),{module:"production"});
     expect(list.todos).toEqual([]);
     expect(list.moduleCounts.production).toBe(0);
-    expect(await combined.countIndicatorForActor(view(ids.wu_yunfeng))).toEqual({pendingCount:0});
+    expect(await combined.countIndicatorForActor(view(ids.wu_yunfeng))).toEqual({pendingCount:0,unreadCount:0});
     expect((await combined.countIndicatorForActor(view(ids.li_zhonghao))).pendingCount).toBeGreaterThan(0);
     await expect(closure.markRead(view(ids.wu_yunfeng),allowed[0]!.todoId)).rejects.toMatchObject({statusCode:404});
     expect((await production.get(actor(ids.wu_yunfeng,"sourcing:view"),id)).productionOrderId).toBe(id);

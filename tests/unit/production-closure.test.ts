@@ -55,7 +55,7 @@ describe("production closure recipient and observation boundaries",()=>{
   expect(todoModuleIdsForUser({isRoot:true,capabilities:[]})).toContain("production");
  });
  it("keeps search/pagination over active risks while the header counts only production unread",async()=>{
-  const todos=Array.from({length:17},(_,i)=>todo(i,i<2)),query=vi.fn(async(sql:string,args:unknown[]=[])=>{
+  const todos=Array.from({length:17},(_,i)=>({...todo(i,i<2),contentToken:"a".repeat(64)})),query=vi.fn(async(sql:string,args:unknown[]=[])=>{
    if(sql.includes("pending_count"))return {rows:[{pending_count:"3"}]};
    if(sql.includes("unique_candidates")){const records=JSON.parse(String(args[2])) as Record<string,unknown>[];return {rows:[{total_count:records.length,total_pages:records.length?1:0,page:1,items:records.map(value=>({kind:"provider",value}))}]};}
    return {rows:[]};
@@ -65,7 +65,7 @@ describe("production closure recipient and observation boundaries",()=>{
   expect(page).toMatchObject({page:2,pageSize:15,totalCount:17,totalPages:2,moduleCounts:{production:17}});expect(page.todos).toHaveLength(2);
   const selected=await service.listForActor(actor(["owner_group"]),{module:"production",query:"STYLE-16",page:9});
   expect(selected).toMatchObject({page:1,totalCount:1,searchScope:"all"});expect(selected.todos[0]!.orderContext?.styleNo).toBe("STYLE-16");
-  expect(await service.countIndicatorForActor(actor(["owner_group"]))).toEqual({pendingCount:5});
+  expect(await service.countIndicatorForActor(actor(["owner_group"]))).toEqual({pendingCount:5,unreadCount:2});
  });
  it("builds a base-path-aware risk deep link and rejects price-bearing receipt DTOs",()=>{
   const item=todo(1);expect(buildTodoDeepLink("/dx/",item.route)).toBe(`/dx/ui/production-dashboard/${item.route.entityId}?todo=${item.route.todoId}`);
