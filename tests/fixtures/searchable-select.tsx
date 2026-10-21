@@ -20,4 +20,25 @@ function ReceiptFixture() {
  const [shipment,setShipment]=useState<ProductionReceivingSummary|null>(null);
  return <main><FactoryReceiptSelector cuttingOrderId="00000000-0000-4000-8000-000000000099" shipment={shipment} onSelect={setShipment}/><output id="shipment">{shipment?.supplierName??""}</output></main>;
 }
-createRoot(document.getElementById("root")!).render(window.location.search.includes("receipt")?<ReceiptFixture/>:<Fixture/>);
+function FloatingFixture() {
+  const [values, setValues] = useState<Record<string, string>>({}), [result, setResult] = useState(""), [disabled, setDisabled] = useState(false);
+  return <main style={{ padding: 16, maxWidth: 900 }}>
+    <p>合成总委派：原生候选不变，仅浮层脱离裁切</p>
+    <form onSubmit={event => { event.preventDefault(); setResult(JSON.stringify(Object.fromEntries(new FormData(event.currentTarget)))); }}>
+      <fieldset disabled={disabled} style={{ minWidth: 0, padding: 0, border: 0 }}>
+        <div id="table-scroll" style={{ overflow: "auto", height: 250 }}>
+          <table style={{ minWidth: 320, width: "100%" }}><tbody>{["纸样", "裁板", "车板", "尾部"].map(stage => <tr key={stage} style={{ height: 60 }}><th style={{ width: 70 }}>{stage}</th><td>
+            <SearchableSelect menuPortal aria-label={`${stage}师傅`} name={stage} value={values[stage] ?? ""} onChange={event => setValues(previous => ({ ...previous, [stage]: event.target.value }))}>
+              <option value="">尚未安排</option>{Array.from({ length: 35 }, (_, index) => <option key={index} value={`person-${index}`} disabled={index === 2}>{index === 2 ? "已停用师傅" : `合成师傅${index}`}</option>)}
+            </SearchableSelect>
+          </td></tr>)}</tbody></table>
+          <div style={{ height: 280 }}>表内滚动区域</div>
+        </div>
+        <button type="submit">保存测试选择</button>
+      </fieldset>
+    </form>
+    <button onClick={() => setDisabled(!disabled)}>切换整表禁用</button><button id="outside">表外按钮</button>
+    <output id="result">{result}</output><div style={{ height: 900 }}>页面滚动区域</div>
+  </main>;
+}
+createRoot(document.getElementById("root")!).render(window.location.search.includes("receipt")?<ReceiptFixture/>:window.location.search.includes("floating")?<FloatingFixture/>:<Fixture/>);

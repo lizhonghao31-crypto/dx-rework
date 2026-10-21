@@ -35,10 +35,49 @@ try {
     await page.getByRole('button',{name:'切换禁用'}).click();assert.equal(await factory.isDisabled(),true);assert.equal(await person.isDisabled(),true);
     await page.getByRole('button',{name:'切换禁用'}).click();
     await factory.click();await factory.fill('不存在');await factory.press('Tab');assert.equal(await factory.inputValue(),'加工厂 3');
-    await page.getByRole('searchbox',{name:'原有搜索'}).fill('原有');await page.getByRole('option',{name:'原有合法候选'}).waitFor();
+    await page.getByRole('combobox',{name:'原有搜索'}).fill('原有');await page.getByRole('option',{name:'原有合法候选'}).waitFor();
     assert.deepEqual(errors,[]);const overflow=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,items:Array.from(document.querySelectorAll('body *')).filter(el=>el.getBoundingClientRect().right>innerWidth).map(el=>({tag:el.tagName,cls:el.className,right:el.getBoundingClientRect().right,width:el.getBoundingClientRect().width}))}));if(overflow.scroll>width)console.log(JSON.stringify(overflow));assert.ok(overflow.scroll<=width);
     if(process.env.SEARCH_EVIDENCE_DIR){await mkdir(process.env.SEARCH_EVIDENCE_DIR,{recursive:true});await page.screenshot({path:join(process.env.SEARCH_EVIDENCE_DIR,`${width}.png`),fullPage:true});}
     await page.close();console.log(`PASS ${width}x${height}: legal options, required, FormData, keyboard, disabled, async options, legacy search`);
+  }
+  for (const [width,height,deviceScaleFactor] of [[1440,1024,1],[1366,600,1],[390,600,1],[1100,480,1.25]]) {
+    const page=await browser.newPage({viewport:{width,height},deviceScaleFactor}),errors=[];
+    page.on('pageerror',error=>errors.push(error.message));
+    await page.goto(`http://127.0.0.1:${server.address().port}/?floating`);
+    const menu=page.getByRole('listbox');
+    const assertInside=async()=>{
+      await page.waitForFunction(()=>{const element=document.querySelector('[role="listbox"]');if(!element)return false;const r=element.getBoundingClientRect();return r.width>0&&r.height>0&&r.x>=0&&r.y>=0&&r.right<=innerWidth+1&&r.bottom<=innerHeight+1;});
+      const bounds=await menu.boundingBox(),viewport=page.viewportSize();assert.ok(bounds&&bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=viewport.width+1&&bounds.y+bounds.height<=viewport.height+1,JSON.stringify(bounds));
+      assert.equal(await menu.evaluate(element=>element.parentElement===document.body),true);
+    };
+    const assertHit=async option=>{assert.equal(await option.evaluate(element=>{const b=element.getBoundingClientRect();return element.contains(document.elementFromPoint(b.x+b.width/2,b.y+b.height/2));}),true);};
+    for(const stage of ['纸样','裁板','车板','尾部']) {
+      const input=page.getByRole('combobox',{name:`${stage}师傅`});await input.click();await menu.waitFor();await assertInside();
+      assert.equal(await menu.getByRole('option').count(),36);
+      assert.equal(await page.locator(`select[name="${stage}"] option`).count(),36);
+      const option=menu.getByRole('option',{name:'合成师傅1',exact:true});await assertHit(option);await option.click();
+      assert.equal(await input.inputValue(),'合成师傅1');assert.equal(await menu.count(),0);
+    }
+    const input=page.getByRole('combobox',{name:'车板师傅'});await input.click();await assertInside();
+    await menu.hover();await page.mouse.wheel(0,3000);
+    const last=menu.getByRole('option',{name:'合成师傅34',exact:true});
+    await page.waitForFunction(()=>{const m=document.querySelector('[role="listbox"]');return m&&m.scrollTop+m.clientHeight>=m.scrollHeight-2;});
+    await assertHit(last);await last.click();await page.getByRole('button',{name:'保存测试选择'}).click();assert.equal(JSON.parse(await page.locator('#result').innerText()).车板,'person-34');
+    await input.fill('已停用');assert.equal(await menu.getByRole('option').isDisabled(),true);await input.press('ArrowDown');await input.press('Enter');assert.equal(await page.locator('select[name="车板"]').inputValue(),'person-34');await input.press('Escape');
+    await input.fill('不存在');await menu.getByText('没有匹配的已有选项').waitFor();await input.press('Tab');assert.equal(await menu.count(),0);assert.equal(await input.inputValue(),'合成师傅34');
+    await input.fill('合成师傅3');await input.dispatchEvent('compositionstart');await input.press('ArrowDown');await input.press('Enter');assert.equal(await page.locator('select[name="车板"]').inputValue(),'person-34');await input.dispatchEvent('compositionend');await input.press('ArrowDown');await input.press('Enter');assert.equal(await input.inputValue(),'合成师傅3');
+    await input.click();await page.locator('#outside').click();assert.equal(await menu.count(),0);
+    await input.click();await page.getByRole('combobox',{name:'裁板师傅'}).click();assert.equal(await menu.count(),1);await input.click();assert.equal(await menu.count(),1);
+    const before=await menu.boundingBox();await page.locator('#table-scroll').evaluate(element=>{element.scrollTop=20;});
+    await page.waitForFunction(y=>{const m=document.querySelector('[role="listbox"]');return m&&Math.abs(m.getBoundingClientRect().y-y)>5;},before.y);
+    await assertInside();await page.locator('#table-scroll').evaluate(element=>{element.scrollTop=500;});await menu.waitFor({state:'detached'});
+    await page.locator('#table-scroll').evaluate(element=>{element.scrollTop=0;});await input.click();await page.getByRole('button',{name:'切换整表禁用'}).click();assert.equal(await input.isDisabled(),true);assert.equal(await menu.count(),0);
+    await page.getByRole('button',{name:'切换整表禁用'}).click();await input.click();await page.locator('fieldset').evaluate(element=>{element.disabled=true;});await menu.waitFor({state:'detached'});assert.equal(await input.isDisabled(),true);
+    await page.locator('fieldset').evaluate(element=>{element.disabled=false;});await input.click();await page.setViewportSize({width:Math.min(width,390),height:440});await assertInside();
+    await page.evaluate(()=>window.scrollTo(0,600));await menu.waitFor({state:'detached'});
+    assert.deepEqual(errors,[]);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    if(process.env.SEARCH_EVIDENCE_DIR){await page.evaluate(()=>window.scrollTo(0,0));await input.click();await mkdir(process.env.SEARCH_EVIDENCE_DIR,{recursive:true});await page.screenshot({path:join(process.env.SEARCH_EVIDENCE_DIR,`portal-${width}-${deviceScaleFactor}.png`),fullPage:false});}
+    await page.close();console.log(`PASS portal ${width}x${height} scale=${deviceScaleFactor}: table rows, mouse hit, last option, native data, IME, focus, scroll, resize, disabled`);
   }
   for (const denied of [false,true]) {
     const page=await browser.newPage(),pages=[];

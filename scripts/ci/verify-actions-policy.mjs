@@ -41,8 +41,8 @@ for (const expression of [
 for (const [name, source] of [["Quick Gate", quick], ["Full Gate", full]]) {
   const branches = source.match(/ {2}pull_request:\n {4}branches:\n((?: {6}- [^\n]+\n)+)/)?.[1]
     .trim().split("\n").map(line => line.trim().slice(2));
-  assert(JSON.stringify(branches) === JSON.stringify(["main", "release/digital-production-v1", "feat/digital-production-a4"]),
-    `${name} must gate main and the approved digital-production integration and A4 stacked base branches only`);
+  assert(JSON.stringify(branches) === JSON.stringify(["main", "release/digital-production-v1", "feat/digital-production-a4", "unified-p*"]),
+    `${name} must gate main and the approved digital-production integration and approved A4/unified-plan stacked base branches only`);
 }
 
 assert(quick.includes("timeout-minutes: 5"), "Quick Gate timeout must stay at 5 minutes");

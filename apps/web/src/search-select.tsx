@@ -1,4 +1,5 @@
-import { useId, useLayoutEffect, useMemo, useRef, useState, type SelectHTMLAttributes } from "react";
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type SelectHTMLAttributes } from "react";
+import { createPortal } from "react-dom";
 import "./search-select.css";
 
 export type SearchSelectOption = Readonly<{
@@ -121,15 +122,18 @@ export function SearchSelect({
 /** Search is transient; only an existing enabled native option can change the value.
  * The native control remains responsible for FormData, required, and change events.
  */
-export function SearchableSelect({ children, onSearchChange, ...props }: SelectHTMLAttributes<HTMLSelectElement> & { onSearchChange?: (query: string) => void }) {
+export function SearchableSelect({ children, onSearchChange, menuPortal = false, ...props }: SelectHTMLAttributes<HTMLSelectElement> & { onSearchChange?: (query: string) => void; menuPortal?: boolean }) {
   const composing = useRef(false);
   const native = useRef<HTMLSelectElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  const wrapper = useRef<HTMLDivElement>(null);
+  const popup = useRef<HTMLDivElement>(null);
   const listId = useId();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(-1);
   const [error, setError] = useState("");
+  const [placement, setPlacement] = useState<CSSProperties | null>(null);
   const [snapshot, setSnapshot] = useState<{ value: string; rows: Array<{ value: string; label: string; disabled: boolean }> }>({ value: "", rows: [] });
   useLayoutEffect(() => {
     const select = native.current;
@@ -139,7 +143,53 @@ export function SearchableSelect({ children, onSearchChange, ...props }: SelectH
   });
   const matches = snapshot.rows.filter(row => row.label.toLocaleLowerCase("zh-CN").includes(query.trim().toLocaleLowerCase("zh-CN")));
   const selected = snapshot.rows.find(row => row.value === snapshot.value)?.label ?? "";
-  const close = () => { setOpen(false); setQuery(""); setActive(-1); onSearchChange?.(""); };
+  const close = useCallback(() => { setOpen(false); setQuery(""); setActive(-1); onSearchChange?.(""); }, [onSearchChange]);
+  useLayoutEffect(() => {
+    if (!menuPortal || !open) return;
+    const anchor = wrapper.current, panel = popup.current, select = native.current;
+    if (!anchor || !panel || !select) return;
+    const position = () => {
+      if (select.matches(":disabled")) { close(); return; }
+      const rect = anchor.getBoundingClientRect(), viewport = window.visualViewport;
+      const top = viewport?.offsetTop ?? 0, left = viewport?.offsetLeft ?? 0;
+      const width = viewport?.width ?? window.innerWidth, height = viewport?.height ?? window.innerHeight;
+      if (!rect.width || !rect.height || rect.bottom <= top || rect.top >= top + height || rect.right <= left || rect.left >= left + width) { close(); return; }
+      for (let parent = anchor.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+        const style = getComputedStyle(parent), bounds = parent.getBoundingClientRect();
+        if ((/(auto|scroll|hidden|clip)/.test(style.overflowY) && (rect.bottom <= bounds.top || rect.top >= bounds.bottom)) ||
+          (/(auto|scroll|hidden|clip)/.test(style.overflowX) && (rect.right <= bounds.left || rect.left >= bounds.right))) { close(); return; }
+      }
+      const below = Math.max(0, top + height - rect.bottom - 14), above = Math.max(0, rect.top - top - 14);
+      const downward = below >= Math.min(180, panel.scrollHeight) || below >= above;
+      const maximum = Math.min(300, downward ? below : above);
+      const panelHeight = Math.min(panel.scrollHeight + 2, maximum);
+      const panelWidth = Math.min(rect.width, Math.max(0, width - 16));
+      const next: CSSProperties = { position: "fixed", right: "auto", width: panelWidth,
+        left: Math.max(left + 8, Math.min(rect.left, left + width - panelWidth - 8)),
+        top: downward ? rect.bottom + 6 : rect.top - 6 - panelHeight, maxHeight: maximum, visibility: "visible" };
+      setPlacement(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
+    };
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !anchor.contains(event.target) && !panel.contains(event.target)) close();
+    };
+    position();
+    window.addEventListener("scroll", position, true);
+    window.addEventListener("resize", position);
+    window.addEventListener("pointerdown", outside, true);
+    window.visualViewport?.addEventListener("resize", position);
+    window.visualViewport?.addEventListener("scroll", position);
+    const resize = new ResizeObserver(position); resize.observe(anchor); resize.observe(panel);
+    const disabled = new MutationObserver(position);
+    disabled.observe(select, { attributes: true, attributeFilter: ["disabled"] });
+    const fieldset = select.closest("fieldset");
+    if (fieldset) disabled.observe(fieldset, { attributes: true, attributeFilter: ["disabled"] });
+    return () => {
+      window.removeEventListener("scroll", position, true); window.removeEventListener("resize", position);
+      window.removeEventListener("pointerdown", outside, true);
+      window.visualViewport?.removeEventListener("resize", position); window.visualViewport?.removeEventListener("scroll", position);
+      resize.disconnect(); disabled.disconnect();
+    };
+  }, [open, menuPortal, matches.length, close]);
   const choose = (value: string) => {
     const select = native.current;
     if (!select || select.matches(":disabled")) return;
@@ -151,7 +201,11 @@ export function SearchableSelect({ children, onSearchChange, ...props }: SelectH
     close();
     input.current?.focus();
   };
-  return <div className="search-select native-search-select" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) close(); }}>
+  const results = open && !props.disabled ? <div ref={popup} className={`search-select__results${menuPortal ? " search-select__results--viewport" : ""}`} role="listbox" id={listId}
+    style={menuPortal ? placement ?? { position: "fixed", visibility: "hidden" } : undefined}>
+    {matches.length ? matches.map((row, index) => <button type="button" role="option" id={`${listId}-${index}`} tabIndex={-1} key={`${index}:${row.value}`} disabled={row.disabled} aria-selected={row.value === snapshot.value} data-active={index === active || undefined} onMouseDown={event => event.preventDefault()} onClick={() => choose(row.value)}>{row.label}</button>) : <span>没有匹配的已有选项</span>}
+  </div> : null;
+  return <div ref={wrapper} className="search-select native-search-select" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget) && !popup.current?.contains(event.relatedTarget)) close(); }}>
     <input ref={input} id={props.id} type="text" role="combobox" autoComplete="off" disabled={props.disabled}
       aria-label={props["aria-label"]} aria-labelledby={props["aria-labelledby"]}
       aria-describedby={error ? `${listId}-error` : props["aria-describedby"]} aria-invalid={error ? true : props["aria-invalid"]}
@@ -186,9 +240,7 @@ export function SearchableSelect({ children, onSearchChange, ...props }: SelectH
       {children}
     </select>
     <button className="native-search-select__toggle" type="button" disabled={props.disabled} tabIndex={-1} aria-label={open ? "收起已有选项" : "展开已有选项"} aria-expanded={open} onClick={() => { setOpen(!open); setQuery(""); setActive(-1); input.current?.focus(); }}></button>
-    {open && !props.disabled && <div className="search-select__results" role="listbox" id={listId}>
-      {matches.length ? matches.map((row, index) => <button type="button" role="option" id={`${listId}-${index}`} tabIndex={-1} key={`${index}:${row.value}`} disabled={row.disabled} aria-selected={row.value === snapshot.value} data-active={index === active || undefined} onMouseDown={event => event.preventDefault()} onClick={() => choose(row.value)}>{row.label}</button>) : <span>没有匹配的已有选项</span>}
-    </div>}
+    {menuPortal && results ? createPortal(results, document.body) : results}
     {error && <span id={`${listId}-error`} role="alert">{error}</span>}
   </div>;
 }
