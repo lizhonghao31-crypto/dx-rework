@@ -1,3 +1,5 @@
+import {AuxiliaryCatalogPage} from "./auxiliary-catalog-page.js";
+import {auxiliaryCatalogRequirements} from "./auxiliary-catalog-access.js";
 import {CockpitProductionSettings} from "./cockpit-production-settings.js";
 import { ProductionWorkspace } from "@dx-rework/ui/production";
 import { DigitalAnalysisPage } from "./digital-analysis-page.js";
@@ -319,6 +321,7 @@ function AppRoutes() {
   else if (/^\/ui\/suppliers\/requests\/(new|[0-9a-f-]{36})$/i.test(path)) page = <SupplierOnboardingPage key={path} requestId={path.split("/")[4]!} />;
   else if (path === "/ui/suppliers") page = <SupplierDirectoryPage />;
   else if (path === "/ui/suppliers/manage") page = <SupplierMaintenancePage />;
+  else if (path === "/ui/auxiliary-catalog") page = <AuxiliaryCatalogPage />;
   else if (path === "/ui/master-data") {
     const parameters = new URLSearchParams(search);
     const masterDataView = parameters.get("view");
@@ -434,6 +437,7 @@ function AppRoutes() {
   if (path.startsWith("/ui/suppliers")) {
     return <AuthGate requiredCapability="supplier_profile:read">{page}</AuthGate>;
   }
+  if (path === "/ui/auxiliary-catalog") return <AuthGate requiredAnyOf={auxiliaryCatalogRequirements}>{page}</AuthGate>;
   if (path === "/ui/master-data" || path === "/ui/people") {
     return <AuthGate requiredAnyOf={[
       owner,
