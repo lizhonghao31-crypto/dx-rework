@@ -5,7 +5,7 @@ import { shanghaiBusinessTime } from "./business-date.js";
 import { productionDisplayReturnUrl } from "./production-display-context.js";
 import { moduleCanWrite } from "./member-module-policy.js";
 import { NavigationIcon } from "./navigation-icons.js";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { z } from "zod";
 import { ProductionReportingDetailSchema, ProductionReportingListSchema, ProductionScopeDirectorySchema,
   type ProductionReportingDetail, type ProductionScopeInput } from "@dx-rework/contracts";
@@ -33,6 +33,7 @@ export async function saveProductionScope(input:ProductionScopeInput,key:string)
  const response=await feedbackFetch(apiUrl("production-reporting/scopes"),{method:"POST",credentials:"include",headers:{"content-type":"application/json","idempotency-key":key},body:JSON.stringify(input)});await feedbackJson(response,"POST",value=>{if(!value||typeof value!=="object"||!("saved"in value)||value.saved!==true)throw Error("invalid scope receipt");return value;});
 }
 
+type ProductionAttempt={payload:string;key:string;startedAt:number;uncertain?:boolean};
 export function ProductionReportingPage({productionOrderId}:{productionOrderId?:string|undefined}) {
   const factoryDecisionId=new URLSearchParams(window.location.search).get('factoryDecisionId');
   const factoryQuery=factoryDecisionId?'?'+new URLSearchParams({factoryDecisionId}):'';
@@ -45,8 +46,12 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
   const [correcting,setCorrecting]=useState<ProductionReportingDetail["history"][number]|null>(null);
   const [correctionQuantity,setCorrectionQuantity]=useState(""),[correctionDate,setCorrectionDate]=useState(today),[reason,setReason]=useState("");
   const [directory,setDirectory]=useState<z.infer<typeof ProductionScopeDirectorySchema>|null>(null);
+  const [scopeError,setScopeError]=useState("");
   const [scopeUser,setScopeUser]=useState(""),[scopeRefreshPending,setScopeRefreshPending]=useState(false),[scopeSupplier,setScopeSupplier]=useState("");
-  const mutation=useRef(false), retry=useRef<{payload:string;key:string;startedAt:number;uncertain?:boolean}|null>(null),scopeRetry=useRef<{payload:string;key:string;startedAt:number;uncertain?:boolean}|null>(null),version=useRef(0);
+  const contextKey=`${user?.id??"unverified"}:${productionOrderId??"list"}:${factoryDecisionId??"original"}`,context=useRef(contextKey);context.current=contextKey;
+  const pendingByContext=useRef(new Map<string,ProductionAttempt>());
+  const retry=useMemo(()=>{const attempts=pendingByContext.current;return {get current(){return attempts.get(contextKey)??null;},set current(value:ProductionAttempt|null){if(value)attempts.set(contextKey,value);else attempts.delete(contextKey);}};},[contextKey]);
+  const mutation=useRef(false),scopeRetry=useRef<{payload:string;key:string;startedAt:number;uncertain?:boolean}|null>(null),version=useRef(0);
   useEffect(()=>{void verifySession().then(s=>{if(s!=="denied"&&s.status==="authorized")setUser(s.user);});},[]);
   const load=async()=>{
     const current=++version.current;setLoading(true);setError("");
@@ -58,13 +63,14 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
     finally{if(current===version.current)setLoading(false);}
   };
   useEffect(()=>{const timer=setTimeout(()=>{void load();},q?250:0);return()=>{clearTimeout(timer);version.current++;};},[productionOrderId,factoryDecisionId,page,q,supplier,status]);
-  const write=async(path:string,body:unknown,success:string)=>{
+  const write=async(path:string,body:unknown,success:string,recover=false)=>{
+    const startedContext=contextKey;
     if(mutation.current)return;mutation.current=true;setBusy(true);setError("");setMessage("");
-    body={...(body as Record<string,unknown>),factoryDecisionId};const payload=JSON.stringify({path,body});if(retry.current?.uncertain&&retry.current.payload!==payload){setError("上次提交结果尚未确认，请先刷新原订单核对；重试时须保留原内容和请求标识。");mutation.current=false;setBusy(false);return;}if(retry.current?.payload!==payload)retry.current={payload,key:createClientRequestId(),startedAt:Date.now()};
+    if(!recover)body={...(body as Record<string,unknown>),factoryDecisionId};const payload=JSON.stringify({path,body});if(retry.current?.uncertain&&retry.current.payload!==payload){setError("上次提交结果尚未确认，请先刷新原订单核对；重试时须保留原内容和请求标识。");mutation.current=false;setBusy(false);return;}if(retry.current?.payload!==payload)retry.current={payload,key:createClientRequestId(),startedAt:Date.now()};
     if(retry.current.uncertain&&Date.now()-retry.current.startedAt>=SUBMISSION_RECOVERY_WINDOW_MS){setError("原提交已超出安全重试时间，请核对原订单；本次未重发，也不会另建请求标识。");mutation.current=false;setBusy(false);return;}
     try {const result=await request(path,ProductionReportingDetailSchema,{method:"POST",body:JSON.stringify(body),headers:{"idempotency-key":retry.current.key}});
-      setDetail(result);retry.current=null;setMessage(success);setQuantities({});setCorrecting(null);
-    }catch(e){if(retry.current?.uncertain||unknownWriteResult(e)){if(retry.current)retry.current.uncertain=true;}else retry.current=null;setError((e instanceof Error?e.message:"提交结果尚未确认，请核对原订单")+(retry.current?.uncertain?"；原提交结果仍未确认，请核对原订单。":""));}finally{mutation.current=false;setBusy(false);}
+      retry.current=null;if(context.current!==startedContext)return;setDetail(result);setMessage(success);setQuantities({});setCorrecting(null);
+    }catch(e){if(retry.current?.uncertain||unknownWriteResult(e)){if(retry.current)retry.current.uncertain=true;}else retry.current=null;if(context.current===startedContext)setError((e instanceof Error?e.message:"提交结果尚未确认，请核对原订单")+(retry.current?.uncertain?"；原提交结果仍未确认，请核对原订单。":""));}finally{mutation.current=false;setBusy(false);}
   };
   const execute=async(kind:"complete"|"ship")=>{
     if(!detail||busy||selectedLine.lineId)return;
@@ -72,22 +78,27 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
       `确认已发货？款号 ${detail.order.firstStyleNo}，已登记产量 ${formatBusinessDecimal(detail.order.completedQuantity)} 件。此操作不会确认仓库收货。`;
     if(await confirmInApp(text,{confirmLabel:kind==="complete"?"确认生产完成":"确认已发货"}))await write(`/${productionOrderId}/${kind}`,{businessDate:date,confirmed:true},kind==="complete"?"已登记生产完成":"已登记发货，等待仓库实际收货");
   };
-  const loadScopes=async()=>{try{setDirectory(await request("/scopes",ProductionScopeDirectorySchema));setScopeRefreshPending(false);return true;}catch(e){setError(e instanceof Error?e.message:"负责范围未能读取，请重新读取");return false;}};
+  const loadScopes=async()=>{try{setDirectory(await request("/scopes",ProductionScopeDirectorySchema));setScopeRefreshPending(false);setScopeError("");setMessage(value=>value.includes("最新范围暂未读取")?"负责范围变更已保存，最新范围已读取。":value);return true;}catch(e){setScopeError(e instanceof Error?e.message:"负责范围未能读取，请重新读取");return false;}};
   const saveScope=async(input:ProductionScopeInput)=>{
-    if(scopeRefreshPending){setError("负责范围已保存，请先重新读取负责范围；本次未重复提交。");return;}if(mutation.current)return;mutation.current=true;setBusy(true);setError("");setMessage("");
-    const payload=JSON.stringify(input);if(scopeRetry.current?.uncertain&&scopeRetry.current.payload!==payload){setError("上次负责范围提交结果尚未确认，请先读取原范围核对；重试时须保留原内容和请求标识。");mutation.current=false;setBusy(false);return;}if(scopeRetry.current?.payload!==payload)scopeRetry.current={payload,key:createClientRequestId(),startedAt:Date.now()};
-    if(scopeRetry.current.uncertain&&Date.now()-scopeRetry.current.startedAt>=SUBMISSION_RECOVERY_WINDOW_MS){setError("原提交已超出安全重试时间，请核对原负责范围；本次未重发，也不会另建请求标识。");mutation.current=false;setBusy(false);return;}
+    if(scopeRefreshPending){setScopeError("负责范围已保存，请先重新读取负责范围；本次未重复提交。");return;}if(mutation.current)return;mutation.current=true;setBusy(true);setScopeError("");setMessage("");
+    const payload=JSON.stringify(input);if(scopeRetry.current?.uncertain&&scopeRetry.current.payload!==payload){setScopeError("上次负责范围提交结果尚未确认，请先读取原范围核对；重试时须保留原内容和请求标识。");mutation.current=false;setBusy(false);return;}if(scopeRetry.current?.payload!==payload)scopeRetry.current={payload,key:createClientRequestId(),startedAt:Date.now()};
+    if(scopeRetry.current.uncertain&&Date.now()-scopeRetry.current.startedAt>=SUBMISSION_RECOVERY_WINDOW_MS){setScopeError("原提交已超出安全重试时间，请核对原负责范围；本次未重发，也不会另建请求标识。");mutation.current=false;setBusy(false);return;}
     try{await saveProductionScope(input,scopeRetry.current.key);scopeRetry.current=null;setScopeRefreshPending(true);
       setMessage(input.active?"负责范围已保存":"负责范围已撤销");
       const refreshed=await loadScopes();if(!refreshed)setMessage("负责范围已保存，最新范围暂未读取；请重新读取负责范围，不要重复提交。");
-    }catch(e){if(scopeRetry.current?.uncertain||unknownWriteResult(e)){if(scopeRetry.current)scopeRetry.current.uncertain=true;}else scopeRetry.current=null;setError((e instanceof Error?e.message:"负责范围提交结果尚未确认，请读取原范围核对")+(scopeRetry.current?.uncertain?"；原提交结果仍未确认，请读取原范围核对。":""));}finally{mutation.current=false;setBusy(false);}
+    }catch(e){if(scopeRetry.current?.uncertain||unknownWriteResult(e)){if(scopeRetry.current)scopeRetry.current.uncertain=true;}else scopeRetry.current=null;setScopeError((e instanceof Error?e.message:"负责范围提交结果尚未确认，请读取原范围核对")+(scopeRetry.current?.uncertain?"；原提交结果仍未确认，请读取原范围核对。":""));}finally{mutation.current=false;setBusy(false);}
   };
+  const pendingProduction=retry.current?.uncertain?JSON.parse(retry.current.payload) as {path:string;body:{factoryDecisionId?:string|null}}:null;
+  const canRecoverProduction=Boolean(pendingProduction&&pendingProduction.path.startsWith(`/${productionOrderId}/`)&&(pendingProduction.body.factoryDecisionId??null)===factoryDecisionId);
+  const recoverProduction=async()=>{if(!canRecoverProduction||!pendingProduction||busy)return;await write(pendingProduction.path,pendingProduction.body,"原生产提交已确认，最新办理状态已读取。",true);};
   const selectedLine=productionLineTarget(window.location.search,detail?.order.poDeliveryDates);
   const orderReturn=digitalDetailReturnUrl(new URLSearchParams(window.location.search).get("returnTo"),import.meta.env.BASE_URL);
   return <Shell active="生产数据填报"><main className="sourcing-workspace production-reporting">
     <Header iconRoute="/ui/production-reporting" title="生产数据填报" subtitle="按实际生产情况上报，系统自动累计。" badge="实时生产看板" />
     <a href={pageUrl("ui/production-dashboard")}><NavigationIcon route="/ui/production-dashboard" />实时看板</a>
     {error?<p role="alert" className="sourcing-delete-error">{error}</p>:null}
+    {scopeError?<p role="alert" className="sourcing-delete-error">{scopeError}</p>:null}
+    {canRecoverProduction?<section aria-label="原生产提交恢复"><p>原生产提交结果仍未确认。刷新后的业务阶段不会撤销原请求；请先用原内容核对结果，再办理下一步。</p><Button disabled={busy||loading} onClick={()=>void recoverProduction()}>使用原内容核对生产提交</Button></section>:null}
     {message?<p role="status">{message}</p>:null}
     {productionOrderId?<a href={orderReturn??productionDisplayReturnUrl(new URLSearchParams(window.location.search).get("returnTo"))??pageUrl("ui/production-reporting")}>{orderReturn?"返回这张订单":productionDisplayReturnUrl(new URLSearchParams(window.location.search).get("returnTo"))?"返回实时生产展示":"返回生产订单"}</a>:null}
     <Button disabled={busy||loading} variant="secondary" onClick={()=>{void load();}}>刷新</Button>
@@ -118,11 +129,11 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
           <p>累计 {formatBusinessDecimal(line.completedQuantity)} / {formatBusinessDecimal(line.quantity)} 件 · 剩余 {formatBusinessDecimal(line.quantity-line.completedQuantity)} 件</p>
           {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&detail.order.status==="in_production"?<form className="sourcing-form-grid production-reporting__report" onSubmit={e=>{e.preventDefault();void write(`/${productionOrderId}/reports`,{position:line.position,businessDate:date,quantity:Number(quantities[line.position])},"本次产量已保存");}}>
             <label>本次新增数量 *<input type="number" inputMode="numeric" min={1} max={line.quantity-line.completedQuantity} step={1} required disabled={busy||line.quantity===line.completedQuantity} value={quantities[line.position]??""} onChange={e=>setQuantities(v=>({...v,[line.position]:e.target.value}))}/></label>
-            <Button type="submit" disabled={busy||loading||!date||!quantities[line.position]||line.quantity===line.completedQuantity}>保存上报</Button>
+            <Button type="submit" disabled={busy||loading||Boolean(pendingProduction)||!date||!quantities[line.position]||line.quantity===line.completedQuantity}>保存上报</Button>
           </form>:null}
         </div></Surface>)}</div>
-        {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&!selectedLine.lineId&&detail.order.status==="in_production"?<Button disabled={busy||loading||!date} onClick={()=>{void execute("complete");}}>生产完成</Button>:null}
-        {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&!selectedLine.lineId&&detail.order.status==="production_completed"?<Button disabled={busy||loading||!date} onClick={()=>{void execute("ship");}}>登记发货</Button>:null}
+        {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&!selectedLine.lineId&&detail.order.status==="in_production"?<Button disabled={busy||loading||Boolean(pendingProduction)||!date} onClick={()=>{void execute("complete");}}>生产完成</Button>:null}
+        {(moduleCanWrite(user,"sourcing")&&detail.canReport)&&!selectedLine.lineId&&detail.order.status==="production_completed"?<Button disabled={busy||loading||Boolean(pendingProduction)||!date} onClick={()=>{void execute("ship");}}>登记发货</Button>:null}
         {selectedLine.lineId?<p>当前仅办理这个PO的日报。生产完成和发货涉及整单，请先<a href={(()=>{const query=new URLSearchParams(window.location.search);query.delete("line");return `${window.location.pathname}${query.size?`?${query}`:""}`;})()}>查看全部PO</a>再确认。</p>:null}
         {detail.shipment?<p>发货款号 {detail.shipment.firstStyleNo} · {detail.shipment.shippedOn} · 发货时登记产量 {formatBusinessDecimal(detail.shipment.recordedQuantity)} 件（仓库收货另行记录）</p>:null}
       </Surface>
@@ -138,7 +149,7 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
           <label>修正后数量 *<input required type="number" min={0} step={1} value={correctionQuantity} onChange={e=>setCorrectionQuantity(e.target.value)} disabled={busy}/></label>
           <label>业务日期 *<input required type="date" max={today()} value={correctionDate} onChange={e=>setCorrectionDate(e.target.value)} disabled={busy}/></label>
           <label>修正原因 *<input required maxLength={500} value={reason} onChange={e=>setReason(e.target.value)} disabled={busy}/></label>
-          <div className="production-reporting__actions"><Button type="submit" disabled={busy||!reason.trim()}>保存修正</Button><Button variant="secondary" disabled={busy} onClick={()=>setCorrecting(null)}>取消</Button></div>
+          <div className="production-reporting__actions"><Button type="submit" disabled={busy||Boolean(pendingProduction)||!reason.trim()}>保存修正</Button><Button variant="secondary" disabled={busy} onClick={()=>setCorrecting(null)}>取消</Button></div>
         </form></Surface>:null}
     </>:null}
     {user?.isRoot?<Surface className="sourcing-list-card"><details onToggle={e=>{if(e.currentTarget.open&&!directory)void loadScopes();}}><summary>驻厂人员负责范围</summary><Button disabled={busy} onClick={()=>{void loadScopes();}}>重新读取负责范围</Button>

@@ -2530,8 +2530,14 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(stale).toMatchObject({totalCount:1,counts:{attention:1}});
     expect(stale.items[0]!.progress).toMatchObject({progressState:"stale",daysWithoutUpdate:3});
     expect(stale.events.some(e=>e.kind==="progress_changed"&&e.progressState==="stale")).toBe(true);
-    const finish=await reporting.execute(reporter(),order.productionOrderId,"complete",{businessDate,confirmed:true},randomUUID());
+    const finishKey=randomUUID();
+    const finish=await reporting.execute(reporter(),order.productionOrderId,"complete",{businessDate,confirmed:true},finishKey);
     expect(finish.value.order).toMatchObject({status:"production_completed",completedQuantity:16,quantity:30,firstReportedOn:businessDate});
+    expect((await reporting.detail(reporter(),order.productionOrderId)).order.status).toBe("production_completed");
+    const recoveredFinish=await reporting.execute(reporter(),order.productionOrderId,"complete",{businessDate,confirmed:true},finishKey);
+    expect(recoveredFinish.reused).toBe(true);expect(recoveredFinish.value).toEqual(finish.value);
+    expect((await database.query("SELECT count(*)::int AS n FROM sourcing_production_transitions WHERE production_order_id=$1 AND status='production_completed'",[order.productionOrderId])).rows[0].n).toBe(1);
+    await expect(reporting.execute(reporter(),order.productionOrderId,"complete",{businessDate,confirmed:true},randomUUID())).rejects.toMatchObject({statusCode:409});
     await expect(reporting.report(reporter(),order.productionOrderId,{...input,quantity:1},randomUUID())).rejects.toMatchObject({statusCode:409});
     const shipKey=randomUUID();
     const shipped=await reporting.execute(reporter(),order.productionOrderId,"ship",{businessDate,confirmed:true},shipKey);

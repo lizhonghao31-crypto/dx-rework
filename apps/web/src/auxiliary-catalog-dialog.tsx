@@ -32,7 +32,7 @@ export function AuxiliaryCatalogDialog({onSelect,onClose,disabled=false}:{onSele
  const send=async(prior:NonNullable<typeof attempt.current>)=>{
   if(writing.current)return;writing.current=true;setBusy(true);setError('');
   try{complete(AuxiliaryItemSchema.parse(await request(prior.path,'POST',prior.body,prior.key)));}
-  catch(error){const uncertain=unknown||!(error instanceof CatalogError)||error.status===null||error.status>=500;setUnknown(uncertain);setError(uncertain?'目录操作结果尚未确认，请保留本页标识先核对回执；订单材料尚未改变。':error.message);}
+  catch(error){const uncertain=unknown||!(error instanceof CatalogError)||error.status===null||error.status===408||error.status>=500;setUnknown(uncertain);setError(uncertain?`${error instanceof CatalogError?error.message:'未收到有效目录回执'}；目录操作结果尚未确认，请保留本页标识先核对回执；订单材料尚未改变。`:error.message);}
   finally{writing.current=false;setBusy(false);}
  };
  const recover=async(retry=false)=>{const prior=attempt.current;if(!prior||writing.current)return;writing.current=true;setBusy(true);setError('');
