@@ -1,3 +1,4 @@
+import {uploadAttachmentWithRecovery,toolsAttachmentApi,localFileScope} from "./attachment-upload-recovery.js";
 import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import { Button } from "@dx-rework/ui";
 import {digitalDetailReturnUrl} from "./digital-detail-route.js";
@@ -11,10 +12,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createWebUrls } from "../url-contract.js";
 import {
   isImageAttachment,
+  hasInvalidDeclaredImageError,
   isReceivingImageCandidate,
   normalizeReceivingImageForUpload,
   prepareAttachmentForUpload,
-  sha256Hex,
 } from "./attachment-upload.js";
 import { verifySession } from "./auth.js";
 import { shanghaiBusinessDate } from "./business-date.js";
@@ -56,12 +57,7 @@ type DifferenceResolution = Readonly<{
   handledAt: string;
   attachments?: readonly ReceivingAttachment[];
 }>;
-type UploadIntent = Readonly<{
-  attachmentId: string;
-  uploadUrl: string;
-  uploadFields: Readonly<Record<string, string>>;
-}>;
-type FinalizedAttachment = Readonly<{ attachmentId: string }>;
+
 type BoardRow = Readonly<{
   receivingBatchId: string;
   styleNo: string;
@@ -162,40 +158,14 @@ const attachmentUrl = (attachmentId: string, mode: "preview" | "download"): stri
   apiUrl(`tools/attachments/${attachmentId}/download?mode=${mode}`);
 
 const uploadReplacementImage = async (source: File): Promise<string> => {
-  const upload = async (file: File): Promise<string> => {
-    const intentResponse = await fetch(apiUrl("tools/attachments/upload-intents"), {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        filename: file.name,
-        mimeType: file.type,
-        sizeBytes: file.size,
-        sha256: await sha256Hex(file),
-      }),
-    });
-    if (!intentResponse.ok) throw new Error(await responseError(intentResponse, "替换图片上传准备失败"));
-    const intent = await intentResponse.json() as UploadIntent;
-    const body = new FormData();
-    for (const [name, value] of Object.entries(intent.uploadFields)) body.append(name, value);
-    body.append("file", file);
-    const uploaded = await fetch(intent.uploadUrl, { method: "POST", body });
-    if (!uploaded.ok) throw new Error(`${source.name} 上传失败`);
-    const finalizedResponse = await fetch(apiUrl(`tools/attachments/${intent.attachmentId}/finalize`), {
-      method: "POST",
-      credentials: "include",
-      headers: { accept: "application/json" },
-    });
-    if (!finalizedResponse.ok) throw new Error(await responseError(finalizedResponse, "替换图片确认失败"));
-    return ((await finalizedResponse.json()) as FinalizedAttachment).attachmentId;
-  };
+  const upload=async(file:File):Promise<string>=>(await uploadAttachmentWithRecovery(file,`receiving-replacement:${localFileScope(source)}`,toolsAttachmentApi,undefined,undefined,source)).attachmentId;
   const prepared = isImageAttachment(source)
     ? await prepareAttachmentForUpload(source)
     : await normalizeReceivingImageForUpload(source);
   try {
     return await upload(prepared);
   } catch (error) {
-    if (!(error instanceof Error) || !["Uploaded object is not a valid file of the declared type", "附件内容与申报文件类型不一致，请重新选择有效原文件"].includes(error.message)) {
+    if (!hasInvalidDeclaredImageError(error)) {
       throw error;
     }
     return upload(await normalizeReceivingImageForUpload(source));

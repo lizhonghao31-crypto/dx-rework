@@ -29,6 +29,7 @@ export function SampleImageUpload({ label, value, onChange, disabled, onBusy, on
 }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const uploadScope=useRef(createClientRequestId());
   const inFlight = useRef(false);
   const changePending = (files: File[]) => { setPendingFiles(files); onPending(files.length); };
   const upload = async (files: File[]) => {
@@ -41,6 +42,7 @@ export function SampleImageUpload({ label, value, onChange, disabled, onBusy, on
       for (let index = 0; index < files.length; index += 1) {
         const original = files[index]!;
         const finalized = await uploadSampleImage(original, {
+          recoveryScope:uploadScope.current,
           createIntent: input => request("tools/attachments/upload-intents", UploadIntentResponseSchema, { method: "POST", body: JSON.stringify(input) }),
           finalize: attachmentId => request(`tools/attachments/${attachmentId}/finalize`, AttachmentResponseSchema, { method: "POST" }),
         });

@@ -1,3 +1,4 @@
+import {exerciseAttachmentRecovery} from "../helpers/attachment-recovery-fixture.js";
 import {createHistoricalPatternFixture} from "../helpers/historical-pattern-fixture.js";
 import { registerWorkReportingRoutes } from "../../apps/api/src/rework/work-reporting-routes.js";
 import { journeyReworkHistoryUrl } from "../../apps/api/src/production-platform/journey-rework-record.js";
@@ -3590,6 +3591,10 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
     expect((await database.query("SELECT status FROM rework_todos WHERE dedupe_key=ANY($1::text[])", [[`work-report-return:${fixture.reportA}`, `work-report-return:${legacyReportId}`]])).rows).toEqual([{ status: "pending" }, { status: "pending" }]);
     expect((await database.query("SELECT count(*)::int count FROM rework_work_reports WHERE work_task_id=$1", [fixture.taskA.workTaskId])).rows[0]).toEqual({ count: 2 });
     expect((await work.list(tailAssign(), fixture.orderId)).orderVersion).toBe(again.value.orderVersion);
+  });
+
+  it("P14 preserves real ready facts after a lost receipt and denies foreign unbound access",async()=>{
+    await exerciseAttachmentRecovery(database,actor(ids.tail,['tail_supervisor'],'tools:user'),actor(ids.production,['production_management'],'tools:user'));
   });
 
 });

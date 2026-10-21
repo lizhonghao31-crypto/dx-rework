@@ -1,9 +1,9 @@
+import {uploadAttachmentWithRecovery} from "./attachment-upload-recovery.js";
 import {useDocumentUploadPreviews} from "./document-upload-previews.js";
 import { useEffect, useRef, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import { BUDGET_SECTIONS, BudgetDocumentSchema, budgetDisplayAmount, calculateBudget, type BudgetDocument, type BudgetRow, type BudgetSheet } from "@dx-rework/contracts/digital-budget";
 import type { DigitalOrder } from "@dx-rework/contracts/digital-production";
-import type { UploadIntentResponse } from "@dx-rework/contracts";
 import {SUBMISSION_RECOVERY_WINDOW_MS} from "./submission-attempt.js";
 import {unknownWriteResult} from "./request-response-feedback.js";
 import { DigitalRequestError, digitalRequest } from "./digital-production-api.js";
@@ -49,7 +49,7 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
   const locateField=useDocumentFieldLocator(revealField);
   const install = (value:BudgetSheet) => { const next=value.document??initial(); templateDefaults.current=new Map(value.document?[]:next.rows.map(row=>[row.rowId,row.category]));setActivated(new Set());setSheet(value);setDoc(next);setDirty(false);setValidationMode(null); };
   const base = `orders/${order.productionOrderId}/budget`;
-  useEffect(() => { let live = true;generation.current++;operation.current=null;writing.current=false;setBusy(false);setUncertain(false);setError("");void budgetRequest(`${base}${initialVersion?`?version=${initialVersion}`:""}`,order.productionOrderId).then(value => { if (live) { install(value); } }).catch(reason => { if (live) setError(reason.message); }); return () => { live = false;generation.current++; }; }, [base,initialVersion,order.productionOrderId]);
+  useEffect(() => { let live = true;previews.reset();completedUploads.current.clear();generation.current++;operation.current=null;writing.current=false;setBusy(false);setUncertain(false);setError("");void budgetRequest(`${base}${initialVersion?`?version=${initialVersion}`:""}`,order.productionOrderId).then(value => { if (live) { install(value); } }).catch(reason => { if (live) setError(reason.message); }); return () => { live = false;generation.current++; }; }, [base,initialVersion,order.productionOrderId]);
   useDigitalDetailNavigationGuard(dirty||uncertain,busy,writing,uncertain?"原预算提交结果尚未确认；离开不会撤销提交，并会丢失本页原请求标识。确定离开？":"有未保存修改，确定离开？");
 
   useEffect(()=>{const element=root.current?.querySelector<HTMLElement>(".budget-document-summary");if(!element)return;const measure=()=>{const toolbar=root.current?.querySelector(".dx-doc-toolbar");setSummaryFits(element.getBoundingClientRect().height+(toolbar?.getBoundingClientRect().height??0)+32<=window.innerHeight);};const observer=new ResizeObserver(measure);observer.observe(element);window.addEventListener("resize",measure);measure();return()=>{observer.disconnect();window.removeEventListener("resize",measure);};},[Boolean(sheet)]);
@@ -94,8 +94,8 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
     finally{confirmingCopy.current=false;}
   };
   const upload = async (files: File[]) => {
-    if (!files.length || writing.current || uncertain) return;previews.start(files);
-    writing.current = true; setBusy(true); setError("");
+    if (!files.length || writing.current || uncertain) return;previews.start(files,undefined,upload);
+    const uploadGeneration=generation.current;writing.current = true; setBusy(true); setError("");
     try {
       const associated=new Set(doc.imageAttachmentIds);
       const limits = await digitalRequest<{ maxUploadBytes: number }>(`${base}/upload-limits`);
@@ -105,16 +105,16 @@ export function DigitalBudgetPanel({ order, onClose, initialVersion:requestedVer
         const fingerprint=`${file.name}:${file.size}:${await sha256Hex(file)}`;
         const prior=completedUploads.current.get(fingerprint);if(prior&&associated.has(prior)){previews.uploaded(file,prior);continue;}
         if(associated.size>=8)throw Error("预算图片最多8张");
-        const intent = await digitalRequest<UploadIntentResponse>(`${base}/upload-intents`, "POST", { filename: file.name, mimeType: file.type, sizeBytes: file.size, sha256: fingerprint.slice(fingerprint.lastIndexOf(":")+1) });
-        const form = new FormData(); for (const [name, value] of Object.entries(intent.uploadFields)) form.append(name, value); form.append("file", file);
-        const response = await fetch(intent.uploadUrl, { method: intent.uploadMethod, body: form, credentials: "omit" });
-        if (!response.ok) throw Error(`${file.name}上传失败`);
-        await digitalRequest(`${base}/attachments/${intent.attachmentId}/finalize`, "POST", {});
+        const ready=await uploadAttachmentWithRecovery(file,`budget:${base}:${initialVersion??'current'}`,{
+          createIntent:input=>digitalRequest(`${base}/upload-intents`,'POST',input),
+          finalize:id=>digitalRequest(`${base}/attachments/${id}/finalize`,'POST',{}),
+        },fingerprint.slice(fingerprint.lastIndexOf(':')+1));
+        if(uploadGeneration!==generation.current)return;const intent=ready;
         previews.uploaded(file,intent.attachmentId);completedUploads.current.set(fingerprint,intent.attachmentId);associated.add(intent.attachmentId);
         setDoc(current => ({ ...current, imageAttachmentIds: [...current.imageAttachmentIds, intent.attachmentId] })); setDirty(true);
-      }catch(reason){const message=reason instanceof Error?reason.message:"上传失败";previews.failed(file,message);setError(message);}}
-    } catch (reason) {const message=reason instanceof Error?reason.message:"上传失败";for(const file of files)previews.failed(file,message);setError(message);}
-    finally { writing.current = false; setBusy(false); }
+      }catch(reason){if(uploadGeneration!==generation.current)return;const message=reason instanceof Error?reason.message:"上传失败";previews.failed(file,message);setError(message);}}
+    } catch (reason) {if(uploadGeneration===generation.current){const message=reason instanceof Error?reason.message:"上传失败";for(const file of files)previews.failed(file,message);setError(message);}}
+    finally { if(uploadGeneration===generation.current){writing.current = false; setBusy(false);} }
   };
   const valid = BudgetDocumentSchema.safeParse(doc), totals = valid.success ? calculateBudget(valid.data) : null;
   const amount = (value: string | null | undefined) => value == null ? "—" : budgetDisplayAmount(value);

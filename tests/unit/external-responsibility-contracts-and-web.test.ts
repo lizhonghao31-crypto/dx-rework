@@ -98,7 +98,9 @@ describe("PR-11 external responsibility contracts and mobile UI", () => {
     expect(panel).not.toMatch(/proposedDeductionAmount\s*[/+*-]/);
 
     expect(uploader).toContain("tools/attachments/upload-intents");
-    expect(uploader).toContain("sha256Hex");
+    const recovery=await readFile(new URL("../../apps/web/src/attachment-upload-recovery.ts",import.meta.url),"utf8");
+    expect(uploader).toContain("uploadAttachmentWithRecovery");
+    expect(recovery).toContain("sha256Hex");
     expect(uploadHelper).toContain("crypto.subtle.digest");
     expect(uploader).toContain("UploadIntentResponseSchema");
     expect(uploader).toContain("AttachmentResponseSchema");

@@ -1,3 +1,4 @@
+import {uploadAttachmentWithRecovery} from "./attachment-upload-recovery.js";
 import {instructionFeedbackProjection} from './document-feedback-projections.js';
 import {instructionCommandMatches} from './command-receipt-content.js';
 import {SubmissionAttempt} from './submission-attempt.js';
@@ -9,7 +10,6 @@ import { InstructionSourceReviewPanel } from "./instruction-source-review.js";
 import { PoCustomerDates } from "./po-customer-dates.js";
 import { useEffect, useRef, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
-import type { UploadIntentResponse } from "@dx-rework/contracts";
 import { MATERIAL_COUNT_TERM, instructionSourceLabels, type InstructionDocument, type InstructionSheet } from "@dx-rework/contracts/production-instruction";
 import {DigitalRequestError, digitalRequest } from "./digital-production-api.js";
 import { createClientRequestId } from "./client-request-id.js";
@@ -47,7 +47,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
   useDigitalDetailNavigationGuard(dirty||uncertain, busy, writing, uncertain?"原制单提交结果尚未确认，离开不会撤销提交并会丢失原标识。仍要离开？":"仍有未保存修改，确定返回？");
   const base = `orders/${orderId}/instruction`;
   useEffect(() => {
-    let live = true;contextVersion.current++;submission.current=new SubmissionAttempt();setUncertain(false); setReceipt(""); setSheet(null); setDoc(null); setError(""); setBusy(true);
+    let live = true;previews.reset();writing.current=false;contextVersion.current++;submission.current=new SubmissionAttempt();setUncertain(false); setReceipt(""); setSheet(null); setDoc(null); setError(""); setBusy(true);
     void instructionRequest(base + (version ? `?version=${version}` : "")).then(value => {
       if (live) { setSheet(value); setDoc(value.document); setDirty(false); setSaveBlocked(false); setValidationMode(null); setSourceReviewOpen(false); operation.current = null; successfulUploads.current.clear(); }
     }).catch(e => { if (live) setError(e.message); }).finally(() => { if (live) setBusy(false); });
@@ -102,8 +102,8 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
   };
   const reload = async () => {if(uncertain){const context=contextVersion.current;try{const value=await instructionRequest(base);if(context===contextVersion.current)setError(`当前读取到制单 v${value.version}；原提交回执仍未确认，原输入与标识保留。`);}catch(error){if(context===contextVersion.current)setError(error instanceof Error?error.message:'制单尚未读取');}return;}if(await discard("重新载入将丢弃未保存修改，确定继续？")){setDirty(false);setReloadCount(value=>value+1);}};
   const upload = async (files: File[]) => {
-    if (uncertain||!files.length || !doc || !sheet?.canEdit || sheet.cutStarted || writing.current) return;previews.start(files);
-    writing.current = true; setBusy(true); setError("");
+    if (uncertain||!files.length || !doc || !sheet?.canEdit || sheet.cutStarted || writing.current) return;previews.start(files,undefined,upload);
+    const uploadContext=contextVersion.current;writing.current = true; setBusy(true); setError("");
     try {
       let count = doc.images.length;
       const limits = await digitalRequest<{ maxUploadBytes: number }>(base + "/upload-limits");
@@ -112,15 +112,16 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
         const hash = await sha256Hex(file), fingerprint = JSON.stringify([uploadKind, file.name, file.size, hash]);
         if (successfulUploads.current.has(fingerprint)){previews.uploaded(file,successfulUploads.current.get(fingerprint)!);continue;}
         if (count >= 60) throw Error("图片最多60张");
-        const intent = await digitalRequest<UploadIntentResponse>(base + "/upload-intents", "POST", { filename: file.name, mimeType: file.type, sizeBytes: file.size, sha256: hash });
-        const form = new FormData(); for (const [key, value] of Object.entries(intent.uploadFields)) form.append(key, value); form.append("file", file);
-        if (!(await fetch(intent.uploadUrl, { method: intent.uploadMethod, body: form, credentials: "omit" })).ok) throw Error(`${file.name}上传失败`);
-        await digitalRequest(base + `/attachments/${intent.attachmentId}/finalize`, "POST", {});
+        const ready=await uploadAttachmentWithRecovery(file,`instruction:${base}:${version??'current'}:${uploadKind}`,{
+          createIntent:input=>digitalRequest(`${base}/upload-intents`,'POST',input),
+          finalize:id=>digitalRequest(`${base}/attachments/${id}/finalize`,'POST',{}),
+        },hash);
+        if(uploadContext!==contextVersion.current)return;const intent=ready;
         previews.uploaded(file,intent.attachmentId);successfulUploads.current.set(fingerprint, intent.attachmentId); count++; generation.current++;
         setDoc(current => current ? { ...current, images: [...current.images, { attachmentId: intent.attachmentId, kind: uploadKind, description: "" }] } : current); setDirty(true);
-      }catch(reason){const message=reason instanceof Error?reason.message:"上传失败";previews.failed(file,message);setError(message);}}
-    } catch (e) {const message=e instanceof Error?e.message:"上传失败";for(const file of files)previews.failed(file,message);setError(message);setSaveBlocked(true);}
-    finally { writing.current = false; setBusy(false); }
+      }catch(reason){if(uploadContext!==contextVersion.current)return;const message=reason instanceof Error?reason.message:"上传失败";previews.failed(file,message);setError(message);}}
+    } catch (e) {if(uploadContext===contextVersion.current){const message=e instanceof Error?e.message:"上传失败";for(const file of files)previews.failed(file,message);setError(message);setSaveBlocked(true);}}
+    finally { if(uploadContext===contextVersion.current){writing.current = false; setBusy(false);} }
   };
   if (!sheet || !doc) return <Surface>{error ? <p role="alert">{error}</p> : <p role="status">正在读取制单…</p>}{!embedded&&!contained&&<Button onClick={onClose}>返回</Button>}</Surface>;
   if (!sheet.canEdit && !sheet.isPublishedSnapshot && sheet.publishedVersion === null) {

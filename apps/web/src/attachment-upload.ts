@@ -286,7 +286,8 @@ export const INVALID_DECLARED_IMAGE_MESSAGE = "Uploaded object is not a valid fi
 export const INVALID_DECLARED_IMAGE_MESSAGE_ZH = "附件内容与申报文件类型不一致，请重新选择有效原文件";
 
 export const hasInvalidDeclaredImageError = (error: unknown): boolean =>
-  error instanceof Error && [INVALID_DECLARED_IMAGE_MESSAGE, INVALID_DECLARED_IMAGE_MESSAGE_ZH].includes(error.message);
+  error instanceof Error && ([INVALID_DECLARED_IMAGE_MESSAGE, INVALID_DECLARED_IMAGE_MESSAGE_ZH].includes(error.message)
+    || error.cause !== undefined && error.cause !== error && hasInvalidDeclaredImageError(error.cause));
 
 /**
  * Retries an image whose declared MIME type does not match its real bytes after

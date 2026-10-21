@@ -236,7 +236,7 @@ describe("Aliyun OSS V4 REST client", () => {
   });
 
   it("requires production server wiring, file-last browser upload, and ECS read-only OSS/CORS preflight", async () => {
-    const [server, uploader, gate] = await Promise.all([
+    const [server, uploader, gate,recovery] = await Promise.all([
       readFile(
         new URL("../../apps/api/src/server.ts", import.meta.url),
         "utf8",
@@ -249,6 +249,7 @@ describe("Aliyun OSS V4 REST client", () => {
         new URL("../../scripts/run-business-chain-gate.mjs", import.meta.url),
         "utf8",
       ),
+      readFile(new URL("../../apps/web/src/attachment-upload-recovery.ts",import.meta.url),"utf8"),
     ]);
 
     expect(server).toContain("AliyunOssV4RestClient");
@@ -256,10 +257,9 @@ describe("Aliyun OSS V4 REST client", () => {
     expect(server).not.toContain(
       "OSS is configured but the official Aliyun OSS SDK client has not been injected",
     );
-    const signedFieldsAt = uploader.indexOf(
-      "for (const [name, value] of Object.entries(intent.uploadFields))",
-    );
-    const fileAt = uploader.indexOf('form.append("file",');
+    expect(uploader).toContain("uploadAttachmentWithRecovery");
+    const signedFieldsAt = recovery.indexOf("Object.entries(pending.intent.uploadFields)");
+    const fileAt = recovery.indexOf("form.append('file',file)");
     expect(signedFieldsAt).toBeGreaterThanOrEqual(0);
     expect(fileAt).toBeGreaterThan(signedFieldsAt);
     expect(gate).toContain("business acceptance runtime must configure OSS");

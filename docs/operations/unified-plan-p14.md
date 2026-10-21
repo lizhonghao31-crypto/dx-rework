@@ -1,0 +1,42 @@
+# P14 附件分阶段反馈及原文件恢复
+
+本增量为第三组，堆叠P13；全部合成TEST数据/私有存储替身，未接真实OSS、ERP、付费识别、真实订单或ECS。原大小/类型/内容/hash/权限/配额/不可覆盖对象/绑定事务与历史保留规则不变，无迁移、回填、对象清理或新识别入口。管理座舱UI不改。
+
+## 协议及恢复边界
+
+`attachment-upload-recovery.ts`只供本轮列出的上传族使用，消费P10原传输错误与现有上传/校验接口。准备和hash沿原代码；申请、对象传输、服务端校验分别提示，ready仍不等于本单保存。完整intent及ready回执按原schema验证，ready还核对原ID、文件名、类型、大小、hash；坏200不清输入或称已上传。
+
+恢复记录按当前身份、原File、宿主单/轮次/用途和实际内容指纹隔离，用WeakMap随本地File释放，不引入新业务数量上限，不持久化File/签名。相同原文件并发操作归一，重试有可信ID时只调用原finalize，既有ready再次确认复用，不重发不可覆盖的对象上传。传输中止/丢回执先核原对象；原服务明确422校验拒绝才允许下一次显式选择重新申请，403/404不当作对象不存在。未知申请没有可信ID时停止自动重建，保留本页原文件与未知提示；不把同名文件当幂等，不伪称提供全局去重。刷新会失去本地文件/恢复闭包，应核对原成功引用后重新选择；不能保证恢复服务器未提供的未知申请ID。
+
+对象传输保留45秒有限预算/AbortController，超时是未知传输，保留ID。外发证据原本地准备30秒、API15秒预算保留。原签名字段先入FormData，file始终最后；私有上传credentials omit，不附业务cookie/JSON头到对象存储。日志只沿原无文件名/签名/正文的有界时序记录。
+
+## 各宿主实际去向
+
+|宿主|本PR实现或保留|
+|---|---|
+|`digital-development-upload.ts`；创建开发单/开发单编辑/补正|原原图字节识别和全尺寸归一化保留；开发/用途scope恢复原ID。创建页原pictures保留成功ID；编辑预览可重试原File；补正保留剩余File与原用途，成功文件逐个进入本页草稿，未完成不能被提交悄悄丢弃，可明确停止剩余选择。|
+|`digital-development-execution-panel.tsx`/`development-result-upload.tsx`|按source/task/轮次/用途上传；成果仅进入原办理草稿，不自动完成任务。切单/切轮/切任务忽略旧回执，清理本地预览与待提交成果；普通重读不把同一上下文上传当作换单。|
+|`production-instruction-panel.tsx`|原60张限制、successfulUploads与版本草稿规则保留；预览重试原File及原kind，切单/版本忽略迟到响应。文件ready仍需原保存/发布引用。|
+|`digital-budget-panel.tsx`|原8张限制、completedUploads保留；同原File恢复，切单/版本清理预览，迟到结果不写新单。预算提交的原方法/正文/键由P12治理，附件不自动另存预算。|
+|`pattern-order-client.ts`、`pattern-order-form.tsx`、`pattern-order-exceptions.tsx`|原上传上限、kind/purpose、完整像素保护及正常化重试保留；按原单/轮或新草稿实例scope。原创建/返工页面保留剩余File、已成功材料及明确停止本地选择动作；不新增业务节点、不删对象。|
+|`sample-image-upload.ts`/`sample-create-page.tsx`|原样衣各上传实例及未完成文件重试消费阶段恢复；成功文件不重复上传，不把失败图片变成样衣创建完成。|
+|`external-evidence-uploader.tsx`/`external-responsibility-panel.tsx`|逐文件保留已ready引用与剩余File，原case scope；失败不丢前面成功项。仍须原扣款/台账动作才保存，不称自动绑定；上下文退出不污染新案件的上传忙状态。|
+|`order-image-supplement-uploader.tsx`、`sourcing-image-supplement-uploader.tsx`|原批次保留，已ready不重传。业务绑定独立冻结原body/key与23小时期限，回执核对实际附件/本单；未知只核原命令。可信绑定后重读失败只GET，不再绑定。明确拒绝可核对原订单后显式按当前版本提交已ready引用，不自动新键；未知或到期不走此分支。|
+|`receiving-page.tsx`、实际回货宿主`order-board-page.tsx`|原uploadedIds/替换顺序/正式回货保存不改；原File恢复与ready全字段校验，保留原图片归一化。回货业务回执由P11治理；并非只改receiving-dialog包装。|
+|`sourcing-workspace-page.tsx`初建图片及回签|初建批次成功逐项保留、原File剩余可恢复；回签沿原pending.files/attachmentIds/key与顺序续传，只恢复未完成文件，完成后仅原绑定提交。原2文件/20MB/类型约束不变。|
+|`document-upload-previews.tsx`|明确尚未就绪/已上传未引用/已保存三个阶段；保留原File重试，切上下文撤销本地object URL，不删除服务端对象。|
+|原下载/metadata/readIdentity及识别API|原权限、grant续取、历史绑定和识别未配置/不可用/坏结果/合法null已具正确边界，定向验证，不增加状态探测API、AI页面或真实付费调用。|
+
+## 检查及真实限制
+
+新增组件浏览器44场景（1440/390）通过：样衣、外发证据、返工补图、外发补图、预算、制单以及开发/板房上传适配器；部分成功、finalize丢/坏回执、申请未知与权限拒绝、原绑定丢回执/已存后只回读、切单迟到保护。开发/板房适配器场景为窄测试宿主，不能称真实完整创建/返工页面验收。原回货14场景、预算合同26场景、原资料页面32场景通过（同步P12修复后预算合同将扩展34并按新候选复测）。
+
+当前定向实库：新增原附件ready提交后丢回执、同ID再finalize一次事实、其他普通岗位未绑定文件访问拒绝/零新增事件、原对象缺失明确rejected、私有不可覆盖及无删除均通过。完整业务链和补正78项通过。单位初轮18套85项通过；旧开发上传mock缺完整intent/ready及四个源码位置断言已按实际调用改，保留类型/hash/file-last/无空JSON头安全断言并补运行时FormData顺序。最新本地47定向及常规2649通过/630策略跳过，lint/typecheck/build/secret通过；随后上游P12修复同步后的最终新HEAD仍须重新门禁。以上不是现场多人/真实对象存储/原生文件选择与下载验收。
+
+需人工后验：手机文件选择/解码、真实OSS签名到期/CORS/网络抖动、批量部分成功后重进、各岗位的历史附件可见性。刷新后File不能假恢复；未知无ID申请保留明确缺口。回退只撤恢复交互/反馈代码，保留已经上传/绑定的对象、ID、合同、回货、台账、业务事件与历史资料。无清库/对象删除/鉴权降级。
+
+## 同步P12 P1后的本地冻结结果
+
+基于P13 bf868feb（含P12 c87a41a6），重新构建依赖并完成lint/typecheck；22个上传/既有契约套件114项通过。扩展浏览器为64场景，加入实际板房创建表单的丢回执/部分成功、绑定明确拒绝/坏200/到期、传输丢回执；预算合同34场景通过。常规2661通过/630按无数据库策略跳过；业务链和补正实库78通过；build（不执行部署postbuild）和完整secret扫描通过。先前44场景/2649项仅为旧本地证据，不能替代当前结果。没有调整业务测试超时、删除检查或降低鉴权。
+
+FULL及一次GitHub Review待当前提交执行；仍未执行ECS、真实OSS、生产ERP和真实订单验收。原回货14/资料32场景为本PR前次同业务源码回归证据，当前新HEAD累计FULL仍需覆盖。

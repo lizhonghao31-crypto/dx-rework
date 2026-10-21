@@ -1,3 +1,4 @@
+import {uploadAttachmentWithRecovery} from "./attachment-upload-recovery.js";
 import {DevelopmentMaterialReopenReceiptSchema} from '@dx-rework/contracts/digital-development-execution';
 import {useTodoContentRead} from './todo-content-read.js';
 import {developmentMakingBasis} from '@dx-rework/contracts/digital-development';
@@ -27,10 +28,8 @@ import {useEffect,useRef,useState,type ReactNode} from "react";
 import {Button} from "@dx-rework/ui";
 import type {DigitalTask} from "@dx-rework/contracts/digital-production-tasks";
 import {type DevelopmentSheet} from "@dx-rework/contracts/digital-development";
-import type {UploadIntentResponse} from "@dx-rework/contracts";
 import {digitalRequest,DigitalRequestError} from "./digital-production-api.js";
 import {createClientRequestId} from "./client-request-id.js";
-import {sha256Hex} from "./attachment-upload.js";
 import {createWebUrls} from "../url-contract.js";
 type RouteFact={factId:string;kind:string;routeVersion:number;taskId:string|null;payload:{note?:string;sentDate?:string;trackingNo?:string;attachmentIds?:string[]};recordedAt:string};
 type State={reopenMaterialCheck?:{taskId:string;supplyTaskId:string;roundNumber:number;expectedDocumentVersion:number;expectedVerificationVersion:number}|null;materialVerification?:MaterialVerification|null;fabricCases?:FabricCase[];unifiedArrangement?:boolean;arrangement?:DevelopmentArrangement|null;materialReadiness?:Array<{usage?:"use"|"unused"|"pending";required?:boolean;materialId:string;available:boolean;verified:boolean;missing:string[];evidenceId:string|null}>;supplementCheckTaskId?:string|null;nextSteps?:Array<{taskId:string;label:string}>;canConfirmExecution?:boolean;patternPreparation?:{version:number;roundId:string;roundType:string;status:string;categorySaved:boolean;priceSaved:boolean;workerId:string|null;workerName:string|null}|null;patternOrder:{orderId:string}|null;routeFacts:RouteFact[];sheet:DevelopmentSheet;dispatch:{version:number;patternWorkerId:string;cuttingWorkerId:string;sewingWorkerId:string}|null;tasks:DigitalTask[];facts:{factId:string;taskId:string|null;kind:string;payload:{note?:string;recommendation?:string;decision?:string;attachmentIds?:string[];items?:Array<{materialId:string;physical:boolean;quantity:boolean;color:boolean;specification:boolean}>};recordedAt:string}[];canReportFabric:boolean;canDispatch:boolean;canDecideFabric:boolean;qrAvailable:boolean};
@@ -50,6 +49,8 @@ export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onCh
   const writing=useRef(false),operation=useRef<{payload:string;key:string;path:string;body:unknown;method:string}|null>(null),base=`sources/${sourceId}/execution`,urls=createWebUrls(import.meta.env.BASE_URL);
   useDigitalDetailNavigationGuard(uncertainWrite,busy,writing,"本次办理已提交但最新状态未确认；离开会丢失本页未保存输入与重试记录，仍要离开？");
   const loadVersion=useRef(0);
+  const uploadEpoch=useRef(0),activeUpload=useRef(false);
+  useEffect(()=>{uploadEpoch.current++;previews.reset();setCraftFiles([]);setSewingFiles([]);setReportFiles([]);if(activeUpload.current){activeUpload.current=false;writing.current=false;setBusy(false);}return()=>{uploadEpoch.current++;};},[sourceId,taskId,state?.sheet.roundNumber]);
   const loadPeople=async(next:State,version=loadVersion.current)=>{
     setPeopleError(null);setPeopleReading(true);
     try{const candidates=await digitalRequest<typeof people>('access/candidates');if(version!==loadVersion.current)return;setPeople(candidates);setPeopleFor(`${sourceId}:${next.arrangement?.version??next.dispatch?.version??0}`);const sewing=candidates.find(person=>person.id===next.dispatch?.sewingWorkerId);onPreassignedSewingLoaded?.(sewing?{id:sewing.id,name:sewing.displayName}:null);}
@@ -112,7 +113,21 @@ export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onCh
       else{setWriteOutcome({path,phase:"rejected"});unresolvedWrite.current=false;setUncertainWrite(false);operation.current=null;setError(reason.message);}
     }finally{writing.current=false;setBusy(false);}
   };
-  const upload=async(selected:File[],purpose:"工艺开发板"|"面料报告"|"车板成果"|"纸样成果")=>{if(!selected?.length||writing.current)return;previews.start(selected,purpose);writing.current=true;setBusy(true);setError("");try{const limit=await digitalRequest<{maxUploadBytes:number}>(`${base}/upload-limits`);for(const file of Array.from(selected)){try{if(file.size>limit.maxUploadBytes)throw Error("文件超过上传大小限制");const intent=await digitalRequest<UploadIntentResponse>(`${base}/upload-intents`,"POST",{filename:file.name,mimeType:file.type,sizeBytes:file.size,sha256:await sha256Hex(file),purpose,...(["车板成果","纸样成果"].includes(purpose)?{taskId}:{})});const form=new FormData();for(const [key,value]of Object.entries(intent.uploadFields))form.append(key,value);form.append("file",file);const response=await fetch(intent.uploadUrl,{method:intent.uploadMethod,body:form,credentials:"omit"});if(!response.ok)throw Error("上传失败");await digitalRequest(`${base}/attachments/${intent.attachmentId}/finalize`,"POST",{});previews.uploaded(file,intent.attachmentId);(["工艺开发板","纸样成果"].includes(purpose)?setCraftFiles:purpose==="车板成果"?setSewingFiles:setReportFiles)(current=>[...current,intent.attachmentId]);}catch(reason){const message=reason instanceof Error?reason.message:"上传失败";previews.failed(file,message);setError(message);}}}catch(reason){const message=reason instanceof Error?reason.message:"上传失败";for(const file of selected)previews.failed(file,message);setError(message);}finally{writing.current=false;setBusy(false);}};
+  const upload=async(selected:File[],purpose:"工艺开发板"|"面料报告"|"车板成果"|"纸样成果")=>{
+    if(!selected.length||writing.current)return;const context=uploadEpoch.current;activeUpload.current=true;previews.start(selected,purpose,files=>upload(files,purpose));writing.current=true;setBusy(true);setError('');
+    try{const limit=await digitalRequest<{maxUploadBytes:number}>(`${base}/upload-limits`);
+      for(const file of selected){if(context!==uploadEpoch.current)return;try{
+        if(file.size>limit.maxUploadBytes)throw Error('文件超过原上传大小限制');
+        const ready=await uploadAttachmentWithRecovery(file,`execution:${base}:${taskId??''}:${state?.sheet.roundNumber??1}:${purpose}`,{
+          createIntent:input=>digitalRequest(`${base}/upload-intents`,'POST',{...input,purpose,...(['车板成果','纸样成果'].includes(purpose)?{taskId}:{})}),
+          finalize:id=>digitalRequest(`${base}/attachments/${id}/finalize`,'POST',{}),
+        });
+        if(context!==uploadEpoch.current)return;previews.uploaded(file,ready.attachmentId);
+        (['工艺开发板','纸样成果'].includes(purpose)?setCraftFiles:purpose==='车板成果'?setSewingFiles:setReportFiles)(current=>[...new Set([...current,ready.attachmentId])]);
+      }catch(reason){if(context!==uploadEpoch.current)return;const message=reason instanceof Error?reason.message:'附件尚未取得就绪回执';previews.failed(file,message);setError(message);}}
+    }catch(reason){if(context===uploadEpoch.current){const message=reason instanceof Error?reason.message:'附件授权未完成';for(const file of selected)previews.failed(file,message);setError(message);}}
+    finally{if(context===uploadEpoch.current){activeUpload.current=false;writing.current=false;setBusy(false);}}
+  };
   return {reopenReceipt,writeOutcome,committedWrite,checkReceipt,navigationFailed,load,recheck,uncertainWrite,retryPeople,reading,readError,peopleError,peopleReading,writeError:error,previews,state,people,peopleFor,error:error||(readError?.message??'')||(peopleError?.message??''),busy,craftFiles,reportFiles,sewingFiles,tailReturn,setTailReturn,base,urls,run,upload,writing};
 }
 type ExecutionProps=Parameters<typeof useDevelopmentExecution>[0];
