@@ -108,7 +108,7 @@ export function useDevelopmentExecution({sourceId,materialRevision=0,taskId,onCh
       onChanged?.(workspace?developmentActionReceipt(path,body as {result?:unknown},submitted,updated.tasks):undefined);
       return updated;
     }catch(reason){
-      if(!(reason instanceof DigitalRequestError)||reason.status===null||reason.status>=500||(path==="reopen-materials"&&(reason.status===408||hadUnknown))){setWriteOutcome({path,phase:"unknown"});unresolvedWrite.current=true;setUncertainWrite(true);setError("尚未确认本次提交是否成功。请核对并重试原提交，系统沿用同一操作标识，避免重复保存。");}
+      if(!(reason instanceof DigitalRequestError)||reason.resultUnknown||(path==="reopen-materials"&&hadUnknown)){setWriteOutcome({path,phase:"unknown"});unresolvedWrite.current=true;setUncertainWrite(true);setError(`${reason instanceof Error?reason.message+"；":""}尚未确认本次提交是否成功。请核对并重试原提交，系统沿用同一操作标识，避免重复保存。`);}
       else{setWriteOutcome({path,phase:"rejected"});unresolvedWrite.current=false;setUncertainWrite(false);operation.current=null;setError(reason.message);}
     }finally{writing.current=false;setBusy(false);}
   };

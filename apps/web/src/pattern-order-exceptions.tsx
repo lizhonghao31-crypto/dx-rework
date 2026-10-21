@@ -79,7 +79,7 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
     const body=JSON.stringify(parsed.data);if(attempt.current?.body!==body||attempt.current.action!=='transfer')attempt.current={body,action:'transfer',key:createClientRequestId()};
     writing.current=true;onBusy(true);setError('');
     try{const result=PatternOrderDetailSchema.parse(await digitalRequest(`sources/${developmentContext.sourceId}/execution/transfer-execution`,'POST',parsed.data,attempt.current.key));onSaved(result);onActive(null);}
-    catch(reason){const unknown=!(reason instanceof DigitalRequestError)||reason.status===null||reason.status>=500;setUncertainTransfer(unknown);setError(unknown?'尚未确认换人是否成功。本页已保留原请求和操作标识，请先核对回执；不会把未知结果当成未换人。':reason.message);}
+    catch(reason){const unknown=!(reason instanceof DigitalRequestError)||reason.resultUnknown;setUncertainTransfer(unknown);setError(unknown?`${reason instanceof Error?reason.message+'；':''}尚未确认换人是否成功。本页已保留原请求和操作标识，请先核对回执；不会把未知结果当成未换人。`:reason.message);}
     finally{writing.current=false;onBusy(false);}
   };
   const submit = async (event: FormEvent) => {

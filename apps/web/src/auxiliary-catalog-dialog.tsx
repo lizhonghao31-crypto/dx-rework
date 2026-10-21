@@ -15,7 +15,7 @@ type Action='create'|'rename'|'disable'|'merge';
 class CatalogError extends Error{constructor(message:string,readonly status:number|null){super(message);}}
 async function request(path:string,method='GET',body?:unknown,key?:string,signal?:AbortSignal){
  const response=await fetch(urls.apiUrl(`master-data/auxiliaries${path}`),{method,credentials:'include',cache:'no-store',...(signal?{signal}:{}),headers:{'content-type':'application/json',...(key?{'idempotency-key':key}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})}).catch(error=>{if(error?.name==='AbortError')throw error;throw new CatalogError(transportFailure(method).message,null);});
- const data=await response.json().catch(()=>null);if(!response.ok)throw new CatalogError(requestFailureMessage(response.status,data?.error?.message),response.status);if(!data)throw new CatalogError(method==='GET'?'未能读取辅料目录，请重试':'目录操作结果未确认，请先核对原回执',null);return data;
+ const data=await response.json().catch(()=>null);if(!response.ok)throw new CatalogError(requestFailureMessage(response.status,data?.error?.message,method),response.status);if(!data)throw new CatalogError(method==='GET'?'未能读取辅料目录，请重试':'目录操作结果未确认，请先核对原回执',null);return data;
 }
 export function AuxiliaryCatalogDialog({onSelect,onClose,disabled=false}:{onSelect?:((item:AuxiliaryItem)=>void)|undefined;onClose():void;disabled?:boolean}){
  const [search,setSearch]=useState(''),q=useDebouncedValue(search.trim(),250),[page,setPage]=useState(1),[includeInactive,setIncludeInactive]=useState(false),[refresh,setRefresh]=useState(0);
@@ -32,7 +32,7 @@ export function AuxiliaryCatalogDialog({onSelect,onClose,disabled=false}:{onSele
  const send=async(prior:NonNullable<typeof attempt.current>)=>{
   if(writing.current)return;writing.current=true;setBusy(true);setError('');
   try{complete(AuxiliaryItemSchema.parse(await request(prior.path,'POST',prior.body,prior.key)));}
-  catch(error){const uncertain=unknown||!(error instanceof CatalogError)||error.status===null||error.status>=500;setUnknown(uncertain);setError(uncertain?'目录操作结果尚未确认，请保留本页标识先核对回执；订单材料尚未改变。':error.message);}
+  catch(error){const uncertain=unknown||!(error instanceof CatalogError)||error.status===null||error.status===408||error.status>=500;setUnknown(uncertain);setError(uncertain?`${error instanceof CatalogError?error.message:'未收到有效目录回执'}；目录操作结果尚未确认，请保留本页标识先核对回执；订单材料尚未改变。`:error.message);}
   finally{writing.current=false;setBusy(false);}
  };
  const recover=async(retry=false)=>{const prior=attempt.current;if(!prior||writing.current)return;writing.current=true;setBusy(true);setError('');

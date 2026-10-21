@@ -1,3 +1,4 @@
+import {feedbackFetch,feedbackJson} from "./request-response-feedback.js";
 import type { z } from "zod";
 import { createWebUrls } from "../url-contract.js";
 
@@ -18,7 +19,7 @@ export async function cuttingRequest<T>(
   schema: z.ZodType<T>,
   init: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(cuttingUrls.apiUrl(`cutting/${path}`), {
+  const response = await feedbackFetch(cuttingUrls.apiUrl(`cutting/${path}`), {
     ...init,
     credentials: "include",
     cache: "no-store",
@@ -27,15 +28,7 @@ export async function cuttingRequest<T>(
       ...init.headers,
     },
   });
-  const body = await response.json();
-  if (!response.ok) {
-    throw new CuttingRequestError(
-      body?.error?.message ?? "操作未完成，请重试",
-      body?.error?.code ?? "UNKNOWN",
-      response.status,
-    );
-  }
-  return schema.parse(body);
+  return feedbackJson(response,init.method??'GET',value=>schema.parse(value),(message,code,status)=>new CuttingRequestError(message,code??'UNKNOWN',status));
 }
 
 export const cuttingImageUrl = (

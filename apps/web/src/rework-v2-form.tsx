@@ -1,3 +1,4 @@
+import {feedbackFetch,feedbackJson} from "./request-response-feedback.js";
 import "./rework-governed.css";
 import { currentModuleCanWrite } from "./member-module-policy.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
@@ -218,21 +219,13 @@ const factoryValue = (order: ReworkOrderResponse): string => {
   return "";
 };
 
-const errorMessage = async (response: Response): Promise<string> => {
-  try {
-    const body = await response.json() as { error?: { message?: string } };
-    return body.error?.message ?? "请求未完成，请稍后重试";
-  } catch {
-    return "请求未完成，请稍后重试";
-  }
-};
 
 async function request<T>(
   path: string,
   schema: ApiSchema<T>,
   init: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(apiUrl(path), {
+  const response = await feedbackFetch(apiUrl(path), {
     credentials: "include",
     ...init,
     headers: {
@@ -241,8 +234,7 @@ async function request<T>(
       ...init.headers,
     },
   });
-  if (!response.ok) throw new Error(await errorMessage(response));
-  return schema.parse(await response.json());
+  return feedbackJson(response,init.method??'GET',value=>schema.parse(value));
 }
 
 const ReceivingReworkEntrySchema: ApiSchema<ReceivingReworkEntry> = {
@@ -840,3 +832,5 @@ export function ReworkInitiationV2Form({
     </div>}
   </div>;
 }
+
+export {request as reworkFormRequest};

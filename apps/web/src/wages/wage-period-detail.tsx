@@ -1,3 +1,4 @@
+import {feedbackFetch,feedbackJson} from "../request-response-feedback.js";
 import { AuthGate } from "../auth.js";
 import { financePageRequirements } from "../finance-access.js";
 import {
@@ -12,14 +13,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createWebUrls } from "../../url-contract.js";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
-const responseError = async (response: Response): Promise<string> => {
-  try {
-    const body = await response.json() as { error?: { message?: string } };
-    return body.error?.message ?? "工资操作失败";
-  } catch {
-    return "工资操作失败";
-  }
-};
+export async function readWagePeriodDetail(periodId:string){
+ const response=await feedbackFetch(apiUrl(`wage-periods/${periodId}`),{credentials:"include",headers:{accept:"application/json"}});
+ return feedbackJson(response,"GET",value=>WagePeriodDetailSchema.parse(value));
+}
 
 export function WagePeriodDetailPage({ periodId }: { periodId: string }) {
   return <AuthGate requiredAnyOf={financePageRequirements}><WagePeriodDetailContent periodId={periodId} /></AuthGate>;
@@ -35,12 +32,7 @@ function WagePeriodDetailContent({ periodId }: { periodId: string }) {
     if (refreshing.current) return;
     refreshing.current = true;
     try {
-      const response = await fetch(apiUrl(`wage-periods/${periodId}`), {
-        credentials: "include",
-        headers: { accept: "application/json" },
-      });
-      if (!response.ok) throw new Error(await responseError(response));
-      const nextDetail = WagePeriodDetailSchema.parse(await response.json());
+      const nextDetail=await readWagePeriodDetail(periodId);if(mounted.current)setMessage("");
       if (mounted.current) setDetail(nextDetail);
     } catch (error: unknown) {
       if (mounted.current) setMessage(error instanceof Error ? error.message : "工资详情加载失败");
@@ -59,7 +51,7 @@ function WagePeriodDetailContent({ periodId }: { periodId: string }) {
     return (
       <div className="wage-page wage-period-detail">
         <header className="page-heading"><div><h1>工资详情</h1></div></header>
-        <Surface><p>{message || "正在加载工资月份…"}</p></Surface>
+        <Surface><p role={message?"alert":"status"}>{message || "正在读取工资月份…"}</p>{message&&<Button onClick={()=>{void load();}}>重新读取工资详情</Button>}</Surface>
       </div>
     );
   }
@@ -88,7 +80,7 @@ function WagePeriodDetailContent({ periodId }: { periodId: string }) {
         </div>
       </Surface>
 
-      {message && <p role="status" className="form-message">{message}</p>}
+      {message && <p role="alert" className="form-message">{message}<Button onClick={()=>{void load();}}>重新读取工资详情</Button></p>}
 
       <section className="wage-grid">
         {items.map((item) => (

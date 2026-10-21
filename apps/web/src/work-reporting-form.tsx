@@ -1,3 +1,5 @@
+import {SUBMISSION_RECOVERY_WINDOW_MS} from "./submission-attempt.js";
+import {feedbackFetch,feedbackJson,feedbackNoContent,unknownWriteResult} from "./request-response-feedback.js";
 import { specialProcessLabel } from "@dx-rework/contracts";
 import { moduleCanWrite } from "./member-module-policy.js";
 import {
@@ -45,26 +47,19 @@ export type FrontlineWorkContext = Readonly<{
 }>;
 
 const request = async <T,>(path: string, parse: (value: unknown) => T, init?: RequestInit): Promise<T> => {
-  const response = await fetch(apiUrl(path), {
+  const response = await feedbackFetch(apiUrl(path), {
     credentials: "include", ...init,
     headers: { accept: "application/json", ...(init?.body ? { "content-type": "application/json" } : {}), ...init?.headers },
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-    throw new Error(body?.error?.message ?? "请求未完成，请稍后重试");
-  }
-  return parse(await response.json());
+  return feedbackJson(response,init?.method??'GET',parse);
 };
 
 const requestNoContent = async (path: string, init?: RequestInit): Promise<void> => {
-  const response = await fetch(apiUrl(path), {
+  const response = await feedbackFetch(apiUrl(path), {
     credentials: "include", ...init,
     headers: { accept: "application/json", ...(init?.body ? { "content-type": "application/json" } : {}), ...init?.headers },
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-    throw new Error(body?.error?.message ?? "请求未完成，请稍后重试");
-  }
+  await feedbackNoContent(response,init?.method??'GET');
 };
 
 const canReviewOrder = (user: WorkReportingUser): boolean => user.isRoot === true || [
@@ -226,6 +221,9 @@ export function WorkReportingForm({
   const currentOrder = useRef(reworkOrderId);
   currentOrder.current = reworkOrderId;
   const factsRequest = useRef(0);
+  const removalCommand=useRef<{taskId:string;orderId:string;body:string;key:string;startedAt:number;path:string;kind:"active"|"legacy";uncertain?:boolean}|null>(null);
+  const [removalRefresh,setRemovalRefresh]=useState(false);
+  useEffect(()=>setRemovalRefresh(false),[reworkOrderId]);
   const [data, setData] = useState<ReworkWorkTasksResponse | null>(history ?? null);
   const specialLabel = data?.tasks.find(task => task.executionKind === "tail_inspection")?.processName ?? specialProcessLabel(data ?? {});
   const [configItems, setConfigItems] = useState<Array<{ configurationItemId: string; processName: string; executionKind: "worker" | "tail_inspection" }>>([]);
@@ -437,37 +435,29 @@ export function WorkReportingForm({
 
   const confirmRemoval = async () => {
     if (!data || !removalTask || busy) return;
+    if(removalRefresh){setMessage("移除已保存，请先仅重新读取办理资料；本次没有重复移除。");return;}
     const workerName = removalTask.members[0]?.displayName ?? "该人员";
-    setBusy(true);
+    if(removalCommand.current&&(removalCommand.current.taskId!==removalTask.workTaskId||removalCommand.current.orderId!==data.reworkOrderId)){setMessage("上次移除结果尚未确认，请返回原单原人员任务核对，暂不另提移除。");return;}
+    if(!removalCommand.current&&!['in_progress','pending_task_assignment'].includes(data.reworkStatus)){setMessage("当前节点不能移除员工。");return;}
+    const kind=data.reworkStatus==='in_progress'?'active':'legacy';
+    removalCommand.current??={taskId:removalTask.workTaskId,orderId:data.reworkOrderId,body:JSON.stringify({expectedOrderVersion:data.orderVersion}),key:createClientRequestId(),startedAt:Date.now(),kind,path:kind==='active'?`rework-orders/${data.reworkOrderId}/work-tasks/${removalTask.workTaskId}/remove-active`:`work-tasks/${removalTask.workTaskId}/remove`};
+    const command=removalCommand.current;if(command.uncertain&&Date.now()-command.startedAt>=SUBMISSION_RECOVERY_WINDOW_MS){setMessage("原提交已超出安全重试时间，请核对原人员任务；本次未重发，也不会另建请求标识。");return;}let confirmed=false;setBusy(true);
     try {
-      if (data.reworkStatus === "in_progress") {
-        const adjusted = await request(
-          `rework-orders/${data.reworkOrderId}/work-tasks/${removalTask.workTaskId}/remove-active`,
-          ReworkWorkTasksResponseSchema.parse,
-          {
-            method: "POST",
-            headers: { "idempotency-key": createClientRequestId() },
-            body: JSON.stringify({ expectedOrderVersion: data.orderVersion }),
-          },
-        );
-        setData(adjusted);
-      } else if (data.reworkStatus === "pending_task_assignment") {
-        await requestNoContent(`work-tasks/${removalTask.workTaskId}/remove`, {
-          method: "POST",
-          headers: { "idempotency-key": createClientRequestId() },
-          body: JSON.stringify({ expectedOrderVersion: data.orderVersion }),
-        });
-        await reload();
-      } else {
-        throw new Error("当前节点不能移除员工。");
+      const init={method:'POST',headers:{'idempotency-key':command.key},body:command.body};
+      if(command.kind==='active'){
+        const adjusted=await request(command.path,ReworkWorkTasksResponseSchema.parse,init);removalCommand.current=null;confirmed=true;
+        if(currentOrder.current!==command.orderId)return;setData(adjusted);
+      }else{
+        await requestNoContent(command.path,init);removalCommand.current=null;confirmed=true;
+        if(currentOrder.current!==command.orderId)return;
+        setRemovalTask(null);setRemovalRefresh(true);await reload();setRemovalRefresh(false);
       }
-      setRemovalTask(null);
-      setMessage(`已从当前订单移除 ${workerName}。`);
+      setRemovalTask(null);setMessage(`已从当前订单移除 ${workerName}。`);
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : "无法移除该人员分配");
-    } finally {
-      setBusy(false);
-    }
+      if(currentOrder.current!==command.orderId)return;
+      if(confirmed)setMessage(`已从当前订单移除 ${workerName}，最新办理资料暂未读取。请仅重新读取办理资料，不要重复移除。`);
+      else{if(command.uncertain||unknownWriteResult(cause))command.uncertain=true;else removalCommand.current=null;setMessage((cause instanceof Error?cause.message:"移除结果尚未确认，请核对原任务")+(command.uncertain?"；原移除结果仍未确认，请保留原请求核对。":""));}
+    } finally {setBusy(false);}
   };
 
   const createTemporaryWorker = async () => {
@@ -687,6 +677,7 @@ export function WorkReportingForm({
       <StatusBadge tone="warning">{frontlineContext.kind === "tail_inspection" ? `待${specialLabel}报数` : "待完工上数"}</StatusBadge>
     </header> : null}
     {message && <p className="work-reporting-feedback" role="status">{message}</p>}
+    {removalRefresh&&<Button disabled={busy} onClick={()=>{if(busy)return;setBusy(true);void reload().then(result=>{if(result){setRemovalRefresh(false);setMessage("移除已保存，办理资料已重新读取");}}).catch(()=>setMessage("移除已保存，办理资料仍未读取成功，请仅重试读取。")).finally(()=>setBusy(false));}}>仅重新读取办理资料</Button>}
     {effectiveTaskMode === "task_assignment" && data && <>
       {data.tasks.length > 0 && <Surface><h2>已分配人员</h2>{data.tasks.map((task) => <div className="section-title whole-order-row n04-assignment-row" key={task.workTaskId}><div><b>{task.processName}</b><p>{task.members.map((member) => member.displayName).join("、")}</p></div><div className="n04-assignment-controls"><StatusBadge tone={assignmentWritable ? "info" : "success"}>{assignmentWritable ? "待开工" : "已处理"}</StatusBadge>{canAssign && assignmentWritable && task.mode === "individual" && task.members.length === 1 && <Button onClick={() => setRemovalTask(task)} disabled={busy}>移除</Button>}</div></div>)}</Surface>}
       {canAssign && assignmentWritable && <Surface><h2>选择人员并分配工序</h2><p>可同时选择多人；临时工由尾部主管代上数。</p>
@@ -768,3 +759,5 @@ export function WorkReportingForm({
     {reportTasks && workReportingWritable && <div className="work-reporting-dialog-backdrop" role="presentation"><Surface className="work-reporting-dialog"><div role="dialog" aria-modal="true" aria-label="返工执行报数"><h2>{isRoot ? "请输入代报数的实际件数" : canAssign ? "请输入临时工的实际件数" : reportTasks.every((task) => task.executionKind === "tail_inspection") ? `请输入您的实际${reportTasks[0]?.processName ?? "整查"}件数` : "请输入您的实际完工件数"}</h2>{reportTasks.map((task) => <div key={task.workTaskId}><ReturnedReportContext task={task} /><InsetField label={`${task.members.map((member) => member.displayName).join("、")} · ${task.processName}（件）`} type="number" min="1" step="1" inputMode="numeric" value={reportQuantities[task.workTaskId] ?? ""} disabled={busy} onChange={(event) => setReportQuantities((current) => ({ ...current, [task.workTaskId]: event.target.value }))} /></div>)}{!reportsReady && <p role="status">请把每项实际完工件数填写为大于 0 的整数。</p>}{busy && <p role="status">正在提交 {formatBusinessDecimal(reportTasks.length)} 项报数，请勿关闭页面或重复操作。</p>}<div className="mobile-actions work-reporting-actions"><Button onClick={() => setReportTasks(null)} disabled={busy}>返回返工</Button><Button variant="primary" data-ready={reportsReady ? "true" : "false"} onClick={() => void submitReports()} disabled={busy}>{busy ? reportTasks.length > 1 ? `批量提交中（${formatBusinessDecimal(reportTasks.length)} 项）…` : "提交中…" : "确认"}</Button></div>{message ? <p role="status">{message}</p> : null}</div></Surface></div>}
   </div>;
 }
+
+export {request as workReportingRequest,requestNoContent as workReportingNoContent};

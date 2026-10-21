@@ -13,7 +13,7 @@ it('shares concurrent candidate reads, isolates callers and discards settled res
 it('does not share different purposes or failed reads',async()=>{
  const fetcher=vi.fn().mockResolvedValueOnce({ok:false,status:403,json:async()=>({error:{message:'denied'}})}).mockResolvedValue(reply([]));vi.stubGlobal('fetch',fetcher);
  const {digitalRequest}=await import('../../apps/web/src/digital-production-api.js');
- await expect(digitalRequest('access/candidates?purpose=technical')).rejects.toThrow('denied');
+ await expect(digitalRequest('access/candidates?purpose=technical')).rejects.toMatchObject({status:403,message:'当前身份无权读取此资料，请返回原工作台核对授权'});
  await Promise.all([digitalRequest('access/candidates?purpose=technical'),digitalRequest('access/candidates?purpose=financial')]);expect(fetcher).toHaveBeenCalledTimes(3);
 });
 it.each(['session','write'])('rejects stale reads after %s changes without aborting writes',async(change)=>{

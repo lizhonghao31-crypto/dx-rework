@@ -34,7 +34,7 @@ function PersonalTodoReader({children}:{children:ReactNode}){
    const session=await verifySession();if(!live)return;if(session==='denied')throw Error('登录状态未确认，请重新登录后打开本人事项。');
    const epoch=sessionCacheVersion();version.current=epoch;
    const response=await fetch(urls.apiUrl(`todos/mine/${encodeURIComponent(todoId)}`),{credentials:'include',cache:'no-store',signal:abort.signal});
-   const body=await response.json().catch(()=>null);if(!live||epoch!==sessionCacheVersion())return;if(!response.ok){if(response.status===403||response.status===404){setError(requestFailureMessage(response.status,body?.error?.message));setPhase('bypass');return;}throw Error(requestFailureMessage(response.status,body?.error?.message));}
+   const body=await response.json().catch(()=>null);if(!live||epoch!==sessionCacheVersion())return;if(!response.ok){if(response.status===403||response.status===404){setError(requestFailureMessage(response.status,body?.error?.message,"GET"));setPhase('bypass');return;}throw Error(requestFailureMessage(response.status,body?.error?.message,"GET"));}
    const parsed=TodoResponseSchema.safeParse(body);if(!parsed.success)throw Error("本人事项资料不完整或格式无效，请重试；仍失败请管理员核对事项接口响应");const todo=parsed.data;if(!live||epoch!==sessionCacheVersion())return;
    if(todo.recipientUserId!==session.user.id)throw Error('事项不属于当前账号，本次不记录已读。');
    setMetadata(todo);setPhase('ready');
@@ -48,7 +48,7 @@ function PersonalTodoReader({children}:{children:ReactNode}){
    // Natural (person, item, token) uniqueness makes retries safe. Never abort a
    // sent write or replace its content token when the outcome is uncertain.
    const response=await fetch(urls.apiUrl(`todos/mine/${metadata.todoId}/read`),{method:'POST',credentials:'include',headers:{'content-type':'application/json'},body:JSON.stringify({contentToken:metadata.contentToken,route:metadata.route})});
-   const body=await response.json().catch(()=>null);if(!response.ok){const message=requestFailureMessage(response.status,body?.error?.message);if(response.status>=400&&response.status<500&&response.status!==408)throw new RejectedTodoRead(message,response.status);throw Error(message);}
+   const body=await response.json().catch(()=>null);if(!response.ok){const message=requestFailureMessage(response.status,body?.error?.message,"POST");if(response.status>=400&&response.status<500&&response.status!==408)throw new RejectedTodoRead(message,response.status);throw Error(message);}
    const parsed=TodoReadReceiptSchema.safeParse(body);if(!parsed.success)throw Error('未收到有效阅读回执，结果尚未确认');const receipt=parsed.data;if(receipt.contentToken!==metadata.contentToken)throw Error('事项阅读回执不匹配，请保留当前内容后重新核对');
    if(version.current!==sessionCacheVersion()||activeActor()!==metadata.recipientUserId)return;
    completed.current=metadata.contentToken;publishTodoRead(metadata.recipientUserId);

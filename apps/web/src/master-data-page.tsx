@@ -1,3 +1,4 @@
+import {feedbackFetch,feedbackJson} from "./request-response-feedback.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -101,8 +102,20 @@ const supplierTypeByLabel = new Map<string, Supplier["supplierType"]>([
   ["other", "other"],
 ]);
 
+function masterDataResponse(path:string,method:string,value:unknown){
+ const pathname=path.split('?')[0]!,reading=method.toUpperCase()==='GET';
+ const object=(item:unknown):item is Record<string,unknown>=>Boolean(item&&typeof item==='object'&&!Array.isArray(item));
+ const identity=(item:unknown,key:string)=>object(item)&&typeof item[key]==='string'&&Number.isSafeInteger(item.version)&&Number(item.version)>0;
+ const kind=pathname.match(/^master-data\/(crafts|processes|suppliers)(?:\/|$)/)?.[1];
+ if(pathname==='master-data/crafts/ensure'){if(!Array.isArray(value)||!value.length||!value.every(item=>identity(item,'craftId')))throw Error('invalid catalog receipt');}
+ else if(!reading&&kind&&(/^master-data\/(?:crafts|processes|suppliers)(?:\/[^/]+\/versions)?$/.test(pathname)||pathname.endsWith('/default-workers'))){const key=kind==='crafts'?'craftId':kind==='processes'?'processId':'supplierId';if(pathname.endsWith('/default-workers')){if(!object(value)||typeof value.processId!=='string'||!Number.isSafeInteger(value.rosterVersion)||!Array.isArray(value.personIds))throw Error('invalid roster receipt');}else if(!identity(value,key))throw Error('invalid catalog receipt');}
+ else if(reading&&['master-data/crafts','master-data/suppliers','master-data/processes'].includes(pathname)){if(!Array.isArray(value))throw Error('invalid catalog list');}
+ else if(reading&&pathname==='master-data/process-catalog'){if(!object(value)||!Array.isArray(value.items)||!Number.isSafeInteger(value.page)||!Number.isSafeInteger(value.totalPages))throw Error('invalid catalog page');}
+ return value;
+}
+
 async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(apiUrl(path), {
+  const response = await feedbackFetch(apiUrl(path), {
     credentials: "include",
     ...init,
     headers: {
@@ -111,12 +124,8 @@ async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
       ...init.headers,
     },
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-    throw new SupplierImportRequestError(body?.error?.message ?? `请求失败：${response.status}`, response.status);
-  }
-  if (response.status === 204) return undefined as T;
-  return await response.json() as T;
+  if(response.ok&&response.status===204)return undefined as T;
+  return feedbackJson(response,init.method??'GET',value=>masterDataResponse(path,init.method??'GET',value) as T,(message,_code,status)=>new SupplierImportRequestError(message,status));
 }
 
 const processCatalogPath = (query: string, page = 1): string => {
@@ -165,6 +174,8 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
   const [pricingUnit, setPricingUnit] = useState<Process["pricingUnit"]>("piece");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [savedMessage,setSavedMessage]=useState("");
+  const [refreshPending,setRefreshPending]=useState(false);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const importLock = useRef(false);
   const [importReason, setImportReason] = useState("批量初始化基础资料");
@@ -178,7 +189,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
   const [processPageLoading, setProcessPageLoading] = useState(false);
   const [canWriteSuppliers, setCanWriteSuppliers] = useState(false);
 
-  const load = async () => {
+  const load = async ():Promise<boolean> => {
     setError("");
     try {
       if (view === "crafts") {
@@ -200,8 +211,10 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
         setProcessTotalPages(nextProcessPage.totalPages);
         setProcessDefaultWorkerCandidates(nextProcessDefaultWorkerCandidates);
       }
+      return true;
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : view === "crafts" ? "工艺数据库加载失败" : view === "processes" ? "工序数据库加载失败" : "供应商资料加载失败");
+      return false;
     }
   };
 
@@ -238,11 +251,13 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
 
   const run = async (key: string, work: () => Promise<unknown>) => {
     if (busy) return;
+    if(refreshPending){setError("上次操作已保存，请先仅重读目录后再办理；本次未重复提交。");return;}
     setBusy(key);
-    setError("");
+    setError("");setSavedMessage("");setRefreshPending(false);
     try {
       await work();
-      await load();
+      setSavedMessage("上次操作已保存");
+      const refreshed=await load();setRefreshPending(!refreshed);if(!refreshed)setSavedMessage("上次操作已保存，最新目录暂未读取。请只重读目录，不要重复新增或修改。");
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "操作失败");
     } finally {
@@ -667,6 +682,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
       </nav>
       <div className="master-data-shell">
         {error ? <p className="master-data-error" role="alert">{error}</p> : null}
+        {savedMessage&&<p role="status">{savedMessage}{refreshPending&&<Button disabled={Boolean(busy)} onClick={()=>{void load().then(ok=>{if(ok){setRefreshPending(false);setSavedMessage("上次操作已保存，目录已重新读取");}});}}>仅重读目录</Button>}</p>}
 
         <div className="master-data-grid master-data-grid--single">
           {view === "crafts" ? <Surface className="master-data-panel">
@@ -896,3 +912,5 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
     </Shell>
   );
 }
+
+export {json as masterDataRequest};

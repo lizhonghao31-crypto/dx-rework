@@ -1,3 +1,4 @@
+import {feedbackFetch,feedbackJson} from "./request-response-feedback.js";
 import { SourcingOrderPhotos } from "./sourcing-order-photos.js";
 import { SourcingOrderDateFacts } from "./sourcing-order-date-facts.js";
 import { SearchableSelect } from "./search-select.js";
@@ -175,7 +176,7 @@ const request = async <T,>(
   schema: ApiSchema<T>,
   init: RequestInit = {},
 ): Promise<T> => {
-  const response = await fetch(apiUrl(path), {
+  const response = await feedbackFetch(apiUrl(path), {
     credentials: "include",
     cache: "no-store",
     ...init,
@@ -185,11 +186,7 @@ const request = async <T,>(
       ...(init.headers ?? {}),
     },
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: { message?: string; code?: string } } | null;
-    throw new SourcingRequestError(body?.error?.message ?? "操作失败，请稍后重试", body?.error?.code, response.status);
-  }
-  return schema.parse(await response.json());
+  return feedbackJson(response,init.method??'GET',value=>schema.parse(value),(message,code,status)=>new SourcingRequestError(message,code,status));
 };
 
 const requestSubmission = async <T,>(path: string, schema: ApiSchema<T>, init: RequestInit): Promise<T> => {
@@ -2173,3 +2170,5 @@ function OrderDetailPage({
     </div>
   );
 }
+
+export {request as sourcingWorkspaceRequest};
