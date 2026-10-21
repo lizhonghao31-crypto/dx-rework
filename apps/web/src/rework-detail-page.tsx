@@ -785,7 +785,7 @@ function CurrentReworkDetailPage({
                     reworkOrderId={detail.reworkOrderId}
                     expectedVersion={detail.version}
                     currentAttachmentCount={detail.attachments.filter((attachment) => attachment.entityType === "rework_order").length}
-                    onUploaded={async () => { await load(); }}
+                    onUploaded={async () => { const current=await load();if(!current)throw Error('原订单尚未读取');return {reworkOrderId:current.reworkOrderId,version:current.version}; }}
                   />
                 )}
                 <span className="rework-governed-image-count">{formatBusinessDecimal(imageAttachments.length)} 张</span>

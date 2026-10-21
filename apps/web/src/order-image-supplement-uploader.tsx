@@ -35,12 +35,13 @@ export function OrderImageSupplementUploader({
   reworkOrderId: string;
   expectedVersion: number;
   currentAttachmentCount: number;
-  onUploaded(): Promise<void>;
+  onUploaded(): Promise<{reworkOrderId:string;version:number}>;
 }) {
   const inFlight=useRef(false),context=useRef(0),pendingFiles=useRef<File[]>([]),binding=useRef<{key:string;body:unknown}|null>(null),acknowledged=useRef(false),definitive=useRef(false),attempt=useRef(new SubmissionAttempt());
-  useEffect(()=>{context.current++;inFlight.current=false;pendingFiles.current=[];binding.current=null;acknowledged.current=false;definitive.current=false;attempt.current=new SubmissionAttempt();setUploading(false);setMessage('');return()=>{context.current++;};},[reworkOrderId]);
+  useEffect(()=>{context.current++;inFlight.current=false;pendingFiles.current=[];binding.current=null;acknowledged.current=false;definitive.current=false;attempt.current=new SubmissionAttempt();setUploading(false);setMessage('');setRefreshedVersion(null);return()=>{context.current++;};},[reworkOrderId]);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
+  const [refreshedVersion,setRefreshedVersion]=useState<number|null>(null);
   useDigitalDetailNavigationGuard(pendingFiles.current.length>0&&!acknowledged.current,uploading,inFlight,'本页附件或原绑定结果尚未确认；离开会丢失本地文件与恢复记录，原请求不会撤销。仍要离开？');
   const remaining = Math.max(0, MAX_REWORK_ATTACHMENTS - currentAttachmentCount);
 
@@ -58,7 +59,7 @@ export function OrderImageSupplementUploader({
       };
       const result=currentAttempt.hasPending?await currentAttempt.retry():await currentAttempt.run(execute);
       if(revision!==context.current)return;
-      if(result.kind==='failure'){definitive.current=!result.uncertain&&!acknowledged.current;show(`${acknowledged.current?'图片引用已保存；重新读取原订单失败':result.uncertain?'文件已就绪，原绑定结果尚未确认':'文件已就绪，本单图片引用未保存'}：${result.failure.message}`);}
+      if(result.kind==='failure'){definitive.current=!result.uncertain&&!acknowledged.current;setRefreshedVersion(null);show(`${acknowledged.current?'图片引用已保存；重新读取原订单失败':result.uncertain?'文件已就绪，原绑定结果尚未确认':'文件已就绪，本单图片引用未保存'}：${result.failure.message}`);}
       if(result.kind==='expired')show('原图片绑定已超过安全恢复期限；请核对原订单图片，不再重发。文件标识保留。');
     };
     if(binding.current){inFlight.current=true;setUploading(true);try{await finishBinding();}catch(error){show(`图片引用已保存，重读原订单失败：${error instanceof Error?error.message:'读取未完成'}`);}finally{if(revision===context.current){inFlight.current=false;setUploading(false);}}return;}
@@ -132,8 +133,8 @@ export function OrderImageSupplementUploader({
     <div className="rework-detail-image-upload">
       {message && <p role="status">{message}</p>}
       {!uploading&&pendingFiles.current.length>0&&<button type="button" onClick={()=>void uploadImages(pendingFiles.current)}>{acknowledged.current?'只重新读取原订单':binding.current?'使用原内容核对图片绑定':'重试未完成图片'}</button>}
-      {!uploading&&binding.current&&<button type="button" onClick={()=>{const revision=context.current;setUploading(true);void onUploaded().then(()=>{if(revision===context.current)setMessage('已重新读取原订单；原图片绑定回执仍按原提交核对，未因读取自动重发。');}).catch(error=>{if(revision===context.current)setMessage(`原订单尚未读取：${error instanceof Error?error.message:'读取未完成'}`);}).finally(()=>{if(revision===context.current){inFlight.current=false;setUploading(false);}});}}>仅核对原订单图片</button>}
-      {!uploading&&binding.current&&definitive.current&&<button type="button" onClick={()=>{const old=binding.current!;binding.current={key:createClientRequestId(),body:{...(old.body as {attachmentIds:string[]}),expectedVersion}};attempt.current=new SubmissionAttempt();definitive.current=false;void uploadImages(pendingFiles.current);}}>按当前版本重新提交已就绪图片</button>}
+      {!uploading&&binding.current&&<button type="button" onClick={()=>{if(inFlight.current)return;const revision=context.current;inFlight.current=true;setUploading(true);setRefreshedVersion(null);void onUploaded().then(value=>{if(revision!==context.current)return;if(value.reworkOrderId!==reworkOrderId||!Number.isSafeInteger(value.version)||value.version<1)throw Error('原订单尚未取得匹配的当前版本');if(definitive.current)setRefreshedVersion(value.version);setMessage('已重新读取原订单；原图片绑定回执仍按原提交核对，未因读取自动重发。');}).catch(error=>{if(revision===context.current)setMessage(`原订单尚未读取：${error instanceof Error?error.message:'读取未完成'}`);}).finally(()=>{if(revision===context.current){inFlight.current=false;setUploading(false);}});}}>仅核对原订单图片</button>}
+      {!uploading&&binding.current&&definitive.current&&<button type="button" disabled={refreshedVersion===null||refreshedVersion!==expectedVersion} onClick={()=>{if(refreshedVersion===null||refreshedVersion!==expectedVersion)return;const old=binding.current!;binding.current={key:createClientRequestId(),body:{...(old.body as {attachmentIds:string[]}),expectedVersion:refreshedVersion}};attempt.current=new SubmissionAttempt();definitive.current=false;setRefreshedVersion(null);void uploadImages(pendingFiles.current);}}>按当前版本重新提交已就绪图片</button>}
       <label className="qc-file-button rework-detail-image-upload__button">
         <span>{uploading ? "正在上传…" : remaining > 0 ? "上传图片" : `已达 ${MAX_REWORK_ATTACHMENTS} 张上限`}</span>
         <input
