@@ -2,6 +2,7 @@ import {createHash,randomUUID} from "node:crypto";
 import {isDeepStrictEqual} from "node:util";
 import type {Pool,PoolClient} from "pg";
 import {DevelopmentDocumentSchema,developmentPublishErrors,type DevelopmentDocument} from "@dx-rework/contracts/digital-development";
+import {legacyAmendmentPublicationOptions} from "./development-document-format.js";
 import {DEVELOPMENT_RETURN_FIELD_LABELS,developmentReturnNeed,developmentAmendmentErrors,type DevelopmentAmendmentContext,type SaveDevelopmentAmendment,type SubmitDevelopmentAmendment} from "@dx-rework/contracts/digital-development-amendments";
 import {isRootActor} from "../access/business-authority.js";
 import type {TrustedActorContext} from "../tools/repositories.js";
@@ -89,7 +90,7 @@ export class DevelopmentAmendmentService{
    }
    if(!draft.reason.trim())fail("请填写本次具体补正 / 澄清说明，再保存并提交");
    const before=current.sheet.document!,document=DevelopmentDocumentSchema.parse(draft.document);
-   const errors=[...developmentAmendmentErrors(before,document),...developmentPublishErrors(document)];if(errors.length)fail(errors.join("；"));
+   const errors=[...developmentAmendmentErrors(before,document),...developmentPublishErrors(document,legacyAmendmentPublicationOptions(before,document))];if(errors.length)fail(errors.join("；"));
    for(const issue of requirements?.issues??[]){
     if(developmentReturnNeed(issue)==="supply"||issue.field==="other")continue;
     const oldValue=issue.materialId?before.materials.find(m=>m.materialId===issue.materialId)?.[issue.field as keyof DevelopmentDocument["materials"][number]]:before[issue.field as keyof DevelopmentDocument];

@@ -11,7 +11,7 @@ import "../../apps/web/src/styles.css";
 const id=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,"0")}`;
 const order=initialDevelopmentOrder([]);order.designStyleNo="TEST-DRAFT-CONTINUITY";order.customerCode="TEST";order.orderDate="2026-10-20";
 order.lines=[1,2,3].map(n=>({formalPoNo:`TEST-PO-${n}`,customerWarehouseArrivalDate:"2099-12-31",poNumber:null,formalStyleNo:null,temporaryStyleNo:null,color:`TEST颜色${n}`,colorForeign:null,deliveryDate:null,sizes:[{size:"M",quantity:String(n*10)}]}));
-const document={...initialDevelopmentDocument(),patternCategoryId:id(2),quantity:1,sampleSize:"M",orderDate:"2026-10-20",returnDate:"2026-10-23",instructions:"TEST 初始说明",files:[{attachmentId:id(3),kind:"款图" as const}],customerOrderDraft:{withOrder:true,order}};
+const document={...initialDevelopmentDocument(),patternCategoryId:id(2),quantity:1,sizeQuantities:[1,0],sampleSize:"M",orderDate:"2026-10-20",returnDate:"2026-10-23",instructions:"TEST 初始说明",files:[{attachmentId:id(3),kind:"款图" as const}],customerOrderDraft:{withOrder:true,order}};
 const state={saved:{sourceId:id(1),designStyleNo:order.designStyleNo,temporaryStyleNo:null,customerCode:"TEST",developmentType:"头版",designerName:"TEST设计师",version:1,status:"draft",document,publishedAt:null,taskId:null,canEdit:true,materialEvents:[]} as DevelopmentSheet,requests:[] as {path:string;method:string;body:unknown}[],failSave:false,failPublish:true,closed:0,created:0,unexpected:[] as string[]};
 Object.assign(window,{uatDraftContinuity:state});
 window.fetch=async(input,init)=>{

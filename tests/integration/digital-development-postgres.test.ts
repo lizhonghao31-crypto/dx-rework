@@ -62,17 +62,17 @@ run("P05 development forms PostgreSQL", () => {
 
   afterAll(async()=>{await database.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
   const source=async()=> (await service.createSource(actor(),{developmentType:"头版",designStyleNo:`TEST-P05-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
-  const draft=():DevelopmentDocument=>DevelopmentDocumentSchema.parse({template:"上衣",quantity:null,sampleSize:"",orderDate:null,returnDate:null,unit:"cm",sizes:["M"],measurements:[{name:"胸围",values:[""]}],interlining:"",placketInterlining:"",sewingThread:"",buttonholeThread:"",stitchDensity:"",washingIroning:"",packaging:"",formalSizes:"",casualSizes:"",mainLabel:false,mainLabelMethod:"",sizeLabel:false,careLabel:false,instructions:"",craft:"无",washing:"免洗",materials:[],files:[]});
+  const draft=():DevelopmentDocument=>DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[null],template:"上衣",quantity:null,sampleSize:"",orderDate:null,returnDate:null,unit:"cm",sizes:["M"],measurements:[{name:"胸围",values:[""]}],interlining:"",placketInterlining:"",sewingThread:"",buttonholeThread:"",stitchDensity:"",washingIroning:"",packaging:"",formalSizes:"",casualSizes:"",mainLabel:false,mainLabelMethod:"",sizeLabel:false,careLabel:false,instructions:"",craft:"无",washing:"免洗",materials:[],files:[]});
   const ready=async()=>{
     const doc=draft(),id=randomUUID();
     await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$4,'test.png','image/png',100,$2,$3,'ready',CURRENT_TIMESTAMP)`,[id,"a".repeat(64),designer,`test/${id}`]);
-    return {...doc,quantity:1,sampleSize:"M",orderDate:"2026-09-30",files:[{attachmentId:id,kind:"款图" as const}]};
+    return {...doc,quantity:1,sizeQuantities:[1],sampleSize:"M",orderDate:null,files:[{attachmentId:id,kind:"款图" as const}]};
   };
   it("persists and clears the draft pattern category through the save contract without storing a price or creating tasks",async()=>{
     const id=await source(),categoryId=randomUUID(),document=draft();
     const input=SaveDevelopmentSchema.parse({expectedVersion:0,document:{...document,patternCategoryId:categoryId}});
     const saved=await development.save(actor(),id,input,randomUUID());
-    expect(saved.document).toEqual({...document,patternCategoryId:categoryId});
+    expect(saved.document).toEqual({...document,orderDate:saved.developmentCreatedDate,patternCategoryId:categoryId});
     const reopened=await new DigitalDevelopmentService(database,true).read(actor(),id);
     expect(reopened.document).toEqual(saved.document);
     await expect(development.save(actor(other),id,{expectedVersion:1,document:{...document,patternCategoryId:null}},randomUUID())).rejects.toMatchObject({statusCode:403});
@@ -228,6 +228,28 @@ run("P05 development forms PostgreSQL", () => {
     expect(await development.canDownload(actor(),id,original.files[0]!.attachmentId)).toBe(true);
     await expect(loadCockpitDocumentCategory(directoryOrder,'development',read(actor(other),id),signal)).rejects.toMatchObject({statusCode:404});
     const emptyId=await source();expect(await loadCockpitDocumentCategory({sourceId:emptyId,orderId:null} as OrderJourney,'development',read(actor(),emptyId),signal)).toMatchObject({state:'missing',entries:[]});
+  });
+
+  it("P03 fixes the development date to server source time and enforces new making counts at first publication",async()=>{
+    const id=await source(),doc=await ready();
+    const sourceDate=(await development.read(actor(),id)).developmentCreatedDate!;
+    await expect(development.save(actor(),id,{expectedVersion:0,document:{...doc,orderDate:sourceDate==="2026-10-21"?"2026-10-22":"2026-10-21"}},randomUUID())).rejects.toMatchObject({statusCode:400});
+    expect((await development.read(actor(),id)).version).toBe(0);
+    const {documentFormatVersion:_version,sizeQuantities:_counts,...oldDraft}=doc;void _version;void _counts;
+    const legacySaved=await development.save(actor(),id,{expectedVersion:0,document:oldDraft},randomUUID());
+    expect(legacySaved.document).toMatchObject({documentFormatVersion:2,sizeQuantities:[null],orderDate:sourceDate});
+    await expect(development.publish(actor(),id,legacySaved.version,randomUUID())).rejects.toThrow("制作数量");
+    expect((await database.query("SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1",[id])).rows[0].n).toBe(0);
+    await expect(development.save(actor(),id,{expectedVersion:legacySaved.version,document:oldDraft},randomUUID())).rejects.toThrow("不能移除");
+    const next={...legacySaved.document!,sizeQuantities:[2],quantity:3};
+    const invalid=await development.save(actor(),id,{expectedVersion:legacySaved.version,document:next},randomUUID());
+    await expect(development.publish(actor(),id,invalid.version,randomUUID())).rejects.toThrow("合计2件");
+    await expect(development.save(actor(other),id,{expectedVersion:invalid.version,document:{...next,sizeQuantities:[3]}},randomUUID())).rejects.toMatchObject({statusCode:403});
+    const saved=await development.save(actor(),id,{expectedVersion:invalid.version,document:{...next,sizeQuantities:[3]}},randomUUID());
+    const key=randomUUID(),published=await development.publish(actor(),id,saved.version,key);
+    expect(await development.publish(actor(),id,saved.version,key)).toEqual(published);
+    expect(published.document).toMatchObject({sizeQuantities:[3],quantity:3,orderDate:sourceDate});
+    expect((await database.query("SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1",[id])).rows[0].n).toBe(1);
   });
 
 });

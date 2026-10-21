@@ -1,3 +1,7 @@
+import {TodoService} from "../../apps/api/src/todos/service.js";
+import {TodoProjectionService} from "../../apps/api/src/todos/projection-service.js";
+import {PatternRoomOrderService} from "../../apps/api/src/pattern-room/order-service.js";
+import {developmentMakingSizes} from "@dx-rework/contracts/digital-development";
 import Fastify from "fastify";
 import {registerDevelopmentRoutes} from "../../apps/api/src/production-platform/development-routes.js";
 import {AuthService} from "../../apps/api/src/auth/service.js";
@@ -24,8 +28,8 @@ import type {TrustedActorContext} from "../../apps/api/src/tools/repositories.js
 const url=process.env.TEST_DATABASE_URL;
 (url?describe:describe.skip)("P02 same-round correction with real current schema",()=>{
  const schema=ownedPostgresSchema("development_amendment"),admin=new pg.Pool({connectionString:url!}),db=new pg.Pool({connectionString:url!,options:`-c search_path=${schema}`});
- const ids={designer:randomUUID(),clerk:randomUUID(),worker:randomUUID(),other:randomUUID(),root:randomUUID()};
- const actor=(who:keyof typeof ids,roles?:string[]):TrustedActorContext=>({actorId:ids[who],actorRoles:roles??[who==="root"?"root_superuser":who==="clerk"?"development_clerk":who==="worker"?"pattern_room_worker":"sample_designer"],authorizationCapability:"digital_production:view",authorizationCapabilities:["digital_production:view","pattern_room:orders:create","todo:view"],requestId:"TEST-P02"});
+ const ids={designer:randomUUID(),clerk:randomUUID(),worker:randomUUID(),other:randomUUID(),supervisor:randomUUID(),root:randomUUID()};
+ const actor=(who:keyof typeof ids,roles?:string[]):TrustedActorContext=>({actorId:ids[who],actorRoles:roles??[who==="root"?"root_superuser":who==="clerk"?"development_clerk":who==="supervisor"?"pattern_room_supervisor":who==="worker"?"pattern_room_worker":"sample_designer"],authorizationCapability:"digital_production:view",authorizationCapabilities:["digital_production:view","pattern_room:orders:create","todo:view"],requestId:"TEST-P02"});
  const employees=new EmployeeAccessService(db,"TEST",new AccessMasterDataService(db,"TEST"),undefined as never,undefined as never,{enabled:false,dingtalkUserId:undefined,secret:undefined},`TEST-${ids.root}`);
  const forms=new DigitalDevelopmentService(db,true),execution=new DevelopmentExecutionService(db,true),amendments=new DevelopmentAmendmentService(db,true),identity=new DigitalProductionIdentityService(db,true),tasks=new DigitalProductionTaskService(db),notices=new DigitalProductionNotificationService(db);
  beforeAll(async()=>{
@@ -46,6 +50,7 @@ const url=process.env.TEST_DATABASE_URL;
   const source=await identity.createSource(actor("designer"),{designStyleNo:`TEST-LEGACY-${randomUUID()}`,temporaryStyleNo:null,customerCode:null,developmentType:"头版"},randomUUID()),sourceId=source.sourceId,materialId=randomUUID(),attachmentId=randomUUID();
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[attachmentId,`TEST/${attachmentId}`,"a".repeat(64),ids.designer]);
   const document={...initialDevelopmentDocument(),quantity:1,sampleSize:"历史M",orderDate:"2026-09-01",materials:[{materialId,category:"主布" as const,label:"TEST旧主布",name:"TEST棉布",specification:"",quantity:"1",color:"黑",width:"",weight:"",composition:"",supplier:"",consumption:"",requiredThisRound:true,available:false,expectedDate:null}],files:[{attachmentId,kind:"款图" as const}]};
+  delete document.documentFormatVersion;delete document.sizeQuantities;
   // Historical frozen-document fixture only; no schema/immutable guard is disabled. The return is made through the actual pre-0248 command below.
   const client=await db.connect();let taskId:string;try{await client.query("BEGIN");taskId=(await tasks.createWithClient(client,actor("root"),{resource:{kind:"source",id:sourceId},kind:"development_materials",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:ids.clerk})).taskId;await forms.bindFiles(client,actor("designer"),sourceId,document);await client.query("INSERT INTO digital_development_documents(source_id,version,status,document,published_at,task_id,updated_by) VALUES($1,2,'published',$2,CURRENT_TIMESTAMP,$3,$4)",[sourceId,JSON.stringify(document),taskId,ids.designer]);await client.query("COMMIT");}catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}
   const entry={materialId,usage:"use" as const,physical:false,quantity:true,color:true,specification:true,note:"",confirmedWith:""},draft=await execution.saveMaterials(actor("clerk"),sourceId,{taskId:taskId!,expectedVersion:0,expectedDocumentVersion:2,entries:[entry],result:"缺项退回"},randomUUID()) as {version:number};
@@ -56,7 +61,7 @@ const url=process.env.TEST_DATABASE_URL;
  const prepare=async(field:DevelopmentReturnIssue["field"]="specification",missing=false)=>{
   const source=await identity.createSource(actor("designer"),{designStyleNo:`TEST-P02-${randomUUID()}`,temporaryStyleNo:null,customerCode:null,developmentType:"头版"},randomUUID()),sourceId=source.sourceId,materialId=randomUUID(),attachmentId=randomUUID();
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[attachmentId,`TEST/${attachmentId}`,"a".repeat(64),ids.designer]);
-  const document={...initialDevelopmentDocument(),quantity:1,sampleSize:"M",orderDate:"2026-10-20",materials:[{materialId,category:"主布" as const,label:"TEST主布",name:"TEST棉布",specification:"40支",quantity:"1",color:"黑",width:"",weight:"",composition:"",supplier:"",consumption:"",requiredThisRound:false,available:!missing,expectedDate:null}],files:[{attachmentId,kind:"款图" as const}]};
+  const document={...initialDevelopmentDocument(),quantity:1,sizeQuantities:[1,0],sampleSize:"M",orderDate:null,materials:[{materialId,category:"主布" as const,label:"TEST主布",name:"TEST棉布",specification:"40支",quantity:"1",color:"黑",width:"",weight:"",composition:"",supplier:"",consumption:"",requiredThisRound:false,available:!missing,expectedDate:null}],files:[{attachmentId,kind:"款图" as const}]};
   const saved=await forms.save(actor("designer"),sourceId,{expectedVersion:0,document},randomUUID()),sheet=await forms.publish(actor("designer"),sourceId,saved.version,randomUUID()),checkTask=sheet.taskId!;
   const issues:DevelopmentReturnIssue[]=[{materialId,field,reason:`TEST ${field}需核实`}];if(missing&&field!=="physical")issues.push({materialId,field:"physical",reason:"TEST实物未到"});
   const entry={materialId,usage:"use" as const,physical:!missing,quantity:true,color:true,specification:field!=="specification",note:"",confirmedWith:""};
@@ -96,6 +101,45 @@ const url=process.env.TEST_DATABASE_URL;
   const unknown=await amendments.read(actor("designer"),f.sourceId,unlinkedTask!);expect(unknown).toMatchObject({issues:[],directSupplyMode:null});
   await expect(amendments.submit(actor("designer"),f.sourceId,{...input,taskId:unlinkedTask!},randomUUID())).rejects.toThrow("请先保存");await expect(execution.resubmit(actor("designer"),f.sourceId,unlinkedTask!,randomUUID())).rejects.toThrow("未取得本任务的原退回依据");
   expect((await execution.read(actor("designer"),f.sourceId)).tasks.filter(task=>task.taskKind==="development_material_recheck")).toHaveLength(0);
+ });
+ it("P03 creates native execution from all 20 positive making sizes without truncating names or changing price rules",async()=>{
+  const designerActor={...actor("designer"),authorizationCapabilities:[...actor("designer").authorizationCapabilities??[],"pattern_room:orders:view","pattern_room:orders:edit"]};
+  const source=await identity.createSource(designerActor,{designStyleNo:`TEST-P03-${randomUUID()}`,temporaryStyleNo:null,customerCode:null,developmentType:"头版"},randomUUID()),attachmentId=randomUUID();
+  await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[attachmentId,`TEST/${attachmentId}`,"a".repeat(64),ids.designer]);
+  const native=new PatternRoomOrderService(db,new TodoProjectionService(new TodoService(db)),{ordersEnabled:true}),linkedForms=new DigitalDevelopmentService(db,true,native);
+  const document={...initialDevelopmentDocument(),quantity:20,sizes:Array.from({length:20},(_,index)=>`TEST长尺码${index+1}-${"码".repeat(20)}`),sizeQuantities:Array.from({length:20},()=>1),measurements:[],materials:[],files:[{attachmentId,kind:"款图" as const}]};
+  const saved=await linkedForms.save(designerActor,source.sourceId,{expectedVersion:0,document},randomUUID());
+  const price=(await db.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0];
+  const published=await linkedForms.publish(designerActor,source.sourceId,saved.version,randomUUID(),{categoryId:price.price_id,priceVersion:price.version});
+  const link=(await db.query("SELECT order_id FROM digital_development_pattern_links WHERE source_id=$1",[source.sourceId])).rows[0];
+  const order=await native.get(designerActor,link.order_id);expect(order.sizeColor).toBe(developmentMakingSizes(published.document));expect(order.sizeColor!.length).toBeGreaterThan(200);expect(order.rounds[0]!.quantity).toBe(20);
+  const extra=randomUUID();await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-extra.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[extra,`TEST/${extra}`,"b".repeat(64),ids.designer]);
+  const change={version:order.version,roundId:order.currentRoundId,styleNo:order.styleNo,requiredDate:'2026-12-01',customer:order.customer,sizeColor:order.sizeColor,referenceStyleNo:order.referenceStyleNo,variant:order.variant,note:'TEST只更新附件日期备注',attachmentIds:[attachmentId,extra],reason:'TEST保留长系统摘要'},key=randomUUID();
+  await expect(native.updateMaterials({...actor('worker'),authorizationCapabilities:['pattern_room:orders:view','pattern_room:orders:edit']},order.orderId,change,randomUUID())).rejects.toMatchObject({statusCode:403});
+  const changed=await native.updateMaterials(designerActor,order.orderId,change,key);await native.updateMaterials(designerActor,order.orderId,change,key);
+  expect(changed).toMatchObject({sizeColor:order.sizeColor,requiredDate:'2026-12-01',note:change.note,version:order.version+1});expect(changed.attachments.filter(file=>file.active)).toHaveLength(2);
+  for(const sizeColor of [order.sizeColor+'TEST伪造','TEST短文本',null])await expect(native.updateMaterials(designerActor,order.orderId,{...change,version:changed.version,sizeColor},randomUUID())).rejects.toMatchObject({statusCode:400});
+  expect((await native.get(designerActor,order.orderId)).version).toBe(changed.version);
+  expect((await linkedForms.read(designerActor,source.sourceId)).document).toEqual(published.document);
+
+ });
+
+ it("P03 reads and corrects a pre-upgrade frozen legacy snapshot without inventing counts or its missing date",async()=>{
+  const source=await identity.createSource(actor("designer"),{designStyleNo:`TEST-LEGACY-${randomUUID()}`,temporaryStyleNo:null,customerCode:null,developmentType:"头版"},randomUUID()),sourceId=source.sourceId,materialId=randomUUID(),attachmentId=randomUUID();
+  await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[attachmentId,`TEST/${attachmentId}`,"a".repeat(64),ids.designer]);
+  const legacy=initialDevelopmentDocument();delete legacy.documentFormatVersion;delete legacy.sizeQuantities;Object.assign(legacy,{quantity:1,sampleSize:"历史码42",orderDate:null,materials:[],files:[{attachmentId,kind:"款图"}]});
+  legacy.materials=[{materialId,category:"主布",label:"TEST历史主布",name:"TEST棉",specification:"40支",quantity:"1",color:"黑",width:"",weight:"",composition:"",supplier:"",consumption:"",requiredThisRound:true,available:true,expectedDate:null}];
+  // Pre-upgrade fixture bootstrap only: seed the original frozen publication; every operation below is the real business command.
+  const client=await db.connect();let taskId:string;try{await client.query("BEGIN");taskId=(await tasks.createWithClient(client,actor("root"),{resource:{kind:"source",id:sourceId},kind:"development_materials",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:ids.clerk})).taskId;await forms.bindFiles(client,actor("designer"),sourceId,legacy);await client.query("INSERT INTO digital_development_documents(source_id,version,status,document,published_at,task_id,updated_by) VALUES($1,2,'published',$2,CURRENT_TIMESTAMP,$3,$4)",[sourceId,JSON.stringify(legacy),taskId,ids.designer]);await client.query("COMMIT");}catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}
+  expect((await forms.read(actor("designer"),sourceId)).document).toEqual(legacy);
+  const entry={materialId,usage:"use" as const,physical:true,quantity:true,color:true,specification:false,note:"",confirmedWith:""},issues=[{materialId,field:"specification" as const,reason:"TEST历史规格需澄清"}];
+  const draft=await execution.saveMaterials(actor("clerk"),sourceId,{taskId:taskId!,expectedVersion:0,expectedDocumentVersion:2,entries:[entry],result:"缺项退回",returnIssues:issues},randomUUID()) as {version:number};
+  await execution.check(actor("clerk"),sourceId,{taskId:taskId!,expectedVerificationVersion:draft.version,result:"缺项退回",note:"TEST规格澄清",returnIssues:issues,items:[entry]},randomUUID());
+  const supply=(await execution.read(actor("designer"),sourceId)).tasks.find(task=>task.taskKind==="development_material_supply"&&task.state==="ready")!,context=await amendments.read(actor("designer"),sourceId,supply.taskId),corrected=structuredClone(context.document);corrected.materials[0]!.specification="42支";
+  const input={taskId:supply.taskId,roundNumber:1,expectedDocumentVersion:2,expectedDraftVersion:0,document:corrected,reason:"TEST澄清历史规格"};
+  await expect(amendments.save(actor("designer"),sourceId,{...input,document:{...corrected,quantity:2}},randomUUID())).rejects.toThrow("复版");
+  const saved=await amendments.save(actor("designer"),sourceId,input,randomUUID());await amendments.submit(actor("designer"),sourceId,{taskId:supply.taskId,roundNumber:1,expectedDocumentVersion:2,expectedDraftVersion:saved.draftVersion},randomUUID());
+  const current=(await forms.read(actor("clerk"),sourceId)).document!;expect(current.sampleSize).toBe("历史码42");expect(current.documentFormatVersion).toBeUndefined();expect(current.sizeQuantities).toBeUndefined();expect(current.orderDate).toBeNull();expect(current.materials[0]!.specification).toBe("42支");expect((await db.query("SELECT document FROM digital_development_documents WHERE source_id=$1",[sourceId])).rows[0].document).toEqual(legacy);
  });
  it("saves without changing official data, then appends one revision and one clerk recheck with identical-command retry",async()=>{
   const f=await prepare(),frozen=(await db.query("SELECT document FROM digital_development_documents WHERE source_id=$1",[f.sourceId])).rows[0].document;

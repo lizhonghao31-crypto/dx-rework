@@ -1,3 +1,4 @@
+import {DevelopmentMakingUpgradeFields,makingUpgradeFromForm} from './development-making-upgrade.js';
 import {DEVELOPMENT_REVISION_NODES,DEVELOPMENT_PROBLEM_CATEGORIES,type DevelopmentRevision} from "@dx-rework/contracts/digital-development-rounds";
 import { PatternDialog } from "./pattern-dialog.js";
 import { PatternMaterials, type PatternMaterial } from "./pattern-materials.js";
@@ -50,7 +51,7 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
   const submit = async (event: FormEvent) => {
     event.preventDefault(); if (!active || busy || uploading) return;
     const basis = { version: order.version, roundId: order.currentRoundId };
-    const input = active === "rework" ? RequestPatternReworkSchema.safeParse({ ...basis, reason, reasonCategory: category,...(order.developmentSourceId?{developmentNodes,developmentProblems}:{}), retainedAttachmentIds: retained.map(file => file.attachmentId), attachmentIds: files.map(file => file.attachmentId) })
+    const input = active === "rework" ? RequestPatternReworkSchema.safeParse({ ...basis, reason, reasonCategory: category,...(order.developmentSourceId?{developmentNodes,developmentProblems,...(order.developmentMakingBasis?.needsUpgrade?{developmentMaking:makingUpgradeFromForm(new FormData(event.currentTarget as HTMLFormElement),order.developmentMakingBasis)}:{})}:{}), retainedAttachmentIds: retained.map(file => file.attachmentId), attachmentIds: files.map(file => file.attachmentId) })
       : active === "transfer" ? TransferPatternOrderSchema.safeParse({ ...basis, segmentId: segment?.segmentId, personId, reason, ...(order.kind === "misc" ? { hours } : { amount }) })
       : active === "cancel" ? CancelPatternOrderSchema.safeParse({ ...basis, reason, ...(!pending ? { segmentId: segment?.segmentId, ...(order.kind === "pattern" ? { amount } : fixedMisc ? {} : { hours }) } : {}) })
       : PatternRoundActionSchema.safeParse(basis);
@@ -75,7 +76,7 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
       <label>返工原因分类<select className="rework-v2-control" disabled={disabled} value={category} onChange={e => setCategory(e.target.value)}><option value="customer_change">客户修改要求</option><option value="workmanship">制作不符合要求</option><option value="other">其他</option></select></label>
 
       {order.developmentSourceId&&<><p>本次同时建立原打板工作轮与数字开发局部复版；工资仍按主管明确核定的原工作轮金额。</p><fieldset><legend>受影响工序</legend>{DEVELOPMENT_REVISION_NODES.map(node=><label key={node} className="pattern-rework-node-choice"><input type="checkbox" disabled={disabled} checked={developmentNodes.includes(node)} onChange={event=>setDevelopmentNodes(current=>event.target.checked?[...current,node]:current.filter(value=>value!==node))}/>{node}</label>)}</fieldset><fieldset><legend>问题分类</legend>{DEVELOPMENT_PROBLEM_CATEGORIES.map(node=><label key={node} className="pattern-rework-node-choice"><input type="checkbox" disabled={disabled} checked={developmentProblems.includes(node)} onChange={event=>setDevelopmentProblems(current=>event.target.checked?[...current,node]:current.filter(value=>value!==node))}/>{node}</label>)}</fieldset></>}
-      <PatternMaterialInput kind="pattern" purpose="rework" count={files.length + retained.length} label="补充图片 / PDF" disabled={disabled} onFiles={selected => void upload(selected)} />
+      <DevelopmentMakingUpgradeFields basis={order.developmentMakingBasis} disabled={disabled}/><PatternMaterialInput kind="pattern" purpose="rework" count={files.length + retained.length} label="补充图片 / PDF" disabled={disabled} onFiles={selected => void upload(selected)} />
       <PatternMaterials files={[...retained, ...files]} disabled={disabled} onRemove={id => { setRetained(current => current.filter(file => file.attachmentId !== id)); setFiles(current => current.filter(file => file.attachmentId !== id)); }} />
     </> : null}
     {active === "transfer" ? <label>接手师傅<div className="rework-v2-control"><SearchSelect options={workers.filter(worker => worker.userId !== segment?.workerUserId).map(worker => ({ value: worker.personId, label: worker.name }))} value={personId} onChange={setPersonId} onSearchChange={setSearchText} placeholder="输入姓名选择师傅" ariaLabel="接手师傅" emptyText="没有匹配的师傅" disabled={disabled} /></div></label> : null}

@@ -61,6 +61,12 @@ export function DocumentSection({ id, title, detail, children }: { id: string; t
   if(chapter&&chapter!==id)return null;
   return <section id={id} className="dx-doc-card dx-doc-section"><h2>{title}{detail && <small>{detail}</small>}</h2>{children}</section>;
 }
+/** An opt-in development form group; existing document chapters keep their original identifiers. */
+export function DocumentSectionGroup({chapters,title,children}:{chapters:string[];title:string;children:ReactNode}){
+ const chapter=useContext(DocumentChapterContext);
+ if(chapter&&!chapters.includes(chapter))return null;
+ return <section className="development-section-group dx-doc-card"><h2>{title}</h2>{children}</section>;
+}
 export function DocumentTableScroll({ children, className = "" }: { children: ReactNode; className?: string }) {
   const viewport = useRef<HTMLDivElement>(null);
   useEffect(() => {

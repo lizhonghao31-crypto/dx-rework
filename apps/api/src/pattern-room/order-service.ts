@@ -1,3 +1,5 @@
+import {developmentAutomaticRoundDocument} from '../production-platform/development-document-format.js';
+import {developmentMakingSizes} from "@dx-rework/contracts/digital-development";
 import {listMiscAssociations,resolveMiscAssociation} from "./misc-associations.js";
 import {DevelopmentRoundService} from "../production-platform/development-round-service.js";
 import {DigitalProductionAccessPolicy} from "../production-platform/access-policy.js";
@@ -5,9 +7,9 @@ import {DigitalProductionTaskService} from "../production-platform/task-service.
 import {DigitalDevelopmentService} from "../production-platform/development-service.js";
 import type { PatternHistorySelection } from "./order-history.js";
 import { createHash, randomUUID } from "node:crypto";
-import { PATTERN_ORDER_STATUS_LABELS, DeletePatternOrderSchema, AssignPatternOrderSchema, CancelPatternOrderSchema, CreatePatternOrderSchema, CreateMiscOrderSchema, PATTERN_ROOM_ORDERS_ENABLED, PatternRoundActionSchema, RecordPatternHoursSchema, RequestPatternReworkSchema, TransferPatternOrderSchema, UpdateMiscMaterialsSchema, UpdatePatternMaterialsSchema, type PatternOrderCapability, type PatternOrderQuery, type PatternRoundAction } from "@dx-rework/contracts/pattern-orders";
+import { PATTERN_ORDER_STATUS_LABELS, DeletePatternOrderSchema, AssignPatternOrderSchema, CancelPatternOrderSchema, CreatePatternOrderSchema, CreateMiscOrderSchema, PATTERN_ROOM_ORDERS_ENABLED, PatternRoundActionSchema, RecordPatternHoursSchema, RequestPatternReworkSchema, TransferPatternOrderSchema, UpdateMiscMaterialsSchema, UpdateLinkedPatternMaterialsSchema, type PatternOrderCapability, type PatternOrderQuery, type PatternRoundAction } from "@dx-rework/contracts/pattern-orders";
 import type { Pool, PoolClient } from "pg";
-import type { z } from "zod";
+import { z } from "zod";
 import { ApplicationError } from "../platform/errors.js";
 import { IdempotencyService, OperationEventRepository, type TrustedActorContext } from "../tools/repositories.js";
 import type { TodoProjectionService } from "../todos/projection-service.js";
@@ -133,7 +135,7 @@ export class PatternRoomOrderService {
     const prior=(await client.query("SELECT order_id FROM digital_development_pattern_links WHERE source_id=$1",[sourceId])).rows[0];
     if(prior)return this.get(actor,prior.order_id);
     const doc=sheet.document!;
-    return this.createOrder(actor,"pattern",{categoryId,priceVersion,styleNo:sheet.designStyleNo??sheet.temporaryStyleNo,quantity:doc.quantity,attachmentIds:doc.files.map(file=>file.attachmentId),requiredDate:doc.returnDate,customer:sheet.customerCode,sizeColor:doc.sampleSize,referenceStyleNo:null,variant:"初版",note:doc.instructions||null},key,sourceId);
+    return this.createOrder(actor,"pattern",{categoryId,priceVersion,styleNo:sheet.designStyleNo??sheet.temporaryStyleNo,quantity:doc.quantity,attachmentIds:doc.files.map(file=>file.attachmentId),requiredDate:doc.returnDate,customer:sheet.customerCode,sizeColor:developmentMakingSizes(doc),referenceStyleNo:null,variant:"初版",note:doc.instructions||null},key,sourceId);
   }
   async create(actor: TrustedActorContext, _input: unknown, _key: string) {
     void _input;void _key;
@@ -149,7 +151,9 @@ export class PatternRoomOrderService {
   }
   createMisc(actor: TrustedActorContext, input: unknown, key: string) { return this.createOrder(actor, "misc", input, key); }
   private async createOrder(actor: TrustedActorContext, kind: "pattern" | "misc", input: unknown, key: string, developmentSourceId?:string) {
-    const parsed = kind === "pattern" ? { ...parse(CreatePatternOrderSchema, input), taskName: null }
+    // Only the private, already-authorized development adapter carries up to 20 full size names.
+    // The public legacy free-text editor retains its original 200-character limit.
+    const parsed = kind === "pattern" ? { ...parse(developmentSourceId?CreatePatternOrderSchema.extend({sizeColor:z.string().max(2400).nullable()}):CreatePatternOrderSchema, input), taskName: null }
       : { ...parse(CreateMiscOrderSchema, input), categoryId: PATTERN_HOURLY_PRICE_ID, quantity: null, customer: null, sizeColor: null, referenceStyleNo: null, variant: null };
     const action = kind === "pattern" ? "pattern_room.order.submitted" : "pattern_room.misc.submitted";
     return this.mutate(actor, kind === "pattern" ? "pattern_room:orders:create" : "pattern_room:misc:create", action, key, developmentSourceId?{parsed,developmentSourceId}:parsed, async (client, effective) => {
@@ -313,13 +317,17 @@ export class PatternRoomOrderService {
   updateMaterials(actor: TrustedActorContext, orderId: string, input: unknown, key: string) { return this.changeMaterials(actor, orderId, "pattern", input, key); }
   updateMiscMaterials(actor: TrustedActorContext, orderId: string, input: unknown, key: string) { return this.changeMaterials(actor, orderId, "misc", input, key); }
   private async changeMaterials(actor: TrustedActorContext, orderId: string, kind: "pattern" | "misc", input: unknown, key: string) {
-    const parsed = kind === "pattern" ? { ...parse(UpdatePatternMaterialsSchema, input), taskName: null }
+    const parsed = kind === "pattern" ? { ...parse(UpdateLinkedPatternMaterialsSchema, input), taskName: null }
       : { ...parse(UpdateMiscMaterialsSchema, input), customer: null, sizeColor: null, referenceStyleNo: null, variant: null };
     const action = "pattern_room.order.materials_changed";
     return this.mutate(actor, kind === "pattern" ? "pattern_room:orders:edit" : "pattern_room:misc:edit", action, key, { orderId, ...parsed }, async (client, effective) => {
       const { order, round } = await this.target(client, effective, orderId, parsed, ["pending_assignment", "in_progress"]);
       if (order.kind !== kind) throw new ApplicationError("INVALID_STATE_TRANSITION", "订单类型不匹配，请刷新本单", 409);
       if (!isPatternRoot(effective) && order.created_by !== effective.actorId) throw new ApplicationError("FORBIDDEN", "只有发起人可以修正制作资料", 403);
+      if(kind==='pattern'&&((parsed.sizeColor?.length??0)>200||(order.size_color?.length??0)>200)){
+        const linked=(await client.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation&&(await client.query('SELECT 1 FROM digital_development_pattern_links WHERE order_id=$1',[orderId])).rowCount;
+        if(!linked||parsed.sizeColor!==order.size_color)throw new ApplicationError('VALIDATION_ERROR','长制作摘要由开发尺寸表生成，本次资料更新须保留原摘要；独立自由文本仍限200字',400);
+      }
       const association=kind==="misc"?await resolveMiscAssociation(client,effective,parsed,order):null;
       const styleNo=association?.styleNo??parsed.styleNo;
       await bindPatternMaterials(client, effective, orderId, round.round_id, parsed.attachmentIds, parsed.reason, kind === "pattern");
@@ -387,7 +395,7 @@ export class PatternRoomOrderService {
       if (await patternReworkCutBlocked(client, orderId)) throw new ApplicationError("CONFLICT", PATTERN_REWORK_CUT_BLOCK, 409);
       const linked=(await client.query("SELECT to_regclass('digital_development_pattern_links') AS relation")).rows[0]?.relation?(await client.query("SELECT source_id FROM digital_development_pattern_links WHERE order_id=$1",[orderId])).rows[0]:null;
       if(linked&&(!parsed.developmentNodes||!parsed.developmentProblems))throw new ApplicationError("VALIDATION_ERROR","请明确本轮受影响工序与问题分类，同步数字开发复版",400);
-      if(!linked&&(parsed.developmentNodes||parsed.developmentProblems))throw new ApplicationError("VALIDATION_ERROR","独立原打板单不使用数字开发复版参数",400);
+      if(!linked&&(parsed.developmentNodes||parsed.developmentProblems||parsed.developmentMaking))throw new ApplicationError("VALIDATION_ERROR","独立原打板单不使用数字开发复版参数",400);
       const roundId = randomUUID();
       await client.query(`INSERT INTO pattern_room_rounds(round_id,order_id,round_type,round_index,status,category_id,price_version,category_name,unit,unit_price,quantity,agreed_amount,requested_by,request_reason,reason_category)
         VALUES($1,$2,'rework',NULL,'pending_assignment',$3,$4,'打板返工','轮',NULL,NULL,NULL,$5,$6,$7)`, [roundId, orderId, round.category_id, round.price_version, effective.actorId, parsed.reason, parsed.reasonCategory]);
@@ -403,7 +411,7 @@ export class PatternRoomOrderService {
       if(linked){
         const sheet=await new DigitalDevelopmentService(this.db,true).read(effective,linked.source_id,client);
         await new DevelopmentRoundService(this.db,true).publishWithClient(client,effective,linked.source_id,{
-          basedOnRound:sheet.roundNumber??1,document:sheet.document!,origin:parsed.reasonCategory==='customer_change'?'客户新增要求':parsed.reasonCategory==='workmanship'?'未达原要求':'内部发现',
+          basedOnRound:sheet.roundNumber??1,document:developmentAutomaticRoundDocument(sheet.document!,sheet.version,parsed.developmentMaking),origin:parsed.reasonCategory==='customer_change'?'客户新增要求':parsed.reasonCategory==='workmanship'?'未达原要求':'内部发现',
           customerComment:parsed.reasonCategory==='other'?'':parsed.reason,internalProblem:parsed.reasonCategory==='other'?parsed.reason:'',explanation:parsed.reason,
           affectedNodes:parsed.developmentNodes!,categories:parsed.developmentProblems!,outputKind:'整件样板'
         },undefined,roundId);

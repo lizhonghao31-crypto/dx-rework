@@ -1,4 +1,5 @@
 import {verificationAvailable} from "./development-material-verification.js";
+import {developmentRevisionForSave} from "./development-document-format.js";
 import {isDevelopmentMaterialPlaceholder} from "@dx-rework/contracts/digital-development";
 import {authorizePatternOrder} from "../pattern-room/order-authority.js";
 import { BulkPreparationService } from "./bulk-preparation-service.js";
@@ -42,8 +43,9 @@ export class DevelopmentRoundService {
   return this.command(actor,sourceId,'save',key,input,async db=>{
    const sheet=await this.forms().read(actor,sourceId,db);if((sheet.roundNumber??1)!==input.revision.basedOnRound)fail('已有新轮次，请重新读取当前资料');
    const before=(await db.query('SELECT version FROM digital_development_round_drafts WHERE source_id=$1 FOR UPDATE',[sourceId])).rows[0];if((before?.version??0)!==input.expectedDraftVersion)fail('复版草稿已更新，请刷新');
-   await this.forms().bindFiles(db,actor,sourceId,input.revision.document);
-   await db.query('INSERT INTO digital_development_round_drafts(source_id,version,based_on_round,payload,updated_by) VALUES($1,1,$2,$3,$4) ON CONFLICT(source_id) DO UPDATE SET version=digital_development_round_drafts.version+1,based_on_round=$2,payload=$3,updated_by=$4,updated_at=CURRENT_TIMESTAMP',[sourceId,input.revision.basedOnRound,JSON.stringify(input.revision),actor.actorId]);
+   const revision={...input.revision,document:developmentRevisionForSave(input.revision.document,sheet.document!)};
+   await this.forms().bindFiles(db,actor,sourceId,revision.document);
+   await db.query('INSERT INTO digital_development_round_drafts(source_id,version,based_on_round,payload,updated_by) VALUES($1,1,$2,$3,$4) ON CONFLICT(source_id) DO UPDATE SET version=digital_development_round_drafts.version+1,based_on_round=$2,payload=$3,updated_by=$4,updated_at=CURRENT_TIMESTAMP',[sourceId,input.revision.basedOnRound,JSON.stringify(revision),actor.actorId]);
    return {draftVersion:input.expectedDraftVersion+1};
   });
  }
@@ -59,6 +61,7 @@ export class DevelopmentRoundService {
   if(!this.enabled)digitalForbidden();
   const parsed=DevelopmentRevisionSchema.safeParse(input);if(!parsed.success)fail(parsed.error.issues[0]?.message??"复版资料无效");input=parsed.data!;
   const sheet=await this.forms().read(actor,sourceId,db);
+  if(input.document.orderDate!==sheet.document!.orderDate)fail('实际复版不能改写首次开发下单日期');
   if(patternReworkRoundId){
    const lifecycle=(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='source' AND resource_id=$1",[sourceId])).rows[0];
    if(lifecycle&&lifecycle.state!=='active')fail('开发单已暂停或取消');
@@ -72,7 +75,7 @@ export class DevelopmentRoundService {
   if(!returnTaskId&&!patternReworkRoundId&&!sheet.canEdit)digitalForbidden();
   if(input.basedOnRound!==(sheet.roundNumber??1))fail('已有新轮次，不能从旧版重复发布');
   if(returnTaskId){const task=(await db.query("SELECT t.route_version,a.task_kind,a.source_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.task_id=$1",[returnTaskId])).rows[0];if(!task||task.source_id!==sourceId||task.task_kind!=='development_tail_check'||task.route_version!==input.basedOnRound||input.origin!=='内部发现')digitalForbidden();}
-  const errors=developmentPublishErrors(input.document);if(errors.length)fail(errors.join('；'));
+  const errors=developmentPublishErrors(input.document,{allowMissingOrderDate:sheet.document!.orderDate===null});if(errors.length)fail(errors.join('；'));
   if(input.affectedNodes.includes('工艺')&&input.document.craft==='无')fail('本轮没有印绣花工艺');
   if(input.affectedNodes.includes('洗水')&&input.document.washing==='免洗')fail('本轮为免洗，请核对受影响节点');
   const document=structuredClone(input.document),affectedNodes=[...input.affectedNodes];

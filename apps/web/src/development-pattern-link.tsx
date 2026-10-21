@@ -1,6 +1,6 @@
 import {confirmInApp} from './system-dialog.js';
 import { SearchableSelect } from "./search-select.js";
-import {useEffect,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {Button} from '@dx-rework/ui';
 import {PatternCategoryOptionsSchema} from '@dx-rework/contracts/pattern-room';
 import {patternRequest} from './pattern-order-client.js';
@@ -10,10 +10,13 @@ export function DevelopmentPatternLink({busy,onSubmit,onSelection,preparing=fals
  const [categories,setCategories]=useState<{priceId:string;name:string;unit:string}[]>([]),[localCategoryId,setCategoryId]=useState(''),[revision,setRevision]=useState(0),[error,setError]=useState('');
  const categoryId=selectedCategoryId??localCategoryId;
  const price=usePatternQuote(categoryId?`category-options/${categoryId}/quote`:null,revision);
+ const lastQuote=useRef<{categoryId:string;quote:NonNullable<typeof price.quote>}|null>(null);
+ if(price.quote)lastQuote.current={categoryId,quote:price.quote};
+ const displayedQuote=price.quote??(lastQuote.current?.categoryId===categoryId?lastQuote.current.quote:null);
  useEffect(()=>{const abort=new AbortController();void patternRequest('category-options',PatternCategoryOptionsSchema,{signal:abort.signal}).then(setCategories).catch(reason=>{if(!abort.signal.aborted)setError(reason.message);});return()=>abort.abort();},[]);
  useEffect(()=>{onSelection?.(price.quote?{categoryId,priceVersion:price.quote.version}:null);},[categoryId,price.quote?.version,onSelection]);
  const select=<label>打板品类 *<SearchableSelect aria-label="打板品类" value={categoryId} required disabled={busy} onChange={async event=>{const next=event.target.value;if(categoryId&&next!==categoryId&&!await confirmInApp("切换打板品类将重新读取执行单价，不修改尺寸模板或历史工资。继续？"))return;onSelection?.(null);setCategoryId(next);onCategoryChange?.(next);}}><option value="">请选择</option>{categories.map(item=><option key={item.priceId} value={item.priceId}>{item.name}</option>)}</SearchableSelect></label>;
- if(preparing)return <div className="development-pattern-preparation">{error&&<p role="alert">{error}</p>}{select}{price.status==='error'&&<p role="alert">{price.message}</p>}<div className="development-price-quote">{price.quote?<span>执行单价：{price.quote.amount} 元/{price.quote.unit}</span>:<span>选择有效品类后核对单价</span>}<Button type="button" disabled={busy} onClick={()=>{onSelection?.(null);setRevision(value=>value+1);}}>刷新价格</Button></div></div>;
+ if(preparing)return <div className="development-pattern-preparation">{error&&<p role="alert">{error}</p>}{select}{price.status==='error'&&<p role="alert">{price.message}；原报价仅供核对，请刷新成功后发布。</p>}<div className="development-price-quote">{displayedQuote?<span>{price.quote?"执行单价":"上次报价"}：{displayedQuote.amount} 元/{displayedQuote.unit}{price.status==='loading'?" · 正在刷新":""}</span>:<span>选择有效品类后核对单价</span>}<Button type="button" disabled={busy||price.status==='loading'} onClick={()=>{onSelection?.(null);setRevision(value=>value+1);}}>刷新价格</Button></div></div>;
  const fields=<fieldset disabled={busy}><legend>{preparing?"正式提交的打板准备":"提交打板执行"}</legend><p>沿用本开发单款号、数量及制作资料，技术主管按原打板流程确认派工和计价。</p>{error&&<p role="alert">{error}</p>}{select}{price.status==='error'&&<p role="alert">{price.message}</p>}{price.quote&&<p>当前单价：{price.quote.amount} 元/{price.quote.unit}</p>}<Button type="button" onClick={()=>{onSelection?.(null);setRevision(value=>value+1);}}>刷新价格</Button>{!preparing&&<Button type="submit" disabled={!price.quote}>提交打板</Button>}</fieldset>;
  return <form onSubmit={event=>{event.preventDefault();if(price.quote)onSubmit?.({categoryId,priceVersion:price.quote.version});}}>{fields}</form>;
 }

@@ -1,3 +1,4 @@
+import type {DevelopmentMakingUpgrade} from '@dx-rework/contracts/digital-development';
 import {plannedRecipient,arrangementsAvailable} from "./development-arrangement.js";
 import {DEVELOPMENT_ARRANGEABLE_KINDS} from "@dx-rework/contracts/development-arrangement";
 import type {DevelopmentRevision} from "@dx-rework/contracts/digital-development-rounds";
@@ -13,7 +14,7 @@ import {DIGITAL_TASK_ROLES,type DigitalTaskKind} from './task-access-repository.
 import {materialReadiness} from './development-material-readiness.js';
 import {developmentRoute} from './development-route.js';
 const fail=(message:string):never=>{throw new ApplicationError('DEVELOPMENT_ROUTE_CONFLICT',message,409);};
-export type DevelopmentRouteAction={attachmentIds?:string[]|undefined;returnNodes?:DevelopmentRevision["affectedNodes"]|undefined;problemCategories?:DevelopmentRevision["categories"]|undefined;craftExecution:'内部'|'外发'|null;taskId:string;note:string;result:'通过'|'退回';nextAssigneeId:string|null;sentDate:string|null;trackingNo:string|null};
+export type DevelopmentRouteAction={making?:DevelopmentMakingUpgrade|undefined;attachmentIds?:string[]|undefined;returnNodes?:DevelopmentRevision["affectedNodes"]|undefined;problemCategories?:DevelopmentRevision["categories"]|undefined;craftExecution:'内部'|'外发'|null;taskId:string;note:string;result:'通过'|'退回';nextAssigneeId:string|null;sentDate:string|null;trackingNo:string|null};
 export class DevelopmentRouteService {
  constructor(private readonly database:Pool,private readonly patternOrders?:PatternRoomOrderService){}
  private async task(db:PoolClient,sourceId:string,taskId:string){return (await db.query('SELECT t.*,a.task_kind,a.assignee_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.task_id=$2',[sourceId,taskId])).rows[0]??digitalNotFound();}

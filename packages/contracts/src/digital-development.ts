@@ -18,6 +18,9 @@ export const DevelopmentMaterialSchema = z.object({
   if (value.auxiliaryKind && value.category !== "辅料") context.addIssue({code:"custom",path:["auxiliaryKind"],message:"仅辅料可以设置辅料类型"});
 });
 export const DevelopmentDocumentSchema = z.object({
+  // Missing version belongs to frozen historical documents, never an exemption for new publication.
+  documentFormatVersion: z.literal(2).optional(),
+  sizeQuantities: z.array(z.number().int().min(0).max(100000).nullable()).max(20).optional(),
   customerOrderDraft: z.object({withOrder:z.boolean(),order:InitialCustomerOrderDraftSchema}).strict().optional(),
   // Draft selection only. Publication still obtains and validates the current price quote.
   patternCategoryId: z.string().uuid().nullable().optional(),
@@ -36,6 +39,7 @@ export const DevelopmentDocumentSchema = z.object({
   const namedSizes = value.sizes.filter(Boolean);
   if (new Set(namedSizes).size !== namedSizes.length) context.addIssue({ code: "custom", path: ["sizes"], message: "尺码列不能重复" });
   if (value.measurements.some(row => row.values.length !== value.sizes.length)) context.addIssue({ code: "custom", path: ["measurements"], message: "尺寸数值必须对应尺码列" });
+  if (value.sizeQuantities && value.sizeQuantities.length !== value.sizes.length) context.addIssue({code:"custom",path:["sizeQuantities"],message:"制作数量必须逐列对应尺码"});
   if (new Set(value.materials.map(row => row.materialId)).size !== value.materials.length) context.addIssue({ code: "custom", path: ["materials"], message: "物料行不能重复" });
   if (new Set(value.files.map(row => row.attachmentId)).size !== value.files.length) context.addIssue({ code: "custom", path: ["files"], message: "附件不能重复" });
 });
@@ -46,6 +50,11 @@ export const DevelopmentMaterialEventSchema = z.object({ expectedMaterialRevisio
   if (value.action === "确认代用" && !value.note) context.addIssue({code:"custom",path:["note"],message:"请填写代用说明"});
 });
 export type DevelopmentDocument = z.infer<typeof DevelopmentDocumentSchema>;
+export const DevelopmentMakingUpgradeSchema=z.object({expectedDocumentVersion:z.number().int().positive(),quantities:z.array(z.number().int().min(0).max(100000)).min(1).max(20)}).strict();
+export type DevelopmentMakingUpgrade=z.infer<typeof DevelopmentMakingUpgradeSchema>;
+export const DevelopmentMakingBasisSchema=z.object({documentVersion:z.number().int().positive(),quantity:z.number().int().positive().nullable(),sizes:z.array(short).max(20),needsUpgrade:z.boolean()}).strict();
+export type DevelopmentMakingBasis=z.infer<typeof DevelopmentMakingBasisSchema>;
+export function developmentMakingBasis(document:DevelopmentDocument,documentVersion:number):DevelopmentMakingBasis{return {documentVersion,quantity:document.quantity,sizes:document.sizes,needsUpgrade:developmentSizeQuantityIssues(document).length>0};}
 export type DevelopmentMaterial = z.infer<typeof DevelopmentMaterialSchema>;
 /** Legacy/unclassified auxiliaries remain ordinary; never infer exceptions from a name. */
 export function isEarlyMaterialException(material: DevelopmentMaterial): boolean {
@@ -57,19 +66,40 @@ export function isDevelopmentMaterialPlaceholder(item:DevelopmentMaterial):boole
   return (!item.auxiliaryKind||item.auxiliaryKind==="普通辅料")&&["","主布","配布","辅料","主布A","配布B","配布C"].includes(item.label.replace(/\s/g,""))&&
     ![item.name,item.supplier,item.width,item.weight,item.composition,item.consumption,item.color,item.specification,item.quantity,item.expectedDate].some(Boolean)&&!item.available;
 }
-export function developmentPublishErrors(document: DevelopmentDocument): string[] {
+export function developmentSizeQuantityIssues(document:DevelopmentDocument):Array<{index:number|null;message:string}>{
+  const issues:Array<{index:number|null;message:string}>=[];
+  if(document.documentFormatVersion!==2||!document.sizeQuantities||document.sizeQuantities.length!==document.sizes.length){
+    return [{index:null,message:"请在尺寸表逐码填写本轮制作数量，0件表示本轮不做，再保存发布"}];
+  }
+  document.sizeQuantities.forEach((value,index)=>{if(value===null||!Number.isInteger(value)||value<0||value>100000)issues.push({index,message:`${document.sizes[index]||`第${index+1}列`}制作数量须为0—100000整数，0件表示本轮不做`});});
+  if(!issues.length){
+    const total=document.sizeQuantities.reduce<number>((sum,value)=>sum+(value??0),0);
+    if(total===0)issues.push({index:null,message:"至少一个尺码的制作数量须大于0"});
+    if(total!==document.quantity)issues.push({index:null,message:`各码制作数量合计${total}件，与本轮打板数量${document.quantity??"未填"}件不一致，请核对尺寸表`});
+  }
+  return issues;
+}
+/** Only server-proven frozen same-round corrections may opt into historical reading rules. */
+export function developmentPublishErrors(document: DevelopmentDocument, options:{allowLegacySizeQuantities?:boolean;allowMissingOrderDate?:boolean}={}): string[] {
   const errors: string[] = [];
   if (!document.quantity) errors.push("请填写本轮打板数量");
-  if (!document.sampleSize) errors.push("请填写本轮打样尺码");
+  if(!options.allowLegacySizeQuantities)errors.push(...developmentSizeQuantityIssues(document).map(issue=>issue.message));
   if (!document.sizes.length) errors.push("至少填写一个尺码列，或先保存草稿");
   if (document.sizes.some(size => !size.trim())) errors.push("请填写尺码列名称，或删除不用的列");
-  if (!document.orderDate) errors.push("请填写下单日期");
+  if (!document.orderDate&&!options.allowMissingOrderDate) errors.push("缺少服务器开发下单日期，请重新读取本单资料；不要填写客户下单日期替代");
   if (!document.files.some(file => file.kind === "款图")) errors.push("请上传款图");
   errors.push(...developmentMaterialPublishIssues(document).map(issue=>issue.message));
   if (document.craft === "无" && document.files.some(file => file.kind === "工艺开发板")) errors.push("工艺开发板仅适用于印花或绣花");
   return errors;
 }
+/** The server must supply the real frozen basis; never accept this eligibility from a request. */
+export function developmentAmendmentPublicationOptions(before:DevelopmentDocument,after:DevelopmentDocument){
+ const legacy=before.documentFormatVersion===undefined&&before.sizeQuantities===undefined&&after.documentFormatVersion===undefined&&after.sizeQuantities===undefined&&
+  JSON.stringify(before.sizes)===JSON.stringify(after.sizes)&&before.quantity===after.quantity&&before.sampleSize===after.sampleSize;
+ return {allowLegacySizeQuantities:legacy,allowMissingOrderDate:before.orderDate===null&&after.orderDate===null};
+}
 export type DevelopmentSheet = {
+  developmentCreatedDate?:string;
   metadata?:JourneyDocumentMetadata;
   materialReadiness?:Array<{usage?:"use"|"unused"|"pending";required?:boolean;materialId:string;available:boolean;verified:boolean;missing:string[];evidenceId:string|null}>;
   productionOrderId?:string|null;
@@ -79,6 +109,13 @@ export type DevelopmentSheet = {
   canRevise?: boolean; roundNumber?: number; latestRoundNumber?: number;
   materialEvents: Array<{ eventId: string; materialId: string; action: string; expectedDate: string | null; note: string; createdAt: string }>;
 };
+
+/** Shared by print, task handoff and native execution. Never invent counts for legacy text. */
+export function developmentMakingSizes(document:DevelopmentDocument|null|undefined):string {
+  if(!document)return "未登记";
+  if(document.documentFormatVersion!==2)return document.sampleSize||"未登记";
+  return document.sizes.flatMap((size,index)=>{const value=document.sizeQuantities?.[index];return typeof value==="number"&&value>0?[`${size||"未命名尺码"} ${value}件`]:[];}).join(" / ")||"尚未填写制作数量";
+}
 
 export function developmentMaterialPublishIssues(document:DevelopmentDocument):Array<{materialId:string;field:"name"|"specification"|"expectedDate";message:string}>{
  const issues:Array<{materialId:string;field:"name"|"specification"|"expectedDate";message:string}>=[];

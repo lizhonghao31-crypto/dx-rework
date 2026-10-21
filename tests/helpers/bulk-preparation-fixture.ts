@@ -39,8 +39,10 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  const source=await identity.createSource(designer,{developmentType:'头版',designStyleNo:fixture.order.designStyleNo,temporaryStyleNo:null,customerCode:options?.sourceCustomerCode===undefined?'PD':options.sourceCustomerCode},randomUUID());
  await identity.attachSource(designer,id,source.sourceId,randomUUID());
  const image=randomUUID();await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-bulk.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[image,`TEST/bulk/${image}`,'a'.repeat(64),designer.actorId]);
- const development=DevelopmentDocumentSchema.parse({template:'上衣',quantity:1,sampleSize:'M',orderDate:'2026-09-30',returnDate:null,unit:'inch',sizes:['M'],measurements:[{name:'袖长',values:['6 1/8']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'',craft:'无',washing:'免洗',materials:[],files:[{attachmentId:image,kind:'款图'}]});
- await forms.save(designer,source.sourceId,{expectedVersion:0,document:development},randomUUID());await forms.publish(designer,source.sourceId,1,randomUUID());
+ const development=DevelopmentDocumentSchema.parse({documentFormatVersion:2,sizeQuantities:[1],template:'上衣',quantity:1,sampleSize:'M',orderDate:null,returnDate:null,unit:'inch',sizes:['M'],measurements:[{name:'袖长',values:['6 1/8']}],interlining:'',placketInterlining:'',sewingThread:'',buttonholeThread:'',stitchDensity:'',washingIroning:'',packaging:'',formalSizes:'',casualSizes:'',mainLabel:false,mainLabelMethod:'',sizeLabel:false,careLabel:false,instructions:'',craft:'无',washing:'免洗',materials:[],files:[{attachmentId:image,kind:'款图'}]});
+ const savedDevelopment=await forms.save(designer,source.sourceId,{expectedVersion:0,document:development},randomUUID());
+ const publishedDevelopment=await forms.publish(designer,source.sourceId,savedDevelopment.version,randomUUID());
+ expect(publishedDevelopment.document!.orderDate).toBe(publishedDevelopment.developmentCreatedDate);
  // Isolate bulk release from the independently tested development route; seed its final-design fact, then use the real customer confirmation command.
  await db.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,1,'最终设计确认','{}',$3)",[randomUUID(),source.sourceId,designer.actorId]);
  let order=await identity.read(primary,id);
@@ -168,8 +170,14 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
  await expect(done('纸样完成')).rejects.toMatchObject({statusCode:409});expect((await cutting.get(actors.root,cuttingId)).canRecord).toBe(false);
  if(mode==='none'){
   const rounds=new DevelopmentRoundService(db,true);
-  await rounds.save(designer,source.sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:{...development,unit:'cm',measurements:[{name:'袖长',values:['15.5575']},{name:'袖长',values:['16']}],instructions:'TEST客户新技术要求'},origin:'客户新增要求',customerComment:'TEST改版',internalProblem:'',explanation:'',categories:['尺寸'],affectedNodes:['纸样'],outputKind:'整件样板'}},randomUUID());
+  const revision={basedOnRound:1,document:{...publishedDevelopment.document!,unit:'cm' as const,measurements:[{name:'袖长',values:['15.5575']},{name:'袖长',values:['16']}],instructions:'TEST客户新技术要求'},origin:'客户新增要求' as const,customerComment:'TEST改版',internalProblem:'',explanation:'',categories:['尺寸' as const],affectedNodes:['纸样' as const],outputKind:'整件样板' as const};
+  // The initial request had no development date. Later revisions must use the server's saved basis, never erase it with that stale request.
+  await expect(rounds.save(designer,source.sourceId,{expectedDraftVersion:0,revision:{...revision,document:{...revision.document,orderDate:development.orderDate}}},randomUUID())).rejects.toMatchObject({statusCode:400});
+  expect((await db.query('SELECT count(*)::int n FROM digital_development_round_drafts WHERE source_id=$1',[source.sourceId])).rows[0].n).toBe(0);
+  await rounds.save(designer,source.sourceId,{expectedDraftVersion:0,revision},randomUUID());
   await rounds.publish(designer,source.sourceId,{expectedDraftVersion:1,basedOnRound:1},randomUUID());
+  expect((await forms.read(designer,source.sourceId)).document!.orderDate).toBe(publishedDevelopment.document!.orderDate);
+  expect((await forms.read(designer,source.sourceId,undefined,1)).document!.orderDate).toBe(publishedDevelopment.document!.orderDate);
   await expect(instruction.read(worker,id)).rejects.toMatchObject({statusCode:404});
   expect((await bulk.read(primary,id))).toMatchObject({customerConfirmed:false,instructionValid:false,preparationId:null});
   await execution.customerSample(designer,source.sourceId,{routeVersion:1,note:'TEST旧确认不能解新轮'},randomUUID());

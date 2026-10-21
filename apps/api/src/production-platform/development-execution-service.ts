@@ -1,3 +1,4 @@
+import {developmentAutomaticRoundDocument} from './development-document-format.js';
 import type {DevelopmentReturnIssue} from "@dx-rework/contracts/digital-development-amendments";
 import {developmentAmendmentsAvailable} from "./development-amendment-repository.js";
 import {validateDevelopmentReturn,recordDevelopmentReturn,submitDevelopmentSupply} from "./development-supply.js";
@@ -243,6 +244,7 @@ export class DevelopmentExecutionService {
   async route(actor:TrustedActorContext,sourceId:string,input:DevelopmentRouteAction,key:string){
     return this.command(actor,sourceId,"route",key,input,async db=>{await new DigitalProductionAccessPolicy(db).assert(actor,"task",input.taskId,"execute");await this.fabricReady(db,sourceId);
       const current=await this.task(db,sourceId,input.taskId);
+      if(input.making&&(current.task_kind!=='development_tail_check'||input.result!=='退回'))fail('各码数量升级仅用于本次尾查退回；其他实际修改请从复版资料办理');
       if(current.task_kind==='development_sewing'){
         if(!input.attachmentIds?.length)fail('车板完成前请在本单资料上传本任务实际完成照片');
         const photo=await db.query("SELECT 1 FROM attachments WHERE attachment_id=ANY($1::uuid[]) AND mime_type IN ('image/jpeg','image/png','image/webp') AND status='ready'",[input.attachmentIds]);
@@ -260,7 +262,7 @@ export class DevelopmentExecutionService {
       if(input.result==="退回"){
         const task=await this.task(db,sourceId,input.taskId),sheet=await this.forms().read(actor,sourceId,db);
         if(!input.returnNodes?.length)fail("请选择退回的问题节点");
-        await new DevelopmentRoundService(this.database,this.enabled).publishWithClient(db,actor,sourceId,{basedOnRound:task.route_version,document:sheet.document!,origin:"内部发现",customerComment:"",internalProblem:input.note,explanation:"板房尾查退回",categories:input.problemCategories?.length?input.problemCategories:["其他"],affectedNodes:input.returnNodes!,outputKind:"整件样板"},input.taskId);
+        await new DevelopmentRoundService(this.database,this.enabled).publishWithClient(db,actor,sourceId,{basedOnRound:task.route_version,document:developmentAutomaticRoundDocument(sheet.document!,sheet.version,input.making),origin:"内部发现",customerComment:"",internalProblem:input.note,explanation:"板房尾查退回",categories:input.problemCategories?.length?input.problemCategories:["其他"],affectedNodes:input.returnNodes!,outputKind:"整件样板"},input.taskId);
       }
       return result;});
   }
