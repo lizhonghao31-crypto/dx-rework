@@ -41,7 +41,7 @@ export function DevelopmentAmendmentPanel({sourceId,taskId,onSubmitted}:{sourceI
  const execute=async(pending:NonNullable<typeof command.current>)=>{
   if(writing.current)return;writing.current=true;setBusy(true);setError("");setNotice("");
   try{await applyReceipt(await digitalRequest<Receipt>(pending.path,pending.method,pending.body,pending.key),pending.submit);}
-  catch(cause){const unknown=uncertain||!(cause instanceof DigitalRequestError&&cause.status!==null&&cause.status>=400&&cause.status<500);setUncertain(unknown);setError(`${cause instanceof Error?cause.message:"未收到操作结果"}${unknown?"；本次结果尚未确认。输入和原操作标识已保留，请先核对回执，不要另建提交。":"；本页输入仍保留，请核实问题后重试。"}`);}
+  catch(cause){const unknown=uncertain||!(cause instanceof DigitalRequestError)||cause.resultUnknown;setUncertain(unknown);setError(`${cause instanceof Error?cause.message:"未收到操作结果"}${unknown?"；本次结果尚未确认。输入和原操作标识已保留，请先核对回执，不要另建提交。":"；本页输入仍保留，请核实问题后重试。"}`);}
   finally{writing.current=false;setBusy(false);}
  };
  const recheck=async()=>{

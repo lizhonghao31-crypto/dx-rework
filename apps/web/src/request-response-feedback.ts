@@ -1,3 +1,4 @@
+import {SubmissionCancelled} from "./submission-validation.js";
 import {requestFailureMessage,transportFailure} from './request-failure-message.js';
 export type ResponseErrorFactory=(message:string,code:string|undefined,status:number)=>Error;
 export class RequestFeedbackError extends Error {
@@ -9,7 +10,7 @@ export const invalidResponseMessage=(method:string)=>isReadRequest(method)?'返�
 /** No retries, body changes or key generation. An already-sent write abort is
  * uncertain, whereas a signal cancelled before fetch proves it was not sent. */
 export async function feedbackFetch(input:RequestInfo|URL,init:RequestInit={}){
- const method=init.method??'GET';if(init.signal?.aborted)throw new DOMException('请求已取消，尚未发送','AbortError');
+ const method=init.method??'GET';if(init.signal?.aborted){if(isReadRequest(method))throw new DOMException('读取请求已取消','AbortError');throw new SubmissionCancelled('请求已取消，尚未发送提交');}
  try{return await fetch(input,init);}catch(error){if(isReadRequest(method)&&(error as Error)?.name==='AbortError')throw error;throw new RequestFeedbackError(transportFailure(method).message,isReadRequest(method)?'read_failed':'unknown',null);}
 }
 export async function feedbackJson<T>(response:Response,method:string,parse:(value:unknown)=>T,makeError?:ResponseErrorFactory):Promise<T>{
@@ -26,4 +27,4 @@ export async function feedbackNoContent(response:Response,method:string,makeErro
  else if(response.status!==204){const message=invalidResponseMessage(method);throw makeError?makeError(message,'INVALID_RESPONSE',response.status):new RequestFeedbackError(message,isReadRequest(method)?'read_failed':'unknown',response.status,'INVALID_RESPONSE');}
 }
 
-export const unknownWriteResult=(error:unknown)=>error instanceof RequestFeedbackError?error.outcome==='unknown':!(typeof (error as {status?:unknown})?.status==='number'&&Number((error as {status:number}).status)>=400&&Number((error as {status:number}).status)<500&&Number((error as {status:number}).status)!==408);
+export const unknownWriteResult=(error:unknown)=>error instanceof SubmissionCancelled?false:error instanceof RequestFeedbackError?error.outcome==='unknown':!(typeof (error as {status?:unknown})?.status==='number'&&Number((error as {status:number}).status)>=400&&Number((error as {status:number}).status)<500&&Number((error as {status:number}).status)!==408);

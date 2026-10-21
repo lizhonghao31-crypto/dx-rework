@@ -1,3 +1,4 @@
+import {SUBMISSION_RECOVERY_WINDOW_MS} from "./submission-attempt.js";
 import {feedbackFetch,feedbackJson,unknownWriteResult} from "./request-response-feedback.js";
 import { SearchableSelect } from "./search-select.js";
 import { shanghaiBusinessTime } from "./business-date.js";
@@ -44,8 +45,8 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
   const [correcting,setCorrecting]=useState<ProductionReportingDetail["history"][number]|null>(null);
   const [correctionQuantity,setCorrectionQuantity]=useState(""),[correctionDate,setCorrectionDate]=useState(today),[reason,setReason]=useState("");
   const [directory,setDirectory]=useState<z.infer<typeof ProductionScopeDirectorySchema>|null>(null);
-  const [scopeUser,setScopeUser]=useState(""),[scopeSupplier,setScopeSupplier]=useState("");
-  const mutation=useRef(false), retry=useRef<{payload:string;key:string;uncertain?:boolean}|null>(null),scopeRetry=useRef<{payload:string;key:string;uncertain?:boolean}|null>(null),version=useRef(0);
+  const [scopeUser,setScopeUser]=useState(""),[scopeRefreshPending,setScopeRefreshPending]=useState(false),[scopeSupplier,setScopeSupplier]=useState("");
+  const mutation=useRef(false), retry=useRef<{payload:string;key:string;startedAt:number;uncertain?:boolean}|null>(null),scopeRetry=useRef<{payload:string;key:string;startedAt:number;uncertain?:boolean}|null>(null),version=useRef(0);
   useEffect(()=>{void verifySession().then(s=>{if(s!=="denied"&&s.status==="authorized")setUser(s.user);});},[]);
   const load=async()=>{
     const current=++version.current;setLoading(true);setError("");
@@ -59,10 +60,11 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
   useEffect(()=>{const timer=setTimeout(()=>{void load();},q?250:0);return()=>{clearTimeout(timer);version.current++;};},[productionOrderId,factoryDecisionId,page,q,supplier,status]);
   const write=async(path:string,body:unknown,success:string)=>{
     if(mutation.current)return;mutation.current=true;setBusy(true);setError("");setMessage("");
-    body={...(body as Record<string,unknown>),factoryDecisionId};const payload=JSON.stringify({path,body});if(retry.current?.uncertain&&retry.current.payload!==payload){setError("上次提交结果尚未确认，请先刷新原订单核对；重试时须保留原内容和请求标识。");mutation.current=false;setBusy(false);return;}if(retry.current?.payload!==payload)retry.current={payload,key:createClientRequestId()};
+    body={...(body as Record<string,unknown>),factoryDecisionId};const payload=JSON.stringify({path,body});if(retry.current?.uncertain&&retry.current.payload!==payload){setError("上次提交结果尚未确认，请先刷新原订单核对；重试时须保留原内容和请求标识。");mutation.current=false;setBusy(false);return;}if(retry.current?.payload!==payload)retry.current={payload,key:createClientRequestId(),startedAt:Date.now()};
+    if(retry.current.uncertain&&Date.now()-retry.current.startedAt>=SUBMISSION_RECOVERY_WINDOW_MS){setError("原提交已超出安全重试时间，请核对原订单；本次未重发，也不会另建请求标识。");mutation.current=false;setBusy(false);return;}
     try {const result=await request(path,ProductionReportingDetailSchema,{method:"POST",body:JSON.stringify(body),headers:{"idempotency-key":retry.current.key}});
       setDetail(result);retry.current=null;setMessage(success);setQuantities({});setCorrecting(null);
-    }catch(e){if(unknownWriteResult(e)){if(retry.current)retry.current.uncertain=true;}else retry.current=null;setError(e instanceof Error?e.message:"提交结果尚未确认，请核对原订单");}finally{mutation.current=false;setBusy(false);}
+    }catch(e){if(retry.current?.uncertain||unknownWriteResult(e)){if(retry.current)retry.current.uncertain=true;}else retry.current=null;setError((e instanceof Error?e.message:"提交结果尚未确认，请核对原订单")+(retry.current?.uncertain?"；原提交结果仍未确认，请核对原订单。":""));}finally{mutation.current=false;setBusy(false);}
   };
   const execute=async(kind:"complete"|"ship")=>{
     if(!detail||busy||selectedLine.lineId)return;
@@ -70,14 +72,15 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
       `确认已发货？款号 ${detail.order.firstStyleNo}，已登记产量 ${formatBusinessDecimal(detail.order.completedQuantity)} 件。此操作不会确认仓库收货。`;
     if(await confirmInApp(text,{confirmLabel:kind==="complete"?"确认生产完成":"确认已发货"}))await write(`/${productionOrderId}/${kind}`,{businessDate:date,confirmed:true},kind==="complete"?"已登记生产完成":"已登记发货，等待仓库实际收货");
   };
-  const loadScopes=async()=>{try{setDirectory(await request("/scopes",ProductionScopeDirectorySchema));return true;}catch(e){setError(e instanceof Error?e.message:"负责范围未能读取，请重新读取");return false;}};
+  const loadScopes=async()=>{try{setDirectory(await request("/scopes",ProductionScopeDirectorySchema));setScopeRefreshPending(false);return true;}catch(e){setError(e instanceof Error?e.message:"负责范围未能读取，请重新读取");return false;}};
   const saveScope=async(input:ProductionScopeInput)=>{
-    if(mutation.current)return;mutation.current=true;setBusy(true);setError("");
-    const payload=JSON.stringify(input);if(scopeRetry.current?.uncertain&&scopeRetry.current.payload!==payload){setError("上次负责范围提交结果尚未确认，请先读取原范围核对；重试时须保留原内容和请求标识。");mutation.current=false;setBusy(false);return;}if(scopeRetry.current?.payload!==payload)scopeRetry.current={payload,key:createClientRequestId()};
-    try{await saveProductionScope(input,scopeRetry.current.key);scopeRetry.current=null;
+    if(scopeRefreshPending){setError("负责范围已保存，请先重新读取负责范围；本次未重复提交。");return;}if(mutation.current)return;mutation.current=true;setBusy(true);setError("");setMessage("");
+    const payload=JSON.stringify(input);if(scopeRetry.current?.uncertain&&scopeRetry.current.payload!==payload){setError("上次负责范围提交结果尚未确认，请先读取原范围核对；重试时须保留原内容和请求标识。");mutation.current=false;setBusy(false);return;}if(scopeRetry.current?.payload!==payload)scopeRetry.current={payload,key:createClientRequestId(),startedAt:Date.now()};
+    if(scopeRetry.current.uncertain&&Date.now()-scopeRetry.current.startedAt>=SUBMISSION_RECOVERY_WINDOW_MS){setError("原提交已超出安全重试时间，请核对原负责范围；本次未重发，也不会另建请求标识。");mutation.current=false;setBusy(false);return;}
+    try{await saveProductionScope(input,scopeRetry.current.key);scopeRetry.current=null;setScopeRefreshPending(true);
       setMessage(input.active?"负责范围已保存":"负责范围已撤销");
       const refreshed=await loadScopes();if(!refreshed)setMessage("负责范围已保存，最新范围暂未读取；请重新读取负责范围，不要重复提交。");
-    }catch(e){if(unknownWriteResult(e)){if(scopeRetry.current)scopeRetry.current.uncertain=true;}else scopeRetry.current=null;setError(e instanceof Error?e.message:"负责范围提交结果尚未确认，请读取原范围核对");}finally{mutation.current=false;setBusy(false);}
+    }catch(e){if(scopeRetry.current?.uncertain||unknownWriteResult(e)){if(scopeRetry.current)scopeRetry.current.uncertain=true;}else scopeRetry.current=null;setError((e instanceof Error?e.message:"负责范围提交结果尚未确认，请读取原范围核对")+(scopeRetry.current?.uncertain?"；原提交结果仍未确认，请读取原范围核对。":""));}finally{mutation.current=false;setBusy(false);}
   };
   const selectedLine=productionLineTarget(window.location.search,detail?.order.poDeliveryDates);
   const orderReturn=digitalDetailReturnUrl(new URLSearchParams(window.location.search).get("returnTo"),import.meta.env.BASE_URL);
@@ -138,7 +141,7 @@ export function ProductionReportingPage({productionOrderId}:{productionOrderId?:
           <div className="production-reporting__actions"><Button type="submit" disabled={busy||!reason.trim()}>保存修正</Button><Button variant="secondary" disabled={busy} onClick={()=>setCorrecting(null)}>取消</Button></div>
         </form></Surface>:null}
     </>:null}
-    {user?.isRoot?<Surface className="sourcing-list-card"><details onToggle={e=>{if(e.currentTarget.open&&!directory)void loadScopes();}}><summary>驻厂人员负责范围</summary>
+    {user?.isRoot?<Surface className="sourcing-list-card"><details onToggle={e=>{if(e.currentTarget.open&&!directory)void loadScopes();}}><summary>驻厂人员负责范围</summary><Button disabled={busy} onClick={()=>{void loadScopes();}}>重新读取负责范围</Button>
       <p>先在“人员与权限”分配驻厂生产填报角色，再配置负责范围。</p>
       <form className="sourcing-form-grid" onSubmit={e=>{e.preventDefault();void saveScope({userId:scopeUser,scopeType:productionOrderId&&!scopeSupplier?"order":"supplier",scopeId:scopeSupplier||productionOrderId||"",active:true});}}>
         <label>驻厂人员 *<SearchableSelect required value={scopeUser} onChange={e=>setScopeUser(e.target.value)}><option value="">请选择</option>{directory?.users.map(u=><option key={u.userId} value={u.userId}>{u.displayName}</option>)}</SearchableSelect></label>

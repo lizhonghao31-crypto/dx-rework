@@ -3,7 +3,8 @@ import { createWebUrls } from "../url-contract.js";
 import {sessionCacheVersion,registerSessionInvalidator} from './auth-session.js';
 /** Typed read boundaries preserve original business messages and unknown write outcomes. */
 export class DigitalRequestError extends Error {
-  constructor(message:string,readonly status:number|null){super(message);this.name='DigitalRequestError';}
+  readonly resultUnknown:boolean;
+  constructor(message:string,readonly status:number|null,readonly code?:string){super(message);this.name='DigitalRequestError';this.resultUnknown=status===null||status>=500||status===408||code==='INVALID_RESPONSE'||code==='IDEMPOTENCY_IN_PROGRESS'||code==='IDEMPOTENCY_CONFLICT';}
 }
 const urls = createWebUrls(import.meta.env.BASE_URL);
 const reads=new Map<string,Promise<unknown>>();
@@ -23,7 +24,7 @@ export async function digitalRequest<T>(path: string, method = "GET", body?: unk
   const request=(async()=>{
     const response=await feedbackFetch(urls.apiUrl(`digital-production/${path}`),{method,credentials:'include',cache:'no-store',
       headers:{'content-type':'application/json',...(key?{'idempotency-key':key}:{})},...(body===undefined?{}:{body:JSON.stringify(body)}),...(reading&&options?.signal?{signal:options.signal}:{})}).catch(error=>{if(error?.name==='AbortError')throw error;throw new DigitalRequestError(error.message,null);});
-    const value=await feedbackJson(response,method,value=>value,(message,_code,status)=>new DigitalRequestError(message,status));
+    const value=await feedbackJson(response,method,value=>value,(message,code,status)=>new DigitalRequestError(message,status,code));
     if(!reading)invalidate();
     if(reading&&(identity!==sessionCacheVersion()||revision!==generation))throw new Error('读取条件已变化，请重试刷新');
     return value;

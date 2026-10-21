@@ -251,12 +251,13 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
 
   const run = async (key: string, work: () => Promise<unknown>) => {
     if (busy) return;
+    if(refreshPending){setError("上次操作已保存，请先仅重读目录后再办理；本次未重复提交。");return;}
     setBusy(key);
     setError("");setSavedMessage("");setRefreshPending(false);
     try {
       await work();
-      setSavedMessage("已保存");
-      const refreshed=await load();setRefreshPending(!refreshed);if(!refreshed)setSavedMessage("已保存，最新目录暂未读取。请只重读目录，不要重复新增或修改。");
+      setSavedMessage("上次操作已保存");
+      const refreshed=await load();setRefreshPending(!refreshed);if(!refreshed)setSavedMessage("上次操作已保存，最新目录暂未读取。请只重读目录，不要重复新增或修改。");
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "操作失败");
     } finally {
@@ -681,7 +682,7 @@ export function MasterDataPage({ view = "crafts" }: { view?: MasterDataView }) {
       </nav>
       <div className="master-data-shell">
         {error ? <p className="master-data-error" role="alert">{error}</p> : null}
-        {savedMessage&&<p role="status">{savedMessage}{refreshPending&&<Button disabled={Boolean(busy)} onClick={()=>{void load().then(ok=>{if(ok){setRefreshPending(false);setSavedMessage("已保存，目录已重新读取");}});}}>仅重读目录</Button>}</p>}
+        {savedMessage&&<p role="status">{savedMessage}{refreshPending&&<Button disabled={Boolean(busy)} onClick={()=>{void load().then(ok=>{if(ok){setRefreshPending(false);setSavedMessage("上次操作已保存，目录已重新读取");}});}}>仅重读目录</Button>}</p>}
 
         <div className="master-data-grid master-data-grid--single">
           {view === "crafts" ? <Surface className="master-data-panel">

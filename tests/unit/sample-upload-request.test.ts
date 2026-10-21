@@ -32,9 +32,9 @@ describe("sample upload HTTP boundary", () => {
   });
 
   it("reports English validation errors in Chinese without hiding authentication failures", async () => {
-    for (const [status, message] of [[400, "请求资料校验未通过"], [401, "登录已失效"], [403, "当前账号无权"]] as const) {
+    for (const [status, message] of [[400, "提交资料未通过校验"], [401, "登录已失效"], [403, "当前账号无权"]] as const) {
       vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error: { code: "VALIDATION_ERROR", message: "Request validation failed" } }), { status }));
-      const error = await sampleRequest("/intent", z.unknown()).catch(error => error);
+      const error = await sampleRequest("/intent", z.unknown(),{method:"POST"}).catch(error => error);
       expect(sampleErrorMessage(error)).toContain(message);
       expect(sampleErrorMessage(error)).not.toContain("Request validation failed");
     }
