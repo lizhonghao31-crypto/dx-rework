@@ -24,13 +24,22 @@ describe("shared entry session verification", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/auth/me", { credentials: "include", cache: "no-store" });
   });
 
-  it.each([401, 403, 500])("keeps HTTP %i denied without inventing a transport failure", async (status) => {
+  it.each([401, 403])("keeps HTTP %i denied without inventing a transport failure", async (status) => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status })));
     const { verifySessionResult, verifySession } = await import("../../apps/web/src/auth-session.js");
     expect(await verifySessionResult()).toEqual({ session: "denied", requestFailed: false });
     expect(await verifySession()).toBe("denied");
   });
 
+  it.each([429,500,503])('fails closed but reports an unread identity for HTTP %i',async status=>{
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('',{status})));const state=await import('../../apps/web/src/auth-session.js');expect(await state.verifySessionResult()).toEqual({session:'denied',requestFailed:true});expect(await state.verifySession()).toBe('denied');
+  });
+  it.each([{status:'authorized',user:null},{status:'authorized',user:{id:'TEST',displayName:'TEST',capabilities:null}},{status:'invalid',user:authorized.user},{status:'authorized',user:{...authorized.user,businessRoles:{}}}])('rejects a malformed successful identity without granting or inventing no-role',async value=>{
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue(Response.json(value)));const state=await import('../../apps/web/src/auth-session.js');expect(await state.verifySessionResult()).toEqual({session:'denied',requestFailed:true});
+  });
+  it('does not cache a cancelled identity read and can read again',async()=>{
+    const fetch=vi.fn().mockRejectedValueOnce(new DOMException('TEST cancelled','AbortError')).mockResolvedValueOnce(Response.json(authorized));vi.stubGlobal('fetch',fetch);const state=await import('../../apps/web/src/auth-session.js');expect(await state.verifySessionResult()).toEqual({session:'denied',requestFailed:false,cancelled:true});expect(state.cachedVerifiedSession()).toBeUndefined();expect(await state.verifySession()).toEqual(authorized);
+  });
   it("keeps no-role sessions distinct from unauthenticated sessions", async () => {
     const noRole = { ...authorized, status: "no_role" };
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(noRole))));

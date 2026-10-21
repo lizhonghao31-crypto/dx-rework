@@ -1,16 +1,17 @@
+import {z} from 'zod';
+import {masterDataRequest} from './master-data-page.js';
+import {RequestFeedbackError,invalidResponseMessage,unknownWriteResult} from './request-response-feedback.js';
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { createWebUrls } from "../url-contract.js";
 import { Shell } from "./components.js";
 import { ListPagination, usePaginatedItems } from "./list-pagination.js";
 import { alertInApp, promptInApp } from "./system-dialog.js";
 import { SystemManagementNavigation } from "./system-management-navigation.js";
 import "./workforce-master-data-page.css";
 
-const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
 type Person = Readonly<{
   personId: string;
@@ -29,21 +30,12 @@ type Person = Readonly<{
 }>;
 
 async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(apiUrl(path), {
-    credentials: "include",
-    ...init,
-    headers: {
-      accept: "application/json",
-      ...(init.body ? { "content-type": "application/json" } : {}),
-      ...init.headers,
-    },
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-    throw new Error(body?.error?.message ?? `请求失败（${response.status}）`);
-  }
-  if (response.status === 204) return undefined as T;
-  return await response.json() as T;
+  const method=init.method??'GET',value=await masterDataRequest<T>(path,init);
+  try{
+   if(method==='GET')return z.array(z.object({personId:z.string(),personType:z.enum(['internal','temporary']),appUserId:z.string().nullable(),displayName:z.string(),temporaryCode:z.string().nullable(),temporaryRemark:z.string().nullable(),active:z.boolean(),aliases:z.array(z.object({aliasId:z.string(),alias:z.string(),revokedAt:z.string().nullable(),revokeReason:z.string().nullable()}).passthrough())}).passthrough()).parse(value) as T;
+   if(method==='POST')z.object(path.endsWith('/aliases')?{aliasId:z.string()}:{personId:z.string()}).passthrough().parse(value);
+   return value;
+  }catch{throw new RequestFeedbackError(invalidResponseMessage(method),method==='GET'?'read_failed':'unknown',200,'INVALID_RESPONSE');}
 }
 
 export function WorkforceMasterDataPage() {
@@ -53,31 +45,36 @@ export function WorkforceMasterDataPage() {
   const [aliases, setAliases] = useState("");
   const [temporaryRemark, setTemporaryRemark] = useState("");
   const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [pendingInput,setPendingInput]=useState("");
+  const [busy, setBusy] = useState(false),[loaded,setLoaded]=useState(false),[reading,setReading]=useState(false),[uncertain,setUncertain]=useState(false),[refreshPending,setRefreshPending]=useState(false);
+  const working=useRef(false),version=useRef(0);const locked=busy||uncertain||refreshPending;
 
   const load = async (): Promise<void> => {
-    const rows = await json<Person[]>("master-data/people?includeInactive=true&includeRevokedAliases=true");
-    setPeople(rows);
+    const current=++version.current;setReading(true);
+    try{const rows=await json<Person[]>("master-data/people?includeInactive=true&includeRevokedAliases=true");if(current!==version.current)return;setPeople(rows);setLoaded(true);setRefreshPending(false);}
+    finally{if(current===version.current)setReading(false);}
   };
 
   useEffect(() => {
     void load().catch((error: unknown) => {
       setMessage(error instanceof Error ? error.message : "人员资料加载失败");
-    });
+    });return()=>{version.current++;};
   }, []);
 
-  const run = async (work: () => Promise<void>, success: string): Promise<void> => {
-    if (busy) return;
+  const run = async (work: () => Promise<void>, success: string,description=""): Promise<void> => {
+    if (locked||working.current) return;
+    working.current=true;
     setBusy(true);
-    setMessage("");
+    setMessage("");setPendingInput(description);
+    let saved=false;
     try {
-      await work();
+      await work();saved=true;setRefreshPending(true);
       await load();
       setMessage(success);
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : "操作失败");
+      const unknown=!saved&&unknownWriteResult(error);setUncertain(unknown);setMessage((saved?"修改已保存，但最新目录尚未读取，请仅重读，不重复操作。":unknown?"原操作结果尚未确认，请仅重读并核对原人员历史；未提供原命令回执，不能重复建立档案或别名。":"")+(error instanceof Error ? error.message : "原操作结果尚未确认"));
     } finally {
-      setBusy(false);
+      working.current=false;setBusy(false);
     }
   };
 
@@ -121,7 +118,7 @@ export function WorkforceMasterDataPage() {
         method: "POST",
         body: JSON.stringify({ alias, reason }),
       });
-    }, "人员别名已新增。 ");
+    }, "人员别名已新增。 ",`原输入：为${person.displayName}新增别名“${alias}”；原因：${reason}`);
   };
 
   const revokeAlias = async (aliasId: string): Promise<void> => {
@@ -143,7 +140,7 @@ export function WorkforceMasterDataPage() {
         method: "DELETE",
         body: JSON.stringify({ reason }),
       });
-    }, "临时工档案已停用，历史任务和工资快照不受影响。 ");
+    }, "临时工档案已停用，历史任务和工资快照不受影响。 ",`原输入：停用${person.displayName}；原因：${reason}`);
   };
 
   const filteredPeople = useMemo(() => {
@@ -179,7 +176,7 @@ export function WorkforceMasterDataPage() {
           <StatusBadge tone="info">N02 / 执行人员来源</StatusBadge>
         </header>
 
-        {message ? <Surface className="workforce-message"><p role="status">{message}</p></Surface> : null}
+        {message ? <Surface className="workforce-message"><p role="status">{message}</p>{uncertain&&pendingInput&&<p>{pendingInput}</p>}<Button disabled={busy||reading} onClick={()=>void load().then(()=>setMessage(uncertain?"已重读目录；原操作回执仍待确认，请原有权人核对人员历史和审计，不要重复提交。":"人员目录已重新读取。" )).catch(error=>setMessage(error instanceof Error?error.message:"人员目录尚未读取"))}>仅重新读取人员目录</Button></Surface> : null}
 
         <Surface className="workforce-create">
           <h2>新增临时工</h2>
@@ -188,7 +185,7 @@ export function WorkforceMasterDataPage() {
             <label>姓名<input value={name} maxLength={100} onChange={(event) => setName(event.target.value)} /></label>
             <label>区分备注（可选）<input value={temporaryRemark} maxLength={100} placeholder="如：夜班、老张介绍" onChange={(event) => setTemporaryRemark(event.target.value)} /></label>
             <label>别名（可选，用逗号分隔）<input value={aliases} onChange={(event) => setAliases(event.target.value)} /></label>
-            <Button variant="primary" data-ready={name.trim() ? "true" : "false"} disabled={busy} onClick={() => void createTemporary()}>{busy ? "处理中…" : "建立临时工档案"}</Button>
+            <Button variant="primary" data-ready={name.trim() ? "true" : "false"} disabled={locked} onClick={() => void createTemporary()}>{busy ? "处理中…" : "建立临时工档案"}</Button>
           </div>
         </Surface>
 
@@ -198,7 +195,7 @@ export function WorkforceMasterDataPage() {
               <h2>查找人员</h2>
               <p>按姓名、现场别名、人员类型或状态搜索；业务页面不展示系统内部 ID。</p>
             </div>
-            <StatusBadge tone="info">{formatBusinessDecimal(filteredPeople.length)} / {formatBusinessDecimal(people.length)} 人</StatusBadge>
+            <StatusBadge tone="info">{loaded?`${formatBusinessDecimal(filteredPeople.length)} / ${formatBusinessDecimal(people.length)} 人`:"目录尚未读取"}</StatusBadge>
           </div>
           <InsetField
             label="搜索人员"
@@ -214,13 +211,13 @@ export function WorkforceMasterDataPage() {
             <h2>内部工人</h2>
             <p>授予“工人”角色后自动进入这里；撤销角色、停用账号或离职后不能再被新分配。</p>
             <div className="workforce-list">
-              {internal.length === 0 ? <p>{query.trim() ? "没有匹配的内部工人。" : "暂无已建档内部工人。"}</p> : internalPage.items.map((person) => (
+              {!loaded?<p>{reading?"正在读取内部工人…":"内部工人目录尚未读取。"}</p>:internal.length === 0 ? <p>{query.trim() ? "没有匹配的内部工人。" : "暂无已建档内部工人。"}</p> : internalPage.items.map((person) => (
                 <article key={person.personId}>
                   <div><b>{person.displayName}</b><small>内部员工 · 可登录</small></div>
                   <StatusBadge tone={person.active ? "success" : "warning"}>{person.active ? "档案有效" : "档案停用"}</StatusBadge>
-                  <Button disabled={busy || !person.active} onClick={() => void addAlias(person)}>新增别名</Button>
+                  <Button disabled={locked || !person.active} onClick={() => void addAlias(person)}>新增别名</Button>
                   {person.aliases.filter((alias) => alias.revokedAt === null).map((alias) => (
-                    <button className="workforce-alias" key={alias.aliasId} disabled={busy} onClick={() => void revokeAlias(alias.aliasId)}>{alias.alias} ×</button>
+                    <button className="workforce-alias" key={alias.aliasId} disabled={locked} onClick={() => void revokeAlias(alias.aliasId)}>{alias.alias} ×</button>
                   ))}
                 </article>
               ))}
@@ -231,17 +228,17 @@ export function WorkforceMasterDataPage() {
           <Surface>
             <h2>临时工</h2>
             <div className="workforce-list">
-              {temporary.length === 0 ? <p>{query.trim() ? "没有匹配的临时工。" : "暂无临时工档案。"}</p> : temporaryPage.items.map((person) => (
+              {!loaded?<p>{reading?"正在读取临时工…":"临时工目录尚未读取。"}</p>:temporary.length === 0 ? <p>{query.trim() ? "没有匹配的临时工。" : "暂无临时工档案。"}</p> : temporaryPage.items.map((person) => (
                 <article key={person.personId}>
                   <div><b>{person.displayName}</b><small>临时工 · 不登录 · {person.temporaryCode ?? "历史临时工待补编号"}{person.temporaryRemark ? ` · ${person.temporaryRemark}` : ""}</small></div>
                   <StatusBadge tone={person.active ? "success" : "warning"}>{person.active ? "可分配" : "已停用"}</StatusBadge>
                   <div className="workforce-row-actions">
-                    <Button disabled={busy || !person.active} onClick={() => void addAlias(person)}>新增别名</Button>
-                    <Button disabled={busy || !person.active} onClick={() => void deactivateTemporary(person)}>停用</Button>
+                    <Button disabled={locked || !person.active} onClick={() => void addAlias(person)}>新增别名</Button>
+                    <Button disabled={locked || !person.active} onClick={() => void deactivateTemporary(person)}>停用</Button>
                   </div>
                   <div className="workforce-aliases">
                     {person.aliases.filter((alias) => alias.revokedAt === null).map((alias) => (
-                      <button className="workforce-alias" key={alias.aliasId} disabled={busy} onClick={() => void revokeAlias(alias.aliasId)}>{alias.alias} ×</button>
+                      <button className="workforce-alias" key={alias.aliasId} disabled={locked} onClick={() => void revokeAlias(alias.aliasId)}>{alias.alias} ×</button>
                     ))}
                   </div>
                 </article>

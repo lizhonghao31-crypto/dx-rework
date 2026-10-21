@@ -77,11 +77,11 @@ const normalizeAliases = async (client: PoolClient, aliases: readonly string[]):
 
 const translateDatabaseError = (error: unknown): never => {
   const code = (error as DatabaseError | null)?.code;
-  if (code === "23505") throw new ApplicationError("CONFLICT", "记录已存在或别名已绑定给其他人员", 409);
+  if (code === "23505") throw new ApplicationError("CONFLICT", "记录已存在或别名已有绑定；请当前维护岗位在原主资料搜索已有记录，人员关联由Root核对，不要重复创建", 409);
   if (code === "23503") throw new ApplicationError("NOT_FOUND", "引用的用户、角色或基础资料不存在", 404);
   if (code === "42501") throw new ApplicationError("FORBIDDEN", "当前用户无权执行该操作", 403);
   if (code === "55000") throw new ApplicationError("CONFLICT", "该记录不允许绕过受控流程修改", 409);
-  if (code === "23514" || code === "22P02") throw new ApplicationError("VALIDATION_ERROR", "数据不符合业务约束", 400);
+  if (code === "23514" || code === "22P02") throw new ApplicationError("VALIDATION_ERROR", "主资料提交未通过业务校验，具体字段或状态原因尚未确认；请当前维护岗位核对原资料，仍失败时提供记录链接与请求编号给Root核查", 400);
   throw error;
 };
 
@@ -825,7 +825,7 @@ export class AccessMasterDataService {
       }
       await this.autoEnableForAuthorization(client, actor, input.userId, input.reason);
       const role = await client.query<{ enabled: boolean }>("SELECT enabled FROM business_roles WHERE role_code=$1 FOR SHARE", [input.roleCode]);
-      if (!role.rows[0]?.enabled) throw new ApplicationError("NOT_FOUND", "业务角色不存在或已停用", 404);
+      if (!role.rows[0]?.enabled) throw new ApplicationError("NOT_FOUND", "业务角色不存在或已停用；请Root在员工权限页核对可用岗位，不能继续提交旧页面中的失效角色", 404);
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtext($1))",
         [`dx_rework:role_assignment:${input.userId}:${input.roleCode}`],

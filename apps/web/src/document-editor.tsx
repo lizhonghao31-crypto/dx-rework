@@ -38,10 +38,14 @@ function focusDocumentField(id:string){
   if(focusTarget.tabIndex<0)focusTarget.tabIndex=-1;
   focusTarget.scrollIntoView({block:"center"});focusTarget.focus();
 }
-export function DocumentErrors({ issues, error }: { issues: DocumentIssue[]; error?: string }) {
-  const locate=useContext(DocumentFieldLocationContext);
+export function useDocumentFieldLocator(onLocateField?:((id:string)=>void)|undefined){
+  const inherited=useContext(DocumentFieldLocationContext),locate=onLocateField??inherited;
+  return (id:string)=>{if(locate)flushSync(()=>locate(id));focusDocumentField(id);};
+}
+export function DocumentErrors({ issues, error, onLocateField }: { issues: DocumentIssue[]; error?: string; onLocateField?:((id:string)=>void)|undefined }) {
+  const locate=useDocumentFieldLocator(onLocateField);
   if (!issues.length && !error) return null;
-  return <div className="dx-doc-errors" role="alert"><strong>{error || "请核对以下内容"}</strong>{issues.length > 0 && <ul>{issues.map((issue, index) => <li key={`${issue.id}-${index}`}><button type="button" onClick={() => { if(locate)flushSync(()=>locate(issue.id)); focusDocumentField(issue.id); }}>{issue.label}：{issue.message}</button></li>)}</ul>}</div>;
+  return <div className="dx-doc-errors" role="alert"><strong>{error || "请核对以下内容"}</strong>{issues.length > 0 && <ul>{issues.map((issue, index) => <li key={`${issue.id}-${index}`}><button type="button" onClick={() => locate(issue.id)}>{issue.label}：{issue.message}</button></li>)}</ul>}</div>;
 }
 export function DocumentField({ id, label, value, onValue, readonly, disabled, numeric, multiline, maxLength = 100, type = "text", column, issue, onBlur, savedValue, savedRevision }: {
   id: string; label: string; value: string; onValue?: (value: string) => void; readonly?: boolean; disabled?: boolean;

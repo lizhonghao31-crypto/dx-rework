@@ -1,7 +1,11 @@
+import {z} from 'zod';
+import {feedbackFetch,feedbackJson,feedbackNoContent,unknownWriteResult} from './request-response-feedback.js';
+import {useDigitalDetailNavigationGuard} from './use-digital-detail-navigation-guard.js';
+import {EmployeeAccessDirectorySchema,EmployeeAccessSyncResponseSchema,EmployeeAccessRoleMutationResponseSchema} from '@dx-rework/contracts/employee-access';
 import { SearchableSelect } from "./search-select.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import type { EmployeeAccessDirectory, EmployeeAccessEmployee } from "@dx-rework/contracts/employee-access";
 import { createWebUrls } from "../url-contract.js";
@@ -38,21 +42,17 @@ type Role = Readonly<{
 type CurrentUser = Readonly<{ userId: string; displayName: string; isRoot: boolean }>;
 
 async function json<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(apiUrl(path), {
-    credentials: "include",
-    ...init,
-    headers: {
-      accept: "application/json",
-      ...(init.body ? { "content-type": "application/json" } : {}),
-      ...init.headers,
-    },
+  const method=init.method??'GET',response=await feedbackFetch(apiUrl(path), {
+    credentials: "include",...init,headers:{accept:"application/json",...(init.body?{"content-type":"application/json"}:{}),...init.headers},
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-    throw new Error(body?.error?.message ?? `请求失败：${response.status}`);
-  }
-  if (response.status === 204) return undefined as T;
-  return await response.json() as T;
+  if(method==='DELETE'||/\/(?:disable|restore)$/.test(path)){await feedbackNoContent(response,method);return undefined as T;}
+  return feedbackJson(response,method,value=>{
+    if(path==='employee-access/employees')return EmployeeAccessDirectorySchema.parse(value) as T;
+    if(path==='access/roles')return z.array(z.object({roleCode:z.string(),displayName:z.string(),description:z.string(),capabilities:z.array(z.string())}).passthrough()).parse(value) as T;
+    if(path==='access/me')return z.object({userId:z.string(),displayName:z.string(),isRoot:z.boolean()}).passthrough().parse(value) as T;
+    if(path==='employee-access/directory/sync')return EmployeeAccessSyncResponseSchema.parse(value) as T;
+    return EmployeeAccessRoleMutationResponseSchema.parse(value) as T;
+  });
 }
 
 const employeeTone = (employee: EmployeeAccessEmployee): "success" | "warning" | "danger" =>
@@ -76,8 +76,11 @@ export function EmployeeAccessPage() {
   const [moduleFilter, setModuleFilter] = useState<"all" | PlatformAccessModuleId>("all");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-
-  const load = async () => {
+  const [reading,setReading]=useState(false),[uncertain,setUncertain]=useState(false),[refreshPending,setRefreshPending]=useState(false),[notice,setNotice]=useState("");
+  const working=useRef(false),readVersion=useRef(0);useDigitalDetailNavigationGuard(uncertain,Boolean(busy),working,"原权限操作结果尚未确认，离开不会撤销操作；请先核对原员工记录。仍要离开？");
+  const locked=Boolean(busy)||uncertain||refreshPending;
+  const load = async (saved=false) => {
+    const version=++readVersion.current;setReading(true);
     setError("");
     try {
       const [nextDirectory, nextRoles, currentUser] = await Promise.all([
@@ -85,15 +88,16 @@ export function EmployeeAccessPage() {
         json<Role[]>("access/roles"),
         json<CurrentUser>("access/me"),
       ]);
+      if(version!==readVersion.current)return;
       setDirectory(nextDirectory);
       setRoles(nextRoles);
-      setMe(currentUser);
+      setMe(currentUser);if(saved||refreshPending)setNotice("修改已保存，最新员工目录已重新读取。");setRefreshPending(false);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "员工权限数据加载失败");
-    }
+      if(version===readVersion.current)setError((saved?"修改已保存，最新员工权限资料尚未读取；只需重读，不重复提交。":"")+(loadError instanceof Error ? loadError.message : "员工权限资料尚未读取"));
+    }finally{if(version===readVersion.current)setReading(false);}
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load();return()=>{readVersion.current++;}; }, []);
 
   const roleNameByCode = useMemo(
     () => new Map(roles.map((role) => [role.roleCode, role.displayName])),
@@ -157,16 +161,18 @@ export function EmployeeAccessPage() {
   );
 
   const mutate = async (key: string, work: () => Promise<unknown>) => {
-    if (busy) return;
+    if (busy||uncertain||refreshPending||working.current) return;
+    working.current=true;
     setBusy(key);
     setError("");
     try {
-      await work();
-      await load();
+      await work();setRefreshPending(true);setNotice("修改已保存；正在重新读取员工目录。");
+      await load(true);
     } catch (mutationError) {
-      setError(mutationError instanceof Error ? mutationError.message : "操作失败");
+      const unknown=unknownWriteResult(mutationError);setUncertain(unknown);
+      setError((unknown?"原权限操作结果尚未确认，请仅重新读取目录及原员工历史，不要重复发起或同步；仍不明确请Root核对审计。":"")+(mutationError instanceof Error ? mutationError.message : "操作结果尚未确认"));
     } finally {
-      setBusy("");
+      working.current=false;setBusy("");
     }
   };
 
@@ -237,7 +243,7 @@ export function EmployeeAccessPage() {
           </div>
           <div className="employee-access-sync">
             <span>最近同步：{directory?.lastDirectorySyncedAt ? new Date(directory.lastDirectorySyncedAt).toLocaleString("zh-CN") : "尚未同步"}</span>
-            <Button disabled={Boolean(busy)} onClick={sync}>{busy === "sync" ? "同步中…" : "同步钉钉通讯录"}</Button>
+            <Button disabled={locked} onClick={sync}>{busy === "sync" ? "同步中…" : "同步钉钉通讯录"}</Button>
           </div>
         </header>
         <Surface className="admin-card"><SystemManagementNavigation active="employee-access" /></Surface>
@@ -279,8 +285,10 @@ export function EmployeeAccessPage() {
             </span>
           </div>
 
+          {notice&&<p role="status">{notice}</p>}{busy&&<p role="status">正在处理原操作，请等待结果。</p>}
           {error ? <p className="employee-access-error" role="alert">{error}</p> : null}
-          {!directory ? <p>正在加载员工目录…</p> : filteredEmployees.length === 0 ? (
+          {(error||uncertain)&&<><Button disabled={Boolean(busy)||reading} onClick={()=>void load()}>仅重新读取员工目录</Button>{uncertain&&<p role="status">重读目录只供核对，不等于收到原权限操作的回执；原操作仍待确认。</p>}</>}
+          {!directory ? <p>{reading?"正在读取员工目录…":"员工目录尚未读取，请重试读取。"}</p> : filteredEmployees.length === 0 ? (
             <p className="employee-access-empty">没有匹配的员工。</p>
           ) : (<>
             <section className="employee-access-grid" aria-label="员工权限目录">
@@ -337,7 +345,7 @@ export function EmployeeAccessPage() {
                           </div>
                           {history.revokedAt === null ? (
                             <Button
-                              disabled={Boolean(busy)
+                              disabled={locked
                                 || (PROTECTED_ROLES.has(history.roleCode) && me?.isRoot !== true)
                                 || (history.roleCode === "owner_group" && wouldDisableLastOwner)}
                               onClick={() => void revoke(employee, history.assignmentId, history.roleCode)}
@@ -379,7 +387,7 @@ export function EmployeeAccessPage() {
                         {assignableRoles.map((role) => <option key={role.roleCode} value={role.roleCode}>{roleDisplayName(role)}</option>)}
                       </SearchableSelect>
                       <Button
-                        disabled={Boolean(busy)
+                        disabled={locked
                           || !selected
                           || (isSelf && !canSelfGrantSystemAdmin)
                           || !employee.active
@@ -391,14 +399,14 @@ export function EmployeeAccessPage() {
                       </Button>
                       {employee.enabled ? (
                         <Button
-                          disabled={Boolean(busy) || wouldDisableLastOwner || protectedTargetLocked}
+                          disabled={locked || wouldDisableLastOwner || protectedTargetLocked}
                           onClick={() => void changeAccess(employee, "disable")}
                         >
                           停用访问
                         </Button>
                       ) : employee.manualAccessDisabled ? (
                         <Button
-                          disabled={Boolean(busy) || !employee.active || !employee.employed || protectedTargetLocked}
+                          disabled={locked || !employee.active || !employee.employed || protectedTargetLocked}
                           onClick={() => void changeAccess(employee, "restore")}
                         >
                           恢复访问

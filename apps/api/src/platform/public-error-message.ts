@@ -22,14 +22,14 @@ const messages: Record<string, string> = {
   "Todo source event was not found": "待办对应的业务事件不存在",
   "Todo source event does not match its business fact": "待办事件与原业务事实不一致",
   "Todo policy is not enabled": "此待办规则尚未启用",
-  "Todo recipient is no longer eligible": "原接收人已不具备办理资格，请联系负责人调整",
+  "Todo recipient is no longer eligible": "原接收人已不具备办理资格；请原业务管理岗位在本单人员安排核对接收人，Root在员工权限页核对停用或岗位变更",
   "Todo routing exception was not found": "待办分派异常记录不存在",
   "Todo routing exception is no longer pending": "此待办分派异常已处理，请刷新",
   "This routing exception is assigned to another manager": "此待办分派异常由其他负责人处理",
   "Todo is not eligible for controlled transfer": "此待办当前不符合转办条件",
   "New recipient lacks the required active authority": "新接收人缺少当前有效的办理权限",
   "Routing exception todo is no longer pending": "分派异常待办已处理，请刷新",
-  "Actionable todo is missing authority facts": "可办理待办缺少权限依据，请联系负责人核查",
+  "Actionable todo is missing authority facts": "可办理待办缺少有效权限依据；请Root核对本单待办与员工授权，不能通过重复点击或改链接绕过",
   "Only its creation delivery can complete an information todo": "信息类待办须由其原投递事件完成",
   "Information delivery event is missing its trusted actor": "信息投递事件缺少可信办理人",
   "Todo creation did not return a row": "待办创建结果未确认，请核对原操作",
@@ -47,8 +47,8 @@ const messages: Record<string, string> = {
   "Todo recipient is not uniquely routable after the required self-approval exclusion": "排除本人审批后无法确定唯一待办接收人",
   "Parallel todo recipients exceed the approved direct-role rule": "并行接收人数超过已批准的直接角色规则",
   "A fully unavailable parallel todo has no stable original recipient": "并行待办接收人均不可用，且无法确定原接收人",
-  "Shared role todo has no currently eligible direct recipient": "共享角色待办没有当前合格的直接接收人",
-  "Assigned business role todo has no currently eligible direct recipient": "指定业务角色待办没有当前合格的直接接收人",
+  "Shared role todo has no currently eligible direct recipient": "共享岗位没有当前可办理人员；请Root在员工权限页核对岗位启用及人员授权，再重读原业务待办",
+  "Assigned business role todo has no currently eligible direct recipient": "指定业务角色没有当前可办理人员；请Root在员工权限页核对该岗位的在职、启用和授权情况，再由原业务岗位核对本单待办",
   "A recipient routing exception requires one direct production-management assignee": "接收人分派异常须指定唯一且直接授权的生产管理负责人",
   "Named business handler has multiple active order delegates": "指定办理人存在多个有效订单委托，请先核对委托关系",
   "High-multiplier confirmation requires one independent direct owner-group recipient": "高倍数确认须有唯一、独立且直接授权的老板组接收人",
@@ -83,16 +83,18 @@ const messages: Record<string, string> = {
   "Export idempotency key was used with different filters": "本次导出标识已用于其他筛选条件，请核对原导出",
   "Export job not found": "导出任务不存在",
   "Export job access denied": "当前账号无权访问此导出任务",
-  "Export claim is stale or result attachment is not ready and authorized": "导出处理凭据已过期，或结果附件尚未就绪或未获授权",
-  "Export claim is stale or job is not running": "导出处理凭据已过期，或任务已不在处理中",
+  "Export claim is stale or result attachment is not ready and authorized": "原导出结果尚不能确认：处理凭据、文件就绪或访问权限至少一项不满足，具体项未能确认；请原导出调用端按原任务编号读取状态，未确认失败前不要另建导出，仍异常请管理员核查",
+  "Export claim is stale or job is not running": "导出任务当前已不能继续按旧凭据处理；请在原导出任务重新读取状态，已完成则领取结果，持续异常时联系管理员",
   "Idempotency key was already used with a different request": "本次提交标识已用于不同内容，请核对原操作",
   "Request with this idempotency key is still in progress": "原提交仍在处理中，请保留内容并核对原操作",
   "Idempotency record is not in progress": "原提交状态已变化，请核对处理结果",
 };
 
-export function publicErrorMessage(error: { message: string; code: string }): string {
+export function publicErrorMessage(error: { message: string; code: string; statusCode?: number }, statusCode = error.statusCode): string {
   if (/[\u3400-\u9fff]/.test(error.message)) return error.message;
   return messages[error.message] ?? (error.code === "VALIDATION_ERROR"
     ? "提交资料格式不正确，请核对填写内容"
-    : `操作未完成，请保留内容并联系负责人核查（${error.code}）`);
+    : statusCode !== undefined && statusCode >= 400 && statusCode < 500 && statusCode !== 408
+      ? "本次请求已被拒绝，具体业务原因尚未确定；请保留输入，由原有权岗位在原页面核对，仍不明确时请管理员按请求编号核查"
+      : "原操作结果尚未确认，具体业务原因未能确定；请保留输入，在原页面核对记录，仍不明确时请管理员按请求编号核查");
 }

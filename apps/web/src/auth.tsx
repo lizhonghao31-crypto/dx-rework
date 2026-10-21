@@ -3,7 +3,7 @@ import { flushSync } from "react-dom";
 import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { createWebUrls } from "../url-contract.js";
 import { LoginLanding } from "./login-landing.js";
-import { cachedVerifiedSession, invalidateSession, registerSessionInvalidator, verifySession, type VerifiedSession } from "./auth-session.js";
+import { cachedSessionVerificationResult,verifySessionResult, cachedVerifiedSession, invalidateSession, registerSessionInvalidator, verifySession, type VerifiedSession } from "./auth-session.js";
 import { beginLoginIntent, completeExplicitLogin, currentLoginIntent, loginIntentStillCurrent, logoutMarker, markLoggedOut, subscribeLogout } from "./logout-state.js";
 import { LogoutButton } from "./session-exit.js";
 
@@ -176,15 +176,18 @@ export function AuthGate({
   requiredAnyOf?: readonly PageAccessRequirement[] | undefined;
 }) {
   const [state, setState] = useState<AuthGateState>(() => cachedVerifiedSession() ?? "loading");
+  const [sessionReadFailed,setSessionReadFailed]=useState(()=>Boolean(cachedSessionVerificationResult()?.requestFailed));
+  const [sessionReadAttempt,setSessionReadAttempt]=useState(0);
   useEffect(() => {
     let mounted = true;
-    void verifySession().then((nextState) => {
-      if (mounted) setState(nextState);
+    let readValid=true;
+    const unsubscribe=registerSessionInvalidator(()=>{readValid=false;if(mounted){setState("loading");setSessionReadFailed(false);setSessionReadAttempt(value=>value+1);}});
+    void verifySessionResult().then((result) => {
+      if (mounted&&readValid){setSessionReadFailed(result.requestFailed||Boolean(result.cancelled));setState(result.session);}
     });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    return () => { mounted = false;unsubscribe(); };
+  }, [sessionReadAttempt]);
+  if(sessionReadFailed)return <StatePage tone="warning" title="当前身份尚未读取" detail="登录状态读取未完成，不能据此判断账号无权限。请重新读取；仍失败时请管理员核查登录服务。"><Button onClick={()=>invalidateSession()}>重新读取登录状态</Button></StatePage>;
   if (state === "loading") return <StatePage tone="info" title="正在确认身份" detail="正在确认钉钉组织与账号状态，请稍候。" />;
   if (state === "denied") return <LoginPage />;
   if (state.status === "no_role") return <StatePage tone="warning" title="尚未分配业务角色" detail="您的达兴组织身份已验证，但暂时不能读取业务数据。请联系管理员分配业务角色。"><LogoutButton /></StatePage>;

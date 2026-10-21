@@ -1,3 +1,7 @@
+import {instructionFeedbackProjection} from './document-feedback-projections.js';
+import {instructionCommandMatches} from './command-receipt-content.js';
+import {SubmissionAttempt} from './submission-attempt.js';
+import {SubmissionRequestError} from './submission-validation.js';
 import {instructionActionReceipt} from "./digital-operation-feedback.js";
 import {useDocumentUploadPreviews} from "./document-upload-previews.js";
 import { customerPoDateLabel } from "./digital-workspace-copy.js";
@@ -7,7 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button, Surface } from "@dx-rework/ui";
 import type { UploadIntentResponse } from "@dx-rework/contracts";
 import { MATERIAL_COUNT_TERM, instructionSourceLabels, type InstructionDocument, type InstructionSheet } from "@dx-rework/contracts/production-instruction";
-import { digitalRequest } from "./digital-production-api.js";
+import {DigitalRequestError, digitalRequest } from "./digital-production-api.js";
 import { createClientRequestId } from "./client-request-id.js";
 import { sha256Hex } from "./attachment-upload.js";
 import { useDigitalDetailNavigationGuard } from "./use-digital-detail-navigation-guard.js";
@@ -21,6 +25,14 @@ const urls = createWebUrls(import.meta.env.BASE_URL);
 const kinds = ["款图", "主唛", "腰卡", "吊牌", "洗水唛", "二维码唛", "包装辅料", "其它工艺"] as const;
 const tabKeys = Object.keys(instructionTabs) as InstructionTab[];
 
+
+export async function instructionRequest(path:string,method='GET',body?:unknown,key?:string,before?:InstructionSheet):Promise<InstructionSheet>{
+ const value=await digitalRequest<InstructionSheet>(path,method,body,key),orderId=path.match(/^orders\/([^/]+)\/instruction/)?.[1];
+ const valid=instructionFeedbackProjection.safeParse(value).success&&value.order.productionOrderId===orderId
+  &&(method==='GET'||Boolean(before&&instructionCommandMatches(value,before,path.slice(`orders/${orderId}/instruction`.length),method,body)));
+ if(!valid)throw new DigitalRequestError(method==='GET'?'制单资料尚未取得完整回执，请重新读取':'原制单提交结果尚未确认，请保留输入并核对原提交',200,'INVALID_RESPONSE');
+ return value;
+}
 export function ProductionInstructionPanel({ orderId, initialVersion, onClose, embedded=false,contained=false,onVersionChange }: { orderId: string; initialVersion?: number | undefined; onClose: () => void; onVersionChange?:((version:number|undefined)=>void)|undefined; contained?:boolean;embedded?:boolean }) {
   const previews=useDocumentUploadPreviews();
   const [sheet, setSheet] = useState<InstructionSheet | null>(null), [doc, setDoc] = useState<InstructionDocument | null>(null), [version, setVersion] = useState<number | undefined>(initialVersion);
@@ -31,11 +43,12 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
   const [validationMode, setValidationMode] = useState<"save" | "publish" | null>(null), [saveBlocked, setSaveBlocked] = useState(false), [confirming, setConfirming] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(null), [reloadCount, setReloadCount] = useState(0), [uploadKind, setUploadKind] = useState<typeof kinds[number]>("款图");
   const writing = useRef(false), operation = useRef<{ payload: string; key: string } | null>(null), generation = useRef(0), successfulUploads = useRef(new Map<string, string>());
-  useDigitalDetailNavigationGuard(dirty, busy, writing, "仍有未保存修改，确定返回？");
+  const submission=useRef(new SubmissionAttempt()),contextVersion=useRef(0);const [uncertain,setUncertain]=useState(false);
+  useDigitalDetailNavigationGuard(dirty||uncertain, busy, writing, uncertain?"原制单提交结果尚未确认，离开不会撤销提交并会丢失原标识。仍要离开？":"仍有未保存修改，确定返回？");
   const base = `orders/${orderId}/instruction`;
   useEffect(() => {
-    let live = true; setReceipt(""); setSheet(null); setDoc(null); setError(""); setBusy(true);
-    void digitalRequest<InstructionSheet>(base + (version ? `?version=${version}` : "")).then(value => {
+    let live = true;contextVersion.current++;submission.current=new SubmissionAttempt();setUncertain(false); setReceipt(""); setSheet(null); setDoc(null); setError(""); setBusy(true);
+    void instructionRequest(base + (version ? `?version=${version}` : "")).then(value => {
       if (live) { setSheet(value); setDoc(value.document); setDirty(false); setSaveBlocked(false); setValidationMode(null); setSourceReviewOpen(false); operation.current = null; successfulUploads.current.clear(); }
     }).catch(e => { if (live) setError(e.message); }).finally(() => { if (live) setBusy(false); });
     return () => { live = false; };
@@ -49,18 +62,20 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
     const beforePrint = () => { if (!sheet?.isPublishedSnapshot || dirty || busy) void alertInApp("请先保存当前修改，并打开已发布版本后打印。"); };
     window.addEventListener("beforeprint", beforePrint); return () => window.removeEventListener("beforeprint", beforePrint);
   }, [sheet, dirty, busy]);
-  const change = (patch: Partial<InstructionDocument>) => { setReceipt(""); generation.current++; setDoc(current => current ? { ...current, ...patch } : current); setDirty(true); if (!saveBlocked) setError(""); };
-  const act = async (path: string, method: string, body: unknown) => {
-    if (writing.current) return;
-    writing.current = true; setBusy(true); setSaving(path === "" && method === "PUT"); setError(""); setReceipt("");
-    const payload = JSON.stringify([path, body]); if (operation.current?.payload !== payload) operation.current = { payload, key: createClientRequestId() };
-    const editGeneration = generation.current;
-    try {
-      const value = await digitalRequest<InstructionSheet>(base + path, method, body, operation.current.key);
-      setSheet(value); if (editGeneration === generation.current) { setDoc(value.document); setDirty(false); previews.saved(); }
-      setSaveBlocked(false); setValidationMode(null); operation.current = null; setReceipt(instructionActionReceipt(path,method,value)); return true;
-    } catch (e) { setError(e instanceof Error ? e.message : "操作失败"); setSaveBlocked(true); return false; }
-    finally { writing.current = false; setBusy(false); setSaving(false); }
+  const change = (patch: Partial<InstructionDocument>) => {if(uncertain)return; setReceipt(""); generation.current++; setDoc(current => current ? { ...current, ...patch } : current); setDirty(true); if (!saveBlocked) setError(""); };
+  const act = async (path:string,method:string,body:unknown,recover=false) => {
+    if(writing.current||uncertain&&!recover)return false;
+    writing.current=true;setBusy(true);setSaving(path===''&&method==='PUT');setError('');setReceipt('');
+    const payload=JSON.stringify([path,body]);if(!recover&&operation.current?.payload!==payload)operation.current={payload,key:createClientRequestId()};
+    const editGeneration=generation.current,context=contextVersion.current,attempt=submission.current,originalKey=operation.current?.key;
+    const execute=async()=>{try{
+      const value=await instructionRequest(base+path,method,body,originalKey,sheet??undefined);attempt.markConfirmed();if(context!==contextVersion.current)return;
+      setUncertain(false);setSheet(value);if(editGeneration===generation.current){setDoc(value.document);setDirty(false);previews.saved();}setSaveBlocked(false);setValidationMode(null);operation.current=null;setReceipt(instructionActionReceipt(path,method,value));
+    }catch(error){if(error instanceof DigitalRequestError&&!error.resultUnknown)throw new SubmissionRequestError(error.message,error.code,error.status??500);throw error;}};
+    try{const result=recover?await attempt.retry():await attempt.run(execute);if(context!==contextVersion.current)return false;
+      if(result.kind==='failure'){setError(result.failure.message+(result.uncertain?'；原制单结果待确认，请使用原内容核对，不要改后另提。':''));setUncertain(result.uncertain);setSaveBlocked(true);return false;}
+      if(result.kind==='expired'){setError('原制单提交已超过安全恢复期限，请在原版本历史核对，不再重发。');return false;}return result.kind==='success';
+    }finally{if(context===contextVersion.current){writing.current=false;setBusy(false);setSaving(false);}}
   };
   const save = () => {
     if (!sheet?.canEdit || sheet.cutStarted || !doc || writing.current) return;
@@ -80,14 +95,14 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
     try { return await confirmInApp(message) && !writing.current; } finally { setConfirming(false); }
   };
   const chooseVersion = async (next: number | undefined) => {
-    if (embedded) return;
+    if (embedded||uncertain) return;
     if (!await discard("切换版本将丢弃未保存修改，确定继续？")) return;
     setDirty(false); setVersion(next); setValidationMode(null);
     const url = new URL(window.location.href); if (next) url.searchParams.set("instructionVersion", String(next)); else url.searchParams.delete("instructionVersion"); window.history.replaceState(window.history.state, "", url);onVersionChange?.(next);
   };
-  const reload = async () => { if (await discard("重新载入将丢弃未保存修改，确定继续？")) { setDirty(false); setReloadCount(value => value + 1); } };
+  const reload = async () => {if(uncertain){const context=contextVersion.current;try{const value=await instructionRequest(base);if(context===contextVersion.current)setError(`当前读取到制单 v${value.version}；原提交回执仍未确认，原输入与标识保留。`);}catch(error){if(context===contextVersion.current)setError(error instanceof Error?error.message:'制单尚未读取');}return;}if(await discard("重新载入将丢弃未保存修改，确定继续？")){setDirty(false);setReloadCount(value=>value+1);}};
   const upload = async (files: File[]) => {
-    if (!files.length || !doc || !sheet?.canEdit || sheet.cutStarted || writing.current) return;previews.start(files);
+    if (uncertain||!files.length || !doc || !sheet?.canEdit || sheet.cutStarted || writing.current) return;previews.start(files);
     writing.current = true; setBusy(true); setError("");
     try {
       let count = doc.images.length;
@@ -111,7 +126,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
   if (!sheet.canEdit && !sheet.isPublishedSnapshot && sheet.publishedVersion === null) {
     return <Surface className="dx-doc-instruction"><DocumentToolbar title="大货制单" status="尚未发布有效制单">{!embedded&&!contained&&<Button onClick={onClose}>返回</Button>}</DocumentToolbar><DocumentSection id="instruction-unpublished" title="尚未发布有效制单"><p>该母单尚无已发布的有效制单。请联系订单跟单发布后查看。</p></DocumentSection><PoCustomerDates sheet={sheet} busy={busy} dirty={dirty} historical={embedded||Boolean(version)} onAct={act}/>{receipt&&!busy&&!error&&<p role="status">{receipt}</p>}{error&&<p role="alert">{error}</p>}</Surface>;
   }
-  const order = sheet.order, readonly = embedded || !sheet.canEdit || sheet.cutStarted, inputDisabled = busy && !saving || sourceReviewOpen;
+  const order = sheet.order, readonly = uncertain||embedded || !sheet.canEdit || sheet.cutStarted, inputDisabled = uncertain||busy && !saving || sourceReviewOpen;
   const total = order.lines.reduce((n, line) => n + line.sizes.reduce((m, size) => m + size.quantity, 0), 0);
   const orderSizes = [...new Set(order.lines.flatMap(line => line.sizes.map(size => size.size)))];
   const issues = validationMode ? instructionIssues(doc, order, validationMode === "publish") : [];
@@ -119,7 +134,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
   const publishedImage = (id: string) => sheet.document.images.some(image => image.attachmentId === id);
   const mainImage = doc.images.find(image => image.kind === "款图");
   const mode = sheet.isPublishedSnapshot ? `已发布制单版本 ${sheet.version}` : `制单草稿 · 版本 ${sheet.version}`;
-  const status = busy ? saving ? "保存中…" : "处理中…" : dirty ? saveBlocked || error ? "保存失败，修改未保存" : "未保存修改" : mode;
+  const status = busy ? saving ? "保存中…" : "处理中…" : uncertain?"原制单提交结果待确认，原输入已保留": dirty ? saveBlocked || error ? "保存失败，修改未保存" : "未保存修改" : mode;
   const issueText = (id: string) => issues.find(issue => issue.id === id)?.message;
   const cell = (id: string, label: string, value: string, savedValue: string, onValue: (value: string) => void, column?: string, multiline = false, maxLength = multiline ? 5000 : 200, type = "text") => <DocumentField id={id} label={label} value={value} savedValue={savedValue} savedRevision={sheet.version} onValue={onValue} readonly={readonly} disabled={inputDisabled} multiline={multiline} maxLength={maxLength} {...(column ? { column } : {})} type={type} issue={issueText(id)} />;
   const field = (key: Exclude<keyof typeof instructionLabels, "date" | "preshrink" | "secondaryCraft">, multiline = false) => <label>{instructionLabels[key]}{cell(`instruction-${key}`, instructionLabels[key], doc[key], sheet.document[key], value => change({ [key]: value }), undefined, multiline)}</label>;
@@ -156,7 +171,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
         {!readonly && <><Button type="button" disabled={busy} onClick={save}>保存草稿</Button><Button type="button" disabled={busy || sheet.publishedVersion === sheet.version && !dirty} onClick={publish}>发布有效制单</Button></>}
         <Button type="button" disabled={!printable} title={!printable ? "请先保存并打开已发布版本后打印" : "打印当前已发布快照的全部六类内容"} onClick={() => window.print()}>打印 / 保存 PDF</Button>
       </DocumentToolbar>
-      {previews.view}<header className="instruction-summary dx-doc-card">
+      {uncertain&&<Button disabled={busy} onClick={()=>void act("","PUT",undefined,true)}>使用原内容核对制单提交</Button>}{previews.view}<header className="instruction-summary dx-doc-card">
         <div className="instruction-summary-image">{mainImage && publishedImage(mainImage.attachmentId) ? <a href={imageUrl(mainImage.attachmentId)} target="_blank" rel="noreferrer"><img src={imageUrl(mainImage.attachmentId)} alt="款图" /></a> : <span>{mainImage ? "保存后预览" : "暂无款图"}</span>}</div>
         <div className="instruction-summary-details"><h2>{order.designStyleNo}</h2><dl><div><dt>客户</dt><dd>{order.customerCode}</dd></div><div><dt>款名</dt><dd>{doc.styleName || "—"}</dd></div><div><dt>跟单</dt><dd>{sheet.merchandiserName || "待指派"}</dd></div><div><dt>类型</dt><dd>{doc.category || "—"}</dd></div><div><dt>年份季节</dt><dd>{doc.season || "—"}</dd></div><div><dt>当前{customerPoDateLabel}</dt><dd>{[...new Set((sheet.customerPoDates??[]).map(line=>line.date).filter(Boolean))].sort().join("、")||"未登记"}</dd></div></dl></div>
         <div className="instruction-po-summary"><h3>PO / 颜色概要</h3><p>{new Set(order.lines.map(line => line.poNumber).filter(Boolean)).size} 个 PO · {order.lines.length} 个款色 · 总数 <strong>{total.toLocaleString()}</strong> 件</p>{order.lines.slice(0, 2).map(line => <div key={line.lineId}><span>{line.color}{line.colorForeign ? ` / ${line.colorForeign}` : ""}</span><strong>{line.sizes.reduce((n, size) => n + size.quantity, 0).toLocaleString()} 件</strong></div>)}{order.lines.length > 2 && <button type="button" onClick={() => focus("main", "instruction-quantities")}>查看全部 {order.lines.length} 个款色</button>}</div>

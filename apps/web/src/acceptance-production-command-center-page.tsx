@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { StatusBadge, Surface } from "@dx-rework/ui";
+import { Button,StatusBadge, Surface } from "@dx-rework/ui";
 
 import { createWebUrls } from "../url-contract.js";
 import {
@@ -13,12 +13,14 @@ import "./acceptance-production-command-center-page.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
 
-type Availability = "checking" | "available" | "unavailable";
+type Availability = "checking" | "available" | "unavailable" | "failed";
 
 export function AcceptanceProductionCommandCenterPage() {
   const [availability, setAvailability] = useState<Availability>("checking");
 
+  const [readAttempt,setReadAttempt]=useState(0);
   useEffect(() => {
+    setAvailability("checking");
     const controller = new AbortController();
     void fetch(apiUrl("acceptance/control/status"), {
       credentials: "include",
@@ -29,16 +31,18 @@ export function AcceptanceProductionCommandCenterPage() {
         setAvailability("available");
         return;
       }
-      setAvailability("unavailable");
+      setAvailability(response.status===404?"unavailable":"failed");
     }).catch(() => {
-      if (!controller.signal.aborted) setAvailability("unavailable");
+      if (!controller.signal.aborted) setAvailability("failed");
     });
     return () => controller.abort();
-  }, []);
+  }, [readAttempt]);
 
   if (availability === "checking") {
     return <main className="acceptance-command-center-state"><Surface><p role="status">正在核对 Acceptance 视觉验收环境…</p></Surface></main>;
   }
+
+  if(availability==="failed")return <main className="acceptance-command-center-state"><Surface><p role="alert">验收环境状态尚未读取，不能据此判断页面是否启用；请重新读取，仍失败时请管理员核查。</p><Button onClick={()=>setReadAttempt(value=>value+1)}>仅重新读取验收状态</Button></Surface></main>;
 
   if (availability === "unavailable") {
     return <main className="acceptance-command-center-state"><Surface>

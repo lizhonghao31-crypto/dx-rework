@@ -1,22 +1,40 @@
+import {closureFeedbackProjection} from './document-feedback-projections.js';
+import {SubmissionAttempt} from './submission-attempt.js';
+import {SubmissionRequestError} from './submission-validation.js';
+import {useDigitalDetailNavigationGuard} from './use-digital-detail-navigation-guard.js';
 import {useEffect,useRef,useState} from 'react';
 import {Button,Surface} from '@dx-rework/ui';
 import type {OrderClosureSheet} from '@dx-rework/contracts/order-closure';
-import {digitalRequest} from './digital-production-api.js';
+import {DigitalRequestError,digitalRequest} from './digital-production-api.js';
 import {createClientRequestId} from './client-request-id.js';
 import {createWebUrls} from '../url-contract.js';
 import './factory-flow-panel.css';
 const reworkStatus=(value:string)=>({draft:'草稿',pending_process_configuration:'待分配工序与工人',pending_ie_review:'待IE核价',pending_task_assignment:'待启动执行',in_progress:'返工执行中',pending_order_review:'待尾部核量',pending_final_quantity_ie_review:'最终数量待IE复核',pending_quantity_adjustment_ie_review:'数量调整待IE',pending_responsibility_determination:'待责任判定',pending_owner_signature:'待老板签字',pending_responsibility_action:'责任处理中',completed:'已完成',cancelled:'已取消'} as Record<string,string>)[value]??'请查看原单';
 const urls=createWebUrls(import.meta.env.BASE_URL);
+export async function closureRequest(path:string,method='GET',body?:unknown,key?:string):Promise<OrderClosureSheet>{
+ const value=await digitalRequest<OrderClosureSheet>(path,method,body,key),orderId=path.match(/^orders\/([^/]+)\/closure/)?.[1];
+ const valid=closureFeedbackProjection.safeParse(value).success&&value.orderId===orderId;
+ if(!valid||method!=='GET'&&(value.stage!=='特殊结案'||!value.closed||value.closed.reason!==(body as {reason:string}).reason.trim()))throw new DigitalRequestError(method==='GET'?'原回货及结案资料尚未取得完整回执，请重新读取':'原结案提交结果尚未确认，请保留原因并核对原提交',200,'INVALID_RESPONSE');
+ return value;
+}
 export function OrderClosurePanel({orderId,onClose}:{orderId:string;onClose:()=>void}){
  const base=`orders/${orderId}/closure`,[sheet,setSheet]=useState<OrderClosureSheet|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),writing=useRef(false),pending=useRef<{payload:string;key:string}|null>(null);
+ const attempt=useRef(new SubmissionAttempt()),contextVersion=useRef(0);const [uncertain,setUncertain]=useState(false);
+ useDigitalDetailNavigationGuard(uncertain,busy,writing,'原结案提交结果尚未确认，离开不会撤销提交并会丢失原标识。仍要离开？');
  const motherReturn=`/ui/digital-production?order=${orderId}`;
- const reload=async()=>setSheet(await digitalRequest<OrderClosureSheet>(base));
- useEffect(()=>{let live=true;void digitalRequest<OrderClosureSheet>(base).then(s=>{if(live)setSheet(s);}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;};},[base]);
- const close=async(reason:string)=>{if(writing.current||!sheet)return;writing.current=true;setBusy(true);setError('');const body={reason,expectedRevision:sheet.revision},payload=JSON.stringify(body);if(pending.current?.payload!==payload)pending.current={payload,key:createClientRequestId()};try{setSheet(await digitalRequest<OrderClosureSheet>(base,'POST',body,pending.current.key));pending.current=null;}catch(e){setError(e instanceof Error?e.message:'结案失败');}finally{writing.current=false;setBusy(false);}};
+ const reload=async()=>{const context=contextVersion.current;const value=await closureRequest(base);if(context===contextVersion.current)setSheet(value);};
+ useEffect(()=>{let live=true;contextVersion.current++;setSheet(null);setError('');setUncertain(false);attempt.current=new SubmissionAttempt();pending.current=null;writing.current=false;setBusy(false);void closureRequest(base).then(s=>{if(live)setSheet(s);}).catch(e=>{if(live)setError(e.message);});return()=>{live=false;contextVersion.current++;};},[base]);
+ const close=async(reason:string,recover=false)=>{
+  if(writing.current||!sheet||uncertain&&!recover)return;writing.current=true;setBusy(true);setError('');
+  const context=contextVersion.current,operation=attempt.current,body={reason,expectedRevision:sheet.revision},payload=JSON.stringify(body);if(!recover&&pending.current?.payload!==payload)pending.current={payload,key:createClientRequestId()};const originalKey=pending.current?.key;
+  const execute=async()=>{try{const value=await closureRequest(base,'POST',body,originalKey);operation.markConfirmed();if(context===contextVersion.current){setSheet(value);pending.current=null;setUncertain(false);}}catch(error){if(error instanceof DigitalRequestError&&!error.resultUnknown)throw new SubmissionRequestError(error.message,error.code,error.status??500);throw error;}};
+  try{const result=recover?await operation.retry():await operation.run(execute);if(context!==contextVersion.current)return;if(result.kind==='failure'){setUncertain(result.uncertain);setError(result.failure.message+(result.uncertain?'；原结案结果待确认，请使用原内容核对，不要修改原因后另提。':''));}else if(result.kind==='expired')setError('原结案提交已超过安全恢复期限，请核对本单结案记录，不再重发。');}
+  finally{if(context===contextVersion.current){writing.current=false;setBusy(false);}}
+ };
  useEffect(()=>{if(!sheet)return;const id=window.location.hash.slice(1);if(!/^receipt-[0-9a-f-]{36}$/.test(id))return;const target=document.getElementById(id);if(target){const detail=target.closest("details");if(detail)detail.open=true;target.scrollIntoView({block:"center"});}},[sheet]);
- return <Surface className="factory-flow"><div className="pattern-actions"><Button disabled={busy} onClick={onClose}>返回</Button><Button disabled={busy} onClick={()=>void reload().catch(e=>setError(e.message))}>刷新原实绩</Button></div><h2>回货、返工与本期结案</h2>{error&&<p role="alert">{error}</p>}{sheet?<><h3>{sheet.stage}</h3><p>出柜：{sheet.shipmentStatus} · 客户签收：{sheet.customerReceiptStatus}。本期装箱完成不代表出柜或签收。</p><a href={`${urls.pageUrl('ui/digital-production')}?factory=${orderId}`}>查看实际发厂与船样到料</a>{sheet.canOpenWages&&<p><a href={urls.pageUrl('ui/wages')}>原工资台账</a>（是否已发工资不阻断本期结案）</p>}
+ return <Surface className="factory-flow"><div className="pattern-actions"><Button disabled={busy} onClick={onClose}>返回</Button><Button disabled={busy} onClick={()=>void reload().catch(e=>setError(e.message))}>刷新原实绩</Button></div><h2>回货、返工与本期结案</h2>{error&&<p role="alert">{error}</p>}{uncertain&&<><p role="status">原结案提交回执仍未确认，刷新原实绩不等于撤销或确认该提交。</p><Button disabled={busy} onClick={()=>void close("",true)}>使用原内容核对结案提交</Button></>}{sheet?<><h3>{sheet.stage}</h3><p>出柜：{sheet.shipmentStatus} · 客户签收：{sheet.customerReceiptStatus}。本期装箱完成不代表出柜或签收。</p><a href={`${urls.pageUrl('ui/digital-production')}?factory=${orderId}`}>查看实际发厂与船样到料</a>{sheet.canOpenWages&&<p><a href={urls.pageUrl('ui/wages')}>原工资台账</a>（是否已发工资不阻断本期结案）</p>}
  {sheet.lines.map(l=><section key={l.lineId} id={`line-${l.lineId}`}><h3>{l.poNumber??'待补PO'} · {l.color}</h3><p>订购 {l.orderedQuantity} · 累计实收 {l.actualQuantity} · 原送货单 {l.documentQuantity} · 次品 {l.defectiveQuantity}</p><p>原收货 {l.receiptCount} 次 · 原装箱 {l.packingQuantity??'尚未登记'}</p>{sheet.canOpenReceiving&&l.receivingBatchId&&<p><a href={`${urls.pageUrl('ui/orders')}?${new URLSearchParams({receivingBatchId:l.receivingBatchId,returnTo:motherReturn})}`}>查看本 PO 回货、差异及装箱</a></p>}{l.receivingResolution&&<p>当前收货差异处理：{l.receivingResolution}</p>}{l.packingResolution&&<p>当前装箱差异处理：{l.packingResolution}</p>}<details><summary>原收货事实</summary>{l.receipts.map(r=><p key={r.receiptId} id={`receipt-${r.receiptId}`}>{new Date(r.receivedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})} · 本次实收 {r.actualQuantity} · 次品 {r.defectiveQuantity}</p>)}<p>累计数沿用原收货模块，包含Root更正和原合并调整。</p></details>{l.reworks.map(r=><div key={r.reworkId}><p>{r.canView===true?<a href={`${urls.pageUrl(`ui/tasks/${r.reworkId}`)}?${new URLSearchParams({returnTo:motherReturn})}`}>{r.reworkNo??'原返工草稿'}</a>:r.reworkNo??'原返工草稿'} · 原状态 {reworkStatus(r.status)} · {r.quantity===null?'原单未记录返工数量':`返工 ${r.quantity} 件`}</p><p>{r.problem}</p><p>原工资台账关联 {r.wageItemCount} 条</p></div>)}</section>)}
  <h3>当前未清事项</h3>{sheet.outstanding.length?<ul>{sheet.outstanding.map((s,i)=><li key={i}>{s}</li>)}</ul>:<p>当前未见未清事项。</p>}{sheet.closed&&<section><h3>特殊结案记录</h3><p>{sheet.closed.closedBy} · {new Date(sheet.closed.closedAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})}</p><p>{sheet.closed.reason}</p><h4>结案时未清事项</h4><ul>{sheet.closed.outstanding.map((s,i)=><li key={i}>{s}</li>)}</ul><p>原质量、差异及工资记录继续按原流程处理，结案未将其标记为已解决。</p></section>}
- {sheet.canClose&&<form onSubmit={e=>{e.preventDefault();void close(String(new FormData(e.currentTarget).get('reason')??''));}}><fieldset disabled={busy}><legend>总监特殊结案</legend><p>核对以上原实绩及未清事项后，可对短装或余量取消作例外决定。结案保存原因和当时未清事项，结束未完成的本期数字待办，原数量和原业务问题保留。</p><label>具体结案原因 *<textarea name="reason" required maxLength={2000}/></label><label> *<input type="checkbox" required/>已核对原实绩及全部未清事项</label><Button type="submit">确认特殊结案</Button></fieldset></form>}
- </>:<p>正在读取原回货及装箱事实…</p>}</Surface>;
+ {sheet.canClose&&<form onSubmit={e=>{e.preventDefault();void close(String(new FormData(e.currentTarget).get('reason')??''));}}><fieldset disabled={busy||uncertain}><legend>总监特殊结案</legend><p>核对以上原实绩及未清事项后，可对短装或余量取消作例外决定。结案保存原因和当时未清事项，结束未完成的本期数字待办，原数量和原业务问题保留。</p><label>具体结案原因 *<textarea name="reason" required maxLength={2000}/></label><label> *<input type="checkbox" required/>已核对原实绩及全部未清事项</label><Button type="submit">确认特殊结案</Button></fieldset></form>}
+ </>:<p>{error?"原回货及装箱事实尚未读取，请刷新原实绩。":"正在读取原回货及装箱事实…"}</p>}</Surface>;
 }

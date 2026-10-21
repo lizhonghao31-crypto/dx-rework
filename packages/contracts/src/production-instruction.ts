@@ -93,7 +93,7 @@ export type InstructionSheet = {
   versions: number[]; isPublishedSnapshot: boolean; canEdit: boolean; cutStarted: boolean; merchandiserName: string | null;
   sourceRound: number | null; latestSourceRound: number | null; canApproveDate: boolean; printedBy: string;
   sourceComparison?:{sourceRound:number;sourceVersion:number;before:InstructionDocument;proposed:InstructionDocument;groups:InstructionSourceGroup[]};
-  sourceReview?:{sourceRound:number;instructionVersion:number;decisions:InstructionSourceReview["decisions"];reviewedAt:string;reviewedBy:string;priorMeasurements?:Pick<InstructionDocument,"unit"|"sizes"|"measurements">};
+  sourceReview?:{sourceRound:number;sourceVersion?:number;instructionVersion:number;decisions:InstructionSourceReview["decisions"];reviewedAt:string;reviewedBy:string;priorMeasurements?:Pick<InstructionDocument,"unit"|"sizes"|"measurements">};
   canRequestDate?:boolean;
   customerPoDates?:Array<{lineId:string;poNumber:string|null;color:string;date:string|null;registeredDate:string|null;version:number;source:string|null;factoryDate:string|null}>;
   dateRequests: CustomerDateHistory[];

@@ -133,6 +133,7 @@ export function AcceptanceLabPage() {
   const [matrixRunning, setMatrixRunning] = useState(false);
   const [matrixProgress, setMatrixProgress] = useState("");
   const [matrixResults, setMatrixResults] = useState<readonly MatrixSummary[]>([]);
+  const [runtimeReadFailed,setRuntimeReadFailed]=useState(false);
   const [runtimeVersion, setRuntimeVersion] = useState<AcceptanceRuntimeVersion | null>(null);
   const [evidenceReport, setEvidenceReport] = useState<AcceptanceEvidenceReport>(initialEvidenceReport);
   const evidenceReportRef = useRef(evidenceReport);
@@ -160,7 +161,7 @@ export function AcceptanceLabPage() {
   }, []);
 
   const captureRuntimeVersion = useCallback(async (): Promise<AcceptanceRuntimeVersion | null> => {
-    try {
+    setRuntimeReadFailed(false);try {
       const response = await jsonRequest<VersionPayload>("version");
       if (response.status === 200 && response.body?.gitSha && response.body.expectedSchemaVersion) {
         const version: AcceptanceRuntimeVersion = {
@@ -175,7 +176,7 @@ export function AcceptanceLabPage() {
     } catch {
       // A failed fresh read must never fall back to a stale version from an earlier attempt.
     }
-    setRuntimeVersion(null);
+    setRuntimeVersion(null);setRuntimeReadFailed(true);
     return null;
   }, []);
 
@@ -185,19 +186,20 @@ export function AcceptanceLabPage() {
 
   const refreshControl = useCallback(async () => {
     setError("");
-    const response = await jsonRequest<{ identities?: readonly AcceptanceIdentity[] }>("acceptance/control/status");
+    try{const response = await jsonRequest<{ identities?: readonly AcceptanceIdentity[] }>("acceptance/control/status");
     if (response.status === 404) {
       setState("unavailable"); setIdentities([]); return;
     }
     if (response.status === 401) {
       setState("locked"); setIdentities([]); return;
     }
-    if (response.status !== 200 || !response.body?.identities) {
-      setState("locked"); setError("验收控制状态读取失败，请重新取得控制凭证。"); return;
+    if (response.status !== 200 || !Array.isArray(response.body?.identities)) {
+      setState("locked"); setError("验收控制状态尚未读取，不能据此判断凭证失效；请重新读取状态，仍失败时请管理员核查服务。"); return;
     }
     setIdentities(response.body.identities);
     setState("ready");
     await Promise.all([refreshCurrentUser(), refreshRuntimeVersion()]);
+    }catch{setState("locked");setIdentities([]);setError("验收控制状态尚未读取，请重新读取状态；网络故障不表示凭证已失效。");}
   }, [refreshCurrentUser, refreshRuntimeVersion]);
 
   useEffect(() => { void refreshControl(); }, [refreshControl]);
@@ -426,7 +428,7 @@ export function AcceptanceLabPage() {
   if (state === "loading") return <main className="acceptance-lab"><Surface><p role="status">正在检查隔离验收中心…</p></Surface></main>;
   if (state === "unavailable") return <main className="acceptance-lab"><Surface><h1>隔离验收中心未启用</h1><p>此入口只在明确启用 Acceptance Lab 的测试环境提供，正式环境不会注册控制接口。</p></Surface></main>;
 
-  if (state === "locked") return <main className="acceptance-lab"><Surface className="acceptance-control-card">
+  if (state === "locked") return <main className="acceptance-lab"><Surface className="acceptance-control-card">{error&&<Button onClick={()=>void refreshControl()}>仅重新读取验收状态</Button>}
     <StatusBadge tone="info">隔离验收中心</StatusBadge>
     <h1>取得验收控制权限</h1>
     <p>控制权限与被测业务身份相互独立。使用一次性控制凭证后，可自行切换不同测试角色。</p>
@@ -444,7 +446,7 @@ export function AcceptanceLabPage() {
 
     <Surface className="acceptance-evidence-panel">
       <div className="acceptance-evidence-heading"><div><h2>验收证据报告</h2><p>矩阵重跑和场景复测只追加新 attempt，不覆盖历史失败；持久化和导出边界会自动清理 Cookie、Token、控制凭证和 Session 形态的敏感值。</p></div><Button variant="secondary" onClick={exportEvidence}>导出 JSON 报告</Button></div>
-      <div className="acceptance-evidence-meta"><span>报告：{evidenceReport.reportId}</span><span>矩阵运行：{evidenceReport.matrixAttempts.length} 次</span><span>历史场景失败：{evidenceSummary.historicalFailures}</span>{runtimeVersion ? <><span>Git：{runtimeVersion.gitSha.slice(0, 12)}</span><span>Schema：{runtimeVersion.schemaVersion ?? "未知"}</span></> : <span>版本信息读取中</span>}</div>
+      <div className="acceptance-evidence-meta"><span>报告：{evidenceReport.reportId}</span><span>矩阵运行：{evidenceReport.matrixAttempts.length} 次</span><span>历史场景失败：{evidenceSummary.historicalFailures}</span>{runtimeVersion ? <><span>Git：{runtimeVersion.gitSha.slice(0, 12)}</span><span>Schema：{runtimeVersion.schemaVersion ?? "未知"}</span></> : <span>{runtimeReadFailed?"版本信息尚未读取，请仅重读运行版本":"正在读取版本信息"}</span>}</div>
       <div className="acceptance-evidence-summary"><strong>最新矩阵 {evidenceSummary.matrixPassed} 通过 · {evidenceSummary.matrixFailed} 失败 · {evidenceSummary.matrixPending} 标准待确认 / 共 {evidenceSummary.matrixTotal}</strong><span>场景：{evidenceSummary.scenarios.pass} 通过 · {evidenceSummary.scenarios.fail} 失败 · {evidenceSummary.scenarios.blocked} 受阻 · {evidenceSummary.scenarios.notRun} 未执行</span></div>
     </Surface>
 

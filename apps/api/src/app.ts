@@ -300,7 +300,7 @@ export function buildApp(dependencies: AppDependencies): FastifyInstance {
     const response: ErrorResponse = {
       error: {
         code: known || denied ? error.code : frameworkClientError ? "VALIDATION_ERROR" : "INTERNAL_ERROR",
-        message: known || denied ? publicErrorMessage(error) : frameworkClientError ? "请求格式不正确，请检查填写内容" : "系统暂时无法处理，请稍后重试",
+        message: known || denied ? publicErrorMessage(error,statusCode) : frameworkClientError ? "请求格式不正确，请检查填写内容" : ["GET","HEAD"].includes(request.method)?"资料读取未完成，请重新读取；仍失败时请管理员按请求编号核查":"原提交结果尚未确认，请先核对原记录，不要重复提交；仍不明确时请管理员按请求编号核查",
         requestId: request.id,
       },
     };

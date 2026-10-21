@@ -1,3 +1,4 @@
+import {feedbackFetch,feedbackJson,invalidResponseMessage} from '../request-response-feedback.js';
 import { settleWageBatches } from "../wages/wage-settlement-batches.js";
 import {
   BasicReworkPageSchema,
@@ -25,16 +26,10 @@ const request = async <T>(
   schema: { parse(value: unknown): T },
   signal?: AbortSignal,
 ): Promise<T> => {
-  const response = await fetch(apiUrl(path), {
-    credentials: "include",
-    headers: { accept: "application/json" },
-    ...(signal ? { signal } : {}),
+  const response = await feedbackFetch(apiUrl(path), {
+    credentials: "include",headers:{accept:"application/json"},...(signal?{signal}:{}),
   });
-  if (!response.ok) {
-    const value = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-    throw new Error(value?.error?.message ?? `请求失败（${response.status}）`);
-  }
-  return schema.parse(await response.json());
+  return feedbackJson(response,'GET',value=>schema.parse(value));
 };
 
 const queryString = (values: Record<string, string | undefined>): string => {
@@ -64,7 +59,7 @@ export const loadReworkOrders = (
 );
 
 export const deleteReworkOrder = async (reworkOrderId: string): Promise<void> => {
-  const response = await fetch(apiUrl(`rework-orders/${reworkOrderId}`), {
+  const response = await feedbackFetch(apiUrl(`rework-orders/${reworkOrderId}`), {
     method: "DELETE",
     credentials: "include",
     headers: {
@@ -72,11 +67,7 @@ export const deleteReworkOrder = async (reworkOrderId: string): Promise<void> =>
       "idempotency-key": `root-delete-${createClientRequestId()}`,
     },
   });
-  if (!response.ok) {
-    const value = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-    throw new Error(value?.error?.message ?? `删除失败（${response.status}）`);
-  }
-  DeleteReworkOrderResponseSchema.parse(await response.json());
+  await feedbackJson(response,'DELETE',value=>DeleteReworkOrderResponseSchema.parse(value));
 };
 
 export const loadReport = (
@@ -104,11 +95,22 @@ export const previewWageSettlement = (filters: Record<string,string | undefined>
 export const markWageSettlement = (filters: Record<string,string | undefined>,lineIds:string[]) =>
  settleWageBatches(lineIds,ids=>markWageSettlementBatch(filters,ids));
 const markWageSettlementBatch = async (filters: Record<string,string | undefined>,lineIds:string[]) => {
- const response=await fetch(apiUrl("management/wages/settlement"),{
+ const response=await feedbackFetch(apiUrl("management/wages/settlement"),{
   method:"POST",credentials:"include",headers:{"content-type":"application/json",accept:"application/json"},
   body:JSON.stringify({filters,lineIds}),
  });
- if(!response.ok){const value=await response.json().catch(()=>null) as {error?:{message?:string}} | null;
-  throw new Error(value?.error?.message ?? "工资结算标记失败");}
- return WageSettlementResultSchema.parse(await response.json());
+ return feedbackJson(response,'POST',value=>WageSettlementResultSchema.parse(value));
 };
+
+/** Same synchronous GET, filters, authorization and server filename; no export task is created. */
+export async function downloadReportExport(reportType:ReportType,filters:Record<string,string|undefined>,signal?:AbortSignal){
+ const response=await feedbackFetch(reportExportUrl(reportType,filters),{credentials:'include',headers:{accept:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'},...(signal?{signal}:{})});
+ if(!response.ok)await feedbackJson(response,'GET',value=>value);
+ if(response.headers.get('content-type')?.toLowerCase().split(';')[0]?.trim()!=='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')throw Error('导出尚未取得有效Excel文件，请在原筛选范围重试读取；仍失败时请管理员核查');
+ let blob:Blob;try{blob=await response.blob();const signature=new Uint8Array(await blob.slice(0,4).arrayBuffer());if(signature[0]!==0x50||signature[1]!==0x4b||signature[2]!==3||signature[3]!==4)throw Error('invalid file');}catch(error){if((error as Error)?.name==='AbortError')throw error;throw Error(invalidResponseMessage('GET'));}
+ const disposition=response.headers.get('content-disposition')??'';
+ let filename=disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]??disposition.match(/filename="([^"]+)"/i)?.[1]??`report-${reportType}.xlsx`;
+ try{filename=decodeURIComponent(filename);}catch{filename=`report-${reportType}.xlsx`;}
+ filename=filename.replace(/[/\\\p{Cc}]/gu,'_');if(!filename.toLowerCase().endsWith('.xlsx'))filename=`report-${reportType}.xlsx`;
+ return {blob,filename};
+}
