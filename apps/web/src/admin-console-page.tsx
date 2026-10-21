@@ -1,3 +1,6 @@
+import {feedbackFetch,feedbackJson} from './request-response-feedback.js';
+import {AdminAuditEventsPageSchema,AdminAuditExportsPageSchema} from '@dx-rework/contracts';
+import {AdminAttachmentsPageSchema,AdminDelegationsPageSchema,AdminExceptionsPageSchema} from '@dx-rework/contracts/admin-console';
 import {WorkAnalysisPanel} from "./work-analysis-panel.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { useEffect, useState, type ReactNode } from "react";
@@ -41,15 +44,12 @@ const loadError = (error: unknown): LoadError => ({
 });
 
 async function getJson<T>(path: string): Promise<T> {
-  const response = await fetch(apiUrl(path), { credentials: "include", headers: { accept: "application/json" } });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null) as { error?: { message?: string; requestId?: string } } | null;
-    throw new AdminRequestError(
-      body?.error?.message ?? `请求失败：${response.status}`,
-      body?.error?.requestId ?? response.headers.get("x-request-id"),
-    );
-  }
-  return await response.json() as T;
+  const response = await feedbackFetch(apiUrl(path), { credentials: "include", headers: { accept: "application/json" } });
+  let requestId=response.headers.get('x-request-id');if(!response.ok){const envelope=await response.clone().json().catch(()=>null) as {error?:{requestId?:unknown}}|null;if(typeof envelope?.error?.requestId==='string')requestId=envelope.error.requestId;}
+  try{return await feedbackJson(response,'GET',value=>{
+   const schema=path.startsWith('admin/audit/events')?AdminAuditEventsPageSchema:path.startsWith('admin/audit/exports')?AdminAuditExportsPageSchema:path.startsWith('admin/attachments')?AdminAttachmentsPageSchema:path.startsWith('admin/delegations')?AdminDelegationsPageSchema:AdminExceptionsPageSchema;
+   return schema.parse(value) as T;
+  });}catch(error){throw new AdminRequestError(error instanceof Error?error.message:'管理资料尚未读取，请重新读取',requestId);}
 }
 
 function CopyableRequestId({ value }: { value: string }) {
@@ -73,13 +73,17 @@ function JsonDetails({ value }: { value: unknown }) {
 export function AdminConsolePage({ initialTab = "audit" }: { initialTab?: Tab }) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [technicalAccess, setTechnicalAccess] = useState<boolean | null>(null);
+  const [identityReadError,setIdentityReadError]=useState(""),[identityAttempt,setIdentityAttempt]=useState(0);
 
   useEffect(() => { setTab(initialTab); }, [initialTab]);
 
   useEffect(() => {
-    let mounted = true;
-    void fetch(apiUrl("auth/me"), { credentials: "include", cache: "no-store" })
-      .then(async (response) => response.ok ? await response.json() as { status: string; user?: AuthorizedUser } : null)
+    let mounted = true;setIdentityReadError('');setTechnicalAccess(null);
+    void feedbackFetch(apiUrl("auth/me"), { credentials: "include", cache: "no-store" })
+      .then(async response=>{
+       if([401,403].includes(response.status))return null;
+       return feedbackJson(response,'GET',value=>{const body=value as {status?:string;user?:AuthorizedUser};if(!body||!['authorized','no_role'].includes(body.status??'')||!body.user||!Array.isArray(body.user.capabilities))throw Error('invalid identity');return body as {status:string;user:AuthorizedUser};});
+      })
       .then((body) => {
         if (!mounted) return;
         const user = body?.status === "authorized" ? body.user : undefined;
@@ -90,11 +94,9 @@ export function AdminConsolePage({ initialTab = "audit" }: { initialTab?: Tab })
         setTechnicalAccess(allowed);
         if (!allowed) setTab("audit");
       })
-      .catch(() => {
-        if (mounted) setTechnicalAccess(false);
-      });
+      .catch(error => {if(mounted){setTechnicalAccess(null);setIdentityReadError(error instanceof Error?error.message:'管理身份尚未读取，请重新读取');}});
     return () => { mounted = false; };
-  }, []);
+  }, [identityAttempt]);
 
   return (
     <div className="admin-shell">
@@ -106,7 +108,7 @@ export function AdminConsolePage({ initialTab = "audit" }: { initialTab?: Tab })
       </header>
       <Surface className="admin-card">
         <SystemManagementNavigation active={tab} onTechnicalTabChange={setTab} />
-        {technicalAccess === null ? <p>正在加载管理权限…</p> : (
+        {identityReadError?<><p role="alert">{identityReadError}</p><Button onClick={()=>setIdentityAttempt(value=>value+1)}>仅重新读取管理身份</Button></>:technicalAccess === null ? <p>正在读取管理权限…</p> : (
           <>
             {tab === "audit" ? <AuditTab /> : tab === "attachments" ? <AttachmentsTab /> : tab === "delegations" ? <DelegationsTab /> : <ExceptionsTab />}
           </>

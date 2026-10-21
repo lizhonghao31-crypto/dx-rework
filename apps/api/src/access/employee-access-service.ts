@@ -296,7 +296,7 @@ export class EmployeeAccessService {
         [userId],
       );
       if (authorization.rows[0]?.allowed !== true) {
-        throw new ApplicationError("CONFLICT", "请先为员工授予有效角色或临时授权", 409);
+        throw new ApplicationError("CONFLICT", "该员工尚无有效角色或临时授权；请Root在本页先核对并授予已确定的业务岗位，再恢复访问", 409);
       }
 
       await client.query(
@@ -404,7 +404,7 @@ export class EmployeeAccessService {
         );
         const after = afterResult.rows[0];
         if (!after) {
-          throw new ApplicationError("INVALID_STATE_TRANSITION", "钉钉目录同步后无法读取员工身份状态", 409);
+          throw new ApplicationError("INVALID_STATE_TRANSITION", "钉钉目录同步后的员工身份状态未能读取；请Root先重新读取员工目录核对结果，不要直接重复同步，持续异常时联系系统管理员", 409);
         }
         if (!before || !sameDirectoryState(before, after)) {
           changed += 1;
@@ -491,7 +491,7 @@ export class EmployeeAccessService {
         );
         const after = afterResult.rows[0];
         if (!after) {
-          throw new ApplicationError("INVALID_STATE_TRANSITION", "钉钉离职同步后无法读取员工身份状态", 409);
+          throw new ApplicationError("INVALID_STATE_TRANSITION", "离职同步后的员工身份状态未能读取；请Root先重新读取员工目录核对停用结果，不要直接重复同步，持续异常时联系系统管理员", 409);
         }
         if (!sameDirectoryState(before, after)) {
           changed += 1;

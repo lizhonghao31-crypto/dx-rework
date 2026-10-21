@@ -5,12 +5,12 @@ import { formatBusinessDecimal, isBusinessMoneyField } from "@dx-rework/contract
 import { fixedBusinessCurrency } from "../fixed-business-currency.js";
 import { ReportTypeSchema, type ReportPreviewResponse, type ReportType } from "@dx-rework/contracts/reporting";
 import { Button, InsetField, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { businessFieldLabel, businessValue, formatBusinessTime } from "../business-display.js";
 import { Header, Shell } from "../components.js";
 import { ListPagination, usePaginatedItems } from "../list-pagination.js";
-import { loadReport, reportExportUrl, reportingBusinessDate, reportingBusinessMonthStart } from "./reporting-client.js";
+import { loadReport, downloadReportExport, reportingBusinessDate, reportingBusinessMonthStart } from "./reporting-client.js";
 import "./reporting.css";
 
 const names: Record<ReportType,string>={rework_overview:"返工总览",wages:"工资明细",responsibilities:"责任明细",own_factory:"本厂承担",external_deductions:"外部扣款",exceptions:"异常明细"};
@@ -38,8 +38,18 @@ export function ReportCenterPage(){
   const [q,setQ]=useState(initial.get("q")??"");
   const [status,setStatus]=useState(initial.get("status")??"");
   const [state,setState]=useState<State>({kind:"loading"});
+  const [exportBusy,setExportBusy]=useState(false),[exportNotice,setExportNotice]=useState(''),[exportError,setExportError]=useState('');
+  const exportRun=useRef(0),exportRequest=useRef<AbortController|null>(null);
   const filters=useMemo(()=>({from,to,q:q.trim()||undefined,status:status||undefined,limit:"100"}),[from,to,q,status]);
   useEffect(()=>{if(type==="wages"){if(wageAccess===null)return;if(!wageAccess){setState({kind:"unavailable",message:"当前账号无权查看工资明细"});return;}}const controller=new AbortController();setState({kind:"loading"});void loadReport(type,filters,controller.signal).then(value=>setState({kind:"ready",value})).catch((error:unknown)=>{if(!(error instanceof DOMException&&error.name==="AbortError"))setState({kind:"unavailable",message:error instanceof Error?error.message:"报表加载失败"});});return()=>controller.abort();},[type,filters,wageAccess]);
+  useEffect(()=>{exportRun.current++;exportRequest.current?.abort();setExportBusy(false);setExportNotice('');setExportError('');return()=>{exportRun.current++;exportRequest.current?.abort();};},[type,filters]);
+  const download=async()=>{
+   if(exportRequest.current&&!exportRequest.current.signal.aborted)return;
+   const controller=new AbortController(),version=++exportRun.current;exportRequest.current=controller;setExportBusy(true);setExportError('');setExportNotice('');
+   try{const file=await downloadReportExport(type,filters,controller.signal);if(version!==exportRun.current)return;const objectUrl=URL.createObjectURL(file.blob),link=document.createElement('a');link.href=objectUrl;link.download=file.filename;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(objectUrl),1000);setExportNotice('已收到导出文件，浏览器正在处理下载；请查看下载列表。');}
+   catch(error){if(version===exportRun.current&&(error as Error)?.name!=='AbortError')setExportError(error instanceof Error?error.message:'导出文件尚未取得，请在原筛选范围重试读取');}
+   finally{if(version===exportRun.current){exportRequest.current=null;setExportBusy(false);}}
+  };
   const value=state.kind==="ready"?state.value:null;
   const page=usePaginatedItems(value?.rows??[], `${type}:${from}:${to}:${q}:${status}`);
   return <Shell active="财务报表"><div className="report-center-layout"><Header title="财务报表" subtitle="查询返工、工资、责任和扣款明细" badge={value?`${formatBusinessDecimal(value.rowCount)} 行 · ${value.range.from} 至 ${value.range.to}`:"查询中"} />
@@ -49,8 +59,9 @@ export function ReportCenterPage(){
       <label>结束日期<input type="date" value={to} onChange={event=>setTo(event.target.value)} /></label>
       <label>状态/类型<select value={status} onChange={event=>setStatus(event.target.value)}>{statuses[type].map(([item,label])=><option value={item} key={item}>{label}</option>)}</select></label>
       <InsetField label="关键词" value={q} onChange={event=>setQ(event.target.value)} placeholder="单号 / 款号 / 人员 / 供应商" />
-      {value?.canExport && <a href={reportExportUrl(type,filters)}><Button variant="primary">导出 Excel</Button></a>}
+      {value?.canExport && <Button variant="primary" disabled={exportBusy} onClick={()=>void download()}>{exportBusy?"正在读取导出文件…":"导出 Excel"}</Button>}
     </Surface>
+    {exportError&&<Surface><p role="alert">{exportError}</p></Surface>}{exportNotice&&<p role="status">{exportNotice}</p>}
     {state.kind==="loading"&&<Surface className="reporting-state">正在生成报表…</Surface>}
     {state.kind==="unavailable"&&<Surface className="reporting-state">{state.message}</Surface>}
     {value&&<>

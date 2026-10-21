@@ -79,7 +79,8 @@ describe("PR-14 reporting contracts, workbook and web wiring", () => {
     expect(dashboard).not.toContain('window.addEventListener("focus"');
     expect(query).toContain("AbortController");
     expect(query).toContain('["draft","草稿"]');
-    expect(report).toContain("reportExportUrl");
+    expect(report).toContain("downloadReportExport");
+    expect(client).toContain("feedbackFetch(reportExportUrl(reportType,filters)");
     expect(client).toContain("ManagementDashboardResponseSchema");
     expect(client).toContain("createWebUrls");
     expect(client).toContain('import { shanghaiBusinessDate } from "../business-date.js";');
