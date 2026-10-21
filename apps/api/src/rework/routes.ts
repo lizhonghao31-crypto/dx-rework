@@ -22,7 +22,6 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import type { RootAuthority } from "../access/root-authority.js";
 import type { AuthUser } from "../auth/service.js";
-import { registerErpIntegrationRoutes, type ErpIntegrationHttpDependencies } from "../erp/erp-integration-routes.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import type { AttachmentService } from "../tools/attachments.js";
@@ -91,7 +90,6 @@ export type ReworkHttpDependencies = Readonly<{
   supplyContextService?: ReworkSupplyContextService;
   root?: RootAuthority;
   listInitiationOptions?: () => Promise<ReworkInitiationOptionsResponse>;
-  erp?: Omit<ErpIntegrationHttpDependencies, "authenticateSession">;
   attachments?: AttachmentService;
   inspectionImageExtractor?: InspectionImageExtractionService;
 }>;
@@ -452,5 +450,4 @@ export function registerReworkRoutes(app: FastifyInstance, dependencies: ReworkH
       ...(dependencies.root ? { root: dependencies.root } : {}),
     });
   }
-  if (dependencies.erp) registerErpIntegrationRoutes(app, { authenticateSession: dependencies.authenticate, ...dependencies.erp });
 }

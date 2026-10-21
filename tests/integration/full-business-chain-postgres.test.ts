@@ -1,5 +1,5 @@
+import {exerciseLegacyErpHistory} from "../helpers/legacy-erp-history-fixture.js";
 import {exerciseAttachmentRecovery} from "../helpers/attachment-recovery-fixture.js";
-import {exerciseErpReceipt} from "../helpers/erp-command-receipt-fixture.js";
 import {createHistoricalPatternFixture} from "../helpers/historical-pattern-fixture.js";
 import { registerWorkReportingRoutes } from "../../apps/api/src/rework/work-reporting-routes.js";
 import { journeyReworkHistoryUrl } from "../../apps/api/src/production-platform/journey-rework-record.js";
@@ -3597,9 +3597,10 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
   it("P14 preserves real ready facts after a lost receipt and denies foreign unbound access",async()=>{
     await exerciseAttachmentRecovery(database,actor(ids.tail,['tail_supervisor'],'tools:user'),actor(ids.production,['production_management'],'tools:user'));
   });
-  it('P15 recovers original ERP commands read-only under current identity and exact scope',async()=>{
-    await exerciseErpReceipt(database,ids.merchandiser,actor(ids.technicalAdmin,['system_admin'],'erp:emergency_intake'),actor(ids.worker,['worker'],'work:report'),todoProjection,actor(ids.patternRoot,['root_superuser'],'access:admin'));
 
+
+  it('retired ERP history remains readable through native business detail without rewriting origins or audits',async()=>{
+    await exerciseLegacyErpHistory(database,ids.merchandiser,actor(ids.patternRoot,['root_superuser'],'rework:view'),actor(ids.worker,['worker'],'work:report'));
   });
 
 });

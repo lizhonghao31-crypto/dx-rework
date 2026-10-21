@@ -32,7 +32,6 @@ import { ProductionDashboardService } from "./sourcing/production-dashboard-serv
 import { ProductionReportingService } from "./sourcing/production-reporting-service.js";
 import { SourcingProductionService } from "./sourcing/sourcing-production-service.js";
 import { loadConfig } from "@dx-rework/config";
-import { DisabledErpAdapter } from "@dx-rework/domain";
 import pg from "pg";
 
 import { EmployeeAccessService } from "./access/employee-access-service.js";
@@ -47,7 +46,6 @@ import { assertAcceptanceServerDatabase } from "./auth/acceptance-server-guard.j
 import { OfficialDingTalkProvider } from "./auth/provider.js";
 import { PostgresAuthStore } from "./auth/postgres-store.js";
 import { AuthService } from "./auth/service.js";
-import { ErpIntegrationService } from "./erp/erp-integration-service.js";
 import {
   checkDatabase,
   getAppliedSchemaHistory,
@@ -206,14 +204,6 @@ const inspectionImageExtractor = new InspectionImageExtractionService({
   apiKey: config.openai.apiKey,
   model: config.openai.visionModel,
 });
-const erpIntegrationService = new ErpIntegrationService(
-  database,
-  config.dingtalk.corpId,
-  undefined,
-  undefined,
-  undefined,
-  todoProjection,
-);
 const processConfigurationService = new ProcessConfigurationService(
   database,
   undefined,
@@ -376,10 +366,6 @@ const app = buildApp({
             supplierName: supplier.supplierName,
           })),
       };
-    },
-    erp: {
-      adapter: new DisabledErpAdapter(),
-      service: erpIntegrationService,
     },
   },
   processConfiguration: {

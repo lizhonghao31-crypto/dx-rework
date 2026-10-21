@@ -1,6 +1,6 @@
 # dx-rework
 
-内部计件返工上数系统，当前以独立应用方式建设，并预留未来接入达兴 ERP“质检返工”节点的显式 adapter 边界。
+内部计件返工上数系统，独立处理人工创建与本系统业务流程。旧外部 ERP 对接已退役，见[退役范围与历史兼容](docs/engineering/legacy-erp-retirement.md)。
 
 ## 当前阶段
 
@@ -13,7 +13,7 @@ apps/web          React 19 + Vite 8 独立前端
 apps/api          Fastify API、健康检查和版本证据
 packages/config   类型化配置与启动校验
 packages/contracts 版本化 API 契约
-packages/domain   领域/集成端口，ERP adapter 默认禁用
+packages/domain   共用领域规则、审计与事件类型
 packages/ui       UI 代码边界（PR-01A 填充）
 infra             独立 Nginx、PM2、logrotate 模板
 scripts           数据库迁移、备份与安全检查
