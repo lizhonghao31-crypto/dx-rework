@@ -4184,6 +4184,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       management.refreshInformation(managerActor(),id,templatePreview,refreshKey),
     ]);
     expect(retry).toBe(first);
+    const commandReceipt=await management.informationRefreshReceipt(managerActor(),id,templatePreview,refreshKey,first);
+    expect(commandReceipt).toMatchObject({sourcingCaseId:id,previousDocumentId:original.sourcingContractDocumentId,documentId:first,previousVersion:original.contractVersion,contractVersion:original.contractVersion+1});
+    await expect(management.informationRefreshReceipt(managerActor(),randomUUID(),templatePreview,refreshKey,first)).rejects.toMatchObject({statusCode:502});
+    await expect(management.informationRefreshReceipt(managerActor(),id,templatePreview,randomUUID(),first)).rejects.toMatchObject({statusCode:502});
     await contractService.generateIfReady(managerActor(),id,first);
     expect((await contractService.getCurrent(readerActor(),id)).item).toMatchObject({contractVersion:original.contractVersion+1,templateVersion:saved.item.templateVersion,status:"ready"});
     const updateSupplier=async()=>{
@@ -4199,6 +4203,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const supplierPreview=await management.previewInformation(contractActor(),id);
     expect(supplierPreview.changes.map(change=>change.field)).toEqual(["address","bankAccount"]);
     const supplierDocument=await management.refreshInformation(contractActor(),id,supplierPreview,randomUUID());
+    // A later contract must not replace the document of the original command.
+    expect((await contractService.generateIfReady(managerActor(),id,first)).item?.sourcingContractDocumentId).toBe(first);
+    expect((await management.informationRefreshReceipt(managerActor(),id,templatePreview,refreshKey,first)).documentId).toBe(first);
+    expect((await contractService.getCurrent(readerActor(),id)).item?.sourcingContractDocumentId).toBe(supplierDocument);
     await contractService.generateIfReady(contractActor(),id,supplierDocument);
     await updateSupplier();
     const now=(await management.templates(rootActor())).item;

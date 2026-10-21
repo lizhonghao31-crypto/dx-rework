@@ -291,6 +291,11 @@ export const SourcingContractDocumentSchema = z.object({
 export const SourcingContractStateResponseSchema = z.object({
   item: SourcingContractDocumentSchema.nullable(),
 }).strict();
+export const ContractInformationRefreshResponseSchema=SourcingContractStateResponseSchema.extend({refreshReceipt:z.object({
+  sourcingCaseId:IdSchema,previousDocumentId:IdSchema,documentId:IdSchema,
+  informationFingerprint:z.string().regex(/^[a-f0-9]{64}$/),idempotencyKey:z.string().min(1).max(200),
+  previousVersion:z.number().int().positive(),contractVersion:z.number().int().positive(),sourcingApprovalSnapshotId:IdSchema,
+}).strict()}).strict();
 
 export const SourcingContractReturnUploadSchema = z.object({
   attachmentIds: z.array(IdSchema).min(1).max(2).refine(ids=>new Set(ids).size===ids.length),

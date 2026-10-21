@@ -26,14 +26,14 @@ window.fetch=async(input,init)=>{
  if(mode.endsWith('denied'))return Response.json({error:{code:'FORBIDDEN',message:'TEST仅原有权岗位可办理，请回本单查看负责岗位'}},{status:403});
  const scope=`${path}:${key}`,old=commands.get(scope);if(old){if(old.body!==JSON.stringify(body))return Response.json({error:{message:'TEST同键不同正文'}},{status:409});return Response.json(old.reply);}
  let reply:unknown;
- if(path.endsWith('/contract/refresh'))reply={item:contract};
+ if(path.endsWith('/contract/refresh'))reply={item:{...contract,sourcingContractDocumentId:id(56),contractVersion:3},refreshReceipt:{sourcingCaseId:id(100),previousDocumentId:id(55),documentId:id(56),informationFingerprint:preview.informationFingerprint,idempotencyKey:key,previousVersion:2,contractVersion:3,sourcingApprovalSnapshotId:id(6)}};
  else if(method==='PUT'&&path.endsWith('/budget')){sheet={...sheet,version:sheet.version+1,status:'draft',document:body.document,totals:calculateBudget(body.document)};reply=sheet;}
  else if(method==='POST'&&path.endsWith('/budget/publish')){sheet={...sheet,status:'published',publishedAt:now};reply=sheet;}
  else return Response.json({error:{message:'TEST未映射写入'}},{status:403});
  commits++;commands.set(scope,{body:JSON.stringify(body),reply});
  const loseThis=path.endsWith('/contract/refresh')||!mode.startsWith('budget-publish')||path.endsWith('/publish');
- if(!failed&&mode!=='contract-refresh'&&loseThis){
-  failed=true;if(mode.endsWith('malformed'))return Response.json({});if(mode.endsWith('408'))return Response.json({error:{message:'TEST回执超时'}},{status:408});throw new TypeError('TEST response lost after commit');
+ if(!failed&&mode!=='contract-refresh'&&mode!=='contract-success'&&loseThis){
+  failed=true;if(mode==='contract-old-id')return Response.json({...reply as object,item:contract});if(mode==='contract-other-case')return Response.json({...reply as object,refreshReceipt:{...(reply as {refreshReceipt:object}).refreshReceipt,sourcingCaseId:id(999)}});if(mode==='contract-wrong-version')return Response.json({...reply as object,item:{...contract,sourcingContractDocumentId:id(56),contractVersion:4}});if(mode.endsWith('malformed'))return Response.json({});if(mode.endsWith('408'))return Response.json({error:{message:'TEST回执超时'}},{status:408});throw new TypeError('TEST response lost after commit');
  }
  return Response.json(reply);
 };

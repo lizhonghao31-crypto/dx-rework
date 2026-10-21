@@ -23,7 +23,7 @@ import {
   RecordSourcingManagementDecisionSchema,
   RequestSourcingFactoryChangeSchema,
   SOURCING_IMAGE_SUPPLEMENT_ROLES,
-  SourcingContractStateResponseSchema,
+  SourcingContractStateResponseSchema,ContractInformationRefreshResponseSchema,
   SourcingContractReturnUploadSchema,
   SourcingContractReturnResponseSchema,
   SourcingMerchandiserOptionsSchema,
@@ -512,8 +512,11 @@ export function registerSourcingRoutes(
       const parsed = RefreshContractInformationSchema.safeParse(request.body);
       if (!parsed.success) validationError(parsed.error.issues[0]?.message ?? "请先查看供应商资料差异");
       const id = caseId(request.params.sourcingCaseId);
-      const documentId = await dependencies.contracts!.management.refreshInformation(actor,id,parsed.data!,idempotencyKey(request));
-      return SourcingContractStateResponseSchema.parse(await dependencies.contracts!.generateIfReady(actor,id,documentId));
+      const key=idempotencyKey(request),documentId = await dependencies.contracts!.management.refreshInformation(actor,id,parsed.data!,key);
+      const state=await dependencies.contracts!.generateIfReady(actor,id,documentId);
+      const refreshReceipt=await dependencies.contracts!.management.informationRefreshReceipt(actor,id,parsed.data!,key,documentId);
+      if(state.item?.sourcingContractDocumentId!==documentId)throw new ApplicationError('INVALID_RESPONSE','原合同更新文档尚未核实，请保留原提交核对。',502);
+      return ContractInformationRefreshResponseSchema.parse({...state,refreshReceipt});
     });
     app.get<{ Params: { sourcingCaseId: string } }>(
       "/sourcing/cases/:sourcingCaseId/contract",

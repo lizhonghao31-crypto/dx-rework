@@ -230,4 +230,26 @@ export class SourcingContractManagementService {
     } catch(error) {await client.query("ROLLBACK").catch(()=>undefined);throw error;}
     finally {client.release();}
   }
+
+  /** Proof of this completed command, including replay after a newer contract
+   * exists. No current/latest document is substituted for its stored result. */
+  async informationRefreshReceipt(actor:TrustedActorContext,caseId:string,input:RefreshContractInformation,key:string,documentId:string){
+    const capability=actor.actorRoles.includes('production_management')&&(actor.authorizationCapabilities??[actor.authorizationCapability]).includes('sourcing:decision:record')?'sourcing:decision:record':'sourcing:contract:record';
+    if(!root(actor)&&!actor.actorRoles.some(role=>role==='order_merchandiser'||role==='production_management'))throw new ApplicationError('FORBIDDEN','当前岗位无权核对合同更新回执',403);
+    await this.database.query('SELECT access_authorized_actor_roles($1,$2)',[actor.actorId,capability]);
+    if(!root(actor)&&!await memberCanWriteModule(this.database,actor.actorId,'sourcing'))throw new ApplicationError('FORBIDDEN','当前账号无权核对合同更新回执',403);
+    const result=await this.database.query<{previous_version:number;contract_version:number;sourcing_approval_snapshot_id:string}>(
+      `SELECT previous.contract_version AS previous_version,document.contract_version,document.sourcing_approval_snapshot_id
+       FROM idempotency_records command
+       JOIN sourcing_contract_documents document ON document.sourcing_contract_document_id::text=command.response->>'documentId'
+       JOIN sourcing_contract_documents previous ON previous.sourcing_contract_document_id=$5
+       WHERE command.scope='sourcing.contract.information.refresh' AND command.actor_key=$1 AND command.idempotency_key=$2
+         AND command.request_hash=$3 AND command.status='completed'
+         AND document.sourcing_case_id=$4 AND previous.sourcing_case_id=$4 AND document.sourcing_contract_document_id=$6
+         AND (document.sourcing_contract_document_id=previous.sourcing_contract_document_id OR
+           (document.revision_of=previous.sourcing_contract_document_id AND document.contract_version=previous.contract_version+1))`,
+      [actor.actorId,key,fingerprint({caseId,input}),caseId,input.sourcingContractDocumentId,documentId]);
+    const row=result.rows[0];if(!row)throw new ApplicationError('INVALID_RESPONSE','原合同更新回执尚未核实，请保留原内容和提交标识核对，不要另建更新。',502);
+    return {sourcingCaseId:caseId,previousDocumentId:input.sourcingContractDocumentId,documentId,informationFingerprint:input.informationFingerprint,idempotencyKey:key,previousVersion:Number(row.previous_version),contractVersion:Number(row.contract_version),sourcingApprovalSnapshotId:row.sourcing_approval_snapshot_id};
+  }
 }

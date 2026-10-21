@@ -138,6 +138,7 @@ const create = (
       saveTemplate:vi.fn(),
       previewInformation:vi.fn(async()=>({sourcingContractDocumentId:"00000000-0000-4000-8000-000000000501",informationFingerprint:"a".repeat(64),returned:false,changes:[],missingFields:[]})),
       refreshInformation:vi.fn(async()=>"00000000-0000-4000-8000-000000000501"),
+      informationRefreshReceipt:vi.fn(async(_actor:unknown,id:string,input:{sourcingContractDocumentId:string;informationFingerprint:string},key:string,documentId:string)=>({sourcingCaseId:id,previousDocumentId:input.sourcingContractDocumentId,documentId,informationFingerprint:input.informationFingerprint,idempotencyKey:key,previousVersion:1,contractVersion:1,sourcingApprovalSnapshotId:'00000000-0000-4000-8000-000000000502'})),
     },
     getCurrent: vi.fn(async () => contractState),
     supplement: vi.fn(async () => contractState),
@@ -794,6 +795,12 @@ describe("contract template and information routes",()=>{
       expect(contracts.management.refreshInformation).toHaveBeenCalledWith(expect.objectContaining({authorizationCapability:capability}),caseSummary.sourcingCaseId,expect.any(Object),"contract-info-refresh");
       expect(contracts.generateIfReady).toHaveBeenCalled();
     }
+  });
+  it('does not return a different latest document as the original refresh receipt',async()=>{
+    const {app,contracts}=create(['sourcing:view','sourcing:contract:record'],['order_merchandiser']);
+    const original=await contracts.getCurrent();contracts.generateIfReady.mockResolvedValueOnce({item:{...original.item,sourcingContractDocumentId:'00000000-0000-4000-8000-000000000999'}});
+    const response=await app.inject({method:'POST',url,headers,payload:{sourcingContractDocumentId:'00000000-0000-4000-8000-000000000501',informationFingerprint:'a'.repeat(64)}});
+    expect(response.statusCode).toBe(502);expect(response.json().error.code).toBe('INVALID_RESPONSE');
   });
   it("rejects unapproved roles, missing capabilities and arbitrary order edits",async()=>{
     for(const [role,capability] of [["factory_payables","sourcing:finance:reconcile"],["owner_group","sourcing:owner:approve"],["order_merchandiser","sourcing:view"],["production_management","sourcing:view"]]){

@@ -285,6 +285,7 @@ export class SourcingContractService {
   async getCurrent(
     actor: TrustedActorContext,
     sourcingCaseId: string,
+    sourcingContractDocumentId?:string,
   ): Promise<SourcingContractStateResponse> {
     this.assertReader(actor);
     const result = await this.database.query<ContractRow>(
@@ -295,8 +296,9 @@ export class SourcingContractService {
        FROM sourcing_contract_documents document
        JOIN sourcing_cases source_case ON source_case.sourcing_case_id=document.sourcing_case_id
        WHERE document.sourcing_case_id=$1 AND source_case.deleted_at IS NULL
+         AND ($2::uuid IS NULL OR document.sourcing_contract_document_id=$2)
        ORDER BY document.contract_version DESC LIMIT 1`,
-      [sourcingCaseId],
+      [sourcingCaseId,sourcingContractDocumentId??null],
     );
     return { item: result.rows[0] ? await this.dto(result.rows[0], actor) : null };
   }
@@ -407,7 +409,7 @@ export class SourcingContractService {
       [sourcingCaseId,sourcingContractDocumentId ?? null],
     );
     const row = claimed.rows[0];
-    if (!row) return this.getCurrent(actor, sourcingCaseId);
+    if (!row) return this.getCurrent(actor, sourcingCaseId,sourcingContractDocumentId);
     try {
       const source = row;
       const snapshot = await hydrateContractContentImages(this.attachments,source.sourcing_case_id,
@@ -426,7 +428,7 @@ export class SourcingContractService {
          WHERE sourcing_contract_document_id=$1 AND status='generating'`,
         [source.sourcing_contract_document_id,fingerprint,attachment.attachmentId,attachment.sha256],
       );
-      return this.getCurrent(actor, sourcingCaseId);
+      return this.getCurrent(actor, sourcingCaseId,sourcingContractDocumentId);
     } catch (error) {
       const reason = error instanceof Error ? error.message.slice(0,500) : "合同PDF生成失败";
       await this.database.query(

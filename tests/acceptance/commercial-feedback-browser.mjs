@@ -13,7 +13,7 @@ try{
  const html=`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script>${js.replace(/<\/script/gi,'<\\/script')}</script></html>`;
  server=createServer((_req,res)=>{res.setHeader('content-type','text/html;charset=utf-8');res.end(html);});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',args:['--no-sandbox']});if(evidence)await mkdir(evidence,{recursive:true});
- for(const width of [1440,390])for(const mode of ['budget-save-lost','budget-save-malformed','budget-save-408','budget-save-denied','budget-save-expired','budget-publish-lost','contract-lost','contract-malformed','contract-408','contract-denied','contract-refresh','contract-missing','contract-expired']){
+ for(const width of [1440,390])for(const mode of ['budget-save-lost','budget-save-malformed','budget-save-408','budget-save-denied','budget-save-expired','budget-publish-lost','contract-lost','contract-malformed','contract-408','contract-denied','contract-refresh','contract-missing','contract-expired','contract-success','contract-old-id','contract-other-case','contract-wrong-version']){
   const context=await browser.newContext({viewport:{width,height:900}}),page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/?mode=${mode}`);
   const writes=()=>page.evaluate(()=>window.commercialFixture.requests.filter(r=>r.method!=='GET'));
@@ -32,8 +32,9 @@ try{
    else{
     await confirm.click();
     if(mode.endsWith('denied')){await page.getByText('TEST仅原有权岗位可办理，请回本单查看负责岗位',{exact:true}).waitFor();assert.equal(await confirm.isEnabled(),true);}
+    else if(mode==='contract-success'){await page.getByText('合同信息更新已保存，原合同与回签历史保留。',{exact:true}).waitFor();assert.equal((await writes()).length,1);assert.equal(await page.evaluate(()=>window.commercialFixture.commits),1);}
     else if(mode==='contract-refresh'){await page.getByText('合同信息更新已保存，原合同与回签历史保留。',{exact:true}).waitFor();const before=(await writes()).length;await page.getByRole('button',{name:'仅重新读取订单资料',exact:true}).click();await page.getByRole('button',{name:'仅重新读取订单资料',exact:true}).waitFor({state:'detached'});assert.equal((await writes()).length,before);}
-    else{const retry=page.getByRole('button',{name:'使用原内容核对更新结果',exact:true});await retry.waitFor();assert.equal(await confirm.isDisabled(),true);const before=(await writes()).length;
+    else{const retry=page.getByRole('button',{name:'使用原内容核对更新结果',exact:true});await retry.waitFor();assert.equal(await confirm.isDisabled(),true);assert.equal(await page.getByText('合同信息更新已保存，原合同与回签历史保留。',{exact:true}).count(),0);const before=(await writes()).length;
      if(mode.endsWith('expired')){await page.evaluate(()=>window.commercialFixture.advance());await retry.click();await page.getByText(/原更新已超过安全恢复期限/).waitFor();assert.equal((await writes()).length,before);}
      else{await retry.click();await page.getByText('合同信息更新已保存，原合同与回签历史保留。',{exact:true}).waitFor();const records=await writes();assert.deepEqual(records.at(-1),records.at(-2));assert.equal(await page.evaluate(()=>window.commercialFixture.commits),1);}
     }

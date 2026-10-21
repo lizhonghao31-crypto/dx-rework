@@ -4,13 +4,20 @@ import {SubmissionAttempt} from "./submission-attempt.js";
 import {SubmissionRequestError} from "./submission-validation.js";
 import { ContractContentEditor } from "./contract-content-editor.js";
 import { useEffect, useRef, useState } from "react";
-import { CONTRACT_REFRESH_FIELDS, ContractRefreshPreviewSchema, SourcingContractStateResponseSchema,
+import { CONTRACT_REFRESH_FIELDS, ContractRefreshPreviewSchema, ContractInformationRefreshResponseSchema,
   type ContractRefreshPreview } from "@dx-rework/contracts";
 import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
 import "./contract-settings.css";
 
 const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+
+export function contractInformationRefreshReceipt(value:unknown,expected:{caseId:string;documentId:string;fingerprint:string;key:string}){
+  const state=ContractInformationRefreshResponseSchema.parse(value),receipt=state.refreshReceipt,item=state.item;
+  if(!item||receipt.sourcingCaseId!==expected.caseId||receipt.previousDocumentId!==expected.documentId||receipt.informationFingerprint!==expected.fingerprint||receipt.idempotencyKey!==expected.key
+    ||receipt.documentId===expected.documentId||item.sourcingContractDocumentId!==receipt.documentId||item.contractVersion!==receipt.contractVersion||receipt.contractVersion!==receipt.previousVersion+1||item.sourcingApprovalSnapshotId!==receipt.sourcingApprovalSnapshotId)throw new Error('原合同更新回执不匹配');
+  return state;
+}
 
 export function ContractInformationRefresh({ caseId, disabled, canEditContent, onUpdated }: {
   caseId:string; disabled:boolean; canEditContent:boolean; onUpdated():Promise<void>;
@@ -49,7 +56,7 @@ export function ContractInformationRefresh({ caseId, disabled, canEditContent, o
     const execute=async()=>{
       try{
         const response=await feedbackFetch(path,{method:"POST",credentials:"include",headers:{"Content-Type":"application/json","idempotency-key":originalKey},body});
-        await feedbackJson(response,"POST",value=>{const state=SourcingContractStateResponseSchema.parse(value);if(!state.item)throw Error("missing contract receipt");return state;},(message,code,status)=>new SubmissionRequestError(message,code,status));
+        await feedbackJson(response,"POST",value=>contractInformationRefreshReceipt(value,{caseId,documentId:preview!.sourcingContractDocumentId,fingerprint:preview!.informationFingerprint,key:originalKey}),(message,code,status)=>new SubmissionRequestError(message,code,status));
         operation.markConfirmed();if(version!==generation.current)return;
         setUncertain(false);setPreview(null);key.current=null;setSaved(true);setRefreshPending(true);
         await onUpdated();if(version===generation.current)setRefreshPending(false);
