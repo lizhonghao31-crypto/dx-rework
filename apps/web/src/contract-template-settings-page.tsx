@@ -1,4 +1,5 @@
 import {feedbackFetch,feedbackJson} from './request-response-feedback.js';
+import {sameReceiptContent} from './command-receipt-content.js';
 import {SubmissionAttempt} from './submission-attempt.js';
 import {SubmissionRequestError} from './submission-validation.js';
 import {useDigitalDetailNavigationGuard} from './use-digital-detail-navigation-guard.js';
@@ -61,7 +62,7 @@ export function ContractTemplateSettingsPage() {
         const file=await response.blob();if(!(await file.slice(0,5).text()).startsWith('%PDF-'))throw Error('预览返回文件格式异常，请重新预览；没有保存模板');
         setPreview({url:URL.createObjectURL(file),content:serialized});
        }else{
-        const loaded=await feedbackJson(response,'POST',value=>{const result=ContractTemplateStateSchema.parse(value);if(result.item.templateVersion!==expectedVersion+1)throw Error('wrong template receipt');return result;},(message,code,status)=>new SubmissionRequestError(message,code,status));
+        const loaded=await feedbackJson(response,'POST',value=>{const result=ContractTemplateStateSchema.parse(value);if(result.item.templateVersion!==expectedVersion+1||!sameReceiptContent(content(result.item),parsed.data))throw Error('wrong template receipt');return result;},(message,code,status)=>new SubmissionRequestError(message,code,status));
         attempt.current.markConfirmed();setUncertain(false);setState(loaded);setDraft(content(loaded.item));setSelectedVersion(String(loaded.item.templateVersion));key.current=null;setMessage('模板已保存，后续生成的合同使用新版本。');
        }
       };

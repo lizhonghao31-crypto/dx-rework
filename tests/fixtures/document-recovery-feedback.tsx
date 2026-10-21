@@ -13,8 +13,8 @@ window.fetch=async(input,init)=>{
  await new Promise(resolve=>setTimeout(resolve,0));const path=new URL(String(input),location.origin).pathname,method=init?.method??'GET',key=new Headers(init?.headers).get('idempotency-key'),body=init?.body?JSON.parse(String(init.body)):null;requests.push({path,method,key,body});
  if(method==='GET')return Response.json(view==='instruction'?instruction:closure);
  if(mode==='denied')return Response.json({error:{code:'FORBIDDEN',message:'TEST请原有权岗位在本单办理'}},{status:403});
- const scope=path+':'+key;if(commands.has(scope))return Response.json(commands.get(scope));let reply:unknown;
+ const previous=structuredClone(instruction);const scope=path+':'+key;if(commands.has(scope))return Response.json(commands.get(scope));let reply:unknown;
  if(view==='instruction'){instruction={...instruction,version:instruction.version+1,document:body.document};reply=instruction;}else{closure={...closure,revision:'b'.repeat(64),stage:'特殊结案',canClose:false,closed:{reason:body.reason.trim(),outstanding:closure.outstanding,closedBy:'TEST总监',closedAt:now}};reply=closure;}
- commits++;commands.set(scope,reply);if(!failed){failed=true;if(mode==='malformed')return Response.json({});throw new TypeError('TEST receipt lost after commit');}return Response.json(reply);
+ commits++;commands.set(scope,reply);if(!failed&&mode!=='success'){failed=true;if(mode==='stale')return Response.json(previous);if(mode==='wrong-content')return Response.json({...instruction,document:previous.document});if(mode==='malformed')return Response.json({});throw new TypeError('TEST receipt lost after commit');}return Response.json(reply);
 };
 createRoot(document.getElementById('root')!).render(view==='instruction'?<ProductionInstructionPanel orderId={id(1)} onClose={()=>undefined}/>:<OrderClosurePanel orderId={id(1)} onClose={()=>undefined}/>);

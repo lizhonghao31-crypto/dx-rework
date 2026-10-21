@@ -191,7 +191,7 @@ export async function exerciseBulkPreparation(db:Pool,fixture:{order:DigitalOrde
   await expect(instruction.reviewSource(primary,id,{...review,sourceVersion:comparison.sourceVersion+1},randomUUID())).rejects.toMatchObject({statusCode:409});
   await expect(instruction.reviewSource(primary,id,{...review,decisions:[]},randomUUID())).rejects.toMatchObject({statusCode:409});
   const reviewKey=randomUUID(),reviewed=await instruction.reviewSource(primary,id,review,reviewKey);
-  expect(reviewed).toMatchObject({version:4,sourceRound:2,document:{comments:'TEST核对第二轮开发'},sourceReview:{instructionVersion:4,decisions:review.decisions}});
+  expect(reviewed).toMatchObject({version:4,sourceRound:2,document:{comments:'TEST核对第二轮开发'},sourceReview:{sourceVersion:comparison.sourceVersion,instructionVersion:4,decisions:review.decisions}});
   expect(reviewed.document.unit).toBe('cm');expect(reviewed.document.measurements.map(row=>row.values)).toEqual([['15.5575'],['16']]);
   expect(new Set(reviewed.document.measurements.map(row=>row.id)).size).toBe(2);
   expect(reviewed.sourceReview?.priorMeasurements).toMatchObject({unit:'inch',sizes:['M'],measurements:doc.measurements});

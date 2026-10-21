@@ -13,7 +13,7 @@ try{
  const html=`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style><div id="root"></div><script>${js.replace(/<\/script/gi,'<\\/script')}</script></html>`;
  server=createServer((_req,res)=>{res.setHeader('content-type','text/html;charset=utf-8');res.end(html);});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',args:['--no-sandbox']});if(evidence)await mkdir(evidence,{recursive:true});
- const scenarios=[...['503','malformed','network','401','no-role'].map(mode=>['auth',mode]),...['fail','empty','saved-read-fail','lost'].map(mode=>['employee',mode]),...['fail','empty'].map(mode=>['workforce',mode]),...['lost','malformed','denied','expired'].map(mode=>['prices',mode]),...['lost','malformed','denied','expired'].map(mode=>['template',mode]),...['fail','malformed','empty'].map(mode=>['admin',mode]),['acceptance','fail'],['acceptance-preview','fail']];
+ const scenarios=[...['503','malformed','network','401','no-role'].map(mode=>['auth',mode]),...['fail','empty','saved-read-fail','lost'].map(mode=>['employee',mode]),...['fail','empty'].map(mode=>['workforce',mode]),...['success','lost','malformed','denied','expired','wrong-enabled','wrong-kind'].map(mode=>['prices',mode]),...['success','lost','malformed','denied','expired','wrong-content'].map(mode=>['template',mode]),...['fail','malformed','empty'].map(mode=>['admin',mode]),['acceptance','fail'],['acceptance-preview','fail']];
  for(const width of [1440,390])for(const [view,mode] of scenarios){
   if(process.env.PLATFORM_CASES&&!process.env.PLATFORM_CASES.split(',').includes(view+':'+mode))continue;
   console.log(JSON.stringify({view,mode,width}));
@@ -35,10 +35,11 @@ try{
    if(mode==='fail'){await page.getByText('内部工人目录尚未读取。',{exact:true}).waitFor();assert.equal(await page.getByText('暂无临时工档案。',{exact:true}).count(),0);await page.getByRole('button',{name:'仅重新读取人员目录',exact:true}).click();}
    await page.getByText('暂无临时工档案。',{exact:true}).waitFor();
   }else if(view==='prices'||view==='template'){
-   if(view==='prices'){await page.getByRole('button',{name:'调整',exact:true}).click();await page.getByLabel(/新单价/).fill('12');await page.getByLabel('调整原因（必填）',{exact:true}).fill('TEST价格反馈');await page.getByRole('button',{name:'保存',exact:true}).click();}
+   if(view==='prices'){await page.getByRole('button',{name:'调整',exact:true}).click();await page.getByLabel(/新单价/).fill('12');if(mode==='wrong-enabled')await page.getByRole('checkbox',{name:'启用此品类',exact:true}).uncheck();await page.getByLabel('调整原因（必填）',{exact:true}).fill('TEST价格反馈');await page.getByRole('button',{name:'保存',exact:true}).click();}
    else{await page.getByLabel(/模板名称/).fill('TEST反馈新模板');await page.getByRole('button',{name:'生成预览',exact:true}).click();await page.getByRole('link',{name:'查看合同预览',exact:true}).waitFor();await page.getByRole('button',{name:'保存生效',exact:true}).click();}
-   if(mode==='denied')await page.getByText('TEST原有权岗位才可办理，请核对原权限',{exact:true}).waitFor();
-   else{const recovery=page.getByRole('button',{name:view==='prices'?'使用原内容核对价格调整':'使用原内容核对模板保存',exact:true});await recovery.waitFor();const before=(await writes()).length;
+   if(mode==='success'){await page.waitForFunction(()=>window.platformFeedbackFixture.commits===1);if(view==='template')await page.getByText('模板已保存，后续生成的合同使用新版本。',{exact:true}).waitFor();else await page.getByRole('dialog').waitFor({state:'detached'});await page.getByRole('button',{name:view==='prices'?'使用原内容核对价格调整':'使用原内容核对模板保存',exact:true}).waitFor({state:'detached'});assert.equal(await page.evaluate(()=>window.platformFeedbackFixture.commits),1);}
+   else if(mode==='denied')await page.getByText('TEST原有权岗位才可办理，请核对原权限',{exact:true}).waitFor();
+   else{const recovery=page.getByRole('button',{name:view==='prices'?'使用原内容核对价格调整':'使用原内容核对模板保存',exact:true});await recovery.waitFor();if(view==='template')assert.equal(await page.getByLabel(/模板名称/).inputValue(),'TEST反馈新模板');else assert.equal(await page.getByLabel(/新单价/).inputValue(),'12');const before=(await writes()).length;
     if(mode==='expired'){await page.evaluate(()=>window.platformFeedbackFixture.advance());await recovery.click();await page.getByText(/已超过安全恢复期限/).waitFor();assert.equal((await writes()).length,before);}
     else{await recovery.click();await recovery.waitFor({state:'detached'});const records=await writes();assert.deepEqual(records.at(-1),records.at(-2));assert.equal(await page.evaluate(()=>window.platformFeedbackFixture.commits),1);}
    }

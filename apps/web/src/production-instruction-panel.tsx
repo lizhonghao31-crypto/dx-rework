@@ -1,4 +1,5 @@
 import {instructionFeedbackProjection} from './document-feedback-projections.js';
+import {instructionCommandMatches} from './command-receipt-content.js';
 import {SubmissionAttempt} from './submission-attempt.js';
 import {SubmissionRequestError} from './submission-validation.js';
 import {instructionActionReceipt} from "./digital-operation-feedback.js";
@@ -25,9 +26,10 @@ const kinds = ["款图", "主唛", "腰卡", "吊牌", "洗水唛", "二维码�
 const tabKeys = Object.keys(instructionTabs) as InstructionTab[];
 
 
-export async function instructionRequest(path:string,method='GET',body?:unknown,key?:string):Promise<InstructionSheet>{
+export async function instructionRequest(path:string,method='GET',body?:unknown,key?:string,before?:InstructionSheet):Promise<InstructionSheet>{
  const value=await digitalRequest<InstructionSheet>(path,method,body,key),orderId=path.match(/^orders\/([^/]+)\/instruction/)?.[1];
- const valid=instructionFeedbackProjection.safeParse(value).success&&value.order.productionOrderId===orderId;
+ const valid=instructionFeedbackProjection.safeParse(value).success&&value.order.productionOrderId===orderId
+  &&(method==='GET'||Boolean(before&&instructionCommandMatches(value,before,path.slice(`orders/${orderId}/instruction`.length),method,body)));
  if(!valid)throw new DigitalRequestError(method==='GET'?'制单资料尚未取得完整回执，请重新读取':'原制单提交结果尚未确认，请保留输入并核对原提交',200,'INVALID_RESPONSE');
  return value;
 }
@@ -67,7 +69,7 @@ export function ProductionInstructionPanel({ orderId, initialVersion, onClose, e
     const payload=JSON.stringify([path,body]);if(!recover&&operation.current?.payload!==payload)operation.current={payload,key:createClientRequestId()};
     const editGeneration=generation.current,context=contextVersion.current,attempt=submission.current,originalKey=operation.current?.key;
     const execute=async()=>{try{
-      const value=await instructionRequest(base+path,method,body,originalKey);attempt.markConfirmed();if(context!==contextVersion.current)return;
+      const value=await instructionRequest(base+path,method,body,originalKey,sheet??undefined);attempt.markConfirmed();if(context!==contextVersion.current)return;
       setUncertain(false);setSheet(value);if(editGeneration===generation.current){setDoc(value.document);setDirty(false);previews.saved();}setSaveBlocked(false);setValidationMode(null);operation.current=null;setReceipt(instructionActionReceipt(path,method,value));
     }catch(error){if(error instanceof DigitalRequestError&&!error.resultUnknown)throw new SubmissionRequestError(error.message,error.code,error.status??500);throw error;}};
     try{const result=recover?await attempt.retry():await attempt.run(execute);if(context!==contextVersion.current)return false;

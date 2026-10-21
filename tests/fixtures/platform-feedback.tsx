@@ -46,13 +46,13 @@ window.fetch=async(input,init)=>{
  if(method!=='GET'){
   if(path.includes('/acceptance/')||path.includes('/directory/sync'))return reject(403,'TEST此验收禁止控制／同步写入');
   if(mode==='denied')return reject(403,'TEST原有权岗位才可办理，请核对原权限');
-  const scope=path+':'+key;if(commands.has(scope))return Response.json(commands.get(scope));
+  const previousTemplate=structuredClone(template);const scope=path+':'+key;if(commands.has(scope))return Response.json(commands.get(scope));
   let reply:unknown;
   if(path.endsWith('/disable')){commits++;employee.enabled=false;employee.manualAccessDisabled=true;if(mode==='lost')throw new TypeError('TEST receipt lost');return new Response(null,{status:204});}
   if(path.includes('/pattern-room/prices/')){commits++;Object.assign(price,{amount:body.amount,enabled:body.enabled,version:price.version+1});reply={...price};}
   else if(path.endsWith('/sourcing/contract-template')){commits++;const {expectedVersion,...content}=body;template={item:{...content,templateVersion:expectedVersion+1,createdAt:now},history:[template.item,...template.history]};reply=template;}
   else return reject(403,'TEST写入未映射');
-  commands.set(scope,reply);if(!failOnce){failOnce=true;if(mode==='malformed')return Response.json({});throw new TypeError('TEST committed but response lost');}return Response.json(reply);
+  commands.set(scope,reply);if(!failOnce&&mode!=='success'){failOnce=true;if(mode==='wrong-content')return Response.json({...template,item:{...template.item,templateName:previousTemplate.item.templateName}});if(mode==='wrong-enabled')return Response.json({...price,enabled:!body.enabled});if(mode==='wrong-kind')return Response.json({...price,kind:'hourly'});if(mode==='malformed')return Response.json({});throw new TypeError('TEST committed but response lost');}return Response.json(reply);
  }
  return reject(404,'TEST未映射的只读请求');
 };

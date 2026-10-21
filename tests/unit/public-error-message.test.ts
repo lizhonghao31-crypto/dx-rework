@@ -3,6 +3,13 @@ import { ApplicationError } from "../../apps/api/src/platform/errors.js";
 import { hasInvalidDeclaredImageError } from "../../apps/web/src/attachment-upload.js";
 import { publicErrorMessage } from "../../apps/api/src/platform/public-error-message.js";
 describe("HTTP public error language", () => {
+  it('keeps unmapped rolled-back 4xx definite while 408 and server failures stay unknown', () => {
+    const message='Outbox idempotency key was used with different semantics';
+    expect(publicErrorMessage(new ApplicationError('CONFLICT',message,409))).toContain('已被拒绝');
+    for(const statusCode of [400,403,404,409,422,429]) expect(publicErrorMessage({code:'TEST',message,statusCode})).not.toContain('尚未确认');
+    for(const statusCode of [408,500,502]) expect(publicErrorMessage({code:'TEST',message,statusCode})).toContain('尚未确认');
+    expect(publicErrorMessage({code:'TEST',message},409)).not.toContain(message);
+  });
   it("keeps domain errors unchanged and translates at the response boundary without losing cause", () => {
     const error = new ApplicationError("ATTACHMENT_NOT_READY", "Attachment is not ready", 409);
     expect(publicErrorMessage(error)).toBe("附件尚未完成校验，请稍后重试");
