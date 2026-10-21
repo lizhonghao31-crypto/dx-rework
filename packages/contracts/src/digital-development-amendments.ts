@@ -15,12 +15,20 @@ export const SubmitDevelopmentAmendmentSchema=SaveDevelopmentAmendmentSchema.omi
 export type SaveDevelopmentAmendment=z.infer<typeof SaveDevelopmentAmendmentSchema>;
 export type SubmitDevelopmentAmendment=z.infer<typeof SubmitDevelopmentAmendmentSchema>;
 export type DevelopmentAmendmentContext={sourceId:string;taskId:string;roundNumber:number;documentVersion:number;document:DevelopmentDocument;issues:DevelopmentReturnIssue[];directSupplyMode:"legacy"|"structured"|null;note:string;draft:{version:number;document:DevelopmentDocument;reason:string}|null};
+/** JSONB and HTTP parsers may reorder object keys. Arrays and actual values remain exact. */
+function sameDocumentValue(before:unknown,after:unknown):boolean{
+ if(before===after)return true;
+ if(before===null||after===null||typeof before!=="object"||typeof after!=="object")return false;
+ if(Array.isArray(before)||Array.isArray(after))return Array.isArray(before)&&Array.isArray(after)&&before.length===after.length&&before.every((value,index)=>sameDocumentValue(value,after[index]));
+ const left=before as Record<string,unknown>,right=after as Record<string,unknown>,keys=Object.keys(left);
+ return keys.length===Object.keys(right).length&&keys.every(key=>Object.hasOwn(right,key)&&sameDocumentValue(left[key],right[key]));
+}
 /** A correction cannot silently become a production revision or an arrival fact. */
 export function developmentAmendmentErrors(before:DevelopmentDocument,after:DevelopmentDocument):string[]{
  const errors:string[]=[];
  for(const key of Object.keys({...before,...after}) as Array<keyof DevelopmentDocument>){
   if(["materials","files","instructions"].includes(key))continue;
-  if(JSON.stringify(before[key])!==JSON.stringify(after[key]))errors.push(`本次补正不能改变${({quantity:"打板数量",sampleSize:"制作尺码",sizes:"尺码列",measurements:"尺寸值",craft:"工艺",washing:"洗水",template:"模板",unit:"尺寸单位"} as Record<string,string>)[key]??"已发布制作依据"}；请通过实际修改 / 复版处理`);
+  if(!sameDocumentValue(before[key],after[key]))errors.push(`本次补正不能改变${({quantity:"打板数量",sampleSize:"制作尺码",sizes:"尺码列",measurements:"尺寸值",craft:"工艺",washing:"洗水",template:"模板",unit:"尺寸单位"} as Record<string,string>)[key]??"已发布制作依据"}；请通过实际修改 / 复版处理`);
  }
  for(const material of before.materials){
   const next=after.materials.find(row=>row.materialId===material.materialId);
