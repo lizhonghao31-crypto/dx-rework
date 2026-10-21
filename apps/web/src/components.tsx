@@ -1,3 +1,4 @@
+import {canManageAuxiliaryCatalog} from "./auxiliary-catalog-access.js";
 import { DigitalNotificationToast } from "./digital-notification-toast.js";
 import { canAccessPatternRoom, canAccessPatternRoomPrices, canAccessPatternRoomOrders, canCreatePatternRoomOrders } from "./pattern-room-access.js";
 import { financeNavigationEntries } from "./finance-access.js";
@@ -567,6 +568,7 @@ export function Shell({
   // Keep the mature creation capability, but place the source entry under creation.
   const creationNavigation = designerNavigation;
   const developmentNavigation: NavigationEntry[] = [
+    ...(currentUser&&canManageAuxiliaryCatalog(currentUser)?[{name:"共享辅料目录",description:"新增、改名、合并重复项及停用",href:"/ui/auxiliary-catalog"}]:[]),
     ...((digital || patternRoomNavigation.length) ? [{ name: "板房管理台", description: "岗位办理、独立打板与杂事", href: digital ? "/ui/digital-pattern-room" : "/ui/digital-pattern-room?section=legacy", activeKey: "digital-pattern" }] : []),
     ...(digital ? [{ name: "板房数据沙盘", description: "同源分析与改进记录", href: "/ui/digital-analysis" }] : []),
     ...(currentUser&&canAccessPatternRoomOrders(currentUser)?[{name:"打板/杂事历史看板",description:"旧打板、杂事与新开发已完成执行轮",href:"/ui/pattern-room/history",activeKey:"pattern-room-history"}]:[]),
