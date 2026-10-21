@@ -108,7 +108,7 @@ export function allocateLargestRemainder(
   );
   const remaining = target - ranked.reduce((sum, member) => sum + member.base, 0n);
   if (remaining < 0n || remaining > BigInt(ranked.length)) {
-    fail("高精度份额无法按最大余数法对齐组总额", 400, "VALIDATION_ERROR");
+    fail("工资份额计算未能与组总额对齐；请工资会计在原工资明细核对组总额与人员份额，仍不一致时提供记录链接给管理员核查，不要手工补差绕过校验", 400, "VALIDATION_ERROR");
   }
   const values = new Map(ranked.map((member, index) => [member.personId, {
     payableAmount: money(member.base + (BigInt(index) < remaining ? 1n : 0n)),
@@ -175,7 +175,7 @@ export class WageService {
   // Compatibility rejection only; the retired month-close writer has been removed.
   async lock(_actor: TrustedActorContext, _periodId: string, _expectedVersion: number, _note: string | null, _key: string): Promise<never> {
     void _actor; void _periodId; void _expectedVersion; void _note; void _key;
-    return fail("旧工资月结已停用",409,"INVALID_STATE_TRANSITION");
+    return fail("旧工资月结已停用；请工资会计从财务中心「工资管理」查看现有工资与结算入口，不要继续提交旧链接",409,"INVALID_STATE_TRANSITION");
   }
 
   private async requireView(actor: TrustedActorContext) {

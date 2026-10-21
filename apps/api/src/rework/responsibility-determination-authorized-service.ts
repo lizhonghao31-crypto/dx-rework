@@ -147,7 +147,7 @@ export class AuthorizedResponsibilityDeterminationService {
         "SELECT 1 FROM rework_responsibility_processes WHERE determination_id=$1 AND multiplier>2 LIMIT 1",
         [current.determination_id],
       );
-      if (current.settlement_schema_version === 1 && high.rowCount && !confirmation.rows[0]) fail("高倍率尚未完成独立确认");
+      if (current.settlement_schema_version === 1 && high.rowCount && !confirmation.rows[0]) fail("高倍率尚未完成独立确认；请原独立老板确认人在我的待办完成本单高倍率确认，判责岗位随后继续本单责任判定，不得自行代替独立确认");
       if (current.settlement_schema_version === 2) {
         const incomplete = await client.query(
           `SELECT 1

@@ -24,7 +24,7 @@ export async function factorySettlements(client:Query,caseId:string){
 export async function reconcileFactory(client:PoolClient,actor:TrustedActorContext,caseId:string,input:{factoryDecisionId:string;result:"match"|"difference";differenceFields?:string[]|undefined;differenceReason?:string|undefined},events:OperationEventRepository){
  const source=(await factorySettlements(client,caseId)).find(s=>s.decision_id===input.factoryDecisionId);
  if(!source)throw new ApplicationError("NOT_FOUND","该加工厂没有本单可核对的生产份额",404);
- if(source.status!=="ready"||!source.pdf_attachment_id)throw new ApplicationError("INVALID_STATE_TRANSITION","本厂合同 PDF 尚未就绪",409);
+ if(source.status!=="ready"||!source.pdf_attachment_id)throw new ApplicationError("INVALID_STATE_TRANSITION","本厂合同 PDF 尚未就绪；请订单跟单在本单合同页核对当前工厂对应的合同生成结果，财务取得有效合同后再核对",409);
  const id=randomUUID(),version=Number((await client.query("SELECT COALESCE(max(reconciliation_version),0)+1 AS version FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1",[caseId])).rows[0].version);
  const difference=input.result==="difference",reason=difference?input.differenceReason!.trim():null,fields=input.differenceFields??[];
  const event=await events.append(client,actor,{action:difference?"sourcing.finance.difference":"sourcing.finance.matched",entityType:"sourcing_case",entityId:caseId,

@@ -545,7 +545,7 @@ export class ResponsibilityDeterminationService {
           [draft.determination_id],
         );
         if (draft.settlement_schema_version === 1 && highMultiplier.rowCount && !confirmation.rows[0]) {
-          fail("高倍率尚未完成独立确认");
+          fail("高倍率尚未完成独立确认；请原独立老板确认人在我的待办完成本单高倍率确认，判责岗位随后继续本单责任判定，不得自行代替独立确认");
         }
 
         const hasOwnFactory = ((await client.query(

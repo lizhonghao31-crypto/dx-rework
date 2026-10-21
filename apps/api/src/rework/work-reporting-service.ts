@@ -552,7 +552,7 @@ export class WorkReportingService {
       if (order.status !== "in_progress") error("当前返工单不在返工执行节点", 409, "INVALID_STATE_TRANSITION");
       if (order.version !== input.expectedOrderVersion) error("返工单已被其他操作更新，请刷新后重试");
       if (!await this.readyForWholeOrderReview(client, reworkOrderId, [], true)) {
-        error("仍有返工人员或整查任务未完成，不能进入最终数量确认", 409, "INVALID_STATE_TRANSITION");
+        error("仍有返工人员或整查任务未完成，不能进入最终数量确认；请尾部在本单执行进度逐项核对，由各任务办理人完成原上数或整查后再核量", 409, "INVALID_STATE_TRANSITION");
       }
       const eventId = await this.events.append(client, actor, {
         action: "rework.execution.complete",

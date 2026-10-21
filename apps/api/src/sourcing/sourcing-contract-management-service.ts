@@ -22,6 +22,7 @@ type CurrentContract = {
   status: string; created_by: string; returned: boolean;
 };
 type Queryable = Pick<Pool | PoolClient, "query">;
+export function missingSupplierContractFields(values:SupplierValues):string[]{return (Object.keys(CONTRACT_SUPPLIER_FIELDS) as SupplierField[]).filter(field=>!values[field].trim()).map(field=>CONTRACT_SUPPLIER_FIELDS[field]);}
 const fingerprint = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export const canRefreshContractInformation = (actor: TrustedActorContext, createdBy: string|null, returned: boolean): boolean => {
   if (root(actor)) return true;
@@ -197,7 +198,8 @@ export class SourcingContractManagementService {
         if (row.sourcing_contract_document_id !== input.sourcingContractDocumentId || fingerprint({supplier:profile.hash,template:latest}) !== input.informationFingerprint) {
           throw new ApplicationError("INVALID_STATE_TRANSITION","合同或供应商资料已变化，请重新查看差异后更新",409);
         }
-        if (Object.values(profile.values).some(value=>!value.trim())) throw new ApplicationError("VALIDATION_ERROR","供应商合同资料不完整，请由有维护权限的人员补齐后更新",422);
+        const missing=missingSupplierContractFields(profile.values);
+        if(missing.length)throw new ApplicationError("VALIDATION_ERROR",`供应商合同资料缺少：${missing.join("、")}；请有原资料维护权限的人员到供应商中心「资料维护」补齐，再回本单合同页查看差异后更新；原批准快照不会被覆盖`,422);
         const changes = [...await this.differences(client,row,profile.values),...await this.templateDifferences(client,row,latest)];
         if (!changes.length) return {statusCode:200,response:{documentId:row.sourcing_contract_document_id}};
         const id = randomUUID();

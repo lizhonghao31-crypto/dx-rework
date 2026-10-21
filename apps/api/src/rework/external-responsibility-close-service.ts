@@ -159,7 +159,7 @@ export class ExternalResponsibilityCloseService {
       current.case_version !== input.expectedCaseVersion
       || current.status !== "deduction_follow_up"
     ) {
-      fail("外部责任台账版本或状态冲突");
+      fail("外部责任台账版本已更新或已不在扣款跟进中；请财务在本单扣款台账重新读取当前金额与状态，仅对仍在跟进的当前版本办理关闭");
     }
 
     const permission = await client.query<{ permitted: boolean }>(
@@ -181,7 +181,7 @@ export class ExternalResponsibilityCloseService {
         [input.evidenceAttachmentIds],
       );
       if (ready.rowCount !== input.evidenceAttachmentIds.length) {
-        fail("附件必须已完成并处于 ready 状态", 409, "ATTACHMENT_NOT_READY");
+        fail("附件尚未上传完成或不可用；请财务在本页核对每份结案凭证上传状态后再提交", 409, "ATTACHMENT_NOT_READY");
       }
     }
 
@@ -212,7 +212,7 @@ export class ExternalResponsibilityCloseService {
       [caseId],
     );
     const totals = ledger.rows[0]
-      ?? fail("扣款台账缺少服务器金额", 409, "CONFLICT");
+      ?? fail("扣款台账缺少有效金额依据；请财务在本单扣款台账核对原应付确认与扣款记录，提供台账链接给Root核查，不能手填默认金额结案", 409, "CONFLICT");
     if (input.result !== "full" || !totals.is_full) {
       fail(
         "实际扣款未达到拟扣金额时必须转财务总监特批",

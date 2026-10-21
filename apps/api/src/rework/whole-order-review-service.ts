@@ -124,7 +124,7 @@ export class WholeOrderReviewService {
       const order = await this.order(client, reworkOrderId, true);
       await this.ensureOrderWide(actor, "tail_supervisor", "submission:audit", order);
       this.ensureOrderVersion(order, input.expectedOrderVersion);
-      if (order.status !== "pending_order_review") error("当前返工单尚未进入 N05 尾部最终数量确认节点", 409, "INVALID_STATE_TRANSITION");
+      if (order.status !== "pending_order_review") error("本单尚未进入尾部最终数量确认；请尾部在本单执行进度核对原返工与整查任务，前序办理完成后再核量", 409, "INVALID_STATE_TRANSITION");
       const plans = await this.plans(client, reworkOrderId);
       if (plans.length === 0 || plans.some((plan) => plan.unit_price === null)) {
         error("每道工序必须完成 IE 核价后才能确认最终数量", 409, "INVALID_STATE_TRANSITION");
@@ -408,7 +408,7 @@ export class WholeOrderReviewService {
       const order = await this.order(client, reworkOrderId, true);
       await this.ensureOrderWide(actor, "tail_supervisor", "submission:audit", order);
       this.ensureOrderVersion(order, input.expectedOrderVersion);
-      if (order.status !== "pending_order_review") error("当前返工单尚未进入 N05 尾部核量节点", 409, "INVALID_STATE_TRANSITION");
+      if (order.status !== "pending_order_review") error("本单尚未进入尾部核量；请尾部在本单执行进度核对原任务完成情况，不能提前提交最终数量", 409, "INVALID_STATE_TRANSITION");
       const existing = await client.query("SELECT 1 FROM rework_order_reviews WHERE rework_order_id=$1 FOR SHARE", [reworkOrderId]);
       if (existing.rowCount) error("该返工单已经完成整单审核", 409, "CONFLICT");
       const plans = await this.plans(client, reworkOrderId);
@@ -1227,7 +1227,7 @@ export class WholeOrderReviewService {
          LIMIT 1`,
         [reworkOrderId],
       );
-      if (pendingExecution.rowCount) error("仍有返工执行报数未完成，不能整单确认", 409, "CONFLICT");
+      if (pendingExecution.rowCount) error("仍有返工执行报数未完成，不能整单确认；请尾部在本单执行进度查看未完成项，由对应返工人员从我的待办报实际完成数后再核量", 409, "CONFLICT");
       return;
     }
     const usesUnifiedTailReports = await this.usesUnifiedTailReports(client, reworkOrderId);
@@ -1254,8 +1254,8 @@ export class WholeOrderReviewService {
          ) AS legacy_tail_pending`,
       [reworkOrderId, usesUnifiedTailReports],
     );
-    if (pending.rows[0]?.execution_pending) error("仍有返工执行报数未完成，不能整单确认", 409, "CONFLICT");
-    if (pending.rows[0]?.legacy_tail_pending) error("历史订单仍有整查报数未完成，不能整单确认", 409, "CONFLICT");
+    if (pending.rows[0]?.execution_pending) error("仍有返工执行报数未完成，不能整单确认；请尾部在本单执行进度查看未完成项，由对应返工人员从我的待办报实际完成数后再核量", 409, "CONFLICT");
+    if (pending.rows[0]?.legacy_tail_pending) error("历史订单仍有整查报数未完成，不能整单确认；请尾部在本单原整查任务核对并提交实际报数，历史事实不能自动补齐", 409, "CONFLICT");
     const overLimit = await client.query<{ process_name: string }>(
       `WITH active_configuration AS (
          SELECT configuration_id,unified_execution_required

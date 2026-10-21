@@ -168,7 +168,7 @@ export class SourcingContractReturnService {
         FOR UPDATE OF monitor`,[sourcingCaseId]);
       const monitor=locked.rows[0];
       if (!monitor?.contract_return_monitor_enabled) {
-        throw new ApplicationError("INVALID_STATE_TRANSITION","该订单尚未批准，暂不能回传合同",409);
+        throw new ApplicationError("INVALID_STATE_TRANSITION","该订单尚未批准，暂不能回传合同；请老板在本单原选厂审批完成决定，订单跟单取得当前有效合同后再上传供应商回签件",409);
       }
       if (!(await this.canUpload(actor,await effectiveSourcingMerchandiser(client,sourcingCaseId,monitor.created_by),monitor.additional_merchandiser_user_id,client))) forbidden();
       const previous=await client.query<{submitted_by:string;attachment_ids:string[]}>(`SELECT submission.submitted_by,

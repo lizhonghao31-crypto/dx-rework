@@ -171,7 +171,7 @@ export class SourcingContractService {
             WHERE sourcing_decision_id=snapshot.sourcing_decision_id AND source_type='factory_change')
         ORDER BY contract_version DESC LIMIT 1) previous ON true
       WHERE snapshot.sourcing_approval_snapshot_id=$1`,[approvalSnapshotId])).rows[0];
-    if (!metadata) throw new ApplicationError("INVALID_STATE_TRANSITION","合同批准快照不存在",409);
+    if (!metadata) throw new ApplicationError("INVALID_STATE_TRANSITION","合同批准快照不存在或关联缺失；请订单跟单在本单合同页核对当前批准方案，由Root核查合同关联，不要重复点击批准",409);
     const documentId = randomUUID();
     const inserted = await client.query<{ sourcing_contract_document_id: string }>(
       `INSERT INTO sourcing_contract_documents(
@@ -268,7 +268,7 @@ export class SourcingContractService {
     );
     const id = inserted.rows[0]?.sourcing_contract_document_id
       ?? existing?.rows[0]?.sourcing_contract_document_id;
-    if (!id) throw new ApplicationError("INVALID_STATE_TRANSITION", "合同批准快照不存在", 409);
+    if (!id) throw new ApplicationError("INVALID_STATE_TRANSITION", "合同批准快照不存在或关联缺失；请订单跟单在本单合同页核对当前批准方案，由Root核查合同关联，不要重复点击批准", 409);
     return id;
   }
 
@@ -334,11 +334,11 @@ export class SourcingContractService {
           throw new ApplicationError("FORBIDDEN", "仅订单跟单或Root可补充合同缺项", 403);
         }
         if (row.status !== "pending_supplement") {
-          throw new ApplicationError("INVALID_STATE_TRANSITION", "合同已冻结，不能修改", 409);
+          throw new ApplicationError("INVALID_STATE_TRANSITION", "合同已冻结，不能直接修改；请订单跟单在本单合同页核对当前版本，资料不符时提供合同链接给Root核查，不能覆盖原批准内容", 409);
         }
         for (const [field,value] of entries) {
           if (!FIELD_NAMES.includes(field) || !row.missing_fields.includes(field)) {
-            throw new ApplicationError("INVALID_STATE_TRANSITION", "只能补充当前合同缺项", 409);
+            throw new ApplicationError("INVALID_STATE_TRANSITION", "只能补充当前合同缺项；请订单跟单重新读取本单合同页列出的缺项，仅填写仍缺失的字段，已冻结字段不在本入口修改", 409);
           }
           const eventId = await this.events.append(client, actor, {
             action: "sourcing.contract.supplement",

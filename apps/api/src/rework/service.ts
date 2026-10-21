@@ -1,3 +1,4 @@
+import {reworkTransitionRejection} from "../platform/business-rejection-guidance.js";
 import {linkDigitalRework} from "../production-platform/receiving-link-adapter.js";
 import { createHash, randomUUID } from "node:crypto";
 
@@ -122,7 +123,7 @@ const requestHash = (scope: string, payload: unknown): string =>
 const translateDatabaseError = (error: unknown): never => {
   if (error instanceof ApplicationError) throw error;
   if (error instanceof DomainRuleError) {
-    throw new ApplicationError("INVALID_STATE_TRANSITION", "返工单当前状态不允许该操作", 409);
+    throw new ApplicationError("INVALID_STATE_TRANSITION", reworkTransitionRejection(error.message), 409);
   }
   const code = (error as DatabaseError | null)?.code;
   if (code === "23505") throw new ApplicationError("CONFLICT", "返工单号或幂等记录已存在", 409);
@@ -130,7 +131,7 @@ const translateDatabaseError = (error: unknown): never => {
   if (code === "42501") throw new ApplicationError("FORBIDDEN", "当前用户无权执行该操作", 403);
   if (code === "55000") throw new ApplicationError("CONFLICT", "返工单不允许绕过受控流程修改", 409);
   if (code === "23514" || code === "22P02") {
-    throw new ApplicationError("VALIDATION_ERROR", "返工单数据或状态不符合业务约束", 400);
+    throw new ApplicationError("VALIDATION_ERROR", "返工输入未通过业务校验，系统未能确定具体字段或状态原因；请核对本单当前办理页，仍失败时提供订单链接给管理员核查，不要反复提交", 400);
   }
   throw error;
 };

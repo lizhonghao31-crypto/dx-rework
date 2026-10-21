@@ -59,6 +59,6 @@ describe("wage largest remainder", () => {
     expect(() => allocateLargestRemainder(
       "1.10",
       members(2, "0.50000000"),
-    )).toThrow("高精度份额无法按最大余数法对齐组总额");
+    )).toThrow(/工资份额计算未能与组总额对齐.*工资会计.*原工资明细/);
   });
 });
