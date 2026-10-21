@@ -30,27 +30,30 @@ export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSav
   const price = usePatternQuote(order ? null : misc ? "hourly-quote" : categoryId ? `category-options/${categoryId}/quote` : null, refreshPrice);
   const quote = price.quote;
   const attempt = useRef<{ body: string; key: string } | null>(null);
-  const draft = usePatternDraftGuard(JSON.stringify([values, association, unmatchedAssociation, files.map(file => file.attachmentId), categoryId, quantity]), busy || uploading);
+  const uploadFormScope=useRef(createClientRequestId()),pendingUploads=useRef<File[]>([]),uploadingGuard=useRef(false),uploadContext=useRef(0);
+  const draft = usePatternDraftGuard(JSON.stringify([values, association, unmatchedAssociation, files.map(file => file.attachmentId), categoryId, quantity,pendingUploads.current.length]), busy || uploading);
   useEffect(() => {
     if (order || misc) return;
     const abort = new AbortController();
     void patternRequest("category-options", PatternCategoryOptionsSchema, { signal: abort.signal }).then(setCategories).catch(e => { if (!abort.signal.aborted) setError(e.message); });
     return () => abort.abort();
   }, [order, misc, refreshPrice]);
+  useEffect(()=>{uploadContext.current++;pendingUploads.current=[];uploadingGuard.current=false;setUploading(false);return()=>{uploadContext.current++;};},[order?.orderId,order?.currentRoundId,kind]);
   const upload = async (selected: File[]) => {
-    if (busy || uploading || !selected.length) return;
+    if (busy || uploadingGuard.current || uploading || !selected.length) return;
     if (selected.length + files.length > PATTERN_MATERIAL_LIMIT) { setError("最多上传 20 份制作资料，请先移除不需要的资料"); return; }
-    setUploading(true); setError("");
+    const context=uploadContext.current;pendingUploads.current=selected;uploadingGuard.current=true;setUploading(true); setError("");
     try {
       for (const file of selected) {
-        const uploaded = await uploadPatternOriginal(file, kind);
+        const uploaded = await uploadPatternOriginal(file, kind,"create",order?`order:${order.orderId}:${order.currentRoundId}`:`new:${uploadFormScope.current}`);
+        if(context!==uploadContext.current)return;pendingUploads.current=pendingUploads.current.filter(item=>item!==file);
         setFiles(current => [...current, { attachmentId: uploaded.attachmentId, filename: uploaded.filename, mimeType: uploaded.mimeType }]);
       }
-    } catch (e) { setError(e instanceof Error ? e.message : "资料上传失败"); }
-    finally { setUploading(false); }
+    } catch (e) {if(context===uploadContext.current)setError(e instanceof Error ? e.message : "资料上传未完成，已就绪部分保留"); }
+    finally {if(context===uploadContext.current){uploadingGuard.current=false;setUploading(false);} }
   };
   const submit = async (event: FormEvent) => {
-    event.preventDefault(); if (busy || uploading || (!order && (!quote || quote.amount === null))) return;
+    event.preventDefault(); if(pendingUploads.current.length){setError("还有附件未就绪，请先重试剩余附件，或明确停止剩余上传后再保存已就绪资料");return;} if (busy || uploading || (!order && (!quote || quote.amount === null))) return;
     if(misc&&unmatchedAssociation){setError("关联款号请选择命中的已有档案或PO，或明确选择不关联订单");document.getElementById('misc-association')?.focus();return;}
     const { reason, taskName, ...fields } = values;
     const common = { styleNo: fields.styleNo, requiredDate: fields.requiredDate || null, note: fields.note, attachmentIds: files.map(file => file.attachmentId) };
@@ -88,7 +91,8 @@ export function PatternOrderForm({ order, kind = order?.kind ?? "pattern", onSav
       <label>版型<select className="rework-v2-control" value={values.variant} onChange={e => setValues({ ...values, variant: e.target.value })} disabled={disabled}><option value="">未指定</option>{["初版", "复版", "齐色版"].map(value => <option key={value}>{value}</option>)}</select></label>
       <InsetField label="参考款号" value={values.referenceStyleNo} maxLength={100} onChange={e => setValues({ ...values, referenceStyleNo: e.target.value })} disabled={disabled} /></div> : null}
     <label className="pattern-form-note">备注<textarea rows={2} className="rework-v2-control" value={values.note} maxLength={2000} onChange={e => setValues({ ...values, note: e.target.value })} disabled={disabled} /></label>
-    <PatternMaterialInput kind={kind} count={files.length} label={misc ? "上传图片 / PDF" : "上传制作图片 / PDF *"} disabled={disabled} onFiles={selected => void upload(selected)} />
+    {pendingUploads.current.length>0&&!uploading&&<><Button type="button" disabled={busy} onClick={()=>void upload(pendingUploads.current)}>重试剩余制作资料</Button><Button type="button" disabled={busy} onClick={()=>{pendingUploads.current=[];setError('已停止剩余本地选择；已上传文件保留，原请求不会因此撤销。');}}>停止剩余上传</Button></>}
+    <PatternMaterialInput kind={kind} count={files.length} label={misc ? "上传图片 / PDF" : "上传制作图片 / PDF *"} disabled={disabled||pendingUploads.current.length>0} onFiles={selected => void upload(selected)} />
     {uploading ? <p role="status">正在上传原始制作资料…</p> : null}
     {files.length > 0 && <PatternMaterials files={files} disabled={disabled} onRemove={id => setFiles(current => current.filter(file => file.attachmentId !== id))} />}
     {order ? <InsetField label="变更原因 *" value={values.reason} required maxLength={500} onChange={e => setValues({ ...values, reason: e.target.value })} disabled={disabled} /> : null}

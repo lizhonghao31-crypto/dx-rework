@@ -1,3 +1,4 @@
+import {uploadAttachmentWithRecovery,toolsAttachmentApi,localFileScope} from "./attachment-upload-recovery.js";
 import {feedbackFetch,feedbackJson} from "./request-response-feedback.js";
 import { SourcingOrderPhotos } from "./sourcing-order-photos.js";
 import { SourcingOrderDateFacts } from "./sourcing-order-date-facts.js";
@@ -27,7 +28,6 @@ import { createSourcingPriceInput } from "./sourcing-price-input.js";
 import { applySourcingPriceCascade } from "./sourcing-price-cascade.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import {
-  AttachmentResponseSchema,
   CraftCatalogListResponseSchema,
   DeleteSourcingCaseResponseSchema,
   MAX_SOURCING_ATTACHMENTS,
@@ -47,7 +47,6 @@ import {
   SourcingFactoryListResponseSchema,
   SourcingFactoryChangeStateResponseSchema,
   SourcingTimelineResponseSchema,
-  UploadIntentResponseSchema,
   duplicateSourcingLineMessage,
   sourcingStyleNumbers,
   type SourcingStyleIdentity,
@@ -509,6 +508,8 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
   const [images, setImages] = useState<UploadedImage[]>(correction?.attachments.map(image => ({...image, previewUrl:attachmentUrl(image.attachmentId,"preview")})) ?? []);
   const [uploading, setUploading] = useState(false);
   const [uploadFailed, setUploadFailed] = useState(false);
+  const uploadBatch=useRef<{files:File[];order:File[];completed:Map<File,UploadedImage>;lineIndex?:number}|null>(null),uploadGeneration=useRef(0);
+  useEffect(()=>()=>{uploadGeneration.current++;},[]);
   const [activeCreateInput, setActiveCreateInput] = useState<string | null>(null);
   const [correctionReason, setCorrectionReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -673,7 +674,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
     createKey.current = null;
   };
 
-  const uploadImages = async (files: FileList | null, lineIndex?: number): Promise<void> => {
+  const uploadImages = async (files: FileList | File[] | null, lineIndex?: number): Promise<void> => {
     if (!files?.length || uploading || busy) return;
     const selected = lineIndex === undefined ? Array.from(files) : [files[0]!];
     const unsupported = selected.find((file) => !isImageUploadCandidate(file));
@@ -685,6 +686,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
       setMessage(`每张订单最多上传 ${MAX_SOURCING_ATTACHMENTS} 张图片`);
       return;
     }
+    const uploadContext=uploadGeneration.current;uploadBatch.current=uploadBatch.current??{files:selected,order:[...selected],completed:new Map(),...(lineIndex===undefined?{}:{lineIndex})};
     setUploading(true);
     setUploadFailed(false);
     try {
@@ -723,50 +725,21 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
                   "hash",
                   () => sha256Hex(candidate),
                 );
-            const intent = await measureAttachmentUploadStage(
-              candidateTiming,
-              "intent",
-              () => request("tools/attachments/upload-intents", UploadIntentResponseSchema, {
-                method: "POST",
-                body: JSON.stringify({
-                  filename: candidate.name,
-                  mimeType: candidate.type,
-                  sizeBytes: candidate.size,
-                  sha256: candidateSha256,
-                }),
-              }),
-            );
-            const upload = new FormData();
-            for (const [name, value] of Object.entries(intent.uploadFields)) upload.append(name, value);
-            upload.append("file", candidate);
-            const response = await measureAttachmentUploadStage(
-              candidateTiming,
-              "oss",
-              () => fetch(intent.uploadUrl, { method: "POST", body: upload }),
-            );
-            if (!response.ok) throw new Error(`${sourceFile.name} 上传失败`);
-            const finalized = await measureAttachmentUploadStage(
-              candidateTiming,
-              "finalize",
-              () => request(
-                `tools/attachments/${intent.attachmentId}/finalize`,
-                AttachmentResponseSchema,
-                { method: "POST" },
-              ),
-            );
+            const finalized=await uploadAttachmentWithRecovery(candidate,`sourcing-create:${localFileScope(sourceFile)}`,toolsAttachmentApi,candidateSha256,
+              (stage,operation)=>measureAttachmentUploadStage(candidateTiming,stage,operation),sourceFile);
             if (finalized.status !== "ready") throw new Error("订单图片尚未确认成功，请重新上传");
-            const previewUrl = URL.createObjectURL(candidate);
-            previewUrls.current.push(previewUrl);
-            return {
-              attachmentId: finalized.attachmentId,
-              filename: finalized.filename,
-              mimeType: finalized.mimeType,
-              previewUrl,
-            };
+            if(uploadContext!==uploadGeneration.current)throw new Error('页面已切换，原附件不应用到新页面');
+            const previewUrl = URL.createObjectURL(candidate);previewUrls.current.push(previewUrl);
+            const result={attachmentId:finalized.attachmentId,filename:finalized.filename,mimeType:finalized.mimeType,previewUrl};
+            const batch=uploadBatch.current!;batch.completed.set(sourceFile,result);
+            setImages(current=>{const readyIds=new Set([...batch.completed.values()].map(image=>image.attachmentId));return [...current.filter(image=>!readyIds.has(image.attachmentId)),...batch.order.flatMap(file=>batch.completed.get(file)??[])];});
+            if(lineIndex!==undefined)setLineItems(current=>current.map((line,index)=>index===lineIndex?{...line,imageAttachmentId:result.attachmentId}:line));
+            if(uploadBatch.current)uploadBatch.current.files=uploadBatch.current.files.filter(file=>file!==sourceFile);
+            return result;
           });
         },
       );
-      setImages((current) => [...current, ...uploaded]);
+      if(uploadContext!==uploadGeneration.current)return;uploadBatch.current=null;
       setUploadFailed(false);
       if (lineIndex !== undefined && uploaded[0]) {
         const imageAttachmentId = uploaded[0].attachmentId;
@@ -776,7 +749,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
       setMessage(`已上传 ${formatBusinessDecimal(uploaded.length)} 张图片；请核对订单资料后提交`);
       createKey.current = null;
     } catch (error) {
-      setUploadFailed(true);
+      if(uploadContext!==uploadGeneration.current)return;setUploadFailed(true);
       const failureMessage = error instanceof Error ? error.message : "订单图片上传失败";
       setMessage(failureMessage);
       setUploading(false);
@@ -907,7 +880,7 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
                   {line.imageAttachmentId ? <img src={images.find((image) => image.attachmentId === line.imageAttachmentId)?.previewUrl} alt={`第 ${index + 1} 款图片`} /> : null}
                   <label className="rework-v2-upload">
                     <span>{line.imageAttachmentId ? "更换图片" : "＋ 上传图片"}</span>
-                    <input type="file" accept="image/*" disabled={busy || uploading || images.length >= MAX_SOURCING_ATTACHMENTS} onChange={(event) => { void uploadImages(event.target.files, index); event.target.value = ""; }} />
+                    <input type="file" accept="image/*" disabled={busy || uploading || uploadFailed || images.length >= MAX_SOURCING_ATTACHMENTS} onChange={(event) => { void uploadImages(event.target.files, index); event.target.value = ""; }} />
                   </label>
                   {images.length > 0 ? <select aria-label={`第 ${index + 1} 款复用图片`} value={line.imageAttachmentId ?? ""} disabled={busy || uploading} onChange={(event) => updateLineItem(index, "imageAttachmentId", event.target.value)}>
                     <option value="">复用已上传图片</option>
@@ -936,13 +909,13 @@ function CreateOrderPage({ user, correction }: { user: AuthorizedUser | null; co
           </div> : null}
           <label className="rework-v2-upload">
             <span>{uploading ? "正在上传…" : "＋ 上传照片"}</span>
-            <input type="file" accept="image/*" multiple disabled={busy || uploading || images.length >= MAX_SOURCING_ATTACHMENTS} onChange={(event) => { void uploadImages(event.target.files); event.target.value = ""; }} />
+            <input type="file" accept="image/*" multiple disabled={busy || uploading || uploadFailed || images.length >= MAX_SOURCING_ATTACHMENTS} onChange={(event) => { void uploadImages(event.target.files); event.target.value = ""; }} />
           </label>
         </section>
         {correction ? <label className="sourcing-form-wide"><span>修改说明（必填）</span><textarea {...feedback.field("sourcing-correction-reason")} value={correctionReason} maxLength={500} onChange={event=>{setCorrectionReason(event.target.value);createKey.current=null;}} /></label> : null}
         <div className="sourcing-submit-row">
           {duplicateLinesMessage || message ? <p role="status">{duplicateLinesMessage ?? message}</p> : null}
-          {uploadFailed && !uploading ? <p role="alert">本次图片上传未完成，请重新选择图片上传成功后再提交。</p> : null}
+          {uploadFailed && !uploading ? <><p role="alert">本次图片尚未全部就绪；已完成图片保留，请重试剩余图片后再提交。</p><Button disabled={busy} onClick={()=>{const batch=uploadBatch.current;if(batch)void uploadImages(batch.files,batch.lineIndex);}}>重试剩余图片</Button><Button disabled={busy} onClick={()=>{uploadBatch.current=null;setUploadFailed(false);setMessage("已停止剩余本地文件选择；已就绪图片保留，原申请不会撤销，未知申请请按原记录核对。");}}>停止剩余上传</Button></> : null}
           <ActionBar className="sourcing-create-actions">
             {!correction ? <button className="dx-button dx-button--secondary" type="button" disabled={busy || uploading} onClick={budgetOrderId?persistBudgetManual:saveLocalDraft}>保存草稿</button> : null}
             <button className="dx-button dx-button--primary" type="button" disabled={busy || feedback.uncertain || !canCreate || Boolean(budgetOrderId && (!budgetPreparation||budgetNeedsReview))} onClick={() => void createOrder()}>
@@ -1455,18 +1428,7 @@ function OrderDetailPage({
     contractUploadGuard.current=true;setContractUploading(true);setContractReturnError("");
     try {
       const submission=await finishContractReturnUpload(pending,async file=>{
-        const intent=await request("tools/attachments/upload-intents",UploadIntentResponseSchema,{
-          method:"POST",body:JSON.stringify({
-            filename:file.name,mimeType:file.type,sizeBytes:file.size,sha256:await sha256Hex(file),
-          }),
-        });
-        const upload=new FormData();
-        for (const [name,value] of Object.entries(intent.uploadFields)) upload.append(name,value);
-        upload.append("file",file);
-        const response=await fetch(intent.uploadUrl,{method:"POST",body:upload});
-        if (!response.ok) throw new Error(`${file.name} 上传失败`);
-        const ready=await request(`tools/attachments/${intent.attachmentId}/finalize`,AttachmentResponseSchema,{method:"POST"});
-        if (ready.status!=="ready") throw new Error(`${file.name} 尚未完成校验`);
+        const ready=await uploadAttachmentWithRecovery(file,`contract-return:${sourcingCaseId}:${pending.key}`,toolsAttachmentApi);
         return ready.attachmentId;
       });
       contractPendingUpload.current=null;

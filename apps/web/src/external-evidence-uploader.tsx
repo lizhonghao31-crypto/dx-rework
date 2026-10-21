@@ -1,22 +1,20 @@
+import {uploadAttachmentWithRecovery,attachmentJson} from "./attachment-upload-recovery.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import {
   AttachmentResponseSchema,
   UploadIntentResponseSchema,
 } from "@dx-rework/contracts";
 import { Button, StatusBadge } from "@dx-rework/ui";
-import { useState } from "react";
+import { useState,useRef,useEffect,useId } from "react";
 
-import { createWebUrls } from "../url-contract.js";
 import {
   isSupportedAttachment,
   prepareAttachmentForUpload,
-  sha256Hex,
 } from "./attachment-upload.js";
 
-const { apiUrl } = createWebUrls(import.meta.env.BASE_URL);
+
 const prepareTimeoutMilliseconds = 30_000;
 const apiTimeoutMilliseconds = 15_000;
-const uploadTimeoutMilliseconds = 45_000;
 
 type UploadStage = "preparing" | "uploading" | "verifying";
 
@@ -31,37 +29,7 @@ type UploadedEvidence = {
   filename: string;
 };
 
-const responseError = async (response: Response): Promise<string> => {
-  try {
-    const body = await response.json() as { error?: { message?: string } };
-    return body.error?.message ?? "附件操作失败";
-  } catch {
-    return "附件操作失败";
-  }
-};
-
-const request = async <T,>(
-  path: string,
-  schema: { parse(value: unknown): T },
-  init: RequestInit,
-): Promise<T> => {
-  const response = await withTimeout(
-    (signal) => fetch(apiUrl(path), {
-      credentials: "include",
-      ...init,
-      signal,
-      headers: {
-        accept: "application/json",
-        ...(init.body ? { "content-type": "application/json" } : {}),
-        ...init.headers,
-      },
-    }),
-    apiTimeoutMilliseconds,
-    "服务器响应超时",
-  );
-  if (!response.ok) throw new Error(await responseError(response));
-  return schema.parse(await response.json());
-};
+const request = async <T,>(path:string,schema:{parse(value:unknown):T},init:RequestInit):Promise<T>=>withTimeout(signal=>attachmentJson(path,value=>schema.parse(value),{...init,signal}),apiTimeoutMilliseconds,'服务器响应超时');
 
 const withTimeout = async <T,>(
   operation: (signal: AbortSignal) => Promise<T>,
@@ -87,24 +55,30 @@ const withTimeout = async <T,>(
 
 export function ExternalEvidenceUploader({
   attachmentIds,
+  scope,
   disabled,
   onChange,
   onMessage,
   onUploadingChange,
 }: {
   attachmentIds: readonly string[];
+  scope?:string;
   disabled: boolean;
   onChange(value: string[]): void;
   onMessage(message: string): void;
   onUploadingChange?(uploading: boolean): void;
 }) {
+  const instance=useId(),inFlight=useRef(false),generation=useRef(0),pendingFiles=useRef<File[]>([]);
+  const [pendingCount,setPendingCount]=useState(0);
+  useEffect(()=>{generation.current++;inFlight.current=false;pendingFiles.current=[];setPendingCount(0);setUploaded([]);setUploading(false);return()=>{generation.current++;if(inFlight.current){inFlight.current=false;onUploadingChange?.(false);}};},[scope]);
   const [uploaded, setUploaded] = useState<UploadedEvidence[]>([]);
   const [uploading, setUploading] = useState(false);
   const [stage, setStage] = useState<UploadStage | null>(null);
   const [failedFile, setFailedFile] = useState<string | null>(null);
 
-  const uploadFiles = async (files: FileList | null): Promise<void> => {
-    if (!files?.length || disabled || uploading) return;
+  const uploadFiles = async (files: FileList | File[] | null): Promise<void> => {
+    if (!files?.length || disabled || inFlight.current || uploading) return;
+    inFlight.current=true;const context=generation.current;pendingFiles.current=Array.from(files);setPendingCount(pendingFiles.current.length);
     setUploading(true);
     onUploadingChange?.(true);
     setFailedFile(null);
@@ -123,62 +97,29 @@ export function ExternalEvidenceUploader({
           prepareTimeoutMilliseconds,
           `${file.name} 文件准备超时`,
         );
-        const sha256 = await withTimeout(
-          async () => sha256Hex(prepared),
-          prepareTimeoutMilliseconds,
-          `${file.name} 文件准备超时`,
-        );
-        const intent = await request(
-          "tools/attachments/upload-intents",
-          UploadIntentResponseSchema,
-          {
-            method: "POST",
-            body: JSON.stringify({
-              filename: prepared.name,
-              mimeType: prepared.type,
-              sizeBytes: prepared.size,
-              sha256,
-            }),
-          },
-        );
-        setStage("uploading");
-        const form = new FormData();
-        for (const [name, value] of Object.entries(intent.uploadFields)) {
-          form.append(name, value);
-        }
-        form.append("file", prepared);
-        const upload = await withTimeout(
-          (signal) => fetch(intent.uploadUrl, {
-            method: "POST",
-            body: form,
-            signal,
-          }),
-          uploadTimeoutMilliseconds,
-          `${file.name} 上传超时`,
-        );
-        if (!upload.ok) throw new Error(`${file.name} 上传失败（${upload.status}）`);
-        setStage("verifying");
-        const finalized = await request(
-          `tools/attachments/${intent.attachmentId}/finalize`,
-          AttachmentResponseSchema,
-          { method: "POST" },
-        );
+        const finalized=await uploadAttachmentWithRecovery(prepared,`external-evidence:${scope??instance}`,{
+          createIntent:input=>request('tools/attachments/upload-intents',UploadIntentResponseSchema,{method:'POST',body:JSON.stringify(input)}),
+          finalize:id=>request(`tools/attachments/${id}/finalize`,AttachmentResponseSchema,{method:'POST'}),
+        },undefined,(phase,operation)=>{setStage(phase==='finalize'?'verifying':'uploading');return operation();},file);
+        if(context!==generation.current)return;
         nextIds.push(finalized.attachmentId);
         nextUploaded.push({
           attachmentId: finalized.attachmentId,
           filename: finalized.filename,
         });
+        pendingFiles.current=pendingFiles.current.slice(1);setPendingCount(pendingFiles.current.length);
+        onChange([...new Set(nextIds)]);setUploaded([...nextUploaded]);
       }
       onChange([...new Set(nextIds)]);
       setUploaded(nextUploaded);
       onMessage(`${formatBusinessDecimal(nextIds.length)} 份证据附件已就绪，提交动作后将锁定到该台账。`);
     } catch (error: unknown) {
-      setFailedFile(activeFileName);
-      onMessage(`${error instanceof Error ? error.message : "附件上传失败"}，请重新选择文件重试。`);
+      if(context!==generation.current)return;setFailedFile(activeFileName);
+      onMessage(`${error instanceof Error ? error.message : "附件上传失败"}。已完成文件保留；请重试未完成附件，文件就绪后仍需提交台账。`);
     } finally {
-      setUploading(false);
+      if(context===generation.current){inFlight.current=false;setUploading(false);
       onUploadingChange?.(false);
-      setStage(null);
+      setStage(null);}
     }
   };
 
@@ -197,7 +138,7 @@ export function ExternalEvidenceUploader({
             type="file"
             multiple
             accept="image/jpeg,image/png,image/webp,application/pdf"
-            disabled={disabled || uploading}
+            disabled={disabled || uploading || pendingCount>0}
             onChange={(event) => {
               void uploadFiles(event.target.files);
               event.target.value = "";
@@ -205,13 +146,14 @@ export function ExternalEvidenceUploader({
           />
         </span>
       </label>
-      <small>支持 JPG、PNG、WebP 和 PDF；系统自动上传并绑定，无需填写附件 ID。</small>
+      <small>支持 JPG、PNG、WebP 和 PDF；文件就绪后仍须提交原台账动作才保存引用；无需填写附件 ID。</small>
       {uploading && stage && <StatusBadge tone="warning">{stageLabel[stage]}</StatusBadge>}
       {!uploading && failedFile && (
         <small className="external-upload-error" role="alert">
-          {failedFile} 未上传成功，可重新选择同一文件重试。
+          {failedFile} 尚未取得就绪回执，已成功部分保留。
         </small>
       )}
+      {!uploading&&pendingCount>0&&<><Button disabled={disabled} onClick={()=>void uploadFiles(pendingFiles.current)}>重试未完成附件</Button><Button disabled={disabled} onClick={()=>{pendingFiles.current=[];setPendingCount(0);setFailedFile(null);onMessage('已停止本页剩余附件选择；此前请求不会撤销，已上传文件仍按原记录核对。');}}>停止剩余上传</Button></>}
       {uploaded.length > 0 && (
         <div className="external-evidence-list">
           {uploaded.map((item) => (

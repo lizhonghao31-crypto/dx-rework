@@ -27,8 +27,9 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
   const [files, setFiles] = useState<PatternMaterial[]>([]), [uploading, setUploading] = useState(false), [error, setError] = useState("");
   const [transferReceiptNotice,setTransferReceiptNotice]=useState('');
   const [uncertainTransfer,setUncertainTransfer]=useState(false),writing=useRef(false);
+  const pendingUploads=useRef<File[]>([]),uploadingGuard=useRef(false),uploadContext=useRef(0);
   const disabled = busy || uploading||uncertainTransfer;
-  useDigitalDetailNavigationGuard(uncertainTransfer,busy||uploading,writing,'原换人提交结果尚未确认，离开不会撤销已发出的操作，且会丢失本页重试记录。仍要离开？');
+  useDigitalDetailNavigationGuard(uncertainTransfer||pendingUploads.current.length>0,busy||uploading,writing,uncertainTransfer?'原换人提交结果尚未确认，离开不会撤销已发出的操作，且会丢失本页重试记录。仍要离开？':'还有附件未就绪，离开会丢失本页剩余文件；原上传请求不会撤销。仍要离开？');
   const [developmentNodes,setDevelopmentNodes]=useState<DevelopmentRevision["affectedNodes"]>([]),[developmentProblems,setDevelopmentProblems]=useState<DevelopmentRevision["categories"]>([]);
   const [retained, setRetained] = useState<PatternMaterial[]>([]);
   const attempt = useRef<{ body: string; action: string; key: string } | null>(null), search = useDebouncedValue(searchText.trim(), 250);
@@ -45,19 +46,21 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
     void patternRequest(`workers?q=${encodeURIComponent(search)}`, PatternWorkerOptionsSchema, { signal: abort.signal }).then(setWorkers).catch(e => { if (!abort.signal.aborted) setError(e.message); });
     return () => abort.abort();
   }, [active, search]);
+  useEffect(()=>{const wasUploading=uploadingGuard.current;uploadContext.current++;pendingUploads.current=[];uploadingGuard.current=false;setUploading(false);if(wasUploading)onBusy(false);return()=>{uploadContext.current++;};},[order.orderId,order.currentRoundId,active]);
   const upload = async (selected: File[]) => {
     if (disabled || !selected.length) return;
     if (selected.length + files.length + retained.length > PATTERN_MATERIAL_LIMIT) { setError("本轮资料合计最多20份，请先移除不需要的资料"); return; }
-    setUploading(true); onBusy(true); setError("");
+    const context=uploadContext.current;pendingUploads.current=selected;uploadingGuard.current=true;setUploading(true); onBusy(true); setError("");
     try {
       for (const file of selected) {
-        const result = await uploadPatternOriginal(file, "pattern", "rework");
+        const result = await uploadPatternOriginal(file, "pattern", "rework",`${order.orderId}:${order.currentRoundId}`);
+        if(context!==uploadContext.current)return;pendingUploads.current=pendingUploads.current.filter(item=>item!==file);
         setFiles(current => [...current, { attachmentId: result.attachmentId, filename: result.filename, mimeType: result.mimeType }]);
       }
-    } catch (e) { setError(e instanceof Error ? e.message : "附件上传失败"); }
-    finally { setUploading(false); onBusy(false); }
+    } catch (e) {if(context===uploadContext.current)setError(e instanceof Error ? e.message : "附件尚未就绪，已完成部分保留"); }
+    finally {if(context===uploadContext.current){uploadingGuard.current=false;setUploading(false);onBusy(false);} }
   };
-  const close=async()=>{if(uncertainTransfer&&!await confirmInApp('换人提交结果尚未确认，关闭不会撤销操作。可稍后重新打开本页核对，仍要关闭？'))return;onActive(null);};
+  const close=async()=>{if(pendingUploads.current.length&&!await confirmInApp('还有附件未就绪，关闭会丢失本页剩余文件；原上传请求不会撤销。仍要关闭？'))return;if(uncertainTransfer&&!await confirmInApp('换人提交结果尚未确认，关闭不会撤销操作。可稍后重新打开本页核对，仍要关闭？'))return;onActive(null);};
   const recoverTransfer=async(retry=false)=>{
     if(writing.current||!developmentContext||!attempt.current)return;
     writing.current=true;onBusy(true);setError('');
@@ -83,6 +86,7 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
     finally{writing.current=false;onBusy(false);}
   };
   const submit = async (event: FormEvent) => {
+    if(pendingUploads.current.length){event.preventDefault();setError("还有本地附件未就绪，请先重试剩余附件或停止剩余上传");return;}
     event.preventDefault(); if (!active || busy || uploading) return;
     const basis = { version: order.version, roundId: order.currentRoundId };
     const input = active === "rework" ? RequestPatternReworkSchema.safeParse({ ...basis, reason, reasonCategory: category,...(order.developmentSourceId?{developmentNodes,developmentProblems,...(order.developmentMakingBasis?.needsUpgrade?{developmentMaking:makingUpgradeFromForm(new FormData(event.currentTarget as HTMLFormElement),order.developmentMakingBasis)}:{})}:{}), retainedAttachmentIds: retained.map(file => file.attachmentId), attachmentIds: files.map(file => file.attachmentId) })
@@ -112,7 +116,7 @@ export function PatternOrderExceptions({ order, active, onActive, busy, onBusy, 
       <label>返工原因分类<select className="rework-v2-control" disabled={disabled} value={category} onChange={e => setCategory(e.target.value)}><option value="customer_change">客户修改要求</option><option value="workmanship">制作不符合要求</option><option value="other">其他</option></select></label>
 
       {order.developmentSourceId&&<><p>本次同时建立原打板工作轮与数字开发局部复版；工资仍按主管明确核定的原工作轮金额。</p><fieldset><legend>受影响工序</legend>{DEVELOPMENT_REVISION_NODES.map(node=><label key={node} className="pattern-rework-node-choice"><input type="checkbox" disabled={disabled} checked={developmentNodes.includes(node)} onChange={event=>setDevelopmentNodes(current=>event.target.checked?[...current,node]:current.filter(value=>value!==node))}/>{node}</label>)}</fieldset><fieldset><legend>问题分类</legend>{DEVELOPMENT_PROBLEM_CATEGORIES.map(node=><label key={node} className="pattern-rework-node-choice"><input type="checkbox" disabled={disabled} checked={developmentProblems.includes(node)} onChange={event=>setDevelopmentProblems(current=>event.target.checked?[...current,node]:current.filter(value=>value!==node))}/>{node}</label>)}</fieldset></>}
-      <DevelopmentMakingUpgradeFields basis={order.developmentMakingBasis} disabled={disabled}/><PatternMaterialInput kind="pattern" purpose="rework" count={files.length + retained.length} label="补充图片 / PDF" disabled={disabled} onFiles={selected => void upload(selected)} />
+      <DevelopmentMakingUpgradeFields basis={order.developmentMakingBasis} disabled={disabled}/>{pendingUploads.current.length>0&&!uploading&&<><Button type="button" disabled={busy} onClick={()=>void upload(pendingUploads.current)}>重试剩余制作资料</Button><Button type="button" disabled={busy} onClick={()=>{pendingUploads.current=[];setError('已停止本地剩余附件选择，原请求不会撤销，已上传文件保留。');}}>停止剩余上传</Button></>}<PatternMaterialInput kind="pattern" purpose="rework" count={files.length + retained.length} label="补充图片 / PDF" disabled={disabled||pendingUploads.current.length>0} onFiles={selected => void upload(selected)} />
       <PatternMaterials files={[...retained, ...files]} disabled={disabled} onRemove={id => { setRetained(current => current.filter(file => file.attachmentId !== id)); setFiles(current => current.filter(file => file.attachmentId !== id)); }} />
     </> : null}
     {active === "transfer" ? <label>接手师傅<div className="rework-v2-control"><SearchSelect options={workers.filter(worker => worker.userId !== segment?.workerUserId).map(worker => ({ value: worker.personId, label: worker.name }))} value={personId} onChange={setPersonId} onSearchChange={setSearchText} placeholder="输入姓名选择师傅" ariaLabel="接手师傅" emptyText="没有匹配的师傅" disabled={disabled} /></div></label> : null}

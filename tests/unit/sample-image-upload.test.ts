@@ -35,25 +35,26 @@ describe("sample image upload stages", () => {
     const client = api(), fetcher = vi.fn();
     vi.mocked(client.createIntent).mockRejectedValue(new SampleRequestError("Request validation failed", "VALIDATION_ERROR", 400));
     vi.stubGlobal("fetch", fetcher);
-    await expect(uploadSampleImage(source(), client)).rejects.toThrow("上传申请失败：请求资料校验未通过");
+    await expect(uploadSampleImage(source(), client)).rejects.toThrow("申请已被拒绝，本地文件仍保留");
     expect(fetcher).not.toHaveBeenCalled(); expect(client.finalize).not.toHaveBeenCalled();
   });
 
   it("stops before finalize on transfer failure and succeeds on an explicit retry", async () => {
-    const client = api(), fetcher = vi.fn().mockResolvedValueOnce(new Response(null, { status: 503 })).mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const original=source(),client = api(), fetcher = vi.fn().mockResolvedValueOnce(new Response(null, { status: 503 }));
     vi.stubGlobal("fetch", fetcher);
-    await expect(uploadSampleImage(source(), client)).rejects.toThrow("图片上传失败");
+    await expect(uploadSampleImage(original, client)).rejects.toThrow("文件传输未完成");
     expect(client.finalize).not.toHaveBeenCalled();
-    await expect(uploadSampleImage(source(), client)).resolves.toMatchObject({ status: "ready" });
-    expect(client.createIntent).toHaveBeenCalledTimes(2);
+    await expect(uploadSampleImage(original, client)).resolves.toMatchObject({ status: "ready" });
+    expect(client.createIntent).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledTimes(1);
     expect(client.finalize).toHaveBeenCalledTimes(1);
   });
 
   it("does not publish an unfinished attachment after finalize failure", async () => {
     const client = api(); vi.stubGlobal("fetch", async () => new Response(null, { status: 204 }));
     vi.mocked(client.finalize).mockRejectedValueOnce(new SampleRequestError("Request validation failed", "VALIDATION_ERROR", 400));
-    await expect(uploadSampleImage(source(), client)).rejects.toThrow("上传确认失败：请求资料校验未通过");
+    await expect(uploadSampleImage(source(), client)).rejects.toThrow("服务端文件校验未完成");
     vi.mocked(client.finalize).mockResolvedValueOnce({ ...(await api().finalize("fixture")), status: "pending" });
-    await expect(uploadSampleImage(source(), client)).rejects.toThrow("图片尚未确认完成");
+    await expect(uploadSampleImage(source(), client)).rejects.toThrow("服务端附件回执与本次文件不一致");
   });
 });

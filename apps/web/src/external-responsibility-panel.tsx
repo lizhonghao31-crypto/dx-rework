@@ -655,6 +655,7 @@ export function ExternalResponsibilityPanel({
               placeholder="填写本次金额"
             />}
             {canAttachEvidence && <ExternalEvidenceUploader
+              scope={caseItem.caseId}
               attachmentIds={evidence}
               disabled={busy}
               onChange={(value) => setAttachments((current) => ({ ...current, [caseItem.caseId]: value }))}

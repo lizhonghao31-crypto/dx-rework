@@ -73,8 +73,10 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
       else{setDraftVersion(response.draftVersion!);const refreshed=await digitalRequest<Rounds>(`${base}/rounds`);setRounds(refreshed);if(refreshed.draft)installDocument(refreshed.draft.payload.document);}
     }catch(reason){setError(reason instanceof Error?reason.message:"复版操作失败");}finally{writing.current=false;setBusy(false);}
   };
+  const uploadContext=useRef(0),uploadWriter=useRef(false);
+  useEffect(()=>{uploadContext.current++;if(uploadWriter.current){uploadWriter.current=false;writing.current=false;setBusy(false);}previews.reset();successfulUploads.current.clear();return()=>{uploadContext.current++;};},[sourceId,selectedRound]);
   const upload=async(files:File[])=>{
-    if(!files?.length||writing.current)return;previews.start(files);writing.current=true;setBusy(true);setError("");
+    if(!files?.length||writing.current)return;previews.start(files,fileKind,upload);const currentUploadContext=uploadContext.current;uploadWriter.current=true;writing.current=true;setBusy(true);setError("");
     try{
       let fileCount=document.files.length;
       const limits=await digitalRequest<{maxUploadBytes:number}>(`${base}/upload-limits`);
@@ -84,10 +86,10 @@ export function DigitalDevelopmentPanel({sourceId,onClose,initialRound,embedded=
         if(successfulUploads.current.has(fingerprint)){previews.uploaded(file,successfulUploads.current.get(fingerprint)!);continue;}
         if(fileCount>=30)throw Error("开发单最多30个附件");
         const attachmentId=await uploadDevelopmentMaterial(base,file,fileKind,limits.maxUploadBytes);
-        previews.uploaded(file,attachmentId);successfulUploads.current.set(fingerprint,attachmentId);fileCount++;
+        if(currentUploadContext!==uploadContext.current)return;previews.uploaded(file,attachmentId);successfulUploads.current.set(fingerprint,attachmentId);fileCount++;
         setDocument(current=>({...current,files:[...current.files,{attachmentId,kind:fileKind}]}));setDirty(true);
-      }catch(reason){const message=reason instanceof Error?reason.message:"上传失败";previews.failed(file,message);setError(message);}}
-    }catch(reason){const message=reason instanceof Error?reason.message:"上传失败";for(const file of files)previews.failed(file,message);setError(message);}finally{writing.current=false;setBusy(false);}
+      }catch(reason){if(currentUploadContext!==uploadContext.current)return;const message=reason instanceof Error?reason.message:"上传失败";previews.failed(file,message);setError(message);}}
+    }catch(reason){if(currentUploadContext===uploadContext.current){const message=reason instanceof Error?reason.message:"上传失败";for(const file of files)previews.failed(file,message);setError(message);}}finally{if(currentUploadContext===uploadContext.current){uploadWriter.current=false;writing.current=false;setBusy(false);}}
   };
   const readonly=embedded|| (revision?!sheet?.canRevise:!sheet?.canEdit||sheet.status==="published");
   const imageUrl=(id:string)=>previews.url(id,urls.apiUrl(`digital-production/${base}/attachments/${id}`));

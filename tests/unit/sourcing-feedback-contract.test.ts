@@ -14,8 +14,11 @@ describe("sourcing form feedback", () => {
   it("clears the previous failure on retry and success, retaining failure blocking", async () => {
     const source = await readFile("apps/web/src/sourcing-workspace-page.tsx", "utf8");
     expect(source).toContain("setUploading(true);\n    setUploadFailed(false);");
-    expect(source).toContain("setImages((current) => [...current, ...uploaded]);\n      setUploadFailed(false);");
-    expect(source).toContain("uploadFailed && !uploading ? <p role=\"alert\"");
+    expect(source).toContain("batch.completed.set(sourceFile,result)");
+    expect(source).toContain("batch.order.flatMap(file=>batch.completed.get(file)??[])");
+    expect(source).toContain("uploadBatch.current=null;\n      setUploadFailed(false);");
+    expect(source).toContain("uploadFailed && !uploading ? <><p role=\"alert\"");
+    expect(source).toContain("重试剩余图片");
     expect(source).toContain("imageCount: images.length, uploading, uploadFailed");
     expect(source).toContain("setUploadFailed(true);");
   });

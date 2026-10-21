@@ -1,3 +1,4 @@
+import {uploadAttachmentWithRecovery,toolsAttachmentApi,localFileScope} from "./attachment-upload-recovery.js";
 import {feedbackFetch,feedbackJson} from "./request-response-feedback.js";
 import { LogoutButton } from "./session-exit.js";
 import {FactoryReceiptSelector} from "./production-closure-ui.js";
@@ -10,10 +11,10 @@ import { createWebUrls } from "../url-contract.js";
 import { createClientRequestId } from "./client-request-id.js";
 import {
   isImageAttachment,
+  hasInvalidDeclaredImageError,
   isReceivingImageCandidate,
   normalizeReceivingImageForUpload,
   prepareAttachmentForUpload,
-  sha256Hex,
 } from "./attachment-upload.js";
 import { mapWithConcurrency } from "./concurrency.js";
 import { useDebouncedValue } from "./use-debounced-value.js";
@@ -65,12 +66,7 @@ type Receipt = Readonly<{
   differenceQuantity: number;
   receivedAt: string;
 }>;
-type UploadIntent = Readonly<{
-  attachmentId: string;
-  uploadUrl: string;
-  uploadFields: Readonly<Record<string, string>>;
-}>;
-type FinalizedAttachment = Readonly<{ attachmentId: string }>;
+
 type SelectedImage = Readonly<{ file: File; previewUrl: string }>;
 
 const requestJson = async <T,>(path: string, init: RequestInit): Promise<T> => {
@@ -92,47 +88,21 @@ export async function receivingReceiptRequest(input:unknown,key:string):Promise<
   if(![receipt.receiptId,receipt.receivingBatchId,receipt.styleNo,receipt.receivedAt].every(item=>typeof item==='string'&&item.length>0)||![receipt.documentQuantity,receipt.actualQuantity,receipt.defectiveQuantity,receipt.differenceQuantity].every(Number.isFinite))throw Error("invalid receipt");return receipt;});
 }
 
-const INVALID_DECLARED_IMAGE_MESSAGE = "Uploaded object is not a valid file of the declared type";
-
-const uploadPreparedReceivingImage = async (file: File, sourceName: string): Promise<string> => {
-  const sha256 = await sha256Hex(file);
-  const intent = await requestJson<UploadIntent>("tools/attachments/upload-intents", {
-    method: "POST",
-    body: JSON.stringify({
-      filename: file.name,
-      mimeType: file.type,
-      sizeBytes: file.size,
-      sha256,
-    }),
-  });
-  const upload = new FormData();
-  for (const [name, value] of Object.entries(intent.uploadFields)) upload.append(name, value);
-  upload.append("file", file);
-  const uploaded = await fetch(intent.uploadUrl, { method: "POST", body: upload });
-  if (!uploaded.ok) throw new Error(`${sourceName} 上传失败`);
-  const finalized = await requestJson<FinalizedAttachment>(
-    `tools/attachments/${intent.attachmentId}/finalize`,
-    { method: "POST" },
-  );
-  return finalized.attachmentId;
-};
-
-const hasInvalidDeclaredImageError = (error: unknown): boolean =>
-  error instanceof Error && [INVALID_DECLARED_IMAGE_MESSAGE, "附件内容与申报文件类型不一致，请重新选择有效原文件"].includes(error.message);
+const uploadPreparedReceivingImage=async(file:File,source:File):Promise<string>=>(await uploadAttachmentWithRecovery(file,`receiving:${localFileScope(source)}`,toolsAttachmentApi,undefined,undefined,source)).attachmentId;
 
 const uploadReceivingImage = async (source: File): Promise<string> => {
   const prepared = isImageAttachment(source)
     ? await prepareAttachmentForUpload(source)
     : await normalizeReceivingImageForUpload(source);
   try {
-    return await uploadPreparedReceivingImage(prepared, source.name);
+    return await uploadPreparedReceivingImage(prepared, source);
   } catch (error) {
     if (!hasInvalidDeclaredImageError(error)) throw error;
   }
 
   try {
     const normalized = await normalizeReceivingImageForUpload(source);
-    return await uploadPreparedReceivingImage(normalized, source.name);
+    return await uploadPreparedReceivingImage(normalized, source);
   } catch (error) {
     if (hasInvalidDeclaredImageError(error)) {
       throw new Error(`${source.name} 图片格式无法识别，请重新选择图片`);

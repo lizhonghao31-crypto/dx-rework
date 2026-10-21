@@ -64,7 +64,10 @@ describe("1.0 prelaunch receiving -> rework evidence chain", () => {
     const page = await read("apps/web/src/receiving-page.tsx");
     expect(page).toContain('...(init.body ? { "content-type": "application/json" } : {})');
     expect(page).not.toContain('headers: { "content-type": "application/json", ...(init.headers ?? {}) }');
-    expect(page).toMatch(/tools\/attachments\/\$\{intent\.attachmentId\}\/finalize`[\s\S]{0,100}\{ method: "POST" \}/);
+    expect(page).toContain("toolsAttachmentApi");
+    const recovery=await read("apps/web/src/attachment-upload-recovery.ts");
+    expect(recovery).toContain("...(init.body?{'content-type':'application/json'}:{})");
+    expect(recovery).toMatch(/finalize:id=>attachmentJson\(`tools\/attachments\/\$\{id\}\/finalize`[\s\S]{0,100}\{method:'POST'\}/);
   });
 
   it("keeps style number as the business key while giving the database an internal batch identity", async () => {
