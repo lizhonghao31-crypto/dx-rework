@@ -1,10 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { budgetIssues } from "../../apps/web/src/digital-budget-validation.js";
+import { budgetFieldChapter, budgetColumns, budgetIssues } from "../../apps/web/src/digital-budget-validation.js";
 import { BudgetDocumentSchema, budgetPublishErrors, calculateBudget, type BudgetDocument } from "../../packages/contracts/src/digital-budget.js";
 const doc=():BudgetDocument=>({fabricType:"针织",productCategory:"上衣",monthSeries:"TEST-2026-10",date:"2026-10-06",currency:"人民币",rows:[{rowId:randomUUID(),section:"主料",category:"面料",name:"主布A",specification:"",unit:"米",supplier:"TEST",consumption:"1",unitPrice:"2"}],freight:"0",cm:"3",salePrice:"10",outsourcingScope:"裁、车、烫、包装",outsourcingUnitPrice:"3",imageAttachmentIds:[]});
 describe("DOC01 original budget validation with stable UI targets",()=>{
  it("retains original invalid decimal and targets the exact surviving row after deletion",()=>{const d=doc(),old=d.rows[0]!.rowId;d.rows.push({...d.rows[0]!,rowId:randomUUID(),name:"长料名",unitPrice:"10.8元"});d.rows.shift();expect(budgetIssues(d)).toMatchObject([{id:`budget-${d.rows[0]!.rowId}-unitPrice`,label:"主料 · 长料名 · 单价不含税"}]);expect(budgetIssues(d)[0]!.id).not.toContain(old);expect(d.rows[0]!.unitPrice).toBe("10.8元");});
  it("uses original publish errors and does not invent unit or supplier requirements",()=>{const d=doc();d.rows[0]!.unit="";d.rows[0]!.supplier="";expect(budgetIssues(d,true)).toEqual([]);d.outsourcingUnitPrice="1.234";expect(budgetIssues(d,true)).toEqual([{id:"budget-outsourcingUnitPrice",label:"本次实际外发预算价",message:budgetPublishErrors(d)[0]}]);d.outsourcingUnitPrice="1.230000";expect(budgetIssues(d,true)).toEqual([]);});
  it("locates incomplete used rows while leaving exact six-place inputs intact",()=>{const d=doc();d.rows[0]!.consumption="0.000001";expect(budgetIssues(d)).toEqual([]);expect(calculateBudget(d).main).toBe("0.000002");d.rows[0]!.consumption="0.0000001";expect(BudgetDocumentSchema.safeParse(d).success).toBe(false);expect(budgetIssues(d)[0]!.id).toBe(`budget-${d.rows[0]!.rowId}-consumption`);d.rows[0]!.consumption="";expect(budgetIssues(d,true)[0]!.id).toBe(`budget-${d.rows[0]!.rowId}-consumption`);});
+});
+
+describe("budget error chapter ownership",()=>{
+ it("maps all document and current stable row fields without changing the draft",()=>{
+  const d=doc();d.rows.push({...d.rows[0]!,rowId:randomUUID(),section:"辅料"},{...d.rows[0]!,rowId:randomUUID(),section:"外发工序"});
+  const before=structuredClone(d);
+  for(const [chapter,fields]of Object.entries({"budget-basic":["fabricType","productCategory","monthSeries","imageAttachmentIds","rows"],"budget-summary":["freight","cm","salePrice","currency"],"budget-outsourcing":["date","outsourcingScope","outsourcingUnitPrice"]}))for(const field of fields)expect(budgetFieldChapter(`budget-${field}`,d)).toBe(chapter);
+  for(const [index,row]of d.rows.entries())for(const field of Object.keys(budgetColumns))expect(budgetFieldChapter(`budget-${row.rowId}-${field}`,d)).toBe(`budget-section-${index}`);
+  expect(d).toEqual(before);d.rows.reverse();expect(budgetFieldChapter(`budget-${before.rows[0]!.rowId}-unitPrice`,d)).toBe("budget-section-0");d.rows.pop();expect(budgetFieldChapter(`budget-${before.rows[0]!.rowId}-unitPrice`,d)).toBeUndefined();
+  expect(budgetFieldChapter("development-quantity",d)).toBeUndefined();expect(budgetFieldChapter("budget-nonexistent",d)).toBeUndefined();
+ });
 });
