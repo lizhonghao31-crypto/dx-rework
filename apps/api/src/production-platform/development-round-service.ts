@@ -1,3 +1,4 @@
+import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
 import {verificationAvailable} from "./development-material-verification.js";
 import {developmentRevisionForSave} from "./development-document-format.js";
 import {isDevelopmentMaterialPlaceholder} from "@dx-rework/contracts/digital-development";
@@ -42,8 +43,9 @@ export class DevelopmentRoundService {
  async save(actor:TrustedActorContext,sourceId:string,input:{expectedDraftVersion:number;revision:DevelopmentRevision},key:string){
   return this.command(actor,sourceId,'save',key,input,async db=>{
    const sheet=await this.forms().read(actor,sourceId,db);if((sheet.roundNumber??1)!==input.revision.basedOnRound)fail('已有新轮次，请重新读取当前资料');
-   const before=(await db.query('SELECT version FROM digital_development_round_drafts WHERE source_id=$1 FOR UPDATE',[sourceId])).rows[0];if((before?.version??0)!==input.expectedDraftVersion)fail('复版草稿已更新，请刷新');
+   const before=(await db.query('SELECT version,payload FROM digital_development_round_drafts WHERE source_id=$1 FOR UPDATE',[sourceId])).rows[0];if((before?.version??0)!==input.expectedDraftVersion)fail('复版草稿已更新，请刷新');
    const revision={...input.revision,document:developmentRevisionForSave(input.revision.document,sheet.document!)};
+   await validateAuxiliaryReferences(db,revision.document,before?.payload?.document??sheet.document!);
    await this.forms().bindFiles(db,actor,sourceId,revision.document);
    await db.query('INSERT INTO digital_development_round_drafts(source_id,version,based_on_round,payload,updated_by) VALUES($1,1,$2,$3,$4) ON CONFLICT(source_id) DO UPDATE SET version=digital_development_round_drafts.version+1,based_on_round=$2,payload=$3,updated_by=$4,updated_at=CURRENT_TIMESTAMP',[sourceId,input.revision.basedOnRound,JSON.stringify(revision),actor.actorId]);
    return {draftVersion:input.expectedDraftVersion+1};
@@ -75,6 +77,7 @@ export class DevelopmentRoundService {
   if(!returnTaskId&&!patternReworkRoundId&&!sheet.canEdit)digitalForbidden();
   if(input.basedOnRound!==(sheet.roundNumber??1))fail('已有新轮次，不能从旧版重复发布');
   if(returnTaskId){const task=(await db.query("SELECT t.route_version,a.task_kind,a.source_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE t.task_id=$1",[returnTaskId])).rows[0];if(!task||task.source_id!==sourceId||task.task_kind!=='development_tail_check'||task.route_version!==input.basedOnRound||input.origin!=='内部发现')digitalForbidden();}
+  await validateAuxiliaryReferences(db,input.document,sheet.document!);
   const errors=developmentPublishErrors(input.document,{allowMissingOrderDate:sheet.document!.orderDate===null});if(errors.length)fail(errors.join('；'));
   if(input.affectedNodes.includes('工艺')&&input.document.craft==='无')fail('本轮没有印绣花工艺');
   if(input.affectedNodes.includes('洗水')&&input.document.washing==='免洗')fail('本轮为免洗，请核对受影响节点');

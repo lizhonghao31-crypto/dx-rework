@@ -982,5 +982,31 @@
       "guard_production_order_root_immutable"
     ],
     "sequences": []
+  },
+  "0249_shared_auxiliary_catalog": {
+    "checksum": "6644394f11095233560b233ac22472f1b8cdb321a2b8999f8c666a4abde3df17",
+    "tables": [
+      "capability_catalog",
+      "role_capabilities"
+    ],
+    "functions": [],
+    "references": [
+      "app_users",
+      "operation_events"
+    ],
+    "insert": [
+      "capability_catalog",
+      "role_capabilities"
+    ],
+    "update": [],
+    "creates": [
+      "auxiliary_catalog_items",
+      "auxiliary_catalog_versions",
+      "auxiliary_catalog_merges"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }

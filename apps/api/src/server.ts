@@ -38,6 +38,7 @@ import pg from "pg";
 import { EmployeeAccessService } from "./access/employee-access-service.js";
 import { RootAuthority } from "./access/root-authority.js";
 import { WorkerAwareAccessMasterDataService } from "./access/worker-aware-access-service.js";
+import {AuxiliaryCatalogService} from './access/auxiliary-catalog-service.js';
 import { AdminAuditService } from "./admin-audit-service.js";
 import { AdminConsoleService } from "./admin-console-service.js";
 import { buildApp } from "./app.js";
@@ -254,6 +255,7 @@ const app = buildApp({
   getAppliedSchemaHistory: () => getAppliedSchemaHistory(database),
   auth,
   access: {
+    auxiliaryCatalog:new AuxiliaryCatalogService(database,rootAuthority),
     authenticate: (token) => auth.authenticate(token),
     service: accessService,
     root: rootAuthority,

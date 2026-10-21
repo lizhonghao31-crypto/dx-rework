@@ -1,3 +1,4 @@
+import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
 import {DevelopmentAmendmentService} from "./development-amendment-service.js";
 import {developmentDraftForSave} from "./development-document-format.js";
 import type {SaveDevelopmentAmendment,SubmitDevelopmentAmendment} from "@dx-rework/contracts/digital-development-amendments";
@@ -92,6 +93,7 @@ export class DigitalDevelopmentService {
       if (row?.status === "published") conflict("已发布开发单不可覆盖，请通过复版记录实际修改");
       const source=(await db.query("SELECT created_at FROM digital_production_sources WHERE source_id=$1",[sourceId])).rows[0];
       const document=developmentDraftForSave(input.document,row?.document,source.created_at);
+      await validateAuxiliaryReferences(db,document,row?.document);
       await this.bindFiles(db, actor, sourceId, document);
       await db.query(`INSERT INTO digital_development_documents(source_id,version,status,document,updated_by) VALUES($1,1,'draft',$2,$3)
         ON CONFLICT(source_id) DO UPDATE SET version=digital_development_documents.version+1,document=EXCLUDED.document,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP`, [sourceId, JSON.stringify(document), actor.actorId]);

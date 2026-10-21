@@ -1031,6 +1031,10 @@
     {
       "version": "0248_development_document_amendments",
       "checksum": "5e7181b85079649a866a962848477997874c7b86ff9e2178db0e90cf352bdd08"
+    },
+    {
+      "version": "0249_shared_auxiliary_catalog",
+      "checksum": "6644394f11095233560b233ac22472f1b8cdb321a2b8999f8c666a4abde3df17"
     }
   ]
 }

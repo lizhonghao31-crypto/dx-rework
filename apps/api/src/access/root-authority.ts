@@ -1,4 +1,4 @@
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 
 import { ApplicationError } from "../platform/errors.js";
 
@@ -9,6 +9,7 @@ type BootstrapRoot = Readonly<{
   provider_user_id: string;
   corp_id: string;
 }>;
+type Database = Pick<Pool|PoolClient,"query">;
 type DatabaseError = Readonly<{ code?: string }>;
 
 export class RootAuthority {
@@ -37,15 +38,15 @@ export class RootAuthority {
     }
   }
 
-  async isRootUser(userId: string): Promise<boolean> {
-    const bootstrap = await this.bootstrapRoot();
+  async isRootUser(userId: string, database:Database=this.database, lock=false): Promise<boolean> {
+    const bootstrap = await this.bootstrapRoot(database,lock);
     if (bootstrap) {
       if (bootstrap.user_id !== userId) return false;
-      return this.isEligibleDingTalkIdentity(userId, bootstrap.provider_user_id);
+      return this.isEligibleDingTalkIdentity(userId, bootstrap.provider_user_id,database,lock);
     }
 
     if (!this.rootDingtalkUserId) return false;
-    return this.isEligibleDingTalkIdentity(userId, this.rootDingtalkUserId);
+    return this.isEligibleDingTalkIdentity(userId, this.rootDingtalkUserId,database,lock);
   }
 
   async assertProtectedRoleMutation(actorUserId: string, roleCode: string): Promise<void> {
@@ -106,13 +107,13 @@ export class RootAuthority {
     return roles.filter((role) => !this.isProtectedRole(role.roleCode));
   }
 
-  private async bootstrapRoot(): Promise<BootstrapRoot | null> {
+  private async bootstrapRoot(database:Database=this.database,lock=false): Promise<BootstrapRoot | null> {
     try {
-      const result = await this.database.query<BootstrapRoot>(
+      const result = await database.query<BootstrapRoot>(
         `SELECT user_id,provider_user_id,corp_id
          FROM owner_bootstrap_consumptions
          WHERE singleton=true AND corp_id=$1
-         LIMIT 1`,
+         LIMIT 1${lock?" FOR SHARE":""}`,
         [this.corporationId],
       );
       return result.rows[0] ?? null;
@@ -122,8 +123,8 @@ export class RootAuthority {
     }
   }
 
-  private async isEligibleDingTalkIdentity(userId: string, providerUserId: string): Promise<boolean> {
-    const result = await this.database.query(
+  private async isEligibleDingTalkIdentity(userId: string, providerUserId: string,database:Database=this.database,lock=false): Promise<boolean> {
+    const result = await database.query(
       `SELECT 1
        FROM app_users u
        JOIN identity_mappings i
@@ -135,7 +136,7 @@ export class RootAuthority {
          AND i.provider_user_id=$3
          AND i.active=true
          AND i.employed=true
-       LIMIT 1`,
+       LIMIT 1${lock?" FOR SHARE OF u,i":""}`,
       [userId, this.corporationId, providerUserId],
     );
     return Boolean(result.rows[0]);

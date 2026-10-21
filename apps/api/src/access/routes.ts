@@ -41,6 +41,7 @@ import { ROOT_ACTOR_ROLE } from "./business-authority.js";
 import type { RootAuthority } from "./root-authority.js";
 import type { AccessMasterDataService } from "./service.js";
 import { supplierBatchTemplate } from "./supplier-batch-template.js";
+import type {AuxiliaryCatalogService} from './auxiliary-catalog-service.js';
 
 const cookieToken = (request: FastifyRequest): string | undefined =>
   request.headers.cookie
@@ -71,6 +72,7 @@ type AssignmentCorrectionService = Readonly<{
 }>;
 
 export type AccessHttpDependencies = Readonly<{
+  auxiliaryCatalog?:AuxiliaryCatalogService;
   authenticate(token: string | undefined): Promise<AuthUser>;
   service: AccessMasterDataService & Partial<AssignmentCorrectionService>;
   root: RootAuthority;
