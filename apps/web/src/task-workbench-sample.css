@@ -38,3 +38,7 @@
 .task-workbench-sample .development-material-check-form th {position:sticky;top:0;background:var(--dx-surface,#fff);}
 .task-workbench-sample .development-material-check-form input[type=checkbox] {width:18px;height:18px;}
 .task-workbench-sample small {display:block;}
+
+.task-workbench-handle[data-material-check=true] {grid-template-columns:minmax(0,1fr);}
+.task-workbench-handle[data-material-check=true]>aside {background:var(--dx-surface-subtle,#f5f8fa);}
+.task-workbench-handle[data-material-check=true]>aside p {display:inline-block;margin:4px 20px 4px 0;}

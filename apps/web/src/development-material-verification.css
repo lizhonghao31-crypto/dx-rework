@@ -1,7 +1,32 @@
-.development-material-verification .development-table-scroll table { min-width: 760px; table-layout: fixed; }
-.development-material-verification .development-table-scroll th:first-child { width: 180px; }
-.development-material-verification .development-table-scroll th:nth-child(2) { width: 260px; }
-.development-material-verification .development-table-scroll th { text-align: left; }
-.development-material-verification .development-table-scroll td { vertical-align: top; }
-.development-material-verification .development-table-scroll input:not([type=checkbox]),
-.development-material-verification .development-table-scroll select { width: 100%; box-sizing: border-box; }
+.development-material-verification { min-width: 0; }
+.development-material-verification > header h3 { margin: 0 0 8px; }
+.development-material-verification > fieldset { min-width: 0; border: 0; padding: 0; margin: 0; }
+.development-material-verification .material-bulk-controls { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; }
+.development-material-verification .material-bulk-controls > div { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--border-color,#d8e0e6); border-radius: 8px; padding: 12px; background: var(--surface-subtle,#f5f8fa); }
+.development-material-verification .material-bulk-controls small { flex-basis: 100%; color: var(--text-secondary,#52616d); line-height: 1.6; }
+.development-material-verification .material-bulk-scope { color: var(--text-secondary,#52616d); font-size: 13px; line-height: 1.7; }
+.development-material-verification .material-verification-list { display: grid; gap: 14px; }
+.development-material-verification .material-verification-card { min-width: 0; border: 1px solid var(--border-color,#d8e0e6); border-radius: 8px; padding: 16px; overflow-wrap: anywhere; background: var(--surface,#fff); }
+.development-material-verification .material-verification-card > header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; }
+.development-material-verification .material-verification-card h4 { font-size: 16px; margin: 0; }
+.development-material-verification .material-verification-card header > span { font-size: 13px; color: var(--text-secondary,#52616d); }
+.development-material-verification .material-verification-specs { display: flex; flex-wrap: wrap; gap: 10px 24px; margin: 12px 0; }
+.development-material-verification .material-verification-specs > div { min-width: 0; max-width: 100%; }
+.development-material-verification .material-verification-specs dt { font-size: 12px; color: var(--text-secondary,#52616d); }
+.development-material-verification .material-verification-specs dd { margin: 3px 0 0; }
+.development-material-verification .material-usage-label { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.development-material-verification .material-usage-label select { width: min(100%,220px); }
+.development-material-verification .material-verification-checks { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; margin: 14px 0 0; }
+.development-material-verification .material-verification-checks > div { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.development-material-verification .material-verification-checks label { display: flex; align-items: center; gap: 7px; }
+.development-material-verification .material-verification-checks input[type=checkbox] { width: 18px; height: 18px; margin: 0; flex-shrink: 0; }
+.development-material-verification .material-verification-checks small { font-size: 12px; line-height: 1.6; color: var(--text-secondary,#52616d); }
+.development-material-verification .material-unused-reason { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,2fr); gap: 12px; }
+.development-material-verification .material-unused-reason input,.development-material-verification textarea { width: 100%; box-sizing: border-box; }
+.development-material-verification .material-check-warning { color: #9a5600; }
+.development-material-verification .material-return-panel { border-left: 3px solid #c7862b; padding: 4px 14px; margin: 16px 0; }
+@media(max-width:700px) {
+ .development-material-verification .material-bulk-controls,.development-material-verification .material-verification-checks { grid-template-columns: repeat(2,minmax(0,1fr)); }
+ .development-material-verification .material-unused-reason { grid-template-columns: minmax(0,1fr); }
+ .development-material-verification .material-verification-card { padding: 12px; }
+}
