@@ -54,7 +54,7 @@ export function isEarlyMaterialException(material: DevelopmentMaterial): boolean
 export type DevelopmentMaterialEvent = z.infer<typeof DevelopmentMaterialEventSchema>;
 /** Empty template slots are not a declaration that a material is unused. */
 export function isDevelopmentMaterialPlaceholder(item:DevelopmentMaterial):boolean {
-  return ["","主布 A","配布 B","配布 C"].includes(item.label)&&
+  return (!item.auxiliaryKind||item.auxiliaryKind==="普通辅料")&&["","主布","配布","辅料","主布A","配布B","配布C"].includes(item.label.replace(/\s/g,""))&&
     ![item.name,item.supplier,item.width,item.weight,item.composition,item.consumption,item.color,item.specification,item.quantity,item.expectedDate].some(Boolean)&&!item.available;
 }
 export function developmentPublishErrors(document: DevelopmentDocument): string[] {
@@ -65,11 +65,7 @@ export function developmentPublishErrors(document: DevelopmentDocument): string[
   if (document.sizes.some(size => !size.trim())) errors.push("请填写尺码列名称，或删除不用的列");
   if (!document.orderDate) errors.push("请填写下单日期");
   if (!document.files.some(file => file.kind === "款图")) errors.push("请上传款图");
-  for (const item of document.materials) {
-    if (!item.requiredThisRound) continue;
-    if (!item.name) errors.push(`${item.label || "物料"}缺少品名`);
-    if (item.category === "辅料" && !item.available && !item.expectedDate) errors.push(`${item.label || item.name}未到，请填写预计日期`);
-  }
+  errors.push(...developmentMaterialPublishIssues(document).map(issue=>issue.message));
   if (document.craft === "无" && document.files.some(file => file.kind === "工艺开发板")) errors.push("工艺开发板仅适用于印花或绣花");
   return errors;
 }
@@ -83,3 +79,15 @@ export type DevelopmentSheet = {
   canRevise?: boolean; roundNumber?: number; latestRoundNumber?: number;
   materialEvents: Array<{ eventId: string; materialId: string; action: string; expectedDate: string | null; note: string; createdAt: string }>;
 };
+
+export function developmentMaterialPublishIssues(document:DevelopmentDocument):Array<{materialId:string;field:"name"|"specification"|"expectedDate";message:string}>{
+ const issues:Array<{materialId:string;field:"name"|"specification"|"expectedDate";message:string}>=[];
+ for(const row of document.materials){
+  if(isDevelopmentMaterialPlaceholder(row))continue;
+  const label=row.label||row.name||row.category;
+  if(!row.name.trim())issues.push({materialId:row.materialId,field:"name",message:`${label}缺少品名，请设计师填写材料资料`});
+  if(row.category==="主布"&&!row.specification.trim())issues.push({materialId:row.materialId,field:"specification",message:`${label}缺规格，请设计师填写主布规格`});
+  if(row.category==="辅料"&&!row.available&&!row.expectedDate)issues.push({materialId:row.materialId,field:"expectedDate",message:`${label}未到，请填写预计日期`});
+ }
+ return issues;
+}

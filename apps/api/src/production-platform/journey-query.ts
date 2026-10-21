@@ -1,3 +1,4 @@
+import {developmentReadTables} from "./development-amendment-repository.js";
 import {digitalConditionGuidance} from "@dx-rework/contracts/digital-production-tasks";
 import {businessRoleLabel} from "@dx-rework/contracts/business-display";
 import {PATTERN_GROUPS} from "@dx-rework/contracts/digital-development-workspace";
@@ -164,8 +165,9 @@ export class DigitalJourneyQuery {
     }
     if(!sourceAccess&&!orderAccess&&!visibleTasks.length)return null;
     if(selectedRound!==undefined&&!sourceAccess)digitalNotFound();
-    const document=sid&&sourceAccess?(await db.query("SELECT * FROM digital_development_documents WHERE source_id=$1",[sid])).rows[0]:null;
-    const revisions=sid&&sourceAccess?(await db.query("SELECT * FROM digital_development_rounds WHERE source_id=$1 ORDER BY round_number",[sid])).rows:[];
+    const documentTables=sid&&sourceAccess?await developmentReadTables(db):null;
+    const document=sid&&sourceAccess?(await db.query(`SELECT * FROM ${documentTables!.documents} WHERE source_id=$1`,[sid])).rows[0]:null;
+    const revisions=sid&&sourceAccess?(await db.query(`SELECT * FROM ${documentTables!.rounds} WHERE source_id=$1 ORDER BY round_number`,[sid])).rows:[];
     const latestRound=revisions.at(-1)?.round_number??(document?1:null);
     const effectiveRound=sid?(await db.query("SELECT coalesce(max(round_number),1)::int AS round FROM digital_development_rounds WHERE source_id=$1",[sid])).rows[0].round:null;
     const round=selectedRound??latestRound??effectiveRound;

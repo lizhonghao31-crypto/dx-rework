@@ -1,3 +1,5 @@
+import {developmentAmendmentsAvailable} from "./development-amendment-repository.js";
+import type {DevelopmentReturnIssue} from "@dx-rework/contracts/digital-development-amendments";
 import {isDeepStrictEqual} from "node:util";
 import {randomUUID} from "node:crypto";
 import type {Pool,PoolClient} from "pg";
@@ -13,7 +15,7 @@ export async function readMaterialVerification(db:DB,sourceId:string,round:numbe
  const saved=(await db.query("SELECT * FROM digital_development_material_verifications WHERE source_id=$1 AND round_number=$2",[sourceId,round])).rows[0];
  const old:Stored[]=saved?.entries??[];
  const entries=verificationRows(document,old);
- if(!saved){
+ if(!saved&&!(await developmentAmendmentsAvailable(db)&&(await db.query("SELECT 1 FROM digital_development_amendments WHERE source_id=$1 AND round_number=$2",[sourceId,round])).rowCount)){
   const prior=(await db.query(`SELECT f.payload FROM digital_development_execution_facts f JOIN digital_production_tasks t ON t.task_id=f.task_id
    WHERE f.source_id=$1 AND t.route_version=$2 AND f.kind IN ('核配通过','缺项退回') ORDER BY f.sequence DESC LIMIT 1`,[sourceId,round])).rows[0];
   for(const entry of entries){const reference=prior?.payload.items?.find((r:MaterialVerificationEntry)=>r.materialId===entry.materialId);if(reference){
@@ -23,7 +25,7 @@ export async function readMaterialVerification(db:DB,sourceId:string,round:numbe
  }
  const people=(await db.query("SELECT id,display_name FROM app_users WHERE id=ANY($1::uuid[])",[entries.map(e=>e.changedBy).filter(Boolean)])).rows;
  for(const entry of entries)entry.changedBy=people.find(p=>p.id===entry.changedBy)?.display_name??entry.changedBy;
- return {version:saved?.version??0,documentVersion,taskId:saved?.task_id??null,note:saved?.draft_note??"",result:saved?.draft_result??"通过",entries};
+ return {returnIssues:saved?.draft_return_issues??[],version:saved?.version??0,documentVersion,taskId:saved?.task_id??null,note:saved?.draft_note??"",result:saved?.draft_result??"通过",entries};
 }
 export function verificationRows(document:DevelopmentDocument,old:Stored[]){
  return document.materials.filter(m=>!isDevelopmentMaterialPlaceholder(m)||old.some(r=>r.materialId===m.materialId)).map(m=>{
@@ -39,7 +41,7 @@ export function verificationRows(document:DevelopmentDocument,old:Stored[]){
   return value;
  });
 }
-export async function saveMaterialVerification(db:PoolClient,actor:TrustedActorContext,sourceId:string,round:number,document:DevelopmentDocument,documentVersion:number,input:{taskId:string;expectedVersion:number;expectedDocumentVersion:number;entries:MaterialVerificationEntry[];note?:string;result?:string}){
+export async function saveMaterialVerification(db:PoolClient,actor:TrustedActorContext,sourceId:string,round:number,document:DevelopmentDocument,documentVersion:number,input:{taskId:string;expectedVersion:number;expectedDocumentVersion:number;entries:MaterialVerificationEntry[];note?:string;result?:string;returnIssues?:DevelopmentReturnIssue[]|undefined}){
  const current=await readMaterialVerification(db,sourceId,round,document,documentVersion);
  const fail=(text:string):never=>{throw new ApplicationError("DEVELOPMENT_CONFLICT",text,409);};
  if(!current)fail("材料确认功能尚未就绪，请联系管理员核实版本");
@@ -56,6 +58,7 @@ export async function saveMaterialVerification(db:PoolClient,actor:TrustedActorC
  });
  await db.query(`INSERT INTO digital_development_material_verifications(source_id,round_number,version,document_version,task_id,entries,changed_by,draft_note,draft_result)
  VALUES($1,$2,1,$3,$4,$5,$6,$7,$8) ON CONFLICT(source_id,round_number) DO UPDATE SET version=digital_development_material_verifications.version+1,document_version=$3,task_id=$4,entries=$5,changed_by=$6,draft_note=$7,draft_result=$8,changed_at=CURRENT_TIMESTAMP`,[sourceId,round,documentVersion,input.taskId,JSON.stringify(entries),actor.actorId,input.note??"",input.result??"通过"]);
+ if(await developmentAmendmentsAvailable(db))await db.query("UPDATE digital_development_material_verifications SET draft_return_issues=$3 WHERE source_id=$1 AND round_number=$2",[sourceId,round,JSON.stringify(input.returnIssues??[])]);
  await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,before_state,after_state) VALUES($1,$2,$3,'development_material_verification','digital_development',$4,$5,$6)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify({round,entries:old}),JSON.stringify({round,documentVersion,entries})]);
  return {version:current!.version+1};
 }

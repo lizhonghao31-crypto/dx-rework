@@ -1,4 +1,4 @@
-import { DevelopmentDocumentSchema, developmentPublishErrors, type DevelopmentDocument } from "@dx-rework/contracts/digital-development";
+import { DevelopmentDocumentSchema, developmentPublishErrors, developmentMaterialPublishIssues, type DevelopmentDocument } from "@dx-rework/contracts/digital-development";
 import { DevelopmentRevisionSchema, type DevelopmentRevision } from "@dx-rework/contracts/digital-development-rounds";
 import type { DocumentIssue } from "./document-editor.js";
 
@@ -18,10 +18,10 @@ export function developmentIssues(document:DevelopmentDocument,quantityInput:str
  if(revision){const parsedRevision=DevelopmentRevisionSchema.safeParse({...revision,document});if(!parsedRevision.success)for(const issue of parsedRevision.error.issues)if(issue.path[0]!=="document")issues.push({id:"development-revision",label:"复版修改依据",message:issue.message});}
  if(!publish||!parsed.success||issues.length)return issues;
  for(const message of developmentPublishErrors(parsed.data)){
-  if(document.materials.some(row=>row.requiredThisRound&&(message===`${row.label||"物料"}缺少品名`||message===`${row.label||row.name}未到，请填写预计日期`)))continue;
+  if(developmentMaterialPublishIssues(parsed.data).some(issue=>issue.message===message))continue;
   const key=message.includes("数量")?"quantity":message.includes("打样尺码")?"sampleSize":message.includes("尺码列")?"sizes":message.includes("下单日期")?"orderDate":message.includes("仅适用于")?"craft":"files";
   issues.push({id:key==="files"?"development-upload":key==="sizes"?document.sizes.length?`development-size-${document.sizes.findIndex(size=>!size.trim())}`:"development-sizes":`development-${key}`,label:labels[key]??key,message});
  }
- for(const row of parsed.data.materials){if(!row.requiredThisRound)continue;if(!row.name)issues.push({id:`development-${row.materialId}-name`,label:`面辅料 · ${row.label||row.category} · 品名`,message:`${row.label||"物料"}缺少品名`});if(row.category==="辅料"&&!row.available&&!row.expectedDate)issues.push({id:`development-${row.materialId}-expectedDate`,label:`面辅料 · ${row.label||row.category} · 预计到料日期`,message:`${row.label||row.name}未到，请填写预计日期`});}
+ for(const issue of developmentMaterialPublishIssues(parsed.data)){const row=parsed.data.materials.find(row=>row.materialId===issue.materialId)!;issues.push({id:`development-${row.materialId}-${issue.field}`,label:`面辅料 · ${row.label||row.category} · ${labels[issue.field]}`,message:issue.message});}
  return issues;
 }

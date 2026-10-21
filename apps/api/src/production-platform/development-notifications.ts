@@ -1,3 +1,4 @@
+import {developmentReadTables} from "./development-amendment-repository.js";
 import {effectiveVerificationDocument} from "./development-material-verification.js";
 import {fabricCases} from "./development-fabric-cases.js";
 import {developmentRoundsAvailable} from "./development-round-repository.js";
@@ -10,7 +11,7 @@ import { DigitalProductionAccessPolicy } from "./access-policy.js";
 export async function projectDevelopmentNotices(db: PoolClient, people: TrustedActorContext[], now = new Date()) {
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
   const rounds=await developmentRoundsAvailable(db);
-  const documents=rounds?"digital_development_current_documents":"digital_development_documents";
+  const documents=rounds?(await developmentReadTables(db)).current:"digital_development_documents";
   const rows = (await db.query(`SELECT d.*,s.created_by,s.design_style_no FROM ${documents} d JOIN digital_production_sources s USING(source_id)
     LEFT JOIN digital_production_resource_lifecycle l ON l.resource_kind='source' AND l.resource_id=d.source_id
     WHERE d.status='published' AND coalesce(l.state,'active')='active'`)).rows;

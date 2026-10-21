@@ -1,3 +1,4 @@
+import {developmentReadTables} from "./development-amendment-repository.js";
 import {developmentRoute} from "./development-route.js";
 import { DigitalDevelopmentService } from "./development-service.js";
 import { OrderClosureService } from "./order-closure-service.js";
@@ -64,7 +65,7 @@ SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
     // Fetch display metadata once for this authorized, bounded page.
     const sourceIds: string[] = result.items.map((row: {sourceId: string|null})=>row.sourceId).filter(Boolean);
     const hasRounds = hasDocuments && Boolean((await db.query("SELECT to_regclass('digital_development_rounds') AS relation")).rows[0]?.relation);
-    const sheets = hasDocuments ? (await db.query(`SELECT source_id,document,status FROM ${hasRounds?'digital_development_current_documents':'digital_development_documents'} WHERE source_id=ANY($1::uuid[])`,[sourceIds])).rows : [];
+    const sheets = hasDocuments ? (await db.query(`SELECT source_id,document,status FROM ${hasRounds?(await developmentReadTables(db)).current:'digital_development_documents'} WHERE source_id=ANY($1::uuid[])`,[sourceIds])).rows : [];
     const rounds = hasRounds
       ? (await db.query("SELECT source_id,round_number,route_nodes FROM digital_development_rounds WHERE source_id=ANY($1::uuid[])",[sourceIds])).rows : [];
     const labels = hasDocuments ? (await db.query("SELECT DISTINCT ON(node_key) node_key,label FROM digital_production_deadline_policies ORDER BY node_key,version DESC")).rows : [];

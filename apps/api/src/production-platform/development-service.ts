@@ -1,3 +1,5 @@
+import {DevelopmentAmendmentService} from "./development-amendment-service.js";
+import type {SaveDevelopmentAmendment,SubmitDevelopmentAmendment} from "@dx-rework/contracts/digital-development-amendments";
 import {effectiveVerificationDocument} from "./development-material-verification.js";
 import {documentMetadata} from "./document-metadata.js";
 import {materialReadiness} from "./development-material-readiness.js";
@@ -126,6 +128,11 @@ export class DigitalDevelopmentService {
       return this.read(actor, sourceId, db);
     });
   }
+  async readAmendment(actor:TrustedActorContext,sourceId:string,taskId:string){return new DevelopmentAmendmentService(this.database,this.creationEnabled).read(actor,sourceId,taskId);}
+  async saveAmendment(actor:TrustedActorContext,sourceId:string,input:SaveDevelopmentAmendment,key:string){return new DevelopmentAmendmentService(this.database,this.creationEnabled).save(actor,sourceId,input,key);}
+  async submitAmendment(actor:TrustedActorContext,sourceId:string,input:SubmitDevelopmentAmendment,key:string){return new DevelopmentAmendmentService(this.database,this.creationEnabled).submit(actor,sourceId,input,key);}
+  async amendmentReceipt(actor:TrustedActorContext,sourceId:string,taskId:string,operation:"save"|"submit",key:string){return new DevelopmentAmendmentService(this.database,this.creationEnabled).receipt(actor,sourceId,taskId,operation,key);}
+  async amendmentHistory(actor:TrustedActorContext,sourceId:string,roundNumber:number){return new DevelopmentAmendmentService(this.database,this.creationEnabled).history(actor,sourceId,roundNumber);}
   async materialEvent(actor: TrustedActorContext, sourceId: string, materialId: string, input: DevelopmentMaterialEvent, key: string) {
     return this.command(actor, sourceId, "material", key, { materialId, ...input }, async db => {
       const row = await developmentDocumentRow(db,sourceId) ?? digitalNotFound();

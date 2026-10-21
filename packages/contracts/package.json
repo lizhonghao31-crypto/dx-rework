@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./digital-development-amendments": { "types": "./src/digital-development-amendments.ts", "import": "./dist/digital-development-amendments.js" },
     "./development-arrangement": { "types": "./src/development-arrangement.ts", "import": "./dist/development-arrangement.js" },
     "./validation-language": { "types": "./src/validation-language.ts", "import": "./dist/validation-language.js" },
     "./todo-destination": { "types": "./src/todo-destination.ts", "import": "./dist/todo-destination.js" },
