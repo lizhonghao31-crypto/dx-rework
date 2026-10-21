@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -38,10 +38,15 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
 
   beforeAll(async () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
-    const directory = new URL("../../apps/api/migrations/", import.meta.url);
-    const migrations = (await readdir(directory)).filter((name) => /^\d{4}_.+\.sql$/.test(name)).sort();
-    expect(migrations.at(-1)).toBe("0053_root_rework_order_logical_deletion.sql");
-    for (const migration of migrations) await database.query(await readFile(new URL(migration, directory), "utf8"));
+    const manifest=JSON.parse(await readFile(new URL("../../apps/api/src/platform/migration-manifest.json",import.meta.url),"utf8")) as {migrations:{version:string;checksum:string}[]};
+    expect(manifest.migrations.some(item=>item.version==='0053_root_rework_order_logical_deletion')).toBe(true);
+    await database.query("CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)");
+    const migrationClient=await database.connect();
+    try{for(const item of manifest.migrations){await migrationClient.query('BEGIN');try{
+      await migrationClient.query(await readFile(new URL(`../../apps/api/migrations/${item.version}.sql`,import.meta.url),'utf8'));
+      await migrationClient.query('INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)',[item.version,item.checksum]);
+      await migrationClient.query('COMMIT');
+    }catch(error){await migrationClient.query('ROLLBACK');throw error;}}}finally{migrationClient.release();}
 
     for (const [id, name, role] of [
       [ids.owner, "Reporting owner", "owner_group"],
@@ -77,7 +82,8 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
        WHERE capability IN ('report:view','report:export') ORDER BY role_code,capability`,
     );
     expect(capabilities.rows).toEqual([
-      { role_code: "finance_read", capability: "report:export" },
+      { role_code: "finance_director", capability: "report:export" },
+      { role_code: "finance_director", capability: "report:view" },
       { role_code: "finance_read", capability: "report:view" },
       { role_code: "owner_group", capability: "report:export" },
       { role_code: "owner_group", capability: "report:view" },
@@ -96,15 +102,19 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
     const page = await service.listReworkOrders(owner(), { limit: 25, page: 1 });
     expect(management.kpis).toEqual({ openOrders: 0, completedOrders: 0, overdueTodos: 0, exceptionCount: 0 });
     expect(management.financial).toEqual({ wageTotal: "0.00", responsibilityTotal: "0.00", ownFactoryTotal: "0.00", externalProposed: "0.00", externalDeducted: "0.00", externalRemaining: "0.00" });
-    expect(site.kpis.pendingWageReview).toBe(0);
-    expect(site.nodeCounts).toContainEqual({ node: "N11", label: "订单完成与后续结算 · 待工资初核", count: 0 });
+    // Tail supervisors no longer have wage-field access under the existing full schema.
+    expect(site.kpis).not.toHaveProperty("pendingWageReview");
+    expect(site.nodeCounts.some(item=>item.node==="N11")).toBe(false);
     expect(page).toMatchObject({ items: [], page: 1, pageSize: 25, totalCount: 0, totalPages: 1, canViewReports: true });
 
     for (const reportType of ["rework_overview", "wages", "responsibilities", "own_factory", "external_deductions", "exceptions"] as const) {
       const preview = await service.report(owner(), reportType, { limit: 100 });
       expect(preview).toMatchObject({ reportType, rowCount: 0, truncated: false, rows: [] });
-      const exported = await service.exportData(owner(), reportType, { limit: 100 });
-      expect(exported.data.rows).toEqual([]);
+      if(reportType==="wages") {
+        // Existing policy separates financial export from management viewing.
+        await expect(service.exportData(owner(),reportType,{limit:100})).rejects.toMatchObject({code:"FORBIDDEN"});
+      }else{const exported = await service.exportData(owner(), reportType, { limit: 100 });
+      expect(exported.data.rows).toEqual([]);}
     }
   });
 
@@ -152,8 +162,7 @@ runWithPostgres("PR-14 management reporting PostgreSQL integration", () => {
 
   it("rejects report access when the claimed capability is absent even for system_admin", async () => {
     const systemAdmin = actor(ids.admin, ["system_admin"], "report:view", ["dashboard:management:read"]);
-    const page = await service.listReworkOrders(systemAdmin, { limit: 25, page: 1 });
-    expect(page.canViewReports).toBe(false);
+    await expect(service.listReworkOrders(systemAdmin, { limit: 25, page: 1 })).rejects.toThrow("actor is not authorized for capability dashboard:management:read");
     await expect(service.report(systemAdmin, "rework_overview", { limit: 100 })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(service.report(owner(), "wages", { status: "approved", limit: 100 })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   });

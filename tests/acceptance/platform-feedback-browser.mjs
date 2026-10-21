@@ -43,7 +43,7 @@ try{
     else{await recovery.click();await recovery.waitFor({state:'detached'});const records=await writes();assert.deepEqual(records.at(-1),records.at(-2));assert.equal(await page.evaluate(()=>window.platformFeedbackFixture.commits),1);}
    }
   }else if(view==='admin'){
-   if(mode!=='empty'){await page.getByRole('alert').first().waitFor();assert.equal(await page.getByText(/没有审计记录/).count(),0);}
+   if(mode!=='empty'){await page.getByRole('alert').first().waitFor();assert.equal(await page.getByText(/没有审计记录/).count(),0);if(mode==='fail'){await page.getByText('TEST-request',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'复制请求 ID',exact:true}).count(),1);}}
    else await page.getByText(/没有|暂无/).first().waitFor();
   }else if(view==='acceptance'){
    await page.getByText(/不能据此判断凭证失效/).waitFor();assert.equal((await writes()).length,0);await page.getByRole('button',{name:'仅重新读取验收状态',exact:true}).click();await page.getByRole('button',{name:'仅重新读取验收状态',exact:true}).waitFor({state:'detached'});assert.equal((await writes()).length,0);

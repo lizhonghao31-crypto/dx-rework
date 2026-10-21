@@ -55,7 +55,8 @@ describe("Root UAT PR-04 exception traceability", () => {
   it("shows a copyable response request ID and a direct linked-order action in the existing page", async () => {
     const page = await readFile("apps/web/src/admin-console-page.tsx", "utf8");
 
-    expect(page).toContain('body?.error?.requestId ?? response.headers.get("x-request-id")');
+    expect(page).toContain("response.headers.get('x-request-id')");
+    expect(page).toContain("typeof envelope?.error?.requestId==='string'");
     expect(page).toContain("navigator.clipboard.writeText(value)");
     expect(page).toContain("复制请求 ID");
     expect(page).toContain("关联订单：");
