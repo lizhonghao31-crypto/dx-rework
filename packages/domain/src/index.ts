@@ -26,57 +26,6 @@ export type OutboxEventDraft = Readonly<{
   idempotencyKey: string;
 }>;
 
-export type ErpAdapterStatus = Readonly<{
-  enabled: boolean;
-  mode: "disabled" | "mock" | "connected";
-}>;
-
-export interface ErpAdapter {
-  status(): Promise<ErpAdapterStatus>;
-  acceptSourceRecord(input: unknown): Promise<void>;
-  publishResult(input: unknown): Promise<void>;
-}
-
-export class IntegrationDisabledError extends Error {
-  constructor(integration: string) {
-    super(`${integration} integration is disabled`);
-    this.name = "IntegrationDisabledError";
-  }
-}
-
-export class DisabledErpAdapter implements ErpAdapter {
-  async status(): Promise<ErpAdapterStatus> {
-    return { enabled: false, mode: "disabled" };
-  }
-
-  async acceptSourceRecord(input: unknown): Promise<never> {
-    void input;
-    throw new IntegrationDisabledError("ERP");
-  }
-
-  async publishResult(input: unknown): Promise<never> {
-    void input;
-    throw new IntegrationDisabledError("ERP");
-  }
-}
-
-export class MockErpAdapter implements ErpAdapter {
-  readonly acceptedSourceRecords: unknown[] = [];
-  readonly publishedResults: unknown[] = [];
-
-  async status(): Promise<ErpAdapterStatus> {
-    return { enabled: true, mode: "mock" };
-  }
-
-  async acceptSourceRecord(input: unknown): Promise<void> {
-    this.acceptedSourceRecords.push(input);
-  }
-
-  async publishResult(input: unknown): Promise<void> {
-    this.publishedResults.push(input);
-  }
-}
-
 export type TrustedActor = Readonly<{ actorId: string; actorRoles: readonly string[]; authorizationCapability: string }>;
 export type IdempotencyStatus = "in_progress" | "completed";
 export type AttachmentStatus = "pending" | "ready" | "rejected";

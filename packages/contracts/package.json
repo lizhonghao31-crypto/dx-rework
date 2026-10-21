@@ -61,10 +61,6 @@
       "types": "./src/admin-console.ts",
       "import": "./dist/admin-console.js"
     },
-    "./erp-integration": {
-      "types": "./src/erp-integration.ts",
-      "import": "./dist/erp-integration.js"
-    },
     "./employee-access": {
       "types": "./src/employee-access.ts",
       "import": "./dist/employee-access.js"
