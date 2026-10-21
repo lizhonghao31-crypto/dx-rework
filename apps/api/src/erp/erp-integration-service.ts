@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import {
   ErpEmergencyLinkResponseSchema,
+  ErpCommandReceiptSchema,serializeErpCommandFingerprint,type ErpCommandScope,type ErpCommandReceipt,
   ErpIntakeResponseSchema,
   type ErpEmergencyLinkResponse,
   type ErpEmergencyLinkV1,
@@ -40,20 +41,8 @@ type FactorySnapshot = Readonly<{
 type IntakeInsertRow = Readonly<{ created_at: Date }>;
 type LinkInsertRow = Readonly<{ created_at: Date }>;
 
-const canonicalize = (value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map(canonicalize);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, child]) => [key, canonicalize(child)]),
-    );
-  }
-  return value;
-};
-
-const requestHash = (scope: string, payload: unknown): string =>
-  createHash("sha256").update(JSON.stringify(canonicalize({ scope, payload }))).digest("hex");
+const requestHash = (scope: ErpCommandScope, payload: unknown): string =>
+  createHash("sha256").update(serializeErpCommandFingerprint(scope,payload)).digest("hex");
 
 const emergencyExternalId = (actorId: string, key: string): string =>
   `emergency:${createHash("sha256").update(`${actorId}:${key}`).digest("hex")}`;
@@ -66,12 +55,12 @@ const databaseCode = (error: unknown): string | undefined =>
 const translateDatabaseError = (error: unknown): never => {
   if (error instanceof ApplicationError) throw error;
   const code = databaseCode(error);
-  if (code === "23505") throw new ApplicationError("CONFLICT", "ERP来源、幂等键或关联记录已存在", 409);
-  if (code === "23503") throw new ApplicationError("NOT_FOUND", "ERP来源引用的业务资料不存在", 404);
-  if (code === "42501") throw new ApplicationError("FORBIDDEN", "当前身份无权执行ERP集成操作", 403);
-  if (code === "55000") throw new ApplicationError("CONFLICT", "ERP集成记录不允许绕过受控流程修改", 409);
+  if (code === "23505") throw new ApplicationError("CONFLICT", "ERP接入发生唯一性冲突，尚未定位具体记录；请接入维护人员核对原键回执和来源审计，不要换键重复建单", 409);
+  if (code === "23503") throw new ApplicationError("NOT_FOUND", "ERP引用的业务资料不存在或关联失效，具体引用尚需核对；请接入维护人员检查原映射，并由原资料维护岗位处理，不使用默认人员或工厂代替", 404);
+  if (code === "42501") throw new ApplicationError("FORBIDDEN", "当前身份无权执行ERP集成操作；请接入维护人员核对当前专用身份或原应急权限，不改用其他账号绕过", 403);
+  if (code === "55000") throw new ApplicationError("CONFLICT", "ERP历史接入记录不能直接修改；请接入维护人员沿原应急关联入口核对，不覆盖旧来源", 409);
   if (code === "23514" || code === "22P02") {
-    throw new ApplicationError("VALIDATION_ERROR", "ERP集成数据不符合业务约束", 400);
+    throw new ApplicationError("VALIDATION_ERROR", "ERP提交未通过业务校验，尚未确定具体字段；请接入维护人员按请求编号核对原契约和资料映射，不能猜字段或替换默认值", 400);
   }
   throw error;
 };
@@ -98,7 +87,7 @@ export class ErpIntegrationService {
     if (input.source.externalIdempotencyKey !== idempotencyKey) {
       throw new ApplicationError(
         "IDEMPOTENCY_CONFLICT",
-        "Idempotency-Key必须与ERP来源契约中的externalIdempotencyKey一致",
+        "请求头提交标识必须与原ERP来源中的提交标识一致；请接入维护人员核对原键及原内容，不换新键重建",
         409,
       );
     }
@@ -127,7 +116,6 @@ export class ErpIntegrationService {
       { reworkOrderId, input },
       200,
       async (client) => {
-        await this.ensureIntegrationPrincipal(client);
         const intake = await client.query<{ intake_mode: IntakeMode; source_system: string }>(
           `SELECT intake.intake_mode,orders.source_system
            FROM erp_rework_intakes intake
@@ -137,9 +125,9 @@ export class ErpIntegrationService {
           [reworkOrderId],
         );
         const row = intake.rows[0];
-        if (!row) throw new ApplicationError("NOT_FOUND", "返工单没有ERP接入记录", 404);
+        if (!row) throw new ApplicationError("NOT_FOUND", "本返工单未找到ERP接入记录；请接入维护人员核对原单标识与来源，不能据此重复建单", 404);
         if (row.intake_mode !== "emergency" || row.source_system !== "erp_emergency") {
-          throw new ApplicationError("CONFLICT", "只有应急录入记录需要后续ERP关联", 409);
+          throw new ApplicationError("CONFLICT", "该记录不属于待关联的应急来源；请接入维护人员读取原来源结果，不重复补关联", 409);
         }
 
         const existing = await client.query<{
@@ -160,7 +148,7 @@ export class ErpIntegrationService {
             || linked.external_idempotency_key !== input.externalIdempotencyKey
             || linked.erp_node_id !== input.erpNodeId
           ) {
-            throw new ApplicationError("IDEMPOTENCY_CONFLICT", "该应急返工单已关联不同ERP来源", 409);
+            throw new ApplicationError("IDEMPOTENCY_CONFLICT", "原应急单已关联其他来源；请接入维护人员核对原关联历史，不覆盖或另建重复来源", 409);
           }
           return ErpEmergencyLinkResponseSchema.parse({
             contractVersion: "1",
@@ -231,6 +219,37 @@ export class ErpIntegrationService {
     return loadErpReworkResult(this.database, actor, reworkOrderId);
   }
 
+  intakeReceipt(actor:TrustedActorContext,key:string,fingerprint:string):Promise<ErpCommandReceipt>{return this.readReceipt(actor,'erp.rework.intake.v1',key,fingerprint);}
+  emergencyReceipt(actor:TrustedActorContext,key:string,fingerprint:string):Promise<ErpCommandReceipt>{return this.readReceipt(actor,'erp.rework.emergency_intake.v1',key,fingerprint);}
+  linkReceipt(actor:TrustedActorContext,reworkOrderId:string,key:string,fingerprint:string):Promise<ErpCommandReceipt>{return this.readReceipt(actor,'erp.rework.link.v1',key,fingerprint,reworkOrderId);}
+
+  /** No acquisition, row locks, expiry extension, auditing writes or adapter
+   * calls. Missing/expired is unknown, never proof that the command failed. */
+  private async readReceipt(actor:TrustedActorContext,scope:ErpCommandScope,key:string,fingerprint:string,orderId?:string):Promise<ErpCommandReceipt>{
+    const client=await this.database.connect();
+    try{await client.query('BEGIN TRANSACTION READ ONLY');await this.authorizeCommand(client,actor,scope);
+      const result=await client.query<{request_hash:string;status:string;status_code:number|null;response:unknown;expires_at:Date;current:boolean}>(
+        `SELECT request_hash,status,status_code,response,expires_at,expires_at>CURRENT_TIMESTAMP AS current
+         FROM idempotency_records WHERE scope=$1 AND actor_key=$2 AND idempotency_key=$3`,[scope,actor.actorId,key]);
+      const row=result.rows[0];let receipt:ErpCommandReceipt;
+      if(!row||!row.current)receipt={contractVersion:'1',outcome:'unconfirmed',reason:'missing_or_expired',receipt:null,message:'未取得仍有效的原回执，不能据此认定未保存。请接入维护人员核对原来源审计，保留原键与内容，不要换键重建。'};
+      else if(row.request_hash!==fingerprint)throw new ApplicationError('IDEMPOTENCY_CONFLICT','原提交标识与内容指纹不一致；请接入维护人员核对原请求内容和标识，不要改用新标识重复建单。',409);
+      else if(row.status!=='completed')receipt={contractVersion:'1',outcome:'unconfirmed',reason:'in_progress',receipt:null,message:'原请求尚未取得完成回执。请保留原键与内容，稍后只读核对，不要另建提交。'};
+      else{
+        const parsed=scope==='erp.rework.link.v1'?ErpEmergencyLinkResponseSchema.safeParse(row.response):ErpIntakeResponseSchema.safeParse(row.response);
+        if(!parsed.success||row.status_code!==(scope==='erp.rework.link.v1'?200:201)||scope!=='erp.rework.link.v1'&&'intakeMode'in parsed.data&&parsed.data.intakeMode!==(scope==='erp.rework.intake.v1'?'erp':'emergency'))throw new ApplicationError('ERP_RECEIPT_INVALID','原回执未符合约定版本，暂不能确认；请接入维护人员按请求编号核对，不能当作未保存重建。',502);
+        if(orderId&&parsed.data.reworkOrderId!==orderId)throw new ApplicationError('IDEMPOTENCY_CONFLICT','原关联回执不属于当前返工单；请接入维护人员核对原单与提交标识，不重复补关联。',409);
+        receipt={contractVersion:'1',outcome:'confirmed',receipt:parsed.data,expiresAt:row.expires_at.toISOString(),message:'已确认原本地业务回执；此读取不执行写入，也不代表外部适配已确认完成。'};
+      }
+      const value=ErpCommandReceiptSchema.parse(receipt);await client.query('COMMIT');return value;
+    }catch(error){await client.query('ROLLBACK').catch(()=>undefined);return translateDatabaseError(error);}finally{client.release();}
+  }
+
+  private async authorizeCommand(client:PoolClient,actor:TrustedActorContext,scope:ErpCommandScope){
+    if(scope==='erp.rework.emergency_intake.v1')await this.ensureEmergencyActor(client,actor);
+    else{this.ensureIntegrationActor(actor);await this.ensureIntegrationPrincipal(client);}
+  }
+
   private async intake(
     actor: TrustedActorContext,
     mode: IntakeMode,
@@ -239,13 +258,6 @@ export class ErpIntegrationService {
   ): Promise<MutationResult<ErpIntakeResponse>> {
     const scope = mode === "erp" ? "erp.rework.intake.v1" : "erp.rework.emergency_intake.v1";
     return this.mutate(actor, scope, idempotencyKey, input, 201, async (client) => {
-      if (mode === "erp") {
-        this.ensureIntegrationActor(actor);
-        await this.ensureIntegrationPrincipal(client);
-      } else {
-        await this.ensureEmergencyActor(client, actor);
-      }
-
       const payload = input.payload;
       const factory = await this.resolveFactory(client, payload.processingFactory);
       await this.ensureActiveMerchandiser(client, payload.merchandiserUserId);
@@ -387,7 +399,7 @@ export class ErpIntegrationService {
 
   private async mutate<T>(
     actor: TrustedActorContext,
-    scope: string,
+    scope: ErpCommandScope,
     idempotencyKey: string,
     payload: unknown,
     statusCode: number,
@@ -396,6 +408,9 @@ export class ErpIntegrationService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      // Replays and receipt reads require the same currently valid identity as
+      // the original write; completed idempotency cannot bypass revocation.
+      await this.authorizeCommand(client,actor,scope);
       const result = await this.idempotency.execute<T>(
         client,
         {
@@ -437,7 +452,7 @@ export class ErpIntegrationService {
       [ERP_INTEGRATION_SERVICE_ACTOR_ID],
     );
     if (!principal.rows[0]) {
-      throw new ApplicationError("INTEGRATION_DISABLED", "ERP集成身份未启用", 503);
+      throw new ApplicationError("INTEGRATION_DISABLED", "ERP专用身份尚未启用；请接入维护人员核对专用身份及当前适配配置，不改用人工账号提交", 503);
     }
   }
 
@@ -477,7 +492,7 @@ export class ErpIntegrationService {
       [userId, this.corporationId],
     );
     if (!result.rows[0]) {
-      throw new ApplicationError("NOT_FOUND", "ERP来源中的订单跟单不存在、不在职或角色无效", 404);
+      throw new ApplicationError("NOT_FOUND", "未找到同时满足当前公司、启用、在职及订单跟单岗位的来源人员；请接入维护人员核对人员映射，再由原员工权限维护岗位核对有效身份，具体缺项尚需核实", 404);
     }
   }
 
@@ -495,7 +510,7 @@ export class ErpIntegrationService {
       [input.supplierId],
     );
     const row = supplier.rows[0];
-    if (!row) throw new ApplicationError("NOT_FOUND", "ERP来源中的加工厂不存在或已停用", 404);
+    if (!row) throw new ApplicationError("NOT_FOUND", "未找到有效来源加工厂；请接入维护人员核对工厂映射，再由原有权供应商维护岗位核对加工厂类型和启用状态，不重复新建同厂", 404);
     return { type: "supplier", supplierId: row.supplier_id, supplierVersion: row.version };
   }
 }

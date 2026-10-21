@@ -8,6 +8,9 @@ import {
   ERP_INTEGRATION_SERVICE_ROLE,
 } from "./erp-integration-identity.js";
 
+const invalidResult=()=>new ApplicationError('ERP_RESULT_INVALID','ERP结果未符合约定版本，暂不能确认；请接入维护人员按请求编号核对结果投影，不用0或空数组代替异常。',502);
+const resultTimestamp=(value:Date)=>{if(!(value instanceof Date)||!Number.isFinite(value.getTime()))throw invalidResult();return value.toISOString();};
+
 type IntakeMode = "erp" | "emergency";
 
 const databaseCode = (error: unknown): string | undefined =>
@@ -18,7 +21,7 @@ const databaseCode = (error: unknown): string | undefined =>
 const translateDatabaseError = (error: unknown): never => {
   if (error instanceof ApplicationError) throw error;
   const code = databaseCode(error);
-  if (code === "42501") throw new ApplicationError("FORBIDDEN", "当前身份无权读取ERP结果契约", 403);
+  if (code === "42501") throw new ApplicationError("FORBIDDEN", "当前身份无权读取ERP结果；请使用原专用身份或具原结果读取权限的系统管理员入口，不以空结果替代权限拒绝", 403);
   if (code === "22P02") throw new ApplicationError("VALIDATION_ERROR", "返工单标识无效", 400);
   throw error;
 };
@@ -62,7 +65,7 @@ async function ensureIntegrationPrincipal(client: PoolClient): Promise<void> {
     [ERP_INTEGRATION_SERVICE_ACTOR_ID],
   );
   if (!principal.rows[0]) {
-    throw new ApplicationError("INTEGRATION_DISABLED", "ERP集成身份未启用", 503);
+    throw new ApplicationError("INTEGRATION_DISABLED", "ERP专用身份尚未启用；请接入维护人员核对当前专用身份和适配配置，原结果不会因此自动改写", 503);
   }
 }
 
@@ -81,7 +84,7 @@ async function ensureResultActor(
     actor.authorizationCapability !== "erp:result:read"
     || !actor.actorRoles.includes("system_admin")
   ) {
-    throw new ApplicationError("FORBIDDEN", "当前身份无权读取ERP结果契约", 403);
+    throw new ApplicationError("FORBIDDEN", "当前身份无权读取ERP结果；请使用原专用身份或具原结果读取权限的系统管理员入口，不以空结果替代权限拒绝", 403);
   }
   await client.query("SELECT access_authorized_actor_roles($1,'erp:result:read')", [
     actor.actorId,
@@ -266,7 +269,7 @@ export async function loadErpReworkResult(
       [reworkOrderId],
     );
     const row = result.rows[0];
-    if (!row) throw new ApplicationError("NOT_FOUND", "返工单不存在或不是ERP接入记录", 404);
+    if (!row) throw new ApplicationError("NOT_FOUND", "未找到本单ERP接入记录；请接入维护人员核对原单标识与来源，不能将未找到当作未保存重建", 404);
 
     const original = {
       sourceSystem: row.source_system,
@@ -289,7 +292,7 @@ export async function loadErpReworkResult(
             erpNodeId: row.linked_erp_node_id,
           }
         : null;
-    const response = ErpReworkResultV1Schema.parse({
+    const parsedResponse = ErpReworkResultV1Schema.safeParse({
       contractVersion: "1",
       source: {
         original,
@@ -301,7 +304,7 @@ export async function loadErpReworkResult(
         reworkNo: row.rework_no,
         status: row.status,
         completedQuantity: row.completed_quantity,
-        updatedAt: row.updated_at.toISOString(),
+        updatedAt: resultTimestamp(row.updated_at),
       },
       workerWages: {
         totalAmount: row.wage_total_amount,
@@ -322,15 +325,16 @@ export async function loadErpReworkResult(
           ? {
               status: row.approval_status,
               decision: row.approval_decision,
-              decidedAt: row.approval_decided_at?.toISOString() ?? null,
+              decidedAt: row.approval_decided_at?resultTimestamp(row.approval_decided_at):null,
             }
           : null,
       },
       attachments: row.attachments,
-      asOf: row.as_of.toISOString(),
+      asOf: resultTimestamp(row.as_of),
     });
+    if(!parsedResponse.success)throw invalidResult();
     await client.query("COMMIT");
-    return response;
+    return parsedResponse.data;
   } catch (error: unknown) {
     await client.query("ROLLBACK").catch(() => undefined);
     return translateDatabaseError(error);
