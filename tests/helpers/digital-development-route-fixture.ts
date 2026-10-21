@@ -1,3 +1,4 @@
+import {exerciseDevelopmentTransfer} from './development-transfer-guards.js';
 import {fabricDecisionTodos} from "../../apps/api/src/production-platform/development-fabric-cases.js";
 import {exerciseMaterialVerification} from "./material-verification-guards.js";
 import {TodoService} from "../../apps/api/src/todos/service.js";
@@ -20,9 +21,9 @@ import {digitalTodoTarget} from '../../apps/api/src/production-platform/notifica
 import {DevelopmentDocumentSchema} from '@dx-rework/contracts/digital-development';
 import type {TrustedActorContext} from '../../apps/api/src/tools/repositories.js';
 import type {TodoProjectionService} from '../../apps/api/src/todos/projection-service.js';
-export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionService,root:TrustedActorContext,workerId:string,workerPersonId:string,qc:TrustedActorContext,replacementWorkerId:string,legacyMaking?:"tail"|"native"){
+export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionService,root:TrustedActorContext,workerId:string,workerPersonId:string,qc:TrustedActorContext,replacementWorkerId:string,legacyMaking?:"tail"|"native",transferOnly:false|true|"authority"=false){
  const native=new PatternRoomOrderService(db,todos,{ordersEnabled:true}),execution=new DevelopmentExecutionService(db,true,native),forms=new DigitalDevelopmentService(db,true,native),identity=new DigitalProductionIdentityService(db,true);
- const routes=legacyMaking?([['无','免洗']] as const):([['无','免洗'],['印花','内洗'],['绣花','外洗'],['印绣花','免洗']] as const);
+ const routes=legacyMaking||transferOnly?([['无','免洗']] as const):([['无','免洗'],['印花','内洗'],['绣花','外洗'],['印绣花','免洗']] as const);
  for(const [craft,washing]of routes){
   const source=await identity.createSource(root,{developmentType:'头版',designStyleNo:`P07-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID());
   const sourceId=source.sourceId,fileId=randomUUID(),mainId=randomUUID(),trimId=randomUUID();
@@ -146,6 +147,7 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
     const change=await arrangementInput(db,execution,clerk,sourceId,workerId);change.entries.find(row=>row.kind==='development_sewing')!.assigneeId=replacementWorkerId;change.entries.find(row=>row.kind==='development_sewing')!.reason='TEST不可覆盖工资执行段';
     await expect(execution.arrange(clerk,sourceId,change,randomUUID())).rejects.toThrow('换人分段');
   }
+  if(transferOnly){await exerciseDevelopmentTransfer(db,execution,native,root,clerk,sourceId,order.orderId,workerId,replacementWorkerId,transferOnly==="authority");return;}
   const executor:TrustedActorContext={actorId:executorId,actorRoles:['pattern_room_worker'],authorizationCapability:'pattern_room:orders:complete',authorizationCapabilities:['pattern_room:orders:complete','pattern_room:orders:view','digital_production:view'],requestId:randomUUID()};
   const resultId=randomUUID();
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-sewing.png','image/png',100,$3,$4,'ready',CURRENT_TIMESTAMP)",[resultId,`r2-pr04/${resultId}`,'c'.repeat(64),executorId]);
@@ -192,6 +194,22 @@ export async function exerciseDevelopmentRoute(db:Pool,todos:TodoProjectionServi
    expect((await forms.read(root,sourceId,undefined,1)).document).toEqual(document);
    expect((await db.query('SELECT count(*)::int n FROM digital_development_rounds WHERE source_id=$1',[sourceId])).rows[0].n).toBe(1);
    expect((await native.get(root,order.orderId)).rounds).toHaveLength(nativeRoundCount+(legacyMaking==='native'?1:0));
+   if(legacyMaking==='native'){
+    const supervisorId=(await db.query("SELECT user_id FROM user_role_assignments WHERE role_code='pattern_room_supervisor' AND revoked_at IS NULL LIMIT 1")).rows[0].user_id;
+    const supervisor={...root,actorId:supervisorId,actorRoles:['pattern_room_supervisor'],authorizationCapability:'pattern_room:orders:assign',authorizationCapabilities:['pattern_room:orders:view','pattern_room:orders:assign','digital_production:view']};
+    await execution.arrange(clerk,sourceId,await arrangementInput(db,execution,clerk,sourceId,workerId),randomUUID());
+    const pending=await native.get(root,order.orderId),basis={roundId:pending.currentRoundId,version:pending.version,personId:workerPersonId};
+    await expect(native.assign(supervisor,order.orderId,basis,randomUUID())).rejects.toMatchObject({statusCode:400});
+    await expect(native.assign(clerk,order.orderId,{...basis,amount:'0'},randomUUID())).rejects.toMatchObject({statusCode:403});
+    const other=(await db.query('SELECT person_id FROM business_people WHERE app_user_id=$1 AND active',[replacementWorkerId])).rows[0].person_id;
+    await expect(native.assign(supervisor,order.orderId,{...basis,personId:other,amount:'0'},randomUUID())).rejects.toMatchObject({statusCode:409});
+    expect((await native.get(root,order.orderId)).version).toBe(pending.version);
+    const assignKey=randomUUID();await native.assign(supervisor,order.orderId,{...basis,amount:'0'},assignKey);await native.assign(supervisor,order.orderId,{...basis,amount:'0'},assignKey);
+    const assigned=await native.get(root,order.orderId),segment=assigned.rounds.find(r=>r.roundId===assigned.currentRoundId)!.segments[0]!;
+    expect(segment.amount).toMatch(/^0(?:\.0+)?$/);expect(segment.workerUserId).toBe(workerId);expect(assigned.version).toBe(pending.version+1);
+    expect((await execution.read(clerk,sourceId)).arrangement!.rows.find(row=>row.kind==='development_sewing')!.assigneeId).toBe(workerId);
+    expect((await db.query("SELECT count(*)::int n FROM rework_todos WHERE dedupe_key=$1 AND status='pending'",[`pattern-room:${order.orderId}:${assigned.currentRoundId}:execution:${segment.segmentId}`])).rows[0].n).toBe(0);
+   }
    return;
   }
   await route('development_tail_check');

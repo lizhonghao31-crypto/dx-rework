@@ -1,6 +1,8 @@
 import {reopenDevelopmentMaterials,assertReopenedReturnIssues} from './development-material-reopen.js';
 import type {ReopenDevelopmentMaterials} from '@dx-rework/contracts/digital-development-execution';
 import {developmentAutomaticRoundDocument} from './development-document-format.js';
+import {validateExecutionTransfer} from './development-execution-transfer.js';
+import type {DevelopmentExecutionTransfer} from '@dx-rework/contracts/development-arrangement';
 import {developmentAmendmentsAvailable} from "./development-amendment-repository.js";
 import {validateDevelopmentReturn,recordDevelopmentReturn,submitDevelopmentSupply} from "./development-supply.js";
 import {fabricCases} from "./development-fabric-cases.js";
@@ -94,6 +96,31 @@ export class DevelopmentExecutionService {
   private async fact(db:PoolClient,actor:TrustedActorContext,sourceId:string,taskId:string|null,kind:string,payload:unknown){const id=randomUUID();await db.query("INSERT INTO digital_development_execution_facts(fact_id,source_id,task_id,kind,payload,actor_id) VALUES($1,$2,$3,$4,$5,$6)",[id,sourceId,taskId,kind,JSON.stringify(payload),actor.actorId]);return id;}
   async arrange(actor:TrustedActorContext,sourceId:string,input:DevelopmentArrangementInput,key:string){
     return this.command(actor,sourceId,"arrangement",key,input,db=>saveArrangement(db,this.database,actor,sourceId,input));
+  }
+  async readNativeExecution(actor:TrustedActorContext,sourceId:string,client?:PoolClient){
+    if(!this.enabled)digitalForbidden();await this.forms().read(actor,sourceId,client);
+    if(!this.patternOrders)fail('原执行服务尚未配置，请管理员核实版本');
+    const link=(await (client??this.database).query('SELECT order_id FROM digital_development_pattern_links WHERE source_id=$1',[sourceId])).rows[0]??digitalNotFound();
+    // The original reader keeps its own scope, cost/technical filtering and actions.
+    return (client?this.patternOrders!.inTransaction(client):this.patternOrders!).get(actor,link.order_id);
+  }
+  async transferExecution(actor:TrustedActorContext,sourceId:string,input:DevelopmentExecutionTransfer,key:string){
+    return this.command(actor,sourceId,'transfer-execution',key,input,async db=>{
+      if(!this.patternOrders)fail('原执行服务尚未配置，请管理员核实版本');
+      await validateExecutionTransfer(db,actor,sourceId,input);
+      const {orderId,version,roundId,segmentId,personId,amount,reason}=input;
+      return this.patternOrders!.inTransaction(db).transfer(actor,orderId,{version,roundId,segmentId,personId,amount,reason},`development-transfer:${createHash('sha256').update(JSON.stringify([sourceId,key])).digest('hex')}`);
+    });
+  }
+  async transferExecutionReceipt(actor:TrustedActorContext,sourceId:string,key:string){
+    if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail('缺少原操作标识，请从本次换人页核对');
+    const db=await this.database.connect();
+    try{
+      await db.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      const current=await this.readNativeExecution(actor,sourceId,db);
+      const row=(await db.query('SELECT response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',[actor.actorId,`development-execution:${sourceId}:transfer-execution`,key])).rows[0];
+      await db.query('COMMIT');return {receipt:row?current:null,committedVersion:row?.response?.version??null};
+    }catch(error){await db.query('ROLLBACK');throw error;}finally{db.release();}
   }
   async dispatch(actor:TrustedActorContext,sourceId:string,input:DevelopmentDispatch,key:string){
     if(await arrangementsAvailable(this.database))fail("人员安排已统一到本单总委派页，请从我的待办打开“安排本轮师傅”。");
