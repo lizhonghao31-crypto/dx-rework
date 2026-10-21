@@ -33,7 +33,7 @@ it('distinguishes an absent business source from an uncreated authorized documen
  expect(snapshot.getSnapshot().development.data?.state).toBe('not_applicable');expect(snapshot.getSnapshot().pattern.data?.state).toBe('not_applicable');expect(snapshot.getSnapshot().budget.data?.state).toBe('not_applicable');snapshot.dispose();
 });
 it('does not declare a kind missing until all pages are read, bounds each read and deduplicates real entry IDs',async()=>{
- const calls:string[]=[];const read:CockpitDocumentReader=async path=>{calls.push(path);const page=Number(new URL(path,'http://test').searchParams.get('page'));return {items:page===2?[{kind:'misc',orderId:'misc-1',orderNo:'TEST杂事'}]:page>=4?[{kind:'pattern',orderId:'pattern-1',orderNo:'TEST打板'}]:[],nextPage:page<5?page+1:null};};
+ const calls:string[]=[];const read:CockpitDocumentReader=async path=>{calls.push(path);const page=Number(new URL(path,'http://test').searchParams.get('page'));return {items:page===2?[{kind:'misc',orderId:'misc-1',orderNo:'TEST杂事',rounds:[]}]:page>=4?[{kind:'pattern',orderId:'pattern-1',orderNo:'TEST打板',rounds:[]}]:[],nextPage:page<5?page+1:null};};
  const snapshot=createCockpitDocumentSnapshot(fixture(),read);await snapshot.load('pattern');expect(calls).toEqual([related(1),related(2),related(3)]);expect(snapshot.getSnapshot().pattern.data).toMatchObject({state:'unknown',entries:[],nextPage:4});
  await snapshot.load('pattern',true);expect(snapshot.getSnapshot().pattern.data).toMatchObject({state:'created',entries:[{id:'pattern-1'}],nextPage:null});expect(calls).toHaveLength(5);snapshot.dispose();
 });
@@ -64,4 +64,29 @@ it('disposes queued and late replies on identity/snapshot change and never commi
 });
 it('freezes the source identity for a snapshot instead of accepting in-place parent mutations',async()=>{
  const order=fixture(),calls:string[]=[],snapshot=createCockpitDocumentSnapshot(order,async path=>{calls.push(path);return metadata(path);});order.sourceId='wrong';order.orderId='wrong';await snapshot.load('development');expect(calls[0]).toContain(sid);expect(snapshot.getSnapshot().development.phase).toBe('ready');snapshot.dispose();
+});
+
+it.each([
+ ['pattern',{items:null,nextPage:null}],['pattern',{items:{},nextPage:null}],['pattern',{items:[null],nextPage:null}],
+ ['pattern',{items:[],nextPage:'2'}],['pattern',{items:[],nextPage:0}],['pattern',{items:[],nextPage:1.5}],
+ ['pattern',{items:[{kind:'pattern',orderId:7,orderNo:'TEST',rounds:[]}],nextPage:null}],
+ ['pattern',{items:[{kind:'pattern',orderId:'TEST',orderNo:'TEST',rounds:null}],nextPage:null}],
+ ['pattern',{items:[{kind:'pattern',orderId:'TEST',orderNo:'TEST',rounds:[{roundId:'r',roundType:'initial',roundIndex:'0'}]}],nextPage:null}],
+ ['budget',{productionOrderId:oid,version:0,versions:null}],['budget',{productionOrderId:oid,version:0,versions:['1']}],
+ ['budget',{productionOrderId:oid,version:'0',versions:[]}],['order',{productionOrderId:oid,lines:null}],
+ ['development',{sourceId:sid,version:0,document:'bad'}],['preparation',{orderId:oid,preparationId:false}],
+ ['preparation',{orderId:oid,preparationId:'p',facts:[],tasks:[null]}],
+ ['factory',{orderId:oid,preparationId:'p',facts:null,checks:[]}],['receiving',{orderId:oid,lines:null,closed:null}],
+ ['receiving',{orderId:oid,lines:[],closed:false}],
+] as const)('keeps malformed %s metadata out of the existence cache and recovers through the original reader',async(key,bad)=>{
+ let invalid=true,count=0;const snapshot=createCockpitDocumentSnapshot(fixture(),async path=>{count++;if(!invalid)return metadata(path);if(key==='order'&&path.endsWith('/instruction'))return metadata(path);if(key==='development'&&path.endsWith('/rounds'))return metadata(path);return bad;});
+ await snapshot.load(key);expect(snapshot.getSnapshot()[key]).toMatchObject({phase:'error'});expect(snapshot.getSnapshot()[key].data).toBeUndefined();const prior=count;invalid=false;await snapshot.load(key);expect(count).toBeGreaterThan(prior);expect(snapshot.getSnapshot()[key].phase).toBe('ready');snapshot.dispose();
+});
+it('validates development revision and contract collections including each entry before deriving missing',async()=>{
+ const source=fixture();source.links=[{domain:'sourcing',id:'case',url:'/ui/sourcing/orders/case',mode:'read',version:1,lineId:null}];
+ for(const bad of [{rounds:null},{rounds:[null]},{rounds:[{roundNumber:'2'}]}]){const snapshot=createCockpitDocumentSnapshot(source,async path=>path.endsWith('/rounds')?bad:metadata(path));await snapshot.load('development');expect(snapshot.getSnapshot().development.phase).toBe('error');snapshot.dispose();}
+ for(const bad of [{contracts:null,versions:[]},{contracts:[],versions:[null]},{contracts:[{entryId:7,version:1}],versions:[]},{contracts:[],versions:[{revision:1,signedContractDocumentId:null,attachments:null}]}]){let invalid=true;const snapshot=createCockpitDocumentSnapshot(source,async()=>invalid?bad:{contracts:[],versions:[]});await snapshot.load('contract');expect(snapshot.getSnapshot().contract).toMatchObject({phase:'error'});invalid=false;await snapshot.load('contract');expect(snapshot.getSnapshot().contract.data?.state).toBe('missing');snapshot.dispose();}
+});
+it('drops a malformed late reply after switching orders without replacing the new valid existence result',async()=>{
+ let release!:(value:unknown)=>void;const old=createCockpitDocumentSnapshot(fixture(),async()=>new Promise(resolve=>{release=resolve;}));const pending=old.load('pattern');old.dispose();const next=createCockpitDocumentSnapshot({...fixture(),sourceId:'next'},async()=>({items:[],nextPage:null}));await next.load('pattern');release({items:null,nextPage:null});await pending;expect(old.getSnapshot().pattern.phase).toBe('idle');expect(next.getSnapshot().pattern).toMatchObject({phase:'ready',data:{state:'missing'}});next.dispose();
 });
