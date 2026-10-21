@@ -73,27 +73,35 @@ export class FactoryFlowService{
    await db.query('BEGIN');await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");await new DigitalProductionAccessPolicy(db).assert(actor,'order',id,'technical');await db.query('SELECT production_order_id FROM digital_production_orders WHERE production_order_id=$1 FOR UPDATE',[id]);
    const command=`factory:${id}:${action}`,hash=createHash('sha256').update(JSON.stringify(input)).digest('hex'),prior=(await db.query('SELECT * FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3',[actor.actorId,command,key])).rows[0];
    if(prior){if(prior.payload_hash!==hash)fail('操作标识已用于不同内容');await db.query('COMMIT');return prior.response as FactoryFlowSheet;}
-   await this.sync(db,actor,id);const s=await this.state(db,id);if(!s.route)fail('全部PO原实裁完成后才能办理裁后');if(s.gate.reasons.length)fail(s.gate.reasons.join('；'));if(s.revision!==input.expectedRevision)fail('已有新办理事实，请刷新后重试');
+   await this.sync(db,actor,id);const s=await this.state(db,id);if(!s.route)fail('全部PO原实裁完成后才能办理裁后；请主跟单在本单产前准备查看未完成PO，由本厂裁床或外裁跟单按实际裁剪方式登记实裁');if(s.gate.reasons.length)fail(s.gate.reasons.join('；'));if(s.revision!==input.expectedRevision)fail('已有新办理事实，本次未覆盖；请重新读取本单核对最新工艺、QC或发厂记录，再提交仍未完成的事项');
    await work(db,s);await this.sync(db,actor,id);const response=await this.read(actor,id,db);
    await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,hash,JSON.stringify(response)]);
    await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'digital_factory_route',$5,$6)",[randomUUID(),actor.requestId,actor.actorId,action,id,JSON.stringify(input)]);await db.query('COMMIT');return response;
   }catch(e){await db.query('ROLLBACK');throw e;}finally{db.release();}
  }
+ private async taskBlockReason(db:DB,actor:TrustedActorContext,s:Awaited<ReturnType<FactoryFlowService['state']>>,kind:string){
+  const raw=s.tasks.find(t=>t.task_kind===kind);
+  if(!raw)return '本轮尚未生成该工序任务：请主跟单在本单产前准备核对全部PO实裁及当前有效版本；仍未生成时联系管理员核查';
+  const task=await this.tasks().read(actor,raw.task_id,db);
+  if(task.paused)return '本单已暂停：请业务负责人在本单任务页核对暂停原因，恢复后再办理';
+  if(task.state==='completed'||task.state==='cancelled')return `本任务${task.state==='completed'?'已完成':'已取消'}：请从我的待办打开当前有效任务，不能重复登记原任务`;
+  return task.unmetConditions?.length?task.unmetConditions.map(item=>`${item.name}：${item.missing}；${item.action??'请本任务负责岗位核对当前办理页'}`).join('；'):'本工序尚未取得可办理状态，具体原因暂未确认；请重新读取本单，仍未恢复时提供任务链接给管理员核查';
+ }
  private latestTime(...values:Array<Date|string|null|undefined>){const times=values.filter((v):v is Date|string=>v!=null).map(v=>new Date(v).getTime());return times.length?new Date(Math.max(...times)):null;}
- private checkTime(at:string|null,earliest?:Date|string|null){if(at&&(!Number.isFinite(new Date(at).getTime())||new Date(at).getTime()>Date.now()||earliest&&new Date(at)<new Date(earliest)))fail('真实时间不能晚于当前或早于前置发生时间');}
+ private checkTime(at:string|null,earliest?:Date|string|null){if(at&&(!Number.isFinite(new Date(at).getTime())||new Date(at).getTime()>Date.now()||earliest&&new Date(at)<new Date(earliest)))fail('真实时间不能晚于当前或早于前置发生时间；请在本页操作记录核对最近的实际发出、回仓或到厂时间后填写，不要用预计日期替代');}
  private async fact(db:PoolClient,actor:TrustedActorContext,prep:string,kind:string,at:string|null,payload:unknown){const id=randomUUID();await db.query('INSERT INTO digital_factory_facts(fact_id,preparation_id,sequence,kind,payload,actor_id,occurred_at) SELECT $1,$2,coalesce(max(sequence),0)+1,$3,$4,$5,$6 FROM digital_factory_facts WHERE preparation_id=$2',[id,prep,kind,JSON.stringify(payload),actor.actorId,at]);return id;}
  async logistics(actor:TrustedActorContext,id:string,input:FactoryLogistics,key:string){return this.command(actor,id,'logistics',input,key,async(db,s)=>{
-  if(!await this.authorized(db,actor,s,'process_logistics'))digitalForbidden();if(s.dispatched)fail('已发厂，裁后工艺记录已结束');if(s.tasks.find(t=>t.task_kind==='process_logistics')?.state!=='ready')fail('工艺收发任务尚不可办理');
+  if(!await this.authorized(db,actor,s,'process_logistics'))digitalForbidden();if(s.dispatched)fail('已发厂，裁后工艺记录已结束');if(s.tasks.find(t=>t.task_kind==='process_logistics')?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'process_logistics'));
   if(input.kind==='工艺沟通'&&!input.note.trim())fail('请填写沟通记录');
   if(input.kind==='工艺发出'&&s.lastMovement?.kind==='工艺发出')fail('整款已在工艺厂，不能重复发出');
   if(input.kind==='工艺发出'&&!input.supplier.trim())fail('请登记实际工艺供应厂');
-  if(input.kind==='工艺回仓'&&s.lastMovement?.kind!=='工艺发出')fail('须有整款工艺发出事实才能回仓');
+  if(input.kind==='工艺回仓'&&s.lastMovement?.kind!=='工艺发出')fail('须有整款工艺发出事实才能回仓；请印绣洗跟单在本页工艺物流核对最近一次发出记录，按实际交接顺序登记');
   this.checkTime(input.occurredAt,input.kind==='工艺沟通'?null:this.latestTime(s.route.cutting_completed_at,s.lastMovement?.occurred_at));
   await this.fact(db,actor,s.route.preparation_id,input.kind,input.occurredAt,{supplier:input.supplier,note:input.note});
   if(input.kind==='工艺回仓'){const task=s.tasks.find(t=>t.task_kind==='bulk_qc');await this.tasks().setConditionWithClient(db,actor,task.task_id,'handover_received',true,input.occurredAt,'整款工艺已回仓待QC');}
  });}
  async qc(actor:TrustedActorContext,id:string,input:FactoryQc,key:string){return this.command(actor,id,'qc',input,key,async(db,s)=>{
-  if(!await this.authorized(db,actor,s,'bulk_qc'))digitalForbidden();if(s.dispatched||!s.returned)fail('整款须已回仓且尚未发厂才能检查');if(s.tasks.find(t=>t.task_kind==='bulk_qc')?.state!=='ready')fail('QC任务尚不可办理');
+  if(!await this.authorized(db,actor,s,'bulk_qc'))digitalForbidden();if(s.dispatched||!s.returned)fail(s.dispatched?'本单已经实际发厂，本轮QC记录已结束；请QC在本单操作记录核对原检查结果，不要补写本轮检查':'尚无整款工艺回仓记录；请印绣洗跟单在本单工艺物流登记实际回仓，再由QC逐PO检查');if(s.tasks.find(t=>t.task_kind==='bulk_qc')?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'bulk_qc'));
   if(new Set(input.checks.map(c=>c.lineId)).size!==input.checks.length||input.checks.some(c=>!s.lines.some(l=>l.line_id===c.lineId)))fail('检查款色必须属于本母单且不可重复');
   for(const check of input.checks){
    if(check.result==='需处理'&&!check.problem.trim())fail('需处理必须说明问题及处理要求');
@@ -104,9 +112,9 @@ export class FactoryFlowService{
   }
  });}
  async dispatch(actor:TrustedActorContext,id:string,input:FactoryDispatch,key:string){return this.command(actor,id,'warehouse',input,key,async(db,s)=>{
-  if(!await this.authorized(db,actor,s,'warehouse_dispatch'))digitalForbidden();if(s.dispatched)fail('整款已实际发厂，不能重复发出');if(!s.allQc)fail('任一PO工艺QC未合格，整款不可发厂');
+  if(!await this.authorized(db,actor,s,'warehouse_dispatch'))digitalForbidden();if(s.dispatched)fail('整款已实际发厂，不能重复发出');if(!s.allQc)fail(`任一PO工艺QC未合格，整款不可发厂：${!s.returned?'尚无本轮工艺回仓记录，请印绣洗跟单在工艺物流登记实际回仓':s.latest.filter(row=>row.check?.result!=='合格').map(row=>`PO ${row.line.po_number}／${row.line.color}：${row.check?.result==='需处理'?'问题待处理及复查':'尚未检查'}`).join('；')}。请QC在本单工艺QC逐项处理，仓库随后登记实际发厂。`);
   if(input.supplierId!==s.gate.approval?.supplier_id)fail('请刷新确认当前原批准的唯一加工厂');
-  const task=s.tasks.find(t=>t.task_kind==='warehouse_dispatch');if(task.state!=='ready')fail('仓库发厂尚不可办理');
+  const task=s.tasks.find(t=>t.task_kind==='warehouse_dispatch');if(task?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,'warehouse_dispatch'));
   this.checkTime(input.occurredAt,this.latestTime(s.route.cutting_completed_at,s.returned?.occurred_at,...s.latest.map(l=>l.check?.checked_at)));
   const factId=await this.fact(db,actor,s.route.preparation_id,'仓库实际发厂',input.occurredAt,{supplierId:input.supplierId,note:input.note});
   await new SourcingProductionService(this.database).dispatchDigitalWithClient(db,actor,id,factId);
@@ -116,10 +124,10 @@ export class FactoryFlowService{
   const kind=input.kind==='船样寄出'?'bulk_ship_sample':'factory_material_count';if(!await this.authorized(db,actor,s,kind))digitalForbidden();this.checkTime(input.occurredAt);
   const prior=s.facts.filter(f=>f.kind===input.kind).at(-1),task=s.tasks.find(t=>t.task_kind===kind);
   if(prior&&(input.kind!=='工厂到料'||prior.occurred_at))fail('已有该实际事实，不能重复改写');
-  if(input.kind!=='工厂到料'&&task.state!=='ready')fail('跟进任务尚不可办理');
+  if(input.kind!=='工厂到料'&&task?.state!=='ready')fail(await this.taskBlockReason(db,actor,s,kind));
   if(input.kind==='船样寄出'&&(!input.occurredAt||!input.trackingNumber))fail('请填写真实寄出日期和快递单号');
   if(input.kind==='到料清点'&&(!input.occurredAt||!input.note.trim()))fail('请填写真实清点时间和清点结果');
-  const arrived=s.facts.filter(f=>f.kind==='工厂到料'&&f.occurred_at).at(-1);if(input.kind==='到料清点'){if(!arrived)fail('实际到厂时间未确认，不能完成48小时清点');this.checkTime(input.occurredAt,arrived.occurred_at);}
+  const arrived=s.facts.filter(f=>f.kind==='工厂到料'&&f.occurred_at).at(-1);if(input.kind==='到料清点'){if(!arrived)fail('实际到厂时间未确认，不能完成48小时清点；请主跟单先在本页工厂到料登记实际收到时间，再登记清点结果');this.checkTime(input.occurredAt,arrived.occurred_at);}
   await this.fact(db,actor,s.route.preparation_id,input.kind,input.occurredAt,{trackingNumber:input.trackingNumber,note:input.note});
   if(input.kind==='工厂到料'&&input.occurredAt)await this.tasks().setConditionWithClient(db,actor,task.task_id,'factory_arrived',true,input.occurredAt,'主跟单确认工厂实际收到面辅料');
   if(input.kind!=='工厂到料'){

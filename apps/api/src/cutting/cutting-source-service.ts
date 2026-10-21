@@ -78,7 +78,7 @@ export async function ensureCuttingOrdersForApproval(
     [approvalSnapshotId, sourcingCaseId],
   );
   if (approvedLines.rowCount === 0) {
-    fail("批准快照没有可生成的裁床款明细");
+    fail("批准快照没有可生成的裁床款明细；请主跟单在原外发选厂订单核对款色明细，管理员核查批准快照，不要重复点击批准");
   }
   for (const line of approvedLines.rows) {
     await client.query(
@@ -93,7 +93,7 @@ export async function ensureCuttingOrdersForApproval(
   if(generation==='digital_production_v1'){
     const orderId=await resolveDigitalChild(client,'sourcing',sourcingCaseId,generation);
     const rows=(await client.query("SELECT c.cutting_order_id,l.line_id FROM cutting_orders c JOIN digital_production_child_lines l ON l.module='sourcing' AND l.child_id=c.sourcing_case_id AND l.child_line_key=c.sourcing_line_position::text WHERE c.sourcing_case_id=$1",[sourcingCaseId])).rows;
-    if(rows.length!==approvedLines.rows.length)fail('原裁单与母单PO映射不完整');
+    if(rows.length!==approvedLines.rows.length)fail('原裁单与母单PO映射不完整；请主跟单核对本单PO与裁床来源，管理员修复关联后再登记，不能另建重复裁单');
     for(const row of rows)await linkNewDigitalChild(client,{module:'cutting',childId:row.cutting_order_id,productionOrderId:orderId!,lines:[{childLineKey:'record',lineId:row.line_id}]});
   }
   const positions = approvedLines.rows.map((line) => line.position);
@@ -105,7 +105,7 @@ export async function ensureCuttingOrdersForApproval(
     [sourcingCaseId, positions],
   );
   if (persisted.rows[0]?.count !== positions.length) {
-    fail("裁床源单未能完整建立");
+    fail("裁床源单未能完整建立；请重新读取本单裁床来源，仍缺失时提供原外发订单链接给管理员核查");
   }
 }
 
@@ -539,7 +539,7 @@ export class CuttingService {
           [input.attachmentIds, actor.actorId],
         );
         if (readyAttachments.rowCount !== input.attachmentIds.length) {
-          fail("裁床单图片未完成上传、归属不符或格式无效", 400, "VALIDATION_ERROR");
+          fail("裁床单图片未完成上传、归属不符或格式无效；请登记人在本页逐张核对上传完成状态，选择本人可用的JPEG、PNG或WebP图片，不能复用其他业务图片", 400, "VALIDATION_ERROR");
         }
         const outOfRange = cuttingOutOfRange(Number(row.contract_quantity), input.actualCutCount);
         const eventId = await this.events.append(client, actor, {
@@ -575,7 +575,7 @@ export class CuttingService {
           [recordId, input.attachmentIds],
         );
         if (boundAttachments.rowCount !== input.attachmentIds.length) {
-          fail("裁床单图片绑定失败，请重试", 409, "INVALID_STATE_TRANSITION");
+          fail("裁床单图片绑定失败，本次登记未完成；请重新读取本单核对图片状态，保留已上传图片，不要直接重复上传全部文件", 409, "INVALID_STATE_TRANSITION");
         }
         if(productionGate?.taskId)await new DigitalProductionTaskService(this.database).completeCuttingFactWithClient(client,actor,productionGate.taskId);
         return {
@@ -639,7 +639,7 @@ export class CuttingService {
         const row = current.rows[0] ?? fail("该裁床订单尚未登记，不能修正", 409, "INVALID_STATE_TRANSITION");
         const version = Number(row.version);
         if (version !== input.expectedVersion) {
-          fail("裁床数量已变化，请刷新后再修正", 409, "CONFLICT");
+          fail("裁床数量已变化，本次未覆盖；请Root重新读取本单原实裁记录，核对最新数量与修正原因后提交", 409, "CONFLICT");
         }
         const outOfRange = cuttingOutOfRange(Number(row.contract_quantity), input.actualCutCount);
         const eventId = await this.events.append(client, actor, {

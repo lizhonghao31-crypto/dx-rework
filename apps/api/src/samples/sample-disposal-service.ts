@@ -8,7 +8,7 @@ import {isRootActor} from '../access/business-authority.js';
 import {requireSampleCapability,canUseSampleCapability} from './sample-authority.js';
 import {requireSampleWrites} from './sample-create-service.js';
 import {bindSampleAttachments,type SampleAttachmentPurpose} from './sample-attachments.js';
-import {sampleInput} from './sample-workflow-service.js';
+import {sampleInput,sampleWorkflowStateLabel} from './sample-workflow-service.js';
 import {sampleSourceHash} from './sample-migration.js';
 type Item={sample_id:string;status:string;version:number;holder_user_id:string|null;holder_name:string|null;storage_location:string|null;archived_from_status:string|null;[field:string]:unknown};
 type Request={request_id:string;sample_id:string;request_type:string;status:string;from_status:string;requested_by:string;version:number;reason:string;[field:string]:unknown};
@@ -53,7 +53,7 @@ export class SampleDisposalService{
    FROM user_role_assignments a WHERE a.role_code=ANY($1::text[]) AND a.revoked_at IS NULL
     AND todo_user_has_direct_role(a.user_id,a.role_code,$2) ORDER BY a.user_id,a.role_code`,[roles,capability]);
   if(!recipients.rows.length&&isRootActor(actor))return;
-  if(!recipients.rows.length)throw new ApplicationError('CONFLICT','未配置有效的样衣事项处理人，请先分配角色',409);
+  if(!recipients.rows.length)throw new ApplicationError('CONFLICT','未配置有效的样衣事项处理人；请Root在员工权限页核对样衣审批岗位，再由申请人在本样衣办理页重试；本次未生成待处理申请',409);
   for(const recipient of recipients.rows)await this.todos.actionableForRecipient(client,actor,{category,sourceEventId:eventId,sourceAction,entityType:'sample',entityId:request.sample_id,
    requiredRole:recipient.role_code,requiredCapability:capability,recipientUserId:recipient.user_id,route:{routeName:'sample_detail',entityId:request.sample_id},policyKey:'general',dedupeKey:`sample:${request.request_id}:${category}:${generation}:${recipient.user_id}`});
  }
@@ -80,10 +80,10 @@ export class SampleDisposalService{
  async request(actor:TrustedActorContext,id:string,raw:unknown,key:string){
   requireSampleCapability(actor,'sample:dispose_request');actor={...actor,authorizationCapability:'sample:dispose_request'};const input=sampleInput(SampleDisposalRequestSchema,raw);
   return this.transaction(actor,id,input.version,key,'dispose-request',input,async(client,item)=>{
-   const allowed=input.type==='loss'?['borrowed']:input.type==='scrap'?['borrowed','in_stock']:['in_stock'];if(!allowed.includes(item.status))throw fail('该处置不适用于当前状态，出售或赠送前请先归还入库');
+   const allowed=input.type==='loss'?['borrowed']:input.type==='scrap'?['borrowed','in_stock']:['in_stock'];if(!allowed.includes(item.status))throw fail(`当前样衣为${sampleWorkflowStateLabel(item.status)}，不能提交本次处置。${input.type==='loss'?'遗失申请仅适用于借出中样衣，请申请人核对持有及交接记录':input.type==='scrap'?'报废仅适用于借出中或在库样衣，请行政先核对当前未结束申请':'出售或赠送前请先由持有人申请归还、行政确认实物入库'}；在本样衣办理页处理，不要重复建档。`);
    const responsible=input.type==='loss'?(await this.person(client,input.responsibleUserId)).id:null;
    const reference=input.type==='loss'?(await client.query<{price:string}>('SELECT purchase_price::text price FROM sample_financial_facts WHERE sample_id=$1',[id])).rows[0]?.price:input.type==='sale'?input.amount:null;
-   if(input.type==='loss'&&reference==null)throw fail('采购资料缺失，不能生成赔偿参考');
+   if(input.type==='loss'&&reference==null)throw fail('采购资料缺失，不能生成赔偿参考；请财务或Root在本样衣财务资料核对采购记录后再办理遗失申请');
    const requestId=randomUUID();const request=(await client.query<Request>(`INSERT INTO sample_workflow_requests(request_id,sample_id,request_type,status,from_status,requested_by,requested_for,reason)
     VALUES($1,$2,$3,'pending',$4,$5,$6,$7) RETURNING *`,[requestId,id,input.type,item.status,actor.actorId,responsible,'reason' in input?input.reason:''])).rows[0]!;
    await client.query(`INSERT INTO sample_disposals(disposal_id,request_id,sample_id,disposal_type,recipient,responsible_user_id,proposed_amount)
@@ -97,12 +97,12 @@ export class SampleDisposalService{
  private async endCustody(client:PoolClient,item:Item){
   if(!item.holder_user_id)return;
   const closed=await client.query('UPDATE sample_custody_records SET disposed_at=CURRENT_TIMESTAMP WHERE sample_id=$1 AND holder_user_id=$2 AND returned_at IS NULL AND disposed_at IS NULL',[item.sample_id,item.holder_user_id]);
-  if(closed.rowCount!==1)throw fail('持有历史不一致，不能结束处置');
+  if(closed.rowCount!==1)throw fail('持有历史不一致，不能结束处置；请行政提供本样衣链接及交接凭据给Root核查，未改写既有持有记录');
  }
  async decide(actor:TrustedActorContext,id:string,raw:unknown,key:string){
   requireSampleCapability(actor,'sample:dispose_approve');actor={...actor,authorizationCapability:'sample:dispose_approve'};const input=sampleInput(SampleDisposalDecisionSchema,raw);
   return this.transaction(actor,id,input.version,key,'dispose-decision',input,async(client,item)=>{
-   const request=await this.pending(client,id);if(item.status!=='disposal_pending'||!request||request.status!=='pending')throw fail('该处置申请已处理');
+   const request=await this.pending(client,id);if(item.status!=='disposal_pending'||!request||request.status!=='pending')throw fail('该处置申请已处理或已不在待审批状态；请审批人在本样衣办理页重新读取原申请结果，不要重复提交决定');
    if(input.decision==='reject'){
     await client.query("UPDATE sample_workflow_requests SET status='rejected',resolved_by=$2,resolved_at=CURRENT_TIMESTAMP,resolution_reason=$3,version=version+1 WHERE request_id=$1",[request.request_id,actor.actorId,input.reason]);
     await client.query('UPDATE sample_items SET status=$2,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE sample_id=$1',[id,request.from_status]);
@@ -125,7 +125,7 @@ export class SampleDisposalService{
  async closeLoss(actor:TrustedActorContext,id:string,raw:unknown,key:string){
   requireSampleCapability(actor,'sample:loss_close');actor={...actor,authorizationCapability:'sample:loss_close'};const input=sampleInput(SampleLossCloseSchema,raw);
   return this.transaction(actor,id,input.version,key,'loss-close',input,async(client,item)=>{
-   const request=await this.pending(client,id);if(item.status!=='loss_payment_pending'||request?.status!=='payment_pending'||request.request_type!=='loss')throw fail('只有审批后的遗失待赔付事项可以结案');
+   const request=await this.pending(client,id);if(item.status!=='loss_payment_pending'||request?.status!=='payment_pending'||request.request_type!=='loss')throw fail('只有审批后的遗失待赔付事项可以结案；请行政在本样衣办理页查看原处置决定，取得实际赔付凭据后再登记结案');
    await this.proof(client,actor,id,request.request_id,input.proofAttachmentIds,'payment_proof');await this.endCustody(client,item);
    const disposal=(await client.query<{final_amount:string}>('UPDATE sample_disposals SET paid_by=$2,paid_at=CURRENT_TIMESTAMP WHERE request_id=$1 RETURNING final_amount::text',[request.request_id,actor.actorId])).rows[0]!;
    await client.query("UPDATE sample_workflow_requests SET status='completed',resolved_by=$2,resolved_at=CURRENT_TIMESTAMP,version=version+1 WHERE request_id=$1",[request.request_id,actor.actorId]);
@@ -185,7 +185,7 @@ export class SampleDisposalService{
   return this.transaction(actor,id,input.version,key,'restore',input,async(client,item)=>{
    if(item.status!=='archived'||!item.archived_from_status)throw fail('样衣未归档');
    const archived=(await client.query<{request_snapshot:Request|null}>('SELECT request_snapshot FROM sample_archive_records WHERE sample_id=$1 ORDER BY created_at DESC,event_id DESC LIMIT 1',[id])).rows[0];
-   if(!archived)throw fail('缺少归档快照，请先核对迁移记录');
+   if(!archived)throw fail('缺少归档快照，当前无法恢复样衣；请Root核对本样衣归档及迁移记录，不能凭当前页面猜测历史状态');
    const request=archived.request_snapshot;
    if(request){const restored=await client.query("UPDATE sample_workflow_requests SET status=$2,resolved_by=NULL,resolved_at=NULL,resolution_reason=NULL,version=version+1 WHERE request_id=$1 AND status='cancelled' AND resolution_reason='样衣归档' AND version=$3",[request.request_id,request.status,request.version+1]);if(restored.rowCount!==1)throw fail('归档期间申请发生变化，不能直接恢复');}
    await client.query('UPDATE sample_items SET status=archived_from_status,archived_from_status=NULL,archived_reason=NULL,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE sample_id=$1',[id]);

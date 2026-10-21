@@ -37,7 +37,8 @@ describe("receiving board operations", () => {
     expect(routes).toContain('"/receiving/batches/:receivingBatchId/difference-resolutions"');
     expect(service).toContain("receiving:resolve_difference");
     expect(service).toContain("receiving:packing_manage");
-    expect(service).toContain("订单数量已变化，请刷新或搜索款号后再处理");
+    expect(service).toContain("订单数量已变化，本次未覆盖");
+    expect(service).toContain("重新读取累计收货数");
     expect(service).toContain("difference_quantity_snapshot");
     expect(migration).toContain("('warehouse_receiver','receiving:export')");
     expect(migration).toContain("('production_management','receiving:export')");

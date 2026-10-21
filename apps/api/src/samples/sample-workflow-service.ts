@@ -16,8 +16,13 @@ type Item = {sample_id:string;status:string;version:number;holder_user_id:string
 type Request = {request_id:string;sample_id:string;request_type:string;status:string;from_status:string;requested_by:string;requested_by_name:string;requested_for:string|null;requested_for_name:string|null;department:string;purpose:string|null;reason:string;version:number};
 const fail = (message:string) => new ApplicationError("INVALID_STATE_TRANSITION",message,409);
 export function sampleInput<T>(schema:z.ZodType<T>,input:unknown):T {
- const parsed=schema.safeParse(input);if(!parsed.success)throw new ApplicationError("VALIDATION_ERROR","请完整填写当前操作所需资料",400);return parsed.data;
+ const parsed=schema.safeParse(input);if(!parsed.success){
+  const labels:Record<string,string>={version:'页面版本（请重新读取）',purpose:'借用用途',borrowerUserId:'借用员工',photoAttachmentIds:'归还照片',token:'交接码',storageLocation:'在库位置',reason:'原因说明',items:'批量归还清单',sampleId:'样衣记录',type:'处置类型',recipient:'接收方',amount:'申请金额',proofAttachmentIds:'证明附件',responsibleUserId:'责任员工',decision:'审批决定',finalAmount:'最终金额',brand:'品牌',styleName:'款名',color:'颜色',department:'所属部门',purchasePrice:'采购金额',receiptAttachmentIds:'采购小票',purchaseDate:'采购日期',receiptMode:'小票处理方式'};
+  const fields=[...new Set(parsed.error.issues.map(issue=>{const field=issue.path.find(part=>typeof part==='string'&&part!=='items');const prefix=issue.path[0]==='items'&&typeof issue.path[1]==='number'?`第${issue.path[1]+1}项：`:'';return prefix+(field&&labels[String(field)]||'当前申请资料');}))];
+  throw new ApplicationError('VALIDATION_ERROR',`以下输入缺失或不符合要求：${fields.join('、')}。请在当前样衣办理页逐项核对后提交。`,400);
+ }return parsed.data;
 }
+export function sampleWorkflowStateLabel(status:string){const labels:Record<string,string>={borrowed:'借出中',return_pending:'归还待确认',in_stock:'在库',borrow_pending:'借出待确认',disposal_pending:'处置待审批',loss_payment_pending:'遗失待赔付',sold:'已出售',gifted:'已赠送',scrapped:'已报废',lost:'已遗失（已赔付）',archived:'已归档'};return labels[status]??'状态待核对';}
 export class SampleWorkflowService {
  constructor(private readonly db:Pool,private readonly corporationId:string,private readonly publicBaseUrl:string,
   private readonly todos:TodoProjectionService,private readonly idempotency=new IdempotencyService(),private readonly events=new OperationEventRepository(),
@@ -29,7 +34,7 @@ export class SampleWorkflowService {
  }
  private async pending(client:PoolClient,id:string):Promise<Request>{
   const row=(await client.query<Request>("SELECT * FROM sample_workflow_requests WHERE sample_id=$1 AND status IN ('pending','payment_pending') FOR UPDATE",[id])).rows[0];
-  if(!row)throw fail("该申请已处理，请刷新");return row;
+  if(!row)throw fail("该申请已处理；请重新读取本样衣办理页查看处理结果，不要重复提交原申请");return row;
  }
  private async person(client:PoolClient,id:string){
   const row=(await client.query<{id:string;display_name:string}>(`SELECT u.id,u.display_name FROM app_users u JOIN identity_mappings i ON i.user_id=u.id
@@ -76,7 +81,7 @@ export class SampleWorkflowService {
  async borrow(actor:TrustedActorContext,sampleId:string,raw:unknown,key:string){
   requireSampleCapability(actor,'sample:borrow_request');actor={...actor,authorizationCapability:'sample:borrow_request'};const input=sampleInput(SampleBorrowRequestSchema,raw);
   return this.transaction(actor,sampleId,input.version,key,'borrow-request',input,async(client,item)=>{
-   if(item.status!=='in_stock')throw fail('仅在库样衣可以申请借出');
+   if(item.status!=='in_stock')throw fail(`仅在库样衣可以申请借出；当前为${sampleWorkflowStateLabel(item.status)}。请在本样衣办理页核对未结束的借还或处置申请，行政完成实际入库后再申请借出。`);
    const borrower=await this.person(client,input.borrowerUserId??actor.actorId),requestId=randomUUID();
    await client.query(`INSERT INTO sample_workflow_requests(request_id,sample_id,request_type,status,from_status,requested_by,requested_for,purpose)
     VALUES($1,$2,'borrow','pending','in_stock',$3,$4,$5)`,[requestId,sampleId,actor.actorId,borrower.id,input.purpose]);
@@ -88,7 +93,7 @@ export class SampleWorkflowService {
  async returnRequest(actor:TrustedActorContext,sampleId:string,raw:unknown,key:string){
   requireSampleCapability(actor,'sample:return_request');actor={...actor,authorizationCapability:'sample:return_request'};const input=sampleInput(SampleReturnRequestSchema,raw);
   return this.transaction(actor,sampleId,input.version,key,'return-request',input,async(client,item)=>{
-   if(item.status!=='borrowed')throw fail('仅借出中的样衣可以申请归还');
+   if(item.status!=='borrowed')throw fail(`仅借出中的样衣可以申请归还；当前为${sampleWorkflowStateLabel(item.status)}。请持有人在本样衣办理页查看当前申请；已有归还申请时由行政确认实际收货，不要重复申请。`);
    if(item.holder_user_id!==actor.actorId&&!isRootActor(actor))throw new ApplicationError('FORBIDDEN','仅当前持有人可以申请归还',403);
    const requestId=randomUUID();
    await client.query(`INSERT INTO sample_workflow_requests(request_id,sample_id,request_type,status,from_status,requested_by,requested_for)
@@ -141,23 +146,23 @@ export class SampleWorkflowService {
   const input=sampleInput(SampleConfirmSchema,raw);
   return this.transaction(actor,sampleId,input.version,key,'handoff-confirm',input,async(client,item)=>{
    const request=await this.pending(client,sampleId);
-   if(request.status!=='pending'||!['borrow','return'].includes(request.request_type)||item.status!==`${request.request_type}_pending`)throw fail('申请状态已变化');
+   if(request.status!=='pending'||!['borrow','return'].includes(request.request_type)||item.status!==`${request.request_type}_pending`)throw fail('申请状态已变化，本次未确认交接；请行政重新读取本样衣当前申请，核对实际交接对象后再办理');
    requireSampleCapability(actor,`sample:${request.request_type}_confirm` as SampleCapability);
    actor={...actor,authorizationCapability:`sample:${request.request_type}_confirm`};
    const q=(await client.query<{subject_user_id:string}>(`SELECT subject_user_id FROM sample_handoff_challenges WHERE token_hash=$1 AND request_id=$2
     AND expires_at>CURRENT_TIMESTAMP AND used_at IS NULL AND revoked_at IS NULL FOR UPDATE`,[createHash('sha256').update(input.token).digest('hex'),request.request_id])).rows[0];
-   if(!q||q.subject_user_id!==request.requested_by)throw fail('交接码不匹配、过期或已使用');
+   if(!q||q.subject_user_id!==request.requested_by)throw fail('交接码不匹配、过期或已使用；请申请人在本样衣当前借还申请重新生成交接码，由行政确认实际交接，不要重建借还申请');
    await this.person(client,q.subject_user_id);
    const borrowing=request.request_type==='borrow',status=borrowing?'borrowed':'in_stock';
    if(borrowing){
-    if(!request.requested_for||!request.purpose)throw fail('借用资料不完整');await this.person(client,request.requested_for);
+    if(!request.requested_for||!request.purpose)throw fail('借用资料缺借用人或用途；请发起人或行政在本样衣办理页核对原借用申请；资料确有缺失时先按原权限撤销待处理申请，再由申请人填写有效员工和实际用途重提');await this.person(client,request.requested_for);
     await client.query(`INSERT INTO sample_custody_records(custody_id,sample_id,holder_user_id,holder_name,department,purpose,borrowed_at,requested_by,confirmed_by)
      VALUES($1,$2,$3,$4,$5,$6,CURRENT_TIMESTAMP,$7,$8)`,[randomUUID(),sampleId,request.requested_for,request.requested_for_name,request.department,request.purpose,request.requested_by,actor.actorId]);
     await client.query(`UPDATE sample_items SET status='borrowed',holder_user_id=$2,holder_name=$3,purpose=$4,borrowed_at=CURRENT_TIMESTAMP,storage_location=NULL,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE sample_id=$1`,[sampleId,request.requested_for,request.requested_for_name,request.purpose]);
    }else{
     if(!input.storageLocation)throw new ApplicationError('VALIDATION_ERROR','收到实物后必须填写在库位置',400);
     const closed=await client.query("UPDATE sample_custody_records SET returned_at=CURRENT_TIMESTAMP WHERE sample_id=$1 AND holder_user_id=$2 AND returned_at IS NULL AND disposed_at IS NULL",[sampleId,item.holder_user_id]);
-    if(closed.rowCount!==1)throw fail('当前持有记录不一致，请联系管理员核对');
+    if(closed.rowCount!==1)throw fail('当前持有记录不一致，本次归还未完成；请行政保留实物交接凭据，提供本样衣链接给Root核对持有历史，不要重复借还');
     await client.query(`UPDATE sample_items SET status='in_stock',holder_user_id=NULL,holder_name=NULL,purpose=NULL,borrowed_at=NULL,storage_location=$2,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE sample_id=$1`,[sampleId,input.storageLocation]);
    }
    await client.query("UPDATE sample_workflow_requests SET status='completed',resolved_by=$2,resolved_at=CURRENT_TIMESTAMP,version=version+1 WHERE request_id=$1",[request.request_id,actor.actorId]);

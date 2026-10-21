@@ -1082,7 +1082,7 @@ export class ReceivingService {
        FOR UPDATE`,
       [attachmentIds],
     );
-    if (candidates.rows.length !== attachmentIds.length) fail("送货单图片不存在或不可用");
+    if (candidates.rows.length !== attachmentIds.length) fail("送货单图片不存在或不可用；请收货登记人在本页核对每张图片的上传状态及归属，保留已成功上传且可用的图片");
     for (const row of candidates.rows) {
       if (row.status !== "ready") fail("送货单图片尚未上传完成");
       if (row.uploaded_by !== actor.actorId) fail("只能使用本人上传的送货单图片", 403, "FORBIDDEN");
@@ -1164,7 +1164,7 @@ export class ReceivingService {
       await this.lockStyles(client, [styleRow.style_no, normalized.styleNo]);
       const current = await this.mutableBatch(client, receivingBatchId, true);
       if (current.version !== normalized.expectedVersion) {
-        fail("收货订单已被其他人修改，请刷新后重试", 409, "CONFLICT");
+        fail("收货订单版本已变化，本次未覆盖；请Root在本单收货记录重新读取数量和送货单后再提交", 409, "CONFLICT");
       }
       if (current.has_rework_history && normalized.attachmentIds !== undefined) {
         fail("返工发起后不能替换送货单图片", 409, "INVALID_STATE_TRANSITION");
@@ -1398,7 +1398,7 @@ export class ReceivingService {
       if (!styleRow) return fail("收货订单不存在", 404, "NOT_FOUND");
       await this.lockStyles(client, [styleRow.style_no]);
       const current = await this.mutableBatch(client, receivingBatchId);
-      if (current.version !== version) fail("收货订单已被其他人修改，请刷新后重试", 409, "CONFLICT");
+      if (current.version !== version) fail("收货订单版本已变化，本次未覆盖；请Root在本单收货记录重新读取数量和送货单后再提交", 409, "CONFLICT");
       const before = {
         receivingBatchId,
         styleNo: current.style_no,
@@ -1733,7 +1733,7 @@ export class ReceivingService {
        FOR UPDATE`,
       [attachmentIds],
     );
-    if (candidates.rows.length !== attachmentIds.length) fail("送货单图片不存在或不可用");
+    if (candidates.rows.length !== attachmentIds.length) fail("送货单图片不存在或不可用；请收货登记人在本页核对每张图片的上传状态及归属，保留已成功上传且可用的图片");
 
     let newBindings = 0;
     for (const row of candidates.rows) {
@@ -2187,7 +2187,7 @@ export class ReceivingService {
       await this.lockStyles(client, [fact.style_no]);
       const batch = await this.mutableBatch(client, fact.receiving_batch_id, true);
       if (batch.version !== normalized.expectedVersion) {
-        fail("收货订单已被其他人修改，请刷新后重试", 409, "CONFLICT");
+        fail("收货订单版本已变化，本次未覆盖；请Root在本单收货记录重新读取数量和送货单后再提交", 409, "CONFLICT");
       }
 
       const beforeReceipt = {
@@ -2280,7 +2280,7 @@ export class ReceivingService {
           after.actualQuantity, Number(raw.actual_quantity), after.defectiveQuantity,
           Number(raw.defective_quantity), actor.actorId, eventId, actor.requestId, batch.version],
       );
-      if (updated.rowCount !== 1) fail("收货订单已被其他人修改，请刷新后重试", 409, "CONFLICT");
+      if (updated.rowCount !== 1) fail("收货订单版本已变化，本次未覆盖；请Root在本单收货记录重新读取数量和送货单后再提交", 409, "CONFLICT");
       await client.query("COMMIT");
       return after;
     } catch (error) {
@@ -2321,7 +2321,7 @@ export class ReceivingService {
         }
         if (snapshot.version !== normalized.expectedVersion
             || snapshot.packingRevisionId !== normalized.expectedPackingRevisionId) {
-          fail("订单或装箱数量已更新，请刷新后重试", 409, "CONFLICT");
+          fail("订单或装箱数量已更新，本次未覆盖；请在本单回货处理页重新读取累计收货与装箱数，再核对后提交", 409, "CONFLICT");
         }
         const packingRevisionId = randomUUID();
         const eventId = await this.events.append(client, actor, {
@@ -2391,7 +2391,7 @@ export class ReceivingService {
       entity_type: string | null; entity_id: string | null;
     }>(`SELECT attachment_id,uploaded_by,mime_type,status,entity_type,entity_id
         FROM attachments WHERE attachment_id=ANY($1::uuid[]) ORDER BY attachment_id FOR UPDATE`, [attachmentIds]);
-    if (candidates.rows.length !== attachmentIds.length) fail("处理凭证不存在或不可用");
+    if (candidates.rows.length !== attachmentIds.length) fail("处理凭证不存在或不可用；请回货处理人在本页核对凭证是否上传完成且未用于其他业务，不能复用他人凭证");
     for (const row of candidates.rows) {
       if (row.status !== "ready") fail("处理凭证尚未上传完成");
       if (row.uploaded_by !== actor.actorId) fail("只能使用本人上传的处理凭证", 403, "FORBIDDEN");
@@ -2437,19 +2437,19 @@ export class ReceivingService {
         }
         if (snapshot.documentQuantity !== normalized.expectedDocumentQuantity
             || snapshot.actualQuantity !== normalized.expectedActualQuantity) {
-          fail("订单数量已变化，请刷新或搜索款号后再处理", 409, "CONFLICT");
+          fail("订单数量已变化，本次未覆盖；请负责跟单在本单回货处理页重新读取累计收货数、送货单数与装箱记录后再处理", 409, "CONFLICT");
         }
         if (differenceType === "packing"
             && snapshot.packingRevisionId !== normalized.expectedPackingRevisionId) {
-          fail("装箱数量已更新，请刷新后重试", 409, "CONFLICT");
+          fail("装箱数量已更新，本次未覆盖；请重新读取本单最新装箱数与差异，再决定是否提交", 409, "CONFLICT");
         }
         if (differenceType === "packing" && snapshot.packingQuantity === null) {
-          fail("请先录入装箱数量");
+          fail("请先录入装箱数量；请有权回货岗位在本单回货处理页登记实际装箱数，再处理与累计收货数的差异");
         }
         const differenceQuantity = differenceType === "receiving"
           ? snapshot.actualQuantity - snapshot.documentQuantity
           : snapshot.packingQuantity! - snapshot.actualQuantity;
-        if (differenceQuantity === 0) fail("当前没有需要处理的差异", 409, "CONFLICT");
+        if (differenceQuantity === 0) fail("当前没有需要处理的差异；请查看本单最新装箱数与累计收货数，无须新增差异处理记录", 409, "CONFLICT");
         const handled=(await client.query(`SELECT 1 FROM receiving_difference_resolutions resolution
           WHERE resolution.receiving_batch_id=$1 AND resolution.difference_type=$2
             AND resolution.actual_quantity_snapshot=$3
