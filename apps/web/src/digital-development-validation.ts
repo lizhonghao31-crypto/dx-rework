@@ -30,3 +30,14 @@ export function developmentIssues(document:DevelopmentDocument,quantityInput:str
  for(const issue of developmentMaterialPublishIssues(parsed.data)){const row=parsed.data.materials.find(row=>row.materialId===issue.materialId)!;issues.push({id:`development-${row.materialId}-${issue.field}`,label:`面辅料 · ${row.label||row.category} · ${labels[issue.field]}`,message:issue.message});}
  return issues;
 }
+
+/** Resolve before mounting the destination chapter; keep the existing form and its inputs. */
+export function developmentFieldChapter(id:string):string|undefined{
+ if(/^development-[0-9a-f]{8}-[0-9a-f-]{27}-/.test(id)||id==='development-materials')return 'development-materials';
+ if(/^development-(size(?:-|s$)|measurement-|template$|unit$)/.test(id))return 'development-sizes';
+ if(/^development-(mainLabel|mainLabelMethod|sizeLabel|careLabel)$/.test(id))return 'development-labels';
+ if(/^development-(washing|washingMethod|washingIroning|ironing|packaging|interlining|placketInterlining|sewingThread|buttonholeThread|stitchDensity|formalSizes|casualSizes)$/.test(id))return 'development-craft';
+ if(/^development-(quantity|returnDate|orderDate|craft|pattern-preparation)$/.test(id))return 'development-basic';
+ if(/^development-(upload|files|instructions)$/.test(id))return 'development-images';
+ return undefined;
+}
