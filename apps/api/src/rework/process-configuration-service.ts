@@ -159,7 +159,7 @@ const translateDatabaseError = (error: unknown): never => {
   if (code === "42501") throw new ApplicationError("FORBIDDEN", "当前用户无权执行该操作", 403);
   if (code === "55000") throw new ApplicationError("CONFLICT", "工序配置不允许绕过受控流程修改", 409);
   if (code === "23514" || code === "22P02") {
-    throw new ApplicationError("VALIDATION_ERROR", "工序、数量、单位、单价或状态不符合规则", 400);
+    throw new ApplicationError("VALIDATION_ERROR", "本次工序配置未通过业务校验，具体字段或状态原因尚未确认；请尾部主管在本单工序配置核对工序、数量、单位和单价，仍失败时提供订单链接给管理员核查", 400);
   }
   throw error;
 };

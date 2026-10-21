@@ -1,3 +1,4 @@
+import {workflowStateRejection} from "../platform/business-rejection-guidance.js";
 import {effectiveSourcingMerchandiser,lockDigitalSourcingHandover} from "./current-merchandiser.js";
 import {SourcingContractReturnService} from "./sourcing-contract-return-service.js";
 import { factoryPoLines, factoryProposals, syncFactoryPoNumbers, validateFactoryInputs, approveFactoryPoDates, prepareTransferPoDates, approveTransferPoDates } from "../production-platform/po-factory-date-adapter.js";
@@ -1808,9 +1809,9 @@ export class SourcingService {
         requestHash:requestHash(scope,{sourcingCaseId,input:{...input,confirmedDuplicateStyles:undefined}}),expiresAt:new Date(Date.now()+86400000)}, async () => {
         const before = await this.readCase(client,sourcingCaseId,actor);
         if (before.approvalSnapshot) fail("老板已批准，不能直接退回修改生效订单",409,"INVALID_STATE_TRANSITION");
-        if (before.version !== input.expectedVersion) fail("订单已被他人处理，请刷新后重试",409,"CONFLICT");
+        if (before.version !== input.expectedVersion) fail("订单已被他人处理，本次未覆盖；请在本单报价选厂页重新读取最新方案与版本，再核对当前待办后提交",409,"CONFLICT");
         if (correcting ? before.status !== "pending_merchandiser_correction"
-          : !["pending_ie_quote","pending_management_decision","pending_owner_approval"].includes(before.status)) fail("当前节点不能执行该操作",409,"INVALID_STATE_TRANSITION");
+          : !["pending_ie_quote","pending_management_decision","pending_owner_approval"].includes(before.status)) fail(workflowStateRejection("外发订单",before.status,correcting?["pending_merchandiser_correction"]:["pending_ie_quote","pending_management_decision","pending_owner_approval"],"本单报价选厂办理页"),409,"INVALID_STATE_TRANSITION");
         const nextStatus = correcting ? "pending_ie_quote" : "pending_merchandiser_correction";
         let after: Record<string,unknown> = {status:nextStatus};
         const facts = correcting ? input as CorrectSourcingCase : null;
@@ -2386,7 +2387,7 @@ export class SourcingService {
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       if (databaseCode(error) === "23514" || databaseCode(error) === "23505") {
-        fail("该询价状态已经变化，请刷新后重试", 409, "INVALID_STATE_TRANSITION");
+        fail("本次报价未通过系统业务校验，具体是资料冲突还是状态变化尚未确认；请IE重新读取本单报价节点，仍失败时提供订单链接给管理员核查", 409, "INVALID_STATE_TRANSITION");
       }
       throw error;
     } finally {
@@ -2828,7 +2829,7 @@ export class SourcingService {
         if (approved) {
           if (!source.supplier_id || !source.supplier_code_snapshot
             || !source.supplier_name_snapshot || source.quantity === null) {
-            fail("批准快照缺少当前选厂事实", 409, "INVALID_STATE_TRANSITION");
+            fail("批准快照缺少当前选厂事实；请生产管理在本单报价选厂页核对原选厂方案，由Root核查关联，不要重复批准或自动另选工厂", 409, "INVALID_STATE_TRANSITION");
           }
           const snapshotId = randomUUID();
           const snapshotTotal = await client.query<{ total_amount: string }>(
@@ -2837,7 +2838,7 @@ export class SourcingService {
             [source.sourcing_decision_id],
           );
           const totalAmount = snapshotTotal.rows[0]?.total_amount;
-          if (!totalAmount) fail("批准快照缺少逐款价格", 409, "INVALID_STATE_TRANSITION");
+          if (!totalAmount) fail("批准快照缺少逐款价格；请生产管理和老板在本单原方案核对价格依据，由Root核查快照，不得补零价或重算历史批准价", 409, "INVALID_STATE_TRANSITION");
           await client.query(
             `INSERT INTO sourcing_approval_snapshots(
                sourcing_approval_snapshot_id,sourcing_case_id,sourcing_decision_id,
@@ -3129,7 +3130,7 @@ export class SourcingService {
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       if (databaseCode(error) === "23514" || databaseCode(error) === "23505") {
-        fail("合同登记状态已经变化，请刷新后重试", 409, "INVALID_STATE_TRANSITION");
+        fail("本次合同登记未通过系统校验；请订单跟单在本单合同办理页重新读取当前批准版本与合同记录，仍无法判断原因时交管理员核查", 409, "INVALID_STATE_TRANSITION");
       }
       throw error;
     } finally {
@@ -4016,7 +4017,7 @@ export class SourcingService {
           [sourcingCaseId],
         );
         if (openFactoryChange.rowCount) {
-          fail("订单转厂审批中，财务暂不能核对", 409, "INVALID_STATE_TRANSITION");
+          fail("订单转厂审批中，财务暂不能核对；请原转厂审批岗位在本单转厂申请完成决定，财务再读取有效工厂与合同后对账", 409, "INVALID_STATE_TRANSITION");
         }
         const expectedFactoryResult = await client.query<{
           supplier_id: string;
@@ -4029,7 +4030,7 @@ export class SourcingService {
            WHERE sourcing_decision_id=$1`,
           [source.sourcing_decision_id],
         );
-        const expectedFactory = expectedFactoryResult.rows[0] ?? fail("当前批准加工厂不存在", 409, "INVALID_STATE_TRANSITION");
+        const expectedFactory = expectedFactoryResult.rows[0] ?? fail("当前批准加工厂依据缺失；请财务暂停本次对账，由订单跟单在本单原批准方案核对，交Root核查关联记录", 409, "INVALID_STATE_TRANSITION");
         const differenceReason = difference ? suppliedReason : undefined;
         const reconciliationVersion = Number(source.reconciliation_version)+1;
         const reconciliationId = randomUUID();
@@ -4121,7 +4122,7 @@ export class SourcingService {
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       if (databaseCode(error) === "23514" || databaseCode(error) === "23505") {
-        fail("财务核对状态已经变化，请刷新后重试", 409, "INVALID_STATE_TRANSITION");
+        fail("本次财务核对未通过系统校验；请财务在本单对账页重新读取当前合同、工厂与已核对记录，避免重复对账；仍失败时提供订单链接给管理员", 409, "INVALID_STATE_TRANSITION");
       }
       throw error;
     } finally {
@@ -4239,7 +4240,7 @@ export class SourcingService {
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       if (databaseCode(error) === "23514" || databaseCode(error) === "23505") {
-        fail("差异核实状态已经变化，请刷新后重试", 409, "INVALID_STATE_TRANSITION");
+        fail("本次差异处理未通过系统校验；请原差异处理岗位在本单对账差异页重新读取处理结果，不能用旧版本重复关闭", 409, "INVALID_STATE_TRANSITION");
       }
       throw error;
     } finally {

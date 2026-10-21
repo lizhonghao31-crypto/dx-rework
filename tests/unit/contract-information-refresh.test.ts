@@ -4,7 +4,7 @@ import {
   CONTRACT_TERM_LABELS, ContractTemplateContentSchema, RefreshContractInformationSchema,
   type ContractTemplateContent,
 } from "@dx-rework/contracts";
-import { canRefreshContractInformation, SourcingContractManagementService } from "../../apps/api/src/sourcing/sourcing-contract-management-service.js";
+import { missingSupplierContractFields, canRefreshContractInformation, SourcingContractManagementService } from "../../apps/api/src/sourcing/sourcing-contract-management-service.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
 const creator="00000000-0000-4000-8000-000000000001";
@@ -70,3 +70,5 @@ describe("contract information refresh permissions",()=>{
     }finally{await doc.destroy?.();}
   });
 });
+
+it("identifies all missing contract profile fields without returning any supplier values",()=>{const missing=missingSupplierContractFields({supplierName:"TEST-private-name",supplierCode:"TEST-private-code",contractEntityName:"TEST-private-entity",address:"",partyBRepresentative:"TEST-private-person",payeeName:"",bankAccount:"",bankName:"TEST-private-bank"});expect(missing).toEqual(["地址","收款人","银行账号"]);expect(JSON.stringify(missing)).not.toContain("TEST-private");});

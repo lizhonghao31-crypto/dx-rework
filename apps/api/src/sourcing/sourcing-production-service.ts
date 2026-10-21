@@ -224,7 +224,7 @@ export class SourcingProductionService {
     const fact=(await client.query(`SELECT f.*,l.child_id AS sourcing_case_id FROM digital_factory_facts f JOIN digital_factory_routes r USING(preparation_id) JOIN digital_production_child_links l ON l.production_order_id=r.production_order_id AND l.module='sourcing' WHERE f.fact_id=$1 AND r.production_order_id=$2 AND f.kind='仓库实际发厂' AND f.actor_id=$3`,[factId,orderId,actor.actorId])).rows[0];
     if(!fact||!actor.actorRoles.includes(ROOT)&&(!hasWarehouseReceivingRole(actor.actorRoles)||!await new DigitalProductionAccessPolicy(client).activeRole(actor.actorId,'warehouse_receiver')))fail('发厂须匹配仓库实际登记事实',403);
     const source=await this.source(client,fact.sourcing_case_id,true);
-    if(!source.sourcing_contract_document_id)fail('当前批准合同尚未就绪');
+    if(!source.sourcing_contract_document_id)fail('当前批准合同尚未就绪；请订单跟单在本单合同页处理已列缺项并等待文件生成，生成失败时按该页重试，不能用旧版合同派单');
     const result=await this.dispatchWithClient(client,actor,fact.sourcing_case_id,source,source.sourcing_contract_document_id!,iso(fact.occurred_at)!);
     const lines=(await client.query("SELECT child_line_key,line_id FROM digital_production_child_lines WHERE module='sourcing' AND child_id=$1 ORDER BY child_line_key",[fact.sourcing_case_id])).rows;
     await linkNewDigitalChild(client,{module:'production',childId:result.response.productionOrderId,productionOrderId:orderId,lines:lines.map(l=>({childLineKey:l.child_line_key,lineId:l.line_id}))});

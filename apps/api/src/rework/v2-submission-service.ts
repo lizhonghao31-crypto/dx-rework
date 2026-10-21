@@ -89,7 +89,7 @@ const translateDatabaseError = (error: unknown): never => {
   const code = (error as DatabaseError | null)?.code;
   if (code === "23503") throw new ApplicationError("NOT_FOUND", "引用的跟单、加工厂或附件不存在", 404);
   if (code === "23514" || code === "22P02") {
-    throw new ApplicationError("VALIDATION_ERROR", "返工单数据或状态不符合业务约束", 400);
+    throw new ApplicationError("VALIDATION_ERROR", "本次返工提交未通过业务校验，系统未能确定具体字段或状态原因；请申请人在本单提交页核对原资料，仍失败时提供订单链接给管理员核查，不要重复建单", 400);
   }
   if (code === "55000") throw new ApplicationError("CONFLICT", "返工单不允许绕过受控流程修改", 409);
   throw error;

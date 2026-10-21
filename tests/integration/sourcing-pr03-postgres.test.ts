@@ -988,7 +988,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     )).rejects.toMatchObject({
       code: "INVALID_STATE_TRANSITION",
       statusCode: 409,
-      message: "订单转厂审批中，财务暂不能核对",
+      message: expect.stringMatching(/^订单转厂审批中.*原转厂审批岗位.*本单转厂申请.*财务/),
     });
     const requestedChange = (await service.listTimeline(
       readerActor(),
@@ -3649,6 +3649,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   });
   it("P09 preserves published budgets, rejects technical readers and stale or unauthorized writes", async () => {
     const { order, designer, document, imageId, budget } = await budgetFixture(), id = order.productionOrderId;
+    await expect(new DigitalBudgetService(database,false).save(designer,id,{expectedVersion:0,document},randomUUID())).rejects.toMatchObject({statusCode:409,code:"BUDGET_CONFLICT",message:expect.stringMatching(/预算新建尚未启用.*管理员.*预算页/)});
+    expect((await database.query("SELECT count(*)::int AS n FROM digital_budget_documents WHERE production_order_id=$1",[id])).rows[0].n).toBe(0);
     const key = randomUUID();
     const saved = await budget.save(designer, id, { expectedVersion: 0, document }, key);
     expect((await budget.save(designer, id, { expectedVersion: 0, document }, key)).version).toBe(saved.version);
@@ -3664,10 +3666,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const task = (await database.query("SELECT p.task_id,t.state,a.assignee_id FROM digital_budget_preparations p JOIN digital_production_tasks t USING(task_id) JOIN digital_production_task_access a USING(task_id) WHERE p.production_order_id=$1", [id])).rows[0];
     expect(task).toMatchObject({ state: "ready", assignee_id: merchandiserId });
     await expect(new DigitalProductionTaskService(database).complete(merchandiserActor(), task.task_id, { note: "不能直接完成" }, randomUUID())).rejects.toMatchObject({ statusCode: 409 });
+    await expect(budget.prepareSourcing(merchandiserActor(),id,0,attachments)).rejects.toMatchObject({statusCode:409,message:expect.stringMatching(/预算已更新.*本次未发起外发.*主跟单.*预算页/)});
     const disabled = new DigitalBudgetService(database, false);
     await disabled.save(designer, id, { expectedVersion: 1, document: { ...document, cm: "9" } }, randomUUID());
     expect((await budget.read(designer, id, undefined, 1)).document?.cm).toBe("8.3");
-    await expect(budget.prepareSourcing(merchandiserActor(), id, 1, attachments)).rejects.toMatchObject({ statusCode: 409 });
+    await expect(budget.prepareSourcing(merchandiserActor(), id, 1, attachments)).rejects.toMatchObject({ statusCode: 409, message:expect.stringMatching(/请先发布当前预算.*本单设计师.*预算页.*主跟单/) });
     await expect(database.query("UPDATE digital_budget_versions SET document='{}' WHERE production_order_id=$1", [id])).rejects.toThrow("immutable");
     expect((await database.query("SELECT count(*)::int AS n FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='sourcing_preparation'", [id])).rows[0].n).toBe(1);
   });
@@ -4181,6 +4184,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       management.refreshInformation(managerActor(),id,templatePreview,refreshKey),
     ]);
     expect(retry).toBe(first);
+    const commandReceipt=await management.informationRefreshReceipt(managerActor(),id,templatePreview,refreshKey,first);
+    expect(commandReceipt).toMatchObject({sourcingCaseId:id,previousDocumentId:original.sourcingContractDocumentId,documentId:first,previousVersion:original.contractVersion,contractVersion:original.contractVersion+1});
+    await expect(management.informationRefreshReceipt(managerActor(),randomUUID(),templatePreview,refreshKey,first)).rejects.toMatchObject({statusCode:502});
+    await expect(management.informationRefreshReceipt(managerActor(),id,templatePreview,randomUUID(),first)).rejects.toMatchObject({statusCode:502});
     await contractService.generateIfReady(managerActor(),id,first);
     expect((await contractService.getCurrent(readerActor(),id)).item).toMatchObject({contractVersion:original.contractVersion+1,templateVersion:saved.item.templateVersion,status:"ready"});
     const updateSupplier=async()=>{
@@ -4196,6 +4203,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const supplierPreview=await management.previewInformation(contractActor(),id);
     expect(supplierPreview.changes.map(change=>change.field)).toEqual(["address","bankAccount"]);
     const supplierDocument=await management.refreshInformation(contractActor(),id,supplierPreview,randomUUID());
+    // A later contract must not replace the document of the original command.
+    expect((await contractService.generateIfReady(managerActor(),id,first)).item?.sourcingContractDocumentId).toBe(first);
+    expect((await management.informationRefreshReceipt(managerActor(),id,templatePreview,refreshKey,first)).documentId).toBe(first);
+    expect((await contractService.getCurrent(readerActor(),id)).item?.sourcingContractDocumentId).toBe(supplierDocument);
     await contractService.generateIfReady(contractActor(),id,supplierDocument);
     await updateSupplier();
     const now=(await management.templates(rootActor())).item;
@@ -4412,6 +4423,10 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const pending=(await contractService.getCurrent(rootActor(),id)).item!;
     expect(pending.status).toBe("pending_supplement");expect(pending.missingFields).toEqual(["address"]);
     expect((await database.query("SELECT 1 FROM sourcing_contract_content_overrides WHERE sourcing_contract_document_id=$1",[pending.sourcingContractDocumentId])).rowCount).toBe(0);
+    const missingProfile=await contractService.management.previewInformation(rootActor(),id);
+    expect(missingProfile.missingFields).toContain("address");
+    await expect(contractService.management.refreshInformation(rootActor(),id,missingProfile,randomUUID())).rejects.toMatchObject({statusCode:422,message:expect.stringMatching(/供应商合同资料缺少：地址.*资料维护.*本单合同页/)});
+    expect((await contractService.getCurrent(rootActor(),id)).item!.sourcingContractDocumentId).toBe(pending.sourcingContractDocumentId);
     await contractService.supplement(contractActor(),id,{address:"本新厂补充地址"},randomUUID());
     expect((await contractService.getCurrent(rootActor(),id)).item?.status).toBe("ready");
     expect((await contractService.content.get(rootActor(),id)).content).toMatchObject({contractTitle:manualContent.contractTitle,
