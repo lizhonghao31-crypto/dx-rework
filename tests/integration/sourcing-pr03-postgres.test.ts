@@ -4064,7 +4064,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       expect(await flow.canDownload(primary,id,qcImage)).toBe(true);expect(await flow.canDownload(logistics,id,qcImage)).toBe(true);expect(await flow.canDownload(tail,id,qcImage)).toBe(false);expect(await flow.canDownload(primary,randomUUID(),qcImage)).toBe(false);
       await expect(flow.qc(qc,id,{expectedRevision:state.revision,checks:[checks[0]!],note:''},randomUUID())).rejects.toMatchObject({statusCode:409});
 
-      await expect(flow.dispatch(warehouse,id,{expectedRevision:state.revision,occurredAt:new Date().toISOString(),supplierId:factoryId,note:''},randomUUID())).rejects.toMatchObject({statusCode:409});
+      await expect(flow.dispatch(warehouse,id,{expectedRevision:state.revision,occurredAt:new Date().toISOString(),supplierId:factoryId,note:''},randomUUID())).rejects.toMatchObject({statusCode:409,message:expect.stringMatching(/PO .*问题待处理及复查.*请QC.*仓库/)});
       await movement('工艺发出');await movement('工艺回仓');state=await flow.read(qc,id);expect(state.lines.every(l=>l.result===null)).toBe(true);expect(state.currentReturn!.factId).not.toBe(firstReturn);expect(state.checks.every(check=>check.returnFactId===firstReturn)).toBe(true);
       await expect(flow.qc(qc,id,{expectedRevision:staleRevision,checks:[{...checks[0]!,attachmentIds:[]}],note:''},randomUUID())).rejects.toMatchObject({statusCode:409});
       state=await flow.qc(qc,id,{expectedRevision:state.revision,checks:state.lines.map(l=>({lineId:l.lineId,result:'合格',problem:'',treatment:'TEST已重做复查合格',attachmentIds:[]})),note:''},randomUUID());expect(state.allQc).toBe(true);

@@ -19,6 +19,7 @@ import {
 import { verifySession } from "./auth.js";
 import { shanghaiBusinessDate } from "./business-date.js";
 import { createClientRequestId } from "./client-request-id.js";
+import {createReceivingBoardMutation,receivingBoardRead} from "./receiving-board-request.js";
 import { ReceivingDialog } from "./receiving-dialog.js";
 import { ImageViewer } from "./image-viewer.js";
 import { ListPagination } from "./list-pagination.js";
@@ -236,7 +237,10 @@ export function OrderBoardPage() {
   const [receiptDocumentQuantity, setReceiptDocumentQuantity] = useState("");
   const [receiptActualQuantity, setReceiptActualQuantity] = useState("");
   const [receiptDefectiveQuantity, setReceiptDefectiveQuantity] = useState("");
+  const [readFailed,setReadFailed]=useState(false);
   const [mutationBusy, setMutationBusy] = useState(false);
+  const boardMutation=useRef(createReceivingBoardMutation());
+  const [mutationUnknown,setMutationUnknown]=useState(false);
   const [mutationMessage, setMutationMessage] = useState("");
   const [exportBusy, setExportBusy] = useState(false);
   const [packingEditing, setPackingEditing] = useState<BoardRow | null>(null);
@@ -332,17 +336,13 @@ export function OrderBoardPage() {
   useEffect(() => {
     let active = true;
     if(invalidTarget){setData(null);setMessage("收货批次链接无效，请返回来源订单");return;}
-    setPageLoading(true);
+    setPageLoading(true);setReadFailed(false);
     const params = new URLSearchParams({ startDate, endDate });
     params.set("status", status);
     params.set("page", String(page));
     if(targetBatchId){params.set("receivingBatchId",targetBatchId);params.set("status","all");params.set("page","1");}
     if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim().toUpperCase());
-    void fetch(apiUrl(`receiving/board?${params.toString()}`), { credentials: "include", cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) {const error=await response.json().catch(()=>null);throw new Error(error?.error?.message??`订单回货加载失败（${response.status}）`);}
-        return response.json() as Promise<BoardResult>;
-      })
+    void receivingBoardRead<BoardResult>(apiUrl(`receiving/board?${params.toString()}`))
       .then((body) => {
         if (!active) return;
         setData(body);
@@ -354,7 +354,7 @@ export function OrderBoardPage() {
       })
       .catch((error:unknown) => {
         if (!active) return;
-        setData(null);
+        setData(null);setReadFailed(true);
         setMessage(error instanceof Error?error.message:"订单回货加载失败，请刷新后重试");
       })
       .finally(() => {
@@ -405,6 +405,7 @@ export function OrderBoardPage() {
   };
 
   const openPacking = (row: BoardRow) => {
+    if(boardMutation.current.hasUnknown()){setMutationMessage("原提交结果尚未确认，请先核对原提交或仅重新读取记录；不能开始另一笔修改");return;}
     setDifferenceEditing(null);
     setPackingEditing(row);
     setPackingQuantity(row.packingQuantity === null ? "" : String(row.packingQuantity));
@@ -413,7 +414,7 @@ export function OrderBoardPage() {
   };
 
   const submitPacking = async () => {
-    if (!packingEditing || mutationBusy) return;
+    if (!packingEditing || mutationBusy || boardMutation.current.hasUnknown()) return;
     const value = Number(packingQuantity);
     if (!Number.isInteger(value) || value < 0 || value > 10_000_000) {
       setMutationMessage("装箱数量必须是0到10000000之间的整数");
@@ -422,7 +423,7 @@ export function OrderBoardPage() {
     setMutationBusy(true);
     setMutationMessage("");
     try {
-      const response = await fetch(apiUrl(`receiving/batches/${packingEditing.receivingBatchId}/packing-revisions`), {
+      await boardMutation.current.submit('packing',apiUrl(`receiving/batches/${packingEditing.receivingBatchId}/packing-revisions`), {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json", "idempotency-key": packingRequestKey },
@@ -432,11 +433,12 @@ export function OrderBoardPage() {
           packingQuantity: value,
         }),
       });
-      if (!response.ok) throw new Error(await responseError(response, "装箱数量保存失败"));
       setPackingEditing(null);
+      setMutationUnknown(false);
       setRefreshToken((current) => current + 1);
       setMutationMessage("装箱数量已保存");
     } catch (error) {
+      setMutationUnknown(boardMutation.current.hasUnknown());
       const text = error instanceof Error ? error.message : "装箱数量保存失败";
       setMutationMessage(text);
     } finally {
@@ -445,6 +447,7 @@ export function OrderBoardPage() {
   };
 
   const openDifference = (row: BoardRow, type: "receiving" | "packing") => {
+    if(boardMutation.current.hasUnknown()){setMutationMessage("原提交结果尚未确认，请先核对原提交或仅重新读取记录；不能开始另一笔修改");return;}
     const resolution = type === "receiving"
       ? row.receivingDifferenceResolution
       : row.packingDifferenceResolution;
@@ -457,7 +460,7 @@ export function OrderBoardPage() {
   };
 
   const submitDifference = async () => {
-    if (!differenceEditing || differenceEditing.resolution || mutationBusy || differenceSubmitting.current) return;
+    if (!differenceEditing || differenceEditing.resolution || mutationBusy || differenceSubmitting.current || boardMutation.current.hasUnknown()) return;
     const result = differenceResult.trim();
     if (!result || result.length > 500) {
       setMutationMessage("处理结果不能为空且不能超过500个字符");
@@ -477,7 +480,7 @@ export function OrderBoardPage() {
         attachmentIds.push(attachmentId);
       }
       const row = differenceEditing.row;
-      const response = await fetch(apiUrl(`receiving/batches/${row.receivingBatchId}/difference-resolutions`), {
+      await boardMutation.current.submit('difference',apiUrl(`receiving/batches/${row.receivingBatchId}/difference-resolutions`), {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json", "idempotency-key": differenceRequestKey },
@@ -491,12 +494,13 @@ export function OrderBoardPage() {
           ...(attachmentIds.length ? { attachmentIds } : {}),
         }),
       });
-      if (!response.ok) throw new Error(await responseError(response, "差异处理提交失败"));
       clearDifferenceImages();
       setDifferenceEditing(null);
+      setMutationUnknown(false);
       setRefreshToken((current) => current + 1);
       setMutationMessage("差异处理结果已保存");
     } catch (error) {
+      setMutationUnknown(boardMutation.current.hasUnknown());
       const text = error instanceof Error ? error.message : "差异处理提交失败";
       setMutationMessage(text);
     } finally {
@@ -523,6 +527,7 @@ export function OrderBoardPage() {
   };
 
   const openEdit = (row: BoardRow) => {
+    if(boardMutation.current.hasUnknown()){setMutationMessage("原提交结果尚未确认，请先核对原提交或仅重新读取记录；不能开始另一笔修改");return;}
     setDeleting(null);
     setEditing(row);
     setEditStyleNo(row.styleNo);
@@ -537,7 +542,7 @@ export function OrderBoardPage() {
     if (!isRoot || (!row.rootCorrectable && !row.rootDeletable)) return null;
     return <div className={`order-board-root-actions order-board-root-actions--${mobile ? "mobile" : "desktop"}`}>
       {row.rootCorrectable ? <button type="button" onClick={() => openEdit(row)}>修改</button> : null}
-      {row.rootDeletable ? <button type="button" className="is-danger" onClick={() => { setEditing(null); setDeleting(row); setMutationMessage(""); }}>删除</button> : null}
+      {row.rootDeletable ? <button type="button" className="is-danger" onClick={() => { if(boardMutation.current.hasUnknown()){setMutationMessage("原提交结果尚未确认，请先核对原提交");return;}setEditing(null); setDeleting(row); setMutationMessage(""); }}>删除</button> : null}
     </div>;
   };
 
@@ -583,6 +588,7 @@ export function OrderBoardPage() {
   };
 
   const openReceiptCorrection = (item: ReceivingHistoryItem) => {
+    if(boardMutation.current.hasUnknown()){setMutationMessage("原提交结果尚未确认，请先核对原提交或仅重新读取记录；不能开始另一笔修改");return;}
     setEditing(null);
     setDeleting(null);
     setCorrectingReceipt(item);
@@ -598,7 +604,7 @@ export function OrderBoardPage() {
   };
 
   const submitReceiptCorrection = async () => {
-    if (!correctingReceipt || mutationBusy) return;
+    if (!correctingReceipt || mutationBusy || boardMutation.current.hasUnknown()) return;
     if (Number(receiptDefectiveQuantity) > Number(receiptActualQuantity)) {
       setMutationMessage("次品数量不能超过实际收货数量");
       return;
@@ -606,7 +612,7 @@ export function OrderBoardPage() {
     setMutationBusy(true);
     setMutationMessage("");
     try {
-      const response = await fetch(apiUrl(`receiving/receipts/${correctingReceipt.receiptId}/corrections`), {
+      await boardMutation.current.submit('receipt',apiUrl(`receiving/receipts/${correctingReceipt.receiptId}/corrections`), {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
@@ -618,11 +624,12 @@ export function OrderBoardPage() {
           defectiveQuantity: Number(receiptDefectiveQuantity),
         }),
       });
-      if (!response.ok) throw new Error(await responseError(response, "收货记录修正失败"));
       setCorrectingReceipt(null);
+      setMutationUnknown(false);
       setRefreshToken((value) => value + 1);
       setMutationMessage("本次收货已修正");
     } catch (error) {
+      setMutationUnknown(boardMutation.current.hasUnknown());
       setMutationMessage(error instanceof Error ? error.message : "收货记录修正失败");
     } finally {
       setMutationBusy(false);
@@ -630,7 +637,7 @@ export function OrderBoardPage() {
   };
 
   const submitCorrection = async () => {
-    if (!editing || mutationBusy) return;
+    if (!editing || mutationBusy || boardMutation.current.hasUnknown()) return;
     if (Number(editDefectiveQuantity) > Number(editActualQuantity)) {
       setMutationMessage("次品数量不能超过实际收货数量");
       return;
@@ -645,7 +652,7 @@ export function OrderBoardPage() {
       const attachmentIds = editImages.length > 0
         ? await Promise.all(editImages.map(uploadReplacementImage))
         : undefined;
-      const response = await fetch(apiUrl(`receiving/batches/${editing.receivingBatchId}`), {
+      await boardMutation.current.submit('batch',apiUrl(`receiving/batches/${editing.receivingBatchId}`), {
         method: "PATCH",
         credentials: "include",
         headers: { "content-type": "application/json" },
@@ -658,11 +665,12 @@ export function OrderBoardPage() {
           ...(attachmentIds ? { attachmentIds } : {}),
         }),
       });
-      if (!response.ok) throw new Error(await responseError(response, "收货订单修改失败"));
       setEditing(null);
+      setMutationUnknown(false);
       setRefreshToken((value) => value + 1);
       setMutationMessage("收货订单已修改");
     } catch (error) {
+      setMutationUnknown(boardMutation.current.hasUnknown());
       setMutationMessage(error instanceof Error ? error.message : "收货订单修改失败");
     } finally {
       setMutationBusy(false);
@@ -670,27 +678,42 @@ export function OrderBoardPage() {
   };
 
   const confirmDelete = async () => {
-    if (!deleting || mutationBusy) return;
+    if (!deleting || mutationBusy || boardMutation.current.hasUnknown()) return;
     setMutationBusy(true);
     setMutationMessage("");
     try {
-      const response = await fetch(apiUrl(`receiving/batches/${deleting.receivingBatchId}`), {
+      await boardMutation.current.submit('delete',apiUrl(`receiving/batches/${deleting.receivingBatchId}`), {
         method: "DELETE",
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ expectedVersion: deleting.version }),
       });
-      if (!response.ok) throw new Error(await responseError(response, "收货订单删除失败"));
       setDeleting(null);
+      setMutationUnknown(false);
       setRefreshToken((value) => value + 1);
       setMutationMessage("收货订单已删除");
     } catch (error) {
+      setMutationUnknown(boardMutation.current.hasUnknown());
       setMutationMessage(error instanceof Error ? error.message : "收货订单删除失败");
     } finally {
       setMutationBusy(false);
     }
   };
 
+  const retryOriginalMutation=async()=>{
+    if(mutationBusy)return;setMutationBusy(true);
+    try{const command=await boardMutation.current.retry();setMutationUnknown(false);
+      const belongs=(value:string)=>command.path.includes(`/${value}`);
+      if(command.kind==='packing')setPackingEditing(current=>current&&belongs(current.receivingBatchId)?null:current);
+      if(command.kind==='difference'){setDifferenceEditing(current=>current&&belongs(current.row.receivingBatchId)?null:current);clearDifferenceImages();}
+      if(command.kind==='receipt')setCorrectingReceipt(current=>current&&belongs(current.receiptId)?null:current);
+      if(command.kind==='batch')setEditing(current=>current&&belongs(current.receivingBatchId)?null:current);
+      if(command.kind==='delete')setDeleting(current=>current&&belongs(current.receivingBatchId)?null:current);
+      setMutationMessage('原提交已确认保存，正在重新读取回货记录；读取失败时仅重读，不重复提交。');setRefreshToken(value=>value+1);
+    }catch(error){setMutationUnknown(boardMutation.current.hasUnknown());setMutationMessage(error instanceof Error?error.message:'原提交结果仍未确认，请核对原记录');}
+    finally{setMutationBusy(false);}
+  };
+  const recoveryActions=mutationUnknown?<><button type="button" disabled={mutationBusy} onClick={()=>void retryOriginalMutation()}>使用原内容核对提交结果</button><button type="button" disabled={mutationBusy} onClick={()=>setRefreshToken(value=>value+1)}>仅重新读取回货记录</button><small>关闭窗口不代表撤销；读取结果不会自动当作原提交回执。</small></>:null;
   return <div className="order-board-page" data-legacy-ui="receiving-board">
     <div className="order-board-heading">
       <div className="order-board-heading__title">
@@ -875,7 +898,7 @@ export function OrderBoardPage() {
         </div>;
       })}
     </div>
-    {message ? <p className="order-board-message" role="status">{message}</p> : null}
+    {message ? <p className="order-board-message" role="status">{message}{readFailed&&<button type="button" disabled={pageLoading} onClick={()=>setRefreshToken(value=>value+1)}>仅重新读取回货记录</button>}</p> : null}
     {data ? <ListPagination
       page={data.page}
       totalPages={data.totalPages}
@@ -884,7 +907,7 @@ export function OrderBoardPage() {
       onPageChange={setPage}
     /> : null}
     {mutationMessage && !editing && !deleting && !correctingReceipt && !packingEditing && !differenceEditing
-      ? <p className="order-board-mutation-message" role="status">{mutationMessage}</p>
+      ? <p className="order-board-mutation-message" role="status">{mutationMessage}{recoveryActions}</p>
       : null}
 
     {attachmentViewer && selectedAttachment ? <ReceivingDialog title={attachmentViewer.title ?? "送货单附件"} onClose={() => setAttachmentViewer(null)}>
@@ -922,10 +945,10 @@ export function OrderBoardPage() {
         <h2>{packingEditing.packingQuantity === null ? "录入" : "修改"}装箱数量</h2>
         <p>款号：<strong>{packingEditing.styleNo}</strong>。填写当前累计已装箱数量；保存后保留上一版本。</p>
         <label>当前累计已装箱数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={packingQuantity} disabled={mutationBusy} onChange={(event) => setPackingQuantity(event.target.value)} /></label>
-        {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}</p> : null}
+        {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}{recoveryActions}</p> : null}
         <div className="order-board-dialog__actions">
           <button type="button" disabled={mutationBusy} onClick={() => setPackingEditing(null)}>取消</button>
-          <button type="submit" className="is-primary" disabled={mutationBusy || packingQuantity === ""}>{mutationBusy ? "保存中…" : "保存"}</button>
+          <button type="submit" className="is-primary" disabled={mutationBusy || mutationUnknown || packingQuantity === ""}>{mutationBusy ? "保存中…" : "保存"}</button>
         </div>
       </form>
     </ReceivingDialog> : null}
@@ -971,10 +994,10 @@ export function OrderBoardPage() {
             </div>)}
           </div>
         </div>}
-        {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}</p> : null}
+        {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}{recoveryActions}</p> : null}
         <div className="order-board-dialog__actions">
           <button type="button" disabled={mutationBusy} onClick={closeDifference}>{differenceEditing.resolution ? "关闭" : "取消"}</button>
-          {!differenceEditing.resolution ? <button type="submit" className="is-primary" disabled={mutationBusy || !differenceResult.trim()}>{mutationBusy ? "提交中…" : "提交处理"}</button> : null}
+          {!differenceEditing.resolution ? <button type="submit" className="is-primary" disabled={mutationBusy || mutationUnknown || !differenceResult.trim()}>{mutationBusy ? "提交中…" : "提交处理"}</button> : null}
         </div>
       </form>
     </ReceivingDialog> : null}
@@ -993,10 +1016,10 @@ export function OrderBoardPage() {
           <label>本次实际收货数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={receiptActualQuantity} disabled={mutationBusy} onChange={(event) => setReceiptActualQuantity(event.target.value)} /></label>
           <label>本次次品数量<input type="number" min="0" max="10000000" step="1" inputMode="numeric" value={receiptDefectiveQuantity} disabled={mutationBusy} onChange={(event) => setReceiptDefectiveQuantity(event.target.value)} /></label>
         </div>
-        {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}</p> : null}
+        {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}{recoveryActions}</p> : null}
         <div className="order-board-dialog__actions">
           <button type="button" disabled={mutationBusy} onClick={() => setCorrectingReceipt(null)}>取消</button>
-          <button type="submit" className="is-primary" disabled={mutationBusy || !receiptSource || !receiptDocumentQuantity || receiptActualQuantity === "" || receiptDefectiveQuantity === ""}>{mutationBusy ? "保存中…" : "保存修正"}</button>
+          <button type="submit" className="is-primary" disabled={mutationBusy || mutationUnknown || !receiptSource || !receiptDocumentQuantity || receiptActualQuantity === "" || receiptDefectiveQuantity === ""}>{mutationBusy ? "保存中…" : "保存修正"}</button>
         </div>
       </form>
     </ReceivingDialog> : null}
@@ -1036,10 +1059,10 @@ export function OrderBoardPage() {
             ? <small>已选择{quantity(editImages.length)}张；保存后整体替换当前图片。</small>
             : <small>不选择新图则保留当前图片。</small>
           : <small>返工已发起，送货单图片已锁定。</small>}
-        {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}</p> : null}
+        {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}{recoveryActions}</p> : null}
         <div className="order-board-dialog__actions">
           <button type="button" disabled={mutationBusy} onClick={() => setEditing(null)}>取消</button>
-          <button type="submit" className="is-primary" disabled={mutationBusy || !editStyleNo.trim() || !editDocumentQuantity || editActualQuantity === "" || editDefectiveQuantity === ""}>{mutationBusy ? "保存中…" : "保存修改"}</button>
+          <button type="submit" className="is-primary" disabled={mutationBusy || mutationUnknown || !editStyleNo.trim() || !editDocumentQuantity || editActualQuantity === "" || editDefectiveQuantity === ""}>{mutationBusy ? "保存中…" : "保存修改"}</button>
         </div>
       </form>
     </ReceivingDialog> : null}
@@ -1049,10 +1072,10 @@ export function OrderBoardPage() {
         <h2>确认删除收货订单？</h2>
         <p>款号：<strong>{deleting.styleNo}</strong></p>
         <p>删除后从订单回货隐藏，原始收货记录与图片仍保留审计。此操作仅限尚未发起返工的订单。</p>
-        {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}</p> : null}
+        {mutationMessage ? <p className="order-board-dialog__error" role="alert">{mutationMessage}{recoveryActions}</p> : null}
         <div className="order-board-dialog__actions">
           <button type="button" disabled={mutationBusy} onClick={() => setDeleting(null)}>取消</button>
-          <button type="button" className="is-danger" disabled={mutationBusy} onClick={() => void confirmDelete()}>{mutationBusy ? "删除中…" : "确认删除"}</button>
+          <button type="button" className="is-danger" disabled={mutationBusy || mutationUnknown} onClick={() => void confirmDelete()}>{mutationBusy ? "删除中…" : "确认删除"}</button>
         </div>
       </div>
     </ReceivingDialog> : null}

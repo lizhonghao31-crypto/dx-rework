@@ -1,0 +1,25 @@
+import {afterEach,expect,it,vi} from 'vitest';
+import {createReceivingBoardMutation,receivingBoardRead,receivingBoardWrite,type ReceivingBoardMutationKind} from '../../apps/web/src/receiving-board-request.js';
+import {SUBMISSION_RECOVERY_WINDOW_MS} from '../../apps/web/src/submission-attempt.js';
+const batch={receivingBatchId:'TEST-batch',styleNo:'TEST-style',version:2,documentQuantity:10,actualQuantity:9,defectiveQuantity:1,differenceQuantity:-1};
+const valid={packing:{receivingBatchId:'TEST-batch',packingRevisionId:'TEST-packing',packingQuantity:9,recordedBy:'TEST-warehouse',recordedAt:'2026-10-20T00:00:00Z'},difference:{receivingBatchId:'TEST-batch',resolutionId:'TEST-resolution',differenceType:'receiving',differenceQuantity:-1,result:'TEST处理',handledBy:'TEST-clerk',handledAt:'2026-10-20T00:00:00Z'},receipt:batch,batch,delete:{receivingBatchId:'TEST-batch',deleted:true}};
+const init={method:'POST',headers:{'content-type':'application/json','idempotency-key':'TEST-original'},body:JSON.stringify({expectedVersion:1,packingQuantity:9})};
+afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks();});
+it.each(Object.keys(valid) as ReceivingBoardMutationKind[])('%s uses its actual JSON receipt and preserves explicit rejection code and request shape',async kind=>{
+ const fetch=vi.fn().mockResolvedValue(Response.json(valid[kind]));vi.stubGlobal('fetch',fetch);await expect(receivingBoardWrite(kind,'/api/receiving/TEST',init)).resolves.toEqual(valid[kind]);expect(fetch).toHaveBeenCalledExactlyOnceWith('/api/receiving/TEST',init);
+ fetch.mockResolvedValue(Response.json({}));await expect(receivingBoardWrite(kind,'/api/receiving/TEST',init)).rejects.toMatchObject({outcome:'unknown',code:'INVALID_RESPONSE'});
+ fetch.mockResolvedValue(Response.json({error:{code:'FORBIDDEN',message:'TEST原岗位无权处理本单'}},{status:403}));await expect(receivingBoardWrite(kind,'/api/receiving/TEST',init)).rejects.toMatchObject({outcome:'rejected',status:403,code:'FORBIDDEN',message:'TEST原岗位无权处理本单'});
+});
+it('retains exactly the original command after a sent failure and rejects a changed body before sending',async()=>{
+ const fetch=vi.fn().mockRejectedValueOnce(new TypeError('TEST lost receipt')).mockResolvedValue(Response.json(valid.packing));vi.stubGlobal('fetch',fetch);const command=createReceivingBoardMutation();await expect(command.submit('packing','/api/receiving/TEST',init)).rejects.toMatchObject({outcome:'unknown'});expect(command.hasUnknown()).toBe(true);
+ await expect(command.submit('packing','/api/receiving/TEST',{...init,body:'{"changed":true}'})).rejects.toThrow('不能改内容');expect(fetch).toHaveBeenCalledTimes(1);await command.retry();expect(command.hasUnknown()).toBe(false);expect(fetch).toHaveBeenCalledTimes(2);expect(fetch.mock.calls[0]![1].body).toBe(init.body);expect(fetch.mock.calls[1]![1].body).toBe(init.body);expect(new Headers(fetch.mock.calls[1]![1].headers).get('idempotency-key')).toBe('TEST-original');
+});
+it('keeps the original unknown outcome through a later definite permission rejection and bounds recovery by the existing window',async()=>{
+ const clock=vi.spyOn(Date,'now').mockReturnValue(1000),fetch=vi.fn().mockResolvedValueOnce(Response.json({})).mockResolvedValue(Response.json({error:{message:'TEST已撤权',code:'FORBIDDEN'}},{status:403}));vi.stubGlobal('fetch',fetch);const command=createReceivingBoardMutation();await expect(command.submit('packing','/TEST',init)).rejects.toMatchObject({outcome:'unknown'});await expect(command.retry()).rejects.toMatchObject({outcome:'unknown',status:403,code:'FORBIDDEN'});expect(command.hasUnknown()).toBe(true);clock.mockReturnValue(1000+SUBMISSION_RECOVERY_WINDOW_MS);await expect(command.retry()).rejects.toThrow('超过恢复期限');expect(fetch).toHaveBeenCalledTimes(2);
+});
+it('keeps a trusted write separate from a failed later board GET and never changes non-idempotent command headers',async()=>{
+ const fetch=vi.fn().mockResolvedValueOnce(Response.json(valid.batch)).mockResolvedValue(new Response('down',{status:503}));vi.stubGlobal('fetch',fetch);const command=createReceivingBoardMutation(),rootInit={method:'PATCH',body:JSON.stringify({expectedVersion:1,actualQuantity:9})};await command.submit('batch','/TEST',rootInit);expect(new Headers(fetch.mock.calls[0]![1].headers).has('idempotency-key')).toBe(false);await expect(receivingBoardRead('/board')).rejects.toMatchObject({outcome:'read_failed'});expect(command.hasUnknown()).toBe(false);expect(fetch).toHaveBeenCalledTimes(2);expect(fetch.mock.calls[1]![1].method??'GET').toBe('GET');
+});
+it('rejects malformed board metadata instead of showing a successful empty list, but accepts a real empty authorized result',async()=>{
+ const fetch=vi.fn().mockResolvedValue(Response.json({rows:null}));vi.stubGlobal('fetch',fetch);await expect(receivingBoardRead('/board')).rejects.toMatchObject({outcome:'read_failed'});const empty={rows:[],kpis:{orderCount:0,receivedQuantity:0,abnormalOrderCount:0,differenceQuantity:0,differenceRate:0},page:1,totalCount:0,totalPages:1};fetch.mockResolvedValue(Response.json(empty));await expect(receivingBoardRead('/board')).resolves.toEqual(empty);
+});

@@ -47,7 +47,7 @@ export class ProductionReportingService {
     if (!isProductionReporter(actor)) fail("仅驻厂填报人员可维护生产数据",403);
     if (!isRoot(actor)) {
       const scope = await client.query<{allowed:boolean}>("SELECT sourcing_production_factory_reporter_allowed($1,$2,$3) AS allowed",[actor.actorId,id,factoryDecisionId]);
-      if (!scope.rows[0]?.allowed) fail("该订单不在负责范围内",403);
+      if (!scope.rows[0]?.allowed) fail("该订单不在当前账号负责范围内；请驻厂填报人员返回生产填报页选择负责订单，需要调整范围时联系有权管理岗位，不显示范围外订单信息",403);
     }
   }
   async list(actor: TrustedActorContext, input: {page?:number|undefined; supplierId?:string|undefined; q?:string|undefined; status?:string|undefined} = {}) {
@@ -109,7 +109,7 @@ export class ProductionReportingService {
     return this.write(actor,id,key,"sourcing.production.report",parsed.data,parsed.data.factoryDecisionId??null,async client=>{
       const factoryDecisionId=parsed.data.factoryDecisionId??null;const order=await this.order(client,actor,id,factoryDecisionId);if(order.status!=="in_production")fail("生产完成后不能继续日常上报");
       const line=order.lines.find(l=>l.position===parsed.data.position);if(!line)fail("款色行不存在",400);
-      if(line.completedQuantity+parsed.data.quantity>line.quantity)fail("本次上报超过该款色剩余数量",400);
+      if(line.completedQuantity+parsed.data.quantity>line.quantity)fail("本次上报超过该款色剩余数量；请驻厂填报人员在本页核对已累计数量，本次只填新增实绩，已有记录错误由Root在原记录修正",400);
       const reportId=randomUUID();await this.insertReport(client,actor,id,reportId,reportId,1,parsed.data,null);
       return this.detail(actor,id,client,parsed.data.factoryDecisionId??null);
     });
@@ -122,7 +122,7 @@ export class ProductionReportingService {
       const result=await client.query<{report_id:string;revision:number;position:number;quantity:number}>(
         "SELECT report_id,revision,position,quantity FROM effective_sourcing_production_reports WHERE root_report_id=$1 AND production_order_id=$2 AND factory_decision_id IS NOT DISTINCT FROM $3::uuid",[rootReportId,id,factoryDecisionId]);
       const prior=result.rows[0];if(!prior)fail("原上报记录不存在",404);
-      if(prior.report_id!==parsed.data.expectedReportId)fail("该记录已被修正，请刷新后重试");
+      if(prior.report_id!==parsed.data.expectedReportId)fail("该记录已被修正，本次未覆盖；请Root重新读取本条原生产记录，核对最新数量、日期及修正原因后再提交");
       const line=order.lines.find(l=>l.position===prior.position)!;
       if(line.completedQuantity-prior.quantity+parsed.data.quantity>line.quantity)fail("修正后累计超过款色订单数量",400);
       const completed=await client.query<{business_date:string}>("SELECT business_date::text FROM sourcing_production_transitions WHERE production_order_id=$1 AND status='production_completed' AND factory_decision_id IS NOT DISTINCT FROM $2::uuid",[id,factoryDecisionId]);
@@ -135,7 +135,7 @@ export class ProductionReportingService {
     input:{position:number;businessDate:string;quantity:number;factoryDecisionId?:string|null|undefined},reason:string|null,before?:unknown) {
     const dispatch=await client.query<{business_date:string}>(
       "SELECT business_date::text FROM sourcing_production_transitions WHERE production_order_id=$1 AND sequence=1 AND factory_decision_id IS NOT DISTINCT FROM $2::uuid",[id,input.factoryDecisionId??null]);
-    if(!dispatch.rows[0])fail("生产订单缺少正式派单记录");
+    if(!dispatch.rows[0])fail("生产订单缺少正式派单记录；请主跟单在原生产订单核对派单事实，记录未恢复前不能用填报日期替代派单日期");
     if(input.businessDate<dispatch.rows[0].business_date)fail("上报业务日期不能早于正式派单日期",400);
     const eventId=await this.events.append(client,{...actor,authorizationCapability:CAP},{
       action:revision===1?"sourcing.production.report":"sourcing.production.correct",entityType:"sourcing_production_report",entityId:reportId,
