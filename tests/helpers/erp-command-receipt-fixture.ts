@@ -30,6 +30,9 @@ export async function exerciseErpReceipt(db:Pool,merchandiser:string,admin:Trust
   events:(await db.query("SELECT * FROM operation_events WHERE entity_type='rework_order' AND entity_id=$1 ORDER BY event_id",[orderId])).rows,
   outbox:(await db.query('SELECT * FROM message_outbox WHERE aggregate_id=$1 ORDER BY event_id',[orderId])).rows,
   todos:(await db.query("SELECT * FROM rework_todos WHERE entity_id=$1 ORDER BY todo_id",[orderId])).rows,
+  totals:(await db.query(`SELECT (SELECT count(*) FROM erp_rework_intakes)::int intakes,
+    (SELECT count(*) FROM erp_rework_links)::int links,(SELECT count(*) FROM operation_events)::int events,
+    (SELECT count(*) FROM message_outbox)::int outbox,(SELECT count(*) FROM rework_todos)::int todos`)).rows[0],
  });
  const before=await snapshot(),receipt=ErpCommandReceiptSchema.parse(await service.intakeReceipt(actor,key,hash));expect(receipt).toMatchObject({outcome:'confirmed',receipt:created.value});expect(await snapshot()).toEqual(before);
  expect(before.events.filter(row=>row.action==='rework.submit')).toHaveLength(1);expect(before.outbox.filter(row=>row.topic==='rework.pending_process_configuration')).toHaveLength(1);expect(before.todos).toHaveLength(1);
@@ -52,13 +55,30 @@ export async function exerciseErpReceipt(db:Pool,merchandiser:string,admin:Trust
  const employeeAccess=new EmployeeAccessService(db,'corp',new AccessMasterDataService(db,'corp'),{} as never,{} as never,{enabled:false,dingtalkUserId:undefined,secret:undefined},`ding-${root.actorId}`);
  await employeeAccess.disableAccess(root,admin.actorId,'TEST核验应急身份停用后的原回执拒绝');
  try{await expect(service.emergencyReceipt(admin,emergencyKey,emergencyHash)).rejects.toThrow();await expect(service.emergencyIntake(admin,emergency,emergencyKey)).rejects.toThrow();}finally{await employeeAccess.restoreAccess(root,admin.actorId,'TEST恢复原合成应急身份');}
- const linkKey=randomUUID(),link=ErpEmergencyLinkV1Schema.parse({contractVersion:'1',externalId:`TEST-LINK-${linkKey}`,externalIdempotencyKey:linkKey,erpNodeId:'TEST-NODE'});
+ const linkKey=randomUUID(),link=ErpEmergencyLinkV1Schema.parse({contractVersion:'1',externalId:`TEST-LINK-${linkKey}`,externalIdempotencyKey:randomUUID(),erpNodeId:'TEST-NODE'});
  const [linked,linkReplay]=await Promise.all([service.linkEmergency(actor,emergencyResult.value.reworkOrderId,link,linkKey),service.linkEmergency(actor,emergencyResult.value.reworkOrderId,link,linkKey)]);expect(linked.value).toEqual(linkReplay.value);
  const linkHash=fingerprint('erp.rework.link.v1',{reworkOrderId:emergencyResult.value.reworkOrderId,input:link});
  expect(await service.linkReceipt(actor,emergencyResult.value.reworkOrderId,linkKey,linkHash)).toMatchObject({outcome:'confirmed',receipt:linked.value});
  await expect(service.linkReceipt(actor,orderId,linkKey,linkHash)).rejects.toMatchObject({code:'IDEMPOTENCY_CONFLICT',statusCode:409});
  await expect(service.linkEmergency(actor,emergencyResult.value.reworkOrderId,{...link,externalId:'TEST-other-source'},randomUUID())).rejects.toMatchObject({code:'IDEMPOTENCY_CONFLICT',statusCode:409});
  expect((await db.query('SELECT count(*)::int count FROM erp_rework_links WHERE rework_order_id=$1',[emergencyResult.value.reworkOrderId])).rows[0].count).toBe(1);
+ // Schema-valid completed responses from another real command are not this
+ // command's receipt. Fault metadata is separate from the legitimate creates.
+ const otherKey=randomUUID(),otherInput={...input,source:{...input.source,externalId:`TEST-other-${otherKey}`,externalIdempotencyKey:otherKey},payload:{...input.payload,styleNo:'TEST-ERP-OTHER'}};
+ const other=await service.intakeFromErp(actor,otherInput,otherKey);
+ const otherEmergencyKey=randomUUID(),otherEmergency={...emergency,payload:{...emergency.payload,styleNo:'TEST-EMERGENCY-OTHER'}};
+ const otherEmergencyResult=await service.emergencyIntake(admin,otherEmergency,otherEmergencyKey);
+ for(const item of [
+  {scope:'erp.rework.intake.v1',actorId:actor.actorId,key,original:created.value,wrong:other.value,read:()=>service.intakeReceipt(actor,key,hash),replay:()=>service.intakeFromErp(actor,input,key)},
+  {scope:'erp.rework.emergency_intake.v1',actorId:admin.actorId,key:emergencyKey,original:emergencyResult.value,wrong:otherEmergencyResult.value,read:()=>service.emergencyReceipt(admin,emergencyKey,emergencyHash),replay:()=>service.emergencyIntake(admin,emergency,emergencyKey)},
+ ]){
+  expect(item.wrong.intakeMode).toBe(item.original.intakeMode);expect(item.wrong.source.externalIdempotencyKey).not.toBe(item.key);
+  await db.query('UPDATE idempotency_records SET response=$4::jsonb WHERE scope=$1 AND actor_key=$2 AND idempotency_key=$3',[item.scope,item.actorId,item.key,JSON.stringify(item.wrong)]);
+  const corrupt=await snapshot();
+  try{await expect(item.read()).rejects.toMatchObject({code:'ERP_RECEIPT_INVALID',statusCode:502});await expect(item.replay()).rejects.toMatchObject({code:'ERP_RECEIPT_INVALID',statusCode:502});expect(await snapshot()).toEqual(corrupt);}
+  finally{await db.query('UPDATE idempotency_records SET response=$4::jsonb WHERE scope=$1 AND actor_key=$2 AND idempotency_key=$3',[item.scope,item.actorId,item.key,JSON.stringify(item.original)]);}
+  expect(await item.read()).toMatchObject({outcome:'confirmed',receipt:item.original});expect(await item.replay()).toMatchObject({reused:true,value:item.original});
+ }
  // Explicit fixture states exercise bounded recovery; none skip a business action.
  const pendingKey=randomUUID(),pendingInput={...input,source:{...input.source,externalId:`TEST-pending-${pendingKey}`,externalIdempotencyKey:pendingKey}},pendingHash=fingerprint('erp.rework.intake.v1',pendingInput);await new IdempotencyRepository().begin(db,{scope:'erp.rework.intake.v1',actorKey:actor.actorId,key:pendingKey,requestHash:pendingHash,expiresAt:new Date(Date.now()+86400000)});
  expect(await service.intakeReceipt(actor,pendingKey,pendingHash)).toMatchObject({outcome:'unconfirmed',reason:'in_progress'});

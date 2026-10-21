@@ -52,6 +52,19 @@ const databaseCode = (error: unknown): string | undefined =>
     ? String((error as { code?: unknown }).code ?? "")
     : undefined;
 
+// The intake source key is the command key for both direct and emergency
+// creation. A link's external source key is independent of its HTTP command key.
+const commandReceipt = (scope:ErpCommandScope,response:unknown,statusCode:number,key:string,orderId?:string) => {
+  const parsed=scope==='erp.rework.link.v1'?ErpEmergencyLinkResponseSchema.safeParse(response):ErpIntakeResponseSchema.safeParse(response);
+  if(!parsed.success||statusCode!==(scope==='erp.rework.link.v1'?200:201)
+    ||scope!=='erp.rework.link.v1'&&'intakeMode'in parsed.data&&parsed.data.intakeMode!==(scope==='erp.rework.intake.v1'?'erp':'emergency')){
+    throw new ApplicationError('ERP_RECEIPT_INVALID','原回执未符合本次命令的约定版本或接入方式，暂不能确认；请接入维护人员按请求编号核对，不能当作未保存重建。',502);
+  }
+  if(scope!=='erp.rework.link.v1'&&parsed.data.source.externalIdempotencyKey!==key)throw new ApplicationError('ERP_RECEIPT_INVALID','原回执的提交标识与本次原标识不一致，暂不能确认；请接入维护人员按请求编号核对原回执，不要换键重建。',502);
+  if(orderId&&parsed.data.reworkOrderId!==orderId)throw new ApplicationError('IDEMPOTENCY_CONFLICT','原关联回执不属于当前返工单；请接入维护人员核对原单与提交标识，不重复补关联。',409);
+  return parsed.data;
+};
+
 const translateDatabaseError = (error: unknown): never => {
   if (error instanceof ApplicationError) throw error;
   const code = databaseCode(error);
@@ -236,10 +249,8 @@ export class ErpIntegrationService {
       else if(row.request_hash!==fingerprint)throw new ApplicationError('IDEMPOTENCY_CONFLICT','原提交标识与内容指纹不一致；请接入维护人员核对原请求内容和标识，不要改用新标识重复建单。',409);
       else if(row.status!=='completed')receipt={contractVersion:'1',outcome:'unconfirmed',reason:'in_progress',receipt:null,message:'原请求尚未取得完成回执。请保留原键与内容，稍后只读核对，不要另建提交。'};
       else{
-        const parsed=scope==='erp.rework.link.v1'?ErpEmergencyLinkResponseSchema.safeParse(row.response):ErpIntakeResponseSchema.safeParse(row.response);
-        if(!parsed.success||row.status_code!==(scope==='erp.rework.link.v1'?200:201)||scope!=='erp.rework.link.v1'&&'intakeMode'in parsed.data&&parsed.data.intakeMode!==(scope==='erp.rework.intake.v1'?'erp':'emergency'))throw new ApplicationError('ERP_RECEIPT_INVALID','原回执未符合约定版本，暂不能确认；请接入维护人员按请求编号核对，不能当作未保存重建。',502);
-        if(orderId&&parsed.data.reworkOrderId!==orderId)throw new ApplicationError('IDEMPOTENCY_CONFLICT','原关联回执不属于当前返工单；请接入维护人员核对原单与提交标识，不重复补关联。',409);
-        receipt={contractVersion:'1',outcome:'confirmed',receipt:parsed.data,expiresAt:row.expires_at.toISOString(),message:'已确认原本地业务回执；此读取不执行写入，也不代表外部适配已确认完成。'};
+        const response=commandReceipt(scope,row.response,row.status_code??0,key,orderId);
+        receipt={contractVersion:'1',outcome:'confirmed',receipt:response,expiresAt:row.expires_at.toISOString(),message:'已确认原本地业务回执；此读取不执行写入，也不代表外部适配已确认完成。'};
       }
       const value=ErpCommandReceiptSchema.parse(receipt);await client.query('COMMIT');return value;
     }catch(error){await client.query('ROLLBACK').catch(()=>undefined);return translateDatabaseError(error);}finally{client.release();}
@@ -422,6 +433,8 @@ export class ErpIntegrationService {
         },
         async () => ({ statusCode, response: await work(client) }),
       );
+      // A controlled same-key retry must not bypass the binding checked by GET.
+      commandReceipt(scope,result.response,result.statusCode,idempotencyKey,scope==='erp.rework.link.v1'?(payload as {reworkOrderId:string}).reworkOrderId:undefined);
       await client.query("COMMIT");
       return { value: result.response, reused: result.reused };
     } catch (error: unknown) {
