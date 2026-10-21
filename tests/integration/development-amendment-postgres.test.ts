@@ -3,6 +3,7 @@ import {TodoProjectionService} from "../../apps/api/src/todos/projection-service
 import {PatternRoomOrderService} from "../../apps/api/src/pattern-room/order-service.js";
 import {developmentMakingSizes} from "@dx-rework/contracts/digital-development";
 import Fastify from "fastify";
+import {registerDevelopmentExecutionRoutes} from "../../apps/api/src/production-platform/development-execution-routes.js";
 import {registerDevelopmentRoutes} from "../../apps/api/src/production-platform/development-routes.js";
 import {AuthService} from "../../apps/api/src/auth/service.js";
 import {PostgresAuthStore} from "../../apps/api/src/auth/postgres-store.js";
@@ -40,7 +41,7 @@ const url=process.env.TEST_DATABASE_URL;
   for(const who of Object.keys(ids) as Array<keyof typeof ids>){const id=ids[who];await db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,$2,true)",[id,`TEST ${who}`]);await db.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','TEST',$3,$3,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id,`TEST-${id}`]);if(who!=="root")await db.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,$3,$2,'P02 test bootstrap')",[randomUUID(),id,actor(who).actorRoles[0]]);}
   await db.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) VALUES(true,$1,$2,'TEST')",[ids.root,`TEST-${ids.root}`]);
   await new AccessMasterDataService(db,"TEST").ensureOrganizationPolicy();
-  legacyReturns=[await prepareLegacyReturn(),await prepareLegacyReturn()];
+  legacyReturns=[await prepareLegacyReturn(),await prepareLegacyReturn(),await prepareLegacyReturn()];
   const amendmentMigration=manifest.migrations.find((row:{version:string})=>row.version==="0248_development_document_amendments");
   await db.query(await readFile(new URL(`../../apps/api/migrations/${amendmentMigration.version}.sql`,import.meta.url),"utf8"));await db.query("INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",[amendmentMigration.version,amendmentMigration.checksum]);
  },60000);
@@ -58,15 +59,15 @@ const url=process.env.TEST_DATABASE_URL;
   const supply=(await execution.read(actor("designer"),sourceId)).tasks.find(task=>task.taskKind==="development_material_supply"&&task.state==="ready")!;
   return {sourceId,materialId,document,supply};
  };
- const prepare=async(field:DevelopmentReturnIssue["field"]="specification",missing=false)=>{
+ const prepare=async(field:DevelopmentReturnIssue["field"]="specification",missing=false,withAux=false,need?:DevelopmentReturnIssue["need"])=>{
   const source=await identity.createSource(actor("designer"),{designStyleNo:`TEST-P02-${randomUUID()}`,temporaryStyleNo:null,customerCode:null,developmentType:"头版"},randomUUID()),sourceId=source.sourceId,materialId=randomUUID(),attachmentId=randomUUID();
   await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[attachmentId,`TEST/${attachmentId}`,"a".repeat(64),ids.designer]);
-  const document={...initialDevelopmentDocument(),quantity:1,sizeQuantities:[1,0],sampleSize:"M",orderDate:null,materials:[{materialId,category:"主布" as const,label:"TEST主布",name:"TEST棉布",specification:"40支",quantity:"1",color:"黑",width:"",weight:"",composition:"",supplier:"",consumption:"",requiredThisRound:false,available:!missing,expectedDate:null}],files:[{attachmentId,kind:"款图" as const}]};
+  const document={...initialDevelopmentDocument(),quantity:1,sizeQuantities:[1,0],sampleSize:"M",orderDate:null,materials:[...(withAux?[{materialId:randomUUID(),category:"主布" as const,label:"TEST主布",name:"TEST棉布",specification:"40支",quantity:"1",color:"黑",width:"",weight:"",composition:"",supplier:"",consumption:"",requiredThisRound:true,available:true,expectedDate:null}]:[]),{materialId,category:withAux?"辅料" as const:"主布" as const,...(withAux?{auxiliaryKind:"普通" as const}:{}),label:withAux?"TEST辅料":"TEST主布",name:"TEST棉布",specification:"40支",quantity:"1",color:"黑",width:"",weight:"",composition:"",supplier:"",consumption:"",requiredThisRound:false,available:!missing,expectedDate:withAux&&missing?"2026-11-01":null}],files:[{attachmentId,kind:"款图" as const}]};
   const saved=await forms.save(actor("designer"),sourceId,{expectedVersion:0,document},randomUUID()),sheet=await forms.publish(actor("designer"),sourceId,saved.version,randomUUID()),checkTask=sheet.taskId!;
-  const issues:DevelopmentReturnIssue[]=[{materialId,field,reason:`TEST ${field}需核实`}];if(missing&&field!=="physical")issues.push({materialId,field:"physical",reason:"TEST实物未到"});
-  const entry={materialId,usage:"use" as const,physical:!missing,quantity:true,color:true,specification:field!=="specification",note:"",confirmedWith:""};
-  const verification=await execution.saveMaterials(actor("clerk"),sourceId,{taskId:checkTask,expectedVersion:0,expectedDocumentVersion:sheet.version,entries:[entry],result:"缺项退回",returnIssues:issues},randomUUID()) as {version:number};
-  await execution.check(actor("clerk"),sourceId,{taskId:checkTask,expectedVerificationVersion:verification.version,result:"缺项退回",note:"TEST具体退回",returnIssues:issues,items:[{materialId,physical:entry.physical,quantity:true,color:true,specification:entry.specification}]},randomUUID());
+  const issues:DevelopmentReturnIssue[]=[{materialId,field,...(need?{need}:{}),reason:`TEST ${field}需核实`}];if(missing&&field!=="physical")issues.push({materialId,field:"physical",reason:"TEST实物未到"});
+  const entry={materialId,usage:"use" as const,physical:!missing,quantity:field!=="quantity",color:field!=="color",specification:field!=="specification",note:"",confirmedWith:""};
+  const verification=await execution.saveMaterials(actor("clerk"),sourceId,{taskId:checkTask,expectedVersion:0,expectedDocumentVersion:sheet.version,entries:document.materials.map(m=>m.materialId===materialId?entry:{...entry,materialId:m.materialId,physical:true,quantity:true,color:true,specification:true}),result:"缺项退回",returnIssues:issues},randomUUID()) as {version:number};
+  await execution.check(actor("clerk"),sourceId,{taskId:checkTask,expectedVerificationVersion:verification.version,result:"缺项退回",note:"TEST具体退回",returnIssues:issues,items:document.materials.map(m=>({materialId:m.materialId,physical:m.materialId===materialId?entry.physical:true,quantity:m.materialId===materialId?entry.quantity:true,color:m.materialId===materialId?entry.color:true,specification:m.materialId===materialId?entry.specification:true}))},randomUUID());
   const supply=(await execution.read(actor("designer"),sourceId)).tasks.find(t=>t.taskKind==="development_material_supply"&&t.state==="ready")!;
   return {sourceId,materialId,supply,document,sheet};
  };
@@ -75,8 +76,70 @@ const url=process.env.TEST_DATABASE_URL;
   const input={taskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:context.documentVersion,expectedDraftVersion:context.draft?.version??0,document,reason:"TEST按原退回字段补正"};return {input,saved:await amendments.save(actor("designer"),f.sourceId,input,randomUUID())};
  };
 
+ const reopenInput=async(f:Awaited<ReturnType<typeof prepare>>)=>{
+  const state=await execution.read(actor("clerk"),f.sourceId);return {taskId:f.sheet.taskId!,supplyTaskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:state.sheet.version,expectedVerificationVersion:state.materialVerification!.version,note:"TEST与设计师沟通后由文员重新确认用途"};
+ };
+ it("D08 B clerk retakes a returned task exactly once; old supply cannot override new use, and only recheck submits facts",async()=>{
+  const f=await prepare("physical",true,true),input=await reopenInput(f),key=randomUUID();
+  const before=await forms.read(actor("clerk"),f.sourceId),factsBefore=(await db.query("SELECT count(*)::int n FROM digital_development_execution_facts WHERE source_id=$1 AND kind='核配通过'",[f.sourceId])).rows[0].n;
+  for(const who of ["designer","worker","supervisor"] as const)await expect(execution.reopenMaterials(actor(who),f.sourceId,input,randomUUID())).rejects.toMatchObject({statusCode:who==="worker"?404:403});
+  await expect(execution.reopenMaterials(actor("clerk"),f.sourceId,{...input,roundNumber:2},randomUUID())).rejects.toThrow("制作轮次");
+  const other=await prepare("physical",true);await expect(execution.reopenMaterials(actor("clerk"),f.sourceId,{...input,supplyTaskId:other.supply.taskId},randomUUID())).rejects.toThrow("不属于本轮");
+  const [a,b]=await Promise.all([execution.reopenMaterials(actor("clerk"),f.sourceId,input,key),execution.reopenMaterials(actor("clerk"),f.sourceId,input,randomUUID())]) as Array<{taskId:string}>;expect(a).toEqual(b);expect(await execution.reopenMaterials(actor("clerk"),f.sourceId,input,key)).toEqual(a);
+  expect((await tasks.read(actor("designer"),f.supply.taskId)).state).toBe("cancelled");
+  expect((await db.query("SELECT count(*)::int n FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind IN ('development_material_supply','development_material_recheck') AND t.state IN ('ready','pending','blocked')",[f.sourceId])).rows[0].n).toBe(1);
+  expect((await notices.todos(actor("clerk"))).filter(t=>t.todoId===a!.taskId)).toHaveLength(1);expect((await notices.todos(actor("designer"))).some(t=>t.todoId===f.supply.taskId)).toBe(false);
+  expect((await forms.read(actor("designer"),f.sourceId)).document).toEqual(before.document);expect((await materialReadiness(db,f.sourceId,1)).earlyReady).toBe(false);
+  await expect(amendments.submit(actor("designer"),f.sourceId,{taskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:before.version,expectedDraftVersion:0},randomUUID())).rejects.toThrow("已结束");
+  await expect(execution.resubmit(actor("designer"),f.sourceId,f.supply.taskId,randomUUID())).rejects.toThrow("旧任务不能重复提交");
+  const state=await execution.read(actor("clerk"),f.sourceId),entries=state.materialVerification!.entries.map(r=>({materialId:r.materialId,usage:r.materialId===f.materialId?"unused" as const:"use" as const,physical:r.materialId!==f.materialId,quantity:true,color:true,specification:true,note:r.materialId===f.materialId?"TEST确认本轮不用":"",confirmedWith:r.materialId===f.materialId?"TEST设计师":""}));
+  const saved=await execution.saveMaterials(actor("clerk"),f.sourceId,{taskId:a!.taskId,expectedVersion:state.materialVerification!.version,expectedDocumentVersion:state.sheet.version,entries,returnIssues:[]},randomUUID()) as {version:number};
+  expect((await materialReadiness(db,f.sourceId,1)).earlyReady).toBe(false);expect((await db.query("SELECT count(*)::int n FROM digital_development_execution_facts WHERE source_id=$1 AND kind='核配通过'",[f.sourceId])).rows[0].n).toBe(factsBefore);
+  await execution.check(actor("clerk"),f.sourceId,{taskId:a!.taskId,expectedVerificationVersion:saved.version,result:"通过",note:"TEST文员提交重新核料",items:entries.filter(r=>r.usage==='use').map(({materialId,physical,quantity,color,specification})=>({materialId,physical,quantity,color,specification}))},randomUUID());
+  expect((await materialReadiness(db,f.sourceId,1)).earlyReady).toBe(true);expect((await forms.read(actor("designer"),f.sourceId)).document).toEqual(before.document);
+  expect((await db.query("SELECT count(*)::int n FROM digital_development_execution_facts WHERE source_id=$1 AND kind='缺项退回'",[f.sourceId])).rows[0].n).toBe(1);expect((await db.query("SELECT count(*)::int n FROM audit_events WHERE entity_id=$1 AND action='development_material_reopen'",[f.sourceId])).rows[0].n).toBe(1);
+ });
+ it("D08 retains independent document issues on a mixed return even when the clerk now chooses unused",async()=>{
+  const f=await prepare("specification",true,true),input=await reopenInput(f),next=await execution.reopenMaterials(actor("clerk"),f.sourceId,input,randomUUID()) as {taskId:string},state=await execution.read(actor("clerk"),f.sourceId);
+  const entries=state.materialVerification!.entries.map(r=>({materialId:r.materialId,usage:r.materialId===f.materialId?"unused" as const:"use" as const,physical:r.materialId!==f.materialId,quantity:true,color:true,specification:r.materialId!==f.materialId,note:"TEST重新确认不用",confirmedWith:"TEST设计师"}));
+  const saved=await execution.saveMaterials(actor("clerk"),f.sourceId,{taskId:next.taskId,expectedVersion:state.materialVerification!.version,expectedDocumentVersion:state.sheet.version,entries},randomUUID()) as {version:number},items=entries.filter(r=>r.usage==='use').map(({materialId,physical,quantity,color,specification})=>({materialId,physical,quantity,color,specification}));
+  await expect(execution.check(actor("clerk"),f.sourceId,{taskId:next.taskId,expectedVerificationVersion:saved.version,result:"通过",note:"TEST不应绕过资料",items},randomUUID())).rejects.toThrow("资料缺错");
+  await expect(execution.check(actor("clerk"),f.sourceId,{taskId:next.taskId,expectedVerificationVersion:saved.version,result:"缺项退回",note:"TEST不应丢掉原缺错",returnIssues:[{materialId:null,field:"instructions",reason:"TEST另有问题"}],items},randomUUID())).rejects.toThrow("资料缺错");
+  await execution.check(actor("clerk"),f.sourceId,{taskId:next.taskId,expectedVerificationVersion:saved.version,result:"缺项退回",note:"TEST保留原规格问题",returnIssues:[{materialId:f.materialId,field:"specification",reason:"TEST仍待补正规格"}],items},randomUUID());
+  expect((await execution.read(actor("designer"),f.sourceId)).tasks.filter(t=>t.taskKind==='development_material_supply'&&t.state==='ready')).toHaveLength(1);expect((await forms.read(actor("clerk"),f.sourceId)).version).toBe(f.sheet.version);
+ });
+ it("D08 known material mismatch cannot be waived by choosing unused or relabelled as a mere physical shortage",async()=>{
+  const f=await prepare("color",true,true,"supply"),next=await execution.reopenMaterials(actor("clerk"),f.sourceId,await reopenInput(f),randomUUID()) as {taskId:string},state=await execution.read(actor("clerk"),f.sourceId),entries=state.materialVerification!.entries.map(r=>({materialId:r.materialId,usage:r.materialId===f.materialId?"unused" as const:"use" as const,physical:r.materialId!==f.materialId,quantity:true,color:r.materialId!==f.materialId,specification:true,note:"TEST用途变更",confirmedWith:"TEST设计师"}));
+  const saved=await execution.saveMaterials(actor("clerk"),f.sourceId,{taskId:next.taskId,expectedVersion:state.materialVerification!.version,expectedDocumentVersion:state.sheet.version,entries},randomUUID()) as {version:number},items=entries.filter(r=>r.usage==='use').map(({materialId,physical,quantity,color,specification})=>({materialId,physical,quantity,color,specification}));
+  await expect(execution.check(actor("clerk"),f.sourceId,{taskId:next.taskId,expectedVerificationVersion:saved.version,result:"通过",note:"TEST不应绕过已知不符",items},randomUUID())).rejects.toThrow("不符");
+  await expect(execution.check(actor("clerk"),f.sourceId,{taskId:next.taskId,expectedVerificationVersion:saved.version,result:"缺项退回",note:"TEST不能替换问题性质",returnIssues:[{materialId:f.materialId,field:"physical",reason:"TEST实物未到"}],items},randomUUID())).rejects.toThrow("不符");
+  await execution.check(actor("clerk"),f.sourceId,{taskId:next.taskId,expectedVerificationVersion:saved.version,result:"缺项退回",note:"TEST不用但保留原颜色不符",returnIssues:[{materialId:f.materialId,field:"color",need:"supply",reason:"TEST原颜色不符仍须更换"}],items},randomUUID());expect((await execution.read(actor("designer"),f.sourceId)).tasks.filter(t=>t.taskKind==='development_material_supply'&&t.state==='ready')).toHaveLength(1);
+ });
+ it("D08 quality stop is not waived by reopening, a draft use change or removing that material",async()=>{
+  const f=await prepare("physical",true,true),file=randomUUID();await db.query("INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at) VALUES($1,$2,'TEST-quality.png','image/png',1,$3,$4,'ready',CURRENT_TIMESTAMP)",[file,`TEST/${file}`,"b".repeat(64),ids.supervisor]);await execution.recordUploadPurpose(actor("supervisor"),f.sourceId,file,"面料报告");await execution.report(actor("supervisor"),f.sourceId,{materialIds:[f.materialId],recommendation:"建议停用",note:"TEST不能靠改用途绕过质量",attachmentIds:[file]},randomUUID());
+  const next=await execution.reopenMaterials(actor("clerk"),f.sourceId,await reopenInput(f),randomUUID()) as {taskId:string},state=await execution.read(actor("clerk"),f.sourceId),entries=state.materialVerification!.entries.map(r=>({materialId:r.materialId,usage:r.materialId===f.materialId?"unused" as const:"use" as const,physical:r.materialId!==f.materialId,quantity:true,color:true,specification:true,note:"TEST用途变更",confirmedWith:"TEST设计师"}));
+  const saved=await execution.saveMaterials(actor("clerk"),f.sourceId,{taskId:next.taskId,expectedVersion:state.materialVerification!.version,expectedDocumentVersion:state.sheet.version,entries},randomUUID()) as {version:number};
+  await expect(execution.check(actor("clerk"),f.sourceId,{taskId:next.taskId,expectedVerificationVersion:saved.version,result:"通过",note:"TEST仍须质量决定",items:entries.filter(r=>r.usage==='use').map(({materialId,physical,quantity,color,specification})=>({materialId,physical,quantity,color,specification}))},randomUUID())).rejects.toThrow("问题面料");expect((await tasks.read(actor("clerk"),next.taskId)).state).toBe('ready');expect((await materialReadiness(db,f.sourceId,1)).earlyReady).toBe(false);
+ });
+ it("D08 races legitimate supply completion without creating duplicate active tasks and rolls back a failed retake",async()=>{
+  const f=await prepare("physical",true,true),input=await reopenInput(f),key=randomUUID(),before=Number((await db.query("SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1",[f.sourceId])).rows[0].n);
+  await db.query(`CREATE FUNCTION d08_injected_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'TEST D08 transaction interruption'; END $$; CREATE TRIGGER d08_injected_failure BEFORE INSERT ON audit_events FOR EACH ROW WHEN (NEW.entity_id='${f.sourceId}' AND NEW.action='development_material_reopen') EXECUTE FUNCTION d08_injected_failure()`);
+  try{await expect(execution.reopenMaterials(actor("clerk"),f.sourceId,input,key)).rejects.toThrow("TEST D08 transaction interruption");}finally{await db.query("DROP TRIGGER d08_injected_failure ON audit_events; DROP FUNCTION d08_injected_failure()");}
+  expect((await tasks.read(actor("designer"),f.supply.taskId)).state).toBe('ready');expect(Number((await db.query("SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1",[f.sourceId])).rows[0].n)).toBe(before);
+  await forms.materialEvent(actor("designer"),f.sourceId,f.materialId,{expectedMaterialRevision:0,expectedVersion:f.sheet.version,action:"到货",expectedDate:null,note:"TEST与文员接回同时提交的真实到货"},randomUUID());
+  const results=await Promise.allSettled([execution.reopenMaterials(actor("clerk"),f.sourceId,input,key),execution.resubmit(actor("designer"),f.sourceId,f.supply.taskId,randomUUID())]);expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
+  expect((await db.query("SELECT count(*)::int n FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND a.task_kind IN ('development_materials','development_material_supply','development_material_recheck') AND t.state IN ('pending','ready','blocked')",[f.sourceId])).rows[0].n).toBe(1);expect((await materialReadiness(db,f.sourceId,1)).earlyReady).toBe(false);
+ });
+ it("D08 cannot retake a paused/cancelled source or an obsolete document snapshot",async()=>{
+  const f=await prepare("physical",true,true),input=await reopenInput(f);
+  await expect(execution.reopenMaterials(actor("clerk"),f.sourceId,{...input,expectedDocumentVersion:input.expectedDocumentVersion+1},randomUUID())).rejects.toThrow("正式资料");
+  await expect(execution.reopenMaterials(actor("clerk"),f.sourceId,{...input,expectedVerificationVersion:input.expectedVerificationVersion+1},randomUUID())).rejects.toThrow("文员确认");
+  await tasks.controlResource(actor("root"),{kind:"source",id:f.sourceId},"pause","TEST暂停仍不可重核",randomUUID());await expect(execution.reopenMaterials(actor("clerk"),f.sourceId,input,randomUUID())).rejects.toThrow("暂停或取消");
+  await tasks.controlResource(actor("root"),{kind:"source",id:f.sourceId},"resume","TEST恢复正常待办",randomUUID());await tasks.controlResource(actor("root"),{kind:"source",id:f.sourceId},"cancel","TEST取消轮不能重开",randomUUID());await expect(execution.reopenMaterials(actor("clerk"),f.sourceId,input,randomUUID())).rejects.toThrow("暂停或取消");
+  expect((await db.query("SELECT count(*)::int n FROM audit_events WHERE entity_id=$1 AND action='development_material_reopen'",[f.sourceId])).rows[0].n).toBe(0);
+ });
  it("preserves pre-0248 pure replenishment, including an unchanged saved draft, without publication checks or no-op revisions",async()=>{
-  for(const [index,f] of legacyReturns.entries()){
+  for(const [index,f] of legacyReturns.slice(0,2).entries()){
    const context=await amendments.read(actor("designer"),f.sourceId,f.supply.taskId);expect(context).toMatchObject({directSupplyMode:"legacy",issues:[]});expect(context.document.materials[0]!.specification).toBe("");
    const base={taskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:2,expectedDraftVersion:0};
    await expect(amendments.submit(actor("worker"),f.sourceId,base,randomUUID())).rejects.toMatchObject({statusCode:404});
@@ -88,6 +151,11 @@ const url=process.env.TEST_DATABASE_URL;
    expect((await db.query("SELECT count(*)::int n FROM digital_development_amendments WHERE source_id=$1",[f.sourceId])).rows[0].n).toBe(0);expect((await db.query("SELECT count(*)::int n FROM digital_development_amendment_drafts WHERE source_id=$1",[f.sourceId])).rows[0].n).toBe(0);
    const rechecks=(await execution.read(actor("clerk"),f.sourceId)).tasks.filter(task=>task.taskKind==="development_material_recheck");expect(rechecks).toHaveLength(1);expect(rechecks[0]).toMatchObject({state:"ready",assigneeId:ids.clerk});expect((await notices.todos(actor("clerk"))).filter(todo=>todo.todoId===rechecks[0]!.taskId)).toHaveLength(1);
   }
+ });
+ it("D08 keeps a verified pre-0248 returned task accessible to the original clerk without revising its frozen document",async()=>{
+  const f=legacyReturns[2]!,state=await execution.read(actor("clerk"),f.sourceId);expect(state.reopenMaterialCheck).not.toBeNull();
+  const next=await execution.reopenMaterials(actor("clerk"),f.sourceId,{...state.reopenMaterialCheck!,note:"TEST文员接回旧补料核实用途"},randomUUID()) as {taskId:string};
+  expect((await tasks.read(actor("clerk"),next.taskId)).state).toBe('ready');expect((await forms.read(actor("designer"),f.sourceId)).document).toEqual(f.document);expect((await db.query("SELECT count(*)::int n FROM digital_development_amendments WHERE source_id=$1",[f.sourceId])).rows[0].n).toBe(0);
  });
  it("does not treat empty structured issues or document corrections as legacy replenishment",async()=>{
   const f=await prepare();expect((await amendments.read(actor("designer"),f.sourceId,f.supply.taskId)).directSupplyMode).toBeNull();
@@ -218,10 +286,14 @@ const url=process.env.TEST_DATABASE_URL;
   const auth=new AuthService(provider,new PostgresAuthStore(db,"TEST",`TEST-${ids.root}`),"TEST",3600000,randomUUID()),app=Fastify(),sessions=new Map<string,string>();
   for(const who of ["designer","clerk","worker"] as const){const code=`TEST-P02-${who}-${randomUUID()}`;codes.set(code,who);sessions.set(who,(await auth.loginMobile(code)).token);}
   registerDevelopmentRoutes(app,{authenticate:token=>auth.authenticate(token),root:new RootAuthority(db,"TEST",`TEST-${ids.root}`)},forms,undefined as never);
+  registerDevelopmentExecutionRoutes(app,{authenticate:token=>auth.authenticate(token),root:new RootAuthority(db,"TEST",`TEST-${ids.root}`)},execution,undefined as never);
   const body={taskId:f.supply.taskId,roundNumber:1,expectedDocumentVersion:context.documentVersion,expectedDraftVersion:0,document:{...context.document,materials:context.document.materials.map(m=>({...m,specification:"42支"}))},reason:"TEST经真实会话补正"},endpoint=`/digital-production/sources/${f.sourceId}/development/amendment`,count=async()=>Number((await db.query("SELECT count(*) n FROM digital_production_commands WHERE command LIKE $1",[`%${f.sourceId}%`])).rows[0].n);
   try{const before=await count();for(const [who,status]of [["worker",404],["clerk",403]] as const){const denied=await app.inject({method:"PUT",url:endpoint,headers:{cookie:`dx_rework_session=${sessions.get(who)}`,"idempotency-key":randomUUID()},payload:body});expect(denied.statusCode).toBe(status);expect(await count()).toBe(before);}
    const key=randomUUID(),allowed=await app.inject({method:"PUT",url:endpoint,headers:{cookie:`dx_rework_session=${sessions.get("designer")}`,"idempotency-key":key},payload:body});expect(allowed.statusCode,allowed.body).toBe(200);expect(allowed.json().draftVersion).toBe(1);expect(await count()).toBe(before+1);expect((await forms.read(actor("designer"),f.sourceId)).version).toBe(f.sheet.version);
    const receipt=await app.inject({url:`${endpoint}/receipt?taskId=${f.supply.taskId}&operation=save&key=${key}`,headers:{cookie:`dx_rework_session=${sessions.get("designer")}`}});expect(receipt.statusCode).toBe(200);expect(receipt.json().receipt.draftVersion).toBe(1);
+   const g=await prepare("physical",true,true),reopen=await reopenInput(g),reopenUrl=`/digital-production/sources/${g.sourceId}/execution/reopen-materials`,taskCount=async()=>Number((await db.query("SELECT count(*)::int n FROM digital_production_task_access WHERE source_id=$1",[g.sourceId])).rows[0].n),beforeReopen=await taskCount();
+   const refused=await app.inject({method:"POST",url:reopenUrl,headers:{cookie:`dx_rework_session=${sessions.get("designer")}`,"idempotency-key":randomUUID()},payload:reopen});expect(refused.statusCode,refused.body).toBe(403);expect(await taskCount()).toBe(beforeReopen);expect((await tasks.read(actor("designer"),g.supply.taskId)).state).toBe('ready');
+   const retaken=await app.inject({method:"POST",url:reopenUrl,headers:{cookie:`dx_rework_session=${sessions.get("clerk")}`,"idempotency-key":randomUUID()},payload:reopen});expect(retaken.statusCode,retaken.body).toBe(200);expect(await taskCount()).toBe(beforeReopen+1);expect((await notices.todos(actor("clerk"))).some(todo=>todo.todoId===retaken.json().taskId)).toBe(true);
    const removed=await app.inject({method:"PUT",url:endpoint,headers:{cookie:`dx_rework_session=${sessions.get("designer")}`,"idempotency-key":randomUUID()},payload:{...body,expectedDraftVersion:1,document:{...body.document,materials:[]}}});expect(removed.statusCode).toBe(409);expect(await count()).toBe(before+1);expect((await amendments.read(actor("designer"),f.sourceId,f.supply.taskId)).draft?.version).toBe(1);
   }finally{await app.close();}
  });

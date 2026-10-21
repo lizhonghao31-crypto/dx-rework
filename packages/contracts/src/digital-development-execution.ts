@@ -34,3 +34,8 @@ export type DevelopmentWork=z.infer<typeof DevelopmentWorkSchema>;
 export const DevelopmentRouteActionSchema=z.object({making:DevelopmentMakingUpgradeSchema.optional(),attachmentIds:z.array(z.string().uuid()).max(20).optional(),returnNodes:z.array(z.enum(DEVELOPMENT_REVISION_NODES)).max(6).optional(),problemCategories:z.array(z.enum(DEVELOPMENT_PROBLEM_CATEGORIES)).max(8).optional(),craftExecution:z.enum(["内部","外发"]).nullable(),taskId:z.string().uuid(),note:z.string().trim().max(2000),result:z.enum(["通过","退回"]),nextAssigneeId:z.string().uuid().nullable(),sentDate:z.iso.date().nullable(),trackingNo:z.string().trim().max(100).nullable()}).strict();
 export const DevelopmentPatternOrderSchema=z.object({categoryId:z.string().uuid(),priceVersion:z.number().int().positive()}).strict();
 export const DevelopmentCustomerSampleSchema=z.object({routeVersion:z.number().int().positive(),note:z.string().trim().min(1).max(2000)}).strict();
+
+export const ReopenDevelopmentMaterialsSchema=z.object({taskId:z.string().uuid(),supplyTaskId:z.string().uuid(),roundNumber:z.number().int().positive(),expectedDocumentVersion:z.number().int().positive(),expectedVerificationVersion:z.number().int().positive(),note:z.string().trim().min(1,"请记录与设计师沟通后重新核料的原因").max(1000)}).strict();
+export type ReopenDevelopmentMaterials=z.infer<typeof ReopenDevelopmentMaterialsSchema>;
+
+export const DevelopmentMaterialReopenReceiptSchema=z.object({taskId:z.string().uuid(),roundNumber:z.number().int().positive()}).strict();

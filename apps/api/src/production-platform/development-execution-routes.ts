@@ -1,4 +1,4 @@
-import {SaveMaterialVerificationSchema} from "@dx-rework/contracts/digital-development-execution";
+import {ReopenDevelopmentMaterialsSchema,SaveMaterialVerificationSchema} from "@dx-rework/contracts/digital-development-execution";
 import type {FastifyInstance,FastifyRequest} from "fastify";
 import {z} from "zod";
 import {DevelopmentArrangementSchema} from "@dx-rework/contracts/development-arrangement";
@@ -22,6 +22,7 @@ export function registerDevelopmentExecutionRoutes(app:FastifyInstance,dependenc
   app.post(`${base}/material-verification`,async request=>service.saveMaterials(await actor(request),id(request),parse(SaveMaterialVerificationSchema,request.body),key(request)));
   app.post(`${base}/check`,async request=>service.check(await actor(request),id(request),parse(DevelopmentCheckSchema,request.body),key(request)));
   app.post(`${base}/supplement-check`,async request=>service.supplementCheck(await actor(request),id(request),parse(z.object({taskId:z.string().uuid()}).strict(),request.body).taskId,key(request)));
+  app.post(`${base}/reopen-materials`,async request=>service.reopenMaterials(await actor(request),id(request),parse(ReopenDevelopmentMaterialsSchema,request.body),key(request)));
   app.post(`${base}/resubmit`,async request=>service.resubmit(await actor(request),id(request),parse(z.object({taskId:z.string().uuid()}).strict(),request.body).taskId,key(request)));
   app.post(`${base}/complete`,async request=>service.complete(await actor(request),id(request),parse(DevelopmentWorkSchema,request.body),key(request)));
   app.post(`${base}/send-washing`,async request=>{const input=parse(z.object({taskId:z.string().uuid(),note:z.string().trim().max(2000)}).strict(),request.body);return service.sendWashing(await actor(request),id(request),input.taskId,input.note,key(request));});

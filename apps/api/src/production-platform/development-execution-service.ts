@@ -1,3 +1,5 @@
+import {reopenDevelopmentMaterials,assertReopenedReturnIssues} from './development-material-reopen.js';
+import type {ReopenDevelopmentMaterials} from '@dx-rework/contracts/digital-development-execution';
 import {developmentAutomaticRoundDocument} from './development-document-format.js';
 import {developmentAmendmentsAvailable} from "./development-amendment-repository.js";
 import {validateDevelopmentReturn,recordDevelopmentReturn,submitDevelopmentSupply} from "./development-supply.js";
@@ -54,13 +56,33 @@ export class DevelopmentExecutionService {
     const readiness=sheet.document?await materialReadiness(db,sourceId,currentRound):null;
     const supplementTask=readiness?.sewingMissing.length?tasks.filter(task=>task.routeVersion===currentRound&&task.state==="completed"&&task.canExecute&&["development_materials","development_material_recheck"].includes(task.taskKind)).at(-1):null;
 
-    return {fabricCases:await fabricCases(db,sourceId),materialVerification:sheet.document?await readMaterialVerification(db,sourceId,currentRound,sheet.document,sheet.version):null,unifiedArrangement:await arrangementsAvailable(db),arrangement:await readArrangement(db,actor,sourceId),canConfirmExecution:isRootActor(actor)||actor.actorRoles.includes("pattern_room_supervisor"),sheet,materialReadiness:readiness?.materials??[],supplementCheckTaskId:supplementTask?.taskId??null,nextSteps,dispatch,tasks,routeFacts,patternOrder,patternPreparation,facts:await this.facts(db,sourceId),canReportFabric:isRootActor(actor)||actor.actorRoles.some(role=>["pattern_room_worker","pattern_room_supervisor","order_merchandiser"].includes(role)),canDispatch:isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes("development_clerk"),canDecideFabric:isRootActor(actor)||actor.actorRoles.includes("production_management")};
+    const materialVerification=sheet.document?await readMaterialVerification(db,sourceId,currentRound,sheet.document,sheet.version):null;
+    let reopenMaterialCheck:null|{taskId:string;supplyTaskId:string;roundNumber:number;expectedDocumentVersion:number;expectedVerificationVersion:number}=null;
+    if(materialVerification?.taskId&&(isRootActor(actor)||(actor.actorRoles.includes('development_clerk')&&await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,'development_clerk')))){
+      const candidate=(await db.query(`SELECT supply.task_id AS supply_id,check_task.task_id AS check_id,v.version FROM digital_production_tasks supply
+       JOIN digital_production_task_access sa ON sa.task_id=supply.task_id AND sa.source_id=$1
+       JOIN digital_development_material_verifications v ON v.source_id=sa.source_id AND v.round_number=supply.route_version
+       LEFT JOIN digital_development_execution_facts f ON f.source_id=sa.source_id AND f.task_id=supply.task_id AND f.kind='补料复核' AND f.payload ? 'returnRequirements'
+       JOIN digital_production_tasks check_task ON check_task.task_id=coalesce((f.payload->'returnRequirements'->>'checkTaskId')::uuid,v.task_id) AND check_task.route_instance_id=supply.route_instance_id AND check_task.route_version=supply.route_version
+       JOIN digital_production_task_access ca ON ca.task_id=check_task.task_id AND ca.source_id=sa.source_id
+       WHERE sa.task_kind='development_material_supply' AND supply.state='ready' AND supply.route_version=$2 AND check_task.state='completed'
+       AND v.task_id=check_task.task_id AND ca.task_kind IN ('development_materials','development_material_recheck')
+       AND EXISTS(SELECT 1 FROM digital_development_execution_facts returned WHERE returned.source_id=sa.source_id AND returned.task_id=check_task.task_id AND returned.kind='缺项退回')
+       ORDER BY f.sequence DESC NULLS LAST LIMIT 1`,[sourceId,currentRound])).rows[0];
+      if(candidate&&tasks.some(task=>task.taskId===candidate.check_id&&task.canExecute))reopenMaterialCheck={taskId:candidate.check_id,supplyTaskId:candidate.supply_id,roundNumber:currentRound,expectedDocumentVersion:sheet.version,expectedVerificationVersion:candidate.version};
+    }
+    return {reopenMaterialCheck,fabricCases:await fabricCases(db,sourceId),materialVerification,unifiedArrangement:await arrangementsAvailable(db),arrangement:await readArrangement(db,actor,sourceId),canConfirmExecution:isRootActor(actor)||actor.actorRoles.includes("pattern_room_supervisor"),sheet,materialReadiness:readiness?.materials??[],supplementCheckTaskId:supplementTask?.taskId??null,nextSteps,dispatch,tasks,routeFacts,patternOrder,patternPreparation,facts:await this.facts(db,sourceId),canReportFabric:isRootActor(actor)||actor.actorRoles.some(role=>["pattern_room_worker","pattern_room_supervisor","order_merchandiser"].includes(role)),canDispatch:isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes("development_clerk"),canDecideFabric:isRootActor(actor)||actor.actorRoles.includes("production_management")};
   }
   private async command(actor:TrustedActorContext,sourceId:string,kind:string,key:string,input:unknown,action:(db:PoolClient)=>Promise<unknown>){
     if(!this.enabled)digitalForbidden();if(!/^[A-Za-z0-9._:-]{1,128}$/.test(key))fail("缺少操作标识");
     const db=await this.database.connect();try{await db.query("BEGIN");await db.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
       const sheet=await this.forms().read(actor,sourceId,db);if(sheet.status!=="published")fail("开发单尚未发布");
       const lifecycle=(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='source' AND resource_id=$1",[sourceId])).rows[0];if(lifecycle&&lifecycle.state!=="active")fail("开发单已暂停或取消");
+      if(kind==='reopen-materials'){
+        const policy=new DigitalProductionAccessPolicy(db);
+        if(!isRootActor(actor)&&(!actor.actorRoles.includes('development_clerk')||!await policy.lockActiveRole(actor.actorId,'development_clerk')))digitalForbidden();
+        await policy.assert(actor,'task',(input as ReopenDevelopmentMaterials).taskId,'execute');
+      }
       const command=`development-execution:${sourceId}:${kind}`,hash=createHash("sha256").update(JSON.stringify(input)).digest("hex");
       const prior=(await db.query("SELECT payload_hash,response FROM digital_production_commands WHERE actor_id=$1 AND command=$2 AND key=$3",[actor.actorId,command,key])).rows[0];
       if(prior&&prior.payload_hash!==hash)fail("同一操作标识不能用于不同内容");
@@ -150,7 +172,8 @@ export class DevelopmentExecutionService {
       if(verification&&input.items.length!==required.length)fail("请提交每一项本轮使用材料的已保存核验结果");
       let checkedItems=input.items;
       if(input.items.some(item=>!required.some(material=>material.materialId===item.materialId)))fail("核配行不属于本轮所需材料");
-      if(await developmentAmendmentsAvailable(db))validateDevelopmentReturn(document,input);
+      const retainedIssues=await assertReopenedReturnIssues(db,sourceId,input.taskId,input);
+      if(await developmentAmendmentsAvailable(db))validateDevelopmentReturn(document,input,retainedIssues);
       if(input.result==="通过"){
         if(verification&&required.some(item=>!item.name.trim()))fail("本轮使用材料缺少品名，请设计师在本单资料补齐后由文员复核");
         if(!required.some(item=>item.category==="主布"))fail("请先补齐本轮主布资料，不能无主料通过");
@@ -202,6 +225,12 @@ export class DevelopmentExecutionService {
       const next=await this.tasks().createWithClient(db,actor,{resource:{kind:"source",id:sourceId},authorizingTaskId:taskId,kind:"development_material_recheck",routeId:prior.route_instance_id,routeVersion:prior.route_version,occurrence,assigneeId:prior.assignee_id});
       await this.fact(db,actor,sourceId,next.taskId,"补料复核",{supplemental:true,note:"补充核验本轮材料",priorTaskId:taskId});
       return next;
+    });
+  }
+  async reopenMaterials(actor:TrustedActorContext,sourceId:string,input:ReopenDevelopmentMaterials,key:string){
+    return this.command(actor,sourceId,"reopen-materials",key,input,async db=>{
+      const sheet=await this.forms().read(actor,sourceId,db);
+      return reopenDevelopmentMaterials(db,this.database,actor,sourceId,input,{roundNumber:sheet.roundNumber??1,version:sheet.version});
     });
   }
   async resubmit(actor:TrustedActorContext,sourceId:string,taskId:string,key:string){

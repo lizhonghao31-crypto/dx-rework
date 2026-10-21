@@ -11,7 +11,7 @@ import {developmentDocumentRow} from "./development-round-repository.js";
 import {materialReadiness} from "./development-material-readiness.js";
 import {developmentAmendmentsAvailable} from "./development-amendment-repository.js";
 const fail=(message:string):never=>{throw new ApplicationError("DEVELOPMENT_SUPPLY_CONFLICT",message,409);};
-export function validateDevelopmentReturn(document:DevelopmentDocument,input:DevelopmentCheck){
+export function validateDevelopmentReturn(document:DevelopmentDocument,input:DevelopmentCheck,retainedIssues:DevelopmentReturnIssue[]=[]){
  const issues=input.returnIssues??[];
  if(input.result==="通过"){if(issues.length)fail("仍有退回问题，请先核实并清除已解决的问题后提交通过");return;}
  if(!issues.length)fail("请指出具体材料 / 资料区域、问题字段和原因，再退回设计师补正 / 补料");
@@ -19,7 +19,7 @@ export function validateDevelopmentReturn(document:DevelopmentDocument,input:Dev
   if(!issue.materialId)continue;
   if(!document.materials.some(m=>m.materialId===issue.materialId))fail("退回的问题材料不属于本轮资料，请重新读取核料页");
   const check=input.items.find(m=>m.materialId===issue.materialId);
-  if(developmentReturnNeed(issue)==="supply"&&!check)fail("本轮不使用或尚未确认使用的材料无需直接补实物，请核对本轮使用情况；资料错误请选择资料补正");
+  if(developmentReturnNeed(issue)==="supply"&&!check&&!retainedIssues.some(prior=>prior.materialId===issue.materialId&&prior.field===issue.field&&developmentReturnNeed(prior)===developmentReturnNeed(issue)))fail("本轮不使用或尚未确认使用的材料无需直接补实物，请核对本轮使用情况；资料错误请选择资料补正");
   if(["physical","quantity","color","specification"].includes(issue.field)&&check?.[issue.field as "physical"|"quantity"|"color"|"specification"]===true)fail("退回问题与同一项“已到 / 相符”勾选矛盾，请核实该项，或选择实际存在的其他资料问题");
  }
 }

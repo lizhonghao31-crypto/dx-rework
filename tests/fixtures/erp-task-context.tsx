@@ -47,6 +47,9 @@ if(scenario.startsWith('material-closure')){
  task.canExecute=scenario!=='material-closure-director';
 }
 const closure=execution as typeof execution&{materialVerification:{bulkRules?:MaterialBulkRules;version:number;documentVersion:number;taskId:string|null;note:string;result:string;entries:Array<{materialId:string;usage:string;physical:boolean;quantity:boolean;color:boolean;specification:boolean;note:string;confirmedWith:string;changedBy:string|null;changedAt:string|null;invalidated:string[]}>}};
+const reopenMode=new URLSearchParams(location.search).get('fixtureReopen');
+if(reopenMode){task.state='completed';closure.materialVerification.version=3;closure.materialVerification.taskId=task.taskId;if(scenario==='material-closure-clerk')Object.assign(execution,{reopenMaterialCheck:{taskId:task.taskId,supplyTaskId:id(850),roundNumber:2,expectedDocumentVersion:5,expectedVerificationVersion:3}});}
+let reopenAttempts=0;
 const bulkCount=Number(new URLSearchParams(location.search).get('fixtureMaterials')??0);
 if(scenario.startsWith('material-closure')&&bulkCount>0){
  const count=Math.min(100,bulkCount);sheet.document!.materials=Array.from({length:count},(_,i)=>({...material,materialId:id(1000+i),name:`TEST 材料${i+1}长名称`,available:i!==3,color:'深蓝',specification:i===5?'':'TEST 规格长文字 150cm',...(i===3?{category:'辅料' as const,auxiliaryKind:'拉链' as const}: {})}));
@@ -67,6 +70,15 @@ Object.assign(window,{taskContextFixture:{requests,scenario}});
 window.fetch=async(input,init)=>{
  await new Promise(resolve=>window.setTimeout(resolve,0));const url=new URL(String(input),location.origin),method=init?.method??'GET';requests.push({path:url.pathname+url.search,method,body:init?.body?JSON.parse(String(init.body)):null});if(method!=='GET'&&scenario.startsWith('material-closure')){
  const body=JSON.parse(String(init?.body));const reject=(message:string)=>Response.json({error:{message}},{status:409});
+ if(url.pathname.endsWith('/reopen-materials')){
+  const records=JSON.parse(sessionStorage.getItem('TEST-reopen-requests')||'[]');records.push({body,key:new Headers(init?.headers).get('idempotency-key')});sessionStorage.setItem('TEST-reopen-requests',JSON.stringify(records));
+  reopenAttempts++;if(reopenMode==='reject')return reject('TEST原补料已提交，请重新读取当前核料任务');
+  Object.assign(execution,{reopenMaterialCheck:null});if(!execution.tasks.some(t=>t.taskId===id(851)))execution.tasks.push({...task,taskId:id(851),taskKind:'development_material_recheck',state:'ready'});
+  if(reopenAttempts===1&&reopenMode==='lost')throw new TypeError('TEST lost response after commit');
+  if(reopenAttempts===1&&reopenMode==='malformed')return Response.json({});
+  if(reopenAttempts===1&&reopenMode==='408')return Response.json({error:{message:'TEST提交结果未知'}},{status:408});
+  return Response.json({taskId:id(851),roundNumber:2});
+ }
  if(url.pathname.endsWith('/material-verification')){
   if(body.expectedVersion!==closure.materialVerification.version)return reject('TEST 核料记录已更新');
   if(body.entries.some((r:{usage:string;note:string;confirmedWith:string})=>r.usage==='unused'&&(!r.note||!r.confirmedWith)))return reject('本轮不使用的材料须记录与设计师确认的对象及说明');
