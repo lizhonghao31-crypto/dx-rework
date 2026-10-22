@@ -316,7 +316,7 @@ export function MyTodosPage() {
           {todos.map((todo, index) => {
             const blocked = todo.status === "blocked_recipient";
             const order = todo.orderContext;
-            const orderSummary = todo.entityType === "digital_task" ? `款号：${order?.styleNo ?? "未记录"}` : todo.entityType === "supplier_onboarding" ? `供应商：${order?.supplierName ?? ""}` : todo.entityType === "pattern_room_order" ? `板房订单：${order?.orderNo ?? ""} · ${order?.styleNo ?? ""}` : todo.entityType === "sample" ? `样衣：${order?.orderNo ?? ""} · ${order?.styleNo ?? ""}` : (todo.entityType === "sourcing_case" || todo.entityType === "production_order")
+            const orderSummary = todo.entityType === "digital_task" ? `款号：${order?.styleNo ?? "未记录"}${todo.route.developmentRound?` · 第${todo.route.developmentRound}轮`:""}${order?.poNumbers?.length?` · PO：${order.poNumbers.join("、")}`:""}` : todo.entityType === "supplier_onboarding" ? `供应商：${order?.supplierName ?? ""}` : todo.entityType === "pattern_room_order" ? `板房订单：${order?.orderNo ?? ""} · ${order?.styleNo ?? ""}` : todo.entityType === "sample" ? `样衣：${order?.orderNo ?? ""} · ${order?.styleNo ?? ""}` : (todo.entityType === "sourcing_case" || todo.entityType === "production_order")
               ? `款号：${order?.styleNo ?? "未填写"} · 供应商：${order?.supplierName ?? "待选厂"}`
               : order
                 ? `款号：${order.styleNo ?? "未填写"} · 返工单：${order.reworkNo ?? "待生成"}`
@@ -332,6 +332,7 @@ export function MyTodosPage() {
                       <StatusBadge tone="danger">需要转交</StatusBadge>
                       <h2>{taskTitle(todo)}</h2>
                       <p>{todo.blockedReason ?? "当前任务需要由管理人员转交。"}</p>
+                      {todo.entityType==="digital_task"&&todo.category==="digital_assignment"&&order?.styleNo&&<><p>{orderSummary}</p><a href={withTodoReturn(taskHref(todo),{q:activeQuery,module:activeModule,page})}>查看任务与人员安排</a></>}
                     </div>
                   </div>
                 ) : (

@@ -237,16 +237,19 @@ export class DigitalJourneyQuery {
       if(done) { const later=summaryOnly||compact?taskSummary?.laterOwner?{before_state:taskSummary.laterOwner}:null:assignments.find(event=>new Date(event.created_at)>new Date(done.recorded_at));if(later)ownerId=later.before_state?.assigneeId??null; }
       node.owner=ownerId?{id:ownerId,name:ownerId===task.assigneeId?task.assigneeName:summaryOnly||compact?taskSummary?.previousOwnerName??null:(await db.query("SELECT display_name FROM app_users WHERE id=$1",[ownerId])).rows[0]?.display_name??null}:null;
       node.records=[{...record("task",task.taskId,taskUrl(task.taskId),task.routeVersion),mode:task.canExecute&&!["completed","cancelled"].includes(task.state)?"handle":"read"}];
-      const conditions=summaryOnly?(taskSummary?.conditionKeys??[]).map(condition_key=>({condition_key})):(await db.query("SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1 AND NOT satisfied",[task.taskId])).rows;
-      node.blockers=conditions.map(condition=>{const detail=digitalConditionGuidance(condition.condition_key,raw.required_role);return {key:condition.condition_key,label:`${detail.missing}；负责岗位：${businessRoleLabel(detail.responsibleRole)}；${detail.action}`,ownerId:null,record:node.records[0]!};});
+      node.blockers=(task.unmetConditions??[]).filter(detail=>!['paused','manual_block','fabric_quality','development_document'].includes(detail.condition)&&!detail.condition.startsWith('materials_ready:')).map(detail=>({key:detail.condition,label:`${detail.missing}；负责岗位：${businessRoleLabel(detail.responsibleRole)}${detail.action?`；${detail.action}`:''}`,ownerId:null,record:node.records[0]!}));
+      const completionKeys=summaryOnly?taskSummary?.completionKeys??[]:(await db.query("SELECT condition_key FROM digital_production_task_conditions WHERE task_id=$1 AND stage='completion' AND NOT satisfied",[task.taskId])).rows.map(row=>row.condition_key as string);
+
       if(raw.source_id&&['development_pattern','development_cutting','development_sewing'].includes(raw.task_kind)&&!['completed','cancelled'].includes(task.state)){
         const materialState=await materialsFor(raw.route_version),missing=raw.task_kind==='development_sewing'?materialState.sewingMissing:materialState.earlyMissing;
         node.blockers=node.blockers.filter(blocker=>blocker.key!=='materials_ready');
+        if(materialState.documentMissing)node.blockers.push({key:'development_document',label:'尚无本轮可核验开发资料；负责岗位：设计师；请设计师在本单开发资料核对当前轮次并发布有效资料',ownerId:null,record:node.records[0]!});
         for(const item of missing)node.blockers.push({key:`materials_ready:${item.materialId}`,label:`${item.name}：${item.missing.join('、')}`,ownerId:null,record:node.records[0]!});
         for(const issue of materialState.quality)node.blockers.push({key:`fabric_quality:${issue.id}`,label:'问题面料尚未允许使用：请供应链总监在本单核料／开发办理页「问题面料报告与决定」明确处理；到料不能解除质量阻断',ownerId:null,record:node.records[0]!});
       }
       if(task.paused)node.blockers.push({key:"resource_paused",label:"原业务已暂停",ownerId:null,record:node.records[0]!});
       if(task.blockedReason&&task.blockedReason!=='前置条件未满足')node.blockers.push({key:"recorded_block",label:task.blockedReason,ownerId:task.assigneeId,record:node.records[0]!});
+      if(task.state==='ready'&&!task.paused&&!node.blockers.length)for(const key of completionKeys){const detail=digitalConditionGuidance(key,raw.required_role);node.blockers.push({key:`completion:${key}`,label:`完成办理前：${detail.missing}；由${businessRoleLabel(detail.responsibleRole)}在原任务办理页核实并提交，当前记录可查看`,ownerId:task.assigneeId,record:node.records[0]!});}
       if(["active","blocked"].includes(state)) {
         if(task.dueAt&&Date.parse(task.dueAt)<=Date.parse(asOf)){node.risks.push("overdue");node.overdueSeconds=(Date.parse(asOf)-Date.parse(task.dueAt))/1000;}
         else if(task.warningAt&&Date.parse(task.warningAt)<=Date.parse(asOf))node.risks.push("due_soon");
