@@ -627,8 +627,9 @@ export class TodoService {
       JOIN sourcing_cases s ON s.sourcing_case_id=l.child_id AND to_jsonb(s)->>'workflow_generation'='digital_production_v1'
       WHERE l.production_order_id=$1 AND t.recipient_user_id=$2 AND t.status IN ('pending','blocked_recipient')
         AND t.todo_type='business_action' AND t.entity_type='sourcing_case' AND t.required_role='order_merchandiser'
-        AND t.category IN ('sourcing_contract_return','sourcing_merchandiser_correction')
-        AND t.dedupe_key ~ ('^sourcing:'||t.entity_id||':(return|correction):[0-9]+$')
+        AND t.category IN ('sourcing_contract_return','sourcing_merchandiser_correction','sourcing_transfer_contract_return','sourcing_price_contract_return')
+        AND (t.dedupe_key ~ ('^sourcing:'||t.entity_id||':(return|correction):[0-9]+$')
+          OR t.dedupe_key ~ ('^sourcing:'||t.entity_id||':(transfer-return|price-return):[0-9a-f-]{36}:[0-9a-f-]{36}$'))
       ORDER BY t.todo_id FOR UPDATE OF t`,[orderId,from])).rows;
     for(const todo of rows){
       if(!todo.required_capability||!await this.isEligibleRecipient(client,to,"order_merchandiser",todo.required_capability,undefined,todo.delegation_scope_id??todo.entity_id))throw new ApplicationError("FORBIDDEN","新主跟单缺少原待办办理权限",403);
@@ -1359,6 +1360,8 @@ export class TodoService {
     deliveryKind: "create" | "complete" | "reminder" | "escalation" | "information",
   ): Promise<void> {
     if (todo.route_descriptor.routeName === "digital_production_task" || await digitalTodoTarget(client, TodoRouteDescriptorSchema.parse(todo.route_descriptor))) return;
+    // Version-bound transfer contract tasks (including their routing exceptions) are in-system only.
+    if (todo.route_descriptor.transferContract || todo.route_descriptor.contractReturn) return;
     const outboxEventId = await this.outbox.enqueue(client, {
       topic: TODO_DELIVERY_TOPIC,
       aggregateType: "rework_todo",

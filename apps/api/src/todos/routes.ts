@@ -1,3 +1,7 @@
+import type { SourcingTransferContractReconciliation } from "../sourcing/sourcing-transfer-contract-reconciliation.js";
+import { z } from "zod";
+import { businessActor, isRootUser } from "../access/business-authority.js";
+import type { RootAuthority } from "../access/root-authority.js";
 import { requestValidationMessage } from "@dx-rework/contracts/validation-language";
 import {
   TodoListResponseSchema,
@@ -37,6 +41,8 @@ const parse = <T>(
 
 export type TodoHttpDependencies = Readonly<{
   authenticate(token: string | undefined): Promise<AuthUser>;
+  root?: RootAuthority;
+  transferContractReconciliation?: SourcingTransferContractReconciliation;
   service: Pick<TodoService,
     "getForActor" | "listForActor" | "countIndicatorForActor"
       | "listRoutingExceptionsForActor" | "transferRoutingException"> & Partial<Pick<TodoService,'markReadForActor'>>;
@@ -46,6 +52,26 @@ export function registerTodoRoutes(
   app: FastifyInstance,
   dependencies: TodoHttpDependencies,
 ): void {
+  if (dependencies.transferContractReconciliation) {
+    const operator = async (request: FastifyRequest) => {
+      const user=await dependencies.authenticate(cookieToken(request));
+      if (!await isRootUser(dependencies.root,user.id)) throw new ApplicationError("FORBIDDEN","仅 Root 可盘点或补录转厂合同待签回",403);
+      return businessActor(dependencies.root,user,request.id,"todo:routing_exception_manage");
+    };
+    app.post("/todos/transfer-contract-reconciliation/preview",async(request,reply)=>{
+      const current=await operator(request);
+      const input=parse(z.object({caseIds:z.array(z.string().uuid()).max(100).default([]),limit:z.number().int().min(1).max(500).default(200)}).strict(),request.body??{});
+      reply.header("cache-control","no-store");
+      return dependencies.transferContractReconciliation!.preview(current,input.caseIds,input.limit);
+    });
+    app.post("/todos/transfer-contract-reconciliation/apply",async(request,reply)=>{
+      const current=await operator(request);
+      const input=parse(z.object({selected:z.array(z.object({caseId:z.string().uuid(),documentId:z.string().uuid(),version:z.number().int().positive(),evidenceHash:z.string().regex(/^[a-f0-9]{64}$/)}).strict()).min(1).max(3),reason:z.string().trim().min(1).max(300)}).strict(),request.body);
+      const key=parse(z.string().min(1).max(128).regex(/^[A-Za-z0-9._:-]+$/),request.headers["idempotency-key"]);
+      reply.header("cache-control","no-store");
+      return dependencies.transferContractReconciliation!.apply(current,input.selected,input.reason,key);
+    });
+  }
   const actor = async (
     request: FastifyRequest,
     capability: "todo:view" | "todo:routing_exception_manage",

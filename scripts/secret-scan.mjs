@@ -151,29 +151,38 @@ export function findHistoricalSecretFindings(root = projectRoot) {
   const shallow = runGit(root, ["rev-parse", "--is-shallow-repository"]).trim();
   if (shallow === "true") throw new Error("Git history scan requires a complete non-shallow checkout");
 
-  const signatureLog = runGit(root, [
-    "log",
-    "--all",
-    "--extended-regexp",
-    "-G",
-    historicalSecretRegex,
-    "--format=%H",
-    "--name-only",
-    "--no-renames",
+  // Git -G is a broad POSIX candidate filter. Verify changed content with the
+  // same bounded detector used for worktree/artifacts before reporting a leak.
+  const signatureDiff = runGit(root, [
+    "log", "--all", "-m", "--extended-regexp", "-G", historicalSecretRegex,
+    "--format=@@COMMIT:%H", "--no-renames", "--no-ext-diff", "--unified=0", "--patch",
   ]);
-
-  const signatureFindings = [];
-  let currentCommit = "unknown";
-  for (const raw of signatureLog.split("\n")) {
-    const line = raw.trim();
-    if (!line) continue;
-    if (/^[0-9a-f]{40}$/i.test(line)) currentCommit = line.slice(0, 12);
-    else signatureFindings.push(`${currentCommit}:${line}`);
-  }
+  // Distinguish patch headers from hunk content: removed private-key markers
+  // and content resembling +++/--- headers must still be inspected.
+  const scanPatch = (patch) => {
+    const findings=[];
+    let commit="unknown",path="unknown",inHunk=false;
+    for (const raw of patch.split("\n")) {
+      if (raw.startsWith("@@COMMIT:")) {
+        commit=raw.slice("@@COMMIT:".length).trim().slice(0,12);path="unknown";inHunk=false;
+      } else if (raw.startsWith("diff --git ")) {
+        inHunk=false;
+      } else if (raw.startsWith("@@ ")) {
+        inHunk=true;
+      } else if (!inHunk && (raw.startsWith("--- a/") || raw.startsWith("+++ b/"))) {
+        path=raw.slice(6).trim();
+      } else if (inHunk && (raw.startsWith("+") || raw.startsWith("-")) && containsSecretSignature(raw.slice(1))) {
+        findings.push(`${commit}:${path}`);
+      }
+    }
+    return findings;
+  };
+  const signatureFindings = scanPatch(signatureDiff);
 
   const assignmentDiff = runGit(root, [
     "log",
     "--all",
+    "-m",
     "--extended-regexp",
     "-G",
     historicalAssignmentRegex,
@@ -184,30 +193,7 @@ export function findHistoricalSecretFindings(root = projectRoot) {
     "--patch",
   ]);
 
-  const assignmentFindings = [];
-  let assignmentCommit = "unknown";
-  let assignmentPath = "unknown";
-  for (const raw of assignmentDiff.split("\n")) {
-    if (raw.startsWith("@@COMMIT:")) {
-      assignmentCommit = raw.slice("@@COMMIT:".length).trim().slice(0, 12) || "unknown";
-      assignmentPath = "unknown";
-      continue;
-    }
-    if (raw.startsWith("--- a/")) {
-      assignmentPath = raw.slice("--- a/".length).trim();
-      continue;
-    }
-    if (raw.startsWith("+++ b/")) {
-      assignmentPath = raw.slice("+++ b/".length).trim();
-      continue;
-    }
-    if ((raw.startsWith("+") || raw.startsWith("-"))
-      && !raw.startsWith("+++")
-      && !raw.startsWith("---")
-      && containsSecretSignature(raw.slice(1))) {
-      assignmentFindings.push(`${assignmentCommit}:${assignmentPath}`);
-    }
-  }
+  const assignmentFindings = scanPatch(assignmentDiff);
 
   const objectList = runGit(root, ["rev-list", "--objects", "--all"]);
   const pathFindings = [];

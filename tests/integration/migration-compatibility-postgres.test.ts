@@ -1,3 +1,4 @@
+import {migrationExecutionSql} from '../../scripts/deploy/migration-execution-compatibility.mjs';
 import {randomUUID} from 'node:crypto';
 import {mkdtemp,mkdir,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -13,7 +14,7 @@ type Entry={version:string;checksum:string};
 const url=process.env.TEST_DATABASE_URL;
 const suite=url?describe:describe.skip;
 suite('main and digital historical PostgreSQL upgrades',()=>{
- it.each(['main','main-219-derived','acceptance-prefix','a3','empty','interrupted-main','main-221','main-222','acceptance-236','integrated-237'] as const)('upgrades %s preserving identities, checksums, timestamps and business rows',async lane=>{
+ it.each(['main','main-219-derived','acceptance-prefix','a3','empty','interrupted-main','main-221','main-222','acceptance-236','integrated-237','main-229','acceptance-260'] as const)('upgrades %s preserving identities, checksums, timestamps and business rows',async lane=>{
   await assertTestDatabaseTarget(url!);
   const catalog=await discoverValidatedMigrations();
   const main:Entry[]=JSON.parse(await readFile('tests/fixtures/migration-histories/main-99db5239.json','utf8')).migrations;
@@ -21,7 +22,9 @@ suite('main and digital historical PostgreSQL upgrades',()=>{
   const main221:Entry[]=JSON.parse(await readFile('tests/fixtures/migration-histories/main-9fcc05c4.json','utf8')).migrations;
   const main222:Entry[]=JSON.parse(await readFile('tests/fixtures/migration-histories/main-ab028c31.json','utf8')).migrations;
   const acceptance236:Entry[]=JSON.parse(await readFile('tests/fixtures/migration-histories/release-e9d687a3.json','utf8')).migrations;
-  const history=lane==='main-222'?main222:lane==='main-221'?main221:lane==='acceptance-236'?acceptance236:lane==='integrated-237'?catalog:lane==='main-219-derived'?main.slice(0,219):lane==='main'||lane==='interrupted-main'?main:lane==='a3'?digital:lane==='acceptance-prefix'?digital.slice(0,225):[];
+  const main229:Entry[]=JSON.parse(await readFile('tests/fixtures/migration-histories/main-ecaf6999.json','utf8')).migrations;
+  const acceptance260:Entry[]=JSON.parse(await readFile('tests/fixtures/migration-histories/release-4c731753.json','utf8')).migrations;
+  const history=lane==='main-229'?main229:lane==='acceptance-260'?acceptance260:lane==='main-222'?main222:lane==='main-221'?main221:lane==='acceptance-236'?acceptance236:lane==='integrated-237'?catalog:lane==='main-219-derived'?main.slice(0,219):lane==='main'||lane==='interrupted-main'?main:lane==='a3'?digital:lane==='acceptance-prefix'?digital.slice(0,225):[];
   const schema=ownedPostgresSchema('migration_compat');
   const admin=new pg.Client({connectionString:url});await admin.connect();
   const scoped=new URL(url!);scoped.searchParams.set('options',`-c search_path=${schema}`);
@@ -29,12 +32,21 @@ suite('main and digital historical PostgreSQL upgrades',()=>{
   try{
    await admin.query(`CREATE SCHEMA ${schema}`);await client.connect();
    await client.query('CREATE TABLE schema_migrations(version text PRIMARY KEY,checksum char(64) NOT NULL,applied_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP)');
+   const serverVersion=Number((await client.query("SHOW server_version_num")).rows[0].server_version_num);
    for(const entry of history){
     const migration=catalog.find(m=>m.version===entry.version);expect(migration?.checksum).toBe(entry.checksum);
-    await client.query('BEGIN');await client.query(migration!.sql);
+    await client.query('BEGIN');await client.query(migrationExecutionSql(migration!,serverVersion));
     await client.query('INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)',[entry.version,entry.checksum]);await client.query('COMMIT');
    }
    const before=(await client.query('SELECT version,checksum,applied_at FROM schema_migrations ORDER BY version')).rows;
+   if(lane==='acceptance-260'){
+    // A bridge cannot be applied over the digital-only history before the two
+    // immutable main migrations. Failure leaves the original receipts intact.
+    await client.query('BEGIN');
+    await expect(client.query(catalog.find(m=>m.version==='0251_contract_price_acceptance_bridge')!.sql)).rejects.toThrow('requires both original main migrations');
+    await client.query('ROLLBACK');
+    expect((await client.query('SELECT version,checksum,applied_at FROM schema_migrations ORDER BY version')).rows).toEqual(before);
+   }
    if(['main-221','acceptance-236','integrated-237'].includes(lane)){
     // Execute the exact [1/5] read-only fragment selected by the installed
     // 209b008 worker, with its immutable policy files. No root wrapper, PM2,
