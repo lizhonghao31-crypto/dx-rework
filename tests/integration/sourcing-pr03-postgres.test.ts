@@ -42,6 +42,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
+import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
 import { DigitalBudgetService } from "../../apps/api/src/production-platform/budget-service.js";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
@@ -56,6 +57,7 @@ import { SourcingContractService } from "../../apps/api/src/sourcing/sourcing-co
 import * as contractPdf from "../../apps/api/src/sourcing/sourcing-contract-pdf.js";
 import { SourcingContractReturnService } from "../../apps/api/src/sourcing/sourcing-contract-return-service.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
+import { registerTodoRoutes } from "../../apps/api/src/todos/routes.js";
 import { TodoProjectionService } from "../../apps/api/src/todos/projection-service.js";
 import { TodoDeliveryWorker } from "../../apps/api/src/todos/delivery-worker.js";
 import { FakeDingTalkTodoProvider } from "../../apps/api/src/todos/provider.js";
@@ -3440,9 +3442,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       supplierId:replacementFactoryId,unitPrice:"12.0000",changeReason:"老板批准转厂",
     },randomUUID());
     expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1",[todoId]))
-      .rows[0]?.status).toBe("completed");
+      .rows[0]?.status).toBe("cancelled");
     const currentTodo=(await database.query<{todo_id:string}>(
-      `SELECT todo_id FROM rework_todos WHERE entity_id=$1 AND category='sourcing_contract_return'
+      `SELECT todo_id FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return'
        AND status='pending'`,[id])).rows[0]?.todo_id;
     expect(currentTodo).toBeTruthy();
     const attachmentId=randomUUID();
@@ -3450,13 +3452,13 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       size_bytes,sha256,uploaded_by,status,ready_at)
       VALUES($1,$2,'签回.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,
       [attachmentId,`contract-return-todo/${attachmentId}`,"d".repeat(64),merchandiserId]);
-    await contractReturns.submit(contractActor(),id,[attachmentId],randomUUID());
+    await contractReturns.submit(contractActor(),id,[attachmentId],randomUUID(),(await contractService.getCurrent(rootActor(),id)).item!.sourcingContractDocumentId);
     expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1",[currentTodo]))
       .rows[0]?.status).toBe("completed");
     expect((await database.query("SELECT delivery_kind FROM todo_delivery_attempts WHERE todo_id=$1 ORDER BY attempted_at",[currentTodo]))
-      .rows.map(row=>row.delivery_kind)).toEqual(["create","complete"]);
-    expect((await database.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_contract_return'",[id]))
-      .rows[0]?.count).toBe(2);
+      .rows.map(row=>row.delivery_kind)).toEqual([]);
+    expect((await database.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return'",[id]))
+      .rows[0]?.count).toBe(1);
   });
 
   it("backfills a single pending contract todo for a historic approval and enqueues delivery once", async () => {
@@ -4381,7 +4383,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const rootDocument=await management.refreshInformation(rootActor(),id,rootPreview,randomUUID());
     await contractService.generateIfReady(rootActor(),id,rootDocument);
     expect((await contractService.getCurrent(rootActor(),id)).item?.canRefreshInformation).toBe(true);
-    expect(await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id)).toEqual({...returned,currentContractReturned:false,currentContractDocumentId:rootDocument});
+    expect(await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id)).toEqual({...returned,currentContractReturned:false,currentContractDocumentId:rootDocument,uploadedFileCount:0,uploadedTotalBytes:0});
     expect((await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[id])).rows).toEqual(returnRows);
     await expect(database.query("UPDATE sourcing_contract_return_submissions SET sourcing_contract_document_id=$2 WHERE submission_id=$1",[returnRows[0].submission_id,rootDocument]))
       .rejects.toMatchObject({code:"55000"});
@@ -4400,10 +4402,17 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       contractReturnStatus:returned.contractReturnStatus});
     expect(resign.history[0]).toMatchObject({signedContractDocumentId:withStyle.sourcingContractDocumentId,
       signedContractVersion:withStyle.contractVersion,attachments:returned.attachments});
-    expect(resign).toMatchObject({uploadedFileCount:2,canUpload:false});
+    expect(resign).toMatchObject({uploadedFileCount:1,uploadedTotalBytes:128,canUpload:true});
     expect(resign.attachments.map(file=>file.attachmentId)).toEqual([newFile]);
-    const thirdFile=await readyCuttingSheet(merchandiserId);
-    await expect(contractReturns.submit(rootActor(),id,[thirdFile],randomUUID())).rejects.toMatchObject({statusCode:409});
+    const secondNewFile=randomUUID();
+    await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'新版回签补充.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[secondNewFile,`contract-info-new-return/${secondNewFile}`,"a".repeat(64),rootActor().actorId]);
+    const fullCurrentReturn=await contractReturns.submit(rootActor(),id,[secondNewFile],randomUUID(),rootDocument);
+    expect(fullCurrentReturn).toMatchObject({uploadedFileCount:2,uploadedTotalBytes:256,canUpload:false,
+      contractReturnedAt:resign.contractReturnedAt});
+    expect(fullCurrentReturn.attachments.map(file=>file.attachmentId)).toEqual([newFile,secondNewFile]);
+    const thirdFile=await readyCuttingSheet(rootActor().actorId);
+    await expect(contractReturns.submit(rootActor(),id,[thirdFile],randomUUID(),rootDocument)).rejects.toMatchObject({statusCode:409});
     expect((await database.query("SELECT entity_type FROM attachments WHERE attachment_id=$1",[thirdFile])).rows[0].entity_type).toBeNull();
     expect((await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE submission_id=$1",[returnRows[0].submission_id])).rows[0]).toEqual(returnRows[0]);
   });
@@ -5216,7 +5225,13 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
 
   it("rechecks preview recipients and skips a concurrent signature without closing unrelated history",async()=>{
     await ensureReturnTodoRecipient();
-    const id=await reviewedContractCase("TRANSFER-PREVIEW-RACE");
+    const second=randomUUID();
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST-preview-second-merchandiser',true)",[second]);
+    await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','corp',$3,$3,true,true,CURRENT_TIMESTAMP)",[randomUUID(),second,`ding-${second}`]);
+    await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
+    try { await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'order_merchandiser',$3,'TEST-preview-second')",[randomUUID(),second,merchandiserId]); }
+    finally { await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation"); }
+    const id=await reviewedContractCase("TRANSFER-PREVIEW-RACE",service,second);
     await database.query(`CREATE FUNCTION test_transfer_preview_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.category='sourcing_transfer_contract_return' THEN RAISE EXCEPTION 'TEST-preview-failure'; END IF; RETURN NEW; END $$;
       CREATE TRIGGER test_transfer_preview_fail BEFORE INSERT ON rework_todos FOR EACH ROW EXECUTE FUNCTION test_transfer_preview_fail()`);
     try {await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"15.5",changeReason:"TEST-preview-race"},randomUUID());}
@@ -5225,16 +5240,15 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     historicalFixtures.set(id,{caseId:id,documentId:current.sourcingContractDocumentId,version:current.contractVersion});
     const repair=new SourcingTransferContractReconciliation(database);
     const preview=await repair.preview(rootActor(),[id]);
-    expect(preview.results[0]).toMatchObject({blocked:false,proposedCount:1});
+    expect(preview.results[0]).toMatchObject({blocked:false,proposedCount:2});
     const selected=preview.results.map(({caseId,documentId,version,evidenceHash})=>({caseId,documentId,version,evidenceHash}));
     const auditBefore=(await database.query("SELECT count(*)::int AS n FROM operation_events WHERE entity_id=$1",[id])).rows[0].n;
     await repair.preview(rootActor(),[id]);await contractService.getCurrent(rootActor(),id);
     expect((await database.query("SELECT count(*)::int AS n FROM operation_events WHERE entity_id=$1",[id])).rows[0].n).toBe(auditBefore);
-    await database.query("ALTER TABLE app_users DISABLE TRIGGER app_users_employee_access_root_guard");
-    try {await database.query("UPDATE app_users SET enabled=false WHERE id=$1",[merchandiserId]);}
-    finally {await database.query("ALTER TABLE app_users ENABLE TRIGGER app_users_employee_access_root_guard");}
+    // Exercise recipient eligibility drift without disabling the release fixture's Root or its guards.
+    await database.query("UPDATE identity_mappings SET employed=false WHERE user_id=$1",[second]);
     try {expect((await repair.apply(rootActor(),selected,"TEST-eligibility-race",randomUUID())).results[0]?.action).toBe("blocked_precondition");}
-    finally {await database.query("UPDATE app_users SET enabled=true WHERE id=$1",[merchandiserId]);}
+    finally {await database.query("UPDATE identity_mappings SET employed=true WHERE user_id=$1",[second]);}
     const file=randomUUID();
     await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
       VALUES($1,$2,'TEST-concurrent-signature.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[file,`TEST-signature/${file}`,"a".repeat(64),merchandiserId]);
