@@ -196,15 +196,20 @@ describe("sourcing contract return routes", () => {
       headers:{cookie:"dx_rework_session=trusted","idempotency-key":"return-b"},
       payload:{attachmentIds:[attachmentId]}})).statusCode).toBe(200);
     expect(owner.contractReturns.submit).toHaveBeenCalledWith(
-      expect.objectContaining({authorizationCapability:"sourcing:owner:approve"}),id,[attachmentId],"return-b",
+      expect.objectContaining({authorizationCapability:"sourcing:owner:approve"}),id,[attachmentId],"return-b",undefined,
     );
     const manager=create(["sourcing:view","sourcing:decision:record"],["production_management"]);
+    const expectedContractDocumentId="00000000-0000-4000-8000-000000000302";
     expect((await manager.app.inject({method:"POST",url:`/sourcing/cases/${id}/contract-return`,
       headers:{cookie:"dx_rework_session=trusted","idempotency-key":"return-c"},
-      payload:{attachmentIds:[attachmentId]}})).statusCode).toBe(200);
+      payload:{attachmentIds:[attachmentId],expectedContractDocumentId}})).statusCode).toBe(200);
     expect(manager.contractReturns.submit).toHaveBeenCalledWith(
-      expect.objectContaining({authorizationCapability:"sourcing:decision:record"}),id,[attachmentId],"return-c",
+      expect.objectContaining({authorizationCapability:"sourcing:decision:record"}),id,[attachmentId],"return-c",expectedContractDocumentId,
     );
+    expect((await manager.app.inject({method:"POST",url:`/sourcing/cases/${id}/contract-return`,
+      headers:{cookie:"dx_rework_session=trusted","idempotency-key":"return-invalid-version"},
+      payload:{attachmentIds:[attachmentId],expectedContractDocumentId:"invalid"}})).statusCode).toBe(400);
+    expect(manager.contractReturns.submit).toHaveBeenCalledTimes(1);
   });
 });
 
