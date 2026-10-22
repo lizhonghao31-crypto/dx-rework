@@ -17,8 +17,11 @@ const at=(value:string|null)=>value?new Date(value).toLocaleString('zh-CN',{time
 const hours=(seconds:number|null)=>seconds===null?'未纳入':`${(seconds/3600).toFixed(2)} 小时`;
 const roles=[['development_clerk','开发文员'],['pattern_room_worker','板房工人'],['pattern_room_tail_inspector','板房尾查'],['sample_designer','设计师'],['order_merchandiser','订单跟单'],['warehouse_receiver','仓库'],['cutting_worker','裁床'],['quality_control','大货QC'],['embroidery_washing_merchandiser','印绣跟单']] as const;
 const states:Record<string,string>={ready:'在办',pending:'待前置',blocked:'受阻',completed:'已完成',cancelled:'已取消'};
-export function DigitalAnalysisPage(){
+export function DigitalAnalysisPage({navigation}:{navigation?:Readonly<{search:string}>}={}){
  const [filters,setFilters]=useState<DigitalAnalysisFilters>(()=>initial().filters),[view,setView]=useState<AnalysisView>(()=>initial().view),[data,setData]=useState<DigitalAnalysisResult|null>(null),[selected,setSelected]=useState<Set<string>>(new Set()),[error,setError]=useState(''),[busy,setBusy]=useState(false),[refresh,setRefresh]=useState(0);
+ // The router publishes a new location object for same-page links and history
+ // entries too. Typed filters replace their own URL and do not trigger this effect.
+ useEffect(()=>{if(!navigation)return;const restored=initialAnalysisContext(navigation.search,day(new Date()),day(new Date(Date.now()-30*86400000)));setFilters(restored.filters);setView(restored.view);setSelected(new Set());setData(null);setError('');setRefresh(value=>value+1);},[navigation]);
  const pending=useRef<{payload:string;key:string}|null>(null),writing=useRef(false);
  const query=new URLSearchParams(Object.entries(filters).filter(([,value])=>value!==undefined).map(([key,value])=>[key,String(value)])).toString();
  const returnUrl=()=>urls.pageUrl('ui/digital-analysis')+'?'+analysisContextQuery(filters,view);
