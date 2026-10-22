@@ -150,24 +150,25 @@ export function findHistoricalSecretFindings(root = projectRoot) {
   const shallow = runGit(root, ["rev-parse", "--is-shallow-repository"]).trim();
   if (shallow === "true") throw new Error("Git history scan requires a complete non-shallow checkout");
 
-  const signatureLog = runGit(root, [
-    "log",
-    "--all",
-    "--extended-regexp",
-    "-G",
-    historicalSecretRegex,
-    "--format=%H",
-    "--name-only",
-    "--no-renames",
+  // Git -G is a broad POSIX candidate filter. Verify changed content with the
+  // same bounded detector used for worktree/artifacts before reporting a leak.
+  const signatureDiff = runGit(root, [
+    "log", "--all", "--extended-regexp", "-G", historicalSecretRegex,
+    "--format=@@COMMIT:%H", "--no-renames", "--no-ext-diff", "--unified=0", "--patch",
   ]);
-
   const signatureFindings = [];
   let currentCommit = "unknown";
-  for (const raw of signatureLog.split("\n")) {
-    const line = raw.trim();
-    if (!line) continue;
-    if (/^[0-9a-f]{40}$/i.test(line)) currentCommit = line.slice(0, 12);
-    else signatureFindings.push(`${currentCommit}:${line}`);
+  let currentPath = "unknown";
+  for (const raw of signatureDiff.split("\n")) {
+    if (raw.startsWith("@@COMMIT:")) {
+      currentCommit=raw.slice("@@COMMIT:".length).trim().slice(0,12);
+      currentPath="unknown";
+    } else if (raw.startsWith("--- a/") || raw.startsWith("+++ b/")) {
+      currentPath=raw.slice(6).trim();
+    } else if ((raw.startsWith("+") || raw.startsWith("-"))
+      && !raw.startsWith("+++") && !raw.startsWith("---") && containsSecretSignature(raw.slice(1))) {
+      signatureFindings.push(`${currentCommit}:${currentPath}`);
+    }
   }
 
   const assignmentDiff = runGit(root, [

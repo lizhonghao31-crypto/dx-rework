@@ -89,7 +89,7 @@ export function registerTodoRoutes(
     });
     app.post("/todos/transfer-contract-reconciliation/apply",async(request,reply)=>{
       const current=await operator(request);
-      const input=parse(z.object({selected:z.array(z.object({caseId:z.string().uuid(),documentId:z.string().uuid()}).strict()).min(1).max(100),reason:z.string().trim().min(1).max(300)}).strict(),request.body);
+      const input=parse(z.object({selected:z.array(z.object({caseId:z.string().uuid(),documentId:z.string().uuid(),version:z.number().int().positive(),evidenceHash:z.string().regex(/^[a-f0-9]{64}$/)}).strict()).min(1).max(3),reason:z.string().trim().min(1).max(300)}).strict(),request.body);
       const key=parse(z.string().min(1).max(128).regex(/^[A-Za-z0-9._:-]+$/),request.headers["idempotency-key"]);
       reply.header("cache-control","no-store");
       return dependencies.transferContractReconciliation!.apply(current,input.selected,input.reason,key);
