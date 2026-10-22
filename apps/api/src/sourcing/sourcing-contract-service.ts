@@ -259,7 +259,6 @@ export class SourcingContractService {
     const id = inserted.rows[0]?.sourcing_contract_document_id
       ?? existing?.rows[0]?.sourcing_contract_document_id;
     if (!id) throw new ApplicationError("INVALID_STATE_TRANSITION", "合同批准快照不存在", 409);
-    await this.transferTodos.synchronize(client as PoolClient, actor, (await client.query<{sourcing_case_id:string}>("SELECT sourcing_case_id FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1", [approvalSnapshotId])).rows[0]!.sourcing_case_id);
     return id;
   }
 

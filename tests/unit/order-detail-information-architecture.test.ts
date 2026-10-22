@@ -22,7 +22,7 @@ describe("order detail information architecture", () => {
     expect(detail).toContain("<dt>发起时间</dt>");
     expect(detail).toContain("<dt>发起人</dt>");
     expect(detail).toContain("<dt>订单跟单</dt>");
-    expect(detail).toContain("<dt>实收数量</dt>");
+    expect(detail).toContain("<dt><ReceivedQuantityLabel>实收数量</ReceivedQuantityLabel></dt>");
     expect(detail).toContain("sourceReceivingActualQuantity");
     expect(styles).toContain(".rework-detail-core-facts");
     expect(styles).toContain("grid-template-columns: repeat(7, minmax(0, 1fr));");

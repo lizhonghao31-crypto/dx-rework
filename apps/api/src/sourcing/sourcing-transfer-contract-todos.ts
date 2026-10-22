@@ -2,11 +2,12 @@ import type { Pool, PoolClient } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { TodoProjectionService } from "../todos/projection-service.js";
 import { TodoService } from "../todos/service.js";
+import { memberCanReceiveFact } from "../access/member-module-policy.js";
 
 export const transferContractTodoPrefix = (caseId: string): string => `sourcing:${caseId}:transfer-return:`;
 export const transferContractVersionPrefix = (caseId: string, documentId: string): string => `${transferContractTodoPrefix(caseId)}${documentId}:`;
 
-type CurrentContract = {
+export type CurrentTransferContract = {
   sourcing_contract_document_id: string;
   contract_version: number;
   supplier_name_snapshot: string;
@@ -18,6 +19,8 @@ type CurrentContract = {
   operation_event_id: string;
   source_action: string;
   returned: boolean;
+  generated_at: Date | string | null;
+  ambiguous_return: boolean;
 };
 
 /** Reconcile only authoritative current-version facts under the existing order lock. */
@@ -27,44 +30,72 @@ export class SourcingTransferContractTodos {
     this.projection = projection ?? new TodoProjectionService(new TodoService(database));
   }
 
-  async synchronize(client: PoolClient, actor: TrustedActorContext, caseId: string): Promise<void> {
-    await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 FOR UPDATE", [caseId]);
-    const current = (await client.query<CurrentContract>(`SELECT document.sourcing_contract_document_id,
+  async inspect(client: PoolClient, caseId: string) {
+    const current = (await client.query<CurrentTransferContract>(`SELECT document.sourcing_contract_document_id,
         document.contract_version,document.status,document.pdf_attachment_id,
+        document.generated_at,
         decision.source_change_request_id,decision.supplier_name_snapshot,source.created_by,
         nullif(to_jsonb(source)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id,
         snapshot.operation_event_id,event.action AS source_action,
         EXISTS(SELECT 1 FROM sourcing_contract_return_submissions signed
           JOIN sourcing_contract_return_attachments link ON link.submission_id=signed.submission_id
           JOIN attachments file ON file.attachment_id=link.attachment_id AND file.status='ready'
-          WHERE signed.sourcing_contract_document_id=document.sourcing_contract_document_id) AS returned
+          WHERE signed.sourcing_contract_document_id=document.sourcing_contract_document_id) AS returned,
+        EXISTS(SELECT 1 FROM sourcing_contract_return_submissions signed
+          WHERE signed.sourcing_case_id=source.sourcing_case_id AND signed.sourcing_contract_document_id IS NULL) AS ambiguous_return
       FROM sourcing_cases source
-      JOIN LATERAL (SELECT * FROM sourcing_contract_documents d WHERE d.sourcing_case_id=source.sourcing_case_id
+      JOIN LATERAL (SELECT d.* FROM sourcing_contract_documents d
+        JOIN sourcing_approval_snapshots approved ON approved.sourcing_approval_snapshot_id=d.sourcing_approval_snapshot_id
+          AND approved.sourcing_decision_id=d.sourcing_decision_id
+        WHERE d.sourcing_case_id=source.sourcing_case_id
         ORDER BY d.contract_version DESC LIMIT 1) document ON true
       JOIN sourcing_approval_snapshots snapshot ON snapshot.sourcing_approval_snapshot_id=document.sourcing_approval_snapshot_id
       JOIN sourcing_decisions decision ON decision.sourcing_decision_id=snapshot.sourcing_decision_id
       JOIN operation_events event ON event.event_id=snapshot.operation_event_id
       WHERE source.sourcing_case_id=$1 AND source.deleted_at IS NULL`, [caseId])).rows[0];
+    const recipients = [];
+    if (current) for (const userId of new Set([current.created_by, current.additional_merchandiser_user_id].filter((id): id is string => !!id))) {
+      const eligible = (await client.query<{ eligible: boolean }>(
+        "SELECT todo_user_has_direct_role($1::uuid,'order_merchandiser','sourcing:contract:record') AS eligible", [userId],
+      )).rows[0]?.eligible === true && await memberCanReceiveFact(client, userId, current.source_action, "sourcing_case", caseId);
+      recipients.push({ userId, role: userId === current.created_by ? "primary" : "additional", eligible,
+        dedupeKey: `${transferContractVersionPrefix(caseId, current.sourcing_contract_document_id)}${userId}` });
+    }
+    const tasks = (await client.query<{ todo_id: string; dedupe_key: string; recipient_user_id: string; status: string }>(
+      `SELECT todo_id,dedupe_key,recipient_user_id,status FROM rework_todos
+       WHERE entity_type='sourcing_case' AND entity_id=$1 AND category='sourcing_transfer_contract_return'
+       ORDER BY todo_id`, [caseId],
+    )).rows;
+    return { current, recipients, tasks };
+  }
+
+  async synchronize(client: PoolClient, actor: TrustedActorContext, caseId: string, options: { historical?: boolean } = {}) {
+    await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 FOR UPDATE", [caseId]);
+    const { current, recipients, tasks } = await this.inspect(client, caseId);
+    // An unfinished new PDF must not invalidate a still-actionable older version.
+    if (!current?.source_change_request_id || current.status !== "ready" || !current.pdf_attachment_id)
+      return { createdTodoIds: [] as string[] };
     const open = await client.query<{ dedupe_key: string; document_id: string | null }>(`SELECT dedupe_key,
         route_descriptor->'transferContract'->>'documentId' AS document_id
       FROM rework_todos WHERE entity_type='sourcing_case' AND entity_id=$1
         AND category='sourcing_transfer_contract_return' AND status IN ('pending','blocked_recipient')
       ORDER BY todo_id FOR UPDATE`, [caseId]);
-    for (const todo of open.rows) {
+    for (const todo of options.historical ? [] : open.rows) {
       if (!current?.source_change_request_id || todo.document_id !== current.sourcing_contract_document_id) {
         await this.projection.cancelOpenByDedupeKey(client, actor, todo.dedupe_key, "合同版本已更新，旧版待签回事项失效");
       }
     }
-    if (!current?.source_change_request_id) return;
     // Do not mislabel an obsolete first-contract task as a successful return.
-    await this.projection.cancelOpenByDedupePrefix(client, actor, `sourcing:${caseId}:return:`, "转厂合同已换版，请办理当前合同");
+    if (!options.historical) await this.projection.cancelOpenByDedupePrefix(client, actor, `sourcing:${caseId}:return:`, "转厂合同已换版，请办理当前合同");
     const prefix = transferContractVersionPrefix(caseId, current.sourcing_contract_document_id);
     if (current.returned) {
       await this.projection.completeOpenByDedupePrefix(client, actor, prefix, "当前版本合同已有效回传");
-      return;
+      return { createdTodoIds: [] as string[] };
     }
-    if (current.status !== "ready" || !current.pdf_attachment_id) return;
-    for (const recipientUserId of new Set([current.created_by, current.additional_merchandiser_user_id].filter((id): id is string => !!id))) {
+    for (const { userId: recipientUserId, eligible } of recipients) {
+      if (options.historical && !eligible) continue;
+      // Closed or blocked facts require explicit handling, never implicit reopening.
+      if (tasks.some(todo => todo.dedupe_key === `${prefix}${recipientUserId}`)) continue;
       await this.projection.actionableForNamedRecipient(client, actor, {
         category: "sourcing_transfer_contract_return",
         sourceEventId: current.operation_event_id,
@@ -77,5 +108,10 @@ export class SourcingTransferContractTodos {
         policyKey: "sourcing_contract_return", dedupeKey: `${prefix}${recipientUserId}`,
       });
     }
+    return { createdTodoIds: (await client.query<{ todo_id: string }>(
+      `SELECT todo_id FROM rework_todos WHERE entity_type='sourcing_case' AND entity_id=$1
+       AND category='sourcing_transfer_contract_return' AND NOT (todo_id=ANY($2::uuid[])) ORDER BY todo_id`,
+      [caseId, tasks.map(todo => todo.todo_id)],
+    )).rows.map(todo => todo.todo_id) };
   }
 }

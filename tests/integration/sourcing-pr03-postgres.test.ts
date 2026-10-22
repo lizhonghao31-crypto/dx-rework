@@ -1,3 +1,4 @@
+import type * as HistoricalScopeModule from "../../apps/api/src/sourcing/sourcing-contract-history-scope.js";
 import { SourcingTransferContractReconciliation } from "../../apps/api/src/sourcing/sourcing-transfer-contract-reconciliation.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import "./work-analysis-postgres.cases.js";
@@ -33,6 +34,13 @@ import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js
 import { AttachmentService } from "../../apps/api/src/tools/attachments.js";
 import { OperationEventRepository, type TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { FakeObjectStorage } from "../../apps/api/src/tools/storage.js";
+
+// Isolated synthetic orders use their own exact baseline registry; production registry is tested separately.
+const historicalFixtures = vi.hoisted(() => new Map<string, {caseId:string;documentId:string;version:number}>());
+vi.mock("../../apps/api/src/sourcing/sourcing-contract-history-scope.js", async importOriginal => {
+  const actual = await importOriginal<typeof HistoricalScopeModule>();
+  return {...actual,contractHistoryBaseline:(id:string) => historicalFixtures.get(id) ?? actual.contractHistoryBaseline(id)};
+});
 
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
@@ -3994,6 +4002,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await service.decideFactoryChange(ownerActor(),id,pending.factoryChangeRequestId,{decision:"approved",verificationReason:"TEST-approved"},randomUUID());
     const first=(await contractService.getCurrent(rootActor(),id)).item!;
     const firstTasks=await tasks();
+    expect((await database.query("SELECT reason FROM operation_events WHERE entity_id=$1 AND action='sourcing.transfer_contract_todo.deferred'",[id])).rows).toEqual([]);
     expect(firstTasks).toHaveLength(2);
     expect(firstTasks.map(t=>t.recipient_user_id).sort()).toEqual([merchandiserId,second].sort());
     for(const task of firstTasks) expect(task).toMatchObject({status:"pending",route_descriptor:{transferContract:{documentId:first.sourcingContractDocumentId,version:first.contractVersion,supplierName:"二号加工厂"}}});
@@ -4002,7 +4011,8 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await attachments.createDownloadIntent({...rootActor(),authorizationCapability:"sourcing:view"},pdf,async()=>true);
     expect(await tasks()).toEqual(firstTasks);
     const repair=new SourcingTransferContractReconciliation(database);
-    const selected=[{caseId:id,documentId:first.sourcingContractDocumentId}];
+    historicalFixtures.set(id,{caseId:id,documentId:first.sourcingContractDocumentId,version:first.contractVersion});
+    const selected=(await repair.preview(rootActor(),[id])).results.map(({caseId,documentId,version,evidenceHash})=>({caseId,documentId,version,evidenceHash}));
     await repair.apply(rootActor(),selected,"TEST-existing-version",randomUUID());
     await repair.apply(rootActor(),selected,"TEST-existing-version-repeated",randomUUID());
     expect(await tasks()).toEqual(firstTasks);
@@ -4012,7 +4022,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const changed=await tasks();
     expect(changed.filter(t=>t.status==='cancelled').map(t=>t.todo_id).sort()).toEqual(firstTasks.map(t=>t.todo_id).sort());
     expect(changed.filter(t=>t.status==='pending')).toHaveLength(2);
-    await expect(repair.apply(rootActor(),selected,"TEST-stale",randomUUID())).rejects.toMatchObject({statusCode:409});
+    expect((await repair.apply(rootActor(),selected,"TEST-stale",randomUUID())).results[0]?.action).toBe("blocked_precondition");
     const file=randomUUID();
     await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
       VALUES($1,$2,'TEST-second-return.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[file,`TEST-second/${file}`,"a".repeat(64),second]);
@@ -4026,8 +4036,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await contractReturns.submit(secondActor,id,[file],key,current.sourcingContractDocumentId);
     expect((await tasks()).filter(t=>t.status==='completed')).toHaveLength(2);
     expect((await tasks()).filter(t=>t.status==='cancelled')).toHaveLength(2);
-    expect((await repair.preview(rootActor(),[id])).results).toEqual([]);
-    await expect(repair.apply(rootActor(),[{caseId:id,documentId:current.sourcingContractDocumentId}],"TEST-returned",randomUUID())).rejects.toMatchObject({statusCode:409});
+    expect((await repair.preview(rootActor(),[id])).results[0]?.blocked).toBe(true);
     // Isolated policy fixture: a read-only second merchandiser neither receives new tasks nor uploads.
     const event=(await database.query("SELECT event_id FROM operation_events WHERE entity_id=$1 LIMIT 1",[id])).rows[0].event_id;
     await database.query("ALTER TABLE business_module_owner_bindings DISABLE TRIGGER member_module_binding_guard");
@@ -4067,21 +4076,22 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(await count()).toBe(0);
     const repair=new SourcingTransferContractReconciliation(database);
     await expect(repair.preview(managerActor(),[id])).rejects.toMatchObject({statusCode:403});
+    historicalFixtures.set(id,{caseId:id,documentId:current.sourcingContractDocumentId,version:current.contractVersion});
     const preview=await repair.preview(rootActor(),[id]);
     expect(preview.results).toHaveLength(1); expect(await count()).toBe(0);
-    const selected=preview.results.map(({caseId,documentId})=>({caseId,documentId}));
+    const selected=preview.results.map(({caseId,documentId,version,evidenceHash})=>({caseId,documentId,version,evidenceHash}));
     await expect(repair.apply(managerActor(),selected,"TEST-forbidden",randomUUID())).rejects.toMatchObject({statusCode:403});
-    await expect(repair.apply(rootActor(),[...selected,{caseId:randomUUID(),documentId:randomUUID()}],"TEST-atomic-invalid",randomUUID())).rejects.toMatchObject({statusCode:409});
+    await expect(repair.apply(rootActor(),[...selected,{caseId:randomUUID(),documentId:randomUUID(),version:1,evidenceHash:"f".repeat(64)}],"TEST-atomic-invalid",randomUUID())).rejects.toMatchObject({statusCode:409});
     expect(await count()).toBe(0);
     await database.query(`CREATE FUNCTION test_transfer_todo_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.category='sourcing_transfer_contract_return' THEN RAISE EXCEPTION 'TEST-transfer-late-failure'; END IF; RETURN NEW; END $$;
       CREATE TRIGGER test_transfer_todo_fail BEFORE INSERT ON rework_todos FOR EACH ROW EXECUTE FUNCTION test_transfer_todo_fail()`);
-    try { await expect(repair.apply(rootActor(),selected,"TEST-late-failure",randomUUID())).rejects.toThrow("TEST-transfer-late-failure"); }
+    try { expect((await repair.apply(rootActor(),selected,"TEST-late-failure",randomUUID())).results[0]?.action).toBe("failed"); }
     finally { await database.query("DROP TRIGGER test_transfer_todo_fail ON rework_todos; DROP FUNCTION test_transfer_todo_fail()"); }
     expect(await count()).toBe(0);
     const key=randomUUID();
     expect((await repair.apply(rootActor(),selected,"TEST-recover",key)).reused).toBe(false);
     expect((await repair.apply(rootActor(),selected,"TEST-recover",key)).reused).toBe(true);
-    await repair.apply(rootActor(),selected,"TEST-recover-again",randomUUID());
+    await Promise.all([repair.apply(rootActor(),selected,"TEST-recover-again",randomUUID()),repair.apply(rootActor(),selected,"TEST-concurrent-recover",randomUUID())]);
     expect(await count()).toBe(1);
     const audit=(await database.query("SELECT actor_id,after_state FROM operation_events WHERE entity_id=$1 AND action='sourcing.transfer_contract_todo.reconcile'",[key])).rows;
     expect(audit).toHaveLength(1);expect(audit[0]).toMatchObject({actor_id:rootActor().actorId,after_state:{contracts:selected}});
@@ -4104,6 +4114,35 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       const result=await app.inject({method:"POST",url:"/todos/transfer-contract-reconciliation/apply",headers:{...headers,'idempotency-key':randomUUID()},payload:{selected,reason:"TEST-route"}});
       expect(result.statusCode).toBe(200);expect(result.headers['cache-control']).toBe('no-store');
     } finally {await app.close();}
+  });
+
+  it("rechecks preview recipients and skips a concurrent signature without closing unrelated history",async()=>{
+    await ensureReturnTodoRecipient();
+    const id=await reviewedContractCase("TRANSFER-PREVIEW-RACE");
+    await database.query(`CREATE FUNCTION test_transfer_preview_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.category='sourcing_transfer_contract_return' THEN RAISE EXCEPTION 'TEST-preview-failure'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER test_transfer_preview_fail BEFORE INSERT ON rework_todos FOR EACH ROW EXECUTE FUNCTION test_transfer_preview_fail()`);
+    try {await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"15.5",changeReason:"TEST-preview-race"},randomUUID());}
+    finally {await database.query("DROP TRIGGER test_transfer_preview_fail ON rework_todos; DROP FUNCTION test_transfer_preview_fail()");}
+    const current=(await contractService.getCurrent(rootActor(),id)).item!;
+    historicalFixtures.set(id,{caseId:id,documentId:current.sourcingContractDocumentId,version:current.contractVersion});
+    const repair=new SourcingTransferContractReconciliation(database);
+    const preview=await repair.preview(rootActor(),[id]);
+    expect(preview.results[0]).toMatchObject({blocked:false,proposedCount:1});
+    const selected=preview.results.map(({caseId,documentId,version,evidenceHash})=>({caseId,documentId,version,evidenceHash}));
+    const auditBefore=(await database.query("SELECT count(*)::int AS n FROM operation_events WHERE entity_id=$1",[id])).rows[0].n;
+    await repair.preview(rootActor(),[id]);await contractService.getCurrent(rootActor(),id);
+    expect((await database.query("SELECT count(*)::int AS n FROM operation_events WHERE entity_id=$1",[id])).rows[0].n).toBe(auditBefore);
+    await database.query("ALTER TABLE app_users DISABLE TRIGGER app_users_employee_access_root_guard");
+    try {await database.query("UPDATE app_users SET enabled=false WHERE id=$1",[merchandiserId]);}
+    finally {await database.query("ALTER TABLE app_users ENABLE TRIGGER app_users_employee_access_root_guard");}
+    try {expect((await repair.apply(rootActor(),selected,"TEST-eligibility-race",randomUUID())).results[0]?.action).toBe("blocked_precondition");}
+    finally {await database.query("UPDATE app_users SET enabled=true WHERE id=$1",[merchandiserId]);}
+    const file=randomUUID();
+    await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'TEST-concurrent-signature.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[file,`TEST-signature/${file}`,"a".repeat(64),merchandiserId]);
+    await contractReturns.submit(contractActor(),id,[file],randomUUID(),current.sourcingContractDocumentId);
+    expect((await repair.apply(rootActor(),selected,"TEST-signed-race",randomUUID())).results[0]?.action).toBe("skipped_signed");
+    expect((await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return'",[id])).rows).toEqual([]);
   });
 
   it("hides transfer uploads until the current PDF is ready and rejects all unfinished generation states",async()=>{
