@@ -58,6 +58,17 @@ try{
     assert.equal((await page.evaluate(()=>window.contractTransferRequests.filter(r=>r.method==='POST'))).length,0);
     results.push({reviewed,rootEditorFollowsVersionFlag:true,refreshPreviewReadOnly:true,passed:true});await page.close();
   }
+  for(const [width,height] of [[1440,1024],[1280,800],[768,1024],[390,844],[360,800]]) {
+    const page=await browser.newPage({viewport:{width,height}});
+    await page.goto(origin+'/?role=management&cycle=1');
+    await page.getByText('本版本 V7 无回签记录',{exact:true}).waitFor();
+    await page.getByText('本次合同回签时效 · 合同待回签',{exact:true}).click();
+    assert.equal(await page.getByRole('button',{name:'上传回签合同',exact:true}).count(),1);
+    assert.equal(await page.getByRole('link',{name:'查看 V6 回签合同',exact:true}).count(),1);
+    assert.equal(await page.evaluate(()=>document.body.scrollWidth>innerWidth),false);
+    if(evidence)await page.locator('.sourcing-contract-bar').screenshot({path:join(evidence,'cycle-'+width+'x'+height+'.png')});
+    results.push({width,height,versionCyclePending:true,oldSignaturePreserved:true,noHorizontalOverflow:true,passed:true});await page.close();
+  }
   const report={localOnly:true,synthetic:true,noRealBusinessAccess:true,results};
   if(evidence)await writeFile(join(evidence,'browser-result.json'),JSON.stringify(report,null,2)+'\n');
   console.log(JSON.stringify(report,null,2));

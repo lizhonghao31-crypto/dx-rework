@@ -295,6 +295,7 @@ export const SourcingContractReturnUploadSchema = z.object({
   attachmentIds: z.array(IdSchema).min(1).max(2).refine(ids=>new Set(ids).size===ids.length),
 }).strict();
 export const SourcingContractReturnResponseSchema = z.object({
+  contractReturnCycleId: IdSchema.nullable().optional(),
   contractReturnMonitoring: z.boolean(),
   contractReturnStatus: z.enum(["pending","returned_on_time","overdue_pending","returned_late"]).nullable(),
   contractGeneratedAt: z.string().datetime().nullable(),

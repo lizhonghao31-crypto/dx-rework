@@ -564,7 +564,7 @@ export class SourcingService {
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
        JOIN sourcing_cases additional_case ON additional_case.sourcing_case_id=case_view.sourcing_case_id
        LEFT JOIN app_users additional_user ON additional_user.id=nullif(to_jsonb(additional_case)->>'additional_merchandiser_user_id','')::uuid
-       LEFT JOIN sourcing_contract_return_monitors monitor_case ON monitor_case.sourcing_case_id=case_view.sourcing_case_id
+       LEFT JOIN LATERAL sourcing_contract_return_facts(case_view.sourcing_case_id) monitor_case ON true
        LEFT JOIN LATERAL (
          SELECT jsonb_agg(
            jsonb_build_object(
@@ -813,7 +813,7 @@ export class SourcingService {
          snapshot.approved_by AS approval_by,snapshot.approved_at AS approval_at
        FROM current_sourcing_cases case_view
        JOIN LATERAL sourcing_case_facts_at(case_view.sourcing_case_id) source_case ON true
-       LEFT JOIN sourcing_contract_return_monitors monitor_case ON monitor_case.sourcing_case_id=case_view.sourcing_case_id
+       LEFT JOIN LATERAL sourcing_contract_return_facts(case_view.sourcing_case_id) monitor_case ON true
        JOIN app_users creator_user ON creator_user.id=case_view.created_by
        JOIN sourcing_cases additional_case ON additional_case.sourcing_case_id=case_view.sourcing_case_id
        LEFT JOIN app_users additional_user ON additional_user.id=nullif(to_jsonb(additional_case)->>'additional_merchandiser_user_id','')::uuid

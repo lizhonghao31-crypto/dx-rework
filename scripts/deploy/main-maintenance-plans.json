@@ -93,5 +93,23 @@
     "languages": ["plpgsql"],
     "onlineCompatible": false,
     "rollback": "restart-previous-only-if-entire-history-unchanged"
+  },
+  {
+    "version": "0228_sourcing_contract_return_cycles",
+    "checksum": "86eec9b3696bade0d7eda97773f9f5a4636f6b38e891879e6882437c7f16cb4c",
+    "strategy": "quiesce-backup-transactional-ddl",
+    "tables": [],
+    "triggerTables": [
+      "public.sourcing_approval_snapshots",
+      "public.sourcing_contract_documents"
+    ],
+    "schema": "public",
+    "functions": [],
+    "languages": [
+      "plpgsql",
+      "sql"
+    ],
+    "onlineCompatible": false,
+    "rollback": "restart-previous-only-if-entire-history-unchanged"
   }
 ]
