@@ -76,6 +76,7 @@ export const TodoOrderContextSchema = z.object({
   styleNo: z.string().nullable(),
   supplierName: z.string().nullable(),
   merchandiserName: z.string().nullable().optional(),
+  poNumbers: z.array(z.string().min(1)).optional(),
   status: z.string().min(1),
   updatedAt: z.string().datetime(),
 }).strict();

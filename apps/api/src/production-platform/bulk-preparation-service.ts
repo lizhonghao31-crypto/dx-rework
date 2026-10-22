@@ -31,13 +31,14 @@ export class BulkPreparationService {
   const ownerApproved=Boolean(approval&&!sourcing?.deleted_at);
   const lifecycle=(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE (resource_kind='order' AND resource_id=$1) OR (resource_kind='source' AND resource_id=$2)",[id,order.source_id])).rows;
   const reasons:string[]=[];
-  if((await db.query("SELECT to_regclass('digital_order_closures') AS relation")).rows[0]?.relation&&(await db.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1',[id])).rowCount)reasons.push('母单已特殊结案，原实绩及历史继续保留');
+  const closed=Boolean((await db.query("SELECT to_regclass('digital_order_closures') AS relation")).rows[0]?.relation&&(await db.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1',[id])).rowCount);
+  if(closed)reasons.push('母单已特殊结案，原实绩及历史继续保留');
   if(!customerConfirmed)reasons.push('当前开发轮次尚未确认客户样板：请设计师取得客户确认后，在本单开发办理页登记客户样板确认');
   if(ownerApproved&&!['in_house','outsourced'].includes(approval.cutting_process))reasons.push('当前选厂方案缺裁剪方式：请主跟单在本单原外发选厂方案明确本厂裁或外厂裁，再按原审批流程办理');
   if(!ownerApproved)reasons.push('当前选厂方案尚无有效老板批准：请主跟单在本单原外发选厂页核对当前方案，由老板按原审批流程办理');
   if(!instructionValid)reasons.push('当前大货制单未发布、与开发轮次不符或缺预缩选择：请主跟单在本单大货制单核对当前资料及预缩要求后发布');
   if(lifecycle.some(r=>r.state!=='active'))reasons.push('母单或开发来源已暂停/取消');
-  return {order,source,instruction,approval,customerConfirmed,ownerApproved,instructionValid,reasons};
+  return {order,source,instruction,approval,customerConfirmed,ownerApproved,instructionValid,reasons,terminal:closed||lifecycle.some(r=>r.state!=='active')};
  }
  private async current(db:DB,id:string,g:Awaited<ReturnType<BulkPreparationService['gates']>>){
   if(g.reasons.length)return null;
@@ -85,8 +86,8 @@ export class BulkPreparationService {
  async read(actor:TrustedActorContext,id:string,db:DB=this.database):Promise<BulkPreparationSheet>{
   const policy=new DigitalProductionAccessPolicy(db);await policy.assert(actor,'order',id,'technical');const g=await this.gates(db,id),prep=await this.current(db,id,g);
   const tasks=prep?await this.tasks().readAuthorized(actor,(await this.routeTasks(db,prep.preparation_id)).map(t=>t.task_id),db):[];
-  const canDispatchPattern=isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes('development_clerk'),canDispatchWarehouse=isDigitalLeader(actor);
-  const canReadDispatch=canDispatchPattern||actor.actorRoles.includes('sample_designer')&&g.order.created_by===actor.actorId
+  const terminal=g.terminal,canDispatchPattern=!terminal&&(isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes('development_clerk')),canDispatchWarehouse=!terminal&&isDigitalLeader(actor);
+  const canReadDispatch=isDigitalLeader(actor)||isDigitalTechnicalManager(actor)||actor.actorRoles.includes('development_clerk')||actor.actorRoles.includes('sample_designer')&&g.order.created_by===actor.actorId
    ||actor.actorRoles.includes('order_merchandiser')&&g.order.primary_merchandiser_id===actor.actorId&&await policy.activeRole(actor.actorId,'order_merchandiser');
   const dispatchPerson=(person:string|null|undefined)=>person&&(canReadDispatch||tasks.some(task=>task.assigneeId===person))?person:null;
   const row=(await db.query("SELECT * FROM digital_bulk_dispatch WHERE production_order_id=$1",[id])).rows[0];
@@ -128,6 +129,9 @@ export class BulkPreparationService {
    if(prior&&prior.payload_hash!==hash)fail('操作标识已用于不同内容');
    if(prior){await db.query('COMMIT');return prior.response as BulkPreparationSheet;}
    const state=(await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1",[id])).rows[0]?.state;if(state&&state!=='active')fail('母单已暂停或取消');
+   const sourceId=(await db.query('SELECT source_id FROM digital_production_orders WHERE production_order_id=$1',[id])).rows[0]?.source_id;
+   if(sourceId&&(await db.query("SELECT 1 FROM digital_production_resource_lifecycle WHERE resource_kind='source' AND resource_id=$1 AND state<>'active'",[sourceId])).rowCount)fail('开发来源已暂停或取消，不能保存预派或派交');
+   if((await db.query("SELECT to_regclass('digital_order_closures') AS relation")).rows[0]?.relation&&(await db.query('SELECT 1 FROM digital_order_closures WHERE production_order_id=$1',[id])).rowCount)fail('母单已特殊结案，不能保存预派或派交；原安排与历史保留');
    await work(db);const result=await this.read(actor,id,db);
    await db.query('INSERT INTO digital_production_commands(actor_id,command,key,payload_hash,response) VALUES($1,$2,$3,$4,$5)',[actor.actorId,command,key,hash,JSON.stringify(result)]);
    await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,$4,'digital_bulk_preparation',$5,$6)",[randomUUID(),actor.requestId,actor.actorId,action,id,JSON.stringify(input)]);

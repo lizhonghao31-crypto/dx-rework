@@ -160,11 +160,17 @@ export class DigitalProductionNotificationService {
       if(task.state==="pending"&&!missing)continue;
       if(!(await this.recipients(this.database,task,"ready",people)).some(p=>p.actorId===actor.actorId))continue;
       // An effective personal action carries only its exact parent's style identity.
-      // Upstream assignment exceptions do not borrow the operator's business context.
+      // Assignment exceptions expose only their own parent after the existing technical-read policy.
       const ownAction=!missing&&await new DigitalProductionAccessPolicy(this.database).allowed(actor,"task",task.task_id,"execute");
       const styleNo=task.production_order_id?task.order_style_no:task.source_id?task.source_style_no:null;
-      const orderContext=ownAction&&styleNo?{reworkNo:null,orderNo:null,styleNo,supplierName:null,status:task.state,updatedAt:iso(task.created_at)}:null;
-      result.push({todoId:task.task_id,taskTitle:task.label,todoType:missing?"recipient_routing_exception":"business_action",category:missing?"digital_assignment":"digital_task",sourceEventId:task.task_id,sourceAction:"digital_task",entityType:"digital_task",entityId:task.task_id,recipientUserId:actor.actorId,requiredRole:task.required_role,requiredCapability:null,route:{routeName:"digital_production_task",entityId:task.task_id,todoId:task.task_id,developmentRound:task.route_version},policyKey:null,dueAt:task.due_at?iso(task.due_at):null,reminderCount:0,status:missing?"blocked_recipient":"pending",blockedReason:missing?"主办缺失或已失效，请重新分配":null,orderContext,unread:true,version:1,createdAt:iso(task.created_at),updatedAt:iso(task.created_at)});
+      const readableAssignment=missing&&await new DigitalProductionAccessPolicy(this.database).allowed(actor,"task",task.task_id,"technical");
+      const orderContext:TodoResponse['orderContext']=(ownAction||readableAssignment)&&styleNo?{reworkNo:null,orderNo:null,styleNo,supplierName:null,status:task.state,updatedAt:iso(task.created_at)}:null;
+      if(orderContext&&readableAssignment){
+        const linkedOrder=task.production_order_id??(task.source_id?(await this.database.query('SELECT production_order_id FROM digital_production_orders WHERE source_id=$1',[task.source_id])).rows[0]?.production_order_id:null);
+        // Source/task visibility alone does not reveal a linked mother's PO list.
+        if(linkedOrder&&await new DigitalProductionAccessPolicy(this.database).allowed(actor,'order',linkedOrder,'technical'))orderContext.poNumbers=(await this.database.query('SELECT po_number FROM digital_production_po_lines WHERE production_order_id=$1 ORDER BY position',[linkedOrder])).rows.flatMap(row=>row.po_number?[row.po_number as string]:[]);
+      }
+      result.push({todoId:task.task_id,taskTitle:task.label,todoType:missing?"recipient_routing_exception":"business_action",category:missing?"digital_assignment":"digital_task",sourceEventId:task.task_id,sourceAction:"digital_task",entityType:"digital_task",entityId:task.task_id,recipientUserId:actor.actorId,requiredRole:task.required_role,requiredCapability:null,route:{routeName:"digital_production_task",entityId:task.task_id,todoId:task.task_id,...(task.source_id?{developmentRound:task.route_version}:{})},policyKey:null,dueAt:task.due_at?iso(task.due_at):null,reminderCount:0,status:missing?"blocked_recipient":"pending",blockedReason:missing?"主办缺失或已失效，请重新分配":null,orderContext,unread:true,version:1,createdAt:iso(task.created_at),updatedAt:iso(task.created_at)});
     }
     return applyTodoReadState(this.database,actor,result);
   }

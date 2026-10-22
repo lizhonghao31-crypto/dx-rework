@@ -64,6 +64,27 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     await app.ready();
   },120000);
   afterAll(async()=>{await app.close();await db.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();});
+  it("uses the original assignment, upstream and completion reasons in both management summary and detail",async()=>{
+    const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-A02-BLOCKERS",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+    const routeId=randomUUID();
+    const pattern=await createTask({resource:{kind:"source",id:sourceId},kind:"development_pattern",routeId,routeVersion:1,occurrence:1,assigneeId:null});
+    const upstream=await createTask({resource:{kind:"source",id:sourceId},kind:"development_cutting",routeId,routeVersion:1,occurrence:1,assigneeId:worker,conditions:["handover_received"],predecessors:[pattern.taskId]});
+    const sewing=await createTask({resource:{kind:"source",id:sourceId},kind:"development_sewing",routeId,routeVersion:1,occurrence:1,assigneeId:worker,conditions:["pattern_assignment_ready"]});
+    const completion=await createTask({resource:{kind:"source",id:sourceId},kind:"development_shipping",routeId,routeVersion:1,occurrence:1,assigneeId:designer});
+    const boss=actor(root,["owner_group"]);
+    const summaries=await journeys.list(boss,JourneyFilterSchema.parse({scope:"development",search:"TEST-A02-BLOCKERS"}),false,undefined,{details:false});
+    const detail=await journeys.read(boss,sourceId,1);
+    const from=(value:typeof detail,id:string)=>value.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===id)!;
+    for(const projection of [summaries.items[0]!,detail]){
+      const missing=from(projection,pattern.taskId);expect(missing.blockers.map(b=>b.label).join("；")).toMatch(/尚未安排办理人.*开发文员/);
+      expect(missing.blockers.some(b=>/业务角色|业务结果尚未提交/.test(b.label))).toBe(false);
+      expect(missing.records[0]?.mode).toBe("read");expect(missing.records[0]?.url).toContain(pattern.taskId);
+      const waiting=from(projection,upstream.taskId);expect(waiting.blockers.map(b=>b.label).join("；")).toContain("尚未完成");expect(waiting.blockers.some(b=>b.key.startsWith("completion:"))).toBe(false);
+      expect(from(projection,sewing.taskId).blockers.map(b=>b.label).join("；")).toMatch(/尚未建立本单原执行记录.*设计师/);
+      const ready=from(projection,completion.taskId);expect(ready.state).toBe("active");expect(ready.blockers.find(b=>b.key==="completion:business_recorded")?.label).toMatch(/完成办理前.*设计师/);
+    }
+    await expect(journeys.read(actor(stranger),sourceId,1)).rejects.toMatchObject({statusCode:404});
+  });
   it("reads five real log events first and cursor-pages every scoped event without ties, new events or foreign cursors leaking",async()=>{
     const sourceId=(await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-COCKPIT-LOG",temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
     const task=await createTask({resource:{kind:"source",id:sourceId},kind:"development_materials",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:clerk});

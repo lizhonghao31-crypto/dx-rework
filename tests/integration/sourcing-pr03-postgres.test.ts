@@ -1,6 +1,7 @@
 import {minimumInitialCustomerDate} from "@dx-rework/contracts/digital-production";
 import { ApplicationError } from "../../apps/api/src/platform/errors.js";
 import { PostgresAuthStore } from "../../apps/api/src/auth/postgres-store.js";
+import { registerBulkPreparationRoutes } from "../../apps/api/src/production-platform/bulk-preparation-routes.js";
 import { registerReceivingRoutes } from "../../apps/api/src/receiving/receiving-routes.js";
 import { registerCuttingRoutes } from "../../apps/api/src/cutting/cutting-routes.js";
 import { PoCustomerDateService } from "../../apps/api/src/production-platform/po-customer-date-service.js";
@@ -3925,6 +3926,89 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await exerciseInstructions(database,fixture.order,merchandiserActor(),fixture.designer,managerActor("TEST P10"),fixture.imageId);
   });
 
+  describe("C05 terminal preassignment boundary",()=>{
+    const app=Fastify();
+    const request=(person:TrustedActorContext,input:unknown,commandKey:string)=>app.inject({method:'PUT',url:`/digital-production/orders/${ready.id}/bulk-preparation/dispatch`,headers:{cookie:`dx_rework_session=${person.actorId}`,'idempotency-key':commandKey},payload:input as Record<string,unknown>});
+    afterAll(()=>app.close());
+    let ready:NonNullable<Awaited<ReturnType<typeof exerciseBulkPreparation>>>,clerk:TrustedActorContext,tech:TrustedActorContext,key:string,body:{expectedVersion:number;patternWorkerId:string;deliverPattern:boolean};
+    const snapshot=async()=>({
+      dispatch:(await database.query("SELECT * FROM digital_bulk_dispatch WHERE production_order_id=$1",[ready.id])).rows,
+      audits:(await database.query("SELECT * FROM audit_events WHERE entity_id=$1 ORDER BY id",[ready.id])).rows,
+      commands:(await database.query("SELECT * FROM digital_production_commands WHERE command LIKE $1 ORDER BY actor_id,command,key",[`bulk:${ready.id}:%`])).rows,
+      tasks:(await database.query("SELECT t.*,a.assignee_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 ORDER BY t.task_id",[ready.id])).rows,
+      wages:(await database.query("SELECT count(*)::int n FROM rework_wage_items")).rows,
+    });
+    beforeAll(async()=>{
+      ready=(await exerciseBulkPreparation(database,await budgetFixture(false,"TEST-C05"),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()},factoryId,craftId("净色车缝"),'none',{cuttingProcess:'in_house',stopAtReady:true}))!;
+      clerk=ready.people.development_clerk!;
+      await database.query("INSERT INTO digital_production_resource_lifecycle(resource_kind,resource_id,state,changed_by,reason) VALUES('order',$1,'active',$2,'TEST isolated initial active lifecycle') ON CONFLICT(resource_kind,resource_id) DO NOTHING",[ready.id,managerId]);
+      // Independent synthetic identity initialization; tested runtime guards remain enabled.
+      const id=randomUUID();await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST C05 supervisor',true)",[id]);
+      await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','corp',$2::uuid::text,$2::uuid::text,true,true,CURRENT_TIMESTAMP)",[randomUUID(),id]);
+      await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
+      try{await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'pattern_room_supervisor',$3,'isolated C05 initial identity')",[randomUUID(),id,ownerId]);}finally{await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation");}
+      tech={actorId:id,actorRoles:['pattern_room_supervisor'],authorizationCapability:'digital_production:view',authorizationCapabilities:['digital_production:view'],requestId:randomUUID()};
+      expect((await ready.bulk.gates(database,ready.id)).reasons).toEqual([]);
+      app.setErrorHandler((error,_req,reply)=>{const known=error as ApplicationError;reply.code(known.statusCode??500).send({error:{code:known.code,message:known.message}});});
+      registerBulkPreparationRoutes(app,{service:new DigitalProductionIdentityService(database,true),creationEnabled:true,authenticate:async token=>{
+        if(![clerk.actorId,tech.actorId,ready.people.pattern_room_worker!.actorId].includes(token??''))throw new ApplicationError('UNAUTHORIZED','TEST session required',401);
+        const user=(await database.query('SELECT display_name FROM app_users WHERE id=$1 AND enabled',[token])).rows[0];if(!user)throw new ApplicationError('UNAUTHORIZED','TEST inactive session',401);
+        const roles=(await database.query('SELECT role_code FROM user_role_assignments WHERE user_id=$1 AND revoked_at IS NULL',[token])).rows.map(row=>row.role_code as string);
+        const capabilities=(await database.query('SELECT DISTINCT capability FROM role_capabilities WHERE role_code=ANY($1::text[])',[roles])).rows.map(row=>row.capability as string);
+        return {id:token!,displayName:user.display_name,businessRoles:roles,capabilities};
+      }},ready.bulk);await app.ready();
+    },20000);
+    it("keeps active preassignment insert/update/replay, denies unauthorized writes and rolls back an audit failure",async()=>{
+      const sheet=await ready.bulk.read(clerk,ready.id);key=randomUUID();body={expectedVersion:sheet.dispatch.version,patternWorkerId:ready.people.pattern_room_worker!.actorId,deliverPattern:false};
+      const response=await request(clerk,body,key);expect(response.statusCode).toBe(200);const saved=response.json();expect(saved.dispatch.version).toBe(body.expectedVersion+1);
+      let before=await snapshot();expect(await ready.bulk.dispatch(clerk,ready.id,body,key)).toEqual(JSON.parse(JSON.stringify(saved)));expect(await snapshot()).toEqual(before);
+      await expect(ready.bulk.dispatch(ready.people.pattern_room_worker!,ready.id,{...body,expectedVersion:saved.dispatch.version},randomUUID())).rejects.toMatchObject({statusCode:403});expect(await snapshot()).toEqual(before);
+      expect((await request(ready.people.pattern_room_worker!,{...body,expectedVersion:saved.dispatch.version},randomUUID())).statusCode).toBe(403);expect(await snapshot()).toEqual(before);
+      const updated=await ready.bulk.dispatch(tech,ready.id,{...body,expectedVersion:saved.dispatch.version},randomUUID());expect(updated.dispatch.version).toBe(saved.dispatch.version+1);
+      before=await snapshot();
+      await database.query(`CREATE FUNCTION test_c05_audit_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.entity_id='${ready.id}' AND NEW.action='dispatch' THEN RAISE EXCEPTION 'TEST C05 audit failure'; END IF; RETURN NEW; END $$`);
+      await database.query("CREATE TRIGGER test_c05_audit_failure BEFORE INSERT ON audit_events FOR EACH ROW EXECUTE FUNCTION test_c05_audit_failure()");
+      try{await expect(ready.bulk.dispatch(clerk,ready.id,{...body,expectedVersion:updated.dispatch.version},randomUUID())).rejects.toThrow('TEST C05 audit failure');expect(await snapshot()).toEqual(before);}
+      finally{await database.query("DROP TRIGGER test_c05_audit_failure ON audit_events");await database.query("DROP FUNCTION test_c05_audit_failure()");}
+    });
+    it("rejects closed-but-lifecycle-active preassignment and formal dispatch with closure as the only unmet gate, including a queued command",async()=>{
+      expect((await ready.bulk.gates(database,ready.id)).reasons).toEqual([]);
+      const client=await database.connect();let pending:Promise<unknown>|undefined;
+      try{
+        await client.query('BEGIN');await client.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+        // Initialize an audited historical special closure; never disable its role/audit guards.
+        const event=randomUUID();await client.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,'TEST C05 historical closure',$2,'digital.order.special_close','digital_production_order',$3,'{}')",[event,managerId,ready.id]);
+        await client.query("INSERT INTO digital_order_closures(production_order_id,reason,outstanding,source_revision,closed_by,audit_event_id) VALUES($1,'TEST terminal boundary','[\"fixture\"]',$2,$3,$4)",[ready.id,'a'.repeat(64),managerId,event]);
+        const version=(await client.query('SELECT version FROM digital_bulk_dispatch WHERE production_order_id=$1',[ready.id])).rows[0].version;
+        pending=ready.bulk.dispatch(clerk,ready.id,{...body,expectedVersion:version},randomUUID());const rejected=expect(pending).rejects.toMatchObject({statusCode:409});
+        const holder=Number((await client.query('SELECT pg_backend_pid() AS pid')).rows[0].pid);let blocked=false;
+        for(let n=0;n<100&&!blocked;n++){blocked=Boolean((await database.query('SELECT 1 FROM pg_stat_activity WHERE $1::int=ANY(pg_blocking_pids(pid))',[holder])).rowCount);if(!blocked)await new Promise(done=>setTimeout(done,5));}
+        await client.query('COMMIT');await rejected;expect(blocked).toBe(true);
+
+      }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+      const gates=await ready.bulk.gates(database,ready.id);expect(gates.reasons).toEqual(['母单已特殊结案，原实绩及历史继续保留']);
+      expect((await database.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1",[ready.id])).rows).toEqual([{state:'active'}]);
+      const before=await snapshot(),version=before.dispatch[0]!.version;
+      for(const person of [clerk,tech])for(const deliverPattern of [false,true]){
+        const rejected=await request(person,{...body,expectedVersion:version,deliverPattern},randomUUID());expect(rejected.statusCode).toBe(409);expect(rejected.json().error.message).toContain('已特殊结案');expect(await snapshot()).toEqual(before);
+        const sheet=await ready.bulk.read(person,ready.id);expect(sheet.canDispatchPattern).toBe(false);expect(sheet.dispatch.patternWorkerId).toBe(body.patternWorkerId);
+      }
+      await ready.bulk.dispatch(clerk,ready.id,body,key);expect(await snapshot()).toEqual(before); // historical receipt, zero writes
+      expect(before.dispatch).toHaveLength(1); // existing history is retained
+    });
+    it("also rejects a cancelled source or order before preassignment without new commands, audits or wages",async()=>{
+      const fixture=await budgetFixture(false,'TEST-C05-CANCEL'),id=fixture.order.productionOrderId;
+      const identity=new DigitalProductionIdentityService(database,true),source=await identity.createSource(fixture.designer,{developmentType:'头版',designStyleNo:fixture.order.designStyleNo,temporaryStyleNo:null,customerCode:'PD'},randomUUID());
+      await identity.attachSource(fixture.designer,id,source.sourceId,randomUUID());
+      for(const [kind,resource] of [['source',source.sourceId],['order',id]] as const){
+        await database.query("INSERT INTO digital_production_resource_lifecycle(resource_kind,resource_id,state,changed_by,reason) VALUES($1,$2,'cancelled',$3,'TEST initial cancelled resource') ON CONFLICT(resource_kind,resource_id) DO UPDATE SET state='cancelled'",[kind,resource,ownerId]);
+        const before=(await database.query("SELECT count(*)::int n FROM audit_events WHERE entity_id=$1",[id])).rows;
+        await expect(ready.bulk.dispatch(clerk,id,{...body,expectedVersion:0},randomUUID())).rejects.toMatchObject({statusCode:409});
+        expect((await database.query("SELECT * FROM digital_bulk_dispatch WHERE production_order_id=$1",[id])).rows).toEqual([]);expect((await database.query("SELECT * FROM digital_production_commands WHERE command LIKE $1",[`bulk:${id}:%`])).rows).toEqual([]);expect((await database.query("SELECT count(*)::int n FROM audit_events WHERE entity_id=$1",[id])).rows).toEqual(before);
+      }
+    });
+  });
+
   it("ERP V3-039 searches and displays the order customer when its development source has no customer",async()=>{
     await exerciseBulkPreparation(database,await budgetFixture(),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()},factoryId,craftId("净色车缝"),'none',{cuttingProcess:'in_house',stopAtReady:true,sourceCustomerCode:null});
   });
@@ -4882,12 +4966,15 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       await database.query("INSERT INTO owner_bootstrap_consumptions(singleton,user_id,provider_user_id,corp_id) VALUES(true,$1,$2,'corp')",[nativeRootId,`ding-${nativeRootId}`]);
     }
     const nativeRoot={...root,actorId:nativeRootId,actorRoles:(await database.query("SELECT access_authorized_actor_roles($1,'master_data:manage') AS roles",[nativeRootId])).rows[0].roles};
-    const supervisorId=randomUUID();
+    const existingSupervisor=(await database.query("SELECT user_id FROM user_role_assignments WHERE role_code='pattern_room_supervisor' AND revoked_at IS NULL")).rows[0];
+    const supervisorId=existingSupervisor?.user_id??randomUUID();
+    if(!existingSupervisor){
     await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST native supervisor',true)",[supervisorId]);
     await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','corp',$3,$3,true,true,CURRENT_TIMESTAMP)",[randomUUID(),supervisorId,`ding-${supervisorId}`]);
     await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
     try {await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'pattern_room_supervisor',$3,'isolated native role fixture')",[randomUUID(),supervisorId,nativeRootId]);}
     finally {await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation");}
+    }
     const price=(await database.query("SELECT price_id,version FROM pattern_room_prices WHERE kind='category' AND enabled ORDER BY price_id LIMIT 1")).rows[0];
     const linked=await execution.patternOrder({...fixture.designer,authorizationCapabilities:[...fixture.designer.authorizationCapabilities!,'pattern_room:orders:view']},ready.sourceId,{categoryId:price.price_id,priceVersion:price.version},randomUUID());
     const existingPerson=(await database.query('SELECT person_id AS "personId" FROM business_people WHERE app_user_id=$1 AND active',[nativeRootId])).rows[0];
