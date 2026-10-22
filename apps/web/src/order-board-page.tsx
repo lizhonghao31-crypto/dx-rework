@@ -7,7 +7,7 @@ import { moduleCanWrite } from "./member-module-policy.js";
 import { NavigationIcon } from "./navigation-icons.js";
 import { formatBusinessDecimal } from "@dx-rework/contracts/business-display";
 import { KpiInstrument, StatusBadge, Surface } from "@dx-rework/ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
 import {
@@ -333,13 +333,8 @@ export function OrderBoardPage() {
     return () => { active = false; };
   }, [startDate, endDate, debouncedQuery, status, page, refreshToken, targetBatchId, invalidTarget]);
 
-  const kpis = useMemo(() => data?.kpis ?? {
-    orderCount: 0,
-    receivedQuantity: 0,
-    abnormalOrderCount: 0,
-    differenceQuantity: 0,
-    differenceRate: 0,
-  }, [data]);
+  const kpis = !pageLoading&&!readFailed&&!invalidTarget ? data?.kpis : undefined;
+  const kpiUnavailable = pageLoading ? "正在读取，暂不计算" : "数据未读到，暂不计算";
   const selectedAttachment = attachmentViewer?.attachments[attachmentViewer.index] ?? null;
   const dateRangeLabel = startDate === endDate ? startDate : `${startDate} 至 ${endDate}`;
   const searchMode = data?.mode === "search";
@@ -732,23 +727,23 @@ export function OrderBoardPage() {
     <div className="order-board-kpis">
       <KpiInstrument
         label={searchMode ? "搜索结果订单数" : "期间收货订单数"}
-        value={quantity(kpis.orderCount)}
-        detail={kpiRangeLabel}
+        value={kpis?quantity(kpis.orderCount):"—"}
+        detail={kpis?kpiRangeLabel:kpiUnavailable}
         tone="info"
       />
       <KpiInstrument
         label={searchMode ? "搜索结果累计实收" : "期间实收数量"}
-        value={`${quantity(kpis.receivedQuantity)}件`}
-        detail={searchMode ? kpiRangeLabel : `${kpiRangeLabel} · 本期实收`}
+        value={kpis?`${quantity(kpis.receivedQuantity)}件`:"—"}
+        detail={kpis?(searchMode ? kpiRangeLabel : `${kpiRangeLabel} · 本期实收`):kpiUnavailable}
         tone="info"
       />
       <KpiInstrument
         label="异常订单数量"
-        value={quantity(kpis.abnormalOrderCount)}
-        detail={searchMode ? "全时间累计实收与送货单数量不一致" : "截至结束日期累计实收与送货单数量不一致"}
-        tone={kpis.abnormalOrderCount ? "warning" : "success"}
+        value={kpis?quantity(kpis.abnormalOrderCount):"—"}
+        detail={kpis?(searchMode ? "全时间累计实收与送货单数量不一致" : "截至结束日期累计实收与送货单数量不一致"):kpiUnavailable}
+        tone={!kpis?"info":kpis.abnormalOrderCount ? "warning" : "success"}
       />
-      <KpiInstrument label="差异率" value={`${formatBusinessDecimal(kpis.differenceRate)}%`} detail={`绝对差异 ${quantity(kpis.differenceQuantity)} 件`} tone={kpis.differenceRate ? "warning" : "success"} />
+      <KpiInstrument label="差异率" value={kpis?`${formatBusinessDecimal(kpis.differenceRate)}%`:"—"} detail={kpis?`绝对差异 ${quantity(kpis.differenceQuantity)} 件`:kpiUnavailable} tone={!kpis?"info":kpis.differenceRate ? "warning" : "success"} />
     </div>
 
     <div className="order-board-legend" aria-label="差异颜色说明">
