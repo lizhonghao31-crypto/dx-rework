@@ -3,7 +3,7 @@ import { SearchableSelect } from "./search-select.js";
 import {DevelopmentOrderArchive} from "./development-order-archive.js";
 import "./digital-kpi-density.css";
 import { NavigationIcon } from "./navigation-icons.js";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@dx-rework/ui";
 import { BusinessTable, FilterBar, KpiCard, Pagination, StatusBadge } from "@dx-rework/ui/production";
 import { DEVELOPMENT_VIEWS, DevelopmentWorkspaceFilterSchema, type DevelopmentWorkspaceFilter, type DevelopmentWorkspaceItem, type DevelopmentWorkspaceResult } from "@dx-rework/contracts/digital-development-workspace";
@@ -33,6 +33,11 @@ export function DigitalDesignerWorkspace() {
   const [filter, setFilter] = useState(initialFilter), [result, setResult] = useState<DevelopmentWorkspaceResult | null>(null);
   const [options, setOptions] = useState<{creationEnabled: boolean; customers: DigitalCustomer[]; minimumInitialCustomerDate?:string;serverToday?:string} | null>(null), [access, setAccess] = useState<DigitalAccessOptions | null>(null);
   const [intent, setIntent] = useState<DevelopmentCreateIntent | null>(null), [confirm, setConfirm] = useState<DevelopmentWorkspaceItem | null>(null);
+  const [confirmSheet,setConfirmSheet]=useState<DevelopmentSheet|undefined>(),[preparingConfirm,setPreparingConfirm]=useState(false),[confirmError,setConfirmError]=useState("");
+  const [confirmedOrderId,setConfirmedOrderId]=useState<string|null>(null);
+  const [confirmedOrder,setConfirmedOrder]=useState<DigitalOrder|null>(null),[confirmedOrderError,setConfirmedOrderError]=useState(""),[orderRetry,setOrderRetry]=useState(0);
+  const preparing=useRef(false),detailLeaveCheck=useRef<(()=>Promise<boolean>)|null>(null);
+  const rememberLeaveCheck=useCallback((check:(()=>Promise<boolean>)|null)=>{detailLeaveCheck.current=check;},[]);
   const [error, setError] = useState(""), [refresh, setRefresh] = useState(0);
   const [sheets, setSheets] = useState<Record<string, DevelopmentSheet>>({}), [sheetErrors, setSheetErrors] = useState<Record<string, string>>({});
   const [selectedId, setSelectedId] = useState<string | null>(() => new URLSearchParams(window.location.search).get("selected"));
@@ -46,6 +51,11 @@ export function DigitalDesignerWorkspace() {
     return `${urls.pageUrl("ui/digital-production")}?${query}`;
   };
   useEffect(() => {
+    let live=true;setConfirmedOrder(null);setConfirmedOrderError("");
+    if(confirmedOrderId)void digitalRequest<DigitalOrder>(`orders/${confirmedOrderId}`).then(order=>{if(live)setConfirmedOrder(order);}).catch(reason=>{if(live)setConfirmedOrderError(reason.message);});
+    return()=>{live=false;};
+  },[confirmedOrderId,orderRetry]);
+  useEffect(() => {
     let live = true; const abort=new AbortController();setError("");setResult(null);
     if(liveSearch.pending)return()=>{live=false;abort.abort();};
     const read={signal:abort.signal};
@@ -56,7 +66,7 @@ export function DigitalDesignerWorkspace() {
   }, [filter, refresh,liveSearch.pending]);
   useEffect(() => {
     let live = true; setSheets({}); setSheetErrors({});setOrders({});setOrderErrors({});
-    const item = result?.items.find(value => value.journey.id === selectedId);
+    const item = result?.items.find(value => editor ? value.journey.sourceId === editor : value.journey.id === selectedId);
     if (item?.journey.sourceId) {
       const source = item.journey.sourceId;
       void digitalRequest<DevelopmentSheet>(`sources/${source}/development${item.journey.sourceVersion && item.journey.selectedRound ? `?round=${item.journey.selectedRound}` : ""}`)
@@ -65,7 +75,7 @@ export function DigitalDesignerWorkspace() {
     }
     if(item?.journey.orderId){const id=item.journey.orderId;void digitalRequest<DigitalOrder>(`orders/${id}`).then(order=>{if(live)setOrders({[item.journey.id]:order});}).catch(reason=>{if(live)setOrderErrors({[item.journey.id]:reason.message});});}
     return () => {live = false;};
-  }, [result, selectedId]);
+  }, [result, selectedId, editor]);
   const update = (patch: Partial<DevelopmentWorkspaceFilter>) => {
     const parsed = DevelopmentWorkspaceFilterSchema.safeParse({...filter, page: 1, ...patch});
     if (!parsed.success) {setError(parsed.error.issues[0]?.message ?? "筛选条件无效"); return;}
@@ -76,10 +86,33 @@ export function DigitalDesignerWorkspace() {
   const select = (id: string) => {setSelectedId(id); setCollapsed(false); window.history.replaceState(window.history.state, "", contextUrl({}, filter, id));};
   const selected = result?.items.find(item => item.journey.id === selectedId), sheet = selected ? sheets[selected.journey.id] : undefined;
   const openUrl = (item: DevelopmentWorkspaceItem) => contextUrl({development:item.journey.sourceId!, ...(item.journey.selectedRound && item.journey.sourceVersion ? {round:String(item.journey.selectedRound)} : {})}, filter, item.journey.id);
-  if (editor) return <div className="development-workspace pattern-orders digital-production"><OrderDocumentContainer key={`${editor}:${round}`} initial={{kind:"development",id:editor,version:round}} onClose={() => {void navigateInternalPage(contextUrl()).then(() => setRefresh(value => value + 1));}}/></div>;
+  const editorItem=result?.items.find(item=>item.journey.sourceId===editor),editorSheet=editorItem?sheets[editorItem.journey.id]:undefined;
+  const canConfirm=Boolean(editorItem?.canConfirm&&!editorItem.journey.orderId&&editorSheet?.status==="published"&&!editorSheet.productionOrderId&&options?.creationEnabled&&access?.create&&!confirmedOrderId);
+  const beginConfirmation=async()=>{
+    if(preparing.current||!canConfirm||!editorItem||!editor)return;
+    preparing.current=true;setPreparingConfirm(true);setConfirmError("");
+    try{
+      if(detailLeaveCheck.current&&!await detailLeaveCheck.current())return;
+      // Read the selected round again before restoring its published, locked PO draft.
+      const currentRound=new URLSearchParams(window.location.search).get("round");
+      const current=await digitalRequest<DevelopmentSheet>(`sources/${editor}/development${currentRound?`?round=${encodeURIComponent(currentRound)}`:""}`);
+      if(current.status!=="published"||current.productionOrderId){setRefresh(value=>value+1);throw new Error(current.productionOrderId?"此开发单已有客户订单，请核对最新关联订单。":"请先沿原流程发布开发单，再确认客户订单。");}
+      setConfirmSheet(current);setConfirm(editorItem);setIntent("confirm_order");
+    }catch(reason){setConfirmError(reason instanceof Error?reason.message:"订购资料读取失败，请重试；开发资料仍保留。");}
+    finally{preparing.current=false;setPreparingConfirm(false);}
+  };
   if (intent && options) return <div className="development-workspace development-golden dx-production-refined development-create-page">
-    <div className="development-breadcrumb">产品开发 › <strong>新建开发订单</strong></div>
-    <DevelopmentCreateForm key={confirm?.journey.id ?? "new-development"} intent={intent} {...(confirm ? {source: confirm.journey,...(sheets[confirm.journey.id]?.document?.customerOrderDraft?.withOrder?{existingDraft:sheets[confirm.journey.id]!}:{})} : {})} customers={options.customers} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} onIntentChange={setIntent} onCancel={() => {setIntent(null); setConfirm(null); setRefresh(value => value + 1);}} onCreated={sourceId => {void navigateInternalPage(contextUrl({development:sourceId}));}}/>
+    <div className="development-breadcrumb">产品开发 › <strong>{confirm?"客户确定订单":"新建开发订单"}</strong></div>
+    <DevelopmentCreateForm key={confirm?.journey.id ?? "new-development"} intent={intent} {...(confirm ? {source: confirm.journey,...(confirmSheet?{existingDraft:confirmSheet}:{}),cancelLabel:"返回开发单"} : {})} customers={options.customers} minimumDate={options.minimumInitialCustomerDate} serverToday={options.serverToday} onIntentChange={setIntent} onCancel={() => {setIntent(null); setConfirm(null); setConfirmSheet(undefined);if(!editor)setRefresh(value => value + 1);}} onCreated={(sourceId,orderId) => {
+      if(confirm&&editor===sourceId){setConfirmedOrderId(orderId);setIntent(null);setConfirm(null);setConfirmSheet(undefined);setRefresh(value=>value+1);}
+      else void navigateInternalPage(contextUrl({development:sourceId}));
+    }}/>
+  </div>;
+  if (editor) return <div className="development-workspace pattern-orders digital-production">
+    {error&&<p role="alert">开发档案读取失败：{error} <Button onClick={()=>setRefresh(value=>value+1)}>重试读取开发档案</Button></p>}
+    {confirmedOrderId&&<><p role="status">客户订单已确认。{confirmedOrder?`已读取关联订单：${confirmedOrder.designStyleNo}。`:!confirmedOrderError?"正在读取关联客户订单…":""} <a href={`${urls.pageUrl("ui/digital-production")}?order=${confirmedOrderId}&returnTo=${encodeURIComponent(window.location.pathname+window.location.search)}`}>查看关联客户订单</a></p>{confirmedOrderError&&<p role="alert">订单确认已成功，关联订单读取失败：{confirmedOrderError} <Button onClick={()=>setOrderRetry(value=>value+1)}>重试读取关联订单</Button></p>}</>}
+    {confirmError&&<p role="alert">{confirmError}</p>}
+    <OrderDocumentContainer key={`${editor}:${round}:${refresh}`} initial={{kind:"development",id:editor,version:round}} onLeaveCheck={rememberLeaveCheck} headerActions={canConfirm?<Button variant="primary" disabled={preparingConfirm} onClick={()=>void beginConfirmation()}>{preparingConfirm?"正在读取订购资料…":"客户确定订单"}</Button>:undefined} onClose={() => {void navigateInternalPage(contextUrl()).then(() => setRefresh(value => value + 1));}}/>
   </div>;
   return <div className="development-workspace development-golden dx-production-refined">
 
@@ -98,7 +131,7 @@ export function DigitalDesignerWorkspace() {
     {!intent && selected && <section className="dx-production-panel development-selected" aria-label="选中开发档案">
       {!selected ? <p className="development-empty">从上方列表选择档案，查看开发资料与订购信息。</p> : <>
         <header className="development-selected-heading"><StyleImage key={`${selected.journey.id}:${selected.journey.sourceVersion}:${selected.journey.styleImageUrl}`} item={selected}/><div><h2>{selected.journey.designStyleNo} <StatusBadge tone="info">{viewLabel(selected)}</StatusBadge></h2><p>款名：{selected.journey.styleName ?? "未登记"} · 客户：{selected.journey.customer ?? "通用开发"} · 开发类型：{sheet?.developmentType ?? "未读取"} · 设计师：{selected.journey.designer ?? "未登记"} · 创建日期：{date(selected.journey.createdAt)}</p></div><button className="development-text-action" aria-expanded={!collapsed} onClick={() => setCollapsed(value => !value)}>{collapsed ? "展开" : "收起"}</button></header>
-        {!collapsed&&<DevelopmentOrderArchive item={selected} sheet={sheet} order={orders[selected.journey.id]} sheetError={sheetErrors[selected.journey.id]} orderError={orderErrors[selected.journey.id]} sourceUrl={selected.journey.sourceId?openUrl(selected):null} canConfirm={Boolean(selected.canConfirm&&sheet?.status==="published"&&options?.creationEnabled&&access?.create)} onConfirm={()=>{setConfirm(selected);setIntent('confirm_order');}}/>}
+        {!collapsed&&<DevelopmentOrderArchive item={selected} sheet={sheet} order={orders[selected.journey.id]} sheetError={sheetErrors[selected.journey.id]} orderError={orderErrors[selected.journey.id]} sourceUrl={selected.journey.sourceId?openUrl(selected):null}/> }
       </>}
     </section>}
   </div>;
