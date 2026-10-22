@@ -116,7 +116,8 @@ const historicalSecretRegex = [
   "github_pat_[A-Za-z0-9_]{20,}",
   "AKIA[0-9A-Z]{16}",
   "LTAI[A-Za-z0-9]{12,}",
-  "sk-[A-Za-z0-9_-]{20,}",
+  // Keep the same left token boundary as the existing worktree detector.
+  "(^|[^A-Za-z0-9_])sk-[A-Za-z0-9_-]{20,}",
 ].join("|");
 
 const historicalAssignmentRegex = [

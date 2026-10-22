@@ -86,6 +86,38 @@ describe("secret scan", () => {
     await expect(findArtifactSecrets(root)).resolves.toEqual(["apps/web/dist/assets/app.js"]);
   });
 
+  it("validates historical candidate lines with the same token boundaries while retaining removed real signatures", () => {
+    const root=initRepo(),ordinary="tests/acceptance/task-session-navigation-browser.mjs";
+    writeFileSync(join(root,"guide.md"),`Run ${ordinary}`);
+    const tokens=[['sk-','A'.repeat(30)].join(''),['ghp_','B'.repeat(32)].join(''),['github_pat_','C'.repeat(24)].join(''),['AKIA','D'.repeat(16)].join(''),['LTAI','e'.repeat(15)].join(''),['-----BEGIN','PRIVATE KEY-----'].join(' ')];
+    for(const [index,token] of tokens.entries())writeFileSync(join(root,`provider-${index}.txt`),index===0?`说明${token}`:token);
+    commitAll(root,"synthetic historical detection fixture");
+    for(const [index] of tokens.entries())writeFileSync(join(root,`provider-${index}.txt`),'removed');
+    writeFileSync(join(root,"guide.md"),`Keep ${ordinary} as the original regression`);
+    commitAll(root,"remove credentials and update ordinary filename reference");
+    expect(containsSecretSignature(ordinary)).toBe(false);
+    const findings=findHistoricalSecretFindings(root);
+    expect(findings.signatures.some(item=>item.endsWith(':guide.md'))).toBe(false);
+    for(const [index,token] of tokens.entries()){
+      expect(findings.signatures.filter(item=>item.endsWith(`:provider-${index}.txt`))).toHaveLength(2);
+      expect(JSON.stringify(findings)).not.toContain(token);
+    }
+  });
+
+  it("detects removed line-leading signatures introduced only by a merge resolution",()=>{
+    const root=initRepo(),git=(...args:string[])=>execFileSync('git',args,{cwd:root,encoding:'utf8'}).trim();
+    writeFileSync(join(root,'base.txt'),'base');commitAll(root,'base');const branch=git('branch','--show-current');
+    git('checkout','-qb','side');writeFileSync(join(root,'side.txt'),'side');commitAll(root,'side');const side=git('rev-parse','HEAD');
+    git('checkout','-q',branch);writeFileSync(join(root,'main.txt'),'main');commitAll(root,'main');const main=git('rev-parse','HEAD');
+    const marker=['-----BEGIN','PRIVATE KEY-----'].join(' ');
+    const key=['ghp_','R'.repeat(32)].join('');
+    const markers=[['notes.txt',marker],['added-header-like.txt',`++ b/${key}`],['removed-header-like.txt',`-- a/${key}`]];
+    for(const [path,value] of markers)writeFileSync(join(root,path!),value!);git('add','-A');const tree=git('write-tree'),merge=git('commit-tree',tree,'-p',main,'-p',side,'-m','synthetic merge-resolution marker');
+    git('update-ref',`refs/heads/${branch}`,merge);git('reset','--hard',merge);
+    for(const [path] of markers)rmSync(join(root,path!));commitAll(root,'remove synthetic marker');const removed=git('rev-parse','HEAD').slice(0,12);
+    const findings=findHistoricalSecretFindings(root);for(const [path] of markers)expect(findings.signatures).toContain(`${removed}:${path}`);expect(JSON.stringify(findings)).not.toContain(marker);expect(JSON.stringify(findings)).not.toContain(key);
+  });
+
   it("finds removed signatures, sensitive assignments and tracked secret files without returning secret values", () => {
     const root = initRepo();
     const historicalToken = ["sk-", "A".repeat(30)].join("");
