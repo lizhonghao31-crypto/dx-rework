@@ -93,5 +93,48 @@
     "languages": ["plpgsql"],
     "onlineCompatible": false,
     "rollback": "restart-previous-only-if-entire-history-unchanged"
+  },
+  {
+    "version": "0228_sourcing_contract_return_cycles",
+    "checksum": "86eec9b3696bade0d7eda97773f9f5a4636f6b38e891879e6882437c7f16cb4c",
+    "strategy": "quiesce-backup-transactional-ddl",
+    "tables": [],
+    "triggerTables": [
+      "public.sourcing_approval_snapshots",
+      "public.sourcing_contract_documents"
+    ],
+    "schema": "public",
+    "functions": [],
+    "languages": [
+      "plpgsql",
+      "sql"
+    ],
+    "onlineCompatible": false,
+    "rollback": "restart-previous-only-if-entire-history-unchanged"
+  },
+  {
+    "version": "0229_sourcing_price_reapplications",
+    "checksum": "633964acebe30386ae7d3877268dcb7519944e387ffeb9707fa4d92e3b3cc857",
+    "strategy": "quiesce-backup-transactional-ddl",
+    "tables": [
+      "public.sourcing_decisions",
+      "public.sourcing_case_transitions"
+    ],
+    "triggerTables": [
+      "public.sourcing_approval_snapshots"
+    ],
+    "schema": "public",
+    "functions": [
+      "public.guard_sourcing_decision_insert()",
+      "public.guard_sourcing_decision_crafts()",
+      "public.guard_sourcing_cutting_process()",
+      "public.guard_sourcing_transition_insert()"
+    ],
+    "languages": [
+      "sql",
+      "plpgsql"
+    ],
+    "onlineCompatible": false,
+    "rollback": "restart-previous-only-if-entire-history-unchanged"
   }
 ]

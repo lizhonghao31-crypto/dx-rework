@@ -60,7 +60,9 @@ const taskLabel: Record<TodoResponse["route"]["routeName"], string> = {
 };
 
 const taskTitle = (todo: TodoResponse): string =>
-  todo.category === "sourcing_transfer_contract_return"
+  todo.category === "sourcing_price_contract_return" ? "调价合同待签回"
+    : todo.category === "sourcing_price_owner_approve" ? "价格重新申请待审批"
+    : todo.category === "sourcing_transfer_contract_return"
     ? "转厂合同待签回"
     : todo.category === "sourcing_contract_return"
     ? "回传合同"
@@ -106,6 +108,8 @@ const categoryLabel = (todo: TodoResponse): string => {
     sourcing_management_decision: "生产管理调价选厂",
     sourcing_owner_approval: "老板最终审批",
     sourcing_contract_return: "回传合同",
+    sourcing_price_contract_return:"调价合同待签回",
+    sourcing_price_owner_approve:"价格重新申请待审批",
     sourcing_transfer_contract_return: "转厂合同待签回",
   };
   return labels[todo.category] ?? taskTitle(todo);
@@ -144,6 +148,7 @@ export const todoHref = (todo: Pick<TodoResponse,"route"|"todoId">): string => {
     case "sourcing_detail":
       target = `ui/sourcing/orders/${route.entityId}`;
       if (route.tab === "contract_return") query.set("section", "contract-return");
+      if (route.contractReturn) query.set("contractDocumentId",route.contractReturn.documentId);
       if (route.transferContract) query.set("contractDocumentId", route.transferContract.documentId);
       break;
     case "responsibility_detail":
@@ -375,7 +380,9 @@ export function MyTodosPage() {
           {todos.map((todo, index) => {
             const blocked = todo.status === "blocked_recipient";
             const order = todo.orderContext;
-            const orderSummary = todo.route.transferContract
+            const orderSummary = todo.route.contractReturn
+              ? `款号：${order?.styleNo ?? "未填写"} · 加工厂：${todo.route.contractReturn.supplierName} · 调价合同 V${todo.route.contractReturn.version}`
+              : todo.route.transferContract
               ? `款号：${order?.styleNo ?? "未填写"} · 新加工厂：${todo.route.transferContract.supplierName} · 合同 V${todo.route.transferContract.version}`
               : todo.entityType === "supplier_onboarding" ? `供应商：${order?.supplierName ?? ""}` : todo.entityType === "pattern_room_order" ? `板房订单：${order?.orderNo ?? ""} · ${order?.styleNo ?? ""}` : todo.entityType === "sample" ? `样衣：${order?.orderNo ?? ""} · ${order?.styleNo ?? ""}` : (todo.entityType === "sourcing_case" || todo.entityType === "production_order")
               ? `款号：${order?.styleNo ?? "未填写"} · 供应商：${order?.supplierName ?? "待选厂"}`
@@ -409,7 +416,7 @@ export function MyTodosPage() {
                       <span><small>当前节点</small>{categoryLabel(todo)}</span>
                       <span><small>{todo.entityType === "production_order" ? "风险持续" : "节点停留"}</small>{formatNodeDuration(todo.createdAt)}</span>
                       {todo.entityType === "production_order" ? <span><small>生产进度</small>{formatBusinessDecimal(todo.productionProgress ?? 0)}%</span> : ["sample", "pattern_room_order", "supplier_onboarding"].includes(todo.entityType) ? null : <span><small>相关金额</small>待核定</span>}
-                      <span><small>截止</small>{(todo.category === "sourcing_contract_return" || todo.category === "sourcing_transfer_contract_return") ? "见订单回签状态" : formatDueAt(todo.dueAt)}</span>
+                      <span><small>截止</small>{(todo.category === "sourcing_contract_return" || todo.category === "sourcing_transfer_contract_return" || todo.category === "sourcing_price_contract_return") ? "见订单回签状态" : formatDueAt(todo.dueAt)}</span>
                     </div>
                   </a>
                 )}

@@ -1,4 +1,4 @@
-import { transferContractVersionPrefix } from "./sourcing-transfer-contract-todos.js";
+import { transferContractVersionPrefix,priceContractVersionPrefix } from "./sourcing-transfer-contract-todos.js";
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -29,6 +29,7 @@ type MonitorRow = {
   contract_return_overdue_seconds: number | string | null;
   contract_return_uploaded_by: string | null;
   uploader_name: string | null;
+  return_cycle_id: string | null;
   current_contract_returned: boolean;
   current_contract_accepts_upload: boolean;
   current_contract_document_id: string | null;
@@ -68,11 +69,11 @@ export class SourcingContractReturnService {
     const result = await this.database.query<MonitorRow>(`SELECT source_case.sourcing_case_id,source_case.created_by,
       nullif(to_jsonb(source_case)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id,
       monitor.contract_return_monitor_enabled,monitor.contract_return_catchup,monitor.contract_generated_at,monitor.contract_return_due_at,
-      monitor.contract_returned_at,monitor.contract_return_uploaded_by,
+      monitor.contract_returned_at,monitor.contract_return_uploaded_by,monitor.return_cycle_id,
       sourcing_contract_return_elapsed_seconds(monitor.contract_return_due_at,
         COALESCE(monitor.contract_returned_at,CURRENT_TIMESTAMP)) AS contract_return_overdue_seconds,
       uploader.display_name AS uploader_name,CURRENT_TIMESTAMP AS as_of,
-      COALESCE((SELECT decision.source_change_request_id IS NULL OR document.status='ready'
+      COALESCE((SELECT (decision.source_change_request_id IS NULL AND NOT EXISTS(SELECT 1 FROM sourcing_contract_return_cycles cycle WHERE cycle.sourcing_approval_snapshot_id=document.sourcing_approval_snapshot_id)) OR document.status='ready'
         FROM sourcing_contract_documents document
         JOIN sourcing_decisions decision ON decision.sourcing_decision_id=document.sourcing_decision_id
         WHERE document.sourcing_case_id=source_case.sourcing_case_id
@@ -81,11 +82,13 @@ export class SourcingContractReturnService {
         WHERE document.sourcing_case_id=source_case.sourcing_case_id
         ORDER BY document.contract_version DESC LIMIT 1) AS current_contract_document_id,
       EXISTS(SELECT 1 FROM sourcing_contract_return_submissions signed
+        JOIN sourcing_contract_return_attachments link ON link.submission_id=signed.submission_id
+        JOIN attachments file ON file.attachment_id=link.attachment_id AND file.status='ready'
         WHERE signed.sourcing_contract_document_id=(SELECT document.sourcing_contract_document_id
           FROM sourcing_contract_documents document WHERE document.sourcing_case_id=source_case.sourcing_case_id
           ORDER BY document.contract_version DESC LIMIT 1)) AS current_contract_returned
       FROM sourcing_cases source_case
-      LEFT JOIN sourcing_contract_return_monitors monitor ON monitor.sourcing_case_id=source_case.sourcing_case_id
+      LEFT JOIN LATERAL sourcing_contract_return_facts(source_case.sourcing_case_id) monitor ON true
       LEFT JOIN app_users uploader ON uploader.id=COALESCE(
         monitor.contract_return_latest_uploaded_by,monitor.contract_return_uploaded_by)
       WHERE source_case.sourcing_case_id=$1 AND source_case.deleted_at IS NULL`,[sourcingCaseId]);
@@ -133,7 +136,7 @@ export class SourcingContractReturnService {
     const currentFiles=current ? [...versions.values()].filter(version=>version.signedContractDocumentId===current.signedContractDocumentId)
       .reverse().flatMap(version=>version.attachments) : [];
 
-    return { ...status,uploadedByName:status.contractReturnMonitoring ? row.uploader_name : null,
+    return { ...status,contractReturnCycleId:row.return_cycle_id,uploadedByName:status.contractReturnMonitoring ? row.uploader_name : null,
       currentContractReturned:row.current_contract_returned,
       currentContractDocumentId:row.current_contract_document_id,
       signedContractDocumentId:current?.signedContractDocumentId ?? null,
@@ -188,15 +191,16 @@ export class SourcingContractReturnService {
         await client.query("COMMIT");
         return this.get({...actor,authorizationCapability:READ},sourcingCaseId);
       }
-      const document=(await client.query<{sourcing_contract_document_id:string;is_transfer:boolean;status:string}>(`SELECT document.sourcing_contract_document_id,document.status,
+      const document=(await client.query<{sourcing_contract_document_id:string;is_transfer:boolean;status:string;requires_version:boolean}>(`SELECT document.sourcing_contract_document_id,document.status,
+          EXISTS(SELECT 1 FROM sourcing_contract_return_cycles cycle WHERE cycle.sourcing_approval_snapshot_id=document.sourcing_approval_snapshot_id) AS requires_version,
           EXISTS(SELECT 1 FROM sourcing_decisions decision WHERE decision.sourcing_decision_id=document.sourcing_decision_id
             AND decision.source_change_request_id IS NOT NULL) AS is_transfer
         FROM sourcing_contract_documents document WHERE document.sourcing_case_id=$1 ORDER BY document.contract_version DESC LIMIT 1`,[sourcingCaseId])).rows[0];
       const documentId=document?.sourcing_contract_document_id ?? null;
-      if ((document?.is_transfer || expectedContractDocumentId !== undefined) && expectedContractDocumentId !== documentId) {
+      if ((document?.is_transfer || document?.requires_version || expectedContractDocumentId !== undefined) && expectedContractDocumentId !== documentId) {
         throw new ApplicationError("INVALID_STATE_TRANSITION", "合同版本已变化，请重新打开当前合同并回传对应版本", 409);
       }
-      if (document?.is_transfer && document.status !== "ready") {
+      if ((document?.is_transfer || document?.requires_version) && document.status !== "ready") {
         throw new ApplicationError("INVALID_STATE_TRANSITION", "当前转厂合同尚未生成完成，请生成后再回传签署文件", 409);
       }
       const existing=await client.query<{attachment_id:string;size_bytes:string;submitted_by:string;sourcing_contract_document_id:string|null}>(`SELECT link.attachment_id::text,file.size_bytes,submission.submitted_by,submission.sourcing_contract_document_id
@@ -250,9 +254,8 @@ export class SourcingContractReturnService {
       await this.events.append(client,actor,{action:"sourcing.contract_return.upload",
         entityType:"sourcing_case",entityId:sourcingCaseId,
         after:{submissionId,revision:next,attachmentIds:[...attachmentIds],sourcingContractDocumentId:documentId,firstReturn:monitor.contract_returned_at === null}});
-      if (documentId) await this.todos.completeOpenByDedupePrefix(
-        client, actor, transferContractVersionPrefix(sourcingCaseId, documentId), "当前版本合同已有效回传",
-      );
+      if (documentId) for(const prefix of [transferContractVersionPrefix(sourcingCaseId,documentId),priceContractVersionPrefix(sourcingCaseId,documentId)])
+        await this.todos.completeOpenByDedupePrefix(client,actor,prefix,"当前版本合同已有效回传");
       if (monitor.contract_returned_at === null) {
         await this.todos.completeOpenByDedupePrefix(
           client,actor,`sourcing:${sourcingCaseId}:return:`,"回签合同已上传",

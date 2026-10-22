@@ -295,6 +295,7 @@ export const SourcingContractReturnUploadSchema = z.object({
   attachmentIds: z.array(IdSchema).min(1).max(2).refine(ids=>new Set(ids).size===ids.length),
 }).strict();
 export const SourcingContractReturnResponseSchema = z.object({
+  contractReturnCycleId: IdSchema.nullable().optional(),
   contractReturnMonitoring: z.boolean(),
   contractReturnStatus: z.enum(["pending","returned_on_time","overdue_pending","returned_late"]).nullable(),
   contractGeneratedAt: z.string().datetime().nullable(),
@@ -444,7 +445,7 @@ export const SourcingFactoryListResponseSchema = z.object({
 export const SourcingDecisionSchema = z.object({
   sourcingDecisionId: IdSchema,
   decisionVersion: z.number().int().positive(),
-  sourceType: z.enum(["initial", "management_revision", "factory_change"]),
+  sourceType: z.enum(["initial", "management_revision", "factory_change", "price_reapplication"]),
   sourceIeQuoteId: IdSchema.nullable(),
   supersedesDecisionId: IdSchema.nullable(),
   supplierId: IdSchema,
@@ -618,6 +619,7 @@ export const SourcingTimelineEntrySchema = z.object({
     "contract",
     "factory_change_request",
     "factory_change_verification",
+    "price_reapplication",
     "finance_reconciliation",
     "exception_verification",
   ]),
@@ -713,3 +715,20 @@ export function cumulativeSourcingTiming(history: readonly {
   const start = createdAt ? Date.parse(createdAt) : Number.NaN;
   return {totalSeconds: Number.isFinite(start) && Number.isFinite(end) ? Math.max(0,(end-start)/1000) : 0,nodeSeconds};
 }
+
+
+export const RequestSourcingPriceReapplicationSchema=z.object({
+  unitPrice:MoneyInputSchema,changeReason:z.string().trim().min(1).max(500),
+  expectedDecisionId:IdSchema,expectedContractDocumentId:IdSchema,
+}).strict();
+export type RequestSourcingPriceReapplication=z.infer<typeof RequestSourcingPriceReapplicationSchema>;
+export const DecideSourcingPriceReapplicationSchema=z.object({
+  decision:z.enum(["approved","rejected","returned","cancelled"]),verificationReason:z.string().trim().min(1).max(500),
+}).strict();
+export type DecideSourcingPriceReapplication=z.infer<typeof DecideSourcingPriceReapplicationSchema>;
+export const SourcingPriceReapplicationStateSchema=z.object({item:z.object({
+  priceRequestId:IdSchema,baseDecisionId:IdSchema,baseDocumentId:IdSchema,unitPrice:MoneyInputSchema,
+  reason:z.string(),requestedBy:IdSchema,requestedAt:z.string().datetime(),requiresOwnerApproval:z.boolean(),
+  status:z.enum(["pending","approved","rejected","returned","cancelled"]),basisChanged:z.boolean(),
+}).strict().nullable()}).strict();
+export type SourcingPriceReapplicationState=z.infer<typeof SourcingPriceReapplicationStateSchema>;
