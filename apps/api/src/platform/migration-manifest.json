@@ -953,8 +953,16 @@
       "checksum": "c50f93ea731b5e9e2b8cab781ad870bb53a1bef8271b913720d63d6efb5e7bb6"
     },
     {
+      "version": "0228_sourcing_contract_return_cycles",
+      "checksum": "86eec9b3696bade0d7eda97773f9f5a4636f6b38e891879e6882437c7f16cb4c"
+    },
+    {
       "version": "0229_digital_bulk_cutting",
       "checksum": "be60e800d1c513da9ae9e25463eba2a92d9ca69b86489f847269743d0e1672bb"
+    },
+    {
+      "version": "0229_sourcing_price_reapplications",
+      "checksum": "633964acebe30386ae7d3877268dcb7519944e387ffeb9707fa4d92e3b3cc857"
     },
     {
       "version": "0230_digital_factory_flow",
@@ -1039,6 +1047,10 @@
     {
       "version": "0250_todo_content_reads",
       "checksum": "146cc69ba897d7beafef88e3a4fd9d3e8411441fd672124db4c6c4576c79a038"
+    },
+    {
+      "version": "0251_contract_price_acceptance_bridge",
+      "checksum": "fcaddd8b378656f7ff65e994c809c6e981d093f0a27d108ed0e9877a2806ff11"
     }
   ]
 }

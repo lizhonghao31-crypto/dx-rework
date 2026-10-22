@@ -1025,5 +1025,89 @@
       "guard_production_order_root_immutable"
     ],
     "sequences": []
+  },
+  "0228_sourcing_contract_return_cycles": {
+    "tables": [
+      "sourcing_approval_snapshots",
+      "sourcing_contract_documents",
+      "sourcing_contract_return_cycles"
+    ],
+    "functions": [],
+    "references": [
+      "operation_events",
+      "sourcing_approval_snapshots",
+      "sourcing_cases",
+      "sourcing_contract_documents"
+    ],
+    "insert": [
+      "sourcing_contract_return_cycle_policy"
+    ],
+    "update": [],
+    "creates": [
+      "sourcing_contract_return_cycle_policy",
+      "sourcing_contract_return_cycles"
+    ],
+    "execute": [
+      "enroll_sourcing_contract_return_cycle",
+      "guard_sourcing_contract_return_cycle",
+      "sourcing_contract_return_add_hours",
+      "start_sourcing_version_return_clock"
+    ],
+    "sequences": [],
+    "checksum": "86eec9b3696bade0d7eda97773f9f5a4636f6b38e891879e6882437c7f16cb4c"
+  },
+  "0229_sourcing_price_reapplications": {
+    "tables": [
+      "sourcing_approval_snapshots",
+      "sourcing_case_transitions",
+      "sourcing_decisions",
+      "sourcing_price_reapplications",
+      "sourcing_price_reviews"
+    ],
+    "functions": [
+      "guard_sourcing_cutting_process",
+      "guard_sourcing_decision_crafts",
+      "guard_sourcing_decision_insert",
+      "guard_sourcing_transition_insert"
+    ],
+    "references": [
+      "app_users",
+      "operation_events",
+      "sourcing_cases",
+      "sourcing_contract_documents",
+      "sourcing_decisions",
+      "sourcing_price_reapplications"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "sourcing_price_reapplications",
+      "sourcing_price_reviews"
+    ],
+    "execute": [
+      "guard_sourcing_price_request",
+      "guard_sourcing_price_review",
+      "guard_sourcing_price_snapshot",
+      "reject_operation_event_mutation"
+    ],
+    "sequences": [],
+    "checksum": "633964acebe30386ae7d3877268dcb7519944e387ffeb9707fa4d92e3b3cc857"
+  },
+  "0251_contract_price_acceptance_bridge": {
+    "checksum": "fcaddd8b378656f7ff65e994c809c6e981d093f0a27d108ed0e9877a2806ff11",
+    "tables": [],
+    "functions": [
+      "digital_merchandiser_todo_transfer",
+      "guard_sourcing_decision_insert",
+      "guard_sourcing_factory_execution",
+      "guard_sourcing_transition_insert",
+      "sourcing_factory_remaining_lines"
+    ],
+    "references": [],
+    "insert": [],
+    "update": [],
+    "creates": [],
+    "execute": [],
+    "sequences": []
   }
 }

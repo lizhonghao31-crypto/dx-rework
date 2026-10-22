@@ -53,6 +53,12 @@ export function assertAppliedMigrationHistory(applied, expected) {
     throw new Error('Post-reconciliation migrations require both complete branch histories');
   }
   assertPrefix(laterApplied, later);
+  // The 0251 bridge belongs after these exact main extensions. Older release
+  // histories remain valid prefixes; future extensions do not invalidate 0251.
+  if (seen.has('0251_contract_price_acceptance_bridge') &&
+    !['0228_sourcing_contract_return_cycles','0229_sourcing_price_reapplications'].every(version => seen.has(version))) {
+    throw new Error('Contract price bridge requires both original main migration histories');
+  }
   // Reject any unexpected migration masquerading as a third fork in 0218..0231.
   for (const row of applied) {
     const n = Number(row.version.slice(0, 4));

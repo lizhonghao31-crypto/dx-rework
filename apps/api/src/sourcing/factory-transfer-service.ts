@@ -15,9 +15,12 @@ export async function factoryTransferLines(client:Query,caseId:string,decisionId
 export async function transferProductionFactory(client:Query,caseId:string,fromDecisionId:string,decisionId:string,eventId:string) {
   const production=(await client.query<{production_order_id:string}>("SELECT production_order_id FROM sourcing_production_orders WHERE sourcing_case_id=$1 FOR UPDATE",[caseId])).rows[0];
   if(!production)return;
+  const execution=(await client.query<{decision_id:string|null}>(
+    "SELECT sourcing_factory_execution_basis($1,$2) AS decision_id",[caseId,fromDecisionId])).rows[0]?.decision_id;
+  if(!execution)throw new ApplicationError("INVALID_STATE_TRANSITION","当前价格决定无法对应实际工厂执行，不能猜测历史归属",409);
   const lines=await factoryTransferLines(client,caseId,fromDecisionId);
   await client.query(`INSERT INTO sourcing_production_factory_transfers(factory_decision_id,production_order_id,from_decision_id,operation_event_id)
-    SELECT $1,$2,$3,$4 FROM operation_events WHERE event_id=$4`,[decisionId,production.production_order_id,fromDecisionId,eventId]);
+    SELECT $1,$2,$3,$4 FROM operation_events WHERE event_id=$4`,[decisionId,production.production_order_id,execution,eventId]);
   for(const line of lines)await client.query(`INSERT INTO sourcing_production_factory_transfer_lines(factory_decision_id,position,retained_quantity,transferred_quantity)
     VALUES($1,$2,$3,$4)`,[decisionId,line.position,line.completed_quantity,line.quantity]);
   await client.query(`INSERT INTO sourcing_production_transitions(production_transition_id,production_order_id,factory_decision_id,sequence,status,business_date,actor_id,operation_event_id,created_at)

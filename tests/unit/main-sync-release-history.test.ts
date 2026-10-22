@@ -8,7 +8,7 @@ const manifest = JSON.parse(readFileSync("apps/api/src/platform/migration-manife
 const branches = JSON.parse(readFileSync("scripts/migration-branches.json", "utf8"));
 const extensions = JSON.parse(readFileSync("scripts/migration-main-extensions.json", "utf8"));
 const frozenMain225Extensions = extensions.filter((row: {version:string})=>Number(row.version.slice(0,4))<=225);
-const newlyReconciledMain = ["0226_external_revision_preserve_handler", "0227_qc_other_craft"];
+const newlyReconciledMain = ["0226_external_revision_preserve_handler", "0227_qc_other_craft", "0228_sourcing_contract_return_cycles", "0229_sourcing_price_reapplications"];
 const production = [...manifest.migrations.slice(0, 217), ...branches.main, ...frozenMain225Extensions].sort((a, b) => a.version.localeCompare(b.version));
 const added = ["0225_warehouse_supervisor_cutting_read", "0242_warehouse_supervisor_digital_dispatch", "0243_misc_order_stable_association", "0244_development_sewing_result_attachments", "0245_development_pattern_result_attachments", "0246_development_round_arrangements", "0247_development_material_verification"];
 const acceptance = manifest.migrations.filter((row: { version: string }) => Number(row.version.slice(0,4))<=247 && !added.includes(row.version) && !newlyReconciledMain.includes(row.version));

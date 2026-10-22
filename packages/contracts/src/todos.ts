@@ -28,6 +28,12 @@ export const TodoRouteDescriptorSchema = z.object({
   roundId: TodoIdSchema.optional(),
   developmentRound: z.number().int().positive().optional(),
   factoryDecisionId: TodoIdSchema.optional(),
+  contractReturn: z.object({
+    documentId: TodoIdSchema,version:z.number().int().positive(),supplierName:z.string().min(1),source:z.literal("price_reapplication"),
+  }).strict().optional(),
+  transferContract: z.object({
+    documentId: TodoIdSchema, version: z.number().int().positive(), supplierName: z.string().min(1),
+  }).strict().optional(),
   tab: z.enum([
     "contract_return",
     "process_configuration",

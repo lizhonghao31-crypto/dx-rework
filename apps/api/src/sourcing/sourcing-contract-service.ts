@@ -1,3 +1,4 @@
+import { SourcingTransferContractTodos } from "./sourcing-transfer-contract-todos.js";
 import {effectiveSourcingMerchandiser,lockDigitalSourcingHandover} from "./current-merchandiser.js";
 import { SourcingContractContentService, loadContractContent, hydrateContractContentImages, canEditContractContent } from "./sourcing-contract-content.js";
 import { memberCanWriteModule } from "../access/member-module-policy.js";
@@ -68,6 +69,7 @@ const requestHash = (scope: string, payload: unknown): string =>
   createHash("sha256").update(JSON.stringify({ scope,payload })).digest("hex");
 
 export class SourcingContractService {
+  readonly transferTodos: SourcingTransferContractTodos;
   readonly management: SourcingContractManagementService;
   readonly content: SourcingContractContentService;
   constructor(
@@ -76,7 +78,7 @@ export class SourcingContractService {
     private readonly idempotency = new IdempotencyService(),
     private readonly events = new OperationEventRepository(),
     todos?: Pick<TodoProjectionService,"actionableForAllAssignedRole"|"cancelOpenByDedupePrefix">,
-  ) { this.management = new SourcingContractManagementService(database); this.content = new SourcingContractContentService(database,attachments,undefined,undefined,todos); }
+  ) { this.transferTodos = new SourcingTransferContractTodos(database); this.management = new SourcingContractManagementService(database); this.content = new SourcingContractContentService(database,attachments,undefined,undefined,todos); }
 
   async validateLineImages(client: Pick<PoolClient, "query">, actor: TrustedActorContext, attachmentIds: readonly string[]): Promise<void> {
     for (const attachmentId of new Set(attachmentIds)) {
@@ -421,13 +423,37 @@ export class SourcingContractService {
         content: pdf,entityType: "sourcing_contract_document",
         entityId: source.sourcing_contract_document_id,
       });
-      await this.database.query(
-        `UPDATE sourcing_contract_documents
-         SET status='ready',snapshot_fingerprint=$2,pdf_attachment_id=$3,
-             pdf_sha256=$4,generated_at=CURRENT_TIMESTAMP,failure_reason=NULL
-         WHERE sourcing_contract_document_id=$1 AND status='generating'`,
-        [source.sourcing_contract_document_id,fingerprint,attachment.attachmentId,attachment.sha256],
-      );
+      const client = await this.database.connect();
+      try {
+        await client.query("BEGIN");
+        await lockDigitalSourcingHandover(client,sourcingCaseId,actor);
+        await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 FOR UPDATE", [sourcingCaseId]);
+        await client.query(
+          `UPDATE sourcing_contract_documents
+           SET status='ready',snapshot_fingerprint=$2,pdf_attachment_id=$3,
+               pdf_sha256=$4,generated_at=COALESCE(generated_at,CURRENT_TIMESTAMP),failure_reason=NULL
+           WHERE sourcing_contract_document_id=$1 AND status='generating'`,
+          [source.sourcing_contract_document_id,fingerprint,attachment.attachmentId,attachment.sha256],
+        );
+        // A routing configuration problem must not turn a valid generated PDF into a failed contract.
+        // Keep an audited retry fact; explicit reconciliation uses the same version-bound projection.
+        await client.query("SAVEPOINT transfer_contract_todos");
+        try {
+          await this.transferTodos.synchronize(client, actor, sourcingCaseId);
+          await client.query("RELEASE SAVEPOINT transfer_contract_todos");
+        } catch (error) {
+          await client.query("ROLLBACK TO SAVEPOINT transfer_contract_todos");
+          await this.events.append(client, actor, {
+            action: "sourcing.transfer_contract_todo.deferred", entityType: "sourcing_case", entityId: sourcingCaseId,
+            after: { sourcingContractDocumentId: source.sourcing_contract_document_id },
+            reason: error instanceof ApplicationError ? error.message : "待办投影失败，需重试核对",
+          });
+        }
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      } finally { client.release(); }
       return this.getCurrent(actor, sourcingCaseId,sourcingContractDocumentId);
     } catch (error) {
       const reason = error instanceof Error ? error.message.slice(0,500) : "合同PDF生成失败";
@@ -439,6 +465,31 @@ export class SourcingContractService {
       ).catch(() => undefined);
       throw error;
     }
+  }
+
+  /** Explicit recovery of enrolled new business only; never scans or enrolls historical orders. */
+  async retryReturnTodos(actor: TrustedActorContext, caseId: string, documentId: string, key: string) {
+    if (!actor.actorRoles.includes(ROOT_ROLE)) throw new ApplicationError("FORBIDDEN","仅Root可恢复合同待办",403);
+    const client=await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      await lockDigitalSourcingHandover(client,caseId,actor);
+      const outcome=await this.idempotency.execute(client,{
+        scope:"sourcing.contract-return-todo.retry",actorKey:actor.actorId,key,
+        requestHash:requestHash("sourcing.contract-return-todo.retry",{caseId,documentId}),expiresAt:new Date(Date.now()+86400000),
+      },async()=>{
+        await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 FOR UPDATE",[caseId]);
+        const {current}=await this.transferTodos.inspect(client,caseId);
+        const enrolled=(await client.query("SELECT 1 FROM sourcing_contract_return_cycles WHERE sourcing_approval_snapshot_id=$1 AND origin='business'",[current?.return_cycle_id??null])).rowCount;
+        if (!enrolled || current?.sourcing_contract_document_id!==documentId || current.status!=="ready")
+          throw new ApplicationError("CONFLICT","仅可恢复明确纳入新规则且已就绪的当前业务合同；历史补录需单独预检",409);
+        const result=await this.transferTodos.synchronize(client,actor,caseId);
+        await this.events.append(client,actor,{action:"sourcing.contract_return_todo.retry",entityType:"sourcing_case",entityId:caseId,
+          after:{documentId,...result}});
+        return {statusCode:200,response:result};
+      });
+      await client.query("COMMIT");return {...outcome.response,reused:outcome.reused};
+    }catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}
   }
 
   private assertReader(actor: TrustedActorContext): void {

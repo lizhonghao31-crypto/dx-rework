@@ -57,6 +57,8 @@ export function todoDestination(descriptor:TodoRouteDescriptor):string {
     case "sourcing_detail":
       path = `/ui/sourcing/orders/${route.entityId}`;
       if (route.tab === "contract_return") query.set("section", "contract-return");
+      if (route.contractReturn) query.set("contractDocumentId",route.contractReturn.documentId);
+      if (route.transferContract) query.set("contractDocumentId",route.transferContract.documentId);
       break;
     case "responsibility_detail":
     case "own_factory_approval":

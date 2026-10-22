@@ -24,6 +24,10 @@ import { DevelopmentRoundService } from "../../apps/api/src/production-platform/
 import { DevelopmentExecutionService } from "../../apps/api/src/production-platform/development-execution-service.js";
 import { PatternRoomOrderService } from "../../apps/api/src/pattern-room/order-service.js";
 import { unzipSync } from "fflate";
+import type * as CryptoModule from "node:crypto";
+import { contractReturnState } from "../../apps/api/src/sourcing/contract-return-state.js";
+import type * as HistoricalScopeModule from "../../apps/api/src/sourcing/sourcing-contract-history-scope.js";
+import { SourcingTransferContractReconciliation } from "../../apps/api/src/sourcing/sourcing-transfer-contract-reconciliation.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { migrationExecutionSql } from "../../scripts/deploy/migration-execution-compatibility.mjs";
 import "./work-analysis-postgres.cases.js";
@@ -38,6 +42,7 @@ import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { AccessMasterDataService } from "../../apps/api/src/access/service.js";
+import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
 import { DigitalBudgetService } from "../../apps/api/src/production-platform/budget-service.js";
 import { DigitalProductionIdentityService } from "../../apps/api/src/production-platform/identity-service.js";
 import { DigitalProductionAccessPolicy } from "../../apps/api/src/production-platform/access-policy.js";
@@ -49,8 +54,10 @@ import { BudgetDocumentSchema } from "@dx-rework/contracts/digital-budget";
 import { CuttingSourceService } from "../../apps/api/src/cutting/cutting-source-service.js";
 import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
 import { SourcingContractService } from "../../apps/api/src/sourcing/sourcing-contract-service.js";
+import * as contractPdf from "../../apps/api/src/sourcing/sourcing-contract-pdf.js";
 import { SourcingContractReturnService } from "../../apps/api/src/sourcing/sourcing-contract-return-service.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
+import { registerTodoRoutes } from "../../apps/api/src/todos/routes.js";
 import { TodoProjectionService } from "../../apps/api/src/todos/projection-service.js";
 import { TodoDeliveryWorker } from "../../apps/api/src/todos/delivery-worker.js";
 import { FakeDingTalkTodoProvider } from "../../apps/api/src/todos/provider.js";
@@ -59,6 +66,18 @@ import { SourcingService } from "../../apps/api/src/sourcing/sourcing-service.js
 import { AttachmentService } from "../../apps/api/src/tools/attachments.js";
 import { OperationEventRepository, type TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 import { FakeObjectStorage } from "../../apps/api/src/tools/storage.js";
+
+vi.mock("node:crypto",async importOriginal=>{
+  const actual=await importOriginal<typeof CryptoModule>();
+  return {...actual,randomUUID:vi.fn(actual.randomUUID)};
+});
+
+// Isolated synthetic orders use their own exact baseline registry; production registry is tested separately.
+const historicalFixtures = vi.hoisted(() => new Map<string, {caseId:string;documentId:string;version:number}>());
+vi.mock("../../apps/api/src/sourcing/sourcing-contract-history-scope.js", async importOriginal => {
+  const actual = await importOriginal<typeof HistoricalScopeModule>();
+  return {...actual,contractHistoryBaseline:(id:string) => historicalFixtures.get(id) ?? actual.contractHistoryBaseline(id)};
+});
 
 const databaseUrl = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const runWithPostgres = databaseUrl ? describe : describe.skip;
@@ -2101,6 +2120,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(contractService.supplement(contractActor(), created.value.sourcingCaseId, {
       address: "试图追改",
     }, randomUUID())).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION" });
+    await service.requestPriceReapplication(managerActor(),created.value.sourcingCaseId,await priceInput(created.value.sourcingCaseId,"7"),randomUUID());
+    const priced=(await contractService.getCurrent(rootActor(),created.value.sourcingCaseId)).item!;
+    expect(priced.status).toBe("ready");
+    const priceContract=await contractService.content.get(rootActor(),created.value.sourcingCaseId);
+    expect(priceContract.content).toMatchObject({partyBAddress:"广州补充地址",payeeName:"陈补充",bankAccount:"622299"});
+
   });
   it("dispatches before finance, freezes all lines, and handles concurrent clicks without duplication", async () => {
     const created = await service.createCase(merchandiserActor(), {
@@ -2416,6 +2441,15 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const document=(await contractService.getCurrent(rootActor(),caseId)).item!,order=(await production.dispatch(rootActor(),caseId,{sourcingContractDocumentId:document.sourcingContractDocumentId,confirmed:true},randomUUID())).value,id=order.productionOrderId;
     const cuts=(await database.query('SELECT * FROM cutting_orders WHERE sourcing_case_id=$1 ORDER BY sourcing_line_position',[caseId])).rows;
     await reporting.report(rootActor(),id,{position:1,businessDate,quantity:20},randomUUID());
+    const originalProduction=(await database.query("SELECT * FROM sourcing_production_orders WHERE production_order_id=$1",[id])).rows[0];
+    const reprice=async(unitPrice:string)=>{
+      const basis=await service.getCase(readerActor(),caseId),pdf=(await contractService.getCurrent(rootActor(),caseId)).item!;
+      await service.requestPriceReapplication(managerActor(),caseId,{unitPrice,changeReason:"TEST sync same-factory execution",expectedDecisionId:basis.decision!.sourcingDecisionId,expectedContractDocumentId:pdf.sourcingContractDocumentId},randomUUID());
+    };
+    await reprice("7.50");await reprice("7.00");
+    expect((await database.query("SELECT sourcing_factory_execution_basis($1,$2) AS basis",[caseId,(await service.getCase(readerActor(),caseId)).decision!.sourcingDecisionId])).rows[0].basis).toBe(originalProduction.sourcing_decision_id);
+    expect((await database.query("SELECT * FROM sourcing_production_orders WHERE production_order_id=$1",[id])).rows[0]).toEqual(originalProduction);
+    expect((await database.query("SELECT count(*)::int AS n FROM sourcing_production_factory_transfers WHERE production_order_id=$1",[id])).rows[0].n).toBe(0);
     const first=(await service.requestFactoryChange(ownerActor(),caseId,{supplierId:replacementFactoryId,unitPrice:'9',changeReason:'TEST只转白色未完工余量'},randomUUID())).value;
     const factoryDecisionId=first.decision!.sourcingDecisionId;expect(first.decision).toMatchObject({quantity:10,totalAmount:'90.00',linePrices:[expect.objectContaining({position:2,quantity:10})]});
     const content=(await contractService.content.get(rootActor(),caseId)).content;expect(content).toMatchObject({totalQuantity:10,totalAmount:'90.00',lines:[expect.objectContaining({position:2,color:'白',quantity:10})]});
@@ -2424,7 +2458,11 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(reporting.report(rootActor(),id,{factoryDecisionId,position:1,businessDate,quantity:1},randomUUID())).rejects.toMatchObject({statusCode:400});
     const reported=(await reporting.report(rootActor(),id,{factoryDecisionId,position:2,businessDate,quantity:4},randomUUID())).value;
     await expect(reporting.correct(rootActor(),id,reported.history[0]!.rootReportId,{expectedReportId:reported.history[0]!.reportId,businessDate,quantity:3,reason:'TEST不能跨厂修正'},randomUUID())).rejects.toMatchObject({statusCode:404});
+    await reprice("8.50");
+    expect((await database.query("SELECT sourcing_factory_execution_basis($1,$2) AS basis",[caseId,(await service.getCase(readerActor(),caseId)).decision!.sourcingDecisionId])).rows[0].basis).toBe(factoryDecisionId);
     const second=(await service.requestFactoryChange(ownerActor(),caseId,{supplierId:factoryId,unitPrice:'8',changeReason:'TEST白色余量再次转厂'},randomUUID())).value,newFactoryDecisionId=second.decision!.sourcingDecisionId;
+    const transfers=(await database.query("SELECT factory_decision_id,from_decision_id FROM sourcing_production_factory_transfers WHERE production_order_id=$1 ORDER BY effective_at",[id])).rows;
+    expect(transfers).toEqual([{factory_decision_id:factoryDecisionId,from_decision_id:originalProduction.sourcing_decision_id},{factory_decision_id:newFactoryDecisionId,from_decision_id:factoryDecisionId}]);
     expect(second.decision).toMatchObject({quantity:6,totalAmount:'48.00',linePrices:[expect.objectContaining({position:2,quantity:6})]});
     expect((await reporting.detail(rootActor(),id)).order).toMatchObject({quantity:20,completedQuantity:20});
     expect((await reporting.detail(rootActor(),id,undefined,factoryDecisionId)).order).toMatchObject({quantity:4,completedQuantity:4});
@@ -2433,6 +2471,22 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const original=(await database.query('SELECT sourcing_decision_id FROM sourcing_production_orders WHERE production_order_id=$1',[id])).rows[0].sourcing_decision_id;
     expect((await service.readFactorySettlements(financeActor(),caseId)).items.map(i=>[i.decisionId,i.quantity,i.totalAmount])).toEqual([[original,20,'160.00'],[factoryDecisionId,4,'36.00'],[newFactoryDecisionId,6,'48.00']]);
     expect((await database.query('SELECT count(*)::int AS count FROM sourcing_production_orders WHERE sourcing_case_id=$1',[caseId])).rows[0].count).toBe(1);
+  });
+
+  it("anchors a pre-dispatch price decision as the real execution and transfers only its unreported remainder",async()=>{
+    const id=await reviewedContractCase("SYNC-PRE-DISPATCH"),before=await service.getCase(readerActor(),id),document=(await contractService.getCurrent(rootActor(),id)).item!;
+    await service.requestPriceReapplication(managerActor(),id,{unitPrice:"14.00",changeReason:"TEST pre-dispatch price",expectedDecisionId:before.decision!.sourcingDecisionId,expectedContractDocumentId:document.sourcingContractDocumentId},randomUUID());
+    const priced=await service.getCase(readerActor(),id),current=(await contractService.getCurrent(rootActor(),id)).item!;
+    const dispatched=(await production.dispatch(rootActor(),id,{sourcingContractDocumentId:current.sourcingContractDocumentId,confirmed:true},randomUUID())).value;
+    const stored=(await database.query("SELECT * FROM sourcing_production_orders WHERE production_order_id=$1",[dispatched.productionOrderId])).rows[0];
+    expect(stored.sourcing_decision_id).toBe(priced.decision!.sourcingDecisionId);
+    const reporting=new ProductionReportingService(database),date=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+    await reporting.report(rootActor(),dispatched.productionOrderId,{position:1,businessDate:date,quantity:1},randomUUID());
+    const transferred=(await service.requestFactoryChange(ownerActor(),id,{supplierId:replacementFactoryId,unitPrice:"13.00",changeReason:"TEST after pre-dispatch price"},randomUUID())).value;
+    expect(transferred.decision!.quantity).toBe(priced.orderQuantity-1);
+    expect((await database.query("SELECT from_decision_id FROM sourcing_production_factory_transfers WHERE production_order_id=$1",[dispatched.productionOrderId])).rows).toEqual([{from_decision_id:priced.decision!.sourcingDecisionId}]);
+    expect((await database.query("SELECT * FROM sourcing_production_orders WHERE production_order_id=$1",[dispatched.productionOrderId])).rows[0]).toEqual(stored);
+    expect((await database.query("SELECT sourcing_factory_execution_basis($1,$2) AS basis",[randomUUID(),priced.decision!.sourcingDecisionId])).rows[0].basis).toBeNull();
   });
 
   it("reports within assigned scope, corrects append-only, and completes then ships without finance", async () => {
@@ -3388,9 +3442,9 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       supplierId:replacementFactoryId,unitPrice:"12.0000",changeReason:"老板批准转厂",
     },randomUUID());
     expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1",[todoId]))
-      .rows[0]?.status).toBe("completed");
+      .rows[0]?.status).toBe("cancelled");
     const currentTodo=(await database.query<{todo_id:string}>(
-      `SELECT todo_id FROM rework_todos WHERE entity_id=$1 AND category='sourcing_contract_return'
+      `SELECT todo_id FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return'
        AND status='pending'`,[id])).rows[0]?.todo_id;
     expect(currentTodo).toBeTruthy();
     const attachmentId=randomUUID();
@@ -3398,13 +3452,13 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       size_bytes,sha256,uploaded_by,status,ready_at)
       VALUES($1,$2,'签回.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,
       [attachmentId,`contract-return-todo/${attachmentId}`,"d".repeat(64),merchandiserId]);
-    await contractReturns.submit(contractActor(),id,[attachmentId],randomUUID());
+    await contractReturns.submit(contractActor(),id,[attachmentId],randomUUID(),(await contractService.getCurrent(rootActor(),id)).item!.sourcingContractDocumentId);
     expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1",[currentTodo]))
       .rows[0]?.status).toBe("completed");
     expect((await database.query("SELECT delivery_kind FROM todo_delivery_attempts WHERE todo_id=$1 ORDER BY attempted_at",[currentTodo]))
-      .rows.map(row=>row.delivery_kind)).toEqual(["create","complete"]);
-    expect((await database.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_contract_return'",[id]))
-      .rows[0]?.count).toBe(2);
+      .rows.map(row=>row.delivery_kind)).toEqual([]);
+    expect((await database.query("SELECT count(*)::int AS count FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return'",[id]))
+      .rows[0]?.count).toBe(1);
   });
 
   it("backfills a single pending contract todo for a historic approval and enqueues delivery once", async () => {
@@ -4329,7 +4383,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const rootDocument=await management.refreshInformation(rootActor(),id,rootPreview,randomUUID());
     await contractService.generateIfReady(rootActor(),id,rootDocument);
     expect((await contractService.getCurrent(rootActor(),id)).item?.canRefreshInformation).toBe(true);
-    expect(await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id)).toEqual({...returned,currentContractReturned:false,currentContractDocumentId:rootDocument});
+    expect(await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id)).toEqual({...returned,currentContractReturned:false,currentContractDocumentId:rootDocument,uploadedFileCount:0,uploadedTotalBytes:0});
     expect((await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1",[id])).rows).toEqual(returnRows);
     await expect(database.query("UPDATE sourcing_contract_return_submissions SET sourcing_contract_document_id=$2 WHERE submission_id=$1",[returnRows[0].submission_id,rootDocument]))
       .rejects.toMatchObject({code:"55000"});
@@ -4348,10 +4402,17 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       contractReturnStatus:returned.contractReturnStatus});
     expect(resign.history[0]).toMatchObject({signedContractDocumentId:withStyle.sourcingContractDocumentId,
       signedContractVersion:withStyle.contractVersion,attachments:returned.attachments});
-    expect(resign).toMatchObject({uploadedFileCount:2,canUpload:false});
+    expect(resign).toMatchObject({uploadedFileCount:1,uploadedTotalBytes:128,canUpload:true});
     expect(resign.attachments.map(file=>file.attachmentId)).toEqual([newFile]);
-    const thirdFile=await readyCuttingSheet(merchandiserId);
-    await expect(contractReturns.submit(rootActor(),id,[thirdFile],randomUUID())).rejects.toMatchObject({statusCode:409});
+    const secondNewFile=randomUUID();
+    await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'新版回签补充.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[secondNewFile,`contract-info-new-return/${secondNewFile}`,"a".repeat(64),rootActor().actorId]);
+    const fullCurrentReturn=await contractReturns.submit(rootActor(),id,[secondNewFile],randomUUID(),rootDocument);
+    expect(fullCurrentReturn).toMatchObject({uploadedFileCount:2,uploadedTotalBytes:256,canUpload:false,
+      contractReturnedAt:resign.contractReturnedAt});
+    expect(fullCurrentReturn.attachments.map(file=>file.attachmentId)).toEqual([newFile,secondNewFile]);
+    const thirdFile=await readyCuttingSheet(rootActor().actorId);
+    await expect(contractReturns.submit(rootActor(),id,[thirdFile],randomUUID(),rootDocument)).rejects.toMatchObject({statusCode:409});
     expect((await database.query("SELECT entity_type FROM attachments WHERE attachment_id=$1",[thirdFile])).rows[0].entity_type).toBeNull();
     expect((await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE submission_id=$1",[returnRows[0].submission_id])).rows[0]).toEqual(returnRows[0]);
   });
@@ -4824,6 +4885,25 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       expect(after).toEqual({...prior,assignee_id:["sourcing_preparation","bulk_cutting_external","factory_material_count","bulk_ship_sample"].includes(prior.task_kind)&&!["completed","cancelled"].includes(prior.state)?final:prior.assignee_id});
     }
     expect(afterFinalTasks.filter(row=>["bulk_cutting_external","factory_material_count","bulk_ship_sample"].includes(row.task_kind)&&!["completed","cancelled"].includes(row.state)).every(row=>row.assignee_id===final)).toBe(true);
+    for(const kind of ["transfer","price"] as const){
+      const beforePrimary=(await identity.read(rootActor(),id)).primaryMerchandiserId!,target=beforePrimary===next?third:next;
+      if(kind==="transfer")await currentService.requestFactoryChange(ownerActor(),caseId,{supplierId:replacementFactoryId,unitPrice:"5.25",changeReason:"TEST transfer current primary"},randomUUID());
+      else{
+        const basis=await currentService.getCase(readerActor(),caseId),pdf=(await contractService.getCurrent(rootActor(),caseId)).item!;
+        await currentService.requestPriceReapplication(managerActor(),caseId,{unitPrice:"5.00",changeReason:"TEST price current primary",expectedDecisionId:basis.decision!.sourcingDecisionId,expectedContractDocumentId:pdf.sourcingContractDocumentId},randomUUID());
+      }
+      const category=kind==="transfer"?"sourcing_transfer_contract_return":"sourcing_price_contract_return";
+      const currentRows=(await todoRows()).filter(row=>row.category===category&&row.status==="pending"),named=currentRows.find(row=>row.recipient_user_id===beforePrimary)!;
+      expect(currentRows.map(row=>row.recipient_user_id).sort()).toEqual([beforePrimary,second].sort());
+      await access.assignMerchandiser(rootActor(),id,target,await currentVersion());
+      const movedVersion=(await todoRows()).find(row=>row.todo_id===named.todo_id)!;
+      expect(movedVersion.recipient_user_id).toBe(target);expect(unchangedTodo(movedVersion)).toEqual(unchangedTodo(named));
+      const retry=await database.connect();try{await retry.query("BEGIN");await retry.query("SELECT pg_advisory_xact_lock(hashtextextended('digital-production-task-lifecycle-v1',0))");
+        expect(await contractService.transferTodos.synchronize(retry,rootActor(),caseId)).toEqual({createdTodoIds:[]});await retry.query("COMMIT");
+      }catch(error){await retry.query("ROLLBACK");throw error;}finally{retry.release();}
+      expect((await todoRows()).filter(row=>row.category===category&&row.status==="pending").map(row=>row.recipient_user_id).sort()).toEqual([target,second].sort());
+      expect((await database.query("SELECT count(*)::int n FROM todo_delivery_attempts a JOIN rework_todos t USING(todo_id) WHERE t.entity_id=$1 AND t.category=$2",[caseId,category])).rows[0].n).toBe(0);
+    }
     await access.setCustomerDefault(rootActor(),"PD",merchandiserId);
   });
 
@@ -4998,15 +5078,618 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect(await before()).toEqual(frozen);
   });
 
-  const reviewedContractCase = async (label: string, currentService = service) => {
+  const reviewedContractCase = async (label: string, currentService = service, additionalMerchandiserUserId?: string) => {
     const id=(await currentService.createCase(merchandiserActor(),{gender:"女装",styleName:"TEST-"+label,
       estimatedCutPieceSendDate:"2026-10-04",deliveryDate:"2026-10-22",
+      ...(additionalMerchandiserUserId ? { additionalMerchandiserUserId } : {}),
       lineItems:[{styleNo:"TEST-"+label,color:"蓝",quantity:2020}],daxingUnitPrice:"8",attachmentIds:[]},randomUUID())).value.sourcingCaseId;
     await currentService.quoteIePrice(ieActor(),id,{unitPrice:"15.5"},randomUUID());
     await currentService.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],unitPrice:"15.5"},randomUUID());
     await currentService.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
     return id;
   };
+
+  it("binds both authorized merchandisers to the effective transfer version, cancels old versions and completes only on current return",async()=>{
+    await ensureReturnTodoRecipient();
+    const second=randomUUID();
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST-second-merchandiser',true)",[second]);
+    await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','corp',$3,$3,true,true,CURRENT_TIMESTAMP)",[randomUUID(),second,`ding-${second}`]);
+    await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
+    try { await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'order_merchandiser',$3,'TEST-second')",[randomUUID(),second,merchandiserId]); }
+    finally { await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation"); }
+    const id=await reviewedContractCase("TRANSFER-TODO-TWO",service,second);
+    const tasks=async()=> (await database.query("SELECT todo_id,recipient_user_id,status,route_descriptor FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return' ORDER BY todo_id",[id])).rows;
+    await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"16",changeReason:"TEST-requires-approval"},randomUUID());
+    expect(await tasks()).toEqual([]);
+    const pending=(await service.getCurrentFactoryChange(readerActor(),id)).item!;
+    await service.decideFactoryChange(ownerActor(),id,pending.factoryChangeRequestId,{decision:"approved",verificationReason:"TEST-approved"},randomUUID());
+    const first=(await contractService.getCurrent(rootActor(),id)).item!;
+    const firstTasks=await tasks();
+    expect((await database.query("SELECT reason FROM operation_events WHERE entity_id=$1 AND action='sourcing.transfer_contract_todo.deferred'",[id])).rows).toEqual([]);
+    expect(firstTasks).toHaveLength(2);
+    expect(firstTasks.map(t=>t.recipient_user_id).sort()).toEqual([merchandiserId,second].sort());
+    for(const task of firstTasks) expect(task).toMatchObject({status:"pending",route_descriptor:{transferContract:{documentId:first.sourcingContractDocumentId,version:first.contractVersion,supplierName:"二号加工厂"}}});
+    await contractService.getCurrent(rootActor(),id);
+    const pdf=(await database.query("SELECT pdf_attachment_id FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[first.sourcingContractDocumentId])).rows[0].pdf_attachment_id;
+    await attachments.createDownloadIntent({...rootActor(),authorizationCapability:"sourcing:view"},pdf,async()=>true);
+    expect(await tasks()).toEqual(firstTasks);
+    const repair=new SourcingTransferContractReconciliation(database);
+    historicalFixtures.set(id,{caseId:id,documentId:first.sourcingContractDocumentId,version:first.contractVersion});
+    const selected=(await repair.preview(rootActor(),[id])).results.map(({caseId,documentId,version,evidenceHash})=>({caseId,documentId,version,evidenceHash}));
+    await repair.apply(rootActor(),selected,"TEST-existing-version",randomUUID());
+    await repair.apply(rootActor(),selected,"TEST-existing-version-repeated",randomUUID());
+    expect(await tasks()).toEqual(firstTasks);
+    await service.requestFactoryChange(managerActor(),id,{supplierId:factoryId,unitPrice:"16",changeReason:"TEST-next-transfer"},randomUUID());
+    const current=(await contractService.getCurrent(rootActor(),id)).item!;
+    expect(current.sourcingContractDocumentId).not.toBe(first.sourcingContractDocumentId);
+    const changed=await tasks();
+    expect(changed.filter(t=>t.status==='cancelled').map(t=>t.todo_id).sort()).toEqual(firstTasks.map(t=>t.todo_id).sort());
+    expect(changed.filter(t=>t.status==='pending')).toHaveLength(2);
+    expect((await repair.apply(rootActor(),selected,"TEST-stale",randomUUID())).results[0]?.action).toBe("blocked_precondition");
+    const file=randomUUID();
+    await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'TEST-second-return.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[file,`TEST-second/${file}`,"a".repeat(64),second]);
+    const secondActor={...contractActor(),actorId:second};
+    await expect(contractReturns.submit({...contractActor(),actorId:ieId},id,[file],randomUUID(),current.sourcingContractDocumentId)).rejects.toMatchObject({statusCode:403});
+    await expect(contractReturns.submit(financeActor(),id,[file],randomUUID(),current.sourcingContractDocumentId)).rejects.toMatchObject({statusCode:403});
+    await expect(contractReturns.submit(secondActor,id,[file],randomUUID(),first.sourcingContractDocumentId)).rejects.toMatchObject({statusCode:409});
+    expect(await tasks()).toEqual(changed);
+    const key=randomUUID();
+    await contractReturns.submit(secondActor,id,[file],key,current.sourcingContractDocumentId);
+    await contractReturns.submit(secondActor,id,[file],key,current.sourcingContractDocumentId);
+    expect((await tasks()).filter(t=>t.status==='completed')).toHaveLength(2);
+    expect((await tasks()).filter(t=>t.status==='cancelled')).toHaveLength(2);
+    expect((await repair.preview(rootActor(),[id])).results[0]?.blocked).toBe(true);
+    // Isolated policy fixture: a read-only second merchandiser neither receives new tasks nor uploads.
+    const event=(await database.query("SELECT event_id FROM operation_events WHERE entity_id=$1 LIMIT 1",[id])).rows[0].event_id;
+    await database.query("ALTER TABLE business_module_owner_bindings DISABLE TRIGGER member_module_binding_guard");
+    try { await database.query("INSERT INTO business_module_owner_bindings(member_key,user_id,operation_event_id) VALUES('wu_yunfeng',$1,$2),('li_zhonghao',$3,$2),('li_junyue',$4,$2)",[second,event,ownerId,merchandiserId]); }
+    finally {await database.query("ALTER TABLE business_module_owner_bindings ENABLE TRIGGER member_module_binding_guard");}
+    try {
+      await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"16",changeReason:"TEST-notify-policy"},randomUUID());
+      const policyVersion=(await contractService.getCurrent(rootActor(),id)).item!;
+      expect((await tasks()).filter(t=>t.status==='pending').map(t=>t.recipient_user_id)).toEqual([merchandiserId]);
+      await expect(contractReturns.submit(secondActor,id,[randomUUID()],randomUUID(),policyVersion.sourcingContractDocumentId)).rejects.toMatchObject({statusCode:403});
+      const rootFile=randomUUID();
+      await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+        VALUES($1,$2,'TEST-root-return.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[rootFile,`TEST-root/${rootFile}`,"a".repeat(64),rootActor().actorId]);
+      await contractReturns.submit(rootActor(),id,[rootFile],randomUUID(),policyVersion.sourcingContractDocumentId);
+      expect((await tasks()).filter(t=>t.status==='pending')).toEqual([]);
+    } finally {
+      await database.query("ALTER TABLE business_module_owner_bindings DISABLE TRIGGER member_module_binding_guard");
+      try {await database.query("DELETE FROM business_module_owner_bindings WHERE user_id=ANY($1::uuid[])",[[second,ownerId,merchandiserId]]);}
+      finally {await database.query("ALTER TABLE business_module_owner_bindings ENABLE TRIGGER member_module_binding_guard");}
+    }
+    const taskIds=(await tasks()).map(t=>t.todo_id);
+    expect((await database.query("SELECT * FROM todo_delivery_attempts WHERE todo_id=ANY($1::uuid[])",[taskIds])).rows).toEqual([]);
+  });
+
+  it("recovers missing transfer tasks explicitly with Root authorization, exact versions, atomic rollback and idempotency",async()=>{
+    await ensureReturnTodoRecipient();
+    const id=await reviewedContractCase("TRANSFER-TODO-RECOVERY");
+    // Simulate a historical projection failure while preserving the generated PDF.
+    await database.query(`CREATE FUNCTION test_transfer_generation_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.category='sourcing_transfer_contract_return' THEN RAISE EXCEPTION 'TEST-generation-projection-failure'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER test_transfer_generation_fail BEFORE INSERT ON rework_todos FOR EACH ROW EXECUTE FUNCTION test_transfer_generation_fail()`);
+    try { await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"15.5",changeReason:"TEST-historical-unroutable"},randomUUID()); }
+    finally { await database.query("DROP TRIGGER test_transfer_generation_fail ON rework_todos; DROP FUNCTION test_transfer_generation_fail()"); }
+    const current=(await contractService.getCurrent(rootActor(),id)).item!;
+    expect(current.status).toBe("ready");
+    expect((await database.query("SELECT * FROM operation_events WHERE entity_id=$1 AND action='sourcing.transfer_contract_todo.deferred'",[id])).rows).toHaveLength(1);
+    const count=async()=>Number((await database.query("SELECT count(*) AS n FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return'",[id])).rows[0].n);
+    expect(await count()).toBe(0);
+    const repair=new SourcingTransferContractReconciliation(database);
+    await expect(repair.preview(managerActor(),[id])).rejects.toMatchObject({statusCode:403});
+    historicalFixtures.set(id,{caseId:id,documentId:current.sourcingContractDocumentId,version:current.contractVersion});
+    const preview=await repair.preview(rootActor(),[id]);
+    expect(preview.results).toHaveLength(1); expect(await count()).toBe(0);
+    const selected=preview.results.map(({caseId,documentId,version,evidenceHash})=>({caseId,documentId,version,evidenceHash}));
+    await expect(repair.apply(managerActor(),selected,"TEST-forbidden",randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(repair.apply(rootActor(),[...selected,{caseId:randomUUID(),documentId:randomUUID(),version:1,evidenceHash:"f".repeat(64)}],"TEST-atomic-invalid",randomUUID())).rejects.toMatchObject({statusCode:409});
+    expect(await count()).toBe(0);
+    await database.query(`CREATE FUNCTION test_transfer_todo_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.category='sourcing_transfer_contract_return' THEN RAISE EXCEPTION 'TEST-transfer-late-failure'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER test_transfer_todo_fail BEFORE INSERT ON rework_todos FOR EACH ROW EXECUTE FUNCTION test_transfer_todo_fail()`);
+    try { expect((await repair.apply(rootActor(),selected,"TEST-late-failure",randomUUID())).results[0]?.action).toBe("failed"); }
+    finally { await database.query("DROP TRIGGER test_transfer_todo_fail ON rework_todos; DROP FUNCTION test_transfer_todo_fail()"); }
+    expect(await count()).toBe(0);
+    await expect(contractService.retryReturnTodos(managerActor(),id,current.sourcingContractDocumentId,randomUUID())).rejects.toMatchObject({statusCode:403});
+    const retryKey=randomUUID();
+    expect((await contractService.retryReturnTodos(rootActor(),id,current.sourcingContractDocumentId,retryKey)).createdTodoIds).toHaveLength(1);
+    expect((await contractService.retryReturnTodos(rootActor(),id,current.sourcingContractDocumentId,retryKey)).reused).toBe(true);
+    const key=randomUUID();
+    expect((await repair.apply(rootActor(),selected,"TEST-recover",key)).reused).toBe(false);
+    expect((await repair.apply(rootActor(),selected,"TEST-recover",key)).reused).toBe(true);
+    await Promise.all([repair.apply(rootActor(),selected,"TEST-recover-again",randomUUID()),repair.apply(rootActor(),selected,"TEST-concurrent-recover",randomUUID())]);
+    expect(await count()).toBe(1);
+    const audit=(await database.query("SELECT actor_id,after_state FROM operation_events WHERE entity_id=$1 AND action='sourcing.transfer_contract_todo.reconcile'",[key])).rows;
+    expect(audit).toHaveLength(1);expect(audit[0]).toMatchObject({actor_id:rootActor().actorId,after_state:{contracts:selected}});
+    const app=Fastify();
+    app.setErrorHandler((error,_request,reply)=>reply.code((error as {statusCode?:number}).statusCode??500).send({error:error.message}));
+    registerTodoRoutes(app,{service:new TodoService(database),transferContractReconciliation:repair,
+      root:new RootAuthority(database,"corp",`ding-${merchandiserId}`),
+      authenticate:async token=>{if(!token) throw Object.assign(new Error("unauthorized"),{statusCode:401});
+        return {id:token,displayName:"TEST",businessRoles:["root_superuser"],capabilities:["todo:routing_exception_manage"]};}});
+    await app.ready();
+    try {
+      for(const suffix of ['preview','apply']) {
+        const url=`/todos/transfer-contract-reconciliation/${suffix}`;
+        expect((await app.inject({method:"POST",url,payload:{}})).statusCode).toBe(401);
+        expect((await app.inject({method:"POST",url,headers:{cookie:`dx_rework_session=${managerId}`},payload:{}})).statusCode).toBe(403);
+      }
+      const headers={cookie:`dx_rework_session=${merchandiserId}`};
+      expect((await app.inject({method:"POST",url:"/todos/transfer-contract-reconciliation/preview",headers,payload:{caseIds:[id]}})).statusCode).toBe(200);
+      expect((await app.inject({method:"POST",url:"/todos/transfer-contract-reconciliation/apply",headers,payload:{selected,reason:"TEST-no-key"}})).statusCode).toBe(400);
+      const result=await app.inject({method:"POST",url:"/todos/transfer-contract-reconciliation/apply",headers:{...headers,'idempotency-key':randomUUID()},payload:{selected,reason:"TEST-route"}});
+      expect(result.statusCode).toBe(200);expect(result.headers['cache-control']).toBe('no-store');
+    } finally {await app.close();}
+  });
+
+  it("rechecks preview recipients and skips a concurrent signature without closing unrelated history",async()=>{
+    await ensureReturnTodoRecipient();
+    const second=randomUUID();
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST-preview-second-merchandiser',true)",[second]);
+    await database.query("INSERT INTO identity_mappings(id,user_id,provider,corp_id,provider_user_id,union_id,active,employed,last_verified_at) VALUES($1,$2,'dingtalk','corp',$3,$3,true,true,CURRENT_TIMESTAMP)",[randomUUID(),second,`ding-${second}`]);
+    await database.query("ALTER TABLE user_role_assignments DISABLE TRIGGER user_role_assignments_guard_creation");
+    try { await database.query("INSERT INTO user_role_assignments(assignment_id,user_id,role_code,granted_by,grant_reason) VALUES($1,$2,'order_merchandiser',$3,'TEST-preview-second')",[randomUUID(),second,merchandiserId]); }
+    finally { await database.query("ALTER TABLE user_role_assignments ENABLE TRIGGER user_role_assignments_guard_creation"); }
+    const id=await reviewedContractCase("TRANSFER-PREVIEW-RACE",service,second);
+    await database.query(`CREATE FUNCTION test_transfer_preview_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.category='sourcing_transfer_contract_return' THEN RAISE EXCEPTION 'TEST-preview-failure'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER test_transfer_preview_fail BEFORE INSERT ON rework_todos FOR EACH ROW EXECUTE FUNCTION test_transfer_preview_fail()`);
+    try {await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"15.5",changeReason:"TEST-preview-race"},randomUUID());}
+    finally {await database.query("DROP TRIGGER test_transfer_preview_fail ON rework_todos; DROP FUNCTION test_transfer_preview_fail()");}
+    const current=(await contractService.getCurrent(rootActor(),id)).item!;
+    historicalFixtures.set(id,{caseId:id,documentId:current.sourcingContractDocumentId,version:current.contractVersion});
+    const repair=new SourcingTransferContractReconciliation(database);
+    const preview=await repair.preview(rootActor(),[id]);
+    expect(preview.results[0]).toMatchObject({blocked:false,proposedCount:2});
+    const selected=preview.results.map(({caseId,documentId,version,evidenceHash})=>({caseId,documentId,version,evidenceHash}));
+    const auditBefore=(await database.query("SELECT count(*)::int AS n FROM operation_events WHERE entity_id=$1",[id])).rows[0].n;
+    await repair.preview(rootActor(),[id]);await contractService.getCurrent(rootActor(),id);
+    expect((await database.query("SELECT count(*)::int AS n FROM operation_events WHERE entity_id=$1",[id])).rows[0].n).toBe(auditBefore);
+    // Exercise recipient eligibility drift without disabling the release fixture's Root or its guards.
+    await database.query("UPDATE identity_mappings SET employed=false WHERE user_id=$1",[second]);
+    try {expect((await repair.apply(rootActor(),selected,"TEST-eligibility-race",randomUUID())).results[0]?.action).toBe("blocked_precondition");}
+    finally {await database.query("UPDATE identity_mappings SET employed=true WHERE user_id=$1",[second]);}
+    const file=randomUUID();
+    await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'TEST-concurrent-signature.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[file,`TEST-signature/${file}`,"a".repeat(64),merchandiserId]);
+    await contractReturns.submit(contractActor(),id,[file],randomUUID(),current.sourcingContractDocumentId);
+    expect((await repair.apply(rootActor(),selected,"TEST-signed-race",randomUUID())).results[0]?.action).toBe("skipped_signed");
+    expect((await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return'",[id])).rows).toEqual([]);
+  });
+
+  it("recovers an enrolled new transfer without using the historical allowlist",async()=>{
+    await ensureReturnTodoRecipient();
+    const id=await reviewedContractCase("CYCLE-NORMAL-RECOVERY");
+    await database.query(`CREATE FUNCTION test_normal_cycle_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.category='sourcing_transfer_contract_return' THEN RAISE EXCEPTION 'TEST-normal-recovery'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER test_normal_cycle_fail BEFORE INSERT ON rework_todos FOR EACH ROW EXECUTE FUNCTION test_normal_cycle_fail()`);
+    try {await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"15.5",changeReason:"TEST-enrolled-recovery"},randomUUID());}
+    finally {await database.query("DROP TRIGGER test_normal_cycle_fail ON rework_todos; DROP FUNCTION test_normal_cycle_fail()");}
+    const doc=(await contractService.getCurrent(rootActor(),id)).item!;
+    expect(historicalFixtures.has(id)).toBe(false);
+    await expect(new SourcingTransferContractReconciliation(database).preview(rootActor(),[id])).rejects.toMatchObject({statusCode:409});
+    expect((await database.query("SELECT * FROM operation_events WHERE entity_id=$1 AND action='sourcing.transfer_contract_todo.deferred'",[id])).rows).toHaveLength(1);
+    await contractService.generateIfReady(rootActor(),id,doc.sourcingContractDocumentId);
+    expect((await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return'",[id])).rows).toHaveLength(0);
+    await expect(contractService.retryReturnTodos(managerActor(),id,doc.sourcingContractDocumentId,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(contractService.retryReturnTodos(rootActor(),id,randomUUID(),randomUUID())).rejects.toMatchObject({statusCode:409});
+    const key=randomUUID();
+    const results=await Promise.all([contractService.retryReturnTodos(rootActor(),id,doc.sourcingContractDocumentId,key),contractService.retryReturnTodos(rootActor(),id,doc.sourcingContractDocumentId,key)]);
+    expect(results.map(result=>result.reused).sort()).toEqual([false,true]);
+    const tasks=(await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return'",[id])).rows;
+    expect(tasks).toHaveLength(1);expect(tasks[0].status).toBe("pending");
+  });
+
+  it("serializes a real concurrent return and explicit repair without a residual actionable todo",async()=>{
+    await ensureReturnTodoRecipient();
+    const id=await reviewedContractCase("CYCLE-RETURN-REPAIR-RACE");
+    await database.query(`CREATE FUNCTION test_return_repair_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.category='sourcing_transfer_contract_return' THEN RAISE EXCEPTION 'TEST-return-repair-missing'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER test_return_repair_fail BEFORE INSERT ON rework_todos FOR EACH ROW EXECUTE FUNCTION test_return_repair_fail()`);
+    try {await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"15.5",changeReason:"TEST-return-repair-race"},randomUUID());}
+    finally {await database.query("DROP TRIGGER test_return_repair_fail ON rework_todos; DROP FUNCTION test_return_repair_fail()");}
+    const doc=(await contractService.getCurrent(rootActor(),id)).item!;
+    historicalFixtures.set(id,{caseId:id,documentId:doc.sourcingContractDocumentId,version:doc.contractVersion});
+    const repair=new SourcingTransferContractReconciliation(database);
+    const selected=(await repair.preview(rootActor(),[id])).results.map(({caseId,documentId,version,evidenceHash})=>({caseId,documentId,version,evidenceHash}));
+    const file=randomUUID();
+    await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'TEST-racing-signature.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[file,`TEST-concurrent/${file}`,"b".repeat(64),merchandiserId]);
+    await Promise.all([repair.apply(rootActor(),selected,"TEST-concurrent-return",randomUUID()),contractReturns.submit(contractActor(),id,[file],randomUUID(),doc.sourcingContractDocumentId)]);
+    expect((await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return' AND status IN ('pending','blocked_recipient')",[id])).rows).toEqual([]);
+    expect(await contractReturns.get(readerActor(),id)).toMatchObject({currentContractReturned:true,contractReturnStatus:"returned_on_time"});
+  });
+
+  it("creates an explicitly approved historical cycle with original microsecond precision only on apply",async()=>{
+    await ensureReturnTodoRecipient();
+    const id="46983c93-bb0c-4a28-b23c-4531feb4ad41",documentId="14cdb30d-d148-4cd7-a9ac-6b65be5f61d0";
+    const actor=merchandiserActor("TEST-fixed-historical-create"),key="TEST-fixed-historical-case";
+    await database.query("UPDATE sourcing_contract_return_cycle_policy SET enabled_at='infinity'");
+    try {
+      // Only synthetic fixture identity is deterministic; no real order is read or copied.
+      const fixtureAcquisitionId=randomUUID(),fixtureStyleId=randomUUID();
+      vi.mocked(randomUUID).mockReturnValueOnce(fixtureAcquisitionId).mockReturnValueOnce(fixtureStyleId).mockReturnValueOnce(id);
+      const created=await service.createCase(actor,{gender:"女装",styleName:"TEST-HISTORICAL-EXACT-SCOPE",estimatedCutPieceSendDate:"2026-10-04",deliveryDate:"2026-10-22",
+        lineItems:[{styleNo:"TEST-SYNTHETIC-HISTORY",color:"蓝",quantity:2020}],daxingUnitPrice:"8",attachmentIds:[]},key);
+      expect(created.value.sourcingCaseId).toBe(id);
+      await service.quoteIePrice(ieActor(),id,{unitPrice:"15.5"},randomUUID());
+      await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],unitPrice:"15.5"},randomUUID());
+      await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+      await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"15.5",changeReason:"TEST-historical-fixture"},randomUUID());
+    } finally {await database.query("UPDATE sourcing_contract_return_cycle_policy SET enabled_at=clock_timestamp()");}
+    const current=(await contractService.getCurrent(rootActor(),id)).item!;
+    // Isolated fixture models the supplied identity/time, while retaining actual generated synthetic PDF bytes.
+    await database.query("ALTER TABLE sourcing_contract_documents DISABLE TRIGGER USER");
+    try {await database.query("UPDATE sourcing_contract_documents SET sourcing_contract_document_id=$2,generated_at='2026-10-15T11:40:54.123456+08:00' WHERE sourcing_contract_document_id=$1",[current.sourcingContractDocumentId,documentId]);}
+    finally {await database.query("ALTER TABLE sourcing_contract_documents ENABLE TRIGGER USER");}
+    await database.query("UPDATE attachments SET entity_id=$2 WHERE entity_type='sourcing_contract_document' AND entity_id=$1",[current.sourcingContractDocumentId,documentId]);
+    expect(historicalFixtures.has(id)).toBe(false);
+    const repair=new SourcingTransferContractReconciliation(database),preview=await repair.preview(rootActor(),[id]);
+    expect(preview.results[0]).toMatchObject({blocked:false,proposedCount:1,cycleId:null});
+    expect((await database.query("SELECT * FROM sourcing_contract_return_cycles WHERE sourcing_case_id=$1",[id])).rows).toEqual([]);
+    const selected=preview.results.map(({caseId,documentId,version,evidenceHash})=>({caseId,documentId,version,evidenceHash}));
+    const result=await repair.apply(rootActor(),selected,"TEST-explicit-historical-cycle",randomUUID());
+    expect(result.results[0]?.action).toBe("created");
+    const cycle=(await database.query(`SELECT origin,cycle.generated_at::text,cycle.due_at::text,cycle.generated_at=document.generated_at AS precise
+      FROM sourcing_contract_return_cycles cycle JOIN sourcing_contract_documents document ON document.sourcing_contract_document_id=cycle.first_document_id
+      WHERE cycle.sourcing_case_id=$1`,[id])).rows[0];
+    expect(cycle).toMatchObject({origin:"historical",precise:true});
+    expect(cycle.generated_at).toContain(".123456");expect(cycle.due_at).toContain(".123456");
+    await repair.apply(rootActor(),selected,"TEST-repeated-historical-cycle",randomUUID());
+    expect((await database.query("SELECT * FROM sourcing_contract_return_cycles WHERE sourcing_case_id=$1",[id])).rows).toHaveLength(1);
+    expect((await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return'",[id])).rows).toHaveLength(1);
+  });
+
+  it("enrolls an effective pre-approval transfer only after its real owner approval",async()=>{
+    await ensureReturnTodoRecipient();
+    const id=(await service.createCase(merchandiserActor(),{gender:"女装",styleName:"TEST-CYCLE-PREAPPROVAL",estimatedCutPieceSendDate:"2026-10-04",deliveryDate:"2026-10-22",
+      lineItems:[{styleNo:"TEST-CYCLE-PREAPPROVAL",color:"蓝",quantity:2020}],daxingUnitPrice:"8",attachmentIds:[]},randomUUID())).value.sourcingCaseId;
+    await service.quoteIePrice(ieActor(),id,{unitPrice:"15.5"},randomUUID());
+    await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],unitPrice:"15.5"},randomUUID());
+    await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"15.5",changeReason:"TEST-transfer-before-first-owner-approval"},randomUUID());
+    expect((await database.query("SELECT * FROM sourcing_contract_return_cycles WHERE sourcing_case_id=$1",[id])).rows).toEqual([]);
+    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    expect((await database.query("SELECT * FROM sourcing_contract_return_cycles WHERE sourcing_case_id=$1",[id])).rows).toHaveLength(1);
+    expect((await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return' AND status='pending'",[id])).rows).toHaveLength(1);
+  });
+
+  const priceInput=async(id:string,unitPrice:string)=>({unitPrice,changeReason:"TEST-price-only",expectedDecisionId:(await service.getCase(readerActor(),id)).decision!.sourcingDecisionId,
+    expectedContractDocumentId:(await contractService.getCurrent(rootActor(),id)).item!.sourcingContractDocumentId});
+
+  it("applies production-management same-factory prices without transfer side effects and keeps Root authority",async()=>{
+    await ensureReturnTodoRecipient();
+    const id=await reviewedContractCase("PRICE-ONLY-EFFECT");
+    await service.recordFinanceReconciliation(financeActor(),id,{result:"match"},randomUUID());
+    const original=await service.getCase(readerActor(),id);
+    const finance=(await database.query("SELECT * FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1",[id])).rows;
+    const source=(await database.query("SELECT * FROM sourcing_cases WHERE sourcing_case_id=$1",[id])).rows;
+    const cutting=(await database.query("SELECT * FROM cutting_orders WHERE sourcing_case_id=$1",[id])).rows;
+    const input=await priceInput(id,"15.25"),key=randomUUID();
+    await expect(service.requestPriceReapplication(ownerActor(),id,input,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(service.requestPriceReapplication(factoryChangeActor(),id,input,randomUUID())).rejects.toMatchObject({statusCode:403});
+    for(const field of ["supplierId","deliveryDate","estimatedCutPieceSendDate","quantity","linePrices"]) {
+      await expect(service.requestPriceReapplication(managerActor(),id,{...input,[field]:"tampered"} as never,randomUUID())).rejects.toMatchObject({statusCode:400});
+    }
+    const result=await service.requestPriceReapplication(managerActor(),id,input,key);
+    expect(result.value.decision).toMatchObject({sourceType:"price_reapplication",unitPrice:"15.2500",supplierId:original.decision!.supplierId});
+    expect(result.value).toMatchObject({orderQuantity:original.orderQuantity,deliveryDate:original.deliveryDate,estimatedCutPieceSendDate:original.estimatedCutPieceSendDate});
+    expect((await service.requestPriceReapplication(managerActor(),id,input,key)).reused).toBe(true);
+    expect((await database.query("SELECT * FROM sourcing_factory_change_requests WHERE sourcing_case_id=$1",[id])).rows).toEqual([]);
+    expect((await database.query("SELECT * FROM sourcing_cases WHERE sourcing_case_id=$1",[id])).rows).toEqual(source);
+    expect((await database.query("SELECT * FROM cutting_orders WHERE sourcing_case_id=$1",[id])).rows).toEqual(cutting);
+    expect((await database.query("SELECT * FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1",[id])).rows).toEqual(finance);
+    const doc=(await contractService.getCurrent(rootActor(),id)).item!;
+    expect(doc.status).toBe("ready");
+    const tasks=(await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 AND category='sourcing_price_contract_return'",[id])).rows;
+    expect(tasks).toHaveLength(1);expect(tasks[0].source_action).toBe("sourcing.price_reapplication.effective");
+    expect(tasks[0].route_descriptor).toMatchObject({contractReturn:{documentId:doc.sourcingContractDocumentId,source:"price_reapplication"}});
+    expect(tasks[0].route_descriptor.transferContract).toBeUndefined();expect(tasks[0].due_at).toBeNull();
+    expect((await database.query("SELECT * FROM outbox_events WHERE payload->>'todoId'=$1",[tasks[0].todo_id])).rows).toEqual([]);
+    expect((await database.query("SELECT * FROM todo_delivery_attempts WHERE todo_id=$1",[tasks[0].todo_id])).rows).toEqual([]);
+    expect(await contractReturns.get(readerActor(),id)).toMatchObject({contractReturnStatus:"pending",currentContractReturned:false});
+    const signed=randomUUID();
+    await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'TEST-price-return.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[signed,`TEST-price-return/${signed}`,"a".repeat(64),merchandiserId]);
+    await contractReturns.submit(contractActor(),id,[signed],randomUUID(),doc.sourcingContractDocumentId);
+    expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1",[tasks[0].todo_id])).rows[0].status).toBe("completed");
+    const count=(await database.query("SELECT * FROM sourcing_decisions WHERE sourcing_case_id=$1",[id])).rowCount;
+    await service.requestPriceReapplication(managerActor(),id,await priceInput(id,"15.25"),randomUUID());
+    expect((await database.query("SELECT * FROM sourcing_decisions WHERE sourcing_case_id=$1",[id])).rowCount).toBe(count);
+    await service.requestPriceReapplication({...rootActor(),authorizationCapability:"sourcing:decision:record"},id,await priceInput(id,"15"),randomUUID());
+    expect((await service.getCase(readerActor(),id)).decision?.unitPrice).toBe("15.0000");
+  });
+
+  it("keeps pending, returned, rejected and cancelled price requests from replacing effective prices",async()=>{
+    const id=await reviewedContractCase("PRICE-PENDING");
+    const original=await service.getCase(readerActor(),id),doc=(await contractService.getCurrent(rootActor(),id)).item!;
+    for(const decision of ["returned","rejected","cancelled"] as const) {
+      const input=await priceInput(id,"16");await service.requestPriceReapplication(managerActor(),id,input,randomUUID());
+      const request=(await service.getCurrentPriceReapplication(readerActor(),id)).item!;
+      expect(request).toMatchObject({status:"pending",requiresOwnerApproval:true});
+      await expect(service.decidePriceReapplication(managerActor(),id,request.priceRequestId,{decision:"approved",verificationReason:"TEST-no-boss"},randomUUID())).rejects.toMatchObject({statusCode:403});
+      await service.decidePriceReapplication(decision==="cancelled"?managerActor():ownerActor(),id,request.priceRequestId,{decision,verificationReason:"TEST-no-effect"},randomUUID());
+      expect((await service.getCase(readerActor(),id)).decision).toEqual(original.decision);
+      expect((await contractService.getCurrent(rootActor(),id)).item?.sourcingContractDocumentId).toBe(doc.sourcingContractDocumentId);
+    }
+    expect((await database.query("SELECT * FROM sourcing_contract_return_cycles WHERE sourcing_case_id=$1",[id])).rows).toEqual([]);
+  });
+
+  it("preserves the Root-edited delivery date in price-only detail, list, approval and generated PDF while retaining historical reads",async()=>{
+    const id=await reviewedContractCase("PRICE-ROOT-DELIVERY");
+    const original=(await contractService.getCurrent(rootActor(),id)).item!;
+    const originalRow=(await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[original.sourcingContractDocumentId])).rows[0];
+    const draft=await contractService.content.get(rootActor(),id);
+    const date="2026-11-12";
+    const edited=await contractService.content.save(rootActor(),id,{...draft,content:{...draft.content,deliveryDate:date}},randomUUID());
+    await contractService.generateIfReady(rootActor(),id,edited);
+    const render=vi.spyOn(contractPdf,"renderSourcingContractPdf");
+    try {
+      await service.requestPriceReapplication(managerActor(),id,await priceInput(id,"15"),randomUUID());
+      const current=(await contractService.getCurrent(rootActor(),id)).item!;
+      expect(current).toMatchObject({status:"ready"});
+      expect(current.sourcingContractDocumentId).not.toBe(edited);
+      expect((await service.getCase(readerActor(),id))).toMatchObject({deliveryDate:date,approvalSnapshot:{deliveryDate:date}});
+      expect((await service.listCases(readerActor(),"TEST-PRICE-ROOT-DELIVERY")).items.find(row=>row.sourcingCaseId===id)?.deliveryDate).toBe(date);
+      expect((await contractService.content.get(rootActor(),id)).content.deliveryDate).toBe(date);
+      expect(render).toHaveBeenCalledWith(expect.objectContaining({deliveryDate:date}));
+      const currentRow=(await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[current.sourcingContractDocumentId])).rows[0];
+      expect(currentRow.approval_snapshot.deliveryDate).toBe(date);
+      expect((await database.query("SELECT delivery_date::text FROM sourcing_cases WHERE sourcing_case_id=$1",[id])).rows[0].delivery_date).toBe("2026-10-22");
+      expect((await database.query("SELECT sourcing_effective_delivery_date($1,'2026-10-22',(SELECT prepared_at FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$2))::text AS date",[id,original.sourcingContractDocumentId])).rows[0].date).toBe("2026-10-22");
+      expect((await database.query("SELECT sourcing_effective_delivery_date($1,'2026-10-22',(SELECT prepared_at FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$2))::text AS date",[id,edited])).rows[0].date).toBe(date);
+      expect((await service.nodeHistory(readerActor(),id,"owner")).item.deliveryDate).toBe("2026-10-22");
+      expect((await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[original.sourcingContractDocumentId])).rows[0]).toEqual(originalRow);
+    } finally {render.mockRestore();}
+  });
+
+  it("keeps one visible pending price request across tabs, reasons and requesters and closes all approval todos",async()=>{
+    const {service:currentService}=await cycleTodoServices();
+    const id=await reviewedContractCase("PRICE-ONE-PENDING");
+    const otherManagerId=randomUUID();
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST-second-production-manager',true)",[otherManagerId]);
+    const otherManager=()=>({...managerActor(),actorId:otherManagerId});
+    const inputs=[await priceInput(id,"16"),await priceInput(id,"17")];
+    const raced=await Promise.allSettled(inputs.map(input=>currentService.requestPriceReapplication(managerActor(),id,input,randomUUID())));
+    expect(raced.filter(result=>result.status==="fulfilled")).toHaveLength(1);
+    expect((raced.find(result=>result.status==="rejected") as PromiseRejectedResult).reason).toMatchObject({statusCode:409,message:expect.stringContaining("已有待处理价格申请")});
+    const winner=inputs[raced.findIndex(result=>result.status==="fulfilled")]!;
+    await currentService.requestPriceReapplication(managerActor(),id,winner,randomUUID());
+    for(const [actor,input] of [[managerActor(),{...winner,unitPrice:"18"}],[managerActor(),{...winner,changeReason:"TEST-different-reason"}],[otherManager(),winner],
+      [managerActor(),{...winner,unitPrice:"15.5"}]] as const) {
+      await expect(currentService.requestPriceReapplication(actor,id,input,randomUUID())).rejects.toMatchObject({statusCode:409});
+    }
+    const pending=(await currentService.getCurrentPriceReapplication(readerActor(),id)).item!;
+    expect(pending).toMatchObject({status:"pending",unitPrice:expect.any(String)});
+    expect((await database.query("SELECT * FROM sourcing_price_reapplications WHERE sourcing_case_id=$1",[id])).rows).toHaveLength(1);
+    const tasks=()=>database.query("SELECT status FROM rework_todos WHERE entity_id=$1 AND category='sourcing_price_owner_approve'",[id]);
+    expect((await tasks()).rows).toEqual([{status:"pending"}]);
+    await currentService.decidePriceReapplication(ownerActor(),id,pending.priceRequestId,{decision:"rejected",verificationReason:"TEST-resolve-first"},randomUUID());
+    expect((await tasks()).rows.every(row=>row.status==="completed")).toBe(true);
+    for(const decision of ["cancelled","returned","approved"] as const) {
+      await currentService.requestPriceReapplication(otherManager(),id,winner,randomUUID());
+      const next=(await currentService.getCurrentPriceReapplication(readerActor(),id)).item!;
+      expect(next).toMatchObject({status:"pending",requestedBy:otherManagerId});
+      await currentService.decidePriceReapplication(decision==="cancelled"?otherManager():ownerActor(),id,next.priceRequestId,
+        {decision,verificationReason:"TEST-resolve-visible-request"},randomUUID());
+      expect((await tasks()).rows.every(row=>row.status==="completed")).toBe(true);
+      expect((await currentService.getCurrentPriceReapplication(readerActor(),id)).item?.status).toBe(decision);
+    }
+  });
+
+  it("serializes concurrent approval callbacks and price approval against a transfer",async()=>{
+    const id=await reviewedContractCase("PRICE-CONCURRENT-APPROVAL");
+    const input=await priceInput(id,"16");await service.requestPriceReapplication(managerActor(),id,input,randomUUID());
+    const a=(await service.getCurrentPriceReapplication(readerActor(),id)).item!;
+    const results=await Promise.allSettled([a,a].map(request=>service.decidePriceReapplication(ownerActor(),id,request.priceRequestId,{decision:"approved",verificationReason:"TEST-concurrent"},randomUUID())));
+    expect(results.filter(result=>result.status==="fulfilled")).toHaveLength(1);
+    expect((results.find(result=>result.status==="rejected") as PromiseRejectedResult).reason).toMatchObject({statusCode:409});
+    expect((await database.query("SELECT * FROM sourcing_decisions WHERE sourcing_case_id=$1 AND source_type='price_reapplication'",[id])).rows).toHaveLength(1);
+    const other=await reviewedContractCase("PRICE-TRANSFER-RACE");
+    await service.requestPriceReapplication(managerActor(),other,await priceInput(other,"16"),randomUUID());
+    const price=(await service.getCurrentPriceReapplication(readerActor(),other)).item!;
+    await service.requestFactoryChange(managerActor(),other,{supplierId:replacementFactoryId,unitPrice:"16",changeReason:"TEST-racing-transfer"},randomUUID());
+    const transfer=(await service.getCurrentFactoryChange(readerActor(),other)).item!;
+    const raced=await Promise.allSettled([
+      service.decidePriceReapplication(ownerActor(),other,price.priceRequestId,{decision:"approved",verificationReason:"TEST-racing-price"},randomUUID()),
+      service.decideFactoryChange(ownerActor(),other,transfer.factoryChangeRequestId,{decision:"approved",verificationReason:"TEST-racing-transfer"},randomUUID()),
+    ]);
+    expect(raced.filter(result=>result.status==="fulfilled")).toHaveLength(1);
+    expect((await database.query("SELECT * FROM sourcing_decisions WHERE sourcing_case_id=$1 AND decision_version>1",[other])).rows).toHaveLength(1);
+  });
+
+  it("recovers price PDF generation on the same approved request without applying it again",async()=>{
+    const id=await reviewedContractCase("PRICE-GENERATION-RETRY");
+    const input=await priceInput(id,"15"),key=randomUUID();
+    const fail=vi.spyOn(contractStorage,"writeImmutable").mockRejectedValueOnce(new Error("TEST-price-pdf-generation-failure"));
+    await service.requestPriceReapplication(managerActor(),id,input,key);fail.mockRestore();
+    expect((await contractService.getCurrent(rootActor(),id)).item?.status).toBe("generation_failed");
+    const decision=(await service.getCase(readerActor(),id)).decision!;
+    await service.requestPriceReapplication(managerActor(),id,input,key);
+    expect((await contractService.getCurrent(rootActor(),id)).item?.status).toBe("ready");
+    expect((await service.getCase(readerActor(),id)).decision?.sourcingDecisionId).toBe(decision.sourcingDecisionId);
+    expect((await database.query("SELECT * FROM sourcing_price_reviews review JOIN sourcing_price_reapplications request USING(price_request_id) WHERE sourcing_case_id=$1",[id])).rows).toHaveLength(1);
+  });
+
+  it("reuses the transfer first-line comparison for multi-style prices and preserves dispatched/cutting facts",async()=>{
+    await ensureReturnTodoRecipient();
+    const id=(await service.createCase(merchandiserActor(),{gender:"女装",styleName:"TEST-PRICE-MULTI",estimatedCutPieceSendDate:"2026-10-04",deliveryDate:"2026-10-22",
+      lineItems:[{styleNo:"TEST-PRICE-MULTI-A",color:"蓝",quantity:10},{styleNo:"TEST-PRICE-MULTI-B",color:"黑",quantity:20}],daxingUnitPrice:"8",attachmentIds:[]},randomUUID())).value.sourcingCaseId;
+    const prices=[{position:1,unitPrice:"15"},{position:2,unitPrice:"10"}];
+    await service.quoteIePrice(ieActor(),id,{linePrices:prices},randomUUID());
+    await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:prices},randomUUID());
+    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    const doc=(await contractService.getCurrent(rootActor(),id)).item!;
+    await production.dispatch(contractActor(),id,{sourcingContractDocumentId:doc.sourcingContractDocumentId,confirmed:true},randomUUID());
+    const cut=(await cutting.listSources(cuttingOwnerActor())).items.find(order=>order.sourcingCaseId===id)!;
+    await cutting.record(cuttingSupervisorActor(),cut.cuttingOrderId,{pieceCount:10,actualCutCount:10,attachmentIds:[await readyCuttingSheet(ownerId)]},randomUUID());
+    const productionBefore=(await database.query("SELECT * FROM sourcing_production_orders WHERE sourcing_case_id=$1",[id])).rows;
+    const cuttingBefore=(await database.query("SELECT * FROM cutting_records WHERE cutting_order_id=$1",[cut.cuttingOrderId])).rows;
+    // The second line increases, yet 14 <= first-line basis 15: the existing transfer rule auto-applies.
+    await service.requestPriceReapplication(managerActor(),id,await priceInput(id,"14"),randomUUID());
+    const request=(await service.getCurrentPriceReapplication(readerActor(),id)).item!;
+    expect(request).toMatchObject({requiresOwnerApproval:false,status:"approved"});
+    const current=await service.getCase(readerActor(),id);
+    expect(current.decision!.linePrices.map(line=>Number(line.unitPrice))).toEqual([14,14]);
+    expect((await database.query("SELECT * FROM sourcing_production_orders WHERE sourcing_case_id=$1",[id])).rows).toEqual(productionBefore);
+    expect((await database.query("SELECT * FROM cutting_records WHERE cutting_order_id=$1",[cut.cuttingOrderId])).rows).toEqual(cuttingBefore);
+  });
+
+  it("rejects out-of-range price totals before creating an approval request",async()=>{
+    const id=(await service.createCase(merchandiserActor(),{gender:"女装",styleName:"TEST-PRICE-TOTAL-LIMIT",estimatedCutPieceSendDate:"2026-10-04",deliveryDate:"2026-10-22",
+      lineItems:[{styleNo:"TEST-PRICE-TOTAL-LIMIT",color:"蓝",quantity:10_000_000}],daxingUnitPrice:"1",attachmentIds:[]},randomUUID())).value.sourcingCaseId;
+    await service.quoteIePrice(ieActor(),id,{unitPrice:"1"},randomUUID());
+    await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],unitPrice:"1"},randomUUID());
+    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await expect(service.requestPriceReapplication(managerActor(),id,await priceInput(id,"9999999999"),randomUUID())).rejects.toMatchObject({statusCode:400});
+    expect((await database.query("SELECT * FROM sourcing_price_reapplications WHERE sourcing_case_id=$1",[id])).rows).toEqual([]);
+  });
+
+  it("uses one stable business return cycle across regenerated PDF IDs and preserves legacy evidence",async()=>{
+    await ensureReturnTodoRecipient();
+    const id=await reviewedContractCase("CYCLE-LOGICAL-VERSION");
+    const original=(await contractService.getCurrent(rootActor(),id)).item!;
+    const file=randomUUID();
+    await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'TEST-original-signature.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[file,`TEST-cycle/${file}`,"b".repeat(64),merchandiserId]);
+    await contractReturns.submit(contractActor(),id,[file],randomUUID(),original.sourcingContractDocumentId);
+    const legacyBefore=(await database.query("SELECT * FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1",[id])).rows[0];
+    await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"15.5",changeReason:"TEST-new-cycle"},randomUUID());
+    const current=(await contractService.getCurrent(rootActor(),id)).item!;
+    const state=await contractReturns.get(readerActor(),id);
+    expect(state).toMatchObject({contractReturnStatus:"pending",contractReturnedAt:null,currentContractReturned:false});
+    expect(state.contractReturnCycleId).toBeTruthy();
+    expect((await service.getCase(readerActor(),id))).toMatchObject({contractReturnStatus:"pending",contractReturnedAt:null});
+    expect((await service.listCases(readerActor(),"TEST-CYCLE-LOGICAL-VERSION","all",1,{contractReturn:"pending"})).items.map(item=>item.sourcingCaseId)).toContain(id);
+    const legacyAfter=(await database.query("SELECT * FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1",[id])).rows[0];
+    expect(legacyAfter).toEqual(legacyBefore);
+    // Real old-code read semantics diverge: DDL compatibility alone is not rollback compatibility.
+    expect(contractReturnState({...legacyAfter,contract_return_overdue_seconds:0},new Date()).contractReturnStatus).toBe("returned_on_time");
+    const initial=(await database.query("SELECT * FROM sourcing_contract_return_cycles WHERE sourcing_case_id=$1",[id])).rows;
+    expect(initial).toHaveLength(1);
+    expect(initial[0].first_document_id).toBe(current.sourcingContractDocumentId);
+    await expect(contractReturns.submit(contractActor(),id,[randomUUID()],randomUUID(),original.sourcingContractDocumentId)).rejects.toMatchObject({statusCode:409});
+    await expect(contractReturns.submit(contractActor(),id,[randomUUID()],randomUUID())).rejects.toMatchObject({statusCode:409});
+    const draft=await contractService.content.get(rootActor(),id);
+    const regenerated=await contractService.content.save(rootActor(),id,{...draft,content:{...draft.content,contractTitle:draft.content.contractTitle+"（修订）"}},randomUUID());
+    expect(regenerated).not.toBe(current.sourcingContractDocumentId);
+    await contractService.generateIfReady(rootActor(),id,regenerated);
+    await contractService.generateIfReady(rootActor(),id,regenerated);
+    expect((await database.query("SELECT * FROM sourcing_contract_return_cycles WHERE sourcing_case_id=$1",[id])).rows).toEqual(initial);
+    const next=await contractReturns.get(readerActor(),id);
+    expect(next).toMatchObject({contractGeneratedAt:state.contractGeneratedAt,contractReturnDueAt:state.contractReturnDueAt,contractReturnStatus:"pending"});
+    expect((await database.query("SELECT due_at FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return'",[id])).rows.every(todo=>todo.due_at===null)).toBe(true);
+    const second=randomUUID();
+    await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'TEST-new-signature.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[second,`TEST-cycle/${second}`,"b".repeat(64),merchandiserId]);
+    await contractReturns.submit(contractActor(),id,[second],randomUUID(),regenerated);
+    expect(await contractReturns.get(readerActor(),id)).toMatchObject({contractReturnStatus:"returned_on_time",currentContractReturned:true});
+    expect((await database.query("SELECT * FROM sourcing_contract_return_monitors WHERE sourcing_case_id=$1",[id])).rows[0].contract_returned_at).toEqual(legacyBefore.contract_returned_at);
+  });
+
+  it("preserves 27 synthetic legacy orders through reads, old ready replays and regeneration",async()=>{
+    await ensureReturnTodoRecipient();
+    // Model a pre-feature population without using any real order or production data.
+    await database.query("UPDATE sourcing_contract_return_cycle_policy SET enabled_at='infinity'");
+    const ids:string[]=[];
+    try {
+      for(let index=0;index<27;index++) {
+        const id=await reviewedContractCase(`CYCLE-LEGACY-${index}`);ids.push(id);
+        await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"15.5",changeReason:"TEST-legacy-action"},randomUUID());
+      }
+    } finally {await database.query("UPDATE sourcing_contract_return_cycle_policy SET enabled_at=clock_timestamp()");}
+    const monitors=(await database.query("SELECT * FROM sourcing_contract_return_monitors WHERE sourcing_case_id=ANY($1::uuid[]) ORDER BY sourcing_case_id",[ids])).rows;
+    const expected=await Promise.all(ids.map(id=>contractReturns.get(readerActor(),id)));
+    for(const id of ids) {
+      const doc=(await contractService.getCurrent(rootActor(),id)).item!;
+      await contractService.generateIfReady(rootActor(),id,doc.sourcingContractDocumentId);
+      const client=await database.connect();
+      try {await client.query("BEGIN");await contractService.prepareForApproval(client,(await database.query("SELECT sourcing_approval_snapshot_id FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[doc.sourcingContractDocumentId])).rows[0].sourcing_approval_snapshot_id,rootActor());await contractService.transferTodos.synchronize(client,rootActor(),id);await client.query("COMMIT");}
+      catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}
+      await service.getCase(readerActor(),id);
+    }
+    expect(await Promise.all(ids.map(id=>contractReturns.get(readerActor(),id)))).toEqual(expected);
+    expect((await database.query("SELECT * FROM sourcing_contract_return_monitors WHERE sourcing_case_id=ANY($1::uuid[]) ORDER BY sourcing_case_id",[ids])).rows).toEqual(monitors);
+    expect((await database.query("SELECT * FROM sourcing_contract_return_cycles WHERE sourcing_case_id=ANY($1::uuid[])",[ids])).rows).toEqual([]);
+    expect((await database.query("SELECT * FROM rework_todos WHERE entity_id=ANY($1::text[]) AND category='sourcing_transfer_contract_return'",[ids])).rows).toEqual([]);
+    const first=ids[0]!;
+    await expect(contractService.retryReturnTodos(rootActor(),first,(await contractService.getCurrent(rootActor(),first)).item!.sourcingContractDocumentId,randomUUID())).rejects.toMatchObject({statusCode:409});
+    const doc=(await contractService.getCurrent(rootActor(),first)).item!;
+    const draft=await contractService.content.get(rootActor(),first);
+    const regenerated=await contractService.content.save(rootActor(),first,{...draft,content:{...draft.content,contractTitle:draft.content.contractTitle+"（历史重出）"}},randomUUID());
+    await contractService.generateIfReady(rootActor(),first,regenerated);
+    expect((await database.query("SELECT * FROM sourcing_contract_return_cycles WHERE sourcing_case_id=ANY($1::uuid[])",[ids])).rows).toEqual([]);
+    await expect(database.query(`INSERT INTO sourcing_contract_return_cycles(sourcing_approval_snapshot_id,sourcing_case_id,business_event_id,origin,created_operation_event_id)
+      SELECT sourcing_approval_snapshot_id,sourcing_case_id,operation_event_id,'business',operation_event_id FROM sourcing_approval_snapshots WHERE sourcing_approval_snapshot_id=$1`,[(await database.query("SELECT sourcing_approval_snapshot_id FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[doc.sourcingContractDocumentId])).rows[0].sourcing_approval_snapshot_id])).rejects.toMatchObject({code:"42501"});
+    await service.requestFactoryChange(managerActor(),first,{supplierId:factoryId,unitPrice:"15.5",changeReason:"TEST-future-real-action"},randomUUID());
+    expect((await database.query("SELECT * FROM sourcing_contract_return_cycles WHERE sourcing_case_id=ANY($1::uuid[])",[ids])).rows).toHaveLength(1);
+  },60_000);
+
+  it("uses the same Shanghai Sunday-paused 48 hours at any database timezone",async()=>{
+    const client=await database.connect();
+    try {
+      await client.query("BEGIN");await client.query("SET LOCAL TIME ZONE 'America/New_York'");
+      for(const [start,due] of [
+        ["2026-10-16T12:00:00+08:00","2026-10-19T12:00:00+08:00"],
+        ["2026-10-17T12:00:00+08:00","2026-10-20T12:00:00+08:00"],
+        ["2026-10-18T12:00:00+08:00","2026-10-21T00:00:00+08:00"],
+      ]) {
+        const row=(await client.query("SELECT sourcing_contract_return_add_hours($1::timestamptz,48) AS due,sourcing_contract_return_elapsed_seconds($1::timestamptz,$2::timestamptz) AS elapsed",[start,due])).rows[0];
+        expect(row.due.toISOString()).toBe(new Date(due!).toISOString());expect(Number(row.elapsed)).toBe(48*3600);
+      }
+      await client.query("ROLLBACK");
+    } finally{client.release();}
+  });
+
+  it("hides transfer uploads until the current PDF is ready and rejects all unfinished generation states",async()=>{
+    await ensureReturnTodoRecipient();
+    const id=await reviewedContractCase("TRANSFER-PDF-READINESS");
+    await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"15.5",changeReason:"TEST-ready-contract"},randomUUID());
+    const oldTasks=(await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return' ORDER BY todo_id",[id])).rows;
+    const draft=await contractService.content.get(rootActor(),id);
+    const documentId=await contractService.content.save(rootActor(),id,{...draft,content:{...draft.content,deliveryDate:"2026-11-10"}},randomUUID());
+    const read=()=>contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id);
+    for(const status of ['generation_pending','generating','generation_failed']) {
+      await database.query("UPDATE sourcing_contract_documents SET status=$2 WHERE sourcing_contract_document_id=$1",[documentId,status]);
+      const client=await database.connect();
+      try {await client.query("BEGIN");await contractService.transferTodos.synchronize(client,rootActor(),id);await client.query("COMMIT");} finally {client.release();}
+      expect((await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return' ORDER BY todo_id",[id])).rows).toEqual(oldTasks);
+      expect(await read()).toMatchObject({canUpload:false,currentContractDocumentId:documentId});
+      await expect(contractReturns.submit(rootActor(),id,[randomUUID()],randomUUID(),documentId)).rejects.toMatchObject({statusCode:409});
+    }
+    await contractService.generateIfReady(rootActor(),id,documentId);
+    expect(await read()).toMatchObject({canUpload:true,currentContractDocumentId:documentId});
+  });
+
+  it("allocates two files and 20 MB per contract version without rewriting signed history",async()=>{
+    await ensureReturnTodoRecipient();
+    const id=await reviewedContractCase("VERSION-RETURN-QUOTA");
+    const old=(await contractService.getCurrent(rootActor(),id)).item!;
+    const makeFile=async(bytes:number)=>{
+      const file=randomUUID();
+      await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+        VALUES($1,$2,'TEST-version-quota.pdf','application/pdf',$3,$4,$5,'ready',CURRENT_TIMESTAMP)`,
+        [file,`TEST-version-quota/${file}`,bytes,"a".repeat(64),merchandiserId]);
+      return file;
+    };
+    const oldFiles=[await makeFile(10*1024*1024),await makeFile(10*1024*1024)];
+    const first=await contractReturns.submit(contractActor(),id,oldFiles,randomUUID(),old.sourcingContractDocumentId);
+    expect(first).toMatchObject({uploadedFileCount:2,uploadedTotalBytes:20*1024*1024,canUpload:false});
+    const history=(await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE sourcing_case_id=$1 ORDER BY revision",[id])).rows;
+    await service.requestFactoryChange(managerActor(),id,{supplierId:replacementFactoryId,unitPrice:"15.5",changeReason:"TEST-version-quota"},randomUUID());
+    const current=(await contractService.getCurrent(rootActor(),id)).item!;
+    expect(current.sourcingContractDocumentId).not.toBe(old.sourcingContractDocumentId);
+    expect(await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id)).toMatchObject({uploadedFileCount:0,uploadedTotalBytes:0,canUpload:true,currentContractReturned:false});
+    const fresh=[await makeFile(19*1024*1024),await makeFile(2*1024*1024)];
+    await expect(contractReturns.submit(contractActor(),id,[fresh[0]!],randomUUID(),old.sourcingContractDocumentId)).rejects.toMatchObject({statusCode:409});
+    await contractReturns.submit(contractActor(),id,oldFiles,randomUUID(),current.sourcingContractDocumentId);
+    expect(await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id)).toMatchObject({uploadedFileCount:0,currentContractReturned:false});
+    const firstCurrentReturn=await contractReturns.submit(contractActor(),id,[fresh[0]!],randomUUID(),current.sourcingContractDocumentId);
+    await expect(contractReturns.submit(contractActor(),id,[fresh[1]!],randomUUID(),current.sourcingContractDocumentId)).rejects.toMatchObject({statusCode:400});
+    await database.query("UPDATE attachments SET size_bytes=$2 WHERE attachment_id=$1",[fresh[1],1024*1024]);
+    const finished=await contractReturns.submit(contractActor(),id,[fresh[1]!],randomUUID(),current.sourcingContractDocumentId);
+    expect(finished).toMatchObject({uploadedFileCount:2,uploadedTotalBytes:20*1024*1024,canUpload:false,currentContractReturned:true,contractReturnedAt:firstCurrentReturn.contractReturnedAt});
+    expect((await database.query("SELECT * FROM sourcing_contract_return_submissions WHERE submission_id=$1",[history[0].submission_id])).rows[0]).toEqual(history[0]);
+    expect((await contractReturns.get({...rootActor(),authorizationCapability:"sourcing:view"},id)).history.flatMap(version=>version.attachments).map(file=>file.attachmentId)).toEqual(expect.arrayContaining(oldFiles));
+    expect((await database.query("SELECT count(*)::int AS n FROM sourcing_contract_return_attachments link JOIN sourcing_contract_return_submissions submission USING(submission_id) WHERE submission.sourcing_case_id=$1",[id])).rows[0].n).toBe(4);
+  });
 
   it("keeps historical finance and signed PDFs while Root edits an unreviewed transfer contract and finance reviews its new version",async()=>{
     const id=await reviewedContractCase("VERSION-REVIEW");
@@ -5135,6 +5818,15 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await contractService.generateIfReady(rootActor(),id,revised);
     expect((await poDates()).map(row=>row.factory)).toEqual([dates[0],"2026-11-09",dates[2]]);
     const before=await poDates();
+    const pricingBasis=await service.getCase(readerActor(),id),pricingDocument=(await contractService.getCurrent(rootActor(),id)).item!;
+    const contractBeforePrice=(await contractService.content.get(rootActor(),id)).content;
+    await service.requestPriceReapplication(managerActor(),id,{unitPrice:"5.25",changeReason:"TEST price preserves mixed PO dates",expectedDecisionId:pricingBasis.decision!.sourcingDecisionId,expectedContractDocumentId:pricingDocument.sourcingContractDocumentId},randomUUID());
+    expect(await poDates()).toEqual(before);
+    const contractAfterPrice=(await contractService.content.get(rootActor(),id)).content;
+    expect(contractAfterPrice.lines.map(line=>line.deliveryDate)).toEqual(contractBeforePrice.lines.map(line=>line.deliveryDate));
+    expect(contractAfterPrice.estimatedCutPieceSendDate).toBe(contractBeforePrice.estimatedCutPieceSendDate);
+    expect(contractAfterPrice.deliveryDate).toBe(contractBeforePrice.deliveryDate);
+    expect((await service.getCase(readerActor(),id)).decision!.supplierId).toBe(pricingBasis.decision!.supplierId);
     await service.requestFactoryChange(managerActor(),id,{supplierId:factoryId,unitPrice:"6",deliveryDate:"2026-11-15",changeReason:"TEST freeze until owner"},randomUUID());
     const pending=(await service.getCurrentFactoryChange(readerActor(),id)).item!;
     expect(await poDates()).toEqual(before);

@@ -26,5 +26,13 @@
   {
     "version": "0227_qc_other_craft",
     "checksum": "2b4ee5e688926de2d9195e762140fe80ef6dba2ccdaa0cae6575c321426b0748"
+  },
+  {
+    "version": "0228_sourcing_contract_return_cycles",
+    "checksum": "86eec9b3696bade0d7eda97773f9f5a4636f6b38e891879e6882437c7f16cb4c"
+  },
+  {
+    "version": "0229_sourcing_price_reapplications",
+    "checksum": "633964acebe30386ae7d3877268dcb7519944e387ffeb9707fa4d92e3b3cc857"
   }
 ]

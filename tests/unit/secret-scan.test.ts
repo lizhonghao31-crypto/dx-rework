@@ -117,6 +117,21 @@ describe("secret scan", () => {
     for(const [path] of markers)rmSync(join(root,path!));commitAll(root,'remove synthetic marker');const removed=git('rev-parse','HEAD').slice(0,12);
     const findings=findHistoricalSecretFindings(root);for(const [path] of markers)expect(findings.signatures).toContain(`${removed}:${path}`);expect(JSON.stringify(findings)).not.toContain(marker);expect(JSON.stringify(findings)).not.toContain(key);
   });
+  it("verifies history candidate content without ignoring test paths or ordinary browser filenames", () => {
+    const root=initRepo(), ordinary=["tests/acceptance/task","-cockpit-identity-browser.mjs"].join("");
+    writeFileSync(join(root,"ordinary.txt"),ordinary);
+    commitAll(root,"ordinary filename with a provider-prefix substring");
+    expect(findHistoricalSecretFindings(root).signatures).toEqual([]);
+    const token=["sk-","A".repeat(30)].join("");
+    writeFileSync(join(root,"ordinary.txt"),ordinary+"\n"+token);
+    commitAll(root,"a real signature in that same file must remain detectable");
+    writeFileSync(join(root,"ordinary.txt"),ordinary);
+    commitAll(root,"removed signatures must remain detectable");
+    const findings=findHistoricalSecretFindings(root);
+    expect(findings.signatures).toHaveLength(2);
+    expect(findings.signatures.every(item=>item.endsWith(":ordinary.txt"))).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(token);
+  });
 
   it("finds removed signatures, sensitive assignments and tracked secret files without returning secret values", () => {
     const root = initRepo();

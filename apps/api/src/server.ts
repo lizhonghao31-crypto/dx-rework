@@ -1,3 +1,4 @@
+import { SourcingTransferContractReconciliation } from "./sourcing/sourcing-transfer-contract-reconciliation.js";
 import { DigitalJourneyQuery } from "./production-platform/journey-query.js";
 import { DigitalAnalysisQuery } from "./production-platform/reporting-query.js";
 import { DigitalCockpitQuery } from "./production-platform/cockpit-query.js";
@@ -413,7 +414,8 @@ const app = buildApp({
     exportService: new WageExportService(database),
     root: rootAuthority,
   },
-  todos: { authenticate: (token) => auth.authenticate(token), service: todoService },
+  todos: { authenticate: (token) => auth.authenticate(token), service: todoService,
+    root:rootAuthority,transferContractReconciliation:new SourcingTransferContractReconciliation(database) },
   reporting: {
     authenticate: (token) => auth.authenticate(token),
     service: reportingService,
