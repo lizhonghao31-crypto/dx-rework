@@ -1,4 +1,4 @@
-import {cachedVerifiedSession} from './auth-session.js';
+import {cachedVerifiedSession,refreshSession} from './auth-session.js';
 import {subscribeTodoRead} from './todo-indicator-refresh.js';
 import {TodoRoutingTransfer} from './todo-routing-transfer.js';
 import { todoTaskTitle } from "@dx-rework/contracts";
@@ -15,7 +15,6 @@ import { Button, StatusBadge, Surface } from "@dx-rework/ui";
 import { useEffect, useRef, useState } from "react";
 
 import { createWebUrls } from "../url-contract.js";
-import { verifySession } from "./auth.js";
 import { Shell } from "./components.js";
 import { todoModuleIdsForUser } from "./platform-access.js";
 import { todoPageWindow } from "./todo-pagination.js";
@@ -183,7 +182,7 @@ export function MyTodosPage() {
 
   useEffect(() => {
     let mounted = true;
-    void verifySession(true).then((session) => {
+    void refreshSession().then((session) => {
       if (!mounted) return;
       const modules = session !== "denied" && session.status === "authorized"
         ? todoModuleIdsForUser(session.user)
@@ -218,7 +217,7 @@ export function MyTodosPage() {
       if(!event.persisted)return;
       const savedOwner=window.history.state?.dxTodoQueryUser;
       ++loadVersion.current;setQueryOwner(null);setState({kind:"loading"});
-      void verifySession(true).then(session=>{
+      void refreshSession().then(session=>{
         if(!mounted)return;
         if(session==="denied"||session.status!=="authorized"||savedOwner!==session.user.id){
           // A different identity must also discard the restored shell/session UI.

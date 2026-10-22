@@ -21,7 +21,7 @@ describe("shared entry session verification", () => {
     expect(await verifySession()).toEqual(authorized);
     expect(cachedVerifiedSession()).toEqual(authorized);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith("/api/auth/me", { credentials: "include", cache: "no-store" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/me", { credentials: "include", cache: "no-store", signal: expect.any(AbortSignal) });
   });
 
   it.each([401, 403])("keeps HTTP %i denied without inventing a transport failure", async (status) => {
