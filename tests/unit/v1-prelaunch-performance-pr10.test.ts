@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const read = (path: string) => readFile(path, "utf8");
 
@@ -16,7 +16,16 @@ describe("1.0 prelaunch PR-10 perceived performance", () => {
 
     expect(auth).toContain('export { verifySession, verifySessionResult } from "./auth-session.js";');
     expect(session).toContain("export function verifySession(force = false): Promise<VerifiedSession>");
-    expect(session).toContain("if (!sessionVerification)");
+    // Assert the cache/concurrency contract, independent of equivalent source spelling.
+    vi.resetModules();let release!:(response:Response)=>void;
+    const fetcher=vi.fn(()=>new Promise<Response>(done=>{release=done;}));vi.stubGlobal("fetch",fetcher);
+    try{
+      const state=await import("../../apps/web/src/auth-session.js");
+      const pending=state.verifySessionResult();expect(state.verifySessionResult()).toBe(pending);
+      const identity={status:"authorized",user:{id:"TEST-cache",displayName:"TEST",businessRoles:[],capabilities:[]}};
+      release(Response.json(identity));expect((await pending).session).toEqual(identity);
+      expect(await state.verifySession()).toEqual(identity);expect(fetcher).toHaveBeenCalledTimes(1);
+    }finally{vi.unstubAllGlobals();}
     expect(shell).toContain("verifySession()");
     expect(reworkQuery).toContain("verifySession()");
     expect(orderBoard).toContain("verifySession()");
