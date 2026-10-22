@@ -158,8 +158,10 @@ function historicalDiffSignatures(diff) {
       path="unknown";
     } else if(raw.startsWith("--- a/")) path=raw.slice("--- a/".length).trim();
     else if(raw.startsWith("+++ b/")) path=raw.slice("+++ b/".length).trim();
+    // Only actual file headers above (and /dev/null below) are metadata.
+    // Changed content can itself start with several plus or minus characters.
     else if((raw.startsWith("+")||raw.startsWith("-"))
-      &&!raw.startsWith("+++")&&!raw.startsWith("---")
+      &&raw!=="+++ /dev/null"&&raw!=="--- /dev/null"
       &&containsSecretSignature(raw.slice(1))) findings.push(`${commit}:${path}`);
   }
   return findings;
