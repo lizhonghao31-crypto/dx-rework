@@ -54,6 +54,10 @@ CREATE FUNCTION guard_sourcing_price_request() RETURNS trigger LANGUAGE plpgsql 
 DECLARE basis sourcing_decisions%ROWTYPE; event operation_events%ROWTYPE;
 BEGIN
   PERFORM sourcing_assert_price_basis(NEW.sourcing_case_id,NEW.base_decision_id,NEW.base_document_id);
+  IF EXISTS(SELECT 1 FROM sourcing_price_reapplications request WHERE request.sourcing_case_id=NEW.sourcing_case_id
+    AND NOT EXISTS(SELECT 1 FROM sourcing_price_reviews review WHERE review.price_request_id=request.price_request_id)) THEN
+    RAISE EXCEPTION 'an unresolved price request must be reviewed or cancelled first' USING ERRCODE='55000';
+  END IF;
   SELECT * INTO basis FROM sourcing_decisions WHERE sourcing_decision_id=NEW.base_decision_id;
   SELECT * INTO event FROM operation_events WHERE event_id=NEW.operation_event_id;
   IF NEW.requires_owner_approval IS DISTINCT FROM (NEW.unit_price>basis.unit_price)

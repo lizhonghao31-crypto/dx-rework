@@ -3116,16 +3116,22 @@ export class SourcingService {
         const basis=await this.priceBasis(client,caseId);
         if(basis.decision_id!==normalized.expectedDecisionId||basis.document_id!==normalized.expectedContractDocumentId)
           fail("价格或合同基准已变化，请刷新后重新申请",409,"CONFLICT");
+        // One visible pending request per order. The case lock also serializes two tabs/users.
+        const pending=(await client.query<{base_decision_id:string;base_document_id:string;unit_price:string;requested_by:string;reason:string}>(
+          `SELECT request.* FROM sourcing_price_reapplications request WHERE sourcing_case_id=$1
+           AND NOT EXISTS(SELECT 1 FROM sourcing_price_reviews review WHERE review.price_request_id=request.price_request_id) LIMIT 1`,[caseId])).rows[0];
+        if(pending) {
+          if(pending.base_decision_id===basis.decision_id&&pending.base_document_id===basis.document_id
+            &&scaledUnitPrice(pending.unit_price)===scaledUnitPrice(normalized.unitPrice)
+            &&pending.requested_by===actor.actorId&&pending.reason===normalized.changeReason)
+            return {statusCode:200,response:{documentId:null as string|null}};
+          fail("本单已有待处理价格申请，请先由老板审批、驳回或退回，或由原申请人撤销后重新申请",409,"CONFLICT");
+        }
         const lines=(await client.query<{position:number;quantity:number;unit_price:string}>("SELECT position,quantity,unit_price FROM sourcing_decision_lines WHERE sourcing_decision_id=$1 ORDER BY position",[basis.decision_id])).rows;
         try {calculateSourcingLinesTotalExact(lines.map(line=>({position:line.position,quantity:Number(line.quantity),unitPrice:normalized.unitPrice})));}
         catch {fail("调价金额超出系统范围，请核对单价与数量");}
         const different=lines.some(line=>scaledUnitPrice(line.unit_price)!==scaledUnitPrice(normalized.unitPrice));
         if(!different) return {statusCode:200,response:{documentId:null as string|null}};
-        const duplicate=(await client.query(`SELECT 1 FROM sourcing_price_reapplications request WHERE sourcing_case_id=$1
-          AND base_decision_id=$2 AND base_document_id=$3 AND unit_price=$4 AND requested_by=$5 AND reason=$6
-          AND NOT EXISTS(SELECT 1 FROM sourcing_price_reviews review WHERE review.price_request_id=request.price_request_id) LIMIT 1`,
-          [caseId,basis.decision_id,basis.document_id,normalized.unitPrice,actor.actorId,normalized.changeReason])).rowCount;
-        if(duplicate) return {statusCode:200,response:{documentId:null as string|null}};
         const priceRequestId=randomUUID(),requiresOwnerApproval=requiresSourcingPriceOwnerApproval(normalized.unitPrice,basis.unit_price);
         const eventId=await this.events.append(client,actor,{action:"sourcing.price_reapplication.request",entityType:"sourcing_case",entityId:caseId,
           before:{decisionId:basis.decision_id,documentId:basis.document_id},after:{priceRequestId,unitPrice:normalized.unitPrice,requiresOwnerApproval},reason:normalized.changeReason});

@@ -22,6 +22,7 @@ import { PostgresAuthStore } from "../../apps/api/src/auth/postgres-store.js";
 import { ApplicationError } from "../../apps/api/src/platform/errors.js";
 import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
 import { SourcingContractService } from "../../apps/api/src/sourcing/sourcing-contract-service.js";
+import * as contractPdf from "../../apps/api/src/sourcing/sourcing-contract-pdf.js";
 import { SourcingContractReturnService } from "../../apps/api/src/sourcing/sourcing-contract-return-service.js";
 import { TodoService } from "../../apps/api/src/todos/service.js";
 import { SourcingTodoReconciliationService } from "../../apps/api/src/todos/sourcing-reconciliation-service.js";
@@ -4317,13 +4318,73 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     expect((await database.query("SELECT * FROM sourcing_contract_return_cycles WHERE sourcing_case_id=$1",[id])).rows).toEqual([]);
   });
 
-  it("serializes two price approvals and price approval against a transfer",async()=>{
+  it("preserves the Root-edited delivery date in price-only detail, list, approval and generated PDF while retaining historical reads",async()=>{
+    const id=await reviewedContractCase("PRICE-ROOT-DELIVERY");
+    const original=(await contractService.getCurrent(rootActor(),id)).item!;
+    const originalRow=(await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[original.sourcingContractDocumentId])).rows[0];
+    const draft=await contractService.content.get(rootActor(),id);
+    const date="2026-11-12";
+    const edited=await contractService.content.save(rootActor(),id,{...draft,content:{...draft.content,deliveryDate:date}},randomUUID());
+    await contractService.generateIfReady(rootActor(),id,edited);
+    const render=vi.spyOn(contractPdf,"renderSourcingContractPdf");
+    try {
+      await service.requestPriceReapplication(managerActor(),id,await priceInput(id,"15"),randomUUID());
+      const current=(await contractService.getCurrent(rootActor(),id)).item!;
+      expect(current).toMatchObject({status:"ready"});
+      expect(current.sourcingContractDocumentId).not.toBe(edited);
+      expect((await service.getCase(readerActor(),id))).toMatchObject({deliveryDate:date,approvalSnapshot:{deliveryDate:date}});
+      expect((await service.listCases(readerActor(),"TEST-PRICE-ROOT-DELIVERY")).items.find(row=>row.sourcingCaseId===id)?.deliveryDate).toBe(date);
+      expect((await contractService.content.get(rootActor(),id)).content.deliveryDate).toBe(date);
+      expect(render).toHaveBeenCalledWith(expect.objectContaining({deliveryDate:date}));
+      const currentRow=(await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[current.sourcingContractDocumentId])).rows[0];
+      expect(currentRow.approval_snapshot.deliveryDate).toBe(date);
+      expect((await database.query("SELECT delivery_date::text FROM sourcing_cases WHERE sourcing_case_id=$1",[id])).rows[0].delivery_date).toBe("2026-10-22");
+      expect((await database.query("SELECT sourcing_effective_delivery_date($1,'2026-10-22',(SELECT prepared_at FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$2))::text AS date",[id,original.sourcingContractDocumentId])).rows[0].date).toBe("2026-10-22");
+      expect((await database.query("SELECT sourcing_effective_delivery_date($1,'2026-10-22',(SELECT prepared_at FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$2))::text AS date",[id,edited])).rows[0].date).toBe(date);
+      expect((await service.nodeHistory(readerActor(),id,"owner")).item.deliveryDate).toBe("2026-10-22");
+      expect((await database.query("SELECT * FROM sourcing_contract_documents WHERE sourcing_contract_document_id=$1",[original.sourcingContractDocumentId])).rows[0]).toEqual(originalRow);
+    } finally {render.mockRestore();}
+  });
+
+  it("keeps one visible pending price request across tabs, reasons and requesters and closes all approval todos",async()=>{
+    const {service:currentService}=await cycleTodoServices();
+    const id=await reviewedContractCase("PRICE-ONE-PENDING");
+    const otherManagerId=randomUUID();
+    await database.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'TEST-second-production-manager',true)",[otherManagerId]);
+    const otherManager=()=>({...managerActor(),actorId:otherManagerId});
+    const inputs=[await priceInput(id,"16"),await priceInput(id,"17")];
+    const raced=await Promise.allSettled(inputs.map(input=>currentService.requestPriceReapplication(managerActor(),id,input,randomUUID())));
+    expect(raced.filter(result=>result.status==="fulfilled")).toHaveLength(1);
+    expect((raced.find(result=>result.status==="rejected") as PromiseRejectedResult).reason).toMatchObject({statusCode:409,message:expect.stringContaining("已有待处理价格申请")});
+    const winner=inputs[raced.findIndex(result=>result.status==="fulfilled")]!;
+    await currentService.requestPriceReapplication(managerActor(),id,winner,randomUUID());
+    for(const [actor,input] of [[managerActor(),{...winner,unitPrice:"18"}],[managerActor(),{...winner,changeReason:"TEST-different-reason"}],[otherManager(),winner],
+      [managerActor(),{...winner,unitPrice:"15.5"}]] as const) {
+      await expect(currentService.requestPriceReapplication(actor,id,input,randomUUID())).rejects.toMatchObject({statusCode:409});
+    }
+    const pending=(await currentService.getCurrentPriceReapplication(readerActor(),id)).item!;
+    expect(pending).toMatchObject({status:"pending",unitPrice:expect.any(String)});
+    expect((await database.query("SELECT * FROM sourcing_price_reapplications WHERE sourcing_case_id=$1",[id])).rows).toHaveLength(1);
+    const tasks=()=>database.query("SELECT status FROM rework_todos WHERE entity_id=$1 AND category='sourcing_price_owner_approve'",[id]);
+    expect((await tasks()).rows).toEqual([{status:"pending"}]);
+    await currentService.decidePriceReapplication(ownerActor(),id,pending.priceRequestId,{decision:"rejected",verificationReason:"TEST-resolve-first"},randomUUID());
+    expect((await tasks()).rows.every(row=>row.status==="completed")).toBe(true);
+    for(const decision of ["cancelled","returned","approved"] as const) {
+      await currentService.requestPriceReapplication(otherManager(),id,winner,randomUUID());
+      const next=(await currentService.getCurrentPriceReapplication(readerActor(),id)).item!;
+      expect(next).toMatchObject({status:"pending",requestedBy:otherManagerId});
+      await currentService.decidePriceReapplication(decision==="cancelled"?otherManager():ownerActor(),id,next.priceRequestId,
+        {decision,verificationReason:"TEST-resolve-visible-request"},randomUUID());
+      expect((await tasks()).rows.every(row=>row.status==="completed")).toBe(true);
+      expect((await currentService.getCurrentPriceReapplication(readerActor(),id)).item?.status).toBe(decision);
+    }
+  });
+
+  it("serializes concurrent approval callbacks and price approval against a transfer",async()=>{
     const id=await reviewedContractCase("PRICE-CONCURRENT-APPROVAL");
     const input=await priceInput(id,"16");await service.requestPriceReapplication(managerActor(),id,input,randomUUID());
     const a=(await service.getCurrentPriceReapplication(readerActor(),id)).item!;
-    await service.requestPriceReapplication(managerActor(),id,{...input,unitPrice:"17"},randomUUID());
-    const b=(await service.getCurrentPriceReapplication(readerActor(),id)).item!;
-    const results=await Promise.allSettled([a,b].map(request=>service.decidePriceReapplication(ownerActor(),id,request.priceRequestId,{decision:"approved",verificationReason:"TEST-concurrent"},randomUUID())));
+    const results=await Promise.allSettled([a,a].map(request=>service.decidePriceReapplication(ownerActor(),id,request.priceRequestId,{decision:"approved",verificationReason:"TEST-concurrent"},randomUUID())));
     expect(results.filter(result=>result.status==="fulfilled")).toHaveLength(1);
     expect((results.find(result=>result.status==="rejected") as PromiseRejectedResult).reason).toMatchObject({statusCode:409});
     expect((await database.query("SELECT * FROM sourcing_decisions WHERE sourcing_case_id=$1 AND source_type='price_reapplication'",[id])).rows).toHaveLength(1);

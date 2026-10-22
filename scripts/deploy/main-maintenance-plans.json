@@ -114,7 +114,7 @@
   },
   {
     "version": "0229_sourcing_price_reapplications",
-    "checksum": "430ea60991739d8ddcbb10024501287ce4a4495fd23dca2bc0c97db09d3e3de5",
+    "checksum": "633964acebe30386ae7d3877268dcb7519944e387ffeb9707fa4d92e3b3cc857",
     "strategy": "quiesce-backup-transactional-ddl",
     "tables": [
       "public.sourcing_decisions",
