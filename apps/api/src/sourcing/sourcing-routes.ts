@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { registerProductionClosureRoutes } from "./production-closure-routes.js";
 import type { ProductionClosureService } from "./production-closure-service.js";
 import { registerProductionDashboardRoutes } from "./production-dashboard-routes.js";
@@ -484,6 +485,12 @@ export function registerSourcingRoutes(
       if (!await isRootUser(dependencies.root,user.id)) throw new ApplicationError("FORBIDDEN","仅Root可修改合同内容",403);
       return businessActor(dependencies.root,user,request.id,"sourcing:contract:record");
     };
+    app.post<{Params:{sourcingCaseId:string}}>("/sourcing/cases/:sourcingCaseId/contract-return/retry-todos",async request=>{
+      const actor=await contentActor(request);
+      const parsed=z.object({documentId:z.string().uuid()}).strict().safeParse(request.body);
+      if(!parsed.success) validationError("请指定当前合同文档");
+      return dependencies.contracts!.retryReturnTodos(actor,caseId(request.params.sourcingCaseId),parsed.data!.documentId,idempotencyKey(request));
+    });
     app.get<{Params:{sourcingCaseId:string}}>("/sourcing/cases/:sourcingCaseId/contract/content",async request =>
       ContractContentStateSchema.parse(await dependencies.contracts!.content.get(await contentActor(request),caseId(request.params.sourcingCaseId))));
     app.post<{Params:{sourcingCaseId:string}}>("/sourcing/cases/:sourcingCaseId/contract/content",{bodyLimit:4*1024*1024},async request => {

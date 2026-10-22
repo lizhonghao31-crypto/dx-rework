@@ -20,6 +20,10 @@ export type CurrentTransferContract = {
   source_action: string;
   returned: boolean;
   generated_at: Date | string | null;
+  sourcing_approval_snapshot_id: string;
+  return_cycle_id: string | null;
+  cycle_generated_at: Date | string | null;
+  cycle_due_at: Date | string | null;
   ambiguous_return: boolean;
 };
 
@@ -33,14 +37,15 @@ export class SourcingTransferContractTodos {
   async inspect(client: PoolClient, caseId: string) {
     const current = (await client.query<CurrentTransferContract>(`SELECT document.sourcing_contract_document_id,
         document.contract_version,document.status,document.pdf_attachment_id,
-        document.generated_at,
+        document.generated_at::text AS generated_at,document.sourcing_approval_snapshot_id,
+        clock.return_cycle_id,clock.contract_generated_at AS cycle_generated_at,clock.contract_return_due_at AS cycle_due_at,
         decision.source_change_request_id,decision.supplier_name_snapshot,source.created_by,
         nullif(to_jsonb(source)->>'additional_merchandiser_user_id','')::uuid AS additional_merchandiser_user_id,
         snapshot.operation_event_id,event.action AS source_action,
-        EXISTS(SELECT 1 FROM sourcing_contract_return_submissions signed
+        CASE WHEN clock.return_cycle_id IS NOT NULL THEN clock.contract_returned_at IS NOT NULL ELSE EXISTS(SELECT 1 FROM sourcing_contract_return_submissions signed
           JOIN sourcing_contract_return_attachments link ON link.submission_id=signed.submission_id
           JOIN attachments file ON file.attachment_id=link.attachment_id AND file.status='ready'
-          WHERE signed.sourcing_contract_document_id=document.sourcing_contract_document_id) AS returned,
+          WHERE signed.sourcing_contract_document_id=document.sourcing_contract_document_id) END AS returned,
         EXISTS(SELECT 1 FROM sourcing_contract_return_submissions signed
           WHERE signed.sourcing_case_id=source.sourcing_case_id AND signed.sourcing_contract_document_id IS NULL) AS ambiguous_return
       FROM sourcing_cases source
@@ -52,6 +57,7 @@ export class SourcingTransferContractTodos {
       JOIN sourcing_approval_snapshots snapshot ON snapshot.sourcing_approval_snapshot_id=document.sourcing_approval_snapshot_id
       JOIN sourcing_decisions decision ON decision.sourcing_decision_id=snapshot.sourcing_decision_id
       JOIN operation_events event ON event.event_id=snapshot.operation_event_id
+      LEFT JOIN LATERAL sourcing_contract_return_facts(source.sourcing_case_id) clock ON true
       WHERE source.sourcing_case_id=$1 AND source.deleted_at IS NULL`, [caseId])).rows[0];
     const recipients = [];
     if (current) for (const userId of new Set([current.created_by, current.additional_merchandiser_user_id].filter((id): id is string => !!id))) {
@@ -73,7 +79,7 @@ export class SourcingTransferContractTodos {
     await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 FOR UPDATE", [caseId]);
     const { current, recipients, tasks } = await this.inspect(client, caseId);
     // An unfinished new PDF must not invalidate a still-actionable older version.
-    if (!current?.source_change_request_id || current.status !== "ready" || !current.pdf_attachment_id)
+    if (!current?.return_cycle_id || current.status !== "ready" || !current.pdf_attachment_id)
       return { createdTodoIds: [] as string[] };
     const open = await client.query<{ dedupe_key: string; document_id: string | null }>(`SELECT dedupe_key,
         route_descriptor->'transferContract'->>'documentId' AS document_id
