@@ -111,5 +111,30 @@
     ],
     "onlineCompatible": false,
     "rollback": "restart-previous-only-if-entire-history-unchanged"
+  },
+  {
+    "version": "0229_sourcing_price_reapplications",
+    "checksum": "430ea60991739d8ddcbb10024501287ce4a4495fd23dca2bc0c97db09d3e3de5",
+    "strategy": "quiesce-backup-transactional-ddl",
+    "tables": [
+      "public.sourcing_decisions",
+      "public.sourcing_case_transitions"
+    ],
+    "triggerTables": [
+      "public.sourcing_approval_snapshots"
+    ],
+    "schema": "public",
+    "functions": [
+      "public.guard_sourcing_decision_insert()",
+      "public.guard_sourcing_decision_crafts()",
+      "public.guard_sourcing_cutting_process()",
+      "public.guard_sourcing_transition_insert()"
+    ],
+    "languages": [
+      "sql",
+      "plpgsql"
+    ],
+    "onlineCompatible": false,
+    "rollback": "restart-previous-only-if-entire-history-unchanged"
   }
 ]

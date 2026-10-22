@@ -23,6 +23,7 @@ import {
   RecordSourcingFinanceReconciliationSchema,
   RecordSourcingManagementDecisionSchema,
   RequestSourcingFactoryChangeSchema,
+  RequestSourcingPriceReapplicationSchema,DecideSourcingPriceReapplicationSchema,SourcingPriceReapplicationStateSchema,
   SOURCING_IMAGE_SUPPLEMENT_ROLES,
   SourcingContractStateResponseSchema,
   SourcingContractReturnUploadSchema,
@@ -584,6 +585,24 @@ export function registerSourcingRoutes(
       },
     );
   }
+
+  app.get<{Params:{sourcingCaseId:string}}>("/sourcing/cases/:sourcingCaseId/price-reapplications/current",async request=>
+    SourcingPriceReapplicationStateSchema.parse(await dependencies.service.getCurrentPriceReapplication(await readActor(request),caseId(request.params.sourcingCaseId))));
+  app.post<{Params:{sourcingCaseId:string}}>("/sourcing/cases/:sourcingCaseId/price-reapplications",async(request,reply)=>{
+    const actor=await actionActor(request,"production_management","sourcing:decision:record");
+    const parsed=RequestSourcingPriceReapplicationSchema.safeParse(request.body);
+    if(!parsed.success) validationError(parsed.error.issues[0]?.message??"价格申请资料无效");
+    const result=await dependencies.service.requestPriceReapplication(actor,caseId(request.params.sourcingCaseId),parsed.data!,idempotencyKey(request));
+    if(result.reused) reply.header("idempotency-replayed","true");return reply.code(201).send(result.value);
+  });
+  app.post<{Params:{sourcingCaseId:string;priceRequestId:string}}>("/sourcing/cases/:sourcingCaseId/price-reapplications/:priceRequestId/decision",async(request,reply)=>{
+    const parsed=DecideSourcingPriceReapplicationSchema.safeParse(request.body);
+    if(!parsed.success) validationError(parsed.error.issues[0]?.message??"价格审批资料无效");
+    const cancelled=parsed.data!.decision==="cancelled";
+    const actor=await actionActor(request,cancelled?"production_management":"owner_group",cancelled?"sourcing:decision:record":"sourcing:owner:approve");
+    const result=await dependencies.service.decidePriceReapplication(actor,caseId(request.params.sourcingCaseId),caseId(request.params.priceRequestId),parsed.data!,idempotencyKey(request));
+    if(result.reused) reply.header("idempotency-replayed","true");return reply.code(201).send(result.value);
+  });
 
   app.get<{ Params: { sourcingCaseId: string } }>(
     "/sourcing/cases/:sourcingCaseId/factory-changes/current",

@@ -2089,6 +2089,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await expect(contractService.supplement(contractActor(), created.value.sourcingCaseId, {
       address: "试图追改",
     }, randomUUID())).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION" });
+    await service.requestPriceReapplication(managerActor(),created.value.sourcingCaseId,await priceInput(created.value.sourcingCaseId,"7"),randomUUID());
+    const priced=(await contractService.getCurrent(rootActor(),created.value.sourcingCaseId)).item!;
+    expect(priced.status).toBe("ready");
+    const priceContract=await contractService.content.get(rootActor(),created.value.sourcingCaseId);
+    expect(priceContract.content).toMatchObject({partyBAddress:"广州补充地址",payeeName:"陈补充",bankAccount:"622299"});
+
   });
   it("dispatches before finance, freezes all lines, and handles concurrent clicks without duplication", async () => {
     const created = await service.createCase(merchandiserActor(), {
@@ -4248,6 +4254,137 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
     expect((await database.query("SELECT * FROM sourcing_contract_return_cycles WHERE sourcing_case_id=$1",[id])).rows).toHaveLength(1);
     expect((await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 AND category='sourcing_transfer_contract_return' AND status='pending'",[id])).rows).toHaveLength(1);
+  });
+
+  const priceInput=async(id:string,unitPrice:string)=>({unitPrice,changeReason:"TEST-price-only",expectedDecisionId:(await service.getCase(readerActor(),id)).decision!.sourcingDecisionId,
+    expectedContractDocumentId:(await contractService.getCurrent(rootActor(),id)).item!.sourcingContractDocumentId});
+
+  it("applies production-management same-factory prices without transfer side effects and keeps Root authority",async()=>{
+    await ensureReturnTodoRecipient();
+    const id=await reviewedContractCase("PRICE-ONLY-EFFECT");
+    await service.recordFinanceReconciliation(financeActor(),id,{result:"match"},randomUUID());
+    const original=await service.getCase(readerActor(),id);
+    const finance=(await database.query("SELECT * FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1",[id])).rows;
+    const source=(await database.query("SELECT * FROM sourcing_cases WHERE sourcing_case_id=$1",[id])).rows;
+    const cutting=(await database.query("SELECT * FROM cutting_orders WHERE sourcing_case_id=$1",[id])).rows;
+    const input=await priceInput(id,"15.25"),key=randomUUID();
+    await expect(service.requestPriceReapplication(ownerActor(),id,input,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(service.requestPriceReapplication(factoryChangeActor(),id,input,randomUUID())).rejects.toMatchObject({statusCode:403});
+    for(const field of ["supplierId","deliveryDate","estimatedCutPieceSendDate","quantity","linePrices"]) {
+      await expect(service.requestPriceReapplication(managerActor(),id,{...input,[field]:"tampered"} as never,randomUUID())).rejects.toMatchObject({statusCode:400});
+    }
+    const result=await service.requestPriceReapplication(managerActor(),id,input,key);
+    expect(result.value.decision).toMatchObject({sourceType:"price_reapplication",unitPrice:"15.2500",supplierId:original.decision!.supplierId});
+    expect(result.value).toMatchObject({orderQuantity:original.orderQuantity,deliveryDate:original.deliveryDate,estimatedCutPieceSendDate:original.estimatedCutPieceSendDate});
+    expect((await service.requestPriceReapplication(managerActor(),id,input,key)).reused).toBe(true);
+    expect((await database.query("SELECT * FROM sourcing_factory_change_requests WHERE sourcing_case_id=$1",[id])).rows).toEqual([]);
+    expect((await database.query("SELECT * FROM sourcing_cases WHERE sourcing_case_id=$1",[id])).rows).toEqual(source);
+    expect((await database.query("SELECT * FROM cutting_orders WHERE sourcing_case_id=$1",[id])).rows).toEqual(cutting);
+    expect((await database.query("SELECT * FROM sourcing_finance_reconciliations WHERE sourcing_case_id=$1",[id])).rows).toEqual(finance);
+    const doc=(await contractService.getCurrent(rootActor(),id)).item!;
+    expect(doc.status).toBe("ready");
+    const tasks=(await database.query("SELECT * FROM rework_todos WHERE entity_id=$1 AND category='sourcing_price_contract_return'",[id])).rows;
+    expect(tasks).toHaveLength(1);expect(tasks[0].source_action).toBe("sourcing.price_reapplication.effective");
+    expect(tasks[0].route_descriptor).toMatchObject({contractReturn:{documentId:doc.sourcingContractDocumentId,source:"price_reapplication"}});
+    expect(tasks[0].route_descriptor.transferContract).toBeUndefined();expect(tasks[0].due_at).toBeNull();
+    expect((await database.query("SELECT * FROM outbox_events WHERE payload->>'todoId'=$1",[tasks[0].todo_id])).rows).toEqual([]);
+    expect((await database.query("SELECT * FROM todo_delivery_attempts WHERE todo_id=$1",[tasks[0].todo_id])).rows).toEqual([]);
+    expect(await contractReturns.get(readerActor(),id)).toMatchObject({contractReturnStatus:"pending",currentContractReturned:false});
+    const signed=randomUUID();
+    await database.query(`INSERT INTO attachments(attachment_id,object_key,original_filename,mime_type,size_bytes,sha256,uploaded_by,status,ready_at)
+      VALUES($1,$2,'TEST-price-return.pdf','application/pdf',128,$3,$4,'ready',CURRENT_TIMESTAMP)`,[signed,`TEST-price-return/${signed}`,"a".repeat(64),merchandiserId]);
+    await contractReturns.submit(contractActor(),id,[signed],randomUUID(),doc.sourcingContractDocumentId);
+    expect((await database.query("SELECT status FROM rework_todos WHERE todo_id=$1",[tasks[0].todo_id])).rows[0].status).toBe("completed");
+    const count=(await database.query("SELECT * FROM sourcing_decisions WHERE sourcing_case_id=$1",[id])).rowCount;
+    await service.requestPriceReapplication(managerActor(),id,await priceInput(id,"15.25"),randomUUID());
+    expect((await database.query("SELECT * FROM sourcing_decisions WHERE sourcing_case_id=$1",[id])).rowCount).toBe(count);
+    await service.requestPriceReapplication({...rootActor(),authorizationCapability:"sourcing:decision:record"},id,await priceInput(id,"15"),randomUUID());
+    expect((await service.getCase(readerActor(),id)).decision?.unitPrice).toBe("15.0000");
+  });
+
+  it("keeps pending, returned, rejected and cancelled price requests from replacing effective prices",async()=>{
+    const id=await reviewedContractCase("PRICE-PENDING");
+    const original=await service.getCase(readerActor(),id),doc=(await contractService.getCurrent(rootActor(),id)).item!;
+    for(const decision of ["returned","rejected","cancelled"] as const) {
+      const input=await priceInput(id,"16");await service.requestPriceReapplication(managerActor(),id,input,randomUUID());
+      const request=(await service.getCurrentPriceReapplication(readerActor(),id)).item!;
+      expect(request).toMatchObject({status:"pending",requiresOwnerApproval:true});
+      await expect(service.decidePriceReapplication(managerActor(),id,request.priceRequestId,{decision:"approved",verificationReason:"TEST-no-boss"},randomUUID())).rejects.toMatchObject({statusCode:403});
+      await service.decidePriceReapplication(decision==="cancelled"?managerActor():ownerActor(),id,request.priceRequestId,{decision,verificationReason:"TEST-no-effect"},randomUUID());
+      expect((await service.getCase(readerActor(),id)).decision).toEqual(original.decision);
+      expect((await contractService.getCurrent(rootActor(),id)).item?.sourcingContractDocumentId).toBe(doc.sourcingContractDocumentId);
+    }
+    expect((await database.query("SELECT * FROM sourcing_contract_return_cycles WHERE sourcing_case_id=$1",[id])).rows).toEqual([]);
+  });
+
+  it("serializes two price approvals and price approval against a transfer",async()=>{
+    const id=await reviewedContractCase("PRICE-CONCURRENT-APPROVAL");
+    const input=await priceInput(id,"16");await service.requestPriceReapplication(managerActor(),id,input,randomUUID());
+    const a=(await service.getCurrentPriceReapplication(readerActor(),id)).item!;
+    await service.requestPriceReapplication(managerActor(),id,{...input,unitPrice:"17"},randomUUID());
+    const b=(await service.getCurrentPriceReapplication(readerActor(),id)).item!;
+    const results=await Promise.allSettled([a,b].map(request=>service.decidePriceReapplication(ownerActor(),id,request.priceRequestId,{decision:"approved",verificationReason:"TEST-concurrent"},randomUUID())));
+    expect(results.filter(result=>result.status==="fulfilled")).toHaveLength(1);
+    expect((results.find(result=>result.status==="rejected") as PromiseRejectedResult).reason).toMatchObject({statusCode:409});
+    expect((await database.query("SELECT * FROM sourcing_decisions WHERE sourcing_case_id=$1 AND source_type='price_reapplication'",[id])).rows).toHaveLength(1);
+    const other=await reviewedContractCase("PRICE-TRANSFER-RACE");
+    await service.requestPriceReapplication(managerActor(),other,await priceInput(other,"16"),randomUUID());
+    const price=(await service.getCurrentPriceReapplication(readerActor(),other)).item!;
+    await service.requestFactoryChange(managerActor(),other,{supplierId:replacementFactoryId,unitPrice:"16",changeReason:"TEST-racing-transfer"},randomUUID());
+    const transfer=(await service.getCurrentFactoryChange(readerActor(),other)).item!;
+    const raced=await Promise.allSettled([
+      service.decidePriceReapplication(ownerActor(),other,price.priceRequestId,{decision:"approved",verificationReason:"TEST-racing-price"},randomUUID()),
+      service.decideFactoryChange(ownerActor(),other,transfer.factoryChangeRequestId,{decision:"approved",verificationReason:"TEST-racing-transfer"},randomUUID()),
+    ]);
+    expect(raced.filter(result=>result.status==="fulfilled")).toHaveLength(1);
+    expect((await database.query("SELECT * FROM sourcing_decisions WHERE sourcing_case_id=$1 AND decision_version>1",[other])).rows).toHaveLength(1);
+  });
+
+  it("recovers price PDF generation on the same approved request without applying it again",async()=>{
+    const id=await reviewedContractCase("PRICE-GENERATION-RETRY");
+    const input=await priceInput(id,"15"),key=randomUUID();
+    const fail=vi.spyOn(contractStorage,"writeImmutable").mockRejectedValueOnce(new Error("TEST-price-pdf-generation-failure"));
+    await service.requestPriceReapplication(managerActor(),id,input,key);fail.mockRestore();
+    expect((await contractService.getCurrent(rootActor(),id)).item?.status).toBe("generation_failed");
+    const decision=(await service.getCase(readerActor(),id)).decision!;
+    await service.requestPriceReapplication(managerActor(),id,input,key);
+    expect((await contractService.getCurrent(rootActor(),id)).item?.status).toBe("ready");
+    expect((await service.getCase(readerActor(),id)).decision?.sourcingDecisionId).toBe(decision.sourcingDecisionId);
+    expect((await database.query("SELECT * FROM sourcing_price_reviews review JOIN sourcing_price_reapplications request USING(price_request_id) WHERE sourcing_case_id=$1",[id])).rows).toHaveLength(1);
+  });
+
+  it("reuses the transfer first-line comparison for multi-style prices and preserves dispatched/cutting facts",async()=>{
+    await ensureReturnTodoRecipient();
+    const id=(await service.createCase(merchandiserActor(),{gender:"女装",styleName:"TEST-PRICE-MULTI",estimatedCutPieceSendDate:"2026-10-04",deliveryDate:"2026-10-22",
+      lineItems:[{styleNo:"TEST-PRICE-MULTI-A",color:"蓝",quantity:10},{styleNo:"TEST-PRICE-MULTI-B",color:"黑",quantity:20}],daxingUnitPrice:"8",attachmentIds:[]},randomUUID())).value.sourcingCaseId;
+    const prices=[{position:1,unitPrice:"15"},{position:2,unitPrice:"10"}];
+    await service.quoteIePrice(ieActor(),id,{linePrices:prices},randomUUID());
+    await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],linePrices:prices},randomUUID());
+    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    const doc=(await contractService.getCurrent(rootActor(),id)).item!;
+    await production.dispatch(contractActor(),id,{sourcingContractDocumentId:doc.sourcingContractDocumentId,confirmed:true},randomUUID());
+    const cut=(await cutting.listSources(cuttingOwnerActor())).items.find(order=>order.sourcingCaseId===id)!;
+    await cutting.record(cuttingSupervisorActor(),cut.cuttingOrderId,{pieceCount:10,actualCutCount:10,attachmentIds:[await readyCuttingSheet(ownerId)]},randomUUID());
+    const productionBefore=(await database.query("SELECT * FROM sourcing_production_orders WHERE sourcing_case_id=$1",[id])).rows;
+    const cuttingBefore=(await database.query("SELECT * FROM cutting_records WHERE cutting_order_id=$1",[cut.cuttingOrderId])).rows;
+    // The second line increases, yet 14 <= first-line basis 15: the existing transfer rule auto-applies.
+    await service.requestPriceReapplication(managerActor(),id,await priceInput(id,"14"),randomUUID());
+    const request=(await service.getCurrentPriceReapplication(readerActor(),id)).item!;
+    expect(request).toMatchObject({requiresOwnerApproval:false,status:"approved"});
+    const current=await service.getCase(readerActor(),id);
+    expect(current.decision!.linePrices.map(line=>Number(line.unitPrice))).toEqual([14,14]);
+    expect((await database.query("SELECT * FROM sourcing_production_orders WHERE sourcing_case_id=$1",[id])).rows).toEqual(productionBefore);
+    expect((await database.query("SELECT * FROM cutting_records WHERE cutting_order_id=$1",[cut.cuttingOrderId])).rows).toEqual(cuttingBefore);
+  });
+
+  it("rejects out-of-range price totals before creating an approval request",async()=>{
+    const id=(await service.createCase(merchandiserActor(),{gender:"女装",styleName:"TEST-PRICE-TOTAL-LIMIT",estimatedCutPieceSendDate:"2026-10-04",deliveryDate:"2026-10-22",
+      lineItems:[{styleNo:"TEST-PRICE-TOTAL-LIMIT",color:"蓝",quantity:10_000_000}],daxingUnitPrice:"1",attachmentIds:[]},randomUUID())).value.sourcingCaseId;
+    await service.quoteIePrice(ieActor(),id,{unitPrice:"1"},randomUUID());
+    await service.recordManagementDecision(managerActor(),id,{supplierId:factoryId,craftIds:[craftId("净色车缝")],unitPrice:"1"},randomUUID());
+    await service.decideOwner(ownerActor(),id,{decision:"approved"},randomUUID());
+    await expect(service.requestPriceReapplication(managerActor(),id,await priceInput(id,"9999999999"),randomUUID())).rejects.toMatchObject({statusCode:400});
+    expect((await database.query("SELECT * FROM sourcing_price_reapplications WHERE sourcing_case_id=$1",[id])).rows).toEqual([]);
   });
 
   it("uses one stable business return cycle across regenerated PDF IDs and preserves legacy evidence",async()=>{

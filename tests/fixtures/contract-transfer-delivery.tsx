@@ -1,6 +1,6 @@
 // Actual page; every request is intercepted with isolated TEST data.
 import { createRoot } from 'react-dom/client';
-import { SourcingCaseSummarySchema, CONTRACT_TERM_LABELS } from '@dx-rework/contracts';
+import { SourcingCaseSummarySchema, CONTRACT_TERM_LABELS,calculateSourcingTotalExact } from '@dx-rework/contracts';
 import { SourcingWorkspacePage } from '../../apps/web/src/sourcing-workspace-page.js';
 import '../../packages/ui/src/tokens.css';
 import '../../packages/ui/src/components.css';
@@ -30,21 +30,31 @@ let item=SourcingCaseSummarySchema.parse({
 });
 const contractDocument={sourcingContractDocumentId:id(55),sourcingApprovalSnapshotId:id(6),contractNumber:'TEST-CONTRACT-V7',contractVersion:7,templateVersion:4,status:'ready',missingFields:[],snapshotFingerprint:'a'.repeat(64),pdfAttachmentId:id(57),pdfSha256:'b'.repeat(64),failureReason:null,preparedAt:now,generatedAt:now,canSupplement:false,canRefreshInformation:role==='root',canEditContent:role==='root'&&!reviewed};
 const content={contractTitle:'TEST合同',contractNumber:'TEST-CONTRACT-V7',contractDate:'2026-10-13',partyAName:'TEST甲方',partyAAddress:'TEST地址',partyARepresentative:'TEST',partyASigningDate:'',partyBSigningDate:'',partyBName:'TEST原工厂',partyBAddress:'TEST地址',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST',bankName:'TEST',signingPlace:'TEST',gender:'女装',styleName:'TEST交期',estimatedCutPieceSendDate:'2026-10-04',deliveryDate:'2026-10-22',processes:['TEST-车缝'],lines,totalQuantity:2020,totalAmount:'31310',terms:Object.fromEntries(Object.keys(CONTRACT_TERM_LABELS).map(key=>[key,'TEST条款']))};
+let priceRequest:Record<string,unknown>|null=params.get('pricePending')==='1'?{priceRequestId:id(88),baseDecisionId:id(3),baseDocumentId:id(55),unitPrice:'16',reason:'TEST待审批',requestedBy:id(1),requestedAt:now,requiresOwnerApproval:true,status:'pending',basisChanged:false}:null;
 const requests:unknown[]=[];
 Object.assign(window,{contractTransferRequests:requests});
 window.fetch=async(input,init)=>{
   const path=String(input),method=init?.method ?? 'GET',body=typeof init?.body==='string'?JSON.parse(init.body):null;
   requests.push({path,method,body});
+  if(method==='POST'&&path.includes('/price-reapplications')){
+    if(path.endsWith('/decision'))priceRequest={...priceRequest,status:body.decision};
+    else {
+      priceRequest={priceRequestId:id(88),baseDecisionId:body.expectedDecisionId,baseDocumentId:body.expectedContractDocumentId,unitPrice:body.unitPrice,reason:body.changeReason,requestedBy:id(1),requestedAt:now,requiresOwnerApproval:Number(body.unitPrice)>15.5,status:Number(body.unitPrice)>15.5?'pending':'approved',basisChanged:false};
+      if(Number(body.unitPrice)<=15.5)item={...item,version:item.version+1,decision:{...item.decision!,sourceType:'price_reapplication',unitPrice:body.unitPrice,totalAmount:calculateSourcingTotalExact(body.unitPrice,2020),linePrices:item.decision!.linePrices.map(line=>({...line,unitPrice:body.unitPrice,totalAmount:calculateSourcingTotalExact(body.unitPrice,line.quantity)}))}};
+    }
+    return Response.json(item);
+  }
   if(method==='POST'&&path.includes('/factory-changes')){
     item={...item,deliveryDate:body.deliveryDate ?? item.deliveryDate,decision:{...item.decision!,supplierId:body.supplierId,supplierName:'TEST新工厂'},approvalSnapshot:{...item.approvalSnapshot!,deliveryDate:body.deliveryDate ?? item.deliveryDate}};
     return Response.json(item);
   }
   if(method!=='GET')return Response.json({error:{message:'TEST-only unexpected mutation'}},{status:403});
-  if(path.endsWith('auth/me'))return Response.json({status:'authorized',user:{id:id(1),displayName:'TEST-'+role,isRoot:role==='root',businessRoles:roles,capabilities}});
+  if(path.endsWith('auth/me'))return Response.json({status:'authorized',user:{id:id(1),displayName:'TEST-'+role,isRoot:role==='root',businessRoles:roles,capabilities,readOnlyModules:params.get('readonly')==='1'?['sourcing']:[]}});
   if(path.endsWith('/contract/content'))return Response.json({sourcingContractDocumentId:id(55),informationFingerprint:'a'.repeat(64),content});
   if(path.endsWith('/contract/refresh'))return Response.json({sourcingContractDocumentId:id(55),informationFingerprint:'a'.repeat(64),returned:true,changes:[],missingFields:[]});
   if(path.endsWith('/attachments')||path.endsWith('/timeline'))return Response.json({items:[]});
   if(path.endsWith('/factories'))return Response.json({items:[{supplierId:id(4),supplierCode:'TEST-OLD',supplierName:'TEST原工厂'},{supplierId:id(5),supplierCode:'TEST-NEW',supplierName:'TEST新工厂'}]});
+  if(path.endsWith('/price-reapplications/current'))return Response.json({item:priceRequest});
   if(path.endsWith('/factory-changes/current'))return Response.json({item:null});
   if(path.endsWith('/contract'))return Response.json({item:contractDocument});
   if(path.endsWith('/contract-return'))return Response.json({contractReturnCycleId:cycle?id(6):null,contractReturnMonitoring:true,contractReturnStatus:cycle?'pending':'returned_late',contractGeneratedAt:now,contractReturnDueAt:now,contractReturnedAt:cycle?null:now,contractReturnOverdueHours:cycle?0:61,uploadedByName:cycle?null:'TEST跟单',canUpload:true,uploadedFileCount:cycle?0:1,uploadedTotalBytes:cycle?0:128,currentContractReturned:false,currentContractDocumentId:id(55),signedContractDocumentId:id(54),signedContractVersion:6,signedContractNumber:'TEST-V6',attachments:[{attachmentId:id(58),filename:'TEST-signed.pdf',mimeType:'application/pdf',sizeBytes:128}],history:[]});

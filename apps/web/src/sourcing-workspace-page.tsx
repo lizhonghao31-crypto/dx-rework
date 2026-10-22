@@ -1,3 +1,4 @@
+import { SourcingPriceReapplicationPanel } from "./sourcing-price-reapplication.js";
 import { SearchableSelect } from "./search-select.js";
 import { contractReturnFileError, finishContractReturnUpload, type ContractReturnUpload } from "./sourcing-contract-return-upload.js";
 import { sourcingCurrentDisplay } from "./sourcing-current-display.js";
@@ -33,6 +34,7 @@ import {
   type SourcingDispatchState,
   SourcingFactoryListResponseSchema,
   SourcingFactoryChangeStateResponseSchema,
+  SourcingPriceReapplicationStateSchema,
   SourcingTimelineResponseSchema,
   UploadIntentResponseSchema,
   duplicateSourcingLineMessage,
@@ -2029,6 +2031,10 @@ function OrderDetailPage({
           </Surface> : null}
           {message ? <p className="sourcing-action-message" role="status">{message}</p> : null}
         </section>
+          {(canManage||canAct(user,"owner_group","sourcing:owner:approve"))&&item.approvalSnapshot?<SourcingPriceReapplicationPanel item={item} contract={contract}
+            canStart={canManage} canReview={canAct(user,"owner_group","sourcing:owner:approve")} isRoot={user?.isRoot===true} userId={user?.id??""} busy={busy}
+            read={()=>request(`sourcing/cases/${item.sourcingCaseId}/price-reapplications/current`,SourcingPriceReapplicationStateSchema)}
+            save={async(path,body,key)=>{setBusy(true);try{await requestSubmission(path,SourcingCaseSummarySchema,{method:"POST",headers:{"idempotency-key":key},body:JSON.stringify(body)});await load();}finally{setBusy(false);}}}/>:null}
           {transferNodeRole ? <section className="sourcing-factory-change" aria-label="订单转厂">
             {!item.decision ? <button className="dx-button dx-button--primary" type="button" disabled title="生产管理首次提交加工厂和单价后开放">订单转厂</button> : factoryChange?.status === "pending_management" ? <>
               <h2>订单转厂</h2>

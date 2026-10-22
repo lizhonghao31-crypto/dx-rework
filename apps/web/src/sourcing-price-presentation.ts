@@ -34,7 +34,7 @@ export function sourcingPriceSummary(pricing: Readonly<{
   linePrices: readonly Readonly<{ unitPrice: string }>[];
 }> | null): string {
   if (!pricing) return "—";
-  if (pricing.sourceType === "factory_change") return formatBusinessCurrency(pricing.unitPrice);
+  if ((pricing.sourceType === "factory_change" || pricing.sourceType === "price_reapplication")) return formatBusinessCurrency(pricing.unitPrice);
   if (pricing.linePrices.length > 1) return "多款价 · 见逐款明细";
   return historicalSourcingPrice(pricing.linePrices[0]?.unitPrice ?? pricing.unitPrice);
 }
@@ -49,7 +49,7 @@ export function sourcingLinePricing(pricing: Readonly<{
   if (!pricing) return null;
   const line = pricing.linePrices.find(entry => entry.position === position);
   if (line) return { unitPrice: line.unitPrice, totalAmount: line.totalAmount };
-  if (pricing.sourceType === "factory_change") {
+  if ((pricing.sourceType === "factory_change" || pricing.sourceType === "price_reapplication")) {
     return { unitPrice: pricing.unitPrice, totalAmount: lineCount === 1 ? pricing.totalAmount : null };
   }
   // A legacy single-line order can use the original order-level facts unambiguously.

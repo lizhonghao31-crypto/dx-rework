@@ -19,6 +19,7 @@ import {
   ReviseSourcingStylesSchema,
   SOURCING_IMAGE_SUPPLEMENT_ROLES,
   RequestSourcingFactoryChangeSchema, canChangeSourcingTransferDeliveryDate,
+  RequestSourcingPriceReapplicationSchema,DecideSourcingPriceReapplicationSchema,
 } from "@dx-rework/contracts";
 import type {
   CorrectSourcingCase, ReturnSourcingCase,
@@ -34,6 +35,7 @@ import type {
   RecordSourcingFinanceReconciliation,
   RecordSourcingManagementDecision,
   RequestSourcingFactoryChange,
+  RequestSourcingPriceReapplication,DecideSourcingPriceReapplication,SourcingPriceReapplicationState,
   SourcingCaseListResponse,
   SourcingFactoryListResponse,
   SourcingFactoryChangeStateResponse,
@@ -160,7 +162,7 @@ type SourcingCaseRow = Readonly<{
   quoted_at: Date | string | null;
   sourcing_decision_id: string | null;
   decision_version: number | string | null;
-  source_type: "initial" | "management_revision" | "factory_change" | null;
+  source_type: "initial" | "management_revision" | "factory_change" | "price_reapplication" | null;
   source_ie_quote_id: string | null;
   supersedes_decision_id: string | null;
   supplier_id: string | null;
@@ -431,6 +433,9 @@ const mapCase = (
 
 const databaseCode = (error: unknown): string | undefined =>
   typeof error === "object" && error !== null ? (error as SqlError).code : undefined;
+
+// Shared with factory changes: the current decision's first-line compatibility price remains authoritative.
+const requiresSourcingPriceOwnerApproval=(proposed:string,basis:string):boolean=>scaledUnitPrice(proposed)>scaledUnitPrice(basis);
 
 export class SourcingService {
   constructor(
@@ -1290,7 +1295,7 @@ export class SourcingService {
     if (!ids) notices.push("该历史版本未保存图片清单，不能还原当时的图片。");
     // Related order-level audits remain readable, explicitly separate from the selected snapshot.
     const relatedEntries = timeline.items.filter(record => node === "management"
-      ? record.kind === "factory_change_request" || record.kind === "factory_change_verification"
+      ? record.kind === "factory_change_request" || record.kind === "factory_change_verification" || record.kind === "price_reapplication"
       : node === "finance" ? record.kind === "exception_verification" || record.kind === "contract"
         : node === "created" && record.kind === "style_revision");
     return { item, node, entry, versions, relatedEntries,
@@ -1310,7 +1315,7 @@ export class SourcingService {
       pdf_attachment_id: string | null;
       kind: "created" | "style_revision" | "ie_quote" | "management_decision" | "owner_decision"
         | "contract" | "factory_change_request" | "factory_change_verification"
-        | "finance_reconciliation" | "exception_verification";
+        | "finance_reconciliation" | "exception_verification" | "price_reapplication";
       entry_version: number | string;
       handled_by: string;
       handled_at: Date | string;
@@ -1386,6 +1391,12 @@ export class SourcingService {
                 (contract.prepared_at AT TIME ZONE 'Asia/Shanghai')::date,
                 NULL::integer,'{}'::text[],NULL::text,NULL::text
          FROM sourcing_contract_documents contract WHERE contract.sourcing_case_id=$1
+         UNION ALL
+         SELECT event.event_id,'price_reapplication',row_number() OVER(ORDER BY event.created_at,event.event_id),event.actor_id,event.created_at,
+           CASE event.action WHEN 'sourcing.price_reapplication.request' THEN '价格重新申请：' WHEN 'sourcing.price_reapplication.effective' THEN '价格申请已生效：'
+             WHEN 'sourcing.price_reapplication.returned' THEN '价格申请已退回：' WHEN 'sourcing.price_reapplication.cancelled' THEN '价格申请已撤销：' ELSE '价格申请已驳回：' END || COALESCE(event.reason,''),
+           (event.after_state->>'unitPrice')::numeric,NULL::numeric,NULL::text,NULL::text,NULL::text,NULL::date,NULL::integer,'{}'::text[],NULL::text,NULL::text
+         FROM operation_events event WHERE event.entity_id=$1::text AND event.entity_type='sourcing_case' AND event.action LIKE 'sourcing.price_reapplication.%'
          UNION ALL
          SELECT change.factory_change_request_id,'factory_change_request',
                 row_number() OVER (ORDER BY change.requested_at,change.factory_change_request_id),
@@ -3059,6 +3070,156 @@ export class SourcingService {
     }
   }
 
+  private async priceBasis(client: PoolClient, caseId: string) {
+    await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[caseId]);
+    const row=(await client.query<{decision_id:string;document_id:string;unit_price:string;approval_id:string;status:string;sequence:number}>(`SELECT decision.sourcing_decision_id AS decision_id,
+      document.sourcing_contract_document_id AS document_id,decision.unit_price,snapshot.sourcing_approval_snapshot_id AS approval_id,
+      sourcing_current_status(source.sourcing_case_id) AS status,
+      (SELECT max(sequence)::int FROM sourcing_case_transitions WHERE sourcing_case_id=source.sourcing_case_id) AS sequence
+      FROM sourcing_cases source
+      JOIN LATERAL (SELECT * FROM sourcing_decisions WHERE sourcing_case_id=source.sourcing_case_id ORDER BY decision_version DESC LIMIT 1) decision ON true
+      JOIN sourcing_approval_snapshots snapshot ON snapshot.sourcing_decision_id=decision.sourcing_decision_id
+      JOIN LATERAL (SELECT * FROM sourcing_contract_documents WHERE sourcing_case_id=source.sourcing_case_id ORDER BY contract_version DESC LIMIT 1) document
+        ON document.sourcing_decision_id=decision.sourcing_decision_id
+      WHERE source.sourcing_case_id=$1 AND source.deleted_at IS NULL`,[caseId])).rows[0];
+    if(!row) fail("请先完成当前选厂批准并准备合同",409,"INVALID_STATE_TRANSITION");
+    await this.assertCurrentTransferBasis(client,caseId,row!.decision_id);
+    return row!;
+  }
+
+  async getCurrentPriceReapplication(actor: TrustedActorContext, caseId: string): Promise<SourcingPriceReapplicationState> {
+    this.assertReader(actor);
+    await this.getCase(actor,caseId);
+    const row=(await this.database.query<{price_request_id:string;base_decision_id:string;base_document_id:string;unit_price:string;
+      reason:string;requested_by:string;requested_at:Date;requires_owner_approval:boolean;decision:string|null;basis_changed:boolean}>(`SELECT request.*,review.decision,
+      request.base_decision_id IS DISTINCT FROM (SELECT sourcing_decision_id FROM sourcing_decisions WHERE sourcing_case_id=$1 ORDER BY decision_version DESC LIMIT 1)
+      OR request.base_document_id IS DISTINCT FROM (SELECT sourcing_contract_document_id FROM sourcing_contract_documents WHERE sourcing_case_id=$1 ORDER BY contract_version DESC LIMIT 1) AS basis_changed
+      FROM sourcing_price_reapplications request LEFT JOIN sourcing_price_reviews review USING(price_request_id)
+      WHERE request.sourcing_case_id=$1 ORDER BY request.requested_at DESC,request.price_request_id DESC LIMIT 1`,[caseId])).rows[0];
+    return {item:row?{priceRequestId:row.price_request_id,baseDecisionId:row.base_decision_id,baseDocumentId:row.base_document_id,
+      unitPrice:row.unit_price,reason:row.reason,requestedBy:row.requested_by,requestedAt:toIso(row.requested_at),requiresOwnerApproval:row.requires_owner_approval,
+      status:(row.decision??"pending") as "pending"|"approved"|"rejected"|"returned"|"cancelled",basisChanged:row.basis_changed}:null};
+  }
+
+  async requestPriceReapplication(actor: TrustedActorContext,caseId: string,input: RequestSourcingPriceReapplication,key: string): Promise<Result<SourcingCaseSummary>> {
+    this.assertActor(actor,MANAGEMENT_DECISION_CAPABILITY,MANAGEMENT_DECISION_ROLE);
+    const parsed=RequestSourcingPriceReapplicationSchema.safeParse(input);
+    if(!parsed.success) fail(parsed.error.issues[0]?.message??"价格重新申请资料无效");
+    if(!actor.actorRoles.includes(ROOT_ROLE)&&!await memberCanWriteModule(this.database,actor.actorId,"sourcing")) fail("当前账号外发只读",403,"FORBIDDEN");
+    if(!this.contractService) fail("合同服务暂不可用",503,"INVALID_STATE_TRANSITION");
+    const normalized={...parsed.data!,unitPrice:normalizeSourcingUnitPrice(parsed.data!.unitPrice)};
+    const client=await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      const outcome=await this.idempotency.execute(client,{scope:"sourcing.price-reapplication.request",actorKey:actor.actorId,key,
+        requestHash:requestHash("sourcing.price-reapplication.request",{caseId,...normalized}),expiresAt:new Date(Date.now()+86400000)},async()=>{
+        const basis=await this.priceBasis(client,caseId);
+        if(basis.decision_id!==normalized.expectedDecisionId||basis.document_id!==normalized.expectedContractDocumentId)
+          fail("价格或合同基准已变化，请刷新后重新申请",409,"CONFLICT");
+        const lines=(await client.query<{position:number;quantity:number;unit_price:string}>("SELECT position,quantity,unit_price FROM sourcing_decision_lines WHERE sourcing_decision_id=$1 ORDER BY position",[basis.decision_id])).rows;
+        try {calculateSourcingLinesTotalExact(lines.map(line=>({position:line.position,quantity:Number(line.quantity),unitPrice:normalized.unitPrice})));}
+        catch {fail("调价金额超出系统范围，请核对单价与数量");}
+        const different=lines.some(line=>scaledUnitPrice(line.unit_price)!==scaledUnitPrice(normalized.unitPrice));
+        if(!different) return {statusCode:200,response:{documentId:null as string|null}};
+        const duplicate=(await client.query(`SELECT 1 FROM sourcing_price_reapplications request WHERE sourcing_case_id=$1
+          AND base_decision_id=$2 AND base_document_id=$3 AND unit_price=$4 AND requested_by=$5 AND reason=$6
+          AND NOT EXISTS(SELECT 1 FROM sourcing_price_reviews review WHERE review.price_request_id=request.price_request_id) LIMIT 1`,
+          [caseId,basis.decision_id,basis.document_id,normalized.unitPrice,actor.actorId,normalized.changeReason])).rowCount;
+        if(duplicate) return {statusCode:200,response:{documentId:null as string|null}};
+        const priceRequestId=randomUUID(),requiresOwnerApproval=requiresSourcingPriceOwnerApproval(normalized.unitPrice,basis.unit_price);
+        const eventId=await this.events.append(client,actor,{action:"sourcing.price_reapplication.request",entityType:"sourcing_case",entityId:caseId,
+          before:{decisionId:basis.decision_id,documentId:basis.document_id},after:{priceRequestId,unitPrice:normalized.unitPrice,requiresOwnerApproval},reason:normalized.changeReason});
+        await client.query(`INSERT INTO sourcing_price_reapplications(price_request_id,sourcing_case_id,base_decision_id,base_document_id,unit_price,requires_owner_approval,reason,requested_by,operation_event_id,request_id)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[priceRequestId,caseId,basis.decision_id,basis.document_id,normalized.unitPrice,requiresOwnerApproval,normalized.changeReason,actor.actorId,eventId,actor.requestId]);
+        let documentId:string|null=null;
+        if(!requiresOwnerApproval) documentId=await this.reviewPriceInTransaction(client,actor,caseId,priceRequestId,{decision:"approved",verificationReason:normalized.changeReason});
+        else await this.todoProjection?.actionableForAllAssignedRole(client,actor,{category:"sourcing_price_owner_approve",sourceEventId:eventId,sourceAction:"sourcing.price_reapplication.request",
+          entityType:"sourcing_case",entityId:caseId,requiredRole:OWNER_DECISION_ROLE,requiredCapability:OWNER_DECISION_CAPABILITY,
+          route:{routeName:"sourcing_detail",entityId:caseId},policyKey:"general",dedupeKey:`sourcing:${caseId}:price-request:${priceRequestId}`});
+        return {statusCode:201,response:{documentId}};
+      });
+      await client.query("COMMIT");
+      if(outcome.response.documentId) await this.contractService!.generateIfReady(actor,caseId,outcome.response.documentId).catch(()=>undefined);
+      return {value:await this.getCase({...actor,authorizationCapability:READ_CAPABILITY},caseId),reused:outcome.reused};
+    } catch(error) {await client.query("ROLLBACK").catch(()=>undefined);this.priceConflict(error);throw error;}finally{client.release();}
+  }
+
+  async decidePriceReapplication(actor: TrustedActorContext,caseId: string,priceRequestId:string,input: DecideSourcingPriceReapplication,key:string): Promise<Result<SourcingCaseSummary>> {
+    const parsed=DecideSourcingPriceReapplicationSchema.safeParse(input);
+    if(!parsed.success) fail(parsed.error.issues[0]?.message??"价格审批资料无效");
+    const decision=parsed.data!;
+    this.assertActor(actor,decision.decision==="cancelled"?MANAGEMENT_DECISION_CAPABILITY:OWNER_DECISION_CAPABILITY,
+      decision.decision==="cancelled"?MANAGEMENT_DECISION_ROLE:OWNER_DECISION_ROLE);
+    if(!this.contractService) fail("合同服务暂不可用",503,"INVALID_STATE_TRANSITION");
+    if(!actor.actorRoles.includes(ROOT_ROLE)&&!await memberCanWriteModule(this.database,actor.actorId,"sourcing")) fail("当前账号外发只读",403,"FORBIDDEN");
+    const client=await this.database.connect();
+    try {
+      await client.query("BEGIN");
+      const outcome=await this.idempotency.execute(client,{scope:"sourcing.price-reapplication.review",actorKey:actor.actorId,key,
+        requestHash:requestHash("sourcing.price-reapplication.review",{caseId,priceRequestId,...decision}),expiresAt:new Date(Date.now()+86400000)},async()=>{
+        await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[caseId]);
+        return {statusCode:201,response:{documentId:await this.reviewPriceInTransaction(client,actor,caseId,priceRequestId,decision)}};
+      });
+      await client.query("COMMIT");
+      if(outcome.response.documentId) await this.contractService!.generateIfReady(actor,caseId,outcome.response.documentId).catch(()=>undefined);
+      return {value:await this.getCase({...actor,authorizationCapability:READ_CAPABILITY},caseId),reused:outcome.reused};
+    }catch(error){await client.query("ROLLBACK").catch(()=>undefined);this.priceConflict(error);throw error;}finally{client.release();}
+  }
+
+  private priceConflict(error:unknown):void {
+    if(["23505","23514","55000"].includes(databaseCode(error)??"")) fail("申请已处理或业务基准已变化，请刷新后重新确认",409,"CONFLICT");
+    if(databaseCode(error)==="42501") fail("当前身份无权处理该价格申请",403,"FORBIDDEN");
+  }
+
+  private async reviewPriceInTransaction(client:PoolClient,actor:TrustedActorContext,caseId:string,priceRequestId:string,input:DecideSourcingPriceReapplication):Promise<string|null> {
+    const request=(await client.query<{unit_price:string;base_decision_id:string;base_document_id:string;requires_owner_approval:boolean;requested_by:string}>(
+      "SELECT * FROM sourcing_price_reapplications WHERE price_request_id=$1 AND sourcing_case_id=$2",[priceRequestId,caseId])).rows[0];
+    if(!request) fail("价格重新申请不存在",404,"NOT_FOUND");
+    if((await client.query("SELECT 1 FROM sourcing_price_reviews WHERE price_request_id=$1",[priceRequestId])).rowCount)
+      fail("该价格申请已处理",409,"CONFLICT");
+    if(input.decision==="cancelled"&&request!.requested_by!==actor.actorId&&!actor.actorRoles.includes(ROOT_ROLE)) fail("仅申请人或Root可撤销",403,"FORBIDDEN");
+    const eventId=await this.events.append(client,actor,{action:input.decision==="approved"?"sourcing.price_reapplication.effective":`sourcing.price_reapplication.${input.decision}`,
+      entityType:"sourcing_case",entityId:caseId,before:{decisionId:request!.base_decision_id,documentId:request!.base_document_id},
+      after:{priceRequestId,unitPrice:request!.unit_price,decision:input.decision},reason:input.verificationReason});
+    await client.query(`INSERT INTO sourcing_price_reviews(price_request_id,decision,reason,decided_by,operation_event_id,request_id) VALUES($1,$2,$3,$4,$5,$6)`,
+      [priceRequestId,input.decision,input.verificationReason,actor.actorId,eventId,actor.requestId]);
+    await this.todoProjection?.completeOpenByDedupePrefix(client,actor,`sourcing:${caseId}:price-request:${priceRequestId}`,input.decision==="approved"?"价格申请已批准":"价格申请已结束");
+    if(input.decision!=="approved") return null;
+    // Lock first, then reread the complete basis in a fresh statement before any effective write.
+    const basis=await this.priceBasis(client,caseId);
+    if(basis.decision_id!==request!.base_decision_id||basis.document_id!==request!.base_document_id) fail("价格申请基准已变化",409,"CONFLICT");
+    const decisionId=randomUUID(),snapshotId=randomUUID();
+    await client.query(`INSERT INTO sourcing_decisions(sourcing_decision_id,sourcing_case_id,decision_version,source_type,source_ie_quote_id,supersedes_decision_id,source_change_request_id,source_price_request_id,
+      supplier_id,supplier_code_snapshot,supplier_name_snapshot,unit_price,quantity,total_amount,decision_reason,decided_by,operation_event_id,request_id,crafts,cutting_process,cutting_process_other)
+      SELECT $1,sourcing_case_id,decision_version+1,'price_reapplication',NULL,sourcing_decision_id,NULL,$2,
+      supplier_id,supplier_code_snapshot,supplier_name_snapshot,$3,quantity,
+      (SELECT sum(round(line.quantity*$3::numeric,2)) FROM sourcing_decision_lines line WHERE line.sourcing_decision_id=$4),$5,$6,$7,$8,crafts,cutting_process,cutting_process_other
+      FROM sourcing_decisions WHERE sourcing_decision_id=$4`,[decisionId,priceRequestId,request!.unit_price,basis.decision_id,input.verificationReason,actor.actorId,eventId,actor.requestId]);
+    await client.query(`INSERT INTO sourcing_decision_lines(sourcing_decision_id,sourcing_case_id,position,quantity,unit_price,total_amount)
+      SELECT $1,sourcing_case_id,position,quantity,$2,round(quantity*$2::numeric,2) FROM sourcing_decision_lines WHERE sourcing_decision_id=$3`,[decisionId,request!.unit_price,basis.decision_id]);
+    await client.query(`INSERT INTO sourcing_approval_snapshots(sourcing_approval_snapshot_id,sourcing_case_id,sourcing_decision_id,decision_version,supplier_id,supplier_code_snapshot,supplier_name_snapshot,
+      supplier_address,contract_entity_name,party_b_representative,payee_name,bank_account,bank_name,quantity,total_amount,daxing_unit_price,estimated_cut_piece_send_date,delivery_date,processes,
+      approved_by,operation_event_id,request_id,gender,style_name_snapshot)
+      SELECT $1,basis.sourcing_case_id,$2,decision.decision_version,basis.supplier_id,basis.supplier_code_snapshot,basis.supplier_name_snapshot,
+      COALESCE(sourcing_price_contract_field($7,'address'),basis.supplier_address),COALESCE(sourcing_price_contract_field($7,'contractEntityName'),basis.contract_entity_name),COALESCE(sourcing_price_contract_field($7,'partyBRepresentative'),basis.party_b_representative),
+      COALESCE(sourcing_price_contract_field($7,'payeeName'),basis.payee_name),COALESCE(sourcing_price_contract_field($7,'bankAccount'),basis.bank_account),COALESCE(sourcing_price_contract_field($7,'bankName'),basis.bank_name),basis.quantity,decision.total_amount,basis.daxing_unit_price,
+      basis.estimated_cut_piece_send_date,sourcing_effective_delivery_date(basis.sourcing_case_id,basis.delivery_date),basis.processes,$3,$4,$5,basis.gender,basis.style_name_snapshot
+      FROM sourcing_approval_snapshots basis JOIN sourcing_decisions decision ON decision.sourcing_decision_id=$2
+      WHERE basis.sourcing_approval_snapshot_id=$6`,[snapshotId,decisionId,actor.actorId,eventId,actor.requestId,basis.approval_id,basis.document_id]);
+    await client.query(`INSERT INTO sourcing_approval_snapshot_lines(sourcing_approval_snapshot_id,position,style_no,alternate_style_no,color,quantity,unit_price,total_amount)
+      SELECT $1,original.position,identity.style_no,identity.alternate_style_no,original.color,original.quantity,line.unit_price,line.total_amount
+      FROM sourcing_approval_snapshot_lines original JOIN sourcing_decision_lines line ON line.sourcing_decision_id=$2 AND line.position=original.position
+      JOIN current_sourcing_case_lines identity ON identity.sourcing_case_id=$3 AND identity.position=original.position WHERE original.sourcing_approval_snapshot_id=$4`,[snapshotId,decisionId,caseId,basis.approval_id]);
+    const documentId=await this.contractService!.prepareForApproval(client,snapshotId,actor);
+    if(basis.status!=="pending_finance_reconciliation") await client.query(`INSERT INTO sourcing_case_transitions(sourcing_transition_id,sourcing_case_id,sequence,from_status,to_status,business_action,transition_reason,actor_id,operation_event_id,request_id)
+      VALUES($1,$2,$3,$4,'pending_finance_reconciliation','price_reapplication_effective',$5,$6,$7,$8)`,[randomUUID(),caseId,basis.sequence+1,basis.status,input.verificationReason,actor.actorId,eventId,actor.requestId]);
+    await this.todoProjection?.completeOpenByDedupePrefix(client,actor,`sourcing:${caseId}:finance:`,"价格合同已形成新版本，按新合同核对");
+    await this.todoProjection?.actionableForAllAssignedRole(client,actor,{category:"sourcing_finance_reconcile",sourceEventId:eventId,sourceAction:"sourcing.price_reapplication.effective",
+      entityType:"sourcing_case",entityId:caseId,requiredRole:FINANCE_RECONCILE_ROLE,requiredCapability:FINANCE_RECONCILE_CAPABILITY,
+      route:{routeName:"sourcing_detail",entityId:caseId},policyKey:"general",dedupeKey:`sourcing:${caseId}:finance:price:${priceRequestId}`});
+    return documentId;
+  }
+
   private factoryChangeInitiator(
     actor: TrustedActorContext,
   ): "order_merchandiser" | "production_management" | "owner_group" {
@@ -3371,6 +3532,7 @@ export class SourcingService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId]);
       const outcome = await this.idempotency.execute(client, {
         scope,
         actorKey: actor.actorId,
@@ -3498,7 +3660,7 @@ export class SourcingService {
           quantity: Number(line.quantity),
           unitPrice,
         })));
-        const requiresOwnerApproval = scaledUnitPrice(unitPrice) > scaledUnitPrice(source.decision_unit_price!);
+        const requiresOwnerApproval = requiresSourcingPriceOwnerApproval(unitPrice,source.decision_unit_price!);
         const immediate = initiatorRole === "owner_group"
           || (initiatorRole === "production_management" && !requiresOwnerApproval);
         const effectiveStatus = this.factoryChangeTargetStatus(source.status, actor);
@@ -3635,6 +3797,7 @@ export class SourcingService {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      await client.query("SELECT sourcing_case_id FROM sourcing_cases WHERE sourcing_case_id=$1 AND deleted_at IS NULL FOR UPDATE",[sourcingCaseId]);
       const outcome = await this.idempotency.execute(client, {
         scope,
         actorKey: actor.actorId,

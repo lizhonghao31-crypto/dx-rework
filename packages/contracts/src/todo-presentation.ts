@@ -17,6 +17,8 @@ export type TodoPresentation = Readonly<{
 }>;
 
 const catalog: Readonly<Record<string, TodoPresentation>> = {
+  sourcing_price_contract_return:{title:"调价合同待签回",action:"请下载当前调价合同，签署后回传对应版本。下载不会完成待办。"},
+  sourcing_price_owner_approve:{title:"价格重新申请待审批",action:"请核对当前价格基准和重新申请价格。"},
   sourcing_transfer_contract_return: { title: "转厂合同待签回", action: "请下载当前转厂合同，签署后回传对应版本。下载不会完成待办。" },
   sourcing_contract_return: { title: "回传合同", action: "老板已批准，请与供应商签署合同并上传回签文件。" },
   sample_borrow_confirm: { title: "确认样衣借出", action: "请实际交付样衣后，扫描申请人的交接码确认。" },

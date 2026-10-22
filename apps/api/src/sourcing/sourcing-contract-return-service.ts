@@ -1,4 +1,4 @@
-import { transferContractVersionPrefix } from "./sourcing-transfer-contract-todos.js";
+import { transferContractVersionPrefix,priceContractVersionPrefix } from "./sourcing-transfer-contract-todos.js";
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
@@ -254,9 +254,8 @@ export class SourcingContractReturnService {
       await this.events.append(client,actor,{action:"sourcing.contract_return.upload",
         entityType:"sourcing_case",entityId:sourcingCaseId,
         after:{submissionId,revision:next,attachmentIds:[...attachmentIds],sourcingContractDocumentId:documentId,firstReturn:monitor.contract_returned_at === null}});
-      if (documentId) await this.todos.completeOpenByDedupePrefix(
-        client, actor, transferContractVersionPrefix(sourcingCaseId, documentId), "当前版本合同已有效回传",
-      );
+      if (documentId) for(const prefix of [transferContractVersionPrefix(sourcingCaseId,documentId),priceContractVersionPrefix(sourcingCaseId,documentId)])
+        await this.todos.completeOpenByDedupePrefix(client,actor,prefix,"当前版本合同已有效回传");
       if (monitor.contract_returned_at === null) {
         await this.todos.completeOpenByDedupePrefix(
           client,actor,`sourcing:${sourcingCaseId}:return:`,"回签合同已上传",

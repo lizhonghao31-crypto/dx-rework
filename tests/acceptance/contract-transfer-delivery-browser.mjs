@@ -39,7 +39,7 @@ try{
       await date.fill('2026-10-03');assert.equal(await page.getByRole('button',{name:'提交转厂',exact:true}).isDisabled(),true);
       await date.fill('2026-10-30');assert.equal(await page.getByRole('button',{name:'提交转厂',exact:true}).isDisabled(),false);
     }
-    if(evidence)await page.locator('.sourcing-factory-change').screenshot({path:join(evidence,'transfer-'+role+'-'+width+'.png')});
+    if(evidence)await page.getByRole('region',{name:'订单转厂',exact:true}).screenshot({path:join(evidence,'transfer-'+role+'-'+width+'.png')});
     assert.equal(await page.evaluate(()=>document.body.scrollWidth>innerWidth),false);
     await page.getByRole('button',{name:'提交转厂',exact:true}).click();
     await page.waitForFunction(()=>window.contractTransferRequests.some(r=>r.method==='POST'));
@@ -68,6 +68,33 @@ try{
     assert.equal(await page.evaluate(()=>document.body.scrollWidth>innerWidth),false);
     if(evidence)await page.locator('.sourcing-contract-bar').screenshot({path:join(evidence,'cycle-'+width+'x'+height+'.png')});
     results.push({width,height,versionCyclePending:true,oldSignaturePreserved:true,noHorizontalOverflow:true,passed:true});await page.close();
+  }
+  for(const [width,height] of [[1440,1024],[1280,800],[768,1024],[390,844],[360,800]])for(const role of ['management','root']) {
+    const page=await browser.newPage({viewport:{width,height}});
+    await page.goto(origin+'/?role='+role);const panel=page.getByRole('region',{name:'价格重新申请',exact:true});
+    await panel.getByRole('button',{name:'重新申请',exact:true}).click();
+    await panel.getByLabel('重新申请单价',{exact:true}).fill('15.25');
+    await panel.getByLabel('重新申请原因',{exact:true}).fill('TEST-browser-price-only');
+    assert.equal(await panel.locator('input:not([readonly])').count(),2);
+    assert.equal(await page.evaluate(()=>document.body.scrollWidth>innerWidth),false);
+    await panel.evaluate(element=>element.scrollIntoView({block:'center',behavior:'instant'}));
+    if(evidence)await panel.screenshot({path:join(evidence,'price-'+role+'-'+width+'x'+height+'.png')});
+    await panel.getByRole('button',{name:'提交价格申请',exact:true}).click();
+    await page.waitForFunction(()=>window.contractTransferRequests.some(r=>r.method==='POST'&&r.path.endsWith('/price-reapplications')));
+    const writes=await page.evaluate(()=>window.contractTransferRequests.filter(r=>r.method==='POST'&&r.path.endsWith('/price-reapplications')));
+    assert.deepEqual(Object.keys(writes[0].body).sort(),['unitPrice','changeReason','expectedDecisionId','expectedContractDocumentId'].sort());
+    assert.equal(writes[0].body.unitPrice,'15.25');results.push({width,height,role,priceOnlyPayload:true,noHorizontalOverflow:true,passed:true});await page.close();
+  }
+  for(const query of ['role=owner','role=merchandiser','role=management&readonly=1']){
+    const page=await browser.newPage({viewport:{width:390,height:844}});await page.goto(origin+'/?'+query);await page.locator('.sourcing-contract-bar').waitFor();
+    assert.equal(await page.getByRole('button',{name:'重新申请',exact:true}).count(),0);results.push({query,noNewPriceEntry:true,passed:true});await page.close();
+  }
+  {
+    const page=await browser.newPage({viewport:{width:390,height:844}});await page.goto(origin+'/?role=owner&pricePending=1');
+    const panel=page.getByRole('region',{name:'价格重新申请',exact:true});await panel.getByLabel('处理说明',{exact:true}).fill('TEST-owner-price-approval');
+    await panel.getByRole('button',{name:'批准调价',exact:true}).click();
+    await page.waitForFunction(()=>window.contractTransferRequests.some(r=>r.method==='POST'&&r.path.includes('/price-reapplications/')&&r.body.decision==='approved'));
+    results.push({ownerExistingApproval:true,noNewOwnerEntry:true,passed:true});await page.close();
   }
   const report={localOnly:true,synthetic:true,noRealBusinessAccess:true,results};
   if(evidence)await writeFile(join(evidence,'browser-result.json'),JSON.stringify(report,null,2)+'\n');
