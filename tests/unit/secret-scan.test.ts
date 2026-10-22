@@ -86,6 +86,22 @@ describe("secret scan", () => {
     await expect(findArtifactSecrets(root)).resolves.toEqual(["apps/web/dist/assets/app.js"]);
   });
 
+  it("verifies history candidate content without ignoring test paths or ordinary browser filenames", () => {
+    const root=initRepo(), ordinary=["tests/acceptance/task","-cockpit-identity-browser.mjs"].join("");
+    writeFileSync(join(root,"ordinary.txt"),ordinary);
+    commitAll(root,"ordinary filename with a provider-prefix substring");
+    expect(findHistoricalSecretFindings(root).signatures).toEqual([]);
+    const token=["sk-","A".repeat(30)].join("");
+    writeFileSync(join(root,"ordinary.txt"),ordinary+"\n"+token);
+    commitAll(root,"a real signature in that same file must remain detectable");
+    writeFileSync(join(root,"ordinary.txt"),ordinary);
+    commitAll(root,"removed signatures must remain detectable");
+    const findings=findHistoricalSecretFindings(root);
+    expect(findings.signatures).toHaveLength(2);
+    expect(findings.signatures.every(item=>item.endsWith(":ordinary.txt"))).toBe(true);
+    expect(JSON.stringify(findings)).not.toContain(token);
+  });
+
   it("finds removed signatures, sensitive assignments and tracked secret files without returning secret values", () => {
     const root = initRepo();
     const historicalToken = ["sk-", "A".repeat(30)].join("");
