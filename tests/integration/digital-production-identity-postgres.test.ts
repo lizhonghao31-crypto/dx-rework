@@ -38,7 +38,7 @@ run("digital production P01 identities", () => {
   const app = Fastify();
   beforeAll(async () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
-    for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0216_digital_production_order_roots.sql"])
+    for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0216_digital_production_order_roots.sql", "0252_digital_sla_configuration_snapshots.sql", "0253_digital_sla_plan_history.sql"])
       await database.query(await readFile(new URL(`../../apps/api/migrations/${name}`, import.meta.url), "utf8"));
     // Existing-domain tables are represented only by referenced identity columns in this isolated fixture.
     // Full Gate separately replays the full real schema and original business chain.
@@ -137,7 +137,46 @@ run("digital production P01 identities", () => {
     const key = randomUUID(); const request = input();
     const [a, b] = await Promise.all([service.createOrder(actor(), request, key), service.createOrder(actor(), request, key)]);
     expect(a.productionOrderId).toBe(b.productionOrderId);
+    expect((await database.query("SELECT count(*)::int n FROM digital_sla_plans WHERE production_order_id=$1",[a.productionOrderId])).rows[0].n).toBe(1);
     await expect(service.createOrder(actor(), { ...request, designStyleNo: "DIFFERENT" }, key)).rejects.toMatchObject({ statusCode: 409 });
+  });
+  it("creates the full P0 atomically, preserves unknown anchors and denies another designer's plan", async () => {
+    const order = await service.createOrder(actor(), input(), randomUUID());
+    const response = await app.inject({ method: "GET", url: `/digital-production/orders/${order.productionOrderId}/sla-plan`, headers: { cookie: `dx_rework_session=${designer}` } });
+    expect(response.statusCode).toBe(200);
+    const result=response.json();
+    expect(result.status).toBe("planned"); expect(result.original.revision).toBe(1);
+    expect(new Set(result.current.plan.nodes.map((n:{stage:number})=>n.stage)).size).toBe(7);
+    expect(result.nodes.find((n:{id:string})=>n.id==="bulk_cutting").actualStart).toBeNull();
+    expect(result.nodes.find((n:{id:string})=>n.id==="production_sheet").deadline.at).toBe("2026-09-04T00:00:00.000Z");
+    expect(result.current.plan.anchors.expected_fabric_arrival.precision).toBe("unknown");
+    expect((await app.inject({method:"GET",url:`/digital-production/orders/${order.productionOrderId}/sla-plan`,headers:{cookie:`dx_rework_session=${other}`}})).statusCode).toBe(404);
+    expect((await app.inject({method:"GET",url:`/digital-production/orders/${order.productionOrderId}/sla-plan`})).statusCode).toBe(401);
+    const legacy=await historicalDigitalOrder(database,actor(),input(`${style}-LEGACY`));
+    expect((await service.slaPlan(actor(),legacy.productionOrderId)).status).toBe("legacy_unenrolled");
+  });
+  it("appends one formal plan for an approved PO date while preserving P0 and exact retry", async () => {
+    const order=await service.createOrder(actor(),input(),randomUUID()),line=order.lines[0]!;
+    const first=(await database.query("SELECT plan_json FROM digital_sla_plans WHERE production_order_id=$1 AND revision=1",[order.productionOrderId])).rows[0].plan_json;
+    await tx(async client=>{
+      const eventId=await approvedDate(client,order.productionOrderId,line.lineId,"customer","2026-11-01",1);
+      await new DigitalPoDateRepository(client).applyWithClient(actor(root,["root_superuser"]),order.productionOrderId,"approved_customer_change",[{lineId:line.lineId,date:"2026-11-01",expectedVersion:1}],eventId);
+    });
+    const rows=(await database.query("SELECT plan_json,revision FROM digital_sla_plans WHERE production_order_id=$1 ORDER BY revision",[order.productionOrderId])).rows;
+    expect(rows.map(r=>r.revision)).toEqual([1,2]); expect(rows[0].plan_json).toEqual(first);
+    expect(rows[1].plan_json.anchors[`customer_shipping_date:${line.lineId}`].value).toBe("2026-11-01");
+    expect(rows[1].plan_json.anchors[`customer_shipping_date:${order.lines[1]!.lineId}`]).toEqual(first.anchors[`customer_shipping_date:${order.lines[1]!.lineId}`]);
+  });
+  it("rolls back order creation and snapshots when first-plan persistence fails", async () => {
+    await database.query(`CREATE FUNCTION fixture_fail_first_plan() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+      IF EXISTS(SELECT 1 FROM digital_production_orders WHERE production_order_id=NEW.production_order_id AND design_style_no='TEST-FAIL-P0') THEN RAISE EXCEPTION 'fixture plan failure'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER fixture_fail_first_plan BEFORE INSERT ON digital_sla_plans FOR EACH ROW EXECUTE FUNCTION fixture_fail_first_plan();`);
+    const count=Number((await database.query("SELECT count(*) n FROM digital_sla_order_snapshots")).rows[0].n);
+    try {
+      await expect(service.createOrder(actor(),input("TEST-FAIL-P0"),randomUUID())).rejects.toThrow("fixture plan failure");
+      expect((await database.query("SELECT count(*)::int n FROM digital_production_orders WHERE design_style_no='TEST-FAIL-P0'")).rows[0].n).toBe(0);
+      expect(Number((await database.query("SELECT count(*) n FROM digital_sla_order_snapshots")).rows[0].n)).toBe(count);
+    } finally { await database.query("DROP TRIGGER fixture_fail_first_plan ON digital_sla_plans; DROP FUNCTION fixture_fail_first_plan()"); }
   });
   it("serializes normalized duplicate sources and orders without exposing another owner's facts",async()=>{
     const sources=await Promise.allSettled([service.createSource(actor(),sourceInput(),randomUUID()),service.createSource(actor(other),sourceInput(` ${style.toLowerCase()} `),randomUUID())]);

@@ -1055,6 +1055,10 @@
     {
       "version": "0252_digital_sla_configuration_snapshots",
       "checksum": "2cc2dceefe7fc33ebab4e2fc5c05acf14164cbb8dd6456f45e181b2fa3ecffa7"
+    },
+    {
+      "version": "0253_digital_sla_plan_history",
+      "checksum": "cf60cfc2f2d1261550d38e14352596925bddd27c14218b08a9483ba412f1cc7c"
     }
   ]
 }

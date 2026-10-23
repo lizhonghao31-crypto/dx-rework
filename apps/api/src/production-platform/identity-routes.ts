@@ -121,6 +121,7 @@ export function registerDigitalIdentityRoutes(app: FastifyInstance, dependencies
   });
   app.post("/digital-production/orders", async request => dependencies.service.createOrder(await actor(request), parse(DigitalOrderCreateSchema, request.body), key(request)));
   app.get("/digital-production/orders/:orderId", async request => dependencies.service.read(await actor(request), id(request, "orderId")));
+  app.get("/digital-production/orders/:orderId/sla-plan", async request => dependencies.service.slaPlan(await actor(request), id(request, "orderId")));
   app.post("/digital-production/orders/:orderId/source/:sourceId", async request => dependencies.service.attachSource(await actor(request), id(request, "orderId"), id(request, "sourceId"), key(request)));
   app.patch("/digital-production/orders/:orderId/lines/:lineId/numbers", async request => dependencies.service.correctNumbers(await actor(request), id(request, "orderId"), id(request, "lineId"), parse(DigitalNumberCorrectionSchema, request.body), key(request)));
 }

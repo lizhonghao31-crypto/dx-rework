@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { PoolClient } from "pg";
 import {
   DIGITAL_SLA_RULE_VERSION, validateDigitalSlaSnapshot, validateDigitalSlaValues,
+  digitalSlaDefaults,
   type DigitalSlaSnapshot, type DigitalSlaValues,
 } from "@dx-rework/contracts/digital-sla";
 
@@ -30,6 +31,13 @@ export class SlaConfigurationRepository {
     const row = (await this.transaction.query("SELECT * FROM digital_sla_configurations ORDER BY version DESC LIMIT 1")).rows[0];
     return row ? { configurationId: row.configuration_id, version: row.version,
       values: validateDigitalSlaValues(row.values_json), createdBy: row.created_by, reason: row.reason } : null;
+  }
+
+  /** Fixed approved bootstrap only. Order creators cannot supply or change standards. */
+  async initialStandard(actorId: string): Promise<SlaConfiguration> {
+    await this.transaction.query("LOCK TABLE digital_sla_configurations IN SHARE ROW EXCLUSIVE MODE");
+    return await this.current() ?? await this.publish({ expectedVersion: 0, values: digitalSlaDefaults(), actorId,
+      reason: "系统按已确认标准初始化（随首张新单保存）", requestKey: "1f259aa4-27bc-47e7-8d95-75454a407890" });
   }
 
   async orderSnapshot(orderId: string, revision?: number): Promise<SlaOrderSnapshot | null> {

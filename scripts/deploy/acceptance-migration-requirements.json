@@ -1129,5 +1129,26 @@
       "guard_production_order_root_immutable"
     ],
     "sequences": []
+  },
+  "0253_digital_sla_plan_history": {
+    "checksum": "cf60cfc2f2d1261550d38e14352596925bddd27c14218b08a9483ba412f1cc7c",
+    "tables": [],
+    "functions": [],
+    "references": [
+      "app_users",
+      "production_order_roots",
+      "digital_sla_order_snapshots",
+      "digital_sla_plans"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_sla_plans",
+      "digital_sla_node_facts"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }
