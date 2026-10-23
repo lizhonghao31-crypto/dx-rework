@@ -1051,6 +1051,10 @@
     {
       "version": "0251_contract_price_acceptance_bridge",
       "checksum": "fcaddd8b378656f7ff65e994c809c6e981d093f0a27d108ed0e9877a2806ff11"
+    },
+    {
+      "version": "0252_digital_sla_configuration_snapshots",
+      "checksum": "2cc2dceefe7fc33ebab4e2fc5c05acf14164cbb8dd6456f45e181b2fa3ecffa7"
     }
   ]
 }

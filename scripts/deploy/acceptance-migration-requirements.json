@@ -1109,5 +1109,25 @@
     "creates": [],
     "execute": [],
     "sequences": []
+  },
+  "0252_digital_sla_configuration_snapshots": {
+    "checksum": "2cc2dceefe7fc33ebab4e2fc5c05acf14164cbb8dd6456f45e181b2fa3ecffa7",
+    "tables": [],
+    "functions": [],
+    "references": [
+      "app_users",
+      "production_order_roots",
+      "digital_sla_configurations"
+    ],
+    "insert": [],
+    "update": [],
+    "creates": [
+      "digital_sla_configurations",
+      "digital_sla_order_snapshots"
+    ],
+    "execute": [
+      "guard_production_order_root_immutable"
+    ],
+    "sequences": []
   }
 }
