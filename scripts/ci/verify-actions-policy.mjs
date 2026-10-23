@@ -48,9 +48,9 @@ for (const [name, source] of [["Quick Gate", quick], ["Full Gate", full]]) {
 assert(quick.includes("timeout-minutes: 5"), "Quick Gate timeout must stay at 5 minutes");
 const unifiedFullBudget="timeout-minutes: ${{ github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'unified-p') && 30 || 20 }}";
 assert(countOccurrences(full,'timeout-minutes:')===1&&full.includes(unifiedFullBudget),"Full Gate must retain a finite 30-minute budget only for same-repository unified-plan heads, otherwise 20 minutes");
-assert(quick.includes("!startsWith(github.event.pull_request.title, '[FULL]')"), "Quick Gate must skip FULL-title PRs before allocating its job");
+assert(quick.includes("!startsWith(github.event.pull_request.title, '[FULL] ')"), "Quick Gate must skip FULL-title PRs before allocating its job");
 assert(stepBlock(quick, "Require explicit Quick Gate title").includes("[QUICK]"), "Quick Gate must require an explicit QUICK title");
-assert(full.includes("startsWith(github.event.pull_request.title, '[FULL]')"), "Full Gate must run only for FULL-title PRs");
+assert(full.includes("startsWith(github.event.pull_request.title, '[FULL] ')"), "Full Gate must run only for FULL-title PRs");
 assert(stepBlock(full, "Require explicit Full Gate title").includes("[FULL]"), "Full Gate must require an explicit FULL title");
 for (const event of ["opened", "synchronize", "reopened", "edited"]) {
   assert(quick.includes(`- ${event}`), `Quick Gate must react to ${event}`);
@@ -58,6 +58,15 @@ for (const event of ["opened", "synchronize", "reopened", "edited"]) {
 }
 assert(quick.includes("cancel-in-progress: true"), "Quick Gate must cancel stale runs");
 assert(full.includes("cancel-in-progress: true"), "Full Gate must cancel stale runs");
+for (const [name, source] of [["Quick Gate", quick], ["Full Gate", full]]) {
+  assert(!/^concurrency:/m.test(source), `${name} must not cancel a running gate before its job event filter`);
+  assert(source.includes("    concurrency:\n      group: pr-gate-${{ github.event.pull_request.number || format('manual-{0}', github.ref) }}\n      cancel-in-progress: true"), `${name} must share job-level cancellation for meaningful PR changes`);
+  assert(source.includes("github.event.action != 'edited' || github.event.changes.base || (github.event.changes.title &&"), `${name} must filter unrelated PR edits before runner allocation`);
+  assert(source.includes("startsWith(github.event.changes.title.from, '[FULL] ') != startsWith(github.event.pull_request.title, '[FULL] ')")
+    && source.includes("startsWith(github.event.changes.title.from, '[QUICK] ') != startsWith(github.event.pull_request.title, '[QUICK] ')"), `${name} must preserve mode changes without rerunning title wording edits`);
+  assert(source.includes("GATE_STEPS_JSON: ${{ toJSON(steps) }}") && source.includes("if: always()"), `${name} must summarize actual step outcomes, including interruptions`);
+  assert(!source.includes('Standard lint/typecheck/build/tests/migration-lint/secret-scan: completed'), `${name} must not claim unexecuted checks completed`);
+}
 assert(quick.includes("full-gate-risk-map.mjs --require-quick-safe"), "Quick Gate must use the shared sensitive-path classifier");
 
 const classifier = stepBlock(quick, "Classify Quick Gate scope");
@@ -97,6 +106,8 @@ assert(full.includes("if: env.DB_REQUIRED == 'true'"), "PostgreSQL work must rem
 assert(full.includes("if: env.DEPLOYMENT_SENSITIVE == 'true'"), "release and backup work must remain conditional");
 assert(full.includes("npm audit --omit=dev --audit-level=high"), "Full Gate must audit the production dependency graph");
 assert(full.includes("npm run secret:scan:full"), "Full Gate must scan complete Git history and first-party build artifacts");
+assert(stepBlock(full, "Full unit and integration suite without runtime DB escalation").includes("run: node node_modules/vitest/vitest.mjs run"), "Full Gate must execute the same complete Vitest suite without repeating npm pretest builds");
+assert(!/^\s*run: npm test\s*$/m.test(full), "Full Gate must not rebuild packages through pretest");
 assert(!containsSecretsContext(quick), "Quick Gate must not receive repository or environment secrets");
 assert(!containsSecretsContext(full), "Full Gate must not receive repository or environment secrets");
 assert(!containsSecretsContext(governance), "Governance validation must not receive repository or environment secrets");
@@ -117,4 +128,22 @@ assert(release.includes("npm run secret:scan:full"), "manual release must rescan
 assert(!/^\s*pull_request:/m.test(governance), "standalone Governance must not auto-run on pull requests");
 assert(!/^\s*pull_request:/m.test(preview), "Preview must not auto-run on pull requests");
 
-console.log("ACTIONS_USAGE_POLICY_OK");
+// Explicit user exception for this one CI-maintenance branch and its frozen release base.
+// The shared risk classifier is unchanged. Any unrelated file, fork or base must use it normally.
+const maintenanceIndex = process.argv.indexOf("--approved-quick-maintenance");
+if (maintenanceIndex >= 0) {
+  const allowed = new Set([
+    ".github/workflows/ci.yml", ".github/workflows/full-gate.yml",
+    "scripts/ci/verify-actions-policy.mjs", "scripts/ci/gate-maintenance.test.mjs",
+    "docs/governance/ci-event-cost-fix-20261023.md",
+  ]);
+  const changed = (await readFile(process.argv[maintenanceIndex + 1], "utf8")).trim().split(/\r?\n/);
+  const approved = process.env.GITHUB_REPOSITORY === "lizhonghao31-crypto/dx-rework"
+    && process.env.HEAD_REPO === process.env.GITHUB_REPOSITORY
+    && process.env.GITHUB_HEAD_REF === "fix/ci-event-cost-summary"
+    && process.env.BASE_SHA === "cab8412cbd4d0141044f05cd71f2102e874b518f"
+    && changed.length > 0 && changed.every(path => allowed.has(path))
+    && changed.some(path => path.startsWith(".github/workflows/"));
+  if (!approved) process.exitCode = 1;
+  else console.log("APPROVED_SINGLE_PR_QUICK_MAINTENANCE");
+} else console.log("ACTIONS_USAGE_POLICY_OK");
