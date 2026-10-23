@@ -144,8 +144,11 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
   validateBusinessTime(time); const now = instant(time.now);
   const planned = new Map(calculateSlaPlan(plan).map(n => [n.id, n]));
   const result = new Map<string, SlaNodeEvaluation>();
+  // Separate rolling windows from immutable P0/Pk. Included targets follow the effective parent window.
+  const forecastWindows = new Map<string, SlaPlannedNode>();
   for (const n of orderedSlaNodes(plan)) {
     const p = planned.get(n.id)!, f = facts[n.id];
+    const projected = planNode(n, plan, forecastWindows);
     if (f && !f.evidence.trim()) throw new Error("Actual SLA event evidence required");
     if (f?.startedAt && f.completedAt && instant(f.completedAt) < instant(f.startedAt)) throw new Error("SLA completion precedes start");
     if (f?.startedAt) instant(f.startedAt);
@@ -185,14 +188,27 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
           if (!r.source.trim() || !Number.isSafeInteger(r.minutes) || r.minutes < 0 || instant(r.validUntil) < instant(r.asOf)) throw new Error("Invalid remaining-work estimate");
           if (instant(r.asOf) <= now && now <= instant(r.validUntil) && instant(r.asOf) + r.minutes * MINUTE >= now) { forecast = known(instant(r.asOf) + r.minutes * MINUTE); forecastBasis = "remaining_estimate"; }
           else forecast = missing(`${n.label}剩余工时预计已失效`);
+          if (n.kind === "order_date" && !f.startedAt && forecast.at && (n.dependsOn.length || n.anchorKey)) {
+            const ready = projected.start;
+            if (!ready.at) { forecast = missing(...ready.reasons, `${n.label}前置预计未知，不能确认完成预计`); forecastBasis = "unknown"; }
+            else if (instant(ready.at) > instant(forecast.at)) { forecast = missing(`${n.label}前置预计晚于所报完成预计，请核实`); forecastBasis = "unknown"; }
+          }
+        } else if (n.kind === "order_date") {
+          // A contractual date rates completion; it is not evidence of processing duration or a live forecast.
+          // Actual starts do not make the promise a reliable forecast either.
+          const ready = projected.start;
+          forecast = !f?.startedAt && (n.dependsOn.length || n.anchorKey) && !ready.at
+            ? missing(...ready.reasons, `${n.label}前置预计未知，缺少可靠完成预计`)
+            : !f?.startedAt && ready.at && slaPastDeadline(ready.at, deadline)
+              ? missing(`${n.label}前置预计已超过交期，缺少新的完成预计`)
+              : missing(`${n.label}仅有承诺交期，缺少可靠完成预计`);
         } else if (f?.startedAt) {
           // A started window is never reset when a prerequisite arrives or ownership changes.
           const target = n.kind === "estimate" ? add(known(instant(f.startedAt)), n.minutes!) : deadline;
           if (target.at && !slaPastDeadline(time.now, target)) { forecast = target; forecastBasis = "standard_window"; }
           else forecast = missing(`${n.label}窗口已过，缺少剩余工时预计`);
         } else {
-          const projected = new Map([...result].map(([id, row]) => [id, { id, start: row.start, end: row.forecast }]));
-          const candidate = planNode(n, plan, projected).end;
+          const candidate = projected.end;
           if (candidate.at && !slaPastDeadline(time.now, candidate)) { forecast = candidate; forecastBasis = "plan"; }
           else forecast = candidate.at ? missing(`${n.label}计划时间已过，缺少新预计`) : candidate;
         }
@@ -200,6 +216,9 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
     }
     result.set(n.id, { ...p, actualStart: f?.startedAt ?? null, actualEnd: f?.completedAt ?? null, deadline, forecast, status,
       planOverdue: n.applicable === "yes" && !f?.completedAt && slaPastDeadline(time.now, p.end), forecastBasis });
+    forecastWindows.set(n.id, { id: n.id, end: forecast,
+      start: f?.startedAt ? known(instant(f.startedAt)) : f?.completedAt ? missing(`${n.label}已完成但缺少可信开始时间`)
+        : f?.waitingFor ? missing(f.waitingFor.reason) : projected.start });
   }
   return plan.nodes.map(n => result.get(n.id)!);
 }

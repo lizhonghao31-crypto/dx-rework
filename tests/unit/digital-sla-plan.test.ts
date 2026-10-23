@@ -20,6 +20,59 @@ const route = (washing: "yes" | "no" = "yes") => buildOrderSlaRoute(resolveDigit
   }, ["po-fixture"]);
 const get = <T extends { id: string }>(items: T[], id: string) => items.find(n => n.id === id)!;
 describe("complete SLA plan and frozen windows", () => {
+  it("projects included start/end targets from the late actual parent window without changing P0",()=>{
+    const p=plan([node("parent",1440),node("handoff",30,{kind:"included",anchorKey:null,includedIn:"parent"}),
+      node("return",30,{kind:"included",anchorKey:null,includedIn:"parent",includedPosition:"end"})]);
+    const rows=evaluateSlaPlan(p,{parent:{startedAt:at(10),standardMinutes:1440,evidence:"fixture:late-start"}},time(10));
+    expect(get(rows,"parent").forecast.at).toBe(at(34));
+    expect(get(rows,"handoff").forecast.at).toBe(at(10.5));
+    expect(get(rows,"return").forecast.at).toBe(at(34));
+    expect(get(rows,"handoff").start.at).toBe(t0);expect(get(rows,"handoff").end.at).toBe(at(.5));
+    expect(get(rows,"return").start.at).toBe(at(23.5));expect(get(rows,"return").end.at).toBe(at(24));
+    expect(get(rows,"handoff").actualStart).toBeNull();
+    const done=evaluateSlaPlan(p,{parent:{completedAt:at(10),evidence:"fixture:completion-no-start"}},time(10));
+    expect(get(done,"handoff").forecast.at).toBeNull();
+    expect(get(done,"return").forecast.at).toBe(at(10));
+  });
+  it("carries a rolling start through a not-yet-started parent to included handoffs",()=>{
+    const p=plan([node("prior",60),node("parent",1440,{anchorKey:null,dependsOn:["prior"]}),
+      node("handoff",30,{kind:"included",anchorKey:null,includedIn:"parent"})]);
+    const rows=evaluateSlaPlan(p,{prior:{startedAt:at(10),evidence:"fixture:prior-late-start"}},time(10));
+    expect(get(rows,"parent").forecast.at).toBe(at(35));expect(get(rows,"handoff").forecast.at).toBe(at(11.5));
+    expect(get(rows,"handoff").start.at).toBe(at(1));
+    p.anchors={};
+    expect(get(evaluateSlaPlan(p,{},time(10)),"handoff").forecast.at).toBeNull();
+  });
+  it("never presents a promised factory date as a forecast with unknown or late upstream work", () => {
+    const p = plan([node("dispatch",60),node("factory",0,{kind:"order_date",minutes:null,targetKey:"delivery",anchorKey:null,dependsOn:["dispatch"]})]);
+    p.anchors.delivery={precision:"instant",value:at(10),source:"fixture:promised-date"};
+    delete p.anchors.start;
+    const unknown=get(evaluateSlaPlan(p,{},time(0)),"factory");
+    expect(unknown.end.at).toBe(at(10));expect(unknown.deadline.at).toBe(at(10));
+    expect(unknown.forecast.at).toBeNull();expect(unknown.forecastBasis).toBe("unknown");
+    expect(unknown.forecast.reasons.join(" ")).toContain("前置预计未知");
+    p.anchors.start={precision:"instant",value:at(11),source:"fixture:late-dispatch"};
+    const late=get(evaluateSlaPlan(p,{},time(0)),"factory");
+    expect(late.forecast.at).toBeNull();expect(late.forecast.reasons.join(" ")).toContain("超过交期");
+    p.anchors.start={precision:"instant",value:t0,source:"fixture:dispatch"};
+    expect(get(evaluateSlaPlan(p,{},time(0)),"factory").forecast.at).toBeNull();
+    expect(get(evaluateSlaPlan(p,{factory:{startedAt:t0,evidence:"fixture:factory-start"}},time(1)),"factory").forecast.at).toBeNull();
+  });
+  it("uses a fresh factory estimate or actual completion, rejects upstream estimate conflicts, and preserves the promise",()=>{
+    const p=plan([node("dispatch",60),node("factory",0,{kind:"order_date",minutes:null,targetKey:"delivery",anchorKey:null,dependsOn:["dispatch"]})]);
+    p.anchors.delivery={precision:"date",value:"2026-10-01",source:"fixture:promised-day"};
+    const estimate={factory:{evidence:"fixture:factory-estimate",remaining:{minutes:720,asOf:t0,validUntil:at(3),source:"fixture:remaining-assessment"}}};
+    const row=get(evaluateSlaPlan(p,estimate,time(0)),"factory");
+    expect(row.forecast.at).toBe(at(12));expect(row.forecastBasis).toBe("remaining_estimate");expect(row.deadline.at).toBe(at(16));
+    p.anchors.start={precision:"instant",value:at(15),source:"fixture:delayed-dispatch"};
+    expect(get(evaluateSlaPlan(p,{},time(0)),"factory").forecast.reasons.join(" ")).toContain("超过交期");
+    expect(get(evaluateSlaPlan(p,estimate,time(0)),"factory").forecast.reasons.join(" ")).toContain("晚于所报完成预计");
+    delete p.anchors.start;
+    expect(get(evaluateSlaPlan(p,estimate,time(0)),"factory").forecast.at).toBeNull();
+    const actual=get(evaluateSlaPlan(p,{factory:{completedAt:at(17),evidence:"fixture:QC-completed"}},time(18)),"factory");
+    expect(actual.forecast.at).toBe(at(17));expect(actual.forecastBasis).toBe("actual");expect(actual.status).toBe("completed_late");
+    expect(actual.deadline.at).toBe(at(16));
+  });
   it("preserves 201 hours including four handoffs and two independent checks", () => {
     const p = route(), rows = calculateSlaPlan(p);
     expect(get(rows, "development_tail_check").end.at).toBe(at(201));
