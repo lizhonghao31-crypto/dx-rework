@@ -71,3 +71,9 @@ feature/sla-02-planning基于PR01。已补统一BusinessClock接口、七阶段�
 承诺日期只作计划/评价目标。没有可靠完成预计时，工厂节点的F保持未知；前置未知、晚于交期或与所报预计冲突时保留具体原因，实际完工仍优先。内含交接/回收的F从父节点实际或滚动窗口推导，不再复用P0开始时刻；既有P0、标准窗口及真实事件不变。
 
 16项计算反例、3项计划历史PostgreSQL用例、36项订单/权限/交期集成用例共55项通过；API类型检查、contracts/domain/config编译、定向lint及diff检查通过。使用重建的本地隔离fixture。两项修正集中形成一个Head；旧604e5eed的Full Gate成功不作为新Head门禁证据。PR01正式Review已请求一次并运行中，不重复请求。
+
+## PR02 正式 Review P2 修复
+
+正式 Review 指出：remaining 分支仅对 order_date 核前置，duration/estimate 等可绕过上游未知或冲突。现统一对所有尚未实际开工的节点核对真实依赖/开始锚点；内含项沿父有效窗口，offset 的提醒目标不当成最早可做时间。实际开工或完成仍优先，P0/Pk不变，不新增业务拦截。
+
+23项计算用例及3项计划历史PostgreSQL用例通过。新增参数化覆盖duration、estimate、order_date、unlimited、offset、included的前置未知、晚于预计、可靠预计、实际开工/完成优先及下游未知传播；另覆盖开始锚点未知与船样可早于提醒目标完成。domain编译、定向eslint通过。此次仅集中修复并推一个Head，不修改PR文案，不请求第二次Review；新Head以随后正常Full Gate为准。

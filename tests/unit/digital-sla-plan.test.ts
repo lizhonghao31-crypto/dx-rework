@@ -73,6 +73,40 @@ describe("complete SLA plan and frozen windows", () => {
     expect(actual.forecast.at).toBe(at(17));expect(actual.forecastBasis).toBe("actual");expect(actual.status).toBe("completed_late");
     expect(actual.deadline.at).toBe(at(16));
   });
+  it.each(["duration", "estimate", "order_date", "unlimited", "offset", "included"] as const)("checks unstarted %s remaining estimates against the effective upstream window", kind => {
+    const p=plan([node("prior",60),node("work",30,{kind,anchorKey:null,
+      dependsOn:kind==='included'?[]:['prior'],includedIn:kind==='included'?'prior':null,
+      targetKey:kind==='order_date'||kind==='offset'?'target':null,offsetDays:kind==='offset'?0:null}),
+      ...(kind==='included'?[]:[node("next",60,{anchorKey:null,dependsOn:['work']})])]);
+    p.anchors.target={precision:'instant',value:at(20),source:'fixture:promise'};
+    const estimate={evidence:'fixture:work-estimate',remaining:{minutes:120,asOf:t0,validUntil:at(3),source:'fixture:remaining'}};
+    const evaluate=(prior:Parameters<typeof evaluateSlaPlan>[1][string],work=estimate)=>evaluateSlaPlan(p,{prior,work},time(0));
+    const held=evaluate({evidence:'fixture:inspection',waitingFor:{reason:'验布等待放行',source:'fixture:hold'}});
+    expect(get(held,'work').forecast.at).toBeNull();expect(get(held,'work').forecastBasis).toBe('unknown');
+    expect(get(held,'work').forecast.reasons.join(' ')).toContain('验布等待放行');
+    if(kind!=='included')expect(get(held,'next').forecast.at).toBeNull();
+    p.anchors.start={precision:'instant',value:at(5),source:'fixture:late-upstream'};
+    const conflict=evaluate({evidence:'fixture:upstream'});
+    expect(get(conflict,'work').forecast.at).toBeNull();expect(get(conflict,'work').forecast.reasons.join(' ')).toContain('晚于所报完成预计');
+    const actualStart=evaluateSlaPlan(p,{work:{...estimate,startedAt:t0}},time(0));
+    expect(get(actualStart,'work').forecast.at).toBe(at(2));expect(get(actualStart,'work').forecastBasis).toBe('remaining_estimate');
+    const actualEnd=evaluateSlaPlan(p,{work:{...estimate,completedAt:t0}},time(0));
+    expect(get(actualEnd,'work').forecast.at).toBe(t0);expect(get(actualEnd,'work').forecastBasis).toBe('actual');
+    p.anchors.start={precision:'instant',value:t0,source:'fixture:upstream'};
+    const valid=evaluate({evidence:'fixture:upstream'});
+    expect(get(valid,'work').forecast.at).toBe(at(2));expect(get(valid,'work').forecastBasis).toBe('remaining_estimate');
+    expect(get(valid,'work').start).toEqual(get(calculateSlaPlan(p),'work').start);
+    expect(get(valid,'work').end).toEqual(get(calculateSlaPlan(p),'work').end);
+  });
+  it("checks explicit start anchors but never treats an offset reminder as an earliest production start",()=>{
+    const p=plan([node('work',60)]),f={work:{evidence:'fixture:assessment',remaining:{minutes:120,asOf:t0,validUntil:at(3),source:'fixture:remaining'}}};
+    delete p.anchors.start;
+    expect(get(evaluateSlaPlan(p,f,time(0)),'work').forecast.at).toBeNull();
+    p.nodes=[node('work',0,{kind:'offset',anchorKey:null,minutes:null,offsetDays:10,targetKey:'shipment'})];
+    p.anchors.shipment={precision:'instant',value:at(480),source:'fixture:shipment'};
+    const row=get(evaluateSlaPlan(p,f,time(0)),'work');
+    expect(row.forecast.at).toBe(at(2));expect(row.deadline.at).toBe(at(240));
+  });
   it("preserves 201 hours including four handoffs and two independent checks", () => {
     const p = route(), rows = calculateSlaPlan(p);
     expect(get(rows, "development_tail_check").end.at).toBe(at(201));

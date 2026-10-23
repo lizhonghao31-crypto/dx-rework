@@ -188,8 +188,13 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
           if (!r.source.trim() || !Number.isSafeInteger(r.minutes) || r.minutes < 0 || instant(r.validUntil) < instant(r.asOf)) throw new Error("Invalid remaining-work estimate");
           if (instant(r.asOf) <= now && now <= instant(r.validUntil) && instant(r.asOf) + r.minutes * MINUTE >= now) { forecast = known(instant(r.asOf) + r.minutes * MINUTE); forecastBasis = "remaining_estimate"; }
           else forecast = missing(`${n.label}剩余工时预计已失效`);
-          if (n.kind === "order_date" && !f.startedAt && forecast.at && (n.dependsOn.length || n.anchorKey)) {
-            const ready = projected.start;
+          // A remaining-work assessment never proves an unstarted prerequisite was met.
+          // Offset targets are deadlines, not earliest starts: a sample may finish before its reminder date.
+          if (!f.startedAt && forecast.at && (n.dependsOn.length || n.anchorKey || n.includedIn)) {
+            const ready = n.kind === "included" ? projected.start : maximum([
+              ...n.dependsOn.map(id => add(forecastWindows.get(id)!.end, plan.nodes.find(node => node.id === id)!.stage === n.stage ? 0 : plan.stageBufferMinutes)),
+              ...(n.anchorKey ? [slaAnchorTime(plan.anchors[n.anchorKey], n.anchorKey)] : []),
+            ], `${n.label}缺少开始依据`);
             if (!ready.at) { forecast = missing(...ready.reasons, `${n.label}前置预计未知，不能确认完成预计`); forecastBasis = "unknown"; }
             else if (instant(ready.at) > instant(forecast.at)) { forecast = missing(`${n.label}前置预计晚于所报完成预计，请核实`); forecastBasis = "unknown"; }
           }
