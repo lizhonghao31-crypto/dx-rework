@@ -16,14 +16,13 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: full-gate-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
 jobs:
   full-validate:
     name: Full Gate exact Head
-    if: ${{ startsWith(github.event.pull_request.title, '[FULL]') }}
+    if: ${{ startsWith(github.event.pull_request.title, '[FULL] ') && (github.event.action != 'edited' || github.event.changes.base || (github.event.changes.title && (startsWith(github.event.changes.title.from, '[FULL] ') != startsWith(github.event.pull_request.title, '[FULL] ') || startsWith(github.event.changes.title.from, '[QUICK] ') != startsWith(github.event.pull_request.title, '[QUICK] ')))) }}
+    concurrency:
+      group: pr-gate-${{ github.event.pull_request.number || format('manual-{0}', github.ref) }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     # This authorized stacked plan includes every heavy gate; keep finite headroom.
     timeout-minutes: ${{ github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'unified-p') && 30 || 20 }}
@@ -34,6 +33,7 @@ jobs:
 
     steps:
       - name: Require explicit Full Gate title
+        id: title
         shell: bash
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
@@ -42,21 +42,25 @@ jobs:
           [[ "$PR_TITLE" == "[FULL] "* ]]
 
       - name: Checkout exact PR Head
+        id: checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
       - name: Set up Node 22
+        id: node
         uses: actions/setup-node@v4
         with:
           node-version: 22.22.2
           cache: npm
 
       - name: Pin npm 10
+        id: npm
         run: npm install --global npm@10.9.9 --no-audit --no-fund --prefer-offline
 
       - name: Verify exact Head
+        id: head
         shell: bash
         env:
           EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -66,9 +70,11 @@ jobs:
           echo "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_ENV}"
 
       - name: Verify Actions usage policy
+        id: policy
         run: node scripts/ci/verify-actions-policy.mjs
 
       - name: Classify Full Gate risk from exact PR diff
+        id: risk
         shell: bash
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -79,6 +85,7 @@ jobs:
           node scripts/ci/full-gate-risk-map.mjs --github-env "$GITHUB_ENV" "$RUNNER_TEMP/full-gate-changed-files.txt"
 
       - name: Compare exact candidate with current remote main migration history
+        id: main_compat
         if: github.base_ref == 'release/digital-production-v1'
         shell: bash
         env:
@@ -88,30 +95,39 @@ jobs:
           node scripts/check-main-release-compat.mjs --candidate-ref "$GIT_SHA" --tool-ref "$GIT_SHA" --baseline-ref "$COMPAT_BASE_SHA" --output "$RUNNER_TEMP/main-release-compat.json"
 
       - name: Install locked dependencies
+        id: install
         run: npm ci --no-audit --no-fund --prefer-offline
 
       - name: Audit production dependency graph
+        id: audit
         run: npm audit --omit=dev --audit-level=high
 
       - name: Lint
+        id: lint
         run: npm run lint
 
       - name: Typecheck
+        id: types
         run: npm run typecheck
 
       - name: Build workspaces without deployment postbuild
+        id: build
         run: npm run build --workspaces --if-present
 
       - name: Full unit and integration suite without runtime DB escalation
-        run: npm test
+        id: tests
+        run: node node_modules/vitest/vitest.mjs run
 
       - name: Validate migration files statically
+        id: migration_lint
         run: npm run db:migrate:lint
 
       - name: Scan repository history and first-party artifacts for secrets
+        id: secrets
         run: npm run secret:scan:full
 
       - name: Start isolated PostgreSQL only for DB-sensitive changes
+        id: db_start
         if: env.DB_REQUIRED == 'true'
         shell: bash
         run: |
@@ -147,6 +163,7 @@ jobs:
           { echo "DATABASE_URL=$test_url"; echo "TEST_DATABASE_URL=$test_url"; } >> "$GITHUB_ENV"
 
       - name: Seed database with base-revision migration history
+        id: db_seed
         if: env.DB_REQUIRED == 'true'
         shell: bash
         env:
@@ -154,10 +171,12 @@ jobs:
         run: bash scripts/seed-base-migrations.sh
 
       - name: Apply and validate exact Head migration history against PostgreSQL
+        id: db_migrate
         if: env.DB_REQUIRED == 'true'
         run: npm run db:migrate:check
 
       - name: Run mapped PostgreSQL sensitive-domain regressions
+        id: db_tests
         if: env.MAPPED_POSTGRES_TESTS != ''
         shell: bash
         run: |
@@ -177,18 +196,22 @@ jobs:
           done
 
       - name: Run PostgreSQL 13 Journey read compatibility
+        id: journey
         if: env.JOURNEY_PG13_COMPAT == 'true'
         run: node scripts/ci/journey-pg13-regression.mjs
 
       - name: Run PostgreSQL Root audit control-boundary regressions for migration changes
+        id: root_audit
         if: env.MIGRATION_SENSITIVE == 'true'
         run: npx vitest run tests/integration/root-self-system-admin-postgres.test.ts
 
       - name: Run PostgreSQL business chain for business, migration or deployment-sensitive changes
+        id: business_chain
         if: env.BUSINESS_CHAIN_SENSITIVE == 'true' || env.MIGRATION_SENSITIVE == 'true' || env.DEPLOYMENT_SENSITIVE == 'true'
         run: DX_REWORK_REQUIRE_TEST_DATABASE=true node scripts/run-business-chain-gate.mjs
 
       - name: PostgreSQL backup and isolated restore drill
+        id: backup
         if: env.DEPLOYMENT_SENSITIVE == 'true'
         shell: bash
         run: |
@@ -229,6 +252,7 @@ jobs:
           psql "$admin_url" -v ON_ERROR_STOP=1 -c "DROP DATABASE $target_name"
 
       - name: Acceptance low-privilege migration and backup recovery
+        id: acceptance_recovery
         if: env.DEPLOYMENT_SENSITIVE == 'true'
         run: |
           node scripts/ci/acceptance-maintenance-drill.mjs 13
@@ -236,12 +260,14 @@ jobs:
           node scripts/ci/acceptance-maintenance-drill.mjs 16
 
       - name: Main and existing release histories through low-privilege Acceptance maintenance
+        id: release_history
         if: github.base_ref == 'release/digital-production-v1' && env.DEPLOYMENT_SENSITIVE == 'true'
         run: |
           node scripts/ci/main-release-history-drill.mjs 13 "$RUNNER_TEMP/main-release-compat.json"
           node scripts/ci/main-release-history-drill.mjs 16 "$RUNNER_TEMP/main-release-compat.json"
 
       - name: PR-17 exact-head acceptance and lifecycle
+        id: release_acceptance
         if: env.DEPLOYMENT_SENSITIVE == 'true'
         shell: bash
         run: |
@@ -255,6 +281,7 @@ jobs:
             tests/integration/pr-17-review-fixes.test.ts
 
       - name: PR-17 package, runtime and relocation-safe transfer
+        id: package
         if: env.DEPLOYMENT_SENSITIVE == 'true'
         shell: bash
         env:
@@ -269,23 +296,63 @@ jobs:
           (cd "$RUNNER_TEMP" && sha256sum -c --strict "pr17-$sha.tar.gz.sha256")
 
       - name: Stop isolated PostgreSQL
+        id: db_stop
         if: always() && env.DB_REQUIRED == 'true'
         run: docker rm -f dx-rework-full-gate-postgres >/dev/null 2>&1 || true
 
-      - name: Write Full Gate summary
+
+      - name: Write actual gate summary
         if: always()
         shell: bash
+        env:
+          GATE_KIND: full
+          GATE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          GATE_JOB_STATUS: ${{ job.status }}
+          GATE_STEPS_JSON: ${{ toJSON(steps) }}
+          GATE_SCOPE_JSON: >-
+            {"event": "${{ github.event_name }}", "base": "${{ github.base_ref }}", "db": "${{ env.DB_REQUIRED }}", "mapped": "${{ env.MAPPED_POSTGRES_TESTS }}", "journey": "${{ env.JOURNEY_PG13_COMPAT }}", "migration": "${{ env.MIGRATION_SENSITIVE }}", "business_chain": "${{ env.BUSINESS_CHAIN_SENSITIVE }}", "deployment": "${{ env.DEPLOYMENT_SENSITIVE }}"}
+          GATE_CHECKS_JSON: >-
+            [["title", "Require explicit Full Gate title", "always"], ["checkout", "Checkout exact PR Head", "always"], ["node", "Set up Node 22", "always"], ["npm", "Pin npm 10", "always"], ["head", "Verify exact Head", "always"], ["policy", "Verify Actions usage policy", "always"], ["risk", "Classify Full Gate risk from exact PR diff", "always"], ["main_compat", "Compare exact candidate with current remote main migration history", "release"], ["install", "Install locked dependencies", "always"], ["audit", "Audit production dependency graph", "always"], ["lint", "Lint", "always"], ["types", "Typecheck", "always"], ["build", "Build workspaces without deployment postbuild", "always"], ["tests", "Full unit and integration suite without runtime DB escalation", "always"], ["migration_lint", "Validate migration files statically", "always"], ["secrets", "Scan repository history and first-party artifacts for secrets", "always"], ["db_start", "Start isolated PostgreSQL only for DB-sensitive changes", "db"], ["db_seed", "Seed database with base-revision migration history", "db"], ["db_migrate", "Apply and validate exact Head migration history against PostgreSQL", "db"], ["db_tests", "Run mapped PostgreSQL sensitive-domain regressions", "mapped"], ["journey", "Run PostgreSQL 13 Journey read compatibility", "journey"], ["root_audit", "Run PostgreSQL Root audit control-boundary regressions for migration changes", "migration"], ["business_chain", "Run PostgreSQL business chain for business, migration or deployment-sensitive changes", "chain"], ["backup", "PostgreSQL backup and isolated restore drill", "deployment"], ["acceptance_recovery", "Acceptance low-privilege migration and backup recovery", "deployment"], ["release_history", "Main and existing release histories through low-privilege Acceptance maintenance", "release_deployment"], ["release_acceptance", "PR-17 exact-head acceptance and lifecycle", "deployment"], ["package", "PR-17 package, runtime and relocation-safe transfer", "deployment"], ["db_stop", "Stop isolated PostgreSQL", "db"]]
         run: |
-          {
-            echo "## Full Gate"
-            echo
-            echo "- Head SHA: $(git rev-parse HEAD)"
-            echo "- Standard lint/typecheck/build/tests/migration-lint/secret-scan: completed"
-            echo "- Migration-sensitive: ${MIGRATION_SENSITIVE:-false}"
-            echo "- Business-chain-sensitive: ${BUSINESS_CHAIN_SENSITIVE:-false}"
-            echo "- Deployment-sensitive: ${DEPLOYMENT_SENSITIVE:-false}"
-            echo "- Sensitive domains: ${FULL_GATE_DOMAINS:-none}"
-            echo "- Mapped PostgreSQL suites: ${MAPPED_POSTGRES_TESTS:-none}"
-            echo "- Journey PostgreSQL 13 compatibility required: ${JOURNEY_PG13_COMPAT:-false}"
-            echo "- PostgreSQL business chain runs for business, migration, or deployment-sensitive exact diffs"
-          } >> "${GITHUB_STEP_SUMMARY}"
+          node <<'GATE_SUMMARY_JS'
+          const fs = require('node:fs');
+          const steps = JSON.parse(process.env.GATE_STEPS_JSON || '{}');
+          const checks = JSON.parse(process.env.GATE_CHECKS_JSON);
+          const scope = JSON.parse(process.env.GATE_SCOPE_JSON);
+          const classified = steps[process.env.GATE_KIND === 'full' ? 'risk' : 'classify']?.outcome === 'success';
+          const flag = name => scope[name] === 'true';
+          function required(kind) {
+            if (kind === 'always') return true;
+            if (kind === 'pr') return scope.event === 'pull_request';
+            if (kind === 'release') return scope.base === 'release/digital-production-v1';
+            if (!classified) return null;
+            if (kind === 'release_deployment') return flag('deployment') && scope.base === 'release/digital-production-v1';
+            if (kind === 'chain') return flag('business_chain') || flag('migration') || flag('deployment');
+            if (kind === 'mapped') return Boolean(scope.mapped);
+            if (kind === 'governance') return flag('governance');
+            if (kind === 'not_governance') return !flag('governance');
+            if (kind === 'business') return !flag('governance') && !flag('web');
+            if (['db','journey','migration','deployment','web','maintenance'].includes(kind)) return flag(kind);
+            throw new Error('Unknown gate scope: ' + kind);
+          }
+          const missing = [];
+          const rows = checks.map(([id, label, kind]) => {
+            const step = steps[id], needed = required(kind);
+            const noWebTests = id === 'web_tests' && step?.outcome === 'success' && step.outputs?.has_tests === 'false';
+            let status;
+            if (step?.outcome === 'failure') status = '失败';
+            else if (step?.outcome === 'cancelled') status = '取消';
+            else if (noWebTests || needed === false && (!step || ['skipped','success'].includes(step.outcome))) status = '不适用';
+            else if (step?.outcome === 'success') status = '成功';
+            else if (needed === null) status = '范围未判定，未完成';
+            else status = process.env.GATE_JOB_STATUS === 'cancelled' ? '取消导致未执行' : '上游中断或未执行';
+            if (needed !== false && !noWebTests && step?.outcome !== 'success') missing.push(label);
+            return '| ' + label + ' | ' + status + ' |';
+          });
+          const report = ['## ' + (process.env.GATE_KIND === 'full' ? 'Full' : 'Quick') + ' Gate 执行明细',
+            '', '- Head SHA: `' + process.env.GATE_HEAD + '`', '- 摘要前 Job 状态：' + process.env.GATE_JOB_STATUS,
+            '- 最终结论以 GitHub Job 为准；清理或摘要成功不代表门禁通过。', '', '| 检查 | 实际结果 |', '| --- | --- |', ...rows,
+            '', '未完成必需检查（含范围未判定）：' + (missing.length ? missing.join('；') : '无'), ''].join('\n');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, report);
+          if (missing.length && process.env.GATE_JOB_STATUS === 'success') process.exitCode = 1;
+          GATE_SUMMARY_JS
