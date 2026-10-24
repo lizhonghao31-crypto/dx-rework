@@ -32,10 +32,11 @@ const contractDocument={sourcingContractDocumentId:id(55),sourcingApprovalSnapsh
 const content={contractTitle:'TEST合同',contractNumber:'TEST-CONTRACT-V7',contractDate:'2026-10-13',partyAName:'TEST甲方',partyAAddress:'TEST地址',partyARepresentative:'TEST',partyASigningDate:'',partyBSigningDate:'',partyBName:'TEST原工厂',partyBAddress:'TEST地址',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST',bankName:'TEST',signingPlace:'TEST',gender:'女装',styleName:'TEST交期',estimatedCutPieceSendDate:'2026-10-04',deliveryDate:'2026-10-22',processes:['TEST-车缝'],lines,totalQuantity:2020,totalAmount:'31310',terms:Object.fromEntries(Object.keys(CONTRACT_TERM_LABELS).map(key=>[key,'TEST条款']))};
 let priceRequest:Record<string,unknown>|null=params.get('pricePending')==='1'?{priceRequestId:id(88),baseDecisionId:id(3),baseDocumentId:id(55),unitPrice:'16',reason:'TEST待审批',requestedBy:id(1),requestedAt:now,requiresOwnerApproval:true,status:'pending',basisChanged:false}:null;
 const requests:unknown[]=[];
+let transferAttempts=0, renderedCaseId=id(100);
 Object.assign(window,{contractTransferRequests:requests});
 window.fetch=async(input,init)=>{
   const path=String(input),method=init?.method ?? 'GET',body=typeof init?.body==='string'?JSON.parse(init.body):null;
-  requests.push({path,method,body});
+  requests.push({path,method,body,key:new Headers(init?.headers).get('idempotency-key')});
   if(method==='POST'&&path.includes('/price-reapplications')){
     if(path.endsWith('/decision'))priceRequest={...priceRequest,status:body.decision};
     else {
@@ -45,6 +46,10 @@ window.fetch=async(input,init)=>{
     return Response.json(item);
   }
   if(method==='POST'&&path.includes('/factory-changes')){
+    if(params.get('transferFailure')==='1'&&transferAttempts++===0){
+      await new Promise<void>(resolve=>Object.assign(window,{releaseTransferFailure:resolve}));
+      return Response.json({error:{code:'INVALID_STATE_TRANSITION',message:'TEST-转厂数量与当前订单数量不一致',requestId:'TEST-transfer-conflict-1'}},{status:409});
+    }
     item={...item,deliveryDate:body.deliveryDate ?? item.deliveryDate,decision:{...item.decision!,supplierId:body.supplierId,supplierName:'TEST新工厂'},approvalSnapshot:{...item.approvalSnapshot!,deliveryDate:body.deliveryDate ?? item.deliveryDate}};
     return Response.json(item);
   }
@@ -59,8 +64,11 @@ window.fetch=async(input,init)=>{
   if(path.endsWith('/contract'))return Response.json({item:contractDocument});
   if(path.endsWith('/contract-return'))return Response.json({contractReturnCycleId:cycle?id(6):null,contractReturnMonitoring:true,contractReturnStatus:cycle?'pending':'returned_late',contractGeneratedAt:now,contractReturnDueAt:now,contractReturnedAt:cycle?null:now,contractReturnOverdueHours:cycle?0:61,uploadedByName:cycle?null:'TEST跟单',canUpload:true,uploadedFileCount:cycle?0:1,uploadedTotalBytes:cycle?0:128,currentContractReturned:false,currentContractDocumentId:id(55),signedContractDocumentId:id(54),signedContractVersion:6,signedContractNumber:'TEST-V6',attachments:[{attachmentId:id(58),filename:'TEST-signed.pdf',mimeType:'application/pdf',sizeBytes:128}],history:[]});
   if(path.endsWith('/dispatch'))return Response.json({item:null,canDispatch:false});
-  if(path.endsWith('/cases/'+id(100)))return Response.json(item);
+  if(path.endsWith('/cases/'+renderedCaseId))return Response.json({...item,sourcingCaseId:renderedCaseId});
   if(path.includes('master-data/crafts'))return Response.json([]);
   return Response.json({error:{message:'TEST route not mapped: '+path}},{status:404});
 };
-createRoot(document.getElementById('root')!).render(<SourcingWorkspacePage view="detail" sourcingCaseId={id(100)}/>);
+const root=createRoot(document.getElementById('root')!);
+const renderCase=(number=100)=>{renderedCaseId=id(number);root.render(<SourcingWorkspacePage view="detail" sourcingCaseId={renderedCaseId}/>);};
+Object.assign(window,{showTransferFixtureCase:renderCase});
+renderCase();
