@@ -46,7 +46,7 @@ for (const [name, source] of [["Quick Gate", quick], ["Full Gate", full]]) {
 }
 
 assert(quick.includes("timeout-minutes: 5"), "Quick Gate timeout must stay at 5 minutes");
-const fullBudget=/^    timeout-minutes: 30[ \t]*$/m;
+const fullBudget=/^ {4}timeout-minutes: 30[ \t]*$/m;
 assert(countOccurrences(full,'timeout-minutes:')===1&&fullBudget.test(full),"Full Gate must retain the explicitly approved finite 30-minute budget");
 assert(quick.includes("!startsWith(github.event.pull_request.title, '[FULL] ')"), "Quick Gate must skip FULL-title PRs before allocating its job");
 assert(stepBlock(quick, "Require explicit Quick Gate title").includes("[QUICK]"), "Quick Gate must require an explicit QUICK title");
