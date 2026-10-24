@@ -30,7 +30,9 @@ export function effectiveMaterials(document:DevelopmentDocument,evidence:readonl
     const missing=!material.requiredThisRound||available?[]:!row?['尚未逐项核验']:dimensions.filter(key=>!row[key]).map(key=>`${labels[key]}未核实`);
     if(material.requiredThisRound&&check?.kind==='缺项退回')missing.push('核料已退回，尚未复核通过；设计师处理本单补正／补料待办后，由开发文员在我的待办复核');
     const earlyAllowed=earlyException&&Boolean(row&&!row.physical&&check?.kind==='核配通过');
-    const supplyAvailable=clerkReceiptRequired&&material.category==='辅料'?Boolean(row?.physical):row?row.physical||arrived:material.available||arrived;
+    // Designer delivery may submit the original supply task for clerk recheck.
+    // It does not establish verified availability, sewing release or clerk receipt.
+    const supplyAvailable=clerkReceiptRequired&&material.category==='辅料'&&check?.kind!=='缺项退回'?Boolean(row?.physical):row?row.physical||arrived:material.available||arrived;
     return {materialId:material.materialId,name:material.label||material.name||'未命名物料',required:material.requiredThisRound,earlyException,earlyAllowed,verified,available,supplyAvailable,missing,evidenceId:(resolvedException?arrival?.id:check?.id)??null};
   });
 }

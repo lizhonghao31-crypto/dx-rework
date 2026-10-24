@@ -11,7 +11,7 @@ import { registerInstructionRoutes } from "../../apps/api/src/production-platfor
 import { ApplicationError } from "../../apps/api/src/platform/errors.js";
 import type { TrustedActorContext } from "../../apps/api/src/tools/repositories.js";
 
-function fixture() {
+function fixture(sla: "absent" | "unenrolled" | "frozen" = "absent") {
   const orderId = randomUUID(), sourceId = randomUUID(), preparationId = randomUUID();
   const workerId = randomUUID(), warehouseId = randomUUID(), designerId = randomUUID(), primaryId = randomUUID();
   const actor = (id = workerId, roles = ["pattern_room_worker"]): TrustedActorContext => ({
@@ -29,7 +29,13 @@ function fixture() {
   const rows = [own, foreign];
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     let found: object[] = [];
-    if (sql.startsWith("SELECT * FROM digital_production_task_access WHERE")) found = rows.filter(row => row.task_id === params[0]);
+    if (sql === "SELECT to_regclass('digital_sla_configurations') AS relation") found = [{relation:sla==='absent'?null:'digital_sla_configurations'}];
+    else if (sql === "SELECT to_regclass('digital_development_sla_plans') AS relation") found = [{relation:null}];
+    else if (sql.startsWith('SELECT t.created_at,a.production_order_id,a.source_id,')) found = rows.filter(row=>row.task_id===params[0]).map(row=>({...row,resource_created_at:row.created_at}));
+    else if (sql.startsWith('SELECT p.* FROM digital_production_deadline_revisions r')) found = [];
+    else if (sql.startsWith('SELECT c.* FROM digital_sla_order_snapshots s JOIN digital_sla_configurations c USING(configuration_id)')) found = sla==='frozen'&&params[0]===orderId?[{policy_refs_json:{policies:{bulk_pattern:{nodeKey:'bulk_pattern',version:7}}}}]:[];
+    else if (sql === 'SELECT * FROM digital_production_deadline_policies WHERE node_key=$1 AND version=$2') found = params[0]==='bulk_pattern'&&params[1]===7?[{label:'TEST frozen task',version:7,sla_seconds:7200,warning_ratio:0.7}]:[];
+    else if (sql.startsWith("SELECT * FROM digital_production_task_access WHERE")) found = rows.filter(row => row.task_id === params[0]);
     else if (sql.includes("SELECT 1 FROM app_users u JOIN user_role_assignments")) found = activeRoles.get(String(params[0]))?.includes(String(params[1])) ? [{}] : [];
     else if (sql.startsWith("SELECT * FROM digital_production_orders")) found = params[0] === orderId ? [order] : [];
     else if (sql.startsWith("SELECT * FROM digital_production_sources")) found = params[0] === sourceId ? [source] : [];
@@ -68,6 +74,19 @@ function fixture() {
 
 describe("task metadata is authorized independently from necessary order documents", () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it.each(['absent','unenrolled','frozen'] as const)('keeps the %s SLA read inside the authorized order and rejects unknown queries',async mode=>{
+    const f=fixture(mode),read=await f.service.read(f.actor(),f.own.task_id);
+    expect(read.policyVersion).toBe(mode==='frozen'?7:1);expect(read.slaHours).toBe(mode==='frozen'?2:1);
+    expect(read.canExecute).toBe(true);expect(read.orderId).toBe(f.orderId);
+    f.query.mockClear();
+    for(const id of [f.foreign.task_id,randomUUID()]){
+      await expect(f.service.read(f.actor(),id)).rejects.toMatchObject({statusCode:404});
+      await expect(f.service.history(f.actor(),id)).rejects.toMatchObject({statusCode:404});
+    }
+    expect(f.query.mock.calls.some(([sql])=>sql.includes('digital_sla_configurations')||sql.startsWith('SELECT event_id AS'))).toBe(false);
+    await expect(f.pool.query('SELECT unexpected_isolated_query')).rejects.toThrow('Unexpected isolated query');
+  });
 
   it("keeps the assigned worker's task and technical order readable, but refuses a sibling task and its history", async () => {
     const f = fixture(), worker = f.actor();

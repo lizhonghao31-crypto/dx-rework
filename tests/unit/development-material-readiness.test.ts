@@ -20,6 +20,12 @@ describe('R2 material evidence',()=>{
   it('does not invent checks from published stock or an arrival',()=>{
     const row=material({available:true});expect(effectiveMaterials(doc(row),[{id:'arrival',kind:'到货',materialId:row.materialId,at:'2026-10-15T00:00:00Z'}])[0]).toMatchObject({available:false,verified:false,missing:['尚未逐项核验']});
   });
+  it('lets a new-model designer delivery reach clerk recheck without releasing sewing or certifying receipt',()=>{
+    const row=material({category:'辅料',name:'拉链'}),returned={id:'returned',kind:'缺项退回',items:[checked(row,false)],at:'2026-10-15T01:00:00Z'};
+    expect(effectiveMaterials(doc(row),[returned],true)[0]).toMatchObject({supplyAvailable:false,available:false,verified:false});
+    const delivered={id:'delivery',kind:'到货',materialId:row.materialId,at:'2026-10-15T02:00:00Z'};
+    expect(effectiveMaterials(doc(row),[returned,delivered],true)[0]).toMatchObject({supplyAvailable:true,available:false,verified:false,earlyAllowed:false,evidenceId:'returned'});
+  });
   it('never infers an exception from a free label or allows a cloth subtype',()=>{
     const row=material({category:'辅料',label:'拉链'});
     expect(isEarlyMaterialException(row)).toBe(false);

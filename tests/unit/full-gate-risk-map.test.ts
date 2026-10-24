@@ -1,5 +1,7 @@
-import { readFileSync } from "node:fs";
-import { basename } from "node:path";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { basename, join } from "node:path";
+import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
 
 import { describe, expect, it } from "vitest";
 
@@ -116,5 +118,57 @@ describe("Full Gate sensitive path mapping", () => {
     const test = classifyFullGatePaths([changedTest]);
     expect(test.mappedPostgresTests).toContain(changedTest);
     expect(test.dbRequired).toBe(true);
+  });
+});
+
+describe("mapped PostgreSQL entrypoint", () => {
+  const workflow = readFileSync(".github/workflows/full-gate.yml", "utf8");
+  const step = workflow.split("      - name: Run mapped PostgreSQL sensitive-domain regressions\n")[1].split("\n      - name: ")[0];
+  const script = step.split("        run: |\n")[1].split("\n").map(line => line.startsWith("          ") ? line.slice(10) : line).join("\n");
+  const full = "tests/integration/full-business-chain-postgres.test.ts";
+  const sourcing = "tests/integration/sourcing-pr03-postgres.test.ts";
+  const ordinary = "tests/integration/digital-sla-configuration-postgres.test.ts";
+  // Execute the real workflow shell; command doubles make these boundary checks independent of a database.
+  const run = (files: string[], extra: Record<string, string> = {}) => {
+    const dir = mkdtempSync(join(tmpdir(), "dx-mapped-command-")), calls = join(dir, "calls");
+    try {
+      const prelude = `
+node() { printf 'safety|%s|%s|%s\\n' "$*" "$NODE_ENV" "$TEST_DATABASE_URL" >> "$MAPPED_COMMAND_LOG"; return "\${SAFETY_EXIT:-0}"; }
+npx() {
+  printf 'vitest' >> "$MAPPED_COMMAND_LOG"; printf '|%s' "$@" >> "$MAPPED_COMMAND_LOG"; printf '|color=%s\\n' "$NO_COLOR" >> "$MAPPED_COMMAND_LOG"
+  printf '%s\\n' "\${VITEST_OUTPUT:-Tests 1 passed (1)}"; return "\${VITEST_EXIT:-0}"
+}
+`;
+      const result = spawnSync("bash", ["-c", prelude + script], { encoding: "utf8", env: {
+        ...process.env, NODE_ENV: "test", TEST_DATABASE_URL: "postgresql://isolated-command-fixture/test",
+        RUNNER_TEMP: dir, MAPPED_COMMAND_LOG: calls, MAPPED_POSTGRES_TESTS: files.join(","), ...extra,
+      } });
+      expect(result.error).toBeUndefined();
+      let commands: string[] = [];
+      try { commands = readFileSync(calls, "utf8").trim().split("\n"); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+      return { status: result.status, commands, stderr: result.stderr };
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  };
+
+  it("uses the existing finite chain config only for the two long suites and resets it before ordinary suites", () => {
+    const files = [full, ordinary, sourcing, "tests/integration/digital-sla-plan-postgres.test.ts"];
+    const result = run(files);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.commands).toEqual([
+      "safety|scripts/test-database-safety.mjs|test|postgresql://isolated-command-fixture/test",
+      ...files.map(file => `vitest|vitest|run|${file}${file === full || file === sourcing ? "|--config|vitest.business-chain.config.ts" : ""}|color=1`),
+    ]);
+  });
+
+  it.each([
+    ["missing explicit test database", { TEST_DATABASE_URL: "" }, [], 0],
+    ["failed database safety check", { SAFETY_EXIT: "19" }, [], 1],
+    ["Vitest failure despite passing-test output", { VITEST_EXIT: "7" }, [full], 2],
+    ["no passing tests", { VITEST_OUTPUT: "Tests 58 skipped (58)" }, [full], 2],
+    ["missing mapped file", {}, ["tests/integration/not-a-real-suite.test.ts"], 1],
+  ] as const)("fails closed for %s", (_label, env, files, commandCount) => {
+    const result = run(files.length ? [...files] : [full], env);
+    expect(result.status).not.toBe(0);
+    expect(result.commands).toHaveLength(commandCount);
   });
 });
