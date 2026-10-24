@@ -136,5 +136,17 @@
     ],
     "onlineCompatible": false,
     "rollback": "restart-previous-only-if-entire-history-unchanged"
+  },
+  {
+    "version": "0230_sourcing_factory_change_current_quantity",
+    "checksum": "4091340fdb842e866aec8b9f124c73c9d5e7086bd122677c144864355052e6bf",
+    "strategy": "quiesce-backup-transactional-ddl",
+    "tables": [],
+    "triggerTables": [],
+    "schema": "public",
+    "functions": ["public.guard_sourcing_factory_change_request_insert()"],
+    "languages": ["plpgsql"],
+    "onlineCompatible": false,
+    "rollback": "restart-previous-only-if-entire-history-unchanged"
   }
 ]

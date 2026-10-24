@@ -153,6 +153,7 @@ const sourcingProductionService = new SourcingProductionService(database);
 const sourcingContractService = new SourcingContractService(database, attachments,undefined,undefined,todoProjection);
 const sourcingService = new SourcingService(
   database,undefined,undefined,todoProjection,sourcingContractService,
+  (diagnostic): void => { app.log.warn({ factoryChangeFailure: diagnostic }, "factory change request failed"); },
 );
 const reworkService = new ReworkInitiationService(
   database,
