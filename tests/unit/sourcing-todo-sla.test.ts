@@ -6,7 +6,7 @@ const input={category:"sourcing_ie_quote",entityType:"sourcing_case",entityId:"c
 const fixture=(minutes=120,transition=true,enrolled=true)=>{
  const values=digitalSlaDefaults();for(const key of ['sourcing_ie','sourcing_selection','sourcing_approval'])values[key]={kind:'duration',minutes};
  const frozen=resolveDigitalSlaSnapshot({version:1,values});
- const query=vi.fn(async(sql:string)=>({rows:sql.includes('to_regclass')?[{relation:'digital_sla_order_snapshots'}]:sql.includes('digital_production_child_links')?(enrolled?[{rule_version:frozen.ruleVersion,parameters_json:frozen.parameters,snapshot_id:'snapshot-fixture'}]:[]):sql.includes('sourcing_case_transitions')?(transition?[{transitioned_at:'2026-10-23T00:00:00Z'}]:[]):[]}));
+ const query=vi.fn(async(sql:string)=>({rows:sql.includes('to_regclass')?[{relation:'digital_sla_order_snapshots'}]:sql.includes('digital_production_child_links')?(enrolled?[{rule_version:frozen.ruleVersion,parameters_json:frozen.parameters,snapshot_id:'snapshot-fixture',production_order_id:'order-fixture'}]:[]):sql.includes('sourcing_case_transitions')?(transition?[{transitioned_at:'2026-10-23T00:00:00Z'}]:[]):[]}));
  return {client:{query} as unknown as Pick<PoolClient,'query'>,query};
 };
 describe('original sourcing todo frozen SLA adapter',()=>{
@@ -22,10 +22,16 @@ describe('original sourcing todo frozen SLA adapter',()=>{
   expect(await sourcingTodoSla(fixture(120,true,false).client,input)).toBeUndefined();
   const {client,query}=fixture();expect(await sourcingTodoSla(client,{...input,category:'sourcing_finance_reconcile'})).toBeUndefined();expect(query).not.toHaveBeenCalled();
  });
- it('retains the original deadline after a return even when the current snapshot changed',async()=>{
+ it.each([
+  {due_at:'2026-10-22T02:00:00Z',snapshot_id:'original-snapshot'},
+  {due_at:null,snapshot_id:'original-snapshot'},
+  {due_at:'2026-10-22T02:00:00Z',snapshot_id:null},
+  {due_at:null,snapshot_id:null},
+ ])('retains historical deadline and original or unknown basis: %j',async(previous)=>{
   const base=fixture(180),original=base.query.getMockImplementation()!;
-  base.query.mockImplementation(async(sql:string)=>sql.includes('FROM rework_todos')?{rows:[{due_at:'2026-10-22T02:00:00Z'}]} as never:original(sql));
-  expect((await sourcingTodoSla(base.client,input))?.dueAt).toEqual(new Date('2026-10-22T02:00:00Z'));
+  base.query.mockImplementation(async(sql:string)=>sql.includes('FROM rework_todos')?{rows:[previous]} as never:original(sql));
+  expect(await sourcingTodoSla(base.client,input)).toEqual({dueAt:previous.due_at?new Date(previous.due_at):null,snapshotId:previous.snapshot_id});
+  expect(base.query).toHaveBeenLastCalledWith(expect.stringContaining('original.production_order_id=$3'),['case-fixture','sourcing_ie_quote','order-fixture']);
   expect(base.query.mock.calls.some(([sql])=>sql.includes('sourcing_case_transitions'))).toBe(false);
  });
 });

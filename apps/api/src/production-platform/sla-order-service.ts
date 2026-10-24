@@ -1,3 +1,5 @@
+import {factorySlaEvidence,factoryEvaluationPlan} from './factory-sla-evidence.js';
+import {bulkSlaEvidence} from "./bulk-sla-evidence.js";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { resolveDigitalSlaSnapshot, validateDigitalSlaSnapshot } from "@dx-rework/contracts/digital-sla";
@@ -85,10 +87,15 @@ export class SlaOrderService {
       // explicitly unknown completion) must replace, not merge with, its obsolete copy.
       const facts = applyOrderCreationEvidence({ ...await repo.facts(orderId), ...development?.facts },
         await orderCreationSlaEvidence(client, orderId, history[0]!));
-      const evaluationPlan = developmentEvaluationPlan(current.plan, facts), nodes = evaluateSlaPlan(evaluationPlan, facts, time);
+      const bulk=await bulkSlaEvidence(client,orderId);
+      // Publication proves the sheet's end, not a replacement for its original order-confirmation start.
+      if(bulk.production_sheet&&facts.production_sheet?.startedAt)bulk.production_sheet.startedAt=facts.production_sheet.startedAt;
+      Object.assign(facts,bulk);
+      const factory=await factorySlaEvidence(client,orderId);if(factory)Object.assign(facts,factory.facts);
+      const evaluationPlan = developmentEvaluationPlan(factory?factoryEvaluationPlan(current.plan,factory.craftKey):current.plan, facts), nodes = evaluateSlaPlan(evaluationPlan, facts, time);
       const progress = slaBusinessProgress(evaluationPlan, Object.entries(facts).filter(([, f]) => f.businessCompleted || f.completedAt).map(([id]) => id));
       await client.query("COMMIT");
-      return { status: "planned" as const, time, original: history[0]!, current, history, nodes, progress, development };
+      return { status: "planned" as const, time, original: history[0]!, current, history, nodes, progress, development, factory };
     } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
   }
 }

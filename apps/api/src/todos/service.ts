@@ -572,14 +572,15 @@ export class TodoService {
       throw new ApplicationError("CONFLICT", "Todo recipient is no longer eligible", 409);
     }
 
+    const sourcingTiming = input.todoType === "business_action" ? await sourcingTodoSla(client,input) : undefined;
     const creationEventId = await this.events.append(client, actor, {
       action: "todo.create",
       entityType: "rework_todo",
       entityId: todoId,
-      after: { sourceEventId: input.sourceEventId, sourceAction: input.sourceAction, todoType: input.todoType },
+      after: { sourceEventId: input.sourceEventId, sourceAction: input.sourceAction, todoType: input.todoType,
+        ...(sourcingTiming ? {slaTiming: {snapshotId:sourcingTiming.snapshotId,dueAt:sourcingTiming.dueAt?.toISOString()??null}} : {}) },
     });
     await this.setTodoContext(client, creationEventId, actor.requestId);
-    const sourcingTiming = input.todoType === "business_action" ? await sourcingTodoSla(client,input) : undefined;
     const created = await client.query<TodoRow>(
       `INSERT INTO rework_todos(
          todo_id,todo_type,category,source_event_id,source_action,entity_type,entity_id,

@@ -13,7 +13,7 @@ const activeActor=()=>{const session=cachedVerifiedSession();return session&&ses
 const matches=(todo:TodoResponse,scope:TodoContentScope)=>todo.route.routeName===scope.routeName&&todo.route.entityId===scope.entityId&&
  (todo.route.developmentRound===undefined||todo.route.developmentRound===scope.developmentRound)&&
  (todo.route.factoryDecisionId===undefined||todo.route.factoryDecisionId===scope.factoryDecisionId)&&
- (todo.category!=='digital_fabric_decision'||scope.reportIds?.includes(todo.todoId)===true);
+ (!['digital_fabric_decision','digital_bulk_fabric_decision'].includes(todo.category)||scope.reportIds?.includes(todo.todoId)===true);
 
 /** Obtain a personal content token before mounting business readers. A token
  * fetched after an older business response must never mark newer content read. */

@@ -16,7 +16,10 @@ export type SlaPlanNode = {
 export type SlaPlan = { nodes: SlaPlanNode[]; anchors: Record<string, SlaAnchor>; warningPercent: number; stageBufferMinutes: number };
 export type SlaTime = { at: string | null; exclusive: boolean; reasons: string[] };
 export type SlaPlannedNode = { id: string; start: SlaTime; end: SlaTime };
+export type SlaBatchWindow={startedAt:string|null;deadline:string|null;warningAt:string|null;completedAt:string|null;complete:boolean;evidence:string};
 export type SlaNodeFact = {
+  /** Native batch read model, never a second editable fact source. */
+  batchWindows?:SlaBatchWindow[]; batchCoverageComplete?:boolean;
   startedAt?: string; completedAt?: string; evidence: string;
   /** Native business completion can remain valid even when its actual time is unknown. */
   businessCompleted?: boolean;
@@ -223,6 +226,22 @@ export function evaluateSlaPlan(plan: SlaPlan, facts: Record<string, SlaNodeFact
           if (candidate.at && !slaPastDeadline(time.now, candidate)) { forecast = candidate; forecastBasis = "plan"; }
           else forecast = candidate.at ? missing(`${n.label}计划时间已过，缺少新预计`) : candidate;
         }
+      }
+    }
+    if(n.applicable==='yes'&&f?.batchWindows){
+      const windows=f.batchWindows;
+      for(const w of windows){if(!w.evidence.trim())throw Error('Batch window evidence required');for(const at of [w.startedAt,w.deadline,w.warningAt,w.completedAt])if(at)instant(at);}
+      const open=windows.filter(w=>!w.complete),knownOpen=open.filter(w=>w.deadline).sort((a,b)=>instant(a.deadline!)-instant(b.deadline!));
+      deadline=knownOpen.length?known(instant(knownOpen[0]!.deadline!)):missing('本段按各批次独立评价时效');
+      if(f.businessCompleted){
+        const late=windows.some(w=>w.completedAt&&w.deadline&&instant(w.completedAt)>instant(w.deadline));
+        status=late?'completed_late':windows.some(w=>!w.completedAt||!w.deadline)?'completed_unrated':'completed_on_time';
+        forecast=f.completedAt?known(instant(f.completedAt)):missing('业务已完成，部分批次实际时间未知');forecastBasis=f.completedAt?'actual':'unknown';
+      }else{
+        status=knownOpen.some(w=>instant(time.now)>instant(w.deadline!))?'overdue':open.some(w=>w.warningAt&&instant(time.now)>=instant(w.warningAt))?'warning':windows.length?'running':'not_started';
+        if(f.batchCoverageComplete&&open.length&&open.every(w=>w.deadline&&instant(w.deadline)>=now)){
+          forecast=known(Math.max(...open.map(w=>instant(w.deadline!)),...windows.filter(w=>w.complete&&w.completedAt).map(w=>instant(w.completedAt!))));forecastBasis='standard_window';
+        }else{forecast=missing(f.batchCoverageComplete?'有批次时间未知或窗口已过，缺少新的剩余工时预计':'仍有未进入本段的裁片数量，整单完成预计依据未齐');forecastBasis='unknown';}
       }
     }
     result.set(n.id, { ...p, actualStart: f?.startedAt ?? null, actualEnd: f?.completedAt ?? null, deadline, forecast, status,
