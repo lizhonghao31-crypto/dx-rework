@@ -1,3 +1,5 @@
+import {garmentQualityTodos} from './garment-quality-todos.js';
+import {factoryProductionQcTodos} from './factory-production-qc-todos.js';
 import {bulkFabricDecisionTodos} from "./bulk-fabric-todos.js";
 import {applyTodoReadState} from '../todos/content-reads.js';
 import {fabricDecisionTodos} from "./development-fabric-cases.js";
@@ -30,14 +32,14 @@ const ACTIVE = "t.state IN ('pending','ready','blocked') AND coalesce(l.state,'a
 const TASKS = `SELECT t.*,a.assignee_id,a.required_role,a.task_kind,a.production_order_id,a.source_id,
   coalesce(o.created_by,s.created_by) AS designer_id,o.primary_merchandiser_id,
   o.design_style_no AS order_style_no,s.design_style_no AS source_style_no,
-  p.label,d.revision_id,d.warning_at,d.due_at,NULLIF(to_jsonb(d)->'sla_basis','null'::jsonb) IS NOT NULL AS source_sla,coalesce(l.state,'active') AS lifecycle
+  p.label,d.revision_id,d.warning_at,d.due_at,NULLIF(to_jsonb(d)->'sla_basis','null'::jsonb) IS NOT NULL AS source_sla,coalesce((to_jsonb(d)->'sla_basis'->>'exclusive')::boolean,false) AS deadline_exclusive,coalesce(l.state,'active') AS lifecycle
   FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
   LEFT JOIN digital_production_orders o USING(production_order_id)
   LEFT JOIN digital_production_sources s ON s.source_id=a.source_id
   LEFT JOIN digital_production_resource_lifecycle l ON l.resource_kind=CASE WHEN a.production_order_id IS NULL THEN 'source' ELSE 'order' END AND l.resource_id=coalesce(a.production_order_id,a.source_id)
   JOIN LATERAL(SELECT label FROM digital_production_deadline_policies WHERE node_key=t.node_key ORDER BY version DESC LIMIT 1)p ON true
   LEFT JOIN LATERAL(SELECT * FROM digital_production_deadline_revisions WHERE task_id=t.task_id ORDER BY revision_id DESC LIMIT 1)d ON true`;
-type Task = {source_sla?:boolean;route_version:number;task_id:string;state:string;assignee_id:string|null;required_role:string;task_kind:string;production_order_id:string|null;source_id:string|null;order_style_no:string|null;source_style_no:string|null;designer_id:string;primary_merchandiser_id:string|null;label:string;revision_id:string|null;warning_at:Date|null;due_at:Date|null;lifecycle:string;created_at:Date};
+type Task = {deadline_exclusive?:boolean;source_sla?:boolean;route_version:number;task_id:string;state:string;assignee_id:string|null;required_role:string;task_kind:string;production_order_id:string|null;source_id:string|null;order_style_no:string|null;source_style_no:string|null;designer_id:string;primary_merchandiser_id:string|null;label:string;revision_id:string|null;warning_at:Date|null;due_at:Date|null;lifecycle:string;created_at:Date};
 const labels: Record<string,string> = {ready:"待办理",reassigned:"已改派给你",unblocked:"已解除阻断",blocked:"办理遇到阻断",completed:"已完成",warning:"即将超时",overdue:"已超时",created:"待分配主办"};
 
 export class DigitalProductionNotificationService {
@@ -126,7 +128,7 @@ export class DigitalProductionNotificationService {
         if(!(unified&&task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind))&&!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role)))
           await this.notice(client,{key:`missing:${task.task_id}:${task.assignee_id??'none'}`,taskId:task.task_id,kind:"created"},(await this.recipients(client,task,"created",people)).map(p=>p.actorId));
         if(task.state==="pending"&&!task.source_sla||!task.due_at)continue;
-        const now=Date.now(),due=new Date(task.due_at).getTime(),kind=(task.source_sla?due<now:due<=now)?"overdue":task.warning_at&&new Date(task.warning_at).getTime()<=now?"warning":null;
+        const now=Date.now(),due=new Date(task.due_at).getTime(),kind=(task.source_sla&&!task.deadline_exclusive?due<now:due<=now)?"overdue":task.warning_at&&new Date(task.warning_at).getTime()<=now?"warning":null;
         if(kind)await this.notice(client,{key:`deadline:${task.task_id}:${task.revision_id}:${kind}`,taskId:task.task_id,kind,revision:task.revision_id},(await this.recipients(client,task,kind,people)).map(p=>p.actorId));
       }
       await this.projectChildren(client);
@@ -158,7 +160,7 @@ export class DigitalProductionNotificationService {
     const tasks=(await this.database.query<Task>(`${TASKS} WHERE ${ACTIVE} ORDER BY d.due_at NULLS LAST,t.created_at,t.task_id`)).rows;
     const unified=await arrangementsAvailable(this.database);
     const result:TodoResponse[]=unified?[...await arrangementTodos(this.database,actor),...await fabricDecisionTodos(this.database,actor)]:[];
-    result.push(...await bulkFabricDecisionTodos(this.database,actor));
+    result.push(...await bulkFabricDecisionTodos(this.database,actor),...await factoryProductionQcTodos(this.database,actor),...await garmentQualityTodos(this.database,actor));
     for(const task of tasks){
       const missing=!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role));
       if(unified&&missing&&task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind))continue;
@@ -214,7 +216,7 @@ export class DigitalProductionNotificationService {
       if(!task||task.lifecycle!=="active")return null;
       if(!await this.currentTaskEvent(database,task,event.event_id,event.event_kind))return null;
       if(event.deadline_revision_id&&String(event.deadline_revision_id)!==String(task.revision_id))return null;
-      if(event.event_kind==="warning"&&task.due_at&&(task.source_sla?new Date(task.due_at).getTime()<Date.now():new Date(task.due_at).getTime()<=Date.now()))return null;
+      if(event.event_kind==="warning"&&task.due_at&&(task.source_sla&&!task.deadline_exclusive?new Date(task.due_at).getTime()<Date.now():new Date(task.due_at).getTime()<=Date.now()))return null;
       const missing=!people.some(p=>p.actorId===task.assignee_id&&hasRequiredWarehouseRole(p.actorRoles,task.required_role));
       if(event.event_kind==="created"&&(!missing||task.source_id&&(DEVELOPMENT_ARRANGEABLE_KINDS as readonly string[]).includes(task.task_kind)&&await arrangementsAvailable(database)))return null;
       if(!(await this.recipients(database,task,event.event_kind,people)).some(p=>p.actorId===actor.actorId))return null;

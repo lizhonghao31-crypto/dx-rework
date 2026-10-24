@@ -42,7 +42,10 @@ const iso = (date: Date | string): string => new Date(date).toISOString();
 const selectPoDeliveryDates=`CASE WHEN to_jsonb(source_case)->>'workflow_generation'='digital_production_v1' THEN
  (SELECT jsonb_agg(jsonb_build_object('lineId',po.line_id,'position',mapped.child_line_key::integer,'poNumber',COALESCE(po.formal_style_no,po.po_number),'color',po.color,
  'customerWarehouseArrivalDate',to_jsonb(po)->>'customer_warehouse_arrival_date','factoryDeliveryDate',to_jsonb(po)->>'factory_delivery_date',
- 'sampleTargetDate',((to_jsonb(po)->>'customer_warehouse_arrival_date')::date-10)::text) ORDER BY mapped.child_line_key::integer)
+ 'sampleTargetDate',((to_jsonb(po)->>'customer_warehouse_arrival_date')::date-COALESCE((
+ SELECT (frozen.parameters_json#>>'{ship_sample_advance,value,days}')::integer
+ FROM digital_sla_order_snapshots frozen WHERE frozen.production_order_id=mapped.production_order_id
+ ORDER BY frozen.revision DESC LIMIT 1),10))::text) ORDER BY mapped.child_line_key::integer)
  FROM digital_production_child_lines mapped JOIN digital_production_po_lines po ON po.production_order_id=mapped.production_order_id AND po.line_id=mapped.line_id
  WHERE mapped.module='production' AND mapped.child_id=production.production_order_id) END AS po_delivery_dates`;
 const selectPoDeliveryClosed=`CASE WHEN to_jsonb(source_case)->>'workflow_generation'='digital_production_v1' THEN EXISTS(

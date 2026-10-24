@@ -11,6 +11,7 @@ export const todoRouteTaskLabels: Readonly<Record<TodoResponse["route"]["routeNa
   wage_period_detail: "核对返工工资",
   sourcing_detail: "处理外发定价选厂订单",
   digital_production_instruction: "大货制单",
+  digital_production_closure: "办理本单回货质检",
   digital_bulk_preparation: "办理产前准备",
   digital_development_arrangement: "安排本轮师傅",
   digital_development: "查看开发单",

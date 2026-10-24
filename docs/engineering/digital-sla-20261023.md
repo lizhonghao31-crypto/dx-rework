@@ -181,3 +181,28 @@ bulkTaskTiming/bulkSlaEvidence读取原制单发布、验布报告/决定、任�
 过程失败均已定位：一次可选字段TS错误、两处未使用导入、一次测试把Root身份当普通跟单、历史夹具缺旧批准引用、deadline revision新增reason不在旧枚举，均局部纠正后通过。单条测试曾在并行类型检查时超过默认5秒；发现同事务批次时效重复查询后复用计算，未加超时/未改CI，最新两条均通过。保留失败和最终日志。
 
 未执行：推送、CI、Review、合并、部署、外部通知、真实库及部署账号迁移验证。0257须随新应用发布；不能把旧应用写新batch路线视为完整回退兼容（缺数量的旧写入将被约束拒绝）。本次证据只覆盖PR05/06本地候选，不代表后续07—11或整轮验收完成。
+
+PR06补充两事务反例已通过（7.69秒）：Root更正持生命周期锁时，pg_locks观察到发厂事务确实等待；实裁100→80、已发40，旧余量60请求拒绝，新余量40可发；过期更正版本及非当前批准厂拒绝；部分发厂/更正后原截止不重置。首轮夹具漏correct capability，权限拒绝后补正fixture，未放宽业务权限。测试文件及日志保存pr06-final-before-pr07。
+
+### PR07 local checkpoint — ship sample (2026-10-23 19:19 UTC)
+Reused original bulk_ship_sample task and digital_production_task_events; new orders create the original task before cutting. ShipSampleService records current PO scope, real sent time, operator and tracking, with original primary-merchandiser/root permission, lifecycle and command idempotency. No sample check added to production, QC, receiving, packing or shipping. Legacy preparation facts retain their original instruction-snapshot scope; unknown times remain unknown. Per-PO native evidence feeds SLA without a second editable fact table.
+ShipSampleTargets uses the order's frozen advance parameter; factory page, PO summary and journey share it. Partial PO shipment changes the active reminder to the remaining original target, retaining old revisions and per-PO completion evidence. Completed time is maximum actual scoped time, not the last input order. New 0258 adds a typed date-target branch to the original deadline revisions; duration invariants and immutable history remain, no fabricated entered_at. Date cutoff is exclusive Beijing next-midnight; reminder comparison follows this boundary.
+Two targeted PostgreSQL tests passed in 5.16s: before-cut recording, scope rejection, tracking required, retry uniqueness, date equality and notification dedupe, old duration constraint rejection, immutable history, partial scope and out-of-order actual times. Initial failures were 404-vs-403 test expectation, Date string conversion losing milliseconds (fixed), and original duration-only constraint (fixed through additive 0258). No broad test rerun. API/Web types, bounded lint, migration static and diff checks passed. Real React component browser at 1440/390 passed and screenshots inspected; followup hides unrelated factory prerequisites in a disclosure, time/tracking use two columns on PC. Synthetic HTTP with isolated PG response, not a full authenticated application pass.
+PR07 remains incomplete: factory garment-QC completion and return logistics adapters remain; current production complete is a reporter quantity/status fact, not QC. Existing shipments have business-date precision only. PR08 not started. No push/CI/review/merge/deployment. No commands running at checkpoint.
+
+### PR07 工厂检查/物流本地闭环（2026-10-23 19:39 UTC）
+- factoryProductionFacts读取原工厂有效分配与原task_events；检查完成结束生产时效，需处理结论及后续检查历史保留，不改变生产日报数量/状态。转厂原服务集成验证：新范围不得继承原厂已检查；当前任务/待办投影与原任务历史分离，缺失主办沿原分配入口，完成新范围后结束待办。
+- factoryReturnLogistics沿原shipped_on日精度和订单冻结48h生成预计区间，actualDispatchedAt保持null；无仓库硬期限。旧生产报表船样提前量已读同一冻结快照，12天冻结与后续全局恢复的反例通过。船样待办不成为结案/装箱间接门禁。
+- 2项真实隔离PG服务链测试通过9.68秒（/tmp/sla07-final-native.log），含QC允许/仓库拒绝、重试、原转厂、新范围再检、缺主办路由/重新分配、保留历史、无船样原生产/发回仓可办；API类型检查通过。QC范围3项单元测试此前通过。
+- 1440/390原React组件+实际服务响应浏览器验证通过并已查看截图（pr07-factory-qc-browser/final-scope）；长PO可换行，无横向溢出，历史折叠。此为组件合成HTTP环境，不冒充全应用认证入口验收。
+- 未推送、未运行CI/Review或部署。PR08从此快照后分离；收齐历时与返工有效轮次仍待接入，不报完成。
+
+## PR08 本地检查点（2026-10-23）
+
+原收货/更正/装箱事实派生收齐、历时及未来未收净量预测，不另建出货台账。R≥Q仅代表收齐，更正不足恢复待收，QC及装箱保持独立。到仓QC复用原事件，按收货数量版本判覆盖；原结案入口补老板允许，0260为兼容增量，不改历史迁移。多批累计装箱缺批次分配事实时保留完成业务事实、时效未知，不编造FIFO；历史数量调整来源不完整同样标精度限制。
+
+返工空数组根因：nativeReworkExecutionRows错误按整单special_process_type=inspection排除实际包含worker作业的单。已改为按configuration item的execution_kind=worker筛选，HAVING有效worker数>0；原派工确认起点、有效报告完成、拒绝报告与再次提交均沿原事件。真实业务链1项通过（3.28秒，/tmp/sla08-work-return.log），不等整查/核量/财务、不追加收货。
+
+收货更正/QC/待办/老板结案原生链通过7.87秒（/tmp/sla08-owner-native.log）；5文件11项单位反例通过362ms（/tmp/sla08-unit-final.log）。API/Web类型、限定lint与迁移静态检查已执行，日志保留。1440/390原组件+真实服务响应fixture页面已看图，窄屏无溢出、PC检查表单双列、历史/未清事项折叠；不是完整登录应用验收。截图pr08-summary-browser/quality-final。
+
+未验证：真实并发QC写入与收货更正（已测版本失效/拒绝与收货更正并发）；全部历史返工轮次重放；部署账号权限；完整认证页面；测试Clock贯穿仍待工具闭环。未推送、CI、Review、合并或部署。

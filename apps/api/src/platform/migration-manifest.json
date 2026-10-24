@@ -1075,6 +1075,18 @@
     {
       "version": "0257_factory_batch_scope",
       "checksum": "1b4757e82e72f455358a55aa1d64bea801b44cff67e8c2553f91e74f97cec45a"
+    },
+    {
+      "version": "0258_ship_sample_date_target",
+      "checksum": "80981f294af226fc562c2ac55d2f025eaf1a1f39c89bd32c5453b57b393d16e7"
+    },
+    {
+      "version": "0259_factory_production_qc_task",
+      "checksum": "96eb14ed8575fdc96dfb20741e4a52d7abb0936e6c831fe6c67bed48ae6ce5a5"
+    },
+    {
+      "version": "0260_digital_closure_owner_authority",
+      "checksum": "e1299660700d0718eb67ac8356117841327b05c91cfa01874dfbc71e76c6b371"
     }
   ]
 }

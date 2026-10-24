@@ -11,7 +11,7 @@ const instructionDocument=z.object({
  measurements:z.array(z.object({id:text,name:text,tolerance:text,method:text,values:strings}).passthrough()),
 }).passthrough();
 export const instructionFeedbackProjection=z.object({order:z.object({productionOrderId:text,lines:z.array(orderLine)}).passthrough(),version:z.number().int().nonnegative(),document:instructionDocument,canEdit:z.boolean(),cutStarted:z.boolean()}).passthrough();
-const receipt=z.object({receiptId:text,receivedAt:text,actualQuantity:quantity,defectiveQuantity:quantity}).passthrough();
+const receipt=z.object({receiptId:text,receivedAt:text.nullable(),actualQuantity:quantity,defectiveQuantity:quantity}).passthrough();
 const rework=z.object({reworkId:text,canView:z.boolean().optional(),reworkNo:nullable,status:text,problem:text,quantity:quantity.nullable(),wageItemCount:quantity}).passthrough();
 const closureLine=z.object({lineId:text,poNumber:nullable,color:text,orderedQuantity:quantity,actualQuantity:quantity,documentQuantity:quantity,defectiveQuantity:quantity,receiptCount:quantity,packingQuantity:quantity.nullable(),receivingBatchId:nullable,receivingResolution:nullable.optional(),packingResolution:nullable.optional(),receipts:z.array(receipt),reworks:z.array(rework)}).passthrough();
 export const closureFeedbackProjection=z.object({orderId:text,revision:text.regex(/^[a-f0-9]{64}$/),stage:z.enum(['等待回货与装箱','本期装箱完成','特殊结案']),lines:z.array(closureLine),outstanding:strings,canClose:z.boolean(),canOpenReceiving:z.boolean(),canOpenRework:z.boolean(),canOpenWages:z.boolean(),closed:z.object({reason:text,outstanding:strings,closedBy:text,closedAt:text}).passthrough().nullable(),shipmentStatus:text,customerReceiptStatus:text}).passthrough();

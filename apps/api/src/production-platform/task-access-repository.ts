@@ -13,7 +13,7 @@ export const DIGITAL_TASK_ROLES = {
   development_washing: "development_clerk", development_shipping: "sample_designer", development_confirmation: "sample_designer",
   bulk_pattern: "pattern_room_worker", warehouse_preshrink: "warehouse_receiver", bulk_cutting: "cutting_worker", bulk_cutting_external: "order_merchandiser",
   factory_material_count: "order_merchandiser", bulk_ship_sample:"order_merchandiser", budget: "sample_designer", production_sheet: "order_merchandiser",
-  process_logistics: "embroidery_washing_merchandiser", bulk_qc: "quality_control", warehouse_dispatch: "warehouse_receiver",
+  factory_production_qc: "quality_control", process_logistics: "embroidery_washing_merchandiser", bulk_qc: "quality_control", warehouse_dispatch: "warehouse_receiver",
 } as const;
 export type DigitalTaskKind = keyof typeof DIGITAL_TASK_ROLES;
 // Internal transactional adapter: no public endpoint can invent a task to obtain access.

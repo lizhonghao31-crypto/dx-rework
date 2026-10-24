@@ -1,3 +1,5 @@
+import {factoryProductionFacts} from './factory-production-facts.js';
+import {shipSampleFacts} from './ship-sample-facts.js';
 import {developmentReadTables} from "./development-amendment-repository.js";
 import {digitalConditionGuidance} from "@dx-rework/contracts/digital-production-tasks";
 import {businessRoleLabel} from "@dx-rework/contracts/business-display";
@@ -385,7 +387,7 @@ export class DigitalJourneyQuery {
       }
       const closure=await new OrderClosureService(this.database).read(actor,oid,db);
       const closureRecord=record("closure",oid,`/ui/digital-production?closure=${oid}`);
-      const received=closure.lines.length>0&&closure.lines.every(line=>line.receiptCount>0&&line.actualQuantity>=line.orderedQuantity&&(line.actualQuantity===line.documentQuantity||Boolean(line.receivingResolution)));
+      const received=closure.collection?.status==='已收齐';
       setFact("receipts",received?"completed":closure.lines.some(line=>line.receiptCount>0)?"active":"uncreated",[closureRecord]);
       setFact("packing",closure.stage==="本期装箱完成"?"completed":closure.lines.some(line=>line.packingRevisionId)?"active":"uncreated",[closureRecord]);
       setFact("quantity_difference",closure.lines.some(line=>line.receiptCount>0&&line.actualQuantity!==line.documentQuantity&&!line.receivingResolution||line.packingQuantity!==null&&line.packingQuantity!==line.actualQuantity&&!line.packingResolution)?"pending":"not_applicable",[closureRecord]);
@@ -397,6 +399,8 @@ export class DigitalJourneyQuery {
       for(const line of closure.lines)for(const rework of line.reworks){const node=emptyNode("rework",rework.status==="completed"?"completed":rework.status==="cancelled"?"cancelled":"active");node.instanceId=rework.reworkId;node.records=[{...record("rework",rework.reworkId,closure.canOpenRework?`/ui/tasks/${rework.reworkId}`:null),lineId:line.lineId}];baseNodes.push(node);}
       if(currentPrep&&gates.instruction&&gates.source)progress.bulk=bulkCockpitProgress({preshrink:bulk.preshrink??"",secondaryCraft:gates.instruction.document.secondaryCraft==="沿用开发"?gates.source.document.craft:gates.instruction.document.secondaryCraft,externalCutting:gates.approval?.cutting_process==="outsourced",tasks:taskDtos.filter(task=>visibleTasks.find(raw=>raw.task_id===task.taskId)?.route_instance_id===currentPrep),received,packed:closure.stage==="本期装箱完成",specialClosed:Boolean(closure.closed)});
       for(const key of ["receiving_inspection","rework_review","responsibility"]) {const node=emptyNode(key,"unavailable");node.unavailableReason="fact_not_recorded";replace(key,node);}
+      const arrivalChecks=closure.quality?.filter(q=>q.quantity>0)??[];
+      if(arrivalChecks.length)setFact('receiving_inspection',arrivalChecks.every(q=>q.inspected)&&closure.lines.every(l=>l.actualQuantity>=l.orderedQuantity)?'completed':'active',[closureRecord],arrivalChecks.every(q=>q.completedAt)?new Date(Math.max(...arrivalChecks.map(q=>Date.parse(q.completedAt!)))).toISOString():null);
       if(closure.canOpenRework)for(const line of closure.lines)for(const rework of line.reworks) {
         const url=`/ui/tasks/${rework.reworkId}`;
         const append=(key:string,state:JourneyState,id:string,actualAt:string|null,ownerId:string|null,recordUrl:string|null)=>{
@@ -405,8 +409,6 @@ export class DigitalJourneyQuery {
           const placeholder=baseNodes.find(value=>value.key===key&&value.instanceId===`${key}:0`);
           if(placeholder)replace(key,node);else baseNodes.push(node);
         };
-        const report=(await db.query("SELECT tail_inspection_report_id,submitted_by,submitted_at,operation_event_id FROM rework_tail_inspection_reports WHERE rework_order_id=$1 AND status='submitted' ORDER BY submitted_at DESC,tail_inspection_report_id DESC LIMIT 1",[rework.reworkId])).rows[0];
-        if(report)append("receiving_inspection","completed",report.tail_inspection_report_id,iso(report.submitted_at),report.submitted_by,await journeyReworkHistoryUrl(db,actor,rework.reworkId,"work_reporting",report.tail_inspection_report_id,report.operation_event_id));
         const reviewed=(await db.query("SELECT order_review_id,reviewed_by,reviewed_at FROM rework_order_reviews WHERE rework_order_id=$1",[rework.reworkId])).rows[0];
         if(reviewed)append("rework_review","completed",reviewed.order_review_id,iso(reviewed.reviewed_at),reviewed.reviewed_by,await journeyReworkHistoryUrl(db,actor,rework.reworkId,["whole_order_review","final_quantity_ie_review"],reviewed.order_review_id));
         else if(rework.status==='pending_order_review')append("rework_review","pending",`review:${rework.reworkId}`,null,null,`${url}?node=whole_order_review`);
@@ -455,10 +457,13 @@ export class DigitalJourneyQuery {
     const promiseDay=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(asOf));
     // A hidden reporting node cannot stand in for the whole order's authoritative completion.
     // Read only this boolean for an already authorized mother; retain all reporting visibility gates.
-    const factoryFinished=Boolean(!patternKinds&&orderAccess&&oid&&(await db.query(`SELECT coalesce(bool_and(sourcing_factory_order_status(p.production_order_id) IN ('production_completed','shipped')),false) AS finished
-      FROM digital_production_child_links l JOIN sourcing_production_orders p ON p.production_order_id=l.child_id
-      WHERE l.production_order_id=$1 AND l.module='production'`,[oid])).rows[0]?.finished);
-    const deliveryRisks=poDeliveryRisks(poDeliveryDates,promiseDay,{finished:finalClosed||Boolean(terminal),factoryFinished,sampleFinished:baseNodes.some(node=>node.current&&node.key==='bulk_ship_sample'&&node.state==='completed')});
+    const factoryQcState=!patternKinds&&orderAccess&&oid?await factoryProductionFacts(db,oid):null;
+    const factoryFinished=Boolean(factoryQcState?.complete);
+    if(factoryQcState&&baseNodes.some(n=>n.key==='factory_production_qc'&&n.state!=='uncreated')){
+      setFact('factory_production_qc',factoryQcState.complete?'completed':'active',[record('factory',oid!,`/ui/digital-production?factory=${oid}&factoryAction=productionQc`)],factoryQcState.complete&&factoryQcState.checks.every(c=>c.completedAt)?new Date(Math.max(...factoryQcState.checks.map(c=>Date.parse(c.completedAt!)))).toISOString():null);
+    }
+    const sampleSentLineIds=orderAccess&&oid?new Set((await shipSampleFacts(db,oid)).flatMap(r=>r.lineIds)):new Set<string>();
+    const deliveryRisks=poDeliveryRisks(poDeliveryDates,promiseDay,{finished:finalClosed||Boolean(terminal),factoryFinished,sampleFinished:baseNodes.some(node=>node.current&&node.key==='bulk_ship_sample'&&node.state==='completed')}).filter(r=>r.kind!=='sample'||!sampleSentLineIds.has(r.lineId));
     const sourceImage=!patternKinds&&sourceAccess?currentDocument?.document?.files?.find((file:{kind:string})=>file.kind==='款图'):null;
     const instructionImages=!patternKinds&&!sourceImage&&orderAccess?(await db.query(`SELECT v.document->'images' AS images FROM digital_instruction_documents d JOIN digital_instruction_versions v ON v.production_order_id=d.production_order_id AND v.version=d.published_version WHERE d.production_order_id=$1`,[oid])).rows[0]?.images:null;
     const instructionImage=instructionImages?.find((file:{kind:string})=>file.kind==='款图');
