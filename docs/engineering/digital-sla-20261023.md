@@ -230,3 +230,93 @@ npm run typecheck
 - 准确Head通过原GitHub连接器读取并逐blob验证2627项；5张超过连接器读取上限的历史UI参考PNG未落地，均非运行源码及本轮修改对象。锁文件未手造，源码/依赖限制未绕过；相关环境错误及支持路径已即时回报。
 - 本次full-business-chain实测Vitest总59.53秒，主初始化/迁移1859ms、主fixture87ms、清理410ms。sourcing总76.37秒，主初始化/迁移2296ms、主fixture28ms、C05 fixture961ms、清理398ms。其余hook、用例与导入没有在这些分段中全部细分，不能把剩余时间无证归为迁移。
 - 本轮没有Work、外部Codex任务、新PR、Review、合并或部署；待负责人审阅本地差异及本节证据后，再按一次性推送854的要求办理。
+
+## 854 mapped 长数据库链超时调查（2026-10-24，仅本地候选，未推送）
+
+前节5文件修复已获批准并提交为 `755db5bc9dadb1a4e989c66c2c10ffe2c1d9c1d1`；前节的“待确认推送”属于当时记录。本节是该 Head 后新发生的超时调查，不能沿用上轮推送授权。开工只读核对远端 Head 仍为755db5b，tree为 `7f77edcf504d7427e7fbe16f72b2771df4572ade`；本节所有候选差异按该tree比较，不把本地旧HEAD下仍显示修改的已推5文件重复提交。
+
+### 原始失败与共同原因
+
+原始证据为 [run 40073216473 / job 120810945881](https://github.com/lizhonghao31-crypto/dx-rework/actions/runs/40073216473/job/120810945881)。日志07:23:42 UTC的三例分别耗时5019/5001/5001ms，均为 `Test timed out in 5000ms`：P05 linked execution transfer、P05 native transfer/authority、P03 legacy tail return。完整58项为55通过/3失败/0跳过；没有出现上一轮4h/0.5h断言错误。普通层实际为501文件通过/72文件跳过、2742测试通过/700测试跳过，随后前7个mapped文件通过；不能把尚未执行的sourcing或正式chain计作通过。
+
+已安装Vitest4.1.10的 `createVitest` 实际解析结果如下，不只依赖配置文本推断：
+
+| 入口 | testTimeout | hookTimeout | 数据库环境 |
+|---|---:|---:|---|
+| 原mapped逐文件 `npx vitest run "$test_file"`，默认vitest.config.ts | 5000ms | 10000ms | DATABASE_URL清空，TEST_DATABASE_URL保留 |
+| 原正式chain runner使用vitest.business-chain.config.ts | 60000ms | 60000ms | 同上 |
+
+三条失败it没有独立timeout，所以在mapped入口接受5秒上限。同文件其它较慢用例已有显式15/30/60秒上限；原CI中P07/P08完成23405ms、SLA03完成11833ms、P03 legacy native完成7021ms。这些显式上限在本候选中继续优先，不被默认60秒覆盖。
+
+上轮完整58本地原日志中，三例分别2425.577/2249.874/2456.339ms，确实低于5秒，因此“本地完整58绿”是真实结果，但没有验证CI的5秒余量。此次同机有限诊断也没有自然复现5秒超时，未注入延迟或CPU限速制造失败。可以确认同一长链两个入口的预算不一致，以及完整组有额外查询工作量；不能从被5秒截断的CI日志反推它不受截断时的真实完成耗时，或把全部差异归因于某种CPU/IO因素。
+
+原CI总144.70秒，主schema/迁移4023ms、主fixture144ms、cleanup2900ms；这些分段不能支持“主要时间都耗在迁移”。本轮进一步量化了目标case步骤与SQL，见后文。
+
+### 实际候选及边界
+
+- `.github/workflows/full-gate.yml`：仅在现有mapped循环内，对 `full-business-chain-postgres.test.ts` 和 `sourcing-pr03-postgres.test.ts` 两个精确路径增加 `--config vitest.business-chain.config.ts`。每轮重置参数数组，其它mapped文件及普通unit入口仍使用原默认配置。两份Vitest配置、30分钟Full/5分钟Quick和检查文件集合不改。
+- `tests/unit/full-gate-risk-map.test.ts`：新增6项检查，实际执行workflow提取的Bash段，以命令double验证两长文件选配置、普通文件重置、显式测试库缺失拒绝、安全检查失败拒绝、Vitest非零退出即使打印passed也拒绝、全skip拒绝及缺文件拒绝；其中第一项合并覆盖选择和重置。原业务断言和数量不减少。
+- 本工程记录只追加本节。没有修改生产业务、依赖、迁移、权限、冻结或历史保护；临时SQL诊断工具仅保存在runtime，不纳入提交。
+
+原 `set -euo pipefail`、显式TEST_DATABASE_URL、安全检查、逐文件存在检查、日志、失败传播及至少一个passed的结果校验均保留。两原配置都清空DATABASE_URL。mapped清理由各suite的afterAll和原workflow停止隔离库负责；仅复用config不会自动获得正式runner的manifest清理。正式runner自身run ID、manifest校验、信号处理与finally清理不变。
+
+风险映射原先用Set合并文件；本候选不改变此去重。mapped与后续正式chain之间没有“已通过即跳过”的跨阶段去重，两个长文件后续仍会再执行。不以完整runner替换mapped命令，避免把runner的整套文件及preflight额外带进每个mapped调用；也不新增成功缓存。
+
+### 本地验证与精确范围
+
+复用原环境：Node22.22.2 / npm10.9.9 / Vitest4.1.10 / pg8.22.0，PGDG PostgreSQL16.15，普通账号dx_pr854_test，JIT开启。没有重装全仓或修改数据库配置。本轮未重跑PG13；改动范围是mapped的PG16入口，不能借上轮PG13证据宣称本轮重新通过PG13。
+
+| 本轮实际执行 | 通过 | 失败 | 跳过 | 说明 |
+|---|---:|---:|---:|---|
+| 默认入口配置，三目标定向诊断 | 3 | 0 | 55 | 临时插桩，16.260秒命令墙钟 |
+| chain入口配置，三目标定向诊断 | 3 | 0 | 55 | 临时插桩，14.849秒命令墙钟 |
+| 候选真实mapped Bash，完整full-business-chain | 58 | 0 | 0 | 无筛选、无插桩，Vitest58.58秒 |
+| 同一候选真实mapped Bash，完整sourcing-pr03 | 115 | 0 | 0 | 无筛选、无插桩，Vitest70.95秒 |
+| chain完整58项SQL对照诊断 | 58 | 0 | 0 | 唯一追加的完整插桩对照，Vitest65.02秒 |
+| 入口/预算/schema清理/数据库安全4份unit文件 | 34 | 0 | 0 | 含新增6项，真实文件数4 |
+
+真实候选Bash总130.596秒，从修改后的workflow原样提取执行，原数据库安全检查实际执行。full主schema/fixture/cleanup为1561/76/419ms；sourcing为1764/27/423ms，另C05 fixture812ms。执行前后只剩public schema，当前测试账号无其它会话；记录范围内所有源码指纹不变。两完整原日志仍有pg对同client并行query的弃用警告，没有把警告抹掉或宣称全组无排队。
+
+实际完整入口由 `runtime/timeout-755db5b/run-candidate-mapped.py` 设置原环境和两个mapped文件，提取Bash后执行；下列为已执行命令，非本节要求再次运行：
+
+```bash
+python3 /workspace/scratch/6d3c65b5fd2c/runtime/timeout-755db5b/run-candidate-mapped.py
+# 提取的Bash中两文件分别实际调用：
+NO_COLOR=1 npx vitest run tests/integration/full-business-chain-postgres.test.ts --config vitest.business-chain.config.ts
+NO_COLOR=1 npx vitest run tests/integration/sourcing-pr03-postgres.test.ts --config vitest.business-chain.config.ts
+npm exec -- vitest run tests/unit/full-gate-risk-map.test.ts tests/unit/unified-gate-budget.test.ts tests/unit/business-chain-schema-cleanup.test.ts tests/unit/test-database-safety.test.ts --reporter=default --reporter=json --outputFile.json=/workspace/scratch/6d3c65b5fd2c/runtime/timeout-755db5b/entrypoint-guards-final.json
+npm exec -- eslint --max-warnings=0 tests/unit/full-gate-risk-map.test.ts
+node scripts/ci/verify-actions-policy.mjs
+```
+
+唯一修改TS经仓库真实ESLint退出0；Actions政策检查输出ACTIONS_USAGE_POLICY_OK。仓库没有Markdown/YAML对应ESLint规则；Bash实际执行及全部差异另做diff检查。本轮没有生产TS变化；workspace tsconfig也不包含tests，因此未重复全workspace typecheck，不能把Vitest转译称作完整静态类型检查。首次新增测试曾因模板字面量转义错误解析失败，已修正；默认沙箱还拒绝原预算测试spawnSync node（EPERM），随后在受支持执行权限下完成最终34项。首次失败日志保留，未假报通过。
+
+### 每case查询、步骤、锁与泄漏证据
+
+诊断只统计Client.query，不重复包Pool.query；Pool.connect仅记录借连接。100ms独立只读采样不纳入业务SQL；helper的206个await通过临时Vite变换标记，原文件字节不变。以下是query调用次数，不拆分多语句调用或数据库函数内部SQL，也不代表一次用户点击的查询数。
+
+| 目标case | 隔离三例中的SQL | 完整58中的SQL | 增量 | 完整组case墙钟 / driver SQL累计 |
+|---|---:|---:|---:|---:|
+| P05 linked transfer | 10805 | 12271 | +1466，13.568% | 2875.624 / 2554.331ms |
+| P05 authority transfer | 10439 | 11849 | +1410，13.507% | 2670.721 / 2329.962ms |
+| P03 legacy tail return | 11114 | 12530 | +1416，12.741% | 2673.997 / 2331.884ms |
+
+完整组确有查询数量增长。材料复核反例步骤分别3727/3782/3841条SQL、832/742/798ms，比隔离多342–347条；安排反例1651/1662/1693条、382/378/371ms，多193–213条。两转派guard分别1701/1095条、381/309ms。完整execution.read寻找单任务的9/9/10次读取仍约1053–1156条；不能删除权限、并发、事务、幂等、补料实收和历史反例来降低这些数字。
+
+增长模板包括每例权限身份读取+311–322次、表存在性检查+234–240次、SLA计划+82次、标签+170次、部分资料/轮次读取+30次。`development-notifications.ts`、`development-arrangement-todos.ts`及面料case列表存在遍历符合条件source的读取，与完整组前序数据增加相符；未经逐条调用链归因，不能把全部增长都归给某一个函数。`development-execution-service.ts`已经使用同一REPEATABLE READ只读事务内的snapshot读取复用，不能误称没有缓存或随意跨写事务缓存权限/材料事实。
+
+三目标在完整诊断中结束时均0在途query/0未归还lease/0结束后query/0跨case标签重叠；池获取最长0.928ms。确实采到3条advisory锁等待观察，query年龄约6.4/12.1/16.7ms，未看到秒级持续阻塞。100ms采样不能排除短等待，也不能用观察次数乘100ms计算锁耗时。最终8个被观测应用池全ended、连接和query归零。
+
+完整组另有必须保留的诊断局限：较早case18/21/22出现3对共847次跨标签配对计数，以及61+33条带旧case标签的结束后SQL；847不是独立SQL数。94条均落在后续N01–N11用例时间内，内容是其外部责任读取；Pool排队回调没有重新绑定调用者上下文，提供了可信的AsyncLocalStorage归属漂移解释。现有记录缺少Pool.query入口归属、调用栈和参数，不能最终排除真实异步延续，也不能判定连接泄漏。异常最晚24.870秒结束，三目标在50.627–58.955秒执行，没有时间重叠；不得把三目标的局部零残留写成完整58全程无异步重叠。
+
+SQL累计包括驱动/网络/等待，不是PG CPU时间；嵌套步骤墙钟不能相加。完整诊断计账1158.466ms、落盘1577.184ms、610次采样累计769.932ms，存在并发及未量化调度开销，不能简单扣除。闲置连接距最后CREATE SCHEMA的query年龄不表示迁移仍在运行。本机没有自然复现5秒失败，CI没有SQL/锁采样；本候选解决入口预算不一致，未优化这些SQL，也不声称性能已根治或远端Full Gate会必然通过。
+
+### Actions范围、成本与停止点
+
+本轮只读现有日志，新增Actions运行0。原失败job从07:12:25至07:23:46 UTC，共681秒（11分21秒）；其中普通测试242秒、mapped261秒。它在mapped提前失败，后续PG13、Root、正式chain、备份恢复与Acceptance/package阶段没有执行，不能据此估算完整成功耗时。
+
+候选3路径独立分类只触发deployment类，映射出的maintenance/migration两文件都已在原CI记录的10文件集合中；原CI风险输出也已要求business/migration/deployment/PG13。本地浅快照缺历史Base对象77a15f2，额外比较整PR路径时报 `fatal: bad object`；未补全仓库，范围核对使用已读取CI原风险输出和现有分类器，不假称重新计算了完整PR差异。相对当前755db5b tree的3文件差异及验证不受此限制影响。
+
+若负责人以后明确批准推送，按当前[FULL]标题及原workflow是一次Full Gate job、30分钟上限，Quick job按原条件跳过；原后续检查范围及跨阶段重复执行仍保留。60秒是单case/hook截止上限，不是每例固定增加55秒；真实挂起会等待更久，仍可能受30分钟总预算限制。未取得账单/额度信息，不编造费用金额，也不以本机130.596秒预测远端整次费用。
+
+本轮证据位于 `runtime/timeout-755db5b/`：原CI日志、resolved-entry-configs.json、candidate-mapped完整两组原日志和execution.json、entrypoint-guards-final、两次三例profile及chain-full58原始记录、full-vs-isolated-summary.json、actions-cost-evidence.json。仅提交可审核的本地diff与结果；没有push、dispatch/rerun、Review、新PR、merge、deploy、Work或其它分支动作。下一次远端写入必须由负责人重新决定。
