@@ -107,6 +107,29 @@ try{
       requestIdVisible:true,caseScopedFeedback:true,retryKeyRetained:true,successSurvivesReload:true,passed:true});
     await page.close();
   }
+  {
+    const page=await browser.newPage({viewport:{width:1440,height:900}}),errors=[];
+    page.on('pageerror',error=>errors.push(error.message));
+    await page.goto(origin+'/?role=root&transferRefreshFailure=1');
+    await page.locator('.sourcing-contract-bar').waitFor();
+    const panel=page.getByRole('region',{name:'订单转厂',exact:true});
+    await panel.getByRole('button',{name:'订单转厂',exact:true}).click();
+    await panel.locator('select').selectOption('00000000-0000-4000-8000-000000000005');
+    await panel.getByLabel('新加工单价',{exact:true}).fill('11.3');
+    await panel.getByLabel('转厂原因',{exact:true}).fill('TEST-提交已成功但读取刷新失败');
+    await panel.getByRole('button',{name:'提交转厂',exact:true}).click();
+    await page.getByText('TEST-订单页面刷新失败',{exact:true}).waitFor();
+    assert.equal(await panel.getByRole('status').innerText(),'老板发起的转厂已直接生效');
+    assert.equal(await panel.getByRole('alert').count(),0);
+    assert.equal(await panel.locator('select').inputValue(),'');
+    assert.equal(await panel.getByLabel('转厂原因',{exact:true}).inputValue(),'');
+    const requests=await page.evaluate(()=>window.contractTransferRequests);
+    assert.equal(requests.filter(row=>row.method==='POST').length,1);
+    assert.ok(requests.filter(row=>row.method==='GET'&&row.path.endsWith('/timeline')).length>=2);
+    assert.deepEqual(errors,[]);
+    results.push({transferCommitted:true,refreshFailed:true,successRetained:true,noFalseSubmissionError:true,noAutomaticResubmit:true,passed:true});
+    await page.close();
+  }
   for(const reviewed of [false,true]){
     const page=await browser.newPage({viewport:{width:1440,height:960}});
     await page.goto(origin+'/?role=root&reviewed='+(reviewed?'1':'0'));await page.getByRole('button',{name:'更新合同信息',exact:true}).click();

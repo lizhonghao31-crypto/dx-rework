@@ -32,7 +32,7 @@ const contractDocument={sourcingContractDocumentId:id(55),sourcingApprovalSnapsh
 const content={contractTitle:'TEST合同',contractNumber:'TEST-CONTRACT-V7',contractDate:'2026-10-13',partyAName:'TEST甲方',partyAAddress:'TEST地址',partyARepresentative:'TEST',partyASigningDate:'',partyBSigningDate:'',partyBName:'TEST原工厂',partyBAddress:'TEST地址',partyBRepresentative:'TEST',payeeName:'TEST',bankAccount:'TEST',bankName:'TEST',signingPlace:'TEST',gender:'女装',styleName:'TEST交期',estimatedCutPieceSendDate:'2026-10-04',deliveryDate:'2026-10-22',processes:['TEST-车缝'],lines,totalQuantity:2020,totalAmount:'31310',terms:Object.fromEntries(Object.keys(CONTRACT_TERM_LABELS).map(key=>[key,'TEST条款']))};
 let priceRequest:Record<string,unknown>|null=params.get('pricePending')==='1'?{priceRequestId:id(88),baseDecisionId:id(3),baseDocumentId:id(55),unitPrice:'16',reason:'TEST待审批',requestedBy:id(1),requestedAt:now,requiresOwnerApproval:true,status:'pending',basisChanged:false}:null;
 const requests:unknown[]=[];
-let transferAttempts=0, renderedCaseId=id(100);
+let transferAttempts=0, renderedCaseId=id(100), transferCommitted=false;
 Object.assign(window,{contractTransferRequests:requests});
 window.fetch=async(input,init)=>{
   const path=String(input),method=init?.method ?? 'GET',body=typeof init?.body==='string'?JSON.parse(init.body):null;
@@ -51,12 +51,14 @@ window.fetch=async(input,init)=>{
       return Response.json({error:{code:'INVALID_STATE_TRANSITION',message:'TEST-转厂数量与当前订单数量不一致',requestId:'TEST-transfer-conflict-1'}},{status:409});
     }
     item={...item,deliveryDate:body.deliveryDate ?? item.deliveryDate,decision:{...item.decision!,supplierId:body.supplierId,supplierName:'TEST新工厂'},approvalSnapshot:{...item.approvalSnapshot!,deliveryDate:body.deliveryDate ?? item.deliveryDate}};
-    return Response.json(item);
+    transferCommitted=true;
+    return Response.json(item,{status:201});
   }
   if(method!=='GET')return Response.json({error:{message:'TEST-only unexpected mutation'}},{status:403});
   if(path.endsWith('auth/me'))return Response.json({status:'authorized',user:{id:id(1),displayName:'TEST-'+role,isRoot:role==='root',businessRoles:roles,capabilities,readOnlyModules:params.get('readonly')==='1'?['sourcing']:[]}});
   if(path.endsWith('/contract/content'))return Response.json({sourcingContractDocumentId:id(55),informationFingerprint:'a'.repeat(64),content});
   if(path.endsWith('/contract/refresh'))return Response.json({sourcingContractDocumentId:id(55),informationFingerprint:'a'.repeat(64),returned:true,changes:[],missingFields:[]});
+  if(path.endsWith('/timeline')&&transferCommitted&&params.get('transferRefreshFailure')==='1')return Response.json({error:{message:'TEST-订单页面刷新失败'}},{status:500});
   if(path.endsWith('/attachments')||path.endsWith('/timeline'))return Response.json({items:[]});
   if(path.endsWith('/factories'))return Response.json({items:[{supplierId:id(4),supplierCode:'TEST-OLD',supplierName:'TEST原工厂'},{supplierId:id(5),supplierCode:'TEST-NEW',supplierName:'TEST新工厂'}]});
   if(path.endsWith('/price-reapplications/current'))return Response.json({item:priceRequest});
