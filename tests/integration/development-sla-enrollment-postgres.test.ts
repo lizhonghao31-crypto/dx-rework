@@ -271,10 +271,20 @@ run("development SLA enrollment and legacy isolation",()=>{
     await expect(execute.configureFixedCutting(rootActor,id,input,randomUUID())).rejects.toThrow("已更新");
     expect((await database.query("SELECT count(*)::int n FROM digital_development_fixed_cutting")).rows[0].n).toBe(1);
     await database.query("INSERT INTO user_role_assignments(user_id,role_code) VALUES($1,'owner_group')",[other]);
-    await expect(execute.configureFixedCutting(actor(other,["owner_group"]),id,{...input,expectedVersion:1},randomUUID())).rejects.toMatchObject({statusCode:403});
-    await database.query("INSERT INTO business_roles(role_code) VALUES('owner_group')");
-    await execute.configureFixedCutting(actor(other,["owner_group"]),id,{...input,expectedVersion:1},randomUUID());
-    expect((await database.query("SELECT max(version) n FROM digital_development_fixed_cutting")).rows[0].n).toBe(2);
+    // Other cases may already seed this role. Build the invalid state explicitly;
+    // a valid active owner must retain the approved configuration authority.
+    const priorRole=(await database.query("SELECT enabled FROM business_roles WHERE role_code='owner_group'")).rows[0];
+    await database.query("INSERT INTO business_roles(role_code,enabled) VALUES('owner_group',false) ON CONFLICT(role_code) DO UPDATE SET enabled=false");
+    try{
+      await expect(execute.configureFixedCutting(actor(other,["owner_group"]),id,{...input,expectedVersion:1},randomUUID())).rejects.toMatchObject({statusCode:403});
+      expect((await database.query("SELECT count(*)::int n FROM digital_development_fixed_cutting")).rows[0].n).toBe(1);
+      await database.query("UPDATE business_roles SET enabled=true WHERE role_code='owner_group'");
+      await execute.configureFixedCutting(actor(other,["owner_group"]),id,{...input,expectedVersion:1},randomUUID());
+      expect((await database.query("SELECT max(version) n FROM digital_development_fixed_cutting")).rows[0].n).toBe(2);
+    }finally{
+      if(priorRole)await database.query("UPDATE business_roles SET enabled=$1 WHERE role_code='owner_group'",[priorRole.enabled]);
+      else await database.query("DELETE FROM business_roles WHERE role_code='owner_group'");
+    }
   });
   it("records external pattern request to receipt in a supervisor task without gating development",async()=>{
     const supervisor=randomUUID();
