@@ -17,14 +17,13 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: quick-gate-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   validate:
-    if: ${{ github.event_name != 'pull_request' || !startsWith(github.event.pull_request.title, '[FULL]') }}
+    if: ${{ github.event_name != 'pull_request' || (!startsWith(github.event.pull_request.title, '[FULL] ') && (github.event.action != 'edited' || github.event.changes.base || (github.event.changes.title && (startsWith(github.event.changes.title.from, '[FULL] ') != startsWith(github.event.pull_request.title, '[FULL] ') || startsWith(github.event.changes.title.from, '[QUICK] ') != startsWith(github.event.pull_request.title, '[QUICK] '))))) }}
     name: Lint, test, migrate and build exact Head
+    concurrency:
+      group: pr-gate-${{ github.event.pull_request.number || format('manual-{0}', github.ref) }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -33,6 +32,7 @@ jobs:
 
     steps:
       - name: Require explicit Quick Gate title
+        id: title
         if: ${{ github.event_name == 'pull_request' }}
         shell: bash
         env:
@@ -45,12 +45,14 @@ jobs:
           }
 
       - name: Checkout exact PR Head
+        id: checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
       - name: Verify immutable evidence and governance files
+        id: head
         shell: bash
         env:
           EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -76,11 +78,13 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           set -euo pipefail
           governance_only=false
           web_only=false
           has_web_source=false
+          approved_maintenance=false
 
           if [[ "${EVENT_NAME}" == "pull_request" ]]; then
             test -n "${BASE_SHA}"
@@ -90,7 +94,11 @@ jobs:
 
             git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" > "$RUNNER_TEMP/quick-gate-changed-files.txt"
             mapfile -t changed_files < "$RUNNER_TEMP/quick-gate-changed-files.txt"
-            node scripts/ci/full-gate-risk-map.mjs --require-quick-safe "$RUNNER_TEMP/quick-gate-changed-files.txt"
+            if node scripts/ci/verify-actions-policy.mjs --approved-quick-maintenance "$RUNNER_TEMP/quick-gate-changed-files.txt"; then
+              approved_maintenance=true
+            else
+              node scripts/ci/full-gate-risk-map.mjs --require-quick-safe "$RUNNER_TEMP/quick-gate-changed-files.txt"
+            fi
             if (( ${#changed_files[@]} > 0 )); then
               governance_only=true
               web_only=true
@@ -119,6 +127,7 @@ jobs:
             fi
           fi
 
+          echo "approved_maintenance=${approved_maintenance}" >> "$GITHUB_OUTPUT"
           echo "governance_only=${governance_only}" >> "${GITHUB_OUTPUT}"
           echo "web_only=${web_only}" >> "${GITHUB_OUTPUT}"
           echo "GOVERNANCE_ONLY=${governance_only}" >> "${GITHUB_ENV}"
@@ -127,9 +136,11 @@ jobs:
           echo "Quick Gate web-only: ${web_only}"
 
       - name: Verify Actions usage policy
+        id: policy
         run: node scripts/ci/verify-actions-policy.mjs
 
       - name: Verify changed governance script syntax
+        id: governance_syntax
         if: ${{ steps.classify.outputs.governance_only == 'true' }}
         shell: bash
         env:
@@ -144,6 +155,7 @@ jobs:
           done < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")
 
       - name: Set up Node 22
+        id: node
         if: ${{ steps.classify.outputs.governance_only != 'true' }}
         uses: actions/setup-node@v4
         with:
@@ -151,38 +163,47 @@ jobs:
           cache: npm
 
       - name: Pin npm 10
+        id: npm
         if: ${{ steps.classify.outputs.governance_only != 'true' }}
         run: npm install --global npm@10.9.9 --no-audit --no-fund --prefer-offline
 
       - name: Install locked dependencies
+        id: install
         if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm ci --no-audit --no-fund --prefer-offline
 
       - name: Lint
+        id: lint
         if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm run lint
 
       - name: Typecheck
+        id: types
         if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm run typecheck
 
       - name: Build workspaces without root postbuild business-chain gate
+        id: build
         if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm run build --workspaces --if-present
 
       - name: Validate migration files statically
+        id: migration_lint
         if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm run db:migrate:lint
 
       - name: Scan repository for committed secret signatures
+        id: secrets
         if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
         run: npm run secret:scan
 
       - name: Install web locked dependencies
+        id: web_install
         if: ${{ steps.classify.outputs.web_only == 'true' }}
         run: npm ci --include-workspace-root --workspace @dx-rework/web --workspace @dx-rework/contracts --workspace @dx-rework/domain --workspace @dx-rework/ui --no-audit --no-fund --prefer-offline
 
       - name: Lint changed web files
+        id: web_lint
         if: ${{ steps.classify.outputs.web_only == 'true' }}
         shell: bash
         env:
@@ -196,14 +217,17 @@ jobs:
           fi
 
       - name: Typecheck web workspaces
+        id: web_types
         if: ${{ steps.classify.outputs.web_only == 'true' }}
         run: npm run typecheck --workspace @dx-rework/contracts --workspace @dx-rework/domain --workspace @dx-rework/ui --workspace @dx-rework/web --if-present
 
       - name: Build web workspaces
+        id: web_build
         if: ${{ steps.classify.outputs.web_only == 'true' }}
         run: npm run build --workspace @dx-rework/contracts --workspace @dx-rework/domain --workspace @dx-rework/ui --workspace @dx-rework/web --if-present
 
       - name: Run changed web unit tests
+        id: web_tests
         if: ${{ steps.classify.outputs.web_only == 'true' }}
         shell: bash
         env:
@@ -213,53 +237,75 @@ jobs:
           set -euo pipefail
           mapfile -t changed_tests < <(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" | grep -E '^tests/unit/.*\.test\.(js|jsx|ts|tsx)$' || true)
           if (( ${#changed_tests[@]} > 0 )); then
+            echo "has_tests=true" >> "$GITHUB_OUTPUT"
             npx vitest run "${changed_tests[@]}"
+          else
+            echo "has_tests=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Scan web-only changes for committed secret signatures
+        id: web_secrets
         if: ${{ steps.classify.outputs.web_only == 'true' }}
         run: npm run secret:scan
 
-      - name: Write web-only quick-gate summary
-        if: ${{ steps.classify.outputs.web_only == 'true' }}
-        shell: bash
-        run: |
-          {
-            echo "## Web Quick Gate"
-            echo
-            echo "- Head SHA: $(git rev-parse HEAD)"
-            echo "- Exact Head / Actions policy: passed"
-            echo "- Scoped dependency install: web + contracts + UI"
-            echo "- Changed-file lint / web typecheck / web build: passed"
-            echo "- Changed web unit tests / secret scan: passed"
-            echo "- API, migration and full business-chain checks skipped: web-only diff"
-          } >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Write governance-only quick-gate summary
-        if: ${{ steps.classify.outputs.governance_only == 'true' }}
-        shell: bash
-        run: |
-          {
-            echo "## Quick Gate"
-            echo
-            echo "- Head SHA: $(git rev-parse HEAD)"
-            echo "- Exact Head / governance: passed"
-            echo "- Actions policy: passed"
-            echo "- Governance script syntax: passed"
-            echo "- Business checks skipped: governance-only change"
-          } >> "${GITHUB_STEP_SUMMARY}"
+      - name: Verify approved CI maintenance fixtures
+        id: maintenance_tests
+        if: steps.classify.outputs.approved_maintenance == 'true'
+        run: node --test scripts/ci/gate-maintenance.test.mjs
 
-      - name: Write business quick-gate summary
-        if: ${{ steps.classify.outputs.governance_only != 'true' && steps.classify.outputs.web_only != 'true' }}
+      - name: Write actual gate summary
+        if: always()
         shell: bash
+        env:
+          GATE_KIND: quick
+          GATE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          GATE_JOB_STATUS: ${{ job.status }}
+          GATE_STEPS_JSON: ${{ toJSON(steps) }}
+          GATE_SCOPE_JSON: >-
+            {"event": "${{ github.event_name }}", "base": "${{ github.base_ref }}", "governance": "${{ steps.classify.outputs.governance_only }}", "web": "${{ steps.classify.outputs.web_only }}", "maintenance": "${{ steps.classify.outputs.approved_maintenance }}"}
+          GATE_CHECKS_JSON: >-
+            [["title", "Require explicit Quick Gate title", "pr"], ["checkout", "Checkout exact PR Head", "always"], ["head", "Verify immutable evidence and governance files", "always"], ["classify", "Classify Quick Gate scope", "always"], ["policy", "Verify Actions usage policy", "always"], ["governance_syntax", "Verify changed governance script syntax", "governance"], ["node", "Set up Node 22", "not_governance"], ["npm", "Pin npm 10", "not_governance"], ["install", "Install locked dependencies", "business"], ["lint", "Lint", "business"], ["types", "Typecheck", "business"], ["build", "Build workspaces without root postbuild business-chain gate", "business"], ["migration_lint", "Validate migration files statically", "business"], ["secrets", "Scan repository for committed secret signatures", "business"], ["web_install", "Install web locked dependencies", "web"], ["web_lint", "Lint changed web files", "web"], ["web_types", "Typecheck web workspaces", "web"], ["web_build", "Build web workspaces", "web"], ["web_tests", "Run changed web unit tests", "web"], ["web_secrets", "Scan web-only changes for committed secret signatures", "web"], ["maintenance_tests", "Verify approved CI maintenance fixtures", "maintenance"]]
         run: |
-          {
-            echo "## Quick Gate"
-            echo
-            echo "- Head SHA: $(git rev-parse HEAD)"
-            echo "- Exact Head / governance: passed"
-            echo "- Actions policy: passed"
-            echo "- Lint / typecheck / workspace build: passed"
-            echo "- Migration lint / secret scan: passed"
-            echo "- Heavy DB, full test, release and preview work intentionally deferred to Full Gate"
-          } >> "${GITHUB_STEP_SUMMARY}"
+          node <<'GATE_SUMMARY_JS'
+          const fs = require('node:fs');
+          const steps = JSON.parse(process.env.GATE_STEPS_JSON || '{}');
+          const checks = JSON.parse(process.env.GATE_CHECKS_JSON);
+          const scope = JSON.parse(process.env.GATE_SCOPE_JSON);
+          const classified = steps[process.env.GATE_KIND === 'full' ? 'risk' : 'classify']?.outcome === 'success';
+          const flag = name => scope[name] === 'true';
+          function required(kind) {
+            if (kind === 'always') return true;
+            if (kind === 'pr') return scope.event === 'pull_request';
+            if (kind === 'release') return scope.base === 'release/digital-production-v1';
+            if (!classified) return null;
+            if (kind === 'release_deployment') return flag('deployment') && scope.base === 'release/digital-production-v1';
+            if (kind === 'chain') return flag('business_chain') || flag('migration') || flag('deployment');
+            if (kind === 'mapped') return Boolean(scope.mapped);
+            if (kind === 'governance') return flag('governance');
+            if (kind === 'not_governance') return !flag('governance');
+            if (kind === 'business') return !flag('governance') && !flag('web');
+            if (['db','journey','migration','deployment','web','maintenance'].includes(kind)) return flag(kind);
+            throw new Error('Unknown gate scope: ' + kind);
+          }
+          const missing = [];
+          const rows = checks.map(([id, label, kind]) => {
+            const step = steps[id], needed = required(kind);
+            const noWebTests = id === 'web_tests' && step?.outcome === 'success' && step.outputs?.has_tests === 'false';
+            let status;
+            if (step?.outcome === 'failure') status = '失败';
+            else if (step?.outcome === 'cancelled') status = '取消';
+            else if (noWebTests || needed === false && (!step || ['skipped','success'].includes(step.outcome))) status = '不适用';
+            else if (step?.outcome === 'success') status = '成功';
+            else if (needed === null) status = '范围未判定，未完成';
+            else status = process.env.GATE_JOB_STATUS === 'cancelled' ? '取消导致未执行' : '上游中断或未执行';
+            if (needed !== false && !noWebTests && step?.outcome !== 'success') missing.push(label);
+            return '| ' + label + ' | ' + status + ' |';
+          });
+          const report = ['## ' + (process.env.GATE_KIND === 'full' ? 'Full' : 'Quick') + ' Gate 执行明细',
+            '', '- Head SHA: `' + process.env.GATE_HEAD + '`', '- 摘要前 Job 状态：' + process.env.GATE_JOB_STATUS,
+            '- 最终结论以 GitHub Job 为准；清理或摘要成功不代表门禁通过。', '', '| 检查 | 实际结果 |', '| --- | --- |', ...rows,
+            '', '未完成必需检查（含范围未判定）：' + (missing.length ? missing.join('；') : '无'), ''].join('\n');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, report);
+          if (missing.length && process.env.GATE_JOB_STATUS === 'success') process.exitCode = 1;
+          GATE_SUMMARY_JS
