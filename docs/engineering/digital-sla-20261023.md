@@ -146,3 +146,87 @@ PR02 #852：604e5eed的Full Gate 39965719804成功；父审两项F修正集中�
 | Zod4.4.3安全公告是外部依赖变动；Chat npm DNS EAI_AGAIN是环境问题。动作漏项、lint漏文件、预算测试及fixture不同步是本轮工程遗漏。 | 依赖修复用指定Node/npm真实生成锁，核3项lock变化，audit保留低/中风险说明；DNS失败报告实际阻断。不得把确定测试/生产问题称flaky或环境问题。 |
 
 当前本地修正：development-material-readiness只允许退回补料进入原复核，不改变实收/质量放行；Journey分离日历和系统业务Clock、缺真实R2起点保持未知、历史改派用纸样；客户交期测试分别覆盖合法总监/老板审批。首次集中组101 passed / 1 failed / 0 skipped，失败为旧老板断言，其它6文件通过；修正后独立完整身份组37 passed / 0 failed / 0 skipped。Journey23、开发16等已完成本地验证，另外sourcing为4 passed / 0 failed / 110 skipped，full-business-chain为4 passed / 0 failed / 54 skipped。实际本地隔离PostgreSQL为18.4，不是CI的PG13/16验证。4个代码/测试文件限定lint与API typecheck退出码0。完整CI、部署和认证浏览器验收不在此次本地结论内，不代表Full通过。父审核已允许仅提交并一次推送这5文件；随后停止，不等待CI，不再用Work跟进下一轮失败。
+
+## 854 本 Chat 同源失败修复与最终本地证据（2026-10-24，待确认推送）
+
+本节记录本 Chat 的新一轮修复。前节的 PG18.4、full-business-chain 4项和 sourcing 4项为上一轮历史证据，不是本候选的完整组结果；前节推送授权不用于本轮。当前按负责人要求先提交可审阅 diff 和验证结果，确认后才推送一次。
+
+### 精确基线与范围
+
+- repository：`lizhonghao31-crypto/dx-rework`；PR [#854](https://github.com/lizhonghao31-crypto/dx-rework/pull/854)。
+- 远端分支：`deliver/sla-foundation-development-budget-20261024`；开工核对 Head 仍为 `2b028dd0895d9617d8c9e370caa08f6a5f66072d`，Base 为 `77a15f2f980d5d66c0312cc8d33b48544f289870`。
+- 失败证据：[run 40068879908](https://github.com/lizhonghao31-crypto/dx-rework/actions/runs/40068879908)，job `120797809363`，已读取原始日志。
+- 本地验证对象为上述 Head 加本轮未提交差异；未创建新候选 commit、未推送，不能把下面通过结果归给未修改的 `2b028dd`。
+- 本轮只改两份测试 helper、两份集成测试及本记录。生产代码、迁移、锁文件、CI范围和时限不变；不合入 WIP，不修改后续05–06或07–08分支。
+
+### 三条尾查失败的同一根因
+
+在未修改的准确 Head 上，PG16.15 单独选择三条失败用例得到 **3通过 / 0失败 / 55跳过**；完整58项得到 **55通过 / 3失败 / 0跳过**，与原 CI 的三条尾查错误一致。
+
+1. `0220_digital_production_tasks.sql` 的尾查历史种子是 policy **v1、14400秒**。`packages/contracts/src/digital-sla.ts` 的新确认标准为 **30分钟**。
+2. 完整组前序 N01-N11 用例调用 `exerciseExternalCaseNotificationScope`，经真实 `identity.createOrder` → `SlaOrderService.enrollNewOrder` → `SlaConfigurationRepository.initialStandard`，首次追加配置 **v1**；该配置引用追加的尾查 policy **v2、1800秒**。配置版本与节点 policy 版本不是同一编号。
+3. `exerciseDevelopmentRoute` 声明测试 Pre-SLA 旧路线，却直接 INSERT source 并遗漏 `created_at`，使其变成前序配置发布之后的当前时间。它没有经过新来源创建 API，也没有 `digital_development_sla_plans` 或冻结配置引用。
+4. `frozenSlaTaskPolicy` 的真实优先级为：已有 deadline revision 的 policy → 入组来源/订单的冻结配置引用 → 无计划历史资源创建时的 policy。这个自称旧单、实际创建于新标准之后的 fixture 正确落到 policy v2；单独运行时前序没有初始化新配置，所以偶然读到 v1。
+
+只读数据库采样保留了三个失败尾查的 `state=ready`、`policy_version=2`、`sla_seconds=1800`、来源计划数0；v1仍为14400秒，没有被覆盖。首个失败来源的精确时间证据如下（UTC，保留 PostgreSQL 微秒）：
+
+| 记录 | 实际值 |
+|---|---|
+| 历史尾查 policy v1 的 changed_at | `2026-10-24 06:34:47.712942+00` |
+| 新尾查 policy v2 的 changed_at | `2026-10-24 06:35:04.673062+00` |
+| 失败 fixture source 的 created_at | `2026-10-24 06:35:12.323466+00` |
+| 来源冻结计划/配置 | 计划数0；没有配置引用，使用历史创建时间回退路径 |
+
+结论是旧 fixture 的来源年代与模型不一致，被前序合法初始化配置暴露；没有发现生产配置冻结或读取把真实旧单改用新标准的缺陷。旧路线4小时断言仍有效，不能改为0.5，也不应把新标准改回4。
+
+### 最小修复与反例
+
+- `digital-development-route-fixture.ts`：仅在合成历史来源初次 INSERT 时，显式使用其路线所需 v1 节点均已安装的历史边界。校验节点齐全且当时没有较新版本，以数据库文本传递时间，避免 JavaScript Date 丢失微秒。发布后断言计划数0；保留 `ready / 4小时`，补 policyVersion=1 和 deadline revision 的 v1 断言。不 UPDATE 已存在的来源或历史事实。
+- `development-sla-enrollment-postgres.test.ts`：新增2项反例。来源确实通过真实 API 创建于入组迁移安装前，分别在默认变更前/后创建旧尾查；另建已冻结新来源，延迟到默认变更后才创建其尾查，再建采用新默认的来源。验证旧单4小时、已冻结新单原参数/引用、后建新单新值；旧配置、P0/计划及 deadline 历史不变。没有实际时间时仍可 ready，但 enteredAt/dueAt 为 null；跨来源读取仍404。两个新用例分别独立运行也通过，不依赖前序初始化。
+- 完整 sourcing 首次执行暴露另两处同类模型混用：旧同源加轮场景使用真实新来源，客户复版依法生成独立 source；测试丢弃返回的新 ID，仍给原来源登记第2轮事实并期待原任务取消。`bulk-preparation-fixture.ts` 新增显式 `legacyDevelopment`，仅两个历史同源场景启用；其余调用继续真实新来源入组。先断言 publish 返回原 source/round2，再登记测试事实；原过时制单404断言保留。
+- `sourcing-pr03-postgres.test.ts`：上述两处选择历史 fixture，新增1项已关联母单的新来源独立客户复版反例。验证新 source 为未关联母单的 draft/round1，原来源、母单、制单历史、准备记录、任务和 SLA 计划不变；工人仍只读原母单制单，对新 source 的开发资料与 Journey 均404。
+
+### 完整组验证、环境与命令
+
+Node **22.22.2**、npm **10.9.9**，使用原锁真实 `npm ci`，锁的 SHA256 前后均为 `fc69a09e506133a069029a0c5abbc50562598f2785978d08fa8fa0a2daaa61c9`；Zod仍为4.6.7。数据库为本机隔离 PGDG **PostgreSQL16.15** 和 **13.23**，最终完整验证使用 `dx_pr854_test` 普通账号，无超级用户、建库、建角色、复制或 bypass RLS 权限，原 `test-database-safety.mjs` 均退出0。JIT保持开启。
+
+按原 CI 映射顺序逐文件执行；下表取各文件最终完整运行结果，迁移兼容与 sourcing 在补齐环境/修复后完整复验，保留第一次失败日志，不宣称一次进程从头全绿。原58项及所有受影响 helper 消费者均覆盖。
+
+| PG16完整文件（`tests/integration/`） | 通过 | 失败 | 跳过 |
+|---|---:|---:|---:|
+| acceptance-maintenance-postgres.test.ts | 1 | 0 | 0 |
+| development-sla-enrollment-postgres.test.ts | 18 | 0 | 0 |
+| digital-budget-shared-postgres.test.ts | 2 | 0 | 0 |
+| digital-journey-postgres.test.ts | 23 | 0 | 0 |
+| digital-production-identity-postgres.test.ts | 37 | 0 | 0 |
+| digital-sla-configuration-postgres.test.ts | 9 | 0 | 0 |
+| digital-sla-plan-postgres.test.ts | 4 | 0 | 0 |
+| full-business-chain-postgres.test.ts | 58 | 0 | 0 |
+| migration-compatibility-postgres.test.ts | 12 | 0 | 0 |
+| sourcing-pr03-postgres.test.ts | 115 | 0 | 0 |
+| **合计** | **279** | **0** | **0** |
+
+PG13.23 完整开发 **18/0/0**、Journey **23/0/0**（按CI使用 `--maxWorkers=2`）；两个新增默认变化反例分别单独运行，各 **1/0/17跳过**。PG16原三条修复后单独运行为 **3/0/55跳过**；sourcing三个直接相关场景定向运行为 **3/0/112跳过**，随后已完整115项通过。上述筛选运行不冒充全组结果。
+
+实际执行命令的参数形式如下；每个完整文件分别执行，无 `-t`，并保存 default/JSON reporter。映射批次实际通过 npm 的 `npx-cli.js vitest run` 调用，等价于这里的 `npm exec -- vitest run`；执行证据保存了绝对命令与各文件前后源码指纹。
+
+```bash
+export TEST_DATABASE_URL=postgresql://dx_pr854_test@127.0.0.1:55416/dx_pr854_test
+NODE_ENV=test node scripts/test-database-safety.mjs
+npm exec -- vitest run tests/integration/full-business-chain-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/workspace/scratch/6d3c65b5fd2c/runtime/mapped-pg16/full-business-chain-postgres.json
+npm exec -- vitest run tests/integration/sourcing-pr03-postgres.test.ts --reporter=default --reporter=json --outputFile.json=/workspace/scratch/6d3c65b5fd2c/runtime/mapped-pg16-recheck/sourcing-pr03-postgres.json
+TEST_DATABASE_URL=postgresql://dx_pr854_test@127.0.0.1:55413/dx_pr854_test npm exec -- vitest run tests/integration/digital-journey-postgres.test.ts --maxWorkers=2
+npm exec -- eslint --max-warnings=0 tests/helpers/bulk-preparation-fixture.ts tests/helpers/digital-development-route-fixture.ts tests/integration/development-sla-enrollment-postgres.test.ts tests/integration/sourcing-pr03-postgres.test.ts
+npm run typecheck
+```
+
+4份实际修改TS使用仓库真实 ESLint 配置，退出0；`npm run build:packages` 与最终6个workspace的 `npm run typecheck` 均退出0。workspace tsconfig 不包含 tests 目录，不把 workspace typecheck 冒充测试文件静态类型检查；本记录为 Markdown，仓库无对应 lint，所有差异另经 `git diff --check`。
+
+### 首次错误与验证边界
+
+- 第一次映射10文件为271通过/7失败/0跳过：迁移3项依赖历史 commit `209b00854c217c9fd2e5a6bbc0f5096c0016df0a` 的 `git show`，本地准确 Head 的浅快照最初缺该对象；sourcing两项需要缺失的 `libLLVM.so.19.1`，另两项为上述旧同源fixture错误。已通过 GitHub 连接器补回真实签名commit/tree/4个原blob并校验SHA，未改历史脚本；补齐官方LLVM运行库，未关闭JIT。随后迁移12项及 sourcing115项完整通过。
+- 额外尝试在PG13运行完整58项，在原beforeAll直接执行0236迁移时因 `UNIQUE NULLS NOT DISTINCT` 报 `syntax error at or near "NULLS"`：**0项执行、58项跳过、suite初始化失败**。这不是通过。未为此改旧迁移或扩大本轮修复；原CI要求的PG13 Journey兼容用例已完整23项通过。
+- 本地为Ubuntu原生PGDG实例，与CI `postgres:16-alpine` / PG13容器的打包环境不相同；这里只声明已执行的数据库主版本及测试结果，不声明完整远端Full Gate通过。
+- 准确Head通过原GitHub连接器读取并逐blob验证2627项；5张超过连接器读取上限的历史UI参考PNG未落地，均非运行源码及本轮修改对象。锁文件未手造，源码/依赖限制未绕过；相关环境错误及支持路径已即时回报。
+- 本次full-business-chain实测Vitest总59.53秒，主初始化/迁移1859ms、主fixture87ms、清理410ms。sourcing总76.37秒，主初始化/迁移2296ms、主fixture28ms、C05 fixture961ms、清理398ms。其余hook、用例与导入没有在这些分段中全部细分，不能把剩余时间无证归为迁移。
+- 本轮没有Work、外部Codex任务、新PR、Review、合并或部署；待负责人审阅本地差异及本节证据后，再按一次性推送854的要求办理。

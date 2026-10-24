@@ -32,6 +32,7 @@ run("development SLA enrollment and legacy isolation",()=>{
   const designer=randomUUID(),other=randomUUID(),root=randomUUID();
   const actor=(id=designer,roles=["sample_designer"]):TrustedActorContext=>({actorId:id,actorRoles:roles,authorizationCapability:"pattern_room:orders:create",authorizationCapabilities:["pattern_room:orders:create","todo:view"],requestId:"SLA03"});
   let legacyId:string;
+  const legacyPolicySources=new Map<string,string>();
   let businessNow="2026-10-23T00:00:00.000Z";
   const clock={read:async()=>({now:businessNow,scenarioId:"isolated-development-fixture",revision:1})};
   const service=new DigitalProductionIdentityService(database,true,undefined,()=>new Date(),clock);
@@ -71,6 +72,8 @@ run("development SLA enrollment and legacy isolation",()=>{
     await database.query(await readFile(new URL("../../apps/api/migrations/0221_digital_production_notifications.sql", import.meta.url), "utf8"));
     await database.query(await readFile(new URL("../../apps/api/migrations/0222_digital_development_documents.sql", import.meta.url), "utf8"));
     legacyId=(await service.createSource(actor(),{developmentType:"头版",designStyleNo:`TEST-LEGACY-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId;
+    // These sources really exist before SLA enrollment is installed; no historical timestamp is rewritten.
+    for(const timing of ['before','after'])legacyPolicySources.set(timing,(await service.createSource(actor(),{developmentType:"头版",designStyleNo:`TEST-LEGACY-POLICY-${randomUUID()}`,temporaryStyleNo:null,customerCode:null},randomUUID())).sourceId);
     for(const name of ["0223_digital_development_execution.sql","0224_digital_development_route.sql","0225_digital_development_rounds.sql","0244_development_sewing_result_attachments.sql","0245_development_pattern_result_attachments.sql","0252_digital_sla_configuration_snapshots.sql", "0253_digital_sla_plan_history.sql","0254_digital_sla_policy_references.sql","0255_development_sla_enrollment.sql"])
       await database.query(await readFile(new URL(`../../apps/api/migrations/${name}`,import.meta.url),"utf8"));
   });
@@ -87,6 +90,7 @@ run("development SLA enrollment and legacy isolation",()=>{
   it("freezes at creation, starts clerk window at publication, and never takes a later global standard",async()=>{
     const id=await source(),initial=await developmentSlaPlan(database,id);
     expect(initial.revision).toBe(1);expect(initial.plan_json.anchors.development_published).toBeUndefined();
+    expect(initial.parameters_json.development_tail_check.value).toEqual({kind:'duration',minutes:30});
     const db=await database.connect();try{
       await db.query("BEGIN");const repo=new SlaConfigurationRepository(db),current=(await repo.current())!;
       const values=digitalSlaDefaults();values.development_materials={kind:"duration",minutes:300};
@@ -466,5 +470,50 @@ run("development SLA enrollment and legacy isolation",()=>{
     expect((await database.query("SELECT count(*)::int n FROM digital_production_task_events WHERE task_id=$1 AND corrects_event_id=$2",[published.taskId,completionEvent])).rows[0].n).toBe(2);
     await expect(sla.read(actor(other),order.productionOrderId)).rejects.toMatchObject({statusCode:404});
     await expect(new SlaOrderService(database,{read:async()=>({now:businessNow,scenarioId:null,revision:0})}).read(rootActor,order.productionOrderId)).rejects.toThrow('scope mismatch');
+  });
+  it.each(['before','after'] as const)('keeps historical and enrolled tail policies frozen when the legacy task is created %s a default change',async timing=>{
+    const legacySourceId=legacyPolicySources.get(timing)!;
+    const leader=actor(root,['root_superuser']),tasks=new DigitalProductionTaskService(database);
+    const createTail=async(id:string)=>{
+      const client=await database.connect();
+      try{
+        await client.query('BEGIN');
+        const task=await tasks.createWithClient(client,leader,{resource:{kind:'source',id},kind:'development_tail_check',routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:null});
+        // Readiness alone does not prove an actual completion/start time.
+        await tasks.setConditionWithClient(client,leader,task.taskId,'washing_finished',true,null);
+        await client.query('COMMIT');return task.taskId;
+      }catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+    };
+    const history=async(id:string)=>(await database.query('SELECT * FROM digital_production_deadline_revisions WHERE task_id=$1 ORDER BY revision_id',[id])).rows;
+    let legacyTaskId=timing==='before'?await createTail(legacySourceId):null;
+    const earlierHistory=legacyTaskId?await history(legacyTaskId):null;
+    // Explicitly initialize/read the standard in this case, even when run without the preceding cases.
+    const enrolledId=await source(),frozenPlan=await developmentSlaPlan(database,enrolledId);
+    const frozenConfig=(await database.query('SELECT * FROM digital_sla_configurations WHERE configuration_id=$1',[frozenPlan.configuration_id])).rows[0];
+    const frozenTail=frozenConfig.policy_refs_json.policies.development_tail_check;
+    const oldPolicies=(await database.query("SELECT * FROM digital_production_deadline_policies WHERE node_key='development_tail_check' ORDER BY version")).rows;
+    const policy=(await tasks.policies(leader)).find(row=>row.nodeKey==='development_tail_check')!;
+    const nextHours=policy.slaHours!+0.5;
+    const changed=await tasks.changePolicy(leader,'development_tail_check',{expectedVersion:policy.version,slaHours:nextHours,warningRatio:policy.warningRatio,note:'TEST only later sources'},randomUUID());
+    expect(changed).toMatchObject({scope:'new_orders',affectedTasks:0});
+    legacyTaskId??=await createTail(legacySourceId);
+    const enrolledTaskId=await createTail(enrolledId);
+    const nextId=await source(),nextPlan=await developmentSlaPlan(database,nextId),nextTaskId=await createTail(nextId);
+    expect(await tasks.read(leader,legacyTaskId)).toMatchObject({state:'ready',slaHours:4,policyVersion:1,enteredAt:null,dueAt:null});
+    expect(await tasks.read(leader,enrolledTaskId)).toMatchObject({state:'ready',slaHours:frozenPlan.parameters_json.development_tail_check.value.minutes/60,policyVersion:frozenTail.version,enteredAt:null,dueAt:null});
+    expect(await tasks.read(leader,nextTaskId)).toMatchObject({state:'ready',slaHours:nextHours,policyVersion:changed.version,enteredAt:null,dueAt:null});
+    expect(nextPlan.configuration_id).not.toBe(frozenPlan.configuration_id);
+    expect(nextPlan.parameters_json.development_tail_check.value).toEqual({kind:'duration',minutes:nextHours*60});
+    expect(await developmentSlaPlan(database,legacySourceId)).toBeNull();
+    expect(await developmentSlaPlan(database,enrolledId)).toEqual(frozenPlan);
+    expect((await database.query('SELECT * FROM digital_sla_configurations WHERE configuration_id=$1',[frozenPlan.configuration_id])).rows).toEqual([frozenConfig]);
+    expect((await database.query("SELECT * FROM digital_production_deadline_policies WHERE node_key='development_tail_check' ORDER BY version")).rows.slice(0,oldPolicies.length)).toEqual(oldPolicies);
+    expect((await history(legacyTaskId)).map(row=>row.policy_version)).toEqual([1]);
+    if(earlierHistory)expect(await history(legacyTaskId)).toEqual(earlierHistory);
+    expect((await database.query(`SELECT s.created_at<c.created_at AS historical,
+      t.created_at>c.created_at AS delayed FROM digital_production_sources s
+      CROSS JOIN digital_sla_configurations c CROSS JOIN digital_production_tasks t
+      WHERE s.source_id=$1 AND c.version=$2 AND t.task_id=$3`,[legacySourceId,changed.configurationVersion,enrolledTaskId])).rows).toEqual([{historical:true,delayed:true}]);
+    await expect(tasks.read(actor(other),legacyTaskId)).rejects.toMatchObject({statusCode:404});
   });
 });

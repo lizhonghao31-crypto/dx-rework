@@ -3586,7 +3586,7 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
     const fixture = await budgetFixture(), primary = merchandiserActor(), root = rootActor();
     const ready = (await exerciseBulkPreparation(database, fixture, service, attachments,
       { primary, manager: managerActor(), owner: ownerActor(), ie: ieActor(), root },
-      factoryId, craftId('净色车缝'), 'none', { cuttingProcess: 'in_house', stopAtReady: true }))!;
+      factoryId, craftId('净色车缝'), 'none', { cuttingProcess: 'in_house', stopAtReady: true, legacyDevelopment: true }))!;
     const { id, sourceId, instruction, bulk, people } = ready;
     for (const version of [2, 3, 4]) {
       const sheet = await instruction.read(primary, id);
@@ -3600,10 +3600,12 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
       origin: '客户新增要求', customerComment: 'TEST第2轮确认', internalProblem: '', explanation: '',
       categories: ['尺寸'], affectedNodes: ['纸样'], outputKind: '整件样板',
     } }, randomUUID());
-    await rounds.publish(fixture.designer, sourceId, { expectedDraftVersion: draft.draftVersion, basedOnRound: 1 }, randomUUID());
+    const publishedRound=await rounds.publish(fixture.designer, sourceId, { expectedDraftVersion: draft.draftVersion, basedOnRound: 1 }, randomUUID());
+    expect(publishedRound).toEqual({sourceId,roundNumber:2});
     await database.query("INSERT INTO digital_development_route_facts(fact_id,source_id,route_version,kind,payload,actor_id) VALUES($1,$2,2,'最终设计确认','{}',$3)", [randomUUID(), sourceId, fixture.designer.actorId]);
     await new DevelopmentExecutionService(database, true).customerSample(fixture.designer, sourceId, { routeVersion: 2, note: 'TEST第2轮客户确认' }, randomUUID());
     const fourth = await instruction.read(primary, id);
+    expect(fourth.sourceComparison).toMatchObject({sourceRound:2});
     const comparison=fourth.sourceComparison!;await instruction.reviewSource(primary,id,{expectedVersion:fourth.version,orderVersion:fourth.order.version,sourceRound:comparison.sourceRound,sourceVersion:comparison.sourceVersion,document:{...fourth.document,comments:'TEST制单v5核对开发第2轮'},decisions:comparison.groups.map(group=>({group,action:'retain' as const}))},randomUUID());
     await instruction.publish(primary, id, { expectedVersion: 5, orderVersion: fourth.order.version }, randomUUID());
     let prep = await bulk.read(primary, id);
@@ -4142,8 +4144,34 @@ runWithPostgres("sourcing PR03-PR05 PostgreSQL business chain", () => {
   it("ERP V3-039 searches and displays the order customer when its development source has no customer",async()=>{
     await exerciseBulkPreparation(database,await budgetFixture(),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()},factoryId,craftId("净色车缝"),'none',{cuttingProcess:'in_house',stopAtReady:true,sourceCustomerCode:null});
   });
+  it('SLA03 independent customer revision preserves the linked mother order and keeps worker access to its instruction',async()=>{
+    const fixture=await budgetFixture(),primary=merchandiserActor(),root=rootActor();
+    const ready=(await exerciseBulkPreparation(database,fixture,service,attachments,{primary,manager:managerActor(),owner:ownerActor(),ie:ieActor(),root},factoryId,craftId('净色车缝'),'none',{cuttingProcess:'in_house',stopAtReady:true}))!;
+    const {id,sourceId,instruction,bulk,people}=ready,worker=people.pattern_room_worker!;
+    const forms=new DigitalDevelopmentService(database,true),rounds=new DevelopmentRoundService(database,true),identity=new DigitalProductionIdentityService(database,true);
+    const original=await forms.read(fixture.designer,sourceId),beforeOrder=await identity.read(primary,id),beforeInstruction=await instruction.read(worker,id),beforePreparation=await bulk.read(primary,id);
+    const frozen=async()=>({
+      instructions:(await database.query('SELECT * FROM digital_instruction_versions WHERE production_order_id=$1 ORDER BY version',[id])).rows,
+      preparations:(await database.query('SELECT * FROM digital_bulk_preparations WHERE production_order_id=$1 ORDER BY preparation_id',[id])).rows,
+      tasks:(await database.query('SELECT t.* FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 OR a.source_id=$2 ORDER BY t.task_id',[id,sourceId])).rows,
+      plans:(await database.query('SELECT * FROM digital_development_sla_plans WHERE source_id=$1 ORDER BY revision',[sourceId])).rows,
+    });
+    const before=await frozen();
+    const draft=await rounds.save(fixture.designer,sourceId,{expectedDraftVersion:0,revision:{basedOnRound:1,document:{...original.document!,instructions:'TEST独立客户复版'},origin:'客户新增要求',customerComment:'TEST独立复版不改原母单',internalProblem:'',explanation:'',categories:['尺寸'],affectedNodes:['纸样'],outputKind:'整件样板'}},randomUUID());
+    const revision=await rounds.publish(fixture.designer,sourceId,{expectedDraftVersion:draft.draftVersion,basedOnRound:1},randomUUID());
+    expect(revision.sourceId).not.toBe(sourceId);expect(revision).toMatchObject({roundNumber:1,revisionNumber:1,status:'draft'});
+    expect(await forms.read(fixture.designer,revision.sourceId)).toMatchObject({status:'draft',productionOrderId:null,roundNumber:1});
+    expect(await forms.read(fixture.designer,sourceId)).toMatchObject({version:original.version,roundNumber:1,productionOrderId:id});
+    expect(await identity.read(primary,id)).toMatchObject({sourceId,version:beforeOrder.version,lines:beforeOrder.lines});
+    expect(await instruction.read(worker,id)).toMatchObject({version:beforeInstruction.version,sourceRound:1,latestSourceRound:1,document:beforeInstruction.document,canEdit:false});
+    expect((await instruction.read(primary,id)).sourceComparison).toBeUndefined();
+    expect(await bulk.read(primary,id)).toMatchObject({preparationId:beforePreparation.preparationId,instructionValid:true,customerConfirmed:true});
+    expect(await frozen()).toEqual(before);
+    await expect(forms.read(worker,revision.sourceId)).rejects.toMatchObject({statusCode:404});
+    await expect(new DigitalJourneyQuery(database).read(worker,revision.sourceId)).rejects.toMatchObject({statusCode:404});
+  });
   it.each(['none','pattern-first','preshrink-first','concurrent'] as const)("P11 releases exactly one whole-order cutting task with %s preparation",async mode=>{
-    await exerciseBulkPreparation(database,await budgetFixture(),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()},factoryId,craftId("净色车缝"),mode);
+    await exerciseBulkPreparation(database,await budgetFixture(),service,attachments,{primary:merchandiserActor(),manager:managerActor(),owner:ownerActor(),ie:ieActor(),root:rootActor()},factoryId,craftId("净色车缝"),mode,mode==='none'?{cuttingProcess:'in_house',stopAtReady:false,legacyDevelopment:true}:undefined);
   });
 
   it("V2 hides deleted native sourcing decisions and dead record links from Journey",async()=>{
