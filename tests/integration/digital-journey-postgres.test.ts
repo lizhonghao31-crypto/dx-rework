@@ -1,3 +1,4 @@
+import {SystemBusinessClock} from '@dx-rework/domain/business-clock';
 import { migrationExecutionSql } from "../../scripts/deploy/migration-execution-compatibility.mjs";
 import { DevelopmentDocumentSchema } from "@dx-rework/contracts/digital-development";
 import { DigitalDevelopmentService } from "../../apps/api/src/production-platform/development-service.js";
@@ -29,7 +30,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   const db=new pg.Pool({connectionString:databaseUrl,options:`-c search_path=${schema}`});
   const root=randomUUID(),designer=randomUUID(),stranger=randomUUID(),worker=randomUUID(),clerk=randomUUID(),tail=randomUUID(),merchandiser=randomUUID();
   const actor=(id=designer,roles=["sample_designer"]):TrustedActorContext=>({actorId:id,actorRoles:roles,authorizationCapability:"pattern_room:orders:create",authorizationCapabilities:["pattern_room:orders:create"],requestId:"TEST-v2-journey"});
-  const identity=new DigitalProductionIdentityService(db,true,undefined,()=>new Date("2026-09-01T00:00:00Z")),journeys=new DigitalJourneyQuery(db),tasks=new DigitalProductionTaskService(db);
+  const identity=new DigitalProductionIdentityService(db,true,undefined,()=>new Date("2026-09-01T00:00:00Z"),new SystemBusinessClock()),journeys=new DigitalJourneyQuery(db),tasks=new DigitalProductionTaskService(db);
   const input=(suffix="0001")=>DigitalOrderCreateSchema.parse({customerCode:"PD",productGroup:"男装",designStyleNo:`TEST-J-${suffix}`,temporaryStyleNo:`TEST-T-${suffix}`,orderDate:"2026-09-01",lines:[{poNumber:"PO-J1",color:"黑",sizes:[{size:"M",quantity:100}],deliveryDate:"2026-10-20"},{poNumber:"PO-J2",color:"白",sizes:[{size:"L",quantity:200}],deliveryDate:"2026-10-22"}]});
   const publishSource=async(sourceId:string)=>{
     const fileId=randomUUID();
@@ -113,7 +114,8 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
     const activate=await db.connect();try{await activate.query("BEGIN");await tasks.setConditionWithClient(activate,actor(root,["root_superuser"]),task.taskId,"materials_ready",true);await tasks.setConditionWithClient(activate,actor(root,["root_superuser"]),task.taskId,"handover_received",true);await activate.query("COMMIT");}catch(error){await activate.query("ROLLBACK");throw error;}finally{activate.release();}
     const current=await journeys.read(actor(),sourceId,undefined,true),older=await journeys.read(actor(),sourceId,1,true);
     const flowNode=older.flowStages?.flatMap(stage=>stage.nodes).find(node=>node.instanceId===task.taskId);
-    expect(older.selectedRound).toBe(1);expect(flowNode).toMatchObject({round:2,current:true});expect(flowNode?.expectedAt).toBeTruthy();
+    expect(older.selectedRound).toBe(1);expect(flowNode).toMatchObject({round:2,current:true});// Ready conditions do not prove a real R2 material-check completion.
+    expect(flowNode?.expectedAt).toBeNull();
     expect(flowNode?.expectedAt).toBe(current.flowStages?.flatMap(stage=>stage.nodes).find(node=>node.instanceId===task.taskId)?.expectedAt);
     expect(older.stages.flatMap(stage=>stage.nodes).find(node=>node.instanceId===task.taskId)?.current).toBe(false);
     expect(older.display).toEqual(current.display);expect(older.currentRiskNodes?.every(node=>node.stage!=="development"||node.round===2)).toBe(true);
@@ -358,7 +360,7 @@ const databaseUrl=process.env.TEST_DATABASE_URL;
   });
   it("resolves names only on visible task reassignment facts while preserving stable IDs",async()=>{
     const source=await identity.createSource(actor(),{developmentType:"头版",designStyleNo:"TEST-J-NAMED-HISTORY",temporaryStyleNo:null,customerCode:"PD"},randomUUID());
-    const {taskId}=await createTask({resource:{kind:"source",id:source.sourceId},kind:"development_cutting",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:null,conditions:["handover_received"]});
+    const {taskId}=await createTask({resource:{kind:"source",id:source.sourceId},kind:"development_pattern",routeId:randomUUID(),routeVersion:1,occurrence:1,assigneeId:null,conditions:["handover_received"]});
     await expect(tasks.reassign(actor(root,["root_superuser"]),taskId,worker,randomUUID())).rejects.toThrow('总委派');
     // Seed a real reassignment event via the transaction adapter used by total arrangement;
     // this test covers authorized history projection, not a second dispatch entry.

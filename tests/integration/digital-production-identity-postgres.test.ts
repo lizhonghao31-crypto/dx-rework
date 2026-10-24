@@ -319,7 +319,7 @@ run("digital production P01 identities", () => {
     const own = await app.inject({ method: "GET", url: `/digital-production/orders/${order.productionOrderId}`, headers: { cookie: `dx_rework_session=${designer}` } });
     expect(own.statusCode).toBe(200); expect(own.headers["cache-control"]).toBe("no-store");
   });
-  it("PR02 applies only selected PO promises, rejects spoofed/current-secondary roles and keeps legacy facts and stable quantities",async()=>{
+  it.each(["director","owner"] as const)("PR02 applies only selected PO promises, rejects spoofed/current-secondary roles and keeps legacy facts and stable quantities (%s)",async approver=>{
     const primary=randomUUID(),secondary=randomUUID(),director=randomUUID(),owner=randomUUID();
     for(const [id,role] of [[primary,"order_merchandiser"],[secondary,"order_merchandiser"],[director,"production_management"],[owner,"owner_group"]]){
       await database.query("INSERT INTO app_users(id,display_name) VALUES($1,'TEST PO dates')",[id]);
@@ -341,9 +341,10 @@ run("digital production P01 identities", () => {
     const prior=(await snap()).rows,key=randomUUID();
     const [request,retry]=await Promise.all([dates.request(p,id,inputDate,key),dates.request(p,id,inputDate,key)]);expect(retry).toEqual(request);
     await expect(dates.request(p,id,{...inputDate,reason:"different"},key)).rejects.toMatchObject({statusCode:409});
-    await expect(dates.decide(actor(owner,["owner_group"]),id,request.requestId,true,randomUUID())).rejects.toMatchObject({statusCode:403});
+    await expect(dates.decide(p,id,request.requestId,true,randomUUID())).rejects.toMatchObject({statusCode:403});
     await expect(dates.decide(actor(secondary,["production_management"]),id,request.requestId,true,randomUUID())).rejects.toMatchObject({statusCode:403});
-    const decisionKey=randomUUID();await dates.decide(m,id,request.requestId,true,decisionKey);await dates.decide(m,id,request.requestId,true,decisionKey);
+    const approvedBy=approver==="owner"?actor(owner,["owner_group"]):m;
+    const decisionKey=randomUUID();await dates.decide(approvedBy,id,request.requestId,true,decisionKey);await dates.decide(approvedBy,id,request.requestId,true,decisionKey);
     const current=await service.read(boss,id);expect(current.version).toBe(order.version+1);
     expect(current.lines.map(line=>line.customerWarehouseArrivalDate)).toEqual(["2026-12-10","2026-12-20",null]);
     expect(current.lines.map(line=>line.factoryDeliveryDate)).toEqual([null,null,null]);

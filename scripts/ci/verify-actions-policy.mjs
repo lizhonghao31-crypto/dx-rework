@@ -46,8 +46,8 @@ for (const [name, source] of [["Quick Gate", quick], ["Full Gate", full]]) {
 }
 
 assert(quick.includes("timeout-minutes: 5"), "Quick Gate timeout must stay at 5 minutes");
-const unifiedFullBudget="timeout-minutes: ${{ github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'unified-p') && 30 || 20 }}";
-assert(countOccurrences(full,'timeout-minutes:')===1&&full.includes(unifiedFullBudget),"Full Gate must retain a finite 30-minute budget only for same-repository unified-plan heads, otherwise 20 minutes");
+const fullBudget=/^ {4}timeout-minutes: 30[ \t]*$/m;
+assert(countOccurrences(full,'timeout-minutes:')===1&&fullBudget.test(full),"Full Gate must retain the explicitly approved finite 30-minute budget");
 assert(quick.includes("!startsWith(github.event.pull_request.title, '[FULL] ')"), "Quick Gate must skip FULL-title PRs before allocating its job");
 assert(stepBlock(quick, "Require explicit Quick Gate title").includes("[QUICK]"), "Quick Gate must require an explicit QUICK title");
 assert(full.includes("startsWith(github.event.pull_request.title, '[FULL] ')"), "Full Gate must run only for FULL-title PRs");
