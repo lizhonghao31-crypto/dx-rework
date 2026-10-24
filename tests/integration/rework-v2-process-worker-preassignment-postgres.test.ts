@@ -1,3 +1,5 @@
+import {WholeOrderReviewService} from '../../apps/api/src/rework/whole-order-review-service.js';
+import {nativeReworkExecutionRows} from '../../apps/api/src/production-platform/rework-sla-evidence.js';
 import { ReworkBusinessDetailService } from "../../apps/api/src/rework/rework-business-detail-service.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { randomUUID } from "node:crypto";
@@ -354,6 +356,36 @@ runWithPostgres("PR-04 unified execution PostgreSQL", () => {
       "UPDATE rework_process_worker_plans SET planned_by=$2 WHERE configuration_id=$1",
       [configurationId, ids.owner],
     )).rejects.toMatchObject({ code: "55000" });
+  });
+
+  it('SLA08 ends the original worker round before pending tail inspection and finance without adding receipt quantity',async()=>{
+    const order=await createSubmittedOrder('SLA08-WORK-ONLY'),id=order.value.reworkOrderId;
+    const saved=await saveConfiguration(id,order.value.version),config=saved.value.configuration!;
+    const workerItem=config.items.find(i=>i.executionKind==='worker')!,tailItem=config.items.find(i=>i.executionKind==='tail_inspection')!;
+    await workerPlan.save(tailAssign(),id,{expectedOrderVersion:saved.value.orderVersion,configurationId:config.configurationId,expectedConfigurationVersion:config.configurationVersion,assignments:[{configurationItemId:workerItem.configurationItemId,memberIds:[workerPersonId]},{configurationItemId:tailItem.configurationItemId,memberIds:[tailPersonId]}]},randomUUID());
+    const submitted=await configuration.submit(tailConfigure(),id,{expectedOrderVersion:saved.value.orderVersion,expectedConfigurationVersion:config.configurationVersion,tailInspectors:[]},randomUUID());
+    const approved=await configuration.review(ie(),id,{expectedOrderVersion:submitted.value.orderVersion,expectedConfigurationVersion:config.configurationVersion,decision:'approved'},randomUUID());
+    await workerPlan.activateAfterIeApproval(id,approved.value.configuration!.configurationVersion,randomUUID());
+    const before=(await nativeReworkExecutionRows(database,[id]))[0];expect(before).toMatchObject({status:'in_progress',special_process_type:'inspection',task_count:1,completed_tasks:0});expect(before.started_at).toBeTruthy();
+    const rootReport=await businessActor(rootAuthority,{id:ids.root,displayName:'Root',capabilities:[],businessRoles:[]},randomUUID(),'work:report_for_worker','tail_supervisor');
+    const view=await workReporting.list(rootReport,id),workerTask=view.tasks.find(t=>t.executionKind==='worker')!;
+    const receiptCount=(await database.query('SELECT count(*)::int n FROM receiving_receipts')).rows[0].n;
+    await workReporting.submitReportsBatch(rootReport,id,{expectedOrderVersion:view.orderVersion,reports:[{workTaskId:workerTask.workTaskId,actualQuantity:1}]},randomUUID());
+    const after=(await nativeReworkExecutionRows(database,[id]))[0];
+    expect(after).toMatchObject({status:'in_progress',task_count:1,completed_tasks:1,item_count:1,assigned_items:1});expect(after.completed_at).toBeTruthy();expect(after.started_at).toEqual(before.started_at);
+    expect((await database.query("SELECT count(*)::int n FROM rework_work_reports report JOIN rework_process_configuration_items item USING(configuration_item_id) WHERE report.rework_order_id=$1 AND item.execution_kind='tail_inspection'",[id])).rows[0].n).toBe(0);
+    expect((await database.query('SELECT count(*)::int n FROM receiving_receipts')).rows[0].n).toBe(receiptCount);
+    const beforeTail=await workReporting.list(rootReport,id),tailTask=beforeTail.tasks.find(t=>t.executionKind==='tail_inspection')!;
+    await workReporting.submitReportsBatch(rootReport,id,{expectedOrderVersion:beforeTail.orderVersion,reports:[{workTaskId:tailTask.workTaskId,actualQuantity:1}]},randomUUID());
+    const originalReport=(await database.query('SELECT work_report_id FROM rework_work_reports WHERE work_task_id=$1',[workerTask.workTaskId])).rows[0].work_report_id;
+    const auditor=await businessActor(rootAuthority,{id:ids.root,displayName:'Root',capabilities:[],businessRoles:[]},randomUUID(),'submission:audit','tail_supervisor');
+    await new WholeOrderReviewService(database).rejectReport(auditor,originalReport,{expectedOrderVersion:(await workReporting.list(rootReport,id)).orderVersion,rejectedPersonId:workerPersonId,reason:'TEST作业退回，不能继续使用原完工'},randomUUID());
+    const rejected=(await nativeReworkExecutionRows(database,[id]))[0];expect(rejected.completed_tasks).toBe(0);expect(rejected.started_at).toEqual(before.started_at);
+    const returned=await workReporting.list(rootReport,id);
+    await workReporting.submitReportsBatch(rootReport,id,{expectedOrderVersion:returned.orderVersion,reports:[{workTaskId:workerTask.workTaskId,actualQuantity:1,resubmitsWorkReportId:originalReport}]},randomUUID());
+    const redone=(await nativeReworkExecutionRows(database,[id]))[0];expect(redone.completed_tasks).toBe(1);expect(redone.started_at).toEqual(before.started_at);expect(new Date(redone.completed_at).getTime()).toBeGreaterThanOrEqual(new Date(after.completed_at).getTime());
+    expect((await database.query('SELECT count(*)::int n FROM receiving_receipts')).rows[0].n).toBe(receiptCount);
+
   });
 
   it("lets Root save and batch-report a mixed worker and tail plan without ordinary role assignments", async () => {

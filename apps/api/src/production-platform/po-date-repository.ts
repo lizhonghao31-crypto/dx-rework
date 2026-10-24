@@ -28,7 +28,8 @@ export class DigitalPoDateRepository {
       const permitted = source === "initial_po"
         ? actor.actorRoles.includes("sample_designer") && await policy.activeRole(actor.actorId,"sample_designer")
         : source === "approved_customer_change"
-          ? actor.actorRoles.includes("production_management") && await policy.activeRole(actor.actorId,"production_management")
+          ? (actor.actorRoles.includes("production_management") && await policy.activeRole(actor.actorId,"production_management")
+            || actor.actorRoles.includes("owner_group") && await policy.activeRole(actor.actorId,"owner_group"))
           : actor.actorRoles.includes("production_management") && actor.authorizationCapability === "sourcing:decision:record"
             && await policy.activeRole(actor.actorId,"production_management")
             || actor.actorRoles.includes("owner_group") && actor.authorizationCapability === "sourcing:owner:approve"

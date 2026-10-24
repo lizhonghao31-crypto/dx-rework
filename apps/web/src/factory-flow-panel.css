@@ -16,3 +16,13 @@
 .factory-po-focused{border-left:3px solid #0065ff;padding-left:12px;scroll-margin-top:16px;}.factory-flow input[type=file]{max-width:100%;min-width:0;width:100%;box-sizing:border-box;}
 
 .factory-qc-images{display:flex;flex-wrap:wrap;gap:8px;}.factory-qc-images img{width:80px;height:80px;object-fit:contain;}
+
+.factory-batch-scope{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:12px}.factory-batch-panel>section>form{display:block}.factory-batch-panel details{margin:8px 0}.factory-batch-panel details[open]>label{margin-top:10px}
+
+.factory-flow .factory-batch-qc{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.factory-batch-qc>h4,.factory-batch-qc>details,.factory-batch-qc>.factory-qc-images{grid-column:1/-1}.factory-batch-panel textarea{min-height:64px}@media(max-width:640px){.factory-flow .factory-batch-qc{grid-template-columns:minmax(0,1fr)}}
+
+.factory-batch-qc>label:has(select){grid-column:1/-1}
+
+.factory-flow .ship-sample-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.ship-sample-fields>label:last-child{grid-column:1/-1}@media(max-width:640px){.factory-flow .ship-sample-fields{grid-template-columns:minmax(0,1fr)}}
+
+.factory-flow .factory-production-qc form{display:block}.factory-production-qc fieldset>label{max-width:24rem}.factory-production-qc .factory-batch-qc>label:has(select){grid-column:auto}.factory-production-qc .factory-batch-qc>p{grid-column:1/-1}

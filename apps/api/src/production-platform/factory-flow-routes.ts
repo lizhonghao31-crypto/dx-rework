@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { CreateUploadIntentSchema } from "@dx-rework/contracts";
-import {FactoryLogisticsSchema,FactoryQcSchema,FactoryDispatchSchema,FactoryFollowupSchema} from "@dx-rework/contracts/factory-flow";
+import {FactoryProductionQcSchema,FactoryLogisticsSchema,FactoryQcSchema,FactoryDispatchSchema,FactoryFollowupSchema} from "@dx-rework/contracts/factory-flow";
 import { businessActor } from "../access/business-authority.js";
 import { ApplicationError } from "../platform/errors.js";
 import type { AttachmentService } from "../tools/attachments.js";
@@ -15,6 +15,7 @@ export function registerFactoryFlowRoutes(app: FastifyInstance, dependencies: Di
   const base="/digital-production/orders/:orderId/factory-flow";
   app.get(base,async request=>service.read(await actor(request),id(request,"orderId")));
   app.post(`${base}/logistics`,async request=>service.logistics(await actor(request),id(request,"orderId"),parse(FactoryLogisticsSchema,request.body),key(request)));
+  app.post(`${base}/production-qc`,async request=>service.productionQc(await actor(request),id(request,"orderId"),parse(FactoryProductionQcSchema,request.body),key(request)));
   app.post(`${base}/qc`,async request=>service.qc(await actor(request),id(request,"orderId"),parse(FactoryQcSchema,request.body),key(request)));
   app.post(`${base}/dispatch`,async request=>service.dispatch(await actor(request),id(request,"orderId"),parse(FactoryDispatchSchema,request.body),key(request)));
   app.post(`${base}/followup`,async request=>service.followup(await actor(request),id(request,"orderId"),parse(FactoryFollowupSchema,request.body),key(request)));

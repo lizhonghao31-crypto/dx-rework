@@ -1,3 +1,4 @@
+import {developmentRevisionSource,inheritedDevelopmentFile} from './development-revision-source.js';
 import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
 import {DevelopmentAmendmentService} from "./development-amendment-service.js";
 import {developmentDraftForSave} from "./development-document-format.js";
@@ -17,11 +18,13 @@ import { ApplicationError } from "../platform/errors.js";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound } from "./access-policy.js";
 import { DigitalProductionTaskService } from "./task-service.js";
+import { captureDevelopmentSla, developmentSlaPlan } from "./development-sla-enrollment.js";
+import type { BusinessClock } from "@dx-rework/domain/business-clock";
 
 type Database = Pick<Pool | PoolClient, "query">;
 const conflict = (message: string): never => { throw new ApplicationError("DEVELOPMENT_CONFLICT", message, 409); };
 export class DigitalDevelopmentService {
-  constructor(private readonly database: Pool, private readonly creationEnabled: boolean, private readonly patternOrders?:PatternRoomOrderService, private readonly now:()=>Date=()=>new Date()) {}
+  constructor(private readonly database: Pool, private readonly creationEnabled: boolean, private readonly patternOrders?:PatternRoomOrderService, private readonly now:()=>Date=()=>new Date(), private readonly businessClock?:BusinessClock) {}
   private async source(db: Database, actor: TrustedActorContext, sourceId: string, write = false) {
     const source = (await db.query("SELECT s.*,u.display_name AS designer_name FROM digital_production_sources s JOIN app_users u ON u.id=s.created_by WHERE s.source_id=$1", [sourceId])).rows[0] ?? digitalNotFound();
     const owner = isRootActor(actor) || (actor.actorRoles.includes("sample_designer") && source.created_by === actor.actorId && (actor.authorizationCapabilities ?? []).includes("pattern_room:orders:create"));
@@ -37,7 +40,7 @@ export class DigitalDevelopmentService {
   async authorizeUpload(actor: TrustedActorContext, sourceId: string) { await this.source(this.database, actor, sourceId, true); }
   async canDownload(actor: TrustedActorContext, sourceId: string, attachmentId: string): Promise<boolean> {
     await this.source(this.database, actor, sourceId);
-    return Boolean((await this.database.query("SELECT 1 FROM digital_development_attachment_bindings WHERE source_id=$1 AND attachment_id=$2", [sourceId, attachmentId])).rowCount);
+    return Boolean((await this.database.query("SELECT 1 FROM digital_development_attachment_bindings WHERE source_id=$1 AND attachment_id=$2", [sourceId, attachmentId])).rowCount)||await inheritedDevelopmentFile(this.database,sourceId,attachmentId);
   }
   async read(actor: TrustedActorContext, sourceId: string, db: Database = this.database, roundNumber?: number): Promise<DevelopmentSheet> {
     const source = await this.source(db, actor, sourceId);
@@ -50,7 +53,7 @@ export class DigitalDevelopmentService {
     let document=row?.document??null;
     if(document?.customerOrderDraft&&!source.can_view_order_draft){document={...document};delete document.customerOrderDraft;}
     const effectiveMaterials=row?.status==="published"&&(await db.query("SELECT to_regclass('digital_development_execution_facts') AS relation")).rows[0]?.relation?(await materialReadiness(db,sourceId,row.round_number??1)).materials:[];
-    return { developmentCreatedDate:beijingCalendarDate(new Date(source.created_at)), metadata:await documentMetadata(db,row?.revision??row), materialReadiness:effectiveMaterials, sourceId, productionOrderId, designStyleNo: source.design_style_no, temporaryStyleNo: source.temporary_style_no, customerCode: source.customer_code,
+    return { revisionSource:await developmentRevisionSource(db,sourceId),independentRevisions:Boolean(await developmentSlaPlan(db,sourceId)),developmentCreatedDate:beijingCalendarDate(new Date(source.created_at)), metadata:await documentMetadata(db,row?.revision??row), materialReadiness:effectiveMaterials, sourceId, productionOrderId, designStyleNo: source.design_style_no, temporaryStyleNo: source.temporary_style_no, customerCode: source.customer_code,
       developmentType: source.development_type, designerName: source.designer_name, version: row?.version ?? 0, status: row?.status ?? "draft",
       document, publishedAt: row?.published_at ? new Date(row.published_at).toISOString() : null, taskId: row?.task_id ?? null,
       canRevise:source.can_edit,roundNumber:row?.round_number??1,latestRoundNumber:row?.latest_round_number??1,canEdit: source.can_edit && (!row || row.round_number===row.latest_round_number), materialEvents };
@@ -81,6 +84,7 @@ export class DigitalDevelopmentService {
       const row = (await db.query("SELECT * FROM attachments WHERE attachment_id=$1 FOR UPDATE", [file.attachmentId])).rows[0];
       if (!row || row.status !== "ready" || !["image/jpeg","image/png","image/webp","application/pdf"].includes(row.mime_type)) conflict("附件必须是已上传完成的图片或 PDF");
       if (["款图","局部图"].includes(file.kind) && !row.mime_type.startsWith("image/")) conflict("款图和局部图请使用图片");
+      if(await inheritedDevelopmentFile(db,sourceId,file.attachmentId))continue;
       if (row.entity_type ? row.entity_type !== "digital_development" || row.entity_id !== sourceId : row.uploaded_by !== actor.actorId) digitalForbidden();
       await db.query("UPDATE attachments SET entity_type='digital_development',entity_id=$2,updated_at=CURRENT_TIMESTAMP WHERE attachment_id=$1", [file.attachmentId, sourceId]);
       await db.query("INSERT INTO digital_development_attachment_bindings(attachment_id,source_id,bound_by) VALUES($1,$2,$3) ON CONFLICT DO NOTHING", [file.attachmentId, sourceId, actor.actorId]);
@@ -93,6 +97,7 @@ export class DigitalDevelopmentService {
       if (row?.status === "published") conflict("已发布开发单不可覆盖，请通过复版记录实际修改");
       const source=(await db.query("SELECT created_at FROM digital_production_sources WHERE source_id=$1",[sourceId])).rows[0];
       const document=developmentDraftForSave(input.document,row?.document,source.created_at);
+      if(document.customerOrderDraft?.withOrder&&await developmentRevisionSource(db,sourceId))conflict('复版沿原开发档案的客户订单，不重复填写大货数量');
       await validateAuxiliaryReferences(db,document,row?.document);
       await this.bindFiles(db, actor, sourceId, document);
       await db.query(`INSERT INTO digital_development_documents(source_id,version,status,document,updated_by) VALUES($1,1,'draft',$2,$3)
@@ -120,15 +125,26 @@ export class DigitalDevelopmentService {
         const dateErrors=initialCustomerDateErrors(parsed.data.lines,minimumInitialCustomerDate(now));
         if(dateErrors.length)throw new ApplicationError("VALIDATION_ERROR",dateErrors.join("；"),400);
       }
-      if(this.patternOrders&&!patternOrder)conflict("请先选择有效打板品类与执行价，再正式提交开发单");
+      const craftPiece=(await developmentRevisionSource(db,sourceId))?.outputKind==='工艺布片';
+      if(this.patternOrders&&!patternOrder&&!craftPiece)conflict("请先选择有效打板品类与执行价，再正式提交开发单");
+      if(patternOrder&&craftPiece)conflict('工艺布片不建立整件车板执行，请刷新本单');
       if(patternOrder&&!this.patternOrders)conflict("打板执行衔接服务未配置");
       await this.bindFiles(db, actor, sourceId, row.document);
+      const time = this.businessClock ? await this.businessClock.read({ kind: "source", id: sourceId })
+        : { now: this.now().toISOString(), scenarioId: null, revision: 0 };
+      // Only sources enrolled at creation receive the new rules. Publishing a legacy draft is not enrollment.
+      if (await developmentSlaPlan(db, sourceId)) await captureDevelopmentSla(db, actor, sourceId, row.document, time, `development-publish:${sourceId}:${key}`);
       const candidates = (await db.query(`SELECT DISTINCT u.id FROM app_users u JOIN user_role_assignments r ON r.user_id=u.id AND r.revoked_at IS NULL
         WHERE u.enabled AND r.role_code='development_clerk' ORDER BY u.id`)).rows;
       const eligible: string[] = [];
       for (const user of candidates) if (await new DigitalProductionAccessPolicy(db).activeRole(user.id, "development_clerk")) eligible.push(user.id);
       const { taskId } = await new DigitalProductionTaskService(this.database).createWithClient(db, actor, { resource: { kind: "source", id: sourceId }, kind: "development_materials", routeId: randomUUID(), routeVersion: 1, occurrence: 1, assigneeId: eligible.length === 1 ? eligible[0]! : null });
-      await db.query("UPDATE digital_development_documents SET status='published',published_at=CURRENT_TIMESTAMP,task_id=$2,version=version+1,updated_by=$3,updated_at=CURRENT_TIMESTAMP WHERE source_id=$1", [sourceId, taskId, actor.actorId]);
+      await db.query("UPDATE digital_development_documents SET status='published',published_at=$4,task_id=$2,version=version+1,updated_by=$3,updated_at=CURRENT_TIMESTAMP WHERE source_id=$1", [sourceId, taskId, actor.actorId, time.now]);
+      if (await developmentSlaPlan(db,sourceId)) {
+        const designer=(await db.query("SELECT created_by FROM digital_production_sources WHERE source_id=$1",[sourceId])).rows[0].created_by;
+        await new DigitalProductionTaskService(this.database).createWithClient(db,actor,{resource:{kind:"source",id:sourceId},kind:"development_shipping",routeId:randomUUID(),routeVersion:1,occurrence:1,
+          assigneeId:await new DigitalProductionAccessPolicy(db).activeRole(designer,"sample_designer")?designer:null});
+      }
       if(patternOrder)await this.patternOrders!.inTransaction(db).createDevelopment(actor,sourceId,patternOrder.categoryId,patternOrder.priceVersion,`development-publish:${createHash("sha256").update(`${sourceId}:${key}`).digest("hex")}`);
       return this.read(actor, sourceId, db);
     });

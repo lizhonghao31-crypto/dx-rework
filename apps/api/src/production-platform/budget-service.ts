@@ -32,9 +32,11 @@ export class DigitalBudgetService {
     const order = (await db.query(`SELECT o.*,u.display_name AS designer_name,m.display_name AS merchandiser_name
       FROM digital_production_orders o JOIN app_users u ON u.id=o.created_by
       LEFT JOIN app_users m ON m.id=o.primary_merchandiser_id WHERE o.production_order_id=$1`, [orderId])).rows[0] ?? digitalNotFound();
-    const canEdit = isRootActor(actor) || actor.actorRoles.includes("sample_designer") && order.created_by === actor.actorId;
-    if (write && !canEdit) throw new ApplicationError("FORBIDDEN","预算由本单设计师或Root维护；当前身份可查看但不能修改，请在本单预算页联系原设计师核对",403);
-    return { ...order, canEdit };
+    const ownMerchandiser = actor.actorRoles.includes("order_merchandiser") && order.primary_merchandiser_id === actor.actorId
+      && await new DigitalProductionAccessPolicy(db).activeRole(actor.actorId,"order_merchandiser");
+    const canEdit = isRootActor(actor) || actor.actorRoles.includes("sample_designer") && order.created_by === actor.actorId || ownMerchandiser;
+    if (write && !canEdit) throw new ApplicationError("FORBIDDEN","仅本单设计师、跟单或Root可维护预算草稿",403);
+    return { ...order, canEdit, canPublish: isRootActor(actor) || ownMerchandiser };
   }
   async read(actor: TrustedActorContext, orderId: string, db: Database = this.database, version?: number): Promise<BudgetSheet> {
     const order = await this.order(db, actor, orderId);
@@ -42,7 +44,8 @@ export class DigitalBudgetService {
     const row = (await db.query(version === undefined ? "SELECT * FROM digital_budget_documents WHERE production_order_id=$1" : "SELECT *, 'published' AS status FROM digital_budget_versions WHERE production_order_id=$1 AND version=$2", version === undefined ? [orderId] : [orderId, version])).rows[0];
     if (version !== undefined && !row) digitalNotFound();
     return { metadata:await documentMetadata(db,row), versions:(await db.query("SELECT version FROM digital_budget_versions WHERE production_order_id=$1 ORDER BY version DESC",[orderId])).rows.map(item=>item.version), productionOrderId: orderId, version: row?.version ?? 0, status: row?.status ?? "draft", document: row?.document ?? null,
-      totals: row ? calculateBudget(row.document) : null, canEdit: order.canEdit && !linked && version === undefined && (Boolean(row) || this.creationEnabled),
+      totals: row ? calculateBudget(row.document) : null, canEdit: order.canEdit && !linked && row?.status !== "published" && version === undefined && (Boolean(row) || this.creationEnabled),
+      canPublish: order.canPublish && !linked && row?.status !== "published" && version === undefined && (Boolean(row) || this.creationEnabled),
       canSubmitSourcing: !linked && row?.status === "published" && (isRootActor(actor) || actor.actorRoles.includes("order_merchandiser") && order.primary_merchandiser_id === actor.actorId),
       sourcingCaseId: linked?.child_id ?? null, publishedAt: row?.published_at ? new Date(row.published_at).toISOString() : null,
       designerName: order.designer_name, merchandiserName: order.merchandiser_name ?? null };
@@ -61,7 +64,8 @@ export class DigitalBudgetService {
       if (prior && prior.payload_hash !== hash) conflict("同一操作标识不能用于不同内容");
       if (prior) { await db.query("COMMIT"); return prior.response as T; }
       const sheet = await this.read(actor, orderId, db);
-      if (!sheet.canEdit) conflict(sheet.sourcingCaseId ? "已进入外发审批，请通过原外发预算更正入口处理" : "预算新建尚未启用；请设计师保留本单资料，由管理员核对当前环境预算功能后再从本单预算页新建");
+      if (action === "publish" && !sheet.canPublish) throw new ApplicationError("FORBIDDEN","预算由本单跟单最终发布，发布后内容冻结",403);
+      if (!sheet.canEdit) conflict(sheet.status === "published" ? "预算已最终发布并冻结，请查看已发布版本" : sheet.sourcingCaseId ? "已进入外发审批，请通过原外发预算更正入口处理" : "预算新建尚未启用，请管理员核对当前环境设置");
       const lifecycle = (await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind='order' AND resource_id=$1", [orderId])).rows[0];
       if (lifecycle && lifecycle.state !== "active") conflict(lifecycle.state === "paused" ? "母单已暂停，预算暂不能修改；请本单负责人在原任务入口核对暂停原因，由原有权岗位恢复后再办理" : lifecycle.state === "cancelled" ? "母单已取消，不能继续修改本单预算；请本单负责人核对原取消记录，历史预算与批准依据保留" : "母单当前状态未确认，暂不能修改预算；请重新读取原单，仍异常请管理员核查");
       const result = await work(db);
@@ -90,7 +94,7 @@ export class DigitalBudgetService {
   async save(actor: TrustedActorContext, orderId: string, input: { expectedVersion: number; document: BudgetDocument }, key: string) {
     return this.command(actor, orderId, "save", key, input, async db => {
       const row = (await db.query("SELECT version FROM digital_budget_documents WHERE production_order_id=$1", [orderId])).rows[0];
-      if ((row?.version ?? 0) !== input.expectedVersion) conflict("预算已更新，本次未覆盖；请本单设计师在预算页重新读取最新版本，核对后再保存");
+      if ((row?.version ?? 0) !== input.expectedVersion) conflict("预算已更新，本次未覆盖；请本单设计师或跟单在预算页重新读取最新版本，核对后再保存");
       await this.bindFiles(db, actor, orderId, input.document);
       await db.query(`INSERT INTO digital_budget_documents(production_order_id,version,status,document,updated_by) VALUES($1,1,'draft',$2,$3)
         ON CONFLICT(production_order_id) DO UPDATE SET version=digital_budget_documents.version+1,status='draft',document=EXCLUDED.document,updated_by=EXCLUDED.updated_by,updated_at=CURRENT_TIMESTAMP,published_at=NULL`, [orderId, JSON.stringify(input.document), actor.actorId]);
@@ -99,11 +103,11 @@ export class DigitalBudgetService {
   }
   async publish(actor: TrustedActorContext, orderId: string, expectedVersion: number, key: string) {
     return this.command(actor, orderId, "publish", key, { expectedVersion }, async db => {
-      const row = (await db.query("SELECT * FROM digital_budget_documents WHERE production_order_id=$1", [orderId])).rows[0] ?? conflict("请先在本单预算页保存预算草稿，再由本单设计师核对并发布；草稿保存本身不会发起外发");
-      if (row.version !== expectedVersion) conflict("预算已更新，本次未发布；请本单设计师在预算页重新读取最新草稿，核对后再发布");
+      const row = (await db.query("SELECT * FROM digital_budget_documents WHERE production_order_id=$1", [orderId])).rows[0] ?? conflict("请先在本单预算页保存预算草稿，再由本单跟单核对并最终发布；草稿保存本身不会发起外发");
+      if (row.version !== expectedVersion) conflict("预算已更新，本次未发布；请本单跟单在预算页重新读取最新草稿，核对后再发布");
       if (row.status === "published") return this.read(actor, orderId, db);
       const errors = budgetPublishErrors(row.document);
-      if (errors.length) throw new ApplicationError("VALIDATION_ERROR", `${errors.join("；")}；请本单设计师在预算页逐项补齐后重新发布`, 400);
+      if (errors.length) throw new ApplicationError("VALIDATION_ERROR", `${errors.join("；")}；请本单设计师或跟单在预算页逐项补齐后重新发布`, 400);
       await this.bindFiles(db, actor, orderId, row.document);
       await db.query("INSERT INTO digital_budget_versions(production_order_id,version,document,totals,published_by) VALUES($1,$2,$3,$4,$5)", [orderId, row.version, JSON.stringify(row.document), JSON.stringify(calculateBudget(row.document)), actor.actorId]);
       await db.query("UPDATE digital_budget_documents SET status='published',published_at=CURRENT_TIMESTAMP,updated_by=$2 WHERE production_order_id=$1", [orderId, actor.actorId]);

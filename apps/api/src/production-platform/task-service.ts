@@ -1,4 +1,12 @@
+import {SlaOrderApplicationService} from './sla-order-application.js';
+import {SlaSettingsService,type StandardDraft} from './sla-settings-service.js';
+import {factoryProductionFacts} from './factory-production-facts.js';
+import {shipSampleTargets} from './ship-sample-timing.js';
+import {factoryTaskTiming,factoryBatchTiming} from './factory-batch-timing.js';
+import {bulkTaskTiming} from "./bulk-task-timing.js";
 import {DEVELOPMENT_ARRANGEABLE_KINDS} from "@dx-rework/contracts/development-arrangement";
+import {developmentTaskTiming} from "./development-task-timing.js";
+import {developmentSlaPlan} from "./development-sla-enrollment.js";
 import {isNativeRootSewingRecipient} from './development-native-recipient.js';
 import {authorizePatternOrder} from '../pattern-room/order-authority.js';
 import {activateInitialDevelopmentExecution} from "./development-native-activation.js";
@@ -9,8 +17,9 @@ import {materialReadiness} from "./development-material-readiness.js";
 import { hasWarehouseReceivingRole } from "@dx-rework/contracts";
 import {FactoryFlowService} from "./factory-flow-service.js";
 import type { DigitalTaskState, DigitalTimeQuality } from "@dx-rework/contracts/digital-production-tasks";
-import {developmentRoute} from "./development-route.js";
+import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import { createHash, randomUUID } from "node:crypto";
+import {isDeepStrictEqual} from "node:util";
 import type { Pool, PoolClient } from "pg";
 import type { TrustedActorContext } from "../tools/repositories.js";
 import { ApplicationError } from "../platform/errors.js";
@@ -18,6 +27,11 @@ import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDig
 import { createDigitalTaskAccess, reassignDigitalTask, type DigitalTaskKind } from "./task-access-repository.js";
 import { digitalDeadline } from "@dx-rework/domain/digital-task-deadline";
 import { ProductionOrderNodeClockRepository } from "./node-clock-repository.js";
+import { DIGITAL_SLA_PARAMETERS } from "@dx-rework/contracts/digital-sla";
+import { SlaConfigurationRepository, SlaVersionConflict } from "./sla-configuration-repository.js";
+import { SlaConfigurationService } from "./sla-configuration-service.js";
+import { slaParameterKey } from "./sla-policy-values.js";
+import { frozenSlaTaskPolicy } from "./sla-task-policy.js";
 
 type Resource = { kind: "order" | "source"; id: string };
 type TimeQuality = "现场登记" | "补报未核实" | "已核实" | "缺失";
@@ -83,10 +97,33 @@ export class DigitalProductionTaskService {
     await client.query("INSERT INTO digital_production_event_intents(event_id,task_id,event_kind) VALUES($1,$2,$3)", [eventId, taskId, kind]);
     return eventId;
   }
-  private async policy(client: PoolClient | Pick<Pool, "query">, key: string) {
+  private async policy(client: PoolClient | Pick<Pool, "query">, key: string, taskId?: string) {
+    if (taskId) {
+      const frozen = await frozenSlaTaskPolicy(client, taskId, key);
+      if (frozen) return frozen;
+    }
     return (await client.query("SELECT * FROM digital_production_deadline_policies WHERE node_key=$1 ORDER BY version DESC LIMIT 1", [key])).rows[0] ?? digitalNotFound();
   }
-  private async revision(client: PoolClient, actor: TrustedActorContext, taskId: string, policy: { node_key: string; version: number; sla_seconds: string | number | null; warning_ratio: string | number }, enteredAt: string | null, reason: string, eventId: string) {
+  private async revision(client: PoolClient, actor: TrustedActorContext, taskId: string, policy: { node_key: string; version: number; sla_seconds: string | number | null; warning_ratio: string | number }, enteredAt: string | null, reason: string, eventId: string, timingOverride?:Awaited<ReturnType<typeof factoryTaskTiming>>) {
+    const task=await this.task(client,taskId);
+    if(task.task_kind==='bulk_ship_sample'&&task.production_order_id){
+      const targets=await shipSampleTargets(client,task.production_order_id);
+      if(targets.snapshotId){
+        const remaining=targets.lines.filter(l=>!l.sent);
+        const dueAt=(remaining.length?remaining:targets.lines).map(l=>l.dueAt).filter((d):d is string=>d!==null).sort()[0]??null;
+        const deadline={warningAt:null,dueAt};
+        await client.query(`INSERT INTO digital_production_deadline_revisions(task_id,policy_node_key,policy_version,entered_at,warning_at,due_at,reason,event_id,changed_by,sla_basis,deadline_kind)
+          VALUES($1,$2,$3,NULL,NULL,$4,$5,$6,$7,$8,'date_target')`,[taskId,policy.node_key,policy.version,dueAt,reason,eventId,actor.actorId,JSON.stringify({snapshotId:targets.snapshotId,parameterKey:'ship_sample_advance',precision:'date',exclusive:true,targets:targets.lines})]);
+        return deadline;
+      }
+    }
+    const timing=timingOverride??await developmentTaskTiming(client,task)??await bulkTaskTiming(client,task)??await factoryTaskTiming(client,task);
+    if(timing){
+      const deadline=digitalDeadline(timing.enteredAt,timing.seconds,timing.warningRatio);
+      await client.query(`INSERT INTO digital_production_deadline_revisions(task_id,policy_node_key,policy_version,entered_at,warning_at,due_at,reason,event_id,changed_by,sla_basis)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,[taskId,policy.node_key,policy.version,timing.enteredAt,deadline.warningAt,deadline.dueAt,reason,eventId,actor.actorId,JSON.stringify(timing)]);
+      return deadline;
+    }
     const deadline = digitalDeadline(enteredAt, policy.sla_seconds === null ? null : Number(policy.sla_seconds), Number(policy.warning_ratio));
     await client.query(`INSERT INTO digital_production_deadline_revisions(task_id,policy_node_key,policy_version,entered_at,warning_at,due_at,reason,event_id,changed_by)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [taskId, policy.node_key, policy.version, enteredAt, deadline.warningAt, deadline.dueAt, reason, eventId, actor.actorId]);
@@ -123,7 +160,9 @@ export class DigitalProductionTaskService {
     else if (facts.count > 0) {occurredAt = iso(facts.latest_at);quality=facts.has_unverified?'补报未核实':facts.all_verified?'已核实':'现场登记';}
     if (occurredAt === null) quality = "缺失";
     else if (quality === "缺失") quality = "补报未核实";
-    const policy = await this.policy(client, task.task_kind);
+    const bulkTiming=await bulkTaskTiming(client,task)??await factoryTaskTiming(client,task);
+    if(bulkTiming){occurredAt=bulkTiming.enteredAt;quality=bulkTiming.timeQuality as TimeQuality;}
+    const policy = await this.policy(client, task.task_kind, task.task_id);
     const eventId = await this.event(client, actor, id, this.resource(task), "ready", occurredAt, quality);
     const deadline = await this.revision(client, actor, id, policy, occurredAt, "activation", eventId);
     let clockId: string | null = null;
@@ -154,12 +193,19 @@ export class DigitalProductionTaskService {
     const id = await createDigitalTaskAccess(client, actor, { kind: input.kind, assigneeId: input.assigneeId, ...(input.resource.kind === "order" ? { orderId: input.resource.id } : { sourceId: input.resource.id }) });
     await client.query("INSERT INTO digital_production_tasks(task_id,node_key,route_instance_id,route_version,occurrence) VALUES($1,$2,$3,$4,$5)", [id, input.kind, input.routeId, input.routeVersion, input.occurrence]);
     for (const prior of input.predecessors ?? []) await client.query("INSERT INTO digital_production_task_dependencies(task_id,predecessor_id) VALUES($1,$2)", [id, prior]);
-    for (const condition of new Set([...(REQUIRED_ACTIVATION[input.kind] ?? []), ...(input.conditions ?? []), "business_recorded" as const])) {
+    let activation=REQUIRED_ACTIVATION[input.kind]??[];
+    if(input.resource.kind==='order'&&['bulk_pattern','warehouse_preshrink'].includes(input.kind)){
+      const prep=(await client.query('SELECT workflow_version FROM digital_bulk_preparations WHERE preparation_id=$1 AND production_order_id=$2',[input.routeId,input.resource.id])).rows[0];
+      if(prep?.workflow_version===2)activation=input.kind==='bulk_pattern'?['customer_confirmed']:['materials_ready'];
+    }
+    for (const condition of new Set([...activation, ...(input.conditions ?? []), "business_recorded" as const])) {
       if (!DIGITAL_CONDITION_KEYS.includes(condition)) fail("未知前置条件");
       await client.query("INSERT INTO digital_production_task_conditions(task_id,condition_key,stage) VALUES($1,$2,$3)", [id, condition, condition === "business_recorded" ? "completion" : "activation"]);
     }
-    await this.event(client, actor, id, input.resource, "created", new Date().toISOString(), "现场登记");
-    await this.activate(client, actor, id, input.occurredAt === undefined ? new Date().toISOString() : input.occurredAt, input.occurredAt === null ? "缺失" : input.occurredAt === undefined ? "现场登记" : "补报未核实");
+    const createdEvent=await this.event(client, actor, id, input.resource, "created", new Date().toISOString(), "现场登记");
+    const activated=await this.activate(client, actor, id, input.occurredAt === undefined ? new Date().toISOString() : input.occurredAt, input.occurredAt === null ? "缺失" : input.occurredAt === undefined ? "现场登记" : "补报未核实");
+    if(!activated&&(await developmentTaskTiming(client,await this.task(client,id))||await bulkTaskTiming(client,await this.task(client,id))||await factoryTaskTiming(client,await this.task(client,id))))
+      await this.revision(client,actor,id,await this.policy(client,input.kind,id),null,'activation',createdEvent);
     return { taskId: id };
   }
   async documents(actor:TrustedActorContext,id:string){
@@ -218,8 +264,18 @@ export class DigitalProductionTaskService {
         if (occurredAt && (new Date(occurredAt).getTime() > Date.now() || (task.entered_at && new Date(occurredAt) < new Date(task.entered_at)))) fail("发生时间不能晚于当前或早于任务进入");
         const quality: TimeQuality = occurredAt === null ? "缺失" : input.occurredAt === undefined ? "现场登记" : "补报未核实";
         const eventId = await this.event(client, actor, id, this.resource(task), "completed", occurredAt, quality, { note: input.note });
-        await this.revision(client, actor, id, await this.policy(client, task.task_kind), iso(task.entered_at), "completion", eventId);
+        await this.revision(client, actor, id, await this.policy(client, task.task_kind, task.task_id), iso(task.entered_at), "completion", eventId);
         await client.query("UPDATE digital_production_tasks SET state='completed',completed_at=$2,completed_quality=$3,terminal_recorded_at=CURRENT_TIMESTAMP WHERE task_id=$1", [id, occurredAt, quality]);
+        if(task.source_id&&await developmentTaskTiming(client,task)){
+          const pending=(await client.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+            WHERE a.source_id=$1 AND t.route_version=$2 AND t.state IN ('pending','ready','blocked') ORDER BY t.task_id`,[task.source_id,task.route_version])).rows;
+          for(const next of pending){
+            const nextTask=await this.task(client,next.task_id),timing=await developmentTaskTiming(client,nextTask);
+            if(!timing)continue;
+            const previous=(await client.query("SELECT sla_basis FROM digital_production_deadline_revisions WHERE task_id=$1 ORDER BY revision_id DESC LIMIT 1",[next.task_id])).rows[0]?.sla_basis;
+            if(!isDeepStrictEqual(previous,timing))await this.revision(client,actor,next.task_id,await this.policy(client,nextTask.task_kind,nextTask.task_id),null,'activation',eventId);
+          }
+        }
         if (task.baseline_clock_id && occurredAt) {
           const clock = (await client.query("SELECT entered_at,completed_at FROM production_order_node_clocks WHERE node_instance_id=$1", [id])).rows[0];
           if (clock && !clock.completed_at && new Date(occurredAt) >= new Date(clock.entered_at)) await new ProductionOrderNodeClockRepository(client).complete(id, new Date(occurredAt));
@@ -248,13 +304,46 @@ export class DigitalProductionTaskService {
     const at=new Date().toISOString();
     await this.setConditionWithClient(client,actor,id,'business_recorded',true,undefined,'所有PO原实裁记录已齐');
     const eventId=await this.event(client,actor,id,this.resource(task),'completed',at,'现场登记',{note:'全部PO原实裁登记完成'});
-    await this.revision(client,actor,id,await this.policy(client,task.task_kind),iso(task.entered_at),'completion',eventId);
+    await this.revision(client,actor,id,await this.policy(client,task.task_kind,task.task_id),iso(task.entered_at),'completion',eventId);
     await client.query("UPDATE digital_production_tasks SET state='completed',completed_at=$2,completed_quality='现场登记',terminal_recorded_at=CURRENT_TIMESTAMP WHERE task_id=$1",[id,at]);
     if(task.baseline_clock_id)await new ProductionOrderNodeClockRepository(client).complete(id,new Date(at));
     await client.query('INSERT INTO digital_bulk_cutting_completions(preparation_id,production_order_id,task_id,completed_by) VALUES($1,$2,$3,$4) ON CONFLICT(preparation_id) DO NOTHING',[native.preparation_id,task.production_order_id,id,actor.actorId]);
     for(const next of (await client.query('SELECT task_id FROM digital_production_task_dependencies WHERE predecessor_id=$1',[id])).rows)await this.activate(client,actor,next.task_id,at,'现场登记');
     await new FactoryFlowService(this.database).sync(client,actor,task.production_order_id);
     return true;
+  }
+  async refreshShipSampleTimingWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string){
+    const row=(await client.query("SELECT task_id FROM digital_production_task_access WHERE production_order_id=$1 AND task_kind='bulk_ship_sample'",[orderId])).rows[0];
+    if(!row)return;const task=await this.task(client,row.task_id);if(['completed','cancelled'].includes(task.state))return;
+    const targets=await shipSampleTargets(client,orderId),remaining=targets.lines.filter(l=>!l.sent);
+    if(!targets.snapshotId||!remaining.length)return;
+    const dueAt=remaining.map(l=>l.dueAt).filter((d):d is string=>d!==null).sort()[0]??null;
+    const prior=(await client.query('SELECT due_at FROM digital_production_deadline_revisions WHERE task_id=$1 ORDER BY revision_id DESC LIMIT 1',[row.task_id])).rows[0];
+    if(iso(prior?.due_at??null)===dueAt)return;
+    const eventId=await this.event(client,actor,row.task_id,this.resource(task),'ship_sample_window',null,'缺失',{remainingLineIds:remaining.map(l=>l.lineId)});
+    await this.revision(client,actor,row.task_id,await this.policy(client,task.task_kind,row.task_id),null,'correction',eventId);
+  }
+  async applySlaVersionWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,applicationId:string,keys:string[]){
+    const rows=(await client.query(`SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id)
+      WHERE (a.production_order_id=$1 OR a.source_id=(SELECT source_id FROM digital_production_orders WHERE production_order_id=$1)) AND t.state NOT IN ('completed','cancelled')`,[orderId])).rows;
+    for(const row of rows){
+      const task=await this.task(client,row.task_id),parameter=slaParameterKey(task.task_kind);
+      const relevant=keys.includes(parameter)||DIGITAL_SLA_PARAMETERS.find(p=>p.key===parameter)?.includedIn?.some(k=>keys.includes(k))||keys.includes('warning_ratio')||task.task_kind==='process_logistics'&&keys.some(k=>['bulk_printing','bulk_embroidery','bulk_print_embroidery'].includes(k))||task.task_kind==='bulk_ship_sample'&&keys.includes('ship_sample_advance');
+      if(!relevant)continue;
+      const policy=await this.policy(client,task.task_kind,task.task_id);
+      const event=await this.event(client,actor,task.task_id,this.resource(task),'sla_application_reference',null,'缺失',{applicationId});
+      await this.revision(client,actor,task.task_id,policy,iso(task.entered_at),'policy',event);
+    }
+  }
+  async refreshFactoryBatchTimingWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string){
+    const prepared=await factoryBatchTiming(client,orderId);if(!prepared)return;
+    const rows=(await client.query("SELECT t.task_id FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.production_order_id=$1 AND a.task_kind IN ('process_logistics','bulk_qc','warehouse_dispatch') AND t.state<>'cancelled'",[orderId])).rows;
+    for(const row of rows){const task=await this.task(client,row.task_id),timing=await factoryTaskTiming(client,task,prepared);if(!timing)continue;
+      const previous=(await client.query('SELECT sla_basis FROM digital_production_deadline_revisions WHERE task_id=$1 ORDER BY revision_id DESC LIMIT 1',[row.task_id])).rows[0]?.sla_basis;
+      if(previous&&JSON.stringify(previous.basis)===JSON.stringify(timing.basis)&&previous.enteredAt===timing.enteredAt&&previous.seconds===timing.seconds)continue;
+      const eventId=await this.event(client,actor,row.task_id,this.resource(task),'factory_batch_window',timing.enteredAt,timing.timeQuality as TimeQuality,{basis:timing.basis});
+      await this.revision(client,actor,row.task_id,await this.policy(client,task.task_kind,task.task_id),timing.enteredAt,'correction',eventId,timing);
+    }
   }
   async completeFactoryDispatchFactsWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,factId:string){
     const fact=(await client.query(`SELECT f.* FROM digital_factory_facts f JOIN digital_factory_routes r USING(preparation_id) WHERE r.production_order_id=$1 AND f.fact_id=$2 AND f.kind='仓库实际发厂' AND f.actor_id=$3`,[orderId,factId,actor.actorId])).rows[0];
@@ -265,7 +354,7 @@ export class DigitalProductionTaskService {
       await this.active(client,this.resource(task));if(task.state!=='ready'||!await this.conditionsReady(client,task.task_id))fail('发厂相关任务尚未就绪');
       const at=new Date().toISOString();await this.setConditionWithClient(client,actor,task.task_id,'business_recorded',true,undefined,'QC事实及实际发厂已齐');
       const eventId=await this.event(client,actor,task.task_id,this.resource(task),'completed',at,'现场登记',{factId,note:'实际发厂收口，QC判定人仍由原检查事实保留'});
-      await this.revision(client,actor,task.task_id,await this.policy(client,task.task_kind),iso(task.entered_at),'completion',eventId);
+      await this.revision(client,actor,task.task_id,await this.policy(client,task.task_kind,task.task_id),iso(task.entered_at),'completion',eventId);
       await client.query("UPDATE digital_production_tasks SET state='completed',completed_at=$2,completed_quality='现场登记',terminal_recorded_at=CURRENT_TIMESTAMP WHERE task_id=$1",[task.task_id,at]);
       if(task.baseline_clock_id)await new ProductionOrderNodeClockRepository(client).complete(task.task_id,new Date(at));
     }
@@ -302,10 +391,12 @@ export class DigitalProductionTaskService {
   async reassign(actor: TrustedActorContext, id: string, assigneeId: string, key: string) {
     return this.transaction(async client => {
       const task = await this.task(client, id, true);
+      if(task.task_kind==='development_cutting'&&task.source_id&&await developmentSlaPlan(client,task.source_id))fail('开发裁板使用固定人员，请在本单人员安排查看固定岗位设置，不逐单分派');
       if (!isDigitalLeader(actor) && !isDigitalTechnicalManager(actor) && !actor.actorRoles.includes("development_clerk")) digitalForbidden();
       if(await requiresDevelopmentAssignee(client,task)&&(await client.query("SELECT to_regclass('digital_development_round_arrangements') AS relation")).rows[0]?.relation)fail("请在本单总委派页改派，填写原因并核对当前安排。");
       return this.command(client, actor, `task-reassign:${id}`, key, { assigneeId }, async () => {
-        if (['completed','cancelled'].includes(task.state)) fail("已结束任务不可日常改派");
+        const currentFactoryScopePending = task.task_kind === "factory_production_qc" && task.state === "completed" && task.production_order_id && !(await factoryProductionFacts(client, task.production_order_id)).complete;
+        if (task.state === "cancelled" || (task.state === "completed" && !currentFactoryScopePending)) fail("已结束任务不可日常改派");
         const result = await reassignDigitalTask(client, actor, id, assigneeId);
         await this.event(client, actor, id, this.resource(task), "reassigned", new Date().toISOString(), "现场登记", { previousAssigneeId: task.assignee_id, assigneeId });
         await this.refreshDevelopmentMaterialCondition(client,actor,id);
@@ -325,16 +416,41 @@ export class DigitalProductionTaskService {
     const before=(await client.query("SELECT satisfied FROM digital_production_task_conditions WHERE task_id=$1 AND condition_key='materials_ready'",[id])).rows[0];
     if(before.satisfied!==ready||(!ready&&task.state==='ready'))await this.setConditionWithClient(client,actor,id,'materials_ready',ready,undefined,'派工前核实本轮材料事实');
   }
+  async previewSlaOrder(actor:TrustedActorContext,input:Parameters<SlaOrderApplicationService['preview']>[1]){return new SlaOrderApplicationService(this.database).preview(actor,input);}
+  async applySlaOrder(actor:TrustedActorContext,input:Parameters<SlaOrderApplicationService['apply']>[1],key:string){return new SlaOrderApplicationService(this.database).apply(actor,input,key);}
+  async slaSettings(actor:TrustedActorContext){
+    return this.transaction(client=>new SlaSettingsService().read(client,actor));
+  }
+  async previewSlaSettings(actor:TrustedActorContext,input:StandardDraft){
+    return this.transaction(client=>new SlaSettingsService().preview(client,actor,input));
+  }
+  async publishSlaSettings(actor:TrustedActorContext,input:StandardDraft&{previewToken:string},key:string){
+    return this.transaction(client=>new SlaSettingsService().publish(client,actor,input,key));
+  }
   async policies(actor: TrustedActorContext) {
     if (!isDigitalLeader(actor)) digitalForbidden();
-    return (await this.database.query(`SELECT DISTINCT ON(node_key) node_key AS "nodeKey",label,version,sla_seconds/3600.0 AS "slaHours",warning_ratio AS "warningRatio",changed_at AS "changedAt",changed_by AS "changedBy",note
-      FROM digital_production_deadline_policies ORDER BY node_key,version DESC`)).rows.map(row => ({ ...row, slaHours: row.slaHours === null ? null : Number(row.slaHours), warningRatio: Number(row.warningRatio) }));
+    return this.transaction(async client => {
+      const unified = Boolean((await client.query("SELECT to_regclass('digital_sla_configurations') AS relation")).rows[0]?.relation);
+      const config = unified ? await new SlaConfigurationRepository(client).current() : null;
+      return (await client.query(`SELECT DISTINCT ON(node_key) node_key AS "nodeKey",label,version,sla_seconds/3600.0 AS "slaHours",warning_ratio AS "warningRatio",changed_at AS "changedAt",changed_by AS "changedBy",note
+        FROM digital_production_deadline_policies ORDER BY node_key,version DESC`)).rows.map(row => {
+        const parameter = unified ? DIGITAL_SLA_PARAMETERS.find(p => p.key === slaParameterKey(row.nodeKey)) : undefined;
+        const warning = config?.values.warning_ratio;
+        const resolved = parameter ? config?.values[parameter.key] ?? (row.version === 1 ? parameter.defaultValue : undefined) : undefined;
+        return { ...row, slaHours: resolved ? "minutes" in resolved ? resolved.minutes / 60 : null : row.slaHours === null ? null : Number(row.slaHours), warningRatio: parameter ? warning?.kind === "ratio" ? warning.percent / 100 : 0.7 : Number(row.warningRatio),
+          ...(parameter ? { applicationScope: "new_orders", warningRatioEditable: false, durationRequired: ["duration", "included", "estimate"].includes(parameter.defaultValue.kind), durationEditable: ["duration", "included", "estimate"].includes(parameter.defaultValue.kind) } : {}) };
+      });
+    });
   }
   async changePolicy(actor: TrustedActorContext, nodeKey: string, input: { expectedVersion: number; slaHours: number | null; warningRatio: number; note: string }, key: string) {
     if (!isDigitalLeader(actor)) digitalForbidden();
     const slaSeconds = input.slaHours === null ? null : input.slaHours * 3600;
     digitalDeadline(null, slaSeconds, input.warningRatio);
     return this.transaction(client => this.command(client, actor, `task-policy:${nodeKey}`, key, input, async () => {
+      if (DIGITAL_SLA_PARAMETERS.some(p => p.key === slaParameterKey(nodeKey)) && (await client.query("SELECT to_regclass('digital_sla_configurations') AS relation")).rows[0]?.relation) {
+        try { return await new SlaConfigurationService().changeLegacyPolicy(client, actor, nodeKey, input, key); }
+        catch (error) { if (error instanceof SlaVersionConflict) fail(error.message); throw error; }
+      }
       const prior = await this.policy(client, nodeKey);
       if (prior.version !== input.expectedVersion) fail("时效参数已更新，请刷新");
       const version = prior.version + 1;
@@ -367,7 +483,7 @@ export class DigitalProductionTaskService {
         const eventId = await this.event(client, actor, id, this.resource(task), "time_corrected", input.occurredAt, corrected ? "已核实" : "缺失", { reason: input.reason, originalKind: original.event_kind }, input.eventId);
         if (original.event_kind === "ready") await client.query("UPDATE digital_production_tasks SET entered_at=$2,entered_quality=$3 WHERE task_id=$1", [id, corrected, corrected ? "已核实" : "缺失"]);
         else await client.query("UPDATE digital_production_tasks SET completed_at=$2,completed_quality=$3 WHERE task_id=$1", [id, corrected, corrected ? "已核实" : "缺失"]);
-        let policy = await this.policy(client, task.task_kind);
+        let policy = await this.policy(client, task.task_kind, task.task_id);
         if (task.state === "completed") {
           const snapshot = (await client.query(`SELECT p.* FROM digital_production_deadline_revisions r JOIN digital_production_deadline_policies p ON p.node_key=r.policy_node_key AND p.version=r.policy_version
             WHERE r.task_id=$1 ORDER BY r.revision_id DESC LIMIT 1`, [id])).rows[0];
@@ -407,9 +523,11 @@ export class DigitalProductionTaskService {
     const policy = new DigitalProductionAccessPolicy(db);
     await policy.assert(actor, "task", id, "technical");
     const task = await this.task(db, id);
-    const effective = (await db.query(`SELECT r.entered_at,r.warning_at,r.due_at,p.version,p.sla_seconds,p.label FROM digital_production_deadline_revisions r
+    const effective = (await db.query(`SELECT r.entered_at,r.warning_at,r.due_at,p.version,
+      CASE WHEN NULLIF(to_jsonb(r)->'sla_basis','null'::jsonb) IS NOT NULL THEN (to_jsonb(r)->'sla_basis'->>'seconds')::numeric ELSE p.sla_seconds END AS sla_seconds,
+      to_jsonb(r)->'sla_basis' AS sla_basis,p.label FROM digital_production_deadline_revisions r
       JOIN digital_production_deadline_policies p ON p.node_key=r.policy_node_key AND p.version=r.policy_version JOIN app_users u ON u.id=r.changed_by WHERE r.task_id=$1 ORDER BY r.revision_id DESC LIMIT 1`, [id])).rows[0];
-    const currentPolicy = effective ?? await this.policy(db, task.task_kind);
+    const currentPolicy = effective ?? await this.policy(db, task.task_kind, task.task_id);
     const resource = this.resource(task);
     const paused = (await db.query("SELECT state FROM digital_production_resource_lifecycle WHERE resource_kind=$1 AND resource_id=$2", [resource.kind, resource.id])).rows[0]?.state === "paused";
     const parent = (await db.query(resource.kind === "order" ? "SELECT created_by,primary_merchandiser_id,design_style_no,customer_code FROM digital_production_orders WHERE production_order_id=$1" : "SELECT created_by,design_style_no,customer_code FROM digital_production_sources WHERE source_id=$1", [resource.id])).rows[0];
@@ -424,7 +542,7 @@ export class DigitalProductionTaskService {
     if(task.source_id&&(await db.query("SELECT to_regclass('digital_development_documents') AS relation")).rows[0]?.relation){
       const document=(await db.query("SELECT document FROM digital_development_documents WHERE source_id=$1 AND status='published'",[task.source_id])).rows[0];
       if(document){
-        const nodes:string[]=task.route_version===1?["development_materials",...developmentRoute(document.document)]:(await db.query("SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2",[task.source_id,task.route_version])).rows[0]?.route_nodes??[];
+        const nodes:string[]=task.route_version===1?["development_materials",...await savedDevelopmentRoute(db,task.source_id,document.document)]:(await db.query("SELECT route_nodes FROM digital_development_rounds WHERE source_id=$1 AND round_number=$2",[task.source_id,task.route_version])).rows[0]?.route_nodes??[];
         const business=nodes.filter(node=>!["development_material_supply","development_craft_dispatch","development_sewing_transfer","development_washing_dispatch"].includes(node));
         const rows=(await db.query("SELECT DISTINCT CASE WHEN node_key='development_material_recheck' THEN 'development_materials' ELSE node_key END AS node,state FROM digital_production_tasks t WHERE route_instance_id=$1 AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned')",[task.route_instance_id])).rows;
         route={applicable:business.length,completed:business.filter(node=>rows.some(row=>row.node===node&&row.state==='completed')).length,cancelled:business.filter(node=>rows.some(row=>row.node===node&&row.state==='cancelled')&&!rows.some(row=>row.node===node&&row.state==='completed')).length};
@@ -435,12 +553,13 @@ export class DigitalProductionTaskService {
     const unmetConditions=await developmentTaskBlockers(db,task,canManage);
     if(paused)unmetConditions.push({condition:'paused',name:'业务暂停',missing:'当前业务已暂停，须先由有权人员恢复',responsibleRole:'业务负责人',action:canControl?'恢复业务':null,evidenceId:null,verified:true});
     if(task.state==='blocked'&&task.blocked_reason&&task.blocked_reason!=='前置条件未满足')unmetConditions.push({condition:'manual_block',name:'任务阻断',missing:task.blocked_reason,responsibleRole:task.required_role,action:canManage?'处理阻断原因':null,evidenceId:null,verified:true});
+    const factoryQc=task.task_kind==='factory_production_qc'&&task.production_order_id?await factoryProductionFacts(db,task.production_order_id):null;
     return { unmetConditions, identity, priority, taskId: id, orderId: task.production_order_id as string | null, sourceId: task.source_id as string | null, taskKind: task.task_kind as string, label: currentPolicy.label as string,
       routeProgress: route, assigneeName: assignee, requiredRole: task.required_role, hasHandover: Boolean(handover.rowCount), canManage, canControl, canCorrect: isDigitalLeader(actor) || isDigitalTechnicalManager(actor),
-      assigneeId: task.assignee_id as string | null, state: task.state as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
-      enteredAt: iso(task.entered_at), recordedAt: iso(task.created_at)!, completedAt: iso(task.completed_at), paused,
+      assigneeId: task.assignee_id as string | null, state: (factoryQc&&task.state==='completed'&&!factoryQc.complete?'ready':task.state) as DigitalTaskState, routeVersion: task.route_version as number, occurrence: task.occurrence as number,
+      enteredAt: iso(effective?.sla_basis?effective.entered_at:task.entered_at), recordedAt: iso(task.created_at)!, completedAt: factoryQc?factoryQc.complete&&factoryQc.checks.every(c=>c.completedAt)?new Date(Math.max(...factoryQc.checks.map(c=>Date.parse(c.completedAt!)))).toISOString():null:iso(task.completed_at), paused,
       dueAt: iso(effective?.due_at ?? null), warningAt: iso(effective?.warning_at ?? null), slaHours: currentPolicy.sla_seconds === null ? null : Number(currentPolicy.sla_seconds) / 3600,
-      policyVersion: currentPolicy.version as number, timeQuality: task.entered_quality as DigitalTimeQuality, completedTimeQuality: task.completed_quality as string,
+      policyVersion: currentPolicy.version as number, timeQuality: (effective?.sla_basis?(effective.sla_basis.timeQuality??(effective.entered_at?'现场登记':'缺失')):task.entered_quality) as DigitalTimeQuality, completedTimeQuality: task.completed_quality as string,
       blockedReason: task.blocked_reason as string | null, canExecute: !paused && await policy.allowed(actor, "task", id, "execute") };
   }
   async cancelForSpecialClosureWithClient(client:PoolClient,actor:TrustedActorContext,orderId:string,reason:string){

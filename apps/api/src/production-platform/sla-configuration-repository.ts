@@ -6,6 +6,7 @@ import {
   digitalSlaDefaults,
   type DigitalSlaSnapshot, type DigitalSlaValues,
 } from "@dx-rework/contracts/digital-sla";
+import { readSlaPolicyValues, slaPolicyKey, storeSlaPolicyValues } from "./sla-policy-values.js";
 
 // Internal transaction-bound persistence. No route is exposed by this foundation.
 // The publishing/application service must check actor and order scope before calling.
@@ -30,14 +31,29 @@ export class SlaConfigurationRepository {
   async current(): Promise<SlaConfiguration | null> {
     const row = (await this.transaction.query("SELECT * FROM digital_sla_configurations ORDER BY version DESC LIMIT 1")).rows[0];
     return row ? { configurationId: row.configuration_id, version: row.version,
-      values: validateDigitalSlaValues(row.values_json), createdBy: row.created_by, reason: row.reason } : null;
+      values: await readSlaPolicyValues(this.transaction, row.policy_refs_json ?? row.values_json), createdBy: row.created_by, reason: row.reason } : null;
   }
 
   /** Fixed approved bootstrap only. Order creators cannot supply or change standards. */
   async initialStandard(actorId: string): Promise<SlaConfiguration> {
     await this.transaction.query("LOCK TABLE digital_sla_configurations IN SHARE ROW EXCLUSIVE MODE");
-    return await this.current() ?? await this.publish({ expectedVersion: 0, values: digitalSlaDefaults(), actorId,
+    const current = await this.current();
+    if (current) return current;
+    const values = await this.bootstrapValues();
+    return await this.publish({ expectedVersion: 0, values, actorId,
       reason: "系统按已确认标准初始化（随首张新单保存）", requestKey: "1f259aa4-27bc-47e7-8d95-75454a407890" });
+  }
+
+  /** Read-only proposed initial values; preserves explicit legacy edits. */
+  async bootstrapValues(): Promise<DigitalSlaValues> {
+    const values = digitalSlaDefaults();
+    // Preserve prior explicit duration edits; version-one seeds are superseded by the approved standard.
+    for (const [key, value] of Object.entries(values)) {
+      if (value.kind !== "duration" && value.kind !== "included" && value.kind !== "estimate") continue;
+      const prior = (await this.transaction.query("SELECT version,sla_seconds FROM digital_production_deadline_policies WHERE node_key=$1 ORDER BY version DESC LIMIT 1", [slaPolicyKey(key)])).rows[0];
+      if (prior && Number(prior.version) > 1 && prior.sla_seconds !== null) values[key] = { kind: value.kind, minutes: Number(prior.sla_seconds) / 60 };
+    }
+    return values;
   }
 
   async orderSnapshot(orderId: string, revision?: number): Promise<SlaOrderSnapshot | null> {
@@ -58,15 +74,25 @@ export class SlaConfigurationRepository {
     await this.transaction.query("LOCK TABLE digital_sla_configurations IN SHARE ROW EXCLUSIVE MODE");
     const prior = (await this.transaction.query("SELECT * FROM digital_sla_configurations WHERE request_key=$1", [input.requestKey])).rows[0];
     if (prior) {
-      if (prior.created_by !== input.actorId || prior.reason !== reason || prior.version !== input.expectedVersion + 1 || !equal(prior.values_json, values)) throw new SlaIdempotencyConflict("SLA request key reused with different input");
-      return { configurationId: prior.configuration_id, version: prior.version, values: prior.values_json, createdBy: prior.created_by, reason: prior.reason };
+      const savedValues = await readSlaPolicyValues(this.transaction, prior.policy_refs_json ?? prior.values_json);
+      if (prior.created_by !== input.actorId || prior.reason !== reason || prior.version !== input.expectedVersion + 1 || !equal(savedValues, values)) throw new SlaIdempotencyConflict("SLA request key reused with different input");
+      return { configurationId: prior.configuration_id, version: prior.version, values: savedValues, createdBy: prior.created_by, reason: prior.reason };
     }
     const version = Number((await this.transaction.query("SELECT COALESCE(max(version),0) AS version FROM digital_sla_configurations")).rows[0].version);
     if (version !== input.expectedVersion) throw new SlaVersionConflict("SLA configuration changed; reload before publishing");
+    const publicationSetting = (await this.transaction.query("SELECT current_setting('dx.sla_policy_publication',true) AS value")).rows[0].value ?? "";
+    await this.transaction.query("SELECT set_config('dx.sla_policy_publication','on',true)");
+    const references = await storeSlaPolicyValues(this.transaction, values, input.actorId, reason);
+    await this.transaction.query("SELECT set_config('dx.sla_policy_publication',$1,true)", [publicationSetting]);
     const id = randomUUID();
-    await this.transaction.query(`INSERT INTO digital_sla_configurations(configuration_id,version,rule_version,values_json,created_by,reason,request_key)
-      VALUES($1,$2,$3,$4,$5,$6,$7)`, [id, version + 1, DIGITAL_SLA_RULE_VERSION, JSON.stringify(values), input.actorId, reason, input.requestKey]);
+    await this.transaction.query(`INSERT INTO digital_sla_configurations(configuration_id,version,rule_version,values_json,created_by,reason,request_key,policy_refs_json)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, [id, version + 1, DIGITAL_SLA_RULE_VERSION, JSON.stringify(values), input.actorId, reason, input.requestKey, JSON.stringify(references)]);
     return { configurationId: id, version: version + 1, values, createdBy: input.actorId, reason };
+  }
+
+  private async configurationValues(version:number){
+    const row=(await this.transaction.query('SELECT policy_refs_json,values_json FROM digital_sla_configurations WHERE version=$1',[version])).rows[0];
+    return row?readSlaPolicyValues(this.transaction,row.policy_refs_json??row.values_json):null;
   }
 
   async appendOrder(input: { orderId: string; expectedRevision: number; configurationId: string; snapshot: DigitalSlaSnapshot; actorId: string; reason: string; requestKey: string }): Promise<SlaOrderSnapshot> {
@@ -78,8 +104,12 @@ export class SlaConfigurationRepository {
     if (!root.rowCount) throw new Error("SLA order not found");
     const config = (await this.transaction.query("SELECT * FROM digital_sla_configurations WHERE configuration_id=$1", [input.configurationId])).rows[0];
     if (!config) throw new Error("SLA configuration not found");
+    const configurationValues = await readSlaPolicyValues(this.transaction, config.policy_refs_json ?? config.values_json);
     for (const [key, row] of Object.entries(snapshot.parameters)) {
-      if (row.source === "global" && (row.sourceVersion !== config.version || !equal(row.value, config.values_json[key]))) throw new Error("Snapshot global source does not match configuration");
+      if(row.source==='global'){
+        const source=row.sourceVersion===config.version?configurationValues:await this.configurationValues(row.sourceVersion);
+        if(!source||!equal(row.value,source[key]))throw new Error('Snapshot global source does not match configuration');
+      }
     }
     const prior = (await this.transaction.query("SELECT * FROM digital_sla_order_snapshots WHERE request_key=$1", [input.requestKey])).rows[0];
     if (prior) {

@@ -7,7 +7,9 @@ import {isRootActor} from "../access/business-authority.js";
 import {ApplicationError} from "../platform/errors.js";
 import {DigitalProductionAccessPolicy,digitalForbidden,digitalNotFound} from "./access-policy.js";
 import {developmentDocumentRow} from "./development-round-repository.js";
-import {developmentRoute} from "./development-route.js";
+import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
+import {developmentSlaPlan} from "./development-sla-enrollment.js";
+import {fixedDevelopmentCutter} from "./development-fixed-cutting.js";
 import {DIGITAL_TASK_ROLES,type DigitalTaskKind} from "./task-access-repository.js";
 import {DigitalProductionTaskService} from "./task-service.js";
 
@@ -30,7 +32,7 @@ export async function readArrangement(db:DB,actor:TrustedActorContext,sourceId:s
   if(!await arrangementsAvailable(db)||!await canArrange(db,actor))return null;
   const document=await developmentDocumentRow(db,sourceId)??digitalNotFound();
   const round=document.round_number??1;
-  const route:string[]=round===1?(document.document?developmentRoute(document.document):[]):document.revision.route_nodes;
+  const route:string[]=round===1?(document.document?await savedDevelopmentRoute(db,sourceId,document.document):[]):document.revision.route_nodes;
   const plan=(await db.query("SELECT * FROM digital_development_round_arrangements WHERE source_id=$1 AND round_number=$2",[sourceId,round])).rows[0];
   const tasks=(await db.query(`SELECT t.task_id,t.state,a.task_kind,a.assignee_id FROM digital_production_tasks t
     JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.route_version=$2 ORDER BY t.created_at,t.task_id`,[sourceId,round])).rows;
@@ -44,15 +46,16 @@ export async function readArrangement(db:DB,actor:TrustedActorContext,sourceId:s
   const unavailableReason=document.status!=="published"?"本单开发资料尚未发布，请设计师先完成发布。":lifecycle!=="active"?`本单已${lifecycle==="paused"?"暂停，请有权管理人恢复后再安排":"取消，人员历史保留只读"}。`:!hasCurrentWork?"本轮已结束，人员历史保留只读。":!checked?"本轮核料尚未通过，请核料文员先完成本轮材料核验。":null;
   const readyToArrange=unavailableReason===null;
   const rows:DevelopmentArrangement["rows"]=[];
+  const fixed=await developmentSlaPlan(db,sourceId)?await fixedDevelopmentCutter(db):null;
   const applicable=route.filter((kind,index)=>kind!=="development_sewing_transfer"||route[index-1]!=="development_craft_confirmation"||route[index+1]!=="development_sewing"||tasks.some(task=>task.task_kind===kind));
   const kinds=[...new Set([...applicable,...tasks.filter(t=>t.task_kind==="development_sewing_transfer"&&!["completed","cancelled"].includes(t.state)).map(t=>t.task_kind)])];
   for(const kind of kinds.filter(kind=>DEVELOPMENT_ARRANGEABLE_KINDS.includes(kind as typeof DEVELOPMENT_ARRANGEABLE_KINDS[number]))){
     const task=tasks.filter(t=>t.task_kind===kind).at(-1);
-    const assigneeId=task?task.assignee_id:(plan?plan.entries[kind]??null:round===1?legacy?.[oldFields[kind]!]??null:null);
+    const assigneeId=task?task.assignee_id:kind==='development_cutting'&&fixed?fixed.assigneeId:(plan?plan.entries[kind]??null:round===1?legacy?.[oldFields[kind]!]??null:null);
     const requiredRole=DIGITAL_TASK_ROLES[kind as DigitalTaskKind];
     const label=(await db.query("SELECT label FROM digital_production_deadline_policies WHERE node_key=$1 ORDER BY version DESC LIMIT 1",[kind])).rows[0]?.label??kind;
     const assigneeName=assigneeId?(await db.query("SELECT display_name FROM app_users WHERE id=$1",[assigneeId])).rows[0]?.display_name??null:null;
-    rows.push({kind,label,requiredRole,assigneeId,assigneeName,valid:Boolean(assigneeId&&(await policy.activeRole(assigneeId,requiredRole)||kind==='development_sewing'&&await isNativeRootSewingRecipient(db,sourceId,assigneeId))),taskId:task?.task_id??null,state:task?.state??null,editable:!task||!["completed","cancelled"].includes(task.state)});
+    rows.push({kind,label,requiredRole,assigneeId,assigneeName,valid:Boolean(assigneeId&&(await policy.activeRole(assigneeId,requiredRole)||kind==='development_sewing'&&await isNativeRootSewingRecipient(db,sourceId,assigneeId))),taskId:task?.task_id??null,state:task?.state??null,fixed:Boolean(kind==='development_cutting'&&fixed),editable:!(kind==='development_cutting'&&fixed)&&(!task||!["completed","cancelled"].includes(task.state))});
   }
   return {roundNumber:round,documentVersion:document.version,version:plan?.version??0,managerId,managerName,canEdit:Boolean(readyToArrange&&(!managerId||managerId===actor.actorId||isRootActor(actor))),canTakeOver:isRootActor(actor)||actor.actorRoles.includes("pattern_room_supervisor")&&await policy.activeRole(actor.actorId,"pattern_room_supervisor"),readyToArrange:Boolean(readyToArrange),unavailableReason,rows};
 }
@@ -81,7 +84,7 @@ export async function saveArrangement(db:PoolClient,database:Pool,actor:TrustedA
     const expected=inputRow.expectedTask;
     if((row.taskId===null)!==(expected===null)||expected&&(expected.taskId!==row.taskId||expected.state!==row.state||expected.assigneeId!==row.assigneeId))
       conflict(`${row.label}已被办理或改派。本次未保存，请核对当前记录。`);
-    if(!row.editable&&inputRow.assigneeId!==row.assigneeId)conflict(`${row.label}已结束，不能改写历史人员。`);
+    if(!row.editable&&inputRow.assigneeId!==row.assigneeId)conflict(row.fixed?'开发裁板使用固定人员，不逐单分派':`${row.label}已结束，不能改写历史人员。`);
     if(input.management!=="keep"&&inputRow.assigneeId!==row.assigneeId)conflict("接管或交回不能同时改派人员，请先单独保存安排。");
     if(input.management==="keep"&&row.editable&&inputRow.assigneeId&&!await policy.lockActiveRole(inputRow.assigneeId,row.requiredRole)&&!(row.kind==='development_sewing'&&row.assigneeId===inputRow.assigneeId&&await isNativeRootSewingRecipient(db,sourceId,inputRow.assigneeId)))
       conflict(`${row.label}所选人员已不可安排。请重新选择有效岗位人员。`);

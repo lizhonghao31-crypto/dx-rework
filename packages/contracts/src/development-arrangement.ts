@@ -5,7 +5,7 @@ import {TransferPatternOrderSchema,PatternWorkAmountSchema} from './pattern-orde
 export const DEVELOPMENT_ARRANGEABLE_KINDS = [
   "development_pattern", "development_cutting", "development_sewing",
   "development_printing", "development_embroidery", "development_print_embroidery",
-  "development_tail_check", "development_washing_dispatch", "development_washing",
+  "development_tail_check", "development_pre_wash_check", "development_washing_dispatch", "development_washing",
   "development_sewing_transfer",
 ] as const;
 export const DevelopmentArrangementSchema = z.object({
@@ -19,7 +19,7 @@ export const DevelopmentArrangementSchema = z.object({
       taskId:z.string().uuid(),state:z.string(),assigneeId:z.string().uuid().nullable(),
     }).strict().nullable(),
     reason:z.string().trim().max(1000),
-  }).strict()).max(10),
+  }).strict()).max(11),
   management:z.enum(["keep","takeover","release"]),
   managementReason:z.string().trim().max(1000),
 }).strict().superRefine((value,ctx)=>{
@@ -37,7 +37,7 @@ export const DevelopmentExecutionTransferSchema=TransferPatternOrderSchema.omit(
 export type DevelopmentExecutionTransfer=z.infer<typeof DevelopmentExecutionTransferSchema>;
 export type DevelopmentArrangementRow={
   kind:string;label:string;requiredRole:string;assigneeId:string|null;assigneeName:string|null;
-  valid:boolean;taskId:string|null;state:string|null;editable:boolean;
+  valid:boolean;taskId:string|null;state:string|null;editable:boolean;fixed?:boolean;
 };
 export type DevelopmentArrangement={
   roundNumber:number;documentVersion:number;version:number;managerId:string|null;managerName:string|null;

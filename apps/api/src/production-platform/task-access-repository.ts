@@ -4,15 +4,16 @@ import type { TrustedActorContext } from "../tools/repositories.js";
 import { DigitalProductionAccessPolicy, digitalForbidden, digitalNotFound, isDigitalLeader, isDigitalTechnicalManager } from "./access-policy.js";
 export const DIGITAL_TASK_ROLES = {
   sourcing_preparation: "order_merchandiser",
+  development_external_pattern: "pattern_room_supervisor",
   development_washing_dispatch: "development_clerk",
   development_craft_dispatch: "sample_designer", development_craft_confirmation: "sample_designer", development_sewing_transfer: "development_clerk",
   development_material_supply: "sample_designer", development_material_recheck: "development_clerk", development_materials: "development_clerk", development_pattern: "pattern_room_worker", development_cutting: "pattern_room_worker",
-  development_sewing: "pattern_room_worker", development_tail_check: "pattern_room_tail_inspector",
+  development_sewing: "pattern_room_worker", development_tail_check: "pattern_room_tail_inspector", development_pre_wash_check: "pattern_room_tail_inspector",
   development_printing: "pattern_room_worker", development_embroidery: "pattern_room_worker", development_print_embroidery: "pattern_room_worker",
   development_washing: "development_clerk", development_shipping: "sample_designer", development_confirmation: "sample_designer",
   bulk_pattern: "pattern_room_worker", warehouse_preshrink: "warehouse_receiver", bulk_cutting: "cutting_worker", bulk_cutting_external: "order_merchandiser",
   factory_material_count: "order_merchandiser", bulk_ship_sample:"order_merchandiser", budget: "sample_designer", production_sheet: "order_merchandiser",
-  process_logistics: "embroidery_washing_merchandiser", bulk_qc: "quality_control", warehouse_dispatch: "warehouse_receiver",
+  factory_production_qc: "quality_control", process_logistics: "embroidery_washing_merchandiser", bulk_qc: "quality_control", warehouse_dispatch: "warehouse_receiver",
 } as const;
 export type DigitalTaskKind = keyof typeof DIGITAL_TASK_ROLES;
 // Internal transactional adapter: no public endpoint can invent a task to obtain access.

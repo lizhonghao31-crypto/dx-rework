@@ -2,10 +2,16 @@ import { z } from "zod";
 
 /** Rule semantics are code-owned. Settings change values, never business gates. */
 export const DIGITAL_SLA_RULE_VERSION = "20261023.1" as const;
+/** Preserve the existing numeric-hour policies without rounding their deadlines. */
+export const isSlaDurationMinutes = (value: unknown): value is number => typeof value === "number"
+  && Number.isFinite(value) && value > 0 && value <= 525600
+  && Math.round(value * 60000) >= 1
+  && Math.abs(value * 60000 - Math.round(value * 60000)) < 0.00001;
+const durationMinutes = z.number().positive().max(525600).refine(isSlaDurationMinutes, "SLA duration must have millisecond precision");
 export const DigitalSlaValueSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("duration"), minutes: z.number().int().positive().max(525600) }).strict(),
-  z.object({ kind: z.literal("included"), minutes: z.number().int().positive().max(525600) }).strict(),
-  z.object({ kind: z.literal("estimate"), minutes: z.number().int().positive().max(525600) }).strict(),
+  z.object({ kind: z.literal("duration"), minutes: durationMinutes }).strict(),
+  z.object({ kind: z.literal("included"), minutes: durationMinutes }).strict(),
+  z.object({ kind: z.literal("estimate"), minutes: durationMinutes }).strict(),
   z.object({ kind: z.literal("offset"), days: z.number().int().nonnegative().max(365) }).strict(),
   z.object({ kind: z.literal("ratio"), percent: z.number().int().min(1).max(99) }).strict(),
   z.object({ kind: z.literal("buffer"), minutes: z.number().int().nonnegative().max(525600) }).strict(),

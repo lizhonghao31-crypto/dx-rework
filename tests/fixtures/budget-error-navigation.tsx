@@ -12,7 +12,7 @@ window.fetch=async(input,init)=>{
  const path=new URL(String(input),location.origin).pathname,method=init?.method??'GET';requests.push({path,method});
  if(method!=='GET')throw Error('Invalid budget must not submit');
  if(path.includes('/document-directory/'))return Response.json({development:{state:'not_applicable'},instruction:{state:'not_applicable'},budget:{state:'available',id:id(1)}});
- if(path.endsWith('/budget'))return Response.json({productionOrderId:id(1),version:7,status:'draft',document,canEdit:true,canSubmitSourcing:false,sourcingCaseId:null,publishedAt:null,designerName:'TEST设计师',merchandiserName:'TEST跟单',versions:[]});
+ if(path.endsWith('/budget'))return Response.json({productionOrderId:id(1),version:7,status:'draft',document,canEdit:true,canPublish:true,canSubmitSourcing:false,sourcingCaseId:null,publishedAt:null,designerName:'TEST设计师',merchandiserName:'TEST跟单',versions:[]});
  if(path.endsWith(`/orders/${id(1)}`))return Response.json({productionOrderId:id(1),designStyleNo:'TEST预算定位',customerCode:'TEST客户',productGroup:'男装',lines:[]});
  throw Error(`Unexpected request ${method} ${path}`);
 };

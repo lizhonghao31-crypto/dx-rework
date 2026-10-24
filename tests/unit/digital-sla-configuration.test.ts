@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { DIGITAL_SLA_PARAMETERS, DigitalSlaFactSchema, digitalSlaDefaults, resolveDigitalSlaSnapshot, validateDigitalSlaValues, validateDigitalSlaSnapshot } from "../../packages/contracts/src/digital-sla.js";
 
 describe("confirmed SLA configuration contract", () => {
+  it("preserves existing fractional-hour precision without rounding or accepting sub-millisecond values", () => {
+    const values = digitalSlaDefaults(); values.external_pattern = { kind: "duration", minutes: 2880.6 };
+    expect(validateDigitalSlaValues(values).external_pattern).toEqual(values.external_pattern);
+    values.external_pattern = { kind: "duration", minutes: 0.0000001 };
+    expect(() => validateDigitalSlaValues(values)).toThrow();
+  });
   it("has unique complete defaults and preserves the 201h development path", () => {
     const values = validateDigitalSlaValues(digitalSlaDefaults());
     expect(new Set(DIGITAL_SLA_PARAMETERS.map(row => row.key)).size).toBe(DIGITAL_SLA_PARAMETERS.length);

@@ -7,6 +7,7 @@ import { PatternOrderReader } from "../../apps/api/src/pattern-room/order-reader
 import { ReceivingService } from "../../apps/api/src/receiving/receiving-service.js";
 import { exceptions as readReportingExceptions } from "../../apps/api/src/reporting/management-reporting-exceptions.js";
 import {exerciseDevelopmentRoute} from "../helpers/digital-development-route-fixture.js";
+import {exerciseDevelopmentSlaNative} from "../helpers/development-sla-native-fixture.js";
 import { exerciseRevisionApproval } from "./helpers/revision-approval-scenario.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
 import { RootAuthority } from "../../apps/api/src/access/root-authority.js";
@@ -3352,6 +3353,10 @@ runWithPostgres("current-schema N01-N11 business chain", () => {
 
   it("P07/P08 development routes preserve wages, final confirmation and exact native history",async()=>{
     await exerciseDevelopmentRoute(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker,workerPersonId,actor(ids.qc,["quality_control"],"digital_production:view"),ids.otherPatternWorker);
+  },30000);
+
+  it("SLA03 enrolled development completes the native chain with fixed cutting and independent inspections", async()=>{
+    await exerciseDevelopmentSlaNative(database,todoProjection,actor(ids.patternRoot,["root_superuser"],"pattern_room:orders:view"),ids.worker);
   },30000);
 
   const returnedReportFixture = async () => {

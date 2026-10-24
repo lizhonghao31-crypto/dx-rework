@@ -20,6 +20,12 @@ const route = (washing: "yes" | "no" = "yes") => buildOrderSlaRoute(resolveDigit
   }, ["po-fixture"]);
 const get = <T extends { id: string }>(items: T[], id: string) => items.find(n => n.id === id)!;
 describe("complete SLA plan and frozen windows", () => {
+  it("keeps effective business completion when its actual time is unknown without inventing a downstream date",()=>{
+    const p=plan([node('done'),node('next',60,{anchorKey:null,dependsOn:['done']})]);
+    const rows=evaluateSlaPlan(p,{done:{businessCompleted:true,startedAt:t0,evidence:'task:completed-time-corrected'}},time(100));
+    expect(get(rows,'done')).toMatchObject({status:'completed_unrated',actualEnd:null,planOverdue:false});
+    expect(get(rows,'done').forecast.at).toBeNull();expect(get(rows,'next').forecast.at).toBeNull();
+  });
   it("projects included start/end targets from the late actual parent window without changing P0",()=>{
     const p=plan([node("parent",1440),node("handoff",30,{kind:"included",anchorKey:null,includedIn:"parent"}),
       node("return",30,{kind:"included",anchorKey:null,includedIn:"parent",includedPosition:"end"})]);
@@ -215,4 +221,22 @@ describe("complete SLA plan and frozen windows", () => {
     expect(() => validateBusinessTime({ now: t0, scenarioId: "fixture", revision: 0 })).toThrow();
     expect(() => validateBusinessTime({ now: "invalid", scenarioId: null, revision: 0 })).toThrow();
   });
+});
+
+describe('native batch SLA aggregation',()=>{
+ const window=(start:number,end:number,completed:number|null)=>({startedAt:at(start),deadline:at(end),warningAt:at(start+(end-start)*.7),completedAt:completed===null?null:at(completed),complete:completed!==null,evidence:'factory:batch'});
+ it('does not treat the first completed dispatch as whole-order completion or a known forecast',()=>{
+  const p=plan([node('dispatch',1440),node('next',60,{anchorKey:null,dependsOn:['dispatch']})]);
+  const rows=evaluateSlaPlan(p,{dispatch:{startedAt:t0,evidence:'native',batchCoverageComplete:false,batchWindows:[window(0,24,10)]}},time(12));
+  expect(get(rows,'dispatch').status).toBe('running');expect(get(rows,'dispatch').forecast.at).toBeNull();expect(get(rows,'next').forecast.at).toBeNull();
+ });
+ it('uses earliest open deadline for risk and latest covered batch window for forecast, without moving P0',()=>{
+  const p=plan([node('dispatch',1440)]),f={startedAt:t0,evidence:'native',batchCoverageComplete:true,batchWindows:[window(0,24,null),window(10,34,null)]};
+  expect(get(evaluateSlaPlan(p,{dispatch:f},time(18)),'dispatch')).toMatchObject({status:'warning',deadline:{at:at(24)},forecast:{at:at(34)},end:{at:at(24)}});
+  expect(get(evaluateSlaPlan(p,{dispatch:f},time(25)),'dispatch')).toMatchObject({status:'overdue',forecast:{at:null}});
+ });
+ it('keeps late batch history visible when the final batch meets its later target',()=>{
+  const p=plan([node('dispatch',1440)]);
+  expect(get(evaluateSlaPlan(p,{dispatch:{startedAt:t0,completedAt:at(33),businessCompleted:true,evidence:'native',batchCoverageComplete:true,batchWindows:[window(0,24,25),window(10,34,33)]}},time(35)),'dispatch')).toMatchObject({status:'completed_late',forecast:{at:at(33)}});
+ });
 });

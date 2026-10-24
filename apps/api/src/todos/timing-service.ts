@@ -1,3 +1,4 @@
+import {effectiveSourcingDueSql} from '../production-platform/sla-sourcing-deadline-sql.js';
 import { memberCanReceiveFact } from "../access/member-module-policy.js";
 import type { Pool, PoolClient } from "pg";
 
@@ -40,6 +41,7 @@ export class TodoTimingService {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new Error("Todo timing limit must be between 1 and 100");
     }
+    const slaReady=Boolean((await this.database.query("SELECT to_regclass('digital_sla_order_snapshots') AS relation")).rows[0]?.relation),effectiveDue=slaReady?effectiveSourcingDueSql('todo'):'todo.due_at';
     const [candidates, overdueCandidates] = await Promise.all([
       this.database.query<{ todo_id: string }>(
       `SELECT todo.todo_id
@@ -50,25 +52,25 @@ export class TodoTimingService {
            NULLIF(todo.route_descriptor->>'reworkOrderId','')::uuid,
            CASE WHEN todo.entity_type='rework_order' THEN todo.entity_id::uuid END
          )
-       WHERE todo.status='pending' AND todo.due_at IS NOT NULL
+       WHERE todo.status='pending' AND (${effectiveDue}) IS NOT NULL
          AND (order_record.rework_order_id IS NULL OR order_record.status<>'deleted')
          AND (
            (todo.reminder_count<policy.max_reminders AND (
              (todo.reminder_count=0
-               AND CURRENT_TIMESTAMP>=todo.due_at
+               AND CURRENT_TIMESTAMP>=(${effectiveDue})
                  + policy.first_reminder_after_due_seconds * interval '1 second')
              OR
              (todo.reminder_count=1
                AND policy.second_reminder_after_due_seconds IS NOT NULL
-               AND CURRENT_TIMESTAMP>=todo.due_at
+               AND CURRENT_TIMESTAMP>=(${effectiveDue})
                  + policy.second_reminder_after_due_seconds * interval '1 second')
            ))
            OR
            (todo.escalated_at IS NULL
-             AND CURRENT_TIMESTAMP>=todo.due_at
+             AND CURRENT_TIMESTAMP>=(${effectiveDue})
                + policy.escalate_after_due_seconds * interval '1 second')
          )
-       ORDER BY todo.due_at,todo.todo_id
+       ORDER BY (${effectiveDue}),todo.todo_id
        LIMIT $1`,
         [limit],
       ),

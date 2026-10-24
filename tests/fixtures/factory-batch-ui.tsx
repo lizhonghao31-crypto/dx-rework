@@ -1,0 +1,10 @@
+import {createRoot} from 'react-dom/client';
+import {FactoryFlowPanel} from '../../apps/web/src/factory-flow-panel.js';
+import type {FactoryFlowSheet} from '@dx-rework/contracts/factory-flow';
+import '../../packages/ui/src/tokens.css';import '../../packages/ui/src/components.css';import '../../apps/web/src/styles.css';
+const input=Reflect.get(window,'factoryInput') as Record<string,FactoryFlowSheet>;
+const mode=new URLSearchParams(location.search).get('mode')??'warehouse',sheet=structuredClone(input[mode==='conflict'?'warehouse':mode]!);
+sheet.supplierName+=' · 长名称检验'.repeat(12);sheet.canManage=false;
+const requests:Array<{path:string;body:unknown}>=[];Reflect.set(window,'factoryRequests',requests);
+window.fetch=async(path,init)=>{if(String(path).endsWith('/access/candidates'))return Response.json([]);if(init?.method&&init.method!=='GET'){requests.push({path:String(path),body:JSON.parse(String(init.body))});if(mode==='conflict')return Response.json({error:{message:'批次已被其他人办理，请刷新核对余量'}},{status:409});}return Response.json(sheet);};
+createRoot(document.getElementById('root')!).render(<main className="pattern-golden" style={{maxWidth:1200,margin:'0 auto',padding:16}}><FactoryFlowPanel orderId={sheet.orderId} onClose={()=>undefined}/></main>);

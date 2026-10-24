@@ -1,3 +1,4 @@
+import {DigitalSlaValuesSchema} from '@dx-rework/contracts/digital-sla';
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { DigitalTaskCompleteSchema, DigitalTaskAssignmentSchema, DigitalDeadlinePolicySchema, DigitalTimeCorrectionSchema } from "@dx-rework/contracts/digital-production-tasks";
@@ -32,6 +33,13 @@ export function registerDigitalTaskRoutes(app: FastifyInstance, dependencies: Di
   });
   app.post("/digital-production/tasks/:taskId/reassign", async request => service.reassign(await actor(request), id(request), parse(DigitalTaskAssignmentSchema, request.body).assigneeId, key(request)));
   app.post("/digital-production/tasks/:taskId/time-corrections", async request => service.correctTime(await actor(request), id(request), parse(DigitalTimeCorrectionSchema, request.body), key(request)));
+  const standardDraft=z.object({expectedVersion:z.number().int().nonnegative(),values:DigitalSlaValuesSchema,reason:z.string().trim().min(1).max(1000)}).strict();
+  const orderSelection=z.object({orderId:z.string().uuid(),configurationVersion:z.number().int().positive(),parameterKeys:z.array(z.string()).min(1).max(45),reason:z.string().trim().min(1).max(1000)}).strict();
+  app.post('/digital-production/sla-settings/orders/preview',async request=>service.previewSlaOrder(await actor(request),parse(orderSelection,request.body)));
+  app.post('/digital-production/sla-settings/orders/apply',async request=>service.applySlaOrder(await actor(request),parse(orderSelection.extend({previewToken:z.string().regex(/^[a-f0-9]{64}$/)}),request.body),parse(z.string().uuid(),key(request))));
+  app.get('/digital-production/sla-settings',async request=>service.slaSettings(await actor(request)));
+  app.post('/digital-production/sla-settings/preview',async request=>service.previewSlaSettings(await actor(request),parse(standardDraft,request.body)));
+  app.post('/digital-production/sla-settings/publish',async request=>service.publishSlaSettings(await actor(request),parse(standardDraft.extend({previewToken:z.string().regex(/^[a-f0-9]{64}$/)}),request.body),parse(z.string().uuid(),key(request))));
   app.get("/digital-production/deadline-policies", async request => service.policies(await actor(request)));
   app.put("/digital-production/deadline-policies/:nodeKey", async request => service.changePolicy(await actor(request), parse(z.string().regex(/^[a-z][a-z_]{1,99}$/), (request.params as Record<string, unknown>).nodeKey), parse(DigitalDeadlinePolicySchema, request.body), key(request)));
   app.post("/digital-production/lifecycle/:kind/:resourceId", async request => {

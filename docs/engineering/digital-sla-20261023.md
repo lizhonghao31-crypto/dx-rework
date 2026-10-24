@@ -77,3 +77,142 @@ feature/sla-02-planning基于PR01。已补统一BusinessClock接口、七阶段�
 正式 Review 指出：remaining 分支仅对 order_date 核前置，duration/estimate 等可绕过上游未知或冲突。现统一对所有尚未实际开工的节点核对真实依赖/开始锚点；内含项沿父有效窗口，offset 的提醒目标不当成最早可做时间。实际开工或完成仍优先，P0/Pk不变，不新增业务拦截。
 
 23项计算用例及3项计划历史PostgreSQL用例通过。新增参数化覆盖duration、estimate、order_date、unlimited、offset、included的前置未知、晚于预计、可靠预计、实际开工/完成优先及下游未知传播；另覆盖开始锚点未知与船样可早于提醒目标完成。domain编译、定向eslint通过。此次仅集中修复并推一个Head，不修改PR文案，不请求第二次Review；新Head以随后正常Full Gate为准。
+
+## 2026-10-23 施工检查点
+
+PR01 #851 / 57d7cf6a01b10d1ddb8d7ca82e648e8c7fb3850f：Full Gate 39962568705成功，Quick Gate跳过；未合并。正式GitHub `@codex review`已在新授权下成功发送一次（评论6366851045），Review运行中；不重复请求。
+
+PR02 #852：604e5eed的Full Gate 39965719804成功；父审两项F修正集中提交41e50d5155bdcb96220c08ad02de0f9c1e05651c并已推送，等待该新Head Gate。未请求Review，未合并。
+
+当前本地分支feature/sla-03-development，基于PR02。0254及development-sla-enrollment.ts仅为未接入的开发规则/路线快照草稿，尚未补迁移manifest、调用点或业务测试，不可提交或部署。API类型检查仅证明当前草稿可编译，不代表PR03实现或验收完成。后续仍须开发主链、外部纸样、独立复版分别闭环并做真实浏览器检查；没有创建任何业务UI截图或宣称UI通过。
+
+原执行环境已恢复，PR03工作树保留。原/tmp测试工具未随恢复保留，已重建Node22与127.0.0.1:55432隔离合成数据PostgreSQL；无真实库操作。PR03基线已快进至PR02修复Head，未推送PR03。
+
+## 本地复用修订：兼容边界定向验证
+
+本节为后续本地修订状态，前述各 Head/运行记录仅为历史证据。当前未提交、未推送、未运行 CI 或 Review。原 PR03 的 51 文件成果已备份保留。
+
+标准时长唯一写入原 deadline policies；发布层保存固定版本引用及原表不能表达的类型参数。values_json 只作不可变的旧读端兼容快照，不提供第二个编辑入口。旧发布行 policy_refs_json 为空时按该行原 JSON 读取，不用最新策略补历史。新的引用、派生 JSON、逐单快照由调用服务的同一事务提交；失败整体回滚。发布用的事务标记写完策略后即恢复，避免同事务后续旧写法借用标记。
+
+回退策略：旧应用可读取兼容 JSON；已纳入统一发布的策略键，不允许旧应用继续直接发布版本（数据库触发器拒绝）。新应用原设置入口已转向统一服务，只影响新单，不直接重写在途任务；仍未实现的选定在途订单影响预览不能用旧入口替代。未纳入统一发布的其他旧策略不在本次拦截范围。此限制针对配置写入，不新增任何生产办理门禁。
+
+本地隔离 PostgreSQL 18，127.0.0.1:55434，低权限合成测试身份；不是线上账号权限验收。本次配置集成 9 项通过（含持久化旧行、版本引用与派生值一致、另一连接不可见未提交发布、三项持久化共同回滚、三角色允许/其他拒绝、旧编辑入口新单范围）；开发定向 2 项通过（原事件记录外部纸样、旧设置入口不漂移待开工任务），其余 12 项未在本次重跑。配置用例 0.97 秒，开发定向 2.28 秒；只是本地耗时，不推算 CI 预算。API 类型检查、相关增量 ESLint、迁移静态清单检查通过。页面此次未重验，不将此前截图当新修改的最终验收。
+
+发布依赖已核清并调整本地未提交编号：原兼容迁移只依赖 0252 配置表和 0220 策略表，不引用开发迁移对象。0252 已提交于 57d7cf6，0253 已提交于 604e5eed；需保留环境的应用状态未知，文件及校验和不改。两份新迁移仅有本地隔离测试证据、未提交未交付，因此兼容迁移安排为 0254_digital_sla_policy_references，开发迁移顺延为 0255_development_sla_enrollment，清单和测试引用同步。旧编号临时测试 schema 已由测试销毁，不修改任何已保留环境迁移记录。交付顺序建议为原01/02基础 → 独立基础复用修正（含新0254）→ PR03（含新0255）；不强塞回旧PR、不强推、不将全部工作合成巨型PR。外部提交仍未授权。
+
+继续完成外部纸样原 task_events 读写适配：新增请求/收到事实只写原事件表，旧专用表仅兼容读取。再次请求后，页面显示最近一次及折叠历史，SLA不能继续取上一请求的已完成状态。本次相关数据库反例1项通过，其余13项跳过。两组实际组件浏览器检查分别6项通过：设置保存/版本冲突/只读，外部纸样请求/接收/只读，均含1440及390宽度。已实际打开设置窄屏和外部纸样PC/窄屏截图，关闭按钮不再断字、无横向溢出。浏览器使用合成HTTP，非已部署全应用验收；未据此宣称PR03整体完成。
+
+## 实际事件单一来源及转母单连接
+
+当前应用代码对 digital_sla_node_facts 只有兼容 SELECT，appendFact 写入方法及创建订单时三份复制写入已删除；历史0253表和不可变保护保留。创建事实来自原 audit_events 的 slaBusinessTime（真实审计记录时间不冒充业务时间）；无该字段的旧事件不补造时间，沿旧事实读取。开发事实来自原任务完成状态/质量、deadline revisions、退回事实及 time_corrected → corrects_event_id 更正链，外部纸样请求/收到新增事实写原 task_events。
+
+修复原生开发事实被旧SLA副本覆盖的读取优先级：旧副本仅fallback，原生未知完成也必须覆盖过时副本。原创建事件只证明制单开始，不证明结束，因此制单旧有效完成及原评价截止仍保留，直到制单自身原生事实适配接管。没有把所有节点都宣称已完成适配；其余业务链仍按对应闭环实现。
+
+开发转母单沿用 source.configuration_id / parameters_json，保留开发计划锚点及原节点，业务事实继续引用source/task，不复制成母单新完成事实。新增反例：冻结后改默认、转母单幂等、原起点不变；故意加入旧SLA完成副本，再通过原correctTime将原完成时间更正为未知并恢复，整单随原事实变化、P0不变、旧表无新增，原更正链两条记录可追溯；跨单权限和跨时钟场景拒绝。该闭环1项通过，原计划/历史兼容文件4项通过。一次错误测试过滤跳过依赖建数导致缺P0，已定位为测试执行选择问题，仅完整重跑该4项文件通过，未扩大套件或触发CI。
+
+发布限制：原01/02未经本地复用修正不能单独标为可部署完成候选。独立修正是保留历史迁移和验证边界，不表示批准增加重复Full Gate。旧应用回退可读兼容快照，但其原配置写入口可能把数据库55000表现为500；不宣称完整可写/友好回退。回退期间该配置写入口不可用，恢复新应用后通过统一发布服务办理。生产业务办理不新增门禁。
+
+## 业务完成与时效未知分离；PR03连接检查
+
+父指出的语义已纠正：原任务没有被重新打开，但原SLA评价/进度把缺完成时间误当未完成。新增只读 businessCompleted 事实属性，来源为原有效业务状态；时间未知时 completed_unrated、无新增在途逾期、业务进度保留，实际完成日期及下游无依据日期保持未知。不改任务状态、不创建待办。有效退回/撤销仍不算完成。25项定向计算/转母单检查通过。
+
+新增跨轮读取反例：前轮尾查退回、后轮待办、后轮有效通过，保留前轮失败事实并采用后轮业务完成；测试通过。该测试使用显式尾查边界数据库夹具，仅验证汇总，不称原生车板返工全链通过。夹具初次缺岗位和后次沿用旧occurrence均被原权限/唯一约束正确拒绝，修夹具后单项通过，未改保护。外样实际Fastify路由/Schema/服务/PostgreSQL串联测试通过，覆盖未登录401、设计师403、主管创建、原幂等及重复请求；认证身份为隔离夹具，不是完整认证系统/部署入口验收。
+
+## PR04独立本地文件组：预算
+
+预算相关文件修改前备份于 pr04-budget-before.tar.gz。复用原 budget_documents / versions / preparations / 附件：本单设计师及有效主跟单共享草稿；仅本单跟单或Root最终发布；发布即冻结，不能再另存新草稿改预算。原外发预算更正/合同定价流程未改。未新增表、审批层、交接工时、预算价格与合同价强等关系。发布原事务生成原外发准备待办，原幂等/版本冲突及不可变版本保护保留。
+
+本地2项PostgreSQL预算事务测试＋6项原HTTP权限边界测试通过：共享读写、非本单拒绝、设计师不能最终发布、跟单最终冻结、重复命令仅一版、发布后设计师/跟单/Root不能覆盖、并发保存/发布只有一个成功。实际原预算组件1440/390浏览器各12项校验定位通过，已查看截图；合成HTTP，不宣称全应用验收。
+
+三段2小时处于接入中，不能标已完成：新增 sourcing-todo-sla 从原外发transition事件和母单冻结snapshot计算截止，原TodoService仅在首次创建且去重后应用，既有todo不因重试重新起钟；不匹配/未纳入SLA的原流程保留。5项适配器单元测试通过，实际审批→待办数据库集成、原审批允许/拒绝及接收人回归仍须完成，尚不能据此提交。未改变通用todo policy数值或配置第二来源，提醒周期及Acceptance时钟仍待原对应闭环接入。
+
+## PR04 原审批待办闭环（本地检查点）
+
+三段2小时已接到原 TodoService 创建事务：`sourcingTodoSla` 只识别 IE报价、生产管理选厂、老板审批三类 sourcing_case 办理待办，读取母单冻结snapshot、原transition起点；已存在同阶段待办时保留首个due_at（含未知），不因退回重派重置。其它general策略和未纳入新模型的旧流程不改。该连接不包含后续70%提醒调度与Acceptance时钟控制，不能据此宣称全部监督功能完成。
+
+6项适配器用例通过。原 SourcingService→TodoProjectionService→TodoService→PostgreSQL 链分别由老板、root审批通过，覆盖预算最终冻结版本/外发引用不一致拒绝、普通跟单不能报价/审批、退回主跟单业务待办与第二跟单仅通知、第二跟单不得改预算或纠错、三段真实事件+2h、退回不重置及general策略不变。原P09冻结/图片数量复用两项针对性检查通过，不重复全量套件。
+
+权限集成发现并修正真实断点：PoCustomerDateService允许老板后，DigitalPoDateRepository原仍仅准总监写客户日期。两层现都允许有效总监/老板/root，原独立审批、审计事件、PO所属/版本/日期大小守卫保留。老板和root真实日期审批通过；老板canApproveDate及原通知接收记录通过，设计师拒绝。面料决定同样补老板/root原入口权限，保留不合格报告与决定历史；相关数据库反例通过。面料待办实际完整入口尚未做浏览器验收，不报通过。
+
+API类型检查通过，核心文件定向eslint通过（末次测试增加通知断言后仍需随最终冻结静态检查）。前次失败分别为测试误传额外字段（修测试，不改schema）、无用解构（修测试）、老板底层写权限缺口（修业务后回归通过）。最新老板单链本地walltime5.58秒；该数字仅此隔离测试，不是完整CI预算。没有付费运行、push、Review或提交。
+
+可追溯补丁/原文件检查点：`/workspace/daxing-sla-evidence/pr04-local-checkpoint/`，含完整工作树归档、tracked diff、核心PR04 patch和逐文件hash。基线仍47756fcd4f5b06d1e15dd671654642912b158f34；未生成本地提交。共享文件的PR03与PR04差异在README逐项列明，核心patch不是独立可部署候选。
+
+PR05进入实现前已确认：0228的approval_snapshot_id NOT NULL与BulkPreparationService统一reasons把技术准备绑定商务审批。需用兼容增量迁移解除技术准备FK必填，并把技术任务和开裁守卫分开；不得修改0228历史文件，不得把owner_approved设成虚假已批准。验布/放行大货事实不能拿开发报告代替。此检查点尚未修改PR05业务代码或迁移，不能宣称产前并行已完成。
+
+## PR04 截止依据错配修正
+
+父审指出的错配属实：previous.due_at 原先搭配最新 snapshot_id。现将首次SLA计算的 snapshotId/dueAt 写入原 todo.create operation_event；同一 sourcing_case＋category 代表本单同一审批阶段，退回/改派不另起该窗口，不按新sourceEventId重新计时。读取首个待办时仅取该创建审计记录引用的、仍属于本母单的原snapshot；没有原依据的历史行返回null，不根据创建时间/最新配置猜版本。旧due_at为null仍保留null。没有新建时效事实表。
+
+9个适配器用例＋1条真实审批/待办数据库链通过（10项）：后来插入180min标准快照，报价与选厂退回后仍持有首次2h截止及原快照；原快照缺失与截止未知分别覆盖。该检查在同一隔离库中构造后续冻结版本，不是生产配置变更。后续独立价格/转厂类别不由此适配器扩大管理。
+
+## PR05 本地实施检查点（未完成交付）
+
+新增0256兼容增量，不改历史0228：旧preparation默认为workflow_version=1并仍要求原批准引用；新SLA路线用version2、必预缩及固定order snapshot引用，允许技术准备时批准引用为空。BulkPreparationService把技术可办理条件与开裁条件分开；纸样不等批价，开裁仍检查原有效批准/裁剪方式/生命周期及质量/纸样/预缩。没有修改原合同、数量、实裁附件守卫。基础/03/04/05依赖保留。
+
+大货验布报告和质量决定写原digital_production_task_events，按order关联面料、实际到仓/检验时间、结果、说明、操作者及原报告更正链；不新建另一份SLA事实。首次报告固定时效快照。新路线使用原任务生成预缩：合格或总监/老板/root允许继续使用才解除materials_ready；先处理或未决定保持等待，原不合格报告不变。补报时间保持未核实；放行后恢复不重置既有预缩窗口。仓库报告与裁床实际收布是不同事实，无裁床或仓库交接/C填报。
+
+bulkTaskTiming/bulkSlaEvidence读取原制单发布、验布报告/决定、任务完成：纸样48h由制单发布起算，任务未派交也监督；验布24h由报告内实际到仓起算；预缩36h由质量放行起算。原订单确认开始与制单发布结束分别保留。没有可信C时开裁任务仍可按真实业务条件就绪，但实际进入/截止/节点时钟为空，绝不从预缩完成或派工推造C。
+
+定向数据库验证：未批价技术办理→验布失败→先处理→允许继续→暂停恢复→预缩完成→仍不准未批开裁→原审批完成后开裁就绪且C未知；原P11纸样先、预缩先、并发及原无需预缩配置（新路线仍必做）四种路径逐项通过。后者旧“客户复版覆盖原单”期待与批准模型冲突，按PR03独立复版语义改测：新source标题复版1、原制单/母单数量保留、新source不复制母单或完成事实。没有改业务代码迁就旧期待。
+
+页面在原产前区域加入折叠验布区，复用原样式和控件；1440/390宽度×仓库/老板/只读/冲突共8项通过。实际查看截图修正了fieldset继承横排导致窄屏拥挤，以及原生输入样式；未重画页面。响应来自隔离PG实际结果，HTTP提交为合成，非全应用认证验收。API/Web类型检查、定向eslint、迁移静态检查通过；仍无CI、推送、Review、部署。
+
+未收口项必须留在PR05：质量决定待办的实际通知/原入口路由、HTTP身份/幂等并发组合、旧version1历史路线明确兼容反例，以及完整组内联测。不能把现有部分检查说成PR05已完成，也不以此直接部署。相关补丁和快照分组保存于本地pr05-local目录。
+
+## PR05 质量待办与历史兼容收口
+
+原通知服务新增派生质量待办，按当前不合格报告事件去重，原产前入口办理；总监/老板/root可见可办，普通角色拒绝。先处理或允许使用均保留不合格事实，未决定不预缩；已决定不重复生成待办。已读需展开实际报告，不能因折叠标题出现就标已读；已读不代表业务完成。
+
+真实Fastify/隔离PostgreSQL HTTP链通过：缺身份401、普通角色403、同key并发报告仅一条、不同质量决定竞争200/409、root重试不重复；实际通知服务汇总返回唯一待办。最终该项walltime5.30秒，仅定向测试成本。历史version1反例通过，未倒灌必预缩或质量门禁，原任务状态/时间保留。Contracts构建及API/Web类型检查通过。当前新增读取钩子和待处理文案后8项1440/390页面检查通过，仍是原React页面+真实PG响应fixture/合成HTTP，不冒充全应用认证验收。
+
+检查点 /workspace/daxing-sla-evidence/pr05-complete-local 保存进入PR06前全部本地文件、tracked diff和hash；共享文件仍须按既定依赖组装，不是单包可部署候选。未推送、未CI、未Review。
+
+## PR06 本地闭环检查点（2026-10-23 19:04 UTC）
+
+0257只扩展原factory route/facts/QC：旧路线默认version1，保留整款一次发厂；新路线version2按原事实payload保存批次/PO/数量及对应检查引用。没有新的裁片数量流水表。工艺发出/回仓/重做来源沿原事实链，数量不超过对应余量；失败QC可由原质检办理先发，保留失败结论、原因、后续安排。发厂事实固定releaseCheckIds，后续检查不改旧发厂依据。首次部分发出仍走原SourcingProductionService合同/数量/审计守卫，后续批次复用同一生产单和母单关联；全应发量齐才结束裁后任务。无工艺路线直接原仓库任务，不生成QC事实。
+
+批次时效由原事实+产前冻结snapshot派生，4/4/7天含运输、QC48h、仓库具备条件24h；工艺重做沿用首次发出窗口，合同后续版本不重置已开启窗口，检查完成与允许发出分别保留。原任务deadline revisions只投影当前最早未完成窗口，不另建可编辑SLA事实；同窗口未变化不追加revision，避免重复提醒。整单SLA读取原批次事实，部分发厂不冒充全段完成；未知未入段数量保持未知预测；批次超期保留，不用最后一批准时洗旧超期。原P0/Pk不改。
+
+辅料发出在原产前仓库区域，复用当前制单辅料及原批准工厂，写原task_events实际发出记录；主跟单可看，仓库办理。无发料审批/收货门户/新硬时限，发出不冒充收到或自动判断整单辅料齐备。Root原实裁更正增加与原登记/发厂相同的生命周期事务锁，避免更正与发出校验交错；已发数高于更正后实裁时保留原事实、显示差异并拒绝继续超发，不暗中删除或重开已完成任务。此锁的并发实现已静态核对，专门“Root更正对发厂”双事务压力场景未跑；发厂同key和异key竞争已实测。
+
+定向证据：31个SLA/批次数量单元用例通过；原无工艺→原回货两条链通过；最新两条新批次/旧路线数据库链通过，walltime9.96秒，非CI预算。新链包括真实Fastify请求身份/负数量拒绝、同key重试、异key竞争、原生产关联唯一、原质量依据固定、辅料先发不生成收货、返工来源及窗口不重置、整单SLA非首次发出即完成。API/Web类型、限定eslint、migration静态和diff检查通过。新批次10个1440/390岗位/冲突页面场景、辅料6个场景通过，实际看图并修正桌面QC横排/折叠信息；QC最后单场景复验通过。浏览器为原React页+真实隔离PG响应、合成HTTP，不冒充完整登录应用验收。
+
+过程失败均已定位：一次可选字段TS错误、两处未使用导入、一次测试把Root身份当普通跟单、历史夹具缺旧批准引用、deadline revision新增reason不在旧枚举，均局部纠正后通过。单条测试曾在并行类型检查时超过默认5秒；发现同事务批次时效重复查询后复用计算，未加超时/未改CI，最新两条均通过。保留失败和最终日志。
+
+未执行：推送、CI、Review、合并、部署、外部通知、真实库及部署账号迁移验证。0257须随新应用发布；不能把旧应用写新batch路线视为完整回退兼容（缺数量的旧写入将被约束拒绝）。本次证据只覆盖PR05/06本地候选，不代表后续07—11或整轮验收完成。
+
+PR06补充两事务反例已通过（7.69秒）：Root更正持生命周期锁时，pg_locks观察到发厂事务确实等待；实裁100→80、已发40，旧余量60请求拒绝，新余量40可发；过期更正版本及非当前批准厂拒绝；部分发厂/更正后原截止不重置。首轮夹具漏correct capability，权限拒绝后补正fixture，未放宽业务权限。测试文件及日志保存pr06-final-before-pr07。
+
+### PR07 local checkpoint — ship sample (2026-10-23 19:19 UTC)
+Reused original bulk_ship_sample task and digital_production_task_events; new orders create the original task before cutting. ShipSampleService records current PO scope, real sent time, operator and tracking, with original primary-merchandiser/root permission, lifecycle and command idempotency. No sample check added to production, QC, receiving, packing or shipping. Legacy preparation facts retain their original instruction-snapshot scope; unknown times remain unknown. Per-PO native evidence feeds SLA without a second editable fact table.
+ShipSampleTargets uses the order's frozen advance parameter; factory page, PO summary and journey share it. Partial PO shipment changes the active reminder to the remaining original target, retaining old revisions and per-PO completion evidence. Completed time is maximum actual scoped time, not the last input order. New 0258 adds a typed date-target branch to the original deadline revisions; duration invariants and immutable history remain, no fabricated entered_at. Date cutoff is exclusive Beijing next-midnight; reminder comparison follows this boundary.
+Two targeted PostgreSQL tests passed in 5.16s: before-cut recording, scope rejection, tracking required, retry uniqueness, date equality and notification dedupe, old duration constraint rejection, immutable history, partial scope and out-of-order actual times. Initial failures were 404-vs-403 test expectation, Date string conversion losing milliseconds (fixed), and original duration-only constraint (fixed through additive 0258). No broad test rerun. API/Web types, bounded lint, migration static and diff checks passed. Real React component browser at 1440/390 passed and screenshots inspected; followup hides unrelated factory prerequisites in a disclosure, time/tracking use two columns on PC. Synthetic HTTP with isolated PG response, not a full authenticated application pass.
+PR07 remains incomplete: factory garment-QC completion and return logistics adapters remain; current production complete is a reporter quantity/status fact, not QC. Existing shipments have business-date precision only. PR08 not started. No push/CI/review/merge/deployment. No commands running at checkpoint.
+
+### PR07 工厂检查/物流本地闭环（2026-10-23 19:39 UTC）
+- factoryProductionFacts读取原工厂有效分配与原task_events；检查完成结束生产时效，需处理结论及后续检查历史保留，不改变生产日报数量/状态。转厂原服务集成验证：新范围不得继承原厂已检查；当前任务/待办投影与原任务历史分离，缺失主办沿原分配入口，完成新范围后结束待办。
+- factoryReturnLogistics沿原shipped_on日精度和订单冻结48h生成预计区间，actualDispatchedAt保持null；无仓库硬期限。旧生产报表船样提前量已读同一冻结快照，12天冻结与后续全局恢复的反例通过。船样待办不成为结案/装箱间接门禁。
+- 2项真实隔离PG服务链测试通过9.68秒（/tmp/sla07-final-native.log），含QC允许/仓库拒绝、重试、原转厂、新范围再检、缺主办路由/重新分配、保留历史、无船样原生产/发回仓可办；API类型检查通过。QC范围3项单元测试此前通过。
+- 1440/390原React组件+实际服务响应浏览器验证通过并已查看截图（pr07-factory-qc-browser/final-scope）；长PO可换行，无横向溢出，历史折叠。此为组件合成HTTP环境，不冒充全应用认证入口验收。
+- 未推送、未运行CI/Review或部署。PR08从此快照后分离；收齐历时与返工有效轮次仍待接入，不报完成。
+
+## PR08 本地检查点（2026-10-23）
+
+原收货/更正/装箱事实派生收齐、历时及未来未收净量预测，不另建出货台账。R≥Q仅代表收齐，更正不足恢复待收，QC及装箱保持独立。到仓QC复用原事件，按收货数量版本判覆盖；原结案入口补老板允许，0260为兼容增量，不改历史迁移。多批累计装箱缺批次分配事实时保留完成业务事实、时效未知，不编造FIFO；历史数量调整来源不完整同样标精度限制。
+
+返工空数组根因：nativeReworkExecutionRows错误按整单special_process_type=inspection排除实际包含worker作业的单。已改为按configuration item的execution_kind=worker筛选，HAVING有效worker数>0；原派工确认起点、有效报告完成、拒绝报告与再次提交均沿原事件。真实业务链1项通过（3.28秒，/tmp/sla08-work-return.log），不等整查/核量/财务、不追加收货。
+
+收货更正/QC/待办/老板结案原生链通过7.87秒（/tmp/sla08-owner-native.log）；5文件11项单位反例通过362ms（/tmp/sla08-unit-final.log）。API/Web类型、限定lint与迁移静态检查已执行，日志保留。1440/390原组件+真实服务响应fixture页面已看图，窄屏无溢出、PC检查表单双列、历史/未清事项折叠；不是完整登录应用验收。截图pr08-summary-browser/quality-final。
+
+未验证：真实并发QC写入与收货更正（已测版本失效/拒绝与收货更正并发）；全部历史返工轮次重放；部署账号权限；完整认证页面；测试Clock贯穿仍待工具闭环。未推送、CI、Review、合并或部署。
+
+## PR09 第一段：统一新单标准（本地，未完成整组）
+
+SlaSettingsService在原策略发布事务上提供read/preview/publish；预览含当前版本、操作者、完整合法数值及原因指纹。正式提交锁原配置发布表并重验，同key重试返回原结果。标准数值仍由原deadline policies保存，发布层保存引用；无新增表。bootstrapValues提为无写入读取，设置页读取不会创建配置。默认仅新订单，不写在途快照/任务。
+
+原座舱二级设置换为常用/七阶段、搜索、跨节点同kind统一数值、单位显式选择、原因/变化预览、版本历史折叠。原任务页去掉重复编辑表单，链接同一入口。未知提交结果锁草稿并重试原命令，不假报成功。未开放在途按钮。
+
+10项配置数据库用例通过819ms（/tmp/sla09-settings-native.log），包括旧预览/修改草稿拒绝、单次发布重试、订单冻结不变和普通岗位拒绝。API/Web类型及限定lint通过；1440/390实际浏览器组件检查新单发布、搜索、同类批量、只读、409失败及无溢出，通过并已看图（pr09-settings-browser）。该浏览器为合成HTTP，不等同完整认证应用。
+
+当前必须先修的在途应用连接：bulkTaskTiming仍读preparation.sla_snapshot_id，原裁后及收货批次也持独立冻结引用；只appendOrder会使整单预测与原待办不一致。下一段须统一正式调整引用、已启动窗口不重置、已完成/旧逾期保护及批次范围，再开放指定订单应用，不能报PR09完成。PR10及Acceptance Clock工具尚未完成。无外部操作。

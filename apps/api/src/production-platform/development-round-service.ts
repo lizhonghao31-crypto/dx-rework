@@ -1,3 +1,5 @@
+import {createIndependentDevelopmentRevision} from './development-revision-source.js';
+import {developmentSlaPlan,developmentSlaRoute} from "./development-sla-enrollment.js";
 import {validateAuxiliaryReferences} from '../access/auxiliary-catalog-service.js';
 import {verificationAvailable} from "./development-material-verification.js";
 import {developmentRevisionForSave} from "./development-document-format.js";
@@ -12,6 +14,7 @@ import {developmentPublishErrors} from '@dx-rework/contracts/digital-development
 import type {TrustedActorContext} from '../tools/repositories.js';
 import {ApplicationError} from '../platform/errors.js';
 import {digitalForbidden} from './access-policy.js';
+import {DigitalProductionAccessPolicy} from './access-policy.js';
 import {DigitalDevelopmentService} from './development-service.js';
 import {DigitalProductionTaskService} from './task-service.js';
 import {DevelopmentRouteService} from './development-route-service.js';
@@ -81,6 +84,10 @@ export class DevelopmentRoundService {
   const errors=developmentPublishErrors(input.document,{allowMissingOrderDate:sheet.document!.orderDate===null});if(errors.length)fail(errors.join('；'));
   if(input.affectedNodes.includes('工艺')&&input.document.craft==='无')fail('本轮没有印绣花工艺');
   if(input.affectedNodes.includes('洗水')&&input.document.washing==='免洗')fail('本轮为免洗，请核对受影响节点');
+  if(input.origin!=='内部发现'&&!returnTaskId&&!patternReworkRoundId&&await developmentSlaPlan(db,sourceId)){
+    await this.forms().bindFiles(db,actor,sourceId,input.document);
+    return createIndependentDevelopmentRevision(db,actor,sourceId,input);
+  }
   const document=structuredClone(input.document),affectedNodes=[...input.affectedNodes];
   const clerkVerification=await verificationAvailable(db);
   // A changed material gets its own identity; old arrivals never certify a replacement.
@@ -89,12 +96,17 @@ export class DevelopmentRoundService {
   const completed:Record<string,{taskId:string;roundNumber:number}>={};
   const tasks=(await db.query("SELECT t.task_id,t.route_version,a.task_kind FROM digital_production_tasks t JOIN digital_production_task_access a USING(task_id) WHERE a.source_id=$1 AND t.state='completed' AND NOT EXISTS(SELECT 1 FROM digital_production_task_events e WHERE e.task_id=t.task_id AND e.event_kind='material_returned') ORDER BY t.route_version DESC,t.completed_at DESC,t.task_id",[sourceId])).rows;
   for(const task of tasks){const kind=task.task_kind==='development_material_recheck'?'development_materials':task.task_kind;if(!completed[kind])completed[kind]={taskId:task.task_id,roundNumber:task.route_version};}
-  const {route,inherited}=developmentRevisionPlan({...input,document,affectedNodes},completed),roundNumber=input.basedOnRound+1,routeId=randomUUID();
+  const {route,inherited}=developmentRevisionPlan({...input,document,affectedNodes},completed,await developmentSlaPlan(db,sourceId)?developmentSlaRoute(document):undefined),roundNumber=input.basedOnRound+1,routeId=randomUUID();
   await this.forms().bindFiles(db,actor,sourceId,document);
   await db.query(`INSERT INTO digital_development_rounds(source_id,round_number,based_on_round,document_version,document,origin,customer_comment,internal_problem,explanation,categories,affected_nodes,output_kind,route_nodes,inherited,return_task_id,route_id,created_by)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,[sourceId,roundNumber,input.basedOnRound,sheet.version+1,JSON.stringify(document),input.origin,input.customerComment,input.internalProblem,input.explanation,input.categories,affectedNodes,input.outputKind,route,JSON.stringify(inherited),returnTaskId??null,routeId,actor.actorId]);
   await new DigitalProductionTaskService(this.database).supersedeSourceTasksWithClient(db,actor,sourceId,input.basedOnRound,returnTaskId);
   await new DevelopmentRouteService(this.database).startRound(db,actor,sourceId,route[0]!,routeId,roundNumber,returnTaskId);
+  if(await developmentSlaPlan(db,sourceId)){
+    const designer=(await db.query('SELECT created_by FROM digital_production_sources WHERE source_id=$1',[sourceId])).rows[0].created_by;
+    await new DigitalProductionTaskService(this.database).createWithClient(db,actor,{resource:{kind:'source',id:sourceId},...(returnTaskId?{authorizingTaskId:returnTaskId}:{}),kind:'development_shipping',routeId,routeVersion:roundNumber,occurrence:roundNumber,
+      assigneeId:await new DigitalProductionAccessPolicy(db).activeRole(designer,'sample_designer')?designer:null});
+  }
   await db.query("INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state) VALUES($1,$2,$3,'development_round_published','digital_development',$4,$5)",[randomUUID(),actor.requestId,actor.actorId,sourceId,JSON.stringify({roundNumber,origin:input.origin,affectedNodes,route,inherited,...(patternReworkRoundId?{nativeRoundId:patternReworkRoundId}:{})})]);
   await new BulkPreparationService(this.database).syncSource(db,actor,sourceId);
   return {sourceId,roundNumber};

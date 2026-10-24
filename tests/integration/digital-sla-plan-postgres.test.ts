@@ -1,3 +1,4 @@
+import { applySlaPolicyFixture } from "../helpers/sla-policy-fixture.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import pg from "pg";
@@ -7,6 +8,7 @@ import { evaluateSlaPlan, type SlaPlan } from "../../packages/domain/src/digital
 import { SlaConfigurationRepository, SlaVersionConflict } from "../../apps/api/src/production-platform/sla-configuration-repository.js";
 import { SlaPlanRepository } from "../../apps/api/src/production-platform/sla-plan-repository.js";
 import { ownedPostgresSchema } from "../helpers/owned-postgres-schema.js";
+import { applyOrderCreationEvidence, orderCreationSlaEvidence } from "../../apps/api/src/production-platform/sla-order-evidence.js";
 
 const url = process.env.TEST_DATABASE_URL, run = url ? describe : describe.skip;
 run("SLA P0, formal versions and observed facts", () => {
@@ -30,6 +32,7 @@ run("SLA P0, formal versions and observed facts", () => {
     await admin.query(`CREATE SCHEMA ${schema}`);
     for (const name of ["0001_platform_foundation.sql", "0002_dingtalk_identity_access.sql", "0216_digital_production_order_roots.sql", "0252_digital_sla_configuration_snapshots.sql", "0253_digital_sla_plan_history.sql"])
       await db.query(await readFile(new URL(`../../apps/api/migrations/${name}`, import.meta.url), "utf8"));
+    await applySlaPolicyFixture(db);
     await db.query("INSERT INTO app_users(id,display_name,enabled) VALUES($1,'isolated plan fixture',true)", [actorId]);
     await db.query("INSERT INTO production_order_roots(production_order_id,workflow_generation,created_by) VALUES($1,'digital_production_v1',$2)", [orderId, actorId]);
     const config = await tx(c => new SlaConfigurationRepository(c).initialStandard(actorId));
@@ -51,10 +54,11 @@ run("SLA P0, formal versions and observed facts", () => {
   });
   it("retains completion lateness when a later plan changes duration", async () => {
     const facts = { startedAt: at(0), completedAt: at(73), standardMinutes: 4320, evidence: "fixture:actual-work" };
-    const command = { orderId, nodeId: "production_sheet", planId, expectedRevision: 0, fact: facts, time: time(73, 2), actorId, reason: "real completion", requestKey: randomUUID() };
-    await tx(c => new SlaPlanRepository(c).appendFact(command));
-    await tx(c => new SlaPlanRepository(c).appendFact(command));
-    await expect(tx(c => new SlaPlanRepository(c).appendFact({ ...command, expectedRevision: 1, requestKey: randomUUID(), fact: { ...facts, startedAt: at(2) } }))).rejects.toThrow(/reset/);
+    // Compatibility fixture written by the previous implementation. The current repository has no fact writer.
+    const completedDeadline = evaluateSlaPlan(p, { production_sheet: facts }, time(73, 2))[0]!.deadline;
+    await db.query(`INSERT INTO digital_sla_node_facts(fact_id,production_order_id,node_id,revision,plan_id,fact_json,business_time,created_by,reason,request_key)
+      VALUES($1,$2,'production_sheet',1,$3,$4,$5,$6,'legacy completion fixture',$7)`,
+      [randomUUID(), orderId, planId, JSON.stringify({ ...facts, completedDeadline }), JSON.stringify(time(73, 2)), actorId, randomUUID()]);
     const revised = structuredClone(p); revised.nodes[0]!.minutes = 5760;
     await expect(tx(c => new SlaPlanRepository(c).appendPlan({ orderId, expectedRevision: 1, snapshotId, plan: revised, time: time(74, 3), actorId, reason: "mismatched snapshot", requestKey: randomUUID() }))).rejects.toThrow(/snapshot/);
     const revisedSnapshot = await tx(async c => {
@@ -79,5 +83,27 @@ run("SLA P0, formal versions and observed facts", () => {
     await expect(tx(async c => { await new SlaPlanRepository(c).appendPlan(next); throw new Error("downstream failed"); })).rejects.toThrow("downstream failed");
     expect((await tx(c => new SlaPlanRepository(c).plans(orderId))).length).toBe(2);
     expect((await tx(c => new SlaConfigurationRepository(c).orderSnapshot(orderId, 1)))?.snapshot.parameters.production_sheet!.value).toEqual(digitalSlaDefaults().production_sheet);
+  });
+  it("reads creation actuals from the scoped business event without another actual ledger", async () => {
+    const eventId = randomUUID();
+    await db.query(`INSERT INTO audit_events(id,request_id,actor_id,action,entity_type,entity_id,after_state)
+      VALUES($1,'fixture',$2,'digital_order_created','digital_order',$3,$4)`, [eventId, actorId, orderId, JSON.stringify({ slaBusinessTime: time(0) })]);
+    await tx(async c => {
+      const original = structuredClone((await new SlaPlanRepository(c).plans(orderId))[0]!);
+      original.plan.anchors.customer_order_confirmed = { precision: "instant", value: at(0), source: `audit_events:${eventId}` };
+      const facts = await orderCreationSlaEvidence(c, orderId, original);
+      expect(facts.production_sheet).toEqual({ startedAt: at(0), standardMinutes: 4320, evidence: `audit_events:${eventId}` });
+      expect(facts.customer_confirmation?.completedAt).toBe(at(0));
+      const legacy = await new SlaPlanRepository(c).facts(orderId);
+      const resolved = applyOrderCreationEvidence(legacy, facts);
+      expect(resolved.production_sheet?.completedAt).toBe(at(73));
+      expect(resolved.production_sheet?.completedDeadline).toEqual(legacy.production_sheet?.completedDeadline);
+      expect(resolved.production_sheet?.startedAt).toBe(at(0));
+      expect(applyOrderCreationEvidence(legacy, {})).toEqual(legacy);
+      expect(await orderCreationSlaEvidence(c, randomUUID(), original)).toEqual({});
+      expect((await c.query("SELECT count(*)::int n FROM digital_sla_node_facts")).rows[0].n).toBe(1); // only the old compatibility fixture
+      original.time.scenarioId = "other-test-scope";
+      await expect(orderCreationSlaEvidence(c, orderId, original)).rejects.toThrow(/scope/);
+    });
   });
 });

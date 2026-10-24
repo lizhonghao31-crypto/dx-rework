@@ -1,4 +1,5 @@
 .cockpit-settings{font-size:14px;max-width:1280px;margin:0 auto;padding:16px;color:#26384c}
+.cockpit-policy-dialog header button{flex-shrink:0;white-space:nowrap}
 .cockpit-settings-overview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:18px 0 12px}
 .cockpit-settings-overview>article{display:flex;align-items:center;gap:13px;padding:18px;border:1px solid #dfebfa;border-radius:9px;background:#fff;min-width:0}
 .cockpit-settings-overview h2{font-size:17px;margin:0 0 5px}
@@ -66,3 +67,18 @@
  .cockpit-policy-dialog .dx-field input{min-height:44px}
 }
 @media(max-width:600px){.cockpit-policy-cards{grid-template-columns:minmax(0,1fr)}.cockpit-setting-symbol{flex-basis:36px;height:36px;font-size:24px}.cockpit-settings-overview h2{font-size:16px}}
+
+.sla-standard-toolbar,.sla-stage-tabs{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:12px 0}
+.sla-standard-toolbar input,.sla-change-reason input,.sla-value-input input,.sla-value-input select{font:inherit;min-height:36px;border:1px solid #c7dbf5;border-radius:6px;padding:6px 8px;box-sizing:border-box;background:#fff;color:inherit}
+.sla-stage-tabs button{font-size:14px;padding:7px 10px;box-shadow:none}
+.sla-stage-tabs button[aria-pressed=true]{background:#eaf2ff;color:#0878ff}
+.sla-standard-rows{list-style:none;padding:0;margin:10px 0}
+.sla-standard-rows>li{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid #e5edf7}
+.sla-node-name{display:flex;align-items:center;gap:8px;min-width:0}
+.sla-node-name small{display:block;color:#65758a;font-size:12px;margin-top:3px}
+.sla-value-input{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.sla-value-input input{width:110px}.sla-value-input select{max-width:130px}
+.sla-settings-help{margin:16px 0;color:#65758a;line-height:1.6}
+.sla-change-reason{display:grid;gap:6px;max-width:600px;margin:16px 0}
+.sla-publish-preview{background:#f4f8fd;border:1px solid #dfebfa;border-radius:8px;padding:14px;margin-top:16px;line-height:1.7}
+@media(max-width:600px){.sla-standard-rows>li{align-items:flex-start;flex-direction:column;gap:8px}.sla-value-input{align-self:stretch}.sla-value-input input{flex:1;min-width:0}.sla-standard-toolbar label,.sla-standard-toolbar input{max-width:100%}.sla-stage-tabs button{font-size:14px}.sla-publish-preview{overflow-wrap:anywhere}}

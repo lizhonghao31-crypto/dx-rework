@@ -21,6 +21,10 @@ export function todoDestination(descriptor:TodoRouteDescriptor):string {
     case "wage_period_detail":
       path = `/ui/wages/${route.entityId}`;
       break;
+    case "digital_bulk_preparation":
+      path = "/ui/digital-production";
+      query.set("bulk", route.entityId);
+      break;
     case "digital_production_instruction":
       path = "/ui/digital-production";
       query.set("instruction", route.entityId);
@@ -35,6 +39,10 @@ export function todoDestination(descriptor:TodoRouteDescriptor):string {
       path = "/ui/digital-production";
       query.set("development", route.entityId);
       if(route.developmentRound)query.set("round",String(route.developmentRound));
+      break;
+    case "digital_production_closure":
+      path = "/ui/digital-production";
+      query.set("closure", route.entityId);
       break;
     case "digital_production_task":
       path = "/ui/digital-production";

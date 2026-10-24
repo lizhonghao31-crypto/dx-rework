@@ -1,5 +1,5 @@
 import {developmentReadTables} from "./development-amendment-repository.js";
-import {developmentRoute} from "./development-route.js";
+import {savedDevelopmentRoute} from "./development-sla-enrollment.js";
 import { DigitalDevelopmentService } from "./development-service.js";
 import { OrderClosureService } from "./order-closure-service.js";
 import { bulkCockpitProgress } from "./cockpit-progress.js";
@@ -108,7 +108,7 @@ SELECT o.production_order_id AS "orderId",s.source_id AS "sourceId",
         const sheet=sheets.find(item=>item.source_id===row.sourceId);
         const document=sheet?.document;
         if(input.stage==='development'&&sheet?.status==='published') {
-          const declared:string[]=(latest?.routeVersion??1)===1?['development_materials',...developmentRoute(document)]:rounds.find(round=>round.source_id===row.sourceId&&round.round_number===latest!.routeVersion)?.route_nodes??[];
+          const declared:string[]=(latest?.routeVersion??1)===1?['development_materials',...await savedDevelopmentRoute(db,row.sourceId,document)]:rounds.find(round=>round.source_id===row.sourceId&&round.round_number===latest!.routeVersion)?.route_nodes??[];
           const nodes=declared.filter(node=>!['development_material_supply','development_craft_dispatch','development_sewing_transfer','development_washing_dispatch'].includes(node));
           flow=nodes.map(key=>{const match=effectiveTasks.filter(task=>task.routeVersion===(latest?.routeVersion??1)&&(task.taskKind===key||(key==='development_materials'&&task.taskKind==='development_material_recheck'))).sort((a,b)=>b.occurrence-a.occurrence)[0];return {key,label:labels.find(item=>item.node_key===key)?.label??key,state:match?.state??(fullSourceAccess?'uncreated':'unavailable'),taskId:match?.taskId??null};});
         }
