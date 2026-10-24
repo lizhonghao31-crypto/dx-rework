@@ -24,8 +24,8 @@ jobs:
       group: pr-gate-${{ github.event.pull_request.number || format('manual-{0}', github.ref) }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
-    # This authorized stacked plan includes every heavy gate; keep finite headroom.
-    timeout-minutes: ${{ github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'unified-p') && 30 || 20 }}
+    # User-authorized Full Gate ceiling; this changes the limit, not execution cost.
+    timeout-minutes: 30
     env:
       NODE_ENV: test
       GIT_SHA: ${{ github.event.pull_request.head.sha }}
